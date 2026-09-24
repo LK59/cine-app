@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
-import { detail, isOwner, LIMITS, notifyAdmin, notifyAuthor } from "@/lib/reports";
+import { detail, isOwner, LIMITS, markSeenBy, notifyAdmin, notifyAuthor } from "@/lib/reports";
 import { imagesFromForm, saveReportImage } from "@/lib/reportImages";
 import { reportCaller, reportFor } from "@/lib/reportRequest";
 
@@ -26,8 +26,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const byAuthor = isOwner(report, who);
   const message = reportsDb.addMessage(report.id, byAuthor ? "user" : "admin", who.userName, body);
   for (const image of images) await saveReportImage(report.id, message.id, image.original, image.shown);
-  reportsDb.markSeen(report.id, byAuthor ? "user" : "admin");
   const updated = reportsDb.get(report.id)!;
+  markSeenBy(updated, who);
   if (byAuthor) void notifyAdmin(updated, "comment");
   else void notifyAuthor(updated, "reply");
   return NextResponse.json(detail(updated, who), { status: 201 });

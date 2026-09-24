@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { CheckCircle2, Clapperboard, ExternalLink, KeyRound, Bell, Pencil, RotateCcw, Send, ServerCrash, Smartphone, XCircle } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
@@ -13,12 +13,12 @@ import { Panel, SeanceRow, JsonBlock, describeLine, fullDate, kindDot } from "@/
 import type { ReportStatus } from "@/lib/db";
 import type { ReportDetail, ImageView } from "@/lib/reports";
 import type { ReportLogs } from "@/lib/reportLogs";
-import { REPORTS_UNREAD_KEY } from "@/lib/useReportBadge";
 import { ImagePicker } from "./ImagePicker";
 import { appendImages } from "./prepareImage";
 import { ReportPath, StatusBadge } from "./ReportParts";
+import { FRESH, reportKey, useRefreshReports } from "./reportCache";
 
-export const reportKey = (id: number | string) => `/api/reports/${id}`;
+export { reportKey } from "./reportCache";
 
 /** Les captures d'un message : la version montrée, ou l'original quand rien n'a pu la produire. */
 function Images({ images }: { images: ImageView[] }) {
@@ -115,10 +115,11 @@ const ADMIN_CHOICES: ReportStatus[] = ["open", "in_progress", "resolved", "close
 export function ReportThread({ id }: { id: number }) {
   const t = useT();
   const toast = useToast();
-  const { mutate: mutateGlobal } = useSWRConfig();
+  const refresh = useRefreshReports();
   const { data, error, isLoading, mutate } = useSWR<ReportDetail>(reportKey(id), fetcher, {
-    // L'ouverture marque le ticket lu : la pastille doit l'apprendre tout de suite.
-    onSuccess: () => void mutateGlobal(REPORTS_UNREAD_KEY),
+    ...FRESH,
+    // L'ouverture marque le ticket lu : la pastille et les listes doivent l'apprendre tout de suite.
+    onSuccess: () => void refresh(),
   });
   const [body, setBody] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -132,9 +133,7 @@ export function ReportThread({ id }: { id: number }) {
   const act = async (run: () => Promise<unknown>) => {
     setBusy(true);
     try {
-      const next = (await run()) as ReportDetail;
-      await mutate(next, { revalidate: false });
-      void mutateGlobal((key) => typeof key === "string" && (key === "/api/reports" || key === "/api/admin/activity/reports"));
+      await refresh((await run()) as ReportDetail);
       return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t("report.ui.failed"));

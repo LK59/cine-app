@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
 import { isOwner } from "@/lib/reports";
-import { reportFilePath } from "@/lib/reportImages";
+import { reportFilePath, storedImageType } from "@/lib/reportImages";
 import { reportCaller, reportFor } from "@/lib/reportRequest";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,12 @@ export async function GET(req: NextRequest, { params }: Params) {
   const name = (image.originalName ?? "capture").replace(/[^\w.\- ]/g, "_");
   return new NextResponse(fs.readFileSync(file), {
     headers: {
-      "Content-Type": original ? image.mime : "image/webp",
+      // Le type par l'extension enregistrée, pas celui que la ligne a gardé du navigateur : les
+      // lignes d'avant le correctif portent encore le type annoncé à l'envoi.
+      "Content-Type": original ? storedImageType(image.original) : "image/webp",
+      "X-Content-Type-Options": "nosniff",
+      // Ouvert seul dans un onglet, un fichier n'a le droit de rien exécuter.
+      "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self'",
       "Cache-Control": "private, max-age=31536000, immutable",
       ...(original ? { "Content-Disposition": `inline; filename="${name}"` } : {}),
     },

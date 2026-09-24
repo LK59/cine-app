@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb, type ReportStatus } from "@/lib/db";
-import { canSetStatus, detail, isOwner, notifyAdmin, notifyAuthor } from "@/lib/reports";
+import { canSetStatus, detail, isOwner, markSeenBy, notifyAdmin, notifyAuthor } from "@/lib/reports";
 import { reportCaller, reportFor } from "@/lib/reportRequest";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,7 @@ const STATUSES: ReportStatus[] = ["open", "in_progress", "resolved", "closed"];
 
 /**
  * Changer l'état : l'administrateur en tout sens, l'auteur pour fermer — ou rouvrir un signalement
- * résolu ou fermé. Le changement s'inscrit dans le fil, et l'autre côté en est prévenu.
+ * résolu ou fermé. Le changement s'inscrit dans le fil, et l'autre côté en est prévenu — sauf d'une fermeture.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const who = await reportCaller(req);
@@ -21,11 +21,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!next || !canSetStatus(report, who, next)) return NextResponse.json({ error: "Changement refusé" }, { status: 403 });
 
   const byAuthor = isOwner(report, who);
-  reportsDb.setStatus(report.id, next, byAuthor ? "user" : "admin");
+  // Une fermeture ne réclame l'attention de personne : ni pastille, ni notification, de quelque
+  // côté qu'elle vienne. Elle reste écrite dans le fil.
+  const quiet = next === "closed";
+  reportsDb.setStatus(report.id, next, byAuthor ? "user" : "admin", quiet);
   reportsDb.addMessage(report.id, "system", who.userName, `status:${next}`);
-  reportsDb.markSeen(report.id, byAuthor ? "user" : "admin");
   const updated = reportsDb.get(report.id)!;
-  if (byAuthor) void notifyAdmin(updated, "status");
-  else void notifyAuthor(updated, "status");
+  markSeenBy(updated, who);
+  if (!quiet) {
+    if (byAuthor) void notifyAdmin(updated, "status");
+    else void notifyAuthor(updated, "status");
+  }
   return NextResponse.json(detail(updated, who));
 }

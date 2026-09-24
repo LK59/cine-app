@@ -26,6 +26,18 @@ export function isOwner(report: ReportRow, who: Who): boolean {
   return report.userId === who.userId;
 }
 
+/**
+ * Marquer lu pour qui regarde — de chacun des côtés qu'il occupe. L'administrateur qui ouvre son
+ * propre signalement en est à la fois l'auteur et le destinataire : ne marquer que le côté auteur
+ * laissait sa pastille d'administrateur allumée pour toujours, sur un ticket qu'il venait de lire
+ * (24/09/2026). Appelé aussi après chacun de ses gestes : on ne se notifie pas soi-même.
+ */
+export function markSeenBy(report: ReportRow, who: Who): void {
+  if (report.status === "draft") return;
+  if (isOwner(report, who)) reportsDb.markSeen(report.id, "user");
+  if (who.admin) reportsDb.markSeen(report.id, "admin");
+}
+
 /** Le sien, ou — pour l'administrateur — n'importe quel signalement parti. */
 export function canSee(report: ReportRow, who: Who): boolean {
   return isOwner(report, who) || (who.admin && report.status !== "draft");

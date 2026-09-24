@@ -9,13 +9,13 @@ import { LoadingState, ErrorState } from "@/components/StateViews";
 import { fullDate } from "@/components/activity/parts";
 import type { ReportSummary } from "@/lib/reports";
 import { ReportRowView } from "./ReportParts";
+import { FRESH, MY_REPORTS_KEY } from "./reportCache";
 
-export const MY_REPORTS_KEY = "/api/reports";
 
 /** Les signalements d'une personne : ses brouillons, ceux qui sont en cours, ceux qui sont réglés. */
 export function MyReports() {
   const t = useT();
-  const { data, error, isLoading, mutate } = useSWR<{ reports: ReportSummary[] }>(MY_REPORTS_KEY, fetcher);
+  const { data, error, isLoading, mutate } = useSWR<{ reports: ReportSummary[] }>(MY_REPORTS_KEY, fetcher, FRESH);
   if (isLoading) return <LoadingState />;
   if (error || !data) return <ErrorState message={t("report.ui.loadError")} onRetry={() => mutate()} />;
 

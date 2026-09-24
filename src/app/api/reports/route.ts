@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
-import { detail, notifyAdmin, readContext, readFields, summarize } from "@/lib/reports";
+import { detail, markSeenBy, notifyAdmin, readContext, readFields, summarize } from "@/lib/reports";
 import { imagesFromForm, saveReportImage } from "@/lib/reportImages";
 import { captureReportLogs } from "@/lib/reportLogs";
 import { jsonField, reportCaller } from "@/lib/reportRequest";
@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
   for (const image of images) await saveReportImage(report.id, null, image.original, image.shown);
   if (!draft) {
     reportsDb.setLogs(report.id, captureReportLogs(who.userName, { id: fields.itemId, title: fields.itemTitle }));
+    markSeenBy(report, who);
     void notifyAdmin(report, "new");
   }
   return NextResponse.json(detail(reportsDb.get(report.id)!, who), { status: 201 });

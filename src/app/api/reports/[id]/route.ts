@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
-import { detail, isOwner, notifyAdmin, readContext, readFields } from "@/lib/reports";
+import { detail, isOwner, markSeenBy, notifyAdmin, readContext, readFields } from "@/lib/reports";
 import { imagesFromForm, saveReportImage } from "@/lib/reportImages";
 import { captureReportLogs } from "@/lib/reportLogs";
 import { jsonField, reportCaller, reportFor } from "@/lib/reportRequest";
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (who instanceof NextResponse) return who;
   const report = reportFor((await params).id, who);
   if (report instanceof NextResponse) return report;
-  if (report.status !== "draft") reportsDb.markSeen(report.id, isOwner(report, who) ? "user" : "admin");
+  markSeenBy(report, who);
   return NextResponse.json(detail(report, who));
 }
 
@@ -46,7 +46,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
   for (const image of images) await saveReportImage(report.id, null, image.original, image.shown);
   if (send) {
     reportsDb.send(report.id, captureReportLogs(who.userName, { id: fields.itemId, title: fields.itemTitle }));
-    void notifyAdmin(reportsDb.get(report.id)!, "new");
+    const sent = reportsDb.get(report.id)!;
+    markSeenBy(sent, who);
+    void notifyAdmin(sent, "new");
   }
   return NextResponse.json(detail(reportsDb.get(report.id)!, who));
 }

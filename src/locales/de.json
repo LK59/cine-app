@@ -2165,7 +2165,7 @@
       "logsHint": "Nützliche technische Angaben (Gerät, letzte Wiedergaben) werden automatisch angehängt.",
       "addImage": "Bildschirmfoto",
       "removeImage": "Bild entfernen",
-      "imagesHint": "Bis zu 6 Bilder, alle gängigen Formate (auch HEIC)",
+      "imagesHint": "Bis zu 6 Bilder — JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF, BMP, TIFF, JPEG XL",
       "noPreview": "Keine Vorschau — Original öffnen",
       "new": "Neue Meldung",
       "newTitle": "Problem melden",
@@ -2196,7 +2196,8 @@
       "logsErrors": "Fehler",
       "logsAuth": "Anmeldungen",
       "logsNotifications": "Erhaltene Benachrichtigungen",
-      "titleLoading": "Bibliothek wird geladen…"
+      "titleLoading": "Bibliothek wird geladen…",
+      "sending": "Wird gesendet…"
     }
   }
 }

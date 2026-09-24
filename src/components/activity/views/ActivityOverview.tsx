@@ -30,6 +30,7 @@ import type { AccountSummary, WeekSignals, household } from "@/lib/activity/acco
 import type { ReportSummary } from "@/lib/reports";
 import { NOTIFICATION_CATEGORIES } from "@/lib/notifications";
 import { ReportRowView } from "@/components/reports/ReportParts";
+import { ADMIN_REPORTS_KEY } from "@/components/reports/reportCache";
 import { DeviceQualityList, Heatmap, TopTitles, AuthList } from "@/components/activity/insights";
 import type { Seance } from "@/lib/activity/seances";
 import { ActivityLink, goTo } from "@/components/activity/nav";
@@ -49,7 +50,7 @@ interface Overview {
 function ReportsPanel({ now }: { now: number }) {
   const t = useT();
   const [showDone, setShowDone] = useState(false);
-  const { data } = useSWR<{ reports: ReportSummary[]; unread: number }>("/api/admin/activity/reports", fetcher, { refreshInterval: 30_000 });
+  const { data } = useSWR<{ reports: ReportSummary[]; unread: number }>(ADMIN_REPORTS_KEY, fetcher, { refreshInterval: 30_000 });
   if (!data) return null;
   const pending = data.reports.filter((r) => r.status === "open" || r.status === "in_progress");
   const done = data.reports.filter((r) => r.status === "resolved" || r.status === "closed");

@@ -2165,7 +2165,7 @@
       "logsHint": "Les informations techniques utiles (appareil, dernières lectures) sont jointes automatiquement.",
       "addImage": "Capture",
       "removeImage": "Retirer l'image",
-      "imagesHint": "Jusqu'à 6 images, tous formats courants (y compris HEIC)",
+      "imagesHint": "Jusqu'à 6 images — JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF, BMP, TIFF, JPEG XL",
       "noPreview": "Aperçu indisponible — ouvrir l'original",
       "new": "Nouveau signalement",
       "newTitle": "Signaler un problème",
@@ -2196,7 +2196,8 @@
       "logsErrors": "Erreurs",
       "logsAuth": "Connexions",
       "logsNotifications": "Notifications reçues",
-      "titleLoading": "Chargement de la bibliothèque…"
+      "titleLoading": "Chargement de la bibliothèque…",
+      "sending": "Envoi…"
     }
   }
 }

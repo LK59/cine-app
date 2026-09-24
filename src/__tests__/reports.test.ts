@@ -160,6 +160,57 @@ describe("signalements — échanges, états, pastilles", () => {
   });
 });
 
+describe("signalements — ce qui allume une pastille (24/09/2026)", () => {
+  const counts = async (who: string) => {
+    const { GET } = await import("@/app/api/reports/unread/route");
+    return (await (await GET(req(who))).json()) as { mine: number; admin: number };
+  };
+  const setStatus = async (who: string, id: number, s: string) => {
+    const { POST } = await import("@/app/api/reports/[id]/status/route");
+    return (await POST(req(who, { json: { status: s } }), params(id))).status;
+  };
+
+  // L'administrateur est aussi l'auteur de ses propres signalements : l'ouvrir ne marquait que le
+  // côté auteur, et sa pastille d'administrateur restait allumée sur un ticket déjà lu.
+  it("l'administrateur ne se notifie pas lui-même, et ouvrir un ticket l'éteint des deux côtés", async () => {
+    const before = await counts("louis");
+    const { body } = await create("louis", AUDIO);
+    expect(await counts("louis")).toEqual(before);
+    const { POST: comment } = await import("@/app/api/reports/[id]/messages/route");
+    const form = new FormData();
+    form.set("body", "Précision.");
+    await comment(req("louis", { form }), params(body.id));
+    expect(await counts("louis")).toEqual(before);
+
+    // Un ticket d'un autre, ouvert : lu.
+    const { body: other } = await create("sarah", AUDIO);
+    expect((await counts("louis")).admin).toBe(before.admin + 1);
+    const { GET } = await import("@/app/api/reports/[id]/route");
+    await GET(req("louis"), params(other.id));
+    expect((await counts("louis")).admin).toBe(before.admin);
+  });
+
+  it("une fermeture n'allume rien et ne notifie personne, d'un côté comme de l'autre", async () => {
+    const { body } = await create("lucas", AUDIO);
+    const { GET } = await import("@/app/api/reports/[id]/route");
+    await GET(req("louis"), params(body.id));
+    await settle();
+    vi.clearAllMocks();
+    const admin = (await counts("louis")).admin;
+    expect(await setStatus("lucas", body.id, "closed")).toBe(200);
+    expect(await setStatus("lucas", body.id, "open")).toBe(200);
+    await GET(req("louis"), params(body.id));
+    const mine = (await counts("lucas")).mine;
+    expect(await setStatus("louis", body.id, "closed")).toBe(200);
+    await settle();
+    expect((await counts("lucas")).mine).toBe(mine);
+    // La réouverture par l'auteur, elle, prévient l'administrateur — une seule fois.
+    expect(push.admins).toHaveBeenCalledTimes(1);
+    expect(push.user).not.toHaveBeenCalled();
+    expect((await counts("louis")).admin).toBe(admin);
+  });
+});
+
 describe("signalements — images", () => {
   it("garde l'original, montre une version WebP, et dit quand rien n'a pu la lire", async () => {
     const { default: sharp } = await import("sharp");
@@ -185,5 +236,23 @@ describe("signalements — images", () => {
   it("refuse ce qui n'est pas une image", async () => {
     const res = await create("lucas", AUDIO, { images: [new File(["<script>"], "page.html", { type: "text/html" })] });
     expect(res.status).toBe(400);
+    // Un SVG est un document qui peut porter du script, et une page déguisée en image garde son extension.
+    const svg = new File(["<svg onload='alert(1)'/>"], "capture.svg", { type: "image/svg+xml" });
+    expect((await create("lucas", AUDIO, { images: [svg] })).status).toBe(400);
+    const disguised = new File(["<script>alert(1)</script>"], "capture.html", { type: "image/png" });
+    expect((await create("lucas", AUDIO, { images: [disguised] })).status).toBe(400);
+  });
+
+  // Le type servi venait du navigateur qui avait envoyé le fichier : une page HTML annoncée
+  // « image/png » sous un nom en .png se serait ouverte comme page dans la session de l'administrateur.
+  it("sert l'original sous le type de son extension, sans rien pouvoir exécuter", async () => {
+    const lie = new File(["<html><script>alert(1)</script></html>"], "capture.png", { type: "text/html" });
+    const { body } = await create("lucas", AUDIO, { images: [lie] });
+    const id = (body.images as { id: number }[])[0].id;
+    const { GET } = await import("@/app/api/reports/[id]/images/[imageId]/route");
+    const res = await GET(req("louis", { url: `https://cine.example/api/reports/${body.id}/images/${id}?original=1` }), imageParams(body.id, id));
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("content-security-policy")).toContain("sandbox");
   });
 });

@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ImagePlus, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 
-/** Tout ce qui ressemble à une image : les types déclarés et, pour les navigateurs muets, les extensions. */
-export const IMAGE_ACCEPT = "image/*,.heic,.heif,.avif,.webp,.bmp,.tif,.tiff,.jxl,.gif,.png,.jpg,.jpeg";
+/** Les formats que le serveur accepte (`IMAGE_TYPES` dans reportImages.ts) : par type et, pour les navigateurs muets, par extension. */
+export const IMAGE_ACCEPT = "image/jpeg,image/png,image/heic,image/heif,image/webp,image/avif,image/gif,image/bmp,image/tiff,image/jxl,.jpg,.jpeg,.png,.heic,.heif,.webp,.avif,.gif,.bmp,.tif,.tiff,.jxl";
 export const MAX_PICKED = 6;
 
 /** Une vignette, ou le nom du fichier quand ce navigateur ne sait pas l'afficher (un HEIC sur Chrome). */

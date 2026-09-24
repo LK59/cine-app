@@ -1028,8 +1028,16 @@ export const reportsDb = {
     return (getDb().prepare("SELECT * FROM reports WHERE status != 'draft' ORDER BY updated_at DESC").all() as ReportDbRow[]).map(toReport);
   },
 
-  setStatus(id: number, status: ReportStatus, by: "user" | "admin"): void {
+  /**
+   * `quiet` : un changement dont l'autre côté n'a pas à être averti — une fermeture. Il s'inscrit
+   * dans le fil, mais n'allume aucune pastille (demandé le 24/09/2026).
+   */
+  setStatus(id: number, status: ReportStatus, by: "user" | "admin", quiet = false): void {
     const now = Date.now();
+    if (quiet) {
+      getDb().prepare("UPDATE reports SET status = ?, updated_at = ? WHERE id = ?").run(status, now, id);
+      return;
+    }
     getDb()
       .prepare(`UPDATE reports SET status = ?, updated_at = ?, ${by === "admin" ? "last_admin_at" : "last_user_at"} = ? WHERE id = ?`)
       .run(status, now, now, id);

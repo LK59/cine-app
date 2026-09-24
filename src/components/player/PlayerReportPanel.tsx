@@ -8,7 +8,8 @@ import { fetcher } from "@/lib/swr";
 import type { ReportDetail } from "@/lib/reports";
 import { ReportWizard } from "@/components/reports/ReportWizard";
 import { MyReports } from "@/components/reports/MyReports";
-import { ReportThread, reportKey } from "@/components/reports/ReportThread";
+import { ReportThread } from "@/components/reports/ReportThread";
+import { FRESH, reportKey } from "@/components/reports/reportCache";
 
 type ReportView = { kind: "new" } | { kind: "list" } | { kind: "draft"; id: number } | { kind: "thread"; id: number };
 
@@ -27,10 +28,13 @@ export function decodeReportView(raw: string): ReportView {
 /** Reprendre un brouillon : l'assistant, rempli de ce qu'il contenait. */
 function DraftEditor({ id }: { id: number }) {
   const t = useT();
-  const { data, error, isLoading, mutate } = useSWR<ReportDetail>(reportKey(id), fetcher);
+  const { data, error, isLoading, mutate } = useSWR<ReportDetail>(reportKey(id), fetcher, FRESH);
   if (isLoading) return <LoadingState />;
   if (error || !data) return <ErrorState message={t("report.ui.loadError")} onRetry={() => mutate()} />;
-  return <ReportWizard existing={data} />;
+  // Déjà parti — depuis un autre appareil, ou une liste restée en retard : c'est le ticket qu'on
+  // montre, jamais un assistant dont l'envoi serait refusé.
+  if (data.status !== "draft") return <ReportThread id={data.id} />;
+  return <ReportWizard key={data.updatedAt} existing={data} />;
 }
 
 /**

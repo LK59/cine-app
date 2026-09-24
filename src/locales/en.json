@@ -2165,7 +2165,7 @@
       "logsHint": "Useful technical details (device, recent playback) are attached automatically.",
       "addImage": "Screenshot",
       "removeImage": "Remove image",
-      "imagesHint": "Up to 6 images, any common format (HEIC included)",
+      "imagesHint": "Up to 6 images — JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF, BMP, TIFF, JPEG XL",
       "noPreview": "No preview — open the original",
       "new": "New report",
       "newTitle": "Report a problem",
@@ -2196,7 +2196,8 @@
       "logsErrors": "Errors",
       "logsAuth": "Sign-ins",
       "logsNotifications": "Notifications received",
-      "titleLoading": "Loading the library…"
+      "titleLoading": "Loading the library…",
+      "sending": "Sending…"
     }
   }
 }

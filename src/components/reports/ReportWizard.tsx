@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { ArrowLeft, Check, ChevronRight, Film, Lightbulb, MessageSquareWarning, Pencil, Save, Search, Send, Trash2, Tv } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Film, Lightbulb, Loader2, MessageSquareWarning, Pencil, Save, Search, Send, Trash2, Tv } from "lucide-react";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
@@ -16,6 +16,7 @@ import type { CinemaSeriesPayload } from "@/app/api/cinema/series/route";
 import type { ReportDetail } from "@/lib/reports";
 import { ImagePicker, MAX_PICKED } from "./ImagePicker";
 import { appendImages, reportContext } from "./prepareImage";
+import { useRefreshReports } from "./reportCache";
 
 type Step = "zone" | "element" | "title" | "issue" | "describe";
 
@@ -221,6 +222,7 @@ export function ReportWizard({ existing }: { existing?: ReportDetail }) {
   const [files, setFiles] = useState<File[]>([]);
   const [kept, setKept] = useState(existing?.images ?? []);
   const [busy, setBusy] = useState(false);
+  const refresh = useRefreshReports();
 
   const steps = stepsFor(draft);
   const index = Math.max(0, steps.indexOf(step));
@@ -255,16 +257,16 @@ export function ReportWizard({ existing }: { existing?: ReportDetail }) {
       form.set("report", JSON.stringify(payload()));
       form.set("context", JSON.stringify(reportContext(locale)));
       await appendImages(form, files);
-      let id: number;
+      let saved: ReportDetail;
       if (existing) {
         if (send) form.set("send", "1");
-        const res = (await apiAction(`/api/reports/${existing.id}`, { method: "PUT", body: form })) as { id: number };
-        id = res.id;
+        saved = (await apiAction(`/api/reports/${existing.id}`, { method: "PUT", body: form })) as ReportDetail;
       } else {
         if (!send) form.set("draft", "1");
-        const res = (await apiAction("/api/reports", { method: "POST", body: form })) as { id: number };
-        id = res.id;
+        saved = (await apiAction("/api/reports", { method: "POST", body: form })) as ReportDetail;
       }
+      const id = saved.id;
+      await refresh(saved);
       toast.success(send ? t("report.ui.sent") : t("report.ui.draftSaved"));
       // Remplacé et non empilé : revenir en arrière depuis le ticket ne doit pas rouvrir l'assistant.
       cinemaNavigate({ report: send ? String(id) : "liste" }, "replace");
@@ -437,8 +439,11 @@ export function ReportWizard({ existing }: { existing?: ReportDetail }) {
         )}
         {step === "describe" && (
           <button type="button" disabled={busy || !canSend} onClick={() => submit(true)} className="btn btn-primary px-4 py-2 text-sm">
-            <Send size={15} />
-            {t("report.ui.send")}
+            {/* Les captures d'un téléphone pèsent plusieurs mégaoctets, et c'est leur envoi qui prend le
+                temps (mesuré le 24/09/2026 : 6,7 Mo pour une capture d'écran d'iPhone) : le bouton dit
+                que ça part, au lieu de sembler ne rien faire. */}
+            {busy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+            {busy ? t("report.ui.sending") : t("report.ui.send")}
           </button>
         )}
       </div>

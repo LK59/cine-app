@@ -20,18 +20,44 @@ export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 /** Par envoi (signalement ou commentaire). */
 export const MAX_IMAGES = 6;
 
-const EXTENSIONS = /\.(jpe?g|png|gif|webp|avif|heic|heif|bmp|tiff?|jxl|ico|svg)$/i;
+/**
+ * Les formats acceptés, et le type sous lequel chacun est servi. Le type vient d'ici, jamais du
+ * navigateur qui a envoyé le fichier : servir le type annoncé laissait passer une page HTML ou un
+ * SVG porteur de script sous un nom de capture, ouverts ensuite dans la session de
+ * l'administrateur par « ouvrir l'original » (24/09/2026). Pas de SVG : c'est un document, pas une
+ * image. La liste affichée à l'écran (`report.ui.imagesHint`) doit rester celle-ci.
+ */
+const IMAGE_TYPES: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  heic: "image/heic",
+  heif: "image/heif",
+  webp: "image/webp",
+  avif: "image/avif",
+  gif: "image/gif",
+  bmp: "image/bmp",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  jxl: "image/jxl",
+};
+const FROM_TYPE: Record<string, string> = Object.fromEntries(Object.entries(IMAGE_TYPES).map(([ext, type]) => [type, ext]));
 
-/** Une image, par son type annoncé ou, à défaut, par son extension — certains navigateurs n'en disent rien. */
-export function looksLikeImage(file: { type: string; name: string }): boolean {
-  return file.type.startsWith("image/") || EXTENSIONS.test(file.name);
+/** L'extension sûre d'un fichier : par son nom, ou — certains navigateurs n'en donnent pas — par son type. */
+function extensionOf(file: { type: string; name: string }): string | null {
+  const fromName = file.name.match(/\.([a-z0-9]{2,5})$/i)?.[1]?.toLowerCase();
+  if (fromName && fromName in IMAGE_TYPES) return fromName;
+  if (fromName) return null;
+  return FROM_TYPE[file.type.toLowerCase()] ?? null;
 }
 
-function extensionOf(file: { type: string; name: string }): string {
-  const fromName = file.name.match(/\.([a-z0-9]{2,5})$/i)?.[1];
-  if (fromName) return fromName.toLowerCase();
-  const fromType = file.type.split("/")[1]?.replace(/[^a-z0-9]/gi, "");
-  return fromType || "bin";
+export function looksLikeImage(file: { type: string; name: string }): boolean {
+  return extensionOf(file) !== null;
+}
+
+/** Le type d'un fichier enregistré, par son extension — celle que `saveReportImage` a choisie. */
+export function storedImageType(name: string): string {
+  return IMAGE_TYPES[name.split(".").pop()?.toLowerCase() ?? ""] ?? "application/octet-stream";
 }
 
 /**
@@ -42,7 +68,8 @@ export async function saveReportImage(reportId: number, messageId: number | null
   const dir = path.join(REPORTS_DIR(), String(reportId));
   fs.mkdirSync(dir, { recursive: true });
   const id = randomUUID();
-  const originalName = `${id}.orig.${extensionOf(original)}`;
+  // Appelé après `looksLikeImage` : l'extension existe toujours.
+  const originalName = `${id}.orig.${extensionOf(original) ?? "bin"}`;
   const originalBytes = Buffer.from(await original.arrayBuffer());
   fs.writeFileSync(path.join(dir, originalName), originalBytes);
 
@@ -75,7 +102,7 @@ export async function saveReportImage(reportId: number, messageId: number | null
     messageId,
     file,
     original: originalName,
-    mime: original.type || "application/octet-stream",
+    mime: storedImageType(originalName),
     originalName: original.name.slice(0, 200) || null,
     width,
     height,
