@@ -26,6 +26,7 @@ vi.mock("@/lib/config", () => ({
   config: {
     get player() { return { enabled: playerEnabled }; },
     jellyfin: { url: "http://jf.test" },
+    app: { sessionSecret: "secret-de-test-assez-long-pour-signer" },
   },
 }));
 
@@ -89,6 +90,40 @@ describe("POST /api/jellyfin/playback/start", () => {
     const res = await POST(fakeReq({ itemId: validId }));
     const body = await res.json();
     expect(body.manifestUrl).toBe(`/api/jellyfin/stream/${validId}/master.m3u8?DeviceId=x`);
+  });
+
+  it("donne une adresse absolue et signée à toute lecture, pas seulement à une diffusion demandée", async () => {
+    // 24/09/2026 : un film ouvert sur le téléphone puis envoyé à la télé par le bouton AirPlay de
+    // la vidéo — la télé recevait l'adresse relative, sans jeton, et 624 refus en une heure.
+    mockVerifySessionFull.mockResolvedValue({ u: "timeo", jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "play-1",
+      MediaSources: [{ Id: "src-1", TranscodingUrl: "/videos/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/master.m3u8?DeviceId=x", MediaStreams: [] }],
+    });
+    const req = Object.assign(fakeReq({ itemId: validId }), {
+      headers: new Headers({ "x-forwarded-proto": "https", "x-forwarded-host": "cine.example" }),
+    }) as unknown as NextRequest;
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const body = await (await POST(req)).json();
+    expect(body.castUrl).toMatch(new RegExp(`^https://cine\\.example/api/jellyfin/stream/${validId}/master\\.m3u8\\?DeviceId=x&`));
+    const { CAST_TOKEN_PARAM, verifyCastToken } = await import("@/lib/castToken");
+    const token = new URL(body.castUrl).searchParams.get(CAST_TOKEN_PARAM);
+    expect(await verifyCastToken(token, validId)).toBe("timeo");
+  });
+
+  it("joue quand même si l'adresse signée ne peut pas être faite", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "timeo", jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "play-1",
+      MediaSources: [{ Id: "src-1", TranscodingUrl: "/videos/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/master.m3u8", MediaStreams: [] }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    // Aucun en-tête : l'origine publique est introuvable.
+    const res = await POST(fakeReq({ itemId: validId }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.castUrl).toBeNull();
+    expect(body.manifestUrl).toBe(`/api/jellyfin/stream/${validId}/master.m3u8`);
   });
 
   it("returns 502 when Jellyfin returns no MediaSource/TranscodingUrl", async () => {

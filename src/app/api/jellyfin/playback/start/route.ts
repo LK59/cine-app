@@ -239,7 +239,10 @@ export async function POST(req: NextRequest) {
      * voyait comme une liste réduite à ce qu'il devinait tout seul. Signé ici, à côté de l'adresse
      * du manifeste, plutôt que deux fois : c'est le même titre et le même spectateur.
      */
-    const castPass = forCast ? await signCastToken(itemId, session.u) : null;
+    // Signé pour toute lecture, et non plus seulement pour une diffusion demandée : voir `castUrl`.
+    // Hors diffusion demandée, un échec de signature ne coûte que l'AirPlay des commandes de la
+    // vidéo — jamais la lecture elle-même (voir `castUrl`).
+    const castPass = forCast ? await signCastToken(itemId, session.u) : await signCastToken(itemId, session.u).catch(() => null);
     /**
      * Les **faits** des pistes, et non une étiquette déjà écrite.
      *
@@ -323,18 +326,30 @@ export async function POST(req: NextRequest) {
      *
      * L'origine vient des en-têtes du mandataire inverse, qui est le seul à savoir sous quel nom
      * le monde extérieur joint cette application — `nextUrl.origin` ne connaît que le conteneur.
+     *
+     * **Pour toute lecture** depuis le 24/09/2026, et non plus seulement quand la diffusion est
+     * demandée par l'application. Le bouton AirPlay des commandes de la vidéo marche partout : une
+     * lecture ouverte sur le téléphone puis envoyée à la télé de là tendait au téléviseur l'adresse
+     * relative et sans jeton. Il a essuyé 624 refus en une heure, iOS a relayé la vidéo par le
+     * téléphone, et l'image sautait ; relancée par « Diffuser », la même télé a tout reçu.
      */
     let castUrl: string | null = null;
-    if (forCast) {
-      const separator = manifestUrl.includes("?") ? "&" : "?";
-      castUrl = `${publicOrigin(req)}${manifestUrl}${separator}${CAST_TOKEN_PARAM}=${encodeURIComponent(castPass!)}`;
+    try {
+      if (castPass) {
+        const separator = manifestUrl.includes("?") ? "&" : "?";
+        castUrl = `${publicOrigin(req)}${manifestUrl}${separator}${CAST_TOKEN_PARAM}=${encodeURIComponent(castPass)}`;
+      }
+    } catch (error) {
+      // Une lecture ordinaire se passe de l'adresse signée : l'élément reçoit alors `manifestUrl`,
+      // comme avant. Une diffusion demandée, non — elle n'aurait rien à tendre au téléviseur.
+      if (forCast) throw error;
     }
 
     return NextResponse.json({
       playSessionId: info.PlaySessionId,
       mediaSourceId: source.Id,
       manifestUrl,
-      /** Non nulle seulement pour une diffusion : l'adresse que le téléviseur ira chercher. */
+      /** L'adresse que l'élément reçoit, et que le téléviseur ira chercher s'il la prend. */
       castUrl,
       isDirectPlay,
       subtitleTracks,

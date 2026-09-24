@@ -774,8 +774,10 @@ function ActivePlayer({
        *
        * AirPlay comme Remote Playback ne transmettent pas le flux : ils tendent au téléviseur la
        * `src` courante, à charge pour lui d'aller la chercher. Elle doit donc être absolue et
-       * porter son laissez-passer. Hors diffusion, rien ne change : `castUrl` est nulle et c'est
-       * l'adresse relative d'hier qui sert.
+       * porter son laissez-passer — et ce dans toute lecture, parce que le bouton AirPlay de la
+       * vidéo peut l'envoyer à la télé sans passer par « Diffuser » (24/09/2026 : une heure de
+       * refus au téléviseur, et une image qui sautait). `manifestUrl` ne sert plus qu'à un
+       * serveur d'avant ce changement.
        */
       const sourceUrl = data.castUrl ?? data.manifestUrl;
 
