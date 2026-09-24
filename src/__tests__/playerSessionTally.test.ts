@@ -75,3 +75,16 @@ describe("SessionTally — arrière-plan", () => {
     expect(t.summary(60_000).waits).toBe(0);
   });
 });
+
+// Un saut lancé juste avant de quitter l'application et arrivé au retour comptait l'absence
+// entière comme attente : 286 s pour un Mac mis en veille (24/09/2026).
+describe("SessionTally — temps passé en arrière-plan", () => {
+  it("compte l'absence en cours et les absences finies", () => {
+    const tally = new SessionTally();
+    expect(tally.hiddenMsSoFar(1_000)).toBe(0);
+    tally.hidden(1_000);
+    expect(tally.hiddenMsSoFar(4_000)).toBe(3_000);
+    tally.shown(5_000);
+    expect(tally.hiddenMsSoFar(9_000)).toBe(4_000);
+  });
+});

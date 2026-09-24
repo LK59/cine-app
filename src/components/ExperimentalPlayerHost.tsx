@@ -305,6 +305,16 @@ const TRANSITION =
 /** Le plus longtemps qu'une image figée reste à l'écran, quoi qu'il arrive. */
 const FREEZE_MAX_MS = 4000;
 
+/**
+ * La durée d'un saut, sans le temps passé en arrière-plan pendant qu'il attendait. Un saut lancé
+ * juste avant de quitter l'application et arrivé au retour comptait l'absence entière : 286 s pour
+ * un Mac mis en veille (24/09/2026), ce qui faussait tout bilan des attentes.
+ */
+function seekElapsed(tally: SessionTally, timing: { startedAt: number; hiddenAtStart: number }): number {
+  const now = Date.now();
+  return Math.max(0, now - timing.startedAt - (tally.hiddenMsSoFar(now) - timing.hiddenAtStart));
+}
+
 export function ExperimentalPlayerHost({
   session,
   mode,
@@ -592,7 +602,7 @@ export function ExperimentalPlayerHost({
    */
   const requestedSeekRef = useRef<number | null>(null);
   /** Le saut en cours de mesure, pour la ligne `seek` du journal — le dernier demandé seulement. */
-  const seekTimingRef = useRef<{ from: number; to: number; startedAt: number; buffered: boolean } | null>(null);
+  const seekTimingRef = useRef<{ from: number; to: number; startedAt: number; hiddenAtStart: number; buffered: boolean } | null>(null);
   /**
    * Un saut qui n'arrive pas là où il était demandé n'écrivait rien : la ligne ne part qu'à
    * l'arrivée. 2012 sur iPhone (22/09/2026) : une tête passée de 2141 à 1681 s sans une trace.
@@ -616,7 +626,7 @@ export function ExperimentalPlayerHost({
       ...(stillSeeking ? {} : { arrived: seekArrived(landedAt, timing.to) }),
       superseded: true,
       landedAt: Math.round(landedAt * 10) / 10,
-      tookMs: Date.now() - timing.startedAt,
+      tookMs: seekElapsed(tally, timing),
       steps: traceRecent(Date.now() - timing.startedAt + 500).join(" | "),
     });
   };
@@ -1606,14 +1616,14 @@ export function ExperimentalPlayerHost({
         const timing = seekTimingRef.current;
         if (timing && seekArrived(element.currentTime, timing.to)) {
           seekTimingRef.current = null;
-          tally.seekArrived(Date.now() - timing.startedAt);
+          tally.seekArrived(seekElapsed(tally, timing));
           reportPlayback("seek", {
             ...describeFileRef.current(),
             path: "remux",
             from: Math.round(timing.from),
             to: Math.round(timing.to),
             buffered: timing.buffered,
-            tookMs: Date.now() - timing.startedAt,
+            tookMs: seekElapsed(tally, timing),
             // Ce que la source a fait entre la demande et l'arrivée — et une demi-seconde avant,
             // pour le geste qui l'a lancée. Un saut arrière suivi d'un blocage (22/09/2026) ne
             // laissait au journal que « de 176 à 166 en 900 ms », sans rien de ce qui l'avait servi.
@@ -2163,7 +2173,7 @@ export function ExperimentalPlayerHost({
       if (element.buffered.start(i) <= seconds && seconds < element.buffered.end(i)) buffered = true;
     }
     reportUnarrivedSeek(element?.currentTime ?? positionRef.current, element?.seeking ?? false);
-    seekTimingRef.current = { from: positionRef.current, to: seconds, startedAt: Date.now(), buffered };
+    seekTimingRef.current = { from: positionRef.current, to: seconds, startedAt: Date.now(), hiddenAtStart: tally.hiddenMsSoFar(Date.now()), buffered };
   };
 
   /** Un changement de piste audio — les commandes et le banc d'essai, par le même chemin. */

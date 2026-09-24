@@ -95,6 +95,15 @@ export class SessionTally {
     return this.lastHiddenMs;
   }
 
+  /**
+   * Tout le temps passé en arrière-plan jusqu'ici, absence en cours comprise. Un saut commencé juste
+   * avant de quitter l'application et arrivé au retour comptait l'absence entière comme attente :
+   * 286 s pour un Mac mis en veille (24/09/2026), ce qui faussait tout bilan de la semaine.
+   */
+  hiddenMsSoFar(now: number): number {
+    return this.backgroundMs + (this.hiddenSince !== null ? now - this.hiddenSince : 0);
+  }
+
   /** La durée de la dernière absence terminée. */
   get lastBackgroundMs(): number {
     return this.lastHiddenMs;
