@@ -460,6 +460,8 @@
     "diagnosis": {
       "title": "Le fichier ou l'appareil ? ({n} jours)",
       "none": "Aucun titre n'a échoué sur la période.",
+      "showAll": "Afficher les {n} titres",
+      "collapse": "Réduire",
       "counts": "{f} séances en échec sur {n} · dernière {when}",
       "verdict": {
         "file": "Le fichier",

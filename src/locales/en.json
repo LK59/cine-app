@@ -460,6 +460,8 @@
     "diagnosis": {
       "title": "The file or the device? ({n} days)",
       "none": "No title failed in this period.",
+      "showAll": "Show all {n} titles",
+      "collapse": "Collapse",
       "counts": "{f} failed sessions out of {n} · last {when}",
       "verdict": {
         "file": "The file",

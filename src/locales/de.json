@@ -460,6 +460,8 @@
     "diagnosis": {
       "title": "Datei oder Gerät? ({n} Tage)",
       "none": "In diesem Zeitraum ist kein Titel fehlgeschlagen.",
+      "showAll": "Alle {n} Titel anzeigen",
+      "collapse": "Einklappen",
       "counts": "{f} von {n} Sitzungen fehlgeschlagen · zuletzt {when}",
       "verdict": {
         "file": "Die Datei",

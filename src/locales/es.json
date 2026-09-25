@@ -460,6 +460,8 @@
     "diagnosis": {
       "title": "¿El archivo o el dispositivo? ({n} días)",
       "none": "Ningún título falló en este periodo.",
+      "showAll": "Mostrar los {n} títulos",
+      "collapse": "Contraer",
       "counts": "{f} sesiones fallidas de {n} · última {when}",
       "verdict": {
         "file": "El archivo",

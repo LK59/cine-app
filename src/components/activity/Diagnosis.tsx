@@ -1,6 +1,7 @@
 "use client";
 
-import { Stethoscope } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronUp, Stethoscope } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { Panel, Poster, ago, type T } from "@/components/activity/parts";
 import { ActivityLink } from "@/components/activity/nav";
@@ -38,16 +39,37 @@ function sentence(d: TitleDiagnosis, t: T): string {
 }
 
 /**
+ * Combien de titres le panneau montre replié. Sur trente jours la liste s'allongeait jusqu'à
+ * repousser la semaine en chiffres hors de l'écran ; les deux premiers suffisent à dire s'il se
+ * passe quelque chose, le reste se déroule à la demande.
+ */
+const FOLDED = 2;
+
+/**
  * Le fichier ou l'appareil ? Pour chaque titre qui a échoué, le verdict tiré du croisement des
  * séances, la phrase qui le justifie, et les témoins — chacun avec sa séance en échec à ouvrir.
  */
 export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; now: number; days: number }) {
   const t = useT();
+  const [open, setOpen] = useState(false);
+  const shown = open ? items : items.slice(0, FOLDED);
+  const toggle =
+    items.length > FOLDED ? (
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-slate-400 hover:bg-white/5 hover:text-white"
+      >
+        {open ? t("activity.diagnosis.collapse") : t("activity.diagnosis.showAll", { n: items.length })}
+        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+    ) : null;
   return (
     <Panel title={t("activity.diagnosis.title", { n: days })} icon={Stethoscope}>
       {items.length ? (
         <ul className="divide-y divide-white/5">
-          {items.map((d) => (
+          {shown.map((d) => (
             <li key={d.key} className="flex gap-3 px-4 py-3">
               <Poster itemId={d.itemId} className="h-16 w-11" />
               <div className="min-w-0 flex-1 space-y-1.5">
@@ -99,6 +121,7 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
               </div>
             </li>
           ))}
+          {toggle && <li className="flex justify-center px-4 py-2">{toggle}</li>}
         </ul>
       ) : (
         <p className="px-4 py-6 text-sm text-slate-500">{t("activity.diagnosis.none")}</p>
