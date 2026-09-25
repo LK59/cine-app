@@ -30,3 +30,27 @@ export async function signOut(go: (path: string) => void): Promise<void> {
   }
   go("/login");
 }
+
+/**
+ * Changer de compte recharge la page, en partant comme en arrivant.
+ *
+ * Une navigation interne garde toute la mémoire de la page : le cache de SWR, le compte sous lequel
+ * le cache de l'appareil et la reprise instantanée rangent ce qu'ils écrivent, les préchargements.
+ * Après « Se déconnecter » puis une autre connexion dans le même onglet, le compte suivant voyait
+ * « Reprendre » et « Ma liste » du précédent, et ses propres données étaient rangées sous l'autre
+ * nom (chasse aux défauts du 25/09/2026). Un vrai chargement repart de zéro — c'est l'écran de
+ * lancement d'une seconde, à un moment où aucun film ne joue.
+ */
+export function hardNavigate(path: string): void {
+  window.location.replace(path);
+}
+
+/**
+ * La destination après connexion : un chemin de ce site, jamais une autre adresse. `next` vient de
+ * l'adresse de la page — un lien piégé pouvait sinon renvoyer ailleurs une fois connecté.
+ */
+export function safeNextPath(asked: string | null, fallback: string): string {
+  if (!asked || !asked.startsWith("/") || asked.startsWith("//") || asked.startsWith("/\\")) return fallback;
+  return asked;
+}
+

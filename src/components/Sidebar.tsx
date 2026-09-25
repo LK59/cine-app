@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "@/lib/signOut";
+import { hardNavigate, signOut } from "@/lib/signOut";
 import { Clapperboard, LogOut, MonitorPlay, Search } from "lucide-react";
 import { NAV_GROUPS } from "@/components/navItems";
 import { useRole } from "@/lib/useRole";
@@ -18,7 +18,7 @@ export function Sidebar() {
   const { isConfigured } = useConfiguredServices();
 
   // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
-  const logout = () => signOut((path) => router.replace(path));
+  const logout = () => signOut(hardNavigate);
 
   return (
     <aside className="glass-panel hidden h-full w-64 flex-col border-r border-l-0 border-y-0 px-3 py-4 md:flex">

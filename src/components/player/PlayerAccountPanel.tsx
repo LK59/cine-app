@@ -7,7 +7,7 @@ import Link from "next/link";
 import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, ListChecks } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
-import { signOut } from "@/lib/signOut";
+import { hardNavigate, signOut } from "@/lib/signOut";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { useLocale, useT } from "@/components/TranslationProvider";
@@ -98,7 +98,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
   const badge = useReportBadge();
 
   // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
-  const logout = () => signOut((path) => router.replace(path));
+  const logout = () => signOut(hardNavigate);
 
   return (
     <PlayerPanelFrame

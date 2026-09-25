@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "fs";
-import { signOut } from "@/lib/signOut";
+import { safeNextPath, signOut } from "@/lib/signOut";
 import { prefetchPlaybackState, takePrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -60,5 +60,18 @@ describe("signOut", () => {
       expect([f, src.includes("signOut(")]).toEqual([f, true]);
       expect([f, src.includes('"/api/auth/logout"')]).toEqual([f, false]);
     }
+  });
+});
+
+describe("safeNextPath — où aller après la connexion", () => {
+  it("garde un chemin de ce site", () => {
+    expect(safeNextPath("/#film=12", "/")).toBe("/#film=12");
+  });
+
+  it("refuse une autre adresse, même déguisée", () => {
+    for (const asked of ["https://ailleurs.example", "//ailleurs.example", "/\\ailleurs.example", "javascript:alert(1)", ""]) {
+      expect(safeNextPath(asked, "/")).toBe("/");
+    }
+    expect(safeNextPath(null, "/gestion")).toBe("/gestion");
   });
 });

@@ -4,7 +4,7 @@ import { MIN_FLICK_PX } from "@/lib/useSwipeToDismiss";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "@/lib/signOut";
+import { hardNavigate, signOut } from "@/lib/signOut";
 import { enterCinema } from "@/lib/leaveCinema";
 import { LogOut, MonitorPlay, MoreHorizontal, Search, RefreshCw } from "lucide-react";
 import { prefetchRoute } from "@/lib/prefetch";
@@ -182,7 +182,7 @@ export function MobileNav() {
   }, [open]);
 
   // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
-  const logout = () => signOut((path) => router.replace(path));
+  const logout = () => signOut(hardNavigate);
 
   async function refresh() {
     if (refreshing) return;

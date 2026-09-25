@@ -2,9 +2,10 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Clapperboard, Activity, Eye, EyeOff } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
+import { hardNavigate, safeNextPath } from "@/lib/signOut";
 
 export default function LoginPage() {
   return (
@@ -15,7 +16,6 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const t = useT();
   const [username, setUsername] = useState("");
@@ -59,7 +59,8 @@ function LoginForm() {
        */
       const asked = searchParams.get("next");
       const local = endpoint.endsWith("/login");
-      router.replace(asked || (local ? "/gestion" : "/"));
+      // Un vrai chargement, pas une navigation interne : voir `hardNavigate`. Et seulement vers ce site.
+      hardNavigate(safeNextPath(asked, local ? "/gestion" : "/"));
     } catch (err) {
       setError(err instanceof Error ? err.message : t("auth.error.unknown"));
     } finally {
