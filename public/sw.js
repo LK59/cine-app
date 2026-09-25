@@ -15,6 +15,9 @@
 // application qui en prend trop — on perdait alors ce qui compte avec ce qui ne sert plus. Le
 // changement de nom évince une dernière fois tout l'ancien cache ; la suite ne grossit plus
 // (voir STATIC_PREFIX et le traitement des images plus bas).
+// (25/09/2026, sans changer de nom : ce fichier a changé pour rattraper les onglets ouverts sur un
+// code plus ancien — voir `reloadHiddenTabsOnce`. Un changement de contenu suffit à faire installer
+// le worker ; le nom, lui, évincerait tout le cache pour rien.)
 const CACHE_NAME = "cine-app-v12";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
 
@@ -69,8 +72,45 @@ self.addEventListener("activate", (event) => {
           )
       )
       .then(() => self.clients.claim())
+      .then(() => reloadHiddenTabsOnce())
   );
 });
+
+/**
+ * Les onglets ouverts sur un code d'avant le 25/09/2026, rattrapés une fois.
+ *
+ * Un onglet ne se recharge seul quand un déploiement sort (`BuildRefresh`) que s'il porte déjà ce
+ * code-là — un onglet plus ancien ne le sait pas, et un iPad a regardé toute une soirée sur le code
+ * du matin. Ces onglets-là ont encore l'ancienne bannière « Nouvelle version disponible », qui
+ * redemande ce fichier à chaque retour au premier plan : il suffit qu'il change pour que le
+ * navigateur installe ce worker, et que la bannière s'affiche d'elle-même dans l'onglet visible.
+ *
+ * Ceux qui sont en arrière-plan, personne ne les regarde : ils sont rechargés ici, une seule fois
+ * par navigateur (la marque est gardée dans le cache de l'application, que `activate` conserve).
+ * Un onglet visible ne l'est jamais : un film peut y jouer, et le worker ne peut pas le savoir.
+ */
+const HIDDEN_TABS_SWEEP = "/__sweep/onglets-2026-09-25";
+
+function reloadHiddenTabsOnce() {
+  const mark = new Request(new URL(HIDDEN_TABS_SWEEP, self.location.href).href);
+  return caches
+    .open(CACHE_NAME)
+    .then((cache) =>
+      cache.match(mark).then((done) => {
+        if (done) return;
+        return cache.put(mark, new Response("1")).then(() =>
+          self.clients.matchAll({ type: "window" }).then((tabs) =>
+            Promise.all(
+              tabs
+                .filter((tab) => tab.visibilityState === "hidden" && typeof tab.navigate === "function")
+                .map((tab) => tab.navigate(tab.url).catch(() => {}))
+            )
+          )
+        );
+      })
+    )
+    .catch(() => {});
+}
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;

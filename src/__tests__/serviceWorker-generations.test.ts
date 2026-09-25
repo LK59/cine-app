@@ -58,9 +58,13 @@ function worker(build: string) {
     clients: { claim: vi.fn(), matchAll: vi.fn().mockResolvedValue([]), openWindow: vi.fn() },
     registration: { showNotification: vi.fn() },
   };
+  currentScope = scope;
   const source = readFileSync(join(process.cwd(), "public/sw.js"), "utf8");
   new Function("self", "caches", "fetch", source)(scope, storage, network);
 }
+
+let currentScope: { clients: { matchAll: ReturnType<typeof vi.fn> } };
+const lastScope = () => currentScope;
 
 async function activate() {
   let done: Promise<unknown> = Promise.resolve();
@@ -125,5 +129,39 @@ describe("le cache du code, par génération", () => {
     worker("aaa");
     expect(await get("/_next/image?url=%2Fposter.jpg&w=256&q=75")).toBeNull();
     expect(network).not.toHaveBeenCalled();
+  });
+});
+
+describe("les onglets d'un code plus ancien (25/09/2026)", () => {
+  beforeEach(() => {
+    names = [];
+    caches = new Map();
+    network = vi.fn();
+  });
+
+  function tab(visibilityState: "hidden" | "visible") {
+    return { visibilityState, url: "https://cine.example/#film=265", navigate: vi.fn().mockResolvedValue(undefined) };
+  }
+
+  it("recharge ceux qui sont en arrière-plan, jamais celui qu'on regarde", async () => {
+    const hidden = tab("hidden");
+    const visible = tab("visible");
+    worker("b1");
+    const scope = lastScope();
+    scope.clients.matchAll.mockResolvedValue([hidden, visible]);
+    await activate();
+    expect(hidden.navigate).toHaveBeenCalledWith(hidden.url);
+    expect(visible.navigate).not.toHaveBeenCalled();
+  });
+
+  it("une seule fois par navigateur, et non à chaque déploiement", async () => {
+    const hidden = tab("hidden");
+    worker("b1");
+    lastScope().clients.matchAll.mockResolvedValue([hidden]);
+    await activate();
+    worker("b2");
+    lastScope().clients.matchAll.mockResolvedValue([hidden]);
+    await activate();
+    expect(hidden.navigate).toHaveBeenCalledTimes(1);
   });
 });
