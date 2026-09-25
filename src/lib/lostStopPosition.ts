@@ -19,6 +19,7 @@
 // se voit pas dans la date : elle se voit dans les sessions, et elle a le dernier mot.
 
 import { jellyfin } from "@/lib/clients/jellyfin";
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 const TICKS_PER_SECOND = 10_000_000;
 const MIN_RESUME_PCT = 5;
@@ -38,7 +39,11 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 /** Ce qui a été fait, pour la ligne du journal — jamais une erreur qui remonte. */
 export async function recoverLostPosition(jfId: string | undefined, fields: Record<string, unknown>, now = Date.now()): Promise<string> {
   if (fields.why !== "lost") return "sans objet";
-  const itemId = typeof fields.itemId === "string" ? fields.itemId : null;
+  // Validé avant d'aller dans une adresse : ce champ vient du navigateur, et l'écriture qui suit
+  // part avec la clé d'administration. Un « itemId » comme `../../System/Restart?` résolvait vers
+  // une autre route de Jellyfin, en POST, avec les droits du serveur (chasse aux défauts du
+  // 25/09/2026). Seul un identifiant Jellyfin passe.
+  const itemId = isJellyfinId(fields.itemId) ? fields.itemId : null;
   const at = num(fields.at);
   const lateBy = num(fields.lateByMs);
   if (!jfId || !itemId || at === null || at <= 0 || lateBy === null) return "incomplet";

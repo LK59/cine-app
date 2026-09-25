@@ -92,7 +92,7 @@ describe("un bilan perdu rend sa position à Jellyfin", () => {
   const NOW = Date.parse("2026-09-24T15:32:39Z");
   const lost = (extra: Record<string, unknown> = {}) => ({
     kind: "stop",
-    fields: { why: "lost", itemId: "love", at: 2448, lateByMs: 47 * 60_000, ...extra },
+    fields: { why: "lost", itemId: "0123456789abcdef0123456789abcdef", at: 2448, lateByMs: 47 * 60_000, ...extra },
   });
   beforeEach(() => {
     vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
@@ -106,7 +106,7 @@ describe("un bilan perdu rend sa position à Jellyfin", () => {
 
   it("avance la position, et le dit dans la ligne", async () => {
     await post(lost());
-    expect(jf.saved).toEqual([["jf-1", "love", 2448 * 10_000_000]]);
+    expect(jf.saved).toEqual([["jf-1", "0123456789abcdef0123456789abcdef", 2448 * 10_000_000]]);
     expect(mockLog).toHaveBeenCalledWith("louis", "stop", expect.objectContaining({ resumeFix: "avancée de 27 s" }));
   });
 
@@ -114,7 +114,7 @@ describe("un bilan perdu rend sa position à Jellyfin", () => {
     jf.userData = { PlaybackPositionTicks: 100 * 10_000_000, LastPlayedDate: new Date(NOW - 60_000).toISOString() };
     await post(lost());
     jf.userData = { PlaybackPositionTicks: 2421 * 10_000_000, LastPlayedDate: new Date(NOW - 50 * 60_000).toISOString() };
-    jf.sessions = [{ UserId: "jf-1", NowPlayingItem: { Id: "love" }, LastPlaybackCheckIn: new Date(NOW - 5_000).toISOString() }];
+    jf.sessions = [{ UserId: "jf-1", NowPlayingItem: { Id: "0123456789abcdef0123456789abcdef" }, LastPlaybackCheckIn: new Date(NOW - 5_000).toISOString() }];
     await post(lost());
     jf.sessions = [];
     jf.userData = { PlaybackPositionTicks: 2500 * 10_000_000, LastPlayedDate: new Date(NOW - 50 * 60_000).toISOString() };
@@ -126,16 +126,25 @@ describe("un bilan perdu rend sa position à Jellyfin", () => {
   // La session de la séance perdue elle-même, encore listée par Jellyfin mais muette depuis la
   // mort de la page : elle ne doit pas passer pour une lecture en cours.
   it("ne prend pas la session morte de la séance perdue pour une lecture en cours", async () => {
-    jf.sessions = [{ UserId: "jf-1", NowPlayingItem: { Id: "love" }, LastPlaybackCheckIn: new Date(NOW - 3 * 60_000).toISOString() }];
+    jf.sessions = [{ UserId: "jf-1", NowPlayingItem: { Id: "0123456789abcdef0123456789abcdef" }, LastPlaybackCheckIn: new Date(NOW - 3 * 60_000).toISOString() }];
     await post(lost());
-    expect(jf.saved).toEqual([["jf-1", "love", 2448 * 10_000_000]]);
+    expect(jf.saved).toEqual([["jf-1", "0123456789abcdef0123456789abcdef", 2448 * 10_000_000]]);
   });
 
   it("ni un arrêt ordinaire, ni une fin de film, ni une position au-delà des seuils", async () => {
-    await post({ kind: "stop", fields: { why: "close", itemId: "love", at: 2448 } });
+    await post({ kind: "stop", fields: { why: "close", itemId: "0123456789abcdef0123456789abcdef", at: 2448 } });
     await post(lost({ ended: true }));
     await post(lost({ at: 3300 }));
     expect(jf.saved).toEqual([]);
+  });
+
+  // Chasse aux défauts du 25/09/2026 : l'identifiant vient du navigateur et l'écriture part avec la
+  // clé d'administration — `../../System/Restart?` résolvait vers une autre route de Jellyfin.
+  it("n'écrit rien pour un identifiant qui n'en est pas un", async () => {
+    await post(lost({ itemId: "../../System/Restart?" }));
+    await post(lost({ itemId: "0123456789abcdef0123456789abcdef/../../Users" }));
+    expect(jf.saved).toEqual([]);
+    expect(mockLog.mock.calls.map((c) => (c[2] as { resumeFix?: string }).resumeFix)).toEqual(["incomplet", "incomplet"]);
   });
 });
 
