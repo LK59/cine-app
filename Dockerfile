@@ -47,6 +47,9 @@ RUN --mount=type=cache,target=/root/.npm apk add --no-cache libstdc++ tzdata && 
 COPY --from=builder --chown=cineapp:cineapp /app/public ./public
 COPY --from=builder --chown=cineapp:cineapp /app/.next/standalone ./
 COPY --from=builder --chown=cineapp:cineapp /app/.next/static ./.next/static
+# Le point d'entrée : il remet les fichiers statiques des builds précédents avant de lancer le
+# serveur (voir server-boot/staticCarryover.mjs).
+COPY --from=builder --chown=cineapp:cineapp /app/server-boot ./server-boot
 # Copy compiled better-sqlite3 native module (compiled for Alpine in deps stage)
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/web-push ./node_modules/web-push
@@ -56,4 +59,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-CMD ["node", "server.js"]
+CMD ["node", "server-boot/boot.mjs"]
