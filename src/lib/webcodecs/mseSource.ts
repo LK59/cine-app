@@ -16,6 +16,7 @@ import { PlaybackGuard } from "./playbackGuard";
 import { NO_INDEX_REACH_SECONDS, reachable, seekArrived } from "./seekArrival";
 import { LANDING_REACH_SECONDS, SeekLifecycle, landingFor } from "./seekLifecycle";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
+import { ByteRate, currentSourceBufferQuota, laneBudget, tightest, type BufferBudget } from "./bufferBudget";
 
 // Kept exported from here as well: every caller of these already reaches for this module, and
 // moving where they live should not mean touching a dozen call sites.
@@ -189,6 +190,12 @@ const TRACED_APPENDS_PER_SEEK = 6;
 /** How much already-played media to keep before evicting, so a short step back does not re-fetch. */
 const KEEP_BEHIND_SECONDS = 30;
 
+/**
+ * De combien le début d'un tampon peut dépasser ce qu'on garde derrière avant qu'on le retire :
+ * sans cette marge, chaque envoi serait suivi d'un retrait d'une fraction de seconde.
+ */
+const TRIM_SLACK_SECONDS = 2;
+
 export interface MseCallbacks {
   /**
    * Fatal: playback cannot continue on this path. The caller decides what to say and offer.
@@ -296,6 +303,15 @@ export class MseSource {
   /** For the frozen-clock check: where the clock was, since when, and how often it was pushed. */
   /** How far ahead to fill. Lowered, for this file only, if the browser says it cannot hold it. */
   private targetBuffer = TARGET_BUFFER_SECONDS;
+  /**
+   * Le plafond de ce navigateur en octets, et le débit réellement envoyé à chaque tampon — voir
+   * `bufferBudget.ts`. Null ailleurs que sur WebKit : rien n'y change.
+   */
+  private readonly quota = currentSourceBufferQuota();
+  private readonly videoRate = new ByteRate();
+  private readonly audioRate = new ByteRate();
+  /** Le dernier budget écrit dans la trace, pour ne l'écrire que lorsqu'il change vraiment. */
+  private tracedBudget: BufferBudget | null = null;
   private lastClockAt = -1;
   private frozenSince: number | null = null;
   private frozenNudges = 0;
@@ -783,7 +799,7 @@ export class MseSource {
     try {
       while (!this.destroyed && this.generation === generation) {
         const lead = this.lead;
-        if (lead >= this.targetBuffer) break;
+        if (lead >= this.aheadTarget) break;
         // Above the floor the system's word is final; below it, the media is needed to play at
         // all and a refusal would strand the player with an empty buffer and a spinner.
         if (lead >= MIN_BUFFER_SECONDS && !this.streamingWanted) break;
@@ -875,7 +891,17 @@ export class MseSource {
         // reading of where the media is would be about a position no longer being served.
         if (this.generation !== generation || this.destroyed) break;
 
+        // Le débit de ce segment, pour le budget en octets : ce qui vient d'être envoyé, sur la durée
+        // qu'il couvre depuis la fin du précédent.
+        // Pas le premier après un saut ou une ouverture : il repart de l'image clé d'avant la cible,
+        // et sa durée comptée depuis la cible gonflerait le débit.
+        if (this.appendsSinceSeek > 0) {
+          const covered = segment.endSeconds - this.readUpTo;
+          this.videoRate.record(segment.video.reduce((n, f) => n + f.byteLength, 0), covered);
+          if (segment.audio) this.audioRate.record(segment.audio.byteLength, covered);
+        }
         this.readUpTo = segment.endSeconds;
+        this.trimBehind();
         // Avant le reste : tant que la tête n'est pas posée, il n'y a ni atterrissage à faire ni
         // démarrage à réclamer.
         this.placePendingStart();
@@ -1123,6 +1149,53 @@ export class MseSource {
     })();
   }
 
+  /**
+   * Le budget en octets de ce navigateur pour ce fichier, en secondes — le plus serré des deux
+   * tampons. Null tant que le débit n'est pas mesuré, et partout ailleurs que sur WebKit.
+   */
+  private get budget(): BufferBudget | null {
+    if (!this.quota) return null;
+    const budget = tightest(
+      this.videoOps ? laneBudget(this.quota.video, this.videoRate.bytesPerSecond, TARGET_BUFFER_SECONDS, KEEP_BEHIND_SECONDS, MIN_BUFFER_SECONDS) : null,
+      this.audioOps ? laneBudget(this.quota.audio, this.audioRate.bytesPerSecond, TARGET_BUFFER_SECONDS, KEEP_BEHIND_SECONDS, MIN_BUFFER_SECONDS) : null
+    );
+    // Écrit à la première mesure, puis quand il bouge d'au moins trois secondes : de quoi lire au
+    // journal ce que le lecteur visait, sans une ligne par segment.
+    const before = this.tracedBudget;
+    if (budget && (!before || Math.abs(before.aheadSeconds - budget.aheadSeconds) >= 3 || Math.abs(before.behindSeconds - budget.behindSeconds) >= 3)) {
+      this.tracedBudget = budget;
+      const mo = (n: number | null) => (n === null ? "?" : (n / 1e6).toFixed(1));
+      trace(
+        `budget : ${Math.round(this.quota.video / 1e6)} Mo par tampon, image ${mo(this.videoRate.bytesPerSecond)} Mo/s, son ${mo(this.audioRate.bytesPerSecond)} Mo/s — ` +
+          `${budget.aheadSeconds.toFixed(1)} s devant, ${budget.behindSeconds.toFixed(1)} s derrière`
+      );
+    }
+    return budget;
+  }
+
+  /** L'avance visée : la plus petite de la cible de ce fichier et du budget en octets. */
+  private get aheadTarget(): number {
+    return Math.min(this.targetBuffer, this.budget?.aheadSeconds ?? Infinity);
+  }
+
+  /**
+   * Retire nous-mêmes ce qui est derrière la tête au-delà du budget, au lieu de laisser WebKit
+   * choisir quoi jeter au milieu d'un envoi — souvent juste après un saut, pendant que la tête
+   * se déplace. Pas pendant un saut : la tête n'y est pas encore à sa place.
+   */
+  private trimBehind(): void {
+    const budget = this.budget;
+    if (!budget || this.seekState.pending || this.video.seeking) return;
+    const until = this.video.currentTime - budget.behindSeconds;
+    if (until <= 0) return;
+    for (const queue of [this.videoOps, this.audioOps]) {
+      const buffer = queue?.buffer;
+      if (!queue || !buffer || buffer.buffered.length === 0) continue;
+      if (buffer.buffered.start(0) >= until - TRIM_SLACK_SECONDS) continue;
+      void this.removeRange(queue, 0, until).catch(() => {});
+    }
+  }
+
   /** Declares the stream over, if it still can be. Never throws. */
   private endStream(): void {
     try {
@@ -1149,6 +1222,13 @@ export class MseSource {
   private quotaHit(): void {
     const held = this.lead;
     this.evict();
+    // Rien devant la tête au moment du refus : ce n'est pas une mesure de ce que le navigateur
+    // peut tenir. Pris pour tel, un refus à 0 s ramenait la cible à huit secondes jusqu'à la fin
+    // du film (Mac, 24/09/2026, « tampon plein à 0.0 s : on vise 8 s pour ce fichier »).
+    if (held < 1) {
+      trace(`tampon plein à ${held.toFixed(1)} s devant la tête : cible gardée à ${this.targetBuffer} s`);
+      return;
+    }
     const room = Math.max(MIN_BUFFER_SECONDS, Math.floor(held * 0.75));
     if (room < this.targetBuffer) {
       trace(`tampon plein à ${held.toFixed(1)} s : on vise ${room} s pour ce fichier`);
@@ -1157,7 +1237,7 @@ export class MseSource {
   }
 
   private evict(): void {
-    const until = this.video.currentTime - KEEP_BEHIND_SECONDS;
+    const until = this.video.currentTime - (this.budget?.behindSeconds ?? KEEP_BEHIND_SECONDS);
     // Traced either way, including when there is nothing to free: whether this ever happens on a
     // real device was, until now, unknowable from the record.
     trace(`éviction demandée à ${this.video.currentTime.toFixed(1)} s — ${until <= 0 ? "rien derrière la tête" : `jusqu'à ${until.toFixed(1)} s`}`);

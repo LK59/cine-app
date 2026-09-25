@@ -611,6 +611,78 @@ describe("MseSource", () => {
     expect(inner.targetBuffer).toBeGreaterThanOrEqual(8);
   });
 
+  it("garde sa cible quand le refus arrive sans rien devant la tête", async () => {
+    // Mac, 24/09/2026 : « tampon plein à 0.0 s : on vise 8 s pour ce fichier ». Une avance nulle au
+    // moment du refus ne mesure pas ce que le navigateur peut tenir, et le film finissait à 8 s.
+    const video = fakeVideo();
+    const source = await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn() });
+    await flush();
+    const inner = source as unknown as { targetBuffer: number; quotaHit: () => void };
+    Object.defineProperty(inner, "lead", { get: () => 0, configurable: true });
+    traceReset();
+    inner.quotaHit();
+    expect(inner.targetBuffer).toBe(30);
+    expect(traceText()).toContain("cible gardée à 30 s");
+  });
+
+  describe("budget en octets de WebKit (iPad, 25/09/2026)", () => {
+    const IPAD = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15";
+    afterEach(() => {
+      vi.restoreAllMocks();
+      Object.defineProperty(navigator, "maxTouchPoints", { value: 0, configurable: true });
+    });
+
+    /** Un remultiplexeur 4K : chaque segment de 2 s pèse 8 Mo d'image, 32 Mb/s. */
+    function heavyRemuxer(segments: number) {
+      const remuxer = fakeRemuxer(segments);
+      const next = remuxer.nextSegment.bind(remuxer);
+      remuxer.nextSegment = async () => {
+        const segment = await next();
+        if (!segment) return segment;
+        const picture = new Uint8Array(1);
+        Object.defineProperty(picture, "byteLength", { value: 8e6 });
+        return { ...segment, video: [picture] };
+      };
+      return remuxer;
+    }
+
+    it("sur un iPad, vise moins de trente secondes d'avance en 4K, et l'écrit", async () => {
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue(IPAD);
+      Object.defineProperty(navigator, "maxTouchPoints", { value: 5, configurable: true });
+      traceReset();
+      const video = fakeVideo();
+      await MseSource.attach(video, heavyRemuxer(200), PLAN, { onError: vi.fn() });
+      await until(() => traceText().includes("budget :"), "le budget écrit dans la trace");
+      await new Promise((r) => setTimeout(r, 50));
+      // 105 Mo à 4 Mo/s : ~26 s en tout. L'avance s'arrête bien avant les trente secondes.
+      expect(video.buffered.end(0)).toBeLessThan(24);
+      expect(traceText()).toMatch(/budget : 110 Mo par tampon/);
+    });
+
+    it("retire lui-même ce qui dépasse derrière la tête, au lieu de le laisser à Safari", async () => {
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue(IPAD);
+      Object.defineProperty(navigator, "maxTouchPoints", { value: 5, configurable: true });
+      const video = fakeVideo();
+      await MseSource.attach(video, heavyRemuxer(200), PLAN, { onError: vi.fn() });
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) > 12, "du média chargé");
+      const [videoBuffer] = FakeSource.instances[0].buffers;
+      // La lecture avance de 30 s : tout ce qui précède 30 s moins le budget arrière est de trop.
+      (video as unknown as { currentTime: number }).currentTime = 30;
+      videoBuffer.setBuffered(0, 36);
+      video.dispatchEvent(new Event("timeupdate"));
+      await until(() => videoBuffer.removed.some(([s, e]) => s === 0 && e > 15 && e < 30), "un retrait derrière la tête");
+    });
+
+    it("ne change rien hors de WebKit", async () => {
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
+      traceReset();
+      const video = fakeVideo();
+      await MseSource.attach(video, heavyRemuxer(200), PLAN, { onError: vi.fn() });
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) >= 30, "les trente secondes d'avant");
+      expect(traceText()).not.toContain("budget :");
+    });
+  });
+
   it("ne touche à rien tant que le navigateur accepte ce qu'on lui donne", async () => {
     // Which is every browser tested here: the cost of the rule above is zero until it is needed.
     const video = fakeVideo();

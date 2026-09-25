@@ -358,6 +358,13 @@ dictionaries' values.
   1025 s, and two rebuilds on the next CRAs all died within milliseconds, then the server player
   took over; the CRAs where a seek had just worked had no RASL behind them. Continuous playback
   keeps them — their references are there.
+- **WebKit caps each SourceBuffer in bytes: 105 MB on iPhone and iPad, 304 MB on a Mac**, and an
+  audio-only buffer gets 5 % of it (`SettingsBaseCocoa.mm`; the 304 MB quoted everywhere is the
+  non-Apple value). 4K at 27 Mb/s fits ~31 s on an iPad, ahead and behind together, so the fill
+  target there is a byte budget measured from what is actually sent (`bufferBudget.ts`), and what
+  lies behind the playhead is trimmed by the player rather than left to WebKit's own eviction,
+  which runs mid-append and, when behind is not enough, removes ahead of the playhead too.
+  Chrome and Firefox have their own caps and are not budgeted yet.
 - **A pathological file is the normal case here.** The library holds six-audio-track files mixing
   FLAC / AC-3 / DTS / TrueHD at 1, 6 and 8 channels, 24-bit FLAC, mono defaults, Dolby Vision 4K.
   Test player changes against `The Exorcist (1973)` before believing them.
