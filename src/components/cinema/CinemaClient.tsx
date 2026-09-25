@@ -71,7 +71,7 @@ import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/discover/route";
 import { prefetchImages, prefetchInChunks, warmUpUrls } from "@/lib/cinemaWarmup";
 import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
-import { tabPaneProps, useKeptTabs } from "@/lib/keptTabs";
+import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
 import { useFreshPersonalLists } from "@/lib/freshLists";
 import { heroInfoKey, preloadHeroInfo } from "@/lib/useHeroInfo";
 import { ProgressFill } from "@/components/cinema/ProgressFill";
@@ -696,18 +696,17 @@ export function CinemaClient() {
    * d'onglet — où la liste des rangées change entièrement et où rester à mi-hauteur n'a aucun
    * sens. `instant`, sinon l'accrochage tranche avant que le défilement doux ait fini.
    */
-  useEffect(() => {
-    rowsPaneRef.current?.scrollTo({ top: 0, behavior: "instant" });
-    // Et une seconde fois quand le catalogue de l'onglet arrive.
-    //
-    // Le catalogue des séries est différé : en venant de « Films », l'onglet s'affiche vide, la
-    // remise à zéro ci-dessus porte donc sur un volet qui ne contient rien, puis les rangées
-    // apparaissent d'un coup sous un conteneur magnétique — et le navigateur, qui doit se
-    // raccrocher à un point d'accroche après un changement de contenu, tombait sur le dernier :
-    // on arrivait tout en bas de la page. Invisible en rechargeant *sur* l'onglet Séries, où le
-    // catalogue est déjà là quand la remise à zéro a lieu — d'où un bug qui ne se voyait que
-    // dans un sens.
-  }, [mediaType, catalogueReady]);
+  // Chaque onglet retrouve sa propre hauteur, et la première visite commence en haut — voir
+  // `useTabScrollMemory`. Replacé une seconde fois quand le catalogue de l'onglet arrive :
+  //
+  // Le catalogue des séries est différé : en venant de « Films », l'onglet s'affiche vide, la
+  // remise en place porte donc sur un volet qui ne contient rien, puis les rangées
+  // apparaissent d'un coup sous un conteneur magnétique — et le navigateur, qui doit se
+  // raccrocher à un point d'accroche après un changement de contenu, tombait sur le dernier :
+  // on arrivait tout en bas de la page. Invisible en rechargeant *sur* l'onglet Séries, où le
+  // catalogue est déjà là quand la remise en place a lieu — d'où un bug qui ne se voyait que
+  // dans un sens.
+  useTabScrollMemory(rowsPaneRef, mediaType, catalogueReady);
 
   /** Le film de la bibliothèque désigné par un lien de reprise, s'il y est. */
   const matchRadarr = useCallback(

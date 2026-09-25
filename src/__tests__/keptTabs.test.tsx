@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, renderHook, cleanup } from "@testing-library/react";
-import { HIDDEN_TAB_ATTR, inHiddenTab, tabPaneProps, useKeptTabs } from "@/lib/keptTabs";
+import { HIDDEN_TAB_ATTR, inHiddenTab, tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
+import { useRef } from "react";
 
 /**
  * Films ↔ Séries sans reconstruction (25/09/2026) : « quand je retourne dans Films, ça régénère
@@ -98,5 +99,46 @@ describe("les listes personnelles redemandées", () => {
     renderHook(() => useFreshPersonalLists("movies"));
     setVisibility("visible");
     expect(mutate).not.toHaveBeenCalled();
+  });
+});
+
+describe("chaque onglet garde sa hauteur (25/09/2026)", () => {
+  /**
+   * Les deux onglets gardés partagent le conteneur qui défile : descendre dans les films faisait
+   * arriver les séries à la même hauteur, et inversement.
+   */
+  function Pane({ tab, ready = true }: { tab: "movies" | "series"; ready?: boolean }) {
+    const ref = useRef<HTMLDivElement>(null);
+    useTabScrollMemory(ref, tab, ready);
+    return <div ref={ref} data-testid="pane" />;
+  }
+  const scrollPane = (el: HTMLElement, top: number) => {
+    el.scrollTop = top;
+    el.dispatchEvent(new Event("scroll"));
+  };
+
+  it("retrouve la hauteur de chaque onglet, et commence en haut à la première visite", () => {
+    const { rerender, getByTestId } = render(<Pane tab="movies" />);
+    const pane = getByTestId("pane");
+    scrollPane(pane, 1200);
+
+    rerender(<Pane tab="series" />);
+    expect(pane.scrollTop).toBe(0);
+    scrollPane(pane, 300);
+
+    rerender(<Pane tab="movies" />);
+    expect(pane.scrollTop).toBe(1200);
+
+    rerender(<Pane tab="series" />);
+    expect(pane.scrollTop).toBe(300);
+  });
+
+  it("replace l'onglet quand son catalogue arrive après lui", () => {
+    const { rerender, getByTestId } = render(<Pane tab="series" ready={false} />);
+    const pane = getByTestId("pane");
+    // Le navigateur se raccroche ailleurs quand les rangées arrivent d'un coup.
+    pane.scrollTop = 5000;
+    rerender(<Pane tab="series" ready />);
+    expect(pane.scrollTop).toBe(0);
   });
 });

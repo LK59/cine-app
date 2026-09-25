@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 
 /**
  * Films ↔ Séries sans reconstruction (25/09/2026).
@@ -57,3 +57,46 @@ export function tabPaneProps(
 export function inHiddenTab(element: Element): boolean {
   return element.closest(`[${HIDDEN_TAB_ATTR}]`) !== null;
 }
+
+/**
+ * Chaque onglet garde sa propre position de défilement.
+ *
+ * Les deux onglets gardés (`useKeptTabs`) vivent dans le même conteneur qui défile : depuis qu'on
+ * ne les démonte plus, descendre dans les films faisait arriver les séries à la même hauteur, et
+ * inversement (Louis, 25/09/2026). Le bureau, lui, remettait tout en haut à chaque changement
+ * d'onglet. Désormais chaque onglet retrouve l'endroit où on l'avait laissé ; sa première visite
+ * commence en haut.
+ *
+ * `contentReady` : un onglet dont le catalogue arrive après son affichage (les séries, différées)
+ * est replacé une seconde fois, une fois ses rangées là — sinon le conteneur magnétique du bureau
+ * se raccrochait au dernier point d'accroche et l'on arrivait tout en bas (voir CinemaClient).
+ */
+export function useTabScrollMemory(ref: RefObject<HTMLElement | null>, active: CinemaTab, contentReady = true): void {
+  const positions = useRef<Partial<Record<CinemaTab, number>>>({});
+  const current = useRef(active);
+
+  // Écouté sur le document, en capture : le conteneur n'existe pas toujours au montage (le bureau
+  // montre d'abord un écran de chargement), et un écouteur posé une fois sur un élément absent
+  // n'aurait jamais rien entendu. `scroll` ne remonte pas, mais passe par la capture.
+  useEffect(() => {
+    const onScroll = (event: Event) => {
+      const el = ref.current;
+      if (el && event.target === el) positions.current[current.current] = el.scrollTop;
+    };
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => document.removeEventListener("scroll", onScroll, { capture: true });
+  }, [ref]);
+
+  // Avant la peinture : l'onglet affiché ne doit jamais apparaître une image à la hauteur de l'autre.
+  useLayoutEffect(() => {
+    current.current = active;
+    const el = ref.current;
+    if (!el) return;
+    const top = positions.current[active] ?? 0;
+    // `instant` : le conteneur du bureau défile en douceur par défaut, et un retour d'onglet
+    // animé sur toute la hauteur serait un mouvement pour rien.
+    if (typeof el.scrollTo === "function") el.scrollTo({ top, behavior: "instant" });
+    else el.scrollTop = top;
+  }, [active, contentReady, ref]);
+}
+

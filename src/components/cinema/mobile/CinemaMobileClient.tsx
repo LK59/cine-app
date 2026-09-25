@@ -9,7 +9,7 @@ import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { heroOffscreen } from "@/lib/heroCarousel";
-import { tabPaneProps, useKeptTabs } from "@/lib/keptTabs";
+import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
 import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
 import { useFreshPersonalLists } from "@/lib/freshLists";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet } from "@/lib/swr";
@@ -238,6 +238,9 @@ export function CinemaMobileClient() {
   // (`useDecodeRowsAhead`).
   const rowsScrollRef = useRef<HTMLDivElement>(null);
   useDecodeRowsAhead(rowsScrollRef);
+  // Chaque onglet garde sa hauteur : les deux volets gardés partagent ce conteneur — voir
+  // `useTabScrollMemory`.
+  useTabScrollMemory(rowsScrollRef, mediaType);
   // Ma liste, la reprise et « À suivre » redemandés au retour et au changement d'onglet.
   useFreshPersonalLists(mediaType);
 
