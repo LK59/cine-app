@@ -218,6 +218,15 @@ export function isAwaitingFresh(key: string): boolean {
 }
 
 /**
+ * Le compte de cette page, tel que l'hydratation l'a reçu — null avant, ou sans session. Lu par la
+ * reprise instantanée (`src/lib/resumeCache/`), qui range ses octets par compte comme ce cache-ci
+ * range ses listes : un appareil partagé ne rouvre jamais le film de quelqu'un d'autre.
+ */
+export function persistedCacheAccount(): string | null {
+  return currentAccount;
+}
+
+/**
  * Le cinéma attend ceci avant de s'afficher, et jamais plus de `HYDRATION_BUDGET_MS` : au-delà,
  * il s'affiche comme avant, sans cache. Résolu tout de suite pour une page sans compte.
  */

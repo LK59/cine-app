@@ -86,7 +86,7 @@ export class MemoryByteSource implements ByteSource {
 // Reads are coalesced into fixed-size chunks and cached: a demuxer asks for a 4-byte element
 // header, then a 3-byte size, then a payload — issuing an HTTP request per call would be
 // thousands of round-trips. One chunk fetch answers hundreds of those.
-const CHUNK_SIZE = 1 << 20; // 1 MiB
+export const CHUNK_SIZE = 1 << 20; // 1 MiB
 
 /**
  * How many chunks to keep. Enough to cover a seek's working set, and a ceiling on the memory a
@@ -420,7 +420,53 @@ export function forgetHandover(): void {
   handover = null;
 }
 
+/**
+ * Des morceaux de ce fichier déjà sur l'appareil — voir `src/lib/resumeCache/`.
+ *
+ * Ouvrir un film est borné par les octets, pas par le calcul (`cout.spec.ts`) : l'en-tête, l'index
+ * et le premier groupe d'images à la position de reprise. Gardés sur l'appareil pour les titres de
+ * « Reprendre » et « À suivre », ils sont servis d'ici avant le réseau ; le reste du fichier vient
+ * du réseau comme toujours.
+ *
+ * Un morceau n'est servi que s'il appartient **à ce fichier-là** : l'identité est vérifiée avant
+ * l'ouverture (taille et version annoncées par Jellyfin), puis à la première réponse du réseau
+ * (taille du `Content-Range`, `Last-Modified`). Au moindre écart, la couche se tait (`has` rend
+ * faux) et se jette elle-même : dans le doute, le réseau.
+ */
+export interface DiskChunks {
+  has(index: number): boolean;
+  /** Le morceau, ou null s'il n'a pas pu être relu — le réseau prend alors le relais. */
+  read(index: number): Promise<Uint8Array | null>;
+  /** Ce que le serveur annonce à la première réponse : un écart retire la couche pour de bon. */
+  verify(total: number, lastModified: string | null): void;
+}
+
+/** D'où sont venus les octets d'une ouverture — pour la ligne `start` du journal. */
+export interface OpeningBytes {
+  device: number;
+  network: number;
+}
+
+/** La dernière source ouverte pour chaque adresse, pour `openingBytes`. Quelques-unes au plus. */
+const lastOpened = new Map<string, HttpByteSource>();
+
+/**
+ * Les octets lus jusqu'ici par la dernière source ouverte sur cette adresse : combien de
+ * l'appareil, combien du réseau. Null si aucune n'est connue.
+ */
+export function openingBytes(url: string): OpeningBytes | null {
+  const source = lastOpened.get(url);
+  return source ? { device: source.deviceBytes, network: source.networkBytes } : null;
+}
+
 export class HttpByteSource implements ByteSource {
+  /** Octets servis depuis l'appareil, et depuis le réseau — voir `openingBytes`. */
+  deviceBytes = 0;
+  networkBytes = 0;
+  /** Le `Last-Modified` de la première réponse qui en portait un : la date du fichier chez Jellyfin. */
+  lastModified: string | null = null;
+  /** Les morceaux gardés sur l'appareil pour ce fichier, s'il y en a — voir `DiskChunks`. */
+  private disk: DiskChunks | null = null;
   /**
    * La taille du fichier — corrigée une fois, si le serveur en annonce une autre que celle avec
    * laquelle la source a été ouverte. Voir `checkTotal`.
@@ -459,6 +505,9 @@ export class HttpByteSource implements ByteSource {
   private constructor(url: string, size: number) {
     this.url = url;
     this.total = size;
+    lastOpened.delete(url);
+    lastOpened.set(url, this);
+    while (lastOpened.size > 4) lastOpened.delete(lastOpened.keys().next().value!);
   }
 
   // The length has to come from the server before anything else can be parsed. HEAD is tried
@@ -471,12 +520,13 @@ export class HttpByteSource implements ByteSource {
   // que les deux premières plages puissent même partir : relevé le 22/09/2026 depuis un serveur
   // lointain, ~60 ms d'aller-retour, soit autant de moins à chaque ouverture. Une taille fausse
   // n'est pas crue sur parole : la première réponse la corrige — voir `checkTotal`.
-  static async open(url: string, knownSize?: number | null): Promise<HttpByteSource> {
+  static async open(url: string, knownSize?: number | null, disk?: DiskChunks | null): Promise<HttpByteSource> {
     // Le même fichier que la source qu'on vient de fermer : sa taille et ses morceaux sont déjà
     // là, sans aller-retour — voir `handover`.
     const inherited = takeHandover(url);
     if (inherited) {
       const source = new HttpByteSource(url, inherited.size);
+      source.disk = disk ?? null;
       source.chunks = inherited.chunks;
       // La zone autour de la tête aussi : c'est elle que la reconstruction relit d'abord, et ses
       // premiers téléchargements l'auraient chassée avant que le lecteur ne la redésigne.
@@ -489,7 +539,7 @@ export class HttpByteSource implements ByteSource {
       // donc à la première lecture plutôt qu'à l'ouverture, avec la même erreur nommée
       // (`NetworkUnavailable`, après `waitForNetwork` et les nouvelles tentatives).
       trace(`taille connue d'avance (${Math.floor(knownSize)} octets) — pas de HEAD`);
-      return HttpByteSource.warmed(url, Math.floor(knownSize));
+      return HttpByteSource.warmed(url, Math.floor(knownSize), disk ?? null);
     }
     // Named for what it is. A file that cannot be opened because there is no network is not a
     // file this player cannot play, and handing it to a player needing the same network is the
@@ -525,8 +575,11 @@ export class HttpByteSource implements ByteSource {
    * Neither is awaited: a file whose Cues are at the front simply leaves the tail chunk unused,
    * which costs a megabyte and no time at all.
    */
-  private static warmed(url: string, size: number): HttpByteSource {
+  private static warmed(url: string, size: number, disk: DiskChunks | null = null): HttpByteSource {
     const source = new HttpByteSource(url, size);
+    // Posée avant les deux premières plages : l'en-tête et l'index, s'ils sont sur l'appareil, en
+    // viennent — c'est tout l'intérêt.
+    source.disk = disk;
     const last = Math.floor((size - 1) / CHUNK_SIZE);
     for (const index of last > 0 ? [0, last] : [0]) {
       void source.fetchChunk(index).catch(() => {
@@ -597,6 +650,7 @@ export class HttpByteSource implements ByteSource {
         this.checkTotal(res);
         const headersAt = performance.now();
         const bytes = new Uint8Array(await res.arrayBuffer());
+        this.networkBytes += bytes.byteLength;
         this.note(sentAt, headersAt, performance.now(), bytes.byteLength, res);
         return bytes;
       } catch (error) {
@@ -634,7 +688,7 @@ export class HttpByteSource implements ByteSource {
     const end = Math.min(start + CHUNK_SIZE, this.size) - 1;
     const own = new AbortController();
     this.inflightControllers.set(index, own);
-    const promise = this.fetchWithRetries(start, end, own.signal)
+    const promise = this.fromDiskOrNetwork(index, start, end, own.signal)
       .then((bytes) => {
         // Demandé avant que `checkTotal` ne corrige la taille, un morceau de fin peut avoir été
         // coupé au mauvais endroit : servi à la lecture qui l'attendait, mais pas gardé.
@@ -654,6 +708,29 @@ export class HttpByteSource implements ByteSource {
 
     this.inflight.set(index, promise);
     return promise;
+  }
+
+  /**
+   * L'appareil d'abord, s'il a ce morceau de ce fichier ; le réseau sinon — et aussi quand la
+   * relecture sur l'appareil échoue ou rend une longueur inattendue. Ne lève jamais à cause de
+   * l'appareil.
+   */
+  private async fromDiskOrNetwork(index: number, start: number, end: number, own: AbortSignal): Promise<Uint8Array> {
+    const disk = this.disk;
+    if (disk?.has(index)) {
+      try {
+        const bytes = await disk.read(index);
+        // Relu une seconde fois après l'attente : une réponse du réseau arrivée entre-temps a pu
+        // dire que ce n'est plus le même fichier.
+        if (bytes && bytes.byteLength === this.expectedLength(index) && disk.has(index)) {
+          this.deviceBytes += bytes.byteLength;
+          return bytes;
+        }
+      } catch {
+        /* l'appareil n'est qu'une avance : le réseau répond */
+      }
+    }
+    return this.fetchWithRetries(start, end, own);
   }
 
   /**
@@ -790,6 +867,14 @@ export class HttpByteSource implements ByteSource {
       const total = header ? Number(header.split("/")[1]) : NaN;
       if (!Number.isFinite(total) || total <= 0) return;
       this.totalChecked = true;
+      this.lastModified = res.headers?.get?.("Last-Modified") ?? null;
+      // La première parole du serveur sur ce fichier : les morceaux gardés sur l'appareil ne
+      // valent que s'ils sont du même.
+      try {
+        this.disk?.verify(total, this.lastModified);
+      } catch {
+        /* une vérification n'est pas une lecture */
+      }
       if (total === this.total) return;
       trace(`réseau : le serveur annonce ${total} octets, la source était ouverte sur ${this.total} — taille corrigée`);
       this.total = total;

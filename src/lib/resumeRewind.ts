@@ -60,3 +60,14 @@ export function rewound(position: number, duration?: number | null): number {
   if (duration && duration > 0 && position > duration - EDGE_SECONDS) return position;
   return position - RESUME_REWIND_SECONDS;
 }
+
+/**
+ * Où s'ouvre une reprise : la position, reculée si le titre a été quitté il y a assez longtemps.
+ * Une seule fonction pour le lecteur qui s'ouvre et pour la reprise instantanée qui garde, en
+ * arrière-plan, les octets de cette ouverture-là : deux calculs dériveraient, et les octets gardés
+ * ne seraient plus ceux que le lecteur lit.
+ */
+export function openingPosition(itemId: string, positionSeconds: number, runtimeSeconds?: number | null): number {
+  if (!(positionSeconds > 0)) return 0;
+  return awayFrom(itemId) ? rewound(positionSeconds, runtimeSeconds) : positionSeconds;
+}
