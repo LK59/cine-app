@@ -55,7 +55,9 @@ vi.mock("swr", () => ({
   mutate: vi.fn(),
   preload: vi.fn(),
   // La bannière lit le cache pour rendre sans attendre un synopsis déjà là — voir `useHeroInfo`.
-  useSWRConfig: () => ({ cache: new Map() }),
+  // `mutate` aussi : les listes personnelles sont redemandées au changement d'onglet
+  // (`useFreshPersonalLists`).
+  useSWRConfig: () => ({ cache: new Map(), mutate: vi.fn() }),
 }));
 
 // ---- L'environnement ------------------------------------------------------------------------
@@ -262,6 +264,27 @@ describe("un titre similaire n'est pas une carte de la grille", () => {
     expect(readCinemaRoute().tab).toBe("series");
     expect(screen.getByTestId("fiche-2")).toHaveAttribute("data-underneath", "false");
     expect(screen.getByTestId("fiche-1")).toHaveAttribute("data-underneath", "true");
+  });
+});
+
+describe("Films ↔ Séries sans reconstruction (25/09/2026)", () => {
+  it("garde le volet des films monté, caché et inerte, et le rend tel quel au retour", () => {
+    // Le cinéma se rend dans un portail, hors du conteneur du test : on lit le document.
+    render(<CinemaClient />);
+    const filmsAvant = document.querySelector("[data-tv-card]");
+    expect(filmsAvant).not.toBeNull();
+
+    act(() => cinemaNavigate({ tab: "series" }, "replace"));
+    const cache = document.querySelector("[data-tab-hidden]");
+    expect(cache).not.toBeNull();
+    expect(cache).toHaveAttribute("hidden");
+    expect(cache).toHaveAttribute("inert");
+    // La même carte, pas une nouvelle : le volet n'a pas été démonté.
+    expect(cache!.contains(filmsAvant)).toBe(true);
+
+    act(() => cinemaNavigate({ tab: "movies" }, "replace"));
+    expect(filmsAvant!.isConnected).toBe(true);
+    expect(filmsAvant!.closest("[data-tab-hidden]")).toBeNull();
   });
 });
 

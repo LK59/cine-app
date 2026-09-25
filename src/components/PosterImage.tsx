@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { showIfAlreadyLoaded } from "@/lib/imageReveal";
+import { revealLoaded, showIfAlreadyLoaded } from "@/lib/imageReveal";
 
 interface PosterImageProps {
   src: string | null | undefined;
@@ -127,7 +127,8 @@ export function PosterImage({
          */
         decoding="async"
         onLoad={(event) => {
-          event.currentTarget.style.opacity = "1";
+          // En fondu seulement si elle vient vraiment d'arriver — voir `revealLoaded`.
+          revealLoaded(event.currentTarget);
           /**
            * Le voile ne s'efface que s'il s'anime, et c'est ce qui reste de plus cher ici.
            *

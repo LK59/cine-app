@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type RefObject } from "react";
+import { noteWarmed } from "@/lib/imageReveal";
 
 /**
  * Décoder les affiches avant qu'on les regarde.
@@ -58,6 +59,131 @@ function scrollingAncestor(element: HTMLElement): HTMLElement | null {
   return null;
 }
 
+/**
+ * Chauffe **la variante que l'image affichée chargera**, pas une autre.
+ *
+ * Une affiche passée par l'optimiseur de Next porte un `srcset` (une adresse par largeur) et un
+ * `sizes` ; son attribut `src` n'est que la plus grande variante, celle qu'aucun téléphone ne
+ * charge. Chauffer `src` seul remplissait donc le cache d'une image que personne n'affiche. On
+ * recopie les trois attributs : le navigateur fait alors, pour l'image de chauffe, exactement le
+ * même choix que pour l'affiche — même écran, même densité, mêmes `sizes`. Une affiche sans
+ * `srcset` (TMDB en direct, sur le téléphone) garde son `src`, qui est alors la bonne adresse.
+ */
+function warmLike(img: HTMLImageElement, kept: Map<string, HTMLImageElement>, limit: number): void {
+  const src = img.getAttribute("src");
+  if (!src) return;
+  const srcset = img.getAttribute("srcset") ?? "";
+  const key = `${srcset}|${src}`;
+  // Déjà tenue : elle redevient la plus récente, et rien n'est redemandé.
+  const held = kept.get(key);
+  if (held) {
+    kept.delete(key);
+    kept.set(key, held);
+    return;
+  }
+  const chauffe = new Image();
+  const sizes = img.getAttribute("sizes");
+  if (sizes) chauffe.sizes = sizes;
+  if (srcset) chauffe.srcset = srcset;
+  chauffe.src = src;
+  // `decode` n'existe pas partout, et rejette pour une image absente — deux raisons de ne jamais
+  // laisser cet appel remonter : c'est du confort, sur le chemin de personne. Une fois décodée, son
+  // adresse est notée : l'affiche qui la chargera s'affichera sans fondu (`revealLoaded`).
+  const decoded = chauffe.decode?.();
+  if (decoded) decoded.then(() => noteWarmed(chauffe.currentSrc || chauffe.src)).catch(() => {});
+  kept.set(key, chauffe);
+  if (kept.size > limit) kept.delete(kept.keys().next().value!);
+}
+
+/** Le conteneur qui défile : lui-même s'il défile, sinon son premier ancêtre qui le fait. */
+function scrollRoot(element: HTMLElement): HTMLElement | null {
+  const overflow = getComputedStyle(element).overflowY;
+  if (overflow === "auto" || overflow === "scroll") return element;
+  return scrollingAncestor(element);
+}
+
+/** Les rangées d'affiches, sur le bureau (`data-tv-rowroot`) comme sur le téléphone (`data-poster-row`). */
+const ROW_SELECTOR = "[data-tv-rowroot], [data-poster-row]";
+
+/**
+ * Les premières cartes d'une rangée qu'on chauffe quand la rangée approche : celles de l'écran,
+ * et celles qu'un geste horizontal révèle d'abord. Pas toute la rangée — vingt-quatre affiches
+ * par rangée, sur une quinzaine de rangées, dépasseraient de loin ce que `KEPT` autorise.
+ */
+export const ROW_CARDS = 12;
+
+/**
+ * Le même travail pour les rangées de l'accueil (25/09/2026).
+ *
+ * « Tous les films » décodait ses affiches trois mille pixels à l'avance, les rangées de l'accueil
+ * jamais : elles chargeaient chaque affiche en approchant de l'écran, la décodaient au dernier
+ * moment et l'annonçaient en fondu — en descendant, les affiches « se génèrent au fur et à
+ * mesure », quand la grille paraissait tout rendre d'un coup.
+ *
+ * Deux axes à la fois. Verticalement, les rangées situées jusqu'à deux écrans et demi sous le bord ;
+ * horizontalement, les `ROW_CARDS` premières cartes de chacune, parce qu'une carte hors du champ
+ * de sa propre rangée n'intersecte jamais rien — la rangée la rogne. Les rangées qui apparaissent
+ * plus tard (le catalogue arrive, l'onglet Séries s'ouvre) sont prises au vol ; une rangée cachée
+ * (l'onglet qu'on ne regarde pas) n'a pas de surface et n'est jamais chauffée. La même borne que
+ * la grille : au-delà de `KEPT` affiches tenues, les plus anciennes sont lâchées.
+ */
+export function useDecodeRowsAhead(container: RefObject<HTMLElement | null>, enabled = true): void {
+  useEffect(() => {
+    // `enabled` : sur le bureau, le panneau des rangées n'existe pas tant que l'écran de
+    // chargement le remplace ; l'effet doit repartir quand il apparaît.
+    const host = container.current;
+    if (!enabled || !host || typeof IntersectionObserver === "undefined") return;
+    const kept = new Map<string, HTMLImageElement>();
+    const near = new Set<Element>();
+    const warmRow = (row: Element) => {
+      const images = row.querySelectorAll("img");
+      for (let i = 0; i < images.length && i < ROW_CARDS; i++) warmLike(images[i], kept, KEPT);
+    };
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            near.add(entry.target);
+            warmRow(entry.target);
+          } else near.delete(entry.target);
+        }
+      },
+      { root: scrollRoot(host), rootMargin: `${Math.round(window.innerHeight * 2.5)}px 0px` }
+    );
+    const followed = new WeakSet<Element>();
+    const follow = () => {
+      for (const row of host.querySelectorAll(ROW_SELECTOR)) {
+        if (followed.has(row)) continue;
+        followed.add(row);
+        observer.observe(row);
+      }
+      // Une rangée déjà proche dont les affiches viennent seulement d'arriver (son squelette
+      // remplacé par le catalogue) : on la rechauffe — ce qui est déjà tenu ne coûte rien.
+      for (const row of near) if (row.isConnected) warmRow(row);
+    };
+    follow();
+    // Regroupé : l'écran change sans cesse (la bannière, le focus d'une carte), et chacun de ces
+    // changements n'a pas à relancer une recherche des rangées. Une fois tous les 200 ms au plus.
+    let scheduled: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = setTimeout(() => {
+        scheduled = null;
+        follow();
+      }, 200);
+    };
+    const mutations = typeof MutationObserver === "undefined" ? null : new MutationObserver(schedule);
+    mutations?.observe(host, { childList: true, subtree: true });
+    return () => {
+      if (scheduled) clearTimeout(scheduled);
+      observer.disconnect();
+      mutations?.disconnect();
+      kept.clear();
+      near.clear();
+    };
+  }, [container, enabled]);
+}
+
 export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unknown): void {
   useEffect(() => {
     const root = grid.current;
@@ -70,22 +196,7 @@ export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unkno
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
           const img = entry.target.querySelector("img");
-          const src = img?.getAttribute("src");
-          if (!src) continue;
-          // Déjà tenue : elle redevient la plus récente, et rien n'est redemandé.
-          const held = kept.get(src);
-          if (held) {
-            kept.delete(src);
-            kept.set(src, held);
-            continue;
-          }
-          const chauffe = new Image();
-          chauffe.src = src;
-          // `decode` n'existe pas partout, et rejette pour une image absente — deux raisons de
-          // ne jamais laisser cet appel remonter : c'est du confort, sur le chemin de personne.
-          chauffe.decode?.().catch(() => {});
-          kept.set(src, chauffe);
-          if (kept.size > KEPT) kept.delete(kept.keys().next().value!);
+          if (img) warmLike(img, kept, KEPT);
         }
       },
       // Chaque carte reste suivie : elle se rechauffe à chaque fois qu'elle rentre dans la marge,

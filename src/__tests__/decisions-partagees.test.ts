@@ -688,3 +688,20 @@ describe("un seul « rien à montrer tant que ça charge »", () => {
     expect(code).not.toMatch(/if \((movies|series)Loading\)|\{(movies|series)Loading && \(/);
   });
 });
+
+describe("un seul chemin pour les onglets gardés, les rangées chauffées et les listes fraîches", () => {
+  /**
+   * 25/09/2026 : le bureau et le téléphone gardent chacun leurs onglets montés, chauffent chacun
+   * leurs rangées et redemandent chacun les listes de la personne. Une règle, trois porteurs,
+   * deux écrans — et aucun des deux ne doit la réécrire à sa façon.
+   */
+  it.each(["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"])(
+    "%s passe par useKeptTabs, tabPaneProps, useDecodeRowsAhead et useFreshPersonalLists",
+    (f) => {
+      const code = lire(f);
+      for (const porteur of ["useKeptTabs(", "tabPaneProps(", "useDecodeRowsAhead(", "useFreshPersonalLists("]) {
+        expect([f, porteur, code.includes(porteur)]).toEqual([f, porteur, true]);
+      }
+    }
+  );
+});

@@ -9,6 +9,9 @@ import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { heroOffscreen } from "@/lib/heroCarousel";
+import { tabPaneProps, useKeptTabs } from "@/lib/keptTabs";
+import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
+import { useFreshPersonalLists } from "@/lib/freshLists";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
@@ -229,9 +232,14 @@ export function CinemaMobileClient() {
   const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
   const isSeries = mediaType === "series";
   const payload = isSeries ? series : movies;
-  // Le classement suit ses données fraîches en glissant, comme les autres rangées.
-  const top10Track = useRef<HTMLDivElement>(null);
-  useFlipGrid(top10Track, (payload?.top10 ?? []).map((item) => String(itemId(item))), CATALOGUE_FLIP);
+  // L'onglet quitté reste monté, caché et inerte — voir `keptTabs.ts`.
+  const keptTabs = useKeptTabs(mediaType);
+  // Le volet qui défile : ses rangées sont décodées avant qu'on les atteigne
+  // (`useDecodeRowsAhead`).
+  const rowsScrollRef = useRef<HTMLDivElement>(null);
+  useDecodeRowsAhead(rowsScrollRef);
+  // Ma liste, la reprise et « À suivre » redemandés au retour et au changement d'onglet.
+  useFreshPersonalLists(mediaType);
 
   // The open sheet is read back out of the URL rather than held in state — that's what lets the
   // back-swipe close it. Nothing resolves until the payload is in, so a cold deep link simply
@@ -506,6 +514,7 @@ export function CinemaMobileClient() {
           dessous. Le retrait de la zone sûre s'y ajoute, l'indicateur d'accueil en mangeant déjà
           une partie. */}
       <div
+        ref={rowsScrollRef}
         className="flex-1 overflow-y-auto overscroll-contain"
         style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${short ? "4.5rem" : "6rem"})` }}
       >
@@ -688,88 +697,22 @@ export function CinemaMobileClient() {
           </MobileRow>
         )}
 
-        {/* The curated rails, ahead of the genre rows — same three as desktop, same definitions
-            (see lib/cinemaRails). Each hides itself when it has nothing to show. */}
-        {payload && payload.top10.length > 0 && (
-          <MobileRow label={top10Label(payload.top10Theme ?? null, t)} trackRef={top10Track}>
-            {payload.top10.map((item, i) => (
-              <CinemaTop10Card
-                key={itemId(item)}
-                rank={i + 1}
-                title={item.title}
-                posterUrl={item.posterUrl}
-                addedAt={item.addedAt}
-                widthClassName={POSTER_WIDTH}
-                showNewBadge={false}
-                numberFontSize="4.5rem"
-                onSelectItem={() => openHero(item)}
-              />
-            ))}
-          </MobileRow>
-        )}
-
-        <PosterRow label={t("cinema.recentlyAdded")} items={payload?.recentlyAdded ?? []} itemId={itemId} onSelect={openHero} showNewBadge={false} />
-        {myListPending && (
-          <MobileRow label={t("cinema.myList")}>
-            <CinemaSkeletonCards cardClassName={POSTER_WIDTH} shape="poster" count={4} />
-          </MobileRow>
-        )}
-        <PosterRow
-          label={t("cinema.myList")}
-          items={myList}
-          itemId={itemId}
-          onSelect={openHero}
-          // Vers « Ma liste » et non vers une grille de genre : la rangée est un extrait
-          // d'un écran qui existe déjà, avec ses onglets, sa recherche et ses demandes.
-          onSeeAll={() => cinemaNavigate({ list: true })}
-        />
-
-        {(discovery?.rows ?? [])
-          .filter((row) =>
-            mediaType === "movies" ? row.key !== "trendingSeries" : row.key === "trendingSeries"
-          )
-          .map((row) => (
-            <DiscoveryRow
-              key={row.key}
-              label={t(`cinema.discovery.${row.key}`)}
-              eyebrow={row.becauseOf ? t("cinema.becauseWatched", { title: row.becauseOf }) : null}
-              items={row.items}
-              missingLabel={t("player.notInLibrary")}
-              onSelect={openDiscovery}
-            />
-          ))}
-
-        {payload?.genres.map((genre) => {
-          const all = payload.rows[genre] ?? [];
-          const items = all.slice(0, ROW_ITEM_LIMIT);
-          if (items.length === 0) return null;
-          return (
-            <PosterRow
-              key={genre}
-              label={genreLabel(genre, t)}
-              items={items}
-              itemId={itemId}
+        {/* Un volet par onglet visité, gardé monté et caché quand on regarde l'autre : au retour,
+            rien n'est reconstruit et aucune affiche ne se recharge — voir `keptTabs.ts`. La
+            bannière et « Reprendre » vivent au-dessus, communs aux deux. */}
+        {keptTabs.map((tab) => (
+          <div key={tab} {...tabPaneProps(tab, mediaType)}>
+            <MobileTabRows
+              tab={tab}
+              payload={tab === "series" ? series : movies}
+              myList={tab === "series" ? myListSeries : myListMovies}
+              myListPending={myListPending}
+              discoveryRows={discovery?.rows}
               onSelect={openHero}
-              // Seulement quand il y a plus à voir : un « voir tout » sur une rangée déjà entière
-              // promet une suite qui n'existe pas.
-              onSeeAll={all.length > items.length ? () => cinemaNavigate({ browse: genre }) : undefined}
+              onDiscover={openDiscovery}
             />
-          );
-        })}
-
-        {/* Le bout de la page : toute la bibliothèque, filtrable. C'est la sortie de secours de
-            quelqu'un qui a fait défiler jusqu'ici sans rien trouver. */}
-        {payload && (
-          <div className="mt-8 px-4 pb-4">
-            <button
-              type="button"
-              onClick={() => cinemaNavigate({ browse: BROWSE_ALL })}
-              className="btn btn-ghost w-full justify-center py-3"
-            >
-              {t(`player.browse.all.${mediaType}`)}
-            </button>
           </div>
-        )}
+        ))}
       </div>
 
       {/* La pile des fiches, rendue comme une liste et non comme deux blocs séparés.
@@ -970,6 +913,125 @@ const DiscoveryRow = memo(function DiscoveryRow({
   );
 });
 
+/**
+ * Les rangées propres à un onglet : le classement, les ajouts, Ma liste, la découverte, les genres.
+ *
+ * Sorties de l'écran pour être montées une fois par onglet visité et gardées (`keptTabs.ts`) : un
+ * seul jeu de rangées, rempli tour à tour par les films et les séries, recevait au changement
+ * d'onglet des affiches toutes différentes — chaque carte se rechargeait et refaisait son fondu.
+ * Chaque volet a donc sa propre piste de classement (`useFlipGrid`), comme chaque rangée a la
+ * sienne.
+ */
+const MobileTabRows = memo(function MobileTabRows({
+  tab,
+  payload,
+  myList,
+  myListPending,
+  discoveryRows,
+  onSelect,
+  onDiscover,
+}: {
+  tab: "movies" | "series";
+  payload: CinemaMoviesPayload | CinemaSeriesPayload | undefined;
+  myList: (CinemaMovie | CinemaSeries)[];
+  myListPending: boolean;
+  discoveryRows: PlayerDiscoverPayload["rows"] | undefined;
+  onSelect: (item: CinemaMovie | CinemaSeries) => void;
+  onDiscover: (item: DiscoveryItem) => void;
+}) {
+  const t = useT();
+  // Le classement suit ses données fraîches en glissant, comme les autres rangées.
+  const top10Track = useRef<HTMLDivElement>(null);
+  const top10: (CinemaMovie | CinemaSeries)[] = payload?.top10 ?? [];
+  useFlipGrid(top10Track, top10.map((item) => String(itemId(item))), CATALOGUE_FLIP);
+  const recentlyAdded: (CinemaMovie | CinemaSeries)[] = payload?.recentlyAdded ?? [];
+  const rows = payload?.rows as Record<string, (CinemaMovie | CinemaSeries)[]> | undefined;
+  return (
+    <>
+      {/* The curated rails, ahead of the genre rows — same three as desktop, same definitions
+          (see lib/cinemaRails). Each hides itself when it has nothing to show. */}
+      {top10.length > 0 && (
+        <MobileRow label={top10Label(payload?.top10Theme ?? null, t)} trackRef={top10Track}>
+          {top10.map((item, i) => (
+            <CinemaTop10Card
+              key={itemId(item)}
+              rank={i + 1}
+              title={item.title}
+              posterUrl={item.posterUrl}
+              addedAt={item.addedAt}
+              widthClassName={POSTER_WIDTH}
+              showNewBadge={false}
+              numberFontSize="4.5rem"
+              onSelectItem={() => onSelect(item)}
+            />
+          ))}
+        </MobileRow>
+      )}
+
+      <PosterRow label={t("cinema.recentlyAdded")} items={recentlyAdded} itemId={itemId} onSelect={onSelect} showNewBadge={false} />
+      {myListPending && (
+        <MobileRow label={t("cinema.myList")}>
+          <CinemaSkeletonCards cardClassName={POSTER_WIDTH} shape="poster" count={4} />
+        </MobileRow>
+      )}
+      <PosterRow
+        label={t("cinema.myList")}
+        items={myList}
+        itemId={itemId}
+        onSelect={onSelect}
+        // Vers « Ma liste » et non vers une grille de genre : la rangée est un extrait
+        // d'un écran qui existe déjà, avec ses onglets, sa recherche et ses demandes.
+        onSeeAll={() => cinemaNavigate({ list: true })}
+      />
+
+      {(discoveryRows ?? [])
+        .filter((row) => (tab === "movies" ? row.key !== "trendingSeries" : row.key === "trendingSeries"))
+        .map((row) => (
+          <DiscoveryRow
+            key={row.key}
+            label={t(`cinema.discovery.${row.key}`)}
+            eyebrow={row.becauseOf ? t("cinema.becauseWatched", { title: row.becauseOf }) : null}
+            items={row.items}
+            missingLabel={t("player.notInLibrary")}
+            onSelect={onDiscover}
+          />
+        ))}
+
+      {payload?.genres.map((genre) => {
+        const all = rows?.[genre] ?? [];
+        const items = all.slice(0, ROW_ITEM_LIMIT);
+        if (items.length === 0) return null;
+        return (
+          <PosterRow
+            key={genre}
+            label={genreLabel(genre, t)}
+            items={items}
+            itemId={itemId}
+            onSelect={onSelect}
+            // Seulement quand il y a plus à voir : un « voir tout » sur une rangée déjà entière
+            // promet une suite qui n'existe pas.
+            onSeeAll={all.length > items.length ? () => cinemaNavigate({ browse: genre }) : undefined}
+          />
+        );
+      })}
+
+      {/* Le bout de la page : toute la bibliothèque, filtrable. C'est la sortie de secours de
+          quelqu'un qui a fait défiler jusqu'ici sans rien trouver. */}
+      {payload && (
+        <div className="mt-8 px-4 pb-4">
+          <button
+            type="button"
+            onClick={() => cinemaNavigate({ browse: BROWSE_ALL })}
+            className="btn btn-ghost w-full justify-center py-3"
+          >
+            {t(`player.browse.all.${tab}`)}
+          </button>
+        </div>
+      )}
+    </>
+  );
+});
+
 /** Un bouton qui ouvre aussi un menu à l'appui long — voir `useLongPress`. */
 function LongPressButton({
   onLongPress,
@@ -1015,7 +1077,8 @@ function MobileRow({
   return (
     // `mt-6` debout, `mt-4` couché : sur ~390 px de haut, six rems entre chaque rangée font qu'on
     // ne voit jamais deux rangées à la fois.
-    <section className="mt-6 [@media(max-height:500px)]:mt-4" style={ROW_CONTAINMENT}>
+    // `data-poster-row` : ce que le décodage anticipé suit — voir `useDecodeRowsAhead`.
+    <section data-poster-row className="mt-6 [@media(max-height:500px)]:mt-4" style={ROW_CONTAINMENT}>
       {/* « Voir tout » posé à côté du titre plutôt qu'au bout du défilement : une rangée s'arrête
           à vingt-quatre affiches, et il fallait faire glisser vingt-quatre fois pour découvrir
           qu'il y avait une suite. Ici il se voit avant qu'on commence. */}

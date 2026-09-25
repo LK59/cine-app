@@ -774,3 +774,52 @@ gardent `useFlipGrid` sans options (trois changements, pas de fondu).
 d'ajout, et changer le film sous les yeux une demi-seconde après l'ouverture ressemble à un bug.
 L'ancienne rotation retenait un index : une nouveauté insérée en tête lui faisait désigner un autre
 film, sans rien qui l'explique.
+
+---
+
+## 26. Films ↔ Séries, et les affiches des rangées
+
+**Règle.** Un onglet visité reste monté ; celui qu'on ne regarde pas est caché (`hidden`), inerte
+(`inert`) et marqué `data-tab-hidden`, que la navigation au clavier et aux gestes ignore. Les
+affiches des rangées de l'accueil sont décodées d'avance : les rangées jusqu'à deux écrans et demi
+sous le bord, les douze premières cartes de chacune, dans la variante que l'affiche chargera
+(`srcset` et `sizes` recopiés). Une affiche prête en moins de 100 ms (cache, chauffée d'avance)
+s'affiche sans fondu ; une vraie arrivée réseau garde le sien.
+
+**Porteurs.** `useKeptTabs`, `tabPaneProps`, `inHiddenTab` (`src/lib/keptTabs.ts`) ;
+`useDecodeRowsAhead` (`src/lib/useDecodeAhead.ts`) ; `revealLoaded` (`src/lib/imageReveal.ts`).
+
+**Appelants.** `CinemaClient.tsx` (un volet par onglet, « Reprendre » seulement dans le volet
+affiché) et `CinemaMobileClient.tsx` (`MobileTabRows`, un par onglet) ; `useTvGridNav`,
+`useCentredCard`, `PlayerRail` pour `inHiddenTab` ; `PosterImage`, `FadeInImg` pour `revealLoaded`.
+
+**Différent exprès.** La bannière n'est pas dans ces volets : elle a sa propre règle (§25) et sa
+remise à plat hors de l'écran ne dépend que de l'onglet courant. « Reprendre » n'existe qu'une fois,
+dans le volet affiché : c'est la même rangée des deux côtés.
+
+**Tests.** `keptTabs.test.tsx`, `useDecodeRowsAhead.test.tsx`, `imageReveal.test.tsx`,
+`CinemaClient-grid-top.test.tsx` (« Films ↔ Séries sans reconstruction »), `decisions-partagees.test.ts`.
+
+**Décidé le 25/09/2026** : en descendant l'accueil, les affiches « se génèrent au fur et à mesure »,
+et revenir à Films « régénère les affiches », quand « Tous les films » paraissait tout rendre d'un
+coup — lui seul décodait d'avance.
+
+---
+
+## 27. Les listes de la personne, redemandées
+
+**Règle.** Ma liste (`TO_WATCH_KEY`, `/api/player/lists`), la reprise et « À suivre » sont
+redemandées au retour de l'application au premier plan et à chaque changement d'onglet Films/Séries
+— pas le catalogue, toujours figé pendant une séance. Rien pendant un film en plein écran (SWR y est
+en pause). Deux demandes rapprochées de moins de 5 s n'en font qu'une.
+
+**Porteur.** `useFreshPersonalLists` (`src/lib/freshLists.ts`).
+
+**Appelants.** `CinemaClient.tsx`, `CinemaMobileClient.tsx`. Le panneau Ma liste se redemande de
+lui-même à son ouverture (SWR, donnée de plus de 10 s).
+
+**Tests.** `keptTabs.test.tsx` (« les listes personnelles redemandées »), `decisions-partagees.test.ts`.
+
+**Décidé le 25/09/2026** : un titre ajouté à Ma liste depuis l'ordinateur, l'application ouverte sur
+l'iPhone, n'y apparaissait ni en changeant d'onglet ni en ouvrant une fiche — seulement au
+redémarrage.

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { scrollBehavior } from "@/lib/reducedMotion";
+import { inHiddenTab } from "@/lib/keptTabs";
 
 // TV-remote-style arrow-key navigation across the home page's poster carousels — deliberately
 // NOT built as a React-state-tracked cursor (compare useListKeyNav.ts, which drives a single
@@ -21,7 +22,9 @@ function isInputFocused(): boolean {
 }
 
 function getRows(): HTMLElement[][] {
-  const all = Array.from(document.querySelectorAll<HTMLElement>("[data-tv-card]"));
+  // Pas celles de l'onglet caché, gardé monté (`keptTabs.ts`) : ses rangées portent parfois les
+  // mêmes noms (`genre-Drame` des deux côtés) et se seraient mêlées à celles de l'écran.
+  const all = Array.from(document.querySelectorAll<HTMLElement>("[data-tv-card]")).filter((el) => !inHiddenTab(el));
   const byRow = new Map<string, HTMLElement[]>();
   for (const el of all) {
     const row = el.dataset.tvRow ?? "";
