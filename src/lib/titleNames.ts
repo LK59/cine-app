@@ -23,6 +23,17 @@ import { spreadTtl } from "@/lib/cacheSpread";
  */
 export type TitleNames = Partial<Record<Locale, string>>;
 
+/**
+ * Le synopsis dans chaque langue, tiré de la même réponse de TMDB que les titres.
+ *
+ * Le catalogue portait le résumé de Radarr, en anglais, et la fiche le remplaçait par celui de
+ * TMDB dans la langue de qui regarde une fois sa description arrivée — un texte qui changeait sous
+ * les yeux. Depuis que la fiche s'ouvre complète (25/09/2026) et ne remplace plus rien, c'est le
+ * catalogue qui doit porter le bon texte : il le prend ici, comme le titre. La langue d'origine
+ * n'est pas une traduction chez TMDB : un film français garde le résumé du catalogue.
+ */
+export type TitleOverviews = Partial<Record<Locale, string>>;
+
 // Sous les trente jours après lesquels le ménage du cache disque efface une entrée : rafraîchie
 // avant d'être effacée, une traduction ne redevient jamais inconnue.
 const TTL_MS = 14 * 24 * 3600_000;
@@ -44,6 +55,7 @@ const failedAt = new Map<string, number>();
 /** Pour les tests. */
 export function resetTitleNames(): void {
   memory.clear();
+  overviewMemory.clear();
   refreshing.clear();
   failedAt.clear();
 }
@@ -76,6 +88,29 @@ export function namesFromTranslations(data: TmdbTranslations): TitleNames {
   return out;
 }
 
+export function overviewsFromTranslations(data: TmdbTranslations): TitleOverviews {
+  const out: TitleOverviews = {};
+  const translations = data.translations?.translations ?? [];
+  for (const locale of LOCALES) {
+    const candidates = translations.filter((t) => t.iso_639_1 === locale);
+    const ordered = [
+      ...candidates.filter((t) => t.iso_3166_1 === HOME_COUNTRY[locale]),
+      ...candidates.filter((t) => t.iso_3166_1 !== HOME_COUNTRY[locale]),
+    ];
+    for (const t of ordered) {
+      const text = (t.data?.overview || "").trim();
+      if (text) {
+        out[locale] = text;
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+const overviewMemory = new Map<string, TitleOverviews>();
+const overviewKey = (namesKey: string) => namesKey.replace("tmdb:titles:v2:", "tmdb:overviews:v1:");
+
 function refresh(key: string, tmdbId: number, mediaType: "movie" | "series"): void {
   if (refreshing.has(key)) return;
   refreshing.add(key);
@@ -84,6 +119,10 @@ function refresh(key: string, tmdbId: number, mediaType: "movie" | "series"): vo
       const entry = { names: namesFromTranslations(data), fetchedAt: Date.now() };
       memory.set(key, entry);
       kvCacheDb.set(key, entry.names, entry.fetchedAt);
+      // Les synopsis viennent de la même réponse : rangés à côté, sans appel de plus.
+      const overviews = overviewsFromTranslations(data);
+      overviewMemory.set(overviewKey(key), overviews);
+      kvCacheDb.set(overviewKey(key), overviews, entry.fetchedAt);
     })
     .catch((err) => {
       failedAt.set(key, Date.now());
@@ -121,6 +160,41 @@ function readTitleNames(tmdbId: number | null | undefined, mediaType: "movie" | 
   const recentlyFailed = Date.now() - (failedAt.get(key) ?? 0) < RETRY_AFTER_FAILURE_MS;
   if (expired && !recentlyFailed) refresh(key, tmdbId, mediaType);
   return entry?.names ?? {};
+}
+
+/**
+ * Les synopsis connus de ce titre, tout de suite ; jamais bloquant, comme les titres. Un titre dont
+ * les titres sont déjà en cache mais pas encore les synopsis (entrée d'avant le 25/09/2026) est
+ * redemandé une fois, en arrière-plan.
+ */
+export function getTitleOverviews(tmdbId: number | null | undefined, mediaType: "movie" | "series"): TitleOverviews {
+  try {
+    if (!tmdbId || !tmdb.isEnabled()) return {};
+    const key = `tmdb:titles:v2:${mediaType}:${tmdbId}`;
+    const okey = overviewKey(key);
+    let overviews = overviewMemory.get(okey);
+    if (!overviews) {
+      const disk = kvCacheDb.get(okey);
+      if (disk) {
+        overviews = disk.value as TitleOverviews;
+        overviewMemory.set(okey, overviews);
+      }
+    }
+    if (!overviews) {
+      const recentlyFailed = Date.now() - (failedAt.get(key) ?? 0) < RETRY_AFTER_FAILURE_MS;
+      if (!recentlyFailed) refresh(key, tmdbId, mediaType);
+      return {};
+    }
+    return overviews;
+  } catch (err) {
+    logError("title-names", err, { tmdbId, mediaType });
+    return {};
+  }
+}
+
+/** Le synopsis à montrer : celui de la langue de qui regarde, sinon celui du catalogue. */
+export function localizedOverview(overviews: TitleOverviews, locale: Locale, fallback: string | null): string | null {
+  return overviews[locale] || fallback;
 }
 
 /**

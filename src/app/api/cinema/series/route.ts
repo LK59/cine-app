@@ -5,7 +5,7 @@ import { cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } fro
 import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt } from "@/lib/title-art";
-import { getTitleNames, localizedTitle } from "@/lib/titleNames";
+import { getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import { dailyTop10Db } from "@/lib/db";
@@ -77,7 +77,8 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: L
     backdropUrl: tmdbResize(backdropUrl(s.images, "full"), "w1280"),
     logoUrl: art.logoUrl,
     posterTextlessUrl: art.posterTextlessUrl,
-    overview: s.overview ?? null,
+    // Dans la langue de qui regarde quand TMDB la connaît — voir `TitleOverviews`.
+    overview: localizedOverview(getTitleOverviews(s.tmdbId, "series"), locale, s.overview ?? null),
     imdbRating,
     genres: s.genres ?? [],
     addedAt: s.added ?? null,

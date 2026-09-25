@@ -163,7 +163,7 @@ function enabled(): boolean {
 export interface TmdbTranslation {
   iso_639_1: string;
   iso_3166_1: string;
-  data?: { title?: string; name?: string };
+  data?: { title?: string; name?: string; overview?: string };
 }
 
 /**

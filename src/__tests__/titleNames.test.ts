@@ -120,3 +120,27 @@ describe("getTitleNames — après un échec", () => {
     vi.useRealTimers();
   });
 });
+
+describe("le synopsis dans la langue de qui regarde (25/09/2026)", () => {
+  it("tire chaque langue des traductions, pays de préférence d'abord", async () => {
+    const { overviewsFromTranslations } = await import("@/lib/titleNames");
+    const overviews = overviewsFromTranslations({
+      original_language: "en",
+      translations: {
+        translations: [
+          { iso_639_1: "fr", iso_3166_1: "CA", data: { overview: "Résumé québécois" } },
+          { iso_639_1: "fr", iso_3166_1: "FR", data: { overview: "Résumé français" } },
+          { iso_639_1: "de", iso_3166_1: "DE", data: { overview: "  " } },
+        ],
+      },
+    });
+    expect(overviews).toEqual({ fr: "Résumé français" });
+  });
+
+  it("retombe sur le synopsis du catalogue quand la langue manque", async () => {
+    const { localizedOverview } = await import("@/lib/titleNames");
+    expect(localizedOverview({ fr: "Résumé" }, "fr", "Summary")).toBe("Résumé");
+    expect(localizedOverview({ fr: "Résumé" }, "de", "Summary")).toBe("Summary");
+    expect(localizedOverview({}, "fr", null)).toBeNull();
+  });
+});
