@@ -70,6 +70,9 @@ import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/discover/route";
 import { prefetchImages, prefetchInChunks, warmUpUrls } from "@/lib/cinemaWarmup";
+import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
+import { tabPaneProps, useKeptTabs } from "@/lib/keptTabs";
+import { useFreshPersonalLists } from "@/lib/freshLists";
 import { heroInfoKey, preloadHeroInfo } from "@/lib/useHeroInfo";
 import { ProgressFill } from "@/components/cinema/ProgressFill";
 
@@ -555,6 +558,11 @@ export function CinemaClient() {
     setSeenMediaType(mediaType);
     setTabSwitched(true);
   }
+  // L'onglet quitté reste monté, caché et inerte : au retour, rien n'est reconstruit. Voir
+  // `keptTabs.ts`. Le fondu du changement d'onglet ne joue que sur le volet affiché.
+  const keptTabs = useKeptTabs(mediaType);
+  const tabPane = (tab: "movies" | "series") =>
+    tabPaneProps(tab, mediaType, tabSwitched ? "animate-fade-in rows-switched" : undefined);
 
   // Whichever tab is actually showing drives the shared background wash below — a plain union,
   // not a new abstraction, since all it needs is backdropUrl + a stable id to key the crossfade.
@@ -620,6 +628,11 @@ export function CinemaClient() {
    */
   const touch = useIsTouch();
   useCentredCard(rowsPaneRef, touch && gridOnTop);
+  // Les affiches des rangées décodées avant qu'on les atteigne — voir `useDecodeRowsAhead`. Le
+  // panneau n'existe qu'une fois l'écran de chargement parti.
+  useDecodeRowsAhead(rowsPaneRef, !nothingToShowYet(moviesLoading, movies));
+  // Ma liste, la reprise et « À suivre » redemandés au retour et au changement d'onglet.
+  useFreshPersonalLists(mediaType);
 
   // "/" opens the search from anywhere on the browse screen — the shortcut every media UI has,
   // and the reason the button itself can stay a small icon rather than a full-width field.
@@ -1115,9 +1128,9 @@ export function CinemaClient() {
               opacités multipliées, près d'une demi-seconde avant que l'écran se pose. Le premier
               affichage garde l'entrée des rangées, le changement d'onglet ce fondu seul
               (`rows-switched`, globals.css). */}
-          <div key={mediaType} className={tabSwitched ? "animate-fade-in rows-switched" : undefined}>
-          {mediaType === "movies" ? (
-            <>
+          {/* Un volet par onglet, gardé monté une fois visité : voir `tabPane`. */}
+          {keptTabs.includes("movies") && (
+            <div {...tabPane("movies")}>
               {/* Première rangée, et celle que la bannière suit — voir CinemaSpotlight. */}
               <CinemaSpotlight
                 label={t("cinema.spotlight")}
@@ -1146,8 +1159,10 @@ export function CinemaClient() {
                 ))}
               </CinemaSpotlight>
 
-              {continueSkeleton}
-              {continueRow}
+              {/* « Reprendre » n'existe qu'une fois, dans l'onglet affiché : c'est la même rangée
+                  des deux côtés, et sa piste porte l'unique `continueTrack`. */}
+              {mediaType === "movies" && continueSkeleton}
+              {mediaType === "movies" && continueRow}
 
               {/* The curated rails, ahead of the alphabetical genre rows: what's best, what just
                   arrived, what you saved. A library sorted A→Z is a catalogue; these three are
@@ -1226,12 +1241,13 @@ export function CinemaClient() {
                   sortie de quelqu'un qui a tout parcouru sans rien trouver. */}
               <div className="mb-10 mt-4 px-8 sm:px-12">
                 <button type="button" onClick={() => cinemaNavigate({ browse: BROWSE_ALL })} className="btn btn-ghost">
-                  {t(`player.browse.all.${mediaType}`)}
+                  {t("player.browse.all.movies")}
                 </button>
               </div>
-            </>
-          ) : (
-            <>
+            </div>
+          )}
+          {keptTabs.includes("series") && (
+            <div {...tabPane("series")}>
               {/* Inline states, not a full-screen early return like movies' own loading/error/
                   empty branches above — those replace the WHOLE screen before the toggle even
                   exists yet (fine, since movies always load first); series loads lazily after
@@ -1262,8 +1278,8 @@ export function CinemaClient() {
                 ))}
               </CinemaSpotlight>
 
-              {continueSkeleton}
-              {continueRow}
+              {mediaType === "series" && continueSkeleton}
+              {mediaType === "series" && continueRow}
 
               {nothingToShowYet(seriesLoading, series) && (
                 <div className="flex justify-center pt-12">
@@ -1350,12 +1366,11 @@ export function CinemaClient() {
               {/* Voir la note jumelle côté films. */}
               <div className="mb-10 mt-4 px-8 sm:px-12">
                 <button type="button" onClick={() => cinemaNavigate({ browse: BROWSE_ALL })} className="btn btn-ghost">
-                  {t(`player.browse.all.${mediaType}`)}
+                  {t("player.browse.all.series")}
                 </button>
               </div>
-            </>
+            </div>
           )}
-          </div>
         </div>
       </div>
 

@@ -13,7 +13,9 @@ describe("changement d'onglet sur le bureau", () => {
   it("le panneau ne fond qu'après un changement d'onglet", () => {
     const src = lire("src/components/cinema/CinemaClient.tsx");
     expect(src).not.toContain('<div key={mediaType} className="animate-fade-in">');
-    expect(src).toContain('className={tabSwitched ? "animate-fade-in rows-switched" : undefined}');
+    // Depuis le 25/09/2026 les deux volets restent montés (`keptTabs.ts`) : le fondu est la classe
+    // du volet affiché, et seulement après un changement d'onglet.
+    expect(src).toContain('tabPaneProps(tab, mediaType, tabSwitched ? "animate-fade-in rows-switched" : undefined)');
   });
 
   it("et les rangées n'y rejouent pas leur propre entrée", () => {

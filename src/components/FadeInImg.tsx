@@ -1,7 +1,7 @@
 "use client";
 
 import type { ImgHTMLAttributes } from "react";
-import { showIfAlreadyLoaded } from "@/lib/imageReveal";
+import { revealLoaded, showIfAlreadyLoaded } from "@/lib/imageReveal";
 
 /**
  * Une image de fond qui arrive en fondu — et qui ne le rejoue pas quand elle est déjà là.
@@ -21,7 +21,7 @@ export function FadeInImg({ className = "", onLoad, alt = "", ...rest }: ImgHTML
       ref={showIfAlreadyLoaded}
       className={`${className} opacity-0 transition-opacity duration-500`}
       onLoad={(event) => {
-        event.currentTarget.style.opacity = "1";
+        revealLoaded(event.currentTarget);
         onLoad?.(event);
       }}
     />

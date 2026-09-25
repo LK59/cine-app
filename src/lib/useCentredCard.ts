@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type RefObject } from "react";
+import { inHiddenTab } from "@/lib/keptTabs";
 
 /**
  * L'équivalent tactile du survol : la carte qui s'arrête au milieu prend la bannière.
@@ -56,6 +57,8 @@ function centredCard(row: HTMLElement): HTMLElement | null {
 function settledRow(pane: HTMLElement): HTMLElement | null {
   const top = pane.getBoundingClientRect().top;
   for (const root of pane.querySelectorAll<HTMLElement>("[data-tv-rowroot]")) {
+    // L'onglet caché, gardé monté, n'a pas d'avis (`keptTabs.ts`).
+    if (inHiddenTab(root)) continue;
     if (root.getBoundingClientRect().bottom > top + 8) {
       return root.querySelector<HTMLElement>("[data-tv-card]")?.parentElement ?? null;
     }

@@ -10,6 +10,7 @@ import { prefetchRoute } from "@/lib/prefetch";
 import { PLAYER_NAV, MANAGE_ITEM, activePanel, openPanel } from "./playerNav";
 import { useReportBadge } from "@/lib/useReportBadge";
 import { NavDot } from "./NavDot";
+import { inHiddenTab } from "@/lib/keptTabs";
 
 /**
  * Le rail du lecteur — desktop.
@@ -55,7 +56,8 @@ export function PlayerRail() {
     const index = items.indexOf(document.activeElement as HTMLButtonElement);
 
     if (e.key === "ArrowRight") {
-      const firstCard = document.querySelector<HTMLElement>("[data-tv-card]");
+      // La première de l'écran, pas celle de l'onglet caché gardé monté (`keptTabs.ts`).
+      const firstCard = Array.from(document.querySelectorAll<HTMLElement>("[data-tv-card]")).find((el) => !inHiddenTab(el));
       if (!firstCard) return;
       e.preventDefault();
       firstCard.focus();
