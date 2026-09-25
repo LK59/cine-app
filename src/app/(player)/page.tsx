@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { catalogueCacheReady } from "@/lib/persistentCache";
 
 // L'écran d'attente est un simple bloc `fixed`, et non plus un portage dans `document.body`.
 //
@@ -18,15 +19,28 @@ function LoadingScreen() {
   );
 }
 
+/**
+ * Le morceau de l'écran et le catalogue gardé sur l'appareil, attendus ensemble.
+ *
+ * Le cinéma ne se monte qu'une fois le cache relu (`catalogueCacheReady`, 150 ms au plus, en
+ * parallèle du téléchargement du morceau) : monté avant, il afficherait l'écran de chargement et
+ * demanderait tout au réseau, exactement ce que le cache doit éviter — et une donnée posée ensuite
+ * sous une requête en cours ferait jeter sa réponse à SWR. Un rendu purement client (`ssr: false`),
+ * donc rien à accorder avec le serveur.
+ */
+function withCatalogueCache<T>(load: Promise<T>): Promise<T> {
+  return Promise.all([load, catalogueCacheReady()]).then(([component]) => component);
+}
+
 // ssr:false — see CinemaClient's own doc comment for why (unrecoverable hydration mismatch on a
 // page that's 100% client-fetched anyway, same pattern as PlayerHostLazy/GlobalSearchLazy).
-const CinemaClient = dynamic(() => import("@/components/cinema/CinemaClient").then((m) => m.CinemaClient), {
+const CinemaClient = dynamic(() => withCatalogueCache(import("@/components/cinema/CinemaClient").then((m) => m.CinemaClient)), {
   ssr: false,
   loading: LoadingScreen,
 });
 
 const CinemaMobileClient = dynamic(
-  () => import("@/components/cinema/mobile/CinemaMobileClient").then((m) => m.CinemaMobileClient),
+  () => withCatalogueCache(import("@/components/cinema/mobile/CinemaMobileClient").then((m) => m.CinemaMobileClient)),
   { ssr: false, loading: LoadingScreen }
 );
 

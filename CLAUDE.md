@@ -117,6 +117,14 @@ and its archives oldest first for any reader.
 refused tokens, with device and address; `data/logs/notifications.log` records every push sent,
 with what happened to it per account (delivered, failed, subscription removed, turned off). Both are
 written by `src/lib/eventLogs.ts` and read by the activity panel like the others.
+`data/logs/startup.log` (since 2026-09-25, same module) records each opening of the cinema: whether
+it was drawn from the catalogue kept on the device (`src/lib/persistentCache.ts`, IndexedDB, one per
+account, seven days, wiped at sign-out) and how old that cache was, and when the cache and then the
+network answered (`cacheMs`, `networkMs`, from navigation start). The cache exists because every
+launch used to ask for the whole catalogue again — one to two seconds of loading screen for a phone
+roaming abroad; the log says what it actually saves. Its format is versioned
+(`PERSISTED_CACHE_SCHEMA`), and `persistentCache-schema.test.ts` fails when the kept responses'
+types change without the version moving.
 **Reports** (« Signaler un problème », `src/lib/reports.ts`) freeze a snapshot of the author's logs
 when sent (`src/lib/reportLogs.ts`) — the logs rotate, the ticket must stay readable. Their paths
 come from one tree, `src/lib/reportTaxonomy.ts`, read by both the wizard and the route; screenshots

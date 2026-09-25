@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
+import { SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionFull } from "@/lib/session";
 /**
  * Deux polices, servies depuis le dépôt — voir `fonts/fonts.css`, qui pose `--font-sans` et
  * `--font-display`.
@@ -105,7 +107,12 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const rawLang = (await cookies()).get(LOCALE_COOKIE)?.value ?? "";
+  const cookieStore = await cookies();
+  const rawLang = cookieStore.get(LOCALE_COOKIE)?.value ?? "";
+  // Le compte, pour le cache du catalogue gardé sur l'appareil (`persistentCache.ts`) : il est
+  // rangé par compte, et le navigateur doit savoir lequel lire avant d'avoir rien demandé au
+  // réseau — c'est tout l'intérêt. Rien pour une page sans session : pas de cache à lire.
+  const account = (await verifySessionFull(cookieStore.get(SESSION_COOKIE)?.value).catch(() => null))?.u ?? null;
   const lang: Locale = LOCALES.includes(rawLang as Locale) ? rawLang as Locale : "fr";
   const dict = await loadLocaleDict(lang);
   return (
@@ -164,7 +171,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <TranslationProvider initialLocale={lang} initialDict={dict}>
           <ThemeProvider>
-            <SWRProvider>
+            <SWRProvider account={account}>
               <ToastProvider>
                 <PlaybackProvider>
                   {children}

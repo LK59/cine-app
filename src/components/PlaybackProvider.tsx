@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { detectCodecSupport } from "@/lib/codecSupport";
 import { useSWRConfig } from "swr";
+import { isAwaitingFresh } from "@/lib/persistentCache";
 import { setWatchingFullScreen } from "@/lib/playbackBusy";
 import { NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import { flushOrphanStops } from "@/lib/unsentStop";
@@ -165,7 +166,8 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
    * Lire ne revenait plus — sur une page par ailleurs vivante. La recherche, elle, marchait très
    * bien : elle se monte à la demande, une fois la pause levée.
    *
-   * On ne relance que les clés qui n'ont jamais rien reçu — ni donnée, ni erreur. Une donnée
+   * On ne relance que les clés qui n'ont jamais rien reçu — ni donnée, ni erreur —, et celles dont
+   * la seule donnée vient du cache gardé sur l'appareil. Une donnée
    * périmée se revalidera d'elle-même, une erreur a déjà sa propre logique de reprise, et
    * revalider tout le catalogue à chaque fermeture de film n'aurait servi personne.
    *
@@ -177,6 +179,10 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     for (const key of cache.keys()) {
       const entry = cache.get(key) as { data?: unknown; error?: unknown } | undefined;
       if (entry && entry.data === undefined && entry.error === undefined) void mutate(key);
+      // Montrée depuis le cache de l'appareil et pas encore rafraîchie : sa requête a pu être
+      // sautée de la même façon, et une clé pourvue n'aurait plus jamais été redemandée
+      // (`persistentCache.ts`).
+      else if (typeof key === "string" && isAwaitingFresh(key)) void mutate(key);
     }
   }, [mode, cache, mutate]);
 

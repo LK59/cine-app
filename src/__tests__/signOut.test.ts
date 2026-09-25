@@ -38,6 +38,20 @@ describe("signOut", () => {
     expect(takePrefetchedPlaybackState("film")).toBeNull();
   });
 
+  it("efface le catalogue gardé sur l'appareil avant de partir", async () => {
+    // 25/09/2026 : un iPad partagé ne doit rien garder de la bibliothèque ni de la reprise du
+    // compte qui s'en va.
+    const { fakeIndexedDb } = await import("./helpers/fakeIndexedDb");
+    const cache = await import("@/lib/persistentCache");
+    cache.resetPersistentCacheForTests();
+    vi.stubGlobal("indexedDB", fakeIndexedDb());
+    await cache.writeEntries([{ account: "louis", key: "/api/jellyfin/resume", savedAt: Date.now(), schema: cache.PERSISTED_CACHE_SCHEMA, data: { items: [] } }]);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    await signOut(vi.fn());
+    expect(await cache.readAccountCache("louis")).toEqual([]);
+    cache.resetPersistentCacheForTests();
+  });
+
   // Une seule façon de se déconnecter : trois copies non gardées, c'est ainsi que le défaut
   // existait trois fois.
   it("est la seule à appeler la déconnexion côté client", () => {

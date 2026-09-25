@@ -12,6 +12,31 @@ export const AUTH_LOG = () => path.join(LOG_DIR, "auth.log");
 export const NOTIFICATIONS_LOG = () => path.join(LOG_DIR, "notifications.log");
 export const EVENT_LOG_KEEP = 20;
 
+/**
+ * Chaque ouverture du cinéma : depuis le cache de l'appareil ou depuis le réseau, et en combien de
+ * temps (25/09/2026). Le cache du catalogue promettait des affiches dès l'ouverture plutôt qu'après
+ * une à deux secondes d'itinérance : ce journal dit ce qu'il fait gagner, au lieu de le supposer.
+ */
+export const STARTUP_LOG = () => path.join(LOG_DIR, "startup.log");
+
+/** Ne lève jamais : une mesure perdue ne coûte rien à personne. */
+export function logStartupTiming(fields: {
+  user: string;
+  device: string | null;
+  build: string | null;
+  cacheUsed: boolean;
+  cacheAgeMs: number | null;
+  cacheMs: number | null;
+  networkMs: number | null;
+  standalone: boolean;
+}): void {
+  try {
+    appendJsonLine(STARTUP_LOG(), { timestamp: new Date().toISOString(), kind: "ouverture", ...fields }, { keep: EVENT_LOG_KEEP });
+  } catch {
+    /* rien */
+  }
+}
+
 export type AuthEvent =
   /** Connexion réussie. */
   | "login"

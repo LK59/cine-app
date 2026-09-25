@@ -57,6 +57,9 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // « Je suis là », une fois par minute : la route n'écrit que sur l'appelant, en mémoire, et ne
   // renvoie rien (vue en direct de l'administrateur).
   "POST /api/presence",
+  // Ce que l'ouverture du cinéma a coûté (cache de l'appareil ou réseau) : la route n'écrit que
+  // sur l'appelant, dans un journal, et ne renvoie rien.
+  "POST /api/startup-timing",
   // « Signaler un problème » : créer le sien. Les routes vérifient que c'est bien le sien pour tout
   // le reste (modifier un brouillon, commenter, fermer, retirer une image).
   "POST /api/reports",
