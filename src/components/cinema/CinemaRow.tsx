@@ -1,7 +1,8 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useRef } from "react";
 import { useT } from "@/components/TranslationProvider";
+import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { CinemaCard } from "@/components/cinema/CinemaCard";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
@@ -55,6 +56,10 @@ export const CinemaRow = memo(function CinemaRow({
   seeAllKey?: string;
 }) {
   const t = useT();
+  // Les affiches glissent vers leur nouvelle place quand les données fraîches remplacent celles
+  // du cache de l'appareil — voir `CATALOGUE_FLIP`.
+  const track = useRef<HTMLDivElement>(null);
+  useFlipGrid(track, items.map((item) => String(item.radarrId)), CATALOGUE_FLIP);
   if (items.length === 0) return null;
 
   return (
@@ -81,7 +86,7 @@ export const CinemaRow = memo(function CinemaRow({
           with overflow-x:auto and no explicit overflow-y computes it that way per spec), so a
           hover/focus-scaled card with no room above it gets its top edge clipped by this same
           box — this is what "les affiches sont coupées" turned out to be. */}
-      <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
+      <div ref={track} className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
         {items.map((item, i) => (
           <CinemaCard
             key={item.radarrId}

@@ -4,7 +4,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { Info, Play } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
-import { useRotatingIndex } from "@/lib/useRotatingIndex";
+import { heroSignature, resolveHeroCarousel, upcomingImages, useDecodeAhead, useHeroOrder } from "@/lib/heroCarousel";
 import { useCarouselDrag, carouselTransform, CAROUSEL_TRANSITION } from "@/lib/useCarouselDrag";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
@@ -39,9 +39,15 @@ function heroPoster(item: { posterUrl: string | null; posterTextlessUrl?: string
   return item.logoUrl ? item.posterTextlessUrl ?? item.posterUrl : item.posterUrl;
 }
 
+// Hors du composant : stables, pour que la bannière ne relance rien à chaque rendu.
+const heroKey = (item: Item) => ("radarrId" in item ? `f${item.radarrId}` : `s${item.sonarrId}`);
+/** Ce que cette bannière affiche d'un titre : son affiche et son logo, décodés d'avance. */
+const heroImages = (item: Item) => [heroPoster(item), item.logoUrl];
+
 export const CinemaMobileHero = memo(function CinemaMobileHero({
-  items,
+  items: official,
   paused,
+  offscreen = false,
   short,
   onPlay,
   onOpen,
@@ -50,6 +56,11 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   items: Item[];
   /** La rotation s'arrête quand une fiche ou la recherche est ouverte par-dessus. */
   paused: boolean;
+  /**
+   * La bannière n'est plus à l'écran — l'autre onglet, un panneau, le lecteur plein écran : elle
+   * reprend l'ordre officiel et revient au début. Voir `heroOffscreen` et `useHeroCarousel`.
+   */
+  offscreen?: boolean;
   /** Écran couché : l'affiche passe à côté du texte au lieu d'être derrière. */
   short: boolean;
   onPlay: (item: Item) => void;
@@ -66,7 +77,18 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   const t = useT();
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [index, setIndex] = useRotatingIndex(items.length, paused || dragging);
+  // L'ordre de cette session, réconcilié avec les données fraîches : le titre à l'écran y reste,
+  // une nouveauté vient au passage suivant — la même règle que le bureau (`useHeroOrder`).
+  const [orderIndex, setIndex, order] = useHeroOrder(heroSignature(official.map(heroKey)), paused || dragging, offscreen);
+  // Les titres déjà montrés, pour retrouver celui à l'écran s'il vient de sortir de la liste : le
+  // bureau a le catalogue entier sous la main, pas cette bannière. Tenu pendant le rendu, comme
+  // l'état dérivé plus bas.
+  const [seen, setSeen] = useState(() => new Map(official.map((item) => [heroKey(item), item])));
+  if (official.some((item) => seen.get(heroKey(item)) !== item)) {
+    setSeen(new Map([...seen, ...official.map((item) => [heroKey(item), item] as const)]));
+  }
+  const { items, index } = resolveHeroCarousel(order, orderIndex, official, heroKey, (key) => seen.get(key));
+  useDecodeAhead(upcomingImages(items, index, heroImages));
 
   /**
    * Un saut de plus d'un cran se fait sans glisser.

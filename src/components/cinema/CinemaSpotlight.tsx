@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { scrollBehavior } from "@/lib/reducedMotion";
+import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 
 /**
  * La première rangée : celle que la bannière suit.
@@ -21,6 +22,7 @@ export function CinemaSpotlight({
   count,
   activeIndex,
   onPick,
+  itemKeys = [],
   children,
 }: {
   label: string;
@@ -28,9 +30,16 @@ export function CinemaSpotlight({
   activeIndex: number;
   /** Aller directement à ce titre : la bannière le montre, la rangée s'y amène. */
   onPick: (index: number) => void;
+  /**
+   * L'identité de chaque carte, dans l'ordre : quand l'ordre de la bannière change (une nouveauté
+   * placée juste après le titre à l'écran, l'ordre officiel retrouvé), les cartes glissent au
+   * lieu de sauter — voir `useHeroCarousel` et `CATALOGUE_FLIP`.
+   */
+  itemKeys?: string[];
   children: ReactNode;
 }) {
   const rail = useRef<HTMLDivElement>(null);
+  useFlipGrid(rail, itemKeys, CATALOGUE_FLIP);
 
   // La rangée suit la rotation. Sans cela, la bannière annoncerait au bout de quelques tours un
   // titre dont la carte est sortie de l'écran par la gauche — la section dirait alors le

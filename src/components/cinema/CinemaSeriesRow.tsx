@@ -1,7 +1,8 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useRef } from "react";
 import { useT } from "@/components/TranslationProvider";
+import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { CinemaSeriesCard } from "@/components/cinema/CinemaSeriesCard";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 
@@ -43,6 +44,9 @@ export const CinemaSeriesRow = memo(function CinemaSeriesRow({
   seeAllKey?: string;
 }) {
   const t = useT();
+  // Comme CinemaRow : les affiches glissent quand les données fraîches arrivent.
+  const track = useRef<HTMLDivElement>(null);
+  useFlipGrid(track, items.map((item) => String(item.sonarrId)), CATALOGUE_FLIP);
   if (items.length === 0) return null;
 
   return (
@@ -61,7 +65,7 @@ export const CinemaSeriesRow = memo(function CinemaSeriesRow({
           </button>
         )}
       </div>
-      <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
+      <div ref={track} className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
         {items.map((item, i) => (
           <CinemaSeriesCard
             key={item.sonarrId}

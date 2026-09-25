@@ -1,6 +1,8 @@
 "use client";
 
+import { useRef } from "react";
 import { CinemaTop10Card } from "@/components/cinema/CinemaTop10Card";
+import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 
 // Same edge fade as CinemaRow/CinemaSeriesRow — see the doc comment there for why it's a static
 // mask rather than a scroll-position check.
@@ -40,12 +42,15 @@ export function CinemaTop10Row<T extends Top10Item>({
   onFocusItem: (item: T) => void;
   onSelectItem: (item: T) => void;
 }) {
+  // Un classement qui change à l'arrivée des données fraîches : les affiches glissent à leur rang.
+  const track = useRef<HTMLDivElement>(null);
+  useFlipGrid(track, items.map((item) => String(idOf(item))), CATALOGUE_FLIP);
   if (items.length === 0) return null;
 
   return (
     <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
       <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{label}</h2>
-      <div className="scrollbar-thin flex scroll-smooth items-end gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
+      <div ref={track} className="scrollbar-thin flex scroll-smooth items-end gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
         {items.map((item, i) => (
           <CinemaTop10Card
             key={idOf(item)}

@@ -7,7 +7,8 @@ import { Clapperboard, Info, Play, Plus, Search, X } from "lucide-react";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
-import { useFlipGrid } from "@/lib/useFlipGrid";
+import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
+import { heroOffscreen } from "@/lib/heroCarousel";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
@@ -222,11 +223,15 @@ export function CinemaMobileClient() {
   const [resumeMenu, setResumeMenu] = useState<{ id: string; title: string; poster: string | null } | null>(null);
   const removeFromResume = useRemoveFromResume();
   const continueTrack = useRef<HTMLDivElement>(null);
-  useFlipGrid(continueTrack, [...resumeMovies.map((m) => m.id), ...continueSeries.map((e) => e.jellyfinItemId)]);
+  // Avec les options du catalogue, comme sur le bureau — voir `CATALOGUE_FLIP`.
+  useFlipGrid(continueTrack, [...resumeMovies.map((m) => m.id), ...continueSeries.map((e) => e.jellyfinItemId)], CATALOGUE_FLIP);
   // La place tenue tant que l'une des deux réponses n'est pas arrivée — voir `CinemaSkeletonCards`.
   const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
   const isSeries = mediaType === "series";
   const payload = isSeries ? series : movies;
+  // Le classement suit ses données fraîches en glissant, comme les autres rangées.
+  const top10Track = useRef<HTMLDivElement>(null);
+  useFlipGrid(top10Track, (payload?.top10 ?? []).map((item) => String(itemId(item))), CATALOGUE_FLIP);
 
   // The open sheet is read back out of the URL rather than held in state — that's what lets the
   // back-swipe close it. Nothing resolves until the payload is in, so a cold deep link simply
@@ -577,6 +582,10 @@ export function CinemaMobileClient() {
                 route.discover !== null ||
                 route.person !== null
               }
+              // Hors de l'écran — l'autre onglet, un panneau, le lecteur plein écran : l'ordre
+              // officiel et le début. Pas une fiche, pas le retour d'arrière-plan : voir
+              // `heroOffscreen`, la même règle que le bureau.
+              offscreen={heroOffscreen(tab, route, playback.mode)}
               short={short}
               onPlay={playHero}
               onOpen={openHero}
@@ -682,7 +691,7 @@ export function CinemaMobileClient() {
         {/* The curated rails, ahead of the genre rows — same three as desktop, same definitions
             (see lib/cinemaRails). Each hides itself when it has nothing to show. */}
         {payload && payload.top10.length > 0 && (
-          <MobileRow label={top10Label(payload.top10Theme ?? null, t)}>
+          <MobileRow label={top10Label(payload.top10Theme ?? null, t)} trackRef={top10Track}>
             {payload.top10.map((item, i) => (
               <CinemaTop10Card
                 key={itemId(item)}
@@ -890,9 +899,13 @@ function PosterRowInner<T extends { title: string; posterUrl: string | null; add
   onSeeAll?: () => void;
   showNewBadge?: boolean;
 }) {
+  // Les affiches glissent quand les données fraîches remplacent celles du cache — voir
+  // `CATALOGUE_FLIP`, la même règle que les rangées du bureau.
+  const track = useRef<HTMLDivElement>(null);
+  useFlipGrid(track, items.map((item) => String(itemId(item))), CATALOGUE_FLIP);
   if (items.length === 0) return null;
   return (
-    <MobileRow label={label} onSeeAll={onSeeAll}>
+    <MobileRow label={label} onSeeAll={onSeeAll} trackRef={track}>
       {items.map((item) => (
         <button
           key={itemId(item)}
@@ -930,9 +943,11 @@ const DiscoveryRow = memo(function DiscoveryRow({
   missingLabel: string;
   onSelect: (item: DiscoveryItem) => void;
 }) {
+  const track = useRef<HTMLDivElement>(null);
+  useFlipGrid(track, items.map((item) => `${item.type}-${item.tmdbId}`), CATALOGUE_FLIP);
   if (items.length === 0) return null;
   return (
-    <MobileRow label={label} eyebrow={eyebrow}>
+    <MobileRow label={label} eyebrow={eyebrow} trackRef={track}>
       {items.map((item) => (
         <button
           key={`${item.type}-${item.tmdbId}`}

@@ -735,3 +735,42 @@ d'une veille »).
 **Décidé le 25/09/2026** : un film verrouillé une minute sur un iPhone repartait tout seul au
 déverrouillage — c'est WebKit qui le relançait, notre lecteur n'y était pour rien. Netflix, YouTube et
 l'app TV d'Apple laissent la lecture en pause.
+
+---
+
+## 25. La bannière quand ses données changent sous elle
+
+**Règle.** Le catalogue s'affiche d'abord depuis le cache de l'appareil, puis les données fraîches
+arrivent. La bannière suit **le titre qu'elle montre**, pas sa place dans la rotation : le titre à
+l'écran y reste, et une nouveauté (un titre absent de l'ordre d'avant) vient juste après lui — elle
+arrive au passage suivant, huit secondes au plus. Sans nouveauté, rien ne bouge. Dès que la bannière
+quitte l'écran — l'autre onglet, un panneau du rail (Ma liste, Compte, recherche, grille complète,
+activité), le lecteur en plein écran —, elle reprend l'ordre officiel depuis le début : la nouveauté
+en premier. Pas une fiche (c'est une interaction : on revient au titre d'où l'on vient), pas le retour
+d'arrière-plan (la bannière est alors à l'écran). Aucune mention « nouveau ». Les images du titre
+suivant sont décodées d'avance. Les rangées d'affiches se réorganisent en glissant (`CATALOGUE_FLIP` :
+jusqu'à huit cartes, un peu décalées, un fondu au-delà, le simple changement d'ordre compté), après la
+bannière si elle change au même moment.
+
+**Porteur.** `reconcileHeroOrder` et `heroOffscreen` (`src/lib/heroCarousel.ts`), portés par le hook
+`useHeroOrder` ; `resolveHeroCarousel` rend les titres d'un ordre de clés. `CATALOGUE_FLIP`
+(`src/lib/useFlipGrid.ts`) pour les rangées.
+
+**Appelants.** `CinemaClient.tsx` (les deux bannières du bureau, films et séries) ;
+`mobile/CinemaMobileHero.tsx`, avec `offscreen` posé par `CinemaMobileClient.tsx`. Rangées :
+`CinemaRow`, `CinemaSeriesRow`, `CinemaTop10Row`, `CinemaDiscoveryRow`, `CinemaSpotlight`, « Reprendre »
+des deux côtés, et `PosterRow`, `DiscoveryRow`, le classement du téléphone.
+
+**Différent exprès.** Le titre à l'écran sorti de la liste officielle est retrouvé dans le catalogue
+entier sur le bureau, dans les titres déjà montrés sur le téléphone — qui n'a pas le catalogue sous la
+main. Les deux bannières ne partent pas de la même liste (le bureau : le « spotlight », le téléphone :
+les ajouts récents) : c'était déjà le cas, ce chantier n'y touche pas. « Ma liste » et les demandes
+gardent `useFlipGrid` sans options (trois changements, pas de fondu).
+
+**Tests.** `heroCarousel.test.ts`, `useHeroOrder.test.tsx`, `CinemaMobileHero-fresh.test.tsx`,
+`useFlipGrid.test.tsx` (« options du catalogue »), `decisions-partagees.test.ts`.
+
+**Décidé le 25/09/2026**, avec le catalogue instantané : la bannière est la vitrine de la rapidité
+d'ajout, et changer le film sous les yeux une demi-seconde après l'ouverture ressemble à un bug.
+L'ancienne rotation retenait un index : une nouveauté insérée en tête lui faisait désigner un autre
+film, sans rien qui l'explique.

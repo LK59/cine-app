@@ -1,7 +1,8 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useRef } from "react";
 import { Plus } from "lucide-react";
+import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { PosterImage } from "@/components/PosterImage";
 import type { DiscoveryItem } from "@/app/api/player/discover/route";
 
@@ -44,6 +45,9 @@ export const CinemaDiscoveryRow = memo(function CinemaDiscoveryRow({
   onFocusItem: () => void;
   onSelectItem: (item: DiscoveryItem) => void;
 }) {
+  // Comme les autres rangées : les affiches glissent quand les données fraîches arrivent.
+  const track = useRef<HTMLDivElement>(null);
+  useFlipGrid(track, items.map((item) => `${item.type}-${item.tmdbId}`), CATALOGUE_FLIP);
   if (items.length === 0) return null;
 
   return (
@@ -54,6 +58,7 @@ export const CinemaDiscoveryRow = memo(function CinemaDiscoveryRow({
     >
       <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{label}</h2>
       <div
+        ref={track}
         className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12"
         style={EDGE_FADE}
       >

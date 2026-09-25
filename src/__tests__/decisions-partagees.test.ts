@@ -640,3 +640,30 @@ describe("un seul « ce navigateur lira-t-il le HLS lui-même ? »", () => {
     expect(code).not.toMatch(/canPlayType\(\s*["']application\/vnd\.apple\.mpegurl/);
   });
 });
+
+describe("une seule bannière face aux données fraîches", () => {
+  /**
+   * Le bureau et le téléphone ont chacun leur bannière et leur rotation. La règle « on suit le titre
+   * affiché, la nouveauté vient au passage suivant, l'ordre officiel revient hors de l'écran » ne
+   * vit que dans `heroCarousel.ts` (25/09/2026) : une rotation par index qui reviendrait d'un côté
+   * ferait de nouveau désigner un autre film à l'arrivée d'une nouveauté.
+   */
+  const code = (f: string) =>
+    lire(f)
+      .split("\n")
+      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+      .join("\n");
+
+  it.each(["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileHero.tsx"])(
+    "%s tourne par useHeroOrder, et non par un index à lui",
+    (f) => {
+      expect(code(f)).toMatch(/useHeroOrder\(/);
+      expect(code(f)).not.toMatch(/useRotatingIndex\(/);
+    }
+  );
+
+  it("les deux écrans jugent « hors de l'écran » par la même fonction", () => {
+    expect(code("src/components/cinema/CinemaClient.tsx")).toMatch(/heroOffscreen\(/);
+    expect(code("src/components/cinema/mobile/CinemaMobileClient.tsx")).toMatch(/heroOffscreen\(/);
+  });
+});
