@@ -2,6 +2,7 @@
 
 import { forgetPrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { clearPersistedCache } from "@/lib/persistentCache";
+import { clearResumeStore } from "@/lib/resumeCache/store";
 
 /**
  * Se déconnecter : prévenir le serveur, puis aller à la page de connexion — **quoi qu'il arrive**.
@@ -20,7 +21,8 @@ export async function signOut(go: (path: string) => void): Promise<void> {
   // Le catalogue gardé sur l'appareil part avec la session : un iPad partagé ne doit rien garder
   // de la bibliothèque ni de la reprise de qui que ce soit. Borné : un stockage lent ne retient
   // pas la personne sur la page qu'elle quitte.
-  await Promise.race([clearPersistedCache(), new Promise((resolve) => setTimeout(resolve, 500))]);
+  // Les octets gardés pour la reprise instantanée aussi (`src/lib/resumeCache/`), dans le même délai.
+  await Promise.race([Promise.all([clearPersistedCache(), clearResumeStore()]), new Promise((resolve) => setTimeout(resolve, 500))]);
   try {
     await fetch("/api/auth/logout", { method: "POST" });
   } catch {

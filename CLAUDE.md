@@ -51,7 +51,9 @@ Tests default to the `node` environment; a component test opts into jsdom with a
 `vitest.config.ts` — that is Vitest 4's default, kept deliberately when moving to 5 so that no
 test quietly changed meaning; flipping it is a decision to take by reading the tests it affects.
 
-**Six benches sit beside the suite, all skipped unless given a file or a library root.**
+**Seven benches sit beside the suite, all skipped unless given a file or a library root.**
+`reprise.spec.ts` proves, on a real file, that the bytes the resume cache keeps reopen it at a
+position and produce the first segment with nothing else.
 `truehd-bench.spec.ts`
 decodes a real TrueHD track through the player's whole chain and prints each channel's level, to
 compare with `ffmpeg astats` — the only proof of that decoder, since no synthetic TrueHD can be
@@ -180,6 +182,14 @@ One local path — remux → native `<video>` — and the server player when it 
 Every file goes through it, MP4 included: `mediaFile.ts` reads Matroska or MP4 into the same
 description, and a good container does not mean everything in it plays natively (there used to be
 a "direct play" path for MP4 — silent E-AC3 on Chrome, no track menus, no embedded subtitles).
+**Reprendre and À suivre open from the device** (since 2026-09-25, `src/lib/resumeCache/`): in the
+background, idle, never during a film or with the page hidden, the opening bytes of a few titles
+(header, index, blocks from the keyframe before `openingPosition`) are kept in OPFS in
+`HttpByteSource`'s 1 MiB chunks, capped per title and in total, and `HttpByteSource` reads them
+before the network. They serve only the same file: Jellyfin's MediaSource `ETag`, the size, and
+the stream's `Last-Modified` (forwarded by the stream route for that) — a mismatch discards them
+and says so in the trace. The `start` line carries `openedFrom` (`appareil` / `réseau` / `mixte`)
+and `deviceBytes`.
 `PlayerHost` chooses between the native player and the legacy server-transcoding one;
 `fallToStable` hands over rather than closing — unless `PLAYER_SERVER_FALLBACK=false`, where there
 is no server-side player to hand to and the same call surfaces a clean playback error instead.

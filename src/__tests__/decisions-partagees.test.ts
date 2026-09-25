@@ -705,3 +705,23 @@ describe("un seul chemin pour les onglets gardés, les rangées chauffées et le
     }
   );
 });
+
+describe("une seule position d'ouverture pour le lecteur et pour la reprise instantanée", () => {
+  /**
+   * 25/09/2026 : la reprise instantanée garde les octets de l'ouverture à la position reculée. Si
+   * l'hôte recalculait le recul à sa façon, les octets gardés ne seraient plus ceux qu'il lit — rien
+   * ne casserait, l'ouverture redeviendrait simplement « mixte ». Les deux passent par
+   * `openingPosition`.
+   */
+  it.each(["src/components/ExperimentalPlayerHost.tsx", "src/lib/resumeCache/useResumeCache.ts"])(
+    "%s passe par openingPosition, sans appeler awayFrom",
+    (f) => {
+      const code = lire(f)
+        .split("\n")
+        .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+        .join("\n");
+      expect(code).toMatch(/openingPosition\(/);
+      expect(code).not.toMatch(/awayFrom\(/);
+    }
+  );
+});

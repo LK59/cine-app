@@ -40,7 +40,7 @@ import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { subtitleStyleStore, overlayCss } from "@/lib/subtitleStyle";
 import { useFrameFit } from "@/lib/frameFit";
-import { awayFrom, noteWatching, rewound, AWAY_MS } from "@/lib/resumeRewind";
+import { noteWatching, openingPosition, rewound, AWAY_MS } from "@/lib/resumeRewind";
 import { warmNextEpisode } from "@/lib/nextEpisodeWarmup";
 import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
 
@@ -81,6 +81,7 @@ import { registerBenchBridge } from "@/lib/playerBench/bridge";
 import { seekArrived } from "@/lib/webcodecs/seekArrival";
 import { SessionTally, newPlayerSessionId } from "@/lib/playerSessionTally";
 import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
+import { forgetResumeCache, openDiskChunks, openingFacts } from "@/lib/resumeCache/diskChunks";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -1484,6 +1485,10 @@ export function ExperimentalPlayerHost({
         // Le choix d'où vient ce plafond : « auto » d'office, ou un réglage fait à la main.
         hdrChoice: String(readHdrCapChoice()),
         wideGamut: displayIsWideGamut() ?? "inconnu",
+        // D'où l'ouverture a été servie — l'appareil, le réseau, ou les deux —, et combien d'octets
+        // venaient de l'appareil : de quoi comparer `openedInMs` avant et après la reprise
+        // instantanée (`src/lib/resumeCache/`, 25/09/2026).
+        ...openingFacts(info.streamUrl),
       });
     };
 
@@ -1519,8 +1524,11 @@ export function ExperimentalPlayerHost({
     // reconstruction, qui rouvre là où l'image vient de s'arrêter. Voir `resumeRewind.ts`.
     if (!openingDecidedRef.current) {
       openingDecidedRef.current = true;
-      if (rebuildAtRef.current === null && !session.bench && startSeconds > 0 && awayFrom(itemId)) {
-        const earlier = rewound(startSeconds, info.runtimeSeconds);
+      if (rebuildAtRef.current === null && !session.bench) {
+        // La même règle que celle qui choisit, en arrière-plan, quels octets garder pour une reprise
+        // instantanée (`src/lib/resumeCache/`) : une seule fonction, pour que les deux ne visent
+        // jamais deux positions différentes.
+        const earlier = openingPosition(itemId, startSeconds, info.runtimeSeconds);
         if (earlier < startSeconds) trace(`reprise : ${startSeconds.toFixed(1)} s, reculée à ${earlier.toFixed(1)} s`);
         startSeconds = earlier;
       }
@@ -1673,6 +1681,9 @@ export function ExperimentalPlayerHost({
         // de fin ne l'envoyait jamais (relevé le 23/09/2026).
         void stopPlaybackRef.current();
         endStoppedRef.current = true;
+        // Fini : ses octets gardés pour une reprise instantanée n'ont plus rien à reprendre. Effacés
+        // en arrière-plan ; le prochain passage l'aurait fait aussi, le titre quittant « Reprendre ».
+        if (!session.bench) forgetResumeCache(itemId);
       };
       // Le saut demandé est atteint : la position lue redevient la vérité.
       const onSeeked = () => {
@@ -1771,6 +1782,10 @@ export function ExperimentalPlayerHost({
       // La taille, déjà dans la description du fichier : l'ouverture n'a plus à la demander par
       // un HEAD, et les deux premières plages partent sans attendre cet aller-retour.
       knownSize: info.sizeBytes,
+      // L'en-tête, l'index et le passage de reprise, s'ils sont gardés sur l'appareil pour ce
+      // fichier-là (`src/lib/resumeCache/`). Vérifiés contre ce que la description dit du fichier ;
+      // l'ouverture ne les attend que 150 ms au plus.
+      disk: openDiskChunks({ itemId, streamUrl: info.streamUrl, size: info.sizeBytes, fileVersion: info.fileVersion ?? null }),
       startSeconds,
       // Ce que le serveur sait de la plage dynamique : le conteneur seul ne suffit pas à décider
       // si un Dolby Vision refusé a une couche de base où se rattraper. Voir `planDolbyVision`.

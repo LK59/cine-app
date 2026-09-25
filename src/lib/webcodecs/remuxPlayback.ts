@@ -8,7 +8,7 @@
 import { displayIsHdr, hdrLightCap } from "./hdrDisplay";
 import { reachable } from "./seekArrival";
 import { playerWarning, type PlayerWarning } from "./playerWarning";
-import { HttpByteSource, type ByteSource } from "./byteSource";
+import { HttpByteSource, type ByteSource, type DiskChunks } from "./byteSource";
 import { fromMatroskaTrack, type PlayerTrack } from "./playerTrack";
 import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { openMediaFile } from "./mediaFile";
@@ -18,6 +18,9 @@ import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
 import { simultaneousText } from "./subtitleMarkup";
+
+/** L'attente maximale des octets gardés sur l'appareil, à l'ouverture — voir `RemuxPlaybackOptions.disk`. */
+const DISK_WAIT_MS = 150;
 
 /** Cues more than this far behind the playhead are dropped: a three-hour film is a lot of lines. */
 const CUE_HISTORY_SECONDS = 60;
@@ -39,6 +42,11 @@ export interface RemuxPlaybackOptions {
    * `HttpByteSource.open`.
    */
   knownSize?: number | null;
+  /**
+   * Les morceaux de ce fichier gardés sur l'appareil pour une reprise instantanée, s'il y en a
+   * (`src/lib/resumeCache/`). Une promesse : l'ouverture ne l'attend que `DISK_WAIT_MS` au plus.
+   */
+  disk?: Promise<DiskChunks | null> | null;
   startSeconds: number;
   onError: (message: string, kind?: "network" | "playback") => void;
   onWarning?: (warning: PlayerWarning) => void;
@@ -210,7 +218,12 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
     `écran HDR : ${displayHdr === null ? "inconnu" : displayHdr ? "oui" : "non"}` +
       (lightCap !== null ? ` — lumière HDR annoncée plafonnée à ${lightCap} nits (choix de l'appareil)` : "")
   );
-  const source = await HttpByteSource.open(options.streamUrl, options.knownSize);
+  // Les octets gardés sur l'appareil, s'il y en a — jamais plus de `DISK_WAIT_MS` d'attente : un
+  // stockage lent ne doit pas coûter plus que le réseau qu'il est censé épargner.
+  const disk = options.disk
+    ? await Promise.race([options.disk.catch(() => null), new Promise<null>((resolve) => setTimeout(() => resolve(null), DISK_WAIT_MS))])
+    : null;
+  const source = await HttpByteSource.open(options.streamUrl, options.knownSize, disk);
   trace(`flux ouvert — ${source.size} octets`);
   try {
     return await probeOpened(source, options, lightCap);

@@ -823,3 +823,28 @@ lui-même à son ouverture (SWR, donnée de plus de 10 s).
 **Décidé le 25/09/2026** : un titre ajouté à Ma liste depuis l'ordinateur, l'application ouverte sur
 l'iPhone, n'y apparaissait ni en changeant d'onglet ni en ouvrant une fiche — seulement au
 redémarrage.
+
+---
+
+## 28. Où s'ouvre une reprise, et ce qu'on garde sur l'appareil pour elle
+
+**Règle.** À la première ouverture d'un titre (pas une reconstruction, pas le banc), le lecteur
+recule de 5 s si l'on a quitté le titre depuis plus de dix minutes, sauf près des deux bords. La
+reprise instantanée garde, en arrière-plan, les octets de **cette** ouverture-là : l'en-tête,
+l'index et les blocs depuis l'image clé qui précède la position reculée.
+
+**Porteur.** `openingPosition(itemId, position, durée)` (`src/lib/resumeRewind.ts`), sur `awayFrom`
+et `rewound`.
+
+**Appelants.** `ExperimentalPlayerHost` (la position d'ouverture) et `targetsFrom`
+(`src/lib/resumeCache/useResumeCache.ts`, ce qu'on garde). Deux calculs viseraient deux positions :
+les octets gardés ne seraient plus ceux que le lecteur lit, et l'ouverture redeviendrait « mixte »
+sans que rien ne casse — seul le journal (`openedFrom`) le dirait.
+
+**Tests.** `resumeRewind.test.ts`, `resumeCache-core.test.ts`, `resumeCache-run.test.ts`,
+`decisions-partagees.test.ts` (ni l'hôte ni la reprise instantanée n'appellent `awayFrom` eux-mêmes).
+
+**Voulu.** Le retour d'une pause de plus de dix minutes pendant la lecture recule aussi, par
+`rewound` directement : c'est un autre moment (l'élément joue déjà), et rien n'y est gardé d'avance.
+
+**Décidé le 25/09/2026**, avec la reprise instantanée.

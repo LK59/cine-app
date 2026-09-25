@@ -169,6 +169,11 @@ export async function GET(
       if (contentRange) passthroughHeaders["Content-Range"] = contentRange;
       if (contentLength) passthroughHeaders["Content-Length"] = contentLength;
       if (acceptRanges) passthroughHeaders["Accept-Ranges"] = acceptRanges;
+      // La date du fichier chez Jellyfin (25/09/2026) : les octets gardés sur l'appareil pour une
+      // reprise instantanée ne valent que pour ce fichier-là, et un fichier remplacé (réencodé par
+      // son gestionnaire) en change — voir `src/lib/resumeCache/`.
+      const lastModified = res.headers.get("Last-Modified");
+      if (lastModified) passthroughHeaders["Last-Modified"] = lastModified;
       // Ce que le serveur a coûté à cette plage, lisible par le lecteur (22/09/2026) : des sauts de
       // dix secondes depuis un serveur lointain, et rien pour dire si c'était le trajet, ce relais
       // ou Jellyfin. `app` : de la réception de la requête aux en-têtes de Jellyfin ; `jf` : Jellyfin

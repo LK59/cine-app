@@ -64,6 +64,14 @@ export interface DirectPlayInfo {
   streamUrl: string;
   container: string;
   sizeBytes: number | null;
+  /**
+   * La version du fichier selon Jellyfin (l'`ETag` de sa source média), qui change quand le fichier
+   * est remplacé. Avec la taille, c'est ce qui dit, avant de lire un octet, si les morceaux gardés
+   * sur l'appareil pour une reprise instantanée sont encore ceux de ce fichier — voir
+   * `src/lib/resumeCache/`. Nulle si Jellyfin ne la donne pas : rien n'est alors servi de
+   * l'appareil.
+   */
+  fileVersion: string | null;
   runtimeSeconds: number | null;
 
   video: {
@@ -227,6 +235,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     // Ce que Jellyfin sait de la taille du fichier. Le lecteur s'en sert pour ouvrir le flux sans
     // la redemander par un HEAD ; nul si Jellyfin ne la donne pas, et le HEAD revient.
     sizeBytes: typeof source.Size === "number" && Number.isFinite(source.Size) && source.Size > 0 ? source.Size : null,
+    fileVersion: typeof source.ETag === "string" && source.ETag ? source.ETag : null,
     runtimeSeconds: item?.RunTimeTicks ? item.RunTimeTicks / 10_000_000 : null,
     video: videoStream
       ? {

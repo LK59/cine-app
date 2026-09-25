@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { catalogueCacheReady } from "@/lib/persistentCache";
+import { useResumeCache } from "@/lib/resumeCache/useResumeCache";
 
 // L'écran d'attente est un simple bloc `fixed`, et non plus un portage dans `document.body`.
 //
@@ -49,5 +50,8 @@ const CinemaMobileClient = dynamic(
 // bundle (YouTube IFrame API, TV grid navigation, the split-pane hero) or vice versa.
 export default function PlayerPage() {
   const isMobile = useIsMobile();
+  // « Reprendre » et « À suivre » qui démarrent instantanément : leurs octets d'ouverture gardés sur
+  // l'appareil, en arrière-plan — une fois ici, pour les deux écrans. Voir `src/lib/resumeCache/`.
+  useResumeCache();
   return isMobile ? <CinemaMobileClient /> : <CinemaClient />;
 }
