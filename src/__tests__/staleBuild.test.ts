@@ -23,7 +23,7 @@ describe("un onglet plus vieux que le serveur", () => {
 });
 
 describe("le moment de recharger", () => {
-  const calme = { filmOpen: false, benchRunning: false, typing: false };
+  const calme = { filmOpen: false, benchRunning: false, typing: false, unsaved: false };
 
   it("est un moment où rien n'est en cours", () => {
     expect(mayReloadNow(calme)).toBe(true);
@@ -33,6 +33,7 @@ describe("le moment de recharger", () => {
     ["un film ouvert, même réduit ou diffusé", { ...calme, filmOpen: true }],
     ["un banc d'essai qui enchaîne les films", { ...calme, benchRunning: true }],
     ["un texte en cours d'écriture", { ...calme, typing: true }],
+    ["un texte tapé et pas encore envoyé, même sans le curseur dedans", { ...calme, unsaved: true }],
   ])("n'est jamais pendant %s", (_nom, moment) => {
     expect(mayReloadNow(moment)).toBe(false);
   });
