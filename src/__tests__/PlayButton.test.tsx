@@ -9,7 +9,7 @@ vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string) => key,
 }));
 const playerEnabled = vi.fn();
-vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerEnabled: () => playerEnabled() }));
+vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerEnabled: () => playerEnabled(), usePlayerEnabledState: () => playerEnabled() }));
 
 import { PlayButton } from "@/components/PlayButton";
 
@@ -114,5 +114,52 @@ describe("PlayButton", () => {
     playerEnabled.mockReturnValue(false);
     const { container } = render(<PlayButton itemId="a" title="Un Film" resumeTicks={HOUR / 2} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+// 25/09/2026 : la fiche s'ouvre complète. Le bouton ne surgit plus en poussant la fiche quand la
+// configuration arrive, et ne se grise que sur un fichier dont Jellyfin a dit qu'il n'existe plus.
+describe("PlayButton — fiche qui s'ouvre complète", () => {
+  it("garde sa place, invisible et inerte, tant que la configuration n'est pas connue", async () => {
+    playerEnabled.mockReturnValue(undefined);
+    const user = userEvent.setup();
+    const { container } = render(<PlayButton itemId="a" title="Un Film" variant="row" reserve />);
+    const button = container.querySelector("button")!;
+    expect(button).toHaveAttribute("data-play-reserved");
+    expect(button).toBeDisabled();
+    expect(button.className).toContain("invisible");
+    // Pas dans la navigation au clavier du menu.
+    expect(button).not.toHaveAttribute("data-detail-menu");
+    await user.click(button);
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it("ne réserve rien sans `reserve`, ni pour « Recommencer »", () => {
+    playerEnabled.mockReturnValue(undefined);
+    const { container } = render(
+      <>
+        <PlayButton itemId="a" title="Un Film" />
+        <PlayButton itemId="a" title="Un Film" restart reserve resumeTicks={HOUR / 2} />
+      </>
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("grisé et muet sur un fichier manquant, sans barre ni « Recommencer »", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <>
+        <PlayButton itemId="a" title="Un Film" variant="primary" resumeTicks={HOUR / 2} runtimeTicks={HOUR} unavailable />
+        <PlayButton itemId="a" title="Un Film" restart resumeTicks={HOUR / 2} unavailable />
+      </>
+    );
+    const buttons = container.querySelectorAll("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toBeDisabled();
+    expect(buttons[0]).toHaveAttribute("data-play-unavailable");
+    expect(screen.getByText("cinema.fileMissing")).toBeInTheDocument();
+    expect(buttons[0].querySelector(".absolute")).toBeNull();
+    await user.click(buttons[0]);
+    expect(play).not.toHaveBeenCalled();
   });
 });

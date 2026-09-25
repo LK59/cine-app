@@ -1,5 +1,5 @@
 import { preload } from "swr";
-import { fetcher } from "@/lib/swr";
+import { fetcher, progressKey } from "@/lib/swr";
 
 /**
  * Un préchargement SWR dont l'échec ne va nulle part — le seul `preload` du dépôt.
@@ -16,6 +16,77 @@ export function preloadQuietly<T>(key: string, fetch: (key: string) => Promise<T
   } catch {
     return Promise.resolve(undefined);
   }
+}
+
+/**
+ * Le même préchargement, mais qui dit ce qui s'est passé : la donnée, ou l'erreur.
+ *
+ * `preloadQuietly` rend `undefined` sur un échec, sans en dire la nature — or « le fichier
+ * n'existe plus » et « le réseau a coupé » n'appellent pas la même conduite (voir
+ * `missingFiles.ts`). Jamais de rejet non plus.
+ */
+export function preloadOutcome<T>(
+  key: string,
+  fetch: (key: string) => Promise<T> = fetcher as (key: string) => Promise<T>
+): Promise<{ data?: T; error?: unknown }> {
+  try {
+    return Promise.resolve(preload(key, fetch)).then(
+      (data) => ({ data }),
+      (error: unknown) => ({ error })
+    );
+  } catch (error) {
+    return Promise.resolve({ error });
+  }
+}
+
+/**
+ * Ce qu'une fiche va demander, demandé dès que le doigt se pose sur son affiche.
+ *
+ * Entre l'appui et l'ouverture de la fiche, il s'écoule le temps du geste lui-même — cent à deux
+ * cents millisecondes que la fiche passait ensuite à attendre sa description Radarr/Sonarr et
+ * l'état Jellyfin du titre (25/09/2026). Partis à l'appui, ils arrivent avec la fiche. SWR
+ * dédoublonne : la fiche qui s'ouvre reprend la demande en vol au lieu d'en lancer une autre, et un
+ * second appui dans la foulée n'en lance pas de troisième.
+ *
+ * Seulement pour un titre de la bibliothèque — `jellyfinItemId` présent : une affiche TMDB n'a ni
+ * fiche Radarr ni état Jellyfin.
+ *
+ * Et une seule fois par titre et par demi-minute : `preload` ne regarde pas la réserve de SWR, il
+ * ne partage que la demande encore en vol. Un doigt qui revient sur la même affiche — ou qui la
+ * frôle en faisant défiler la rangée — relancerait sinon les deux requêtes à chaque fois.
+ */
+export function prefetchTitleSheet(title: { kind: "movie"; radarrId: number; jellyfinItemId: string | null | undefined } | { kind: "series"; sonarrId: number; jellyfinItemId: string | null | undefined }): void {
+  if (!title.jellyfinItemId) return;
+  const keys =
+    title.kind === "movie"
+      ? [`/api/radarr/movies/${title.radarrId}/info`, progressKey(title.jellyfinItemId)]
+      : [`/api/sonarr/series/${title.sonarrId}/info`, `/api/cinema/series/${title.jellyfinItemId}/episodes`];
+  const now = Date.now();
+  for (const key of keys) {
+    const at = recentlyPrefetched.get(key);
+    if (at !== undefined && now - at < PREFETCH_AGAIN_MS) continue;
+    recentlyPrefetched.set(key, now);
+    void preloadQuietly(key);
+  }
+}
+
+const PREFETCH_AGAIN_MS = 30_000;
+const recentlyPrefetched = new Map<string, number>();
+
+/** Pour les tests : oublier ce qui a déjà été demandé. */
+export function resetTitleSheetPrefetch(): void {
+  recentlyPrefetched.clear();
+}
+
+/**
+ * La même chose pour une affiche dont on ne sait que la forme — les rangées du téléphone sont
+ * écrites une fois pour les films et les séries.
+ */
+export function prefetchLibraryItem(item: object): void {
+  const title = item as { radarrId?: unknown; sonarrId?: unknown; jellyfinItemId?: unknown };
+  const jellyfinItemId = typeof title.jellyfinItemId === "string" ? title.jellyfinItemId : null;
+  if (typeof title.radarrId === "number") prefetchTitleSheet({ kind: "movie", radarrId: title.radarrId, jellyfinItemId });
+  else if (typeof title.sonarrId === "number") prefetchTitleSheet({ kind: "series", sonarrId: title.sonarrId, jellyfinItemId });
 }
 
 // Warms the SWR cache for a route's main data before navigation actually

@@ -16,7 +16,7 @@ import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { SHEET_OUT_MS, sheetMotionClass } from "@/lib/sheetMotion";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
-import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
+import { usePlayerEnabledState } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { useIsShortViewport } from "@/lib/useIsMobile";
@@ -39,9 +39,14 @@ import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { resumeAtFor } from "@/lib/resumePosition";
 import { nextEpisodeIn } from "@/lib/nextEpisode";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
-import { CinemaTagline, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts } from "@/lib/sheetFacts";
+import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
+
+/** Un visage sans personne : ce qui donne sa hauteur à la place tenue de la distribution. */
+const RESERVED_CAST: CinemaCastMember[] = [{ tmdbId: 0, name: "\u00a0", character: "\u00a0", photoUrl: null }];
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -92,7 +97,8 @@ export function CinemaMobileDetail({
   const runtimeLabel = useRuntimeLabel();
   const short = useIsShortViewport();
   const playback = usePlayback();
-  const playerEnabled = usePlayerEnabled();
+  // `undefined` tant qu'on ne sait pas : le bouton Lire garde alors sa place au lieu de surgir.
+  const playerEnabled = usePlayerEnabledState();
   const [showTrailer, setShowTrailer] = useState(false);
   // Monté parce qu'on revient dessus, et non parce qu'on l'ouvre : pas d'animation d'entrée. Il
   // n'ouvre rien, il se découvre — voir `arrivedByBack`. Lu une seule fois, au montage.
@@ -133,7 +139,10 @@ export function CinemaMobileDetail({
   const infoUrl = isSeries
     ? `/api/sonarr/series/${(item as CinemaSeries).sonarrId}/info`
     : `/api/radarr/movies/${(item as CinemaMovie).radarrId}/info`;
-  const { data: info } = useSWR<DetailInfo>(infoUrl, fetcher);
+  const { data: info, error: infoError } = useSWR<DetailInfo>(infoUrl, fetcher);
+  // L'accroche, la bande-annonce et la distribution n'arrivent que par cette réponse : leur place
+  // est tenue dès l'ouverture, et elles s'y posent en fondu — voir `useLateArrival`.
+  const late = useLateArrival(info !== undefined || infoError !== undefined);
 
   // Movies carry their resume point on a per-user endpoint (the library payload is shared across
   // viewers); a series' equivalent is whichever episode Jellyfin says is next up.
@@ -142,7 +151,7 @@ export function CinemaMobileDetail({
     isSeries ? null : progressKey(item.jellyfinItemId),
     fetcher
   );
-  const { data: episodesData } = useSWR<CinemaEpisodesPayload>(
+  const { data: episodesData, error: episodesError } = useSWR<CinemaEpisodesPayload>(
     isSeries ? `/api/cinema/series/${item.jellyfinItemId}/episodes` : null,
     fetcher
   );
@@ -209,7 +218,25 @@ export function CinemaMobileDetail({
   // the sheet you started from, not on the browse grid behind it.
 
   const nextEpisode = episodesData?.nextEpisode;
-  const resumeTicks = isSeries ? nextEpisode?.resumeTicks ?? null : progress?.resumeTicks ?? null;
+  /**
+   * Ce que Lire lance et ce qu'il annonce : ce que le serveur a dit, sinon ce que « Reprendre » et
+   * « À suivre », gardés sur l'appareil, savent déjà — la même décision que les deux fiches du
+   * bureau, dans `sheetFacts.ts`.
+   */
+  const facts = useSheetPlayFacts(
+    isSeries
+      ? { kind: "series", jellyfinItemId: item.jellyfinItemId, sonarrId: (item as CinemaSeries).sonarrId }
+      : { kind: "movie", jellyfinItemId: item.jellyfinItemId },
+    item.title,
+    isSeries
+      ? episodesData
+        ? { kind: "series", known: true, episode: episodesData.nextEpisode }
+        : undefined
+      : progress
+        ? { kind: "movie", known: progress?.known === true, resumeTicks: progress.resumeTicks, runtimeTicks: progress.runtimeTicks }
+        : undefined
+  );
+  const resumeTicks = facts.resumeTicks;
   /**
    * Sait-on s'il y a une reprise, ou attend-on encore la réponse ?
    *
@@ -220,11 +247,17 @@ export function CinemaMobileDetail({
   // Pour un film, « la réponse est arrivée » ne suffit pas : la route revient avec `known: false`
   // quand Jellyfin n'a pas répondu, et ce silence se lisait « aucune reprise » — voir
   // `resumeAtFor`.
-  const resumeKnown = isSeries ? episodesData !== undefined : progress?.known === true;
-  const runtimeTicks = isSeries ? nextEpisode?.runtimeTicks ?? null : progress?.runtimeTicks ?? null;
-  const hasResume = !!resumeTicks && resumeTicks > 0;
-  const playTargetId = isSeries ? nextEpisode?.itemId : item.jellyfinItemId;
-  const playTargetTitle = isSeries ? nextEpisode?.title ?? item.title : item.title;
+  const resumeKnown = facts.resumeKnown;
+  const runtimeTicks = facts.runtimeTicks;
+  const hasResume = facts.hasResume;
+  const playTargetId = facts.targetId;
+  const playTargetTitle = facts.title;
+  // Grisé seulement si Jellyfin a répondu que le fichier n'existe plus — voir `missingFiles.ts`.
+  const fileMissing = useFileMissing(playTargetId);
+  // La place du bouton est tenue tant qu'on ne sait ni si la lecture est ouverte, ni — pour une
+  // série jamais commencée — quel épisode elle lancerait.
+  const playPending =
+    playerEnabled === undefined || (!playTargetId && isSeries && episodesData === undefined && episodesError === undefined);
   // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
   // Le titre du bouton principal seulement — le film, ou l'épisode à reprendre —, pas chaque
   // ligne d'épisode.
@@ -235,7 +268,7 @@ export function CinemaMobileDetail({
   const getNextEpisode = nextEpisodeIn(seasons);
 
   function play(fromStart = false) {
-    if (!playTargetId) return;
+    if (!playTargetId || fileMissing) return;
     playback.play({
       itemId: playTargetId,
       title: playTargetTitle,
@@ -385,30 +418,45 @@ export function CinemaMobileDetail({
           {/* La durée, à côté de l'année et du genre : c'est la troisième chose qu'on veut savoir
               avant de lancer un film. Pour une série, celle d'un épisode (« 45min/ép. ») — ce
               qu'engage le premier, avant d'en avoir ouvert aucun (21/09/2026). */}
-          {runtimeLabel(info?.tmdb?.runtime, isSeries) && <span>{runtimeLabel(info?.tmdb?.runtime, isSeries)}</span>}
+          {/* Celle du catalogue d'abord, là dès l'ouverture — celui des séries n'en a pas, et la
+              leur s'insère en fondu. */}
+          {runtimeLabel(isSeries ? info?.tmdb?.runtime : sheetRuntimeMinutes((item as CinemaMovie).runtimeMinutes, info?.tmdb?.runtime), isSeries) && (
+            <span className={isSeries ? late.fade : ""}>
+              {runtimeLabel(isSeries ? info?.tmdb?.runtime : sheetRuntimeMinutes((item as CinemaMovie).runtimeMinutes, info?.tmdb?.runtime), isSeries)}
+            </span>
+          )}
           <QualityBadges quality={"quality" in item ? item.quality : undefined} />
           {item.genres.length > 0 && <span className="truncate">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
         </div>
 
-        {playerEnabled && playTargetId && (
+        {playPending && (
+          <div
+            aria-hidden="true"
+            data-sheet-reserved=""
+            className="invisible mb-2 flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-base font-semibold"
+          >
+            <Play size={18} />
+            {t("common.play")}
+          </div>
+        )}
+        {!playPending && playerEnabled && playTargetId && (
           <button
             type="button"
             onClick={() => play()}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink transition-transform active:scale-95"
+            disabled={fileMissing}
+            data-play-unavailable={fileMissing ? "" : undefined}
+            className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink transition-transform ${
+              fileMissing ? "cursor-not-allowed opacity-45" : "active:scale-95"
+            }`}
           >
             <Play size={18} fill="currentColor" />
-            {formatContinueLabel(
-              t,
-              resumeTicks,
-              runtimeTicks,
-              isSeries ? nextEpisode?.seasonNumber : null,
-              isSeries ? nextEpisode?.episodeNumber : null,
-              isSeries ? nextEpisode?.rewatch : false
-            )}
+            {fileMissing
+              ? t("cinema.fileMissing")
+              : formatContinueLabel(t, resumeTicks, runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch)}
           </button>
         )}
 
-        {playerEnabled && playTargetId && hasResume && (
+        {!playPending && playerEnabled && playTargetId && hasResume && !fileMissing && (
           <button
             type="button"
             onClick={() => play(true)}
@@ -419,11 +467,12 @@ export function CinemaMobileDetail({
           </button>
         )}
 
+        {late.pending && <ReservedLine className="mb-4 h-[2.75rem]" />}
         {info?.trailerKey && (
           <button
             type="button"
             onClick={() => setShowTrailer(true)}
-            className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95"
+            className={`mb-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 ${late.fade}`}
           >
             <Video size={16} />
             {t("cinema.trailer")}
@@ -431,8 +480,13 @@ export function CinemaMobileDetail({
         )}
 
         {/* Avec le synopsis plutôt qu'avec l'année : placée plus haut, elle repoussait « Lire ». */}
-        <CinemaTagline text={info?.tmdb?.tagline} className="mb-1.5" />
-        <p className="mb-3 text-sm leading-6 text-white">{info?.tmdb?.overview || item.overview}</p>
+        {late.pending ? (
+          <ReservedLine className="mb-1.5 h-[1.1rem]" />
+        ) : (
+          <CinemaTagline text={info?.tmdb?.tagline} className={`mb-1.5 ${late.fade}`} />
+        )}
+        {/* Le synopsis du catalogue ne change pas de texte à l'arrivée de TMDB — voir `sheetOverview`. */}
+        <p className="mb-3 text-sm leading-6 text-white">{sheetOverview(item.overview, info?.tmdb?.overview)}</p>
 
 
         {/* Netflix's icon-over-label action row — big touch targets, no text buttons competing
@@ -468,8 +522,14 @@ export function CinemaMobileDetail({
         {/* Des visages plutôt qu'une ligne de noms : chacun ouvre la fiche de la personne, posée
             par-dessus ce titre. Juste après les actions — plus bas, sous la liste des épisodes
             d'une série, personne ne l'aurait trouvé. Voir `CinemaCastRow`. */}
+        {/* La même rangée, invisible, tient exactement sa hauteur tant que la réponse n'est pas là. */}
+        {late.pending && (
+          <div aria-hidden="true" data-sheet-reserved="" className="invisible -mx-4 mb-4 px-4">
+            <CinemaCastRow cast={RESERVED_CAST} />
+          </div>
+        )}
         {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-          <div className="-mx-4 mb-4 px-4">
+          <div className={`-mx-4 mb-4 px-4 ${late.fade}`}>
             <CinemaCastRow cast={info.tmdb.cast} />
           </div>
         )}

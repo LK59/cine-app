@@ -1819,6 +1819,7 @@
     }
   },
   "cinema": {
+    "fileMissing": "Archivo no encontrado",
     "standardMode": "Modo estándar",
     "cast": "Reparto",
     "trailer": "Tráiler",

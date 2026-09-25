@@ -725,3 +725,25 @@ describe("une seule position d'ouverture pour le lecteur et pour la reprise inst
     }
   );
 });
+
+describe("une seule décision pour ce qu'une fiche montre avant le réseau", () => {
+  /**
+   * 25/09/2026 : les trois fiches d'un titre de la bibliothèque attendaient chacune le réseau pour
+   * la durée, le synopsis et « Reprendre », et chacune le lisait à sa façon. Elles passent toutes
+   * par `sheetFacts.ts` ; le synopsis de TMDB ne doit plus passer devant celui du catalogue.
+   */
+  it.each([
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+  ])("%s passe par useSheetPlayFacts, sheetOverview, useFileMissing et useLateArrival", (f) => {
+    const code = lire(f)
+      .split("\n")
+      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+      .join("\n");
+    for (const porteur of ["useSheetPlayFacts(", "sheetOverview(", "useFileMissing(", "useLateArrival("]) {
+      expect([f, porteur, code.includes(porteur)]).toEqual([f, porteur, true]);
+    }
+    expect(code).not.toMatch(/info\?\.tmdb\?\.overview \|\|/);
+  });
+});

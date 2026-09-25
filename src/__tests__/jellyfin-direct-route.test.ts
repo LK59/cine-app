@@ -218,6 +218,31 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
     mockGetSources.mockResolvedValue({ MediaSources: [] });
     expect((await get()).status).toBe(404);
   });
+
+  // 25/09/2026 : la fiche grise son bouton Lire sur ce code, et seulement sur lui. Le même 404
+  // répondait aussi quand Jellyfin était injoignable — l'erreur était avalée — et griser alors un
+  // film lisible aurait été pire que ne rien dire.
+  it("dit `file_missing` seulement quand Jellyfin a répondu qu'il n'y a pas de fichier", async () => {
+    const { HttpError, FILE_MISSING } = await import("@/lib/http");
+
+    mockGetSources.mockResolvedValue({ MediaSources: [] });
+    let res = await get();
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe(FILE_MISSING);
+
+    mockGetSources.mockRejectedValue(new HttpError("Not Found", 404));
+    res = await get();
+    expect((await res.json()).code).toBe(FILE_MISSING);
+
+    mockGetSources.mockRejectedValue(new HttpError("Bad Gateway", 502));
+    res = await get();
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBeUndefined();
+
+    mockGetSources.mockRejectedValue(new TypeError("fetch failed"));
+    res = await get();
+    expect((await res.json()).code).toBeUndefined();
+  });
 });
 
 describe("sous-titres posés à côté du film", () => {

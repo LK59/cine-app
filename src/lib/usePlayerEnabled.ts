@@ -3,7 +3,8 @@
 import useSWR from "swr";
 import { fetcher, playerBootstrapOptions } from "@/lib/swr";
 
-interface PublicPlayerConfig {
+/** Ce que `/api/config/public` renvoie — gardé sur l'appareil, donc suivi par le test de format du cache. */
+export interface PublicPlayerConfig {
   playerEnabled: boolean;
   playerServerFallback: boolean;
   claraGallery?: boolean;
@@ -36,6 +37,17 @@ function usePublicPlayerConfig() {
 export function usePlayerEnabled(): boolean {
   const { data } = usePublicPlayerConfig();
   return data?.playerEnabled ?? false;
+}
+
+/**
+ * La même réponse, mais qui distingue « non » de « pas encore » : `undefined` tant qu'on ne sait
+ * pas. Pour une fiche qui réserve la place de son bouton Lire au lieu de le voir surgir — la
+ * réponse est gardée sur l'appareil (`persistentCache.ts`), donc « pas encore » ne dure en
+ * pratique que le tout premier lancement.
+ */
+export function usePlayerEnabledState(): boolean | undefined {
+  const { data } = usePublicPlayerConfig();
+  return data?.playerEnabled;
 }
 
 /**

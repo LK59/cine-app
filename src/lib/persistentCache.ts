@@ -30,9 +30,14 @@ import { APP_BUILD } from "@/lib/appBuild";
  */
 
 /** À changer avec les types des réponses gardées — le test de format le rappelle. */
-export const PERSISTED_CACHE_SCHEMA = 1;
+export const PERSISTED_CACHE_SCHEMA = 2;
 
-/** Ce qui se garde. Rien d'autre : ce sont les flux de l'écran d'accueil, et eux seuls. */
+/**
+ * Ce qui se garde. Rien d'autre : ce sont les flux de l'écran d'accueil, et eux seuls — plus la
+ * configuration publique du lecteur (version 2, 25/09/2026). Sans elle, le bouton « Lire » d'une
+ * fiche n'apparaissait qu'un instant après la fiche : `usePlayerEnabled` répond « non » tant que
+ * `/api/config/public` n'a pas répondu, et cette réponse-là n'était gardée nulle part.
+ */
 export const PERSISTED_KEYS: readonly string[] = [
   MOVIES_CATALOGUE_KEY,
   SERIES_CATALOGUE_KEY,
@@ -43,6 +48,7 @@ export const PERSISTED_KEYS: readonly string[] = [
   "/api/player/lists",
   "/api/watchlist?status=to_watch",
   "/api/player/discover",
+  "/api/config/public",
 ];
 
 export const MAX_AGE_MS = 7 * 24 * 3600_000;

@@ -32,7 +32,9 @@ import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstA
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip, BELOW_SECTION_CLASS } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
-import { CinemaRatingsLine, CinemaTagline } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival } from "@/components/cinema/CinemaDetailExtras";
+import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts } from "@/lib/sheetFacts";
+import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
 
@@ -92,7 +94,10 @@ export function CinemaMovieDetail({
   const [showTrailer, setShowTrailer] = useState(false);
   const [showSynopsis, setShowSynopsis] = useState(false);
   const [showCast, setShowCast] = useState(false);
-  const { data: info } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
+  const { data: info, error: infoError } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
+  // L'accroche, la distribution et la bande-annonce n'arrivent que par cette réponse : leur place
+  // est tenue dès l'ouverture, et elles s'y posent en fondu — voir `useLateArrival`.
+  const late = useLateArrival(info !== undefined || infoError !== undefined);
   // CinemaMovie (the /api/cinema/movies payload) carries no per-user watch progress at all
   // (Radarr/TMDB fields only, shared across every viewer) — without this, Lecture always started
   // a partly-watched movie over from 0 unless the movie happened to be opened via the Continue
@@ -103,7 +108,16 @@ export function CinemaMovieDetail({
   // mentir.
   const { progress, watched, known: flagsKnown, busy: flagsBusy, toggleWatched } =
     useJellyfinItemState(item.jellyfinItemId);
-  const hasResume = !!progress?.resumeTicks && progress.resumeTicks > 0;
+  // Ce que Jellyfin a dit de la position, sinon ce que la reprise gardée sur l'appareil en sait :
+  // « Reprendre · 1 h 10 restantes » dès l'ouverture, sans rien affirmer — voir `sheetFacts.ts`.
+  const facts = useSheetPlayFacts(
+    { kind: "movie", jellyfinItemId: item.jellyfinItemId },
+    item.title,
+    progress ? { kind: "movie", known: progress?.known === true, resumeTicks: progress.resumeTicks, runtimeTicks: progress.runtimeTicks } : undefined
+  );
+  const hasResume = facts.hasResume;
+  // Grisé seulement si Jellyfin a répondu que le fichier n'existe plus — voir `missingFiles.ts`.
+  const fileMissing = useFileMissing(item.jellyfinItemId);
   // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
   usePlaybackPrefetch(item.jellyfinItemId);
   // Without this, Vu/À voir always opened looking un-toggled even for a title already on the
@@ -334,20 +348,24 @@ export function CinemaMovieDetail({
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
             {/* Voir la note jumelle de la fiche téléphone : la durée manquait, et c'est la
                 troisième chose qu'on veut savoir avant de lancer un film. */}
-            {formatMinutes(info?.tmdb?.runtime) && <span>{formatMinutes(info?.tmdb?.runtime)}</span>}
+            {/* Celle du catalogue, là dès l'ouverture ; TMDB seulement quand il n'en a pas. */}
+            {formatMinutes(sheetRuntimeMinutes(item.runtimeMinutes, info?.tmdb?.runtime)) && (
+              <span>{formatMinutes(sheetRuntimeMinutes(item.runtimeMinutes, info?.tmdb?.runtime))}</span>
+            )}
             <QualityBadges quality={item.quality} />
           {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
 
-          <CinemaTagline text={info?.tmdb?.tagline} />
+          {late.pending ? <ReservedLine className="h-[1.1rem]" /> : <CinemaTagline text={info?.tmdb?.tagline} className={late.fade} />}
 
           <CinemaOverview
-            text={info?.tmdb?.overview || item.overview || ""}
+            text={sheetOverview(item.overview, info?.tmdb?.overview)}
             readMore={t("cinema.readMore")}
             alwaysOpenable={!!info?.imdbId}
             onOpen={() => setShowSynopsis(true)}
           />
 
+          {late.pending && <ReservedLine className="h-4" />}
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
             /* Chaque nom mène à sa fiche, sans quitter le lecteur. C'était une ligne de texte
                mort au milieu d'un écran où tout le reste s'ouvre ; et une filmographie est
@@ -363,7 +381,7 @@ export function CinemaMovieDetail({
 
                Le décompte est hors du paragraphe tronqué : à l'intérieur, il aurait pu être coupé
                lui aussi, ce qui est le seul élément qu'on ne peut pas se permettre de perdre. */
-            <div className="flex items-baseline gap-1.5">
+            <div className={`flex items-baseline gap-1.5 ${late.fade}`}>
               <p className={CAST_CLASS}>
                 {t("cinema.cast")}{" "}
                 {info.tmdb.cast.slice(0, CAST_SHOWN).map((c, i) => (
@@ -397,16 +415,18 @@ export function CinemaMovieDetail({
             <PlayButton
               itemId={item.jellyfinItemId}
               title={item.title}
-              resumeTicks={progress?.resumeTicks ?? undefined}
-              runtimeTicks={progress?.runtimeTicks ?? undefined}
-              // Tant que la réponse n'est pas là, ne rien affirmer : `progress` absent ne veut pas
-              // dire « jamais commencé ».
-              resumeKnown={progress?.known === true}
+              resumeTicks={facts.resumeTicks ?? undefined}
+              runtimeTicks={facts.runtimeTicks ?? undefined}
+              // Tant que Jellyfin n'a pas répondu, ne rien affirmer : la reprise locale donne le
+              // libellé, la position reste au serveur.
+              resumeKnown={facts.resumeKnown}
+              unavailable={fileMissing}
+              reserve
               variant="row"
               // Same override as CinemaSeriesDetail's own Play button — see its doc comment —
               // so a movie opened from the Continue Watching row and one opened from its own
               // poster card show the identical "Reprendre - 1h10 restants" wording.
-              label={formatContinueLabel(t, progress?.resumeTicks, progress?.runtimeTicks)}
+              label={formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks)}
               // La même ligne que les autres : c'est le sélecteur qui se peint en blanc, pas
               // elle. Deux blancs à l'écran — un fixe et un mobile — se disputaient le sens.
               className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
@@ -420,7 +440,7 @@ export function CinemaMovieDetail({
                 justifiait par le lecteur stable, qui ne saute que sur une valeur vraie. Le
                 lecteur natif, lui, lit un champ absent comme « prends la position du serveur » :
                 « Recommencer » reprenait donc exactement là où l'on venait de s'arrêter. */}
-            {hasResume && (
+            {hasResume && !fileMissing && (
               <button
                 data-detail-menu
                 onClick={() => playback.play({ itemId: item.jellyfinItemId, title: item.title, resumeAt: 0 })}
@@ -433,8 +453,17 @@ export function CinemaMovieDetail({
               </button>
             )}
 
+            {/* Sa place est tenue, invisible et hors du clavier, tant que la description n'est pas là. */}
+            {late.pending && (
+              <div aria-hidden="true" data-sheet-reserved="" className={`${MENU_ROW} ${MENU_ROW_INACTIVE} invisible`}>
+                <span className={MENU_BADGE}>
+                  <Video size={14} />
+                </span>
+                <span className="text-sm font-medium">{t("cinema.trailer")}</span>
+              </div>
+            )}
             {info?.trailerKey && (
-              <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}>
+              <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${late.fade}`}>
                 <span className={MENU_BADGE}>
                   <Video size={14} />
                 </span>
@@ -561,7 +590,7 @@ export function CinemaMovieDetail({
             );
           }}
         >
-          <p>{info?.tmdb?.overview || item.overview || ""}</p>
+          <p>{sheetOverview(item.overview, info?.tmdb?.overview)}</p>
           <CinemaRatingsLine imdbId={info?.imdbId} />
         </CinemaDetailModal>
       )}

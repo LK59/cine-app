@@ -8,6 +8,13 @@
 export const UPSTREAM_UNREACHABLE = "upstream_unreachable";
 
 /**
+ * Le code d'une réponse quand Jellyfin a **répondu** que le fichier n'existe pas — et seulement
+ * alors. Une panne de Jellyfin, un jeton refusé ou un délai ne le portent jamais : la fiche grise
+ * son bouton Lire sur ce code, et un simple retard ne doit pas griser un film lisible.
+ */
+export const FILE_MISSING = "file_missing";
+
+/**
  * L'amont n'a rien répondu — ni un statut, ni un refus : rien.
  *
  * C'est une panne d'une autre nature qu'une erreur HTTP, et les confondre coûte une phrase qui ne

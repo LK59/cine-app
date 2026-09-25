@@ -48,6 +48,12 @@ describe("ce qui se garde", () => {
     }
   });
 
+  // 25/09/2026 : sans elle, le bouton Lire de chaque fiche attendait cette réponse à chaque
+  // lancement — `usePlayerEnabled` dit « non » tant qu'il ne sait pas — et surgissait après coup.
+  it("la configuration du lecteur, qui décide si les fiches ont un bouton Lire", () => {
+    expect(PERSISTED_KEYS).toContain("/api/config/public");
+  });
+
   it("et rien d'autre", () => {
     expect(isPersistedKey("/api/cinema/progress/abc")).toBe(false);
     expect(isPersistedKey("/api/auth/me")).toBe(false);

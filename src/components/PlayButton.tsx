@@ -3,7 +3,7 @@
 import { PlayCircle, RotateCcw } from "lucide-react";
 import { formatResumeTicks } from "@/lib/format";
 import { useT } from "@/components/TranslationProvider";
-import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
+import { usePlayerEnabledState } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { resumeAtFor } from "@/lib/resumePosition";
 
@@ -51,6 +51,18 @@ interface PlayButtonProps {
    * Vrai par défaut : les appelants qui rendent une rangée tiennent déjà la donnée dans la main.
    */
   resumeKnown?: boolean;
+  /**
+   * Jellyfin a répondu que le fichier n'existe plus (`useFileMissing`) : le bouton reste à sa
+   * place, grisé, sans rien lancer. Seulement ce cas-là — une coupure ou un retard ne grise
+   * jamais un titre lisible (voir `missingFiles.ts`).
+   */
+  unavailable?: boolean;
+  /**
+   * Garder la place du bouton tant qu'on ne sait pas si la lecture est ouverte, au lieu de ne
+   * rien rendre puis de le voir surgir en poussant la fiche (25/09/2026). Pour les fiches, dont
+   * le bouton est l'action principale ; une carte ou une rangée n'a pas de place à tenir.
+   */
+  reserve?: boolean;
 }
 
 // Single source of truth for the Lire/Reprendre label + resume behavior, used
@@ -68,25 +80,32 @@ export function PlayButton({
   getNextEpisode,
   restart = false,
   resumeKnown = true,
+  unavailable = false,
+  reserve = false,
 }: PlayButtonProps) {
   const playback = usePlayback();
   const t = useT();
-  const playerEnabled = usePlayerEnabled();
+  const playerEnabled = usePlayerEnabledState();
 
-  if (!playerEnabled) return null;
+  // `undefined` : on ne sait pas encore. Une fiche garde la place — le même bouton, invisible et
+  // inerte, donc exactement de la même taille ; le reste ne rend rien, comme avant.
+  const pending = playerEnabled === undefined && reserve && !restart;
+  if (!playerEnabled && !pending) return null;
+  const inert = pending || unavailable;
 
   const hasResume = !!resumeTicks && resumeTicks > 0;
-  // Un bouton « recommencer » sans reprise en cours ne recommencerait rien.
-  if (restart && !hasResume) return null;
+  // Un bouton « recommencer » sans reprise en cours ne recommencerait rien — ni sur un fichier
+  // qui n'existe plus.
+  if (restart && (!hasResume || unavailable)) return null;
 
-  const label = labelOverride ?? (
+  const label = unavailable ? t('cinema.fileMissing') : labelOverride ?? (
     restart ? t('common.restart') : hasResume ? `${t('common.resume')} - ${formatResumeTicks(resumeTicks!)}` : t('common.play')
   );
   // Un nombre dès qu'on sait, et rien du tout quand on ne sait pas. Zéro veut dire « depuis le
   // début » et ne doit être dit que par quelqu'un qui en est sûr — voir `resumeKnown`.
   const initialResumeAt = resumeAtFor({ fromStart: restart, known: resumeKnown, resumeTicks });
   const progressPct =
-    !restart && hasResume && runtimeTicks && runtimeTicks > 0 ? Math.min(100, (resumeTicks! / runtimeTicks) * 100) : null;
+    !restart && !unavailable && hasResume && runtimeTicks && runtimeTicks > 0 ? Math.min(100, (resumeTicks! / runtimeTicks) * 100) : null;
   const Icon = restart ? RotateCcw : PlayCircle;
 
   const defaultClass =
@@ -104,13 +123,20 @@ export function PlayButton({
 
   return (
     <button
-      data-detail-menu={variant === "row" ? "" : undefined}
+      // Une ligne inerte n'entre pas dans la navigation au clavier du menu de la fiche.
+      data-detail-menu={variant === "row" && !inert ? "" : undefined}
+      data-play-reserved={pending ? "" : undefined}
+      data-play-unavailable={unavailable ? "" : undefined}
+      disabled={inert}
+      aria-hidden={pending || undefined}
+      tabIndex={pending ? -1 : undefined}
       onClick={(e) => {
         e.stopPropagation();
         e.preventDefault();
+        if (inert) return;
         playback.play({ itemId, title, resumeAt: initialResumeAt, getNextEpisode });
       }}
-      className={className ?? defaultClass}
+      className={`${className ?? defaultClass}${pending ? " invisible" : unavailable ? " cursor-not-allowed opacity-45" : ""}`}
       title={label}
     >
       {variant === "primary" && progressPct !== null && (

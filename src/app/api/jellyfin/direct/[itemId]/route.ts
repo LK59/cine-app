@@ -8,6 +8,7 @@ import { originalLanguageCode } from "@/lib/originalLanguage";
 import { displayTitle } from "@/lib/displayTitle";
 import { userPrefsDb } from "@/lib/db";
 import { isJellyfinId } from "@/lib/jellyfinPath";
+import { FILE_MISSING, HttpError } from "@/lib/http";
 
 /** What Jellyfin can hand back as WebVTT. Anything else is a picture and has nothing to read. */
 const TEXT_SUBTITLE_FORMATS = new Set(["srt", "subrip", "ass", "ssa", "vtt", "webvtt", "mov_text"]);
@@ -145,14 +146,29 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
 
   // Fetched together: the timestamps 404 for films and for episodes nobody has analysed, which
   // simply means no skip-intro and no next-up prompt for this one.
+  // L'échec de la description retenu, et non seulement avalé : « Jellyfin ne répond pas » et
+  // « Jellyfin dit que ce fichier n'existe pas » finissaient tous deux en « Fichier introuvable »,
+  // et la fiche, qui grise son bouton Lire sur la seconde, l'aurait grisé pendant une panne.
+  let itemError: unknown = null;
   const [item, timestamps, naming] = await Promise.all([
-    jellyfin.getItemMediaSources(session.jfId, itemId).catch(() => null),
+    jellyfin.getItemMediaSources(session.jfId, itemId).catch((error: unknown) => {
+      itemError = error;
+      return null;
+    }),
     jellyfin.getEpisodeTimestamps(itemId).catch(() => null),
     // Alongside the others rather than after them: naming the film must not delay showing it.
     jellyfin.getItemNaming(session.jfId, itemId).catch(() => null),
   ]);
   const source = item?.MediaSources?.[0];
-  if (!source) return NextResponse.json({ error: "Fichier introuvable côté Jellyfin" }, { status: 404 });
+  if (!source) {
+    // Le statut ne change pas — l'hôte du lecteur le lit comme avant. Le code, lui, n'est posé que
+    // quand Jellyfin a répondu : un titre sans source, ou un 404 sur le titre lui-même.
+    const missing = itemError === null || (itemError instanceof HttpError && itemError.status === 404);
+    return NextResponse.json(
+      { error: "Fichier introuvable côté Jellyfin", ...(missing ? { code: FILE_MISSING } : {}) },
+      { status: 404 }
+    );
+  }
 
   const streams = source.MediaStreams ?? [];
   const videoStream = streams.find((s) => s.Type === "Video") ?? null;

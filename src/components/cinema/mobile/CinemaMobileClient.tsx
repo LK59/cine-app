@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { Clapperboard, Info, Play, Plus, Search, X } from "lucide-react";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/lib/useLongPress";
+import { prefetchLibraryItem } from "@/lib/prefetch";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { heroOffscreen } from "@/lib/heroCarousel";
@@ -856,6 +857,8 @@ function PosterRowInner<T extends { title: string; posterUrl: string | null; add
         <button
           key={itemId(item)}
           type="button"
+          // Ce que la fiche va demander part dès que le doigt se pose — voir `prefetchTitleSheet`.
+          onPointerDown={() => prefetchLibraryItem(item)}
           onClick={() => onSelect(item)}
           className={`${POSTER_WIDTH} pressable relative shrink-0 overflow-hidden rounded-lg`}
         >

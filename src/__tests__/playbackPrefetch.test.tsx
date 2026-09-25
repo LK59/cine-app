@@ -16,6 +16,7 @@ let serverFallback: boolean | undefined = true;
 let enabled = true;
 vi.mock("@/lib/usePlayerEnabled", () => ({
   usePlayerEnabled: () => enabled,
+  usePlayerEnabledState: () => enabled,
   usePlayerServerFallback: () => serverFallback,
 }));
 vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy }) }));
@@ -29,6 +30,7 @@ import {
 } from "@/lib/playbackPrefetch";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { refreshAfterPlayback, revalidateWatchState } from "@/lib/swr";
+import { markFileMissing, useFileMissing } from "@/lib/missingFiles";
 
 let resumeSeconds = 0;
 const fetchMock = vi.fn(async (url: string) => {
@@ -173,5 +175,58 @@ describe("usePlaybackPrefetch", () => {
     render(<Sheet itemId="film-d" />);
     await new Promise((r) => setTimeout(r, 10));
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Le bouton Lire grisé (25/09/2026) : seulement quand Jellyfin a répondu que le fichier n'existe
+ * plus. Un réseau coupé, un Jellyfin absent ou un jeton refusé ne grisent jamais un titre lisible.
+ */
+describe("usePlaybackPrefetch — fichier manquant", () => {
+  // `mockReset` rend l'implémentation d'origine : celles posées ici ne débordent pas ailleurs.
+  afterEach(() => fetchMock.mockReset());
+  function Missing({ itemId }: { itemId: string }) {
+    usePlaybackPrefetch(itemId);
+    return <span data-testid="missing">{String(useFileMissing(itemId))}</span>;
+  }
+  const answer = (status: number, body: unknown) => async (url: string) =>
+    url.startsWith("/api/jellyfin/playback-state/")
+      ? { ok: true, json: async () => ({ resumeSeconds: 0, preferences: null }) }
+      : { ok: false, status, headers: new Headers(), json: async () => body };
+
+  it("grise sur la réponse `file_missing` de la route", async () => {
+    fetchMock.mockImplementation(answer(404, { error: "Fichier introuvable côté Jellyfin", code: "file_missing" }) as never);
+    const { getByTestId } = render(<Missing itemId="perdu-1" />);
+    await waitFor(() => expect(getByTestId("missing").textContent).toBe("true"));
+  });
+
+  it.each([
+    ["un 404 sans code (Jellyfin injoignable)", 404, { error: "Fichier introuvable côté Jellyfin" }],
+    ["une panne du serveur", 502, { error: "Bad gateway" }],
+    ["un jeton refusé", 401, { error: "Unauthorized" }],
+  ])("ne grise pas sur %s", async (_label, status, body) => {
+    fetchMock.mockImplementation(answer(status, body) as never);
+    const itemId = `lisible-${status}-${Object.keys(body).length}`;
+    const { getByTestId } = render(<Missing itemId={itemId} />);
+    await waitFor(() => expect(calls(directInfoKey(itemId))).toBe(1));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(getByTestId("missing").textContent).toBe("false");
+  });
+
+  it("ne grise pas sur une coupure réseau", async () => {
+    fetchMock.mockImplementation((async (url: string) => {
+      if (url.startsWith("/api/jellyfin/playback-state/")) return { ok: true, json: async () => ({ resumeSeconds: 0 }) };
+      throw new TypeError("Load failed");
+    }) as never);
+    const { getByTestId } = render(<Missing itemId="coupure" />);
+    await waitFor(() => expect(calls(directInfoKey("coupure"))).toBe(1));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(getByTestId("missing").textContent).toBe("false");
+  });
+
+  it("efface la marque quand le fichier répond de nouveau", async () => {
+    markFileMissing("retrouve");
+    const { getByTestId } = render(<Missing itemId="retrouve" />);
+    await waitFor(() => expect(getByTestId("missing").textContent).toBe("false"));
   });
 });

@@ -23,6 +23,8 @@ import { PERSISTED_CACHE_SCHEMA } from "@/lib/persistentCache";
 /** Une entrée par version, jamais réécrite : on ajoute la suivante. */
 const FINGERPRINTS: Record<number, string> = {
   1: "602c82816f0ecea7",
+  // 25/09/2026 : la configuration publique du lecteur rejoint le cache (le bouton Lire des fiches).
+  2: "8faaa82aa564ea57",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */
@@ -36,6 +38,7 @@ const DECLARATIONS: [file: string, names: string[]][] = [
   ["src/lib/playerRequests.ts", ["PlayerRequest"]],
   ["src/app/api/player/discover/route.ts", ["DiscoveryItem", "DiscoveryRow", "PlayerDiscoverPayload"]],
   ["src/lib/db.ts", ["WatchlistItem", "WatchlistStatus"]],
+  ["src/lib/usePlayerEnabled.ts", ["PublicPlayerConfig"]],
 ];
 
 /** La reprise n'a pas de type déclaré : c'est l'objet construit par la route qui fait foi. */

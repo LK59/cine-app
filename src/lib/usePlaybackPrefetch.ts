@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { useSWRConfig } from "swr";
-import { preloadQuietly } from "@/lib/prefetch";
+import { preloadOutcome } from "@/lib/prefetch";
+import { clearFileMissing, isFileMissing, markFileMissing } from "@/lib/missingFiles";
 import { usePlayerEnabled, usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
 import { directInfoKey, prefetchPlaybackState } from "@/lib/playbackPrefetch";
@@ -41,9 +42,17 @@ export function usePlaybackPrefetch(itemId: string | null | undefined): void {
     if (cache.get(key)?.data !== undefined) return;
     // Un échec ne doit pas rester dans la réserve de SWR : l'hôte le prendrait, une heure plus
     // tard, pour la réponse du moment. `mutate(key)` sans donnée l'en retire (et relance l'hôte
-    // s'il était déjà là à attendre). `preloadQuietly` rend `undefined` sur un échec.
-    void preloadQuietly(key).then((data) => {
-      if (data === undefined) void mutate(key);
+    // s'il était déjà là à attendre).
+    //
+    // Et sa nature est retenue : si Jellyfin a répondu que le fichier n'existe plus, la fiche grise
+    // son bouton Lire — seulement dans ce cas, jamais pour une coupure (voir `missingFiles.ts`).
+    void preloadOutcome(key).then(({ data, error }) => {
+      if (data !== undefined) {
+        clearFileMissing(itemId);
+        return;
+      }
+      void mutate(key);
+      if (isFileMissing(error)) markFileMissing(itemId);
     });
   }, [enabled, native, itemId, cache, mutate]);
 }

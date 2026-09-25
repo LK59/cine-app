@@ -32,7 +32,9 @@ import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { nextEpisodeIn } from "@/lib/nextEpisode";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
-import { CinemaRatingsLine, CinemaTagline, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { sheetOverview, useSheetPlayFacts } from "@/lib/sheetFacts";
+import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
 
@@ -98,11 +100,25 @@ export function CinemaSeriesDetail({
   const showEpisodes = useCinemaRoute().episodes;
   const setShowEpisodes = (open: boolean) =>
     open ? cinemaNavigate({ episodes: true }) : cinemaClose({ episodes: false });
-  const { data: info } = useSWR<SonarrInfo>(`/api/sonarr/series/${item.sonarrId}/info`, fetcher);
-  const { data: episodesData } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
+  const { data: info, error: infoError } = useSWR<SonarrInfo>(`/api/sonarr/series/${item.sonarrId}/info`, fetcher);
+  // L'accroche, la distribution et la bande-annonce n'arrivent que par cette réponse : leur place
+  // est tenue dès l'ouverture, et elles s'y posent en fondu — voir `useLateArrival`.
+  const late = useLateArrival(info !== undefined || infoError !== undefined);
+  const { data: episodesData, error: episodesError } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
+  // L'épisode que Lire lancerait : celui du serveur quand la liste est là, sinon celui que « À
+  // suivre » ou « Reprendre », gardés sur l'appareil, connaissent déjà — voir `sheetFacts.ts`.
+  const facts = useSheetPlayFacts(
+    { kind: "series", jellyfinItemId: item.jellyfinItemId, sonarrId: item.sonarrId },
+    item.title,
+    episodesData ? { kind: "series", known: true, episode: episodesData.nextEpisode } : undefined
+  );
+  // Une série jamais commencée : rien d'autre que la liste des épisodes ne dit quel épisode lire.
+  // Sa ligne garde sa place en attendant, plutôt que de surgir.
+  const playPending = !facts.targetId && episodesData === undefined && episodesError === undefined;
+  const fileMissing = useFileMissing(facts.targetId);
   // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
   // L'épisode du bouton principal seulement, pas chaque ligne de la liste.
-  usePlaybackPrefetch(episodesData?.nextEpisode?.itemId);
+  usePlaybackPrefetch(facts.targetId);
   // Marquer une série vue coche la série entière chez Jellyfin, ce qui est exactement le geste
   // qu'on veut : « je l'ai finie », et ses applications le sauront aussi.
   const { watched, known: flagsKnown, busy: flagsBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId, "series");
@@ -160,7 +176,7 @@ export function CinemaSeriesDetail({
       focusFirstAction(containerRef.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playerEnabled, info?.trailerKey, episodesData?.nextEpisode, item.sonarrId, underneath]);
+  }, [playerEnabled, info?.trailerKey, episodesData?.nextEpisode, facts.targetId, item.sonarrId, underneath]);
 
   // Same as CinemaMovieDetail — see its own note. The sheet stays open under the player so
   // closing the player comes back here, and stands down from the keyboard while it's up there.
@@ -236,8 +252,8 @@ export function CinemaSeriesDetail({
   if (typeof document === "undefined") return null;
 
   const inList = addedStatus === "to_watch";
-  const nextEpisode = episodesData?.nextEpisode;
-  const hasResume = !!nextEpisode?.resumeTicks && nextEpisode.resumeTicks > 0;
+  const playTargetId = facts.targetId;
+  const hasResume = facts.hasResume;
 
   return createPortal(
     <div
@@ -309,19 +325,21 @@ export function CinemaSeriesDetail({
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
-            {runtimeLabel(info?.tmdb?.runtime, true) && <span>{runtimeLabel(info?.tmdb?.runtime, true)}</span>}
+            {/* Le catalogue des séries n'a pas de durée : elle vient de TMDB, et s'insère en fondu. */}
+            {runtimeLabel(info?.tmdb?.runtime, true) && <span className={late.fade}>{runtimeLabel(info?.tmdb?.runtime, true)}</span>}
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
 
-          <CinemaTagline text={info?.tmdb?.tagline} />
+          {late.pending ? <ReservedLine className="h-[1.1rem]" /> : <CinemaTagline text={info?.tmdb?.tagline} className={late.fade} />}
 
           <CinemaOverview
-            text={info?.tmdb?.overview || item.overview || ""}
+            text={sheetOverview(item.overview, info?.tmdb?.overview)}
             readMore={t("cinema.readMore")}
             alwaysOpenable={!!info?.imdbId}
             onOpen={() => setShowSynopsis(true)}
           />
 
+          {late.pending && <ReservedLine className="h-4" />}
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
             /* Chaque nom mène à sa fiche, sans quitter le lecteur. C'était une ligne de texte
                mort au milieu d'un écran où tout le reste s'ouvre ; et une filmographie est
@@ -337,7 +355,7 @@ export function CinemaSeriesDetail({
 
                Le décompte est hors du paragraphe tronqué : à l'intérieur, il aurait pu être coupé
                lui aussi, ce qui est le seul élément qu'on ne peut pas se permettre de perdre. */
-            <div className="flex items-baseline gap-1.5">
+            <div className={`flex items-baseline gap-1.5 ${late.fade}`}>
               <p className={CAST_CLASS}>
                 {t("cinema.cast")}{" "}
                 {info.tmdb.cast.slice(0, CAST_SHOWN).map((c, i) => (
@@ -367,12 +385,23 @@ export function CinemaSeriesDetail({
 
           {/* Plus étroit que le texte au-dessus, sans être une colonne à part — voir MENU_STYLE. */}
           <div data-detail-actions className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
-            {nextEpisode && (
+            {playPending && (
+              <div aria-hidden="true" data-sheet-reserved="" className={`${MENU_ROW} ${MENU_ROW_INACTIVE} invisible`}>
+                <span className={MENU_BADGE} />
+                <span className="text-sm font-medium">{t("common.play")}</span>
+              </div>
+            )}
+            {playTargetId && (
               <PlayButton
-                itemId={nextEpisode.itemId}
-                title={nextEpisode.title}
-                resumeTicks={nextEpisode.resumeTicks}
-                runtimeTicks={nextEpisode.runtimeTicks}
+                itemId={playTargetId}
+                title={facts.title}
+                resumeTicks={facts.resumeTicks ?? undefined}
+                runtimeTicks={facts.runtimeTicks ?? undefined}
+                // Tant que la liste des épisodes n'est pas là, la reprise locale donne le libellé et
+                // la position reste au serveur.
+                resumeKnown={facts.resumeKnown}
+                unavailable={fileMissing}
+                reserve
                 getNextEpisode={getNextEpisode}
                 variant="row"
                 // PlayButton's own default label (elapsed time, no episode code) is meant for
@@ -382,11 +411,11 @@ export function CinemaSeriesDetail({
                 // that row would otherwise see two different labels for the same episode.
                 label={formatContinueLabel(
                   t,
-                  nextEpisode.resumeTicks,
-                  nextEpisode.runtimeTicks,
-                  nextEpisode.seasonNumber,
-                  nextEpisode.episodeNumber,
-                  nextEpisode.rewatch
+                  facts.resumeTicks,
+                  facts.runtimeTicks,
+                  facts.seasonNumber,
+                  facts.episodeNumber,
+                  facts.rewatch
                 )}
                 // La même ligne que les autres : c'est le sélecteur qui se peint en blanc.
                 className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
@@ -402,11 +431,11 @@ export function CinemaSeriesDetail({
                 natif lit un champ absent comme « prends la position du serveur » : « Recommencer »
                 reprenait donc l'épisode là où on l'avait laissé. Le jumeau côté film a été corrigé
                 d'abord et celui-ci oublié — c'est exactement la dérive que le CLAUDE.md décrit. */}
-            {nextEpisode && hasResume && (
+            {playTargetId && hasResume && !fileMissing && (
               <button
                 data-detail-menu
                 onClick={() =>
-                  playback.play({ itemId: nextEpisode.itemId, title: nextEpisode.title, resumeAt: 0, getNextEpisode })
+                  playback.play({ itemId: playTargetId, title: facts.title, resumeAt: 0, getNextEpisode })
                 }
                 className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
               >
@@ -417,8 +446,17 @@ export function CinemaSeriesDetail({
               </button>
             )}
 
+            {/* Sa place est tenue, invisible et hors du clavier, tant que la description n'est pas là. */}
+            {late.pending && (
+              <div aria-hidden="true" data-sheet-reserved="" className={`${MENU_ROW} ${MENU_ROW_INACTIVE} invisible`}>
+                <span className={MENU_BADGE}>
+                  <Video size={14} />
+                </span>
+                <span className="text-sm font-medium">{t("cinema.trailer")}</span>
+              </div>
+            )}
             {info?.trailerKey && (
-              <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}>
+              <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${late.fade}`}>
                 <span className={MENU_BADGE}>
                   <Video size={14} />
                 </span>
@@ -508,7 +546,7 @@ export function CinemaSeriesDetail({
           title={item.title}
           seasons={episodesData.seasons}
           sonarrId={item.sonarrId}
-          nextEpisodeId={nextEpisode?.itemId}
+          nextEpisodeId={episodesData?.nextEpisode?.itemId}
           onClose={() => {
             setShowEpisodes(false);
             // Same focus-restore fix — CinemaEpisodeBrowser unmounting otherwise leaves focus
@@ -559,7 +597,7 @@ export function CinemaSeriesDetail({
             );
           }}
         >
-          <p>{info?.tmdb?.overview || item.overview || ""}</p>
+          <p>{sheetOverview(item.overview, info?.tmdb?.overview)}</p>
           <CinemaRatingsLine imdbId={info?.imdbId} />
         </CinemaDetailModal>
       )}

@@ -12,7 +12,8 @@ import { SWRConfig } from "swr";
  * (`playerOwnsKeyboard`) ; celle-ci non. Voir `playerHoldsKeyboard`.
  */
 let mode: "idle" | "mini" | "full" = "idle";
-vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode, play: vi.fn() }) }));
+const playMock = vi.fn();
+vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode, play: playMock }) }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr" }) }));
 vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),
@@ -25,7 +26,7 @@ vi.mock("@/lib/cinemaRoute", async (importOriginal) => ({
   useRouteBehind: () => null,
 }));
 vi.mock("@/lib/useIsMobile", () => ({ useIsMobile: () => true, useIsShortViewport: () => false }));
-vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerEnabled: () => true, usePlayerServerFallback: () => true }));
+vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerEnabled: () => true, usePlayerEnabledState: () => true, usePlayerServerFallback: () => true }));
 vi.mock("@/lib/useWatchlistStatusMap", () => ({ useWatchlistStatusMap: () => ({}) }));
 vi.mock("@/lib/useAddToWatchlist", () => ({
   canJoinWatchlist: (tmdbId: number | null | undefined) => !!tmdbId,
@@ -41,6 +42,7 @@ vi.mock("@/components/PosterImage", () => ({ PosterImage: () => null }));
 
 import { CinemaMobileDetail } from "@/components/cinema/mobile/CinemaMobileDetail";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
+import { RESUME_KEY } from "@/lib/swr";
 
 const MOVIE = {
   radarrId: 1,
@@ -112,5 +114,54 @@ describe("CinemaMobileDetail — pendant sa sortie", () => {
     expect(root().style.pointerEvents).toBe("");
     fireEvent.click(document.body.querySelector('[aria-label="cinema.back"]')!);
     expect(root().style.pointerEvents).toBe("none");
+  });
+});
+
+/**
+ * 25/09/2026 : la fiche s'ouvre complète. Ici le réseau ne répond jamais (`fetcher` reste en
+ * attente) — tout ce qui s'affiche vient donc de l'appareil : le catalogue et « Reprendre ».
+ */
+describe("CinemaMobileDetail — ce que l'appareil sait, tout de suite", () => {
+  const MIN = 60 * 10_000_000;
+  const drawWithResume = () =>
+    render(
+      <SWRConfig
+        value={{
+          provider: () => new Map(),
+          dedupingInterval: 0,
+          fallback: {
+            [RESUME_KEY]: { items: [{ id: "jf1", positionTicks: 30 * MIN, runtimeTicks: 120 * MIN, cinemaHref: "/radarr/1" }] },
+          },
+        }}
+      >
+        <CinemaMobileDetail
+          item={{ ...MOVIE, overview: "Le synopsis du catalogue", runtimeMinutes: 136 } as CinemaMovie}
+          mediaType="movies"
+          onClose={vi.fn()}
+        />
+      </SWRConfig>
+    );
+
+  it("la durée et le synopsis du catalogue, « Reprendre » de la reprise locale", () => {
+    drawWithResume();
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Le synopsis du catalogue");
+    expect(text).toContain("2h16");
+    expect(text).toContain("common.resume · cinema.timeRemaining");
+  });
+
+  it("ne décide pas de la position tant que Jellyfin n'a pas répondu", () => {
+    playMock.mockClear();
+    drawWithResume();
+    const button = [...document.body.querySelectorAll("button")].find((b) => b.textContent?.includes("common.resume"))!;
+    fireEvent.click(button);
+    expect(playMock).toHaveBeenCalledTimes(1);
+    expect(playMock.mock.calls[0][0]).toMatchObject({ itemId: "jf1" });
+    expect(playMock.mock.calls[0][0].resumeAt).toBeUndefined();
+  });
+
+  it("tient la place de l'accroche, de la bande-annonce et de la distribution", () => {
+    drawWithResume();
+    expect(document.body.querySelectorAll("[data-sheet-reserved]").length).toBe(3);
   });
 });

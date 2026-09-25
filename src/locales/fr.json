@@ -1819,6 +1819,7 @@
     }
   },
   "cinema": {
+    "fileMissing": "Fichier introuvable",
     "standardMode": "Mode standard",
     "cast": "Avec",
     "trailer": "Bande-annonce",

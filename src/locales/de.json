@@ -1819,6 +1819,7 @@
     }
   },
   "cinema": {
+    "fileMissing": "Datei nicht gefunden",
     "standardMode": "Standardmodus",
     "cast": "Besetzung",
     "trailer": "Trailer",

@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowDown } from "lucide-react";
+import { useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { useT, useLocale } from "@/components/TranslationProvider";
@@ -14,6 +15,33 @@ import { useTweenedNumber } from "@/lib/useTweenedNumber";
  * qui dérivent quand chaque écran les écrit à sa façon. Louis voulait des détails « très légers,
  * nécessaires et discrets » : une ligne, un mot, un pourcentage — rien qui fasse une section.
  */
+
+/**
+ * Ce qui n'arrive que par le réseau — l'accroche, la distribution, la bande-annonce — a sa place
+ * dès l'ouverture de la fiche, et y apparaît en fondu.
+ *
+ * 25/09/2026, Louis : la fiche s'ouvrait, puis chaque ligne arrivait à son tour en poussant les
+ * autres. Tout ce qui est gardé sur l'appareil est maintenant là d'emblée (`sheetFacts.ts`) ; ce
+ * qui reste à venir tient sa place vide (`ReservedLine`) tant que la réponse n'est pas là, puis
+ * s'y dépose en 150 ms — seulement si elle est arrivée après l'ouverture : une fiche dont tout
+ * était déjà là ne clignote pas. Une réponse qui n'a rien pour cette place la rend (un film sans
+ * accroche) : c'est le seul mouvement qui reste, et le plus rare.
+ *
+ * `settled` : la réponse est là, ou a échoué — une erreur libère la place comme une réponse vide.
+ */
+export function useLateArrival(settled: boolean): { pending: boolean; fade: string } {
+  // Lu une seule fois, au montage : c'est l'état à l'ouverture qui décide du fondu.
+  const [lateAtMount] = useState(() => !settled);
+  return { pending: !settled, fade: lateAtMount ? LATE_FADE : "" };
+}
+
+/** Le fondu d'arrivée : celui de l'application, raccourci à 150 ms. */
+export const LATE_FADE = "animate-fade-in [animation-duration:150ms]";
+
+/** Une place tenue, vide, de la hauteur de ce qui va l'occuper. */
+export function ReservedLine({ className }: { className: string }) {
+  return <div aria-hidden="true" data-sheet-reserved="" className={className} />;
+}
 
 /**
  * L'accroche du film (« In space no one can hear you scream »), sous les métadonnées.

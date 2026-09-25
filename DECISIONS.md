@@ -848,3 +848,48 @@ sans que rien ne casse — seul le journal (`openedFrom`) le dirait.
 `rewound` directement : c'est un autre moment (l'élément joue déjà), et rien n'y est gardé d'avance.
 
 **Décidé le 25/09/2026**, avec la reprise instantanée.
+
+---
+
+## 29. Ce qu'une fiche montre avant que le réseau ait répondu
+
+**Règle.** Une fiche d'un titre de la bibliothèque s'ouvre complète avec ce que l'appareil sait
+déjà. La durée, l'année, les genres et le synopsis viennent du catalogue (gardé sur l'appareil) ;
+TMDB ne donne la durée ou le synopsis que quand le catalogue n'en a pas — le synopsis ne change
+jamais de texte sous les yeux. Le bouton Lire est là d'emblée : « Reprendre · durée restante » si le
+titre est dans « Reprendre » (une série : son épisode dans « À suivre », sinon dans « Reprendre »),
+« Lire » sinon — mais tant que Jellyfin n'a pas répondu, `resumeKnown` reste faux et `resumeAt`
+absent : le libellé vient de l'appareil, la position du serveur. La réponse de Jellyfin l'emporte
+dès qu'elle arrive. La configuration qui décide s'il y a un bouton Lire (`/api/config/public`) est
+gardée sur l'appareil ; tant qu'elle manque, le bouton garde sa place, invisible (`reserve`).
+
+Le bouton ne se grise (« Fichier introuvable ») **que** si la route `direct` a répondu
+`file_missing` — Jellyfin a dit que le fichier n'existe pas. Une coupure, un Jellyfin injoignable,
+un jeton refusé ou un retard ne grisent jamais un titre lisible.
+
+Ce qui n'arrive que par le réseau — accroche, distribution, bande-annonce, durée d'une série — a sa
+place tenue dès l'ouverture et s'y pose en fondu de 150 ms, seulement si la réponse est arrivée
+après l'ouverture. Et l'appui sur une affiche demande déjà la description et l'état Jellyfin du
+titre, une fois par demi-minute.
+
+**Porteurs.** `src/lib/sheetFacts.ts` — `useSheetPlayFacts` (sur `localPlayTarget` et
+`sheetPlayFacts`), `sheetRuntimeMinutes`, `sheetOverview` ; `useFileMissing`
+(`src/lib/missingFiles.ts`, alimenté par `usePlaybackPrefetch`) ; `useLateArrival` et
+`ReservedLine` (`CinemaDetailExtras.tsx`) ; `prefetchTitleSheet` / `prefetchLibraryItem`
+(`src/lib/prefetch.ts`).
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail` ; l'appui :
+`CinemaCard`, `CinemaSeriesCard`, les rangées d'affiches du téléphone (`PosterRow`).
+
+**Tests.** `sheetFacts.test.ts`, `PlayButton.test.tsx` (place gardée, bouton grisé),
+`playbackPrefetch.test.tsx` (grisé seulement sur `file_missing`), `jellyfin-direct-route.test.ts`
+(le code, seulement quand Jellyfin a répondu), `persistentCache.test.ts`,
+`decisions-partagees.test.ts`.
+
+**Voulu.** Les fiches TMDB (découverte, personnes) et les films demandés mais pas encore là ne
+passent pas ici : ils gardent Demander / Demandé. La fiche téléphone garde son propre gros bouton
+blanc, mais il lit les mêmes faits. La série n'a pas de durée au catalogue : la sienne reste celle
+de TMDB, en fondu. Une place tenue que la réponse n'occupe pas (un film sans accroche) se referme :
+c'est le seul mouvement qui reste, et le plus rare.
+
+**Décidé le 25/09/2026.**
