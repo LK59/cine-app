@@ -124,6 +124,24 @@ function isAllowedForEveryone(method: string, pathname: string): boolean {
 }
 
 /**
+ * Les lectures réservées à l'administrateur.
+ *
+ * La règle générale laisse tout GET à un compte ordinaire. Ces quatre-là ne *lisent* pas : elles
+ * déclenchent chez Radarr, Sonarr ou Bazarr une recherche interactive auprès des indexeurs et des
+ * fournisseurs de sous-titres — des minutes de travail, des quotas consommés, et des noms de
+ * sorties que seule la gestion affiche. Aucun écran du cinéma ne les appelle (25/09/2026).
+ */
+const ADMIN_ONLY_READS: RegExp[] = [
+  /^\/api\/radarr\/movies\/[^/]+\/releases\/?$/,
+  /^\/api\/sonarr\/series\/[^/]+\/releases\/?$/,
+  /^\/api\/bazarr\/(movies|episodes)\/[^/]+\/subtitles\/?$/,
+];
+
+function isAdminOnlyRead(pathname: string): boolean {
+  return ADMIN_ONLY_READS.some((re) => re.test(pathname));
+}
+
+/**
  * Les adresses que le lecteur a portées avant d'être la racine.
  *
  * Il a été `/cinema`, puis `/player`, et il est maintenant l'application elle-même : c'est sur lui
@@ -245,6 +263,9 @@ export async function proxy(req: NextRequest) {
     req.method !== "GET" &&
     !isAllowedForEveryone(req.method, pathname)
   ) {
+    return NextResponse.json({ error: "Action réservée à l'administrateur" }, { status: 403 });
+  }
+  if (session.role !== "admin" && isAdminOnlyRead(pathname)) {
     return NextResponse.json({ error: "Action réservée à l'administrateur" }, { status: 403 });
   }
 

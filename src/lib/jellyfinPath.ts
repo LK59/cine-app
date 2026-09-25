@@ -30,6 +30,23 @@ export function isJellyfinId(value: unknown): value is string {
   return typeof value === "string" && JELLYFIN_ID_RE.test(value);
 }
 
+/** La même chose sous sa forme GUID à tirets, que Jellyfin accepte aussi dans un chemin. */
+const JELLYFIN_GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Un identifiant prêt à entrer dans une URL Jellyfin, ou une erreur.
+ *
+ * Le dernier rempart, dans le client lui-même : chaque route devrait avoir refusé l'identifiant
+ * avant, mais il a suffi qu'une seule l'oublie — `/api/jellyfin/played` passait `itemId` tel quel
+ * dans `/Users/{id}/PlayedItems/{itemId}`, signé avec la clé d'administration, et
+ * `../../System/Shutdown?` y arrêtait le serveur (25/09/2026). Lever ici plutôt que nettoyer :
+ * un identifiant corrigé en silence écrirait sur un autre titre.
+ */
+export function jellyfinIdSegment(value: unknown): string {
+  if (typeof value === "string" && (JELLYFIN_ID_RE.test(value) || JELLYFIN_GUID_RE.test(value))) return value;
+  throw new Error(`Identifiant Jellyfin invalide : ${JSON.stringify(String(value).slice(0, 80))}`);
+}
+
 /** L'index d'une piste de sous-titres : un entier, tel que Jellyfin le numérote. */
 export function isSubtitleStreamIndex(value: unknown): value is string {
   return typeof value === "string" && /^\d{1,4}$/.test(value);

@@ -5,6 +5,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId, isStreamPath, isUnderJellyfinPrefix } from "@/lib/jellyfinPath";
 import { castPassFor, withCastPass, CAST_TOKEN_PARAM } from "@/lib/castToken";
+import { stripAccessToken } from "@/lib/stripAccessToken";
 
 // Root cause found live via temporary request logging: right after a fresh remux job starts
 // (e.g. on an audio-track switch, which always requests a brand new PlaySessionId/ffmpeg job),
@@ -59,7 +60,9 @@ export async function GET(
   }
 
   const restPath = path.join("/");
-  const target = `${config.jellyfin.url}/videos/${itemId}/${restPath}${req.nextUrl.search}`;
+  // Le jeton d'une adresse ancienne ou recopiée ne repart pas : l'en-tête ci-dessous authentifie
+  // la requête, et Jellyfin le lit avant la requête — voir `stripAccessToken`.
+  const target = `${config.jellyfin.url}/videos/${itemId}/${restPath}${stripAccessToken(req.nextUrl.search)}`;
   // Ceinture et bretelles : la question est reposée sur l'URL assemblée, celle que `fetch`
   // normalisera, et non sur les morceaux dont elle sort.
   if (!isUnderJellyfinPrefix(target, `${config.jellyfin.url}/videos/${itemId}/`)) {
@@ -120,9 +123,13 @@ export async function GET(
       // manifest's own URL) — rewrite those back through our own proxy so the
       // browser never needs to know Jellyfin's real host.
       const text = await res.text();
-      const rewritten = text.replace(
-        new RegExp(`(?:https?:\\/\\/[^/\\s"]+)?\\/videos\\/${itemId}\\/`, "gi"),
-        `/api/jellyfin/stream/${itemId}/`
+      // Et sans jeton : Jellyfin recopie la requête du maître dans chaque variante et chaque
+      // segment, et peut écrire le sien dans une piste de sous-titres — voir `stripAccessToken`.
+      const rewritten = stripAccessToken(
+        text.replace(
+          new RegExp(`(?:https?:\\/\\/[^/\\s"]+)?\\/videos\\/${itemId}\\/`, "gi"),
+          `/api/jellyfin/stream/${itemId}/`
+        )
       );
       /**
        * Le laissez-passer est reporté dans chaque adresse que le manifeste désigne.

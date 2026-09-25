@@ -391,3 +391,29 @@ describe("ce que la route dit des pistes", () => {
     }
   });
 });
+
+/**
+ * `TranscodingUrl` porte le jeton de la personne (`ApiKey=`) : il ne doit sortir ni dans l'adresse
+ * donnée à la page, ni dans celle donnée au téléviseur (25/09/2026, journal du relais inverse).
+ */
+describe("POST /api/jellyfin/playback/start — jeton de Jellyfin", () => {
+  it("retire ApiKey de manifestUrl et de castUrl, et garde le reste", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "timeo", jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "play-1",
+      MediaSources: [{
+        Id: "src-1",
+        TranscodingUrl: "/videos/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/master.m3u8?DeviceId=x&ApiKey=jeton-secret&PlaySessionId=play-1",
+        MediaStreams: [],
+      }],
+    });
+    const req = Object.assign(fakeReq({ itemId: validId }), {
+      headers: new Headers({ "x-forwarded-proto": "https", "x-forwarded-host": "cine.example" }),
+    }) as unknown as NextRequest;
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const body = await (await POST(req)).json();
+    expect(body.manifestUrl).toBe(`/api/jellyfin/stream/${validId}/master.m3u8?DeviceId=x&PlaySessionId=play-1`);
+    expect(body.castUrl).not.toContain("jeton-secret");
+    expect(body.castUrl).toMatch(/\/master\.m3u8\?DeviceId=x&PlaySessionId=play-1&/);
+  });
+});

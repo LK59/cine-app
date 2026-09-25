@@ -6,6 +6,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { stripAccessToken } from "@/lib/stripAccessToken";
 import { buildDeviceProfile, castRefusalFor } from "@/lib/deviceProfile";
 import type { CodecSupport } from "@/lib/codecSupport";
 import { cachedMovies } from "@/lib/server-cache";
@@ -181,7 +182,10 @@ export async function POST(req: NextRequest) {
       // it under our own stream proxy, so the browser never talks to Jellyfin directly.
       const parsed = new URL(source.TranscodingUrl, "http://internal");
       const restPath = parsed.pathname.replace(/^\/videos\/[0-9a-f-]{32,36}\//i, "");
-      manifestUrl = `/api/jellyfin/stream/${itemId}/${restPath}${parsed.search}`;
+      // Sans le jeton que Jellyfin y a écrit (`ApiKey=`) : le relais signe lui-même chaque requête,
+      // et cette adresse finit dans la page, l'historique et le journal du relais inverse — voir
+      // `stripAccessToken`.
+      manifestUrl = `/api/jellyfin/stream/${itemId}/${restPath}${stripAccessToken(parsed.search)}`;
       ({ videoCodecs, reasons: transcodeReasons } = parseTranscodingUrlInfo(source.TranscodingUrl));
 
       // Found live: a track switch that needs a genuine transcode (not just a remux copy — e.g.

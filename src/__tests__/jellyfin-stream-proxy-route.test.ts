@@ -171,3 +171,43 @@ describe("traversée de chemin sur /api/jellyfin/stream/[itemId]/[...path]", () 
     }
   });
 });
+
+/**
+ * Le jeton que Jellyfin écrit dans ses adresses (`ApiKey=`) ne traverse plus le relais.
+ *
+ * 25/09/2026 : `master.m3u8?…&ApiKey=…` dans le journal du relais inverse — le jeton de la
+ * personne, recopié par Jellyfin dans chaque variante et chaque segment. Le relais s'authentifie
+ * par l'en-tête, que Jellyfin lit avant la requête : le paramètre ne servait à rien.
+ */
+describe("GET /api/jellyfin/stream — jeton dans l'adresse", () => {
+  async function getUrl(url: string, path: string[]) {
+    const { GET } = await import("@/app/api/jellyfin/stream/[itemId]/[...path]/route");
+    return GET(fakeReq(url), { params: Promise.resolve({ itemId: validId, path }) });
+  }
+
+  it("ne transmet pas l'ApiKey de la requête à Jellyfin, et s'authentifie par l'en-tête", async () => {
+    mockFetch.mockResolvedValue(upstream(200));
+    await getUrl(`http://app/api/jellyfin/stream/${validId}/hls1/main/0.mp4?PlaySessionId=p&ApiKey=jeton&runtimeTicks=0`, ["hls1", "main", "0.mp4"]);
+    const [target, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(target).toBe(`http://jf.test/videos/${validId}/hls1/main/0.mp4?PlaySessionId=p&runtimeTicks=0`);
+    expect((init.headers as Record<string, string>).Authorization).toBe('MediaBrowser Token="key"');
+  });
+
+  it("retire les jetons des adresses d'un manifeste, sous-titres compris", async () => {
+    const manifest = [
+      "#EXTM3U",
+      `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",URI="src/Subtitles/3/subtitles.m3u8?SegmentLength=30&api_key=cle"`,
+      "#EXT-X-STREAM-INF:BANDWIDTH=1",
+      "main.m3u8?DeviceId=d&ApiKey=jeton&PlaySessionId=p",
+      "hls1/main/0.mp4?ApiKey=jeton",
+      "",
+    ].join("\n");
+    mockFetch.mockResolvedValue({ ...upstream(200), text: async () => manifest });
+    const res = await getUrl(`http://app/api/jellyfin/stream/${validId}/master.m3u8?ApiKey=jeton`, ["master.m3u8"]);
+    const text = await res.text();
+    expect(text).not.toMatch(/api_?key/i);
+    expect(text).toContain("main.m3u8?DeviceId=d&PlaySessionId=p");
+    expect(text).toContain('URI="src/Subtitles/3/subtitles.m3u8?SegmentLength=30"');
+    expect(text).toContain("\nhls1/main/0.mp4\n");
+  });
+});

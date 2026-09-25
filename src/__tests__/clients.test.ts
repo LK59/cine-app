@@ -96,9 +96,9 @@ describe("jellyfin client", () => {
   });
 
   it("getAllMovies scopes the request to the given userId", async () => {
-    await jellyfin.getAllMovies("user-abc");
+    await jellyfin.getAllMovies("abcabcabcabcabcabcabcabcabcabc12");
     const calledUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
-    expect(calledUrl).toContain("/Users/user-abc/Items");
+    expect(calledUrl).toContain("/Users/abcabcabcabcabcabcabcabcabcabc12/Items");
     expect(calledUrl).toContain("IncludeItemTypes=Movie");
   });
 

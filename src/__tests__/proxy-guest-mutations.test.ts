@@ -104,6 +104,29 @@ describe("proxy — what a plain user may write", () => {
     expect((await proxy(req("POST", "/api/qbittorrent/pause"))).status).toBe(403);
   });
 
+  // 25/09/2026 : ces GET déclenchent une recherche interactive chez les indexeurs ou les
+  // fournisseurs de sous-titres — la règle « tout GET est permis » les ouvrait à tout compte.
+  it("refuses a user the interactive searches, even as GET", async () => {
+    const { proxy } = await import("@/proxy");
+    for (const path of [
+      "/api/radarr/movies/12/releases",
+      "/api/sonarr/series/7/releases",
+      "/api/bazarr/movies/12/subtitles",
+      "/api/bazarr/episodes/99/subtitles",
+    ]) {
+      expect((await proxy(req("GET", path))).status).toBe(403);
+    }
+    // Le reste des lectures reste ouvert.
+    expect((await proxy(req("GET", "/api/radarr/movies/12"))).status).toBe(200);
+  });
+
+  it("lets an administrator run those searches", async () => {
+    mockVerify.mockResolvedValue({ u: "louis", role: "admin" });
+    const { proxy } = await import("@/proxy");
+    expect((await proxy(req("GET", "/api/radarr/movies/12/releases"))).status).toBe(200);
+    expect((await proxy(req("GET", "/api/bazarr/episodes/99/subtitles"))).status).toBe(200);
+  });
+
   it("leaves an administrator alone", async () => {
     mockVerify.mockResolvedValue({ u: "louis", role: "admin" });
     const { proxy } = await import("@/proxy");

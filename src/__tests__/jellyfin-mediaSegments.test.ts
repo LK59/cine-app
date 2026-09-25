@@ -54,9 +54,9 @@ describe("jellyfin.getEpisodeTimestamps", () => {
 
   it("lit les segments de Jellyfin 12", async () => {
     global.fetch = vi.fn().mockResolvedValue(json({ Items: [segment("Outro", 1500, 1560)] }));
-    const t = await jellyfin.getEpisodeTimestamps("ep");
+    const t = await jellyfin.getEpisodeTimestamps("feedfacefeedfacefeedfacefeedface");
     expect(t?.Credits?.Start).toBe(1500);
-    expect(global.fetch).toHaveBeenCalledWith(`${config.jellyfin.url}/MediaSegments/ep`, expect.anything());
+    expect(global.fetch).toHaveBeenCalledWith(`${config.jellyfin.url}/MediaSegments/feedfacefeedfacefeedfacefeedface`, expect.anything());
   });
 
   it("retombe sur l'ancien greffon quand les segments manquent", async () => {
@@ -64,7 +64,7 @@ describe("jellyfin.getEpisodeTimestamps", () => {
       .fn()
       .mockResolvedValueOnce(json({}, 404))
       .mockResolvedValueOnce(json({ Credits: { Start: 1400, End: 1450, Valid: true } }));
-    const t = await jellyfin.getEpisodeTimestamps("ep");
+    const t = await jellyfin.getEpisodeTimestamps("feedfacefeedfacefeedfacefeedface");
     expect(t?.Credits?.Start).toBe(1400);
   });
 });

@@ -40,33 +40,33 @@ describe("POST /api/jellyfin/playback/progress", () => {
   it("returns 400 when required fields are missing", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jfToken: "tok" });
     const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
-    const res = await POST(fakeReq({ itemId: "abc" }));
+    const res = await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef" }));
     expect(res.status).toBe(400);
   });
 
   it("rejects a non-numeric positionTicks", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jfToken: "tok" });
     const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
-    const res = await POST(fakeReq({ itemId: "abc", playSessionId: "s", mediaSourceId: "m", positionTicks: "not-a-number" }));
+    const res = await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m", positionTicks: "not-a-number" }));
     expect(res.status).toBe(400);
   });
 
   it("reports progress to Jellyfin with the session's own jfId/jfToken, defaulting playMethod to Transcode", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jfToken: "tok" });
     const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
-    const res = await POST(fakeReq({ itemId: "abc", playSessionId: "s", mediaSourceId: "m", positionTicks: 12345 }));
+    const res = await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m", positionTicks: 12345 }));
     expect(res.status).toBe(200);
     expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith(
-      "jf-1", "abc", "tok", "s", "m", 12345, "Transcode", "CineApp", false
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 12345, "Transcode", "CineApp", false
     );
   });
 
   it("forwards the client-reported playMethod to Jellyfin", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jfToken: "tok" });
     const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
-    await POST(fakeReq({ itemId: "abc", playSessionId: "s", mediaSourceId: "m", positionTicks: 1, playMethod: "DirectPlay" }));
+    await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m", positionTicks: 1, playMethod: "DirectPlay" }));
     expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith(
-      "jf-1", "abc", "tok", "s", "m", 1, "DirectPlay", "CineApp", false
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 1, "DirectPlay", "CineApp", false
     );
   });
 
@@ -74,7 +74,7 @@ describe("POST /api/jellyfin/playback/progress", () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jfToken: "tok" });
     mockJellyfin.reportPlaybackProgress.mockRejectedValue(new Error("jellyfin unreachable"));
     const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
-    const res = await POST(fakeReq({ itemId: "abc", playSessionId: "s", mediaSourceId: "m", positionTicks: 1 }));
+    const res = await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m", positionTicks: 1 }));
     expect(res.status).toBe(502);
   });
 });
@@ -87,7 +87,7 @@ describe("le nom du client, et l'état de pause", () => {
     const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
     await POST(
       fakeReq({
-        itemId: "abc",
+        itemId: "0123456789abcdef0123456789abcdef",
         playSessionId: "s",
         mediaSourceId: "m",
         positionTicks: 5,
@@ -96,7 +96,7 @@ describe("le nom du client, et l'état de pause", () => {
       })
     );
     expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith(
-      "jf-1", "abc", "tok", "s", "m", 5, "Transcode", "CineEngine By CineApp", true
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 5, "Transcode", "CineEngine By CineApp", true
     );
   });
 
@@ -105,10 +105,10 @@ describe("le nom du client, et l'état de pause", () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jfToken: "tok" });
     const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
     await POST(
-      fakeReq({ itemId: "abc", playSessionId: "s", mediaSourceId: "m", positionTicks: 5, client: "<script>Netflix" })
+      fakeReq({ itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m", positionTicks: 5, client: "<script>Netflix" })
     );
     expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith(
-      "jf-1", "abc", "tok", "s", "m", 5, "Transcode", "CineApp", false
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 5, "Transcode", "CineApp", false
     );
   });
 });

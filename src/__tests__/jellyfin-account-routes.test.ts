@@ -50,22 +50,22 @@ describe("POST /api/jellyfin/played", () => {
   it("returns 400 when played is not a boolean", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
     const { POST } = await import("@/app/api/jellyfin/played/route");
-    const res = await POST(fakeReq({ itemId: "abc" }));
+    const res = await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef" }));
     expect(res.status).toBe(400);
   });
 
   it("calls markPlayed when played=true", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
     const { POST } = await import("@/app/api/jellyfin/played/route");
-    await POST(fakeReq({ itemId: "abc", played: true }));
-    expect(mockJellyfin.markPlayed).toHaveBeenCalledWith("jf-1", "abc");
+    await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef", played: true }));
+    expect(mockJellyfin.markPlayed).toHaveBeenCalledWith("jf-1", "0123456789abcdef0123456789abcdef");
   });
 
   it("calls markUnplayed when played=false", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
     const { POST } = await import("@/app/api/jellyfin/played/route");
-    await POST(fakeReq({ itemId: "abc", played: false }));
-    expect(mockJellyfin.markUnplayed).toHaveBeenCalledWith("jf-1", "abc");
+    await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef", played: false }));
+    expect(mockJellyfin.markUnplayed).toHaveBeenCalledWith("jf-1", "0123456789abcdef0123456789abcdef");
   });
 });
 
@@ -140,15 +140,15 @@ describe("POST /api/jellyfin/playback/stop", () => {
   it("returns 400 when required fields are missing", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
     const { POST } = await import("@/app/api/jellyfin/playback/stop/route");
-    const res = await POST(fakeReq({ itemId: "abc" }));
+    const res = await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef" }));
     expect(res.status).toBe(400);
   });
 
   it("reports the stop with defaulted positionTicks", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
     const { POST } = await import("@/app/api/jellyfin/playback/stop/route");
-    await POST(fakeReq({ itemId: "abc", playSessionId: "s", mediaSourceId: "m" }));
-    expect(mockJellyfin.reportPlaybackStopped).toHaveBeenCalledWith("jf-1", "abc", "tok", "s", "m", 0, "CineApp");
+    await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m" }));
+    expect(mockJellyfin.reportPlaybackStopped).toHaveBeenCalledWith("jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 0, "CineApp");
   });
 });
 
@@ -180,7 +180,7 @@ describe("POST /api/jellyfin/played — cache", () => {
     const { POST } = await import("@/app/api/jellyfin/played/route");
     const res = await POST({
       cookies: { get: () => ({ value: "t" }) },
-      json: async () => ({ itemId: "abc", played: true }),
+      json: async () => ({ itemId: "0123456789abcdef0123456789abcdef", played: true }),
     } as unknown as NextRequest);
 
     expect(res.status).toBe(200);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
+import { isJellyfinId } from "@/lib/jellyfinPath";
 import { PLAYBACK_CLIENTS, isPlaybackClient } from "@/lib/playbackClients";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
   const client = isPlaybackClient(body?.client) ? body.client : PLAYBACK_CLIENTS.stable;
   const isPaused = body?.isPaused === true;
 
-  if (!itemId || !playSessionId || !mediaSourceId || !Number.isFinite(positionTicks)) {
+  if (!isJellyfinId(itemId) || !playSessionId || !mediaSourceId || !Number.isFinite(positionTicks)) {
     return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
   }
 

@@ -17,7 +17,7 @@ function fakeReq(body: unknown, cookie = "t"): NextRequest {
   } as unknown as NextRequest;
 }
 
-const complete = { itemId: "abc", playSessionId: "s", mediaSourceId: "m" };
+const complete = { itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m" };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -32,7 +32,7 @@ describe("POST /api/jellyfin/playback/playing", () => {
     expect(res.status).toBe(200);
     // Reported with the viewer's own token, never the admin key: this is their watch history.
     expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith(
-      "jf-1", "abc", "tok", "s", "m", "DirectPlay", "CineEngine By CineApp"
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", "DirectPlay", "CineEngine By CineApp"
     );
   });
 
@@ -40,13 +40,13 @@ describe("POST /api/jellyfin/playback/playing", () => {
     const { POST } = await import("@/app/api/jellyfin/playback/playing/route");
     await POST(fakeReq({ ...complete, client: "Netflix" }));
     expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith(
-      "jf-1", "abc", "tok", "s", "m", "DirectPlay", "CineApp"
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", "DirectPlay", "CineApp"
     );
   });
 
   it("refuse une session incomplète, un compte non lié, et le lecteur désactivé", async () => {
     const { POST } = await import("@/app/api/jellyfin/playback/playing/route");
-    expect((await POST(fakeReq({ itemId: "abc" }))).status).toBe(400);
+    expect((await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef" }))).status).toBe(400);
 
     mockVerifySessionFull.mockResolvedValue({ u: "louis" });
     expect((await POST(fakeReq(complete))).status).toBe(403);
