@@ -4,7 +4,7 @@ import { HeroBackdrop } from "@/components/cinema/HeroBackdrop";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
-import { useFlipGrid } from "@/lib/useFlipGrid";
+import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -62,7 +62,7 @@ import { CinemaTop10Row } from "@/components/cinema/CinemaTop10Row";
 import { CinemaDiscoveryRow } from "@/components/cinema/CinemaDiscoveryRow";
 import { useCinemaMyList, useCinemaMyListPending } from "@/lib/useCinemaMyList";
 import { CinemaSkeletonCards, isRowPending } from "@/components/cinema/CinemaRowSkeleton";
-import { useRotatingIndex } from "@/lib/useRotatingIndex";
+import { heroOffscreen, heroSignature, resolveHeroCarousel, upcomingImages, useDecodeAhead, useHeroOrder } from "@/lib/heroCarousel";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
@@ -227,6 +227,12 @@ function ContinueCard({
 
 /** La clé de « Voir tout » qui ouvre « Ma liste » plutôt qu'une grille complète. */
 const SEE_ALL_LIST = "__ma-liste__";
+
+// Hors du composant : stables, pour que la bannière ne relance rien à chaque rendu.
+const movieHeroKey = (m: CinemaMovie) => `f${m.radarrId}`;
+const seriesHeroKey = (s: CinemaSeries) => `s${s.sonarrId}`;
+/** Ce que la bannière du bureau affiche d'un titre : son fond et son logo, décodés d'avance. */
+const heroImagesOf = (item: { backdropUrl: string | null; logoUrl: string | null }) => [item.backdropUrl, item.logoUrl];
 export function CinemaClient() {
   const t = useT();
 
@@ -352,7 +358,9 @@ export function CinemaClient() {
   // glissent jusqu'à leur place quand une carte part. Le menu, lui, est déclaré plus haut.
   const removeFromResume = useRemoveFromResume();
   const continueTrack = useRef<HTMLDivElement>(null);
-  useFlipGrid(continueTrack, [...resumeMovies.map((m) => m.id), ...continueSeries.map((e) => e.jellyfinItemId)]);
+  // Avec les options du catalogue : à l'arrivée des données fraîches, le film fini sur la télé
+  // quitte la rangée et celui qu'on reprend remonte en tête, en glissant — voir `CATALOGUE_FLIP`.
+  useFlipGrid(continueTrack, [...resumeMovies.map((m) => m.id), ...continueSeries.map((e) => e.jellyfinItemId)], CATALOGUE_FLIP);
   // La place tenue tant que l'une des deux réponses n'est pas arrivée — voir `CinemaSkeletonCards`.
   const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
   const myListPending = useCinemaMyListPending();
@@ -441,15 +449,29 @@ export function CinemaClient() {
   // is to preview whatever you're pointing at.
   // Le « spotlight » plutôt que « récemment ajouté » : ce dernier a sa propre rangée plus bas, et
   // les mêmes huit titres deux fois de suite ne font pas deux sections.
-  const movieCarousel = (movies?.spotlight?.length ? movies.spotlight : movies?.recentlyAdded ?? []).slice(0, 8);
+  const movieCarouselOfficial = (movies?.spotlight?.length ? movies.spotlight : movies?.recentlyAdded ?? []).slice(0, 8);
   // Arrêtée aussi tant que la grille est recouverte. La bannière tournait sous les fiches et les
   // panneaux, invisible, et chaque tour redessinait tout cet écran — fiches ouvertes comprises,
   // dont la fenêtre du synopsis reprenait alors le focus toutes les huit secondes (voir
   // `CinemaDetailModal`).
-  const [movieCarouselIndex, setMovieCarouselIndex] = useRotatingIndex(
-    movieCarousel.length,
-    focusedItem !== null || !gridOnTop
+  // Et elle suit le titre qu'elle montre quand les données fraîches remplacent celles du cache :
+  // le film à l'écran y reste, une nouveauté vient au passage suivant, et l'ordre officiel revient
+  // dès qu'elle quitte l'écran — voir `useHeroCarousel`, commun avec le téléphone.
+  // Le hook ne reçoit que des valeurs primitives — voir `useHeroOrder`.
+  const [movieOrderIndex, setMovieCarouselIndex, movieOrder] = useHeroOrder(
+    heroSignature(movieCarouselOfficial.map(movieHeroKey)),
+    focusedItem !== null || !gridOnTop,
+    heroOffscreen("movies", route, playback.mode)
   );
+  // Un titre à l'écran qui vient de sortir de la liste reste à l'écran : retrouvé dans le catalogue.
+  const { items: movieCarousel, index: movieCarouselIndex } = resolveHeroCarousel(
+    movieOrder,
+    movieOrderIndex,
+    movieCarouselOfficial,
+    movieHeroKey,
+    (key) => moviesById.get(Number(key.slice(1)))
+  );
+  useDecodeAhead(upcomingImages(movieCarousel, movieCarouselIndex, heroImagesOf));
   const heroItem = focusedItem ?? movieCarousel[movieCarouselIndex] ?? null;
   /**
    * La barre allumée est celle du titre que la bannière montre — pas celle de la rotation.
@@ -483,11 +505,20 @@ export function CinemaClient() {
     // tant que celui des séries n'était pas chargé, c'est-à-dire dans le cas le plus courant.
     route.film !== null ? moviesById.size > 0 : seriesById.size > 0
   );
-  const seriesCarousel = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
-  const [seriesCarouselIndex, setSeriesCarouselIndex] = useRotatingIndex(
-    seriesCarousel.length,
-    seriesFocusedItem !== null || !gridOnTop
+  const seriesCarouselOfficial = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
+  const [seriesOrderIndex, setSeriesCarouselIndex, seriesOrder] = useHeroOrder(
+    heroSignature(seriesCarouselOfficial.map(seriesHeroKey)),
+    seriesFocusedItem !== null || !gridOnTop,
+    heroOffscreen("series", route, playback.mode)
   );
+  const { items: seriesCarousel, index: seriesCarouselIndex } = resolveHeroCarousel(
+    seriesOrder,
+    seriesOrderIndex,
+    seriesCarouselOfficial,
+    seriesHeroKey,
+    (key) => seriesById.get(Number(key.slice(1)))
+  );
+  useDecodeAhead(upcomingImages(seriesCarousel, seriesCarouselIndex, heroImagesOf));
   const seriesHeroItem = seriesFocusedItem ?? seriesCarousel[seriesCarouselIndex] ?? null;
   const seriesSpotlightIndex = seriesHeroItem
     ? seriesCarousel.findIndex((sh) => sh.sonarrId === seriesHeroItem.sonarrId)
@@ -1091,6 +1122,7 @@ export function CinemaClient() {
               <CinemaSpotlight
                 label={t("cinema.spotlight")}
                 count={movieCarousel.length}
+                itemKeys={movieCarousel.map(movieHeroKey)}
                 activeIndex={movieSpotlightIndex}
                 onPick={(i) => {
                   // La bannière doit repartir sur la rotation : tant qu'une carte est retenue,
@@ -1208,6 +1240,7 @@ export function CinemaClient() {
               <CinemaSpotlight
                 label={t("cinema.spotlight")}
                 count={seriesCarousel.length}
+                itemKeys={seriesCarousel.map(seriesHeroKey)}
                 activeIndex={seriesSpotlightIndex}
                 onPick={(i) => {
                   setSeriesFocusedItem(null);
