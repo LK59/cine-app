@@ -65,17 +65,24 @@ describe("journal du lecteur serveur", () => {
  */
 describe("arrêt du lecteur serveur", () => {
   it("dit pourquoi et où il s'est arrêté", () => {
-    const line = serverStopFields(CTX, "close", 1834.6);
+    const line = serverStopFields(CTX, "close", 1834.6, 1200);
     expect(line).toMatchObject({ player: "serveur", path: "serveur", why: "close", at: 1835, itemId: CTX.itemId });
-    expect(serverStopFields(CTX, "next", 2400).why).toBe("next");
+    expect(serverStopFields(CTX, "next", 2400, 0).why).toBe("next");
     expect(isPlayerEventKind("stop")).toBe(true);
+  });
+
+  // 24/09/2026 : sans temps regardé, une séance passée par le serveur se lisait à zéro seconde.
+  it("porte le temps joué, et non la position", () => {
+    expect(serverStopFields(CTX, "close", 3600, 95)).toMatchObject({ at: 3600, watched: 95 });
+    expect(castEndedFields(CTX, "appareil distant déconnecté", 3600, 1800)).toMatchObject({ watched: 1800 });
+    expect(castEndedFields(CTX, "appareil distant déconnecté", 3600)).not.toHaveProperty("watched");
   });
 });
 
 describe("lecteur serveur pendant un banc", () => {
   it("marque ses lignes du banc, pour qu'elles restent hors du journal des spectateurs", () => {
     expect(serverStartFields({ ...CTX, bench: "banc-1" }, { directPlay: false, nativeHls: true, resumeAt: 0, audioStreamIndex: undefined })).toMatchObject({ bench: "banc-1" });
-    expect(serverStopFields(CTX, "close", 10)).not.toHaveProperty("bench");
+    expect(serverStopFields(CTX, "close", 10, 0)).not.toHaveProperty("bench");
   });
 });
 

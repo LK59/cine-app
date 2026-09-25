@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SessionTally, MIN_WAIT_MS, newPlayerSessionId } from "@/lib/playerSessionTally";
+import { SessionTally, MIN_WAIT_MS, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
 
 // Le décompte qui fait le bilan d'une séance. Les attentes d'une à quatre secondes n'avaient
 // aucune trace : seules celles de cinq secondes et plus devenaient une ligne `stall`.
@@ -109,5 +109,23 @@ describe("SessionTally — l'arrière-plan sur une ligne d'incident", () => {
     const tally = new SessionTally();
     tally.hidden(10_000);
     expect(tally.backgroundFacts(12_000)).toEqual({ hiddenNow: true, hiddenForMs: 2_000 });
+  });
+});
+
+describe("WatchedClock", () => {
+  it("compte le temps joué, pauses exclues, et chaque ligne ne rend compte que de sa part", () => {
+    const clock = new WatchedClock();
+    clock.run(0);
+    clock.run(5_000); // un second « play » ne redémarre pas le compte
+    clock.halt(10_000);
+    clock.halt(20_000); // une pause pendant la pause ne compte rien
+    expect(clock.seconds(30_000)).toBe(10);
+    clock.run(30_000);
+    // Une fin de diffusion en pleine lecture : sa part, puis on repart de zéro sans s'arrêter.
+    expect(clock.take(40_000)).toBe(20);
+    expect(clock.seconds(45_000)).toBe(5);
+    clock.halt(50_000);
+    expect(clock.take(60_000)).toBe(10);
+    expect(clock.take(70_000)).toBe(0);
   });
 });

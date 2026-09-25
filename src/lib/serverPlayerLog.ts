@@ -71,8 +71,8 @@ export function castEstablishedFields(ctx: ServerPlayerContext, at: number): Rec
  * une « séance de diffusion »), et la séance, sans laquelle la ligne tombait dans une séance
  * reconstituée et comptait comme un échec sur la page Activité (relu le 24/09/2026).
  */
-export function castEndedFields(ctx: ServerPlayerContext, source: string, at: number): Record<string, unknown> {
-  return { ...base(ctx), cast: true, path: "serveur", reason: `fin de diffusion (${source})`, at: Math.round(at) };
+export function castEndedFields(ctx: ServerPlayerContext, source: string, at: number, watched?: number): Record<string, unknown> {
+  return { ...base(ctx), cast: true, path: "serveur", reason: `fin de diffusion (${source})`, at: Math.round(at), ...(watched !== undefined ? { watched } : {}) };
 }
 
 /**
@@ -81,8 +81,11 @@ export function castEndedFields(ctx: ServerPlayerContext, source: string, at: nu
  * Il notait son démarrage et jamais sa fin : chacune de ses séances se lisait « commencée, jamais
  * finie » dans le journal, comme un lecteur disparu (relevé le 23/09/2026).
  */
-export function serverStopFields(ctx: ServerPlayerContext, why: "close" | "next", at: number): Record<string, unknown> {
-  return { ...base(ctx), path: "serveur", why, at: Math.round(at) };
+export function serverStopFields(ctx: ServerPlayerContext, why: "close" | "next", at: number, watched: number): Record<string, unknown> {
+  // `watched` : le temps joué par ce lecteur-ci depuis sa dernière ligne qui en rendait compte, et
+  // non la position — un film repris à une heure n'a pas été regardé une heure. Sans lui, une
+  // séance passée par le serveur se lisait à zéro seconde regardée (24/09/2026).
+  return { ...base(ctx), path: "serveur", why, at: Math.round(at), watched };
 }
 
 function base(ctx: ServerPlayerContext): Record<string, unknown> {

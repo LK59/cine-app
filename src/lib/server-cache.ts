@@ -32,6 +32,22 @@ interface StaleEntry<T> {
 const store      = new Map<string, Entry<unknown>>();
 const staleStore = new Map<string, StaleEntry<unknown>>();
 const inFlight   = new Map<string, Promise<unknown>>();
+/**
+ * Un numéro par clé, avancé à chaque invalidation.
+ *
+ * L'invalidation ne vidait que `store` : une requête partie avant elle restait dans `inFlight`, le
+ * premier appel d'après s'y joignait et recevait l'ancienne réponse — puis elle l'écrivait dans le
+ * cache, pour tout le TTL. Un film ajouté ou supprimé pouvait ainsi rester invisible (ou visible)
+ * trente secondes de plus, précisément après l'action qui demandait de relire. Une réponse n'est
+ * écrite que si la clé n'a pas été invalidée depuis son départ.
+ */
+const generation = new Map<string, number>();
+const generationOf = (key: string) => generation.get(key) ?? 0;
+
+/** Retirer la requête en vol de cette clé — seulement si c'est encore elle. */
+function settle(key: string, p: Promise<unknown>) {
+  if (inFlight.get(key) === p) inFlight.delete(key);
+}
 
 // ─── Cache result type (for aggregated/dashboard endpoints) ──────────────────
 
@@ -66,22 +82,26 @@ export async function withCache<T>(
   const existing = inFlight.get(key) as Promise<T> | undefined;
   if (existing) return existing;
 
+  const gen = generationOf(key);
   const p: Promise<T> = fn()
     .then((v) => {
-      store.set(key, { v, exp: Date.now() + ttlMs });
-      staleStore.set(key, { v, fetchedAt: Date.now() });
+      // Invalidée pendant le trajet : la réponse sert à qui l'attendait, pas au cache.
+      if (generationOf(key) === gen) {
+        store.set(key, { v, exp: Date.now() + ttlMs });
+        staleStore.set(key, { v, fetchedAt: Date.now() });
+      }
       return v;
     })
     .catch((err) => {
       // Try stale fallback — serve last known value with a reduced TTL so we retry soon
       const stale = staleStore.get(key) as StaleEntry<T> | undefined;
       if (stale) {
-        store.set(key, { v: stale.v, exp: Date.now() + Math.min(ttlMs * 0.5, 30_000) });
+        if (generationOf(key) === gen) store.set(key, { v: stale.v, exp: Date.now() + Math.min(ttlMs * 0.5, 30_000) });
         return stale.v;
       }
       throw err;
     })
-    .finally(() => { inFlight.delete(key); });
+    .finally(() => settle(key, p));
 
   inFlight.set(key, p as Promise<unknown>);
   return p;
@@ -135,6 +155,7 @@ export async function withPersistentCache<T>(key: string, requestedTtlMs: number
   const existing = inFlight.get(key) as Promise<T> | undefined;
   if (existing) return existing;
 
+  const gen = generationOf(key);
   const p: Promise<T> = (async () => {
     const disk = kvCacheDb.get(key);
     if (disk && Date.now() - disk.fetchedAt < ttlMs) {
@@ -156,16 +177,18 @@ export async function withPersistentCache<T>(key: string, requestedTtlMs: number
        */
       if (disk) {
         const stale = disk.value as T;
-        store.set(key, { v: stale, exp: Date.now() + 5 * 60_000 });
+        if (generationOf(key) === gen) store.set(key, { v: stale, exp: Date.now() + 5 * 60_000 });
         return stale;
       }
       throw err;
     }
+    // Même règle que `withCache` : une réponse partie avant une invalidation n'est pas gardée.
+    if (generationOf(key) !== gen) return v;
     store.set(key, { v, exp: Date.now() + ttlMs });
     staleStore.set(key, { v, fetchedAt: Date.now() });
     kvCacheDb.set(key, v, Date.now());
     return v;
-  })().finally(() => { inFlight.delete(key); });
+  })().finally(() => settle(key, p));
 
   inFlight.set(key, p as Promise<unknown>);
   return p;
@@ -173,19 +196,24 @@ export async function withPersistentCache<T>(key: string, requestedTtlMs: number
 
 // ─── Invalidation ─────────────────────────────────────────────────────────────
 
+/**
+ * Oublier une clé : sa valeur, sa requête en vol, et toute réponse qui arriverait d'avant — voir
+ * `generation`. Le prochain appel repart d'une requête neuve.
+ */
 export function invalidateKey(key: string) {
   store.delete(key);
+  inFlight.delete(key);
+  generation.set(key, generationOf(key) + 1);
 }
 
 export function invalidateByPrefix(prefix: string) {
-  for (const key of store.keys()) {
-    if (key.startsWith(prefix)) store.delete(key);
-  }
+  const keys = new Set([...store.keys(), ...inFlight.keys()].filter((key) => key.startsWith(prefix)));
+  for (const key of keys) invalidateKey(key);
 }
 
 export function invalidateLibrary() {
-  store.delete("radarr:movies");
-  store.delete("sonarr:series");
+  invalidateKey("radarr:movies");
+  invalidateKey("sonarr:series");
 }
 
 export function invalidateJellyfinLibrary() {

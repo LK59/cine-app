@@ -79,7 +79,7 @@ import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { registerBenchBridge } from "@/lib/playerBench/bridge";
 import { seekArrived } from "@/lib/webcodecs/seekArrival";
-import { SessionTally, newPlayerSessionId } from "@/lib/playerSessionTally";
+import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
 import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
 import { forgetResumeCache, openDiskChunks, openingFacts } from "@/lib/resumeCache/diskChunks";
 
@@ -339,7 +339,7 @@ export function ExperimentalPlayerHost({
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
   mode: "full" | "mini";
-  onFallback: (reason: string, takeover?: StableTakeover) => void;
+  onFallback: (reason: string, takeover?: StableTakeover, sessionId?: string) => void;
 }) {
   const t = useT();
   // Pour les phrases écrites depuis le pipeline : ses gestionnaires sont construits par un effet
@@ -426,6 +426,8 @@ export function ExperimentalPlayerHost({
    */
   const [sessionId] = useState(newPlayerSessionId);
   const [tally] = useState(() => new SessionTally());
+  // Déclaré ici pour `fallToStable`, qui le reporte sur sa ligne — voir `WatchedClock`.
+  const [watched] = useState(() => new WatchedClock());
   /**
    * The record's view of what is playing, read through refs.
    *
@@ -482,13 +484,28 @@ export function ExperimentalPlayerHost({
     // d'ouverture, sur la piste par défaut : une heure de film rembobinée, dans une autre langue
     // (relu le 22/09/2026). Avant la première image, rien : la séance dit déjà tout — voir
     // `StableTakeover`.
+    //
     const handover = takeover ?? (everReadyRef.current ? takeoverNowRef.current() : undefined);
     trace(`repli : passage au lecteur stable — ${reason}`);
     // `cast` à plat : une diffusion demandée n'est pas un échec, et le journal doit pouvoir le dire
-    // sans comparer des phrases (voir `seances.ts`).
-    reportPlayback("fallback", { ...file, reason, path, ...(handover ? { takeover: handover } : {}), ...(handover?.cast ? { cast: true } : {}), ...tally.backgroundFacts(Date.now()) });
-    onFallbackRef.current(reason, handover);
-  }, [sessionId, tally]);
+    // sans comparer des phrases (voir `seances.ts`). `watched` : ce que ce lecteur-ci a joué avant
+    // de passer la main, puisque sa ligne `stop` ne partira pas.
+    const now = Date.now();
+    reportPlayback("fallback", {
+      ...file,
+      reason,
+      path,
+      ...(handover ? { takeover: handover } : {}),
+      ...(handover?.cast ? { cast: true } : {}),
+      watched: watched.seconds(now),
+      ...tally.backgroundFacts(now),
+    });
+    // L'identifiant de la séance passe avec le relais, avant la première image comme après : le
+    // lecteur serveur écrit ses lignes sous le même, et le journal lit une seule séance au lieu de
+    // deux. Le 24/09/2026, une demi-heure de film passée par le serveur se lisait en deux séances,
+    // dont une à zéro seconde regardée — et une soirée de diffusion vers la télé, deux heures à zéro.
+    onFallbackRef.current(reason, handover, sessionId);
+  }, [sessionId, tally, watched]);
   /**
    * A passing notice, with the moment it was raised.
    *
@@ -1111,18 +1128,11 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     mountedAtRef.current = Date.now();
   }, []);
-  // Le temps passé à jouer, pas l'écart entre la position d'arrivée et celle de départ : un saut
-  // de quarante minutes n'est pas quarante minutes regardées.
-  const watchedRef = useRef<{ total: number; since: number | null }>({ total: 0, since: null });
   useEffect(() => {
     if (!playing) return;
-    const watched = watchedRef.current;
-    watched.since = Date.now();
-    return () => {
-      if (watched.since !== null) watched.total += Date.now() - watched.since;
-      watched.since = null;
-    };
-  }, [playing]);
+    watched.run(Date.now());
+    return () => watched.halt(Date.now());
+  }, [playing, watched]);
   const stopFactsRef = useRef({ ready: false, ended: false, error: null as string | null, audio: null as number | null, rebuilds: 0 });
   useEffect(() => {
     stopFactsRef.current = { ready, ended, error, audio: currentAudio, rebuilds: rebuildCount };
@@ -1135,14 +1145,12 @@ export function ExperimentalPlayerHost({
     (why: "close" | "next" | "page" | "unmount" | "lost") => {
       const now = Date.now();
       const facts = stopFactsRef.current;
-      const watched = watchedRef.current;
-      const watchedMs = watched.total + (watched.since !== null ? now - watched.since : 0);
       return {
         ...describeFileRef.current(),
         path: pathRef.current ?? "non décidé",
         why,
         at: positionRef.current,
-        watched: Math.round(watchedMs / 1000),
+        watched: watched.seconds(now),
         ended: facts.ended,
         rebuild: facts.rebuilds,
         ...(facts.audio !== null ? { audio: facts.audio } : {}),
@@ -1154,7 +1162,7 @@ export function ExperimentalPlayerHost({
         ...syncFacts(remuxRef.current, videoElRef.current ?? lastVideoElRef.current),
       };
     },
-    [tally]
+    [tally, watched]
   );
   const reportStop = useCallback(
     (why: "close" | "next" | "page" | "unmount") => {

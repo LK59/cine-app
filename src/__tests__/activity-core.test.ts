@@ -14,6 +14,7 @@ import { recordBeat, presenceOf, PRESENCE_TTL_MS, __testing as presence } from "
 import { buildSeances } from "@/lib/activity/seances";
 import { readRecords, readFullLine, __testing as reader, type LogRecord } from "@/lib/activity/logReader";
 
+const IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15E148 Safari/604.1";
 const rec = (fields: Record<string, unknown>, t: number): LogRecord => ({ ...fields, _file: "player.log", _line: 0, _t: t });
 
 describe("présence", () => {
@@ -88,6 +89,60 @@ describe("séances", () => {
     expect(s.fallbacks).toBe(0);
     expect(s.casts).toBe(1);
     expect(s.incidents).toHaveLength(0);
+  });
+
+  // Sarah, 24/09/2026 : 244eb2c8 (natif) puis 48f4a73f (serveur), deux séances et 0 s pour une
+  // demi-heure de film. Depuis le 25/09, le lecteur serveur poursuit la séance du natif.
+  it("un repli vers le lecteur serveur : une séance, les deux parts du temps regardé additionnées", () => {
+    const who = { session: "244eb2c8", user: "sarah", itemId: "m", title: "Materialists", agent: IPHONE_UA };
+    const [s, ...rest] = buildSeances([
+      rec({ ...who, kind: "start", path: "remux", rebuild: 0, openedInMs: 1800, video: "hevc" }, 1000),
+      rec({ ...who, kind: "fallback", path: "remux", reason: "moteur à bout de reconstructions", takeover: { resumeAt: 612 }, watched: 540 }, 600_000),
+      rec({ ...who, kind: "start", player: "serveur", cast: false, path: "serveur", reason: "transcodé par le serveur", at: 612 }, 603_000),
+      rec({ ...who, kind: "stop", player: "serveur", cast: false, path: "serveur", why: "close", at: 1900, watched: 1290 }, 1_900_000),
+    ]);
+    expect(rest).toHaveLength(0);
+    expect(s.player).toBe("serveur");
+    expect(s.openedMs).toBe(1800);
+    expect(s.fallbacks).toBe(1);
+    expect(s.watched).toBe(540 + 1290);
+    expect(s.stop?.watched).toBe(540 + 1290);
+  });
+
+  it("une diffusion vers la télé rendue au téléphone : la part du natif, puis celle de la télé", () => {
+    // Timéo, 24/09/2026 : une soirée de diffusion lue à 0 s. Le lecteur serveur est démonté à la fin
+    // de la diffusion sans `stop` : sa part voyage sur la ligne de fin de diffusion.
+    const who = { session: "61ac485e", user: "timeo", itemId: "e1", title: "Send Help", agent: IPHONE_UA };
+    const [s] = buildSeances([
+      rec({ ...who, kind: "start", path: "remux", rebuild: 0 }, 1000),
+      rec({ ...who, kind: "fallback", path: "remux", reason: "diffusion demandée", takeover: { resumeAt: 30, cast: true }, cast: true, watched: 30 }, 31_000),
+      rec({ ...who, kind: "start", player: "serveur", cast: true, path: "serveur" }, 33_000),
+      rec({ ...who, kind: "cast", player: "serveur", cast: true, reason: "diffusion établie" }, 40_000),
+      rec({ ...who, kind: "fallback", player: "serveur", cast: true, reason: "fin de diffusion (route sans fil perdue)", watched: 5400 }, 5_500_000),
+    ]);
+    expect(s.onTv).toBe(true);
+    expect(s.casts).toBe(2);
+    expect(s.fallbacks).toBe(0);
+    expect(s.stop).toBeNull();
+    expect(s.watched).toBe(5430);
+  });
+
+  it("un bilan remplacé ne compte pas deux fois la part d'avant le relais, et les lignes d'avant se lisent comme avant", () => {
+    const who = { session: "x1", user: "lucas", itemId: "t" };
+    const [s] = buildSeances([
+      rec({ ...who, kind: "fallback", reason: "source perdue", watched: 100 }, 1000),
+      rec({ ...who, kind: "stop", player: "serveur", why: "page", watched: 50 }, 2000),
+      rec({ ...who, kind: "stop", player: "serveur", why: "lost", watched: 80 }, 3000),
+    ]);
+    expect(s.watched).toBe(180);
+    // Avant le 25/09 : ni `watched` sur le repli, ni sur le `stop` du serveur.
+    const [old] = buildSeances([
+      rec({ session: "o1", user: "sarah", kind: "fallback", reason: "source perdue" }, 1000),
+      rec({ session: "o1", user: "sarah", kind: "stop", why: "close", watched: 42 }, 2000),
+    ]);
+    expect(old.watched).toBe(42);
+    const [none] = buildSeances([rec({ session: "o2", user: "sarah", kind: "start" }, 1000)]);
+    expect(none.watched).toBeNull();
   });
 
   it("ignore les lignes du banc d'essai", () => {

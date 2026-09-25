@@ -155,7 +155,7 @@ export async function listAccounts(now = Date.now()): Promise<AccountSummary[]> 
         alerts,
         week: {
           seances: mine.length,
-          watchedSeconds: mine.reduce((n, s) => n + (s.stop?.watched ?? 0), 0),
+          watchedSeconds: mine.reduce((n, s) => n + (s.watched ?? 0), 0),
           problems: mine.reduce((n, s) => n + problemsOf(s), 0),
         },
       };
@@ -235,7 +235,7 @@ export function weekSignals(now = Date.now()): WeekSignals {
     since,
     seances: seances.length,
     viewers: new Set(seances.map((s) => s.user.toLowerCase())).size,
-    watchedSeconds: sum((s) => s.stop?.watched ?? 0),
+    watchedSeconds: sum((s) => s.watched ?? 0),
     waits: sum((s) => s.stop?.waits ?? 0),
     waitedMs: sum((s) => s.stop?.waitedMs ?? 0),
     slowSeeks: sum((s) => s.slowSeeks),
@@ -374,9 +374,9 @@ export async function accountDetail(id: string, now = Date.now()) {
     historyDays: ACCOUNT_HISTORY_DAYS,
     stats: {
       seances: seances.length,
-      watchedSeconds: seances.reduce((n, s) => n + (s.stop?.watched ?? 0), 0),
+      watchedSeconds: seances.reduce((n, s) => n + (s.watched ?? 0), 0),
       weekSeances: week.length,
-      weekWatchedSeconds: week.reduce((n, s) => n + (s.stop?.watched ?? 0), 0),
+      weekWatchedSeconds: week.reduce((n, s) => n + (s.watched ?? 0), 0),
       problems: seances.reduce((n, s) => n + problemsOf(s), 0),
       devices: [...new Set(seances.map((s) => s.device).filter(Boolean))] as string[],
       firstSeen: seances.length ? seances[seances.length - 1].start : null,
@@ -462,7 +462,7 @@ export function qualityByDevice(seances: Seance[]): DeviceQuality[] {
     .map(([device, list]) => ({
       device,
       seances: list.length,
-      watchedSeconds: list.reduce((n, s) => n + (s.stop?.watched ?? 0), 0),
+      watchedSeconds: list.reduce((n, s) => n + (s.watched ?? 0), 0),
       openMs: median(list.map((s) => s.openedMs).filter((v): v is number => v !== null)),
       waits: list.reduce((n, s) => n + (s.stop?.waits ?? 0), 0),
       waitedMs: list.reduce((n, s) => n + (s.stop?.waitedMs ?? 0), 0),
@@ -496,11 +496,11 @@ export function habitsOf(seances: Seance[]): Habits {
     const d = new Date(s.start);
     // L'heure du serveur, qui est celle du foyer (TZ du conteneur).
     const day = (d.getDay() + 6) % 7;
-    heatmap[day][d.getHours()] += s.stop?.watched ?? 60;
+    heatmap[day][d.getHours()] += s.watched ?? 60;
     const key = workTitle(s.title);
     const t = titles.get(key) ?? { title: key, seances: 0, watchedSeconds: 0 };
     t.seances += 1;
-    t.watchedSeconds += s.stop?.watched ?? 0;
+    t.watchedSeconds += s.watched ?? 0;
     titles.set(key, t);
   }
   return {

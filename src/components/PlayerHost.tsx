@@ -27,7 +27,7 @@ import { useWakeLock } from "@/lib/useWakeLock";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { serverStartFields, serverFailureFields, castEstablishedFields, castEndedFields, serverStopFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
 import { castRouteActive } from "@/lib/castRoute";
-import { newPlayerSessionId } from "@/lib/playerSessionTally";
+import { WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
 import { noteWatching } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 
@@ -145,11 +145,23 @@ export function PlayerHost() {
   // function every time this component drew — and minimising the player draws it — which the
   // experimental player took for a reason to build its whole pipeline again.
   const itemId = session?.itemId;
+  /**
+   * La séance du journal que le lecteur serveur poursuit, quand il prend la main.
+   *
+   * Tenue à part du relais (`StableTakeover`) : un renoncement avant la première image n'en porte
+   * pas — sa position serait inventée —, et c'est pourtant le repli le plus courant. Un lecteur
+   * serveur ouvert directement n'en reçoit pas et crée la sienne. Même règle d'appartenance que le
+   * relais : comparée par identité à la lecture en cours, pour qu'une réouverture du même film ne
+   * se range pas dans la séance d'hier.
+   */
+  const [continued, setContinued] = useState<{ owner: unknown; id: string } | null>(null);
   // La séance est jointe au relais ici, et non par le lecteur natif : c'est ce niveau qui la
   // possède, et le relais ne doit valoir que pour elle — voir `StableTakeover.owner`.
   const handOver = useCallback(
-    (reason: string, resumeInto?: StableTakeover) => {
-      if (itemId) stepAside(itemId, reason, resumeInto ? { ...resumeInto, owner: session } : undefined);
+    (reason: string, resumeInto?: StableTakeover, sessionId?: string) => {
+      if (!itemId) return;
+      if (sessionId) setContinued({ owner: session, id: sessionId });
+      stepAside(itemId, reason, resumeInto ? { ...resumeInto, owner: session } : undefined);
     },
     [itemId, session, stepAside]
   );
@@ -233,6 +245,7 @@ export function PlayerHost() {
         mode={mode === "mini" ? "mini" : "full"}
         fallbackReason={fallbackReason}
         takeover={carried ?? takeover}
+        continuesSession={continued?.owner === session ? continued.id : undefined}
         onCastEnded={handCastBack}
       />
       {/* Shown over the stable player while it makes its own arrangements, and gone on its own.
@@ -267,6 +280,7 @@ function ActivePlayer({
   mode,
   fallbackReason,
   takeover,
+  continuesSession,
   onCastEnded,
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
@@ -275,6 +289,8 @@ function ActivePlayer({
   fallbackReason?: string | null;
   /** Where to resume and on which track, when the handover happened mid-playback. */
   takeover?: StableTakeover | null;
+  /** La séance du lecteur natif qui a passé la main, que ce lecteur poursuit dans le journal. */
+  continuesSession?: string;
   /** Appelé quand la diffusion s'arrête, avec la position où elle s'est arrêtée. */
   /** `paused` : la diffusion s'est arrêtée d'elle-même — voir `returnsPaused`. */
   onCastEnded?: (resumeAt: number, paused?: boolean) => void;
@@ -408,8 +424,9 @@ function ActivePlayer({
   // Ce que chaque ligne du journal de ce lecteur porte — voir `serverPlayerLog`. Tenu dans une
   // référence : `startPlayback` a des dépendances volontairement figées, et y lire `title` ou
   // `castSession` directement nommerait l'épisode d'avant.
-  // Une séance par titre ouvert : l'épisode suivant en commence une autre.
-  const [firstSession] = useState(newPlayerSessionId);
+  // Une séance par titre ouvert : l'épisode suivant en commence une autre. Un relais du lecteur
+  // natif poursuit la sienne — une séance, et non deux dont une à zéro seconde (24/09/2026).
+  const [firstSession] = useState(() => continuesSession ?? newPlayerSessionId());
   const logSession = useRef({ itemId, id: firstSession });
   const agent = typeof navigator === "undefined" ? undefined : navigator.userAgent;
   /**
@@ -431,6 +448,13 @@ function ActivePlayer({
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  // Le temps joué, porté par ses lignes `stop` et de fin de diffusion — voir `WatchedClock`.
+  const [watched] = useState(() => new WatchedClock());
+  useEffect(() => {
+    if (!playing) return;
+    watched.run(Date.now());
+    return () => watched.halt(Date.now());
+  }, [playing, watched]);
   // Tant que ça joue, l'écran reste allumé — voir useWakeLock pour ce que chaque chemin
   // obtient déjà tout seul et ce qu'il n'obtient pas.
   useWakeLock(playing);
@@ -454,10 +478,10 @@ function ActivePlayer({
   // close/unmount fade since the player stays open for the new episode.
   const handleAdvance = useCallback(() => {
     if (!nextEpisode) return;
-    reportPlayback("stop", serverStopFields(logContext.current, "next", lastKnownTime.current));
+    reportPlayback("stop", serverStopFields(logContext.current, "next", lastKnownTime.current, watched.take(Date.now())));
     stopPlaybackNow();
     playback.advance(nextEpisode);
-  }, [nextEpisode, playback, stopPlaybackNow]);
+  }, [nextEpisode, playback, stopPlaybackNow, watched]);
 
   // Fades out instead of vanishing instantly — an abrupt unmount back to the
   // underlying page reads as a glitch, especially mid-transcode. Reports the
@@ -467,7 +491,7 @@ function ActivePlayer({
   const CLOSE_MS = 200;
   const handleClose = useCallback(() => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    reportPlayback("stop", serverStopFields(logContext.current, "close", lastKnownTime.current));
+    reportPlayback("stop", serverStopFields(logContext.current, "close", lastKnownTime.current, watched.take(Date.now())));
     const reported = stopPlaybackNow();
     setClosing(true);
     // Cette lecture-ci seulement : voir `close(openId)`.
@@ -477,7 +501,7 @@ function ActivePlayer({
     // où on le quitte, et rien ne les relisait. Volontairement hors du chemin de la fermeture —
     // l'écran doit partir tout de suite, la relecture peut attendre son tour.
     void refreshAfterPlayback(reported, itemId);
-  }, [playback, stopPlaybackNow, itemId, session.openId]);
+  }, [playback, stopPlaybackNow, itemId, session.openId, watched]);
 
   // (Re)starts playback, optionally at a specific audio track / resume point.
   // Jellyfin only ever transcodes ONE audio stream into the HLS output (unlike
@@ -1147,7 +1171,9 @@ function ActivePlayer({
     const ended = (source: string) => {
       // Avec la séance et la marque de diffusion : sans elles, la ligne se rangeait dans une séance
       // « reconstituée » et comptait comme un repli raté sur la page Activité (24/09/2026).
-      reportPlayback("fallback", castEndedFields(logContext.current, source, video.currentTime || 0));
+      // Avec le temps joué jusque-là, pris et remis à zéro : le lecteur est démonté juste après s'il
+      // avait été ouvert pour diffuser, et sinon son `stop` ne comptera que la suite.
+      reportPlayback("fallback", castEndedFields(logContext.current, source, video.currentTime || 0, watched.take(Date.now())));
       // En pause : la route est tombée sans que personne ne demande à continuer sur le téléphone.
       if (castSession) onCastEnded?.(castHandBackPosition(video.currentTime, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt), true);
     };
@@ -1188,7 +1214,7 @@ function ActivePlayer({
     // Les lignes du journal se nomment par `logContext`, lu au moment d'écrire : ni le titre ni
     // l'épisode ne sont des dépendances, et un changement d'épisode ne réarme pas les écouteurs —
     // ce qui perdrait la route en cours.
-  }, [castSession, onCastEnded, videoKey]);
+  }, [castSession, onCastEnded, videoKey, watched]);
 
   // Ends playback entirely (not just minimize) when the video finishes — same in both modes.
   //

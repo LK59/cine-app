@@ -205,7 +205,7 @@ export function SeanceFlags({ s }: { s: Seance }) {
 /** Une séance en une ligne, qui mène à sa chronologie. */
 export function SeanceRow({ s, now, showUser = false }: { s: Seance; now: number; showUser?: boolean }) {
   const t = useT();
-  const watched = s.stop?.watched;
+  const watched = s.watched;
   return (
     <ActivityLink
       to={{ kind: "seance", id: s.id }}

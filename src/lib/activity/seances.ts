@@ -27,7 +27,18 @@ export interface Seance {
   video: string | null;
   range: string | null;
   container: string | null;
-  /** Le bilan, quand il est arrivé. */
+  /**
+   * Le temps regardé sur toute la séance, en secondes — null quand aucune ligne n'en dit rien.
+   *
+   * La somme de ce que chaque lecteur a joué : le lecteur natif le dit sur son `fallback` quand il
+   * passe la main (sa ligne `stop` ne partira pas), le lecteur serveur sur sa fin de diffusion et
+   * sur son `stop`, chacun pour sa part seulement. Depuis le 25/09/2026, le lecteur serveur
+   * poursuit la séance du lecteur natif au lieu d'en ouvrir une : un repli se lisait en deux
+   * séances, dont celle qui avait joué à zéro seconde regardée (24/09/2026). Les lignes d'avant
+   * n'ont pas ces champs, et se lisent comme avant.
+   */
+  watched: number | null;
+  /** Le bilan, quand il est arrivé. `stop.watched` y est la somme de la séance, comme `watched`. */
   stop: {
     why: string | null;
     watched: number | null;
@@ -110,6 +121,7 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     video: str(r.video),
     range: str(r.range),
     container: str(r.container),
+    watched: null,
     stop: null,
     seeks: 0,
     slowSeeks: 0,
@@ -175,6 +187,8 @@ function absorb(s: Seance, r: LogRecord): void {
       s.incidents.push({ kind: "stall", t: r._t, reason: `${num(r.position)?.toFixed(0) ?? "?"} s` });
       break;
     case "fallback":
+      // La part du lecteur qui passe la main — voir `watched`.
+      addWatched(s, num(r.watched));
       if (isCast(r, reason)) {
         s.casts += 1;
         break;
@@ -191,7 +205,9 @@ function absorb(s: Seance, r: LogRecord): void {
       break;
     case "stop":
       // La dernière ligne de bilan l'emporte : une séance perdue par iOS est renvoyée au lancement
-      // suivant (`why: "lost"`), après la ligne qu'elle remplace.
+      // suivant (`why: "lost"`), après la ligne qu'elle remplace. Son `watched` n'est que la part
+      // du dernier lecteur : la somme se fait à la fin (`finish`), pour qu'un bilan remplacé ne
+      // compte pas deux fois.
       s.stop = {
         why: str(r.why),
         watched: num(r.watched),
@@ -207,6 +223,23 @@ function absorb(s: Seance, r: LogRecord): void {
       };
       break;
   }
+}
+
+/** Le temps joué avant un relais, cumulé à part jusqu'à `finish`. */
+const handedWatched = new WeakMap<Seance, number>();
+
+function addWatched(s: Seance, seconds: number | null): void {
+  if (seconds === null || seconds < 0) return;
+  handedWatched.set(s, (handedWatched.get(s) ?? 0) + seconds);
+}
+
+/** Le temps regardé de la séance : les parts des relais, plus celle du dernier bilan. */
+function finish(s: Seance): Seance {
+  const handed = handedWatched.get(s) ?? null;
+  const own = s.stop?.watched ?? null;
+  s.watched = handed === null && own === null ? null : (handed ?? 0) + (own ?? 0);
+  if (s.stop) s.stop.watched = s.watched;
+  return s;
 }
 
 /** Les séances d'un journal du lecteur, les plus récentes d'abord. */
@@ -234,5 +267,5 @@ export function buildSeances(records: LogRecord[]): Seance[] {
     }
     absorb(s, r);
   }
-  return [...byId.values()].sort((a, b) => b.start - a.start);
+  return [...byId.values()].map(finish).sort((a, b) => b.start - a.start);
 }

@@ -172,3 +172,43 @@ export function newPlayerSessionId(): string {
   }
   return Math.random().toString(36).slice(2, 10);
 }
+
+/**
+ * Le temps passé à jouer, pas l'écart entre la position d'arrivée et celle de départ : un saut de
+ * quarante minutes n'est pas quarante minutes regardées.
+ *
+ * Partagé par les deux lecteurs. Le lecteur serveur n'en tenait aucun : son `stop` ne portait que
+ * sa position, si bien qu'une séance passée par lui — repli ou diffusion vers la télé — se lisait à
+ * zéro seconde regardée sur la page Activité (24/09/2026).
+ */
+export class WatchedClock {
+  private total = 0;
+  private since: number | null = null;
+
+  run(now: number): void {
+    if (this.since === null) this.since = now;
+  }
+
+  halt(now: number): void {
+    if (this.since === null) return;
+    this.total += Math.max(0, now - this.since);
+    this.since = null;
+  }
+
+  /** En secondes, arrondi — l'unité de la ligne `stop`. */
+  seconds(now: number): number {
+    return Math.round((this.total + (this.since !== null ? Math.max(0, now - this.since) : 0)) / 1000);
+  }
+
+  /**
+   * Lire et repartir de zéro : chaque ligne qui porte `watched` rend compte de sa part seulement,
+   * et la séance en fait la somme (`seances.ts`). Une diffusion rendue puis un arrêt ne comptent
+   * pas deux fois le même film.
+   */
+  take(now: number): number {
+    const seconds = this.seconds(now);
+    this.total = 0;
+    if (this.since !== null) this.since = now;
+    return seconds;
+  }
+}

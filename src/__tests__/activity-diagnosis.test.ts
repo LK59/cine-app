@@ -105,6 +105,25 @@ describe("relus le 24/09/2026 au soir", () => {
     expect(diagnoseTitles(seances)).toEqual([]);
   });
 
+  // 25/09/2026 : le lecteur serveur poursuit la séance du natif. Le témoin qui échoue reste un
+  // témoin qui échoue, et le verdict ne bouge pas — seul son nombre de séances n'est plus doublé.
+  it("un repli poursuivi par le lecteur serveur reste une séance en échec, et le verdict ne change pas", () => {
+    const records = [
+      ...seance("a", "x", IPHONE, false, [
+        { kind: "fallback", reason: "moteur à bout de reconstructions", watched: 300 },
+        { kind: "start", player: "serveur", path: "serveur" },
+        { kind: "stop", player: "serveur", why: "close", watched: 1200 },
+      ]),
+      ...seance("b", "x", MAC, false),
+    ];
+    const seances = buildSeances(records);
+    expect(seances).toHaveLength(2);
+    const [d] = diagnoseTitles(seances);
+    expect(d.verdict).toEqual({ kind: "device", user: "a", device: "iPhone · Safari", everywhere: false });
+    expect(d.viewers.find((v) => v.user === "a")).toMatchObject({ seances: 1, failed: 1 });
+    expect(seances.find((s) => s.user === "a")?.watched).toBe(1500);
+  });
+
   it("une relance du lecteur serveur n'ouvre pas une nouvelle séance", () => {
     const base = { user: "a", itemId: "x", title: "Titre", player: "serveur", _file: "player.log" };
     const lines = [
