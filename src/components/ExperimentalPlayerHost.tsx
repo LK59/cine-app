@@ -1195,6 +1195,10 @@ export function ExperimentalPlayerHost({
       if (document.visibilityState === "hidden") {
         tally.hidden(Date.now());
         hiddenAtRef.current = Date.now();
+        // Un maintien d'un retour précédent n'a plus rien à dire : sans relance entre-temps, rien ne
+        // l'effaçait, et une source fermée au départ suivant rouvrait à sa vieille position — seize
+        // minutes en arrière après un glissement de la barre en pause (chasse aux défauts du 25/09/2026).
+        holdOnReturnRef.current = null;
         // Une pause qui précède le départ de moins d'une seconde peut être celle d'iOS lui-même :
         // la même règle que `restart`. Seule une pause plus ancienne est celle du spectateur.
         const pausedAt = viewerPausedAtRef.current;
@@ -1215,7 +1219,9 @@ export function ExperimentalPlayerHost({
           before &&
           holdPausedOnReturn({ awayMs: away, playingWhenHidden: before.playing, positionWhenHidden: before.at, positionOnReturn: element.currentTime })
         ) {
-          const at = rewoundPosition(element.currentTime);
+          // Une source que iOS a fermée peut laisser l'élément à zéro : la position au départ vaut
+          // mieux qu'une reprise au début du film.
+          const at = rewoundPosition(element.currentTime > 0 ? element.currentTime : before.at);
           holdOnReturnRef.current = { until: Date.now() + 2500, at, since: Date.now() };
           trace(`retour après ${(away / 1000).toFixed(1)} s : lecture laissée en pause, reprise à ${at.toFixed(1)} s`);
           try {

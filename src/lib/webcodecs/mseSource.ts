@@ -196,6 +196,13 @@ const KEEP_BEHIND_SECONDS = 30;
  */
 const TRIM_SLACK_SECONDS = 2;
 
+/**
+ * Ce qu'un retrait derrière la tête laisse avant l'image clé de son groupe : les instants du tampon
+ * sont arrondis à l'échelle de temps du fMP4, et une clé lue un rien plus tôt que l'index ferait
+ * partir le groupe entier.
+ */
+const KEYFRAME_TRIM_MARGIN = 0.05;
+
 export interface MseCallbacks {
   /**
    * Fatal: playback cannot continue on this path. The caller decides what to say and offer.
@@ -1186,7 +1193,7 @@ export class MseSource {
   private trimBehind(): void {
     const budget = this.budget;
     if (!budget || this.seekState.pending || this.video.seeking) return;
-    const until = this.video.currentTime - budget.behindSeconds;
+    const until = this.behindLimit(this.video.currentTime - budget.behindSeconds, 0);
     if (until <= 0) return;
     for (const queue of [this.videoOps, this.audioOps]) {
       const buffer = queue?.buffer;
@@ -1236,8 +1243,34 @@ export class MseSource {
     }
   }
 
+  /**
+   * Jusqu'où retirer derrière la tête sans lui retirer son image.
+   *
+   * La norme MSE prolonge un `remove(0, until)` jusqu'à l'image clé qui suit `until` : si la tête
+   * est dans le même groupe d'images, tout ce groupe part avec, l'image sous la tête comprise —
+   * `buffered` passait de 0–30 à 20–30 pour un retrait jusqu'à 11,5 s, tête à 16 s, dans Chromium,
+   * Firefox et WebKit (banc du 25/09/2026). Avec des groupes de 28 s (*Ford v Ferrari*) ou 52 s
+   * (*1917*) et un budget de quelques secondes derrière, chaque envoi recoupait le groupe en cours :
+   * arrêts, relectures, puis saut à l'image clé suivante. Le retrait s'arrête donc un peu avant
+   * l'image clé qui ouvre le groupe de la tête ; l'image clé suivante de `until` est alors celle-là.
+   * Sans index, on ne sait pas où elle est : `unknown`.
+   */
+  private behindLimit(until: number, unknown: number): number {
+    if (until <= 0) return until;
+    try {
+      if (!this.remuxer.seekable) return unknown;
+      const file = this.remuxer.keyframeAtOrBefore(Math.max(0, this.video.currentTime - this.delaySeconds));
+      if (file === null) return 0;
+      return Math.min(until, file + this.delaySeconds - KEYFRAME_TRIM_MARGIN);
+    } catch {
+      return unknown;
+    }
+  }
+
   private evict(): void {
-    const until = this.video.currentTime - (this.budget?.behindSeconds ?? KEEP_BEHIND_SECONDS);
+    // Sans index, le plafond est atteint quand même : on retire comme avant, faute de mieux.
+    const wanted = this.video.currentTime - (this.budget?.behindSeconds ?? KEEP_BEHIND_SECONDS);
+    const until = this.behindLimit(wanted, wanted);
     // Traced either way, including when there is nothing to free: whether this ever happens on a
     // real device was, until now, unknowable from the record.
     trace(`éviction demandée à ${this.video.currentTime.toFixed(1)} s — ${until <= 0 ? "rien derrière la tête" : `jusqu'à ${until.toFixed(1)} s`}`);

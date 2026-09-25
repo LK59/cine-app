@@ -14,7 +14,7 @@ import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./subtitleMarkup";
 import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, isRaslPicture, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample, TrackColour } from "./matroska";
-import { clusterOffsetForTime, cueTimeAfter } from "./matroska";
+import { clusterOffsetForTime, cueTimeAfter, cueTimeAtOrBefore } from "./matroska";
 import { isReadAbandoned, type NetworkWindow } from "./byteSource";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
@@ -771,6 +771,12 @@ export class Remuxer {
    */
   keyframeAfter(seconds: number): number | null {
     const us = cueTimeAfter(this.file, Math.round(seconds * 1e6), this.videoTrack.number);
+    return us === null ? null : us / 1e6;
+  }
+
+  /** L'image clé indexée à cet instant ou avant, sur l'horloge du fichier, ou null. */
+  keyframeAtOrBefore(seconds: number): number | null {
+    const us = cueTimeAtOrBefore(this.file, Math.round(seconds * 1e6), this.videoTrack.number);
     return us === null ? null : us / 1e6;
   }
 

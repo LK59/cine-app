@@ -313,6 +313,8 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0)
     seeks,
     seekable,
     plan: () => PLAN,
+    // Une image clé toutes les deux secondes, comme les segments.
+    keyframeAtOrBefore: (s: number) => Math.floor(s / 2) * 2,
     diagnostics: () => ({ presentationDelaySeconds: delay, clampedSamples: 0 }),
     seekTo: (s: number) => {
       seeks.push(s);
@@ -671,6 +673,26 @@ describe("MseSource", () => {
       videoBuffer.setBuffered(0, 36);
       video.dispatchEvent(new Event("timeupdate"));
       await until(() => videoBuffer.removed.some(([s, e]) => s === 0 && e > 15 && e < 30), "un retrait derrière la tête");
+    });
+
+    it("ne retire jamais le groupe d'images où se trouve la tête", async () => {
+      // La norme MSE prolonge un retrait jusqu'à l'image clé suivante : avec un groupe de 28 s
+      // ouvert à 10 s et la tête à 30 s, un retrait jusqu'à 30 − budget emportait l'image sous la
+      // tête (banc du 25/09/2026). Il doit s'arrêter avant 10 s.
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue(IPAD);
+      Object.defineProperty(navigator, "maxTouchPoints", { value: 5, configurable: true });
+      const video = fakeVideo();
+      const remuxer = Object.assign(heavyRemuxer(200), { keyframeAtOrBefore: (s: number) => (s >= 10 && s < 38 ? 10 : Math.floor(s / 2) * 2) });
+      await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) > 12, "du média chargé");
+      const [videoBuffer] = FakeSource.instances[0].buffers;
+      (video as unknown as { currentTime: number }).currentTime = 30;
+      videoBuffer.setBuffered(0, 36);
+      video.dispatchEvent(new Event("timeupdate"));
+      await until(() => videoBuffer.removed.some(([s]) => s === 0), "un retrait derrière la tête");
+      const ends = videoBuffer.removed.filter(([s]) => s === 0).map(([, e]) => e);
+      // Délai de présentation de 0,2 s : l'image clé est à 10,2 s sur l'horloge du lecteur.
+      for (const end of ends) expect(end).toBeLessThanOrEqual(10.2);
     });
 
     it("sur Chrome, borne aussi l'avance à ses 150 Mio", async () => {
