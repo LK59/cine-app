@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { PosterImage } from "@/components/PosterImage";
-import { FAST_REVEAL_MS, noteWarmed } from "@/lib/imageReveal";
+import { FAST_REVEAL_MS, READY_REVEAL, noteWarmed } from "@/lib/imageReveal";
 
 /**
  * Le fondu d'arrivée réservé aux vraies arrivées (25/09/2026) : les affiches déjà là —
@@ -35,9 +35,9 @@ async function loaded(img: HTMLImageElement) {
 }
 
 describe("l'apparition d'une affiche", () => {
-  it("sans fondu quand le navigateur l'a obtenue en un instant", async () => {
+  it("un fondu court quand le navigateur l'a obtenue en un instant", async () => {
     fetchedIn(12);
-    expect(await loaded(mount("/api/jellyfin/image/a"))).toBe("none");
+    expect(await loaded(mount("/api/jellyfin/image/a"))).toBe(READY_REVEAL);
   });
 
   it("en fondu quand elle est vraiment arrivée par le réseau", async () => {
@@ -45,11 +45,11 @@ describe("l'apparition d'une affiche", () => {
     expect(await loaded(mount("/api/jellyfin/image/b"))).toBe("");
   });
 
-  it("sans fondu quand le décodage anticipé l'avait chauffée", async () => {
+  it("un fondu court quand le décodage anticipé l'avait chauffée", async () => {
     fetchedIn(FAST_REVEAL_MS * 4);
     const img = mount("/api/jellyfin/image/c");
     noteWarmed(img.src);
-    expect(await loaded(img)).toBe("none");
+    expect(await loaded(img)).toBe(READY_REVEAL);
   });
 
   it("faute de mesure, jugée sur le temps écoulé depuis son montage", async () => {
@@ -58,7 +58,7 @@ describe("l'apparition d'une affiche", () => {
     vi.spyOn(performance, "now").mockImplementation(() => t);
     const vite = mount("/api/jellyfin/image/d");
     t += 20;
-    expect(await loaded(vite)).toBe("none");
+    expect(await loaded(vite)).toBe(READY_REVEAL);
     cleanup();
 
     const lente = mount("/api/jellyfin/image/e");
