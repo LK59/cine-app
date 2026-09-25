@@ -2,7 +2,6 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { revealNavigation } from "@/lib/useHideOnScroll";
-import { suppressRise } from "@/lib/riseIn";
 
 /**
  * Films ↔ Séries sans reconstruction (25/09/2026).
@@ -94,11 +93,8 @@ export function useTabScrollMemory(ref: RefObject<HTMLElement | null>, active: C
     const switched = current.current !== active;
     current.current = active;
     // Un changement d'onglet : la barre du bas revient, quelle que soit la hauteur de l'onglet
-    // d'arrivée, et les cartes du volet qui apparaît d'un coup s'affichent sans monter.
-    if (switched) {
-      revealNavigation();
-      suppressRise();
-    }
+    // d'arrivée.
+    if (switched) revealNavigation();
     const el = ref.current;
     if (!el) return;
     const top = positions.current[active] ?? 0;

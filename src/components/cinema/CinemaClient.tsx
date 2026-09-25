@@ -72,7 +72,6 @@ import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/disc
 import { prefetchImages, prefetchInChunks, warmUpUrls } from "@/lib/cinemaWarmup";
 import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
 import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
-import { useRiseIn } from "@/lib/riseIn";
 import { useFreshPersonalLists } from "@/lib/freshLists";
 import { heroInfoKey, preloadHeroInfo } from "@/lib/useHeroInfo";
 import { ProgressFill } from "@/components/cinema/ProgressFill";
@@ -708,8 +707,6 @@ export function CinemaClient() {
   // catalogue est déjà là quand la remise en place a lieu — d'où un bug qui ne se voyait que
   // dans un sens.
   useTabScrollMemory(rowsPaneRef, mediaType, catalogueReady);
-  // Les cartes montent rejoindre leur rangée en entrant dans l'écran — voir `riseIn.ts`.
-  useRiseIn(rowsPaneRef);
 
   /** Le film de la bibliothèque désigné par un lien de reprise, s'il y est. */
   const matchRadarr = useCallback(

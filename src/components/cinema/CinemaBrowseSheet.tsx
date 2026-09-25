@@ -6,7 +6,6 @@ import { PlayerPanelFrame } from "@/components/player/PlayerPanelFrame";
 import { PlayerResultCard } from "@/components/player/PlayerResultCard";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { useDecodeAhead } from "@/lib/useDecodeAhead";
-import { useRiseIn } from "@/lib/riseIn";
 import { genreLabel } from "@/lib/top10Label";
 import {
   browseTitles,
@@ -71,8 +70,6 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
   // défilement qui saccadait, et non la grille elle-même. Voir `useDecodeAhead`.
   const gridRef = useRef<HTMLDivElement>(null);
   useDecodeAhead(gridRef, shown);
-  // Les cartes de la grille montent à leur place en entrant dans l'écran — voir `riseIn.ts`.
-  useRiseIn(gridRef, ":scope > *");
 
   // Le genre traduit, comme la rangée d'où l'on vient : « Comédie » sur l'accueil puis « Comedy »
   // ici, c'étaient deux noms pour la même chose à un appui d'intervalle.

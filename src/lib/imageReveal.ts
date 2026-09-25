@@ -96,9 +96,10 @@ export function arrivedReady(img: HTMLImageElement): boolean {
 /**
  * Une image déjà prête s'affiche sans fondu ; seule une vraie arrivée réseau en garde un.
  *
- * Essayé le 25/09/2026 : un fondu de 180 ms sur les affiches prêtes donnait l'impression d'une
- * attente (« un effet plus lent encore »). Le mouvement est porté par la carte, qui monte à sa
- * place en entrant dans l'écran — voir `riseIn.ts`.
+ * Deux essais écartés le 25/09/2026 : un fondu de 180 ms sur les affiches prêtes donnait
+ * l'impression d'une attente (« un effet plus lent encore »), et une carte qui montait à sa place
+ * en entrant dans l'écran, avec un léger rebond, « c'était mieux sans ». Les affiches prêtes
+ * s'affichent donc telles quelles.
  */
 export const READY_REVEAL = "none";
 
