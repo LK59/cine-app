@@ -198,3 +198,17 @@ export async function refreshAfterPlayback(reported: Promise<void>, itemId: stri
   if (!(await whenScreenIsFree())) return;
   await revalidateWatchState(itemId);
 }
+
+/**
+ * Rien à montrer tant que ça charge — et seulement dans ce cas.
+ *
+ * `isLoading` de SWR reste vrai tant que la *première* requête d'une clé n'a pas répondu, même si
+ * une donnée est déjà là entre-temps. Depuis le catalogue gardé sur l'appareil (25/09/2026), c'est
+ * le cas ordinaire au lancement : la donnée de la dernière visite est posée pendant que la requête
+ * court, et l'écran du bureau restait sur ses squelettes jusqu'à la réponse réseau, catalogue en
+ * main. Une seule règle pour tous les écrans qui attendent leur liste.
+ */
+export function nothingToShowYet(isLoading: boolean, data: unknown): boolean {
+  return isLoading && data === undefined;
+}
+

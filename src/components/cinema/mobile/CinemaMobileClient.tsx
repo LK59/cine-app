@@ -9,7 +9,7 @@ import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { heroOffscreen } from "@/lib/heroCarousel";
-import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
@@ -430,7 +430,7 @@ export function CinemaMobileClient() {
 
   if (typeof document === "undefined") return null;
 
-  const loading = moviesLoading || (isSeries && seriesLoading && !series);
+  const loading = nothingToShowYet(moviesLoading, movies) || (isSeries && nothingToShowYet(seriesLoading, series));
 
   // app-viewport instead of inset-0's implicit height: in an installed PWA that resolves to the
   // real screen, where the viewport iOS lays the app out in at first is short — see the note in

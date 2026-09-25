@@ -667,3 +667,24 @@ describe("une seule bannière face aux données fraîches", () => {
     expect(code("src/components/cinema/mobile/CinemaMobileClient.tsx")).toMatch(/heroOffscreen\(/);
   });
 });
+
+describe("un seul « rien à montrer tant que ça charge »", () => {
+  /**
+   * 25/09/2026 : le catalogue de la dernière visite était posé pendant que la requête courait, et le
+   * bureau restait sur ses squelettes jusqu'à la réponse réseau — il lisait `isLoading` seul, que
+   * SWR garde vrai tant que la première requête n'a pas répondu, donnée présente ou non.
+   */
+  it.each([
+    "src/components/cinema/CinemaClient.tsx",
+    "src/components/cinema/mobile/CinemaMobileClient.tsx",
+    "src/components/player/PlayerListPanel.tsx",
+  ])("%s attend par nothingToShowYet", (f) => {
+    const code = lire(f)
+      .split("\n")
+      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+      .join("\n");
+    expect(code).toMatch(/nothingToShowYet\(/);
+    // Un indicateur de chargement lu seul, sans la donnée, ne doit pas revenir.
+    expect(code).not.toMatch(/if \((movies|series)Loading\)|\{(movies|series)Loading && \(/);
+  });
+});

@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Play, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
@@ -832,7 +832,7 @@ export function CinemaClient() {
   // fully populated in the DOM (title, backdrop, rows all present, confirmed via outerHTML) but
   // invisible. Portaling straight to document.body — same escape hatch already used by
   // Modal/TrailerModal/PlayerHost/ActionSheet — sidesteps the containing-block issue entirely.
-  if (moviesLoading) {
+  if (nothingToShowYet(moviesLoading, movies)) {
     // A skeleton in the shape of the real screen, not a centred spinner: the layout it resolves
     // into is already on screen, so the load reads as content filling in rather than a blank
     // screen swapping for a full one.
@@ -1265,7 +1265,7 @@ export function CinemaClient() {
               {continueSkeleton}
               {continueRow}
 
-              {seriesLoading && (
+              {nothingToShowYet(seriesLoading, series) && (
                 <div className="flex justify-center pt-12">
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
                 </div>

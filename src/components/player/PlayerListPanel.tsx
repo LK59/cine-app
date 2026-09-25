@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { fetcher } from "@/lib/swr";
+import { fetcher, nothingToShowYet } from "@/lib/swr";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { Search, Plus, Bookmark, Inbox, Eye, CloudOff } from "lucide-react";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
@@ -272,13 +272,13 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
           <p className="mt-5 text-sm text-muted">{t("player.lists.watchedHint")}</p>
         )}
 
-        {isLoading && (
+        {nothingToShowYet(isLoading, data) && (
           <div className="mt-12 flex justify-center">
             <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-white" />
           </div>
         )}
 
-        {unreadable && !isLoading && (
+        {unreadable && !nothingToShowYet(isLoading, data) && (
           <PlayerEmptyState
             icon={CloudOff}
             message={t("player.lists.failed")}
@@ -286,7 +286,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
           />
         )}
 
-        {!isLoading && !unreadable && counts[segment] === 0 && (
+        {!nothingToShowYet(isLoading, data) && !unreadable && counts[segment] === 0 && (
           <PlayerEmptyState
             icon={EMPTY_ICON[segment]}
             message={t(`player.lists.empty.${segment}`)}
