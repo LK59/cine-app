@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   ByteRate,
+  CHROMIUM_ANDROID,
+  CHROMIUM_DESKTOP,
   WEBKIT_MAC_SOURCE_BUFFER_BYTES,
   WEBKIT_MOBILE_SOURCE_BUFFER_BYTES,
   laneBudget,
@@ -18,19 +20,53 @@ describe("le plafond d'un SourceBuffer", () => {
   // 304 Mo sur macOS — et non 304 Mo partout, qui est la valeur des WebKit hors Apple.
   it("vaut 105 Mo sur iPhone, et sur un iPad même quand il se dit Mac", () => {
     expect(sourceBufferQuota(IPHONE)?.video).toBe(WEBKIT_MOBILE_SOURCE_BUFFER_BYTES);
-    expect(sourceBufferQuota(IPAD, 5)?.video).toBe(WEBKIT_MOBILE_SOURCE_BUFFER_BYTES);
+    expect(sourceBufferQuota(IPAD, { maxTouchPoints: 5 })?.video).toBe(WEBKIT_MOBILE_SOURCE_BUFFER_BYTES);
   });
 
   it("vaut 304 Mo sur un vrai Mac", () => {
-    expect(sourceBufferQuota(IPAD, 0)?.video).toBe(WEBKIT_MAC_SOURCE_BUFFER_BYTES);
+    expect(sourceBufferQuota(IPAD, { maxTouchPoints: 0 })?.video).toBe(WEBKIT_MAC_SOURCE_BUFFER_BYTES);
   });
 
   it("ne donne au tampon sans image que 5 %", () => {
     expect(sourceBufferQuota(IPHONE)?.audio).toBe(Math.floor(WEBKIT_MOBILE_SOURCE_BUFFER_BYTES * 0.05));
   });
 
-  it("n'invente rien ailleurs que sur WebKit", () => {
-    expect(sourceBufferQuota(CHROME)).toBeNull();
+});
+
+describe("le plafond de Chromium", () => {
+  // media/base/demuxer_memory_limit_default.cc et _android.cc, relus le 25/09/2026.
+  const EDGE = CHROME + " Edg/152.0.0.0";
+  const OPERA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 OPR/135.0.0.0";
+  const ANDROID = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36";
+  const CHROME_IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0.6478.108 Mobile/15E148 Safari/604.1";
+
+  it.each([["Chrome", CHROME], ["Edge", EDGE], ["Opera", OPERA]])("%s sur ordinateur : 150 Mio d'image, 12 de son", (_n, ua) => {
+    expect(sourceBufferQuota(ua)).toEqual({ engine: "Chromium", ...CHROMIUM_DESKTOP });
+    expect(CHROMIUM_DESKTOP).toEqual({ video: 157_286_400, audio: 12_582_912 });
+  });
+
+  it.each([
+    [8, CHROMIUM_ANDROID.default],
+    [4, CHROMIUM_ANDROID.medium],
+    [2, CHROMIUM_ANDROID.medium],
+    [1, CHROMIUM_ANDROID.low],
+    [0.5, CHROMIUM_ANDROID.veryLow],
+  ])("Android avec %s Go annoncés : le palier le plus bas que ça autorise", (memory, tier) => {
+    expect(sourceBufferQuota(ANDROID, { deviceMemory: memory })).toEqual({ engine: "Chromium Android", ...tier });
+  });
+
+  it("Android sans mémoire annoncée : le palier du milieu", () => {
+    expect(sourceBufferQuota(ANDROID)).toEqual({ engine: "Chromium Android", ...CHROMIUM_ANDROID.medium });
+  });
+
+  it("Chrome sur iPhone est WebKit, et en prend les chiffres", () => {
+    expect(sourceBufferQuota(CHROME_IOS)?.engine).toBe("WebKit mobile");
+  });
+});
+
+describe("un moteur qu'on ne connaît pas", () => {
+  it("garde le comportement d'avant", () => {
+    expect(sourceBufferQuota("Mozilla/5.0 (X11; Linux x86_64; rv:154.0) Gecko/20100101 Firefox/154.0")).toBeNull();
   });
 });
 

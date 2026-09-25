@@ -18,8 +18,11 @@ import { isWebKitEngine } from "@/lib/webkitEngine";
  * Le budget se mesure donc en octets : une part du plafond pour l'avance, une part pour ce qu'on
  * garde derrière, le reste en marge pour les envois en vol — et le débit est celui qu'on envoie
  * réellement, segment par segment, pas une moyenne du fichier : une scène d'action pèse deux fois
- * un dialogue. Ailleurs que sur WebKit, rien ne change ici : les plafonds de Chrome et de Firefox
- * sont d'autres chiffres, à traiter à part.
+ * un dialogue.
+ *
+ * Chaque moteur a ses chiffres, lus dans ses sources et non dans une page qui les résume — la
+ * valeur de 304 Mo « pour Safari » qu'on trouve partout est celle des WebKit hors Apple. Un moteur
+ * qu'on ne reconnaît pas garde le comportement d'avant : trente secondes, et son éviction à lui.
  */
 
 /** `defaultMaximumSourceBufferSize`, iOS et iPadOS. */
@@ -40,25 +43,81 @@ const USABLE_SHARE = 0.85;
 /** Ce qu'on garde derrière au moins, quand le plafond le permet : un petit pas en arrière sans relire. */
 const MIN_BEHIND_SECONDS = 6;
 
+/**
+ * Chromium, ordinateur (`media/base/demuxer_memory_limit_default.cc`, lu le 25/09/2026) : 150 Mio
+ * d'image, 12 Mio de son, par piste. Le palier « appareil modeste » (30 / 2 Mio) n'y est pris
+ * qu'avec un drapeau de ligne de commande : on ne le suppose pas.
+ */
+export const CHROMIUM_DESKTOP = { video: 150 * 1024 * 1024, audio: 12 * 1024 * 1024 };
+
+/**
+ * Chromium, Android (`demuxer_memory_limit_android.cc`) : quatre paliers selon la mémoire de
+ * l'appareil — par défaut 150 / 12, « mode modeste partiel » (3 Go, ou 4 à 6 Go selon une
+ * expérience) 80 / 5, appareil modeste 30 / 2, 512 Mo 15 / 1 Mio. La page n'en voit que
+ * `navigator.deviceMemory`, arrondi à une puissance de deux : un 3 Go s'y lit 2, un 6 Go 4. On
+ * prend donc le palier le plus bas que cette valeur autorise — trop bas ne coûte qu'un peu
+ * d'avance, trop haut rend l'éviction au navigateur.
+ */
+export const CHROMIUM_ANDROID = {
+  default: { video: 150 * 1024 * 1024, audio: 12 * 1024 * 1024 },
+  medium: { video: 80 * 1024 * 1024, audio: 5 * 1024 * 1024 },
+  low: { video: 30 * 1024 * 1024, audio: 2 * 1024 * 1024 },
+  veryLow: { video: 15 * 1024 * 1024, audio: 1 * 1024 * 1024 },
+};
+
 export interface SourceBufferQuota {
+  /** Le moteur reconnu, pour la trace. */
+  engine: string;
   video: number;
   audio: number;
+}
+
+/** Ce qu'on sait de l'appareil en plus de son agent. */
+export interface DeviceHints {
+  /** `navigator.maxTouchPoints` : un iPad en mode bureau se dit Mac. */
+  maxTouchPoints?: number;
+  /** `navigator.deviceMemory`, en Go, arrondi — Chromium seulement. */
+  deviceMemory?: number;
+}
+
+function chromiumAndroidTier(deviceMemory: number | undefined): { video: number; audio: number } {
+  // Absent : on ne sait rien, et le palier du milieu est le pari prudent.
+  if (deviceMemory === undefined) return CHROMIUM_ANDROID.medium;
+  if (deviceMemory <= 0.5) return CHROMIUM_ANDROID.veryLow;
+  if (deviceMemory <= 1) return CHROMIUM_ANDROID.low;
+  if (deviceMemory <= 4) return CHROMIUM_ANDROID.medium;
+  return CHROMIUM_ANDROID.default;
+}
+
+/** Chromium sous un nom ou un autre — Chrome, Edge, Opera, Brave, Samsung Internet. Jamais sur iOS, où tout est WebKit. */
+export function isChromiumEngine(userAgent: string): boolean {
+  return !isWebKitEngine(userAgent) && /Chrom(e|ium)\/\d/.test(userAgent);
 }
 
 /**
  * Le plafond de ce navigateur, quand on le connaît. Un iPad en mode bureau se présente comme un
  * Mac : on le reconnaît à son écran tactile, comme le fait déjà `PlayerControls`.
  */
-export function sourceBufferQuota(userAgent: string, maxTouchPoints = 0): SourceBufferQuota | null {
-  if (!isWebKitEngine(userAgent)) return null;
-  const mobile = /iP(hone|ad|od)/i.test(userAgent) || (/Macintosh/i.test(userAgent) && maxTouchPoints > 1);
-  const total = mobile ? WEBKIT_MOBILE_SOURCE_BUFFER_BYTES : WEBKIT_MAC_SOURCE_BUFFER_BYTES;
-  return { video: total, audio: Math.floor(total * AUDIO_ONLY_SHARE) };
+export function sourceBufferQuota(userAgent: string, hints: DeviceHints = {}): SourceBufferQuota | null {
+  if (isWebKitEngine(userAgent)) {
+    const mobile = /iP(hone|ad|od)/i.test(userAgent) || (/Macintosh/i.test(userAgent) && (hints.maxTouchPoints ?? 0) > 1);
+    const total = mobile ? WEBKIT_MOBILE_SOURCE_BUFFER_BYTES : WEBKIT_MAC_SOURCE_BUFFER_BYTES;
+    return { engine: mobile ? "WebKit mobile" : "WebKit macOS", video: total, audio: Math.floor(total * AUDIO_ONLY_SHARE) };
+  }
+  if (isChromiumEngine(userAgent)) {
+    if (/Android/i.test(userAgent)) return { engine: "Chromium Android", ...chromiumAndroidTier(hints.deviceMemory) };
+    return { engine: "Chromium", ...CHROMIUM_DESKTOP };
+  }
+  return null;
 }
 
 export function currentSourceBufferQuota(): SourceBufferQuota | null {
   if (typeof navigator === "undefined") return null;
-  return sourceBufferQuota(navigator.userAgent, navigator.maxTouchPoints ?? 0);
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  return sourceBufferQuota(navigator.userAgent, {
+    maxTouchPoints: navigator.maxTouchPoints ?? 0,
+    ...(typeof memory === "number" ? { deviceMemory: memory } : {}),
+  });
 }
 
 /** Combien de segments récents servent à mesurer le débit : assez pour lisser, assez peu pour suivre une scène. */

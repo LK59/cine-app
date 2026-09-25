@@ -364,7 +364,8 @@ dictionaries' values.
   target there is a byte budget measured from what is actually sent (`bufferBudget.ts`), and what
   lies behind the playhead is trimmed by the player rather than left to WebKit's own eviction,
   which runs mid-append and, when behind is not enough, removes ahead of the playhead too.
-  Chrome and Firefox have their own caps and are not budgeted yet.
+  Chromium: 150 MiB / 12 MiB per track on desktop, four tiers on Android read from
+  `navigator.deviceMemory` (`demuxer_memory_limit_*.cc`). An unknown engine keeps the old 30 s.
 - **A pathological file is the normal case here.** The library holds six-audio-track files mixing
   FLAC / AC-3 / DTS / TrueHD at 1, 6 and 8 channels, 24-bit FLAC, mono defaults, Dolby Vision 4K.
   Test player changes against `The Exorcist (1973)` before believing them.

@@ -305,7 +305,7 @@ export class MseSource {
   private targetBuffer = TARGET_BUFFER_SECONDS;
   /**
    * Le plafond de ce navigateur en octets, et le débit réellement envoyé à chaque tampon — voir
-   * `bufferBudget.ts`. Null ailleurs que sur WebKit : rien n'y change.
+   * `bufferBudget.ts`. Null pour un moteur qu'on ne connaît pas : rien n'y change.
    */
   private readonly quota = currentSourceBufferQuota();
   private readonly videoRate = new ByteRate();
@@ -1166,7 +1166,7 @@ export class MseSource {
       this.tracedBudget = budget;
       const mo = (n: number | null) => (n === null ? "?" : (n / 1e6).toFixed(1));
       trace(
-        `budget : ${Math.round(this.quota.video / 1e6)} Mo par tampon, image ${mo(this.videoRate.bytesPerSecond)} Mo/s, son ${mo(this.audioRate.bytesPerSecond)} Mo/s — ` +
+        `budget ${this.quota.engine} : ${Math.round(this.quota.video / 1e6)} Mo d'image, ${Math.round(this.quota.audio / 1e6)} Mo de son, image ${mo(this.videoRate.bytesPerSecond)} Mo/s, son ${mo(this.audioRate.bytesPerSecond)} Mo/s — ` +
           `${budget.aheadSeconds.toFixed(1)} s devant, ${budget.behindSeconds.toFixed(1)} s derrière`
       );
     }

@@ -625,7 +625,7 @@ describe("MseSource", () => {
     expect(traceText()).toContain("cible gardée à 30 s");
   });
 
-  describe("budget en octets de WebKit (iPad, 25/09/2026)", () => {
+  describe("budget en octets selon le moteur (25/09/2026)", () => {
     const IPAD = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15";
     afterEach(() => {
       vi.restoreAllMocks();
@@ -652,11 +652,11 @@ describe("MseSource", () => {
       traceReset();
       const video = fakeVideo();
       await MseSource.attach(video, heavyRemuxer(200), PLAN, { onError: vi.fn() });
-      await until(() => traceText().includes("budget :"), "le budget écrit dans la trace");
+      await until(() => traceText().includes("budget WebKit mobile"), "le budget écrit dans la trace");
       await new Promise((r) => setTimeout(r, 50));
       // 105 Mo à 4 Mo/s : ~26 s en tout. L'avance s'arrête bien avant les trente secondes.
       expect(video.buffered.end(0)).toBeLessThan(24);
-      expect(traceText()).toMatch(/budget : 110 Mo par tampon/);
+      expect(traceText()).toMatch(/budget WebKit mobile : 110 Mo d'image, 6 Mo de son/);
     });
 
     it("retire lui-même ce qui dépasse derrière la tête, au lieu de le laisser à Safari", async () => {
@@ -673,13 +673,25 @@ describe("MseSource", () => {
       await until(() => videoBuffer.removed.some(([s, e]) => s === 0 && e > 15 && e < 30), "un retrait derrière la tête");
     });
 
-    it("ne change rien hors de WebKit", async () => {
+    it("sur Chrome, borne aussi l'avance à ses 150 Mio", async () => {
       vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
       traceReset();
       const video = fakeVideo();
       await MseSource.attach(video, heavyRemuxer(200), PLAN, { onError: vi.fn() });
+      await until(() => traceText().includes("budget Chromium"), "le budget de Chromium écrit dans la trace");
+      await new Promise((r) => setTimeout(r, 50));
+      // 157 Mo à 4 Mo/s : ~39 s en tout, dont environ 24 devant.
+      expect(video.buffered.end(0)).toBeLessThan(28);
+      expect(traceText()).toMatch(/budget Chromium : 157 Mo d'image, 13 Mo de son/);
+    });
+
+    it("ne change rien pour un moteur qu'on ne connaît pas", async () => {
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (X11; Linux x86_64; rv:154.0) Gecko/20100101 Firefox/154.0");
+      traceReset();
+      const video = fakeVideo();
+      await MseSource.attach(video, heavyRemuxer(200), PLAN, { onError: vi.fn() });
       await until(() => video.buffered.length > 0 && video.buffered.end(0) >= 30, "les trente secondes d'avant");
-      expect(traceText()).not.toContain("budget :");
+      expect(traceText()).not.toContain("budget ");
     });
   });
 
