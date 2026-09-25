@@ -3,6 +3,8 @@ import {
   ByteRate,
   CHROMIUM_ANDROID,
   CHROMIUM_DESKTOP,
+  GECKO,
+  GECKO_BEFORE_130,
   WEBKIT_MAC_SOURCE_BUFFER_BYTES,
   WEBKIT_MOBILE_SOURCE_BUFFER_BYTES,
   laneBudget,
@@ -64,9 +66,30 @@ describe("le plafond de Chromium", () => {
   });
 });
 
+describe("le plafond de Gecko", () => {
+  // dom/media/mediasource/TrackBuffersManager.cpp, relu le 25/09/2026 ; 100 → 150 Mio au bug 1760529.
+  it.each([
+    ["Firefox sous Linux", "Mozilla/5.0 (X11; Linux x86_64; rv:154.0) Gecko/20100101 Firefox/154.0"],
+    ["Firefox sous Windows", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0"],
+    ["Firefox sur Android", "Mozilla/5.0 (Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0"],
+  ])("%s : 150 Mio d'image, 20 de son", (_n, ua) => {
+    expect(sourceBufferQuota(ua)).toEqual({ engine: "Gecko", ...GECKO });
+    expect(GECKO).toEqual({ video: 157_286_400, audio: 20_971_520 });
+  });
+
+  it("avant Firefox 130 : 100 Mio d'image", () => {
+    expect(sourceBufferQuota("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")).toEqual({ engine: "Gecko", ...GECKO_BEFORE_130 });
+  });
+
+  it("Firefox sur iPhone est WebKit", () => {
+    expect(sourceBufferQuota("Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/126.0 Mobile/15E148 Safari/605.1.15")?.engine).toBe("WebKit mobile");
+  });
+});
+
 describe("un moteur qu'on ne connaît pas", () => {
   it("garde le comportement d'avant", () => {
-    expect(sourceBufferQuota("Mozilla/5.0 (X11; Linux x86_64; rv:154.0) Gecko/20100101 Firefox/154.0")).toBeNull();
+    expect(sourceBufferQuota("Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; Trident/6.0)")).toBeNull();
+    expect(sourceBufferQuota("")).toBeNull();
   });
 });
 

@@ -685,8 +685,19 @@ describe("MseSource", () => {
       expect(traceText()).toMatch(/budget Chromium : 157 Mo d'image, 13 Mo de son/);
     });
 
-    it("ne change rien pour un moteur qu'on ne connaît pas", async () => {
+    it("sur Firefox, borne l'avance à ses 150 Mio", async () => {
       vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (X11; Linux x86_64; rv:154.0) Gecko/20100101 Firefox/154.0");
+      traceReset();
+      const video = fakeVideo();
+      await MseSource.attach(video, heavyRemuxer(200), PLAN, { onError: vi.fn() });
+      await until(() => traceText().includes("budget Gecko"), "le budget de Gecko écrit dans la trace");
+      await new Promise((r) => setTimeout(r, 50));
+      expect(video.buffered.end(0)).toBeLessThan(28);
+      expect(traceText()).toMatch(/budget Gecko : 157 Mo d'image, 21 Mo de son/);
+    });
+
+    it("ne change rien pour un moteur qu'on ne connaît pas", async () => {
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; Trident/6.0)");
       traceReset();
       const video = fakeVideo();
       await MseSource.attach(video, heavyRemuxer(200), PLAN, { onError: vi.fn() });

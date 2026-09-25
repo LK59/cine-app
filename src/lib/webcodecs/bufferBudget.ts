@@ -65,6 +65,22 @@ export const CHROMIUM_ANDROID = {
   veryLow: { video: 15 * 1024 * 1024, audio: 1 * 1024 * 1024 },
 };
 
+/**
+ * Gecko (`dom/media/mediasource/TrackBuffersManager.cpp`, lu le 25/09/2026) : 150 Mio d'image et
+ * 20 Mio de son, sur toutes les plateformes, Android compris — aucune surcharge dans les
+ * préférences livrées. L'image était à 100 Mio jusqu'au bug 1760529 (juillet 2024, Firefox 130) :
+ * les chiffres de 100 Mio qui circulent datent d'avant.
+ */
+export const GECKO = { video: 150 * 1024 * 1024, audio: 20 * 1024 * 1024 };
+export const GECKO_BEFORE_130 = { video: 100 * 1024 * 1024, audio: 20 * 1024 * 1024 };
+
+/** Firefox et ses dérivés, avec leur version — jamais sur iOS, où Firefox est WebKit. */
+export function geckoVersion(userAgent: string): number | null {
+  if (isWebKitEngine(userAgent) || !/Gecko\/\d/.test(userAgent)) return null;
+  const match = /Firefox\/(\d+)/.exec(userAgent);
+  return match ? Number(match[1]) : null;
+}
+
 export interface SourceBufferQuota {
   /** Le moteur reconnu, pour la trace. */
   engine: string;
@@ -108,6 +124,8 @@ export function sourceBufferQuota(userAgent: string, hints: DeviceHints = {}): S
     if (/Android/i.test(userAgent)) return { engine: "Chromium Android", ...chromiumAndroidTier(hints.deviceMemory) };
     return { engine: "Chromium", ...CHROMIUM_DESKTOP };
   }
+  const gecko = geckoVersion(userAgent);
+  if (gecko !== null) return { engine: "Gecko", ...(gecko >= 130 ? GECKO : GECKO_BEFORE_130) };
   return null;
 }
 
