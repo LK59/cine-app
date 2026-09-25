@@ -109,6 +109,17 @@ describe("le budget d'un tampon", () => {
     expect(laneBudget(WEBKIT_MOBILE_SOURCE_BUFFER_BYTES, 6e6 / 8, 30, 30, 8)!.aheadSeconds).toBe(30);
   });
 
+  it("garde derrière les trente secondes d'avant quand le plafond est loin", () => {
+    // Banc du 25/09/2026, Chrome, 12 Angry Men (1,8 Mo/s) : une part fixe du plafond ne gardait que
+    // 17,6 s derrière quand 87 s tenaient — un « −30 s » allait relire le réseau pour rien.
+    expect(laneBudget(150 * 1024 * 1024, 1.8e6, 30, 30, 8)).toEqual({ aheadSeconds: 30, behindSeconds: 30 });
+  });
+
+  it("laisse toujours de quoi faire un petit pas en arrière sur un iPad en 4K", () => {
+    const b = laneBudget(WEBKIT_MOBILE_SOURCE_BUFFER_BYTES, 27e6 / 8, 30, 30, 8)!;
+    expect(b.behindSeconds).toBeGreaterThanOrEqual(6);
+  });
+
   it("garde l'avance minimale même pour un débit énorme, et fait céder l'arrière", () => {
     const b = laneBudget(WEBKIT_MOBILE_SOURCE_BUFFER_BYTES, 80e6 / 8, 30, 30, 8)!;
     expect(b.aheadSeconds).toBe(8);

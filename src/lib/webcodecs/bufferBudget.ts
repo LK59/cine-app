@@ -15,8 +15,8 @@ import { isWebKitEngine } from "@/lib/webkitEngine";
  * +10 s (24/09/2026). L'éviction de WebKit retire d'abord derrière la tête, puis, si ça ne suffit
  * pas, *devant* elle en partant de la fin.
  *
- * Le budget se mesure donc en octets : une part du plafond pour l'avance, une part pour ce qu'on
- * garde derrière, le reste en marge pour les envois en vol — et le débit est celui qu'on envoie
+ * Le budget se mesure donc en octets : une part du plafond pour l'avance, ce qui reste pour ce
+ * qu'on garde derrière, une marge pour les envois en vol — et le débit est celui qu'on envoie
  * réellement, segment par segment, pas une moyenne du fichier : une scène d'action pèse deux fois
  * un dialogue.
  *
@@ -33,11 +33,10 @@ export const WEBKIT_MAC_SOURCE_BUFFER_BYTES = 318_767_104;
 const AUDIO_ONLY_SHARE = 0.05;
 
 /**
- * La part du plafond pour l'avance, pour ce qu'on garde derrière la tête, et pour les deux
- * réunis — le reste est la marge des envois en vol, que WebKit compte avant de les accepter.
+ * La part du plafond pour l'avance, et pour l'avance et l'arrière réunis — le reste est la marge
+ * des envois en vol, que le navigateur compte avant de les accepter.
  */
 const AHEAD_SHARE = 0.6;
-const BEHIND_SHARE = 0.2;
 const USABLE_SHARE = 0.85;
 
 /** Ce qu'on garde derrière au moins, quand le plafond le permet : un petit pas en arrière sans relire. */
@@ -177,12 +176,15 @@ export interface BufferBudget {
  */
 export function laneBudget(quotaBytes: number, bytesPerSecond: number | null, maxAhead: number, maxBehind: number, minAhead: number): BufferBudget | null {
   if (!bytesPerSecond || bytesPerSecond <= 0 || quotaBytes <= 0) return null;
-  const usable = (quotaBytes / bytesPerSecond) * USABLE_SHARE;
   const secondsInQuota = quotaBytes / bytesPerSecond;
-  const behind = Math.min(maxBehind, Math.max(MIN_BEHIND_SECONDS, secondsInQuota * BEHIND_SHARE));
-  const ahead = Math.max(minAhead, Math.min(maxAhead, secondsInQuota * AHEAD_SHARE, usable - behind));
-  // Un débit si lourd que l'avance minimale mange déjà le plafond : c'est l'arrière qui cède.
-  return { aheadSeconds: ahead, behindSeconds: Math.max(1, Math.min(behind, usable - ahead)) };
+  const usable = secondsInQuota * USABLE_SHARE;
+  // L'avance d'abord, en laissant de quoi faire un petit pas en arrière.
+  const ahead = Math.max(minAhead, Math.min(maxAhead, secondsInQuota * AHEAD_SHARE, usable - MIN_BEHIND_SECONDS));
+  // L'arrière prend ce qui reste sous le plafond, jusqu'aux trente secondes d'avant. Une part fixe
+  // du plafond le rognait pour rien sur un fichier léger : 17,6 s gardées derrière sur Chrome quand
+  // 87 s tenaient (banc du 25/09/2026). Un débit si lourd que l'avance minimale mange déjà le
+  // plafond : c'est lui qui cède, jusqu'à une seconde.
+  return { aheadSeconds: ahead, behindSeconds: Math.max(1, Math.min(maxBehind, usable - ahead)) };
 }
 
 /** Le plus serré des deux tampons : l'image et le son se lisent ensemble. */
