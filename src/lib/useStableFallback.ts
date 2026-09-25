@@ -77,6 +77,11 @@ export function takeoverFor(takeover: StableTakeover | null | undefined, session
  * téléphone (relu le 24/09/2026). Une diffusion reste une diffusion tant que la lecture n'a pas
  * été fermée ; une autre ouverture (un autre numéro) ne l'hérite jamais.
  */
+/** Cette lecture-ci est-elle en diffusion ? Seul le relais de sa séance le dit — voir `stepAside`. */
+export function castingNow(takeover: StableTakeover | null | undefined, session: unknown): boolean {
+  return takeoverFor(takeover, session)?.cast === true;
+}
+
 export function castCarriedTo(
   takeover: StableTakeover | null | undefined,
   session: { itemId: string; openId?: number; resumeAt?: number }
@@ -176,6 +181,18 @@ export function useStableFallback(): StableFallback {
   const [returning, setReturning] = useState<{ itemId: string; resumeAt: number; owner?: unknown; paused?: boolean } | null>(null);
 
   const stepAside = useCallback((itemId: string, why: string, resumeInto?: StableTakeover) => {
+    // Diffuser n'est pas un échec : la bascule ne vaut que pour la lecture qui l'a demandée — le
+    // relais, lié à sa séance par `owner`, la porte (`castingNow`). Rangé dans `handedOver`, le film
+    // passait pour illisible jusqu'au rechargement de l'app dès qu'on fermait le lecteur pendant
+    // une diffusion au lieu de la rendre : chaque relance partait au lecteur serveur
+    // (*Ted Lasso*, 25/09/2026).
+    if (resumeInto?.cast) {
+      setReason(why);
+      setTakeover(resumeInto);
+      setReturning(null);
+      setNegotiating(true);
+      return;
+    }
     setHandedOver((ids) => {
       // Already given up on: the word has been said and saying it twice would only interrupt
       // a player that is by now busy playing.

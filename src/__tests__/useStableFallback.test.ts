@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useStableFallback, takeoverFor, castCarriedTo, returningFor, returnsPaused, castHandBackPosition, NEGOTIATING_MS } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, castCarriedTo, castingNow, returningFor, returnsPaused, castHandBackPosition, NEGOTIATING_MS } from "@/lib/useStableFallback";
 
 // The handover itself, apart from the two players it sits between. What matters is that it
 // happens without asking, says so once, and leaves an account of why.
@@ -123,7 +123,7 @@ describe("le retour après une diffusion", () => {
   it("rend la main, à la position où la diffusion s'est arrêtée", () => {
     const { result } = renderHook(() => useStableFallback());
     act(() => result.current.stepAside("film-1", "diffusion demandée", { resumeAt: 120, cast: true }));
-    expect(result.current.handedOver).toEqual(["film-1"]);
+    expect(result.current.takeover?.cast).toBe(true);
 
     act(() => result.current.stepBack("film-1", 4200));
 
@@ -161,7 +161,19 @@ describe("le retour après une diffusion", () => {
     act(() => result.current.stepAside("film-1", "diffusion", { resumeAt: 4200, cast: true }));
 
     expect(result.current.returning).toBeNull();
-    expect(result.current.handedOver).toEqual(["film-1"]);
+    expect(result.current.takeover).toEqual({ resumeAt: 4200, cast: true });
+  });
+
+  it("ne rend pas le film illisible quand on ferme le lecteur pendant la diffusion", () => {
+    // 25/09/2026 : une diffusion bloquée, le lecteur fermé sans la rendre — et chaque relance de
+    // *Ted Lasso* partait au lecteur serveur jusqu'au rechargement de l'app. La diffusion ne vaut
+    // que pour la lecture qui l'a demandée.
+    const session = { itemId: "film-1" };
+    const { result } = renderHook(() => useStableFallback());
+    act(() => result.current.stepAside("film-1", "diffusion demandée", { resumeAt: 100, cast: true, owner: session }));
+    expect(result.current.handedOver).toEqual([]);
+    expect(castingNow(result.current.takeover, session)).toBe(true);
+    expect(castingNow(result.current.takeover, { itemId: "film-1" })).toBe(false);
   });
 });
 

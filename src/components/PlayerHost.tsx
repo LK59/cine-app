@@ -7,7 +7,7 @@ import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { refreshAfterPlayback } from "@/lib/swr";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { useStableFallback, takeoverFor, castCarriedTo, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, castCarriedTo, castingNow, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
 import { publishHandedOver } from "@/lib/playerBench/bridge";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
@@ -216,7 +216,7 @@ export function PlayerHost() {
   // fichier que le navigateur ne sait pas porter finit sur une erreur de lecture, pas sur un
   // transcodage — c'est tout l'objet du réglage.
   const carried = castCarriedTo(takeover, session);
-  const useNative = !serverFallback || (!legacy && !handedOver.includes(session.itemId) && !carried);
+  const useNative = !serverFallback || (!legacy && !handedOver.includes(session.itemId) && !carried && !castingNow(takeover, session));
   if (useNative) {
     return (
       <ExperimentalPlayerHost
