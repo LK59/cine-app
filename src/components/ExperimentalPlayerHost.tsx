@@ -469,7 +469,7 @@ export function ExperimentalPlayerHost({
     const path = pathRef.current ?? "non décidé";
     if (serverFallbackRef.current === false) {
       trace(`abandon : aucun lecteur serveur sur cette installation — ${reason}`);
-      reportPlayback("error", { ...file, reason, path });
+      reportPlayback("error", { ...file, reason, path, ...tally.backgroundFacts(Date.now()) });
       setRuntimeError(reason);
       return;
     }
@@ -484,9 +484,9 @@ export function ExperimentalPlayerHost({
     trace(`repli : passage au lecteur stable — ${reason}`);
     // `cast` à plat : une diffusion demandée n'est pas un échec, et le journal doit pouvoir le dire
     // sans comparer des phrases (voir `seances.ts`).
-    reportPlayback("fallback", { ...file, reason, path, ...(handover ? { takeover: handover } : {}), ...(handover?.cast ? { cast: true } : {}) });
+    reportPlayback("fallback", { ...file, reason, path, ...(handover ? { takeover: handover } : {}), ...(handover?.cast ? { cast: true } : {}), ...tally.backgroundFacts(Date.now()) });
     onFallbackRef.current(reason, handover);
-  }, [sessionId]);
+  }, [sessionId, tally]);
   /**
    * A passing notice, with the moment it was raised.
    *
@@ -1167,18 +1167,36 @@ export function ExperimentalPlayerHost({
     };
     save();
     const timer = setInterval(save, 30_000);
+    /**
+     * Écrit dans la trace, et plus seulement compté : l'état de l'élément au départ et au retour.
+     * Une panne de décodage juste après un déverrouillage ne se distinguait pas d'une panne en
+     * pleine lecture (Red Dragon, 24/09/2026), et qui relance la lecture au retour — WebKit, de
+     * lui-même — ne se lisait nulle part.
+     */
+    const state = () => {
+      const element = videoElRef.current;
+      return element ? `${element.paused ? "en pause" : "en lecture"} à ${element.currentTime.toFixed(1)} s` : "sans élément";
+    };
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
     const onVisibility = () => {
+      if (settleTimer) clearTimeout(settleTimer);
       if (document.visibilityState === "hidden") {
         tally.hidden(Date.now());
         hiddenAtRef.current = Date.now();
+        trace(`arrière-plan — ${state()}`);
         save();
       } else {
-        tally.shown(Date.now());
+        const away = tally.shown(Date.now());
+        trace(`retour au premier plan après ${(away / 1000).toFixed(1)} s — ${state()}`);
+        // Le navigateur reprend (ou non) la lecture un instant après : c'est ce second relevé qui dit
+        // ce qu'il a décidé.
+        settleTimer = setTimeout(() => trace(`1,5 s après le retour — ${state()}`), 1500);
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       clearInterval(timer);
+      if (settleTimer) clearTimeout(settleTimer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [sessionId, stopFields, tally]);
@@ -1741,6 +1759,8 @@ export function ExperimentalPlayerHost({
             at,
             attempt: rebuildsRef.current,
             skipped: again,
+            // Un retour d'arrière-plan récent, s'il y en a un — voir `backgroundFacts`.
+            ...tally.backgroundFacts(Date.now()),
             // Les tampons et la trace au moment de la perte : sans eux, un « Media failed to
             // decode » ne disait pas si c'étaient nos données ou l'appareil (23/09/2026).
             ...remuxRef.current?.lossReport(),
@@ -1762,7 +1782,7 @@ export function ExperimentalPlayerHost({
       onStarting: (at) => setStartingAt(at),
       // Une horloge qui ne bouge plus alors que l'élément dit jouer : écrit tel quel, une fois par
       // blocage. Rien à décider ici — les reprises sont déjà en cours dans la source.
-      onStall: (facts) => reportPlayback("stall", { ...describeFileRef.current(), path: "remux", ...facts }),
+      onStall: (facts) => reportPlayback("stall", { ...describeFileRef.current(), path: "remux", ...facts, ...tally.backgroundFacts(Date.now()) }),
     })
       .then((probe) => {
         if (cancelled) {

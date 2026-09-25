@@ -88,3 +88,26 @@ describe("SessionTally — temps passé en arrière-plan", () => {
     expect(tally.hiddenMsSoFar(9_000)).toBe(4_000);
   });
 });
+
+describe("SessionTally — l'arrière-plan sur une ligne d'incident", () => {
+  /**
+   * Red Dragon, 24/09/2026 : deux « Media failed to decode » sur un iPhone passé dix-huit fois en
+   * arrière-plan, et rien pour dire si la panne suivait un déverrouillage.
+   */
+  it("ne dit rien pour une page qui n'a jamais quitté l'écran", () => {
+    expect(new SessionTally().backgroundFacts(1000)).toEqual({});
+  });
+
+  it("dit depuis combien de temps la page est revenue, et combien de temps elle était partie", () => {
+    const tally = new SessionTally();
+    tally.hidden(10_000);
+    tally.shown(70_000);
+    expect(tally.backgroundFacts(71_500)).toEqual({ shownAgoMs: 1_500, lastHiddenMs: 60_000 });
+  });
+
+  it("dit qu'elle est encore en arrière-plan, et depuis quand", () => {
+    const tally = new SessionTally();
+    tally.hidden(10_000);
+    expect(tally.backgroundFacts(12_000)).toEqual({ hiddenNow: true, hiddenForMs: 2_000 });
+  });
+});

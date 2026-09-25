@@ -49,6 +49,8 @@ export class SessionTally {
   private backgroundRebuilds = 0;
   private hiddenSince: number | null = null;
   private lastHiddenMs = 0;
+  /** Le dernier retour au premier plan — voir `backgroundFacts`. */
+  private lastShownAt: number | null = null;
 
   /** Le film s'arrête de lui-même. Un second signal pendant la même attente ne la redouble pas. */
   waitStarted(now: number): void {
@@ -89,6 +91,7 @@ export class SessionTally {
     const since = this.hiddenSince;
     if (since === null) return 0;
     this.hiddenSince = null;
+    this.lastShownAt = now;
     this.backgrounds += 1;
     this.lastHiddenMs = Math.max(0, now - since);
     this.backgroundMs += this.lastHiddenMs;
@@ -107,6 +110,21 @@ export class SessionTally {
   /** La durée de la dernière absence terminée. */
   get lastBackgroundMs(): number {
     return this.lastHiddenMs;
+  }
+
+  /**
+   * Où en est la page vis-à-vis de l'arrière-plan, pour une ligne d'incident.
+   *
+   * Deux « Media failed to decode » sur *Red Dragon* chez un iPhone passé dix-huit fois en
+   * arrière-plan dans la séance (24/09/2026) : un flux sain, décodé sans erreur par FFmpeg comme
+   * nos propres octets, et aucun moyen de savoir si la panne suivait un déverrouillage — rien de
+   * l'arrière-plan n'était écrit. `shownAgoMs` petit, c'est une panne au retour ; absent, la page
+   * n'a jamais quitté l'écran. Rien quand il n'y a rien à dire.
+   */
+  backgroundFacts(now: number): Record<string, number | boolean> {
+    if (this.hiddenSince !== null) return { hiddenNow: true, hiddenForMs: now - this.hiddenSince };
+    if (this.lastShownAt === null) return {};
+    return { shownAgoMs: now - this.lastShownAt, lastHiddenMs: this.lastHiddenMs };
   }
 
   backgroundRebuilt(): void {
