@@ -709,3 +709,29 @@ en fin d'échelle).
 L'hôte, qui ne demandait que `canPlayType`, lui a donné la playlist directement ; le HLS intégré de
 Chromium l'a refusée quatre fois sans demander une variante, pendant que la sonde avait décrit
 MediaSource. Le film ne démarrait pas du tout.
+
+---
+
+## 24. La lecture au retour d'arrière-plan
+
+**Règle.** Une vidéo qui jouait quand l'application est passée en arrière-plan (écran verrouillé,
+autre application) attend en pause au retour, 3 s avant l'endroit quitté, si l'absence a duré plus
+de 5 s. Plus court, elle reprend comme avant. Une vidéo qui a continué pendant l'absence (image dans
+l'image, lecture en arrière-plan) n'est pas touchée. La relance que WebKit fait de lui-même au
+déverrouillage est refusée tant qu'aucun geste du spectateur ne l'a demandée ; une reconstruction au
+retour (source fermée par iOS) repart elle aussi en pause, au même endroit.
+
+**Porteur.** `holdPausedOnReturn`, `rewoundPosition` (`src/lib/backgroundReturn.ts`).
+
+**Appelants.** `ExperimentalPlayerHost.tsx` : le relevé au départ, la décision au retour, le refus de
+la relance, la reconstruction d'arrière-plan.
+
+**Différent exprès.** Le lecteur serveur (`PlayerHost.tsx`) n'applique pas la règle : sur iPhone, il
+sert surtout à diffuser vers un téléviseur, où la lecture continue par définition.
+
+**Tests.** `backgroundReturn.test.ts`, `ExperimentalPlayerHost.test.tsx` (« la lecture au retour
+d'une veille »).
+
+**Décidé le 25/09/2026** : un film verrouillé une minute sur un iPhone repartait tout seul au
+déverrouillage — c'est WebKit qui le relançait, notre lecteur n'y était pour rien. Netflix, YouTube et
+l'app TV d'Apple laissent la lecture en pause.

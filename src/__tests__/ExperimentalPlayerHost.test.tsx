@@ -575,6 +575,81 @@ describe("une source perdue", () => {
     expect(logged("stop")[0].fields).toMatchObject({ backgrounds: 1, backgroundMs: 90_000, backgroundRebuilds: 1 });
   });
 
+  describe("la lecture au retour d'une veille (25/09/2026)", () => {
+    const setVisibility = (state: "visible" | "hidden") => {
+      Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+    /** Une vidéo qui joue, et dont on compte les mises en pause. */
+    function playingVideo(at: number) {
+      const element = videoElement(at);
+      Object.defineProperty(element, "paused", { value: false, configurable: true });
+      const pause = vi.fn(() => Object.defineProperty(element, "paused", { value: true, configurable: true }));
+      Object.defineProperty(element, "pause", { value: pause, configurable: true });
+      return { element, pause };
+    }
+    afterEach(() => {
+      vi.restoreAllMocks();
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    });
+
+    it("attend en pause un peu avant, refuse la relance de WebKit, puis obéit au spectateur", async () => {
+      mount();
+      await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+      const { element, pause } = playingVideo(4115);
+      let t = 5_000_000;
+      vi.spyOn(Date, "now").mockImplementation(() => t);
+
+      act(() => setVisibility("hidden"));
+      t += 60_000;
+      act(() => setVisibility("visible"));
+      expect(pause).toHaveBeenCalledTimes(1);
+      expect(element.currentTime).toBe(4112);
+
+      // WebKit relance de lui-même un instant après le déverrouillage : refusé.
+      t += 300;
+      Object.defineProperty(element, "paused", { value: false, configurable: true });
+      await act(async () => void fireEvent(element, new Event("play")));
+      expect(pause).toHaveBeenCalledTimes(2);
+
+      // Le spectateur appuie sur lecture : la lecture repart.
+      t += 500;
+      fireEvent.pointerDown(document.body);
+      Object.defineProperty(element, "paused", { value: false, configurable: true });
+      await act(async () => void fireEvent(element, new Event("play")));
+      expect(pause).toHaveBeenCalledTimes(2);
+    });
+
+    it("laisse reprendre après un aller-retour de quelques secondes", async () => {
+      mount();
+      await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+      const { pause } = playingVideo(4115);
+      let t = 5_000_000;
+      vi.spyOn(Date, "now").mockImplementation(() => t);
+      act(() => setVisibility("hidden"));
+      t += 3_000;
+      act(() => setVisibility("visible"));
+      expect(pause).not.toHaveBeenCalled();
+    });
+
+    it("reconstruit en pause, un peu avant, quand iOS a fermé la source pendant la veille", async () => {
+      mount();
+      await waitFor(() => expect(probes).toHaveLength(1));
+      await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+      playingVideo(1200);
+      let t = 5_000_000;
+      vi.spyOn(Date, "now").mockImplementation(() => t);
+      act(() => setVisibility("hidden"));
+      t += 90_000;
+      remux.lost = true;
+      remux.position = 1200;
+      act(() => setVisibility("visible"));
+      await waitFor(() => expect(probes).toHaveLength(2), { timeout: 3000 });
+      expect(probes[1].startSeconds).toBeCloseTo(1197, 1);
+      expect((probes[1] as unknown as { startPaused: boolean }).startPaused).toBe(true);
+    });
+  });
+
   it("reconstruit au lieu de reporter une panne", async () => {
     mount();
     await waitFor(() => expect(probes).toHaveLength(1));

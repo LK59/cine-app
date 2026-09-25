@@ -29,6 +29,7 @@ import { useT, useLocale } from "@/components/TranslationProvider";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import { NATIVE_PATH } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset, traceRecent } from "@/lib/webcodecs/trace";
+import { holdPausedOnReturn, rewoundPosition } from "@/lib/backgroundReturn";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
@@ -683,6 +684,15 @@ export function ExperimentalPlayerHost({
   const viewerPausedAtRef = useRef<number | null>(null);
   /** Le dernier passage en arrière-plan. */
   const hiddenAtRef = useRef<number | null>(null);
+  /** L'état de la vidéo au départ en arrière-plan — voir `holdPausedOnReturn`. */
+  const hiddenPlaybackRef = useRef<{ playing: boolean; at: number } | null>(null);
+  /**
+   * Un retour qui doit laisser la lecture en pause : jusqu'à quand refuser la relance de WebKit, et
+   * où reprendre. Une reconstruction au retour (source fermée par iOS) le lit aussi.
+   */
+  const holdOnReturnRef = useRef<{ until: number; at: number; since: number } | null>(null);
+  /** Le dernier geste du spectateur : une lecture qu'il demande lui-même n'est jamais refusée. */
+  const lastGestureAtRef = useRef(0);
   /**
    * L'image figée d'une reconstruction pour changement de piste — voir `freezeFrame`. Sans elle,
    * l'image passait au noir le temps que le nouveau lecteur s'ouvre, puis revenait en fondu :
@@ -1180,24 +1190,71 @@ export function ExperimentalPlayerHost({
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
     const onVisibility = () => {
       if (settleTimer) clearTimeout(settleTimer);
+      const element = videoElRef.current;
       if (document.visibilityState === "hidden") {
         tally.hidden(Date.now());
         hiddenAtRef.current = Date.now();
+        // Une pause qui précède le départ de moins d'une seconde peut être celle d'iOS lui-même :
+        // la même règle que `restart`. Seule une pause plus ancienne est celle du spectateur.
+        const pausedAt = viewerPausedAtRef.current;
+        const iosPaused = element?.paused === true && pausedAt !== null && Date.now() - pausedAt < 1000;
+        hiddenPlaybackRef.current = element ? { playing: !element.paused || iosPaused, at: element.currentTime } : null;
         trace(`arrière-plan — ${state()}`);
         save();
       } else {
         const away = tally.shown(Date.now());
         trace(`retour au premier plan après ${(away / 1000).toFixed(1)} s — ${state()}`);
+        // Verrouillé en plein film : la lecture attend au retour, un peu avant — voir
+        // `holdPausedOnReturn`. WebKit la relance de lui-même un instant plus tard ; le refus de
+        // cette relance-là est plus bas, dans `onPlay`.
+        const before = hiddenPlaybackRef.current;
+        hiddenPlaybackRef.current = null;
+        if (
+          element &&
+          before &&
+          holdPausedOnReturn({ awayMs: away, playingWhenHidden: before.playing, positionWhenHidden: before.at, positionOnReturn: element.currentTime })
+        ) {
+          const at = rewoundPosition(element.currentTime);
+          holdOnReturnRef.current = { until: Date.now() + 2500, at, since: Date.now() };
+          trace(`retour après ${(away / 1000).toFixed(1)} s : lecture laissée en pause, reprise à ${at.toFixed(1)} s`);
+          try {
+            element.pause();
+            element.currentTime = at;
+          } catch {
+            // Source déjà fermée par iOS : la reconstruction au retour reprendra en pause, à cet endroit.
+          }
+        }
         // Le navigateur reprend (ou non) la lecture un instant après : c'est ce second relevé qui dit
         // ce qu'il a décidé.
         settleTimer = setTimeout(() => trace(`1,5 s après le retour — ${state()}`), 1500);
       }
     };
+    // La relance de WebKit au déverrouillage arrive après notre pause : refusée tant qu'aucun geste
+    // du spectateur ne l'a demandée. `play` ne remonte pas : écouté en capture, sur le document.
+    const onPlay = (event: Event) => {
+      const hold = holdOnReturnRef.current;
+      if (!hold || !(event.target instanceof HTMLVideoElement)) return;
+      if (Date.now() > hold.until || lastGestureAtRef.current > hold.since) {
+        holdOnReturnRef.current = null;
+        return;
+      }
+      trace("relance du navigateur au retour refusée — la lecture attend le spectateur");
+      event.target.pause();
+    };
+    const onGesture = () => {
+      lastGestureAtRef.current = Date.now();
+    };
     document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener("play", onPlay, true);
+    document.addEventListener("pointerdown", onGesture, true);
+    document.addEventListener("keydown", onGesture, true);
     return () => {
       clearInterval(timer);
       if (settleTimer) clearTimeout(settleTimer);
       document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("play", onPlay, true);
+      document.removeEventListener("pointerdown", onGesture, true);
+      document.removeEventListener("keydown", onGesture, true);
     };
   }, [sessionId, stopFields, tally]);
   useEffect(() => {
@@ -1838,7 +1895,11 @@ export function ExperimentalPlayerHost({
       const playback = remuxRef.current;
       if (!playback?.lost || rebuildAtRef.current !== null) return;
       if (!spendRebuild()) return;
-      const at = playback.position || positionRef.current;
+      // Un retour qui laisse la lecture en pause (`holdPausedOnReturn`) : la reconstruction aussi,
+      // au même endroit un peu en arrière. Sans cela, le pipeline reconstruit repartait en lecture.
+      const hold = holdOnReturnRef.current;
+      const at = hold ? hold.at : playback.position || positionRef.current;
+      if (hold) keepPausedRef.current = true;
       // Écrit au journal, et plus seulement dans la trace : une reconstruction au retour se lisait
       // comme une ouverture de plus, et combien de retours d'arrière-plan en coûtent une restait
       // une question sans réponse (23/09/2026).
