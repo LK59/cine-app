@@ -6,6 +6,7 @@ import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId, isStreamPath, isUnderJellyfinPrefix } from "@/lib/jellyfinPath";
 import { castPassFor, withCastPass, CAST_TOKEN_PARAM } from "@/lib/castToken";
 import { stripAccessToken } from "@/lib/stripAccessToken";
+import { castMasterPlaylist } from "@/lib/castMaster";
 
 // Root cause found live via temporary request logging: right after a fresh remux job starts
 // (e.g. on an audio-track switch, which always requests a brand new PlaySessionId/ffmpeg job),
@@ -142,8 +143,9 @@ export async function GET(
        * Ajouté seulement quand la requête en cours en portait un : une lecture normale, dans la
        * page et avec son cookie, ne doit pas se mettre à distribuer des laissez-passer.
        */
+      // En diffusion, le maître perd ses variantes de secours — voir `castMasterPlaylist`.
       const withPass = castPass
-        ? withCastPass(rewritten, itemId, req.nextUrl.searchParams.get(CAST_TOKEN_PARAM) ?? "")
+        ? withCastPass(castMasterPlaylist(rewritten), itemId, req.nextUrl.searchParams.get(CAST_TOKEN_PARAM) ?? "")
         : rewritten;
       const buf = Buffer.from(withPass, "utf-8");
 
