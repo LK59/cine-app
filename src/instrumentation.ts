@@ -35,6 +35,12 @@ export async function register() {
     const { startDbBackupCron } = await import("./lib/dbBackup");
     startDbBackupCron();
 
+    // Les affiches du catalogue préparées d'avance dans les tailles que les écrans demandent : sans
+    // cela, la première personne à voir un titre payait 60 à 350 ms par affiche (25/09/2026). En
+    // arrière-plan, une minute après le démarrage — voir `posterPrewarm.ts`.
+    const { startPosterPrewarm } = await import("./lib/posterPrewarm");
+    startPosterPrewarm();
+
     // Non-blocking cache warmup — fire and forget, never delays startup
     setTimeout(() => {
       import("./lib/server-cache").then(async ({ cachedMovies, cachedSeries }) => {
