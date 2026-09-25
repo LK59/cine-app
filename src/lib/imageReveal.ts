@@ -94,14 +94,13 @@ export function arrivedReady(img: HTMLImageElement): boolean {
 
 /** À appeler depuis `onLoad` : l'image apparaît, en fondu seulement si elle vient d'arriver. */
 /**
- * L'apparition d'une image déjà prête : courte et légère, pas rien.
+ * Une image déjà prête s'affiche sans fondu ; seule une vraie arrivée réseau en garde un.
  *
- * Coupée net, l'arrivée des affiches paraissait brute une fois qu'elles étaient toutes prêtes
- * d'avance — l'application était devenue rapide, mais « moins bien finie » (Louis, 25/09/2026).
- * Un fondu de 180 ms, adouci en fin de course, garde le geste sans rien suggérer d'une attente ;
- * les 500 ms restent à une vraie arrivée réseau, qui, elle, doit se voir.
+ * Essayé le 25/09/2026 : un fondu de 180 ms sur les affiches prêtes donnait l'impression d'une
+ * attente (« un effet plus lent encore »). Le mouvement est porté par la carte, qui monte à sa
+ * place en entrant dans l'écran — voir `riseIn.ts`.
  */
-export const READY_REVEAL = "opacity 180ms cubic-bezier(0.22, 1, 0.36, 1)";
+export const READY_REVEAL = "none";
 
 export function revealLoaded(img: HTMLImageElement): void {
   if (arrivedReady(img)) img.style.transition = READY_REVEAL;

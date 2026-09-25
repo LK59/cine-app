@@ -35,7 +35,7 @@ async function loaded(img: HTMLImageElement) {
 }
 
 describe("l'apparition d'une affiche", () => {
-  it("un fondu court quand le navigateur l'a obtenue en un instant", async () => {
+  it("sans fondu quand le navigateur l'a obtenue en un instant", async () => {
     fetchedIn(12);
     expect(await loaded(mount("/api/jellyfin/image/a"))).toBe(READY_REVEAL);
   });
@@ -45,7 +45,7 @@ describe("l'apparition d'une affiche", () => {
     expect(await loaded(mount("/api/jellyfin/image/b"))).toBe("");
   });
 
-  it("un fondu court quand le décodage anticipé l'avait chauffée", async () => {
+  it("sans fondu quand le décodage anticipé l'avait chauffée", async () => {
     fetchedIn(FAST_REVEAL_MS * 4);
     const img = mount("/api/jellyfin/image/c");
     noteWarmed(img.src);

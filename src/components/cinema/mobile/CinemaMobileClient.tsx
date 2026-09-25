@@ -10,6 +10,7 @@ import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { heroOffscreen } from "@/lib/heroCarousel";
 import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
+import { useRiseIn } from "@/lib/riseIn";
 import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
 import { useFreshPersonalLists } from "@/lib/freshLists";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet } from "@/lib/swr";
@@ -241,6 +242,8 @@ export function CinemaMobileClient() {
   // Chaque onglet garde sa hauteur : les deux volets gardés partagent ce conteneur — voir
   // `useTabScrollMemory`.
   useTabScrollMemory(rowsScrollRef, mediaType);
+  // Les cartes montent rejoindre leur rangée en entrant dans l'écran — voir `riseIn.ts`.
+  useRiseIn(rowsScrollRef);
   // Ma liste, la reprise et « À suivre » redemandés au retour et au changement d'onglet.
   useFreshPersonalLists(mediaType);
 
@@ -636,6 +639,7 @@ export function CinemaMobileClient() {
                     })
                   )
                 }
+                data-rise-card
                 className={`${CONTINUE_WIDTH} pressable shrink-0 select-none text-left [-webkit-touch-callout:none]`}
               >
                 <div className="relative overflow-hidden rounded-lg">

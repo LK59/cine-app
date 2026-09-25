@@ -9,6 +9,23 @@ const THRESHOLD = 12;
 const TOP_ZONE = 32;
 
 /**
+ * La barre réapparaît, et le prochain déplacement ne compte pas comme un défilement.
+ *
+ * Chaque onglet du cinéma retrouve sa propre hauteur (`useTabScrollMemory`) : passer de Séries,
+ * en haut, à Films, plus bas, déplaçait le conteneur d'un coup — lu comme une descente, la barre
+ * disparaissait sur Films et restait sur Séries (Louis, 25/09/2026). Une seule règle désormais :
+ * elle se cache quand on descend, revient dès qu'on remonte, et revient toujours à un changement
+ * d'onglet, quelle que soit la hauteur de l'onglet d'arrivée.
+ */
+const REVEAL_EVENT = "cine:reveal-navigation";
+/** Le temps pendant lequel un déplacement est celui qu'on vient de faire, pas celui du doigt. */
+const REVEAL_QUIET_MS = 400;
+
+export function revealNavigation(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(REVEAL_EVENT));
+}
+
+/**
  * Cacher quelque chose quand on descend, le rendre quand on remonte.
  *
  * Le comportement standard d'une barre flottante, et ce qui permet d'en avoir une sans perdre
@@ -31,6 +48,7 @@ export function useHideOnScroll(enabled = true): boolean {
   // aucun sens.
   const lastTop = useRef(new WeakMap<EventTarget, number>());
   const frame = useRef<number | null>(null);
+  const quietUntil = useRef(0);
 
   /**
    * Reprendre la main, c'est repartir visible.
@@ -62,6 +80,8 @@ export function useHideOnScroll(enabled = true): boolean {
         const top = target.scrollTop;
         const previous = lastTop.current.get(target) ?? 0;
         lastTop.current.set(target, top);
+        // Le déplacement d'un changement d'onglet : retenu comme point de départ, pas comme geste.
+        if (performance.now() < quietUntil.current) return;
         if (top <= TOP_ZONE) {
           setHidden(false);
           return;
@@ -72,9 +92,16 @@ export function useHideOnScroll(enabled = true): boolean {
       });
     }
 
+    function onReveal() {
+      quietUntil.current = performance.now() + REVEAL_QUIET_MS;
+      setHidden(false);
+    }
+
     document.addEventListener("scroll", onScroll, true);
+    window.addEventListener(REVEAL_EVENT, onReveal);
     return () => {
       document.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener(REVEAL_EVENT, onReveal);
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
     };

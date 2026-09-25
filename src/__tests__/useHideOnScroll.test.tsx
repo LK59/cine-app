@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { useRef } from "react";
-import { useHideOnScroll } from "@/lib/useHideOnScroll";
+import { revealNavigation, useHideOnScroll } from "@/lib/useHideOnScroll";
 
 /** Le crochet mesure au prochain rafraîchissement : les tests doivent le laisser arriver. */
 async function nextFrame() {
@@ -124,3 +124,38 @@ describe("useHideOnScroll — une rangée qui défile de côté", () => {
     row.remove();
   });
 });
+
+describe("useHideOnScroll — au changement d'onglet (25/09/2026)", () => {
+  /**
+   * Chaque onglet retrouve sa hauteur : passer de Séries, en haut, à Films, plus bas, déplaçait le
+   * conteneur d'un coup — lu comme une descente, la barre disparaissait sur Films.
+   */
+  it("revient au changement d'onglet, et le déplacement qui suit ne la recache pas", async () => {
+    render(<Bar />);
+    await scrollTo(600);
+    expect(state()).toBe("cachée");
+    act(() => revealNavigation());
+    expect(state()).toBe("visible");
+    // L'onglet d'arrivée est rétabli plus bas : ce n'est pas un geste.
+    await scrollTo(1400);
+    expect(state()).toBe("visible");
+  });
+
+  it("reprend ensuite sa règle : descendre la recache, remonter la montre", async () => {
+    const now = vi.spyOn(performance, "now");
+    let t = 10_000;
+    now.mockImplementation(() => t);
+    render(<Bar />);
+    await scrollTo(600);
+    act(() => revealNavigation());
+    await scrollTo(1400); // l'onglet replacé
+    expect(state()).toBe("visible");
+    t += 1_000; // la fenêtre du replacement est passée
+    await scrollTo(1700);
+    expect(state()).toBe("cachée");
+    await scrollTo(1500);
+    expect(state()).toBe("visible");
+    now.mockRestore();
+  });
+});
+
