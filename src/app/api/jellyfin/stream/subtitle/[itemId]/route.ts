@@ -56,7 +56,8 @@ export async function GET(
     return new NextResponse(blob, {
       headers: {
         "Content-Type": "text/vtt",
-        "Cache-Control": "public, max-age=3600",
+        // `private` : servi à une session seulement — voir le relais de flux.
+        "Cache-Control": "private, max-age=3600",
       },
     });
   } catch {

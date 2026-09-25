@@ -89,6 +89,17 @@ end, its description, its resume state and its file header and index are fetched
 the opening looks for them, so it starts without the round trips to a distant server. No picture is
 read, and the source closes without taking the current film's handover slot (`close(false)`).
 
+**Casting goes through the server player** (AirPlay, Chromecast): a MediaSource stream cannot be
+sent to a television, so the host hands over with `cast: true` and takes the film back when the
+route ends. That handover belongs to the playback that asked for it — the takeover carries its
+session (`castingNow`) — and never enters `handedOver`, the list of files the native path could not
+carry, which lasts until the app reloads: closing the player mid-cast used to send every later
+launch of that title to the server player. In the playlist a television receives, an HDR file keeps
+only its copied variant (`castMasterPlaylist`): Jellyfin adds two SDR re-encodes declared at the
+same bitrate, and after a seek a television gave up on the slow restart of the copy, switched to a
+4K re-encode sharing the same Jellyfin job, and asked for the same segment forever. The cost: a
+television without HDR finds no SDR version of such a file.
+
 **The native path is nearly free.** Matroska samples are already exactly what MP4 wants — length-prefixed
 HEVC/AVC access units, AC-3/AAC frames as they are. Only the packaging differs. No pixel and no
 audio sample passes through JavaScript: the browser decodes in hardware, composes the image itself,

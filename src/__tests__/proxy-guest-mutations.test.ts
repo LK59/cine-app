@@ -120,9 +120,16 @@ describe("proxy — what a plain user may write", () => {
     expect((await proxy(req("GET", "/api/radarr/movies/12"))).status).toBe(200);
   });
 
+  // Même jour : l'historique de Radarr et Sonarr, que seule la page d'état de la gestion affiche.
+  it("refuses a user the download history", async () => {
+    const { proxy } = await import("@/proxy");
+    expect((await proxy(req("GET", "/api/activity"))).status).toBe(403);
+  });
+
   it("lets an administrator run those searches", async () => {
     mockVerify.mockResolvedValue({ u: "louis", role: "admin" });
     const { proxy } = await import("@/proxy");
+    expect((await proxy(req("GET", "/api/activity"))).status).toBe(200);
     expect((await proxy(req("GET", "/api/radarr/movies/12/releases"))).status).toBe(200);
     expect((await proxy(req("GET", "/api/bazarr/episodes/99/subtitles"))).status).toBe(200);
   });

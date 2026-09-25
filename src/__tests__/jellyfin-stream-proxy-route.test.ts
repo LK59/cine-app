@@ -47,6 +47,8 @@ describe("GET /api/jellyfin/stream/[itemId]/[...path]", () => {
     mockFetch.mockResolvedValue(upstream(200));
     const res = await get();
     expect(res.status).toBe(200);
+    // Servi à une session seulement : aucun cache partagé ne doit le garder (25/09/2026).
+    expect(res.headers.get("Cache-Control")).toMatch(/^private,/);
     expect(mockFetch).toHaveBeenCalledOnce();
   });
 

@@ -130,8 +130,13 @@ function isAllowedForEveryone(method: string, pathname: string): boolean {
  * déclenchent chez Radarr, Sonarr ou Bazarr une recherche interactive auprès des indexeurs et des
  * fournisseurs de sous-titres — des minutes de travail, des quotas consommés, et des noms de
  * sorties que seule la gestion affiche. Aucun écran du cinéma ne les appelle (25/09/2026).
+ *
+ * `/api/activity`, lui, lit bien : l'historique de Radarr et Sonarr — ce qui a été récupéré,
+ * importé, supprimé, et d'où. Seule la page d'état de la gestion l'affiche ; un compte ordinaire
+ * n'a aucune raison de le lire (même jour).
  */
 const ADMIN_ONLY_READS: RegExp[] = [
+  /^\/api\/activity\/?$/,
   /^\/api\/radarr\/movies\/[^/]+\/releases\/?$/,
   /^\/api\/sonarr\/series\/[^/]+\/releases\/?$/,
   /^\/api\/bazarr\/(movies|episodes)\/[^/]+\/subtitles\/?$/,

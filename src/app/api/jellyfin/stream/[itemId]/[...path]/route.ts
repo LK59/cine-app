@@ -171,7 +171,10 @@ export async function GET(
       // DirectPlay/DirectStream: a single big Range-seekable file, not an immutable HLS
       // segment — pass through the real status (200 or 206) and range headers as-is instead
       // of assuming 200, so native <video> seeking works.
-      const passthroughHeaders: Record<string, string> = { "Content-Type": contentType, "Cache-Control": "public, max-age=21600" };
+      // `private` : la réponse n'est servie qu'à une session ou à un laissez-passer, et aucun cache
+      // partagé — relais inverse, proxy d'entreprise — ne doit la resservir à qui n'en a pas
+      // (chasse aux défauts du 25/09/2026). Le cache du navigateur, le seul qui serve ici, la garde.
+      const passthroughHeaders: Record<string, string> = { "Content-Type": contentType, "Cache-Control": "private, max-age=21600" };
       const contentRange = res.headers.get("Content-Range");
       const contentLength = res.headers.get("Content-Length");
       const acceptRanges = res.headers.get("Accept-Ranges");
@@ -195,9 +198,10 @@ export async function GET(
     // Each HLS segment URL is tied to a specific PlaySessionId and never changes
     // content once generated — immutable, and long-lived enough to cover a
     // full movie, so a rewind past hls.js's in-memory buffer replays from the
-    // browser's HTTP cache instead of re-hitting Jellyfin.
+    // browser's HTTP cache instead of re-hitting Jellyfin. `private`, like the file above: only the
+    // browser's cache may keep it.
     return new NextResponse(res.body, {
-      headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=21600, immutable" },
+      headers: { "Content-Type": contentType, "Cache-Control": "private, max-age=21600, immutable" },
     });
   } catch {
     return new NextResponse(null, { status: 502 });

@@ -519,7 +519,10 @@ leaving `APP_ADMIN_PASSWORD` empty disables it.
 
 Permissions are never enforced by the interface. `src/proxy.ts` refuses every write a `user`
 should not make, whatever the screen happens to show; hiding a button is presentation, not
-security.
+security. A handful of reads are refused too (`ADMIN_ONLY_READS`): the interactive release and
+subtitle searches, which start work at the indexers and subtitle providers although they are
+`GET`s, and `/api/activity`, the Radarr/Sonarr download history shown only by the management
+status page.
 
 ---
 
@@ -535,7 +538,12 @@ data/
 *.db-shm
 ```
 
-All service API keys stay server-side and are never exposed to the browser.
+All service API keys stay server-side and are never exposed to the browser. Jellyfin writes its
+access token into the playlists and subtitle URLs it generates (`ApiKey=`); the stream relay
+authenticates every request with its own header and strips that parameter from every address and
+playlist it forwards (`src/lib/stripAccessToken.ts`), so it never reaches a page, a history or a
+reverse proxy's access log. Streams, segments and subtitles are served `Cache-Control: private`:
+only the viewer's browser may keep them, never a shared cache.
 
 ## Sessions
 
