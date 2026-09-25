@@ -37,7 +37,7 @@ import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/r
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { resumeAtFor } from "@/lib/resumePosition";
-import { useNextEpisodeFromCache } from "@/lib/nextEpisode";
+import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts } from "@/lib/sheetFacts";

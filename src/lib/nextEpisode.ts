@@ -1,5 +1,3 @@
-import { useCallback } from "react";
-import { useSWRConfig } from "swr";
 import type { CinemaSeason } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 
 /**
@@ -40,25 +38,5 @@ export function nextEpisodeIn(seasons: CinemaSeason[]) {
 export function firstEpisodeOf(seasons: CinemaSeason[]): CinemaSeason["episodes"][number] | null {
   const season = seasons.find((s) => s.seasonNumber !== 0 && s.episodes.length > 0) ?? seasons.find((s) => s.episodes.length > 0);
   return season?.episodes[0] ?? null;
-}
-
-/**
- * L'épisode suivant, lu dans la liste des épisodes **au moment où on le demande**.
- *
- * Depuis que le bouton d'une fiche s'affiche avant l'arrivée de la liste des épisodes (`sheetFacts`,
- * 25/09/2026), un Lire appuyé tout de suite emportait `nextEpisodeIn([])` : au générique, ni
- * « Épisode suivant » ni enchaînement, et `advance` gardait la même fonction pour toute la séance
- * (chasse aux défauts du 25/09/2026). Relue dans la réserve de SWR à chaque appel, la liste arrivée
- * entre-temps compte.
- */
-export function useNextEpisodeFromCache(episodesKey: string): (currentItemId: string) => { itemId: string; title: string } | null {
-  const { cache } = useSWRConfig();
-  return useCallback(
-    (currentItemId: string) => {
-      const data = cache.get(episodesKey)?.data as { seasons?: CinemaSeason[] } | undefined;
-      return nextEpisodeIn(data?.seasons ?? [])(currentItemId);
-    },
-    [cache, episodesKey]
-  );
 }
 
