@@ -104,7 +104,10 @@ is read again at once). A `seek` line carries `ranges`, the
 element's buffered ranges when the viewer asked, and its trace the two buffers separately. A page iOS kills in the background never gets to send
 it, so the summary is kept in `localStorage` while the session lives (`src/lib/unsentStop.ts`)
 and sent on the next launch as `why: "lost"` with `lateByMs`; the weekly reading keeps the last
-line per `session`. Both files are one
+line per `session`. Since 2026-09-25 every native- and server-player line carries `build`, the code the *browser* ran:
+a tab left open all day wrote an evening of stalls with the morning's code, and only the reverse
+proxy's `/sw.js?v=` requests said so. Such a tab now reloads itself when nothing is playing
+(`src/lib/staleBuild.ts`). Both files are one
 JSON object per line, rotated at 5 MB (`src/lib/logFile.ts`) — `player.log` keeping five archives
 (`.1` newest … `.5`), `server.log` three — and read with `tail`/`jq`; `logGenerations` lists a log
 and its archives oldest first for any reader.

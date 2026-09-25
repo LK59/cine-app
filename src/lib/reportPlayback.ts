@@ -1,6 +1,7 @@
 "use client";
 
 import type { PlayerEventKind } from "@/lib/playerLog";
+import { APP_BUILD } from "@/lib/appBuild";
 
 /**
  * Tells the server what the player did, so a silent step down stops being an invisible one.
@@ -11,7 +12,10 @@ import type { PlayerEventKind } from "@/lib/playerLog";
  */
 export function reportPlayback(kind: PlayerEventKind, fields: Record<string, unknown>): void {
   try {
-    const body = JSON.stringify({ kind, fields });
+    // Le code qui a écrit la ligne, et non celui que le serveur sert : un onglet ouvert depuis le
+    // matin écrivait au journal avec le code du matin, et ses blocages passaient pour ceux de la
+    // version du soir (25/09/2026). Un bilan renvoyé après coup porte déjà le sien (`unsentStop`).
+    const body = JSON.stringify({ kind, fields: { build: APP_BUILD, ...fields } });
     /**
      * L'arrêt part par `sendBeacon` quand le navigateur le propose.
      *

@@ -1,5 +1,7 @@
 "use client";
 
+import { APP_BUILD } from "@/lib/appBuild";
+
 /**
  * Le bilan d'une séance, gardé sur l'appareil tant qu'il n'est pas parti.
  *
@@ -30,7 +32,9 @@ interface Saved {
 
 export function saveUnsentStop(session: string, fields: Record<string, unknown>, now = Date.now()): void {
   try {
-    localStorage.setItem(PREFIX + session, JSON.stringify({ savedAt: now, fields } satisfies Saved));
+    // Le build de la séance, gardé avec elle : le bilan part au lancement suivant, qui peut tourner
+    // sur un autre code.
+    localStorage.setItem(PREFIX + session, JSON.stringify({ savedAt: now, fields: { build: APP_BUILD, ...fields } } satisfies Saved));
   } catch {
     // Pas de stockage : la séance se passera de filet.
   }

@@ -17,7 +17,7 @@ import { cookies } from "next/headers";
 import "./fonts/fonts.css";
 import "./globals.css";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
-import { UpdateBanner } from "@/components/UpdateBanner";
+import { BuildRefresh } from "@/components/BuildRefresh";
 import { SWRProvider } from "@/components/SWRProvider";
 import { ToastProvider } from "@/components/Toast";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -197,11 +197,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <ErrorBoundary name="presence">
                     <PresencePinger />
                   </ErrorBoundary>
+                  {/* Un onglet plus vieux que le serveur se recharge seul, quand aucun film n'est
+                      ouvert — d'où sa place sous `PlaybackProvider`. Voir `staleBuild.ts`. */}
+                  <ErrorBoundary name="build">
+                    <BuildRefresh />
+                  </ErrorBoundary>
                 </PlaybackProvider>
               </ToastProvider>
             </SWRProvider>
           </ThemeProvider>
-          <UpdateBanner />
           <InstallPrompt />
         </TranslationProvider>
         <ServiceWorkerRegistration />

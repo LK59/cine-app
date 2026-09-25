@@ -152,9 +152,14 @@ export function logPlaybackEvent(
   // sa ligne à sa guise, dans le journal même qui sert à instruire les pannes (chasse aux
   // défauts du 22/09/2026).
   const server = { timestamp: new Date().toISOString(), kind, user };
+  // Le build du navigateur, en tête et hors du plafond de champs : une ligne `stop` touche déjà les
+  // quarante, et c'est le champ qui dit si le reste décrit le code d'aujourd'hui (25/09/2026 — un
+  // onglet a écrit toute une soirée avec le code du matin).
+  const { build, ...rest } = fields;
+  const head = typeof build === "string" && build ? { ...server, build: build.slice(0, 40) } : server;
   appendJsonLine(
     bench ? benchPlayerLogFile() : playerLogFile(),
-    { ...server, ...clean(fields), ...server },
+    { ...head, ...clean(rest), ...server },
     { keep: bench ? BENCH_PLAYER_LOG_KEEP : PLAYER_LOG_KEEP }
   );
 }

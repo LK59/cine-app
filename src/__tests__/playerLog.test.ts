@@ -37,6 +37,19 @@ describe("logPlaybackEvent", () => {
     expect(Date.parse(lines()[0].timestamp)).toBeGreaterThan(0);
   });
 
+  it("garde le build du navigateur en tête, même sur une ligne qui atteint le plafond de champs", async () => {
+    // 25/09/2026 : un onglet ouvert depuis le matin a écrit toute une soirée avec le code du matin,
+    // et rien dans ses lignes ne le disait. Une ligne `stop` touche déjà les quarante champs.
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    const many = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`f${i}`, i]));
+    logPlaybackEvent("lucas", "stop", { ...many, build: "2026-09-24 08:53 UTC" });
+    const line = lines()[0];
+    expect(line.build).toBe("2026-09-24 08:53 UTC");
+    expect(Object.keys(line).slice(0, 4)).toEqual(["timestamp", "kind", "user", "build"]);
+    // Le plafond vaut toujours pour le reste.
+    expect(Object.keys(line).filter((k) => k.startsWith("f"))).toHaveLength(40);
+  });
+
   it("crée son dossier plutôt que d'échouer parce qu'il n'existe pas", async () => {
     const { logPlaybackEvent } = await import("@/lib/playerLog");
     expect(fs.existsSync(path.join(dir, "logs"))).toBe(false);

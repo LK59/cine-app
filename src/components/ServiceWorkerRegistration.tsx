@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { forgetChunkReload } from "@/lib/chunkError";
+import { APP_BUILD } from "@/lib/appBuild";
 import { clearDeliveredNotifications } from "@/lib/clearDeliveredNotifications";
 
 export function ServiceWorkerRegistration() {
@@ -13,7 +14,7 @@ export function ServiceWorkerRegistration() {
     if ("serviceWorker" in navigator) {
       // Le numéro du build dans l'adresse : chaque déploiement installe son propre worker, qui
       // range le code dans un cache à son nom et fait le ménage de l'avant-dernier. Voir sw.js.
-      const build = encodeURIComponent(process.env.NEXT_PUBLIC_APP_BUILD ?? "dev");
+      const build = encodeURIComponent(APP_BUILD);
       navigator.serviceWorker.register(`/sw.js?v=${build}`).catch(() => {});
     }
   }, []);
