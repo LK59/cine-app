@@ -1,4 +1,4 @@
-import { isWebKit } from "@/lib/webkitEngine";
+import { playsHlsNatively } from "@/lib/webkitEngine";
 // Client-only: detects what the browser can actually decode, so the DeviceProfile sent to
 // Jellyfin (see PlaybackInfoOptions in clients/jellyfin.ts) reflects real capabilities instead
 // of the previous "always transcode everything" fallback.
@@ -112,7 +112,7 @@ function isNativeHlsBrowser(): boolean {
   // sonder ses capacités avec `canPlayType` au lieu de MediaSource lui faisait décrire un pipeline
   // dont ce lecteur ne se sert jamais, et le profil envoyé à Jellyfin s'en trouvait faussé.
   // Voir isWebKitEngine.
-  return isWebKit() && !!document.createElement("video").canPlayType("application/vnd.apple.mpegurl");
+  return playsHlsNatively();
 }
 
 function checkViaCanPlayType(mime: string): boolean {

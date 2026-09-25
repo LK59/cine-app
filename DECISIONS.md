@@ -686,3 +686,26 @@ expirées), `/api/admin/activity/accounts/[id]` (fermeture par l'administrateur)
 **Décidé le 24/09/2026**, en revenant sur le choix du 06/09 (rien ne se révoquait) : vingt-quatre
 appareils « CineApp » s'étaient accumulés pour un seul compte, autant de jetons valides pour
 toujours.
+
+---
+
+## 23. Qui lit le flux HLS du lecteur serveur
+
+**Règle.** Le flux HLS va au pipeline du navigateur (`video.src`) sur WebKit seulement ; partout
+ailleurs, à hls.js — même quand le navigateur répond oui à
+`canPlayType("application/vnd.apple.mpegurl")`. La sonde des codecs pose la même question pour
+choisir ce qu'elle interroge (`canPlayType` sur WebKit, MediaSource ailleurs), de sorte que le
+profil négocié avec Jellyfin décrit le pipeline qui lira réellement le flux.
+
+**Porteur.** `playsHlsNatively` (`src/lib/webkitEngine.ts`).
+
+**Appelants.** `src/lib/codecSupport.ts` (`isNativeHlsBrowser`) ; `src/components/PlayerHost.tsx`
+(le choix hls.js / natif, le remontage de l'élément, le rechargement au changement de piste et
+en fin d'échelle).
+
+**Tests.** `webkitEngine.test.ts`, `decisions-partagees.test.ts`.
+
+**Trouvé le 25/09/2026** : Opera 135 (Chromium 151) sous Windows répond désormais oui au HLS.
+L'hôte, qui ne demandait que `canPlayType`, lui a donné la playlist directement ; le HLS intégré de
+Chromium l'a refusée quatre fois sans demander une variante, pendant que la sonde avait décrit
+MediaSource. Le film ne démarrait pas du tout.

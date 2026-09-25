@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { isWebKitEngine } from "@/lib/webkitEngine";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { isWebKitEngine, playsHlsNatively } from "@/lib/webkitEngine";
 
 /** De vrais agents, relevés dans les journaux du lecteur ou sur les appareils de la maison. */
 const AGENTS: [string, boolean, string][] = [
@@ -27,6 +27,11 @@ const AGENTS: [string, boolean, string][] = [
     "Chrome de bureau",
     false,
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+  ],
+  [
+    "Opera sous Windows, envoyé sur le HLS intégré de Chromium le 25/09/2026",
+    false,
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 OPR/135.0.0.0",
   ],
   [
     "Firefox sous Linux",
@@ -60,5 +65,28 @@ describe("isWebKitEngine", () => {
     expect(chromeAndroid).toContain("AppleWebKit");
     expect(chromeAndroid).toContain("Safari");
     expect(isWebKitEngine(chromeAndroid)).toBe(false);
+  });
+});
+
+describe("playsHlsNatively", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Un élément qui répond oui au HLS, comme Chromium 151 le fait désormais sur ordinateur. */
+  const saysYesToHls = { canPlayType: (t: string) => (t === "application/vnd.apple.mpegurl" ? "maybe" : "") } as unknown as HTMLVideoElement;
+  const agent = (name: string) => AGENTS.find(([n]) => n.startsWith(name))![2];
+
+  /**
+   * Opera 135 (Chromium 151) répondait oui : le lecteur serveur lui donnait la playlist en direct,
+   * le HLS intégré de Chromium la refusait quatre fois, et le film ne démarrait jamais — alors que
+   * la sonde des codecs avait décrit MediaSource, c'est-à-dire hls.js.
+   */
+  it.each(["Opera sous Windows", "Chrome de bureau", "le Chrome Android", "Edge"])("%s : hls.js, même s'il dit lire le HLS", (name) => {
+    vi.stubGlobal("navigator", { userAgent: agent(name) });
+    expect(playsHlsNatively(saysYesToHls)).toBe(false);
+  });
+
+  it.each(["l'iPhone de la maison", "Safari de bureau"])("%s : le pipeline du navigateur", (name) => {
+    vi.stubGlobal("navigator", { userAgent: agent(name) });
+    expect(playsHlsNatively(saysYesToHls)).toBe(true);
   });
 });

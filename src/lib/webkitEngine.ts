@@ -27,3 +27,22 @@ export function isWebKitEngine(userAgent: string): boolean {
 export function isWebKit(): boolean {
   return typeof navigator !== "undefined" && isWebKitEngine(navigator.userAgent);
 }
+
+/**
+ * Ce lecteur donnera-t-il le flux HLS au pipeline du navigateur, plutôt qu'à hls.js ?
+ *
+ * WebKit seulement, même quand un autre moteur répond oui à `canPlayType` : Chromium 151 le fait
+ * désormais sur ordinateur, et Opera sous Windows (25/09/2026) a été envoyé ainsi sur le lecteur
+ * HLS intégré de Chromium. Il a refusé la playlist maître quatre fois — aucune variante, aucun
+ * segment demandés, aucun ffmpeg lancé — et le film n'a jamais démarré. Pendant ce temps, la sonde
+ * des codecs avait interrogé MediaSource, c'est-à-dire hls.js : le profil négocié décrivait un
+ * pipeline, la lecture en empruntait un autre.
+ *
+ * Une seule fonction pour la sonde (`codecSupport.ts`) et pour l'hôte (`PlayerHost.tsx`), pour
+ * que les deux ne décrivent plus jamais deux navigateurs différents. Voir DECISIONS.md.
+ */
+export function playsHlsNatively(video?: HTMLVideoElement | null): boolean {
+  if (!isWebKit()) return false;
+  const element = video ?? (typeof document !== "undefined" ? document.createElement("video") : null);
+  return !!element?.canPlayType("application/vnd.apple.mpegurl");
+}

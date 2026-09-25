@@ -624,3 +624,19 @@ describe("un titre similaire s'ouvre sans toucher à l'onglet, sur les deux écr
     expect(src).toMatch(/onSelectSimilar=\{\(next\) => openSimilarTitle\(/);
   });
 });
+
+describe("un seul « ce navigateur lira-t-il le HLS lui-même ? »", () => {
+  /**
+   * La sonde des codecs et l'hôte du lecteur serveur posaient la question chacun à sa manière :
+   * la première demandait WebKit, le second seulement `canPlayType`. Opera sous Windows
+   * (25/09/2026) a été sondé comme hls.js puis servi au HLS intégré de Chromium, qui a refusé.
+   */
+  it.each(["src/components/PlayerHost.tsx", "src/lib/codecSupport.ts"])("%s passe par playsHlsNatively", (f) => {
+    const code = lire(f)
+      .split("\n")
+      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+      .join("\n");
+    expect(code).toMatch(/playsHlsNatively\(/);
+    expect(code).not.toMatch(/canPlayType\(\s*["']application\/vnd\.apple\.mpegurl/);
+  });
+});

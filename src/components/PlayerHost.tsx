@@ -20,7 +20,7 @@ import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { describeJellyfinPlayback } from "@/lib/playbackPanel";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
-import { isWebKit } from "@/lib/webkitEngine";
+import { playsHlsNatively } from "@/lib/webkitEngine";
 import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
@@ -511,7 +511,7 @@ function ActivePlayer({
 
       // WebKit only — hls.js (Firefox, Chrome/Edge desktop & Android) already handles reusing
       // the element correctly via its own MediaSource and was never affected by this.
-      if (video.src && video.canPlayType("application/vnd.apple.mpegurl")) {
+      if (video.src && playsHlsNatively(video)) {
         flushSync(() => setVideoKey((k) => k + 1));
         video = videoRef.current;
         if (!video) return;
@@ -554,7 +554,7 @@ function ActivePlayer({
       // cache, where the next transcoded title will find it. The extra .catch() is only there so
       // an early return can't leave a rejected promise unhandled — the await below still sees
       // (and throws) the original rejection exactly as it did before.
-      const nativeHls = !!video.canPlayType("application/vnd.apple.mpegurl");
+      const nativeHls = playsHlsNatively(video);
       const hlsModule = nativeHls ? null : import("hls.js");
       hlsModule?.catch(() => {});
 
@@ -921,7 +921,7 @@ function ActivePlayer({
       // across every test. Persists just enough to resume exactly where playback left off.
       // WebKit, et non « sait lire du HLS » : Chrome Android répond oui à la seconde question et
       // rechargeait donc la page à chaque changement de piste. Voir isWebKitEngine.
-      if (isWebKit() && video?.canPlayType("application/vnd.apple.mpegurl")) {
+      if (video && playsHlsNatively(video)) {
         try {
           sessionStorage.setItem(
             PLAYER_RELOAD_INTENT_KEY,
@@ -1395,7 +1395,7 @@ function ActivePlayer({
       // whose grace-delayed restart (see fromReload) then loads into a genuinely clean slate.
       // Strictly bounded by the attempt counter carried in the intent so two exhausted ladders
       // can never reload-loop forever.
-      if ((reloadAttempt ?? 0) < 1 && isWebKit() && video!.canPlayType("application/vnd.apple.mpegurl")) {
+      if ((reloadAttempt ?? 0) < 1 && playsHlsNatively(video)) {
         try {
           const audioIdx = lastPlaybackOpts.current?.audioStreamIndex;
           sessionStorage.setItem(
