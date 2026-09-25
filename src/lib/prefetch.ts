@@ -57,10 +57,12 @@ export function preloadOutcome<T>(
  */
 export function prefetchTitleSheet(title: { kind: "movie"; radarrId: number; jellyfinItemId: string | null | undefined } | { kind: "series"; sonarrId: number; jellyfinItemId: string | null | undefined }): void {
   if (!title.jellyfinItemId) return;
-  const keys =
-    title.kind === "movie"
-      ? [`/api/radarr/movies/${title.radarrId}/info`, progressKey(title.jellyfinItemId)]
-      : [`/api/sonarr/series/${title.sonarrId}/info`, `/api/cinema/series/${title.jellyfinItemId}/episodes`];
+  // La description seulement, la même pour tout le monde. Pas l'état Jellyfin ni la liste des
+  // épisodes : un préchargement jamais consommé reste dans la réserve de SWR et est rendu, des
+  // heures plus tard, comme s'il venait d'arriver — un doigt qui frôlait *Dune* en défilant, le film
+  // regardé ensuite sur la télé, et la fiche affirmait « depuis le début » (chasse aux défauts du
+  // 25/09/2026). La fiche affiche déjà son bouton depuis ce que l'appareil sait (`sheetFacts`).
+  const keys = title.kind === "movie" ? [`/api/radarr/movies/${title.radarrId}/info`] : [`/api/sonarr/series/${title.sonarrId}/info`];
   const now = Date.now();
   for (const key of keys) {
     const at = recentlyPrefetched.get(key);

@@ -113,16 +113,20 @@ describe("prefetchTitleSheet — l'appui sur une affiche", () => {
   afterEach(() => vi.unstubAllGlobals());
   const urls = () => fetchMock.mock.calls.map((c) => String((c as unknown[])[0]));
 
-  it("demande la description et l'état Jellyfin d'un film, une seule fois", async () => {
+  // Seule la description, qui ne bouge pas : un préchargement jamais consommé de l'état Jellyfin
+  // ou des épisodes était servi tel quel des minutes plus tard, à la place de l'état du moment
+  // (chasse aux défauts du 25/09/2026).
+  it("demande la description d'un film, une seule fois, et pas son état Jellyfin", async () => {
     prefetchTitleSheet({ kind: "movie", radarrId: 12, jellyfinItemId: "jf-12" });
     prefetchTitleSheet({ kind: "movie", radarrId: 12, jellyfinItemId: "jf-12" });
     await Promise.resolve();
-    expect(urls().sort()).toEqual(["/api/radarr/movies/12/info", progressKey("jf-12")].sort());
+    expect(urls()).toEqual(["/api/radarr/movies/12/info"]);
+    expect(urls()).not.toContain(progressKey("jf-12"));
   });
 
-  it("une série : sa description et sa liste d'épisodes", () => {
+  it("une série : sa description, pas sa liste d'épisodes", () => {
     prefetchLibraryItem({ sonarrId: 4, jellyfinItemId: "jf-s" });
-    expect(urls().sort()).toEqual(["/api/cinema/series/jf-s/episodes", "/api/sonarr/series/4/info"]);
+    expect(urls()).toEqual(["/api/sonarr/series/4/info"]);
   });
 
   it("rien pour une affiche hors bibliothèque", () => {

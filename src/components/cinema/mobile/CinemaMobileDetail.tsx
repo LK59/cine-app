@@ -37,7 +37,7 @@ import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/r
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { resumeAtFor } from "@/lib/resumePosition";
-import { nextEpisodeIn } from "@/lib/nextEpisode";
+import { useNextEpisodeFromCache } from "@/lib/nextEpisode";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts } from "@/lib/sheetFacts";
@@ -265,7 +265,8 @@ export function CinemaMobileDetail({
 
   // Flat (season, episode) order — powers the player's own credits-time auto-advance, same
   // contract PlayButton/PlayerHost already expect on desktop.
-  const getNextEpisode = nextEpisodeIn(seasons);
+  // Relu à l'appel, pas figé au rendu : voir `useNextEpisodeFromCache`.
+  const getNextEpisode = useNextEpisodeFromCache(`/api/cinema/series/${item.jellyfinItemId}/episodes`);
 
   function play(fromStart = false) {
     if (!playTargetId || fileMissing) return;

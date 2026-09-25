@@ -43,6 +43,7 @@ import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/disc
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { ProgressFill } from "@/components/cinema/ProgressFill";
+import { feedResumeAt } from "@/lib/sheetFacts";
 
 // Roughly a third of a phone's width, so a row always shows "two and a bit" posters — the visual
 // cue that it scrolls, without a card so small the artwork stops being readable.
@@ -428,7 +429,7 @@ export function CinemaMobileClient() {
       playback.play({
         itemId: item.jellyfinItemId,
         title: item.title,
-        resumeAt: resume === undefined ? undefined : entry ? entry.positionTicks / 10_000_000 : 0,
+        resumeAt: resume === undefined ? undefined : feedResumeAt(entry?.positionTicks, RESUME_KEY),
       });
     },
     [playback, playSeries, resume, resumeByItemId]
@@ -593,7 +594,10 @@ export function CinemaMobileClient() {
                 route.account ||
                 route.browse !== null ||
                 route.discover !== null ||
-                route.person !== null
+                route.person !== null ||
+                // Activité et Signalement recouvrent l'écran eux aussi (chasse aux défauts du 25/09/2026).
+                route.activity !== null ||
+                route.report !== null
               }
               // Hors de l'écran — l'autre onglet, un panneau, le lecteur plein écran : l'ordre
               // officiel et le début. Pas une fiche, pas le retour d'arrière-plan : voir
@@ -633,7 +637,7 @@ export function CinemaMobileClient() {
                     playback.play({
                       itemId: entry.id,
                       title: entry.name,
-                      resumeAt: entry.positionTicks > 0 ? entry.positionTicks / 10_000_000 : 0,
+                      resumeAt: feedResumeAt(entry.positionTicks, RESUME_KEY),
                     })
                   )
                 }
@@ -673,7 +677,7 @@ export function CinemaMobileClient() {
                     playback.play({
                       itemId: entry.jellyfinItemId,
                       title: entry.title,
-                      resumeAt: entry.resumeTicks ? entry.resumeTicks / 10_000_000 : 0,
+                      resumeAt: feedResumeAt(entry.resumeTicks, NEXT_UP_KEY),
                     })
                   )
                 }

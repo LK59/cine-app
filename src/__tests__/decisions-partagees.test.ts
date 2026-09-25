@@ -280,12 +280,14 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
   });
 
   it("l'épisode suivant du cinéma vient de `nextEpisodeIn`", () => {
+    // Les deux fiches de série passent par `useNextEpisodeFromCache`, qui l'appelle au moment où
+    // l'épisode se termine (25/09/2026).
     for (const f of [
       "src/components/cinema/CinemaSeriesDetail.tsx",
       "src/components/cinema/mobile/CinemaMobileDetail.tsx",
       "src/lib/playSeriesNextEpisode.ts",
     ]) {
-      expect([f, codeOnly(f)]).toEqual([f, expect.stringContaining("nextEpisodeIn(")]);
+      expect([f, codeOnly(f)]).toEqual([f, expect.stringMatching(/nextEpisodeIn\(|useNextEpisodeFromCache\(/)]);
       expect([f, /flat\.findIndex/.test(codeOnly(f))]).toEqual([f, false]);
     }
   });

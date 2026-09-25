@@ -76,7 +76,7 @@ export function reconcileHeroOrder(shown: readonly string[], index: number, offi
  */
 export function heroOffscreen(
   heroTab: "movies" | "series",
-  route: Pick<CinemaRoute, "tab" | "list" | "account" | "search" | "browse" | "activity">,
+  route: Pick<CinemaRoute, "tab" | "list" | "account" | "search" | "browse" | "activity" | "report">,
   playerMode: string
 ): boolean {
   return (
@@ -86,7 +86,9 @@ export function heroOffscreen(
     route.account ||
     route.search ||
     route.browse !== null ||
-    route.activity !== null
+    route.activity !== null ||
+    // « Signaler un problème » recouvre l'écran comme l'activité (chasse aux défauts du 25/09/2026).
+    route.report !== null
   );
 }
 

@@ -121,7 +121,8 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
    * recherche, et au retour elle était pleine alors que le titre ne changeait que huit secondes
    * plus tard. Elle se fige avec lui, et repart de zéro quand il repart pour un intervalle entier.
    */
-  const running = !(paused || dragging);
+  // Hors de l'écran aussi : le minuteur de `useHeroOrder` s'y arrête, la barre doit le suivre.
+  const running = !(paused || dragging || offscreen);
   const [runs, setRuns] = useState(0);
   const [wasRunning, setWasRunning] = useState(running);
   if (running !== wasRunning) {

@@ -30,7 +30,7 @@ import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/seri
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip, BELOW_SECTION_CLASS } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
-import { nextEpisodeIn } from "@/lib/nextEpisode";
+import { useNextEpisodeFromCache } from "@/lib/nextEpisode";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, useSheetPlayFacts } from "@/lib/sheetFacts";
@@ -237,7 +237,8 @@ export function CinemaSeriesDetail({
   // The episode right after `currentItemId` in flat (season, episode) order — same "next up"
   // semantics PlayButton's getNextEpisode already expects (see PlayerHost's own credits-time
   // auto-advance), powered here by the same season/episode list "Plus d'épisodes" already needs.
-  const getNextEpisode = nextEpisodeIn(episodesData?.seasons ?? []);
+  // Relu à l'appel, pas figé au rendu : voir `useNextEpisodeFromCache`.
+  const getNextEpisode = useNextEpisodeFromCache(`/api/cinema/series/${item.jellyfinItemId}/episodes`);
 
   function playEpisode(ep: CinemaEpisode) {
     playback.play({

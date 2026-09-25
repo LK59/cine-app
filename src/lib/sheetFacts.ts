@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { fetcher, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
+import { isAwaitingFresh } from "@/lib/persistentCache";
 import type { CinemaNextUpItem, CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 
 /**
@@ -185,3 +186,20 @@ export function sheetRuntimeMinutes(catalogue: number | null | undefined, tmdb: 
 export function sheetOverview(catalogue: string | null | undefined, tmdb: string | null | undefined): string {
   return catalogue?.trim() ? catalogue : tmdb?.trim() ? tmdb : "";
 }
+
+/**
+ * La position à donner au lecteur depuis une liste (« Reprendre », « À suivre ») : affirmée
+ * seulement si la liste est fraîche.
+ *
+ * Gardées sur l'appareil jusqu'à sept jours (`persistentCache.ts`), ces listes sont affichées dès
+ * l'ouverture — mais un film repris hier soir sur la télé n'y est pas, ou pas à sa position. Tant
+ * que la réponse fraîche n'est pas arrivée, le champ reste absent : « demande au serveur »
+ * (CLAUDE.md, `resumeAt`). Une fois fraîche, la liste fait foi, zéro compris. Une seule règle pour
+ * la bannière du téléphone et les cartes « Reprendre » des deux écrans (chasse aux défauts du
+ * 25/09/2026, DECISIONS §29).
+ */
+export function feedResumeAt(ticks: number | null | undefined, feedKey: string): number | undefined {
+  if (isAwaitingFresh(feedKey)) return undefined;
+  return ticks && ticks > 0 ? ticks / 10_000_000 : 0;
+}
+

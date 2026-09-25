@@ -75,6 +75,7 @@ import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
 import { useFreshPersonalLists } from "@/lib/freshLists";
 import { heroInfoKey, preloadHeroInfo } from "@/lib/useHeroInfo";
 import { ProgressFill } from "@/components/cinema/ProgressFill";
+import { feedResumeAt } from "@/lib/sheetFacts";
 
 // The lightweight resume feed — /api/dashboard also carries these, but only alongside a full
 // sweep of every service, the torrent client and disk stats, which is a lot of upstream work to
@@ -958,7 +959,7 @@ export function CinemaClient() {
                 playback.play({
                   itemId: item.id,
                   title: item.name,
-                  resumeAt: item.positionTicks > 0 ? item.positionTicks / 10_000_000 : 0,
+                  resumeAt: feedResumeAt(item.positionTicks, RESUME_KEY),
                 })
               )
             }
@@ -988,8 +989,7 @@ export function CinemaClient() {
                 playback.play({
                   itemId: item.jellyfinItemId,
                   title: item.title,
-                  resumeAt:
-                    item.resumeTicks && item.resumeTicks > 0 ? item.resumeTicks / 10_000_000 : 0,
+                  resumeAt: feedResumeAt(item.resumeTicks, NEXT_UP_KEY),
                 })
               )
             }
