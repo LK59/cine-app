@@ -1074,6 +1074,14 @@ export const reportsDb = {
     return row ? toReport(row) : null;
   },
 
+  /** Pour le plafond par compte (`reportQuota`) : créés depuis `sinceMs`, et brouillons encore ouverts. */
+  quotaCounts(userId: string, sinceMs: number): { created: number; drafts: number } {
+    const row = getDb()
+      .prepare("SELECT SUM(created_at >= ?) AS created, SUM(status = 'draft') AS drafts FROM reports WHERE user_id = ?")
+      .get(sinceMs, userId) as { created: number | null; drafts: number | null };
+    return { created: row.created ?? 0, drafts: row.drafts ?? 0 };
+  },
+
   listForUser(userId: string): ReportRow[] {
     return (getDb().prepare("SELECT * FROM reports WHERE user_id = ? ORDER BY updated_at DESC").all(userId) as ReportDbRow[]).map(toReport);
   },

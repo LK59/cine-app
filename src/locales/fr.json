@@ -2263,7 +2263,8 @@
       "draftNoComment": "Un brouillon ne se commente pas : envoyez-le d'abord.",
       "refused": "Ce changement n'est pas permis.",
       "incomplete": "Il manque une réponse ou la description.",
-      "requestTooLarge": "Les images sont trop lourdes pour un seul envoi : retirez-en une."
+      "requestTooLarge": "Les images sont trop lourdes pour un seul envoi : retirez-en une.",
+      "quota": "Vous avez déjà envoyé beaucoup de signalements aujourd'hui, ou gardé beaucoup de brouillons : envoyez ou supprimez-en, ou réessayez demain."
     }
   }
 }

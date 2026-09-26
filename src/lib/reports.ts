@@ -12,6 +12,7 @@ import { sendPushToAdmins, sendPushToUser } from "@/lib/push";
 import { config } from "@/lib/config";
 import { logError } from "@/lib/logger";
 import type { ReportLogs } from "@/lib/reportLogs";
+import { MAX_OPEN_DRAFTS, MAX_REPORTS_PER_DAY } from "@/lib/reportLimits";
 
 export interface Who {
   userId: string;
@@ -42,6 +43,19 @@ export function markSeenBy(report: ReportRow, who: Who): void {
 /** Le sien, ou — pour l'administrateur — n'importe quel signalement parti. */
 export function canSee(report: ReportRow, who: Who): boolean {
   return isOwner(report, who) || (who.admin && report.status !== "draft");
+}
+
+/**
+ * Ce qui empêche ce compte de créer un signalement de plus, ou `null`. L'administrateur n'a pas
+ * de plafond : c'est lui qui fait de la place. `draft` compte les brouillons ouverts en plus des
+ * créations du jour — un brouillon oublié garde ses images sur le disque.
+ */
+export function reportQuota(who: Who, draft: boolean, now = Date.now()): string | null {
+  if (who.admin) return null;
+  const { created, drafts } = reportsDb.quotaCounts(who.userId, now - 24 * 3600_000);
+  if (created >= MAX_REPORTS_PER_DAY) return `${MAX_REPORTS_PER_DAY} signalements au plus par 24 heures`;
+  if (draft && drafts >= MAX_OPEN_DRAFTS) return `${MAX_OPEN_DRAFTS} brouillons ouverts au plus`;
+  return null;
 }
 
 const MAX_DESCRIPTION = 5000;

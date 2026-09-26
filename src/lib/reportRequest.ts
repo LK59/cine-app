@@ -20,7 +20,8 @@ export type ReportErrorCode =
   | "notDraft"
   | "draftNoComment"
   | "refused"
-  | "incomplete";
+  | "incomplete"
+  | "quota";
 
 export function reportError(code: ReportErrorCode, status: number, detail?: string): NextResponse {
   return NextResponse.json({ error: detail ?? code, code }, { status });

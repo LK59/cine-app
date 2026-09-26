@@ -2263,7 +2263,8 @@
       "draftNoComment": "Un borrador no se puede comentar: envíalo primero.",
       "refused": "Este cambio no está permitido.",
       "incomplete": "Falta una respuesta o la descripción.",
-      "requestTooLarge": "Las imágenes pesan demasiado para un solo envío: quita una."
+      "requestTooLarge": "Las imágenes pesan demasiado para un solo envío: quita una.",
+      "quota": "Ya has enviado muchos informes hoy o guardado muchos borradores: envía o elimina alguno, o inténtalo mañana."
     }
   }
 }

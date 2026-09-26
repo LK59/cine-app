@@ -2263,7 +2263,8 @@
       "draftNoComment": "Ein Entwurf kann nicht kommentiert werden: Senden Sie ihn zuerst.",
       "refused": "Diese Änderung ist nicht erlaubt.",
       "incomplete": "Eine Antwort oder die Beschreibung fehlt.",
-      "requestTooLarge": "Die Bilder sind für eine Sendung zu groß: Entfernen Sie eines."
+      "requestTooLarge": "Die Bilder sind für eine Sendung zu groß: Entfernen Sie eines.",
+      "quota": "Sie haben heute schon viele Meldungen gesendet oder viele Entwürfe behalten: Senden oder löschen Sie einige, oder versuchen Sie es morgen erneut."
     }
   }
 }

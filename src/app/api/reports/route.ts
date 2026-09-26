@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
-import { detail, markSeenBy, notifyAdmin, seanceFor, readContext, readFields, summarize } from "@/lib/reports";
+import { detail, markSeenBy, notifyAdmin, reportQuota, seanceFor, readContext, readFields, summarize } from "@/lib/reports";
 import { imagesFromForm, saveReportImage } from "@/lib/reportImages";
 import { captureReportLogs } from "@/lib/reportLogs";
 import { jsonField, reportCaller, reportError } from "@/lib/reportRequest";
@@ -23,9 +23,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const who = await reportCaller(req);
   if (who instanceof NextResponse) return who;
+  // Le plafond du jour avant de lire le formulaire, qui peut peser 90 Mo ; celui des brouillons
+  // après, puisque c'est le formulaire qui dit s'il en est un. Rien n'est écrit avant les deux.
+  const overDay = reportQuota(who, false);
+  if (overDay) return reportError("quota", 429, overDay);
   const form = await req.formData().catch(() => null);
   if (!form) return reportError("form", 400, "Formulaire illisible");
   const draft = form.get("draft") === "1";
+  const overDrafts = draft ? reportQuota(who, true) : null;
+  if (overDrafts) return reportError("quota", 429, overDrafts);
   const fields = readFields(jsonField(form, "report"), draft);
   if (typeof fields === "string") return reportError("incomplete", 400, fields);
   const images = imagesFromForm(form);

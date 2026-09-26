@@ -17,6 +17,7 @@ const KNOWN = new Set([
   "refused",
   "incomplete",
   "requestTooLarge",
+  "quota",
 ]);
 
 export function reportErrorText(error: unknown, t: (key: string) => string): string {

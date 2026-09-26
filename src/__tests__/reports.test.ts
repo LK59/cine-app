@@ -40,6 +40,8 @@ const SESSIONS: Record<string, unknown> = {
   lucas: { u: "lucas", jfUser: "lucas", jfId: "id-lucas", role: "user", jti: "j1" },
   sarah: { u: "sarah", jfUser: "sarah", jfId: "id-sarah", role: "user", jti: "j2" },
   louis: { u: "louis", jfUser: "louis", jfId: "id-louis", role: "admin", jti: "j3" },
+  // Réservée aux plafonds : ses créations ne doivent pas compter dans celles des autres tests.
+  noe: { u: "noe", jfUser: "noe", jfId: "id-noe", role: "user", jti: "j4" },
 };
 vi.mock("@/lib/session", () => ({ verifySessionFull: async (token: string) => SESSIONS[token] ?? null }));
 
@@ -398,5 +400,69 @@ describe("signalements — images", () => {
     const i = rules.findIndex((r) => r.source === "/api/reports/:id/images/:imageId");
     expect(i).toBeGreaterThan(rules.findIndex((r) => r.source === "/(.*)"));
     expect(rules[i].headers.find((h) => h.key === "Content-Security-Policy")?.value).toMatch(/^sandbox;/);
+  });
+});
+
+// Rien ne bornait ni le nombre de signalements ni celui des brouillons : six images de 25 Mo à
+// chaque création, et `data/` porte aussi la base et les journaux (26/09/2026).
+describe("signalements — plafonds par compte (26/09/2026)", () => {
+  it("refuse en 429, avec un code que l'écran traduit, au-delà de 20 brouillons ouverts", async () => {
+    const { MAX_OPEN_DRAFTS } = await import("@/lib/reportLimits");
+    for (let i = 0; i < MAX_OPEN_DRAFTS; i++) {
+      expect((await create("noe", { zone: "home", element: "homeResume" }, { draft: true })).status).toBe(201);
+    }
+    const refused = await create("noe", { zone: "home", element: "homeResume" }, { draft: true });
+    expect(refused.status).toBe(429);
+    expect(refused.body.code).toBe("quota");
+    // Un envoi direct n'ajoute pas de brouillon : il passe tant que le plafond du jour le permet.
+    expect((await create("noe", AUDIO)).status).toBe(201);
+  });
+
+  it("refuse en 429 au-delà de 30 créations sur 24 heures, brouillons compris", async () => {
+    const { MAX_REPORTS_PER_DAY } = await import("@/lib/reportLimits");
+    const { reportsDb } = await import("@/lib/db");
+    let { created } = reportsDb.quotaCounts("id-noe", Date.now() - 24 * 3600_000);
+    for (; created < MAX_REPORTS_PER_DAY; created++) expect((await create("noe", AUDIO)).status).toBe(201);
+    const refused = await create("noe", AUDIO);
+    expect(refused.status).toBe(429);
+    expect(refused.body.code).toBe("quota");
+    // L'administrateur n'a pas de plafond ; les autres comptes ne partagent pas celui de noe.
+    expect((await create("sarah", AUDIO)).status).toBe(201);
+  });
+
+  it("n'en met pas à l'administrateur", async () => {
+    const { reportQuota } = await import("@/lib/reports");
+    expect(reportQuota({ userId: "id-noe", userName: "noe", admin: true }, true)).toBeNull();
+    expect(reportQuota({ userId: "id-noe", userName: "noe", admin: false }, false)).not.toBeNull();
+  });
+
+  it("l'écran connaît le code", async () => {
+    const { reportErrorText } = await import("@/components/reports/reportErrors");
+    expect(reportErrorText({ code: "quota" }, (k) => k)).toBe("report.errors.quota");
+  });
+});
+
+describe("signalements — images démesurées (26/09/2026)", () => {
+  // 100 M pixels pour tout format laissaient un PNG uni de quelques kilo-octets se décoder en
+  // centaines de mégaoctets, six fois par requête.
+  it("ne décode pas un PNG de plus de 40 M pixels, mais garde l'original", async () => {
+    const { default: sharp } = await import("sharp");
+    const png = await sharp({ create: { width: 6500, height: 6500, channels: 3, background: "#000" } }).png({ compressionLevel: 1 }).toBuffer();
+    const { status, body } = await create("sarah", AUDIO, { images: [new File([png], "immense.png", { type: "image/png" })] });
+    expect(status).toBe(201);
+    const images = body.images as { url: string | null; originalUrl: string }[];
+    expect(images).toHaveLength(1);
+    expect(images[0].url).toBeNull();
+    expect(images[0].originalUrl).toContain("original=1");
+  }, 30_000);
+
+  it("garde 100 M pour le JPEG, décodé réduit, et 40 M pour le reste", async () => {
+    const { inputPixelLimit } = await import("@/lib/reportImages");
+    expect(inputPixelLimit("jpeg")).toBe(100_000_000);
+    expect(inputPixelLimit("png")).toBe(40_000_000);
+    expect(inputPixelLimit("webp")).toBe(40_000_000);
+    expect(inputPixelLimit(undefined)).toBe(40_000_000);
+    // Une capture 8K passe.
+    expect(7680 * 4320).toBeLessThan(inputPixelLimit("png"));
   });
 });

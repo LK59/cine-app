@@ -59,6 +59,22 @@ export function storedImageType(name: string): string {
 }
 
 /**
+ * Combien de pixels `sharp` accepte de décoder, selon le format annoncé par l'en-tête.
+ *
+ * 100 M pour tout le monde laissait un PNG de 10 000 × 10 000 — quelques kilo-octets d'une seule
+ * couleur, bien sous les 25 Mo — se décoder en 400 Mo de mémoire, six fois par requête, dans un
+ * conteneur de 2 Go (26/09/2026). 40 M couvre une capture 8K (33 M) et au-delà.
+ *
+ * Le JPEG garde 100 M : libjpeg le décode déjà réduit (1/2, 1/4, 1/8) quand la sortie est plus
+ * petite, ce qui est toujours le cas ici (2 560 px au plus) — sa mémoire ne suit pas ses pixels.
+ * Et c'est le format des photos de téléphone en pleine définition (48 M sur un iPhone en « JPEG
+ * Max », 50 à 64 M sur bien des Android), qui recevaient une version d'affichage jusqu'ici.
+ */
+export function inputPixelLimit(format: string | undefined): number {
+  return format === "jpeg" ? 100_000_000 : 40_000_000;
+}
+
+/**
  * Enregistre une image : l'original, et une version d'affichage si elle peut être produite.
  * `shown` est ce que le navigateur a lui-même converti (un HEIC devenu JPEG), s'il l'a fait.
  */
@@ -79,7 +95,8 @@ export async function saveReportImage(reportId: number, messageId: number | null
     if (!source) continue;
     try {
       const { default: sharp } = await import("sharp");
-      const { data, info } = await sharp(source, { failOn: "none", limitInputPixels: 100_000_000 })
+      const limitInputPixels = inputPixelLimit((await sharp(source, { failOn: "none" }).metadata()).format);
+      const { data, info } = await sharp(source, { failOn: "none", limitInputPixels })
         .rotate()
         .resize({ width: 2560, height: 2560, fit: "inside", withoutEnlargement: true })
         .webp({ quality: 82 })
