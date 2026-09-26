@@ -7,6 +7,7 @@ import { isJellyfinId, isStreamPath, isUnderJellyfinPrefix } from "@/lib/jellyfi
 import { castPassFor, withCastPass, CAST_TOKEN_PARAM } from "@/lib/castToken";
 import { stripAccessToken } from "@/lib/stripAccessToken";
 import { castMasterPlaylist } from "@/lib/castMaster";
+import { fixVttTimestampMap } from "@/lib/vttTimestampMap";
 
 // Root cause found live via temporary request logging: right after a fresh remux job starts
 // (e.g. on an audio-track switch, which always requests a brand new PlaySessionId/ffmpeg job),
@@ -164,6 +165,15 @@ export async function GET(
       // contain the full text.
       return new NextResponse(buf, {
         headers: { "Content-Type": contentType, "Cache-Control": "no-store", "Content-Length": String(buf.length) },
+      });
+    }
+
+    // Un segment de sous-titres HLS : lu en entier (quelques centaines d'octets) pour corriger le
+    // repère de temps que Jellyfin y écrit pour des segments `.ts` — voir `fixVttTimestampMap`.
+    if (restPath.endsWith(".vtt")) {
+      const buf = Buffer.from(fixVttTimestampMap(await res.text()), "utf-8");
+      return new NextResponse(buf, {
+        headers: { "Content-Type": contentType, "Cache-Control": "private, max-age=21600", "Content-Length": String(buf.length) },
       });
     }
 
