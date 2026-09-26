@@ -388,7 +388,8 @@ docker compose ps
 ```
 
 **Can it reach your services?** Open `http://<server>:3000/status` — this page is deliberately
-public, no login required, precisely so it can be read when logging in is what fails. Each service
+public, no login required, precisely so it can be read when logging in is what fails. Signed out,
+it only says whether signing in and watching work; signed in as the administrator, each service
 answers for itself: connected, not configured, or unreachable with the error it returned. (Port
 3000 on the host only answers with the `ports:` line uncommented — otherwise use your proxy's
 address, or the shell check below.)
@@ -401,7 +402,7 @@ address, or the shell check below.)
 <img src="docs/screenshots/deploy-status-page.png" width="100%">
 -->
 
-The same information, from the shell:
+The same summary, from the shell (signed out, so the three sign-in and playback capabilities):
 
 ```bash
 curl -s http://localhost:3000/api/status/public | head -c 400

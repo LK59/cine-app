@@ -869,8 +869,9 @@ un jeton refusé ou un retard ne grisent jamais un titre lisible.
 
 Ce qui n'arrive que par le réseau — accroche, distribution, bande-annonce, durée d'une série — a sa
 place tenue dès l'ouverture et s'y pose en fondu de 150 ms, seulement si la réponse est arrivée
-après l'ouverture. Et l'appui sur une affiche demande déjà la description et l'état Jellyfin du
-titre, une fois par demi-minute.
+après l'ouverture. Et l'appui sur une affiche demande déjà la description du titre, une fois par
+demi-minute — et elle seulement : l'état Jellyfin et la liste d'épisodes, préchargés sans être lus,
+étaient servis périmés quelques minutes plus tard (25/09/2026).
 
 **Porteurs.** `src/lib/sheetFacts.ts` — `useSheetPlayFacts` (sur `localPlayTarget` et
 `sheetPlayFacts`), `sheetRuntimeMinutes`, `sheetOverview` ; `useFileMissing`
@@ -893,3 +894,25 @@ de TMDB, en fondu. Une place tenue que la réponse n'occupe pas (un film sans ac
 c'est le seul mouvement qui reste, et le plus rare.
 
 **Décidé le 25/09/2026.**
+
+## 30. Ce qu'une connexion accepte avant de travailler
+
+**Règle.** Un identifiant et un mot de passe sont des chaînes, bornés (256 et 1 024 caractères),
+vérifiés avant toute comparaison, tout appel à Jellyfin et toute écriture dans `auth.log`. Le mot
+de passe est essayé tel quel, puis sans ses blancs de fin (`trimEnd`) seulement s'il en a.
+
+**Pourquoi.** Les deux routes de connexion sont publiques. Le rognage par `replace(/\s+$/, "")`
+était quadratique : un mot de passe fait d'espaces suivies d'un caractère figeait tout le serveur,
+quinze minutes pour un mégaoctet, avant même la limite d'essais. Et un mot de passe qui n'était pas
+une chaîne répondait 500 (audit du 26/09/2026).
+
+**Porteurs.** `readCredentials` et `passwordAttempts` (`src/lib/passwordAttempts.ts`).
+
+**Appelants.** `src/app/api/auth/jellyfin/route.ts`, `src/app/api/auth/login/route.ts`.
+
+**Tests.** `passwordAttempts.test.ts`, les tests des deux routes.
+
+**Voulu.** 400 et « Identifiants requis » pour ce qui est refusé ici, comme un champ vide : rien
+de plus précis à dire à qui envoie cela.
+
+**Décidé le 26/09/2026.**

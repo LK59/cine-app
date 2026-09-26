@@ -460,7 +460,8 @@ what fill it. Everything else is optional, and an integration that is not config
 a configuration, not as a failure:
 
 - `/api/config/public` reports which services are connected — booleans only, never an address or a
-  key, since that route is read without a session.
+  key — and only to a signed-in session: to anyone else, the list would say what runs behind the
+  site.
 - A page whose service is missing shows what is missing and the exact variables to add to `.env`,
   instead of a network error.
 - The sidebar dims those entries rather than hiding them, so a page someone is looking for can
@@ -469,7 +470,9 @@ a configuration, not as a failure:
   server-side player when the browser cannot handle a file.
 
 A service that is configured but **down** is a different thing and reads differently: `/status` and
-the health cards say so, with the error the service itself returned.
+the health cards say so, with the error the service itself returned. Signed out, `/status` only
+answers the question of someone who cannot get in — can one sign in, can one watch — without
+naming the services behind; signed in, it shows every capability.
 
 ---
 
@@ -538,7 +541,9 @@ data/
 *.db-shm
 ```
 
-All service API keys stay server-side and are never exposed to the browser. Jellyfin writes its
+All service API keys stay server-side and are never exposed to the browser, and the server's
+configuration module is never bundled into client code (a constant a screen needs lives in a
+module of its own, such as `src/lib/tmdbImageBase.ts`). Jellyfin writes its
 access token into the playlists and subtitle URLs it generates (`ApiKey=`); the stream relay
 authenticates every request with its own header and strips that parameter from every address and
 playlist it forwards (`src/lib/stripAccessToken.ts`), so it never reaches a page, a history or a
@@ -565,6 +570,11 @@ can be revoked immediately rather than only on expiry. A few things are worth kn
 - **Signing out turns this device's notifications off.** A push subscription belongs to the
   browser, not to the person; left in place, the next account on a shared tablet received the
   previous one's notifications. If they were on, the question is asked again at the next sign-in.
+- **Abuse is bounded where one account could cost everyone.** Sign-in fields are typed and
+  length-capped before any work; problem reports are capped per account (30 a day, 20 open
+  drafts; the administrator is exempt) and their screenshots decoded under a pixel limit; push
+  subscriptions are accepted only for known push services, ten per account; lists of ratings and
+  person searches are bounded against the TMDB/OMDb quotas.
 - **Signing your other devices out affects Cine App only.** The Jellyfin sessions those logins
   opened are left alone — deliberately: nobody clicking that button expects to lose Jellyfin
   with it.
