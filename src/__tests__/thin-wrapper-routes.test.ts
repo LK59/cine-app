@@ -27,10 +27,22 @@ describe("GET /api/jackett/indexers", () => {
 });
 
 describe("GET /api/qbittorrent/torrents", () => {
-  it("returns qbittorrent.getTorrents()'s result as-is", async () => {
-    mockQbittorrent.getTorrents.mockResolvedValue([{ hash: "abc" }]);
+  it("renvoie les torrents sans passkey : ni magnet, ni chemin d'annonce (26/09/2026)", async () => {
+    mockQbittorrent.getTorrents.mockResolvedValue([
+      {
+        hash: "abc",
+        name: "Film",
+        tracker: "https://tracker.example/0123456789abcdef/announce",
+        magnet_uri: "magnet:?xt=urn:btih:abc&tr=https%3A%2F%2Ftracker.example%2F0123456789abcdef%2Fannounce",
+        save_path: "/downloads",
+      },
+    ]);
     const { GET } = await import("@/app/api/qbittorrent/torrents/route");
-    expect(await (await GET()).json()).toEqual([{ hash: "abc" }]);
+    const [torrent] = await (await GET()).json();
+    expect(torrent).toMatchObject({ hash: "abc", name: "Film", tracker: "https://tracker.example/" });
+    expect(torrent).not.toHaveProperty("magnet_uri");
+    expect(torrent).not.toHaveProperty("save_path");
+    expect(JSON.stringify(torrent)).not.toContain("0123456789abcdef");
   });
 });
 
