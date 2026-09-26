@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { configuredServices } from "@/lib/services";
 
@@ -9,7 +11,12 @@ import { configuredServices } from "@/lib/services";
  * branché, pour que l'interface cesse de proposer des pages qui ne peuvent que rater — un service
  * absent est une configuration, pas une panne, et les deux ne se disent pas de la même façon.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Ce qui est branché ne regarde que les personnes connectées : sans session, la liste disait à
+  // n'importe qui qu'un client BitTorrent et Jackett tournaient derrière (audit du 26/09/2026).
+  // L'interface tient une absence pour « branché » (`useConfiguredServices`), et l'écran de
+  // connexion n'en a pas besoin.
+  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   return NextResponse.json({
     defaultLang: config.app.language,
     playerEnabled: config.player.enabled,
@@ -19,6 +26,6 @@ export async function GET() {
     playerServerFallback: config.player.serverFallback,
     // L'option galerie : lue au démarrage du serveur, et non plus figée dans l'image.
     claraGallery: config.gallery.clara,
-    configured: configuredServices(config),
+    ...(session ? { configured: configuredServices(config) } : {}),
   });
 }

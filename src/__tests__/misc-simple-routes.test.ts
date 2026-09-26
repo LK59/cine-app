@@ -30,10 +30,25 @@ function fakeReq(cookie = "t"): NextRequest {
 
 beforeEach(() => vi.clearAllMocks());
 
+function configReq(): import("next/server").NextRequest {
+  return { cookies: { get: () => ({ value: "t" }) } } as unknown as import("next/server").NextRequest;
+}
+
 describe("GET /api/config/public", () => {
-  it("says what is connected, and never how", async () => {
+  // 26/09/2026 : sans session, la liste de ce qui est branché n'est plus donnée — elle nommait le
+  // client BitTorrent et Jackett à n'importe qui.
+  it("ne dit pas ce qui est branché à une personne non connectée", async () => {
+    mockVerifySessionFull.mockResolvedValue(null);
     const { GET } = await import("@/app/api/config/public/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(configReq())).json();
+    expect(body.configured).toBeUndefined();
+    expect(body.defaultLang).toBe("fr");
+  });
+
+  it("says what is connected, and never how", async () => {
+    mockVerifySessionFull.mockResolvedValue({ role: "user" });
+    const { GET } = await import("@/app/api/config/public/route");
+    const body = await (await GET(configReq())).json();
     expect(body).toEqual({
       defaultLang: "fr",
       playerEnabled: true,

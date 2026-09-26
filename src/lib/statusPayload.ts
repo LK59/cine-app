@@ -108,3 +108,27 @@ export async function buildStatusPayload(force: boolean): Promise<StatusPayload>
 
   return { overall, checkedAt: new Date(checkedAt).toISOString(), live: !usable, capabilities: payload };
 }
+
+/**
+ * Ce qu'une personne non connectée voit de l'état : peut-on se connecter et regarder, et rien de plus.
+ *
+ * La page d'état est publique — c'est celle qu'on ouvre quand la connexion ne marche pas —, mais sa
+ * réponse listait à n'importe qui sur Internet chaque capacité et chaque service derrière elle, un
+ * client BitTorrent et un agrégateur d'indexeurs compris (audit du 26/09/2026). Sans session, il ne
+ * reste que les trois capacités qui répondent à la question de cette personne-là, sans leurs
+ * dépendances, et l'état d'ensemble recalculé sur elles seules.
+ */
+export const ANONYMOUS_CAPABILITIES = ["watchJellyfin", "watchCineApp", "auth"] as const;
+
+export function anonymousStatus(payload: StatusPayload): StatusPayload {
+  const kept = payload.capabilities
+    .filter((c) => (ANONYMOUS_CAPABILITIES as readonly string[]).includes(c.id))
+    .map((c) => ({ ...c, note: null, dependsOn: [], softDependsOn: [] }));
+  const overall: CheckStatus = kept.every((c) => c.status === "ok")
+    ? "ok"
+    : kept.some((c) => c.status === "down")
+      ? "down"
+      : "degraded";
+  return { ...payload, overall, capabilities: kept };
+}
+

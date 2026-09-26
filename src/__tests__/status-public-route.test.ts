@@ -6,6 +6,9 @@ vi.mock("@/lib/rateLimiter", () => ({
   createRateLimiter: () => () => rateLimitAllows,
 }));
 vi.mock("@/lib/api-helpers", () => ({ getClientIp: () => "1.2.3.4" }));
+vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
+let signedIn = true;
+vi.mock("@/lib/session", () => ({ verifySessionFull: async () => (signedIn ? { u: "louis", role: "user" } : null) }));
 
 const runAllServiceChecks = vi.fn(async () => ({}));
 const computeCapabilities = vi.fn(() => [
@@ -27,7 +30,7 @@ vi.mock("@/lib/statusCron", () => ({
 }));
 
 function fakeReq(search = ""): NextRequest {
-  return { nextUrl: new URL(`http://x/api/status/public${search}`) } as unknown as NextRequest;
+  return { nextUrl: new URL(`http://x/api/status/public${search}`), cookies: { get: () => ({ value: "t" }) } } as unknown as NextRequest;
 }
 
 function freshSnapshot(ageMs: number) {
@@ -112,5 +115,23 @@ describe("GET /api/status/public", () => {
     await GET(fakeReq());
     await GET(fakeReq("?refresh=1"));
     expect(getCapabilityHistory).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("sans session (26/09/2026)", () => {
+  it("ne montre que se connecter et regarder, sans dépendances, et n'interroge rien en direct", async () => {
+    signedIn = false;
+    computeCapabilities.mockReturnValueOnce([
+      { id: "watchJellyfin", status: "ok", note: null, dependsOn: [{ service: "jellyfin", status: "ok" }] as never, softDependsOn: [] },
+      { id: "download", status: "down", note: null, dependsOn: [{ service: "qbittorrent", status: "down" }] as never, softDependsOn: [] },
+    ] as never);
+    snapshot = null;
+    const { GET } = await import("@/app/api/status/public/route");
+    const body = await (await GET(fakeReq("?refresh=1"))).json();
+    expect(body.capabilities.map((c: { id: string }) => c.id)).toEqual(["watchJellyfin"]);
+    expect(body.capabilities[0].dependsOn).toEqual([]);
+    expect(body.overall).toBe("ok");
+    expect(JSON.stringify(body)).not.toContain("qbittorrent");
+    signedIn = true;
   });
 });

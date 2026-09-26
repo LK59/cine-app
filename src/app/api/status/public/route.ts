@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildStatusPayload } from "@/lib/statusPayload";
+import { anonymousStatus, buildStatusPayload } from "@/lib/statusPayload";
+import { SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionFull } from "@/lib/session";
 import { createRateLimiter } from "@/lib/rateLimiter";
 import { getClientIp } from "@/lib/api-helpers";
 
@@ -50,6 +52,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "rate limited" }, { status: 429 });
   }
 
+  // Une session ouverte voit tout ; sans elle, l'essentiel seulement — voir `anonymousStatus`. Et
+  // sans session, pas d'interrogation en direct : le dernier relevé a au plus une minute.
+  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   // `?refresh=1` = le bouton « rafraîchir maintenant ». Tout le reste lit le dernier relevé.
-  return NextResponse.json(await buildStatusPayload(req.nextUrl.searchParams.get("refresh") === "1"));
+  const payload = await buildStatusPayload(!!session && req.nextUrl.searchParams.get("refresh") === "1");
+  return NextResponse.json(session ? payload : anonymousStatus(payload));
 }
