@@ -17,10 +17,12 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm test
-# Next's compiler cache lives in .next/cache and is what makes a rebuild incremental. As a cache
-# mount it survives between builds and is updated in place, instead of every build recompiling
-# the whole app and writing a fresh layer for the result.
-RUN --mount=type=cache,target=/app/.next/cache npm run build
+# No cache mount on .next/cache any more (26/09/2026). Turbopack keeps its compilation cache
+# there, and a build fed the previous one shipped fresh JavaScript with a stale stylesheet: every
+# rule added to globals.css since the last build was missing from the image, while the gate and
+# `next build` both passed. The cache saved four seconds (2.9 s against 6.6 s compiled cold).
+# The image cache the server writes at runtime lives in a volume (docker-compose.yml), not here.
+RUN npm run build
 
 FROM node:24-alpine AS runner
 WORKDIR /app
