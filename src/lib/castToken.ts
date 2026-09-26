@@ -1,5 +1,6 @@
 import { config } from "@/lib/config";
 import { isJellyfinId } from "@/lib/jellyfinPath";
+import { sessionDb } from "@/lib/db";
 
 /**
  * Le laissez-passer d'un téléviseur pour un seul film.
@@ -59,11 +60,19 @@ interface CastClaims {
   u: string;
   /** Fin de validité, en ms. */
   e: number;
+  /**
+   * La session qui l'a demandé. Le laissez-passer meurt avec elle : il est émis pour chaque lecture
+   * et finit dans les journaux d'accès du relais inverse, et sans ce lien il restait valable six
+   * heures après une déconnexion ou une session fermée par l'administrateur (audit du 26/09/2026).
+   * Absent des jetons d'avant, qui expirent d'eux-mêmes.
+   */
+  s?: string;
 }
 
 /** Le laissez-passer pour ce titre, à coller dans l'adresse donnée au téléviseur. */
-export async function signCastToken(itemId: string, userId: string, now = Date.now()): Promise<string> {
-  const payload = base64url(new TextEncoder().encode(JSON.stringify({ i: itemId, u: userId, e: now + LIFETIME_MS } satisfies CastClaims)));
+export async function signCastToken(itemId: string, userId: string, now = Date.now(), sessionJti?: string): Promise<string> {
+  const claims: CastClaims = { i: itemId, u: userId, e: now + LIFETIME_MS, ...(sessionJti ? { s: sessionJti } : {}) };
+  const payload = base64url(new TextEncoder().encode(JSON.stringify(claims)));
   const signature = base64url(await crypto.subtle.sign("HMAC", await getKey(), new TextEncoder().encode(payload)));
   return `${payload}.${signature}`;
 }
@@ -75,7 +84,12 @@ export async function signCastToken(itemId: string, userId: string, now = Date.n
  * proxy, sur le chemin de *toutes* les requêtes de flux, et une vérification qui lève à la place
  * d'un refus transformerait un jeton malformé en panne de l'application entière.
  */
-export async function verifyCastToken(token: string | null | undefined, itemId: string, now = Date.now()): Promise<string | null> {
+export async function verifyCastToken(
+  token: string | null | undefined,
+  itemId: string,
+  now = Date.now(),
+  sessionAlive: (jti: string) => boolean = (jti) => sessionDb.exists(jti)
+): Promise<string | null> {
   if (!token) return null;
   try {
     const [payload, signature] = token.split(".");
@@ -97,6 +111,7 @@ export async function verifyCastToken(token: string | null | undefined, itemId: 
     if (typeof claims.i !== "string" || claims.i !== itemId) return null;
     if (typeof claims.e !== "number" || claims.e <= now) return null;
     if (typeof claims.u !== "string" || !claims.u) return null;
+    if (claims.s !== undefined && (typeof claims.s !== "string" || !sessionAlive(claims.s))) return null;
     return claims.u;
   } catch {
     return null;

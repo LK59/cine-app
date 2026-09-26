@@ -265,3 +265,17 @@ describe("l'interruption d'une diffusion", () => {
     expect(source).toMatch(/onChangeAudio=\{requestAudioChange\}/);
   });
 });
+
+describe("le laissez-passer meurt avec la session qui l'a demandé (26/09/2026)", () => {
+  it("vaut tant que la session existe, plus après", async () => {
+    const token = await signCastToken(ITEM, "louis", Date.now(), "jti-1");
+    expect(await verifyCastToken(token, ITEM, Date.now(), (jti) => jti === "jti-1")).toBe("louis");
+    expect(await verifyCastToken(token, ITEM, Date.now(), () => false)).toBeNull();
+  });
+
+  it("un jeton d'avant, sans session, reste valable jusqu'à son expiration", async () => {
+    const token = await signCastToken(ITEM, "louis");
+    expect(await verifyCastToken(token, ITEM, Date.now(), () => false)).toBe("louis");
+  });
+});
+

@@ -246,7 +246,10 @@ export async function POST(req: NextRequest) {
     // Signé pour toute lecture, et non plus seulement pour une diffusion demandée : voir `castUrl`.
     // Hors diffusion demandée, un échec de signature ne coûte que l'AirPlay des commandes de la
     // vidéo — jamais la lecture elle-même (voir `castUrl`).
-    const castPass = forCast ? await signCastToken(itemId, session.u) : await signCastToken(itemId, session.u).catch(() => null);
+    // Lié à la session qui le demande : il meurt avec elle — voir `CastClaims.s`.
+    const castPass = forCast
+      ? await signCastToken(itemId, session.u, Date.now(), session.jti)
+      : await signCastToken(itemId, session.u, Date.now(), session.jti).catch(() => null);
     /**
      * Les **faits** des pistes, et non une étiquette déjà écrite.
      *
