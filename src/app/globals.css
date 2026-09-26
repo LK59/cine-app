@@ -637,6 +637,21 @@
       height: 100vh;
     }
   }
+
+  /* Une fiche de titre sur téléphone : la même hauteur que `app-viewport`, moins ce qu'elle laisse
+     au-dessus d'elle — la barre d'état et un demi-rem, pour qu'on la voie posée en carte sur
+     l'accueil (26/09/2026). Elle commençait tout en haut, son contenu repoussé sous la barre d'état
+     par un retrait. Mêmes unités que ci-dessus, pour les mêmes raisons. */
+  .phone-sheet-frame {
+    top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+    height: calc(100dvh - env(safe-area-inset-top, 0px) - 0.5rem);
+  }
+
+  @media (display-mode: standalone) {
+    .phone-sheet-frame {
+      height: calc(100vh - env(safe-area-inset-top, 0px) - 0.5rem);
+    }
+  }
 }
 
 @layer base {

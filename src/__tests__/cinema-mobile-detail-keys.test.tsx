@@ -63,7 +63,7 @@ const draw = (onClose: () => void) =>
       <CinemaMobileDetail item={MOVIE} mediaType="movies" onClose={onClose} />
     </SWRConfig>
   );
-const root = () => document.body.querySelector<HTMLElement>(".app-viewport")!;
+const root = () => document.body.querySelector<HTMLElement>(".phone-sheet-frame")!;
 
 beforeEach(() => {
   mode = "idle";

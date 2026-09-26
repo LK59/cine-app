@@ -69,3 +69,16 @@ export function detailColumnMotion({ leaving, revealed }: { leaving: boolean; re
   if (leaving) return "animate-fade-out-down";
   return revealed ? "" : "animate-fade-in-up";
 }
+
+/**
+ * Le rayon des coins du haut d'une fiche de titre sur téléphone, selon le chemin parcouru au doigt.
+ *
+ * Elle était collée au bord et carrée, alors que la fiche personne se posait déjà en carte aux coins
+ * arrondis. Depuis le 26/09/2026 elle commence sous la barre d'état (`phone-sheet-frame`) et
+ * garde 16 px au repos, comme `rounded-2xl` ; en tirant, le rayon grandit jusqu'à 28 px comme il le
+ * faisait depuis zéro — le geste garde sa forme, il part d'une carte déjà arrondie. Partagé par la
+ * fiche de bibliothèque et la fiche TMDB : rien dans le geste ne dit laquelle une affiche ouvre.
+ */
+export function phoneSheetCorner(offset: number): number {
+  return Math.max(16, Math.min(28, offset * 0.5));
+}

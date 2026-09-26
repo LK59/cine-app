@@ -47,7 +47,7 @@ const discover = (leaving: boolean) => wrap(<PlayerDiscoverSheet tmdbId={2} medi
 
 const escape = () => fireEvent.keyDown(window, { key: "Escape" });
 /** La racine de la fiche découverte sur téléphone : elle porte l'animation. */
-const discoverRoot = () => document.body.querySelector<HTMLElement>(".app-viewport")!;
+const discoverRoot = () => document.body.querySelector<HTMLElement>(".phone-sheet-frame")!;
 /** Les poignées : la bannière de la fiche découverte, l'en-tête de la fiche personne. */
 const discoverHandle = () => document.body.querySelector<HTMLElement>(".aspect-video")!;
 const personHandle = () => document.body.querySelector<HTMLElement>('[role="dialog"] > div')!;

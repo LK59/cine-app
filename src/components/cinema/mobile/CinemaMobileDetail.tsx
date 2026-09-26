@@ -13,7 +13,7 @@ import { arrivedByBack, markSheetLeaving, useSheetBehind, useRouteBehind } from 
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
-import { SHEET_OUT_MS, sheetMotionClass } from "@/lib/sheetMotion";
+import { SHEET_OUT_MS, sheetMotionClass, phoneSheetCorner } from "@/lib/sheetMotion";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { usePlayerEnabledState } from "@/lib/usePlayerEnabled";
@@ -321,12 +321,14 @@ export function CinemaMobileDetail({
       //
       // Une fiche recouverte ne peut de toute façon être ni tirée ni fermée — ses gestes sont
       // débranchés —, donc les deux autres branches restent fausses pour elle.
-      className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
+      className={`phone-sheet-frame safe-x fixed inset-x-0 overflow-y-auto overscroll-contain bg-ink ring-1 ring-white/10 ${
         sheetMotionClass({ swipe, leaving: closing, revealed, out: swapsInPlace ? "" : "sheet-out" })
       }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
       // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close
-      // button lands in the murk.
+      // button lands in the murk. Since 26/09/2026 the whole card starts there (`phone-sheet-frame`),
+      // half a rem lower, rounded and edged like the person sheet — no longer a padding inside a
+      // rectangle glued to the top of the screen.
       style={{
         // Les plans, de bas en haut : la grille (45), les panneaux du rail (46) — qu'une fiche
         // recouvre sans les refermer —, la fiche du dessous (47) et celle du dessus (48).
@@ -337,7 +339,6 @@ export function CinemaMobileDetail({
         // milieu de l'animation empilait une fiche par-dessus, et celle-ci, devenue « dessous »,
         // ne se refermait plus jamais — invisible, mais toujours dans l'adresse (23/09/2026).
         pointerEvents: inert || closing ? "none" : undefined,
-        paddingTop: "env(safe-area-inset-top, 0px)",
         transform: !inert && swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
         // No transition while the finger is down: the sheet is not animating towards the finger,
         // it is where the finger is. On release the spring back (or the rest of the way out) is
@@ -349,8 +350,8 @@ export function CinemaMobileDetail({
         // you could see the grid through. It's one solid panel being moved out of the way, so it
         // gets the two things a panel gets when it lifts off the screen edge: corners and a
         // shadow, both proportional to how far it has come.
-        borderTopLeftRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
-        borderTopRightRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
+        borderTopLeftRadius: phoneSheetCorner(swipe.offset),
+        borderTopRightRadius: phoneSheetCorner(swipe.offset),
         boxShadow: swipe.offset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined,
       }}
     >

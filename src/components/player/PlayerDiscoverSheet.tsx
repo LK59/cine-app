@@ -10,7 +10,7 @@ import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
-import { SHEET_OUT_MS, sheetMotionClass, detailColumnMotion } from "@/lib/sheetMotion";
+import { SHEET_OUT_MS, sheetMotionClass, detailColumnMotion, phoneSheetCorner } from "@/lib/sheetMotion";
 import { useSheetExit } from "@/lib/useSheetExit";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import {
@@ -152,7 +152,7 @@ export function PlayerDiscoverSheet({
   // tout le reste dans une colonne qui défile.
   const mobileSheet = (
     <div
-      className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
+      className={`phone-sheet-frame safe-x fixed inset-x-0 overflow-y-auto overscroll-contain bg-ink ring-1 ring-white/10 ${
         // Exactement les classes des fiches de bibliothèque : dans une rangée de saga, un titre
         // sur trois ouvre celle-ci et les autres ouvrent l'autre, et rien dans le geste ne dit
         // laquelle — les deux doivent donc entrer et sortir de la même façon.
@@ -161,7 +161,6 @@ export function PlayerDiscoverSheet({
       style={{
         zIndex: 48,
         ...exit.style,
-        paddingTop: "env(safe-area-inset-top, 0px)",
         transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
         // Pas de transition pendant que le doigt est posé : la fiche n'anime pas vers le doigt,
         // elle *est* où il est. C'est le relâchement qu'on adoucit — le retour en place comme le
@@ -173,8 +172,8 @@ export function PlayerDiscoverSheet({
         // d'écran à travers lequel on voit la grille. C'est un panneau plein qu'on écarte, donc il
         // reçoit ce que reçoit un panneau qui décolle du bord — des coins et une ombre, l'un comme
         // l'autre proportionnels au chemin parcouru.
-        borderTopLeftRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
-        borderTopRightRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
+        borderTopLeftRadius: phoneSheetCorner(swipe.offset),
+        borderTopRightRadius: phoneSheetCorner(swipe.offset),
         boxShadow: swipe.offset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined,
       }}
     >
