@@ -916,3 +916,25 @@ une chaîne répondait 500 (audit du 26/09/2026).
 de plus précis à dire à qui envoie cela.
 
 **Décidé le 26/09/2026.**
+
+## 31. La forme d'une fiche de titre sur téléphone
+
+**Règle.** Une fiche de titre commence sous la barre d'état, un demi-rem plus bas, avec des coins
+de 16 px au repos, qui grandissent jusqu'à 28 px quand on la tire vers le bas.
+
+**Pourquoi.** Elle était collée en haut de l'écran et carrée, alors que la fiche personne se posait
+déjà en carte arrondie. Et la moitié des titres d'une rangée de saga ouvre la fiche de
+bibliothèque, l'autre moitié la fiche TMDB, sans que rien dans le geste dise laquelle : les deux
+doivent avoir la même forme.
+
+**Porteurs.** `.phone-sheet-frame` (`globals.css` : position et hauteur, dans les unités
+d'`app-viewport`) et `phoneSheetCorner` (`src/lib/sheetMotion.ts`).
+
+**Appelants.** `CinemaMobileDetail`, `PlayerDiscoverSheet` (sa version téléphone).
+
+**Tests.** `sheet-exit.test.tsx` et `cinema-mobile-detail-keys.test.tsx` retrouvent les deux fiches
+par `.phone-sheet-frame`.
+
+**Voulu.** La fiche personne garde sa propre forme : elle se pose en bas, à 92 % de la hauteur.
+
+**Décidé le 26/09/2026.**
