@@ -589,8 +589,9 @@ Only relevant if you are modifying the code — deploying needs none of this.
 docker run --rm -v "$PWD":/app -w /app node:24-alpine sh -c \
   'apk add --no-cache python3 make g++ && npm ci'
 
-# Iterate — hot reload against the working tree, on http://localhost:3001 of the server
-# (loopback only: use an SSH tunnel, `ssh -L 3001:localhost:3001 <server>`).
+# Iterate — hot reload against the working tree. Published on the server's loopback (3001) unless
+# DEV_BIND says otherwise; reach it through a reverse proxy on the same Docker network
+# (cine-app-dev:3000), an SSH tunnel, or DEV_BIND=0.0.0.0 on a private LAN.
 # Runs alongside production; does not rebuild the image.
 docker compose -f docker-compose.dev.yml up
 

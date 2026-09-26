@@ -24,8 +24,9 @@ Hiding the management button is presentation, not security.
 **There is no Node or npm on this host.** Everything runs through Docker.
 
 ```sh
-# Iterate — hot reload against the working tree, on http://localhost:3001 of the server
-# (published on loopback only: reach it through `ssh -L 3001:localhost:3001 <server>`).
+# Iterate — hot reload against the working tree. Port 3001 is published on loopback only
+# (`DEV_BIND` in .env changes that); the reverse proxy reaches cine-app-dev:3000 over the Docker
+# network, or use `ssh -L 3001:localhost:3001 <server>`.
 # Runs alongside production; does not rebuild the image.
 docker compose -f docker-compose.dev.yml up
 
