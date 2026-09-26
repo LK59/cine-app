@@ -66,10 +66,11 @@ describe("signOut", () => {
 describe("safeNextPath — où aller après la connexion", () => {
   it("garde un chemin de ce site", () => {
     expect(safeNextPath("/#film=12", "/")).toBe("/#film=12");
+    expect(safeNextPath("/gestion?onglet=2#x", "/")).toBe("/gestion?onglet=2#x");
   });
 
   it("refuse une autre adresse, même déguisée", () => {
-    for (const asked of ["https://ailleurs.example", "//ailleurs.example", "/\\ailleurs.example", "javascript:alert(1)", ""]) {
+    for (const asked of ["https://ailleurs.example", "//ailleurs.example", "/\\ailleurs.example", "javascript:alert(1)", "", "/\t/ailleurs.example", "/\n/ailleurs.example", "/\r/ailleurs.example"]) {
       expect(safeNextPath(asked, "/")).toBe("/");
     }
     expect(safeNextPath(null, "/gestion")).toBe("/gestion");
