@@ -261,7 +261,15 @@ self.addEventListener("notificationclick", (event) => {
     Promise.all([
       clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
         const existing = windowClients.find((c) => c.url.includes(self.location.origin));
-        if (existing) return existing.focus().then((c) => c.navigate(url));
+        // `navigate` échoue sur un onglet que ce worker ne contrôle pas encore (un rechargement en
+        // cours) : l'onglet venait au premier plan sans ouvrir la page de la notification. Une
+        // fenêtre neuve plutôt que rien (audit du 26/09/2026).
+        if (existing) {
+          return existing
+            .focus()
+            .then((c) => c.navigate(url))
+            .catch(() => clients.openWindow(url));
+        }
         return clients.openWindow(url);
       }),
       self.registration.getNotifications().then((n) => {

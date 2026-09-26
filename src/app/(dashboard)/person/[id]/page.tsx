@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { WatchlistButton } from "@/components/WatchlistButton";
-import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { TMDB_IMAGE_BASE } from "@/lib/tmdbImageBase";
 import {
   ArrowLeft, Star, Film, Tv, BookCheck, User, Calendar, MapPin, Briefcase,
   ExternalLink, X, ChevronLeft, ChevronRight, Globe, CirclePlus,

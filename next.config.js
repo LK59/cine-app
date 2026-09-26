@@ -2,6 +2,8 @@ const { version } = require("./package.json");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Pas de `x-powered-by: Next.js` : rien à gagner à annoncer la pile à qui sonde le site.
+  poweredByHeader: false,
   output: "standalone",
   experimental: {
     // Le corps d'une requête que le proxy (`src/proxy.ts`) doit laisser passer entier. 10 Mo par

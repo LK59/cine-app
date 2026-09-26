@@ -14,7 +14,7 @@ import {
   ExternalLink, Globe, ChevronLeft, ChevronRight, X,
 } from "lucide-react";
 import { InstagramIcon } from "@/components/BrandIcons";
-import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { TMDB_IMAGE_BASE } from "@/lib/tmdbImageBase";
 import { useToast } from "@/components/Toast";
 import { createPortal } from "react-dom";
 import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/route";

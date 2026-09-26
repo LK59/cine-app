@@ -4,7 +4,7 @@ import { fetchJson } from "@/lib/http";
 const { apiKey } = config.tmdb;
 const BASE = "https://api.themoviedb.org/3";
 
-export const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p";
+export { TMDB_IMAGE_BASE } from "@/lib/tmdbImageBase";
 
 export interface TmdbPerson {
   id: number;

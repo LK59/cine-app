@@ -16,7 +16,7 @@ import { INTERVALS } from "@/lib/refresh-intervals";
 import type { EnrichedRequest } from "@/lib/jellyseerr-enrich";
 import { useRole } from "@/lib/useRole";
 import { useToast } from "@/components/Toast";
-import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { TMDB_IMAGE_BASE } from "@/lib/tmdbImageBase";
 import { relDate } from "@/lib/format";
 import { useT } from "@/components/TranslationProvider";
 

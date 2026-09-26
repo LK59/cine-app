@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { Modal } from "@/components/Modal";
 import { Film, Library, Loader2, ListPlus } from "lucide-react";
-import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { TMDB_IMAGE_BASE } from "@/lib/tmdbImageBase";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
 import { useT } from "@/components/TranslationProvider";

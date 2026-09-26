@@ -26,7 +26,7 @@ import { useTvGridNav } from "@/lib/useTvGridNav";
 import type { DashboardPayload, ServiceStatus, ActivityItem, ResumeItem, RecentItem, TorrentItem } from "@/app/api/dashboard/route";
 import type { DiskStats } from "@/lib/disk-stats";
 import type { WatchlistItem } from "@/lib/db";
-import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { TMDB_IMAGE_BASE } from "@/lib/tmdbImageBase";
 
 import { fmtSize, formatResumeTicks } from "@/lib/format";
 import { RelativeTime } from "@/components/RelativeTime";
