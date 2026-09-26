@@ -40,6 +40,7 @@ export function PlayerPanelFrame({
   replaced = false,
   fromTab = false,
   back = false,
+  contentWidth = "72rem",
   children,
 }: {
   title: string;
@@ -80,6 +81,13 @@ export function PlayerPanelFrame({
    * plutôt que de s'ajouter à elle.
    */
   back?: boolean;
+  /**
+   * La largeur du contenu du panneau — la même que son `max-w-*`. Sur grand écran, la fenêtre s'y
+   * ajuste (plus ses marges intérieures) au lieu de s'étirer jusqu'au bord droit : le compte, une
+   * colonne de 42 rem, flottait au milieu d'une fenêtre de toute la largeur de l'écran
+   * (26/09/2026).
+   */
+  contentWidth?: string;
   children: React.ReactNode;
 }) {
   const t = useT();
@@ -226,8 +234,17 @@ export function PlayerPanelFrame({
     >
       {/* La fenêtre. Sur téléphone elle n'a ni bord ni fond : c'est l'écran entier, comme avant.
           Les animations restent sur la racine — la fenêtre entre et sort avec elle, au même
-          rythme. */}
-      <div className={`flex min-h-0 flex-1 flex-col ${isMobile ? "" : "panel-window overflow-hidden rounded-2xl"}`}>
+          rythme.
+
+          Sans `overflow-hidden` : un parent qui découpe en arrondi la zone qui défile oblige
+          Chrome à refaire ce découpage à chaque image du défilement — c'est ce qui ramait sur
+          PC. Le fond seul est arrondi ; la zone qui défile est retirée des coins (voir plus bas),
+          et rien ne dépasse. */}
+      <div
+        className={`flex min-h-0 w-full flex-1 flex-col ${isMobile ? "" : "panel-window mx-auto rounded-2xl"}`}
+        // Le contenu, plus les marges intérieures de l'en-tête et du corps (`sm:px-10`).
+        style={isMobile ? undefined : { maxWidth: `calc(${contentWidth} + 5rem)` }}
+      >
       <header
         className="flex shrink-0 items-start gap-3 px-5 sm:gap-4 sm:px-10"
         // Un téléphone couché n'a que ~400 px de haut : un titre de trois rem et deux rems de
@@ -279,7 +296,9 @@ export function PlayerPanelFrame({
       <div
         ref={bodyRef}
         key={entrance}
-        className="scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10"
+        // Sur grand écran, décollée de 6 px du bas et de la droite : la barre de défilement reste
+        // dans l'arrondi de la fenêtre (16 px), qui ne découpe plus rien.
+        className={`scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10 ${isMobile ? "" : "mb-1.5 mr-1.5"}`}
         // La barre du bas flotte par-dessus sur téléphone : sans cette réserve, la dernière rangée
         // d'un panneau finissait dessous. Nulle sur grand écran, où c'est le rail qui navigue.
         style={{

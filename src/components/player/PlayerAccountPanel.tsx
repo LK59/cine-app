@@ -104,7 +104,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
   const logout = () => signOut(hardNavigate);
 
   return (
-    <PlayerPanelFrame
+    <PlayerPanelFrame contentWidth="42rem"
       leaving={leaving}
       replaced={replaced}
       fromTab={fromTab}

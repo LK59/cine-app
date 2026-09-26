@@ -48,7 +48,7 @@ export function PlayerReportPanel({ raw, leaving }: { raw: string; leaving?: boo
   const title =
     view.kind === "new" ? t("report.ui.newTitle") : view.kind === "draft" ? t("report.ui.draftTitle") : view.kind === "list" ? t("report.ui.listTitle") : t("report.ui.threadTitle");
   return (
-    <PlayerPanelFrame title={title} back leaving={leaving}>
+    <PlayerPanelFrame contentWidth="64rem" title={title} back leaving={leaving}>
       {view.kind === "new" && <ReportWizard fromList={view.fromList} />}
       {view.kind === "draft" && <DraftEditor id={view.id} />}
       {view.kind === "list" && <MyReports />}

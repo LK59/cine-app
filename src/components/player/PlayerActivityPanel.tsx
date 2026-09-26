@@ -23,7 +23,7 @@ export function PlayerActivityPanel({ raw, leaving }: { raw: string; leaving?: b
   const view = decodeView(raw) ?? { kind: "overview" as const };
   const title = view.kind === "logs" ? t("activity.logs.title") : view.kind === "report" ? t("report.ui.threadTitle") : t("activity.title");
   return (
-    <PlayerPanelFrame title={title} back leaving={leaving}>
+    <PlayerPanelFrame contentWidth="80rem" title={title} back leaving={leaving}>
       <div className="mx-auto w-full max-w-7xl space-y-6 pt-2">
         {view.kind === "overview" && <ActivityOverview />}
         {view.kind === "account" && <ActivityAccount id={view.id} />}

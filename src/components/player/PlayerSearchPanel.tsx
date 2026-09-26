@@ -332,7 +332,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   ];
 
   return (
-    <PlayerPanelFrame title={t("player.nav.search")} leaving={leaving} replaced={replaced} fromTab={fromTab}>
+    <PlayerPanelFrame contentWidth="64rem" title={t("player.nav.search")} leaving={leaving} replaced={replaced} fromTab={fromTab}>
       <div className="mx-auto w-full max-w-5xl">
         <div className="relative">
           <SearchIcon size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-subtle" />
