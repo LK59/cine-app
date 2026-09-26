@@ -19,11 +19,39 @@
  * espace de tête se voit à la saisie dès que le champ est révélé, et l'écran la nomme désormais.
  */
 export function passwordAttempts(password: string): string[] {
-  const trimmed = password.replace(/\s+$/, "");
+  // `trimEnd` et non `replace(/\s+$/, "")` : même jeu de blancs, mais la regex est quadratique —
+  // le moteur retente `\s+` depuis chaque espace d'une longue suite qui ne finit pas la chaîne.
+  // 40 000 espaces suivies d'un « x » tenaient la boucle 1,5 s, 1 Mo environ un quart d'heure,
+  // et ceci tourne sur la route de connexion, publique par définition (26/09/2026).
+  const trimmed = password.trimEnd();
   return trimmed === password ? [password] : [password, trimmed];
 }
 
 /** Le mot de passe commence-t-il par une espace ? Sert à nommer l'échec, jamais à décider. */
 export function hasLeadingSpace(password: string): boolean {
   return /^\s/.test(password);
+}
+
+/**
+ * Bornes des identifiants reçus par les routes de connexion. Généreuses pour un humain comme pour
+ * un gestionnaire de mots de passe (qui propose rarement plus de 128 caractères), et assez basses
+ * pour qu'aucun travail — comparaison, appel à Jellyfin, ligne d'`auth.log` — ne dépende de ce
+ * qu'un inconnu choisit d'envoyer.
+ */
+export const MAX_USERNAME_LENGTH = 256;
+export const MAX_PASSWORD_LENGTH = 1024;
+
+/**
+ * Lit identifiant et mot de passe d'un corps de requête, ou `null` s'ils manquent, ne sont pas
+ * des chaînes ou dépassent les bornes. Partagé par les deux routes de connexion (Jellyfin et
+ * compte local), qui refusaient chacune à leur façon : un `password` numérique passait le test
+ * `!password` puis faisait lever `.replace` — un 500 au lieu d'un 400.
+ */
+export function readCredentials(body: unknown): { username: string; password: string } | null {
+  if (!body || typeof body !== "object") return null;
+  const { username, password } = body as Record<string, unknown>;
+  if (typeof username !== "string" || typeof password !== "string") return null;
+  if (!username || !password) return null;
+  if (username.length > MAX_USERNAME_LENGTH || password.length > MAX_PASSWORD_LENGTH) return null;
+  return { username, password };
 }

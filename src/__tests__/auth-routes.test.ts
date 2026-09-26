@@ -54,6 +54,14 @@ describe("POST /api/auth/login", () => {
     expect(res.status).toBe(400);
   });
 
+  it("refuse en 400, sans lever, un mot de passe qui n'est pas une chaîne ou trop long", async () => {
+    // Un nombre passait `!password` puis faisait lever `.replace` : 500 (26/09/2026).
+    const { POST } = await import("@/app/api/auth/login/route");
+    expect((await POST(fakeReq({ body: { username: "admin", password: 1234 } }))).status).toBe(400);
+    expect((await POST(fakeReq({ body: { username: "admin", password: "x".repeat(2000) } }))).status).toBe(400);
+    expect(mockSessionDb.create).not.toHaveBeenCalled();
+  });
+
   it("returns 401 for wrong password", async () => {
     const { POST } = await import("@/app/api/auth/login/route");
     const res = await POST(fakeReq({ body: { username: "admin", password: "wrong" } }));

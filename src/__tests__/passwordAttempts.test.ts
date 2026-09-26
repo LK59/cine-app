@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { passwordAttempts, hasLeadingSpace } from "@/lib/passwordAttempts";
+import { passwordAttempts, hasLeadingSpace, readCredentials } from "@/lib/passwordAttempts";
 
 // Un mot de passe collé arrive régulièrement lesté d'une espace finale. Il a l'air juste, il ne
 // marche pas, et l'écran ne répond que « identifiants invalides ».
@@ -44,5 +44,40 @@ describe("hasLeadingSpace", () => {
     expect(hasLeadingSpace("secret ")).toBe(false);
     expect(hasLeadingSpace("secret")).toBe(false);
     expect(hasLeadingSpace("")).toBe(false);
+  });
+});
+
+describe("passwordAttempts — coût borné (26/09/2026)", () => {
+  it("traite 200 000 espaces suivies d'un caractère en moins de 50 ms", () => {
+    // `replace(/\s+$/, "")` y passait des minutes : quadratique sur une suite d'espaces qui ne
+    // termine pas la chaîne. Sur la route de connexion publique, c'était une boucle bloquée à la demande.
+    const password = " ".repeat(200_000) + "x";
+    const started = performance.now();
+    expect(passwordAttempts(password)).toEqual([password]);
+    expect(performance.now() - started).toBeLessThan(50);
+  });
+
+  it("retire les mêmes blancs que l'ancienne regex, Unicode compris", () => {
+    expect(passwordAttempts("secret\u00a0\u2003\ufeff\r\n")).toEqual(["secret\u00a0\u2003\ufeff\r\n", "secret"]);
+  });
+});
+
+describe("readCredentials", () => {
+  it("accepte deux chaînes non vides dans les bornes", () => {
+    expect(readCredentials({ username: "louis", password: "secret " })).toEqual({ username: "louis", password: "secret " });
+  });
+
+  it("refuse ce qui n'est pas une chaîne au lieu de lever plus loin", () => {
+    expect(readCredentials({ username: "louis", password: 1234 })).toBeNull();
+    expect(readCredentials({ username: ["louis"], password: "x" })).toBeNull();
+    expect(readCredentials(null)).toBeNull();
+    expect(readCredentials("louis")).toBeNull();
+  });
+
+  it("refuse le vide et l'excessif", () => {
+    expect(readCredentials({ username: "", password: "x" })).toBeNull();
+    expect(readCredentials({ username: "louis", password: "x".repeat(1025) })).toBeNull();
+    expect(readCredentials({ username: "l".repeat(257), password: "x" })).toBeNull();
+    expect(readCredentials({ username: "l".repeat(256), password: "x".repeat(1024) })).not.toBeNull();
   });
 });

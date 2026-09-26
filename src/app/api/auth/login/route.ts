@@ -8,7 +8,7 @@ import { checkRateLimit } from "@/lib/rateLimiter";
 import { LOCALE_COOKIE } from "@/lib/i18n";
 import { getClientIp } from "@/lib/api-helpers";
 import { timingSafeEquals } from "@/lib/timingSafeEquals";
-import { passwordAttempts, hasLeadingSpace } from "@/lib/passwordAttempts";
+import { passwordAttempts, hasLeadingSpace, readCredentials } from "@/lib/passwordAttempts";
 import { logAuthEvent } from "@/lib/eventLogs";
 
 export async function POST(req: NextRequest) {
@@ -17,13 +17,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Trop de tentatives, réessayez dans 15 minutes" }, { status: 429 });
   }
 
-  const body = await req.json().catch(() => null);
-  const username = body?.username as string | undefined;
-  const password = body?.password as string | undefined;
-
-  if (!username || !password) {
+  // Types et longueurs vérifiés avant tout travail : ce qui suit compare, journalise et appelle
+  // Jellyfin avec ces valeurs, et la route est publique — voir `readCredentials`.
+  const credentials = readCredentials(await req.json().catch(() => null));
+  if (!credentials) {
     return NextResponse.json({ error: "Identifiants requis" }, { status: 400 });
   }
+  const { username, password } = credentials;
 
   // La forme donnée d'abord, la forme sans espace finale ensuite — voir `passwordAttempts`. Les
   // deux passent par `timingSafeEquals` : une comparaison qui s'arrête au premier caractère

@@ -7,7 +7,7 @@ import { sessionDb, userPrefsDb } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rateLimiter";
 import { LOCALE_COOKIE } from "@/lib/i18n";
 import { getClientIp } from "@/lib/api-helpers";
-import { passwordAttempts, hasLeadingSpace } from "@/lib/passwordAttempts";
+import { passwordAttempts, hasLeadingSpace, readCredentials } from "@/lib/passwordAttempts";
 import { loginToJellyseerr } from "@/lib/jellyseerrIdentity";
 import { forwardedFor } from "@/lib/clientAddress";
 import { logAuthEvent } from "@/lib/eventLogs";
@@ -18,13 +18,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Trop de tentatives, réessayez dans 15 minutes" }, { status: 429 });
   }
 
-  const body = await req.json().catch(() => null);
-  const username = body?.username as string | undefined;
-  const password = body?.password as string | undefined;
-
-  if (!username || !password) {
+  // Types et longueurs vérifiés avant tout travail : ce qui suit compare, journalise et appelle
+  // Jellyfin avec ces valeurs, et la route est publique — voir `readCredentials`.
+  const credentials = readCredentials(await req.json().catch(() => null));
+  if (!credentials) {
     return NextResponse.json({ error: "Identifiants requis" }, { status: 400 });
   }
+  const { username, password } = credentials;
 
   let jellyfinRes: Response;
   // DeviceId used to be a single hardcoded constant ("cine-app-server") shared by every login,

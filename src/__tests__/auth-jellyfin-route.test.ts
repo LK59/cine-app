@@ -62,6 +62,17 @@ describe("POST /api/auth/jellyfin", () => {
     expect(res.status).toBe(400);
   });
 
+  it("refuse en 400 avant d'appeler Jellyfin un identifiant hors type ou hors borne", async () => {
+    // Un nombre en mot de passe faisait lever `.replace` : 500 ; une chaîne d'un mégaoctet
+    // partait vers Jellyfin et dans auth.log (26/09/2026).
+    global.fetch = vi.fn();
+    const { POST } = await import("@/app/api/auth/jellyfin/route");
+    expect((await POST(fakeReq({ username: "louis", password: 1234 }))).status).toBe(400);
+    expect((await POST(fakeReq({ username: "l".repeat(300), password: "x" }))).status).toBe(400);
+    expect((await POST(fakeReq({ username: "louis", password: " ".repeat(200_000) + "x" }))).status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("returns 502 when Jellyfin cannot be reached", async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
     const { POST } = await import("@/app/api/auth/jellyfin/route");
