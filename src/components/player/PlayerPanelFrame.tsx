@@ -29,6 +29,9 @@ import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
  * qui fait qu'un retour depuis un film ouvert en cherchant ramène sur la recherche, avec la
  * requête intacte, au lieu de sauter à l'accueil.
  */
+/** Sur grand écran, l'écart entre la fenêtre du panneau et les bords — celui de la pilule du rail. */
+const WINDOW_GAP = "0.75rem";
+
 export function PlayerPanelFrame({
   title,
   subtitle,
@@ -173,9 +176,10 @@ export function PlayerPanelFrame({
   return createPortal(
     <div
       ref={rootRef}
+      data-panel-root
       // Sur téléphone, il monte comme les fiches ; sur grand écran, il apparaît. Deux idiomes, chacun
       // celui de sa plateforme — et surtout le même que les autres écrans de la même famille.
-      className={`fixed inset-0 flex flex-col overflow-hidden bg-ink ${
+      className={`fixed inset-0 flex flex-col overflow-hidden ${isMobile ? "bg-ink" : ""} ${
         /* Un onglet, pas une feuille.
          *
          * Ces panneaux montaient depuis le bas — le vocabulaire de la modale, alors que le modèle
@@ -206,10 +210,24 @@ export function PlayerPanelFrame({
         pointerEvents: leaving ? "none" : undefined,
         // Le retrait du rail et la marge de l'encoche s'additionnent : le premier vaut zéro sur
         // téléphone, la seconde vaut zéro partout ailleurs.
-        paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
-        paddingRight: "env(safe-area-inset-right, 0px)",
+        //
+        // Sur grand écran, une marge de plus tout autour : le panneau y est une fenêtre posée sur
+        // l'accueil, décollée des bords comme la pilule du rail (26/09/2026) — et non plus un fond
+        // noir d'un bord à l'autre, la seule surface « boîte » qui restait à côté d'elle.
+        ...(isMobile
+          ? {
+              paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
+              paddingRight: "env(safe-area-inset-right, 0px)",
+            }
+          : {
+              padding: `${WINDOW_GAP} calc(${WINDOW_GAP} + env(safe-area-inset-right, 0px)) ${WINDOW_GAP} calc(var(--player-rail, 0px) + ${WINDOW_GAP} + env(safe-area-inset-left, 0px))`,
+            }),
       }}
     >
+      {/* La fenêtre. Sur téléphone elle n'a ni bord ni fond : c'est l'écran entier, comme avant.
+          Les animations restent sur la racine — la fenêtre entre et sort avec elle, au même
+          rythme. */}
+      <div className={`flex min-h-0 flex-1 flex-col ${isMobile ? "" : "panel-window overflow-hidden rounded-2xl"}`}>
       <header
         className="flex shrink-0 items-start gap-3 px-5 sm:gap-4 sm:px-10"
         // Un téléphone couché n'a que ~400 px de haut : un titre de trois rem et deux rems de
@@ -261,7 +279,7 @@ export function PlayerPanelFrame({
       <div
         ref={bodyRef}
         key={entrance}
-        className="scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10"
+        className={`scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10 ${isMobile ? "" : "panel-window-scroll"}`}
         // La barre du bas flotte par-dessus sur téléphone : sans cette réserve, la dernière rangée
         // d'un panneau finissait dessous. Nulle sur grand écran, où c'est le rail qui navigue.
         style={{
@@ -277,11 +295,17 @@ export function PlayerPanelFrame({
             Le contenu disparaissait net sous le titre, coupé à la ligne près (23/09/2026). Le
             fondu occupe la marge qui séparait l'en-tête du contenu : au repos il ne recouvre que
             du vide, et rien ne bouge ; au défilement, ce qui monte s'y efface. */}
-        <div
-          aria-hidden
-          className={`pointer-events-none sticky top-0 z-10 bg-gradient-to-b from-ink to-transparent ${short ? "h-2" : "h-4"}`}
-        />
+        {/* Sur grand écran, le fond de la fenêtre est translucide : un dégradé depuis le noir
+            plein y ferait une bande plus sombre. Le même fondu y est donc un masque sur la zone
+            qui défile (`panel-window-scroll`), qui efface le contenu sans rien peindre. */}
+        {isMobile && (
+          <div
+            aria-hidden
+            className={`pointer-events-none sticky top-0 z-10 bg-gradient-to-b from-ink to-transparent ${short ? "h-2" : "h-4"}`}
+          />
+        )}
         {children}
+      </div>
       </div>
     </div>,
     document.body

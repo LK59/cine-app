@@ -61,7 +61,7 @@ describe("PlayerPanelFrame — d'un onglet à l'autre", () => {
         <p>contenu</p>
       </PlayerPanelFrame>
     );
-    return container.ownerDocument.querySelector<HTMLElement>(".fixed.inset-0.bg-ink")!;
+    return container.ownerDocument.querySelector<HTMLElement>("[data-panel-root]")!;
   };
 
   it("remplacé, il reste plein et passe dessous", () => {
@@ -93,7 +93,7 @@ describe("PlayerPanelFrame — arrivée depuis un autre onglet", () => {
       <p>contenu</p>
     </PlayerPanelFrame>
   );
-  const root = () => document.querySelector<HTMLElement>(".fixed.inset-0.bg-ink")!;
+  const root = () => document.querySelector<HTMLElement>("[data-panel-root]")!;
 
   it("apparaît d'un coup quand il arrive d'un autre onglet", () => {
     render(frame({ fromTab: true }));
