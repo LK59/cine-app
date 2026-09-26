@@ -7,6 +7,9 @@ export async function GET() {
       jellyfin.getLibraryCounts(),
       jellyfin.getSystemInfo(),
     ]);
-    return { counts, systemInfo };
+    // Le nom et la version, seuls lus par la page Jellyfin (son sous-titre). `/System/Info` entier
+    // partait à tout compte connecté : chemins du serveur (journaux, cache, transcodage, données),
+    // adresse locale, système d'exploitation, identifiant de l'instance (26/09/2026).
+    return { counts, systemInfo: { ServerName: systemInfo.ServerName, Version: systemInfo.Version } };
   });
 }
