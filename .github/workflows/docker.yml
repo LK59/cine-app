@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+# Rien par défaut ; le job de publication demande lui-même ce qu'il lui faut (paquets).
+permissions:
+  contents: read
+
 jobs:
   # The gate: type-check, lint and tests. `needs` can only point at a job in this same file, so
   # the shared workflow is called here rather than relied on from its own trigger.

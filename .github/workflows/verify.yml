@@ -23,6 +23,10 @@ on:
   pull_request:
   workflow_call:
 
+# Lecture seule : ce workflow ne publie rien, et son jeton n'a pas à pouvoir écrire dans le dépôt.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
