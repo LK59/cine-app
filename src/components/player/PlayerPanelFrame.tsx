@@ -40,6 +40,7 @@ export function PlayerPanelFrame({
   replaced = false,
   fromTab = false,
   back = false,
+  swapIn = false,
   contentWidth = "72rem",
   children,
 }: {
@@ -82,6 +83,14 @@ export function PlayerPanelFrame({
    */
   back?: boolean;
   /**
+   * Il prend la place d'une autre fenêtre encore en train de partir, sans être un onglet : le
+   * Compte et l'activité ou les signalements qu'il ouvre, dans un sens comme dans l'autre. Sur
+   * grand écran il entre comme un onglet qui en remplace un autre (`panel-swap-in`) — sinon deux
+   * fenêtres de largeurs différentes se croisaient en même temps. Sans effet sur téléphone, où ces
+   * écrans gardent leur entrée. Lu à chaque entrée, comme `fromTab`.
+   */
+  swapIn?: boolean;
+  /**
    * La largeur du contenu du panneau — la même que son `max-w-*`. Sur grand écran, la fenêtre s'y
    * ajuste (plus ses marges intérieures) au lieu de s'étirer jusqu'au bord droit : le compte, une
    * colonne de 42 rem, flottait au milieu d'une fenêtre de toute la largeur de l'écran
@@ -105,11 +114,13 @@ export function PlayerPanelFrame({
   const [entrance, setEntrance] = useState(0);
   const [wasLeaving, setWasLeaving] = useState(leaving);
   const [instantEntry, setInstantEntry] = useState(fromTab);
+  const [swapEntry, setSwapEntry] = useState(swapIn);
   if (wasLeaving !== leaving) {
     setWasLeaving(leaving);
     if (!leaving) {
       setEntrance((n) => n + 1);
       setInstantEntry(fromTab);
+      setSwapEntry(swapIn);
     }
   }
 
@@ -227,7 +238,28 @@ export function PlayerPanelFrame({
          * après —, si bien que la dérive animait une boîte sans contenu et passait inaperçue. La
          * racine, elle, existe et se voit toujours : son fond porte le mouvement quoi qu'il arrive
          * au reste. Une seule transformation composée par bascule au lieu de deux, aussi. */
-        leaving ? (replaced ? "" : "animate-fade-out-scale") : instantEntry ? "" : "animate-fade-in-side"
+        /* D'un onglet à l'autre, deux gestes selon la plateforme.
+         *
+         * Sur téléphone, un changement sec (23/09/2026) : les deux écrans sont pleins et au même
+         * endroit — celui qui arrive recouvre exactement celui qui part, et un fondu croisé ne
+         * faisait que superposer deux pages, leurs titres presque au même endroit.
+         *
+         * Sur grand écran, les fenêtres n'ont pas la même largeur (Compte 42 rem, Ma liste 72) :
+         * la nouvelle apparaissait d'un coup au milieu de l'ancienne, qui dépassait autour puis
+         * s'effaçait sèchement 200 ms plus tard (26/09/2026). L'ancienne part donc comme une
+         * fenêtre qu'on ferme, et la nouvelle entre juste après elle (`panel-swap-in`, décalée
+         * de 80 ms) : elles ne se superposent presque pas, et leurs titres ne se croisent pas. */
+        leaving
+          ? replaced && isMobile
+            ? ""
+            : "animate-fade-out-scale"
+          : instantEntry
+            ? isMobile
+              ? ""
+              : "panel-swap-in"
+            : swapEntry && !isMobile
+              ? "panel-swap-in"
+              : "animate-fade-in-side"
       }`}
       style={{
         // Celui qui part passe dessous : celui qui arrive doit le recouvrir, quel que soit leur

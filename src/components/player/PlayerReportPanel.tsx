@@ -42,13 +42,13 @@ function DraftEditor({ id }: { id: number }) {
  * « Signaler un problème » — pour tout le monde, depuis le panneau Compte. Chaque vue (l'assistant,
  * la liste, un ticket) est une entrée d'historique : la coquille le monte sous une clé par vue.
  */
-export function PlayerReportPanel({ raw, leaving }: { raw: string; leaving?: boolean }) {
+export function PlayerReportPanel({ raw, leaving, swapIn }: { raw: string; leaving?: boolean; swapIn?: boolean }) {
   const t = useT();
   const view = decodeReportView(raw);
   const title =
     view.kind === "new" ? t("report.ui.newTitle") : view.kind === "draft" ? t("report.ui.draftTitle") : view.kind === "list" ? t("report.ui.listTitle") : t("report.ui.threadTitle");
   return (
-    <PlayerPanelFrame contentWidth="64rem" title={title} back leaving={leaving}>
+    <PlayerPanelFrame contentWidth="64rem" title={title} back leaving={leaving} swapIn={swapIn}>
       {view.kind === "new" && <ReportWizard fromList={view.fromList} />}
       {view.kind === "draft" && <DraftEditor id={view.id} />}
       {view.kind === "list" && <MyReports />}

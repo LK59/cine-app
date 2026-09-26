@@ -87,7 +87,7 @@ function ReportSection() {
   );
 }
 
-export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: boolean; replaced?: boolean; fromTab?: boolean }) {
+export function PlayerAccountPanel({ leaving, replaced, fromTab, swapIn }: { leaving?: boolean; replaced?: boolean; fromTab?: boolean; swapIn?: boolean }) {
   const t = useT();
   const router = useRouter();
   const { data: me } = useSWR<{ username: string; jfUser: string | null; role: string }>("/api/auth/me", fetcher);
@@ -108,6 +108,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
       leaving={leaving}
       replaced={replaced}
       fromTab={fromTab}
+      swapIn={swapIn}
       title={t("player.nav.account")}
       // Une majuscule à l'affichage seulement : le nom du compte, lui, reste tel que Jellyfin le
       // connaît — c'est lui qu'on tape pour se connecter.

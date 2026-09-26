@@ -16,7 +16,14 @@ import { PlayerBottomBar } from "./PlayerBottomBar";
 // Tant que le morceau n'est pas arrivé, le fond du panneau à sa place : il n'y avait rien, et
 // l'accueil se voyait le temps du chargement — entre deux onglets comme à la première ouverture
 // (23/09/2026). Au niveau d'un panneau, sous la barre du bas et le rail.
+//
+// Sur téléphone seulement (26/09/2026). Sur grand écran, un panneau est une fenêtre posée sur
+// l'accueil : ce noir plein écran s'affichait le temps du premier chargement, puis la fenêtre
+// apparaissait au milieu — un éclair noir à chaque première ouverture. Là, l'accueil visible un
+// instant de plus est exactement ce qu'on doit voir.
 function PanelPlaceholder() {
+  const isMobile = useIsMobile();
+  if (!isMobile) return null;
   return <div aria-hidden className="fixed inset-0 bg-ink" style={{ zIndex: 46 }} />;
 }
 const PlayerListPanel = dynamic(() => import("./PlayerListPanel").then((m) => m.PlayerListPanel), { ssr: false, loading: PanelPlaceholder });
@@ -226,14 +233,16 @@ export function PlayerShell() {
           leaving={account.leaving}
           replaced={account.leaving && (route.search || route.list)}
           fromTab={search.leaving || list.leaving}
+          // Revenu de l'activité ou d'un signalement, qui s'efface encore — voir `swapIn`.
+          swapIn={activity.leaving || report.leaving}
         />
       )}
       {/* L'activité : une clé par vue — une autre vue est un autre écran (voir la règle des fiches
           dans CLAUDE.md), avec son entrée, son défilement et son focus à elle. */}
       {activity.render && lastActivity !== null && (
-        <PlayerActivityPanel key={lastActivity} raw={lastActivity} leaving={activity.leaving} />
+        <PlayerActivityPanel key={lastActivity} raw={lastActivity} leaving={activity.leaving} swapIn={account.leaving || report.leaving} />
       )}
-      {report.render && lastReport !== null && <PlayerReportPanel key={lastReport} raw={lastReport} leaving={report.leaving} />}
+      {report.render && lastReport !== null && <PlayerReportPanel key={lastReport} raw={lastReport} leaving={report.leaving} swapIn={account.leaving || activity.leaving} />}
       {/* Une seule fiche du dessus à la fois. Deux rendues ensemble se recouvraient dans l'ordre
           de montage, et surtout écoutaient Échap toutes les deux — une touche remontait alors de
           deux crans. L'historique garde la précédente, et le retour la rouvre.

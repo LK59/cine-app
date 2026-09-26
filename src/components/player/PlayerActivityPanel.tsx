@@ -18,12 +18,12 @@ import { ActivitySeance } from "@/components/activity/views/ActivitySeance";
  * d'historique, donc un écran à part : la coquille le monte sous une clé par vue. Les routes
  * d'API refusent tout autre compte que l'administrateur ; l'écran n'en montre alors que l'erreur.
  */
-export function PlayerActivityPanel({ raw, leaving }: { raw: string; leaving?: boolean }) {
+export function PlayerActivityPanel({ raw, leaving, swapIn }: { raw: string; leaving?: boolean; swapIn?: boolean }) {
   const t = useT();
   const view = decodeView(raw) ?? { kind: "overview" as const };
   const title = view.kind === "logs" ? t("activity.logs.title") : view.kind === "report" ? t("report.ui.threadTitle") : t("activity.title");
   return (
-    <PlayerPanelFrame contentWidth="80rem" title={title} back leaving={leaving}>
+    <PlayerPanelFrame contentWidth="80rem" title={title} back leaving={leaving} swapIn={swapIn}>
       <div className="mx-auto w-full max-w-7xl space-y-6 pt-2">
         {view.kind === "overview" && <ActivityOverview />}
         {view.kind === "account" && <ActivityAccount id={view.id} />}

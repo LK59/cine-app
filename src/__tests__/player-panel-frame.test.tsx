@@ -3,7 +3,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
-vi.mock("@/lib/useIsMobile", () => ({ useIsMobile: () => false, useIsShortViewport: () => false }));
+let mobile = false;
+vi.mock("@/lib/useIsMobile", () => ({ useIsMobile: () => mobile, useIsShortViewport: () => false }));
 vi.mock("@/lib/cinemaRoute", () => ({
   CLOSE_PANELS: { search: false, list: false, account: false, browse: null, activity: null, report: null },
   cinemaClose: vi.fn(),
@@ -20,7 +21,10 @@ const panel = (leaving: boolean) => (
   </PlayerPanelFrame>
 );
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  mobile = false;
+});
 
 /**
  * Les flèches survivent à un retour rapide sur l'onglet.
@@ -64,9 +68,18 @@ describe("PlayerPanelFrame — d'un onglet à l'autre", () => {
     return container.ownerDocument.querySelector<HTMLElement>("[data-panel-root]")!;
   };
 
-  it("remplacé, il reste plein et passe dessous", () => {
+  it("remplacé, il reste plein et passe dessous — sur téléphone", () => {
+    mobile = true;
     const el = root(true, true);
     expect(el.className).not.toContain("animate-fade-out");
+    expect(el.style.zIndex).toBe("45");
+  });
+
+  // Sur grand écran les fenêtres n'ont pas la même largeur : restée pleine, l'ancienne dépassait
+  // autour de la nouvelle puis disparaissait d'un coup (26/09/2026).
+  it("remplacé, il s'efface dessous — sur grand écran", () => {
+    const el = root(true, true);
+    expect(el.className).toContain("animate-fade-out-scale");
     expect(el.style.zIndex).toBe("45");
   });
 
@@ -95,8 +108,16 @@ describe("PlayerPanelFrame — arrivée depuis un autre onglet", () => {
   );
   const root = () => document.querySelector<HTMLElement>("[data-panel-root]")!;
 
-  it("apparaît d'un coup quand il arrive d'un autre onglet", () => {
+  it("apparaît d'un coup quand il arrive d'un autre onglet — sur téléphone", () => {
+    mobile = true;
     render(frame({ fromTab: true }));
+    expect(root().className).not.toContain("animate-fade-in-side");
+    expect(root().className).not.toContain("panel-swap-in");
+  });
+
+  it("entre après l'autre fenêtre quand il arrive d'un autre onglet — sur grand écran", () => {
+    render(frame({ fromTab: true }));
+    expect(root().className).toContain("panel-swap-in");
     expect(root().className).not.toContain("animate-fade-in-side");
   });
 
@@ -195,5 +216,32 @@ describe("PlayerPanelFrame — clic à côté de la fenêtre", () => {
     fireEvent.pointerDown(screen.getByText("un"));
     fireEvent.click(root());
     expect(cinemaClose).not.toHaveBeenCalled();
+  });
+});
+
+// Le Compte et l'activité ou les signalements qu'il ouvre : deux fenêtres de largeurs différentes
+// se croisaient en même temps sur grand écran (26/09/2026). Le téléphone garde son entrée.
+describe("PlayerPanelFrame — une fenêtre qui en remplace une autre sans être un onglet", () => {
+  const root = () => document.querySelector<HTMLElement>("[data-panel-root]")!;
+  const frame = (swapIn: boolean) => (
+    <PlayerPanelFrame title="Titre" back swapIn={swapIn}>
+      <p>contenu</p>
+    </PlayerPanelFrame>
+  );
+
+  it("entre après l'autre sur grand écran", () => {
+    render(frame(true));
+    expect(root().className).toContain("panel-swap-in");
+  });
+
+  it("garde son entrée sur téléphone", () => {
+    mobile = true;
+    render(frame(true));
+    expect(root().className).toContain("animate-fade-in-side");
+  });
+
+  it("entre normalement quand rien ne part", () => {
+    render(frame(false));
+    expect(root().className).toContain("animate-fade-in-side");
   });
 });
