@@ -78,7 +78,7 @@ export const jackett = {
   testIndexer: async (id: string): Promise<boolean> => {
     try {
       await fetchXml(
-        `${url}/api/v2.0/indexers/${id}/results/torznab/api?apikey=${encodeURIComponent(apiKey)}&t=caps`,
+        `${url}/api/v2.0/indexers/${encodeURIComponent(id)}/results/torznab/api?apikey=${encodeURIComponent(apiKey)}&t=caps`,
         5000
       );
       return true;

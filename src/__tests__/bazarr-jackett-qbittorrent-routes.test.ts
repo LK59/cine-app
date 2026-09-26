@@ -26,6 +26,8 @@ function fakeReq(opts: { params?: Record<string, string>; body?: unknown } = {})
 
 beforeEach(() => vi.clearAllMocks());
 
+const HASH = "0123456789abcdef0123456789abcdef01234567";
+
 describe("/api/bazarr/episodes/[id]/subtitles", () => {
   it("GET searches subtitles for the numeric episode id", async () => {
     mockBazarr.searchEpisodeSubtitles.mockResolvedValue([]);
@@ -82,38 +84,82 @@ describe("POST /api/jackett/indexers/[id]/test", () => {
   });
 });
 
+describe("POST /api/jackett/indexers/[id]/test — identifiant validé (26/09/2026)", () => {
+  it("refuse un identifiant qui sortirait du chemin de l'indexeur, sans appeler Jackett", async () => {
+    const { POST } = await import("@/app/api/jackett/indexers/[id]/test/route");
+    for (const id of ["../../server/config", "x?t=search&q=a", "a/b", ""]) {
+      const res = await POST(fakeReq(), { params: Promise.resolve({ id }) });
+      expect(res.status).toBe(400);
+    }
+    expect(mockJackett.testIndexer).not.toHaveBeenCalled();
+  });
+
+  it("accepte les identifiants réels", async () => {
+    mockJackett.testIndexer.mockResolvedValue(true);
+    const { POST } = await import("@/app/api/jackett/indexers/[id]/test/route");
+    for (const id of ["yggreborn-api", "torrent9", "crazyspirits-api", "u2p"]) {
+      expect((await POST(fakeReq(), { params: Promise.resolve({ id }) })).status).toBe(200);
+    }
+  });
+});
+
+describe("/api/qbittorrent/torrents/[hash] — empreinte validée (26/09/2026)", () => {
+  it("refuse `all`, les listes et le reste, sans rien envoyer à qBittorrent", async () => {
+    const { POST, DELETE } = await import("@/app/api/qbittorrent/torrents/[hash]/route");
+    for (const hash of ["all", `${HASH}|${HASH}`, "abc", HASH + "0"]) {
+      expect((await DELETE(fakeReq({ params: { deleteFiles: "true" } }), { params: Promise.resolve({ hash }) })).status).toBe(400);
+      expect((await POST(fakeReq({ body: { action: "pause" } }), { params: Promise.resolve({ hash }) })).status).toBe(400);
+    }
+    expect(mockQbittorrent.remove).not.toHaveBeenCalled();
+    expect(mockQbittorrent.pause).not.toHaveBeenCalled();
+  });
+
+  it("accepte une empreinte v2 de 64 caractères", async () => {
+    mockQbittorrent.remove.mockResolvedValue("");
+    const { DELETE } = await import("@/app/api/qbittorrent/torrents/[hash]/route");
+    const v2 = HASH + "0123456789abcdef01234567".slice(0, 24);
+    expect((await DELETE(fakeReq(), { params: Promise.resolve({ hash: v2 }) })).status).toBe(200);
+  });
+
+  it("répond 400, pas 500, à un corps illisible", async () => {
+    const { POST } = await import("@/app/api/qbittorrent/torrents/[hash]/route");
+    const req = { json: async () => { throw new SyntaxError("bad"); } } as unknown as NextRequest;
+    expect((await POST(req, { params: Promise.resolve({ hash: HASH }) })).status).toBe(400);
+  });
+});
+
 describe("POST /api/qbittorrent/torrents/[hash]", () => {
   it("pauses the torrent for action=pause", async () => {
     mockQbittorrent.pause.mockResolvedValue(undefined);
     const { POST } = await import("@/app/api/qbittorrent/torrents/[hash]/route");
-    await POST(fakeReq({ body: { action: "pause" } }), { params: Promise.resolve({ hash: "abc" }) });
-    expect(mockQbittorrent.pause).toHaveBeenCalledWith(["abc"]);
+    await POST(fakeReq({ body: { action: "pause" } }), { params: Promise.resolve({ hash: HASH }) });
+    expect(mockQbittorrent.pause).toHaveBeenCalledWith([HASH]);
   });
 
   it("resumes the torrent for action=resume", async () => {
     mockQbittorrent.resume.mockResolvedValue(undefined);
     const { POST } = await import("@/app/api/qbittorrent/torrents/[hash]/route");
-    await POST(fakeReq({ body: { action: "resume" } }), { params: Promise.resolve({ hash: "abc" }) });
-    expect(mockQbittorrent.resume).toHaveBeenCalledWith(["abc"]);
+    await POST(fakeReq({ body: { action: "resume" } }), { params: Promise.resolve({ hash: HASH }) });
+    expect(mockQbittorrent.resume).toHaveBeenCalledWith([HASH]);
   });
 
   it("returns 400 for an unknown action", async () => {
     const { POST } = await import("@/app/api/qbittorrent/torrents/[hash]/route");
-    const res = await POST(fakeReq({ body: { action: "explode" } }), { params: Promise.resolve({ hash: "abc" }) });
+    const res = await POST(fakeReq({ body: { action: "explode" } }), { params: Promise.resolve({ hash: HASH }) });
     expect(res.status).toBe(400);
   });
 
   it("DELETE forwards deleteFiles=true from the query string", async () => {
     mockQbittorrent.remove.mockResolvedValue(undefined);
     const { DELETE } = await import("@/app/api/qbittorrent/torrents/[hash]/route");
-    await DELETE(fakeReq({ params: { deleteFiles: "true" } }), { params: Promise.resolve({ hash: "abc" }) });
-    expect(mockQbittorrent.remove).toHaveBeenCalledWith(["abc"], true);
+    await DELETE(fakeReq({ params: { deleteFiles: "true" } }), { params: Promise.resolve({ hash: HASH }) });
+    expect(mockQbittorrent.remove).toHaveBeenCalledWith([HASH], true);
   });
 
   it("DELETE defaults deleteFiles to false", async () => {
     mockQbittorrent.remove.mockResolvedValue(undefined);
     const { DELETE } = await import("@/app/api/qbittorrent/torrents/[hash]/route");
-    await DELETE(fakeReq(), { params: Promise.resolve({ hash: "abc" }) });
-    expect(mockQbittorrent.remove).toHaveBeenCalledWith(["abc"], false);
+    await DELETE(fakeReq(), { params: Promise.resolve({ hash: HASH }) });
+    expect(mockQbittorrent.remove).toHaveBeenCalledWith([HASH], false);
   });
 });

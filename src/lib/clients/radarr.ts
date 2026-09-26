@@ -138,9 +138,11 @@ export const radarr = {
       `${url}/api/v3/history/movie?movieId=${movieId}&includeMovie=true`,
       { headers }
     ),
+  // Encodées : les bornes viennent telles quelles de la requête du navigateur, et un `&` y
+  // ajoutait n'importe quel paramètre à un appel fait avec la clé d'API (26/09/2026).
   getCalendar: (start: string, end: string) =>
     fetchJson<RadarrMovie[]>(
-      `${url}/api/v3/calendar?start=${start}&end=${end}&unmonitored=true`,
+      `${url}/api/v3/calendar?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&unmonitored=true`,
       { headers }
     ),
   searchReleases: (movieId: number) =>

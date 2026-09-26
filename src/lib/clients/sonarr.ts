@@ -114,9 +114,11 @@ export const sonarr = {
       `${url}/api/v3/history/series?seriesId=${seriesId}&includeSeries=true&includeEpisode=true`,
       { headers }
     ),
+  // Encodées : les bornes viennent telles quelles de la requête du navigateur, et un `&` y
+  // ajoutait n'importe quel paramètre à un appel fait avec la clé d'API (26/09/2026).
   getCalendar: (start: string, end: string) =>
     fetchJson<SonarrEpisode[]>(
-      `${url}/api/v3/calendar?start=${start}&end=${end}&unmonitored=true&includeSeries=true`,
+      `${url}/api/v3/calendar?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&unmonitored=true&includeSeries=true`,
       { headers }
     ),
   searchReleases: (params: { seriesId?: number; episodeId?: number; seasonNumber?: number }) => {
