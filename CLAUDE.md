@@ -346,6 +346,11 @@ dictionaries' values.
   it; and a paused query is **dropped, not deferred** — SWR never replays it, so
   `PlaybackProvider` re-asks for every key left with neither data nor error when the screen comes
   back.
+- **`mutate(key)` revalidates through the first hook registered on that key, and only that one**
+  (`revalidators[0]` in SWR). A hook that merely follows a list must still carry the fetcher, with
+  `followOnlyOptions` so it never fetches on its own: `useResumeCache` followed "Reprendre" with a
+  `null` fetcher, mounted before the cinema, and every refresh after playback became a no-op —
+  the home row kept the old time remaining while the sheet was right.
 - **Only `/api/jellyfin/resume` and `/api/cinema/next-up` revalidate on focus** (`liveFeedOptions`).
   The rest of the catalogue is deliberately frozen — but **not because it is heavy**. Measured on
   2026-09-20 over 720 films: 623 KB raw, **118 KB gzipped**, of which the synopses alone are 76%

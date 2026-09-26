@@ -10,7 +10,7 @@ import { persistedCacheAccount } from "@/lib/persistentCache";
 import { directInfoKey } from "@/lib/playbackPrefetch";
 import { preloadQuietly } from "@/lib/prefetch";
 import { openingPosition } from "@/lib/resumeRewind";
-import { NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
+import { fetcher, followOnlyOptions, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import { CHUNK_SIZE, HttpByteSource } from "@/lib/webcodecs/byteSource";
 import { planResumeCache, remainingChunks, resumeTargets, type ResumeTarget } from "./plan";
 import { recordOpening } from "./record";
@@ -171,12 +171,12 @@ function whenIdle(work: () => void): () => void {
  */
 export function useResumeCache(): void {
   const { session } = usePlayback();
-  // Lues, jamais demandées : sans récupérateur, SWR ne fait que suivre ce que le cinéma a déjà. Monté
-  // avant lui (la page attend encore le catalogue gardé sur l'appareil), un `useSWR` qui demandait
-  // ces listes au serveur prenait leur place dans le cache — et l'hydratation, qui ne touche jamais
-  // une clé déjà demandée, laissait « Reprendre » sans son affichage instantané.
-  const { data: resume } = useSWR<{ items: ResumeFeedItem[] }>(RESUME_KEY, null);
-  const { data: nextUp } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, null);
+  // Lues, jamais demandées d'elles-mêmes : monté avant le cinéma (la page attend encore le catalogue
+  // gardé sur l'appareil), un `useSWR` qui demandait ces listes au serveur prenait leur place dans
+  // le cache — et l'hydratation, qui ne touche jamais une clé déjà demandée, laissait « Reprendre »
+  // sans son affichage instantané. Mais avec le récupérateur : voir `followOnlyOptions`.
+  const { data: resume } = useSWR<{ items: ResumeFeedItem[] }>(RESUME_KEY, fetcher, followOnlyOptions);
+  const { data: nextUp } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, fetcher, followOnlyOptions);
   const filmOpen = session !== null;
   const targets = useMemo(() => targetsFrom(resume?.items, nextUp?.items), [resume, nextUp]);
   const signature = targets.map((target) => `${target.itemId}@${Math.round(target.startSeconds)}`).join(",");

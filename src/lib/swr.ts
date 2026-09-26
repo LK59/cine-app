@@ -32,6 +32,24 @@ export const NEXT_UP_KEY = "/api/cinema/next-up";
  * différence entre revenir d'une veille et revenir d'un autre onglet. L'intervalle empêche un
  * va-et-vient entre deux applications de déclencher une requête par aller-retour.
  */
+/**
+ * Suivre une liste que d'autres écrans demandent, sans jamais la demander soi-même.
+ *
+ * Avec le vrai récupérateur, et non `null` : SWR ne relit une clé, sur `mutate(key)`, que par le
+ * **premier** crochet inscrit sur elle (`revalidators[0]`). Un crochet sans récupérateur monté en
+ * premier — la reprise instantanée l'est, avant le cinéma — faisait de chaque relecture un geste
+ * vide : après un film, « Reprendre » gardait la durée restante d'avant jusqu'au retour suivant
+ * dans l'application, pendant que la fiche, elle, était juste (26/09/2026). Ces options
+ * n'envoient rien d'elles-mêmes — ni au montage, ni au retour au premier plan, ni à la
+ * reconnexion — ; seule une relecture demandée passe par elles.
+ */
+export const followOnlyOptions = {
+  revalidateOnMount: false,
+  revalidateIfStale: false,
+  revalidateOnFocus: false,
+  revalidateOnReconnect: false,
+} as const;
+
 export const liveFeedOptions = {
   revalidateOnFocus: true,
   focusThrottleInterval: 30_000,

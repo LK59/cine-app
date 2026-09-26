@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { fetcher, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
+import { fetcher, followOnlyOptions, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import { isAwaitingFresh } from "@/lib/persistentCache";
 import type { CinemaNextUpItem, CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 
@@ -167,9 +167,8 @@ export function sheetPlayFacts(fallbackTitle: string, server: ServerPlayFacts | 
  * `targetId` d'un film est toujours le film lui-même — la fiche le complète.
  */
 export function useSheetPlayFacts(title: SheetTitle, fallbackTitle: string, server: ServerPlayFacts | undefined): SheetPlayFacts {
-  const readOnly = { revalidateOnMount: false, revalidateIfStale: false, revalidateOnFocus: false } as const;
-  const { data: resume } = useSWR<{ items: ResumeFeedItem[] }>(RESUME_KEY, fetcher, readOnly);
-  const { data: nextUp } = useSWR<CinemaNextUpPayload>(title.kind === "series" ? NEXT_UP_KEY : null, fetcher, readOnly);
+  const { data: resume } = useSWR<{ items: ResumeFeedItem[] }>(RESUME_KEY, fetcher, followOnlyOptions);
+  const { data: nextUp } = useSWR<CinemaNextUpPayload>(title.kind === "series" ? NEXT_UP_KEY : null, fetcher, followOnlyOptions);
   const facts = sheetPlayFacts(fallbackTitle, server, localPlayTarget(title, resume?.items, nextUp?.items));
   return title.kind === "movie" ? { ...facts, targetId: title.jellyfinItemId } : facts;
 }
