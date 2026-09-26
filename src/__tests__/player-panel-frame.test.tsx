@@ -164,3 +164,36 @@ describe("PlayerPanelFrame — le bas", () => {
     expect(body.style.paddingBottom).toContain("max(var(--player-bar-space, 4rem), 2.5rem)");
   });
 });
+
+// Sur grand écran, un clic à côté de la fenêtre la ferme (26/09/2026) — mais pas une sélection de
+// texte commencée dedans et relâchée dehors, que le navigateur livre comme un clic sur la racine.
+describe("PlayerPanelFrame — clic à côté de la fenêtre", () => {
+  const root = () => document.querySelector<HTMLElement>("[data-panel-root]")!;
+
+  it("ferme le panneau", async () => {
+    const { cinemaClose } = await import("@/lib/cinemaRoute");
+    vi.mocked(cinemaClose).mockClear();
+    render(panel(false));
+    fireEvent.pointerDown(root());
+    fireEvent.click(root());
+    expect(cinemaClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("ne ferme pas sur un clic dans la fenêtre", async () => {
+    const { cinemaClose } = await import("@/lib/cinemaRoute");
+    vi.mocked(cinemaClose).mockClear();
+    render(panel(false));
+    fireEvent.pointerDown(screen.getByText("un"));
+    fireEvent.click(screen.getByText("un"));
+    expect(cinemaClose).not.toHaveBeenCalled();
+  });
+
+  it("ne ferme pas sur un geste commencé dans la fenêtre et relâché dehors", async () => {
+    const { cinemaClose } = await import("@/lib/cinemaRoute");
+    vi.mocked(cinemaClose).mockClear();
+    render(panel(false));
+    fireEvent.pointerDown(screen.getByText("un"));
+    fireEvent.click(root());
+    expect(cinemaClose).not.toHaveBeenCalled();
+  });
+});

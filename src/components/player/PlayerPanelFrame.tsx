@@ -118,6 +118,8 @@ export function PlayerPanelFrame({
   const short = useIsShortViewport();
   const bodyRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  /** L'appui a commencé hors de la fenêtre — voir `closeOnOutsideClick`. */
+  const pressedOutside = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   // Les flèches parcourent le contenu du panneau, comme elles parcourent déjà les rangées de
   // l'accueil. Sur le corps et non sur la fenêtre : un panneau ne prend les flèches que de ce
@@ -185,6 +187,24 @@ export function PlayerPanelFrame({
     <div
       ref={rootRef}
       data-panel-root
+      /**
+       * Sur grand écran, un clic à côté de la fenêtre la ferme, comme on ferme n'importe quelle
+       * fenêtre posée sur une page (demandé le 26/09/2026). Seulement si l'appui *et* le
+       * relâchement tombent hors de la fenêtre : une sélection de texte commencée dedans et
+       * relâchée dehors produit un clic sur leur ancêtre commun — cette racine —, et fermait le
+       * panneau sous la souris de qui voulait copier un titre. Sur téléphone, la racine est l'écran
+       * entier : il n'y a pas de « dehors ».
+       */
+      onPointerDown={isMobile ? undefined : (e) => (pressedOutside.current = e.target === e.currentTarget)}
+      onClick={
+        isMobile
+          ? undefined
+          : (e) => {
+              if (e.target !== e.currentTarget || !pressedOutside.current) return;
+              pressedOutside.current = false;
+              cinemaClose(CLOSE_PANELS);
+            }
+      }
       // Sur téléphone, il monte comme les fiches ; sur grand écran, il apparaît. Deux idiomes, chacun
       // celui de sa plateforme — et surtout le même que les autres écrans de la même famille.
       className={`fixed inset-0 flex flex-col overflow-hidden ${isMobile ? "bg-ink" : ""} ${

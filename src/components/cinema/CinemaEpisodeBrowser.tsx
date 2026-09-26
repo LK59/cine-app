@@ -165,13 +165,13 @@ export function CinemaEpisodeBrowser({
       {/* No position:fixed descendants here (the back button above is a sibling) — safe to
           transform, unlike the outer root (see globals.css's own note on this pitfall). */}
       <div className={`flex h-full pt-20 ${closing ? "animate-slide-out-right" : revealed ? "" : "animate-slide-in-right"}`}>
-        {/* Une colonne flottante, dans le matériau du rail (26/09/2026) : elle était collée au bord
+        {/* Une colonne flottante, dans le matériau du rail sans son ombre (26/09/2026, `float-surface`) : elle était collée au bord
             gauche sur toute la hauteur, séparée des épisodes par un filet. Décollée d'un
             trois-quarts de rem, comme la fenêtre des panneaux ; opaque, parce que la liste d'à côté
             défile. Le fond seul est arrondi, et c'est une zone intérieure, retirée des coins, qui
             défile : un arrondi qui découpe ce qui défile se recalcule à chaque image (même leçon
             que la fenêtre des panneaux). */}
-        <div className="player-bar mb-3 ml-3 flex w-56 shrink-0 rounded-2xl sm:w-64">
+        <div className="float-surface mb-3 ml-3 flex w-56 shrink-0 rounded-2xl sm:w-64">
         <div className="scrollbar-thin my-1.5 min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-1.5">
           <p className="mb-3 truncate px-2 text-sm font-medium text-muted">{title}</p>
           {seasonNumbers.map((seasonNumber) => {
