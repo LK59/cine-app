@@ -939,23 +939,18 @@
 
 /* La fenêtre des panneaux du bureau — Recherche, Ma liste, Compte, Parcourir (26/09/2026).
  *
- * Posée sur l'accueil avec une marge tout autour, translucide et floutée : on devine l'accueil
- * derrière, comme sous la pilule du rail. Le flou est permis ici pour la raison qui le permet à
- * `player-panel` : une seule surface, sur grand écran seulement, et c'est son *contenu* qui défile —
- * pas ce qu'il y a derrière elle. Assez dense pour que deux fenêtres superposées le temps d'un
- * changement d'onglet ne laissent pas lire celle du dessous. */
-@utility panel-window {
-  background: rgb(12 12 16 / 0.86);
-  backdrop-filter: blur(28px) saturate(140%);
-  -webkit-backdrop-filter: blur(28px) saturate(140%);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 24px 60px -12px rgb(0 0 0 / 0.7);
+ * Posée sur l'accueil avec une marge tout autour, un liseré et une ombre : c'est la marge qui la
+ * détache, pas la transparence. La première version était translucide et floutée (86 %, flou de
+ * 28 px) : trop claire, le texte se lisait mal sur l'accueil qui transparaissait, et le flou d'une
+ * surface presque plein écran faisait ramer le défilement sur PC — retirée le jour même. Opaque
+ * donc, un cran au-dessus du noir de l'app (`--panel-surface`), pour qu'elle se lise comme une
+ * surface posée et non comme un trou. */
+:root {
+  --panel-surface: #111114;
 }
-/* Le fondu sous l'en-tête, en masque plutôt qu'en dégradé peint : sur un fond translucide, un
-   dégradé depuis le noir plein dessinait une bande plus sombre. Le masque efface le contenu qui
-   monte sans rien peindre, sur n'importe quel fond. */
-@utility panel-window-scroll {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 1rem);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 1rem);
+@utility panel-window {
+  background: var(--panel-surface);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 24px 60px -12px rgb(0 0 0 / 0.8);
 }
 /* Le même principe pour la fin d'une rangée qui défile de côté (filtres, segments) : elle s'efface
    dans son fond au lieu d'y poser une bande de la couleur de l'app. */

@@ -279,7 +279,7 @@ export function PlayerPanelFrame({
       <div
         ref={bodyRef}
         key={entrance}
-        className={`scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10 ${isMobile ? "" : "panel-window-scroll"}`}
+        className="scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10"
         // La barre du bas flotte par-dessus sur téléphone : sans cette réserve, la dernière rangée
         // d'un panneau finissait dessous. Nulle sur grand écran, où c'est le rail qui navigue.
         style={{
@@ -295,15 +295,13 @@ export function PlayerPanelFrame({
             Le contenu disparaissait net sous le titre, coupé à la ligne près (23/09/2026). Le
             fondu occupe la marge qui séparait l'en-tête du contenu : au repos il ne recouvre que
             du vide, et rien ne bouge ; au défilement, ce qui monte s'y efface. */}
-        {/* Sur grand écran, le fond de la fenêtre est translucide : un dégradé depuis le noir
-            plein y ferait une bande plus sombre. Le même fondu y est donc un masque sur la zone
-            qui défile (`panel-window-scroll`), qui efface le contenu sans rien peindre. */}
-        {isMobile && (
-          <div
-            aria-hidden
-            className={`pointer-events-none sticky top-0 z-10 bg-gradient-to-b from-ink to-transparent ${short ? "h-2" : "h-4"}`}
-          />
-        )}
+        {/* Depuis la couleur de ce qu'il recouvre : le noir de l'app sur téléphone, la surface de
+            la fenêtre sur grand écran. Un masque sur la zone qui défile a fait ce travail le temps
+            d'une fenêtre translucide ; peint, il ne coûte rien au défilement. */}
+        <div
+          aria-hidden
+          className={`pointer-events-none sticky top-0 z-10 bg-gradient-to-b ${isMobile ? "from-ink" : "from-(--panel-surface)"} to-transparent ${short ? "h-2" : "h-4"}`}
+        />
         {children}
       </div>
       </div>
