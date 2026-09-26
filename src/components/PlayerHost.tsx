@@ -437,6 +437,8 @@ function ActivePlayer({
    */
   const [castActive, setCastActive] = useState(false);
   const castActiveRef = useRef(false);
+  /** La croix a été pressée : la fin de diffusion qu'elle provoque n'est pas un retour au téléphone. */
+  const closingRef = useRef(false);
   // Déclaré avant le contexte du journal, qui le lit.
   const logContext = useRef<ServerPlayerContext>({ itemId, title, cast: castSession, bench: session.bench, session: firstSession, agent });
   useEffect(() => {
@@ -493,6 +495,26 @@ function ActivePlayer({
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     reportPlayback("stop", serverStopFields(logContext.current, "close", lastKnownTime.current, watched.take(Date.now())));
     const reported = stopPlaybackNow();
+    /**
+     * En diffusion, fermer le lecteur arrête aussi le téléviseur.
+     *
+     * Retirer l'élément de la page ne coupe pas une session AirPlay : le téléviseur continuait de
+     * jouer sans nous, et la reprise suivante partait de l'instant de la croix, pas de celui où la
+     * télé s'était arrêtée — vingt secondes d'écart le 26/09/2026, les segments demandés par
+     * l'Apple TV après la fermeture en témoignent. Arrêté ici, la position rapportée juste
+     * au-dessus reste la bonne.
+     */
+    const video = videoRef.current;
+    if (video && castActiveRef.current) {
+      closingRef.current = true;
+      try {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      } catch {
+        // Déjà démonté : il n'y a plus rien à arrêter.
+      }
+    }
     setClosing(true);
     // Cette lecture-ci seulement : voir `close(openId)`.
     const openId = session.openId;
@@ -1169,6 +1191,9 @@ function ActivePlayer({
      * comprendre le 19/09/2026, et la question se reposera.
      */
     const ended = (source: string) => {
+      // Provoquée par la croix : la séance est déjà close, et la rendre au téléphone rouvrirait le
+      // lecteur natif pendant la fermeture.
+      if (closingRef.current) return;
       // Avec la séance et la marque de diffusion : sans elles, la ligne se rangeait dans une séance
       // « reconstituée » et comptait comme un repli raté sur la page Activité (24/09/2026).
       // Avec le temps joué jusque-là, pris et remis à zéro : le lecteur est démonté juste après s'il

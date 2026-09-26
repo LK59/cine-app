@@ -98,7 +98,15 @@ launch of that title to the server player. In the playlist a television receives
 only its copied variant (`castMasterPlaylist`): Jellyfin adds two SDR re-encodes declared at the
 same bitrate, and after a seek a television gave up on the slow restart of the copy, switched to a
 4K re-encode sharing the same Jellyfin job, and asked for the same segment forever. The cost: a
-television without HDR finds no SDR version of such a file.
+television without HDR finds no SDR version of such a file. Closing the player mid-cast stops the television too:
+removing the element does not end an AirPlay session, and the television used to play on while
+the next launch resumed from the moment of the close. Jellyfin stamps every WebVTT segment with
+`X-TIMESTAMP-MAP=MPEGTS:900000` — the ten-second offset of MPEG-TS segments — while our segments
+are fMP4 with the file's own timestamps (`-copyts -start_at_zero`); the relay rewrites it to
+`MPEGTS:0` (`fixVttTimestampMap`), or an Apple TV shows each subtitle ten seconds late. The phone
+draws its own subtitles and never showed the offset. **Choosing subtitles from the phone does not
+reach the television yet**: the phone's menu drives its own `<track>` elements, the television
+reads the stream's subtitle renditions — pick them on the television meanwhile.
 
 **The native path is nearly free.** Matroska samples are already exactly what MP4 wants — length-prefixed
 HEVC/AVC access units, AC-3/AAC frames as they are. Only the packaging differs. No pixel and no
