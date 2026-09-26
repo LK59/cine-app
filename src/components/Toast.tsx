@@ -42,33 +42,36 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ success, error, info }}>
       {children}
-      <div className="fixed bottom-20 right-4 z-100 flex flex-col gap-2 md:bottom-6 md:right-6">
+      {/* Une pilule flottante, dans le matériau de la barre du bas et du rail (26/09/2026) : des
+          rectangles pleins vert, bleu ou rouge, posés à droite sans rapport avec la barre. L'état
+          passe par l'icône colorée ; la pile se centre au-dessus de la barre sur téléphone, et
+          reste en bas à droite sur grand écran — voir `.toast-stack`. Sur téléphone la pile fait
+          toute la largeur pour se centrer : elle laisse passer les appuis, seuls les messages en
+          prennent. */}
+      <div className="toast-stack pointer-events-none fixed z-100 flex flex-col gap-2">
         {toasts.map((t) => (
           <div
             key={t.id}
             // Annoncé aux lecteurs d'écran : une erreur interrompt, le reste attend son tour.
             role={t.type === "error" ? "alert" : "status"}
-            className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-white shadow-2xl backdrop-blur-xs ${
+            // Le rayon du rail, pas `rounded-full` : sur une ligne c'est une pilule, et un message
+            // qui passe à la ligne reste une carte aux coins ronds au lieu d'un ovale.
+            style={{ borderRadius: "1.5rem" }}
+            className={`player-bar pointer-events-auto flex max-w-[min(28rem,calc(100vw-2rem))] items-center gap-3 py-3 pl-4 pr-3 text-sm font-medium text-white ${
               t.leaving ? "animate-fade-out" : "animate-fade-in-up"
-            } ${
-              t.type === "success"
-                ? "bg-emerald-600/95 ring-1 ring-emerald-500/50"
-                : t.type === "info"
-                  ? "bg-sky-700/95 ring-1 ring-sky-500/50"
-                  : "bg-red-700/95 ring-1 ring-red-500/50"
             }`}
           >
             {t.type === "success" ? (
-              <CircleCheck size={16} className="shrink-0" />
+              <CircleCheck size={17} className="shrink-0 text-success" />
             ) : t.type === "info" ? (
-              <Info size={16} className="shrink-0" />
+              <Info size={17} className="shrink-0 text-accent-400" />
             ) : (
-              <CircleX size={16} className="shrink-0" />
+              <CircleX size={17} className="shrink-0 text-danger" />
             )}
             <span>{t.message}</span>
             <button
               onClick={() => remove(t.id)}
-              className="ml-1 shrink-0 opacity-60 hover:opacity-100"
+              className="ml-1 shrink-0 text-subtle transition-colors hover:text-white"
             >
               <X size={14} />
             </button>

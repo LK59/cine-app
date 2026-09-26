@@ -916,6 +916,27 @@
   .player-glass-on:hover { background: rgb(255 255 255 / 0.3); }
 }
 
+/* La pile des messages (`Toast.tsx`).
+ *
+ * Sur téléphone, centrée au-dessus de la barre du bas : sa réserve (`--player-bar-space`, posée
+ * par PlayerShell) dit où elle s'arrête. Hors du cinéma la variable n'existe pas, et les valeurs
+ * de repli sont celles d'avant (5 rem sur téléphone). Sur grand écran, en bas à droite, et jamais
+ * collée au bord quand la réserve vaut zéro. */
+.toast-stack {
+  left: 1rem;
+  right: 1rem;
+  align-items: center;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + max(var(--player-bar-space, 5rem), 1.5rem));
+}
+@media (min-width: 768px) {
+  .toast-stack {
+    left: auto;
+    right: 1.5rem;
+    align-items: flex-end;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + max(var(--player-bar-space, 1.5rem), 1.5rem));
+  }
+}
+
 /* La fenêtre des panneaux du bureau — Recherche, Ma liste, Compte, Parcourir (26/09/2026).
  *
  * Posée sur l'accueil avec une marge tout autour, translucide et floutée : on devine l'accueil
