@@ -30,6 +30,7 @@ const PlayerDiscoverSheet = dynamic(() => import("./PlayerDiscoverSheet").then((
 const PlayerPersonSheet = dynamic(() => import("./PlayerPersonSheet").then((m) => m.PlayerPersonSheet), { ssr: false });
 // L'écran d'accueil — chargé à part : la plupart des lancements ne l'affichent pas.
 const PlayerOnboardingGate = dynamic(() => import("./PlayerOnboarding").then((m) => m.PlayerOnboardingGate), { ssr: false });
+const PushResumePrompt = dynamic(() => import("./PushResumePrompt").then((m) => m.PushResumePrompt), { ssr: false });
 // Les décodeurs du lecteur, une fois l'écran installé, à chaque démarrage : l'écran d'accueil seul
 // ne concerne qu'un premier lancement, et le 21/09/2026 le décodeur FLAC arrivait par un
 // déploiement que presque personne ne verrait passer par là. `ssr: false` n'est pas un détail :
@@ -199,6 +200,7 @@ export function PlayerShell() {
           question. */}
       {isMobile ? <PlayerBottomBar /> : <PlayerRail />}
       <PlayerOnboardingGate />
+      <PushResumePrompt />
       <DecoderWarmup delayMs={DECODER_WARMUP_MS} />
       {/* Montés le temps de leur sortie : l'adresse change avant eux — un retour du navigateur
           suffit — et sans ce sursis ils disparaissaient d'un coup, alors qu'ils arrivent en

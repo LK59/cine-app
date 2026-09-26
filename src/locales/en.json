@@ -1816,6 +1816,11 @@
       "details": "Technical details",
       "copy": "Copy",
       "copied": "Copied"
+    },
+    "pushResume": {
+      "title": "Notifications",
+      "body": "You had them on for this device before signing out. Turn them back on?",
+      "later": "Later"
     }
   },
   "cinema": {

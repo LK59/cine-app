@@ -562,6 +562,9 @@ can be revoked immediately rather than only on expiry. A few things are worth kn
 - **A casting pass dies with its session.** The pass a television uses to fetch one title's stream
   without a cookie (six hours, read-only, that title only) names the session that asked for it,
   and stops working once that session is signed out or closed.
+- **Signing out turns this device's notifications off.** A push subscription belongs to the
+  browser, not to the person; left in place, the next account on a shared tablet received the
+  previous one's notifications. If they were on, the question is asked again at the next sign-in.
 - **Signing your other devices out affects Cine App only.** The Jellyfin sessions those logins
   opened are left alone — deliberately: nobody clicking that button expects to lose Jellyfin
   with it.

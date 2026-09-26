@@ -24,7 +24,8 @@ async function getVapidKey(): Promise<string | null> {
   } catch { return null; }
 }
 
-export function PushToggle() {
+/** `onSubscribed` : l'abonnement vient d'être accepté par le serveur — voir `PushResumePrompt`. */
+export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {}) {
   const [state, setState] = useState<State>("loading");
   const [sub, setSub] = useState<PushSubscription | null>(null);
   const swReg = useRef<ServiceWorkerRegistration | null>(null);
@@ -108,11 +109,12 @@ export function PushToggle() {
 
       setSub(subscription);
       setState("subscribed");
+      onSubscribed?.();
     } catch (error) {
       setState("unsubscribed");
       toast.error(error instanceof Error ? error.message : t('common.error'));
     }
-  }, [toast, t]);
+  }, [toast, t, onSubscribed]);
 
   const unsubscribe = useCallback(async () => {
     setState("loading");

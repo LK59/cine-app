@@ -1816,6 +1816,11 @@
       "details": "Technische Details",
       "copy": "Kopieren",
       "copied": "Kopiert"
+    },
+    "pushResume": {
+      "title": "Benachrichtigungen",
+      "body": "Sie waren auf diesem Gerät vor der Abmeldung aktiviert. Wieder einschalten?",
+      "later": "Später"
     }
   },
   "cinema": {

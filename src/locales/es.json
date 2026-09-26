@@ -1816,6 +1816,11 @@
       "details": "Detalles técnicos",
       "copy": "Copiar",
       "copied": "Copiado"
+    },
+    "pushResume": {
+      "title": "Notificaciones",
+      "body": "Las tenías activadas en este dispositivo antes de cerrar sesión. ¿Volver a activarlas?",
+      "later": "Más tarde"
     }
   },
   "cinema": {

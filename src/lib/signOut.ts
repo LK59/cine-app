@@ -4,6 +4,8 @@ import { forgetPrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { clearPersistedCache } from "@/lib/persistentCache";
 import { clearResumeStore } from "@/lib/resumeCache/store";
 import { forgetSearches } from "@/lib/recentSearches";
+import { dropPushOnSignOut } from "@/lib/pushOnSignOut";
+import { persistedCacheAccount } from "@/lib/persistentCache";
 
 /**
  * Se déconnecter : prévenir le serveur, puis aller à la page de connexion — **quoi qu'il arrive**.
@@ -26,7 +28,13 @@ export async function signOut(go: (path: string) => void): Promise<void> {
   // de la bibliothèque ni de la reprise de qui que ce soit. Borné : un stockage lent ne retient
   // pas la personne sur la page qu'elle quitte.
   // Les octets gardés pour la reprise instantanée aussi (`src/lib/resumeCache/`), dans le même délai.
-  await Promise.race([Promise.all([clearPersistedCache(), clearResumeStore()]), new Promise((resolve) => setTimeout(resolve, 500))]);
+  // Sous quel compte retenir que les notifications étaient activées — voir `pushOnSignOut`.
+  const account = persistedCacheAccount();
+  // Les notifications de cet appareil aussi : sinon elles iraient au compte suivant.
+  await Promise.race([
+    Promise.all([clearPersistedCache(), clearResumeStore(), dropPushOnSignOut(account)]),
+    new Promise((resolve) => setTimeout(resolve, 500)),
+  ]);
   try {
     await fetch("/api/auth/logout", { method: "POST" });
   } catch {

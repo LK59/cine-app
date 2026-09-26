@@ -1816,6 +1816,11 @@
       "details": "Détails techniques",
       "copy": "Copier",
       "copied": "Copié"
+    },
+    "pushResume": {
+      "title": "Notifications",
+      "body": "Vous les aviez activées sur cet appareil avant de vous déconnecter. Les réactiver ?",
+      "later": "Plus tard"
     }
   },
   "cinema": {
