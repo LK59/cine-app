@@ -145,6 +145,32 @@ describe("GET /api/search", () => {
   });
 });
 
+// Chaque nom reconnu coûtait une à deux recherches TMDB, sans borne : une adresse listant des
+// centaines de noms partait en autant d'appels sur la clé de la maison (26/09/2026).
+describe("GET /api/search — coût borné", () => {
+  it("ne cherche pas plus de quatre personnes par requête", async () => {
+    const { parseNaturalQuery } = await import("@/lib/search-natural-query");
+    const names = ["alain delon", "jean gabin", "lino ventura", "romy schneider", "gerard depardieu", "jean marais", "michel serrault", "annie girardot"];
+    const q = `films avec ${names.join(" et ")}`;
+    // La requête doit bien en nommer plus de quatre, sans quoi le test ne prouve rien.
+    expect(parseNaturalQuery(q, "all").castNames.length).toBeGreaterThan(4);
+    const { GET, MAX_PERSON_NAMES } = await import("@/app/api/search/route");
+    await GET(fakeReq({ q }));
+    // La requête entière est cherchée une fois comme personne ; les noms, eux, un par un.
+    const searchedNames = new Set(mockTmdbSingleton.searchPerson.mock.calls.map(([n]) => n).filter((n) => names.includes(n)));
+    expect(searchedNames.size).toBe(MAX_PERSON_NAMES);
+  });
+
+  it("coupe une requête plus longue qu'une phrase avant de l'envoyer à TMDB", async () => {
+    const { GET, MAX_QUERY_LENGTH } = await import("@/app/api/search/route");
+    await GET(fakeReq({ q: "dune ".repeat(2000) }));
+    for (const [query] of mockTmdbSingleton.searchMulti.mock.calls) {
+      expect(String(query).length).toBeLessThanOrEqual(MAX_QUERY_LENGTH);
+    }
+    expect(mockTmdbSingleton.searchMulti).toHaveBeenCalled();
+  });
+});
+
 /**
  * Ce qu'une personne fait sur cet écran.
  *

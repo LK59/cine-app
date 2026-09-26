@@ -230,6 +230,20 @@ describe("GET /api/watchlist/ratings", () => {
     expect(body["movie:42"]).toBe("8.1");
   });
 
+  it("borne et dédoublonne la liste, en tronquant plutôt qu'en refusant (26/09/2026)", async () => {
+    // Chaque note inconnue coûtait un appel TMDB et un OMDb, sans limite de nombre.
+    mockOmdb.isEnabled.mockReturnValue(true);
+    mockTmdb.getMovie.mockResolvedValue({ imdb_id: null });
+    const ids = Array.from({ length: 800 }, (_, i) => `movie:${900_000 + i}`);
+    const { GET } = await import("@/app/api/watchlist/ratings/route");
+    const res = await GET(fakeReq({ params: { items: [...ids, ids[0], ids[0]].join(",") } }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Object.keys(body)).toHaveLength(500);
+    expect(body).toHaveProperty("movie:900000");
+    expect(mockTmdb.getMovie.mock.calls.length).toBeLessThanOrEqual(500);
+  });
+
   it("returns null for a title with no OMDb rating (N/A), not the string 'N/A'", async () => {
     mockOmdb.isEnabled.mockReturnValue(true);
     mockTmdb.getMovie.mockResolvedValue({ imdb_id: "tt123" });

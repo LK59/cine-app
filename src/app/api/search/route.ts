@@ -68,9 +68,21 @@ export interface SearchDebug {
   results: Record<string, string[]>;
 }
 
+/**
+ * Bornes de ce qu'une recherche peut coûter en appels TMDB (26/09/2026).
+ *
+ * Chaque nom de personne reconnu dans une requête en langage naturel (« films avec A et B… »)
+ * coûtait une à deux recherches TMDB, sans limite de nombre : une seule adresse listant des
+ * centaines de noms partait en autant d'appels, et la clé TMDB est partagée par toute la maison.
+ * Personne ne croise plus de quatre personnes dans une requête ; au-delà, les noms suivants sont
+ * ignorés plutôt que la requête refusée. Et une requête plus longue qu'une phrase est coupée.
+ */
+export const MAX_PERSON_NAMES = 4;
+export const MAX_QUERY_LENGTH = 200;
+
 async function resolvePersonIds(names: string[]): Promise<number[]> {
   const found = await Promise.all(
-    names.map(async (name) => {
+    names.slice(0, MAX_PERSON_NAMES).map(async (name) => {
       const corrected = correctPersonName(name);
       const primary = await tmdb.searchPerson(corrected).catch(() => ({ results: [] }));
       if (primary.results[0]?.id) return primary.results[0].id;
@@ -200,7 +212,7 @@ async function findSharedSeriesByCast(castIds: number[]) {
 }
 
 export async function GET(req: NextRequest) {
-  const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
+  const q = (req.nextUrl.searchParams.get("q") ?? "").slice(0, MAX_QUERY_LENGTH).trim();
   const type = req.nextUrl.searchParams.get("type") as "movie" | "series" | "all" | null ?? "all";
   const wantsDebug = req.nextUrl.searchParams.get("debug") === "1";
   const session = wantsDebug ? await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value) : null;
