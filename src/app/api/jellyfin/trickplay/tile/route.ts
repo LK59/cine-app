@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
     return new NextResponse(blob, {
       headers: {
         "Content-Type": res.headers.get("Content-Type") ?? "image/jpeg",
-        "Cache-Control": "public, max-age=86400, immutable",
+        // `private` : des images du film, servies à une session seulement — aucun cache partagé ne
+        // doit les resservir (26/09/2026, comme le relais de flux).
+        "Cache-Control": "private, max-age=86400, immutable",
       },
     });
   } catch {

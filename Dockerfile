@@ -42,7 +42,11 @@ RUN addgroup -g 1001 cineapp && adduser -u 1001 -G cineapp -s /bin/sh -D cineapp
 # À ne pas confondre avec le nom des sauvegardes, qui vient de `toISOString()` : celui-là est en
 # UTC quoi qu'il arrive, `tzdata` n'y peut rien, et il a fallu le corriger dans le code — voir
 # `dbBackup.ts`.
-RUN --mount=type=cache,target=/root/.npm apk add --no-cache libstdc++ tzdata && npm install --no-save sharp
+# sharp épinglé, à la version que demande `next` : non épinglé, un build à froid prenait la dernière
+# publiée et un build en cache gardait l'ancienne — deux images différentes pour le même commit, et
+# une mise à jour de sécurité de libvips/libheif qui ne passait pas (26/09/2026). À faire suivre
+# `npm ls sharp` quand `next` change.
+RUN --mount=type=cache,target=/root/.npm apk add --no-cache libstdc++ tzdata && npm install --no-save sharp@0.35.4
 
 COPY --from=builder --chown=cineapp:cineapp /app/public ./public
 COPY --from=builder --chown=cineapp:cineapp /app/.next/standalone ./
