@@ -1,6 +1,7 @@
 "use client";
 
 import { APP_BUILD } from "@/lib/appBuild";
+import { persistedCacheAccount } from "@/lib/persistentCache";
 
 /**
  * Le bilan d'une séance, gardé sur l'appareil tant qu'il n'est pas parti.
@@ -28,13 +29,25 @@ export const ORPHAN_AFTER_MS = 2 * 60_000;
 interface Saved {
   savedAt: number;
   fields: Record<string, unknown>;
+  /**
+   * Le compte de la séance. Sans lui, un bilan resté en plan partait sous la session suivante,
+   * quelle qu'elle soit : sur un iPad partagé, le film d'une personne s'inscrivait dans le journal
+   * — et dans la reprise Jellyfin — d'une autre (audit du 26/09/2026). Absent des bilans d'avant.
+   */
+  account?: string | null;
 }
+
+/** Un bilan d'un autre compte attend son retour — une semaine, pas davantage. */
+const OTHER_ACCOUNT_KEEP_MS = 7 * 24 * 3600_000;
 
 export function saveUnsentStop(session: string, fields: Record<string, unknown>, now = Date.now()): void {
   try {
     // Le build de la séance, gardé avec elle : le bilan part au lancement suivant, qui peut tourner
     // sur un autre code.
-    localStorage.setItem(PREFIX + session, JSON.stringify({ savedAt: now, fields: { build: APP_BUILD, ...fields } } satisfies Saved));
+    localStorage.setItem(
+      PREFIX + session,
+      JSON.stringify({ savedAt: now, fields: { build: APP_BUILD, ...fields }, account: persistedCacheAccount() } satisfies Saved)
+    );
   } catch {
     // Pas de stockage : la séance se passera de filet.
   }
@@ -52,7 +65,9 @@ export function clearUnsentStop(session: string): void {
  * Les bilans restés en plan, prêts à envoyer — sans les retirer : ils ne partent du stockage
  * qu'une fois acceptés (voir `flushOrphanStops`).
  */
-export function findOrphanStops(now = Date.now()): { key: string; fields: Record<string, unknown> }[] {
+export function findOrphanStops(now = Date.now(), account: string | null = persistedCacheAccount()): { key: string; fields: Record<string, unknown> }[] {
+  // Personne de connu (l'écran de connexion) : rien ne partirait, la route refuse sans session.
+  if (!account) return [];
   const found: { key: string; fields: Record<string, unknown> }[] = [];
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -70,6 +85,11 @@ export function findOrphanStops(now = Date.now()): { key: string; fields: Record
         continue;
       }
       if (now - saved.savedAt < ORPHAN_AFTER_MS) continue;
+      // Le bilan d'un autre compte n'est pas le nôtre : il attend que ce compte revienne.
+      if (saved.account && saved.account !== account) {
+        if (now - saved.savedAt > OTHER_ACCOUNT_KEEP_MS) localStorage.removeItem(key);
+        continue;
+      }
       found.push({ key, fields: { ...saved.fields, why: "lost", lateByMs: now - saved.savedAt } });
     }
   } catch {

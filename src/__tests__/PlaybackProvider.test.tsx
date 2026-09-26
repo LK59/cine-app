@@ -166,6 +166,10 @@ describe("PlaybackProvider — bilans restés sur l'appareil", () => {
     );
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
+    // Un compte connecté : sans lui, rien ne part (26/09/2026, voir `findOrphanStops`). Posé par
+    // l'hydratation, comme au lancement réel — `SWRProvider` le fait avant les écrans.
+    const { hydrateFromDisk } = await import("@/lib/persistentCache");
+    await hydrateFromDisk("louis", { has: () => true, set: () => {} }).catch(() => 0);
     renderHook(() => usePlayback(), { wrapper });
     await waitFor(() => expect(localStorage.getItem("cine:unsent-stop:abcd1234")).toBeNull());
     expect(fetchMock).toHaveBeenCalledWith("/api/player/log", expect.objectContaining({ method: "POST" }));

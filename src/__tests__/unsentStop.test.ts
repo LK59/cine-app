@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// Le compte de la page, tel que l'hydratation l'a reçu — voir `persistedCacheAccount`.
+let account: string | null = "louis";
+vi.mock("@/lib/persistentCache", () => ({ persistedCacheAccount: () => account }));
 import { saveUnsentStop, clearUnsentStop, findOrphanStops, flushOrphanStops, ORPHAN_AFTER_MS } from "@/lib/unsentStop";
 import { reportPlayback } from "@/lib/reportPlayback";
 
@@ -9,7 +13,10 @@ import { reportPlayback } from "@/lib/reportPlayback";
  * Douze séances sur 163, du 21 au 23/09/2026, n'avaient pas de ligne `stop` : la page n'a pas
  * survécu jusqu'à `pagehide`. Le bilan attend sur l'appareil et part au lancement suivant.
  */
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  account = "louis";
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe("le bilan gardé sur l'appareil", () => {
@@ -70,5 +77,31 @@ describe("reportPlayback — l'arrêt part par balise", () => {
     reportPlayback("stop", { itemId: "x" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     Object.defineProperty(navigator, "sendBeacon", { value: undefined, configurable: true });
+  });
+});
+
+describe("un appareil partagé", () => {
+  // 26/09/2026 : le bilan d'un compte partait sous la session du suivant, et la reprise Jellyfin de
+  // ce dernier avançait au film du premier.
+  it("n'envoie que les bilans du compte connecté, et garde les autres pour leur retour", () => {
+    saveUnsentStop("aaaa", { itemId: "a" }, 0);
+    account = "timeo";
+    expect(findOrphanStops(ORPHAN_AFTER_MS + 1)).toEqual([]);
+    expect(localStorage.length).toBe(1);
+    account = "louis";
+    expect(findOrphanStops(ORPHAN_AFTER_MS + 1)).toHaveLength(1);
+  });
+
+  it("n'envoie rien tant que personne n'est connecté", () => {
+    saveUnsentStop("aaaa", { itemId: "a" }, 0);
+    account = null;
+    expect(findOrphanStops(ORPHAN_AFTER_MS + 1)).toEqual([]);
+  });
+
+  it("oublie au bout d'une semaine le bilan d'un compte qui ne revient pas", () => {
+    saveUnsentStop("aaaa", { itemId: "a" }, 0);
+    account = "timeo";
+    findOrphanStops(8 * 24 * 3600_000);
+    expect(localStorage.length).toBe(0);
   });
 });
