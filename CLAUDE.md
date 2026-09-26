@@ -24,7 +24,8 @@ Hiding the management button is presentation, not security.
 **There is no Node or npm on this host.** Everything runs through Docker.
 
 ```sh
-# Iterate — hot reload against the working tree, on http://<server>:3001.
+# Iterate — hot reload against the working tree, on http://localhost:3001 of the server
+# (published on loopback only: reach it through `ssh -L 3001:localhost:3001 <server>`).
 # Runs alongside production; does not rebuild the image.
 docker compose -f docker-compose.dev.yml up
 

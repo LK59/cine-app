@@ -586,7 +586,8 @@ Only relevant if you are modifying the code — deploying needs none of this.
 docker run --rm -v "$PWD":/app -w /app node:24-alpine sh -c \
   'apk add --no-cache python3 make g++ && npm ci'
 
-# Iterate — hot reload against the working tree, on http://<server>:3001.
+# Iterate — hot reload against the working tree, on http://localhost:3001 of the server
+# (loopback only: use an SSH tunnel, `ssh -L 3001:localhost:3001 <server>`).
 # Runs alongside production; does not rebuild the image.
 docker compose -f docker-compose.dev.yml up
 
@@ -641,8 +642,8 @@ One caveat: the development port is plain HTTP, and several browser APIs are res
 contexts. The ordinary path — remux into MediaSource, native `<video>` — works there. WebCodecs
 does not exist outside a secure context, so neither does what depends on it: the in-browser
 re-encoding of DTS, TrueHD and FLAC, which needs `AudioEncoder` — those files go to the server
-player instead. Testing them needs HTTPS — deploy it, or point a
-reverse-proxy host at port 3001 (`localhost` also counts as secure).
+player instead. Testing them needs a secure context: an SSH tunnel to `localhost:3001`
+(`localhost` counts as secure), a reverse-proxy host pointing at `cine-app-dev:3000`, or a deploy.
 
 ## Debugging a running deployment
 

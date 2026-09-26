@@ -45,9 +45,13 @@ services:
       # Optional Clara gallery photos; set CLARA_GALLERY_DIR in .env to your folder.
       - ${CLARA_GALLERY_DIR:-./gallery}:/app/gallery/clara:ro
     ports:
-      # Reachable on the LAN at http://<server>:3001 — enough to test from a phone without
-      # touching the reverse proxy, which may serve other sites.
-      - "3001:3000"
+      # Loopback only. A bare "3001:3000" publishes on every interface — on a host whose only
+      # address is public, that put `next dev`, with the production keys and database, in plain
+      # HTTP on the Internet (Docker's port rules bypass the host firewall). Reach it with an SSH
+      # tunnel (`ssh -L 3001:localhost:3001 <server>`, then http://localhost:3001, which browsers
+      # also treat as a secure context), or from a reverse-proxy host on the same Docker network
+      # pointing at cine-app-dev:3000.
+      - "127.0.0.1:3001:3000"
     # Same identity as production so the SQLite database and its WAL stay writable by both.
     user: "1001:1000"
     networks:
