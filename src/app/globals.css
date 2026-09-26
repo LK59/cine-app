@@ -493,10 +493,16 @@
    Un filtre, un genre, un segment : le même geste, et jusqu'ici trois formes
    selon la page. Actif = plein, sans bordure. Inactif = presque rien. Une puce
    qui porte à la fois une bordure, un fond et un rayon se dispute l'attention
-   avec le contenu qu'elle filtre. */
+   avec le contenu qu'elle filtre.
+
+   « Presque rien » était devenu rien du tout : sans aucun fond au repos, une
+   rangée de filtres se lisait comme du texte gris posé sur le noir, et ne
+   devenait une pilule qu'au survol — ce qu'un doigt ne fait pas (26/09/2026).
+   Un fond de 6 %, toujours sans bordure : assez pour dessiner la forme, trop
+   peu pour disputer l'attention au contenu. */
 
 @utility chip {
-  @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-slate-400;
+  @apply inline-flex items-center gap-1.5 rounded-full bg-white/6 px-3 py-1.5 text-sm font-medium text-slate-400;
   transition: background-color 150ms ease-out, color 150ms ease-out,
     transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -505,7 +511,7 @@
 }
 @media (hover: hover) {
   .chip:hover {
-    @apply bg-white/8 text-slate-100;
+    @apply bg-white/10 text-slate-100;
   }
 }
 @utility chip-on {

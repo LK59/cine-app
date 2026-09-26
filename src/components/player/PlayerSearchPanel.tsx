@@ -360,7 +360,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
             autoComplete="off"
             placeholder={t("player.search.placeholder")}
             aria-label={t("player.nav.search")}
-            className="search-no-native-clear w-full rounded-xl border border-white/10 bg-white/5 py-4 pl-12 pr-12 text-base text-white placeholder:text-subtle focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+            className="search-no-native-clear w-full rounded-full border border-white/10 bg-white/5 py-4 pl-12 pr-12 text-base text-white placeholder:text-subtle focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
           />
           {/* Effacer sans viser la touche retour arrière trente fois.
               `type="search"` dessine bien une croix native, mais pas sur iOS — et c'est
