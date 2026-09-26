@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, X } from "lucide-react";
 import { CLOSE_PANELS, cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useT } from "@/components/TranslationProvider";
 import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
+import { openPanel } from "./playerNav";
 
 /**
  * L'habillage commun des écrans ouverts depuis le rail — Recherche, Ma liste, Compte.
@@ -125,6 +126,21 @@ export function PlayerPanelFrame({
   }
 
   const route = useCinemaRoute();
+  /**
+   * Fermer la fenêtre, c'est revenir à l'accueil (26/09/2026).
+   *
+   * Tout passait par `cinemaClose`, c'est-à-dire un retour dans l'historique : Accueil → Ma
+   * liste → Compte, puis fermer, rouvrait Ma liste — un « fermer » qui ouvre une autre fenêtre.
+   * La croix, Échap et un clic à côté ramènent donc à l'accueil, comme « Accueil » dans le rail.
+   *
+   * Sauf sur un écran poussé (`back` : Parcourir, l'activité, les signalements), où la flèche et
+   * Échap reviennent d'un cran — c'est ce que dit la flèche. Le clic à côté, lui, sort de la
+   * fenêtre quelle qu'elle soit : il appelle `openPanel` directement.
+   */
+  const closeWindow = useCallback(() => {
+    if (back) cinemaClose(CLOSE_PANELS);
+    else openPanel("home", route);
+  }, [back, route]);
   const isMobile = useIsMobile();
   const short = useIsShortViewport();
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -184,11 +200,11 @@ export function PlayerPanelFrame({
       if (document.querySelector('[aria-modal="true"]')) return;
       if ((e.target as Element | null)?.closest?.("[data-owns-escape]")) return;
       e.stopPropagation();
-      cinemaClose(CLOSE_PANELS);
+      closeWindow();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [covered, leaving]);
+  }, [covered, leaving, closeWindow]);
 
   // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
   // `document` n'existe pas et où `createPortal` fait échouer la page entière.
@@ -213,7 +229,9 @@ export function PlayerPanelFrame({
           : (e) => {
               if (e.target !== e.currentTarget || !pressedOutside.current) return;
               pressedOutside.current = false;
-              cinemaClose(CLOSE_PANELS);
+              // L'accueil, toujours — même depuis un écran poussé : on sort de la fenêtre, pas
+              // d'un cran. Voir `closeWindow`.
+              openPanel("home", route);
             }
       }
       // Sur téléphone, il monte comme les fiches ; sur grand écran, il apparaît. Deux idiomes, chacun
@@ -338,7 +356,7 @@ export function PlayerPanelFrame({
           {!isMobile && !back && (
             <button
               type="button"
-              onClick={() => cinemaClose(CLOSE_PANELS)}
+              onClick={closeWindow}
               aria-label={t("common.close")}
               className="flex h-10 w-10 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
             >

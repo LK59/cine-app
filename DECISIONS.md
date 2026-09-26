@@ -938,3 +938,26 @@ par `.phone-sheet-frame`.
 **Voulu.** La fiche personne garde sa propre forme : elle se pose en bas, à 92 % de la hauteur.
 
 **Décidé le 26/09/2026.**
+
+## 32. Fermer une fenêtre du cinéma ramène à l'accueil
+
+**Règle.** La croix, Échap et un clic à côté de la fenêtre (grand écran) ramènent à l'accueil,
+comme « Accueil » dans le rail. Sur un écran poussé (Parcourir, l'activité, les signalements), la
+flèche et Échap reviennent d'un cran ; le clic à côté ramène à l'accueil là aussi.
+
+**Pourquoi.** Tout passait par `cinemaClose`, un retour dans l'historique : Accueil → Ma liste →
+Compte, puis fermer, rouvrait Ma liste — un « fermer » qui ouvre une autre fenêtre.
+
+**Porteurs.** `closeWindow` dans `PlayerPanelFrame`, qui s'appuie sur `openPanel("home")`
+(`playerNav.ts`).
+
+**Appelants.** Tous les panneaux montés dans `PlayerPanelFrame` : Recherche, Ma liste, Compte,
+Parcourir, Activité, Signalements.
+
+**Tests.** `player-panel-frame.test.tsx` (« Échap », « clic à côté de la fenêtre »).
+
+**Voulu.** Les fiches (film, série, personne, découverte) gardent `cinemaClose` : elles s'empilent
+les unes sur les autres, et en sortir revient bien à celle d'en dessous. Aller à l'accueil ajoute une
+entrée d'historique, comme le rail : le retour du navigateur rouvre la fenêtre fermée.
+
+**Décidé le 26/09/2026.**

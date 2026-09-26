@@ -144,28 +144,50 @@ describe("PlayerPanelFrame — arrivée depuis un autre onglet", () => {
 // Compte (l'accueil restait) ; dans la recherche d'ajout de « Ma liste », il quittait tout l'écran
 // (23/09/2026).
 describe("PlayerPanelFrame — Échap", () => {
-  it("referme le panneau quand rien d'autre ne le réclame", async () => {
-    const { cinemaClose } = await import("@/lib/cinemaRoute");
+  it("referme le panneau quand rien d'autre ne le réclame — vers l'accueil", async () => {
+    const { cinemaClose, cinemaNavigate } = await import("@/lib/cinemaRoute");
+    vi.mocked(cinemaClose).mockClear();
+    vi.mocked(cinemaNavigate).mockClear();
     render(panel(false));
     fireEvent.keyDown(window, { key: "Escape" });
+    expect(cinemaNavigate).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(cinemaNavigate).mock.calls[0][0]).toMatchObject({ search: false, list: false, account: false });
+    expect(cinemaClose).not.toHaveBeenCalled();
+  });
+
+  // Un écran poussé (Parcourir, l'activité) revient d'un cran, comme sa flèche.
+  it("revient d'un cran sur un écran poussé", async () => {
+    const { cinemaClose, cinemaNavigate } = await import("@/lib/cinemaRoute");
+    vi.mocked(cinemaClose).mockClear();
+    vi.mocked(cinemaNavigate).mockClear();
+    render(
+      <PlayerPanelFrame title="Titre" back>
+        <p>contenu</p>
+      </PlayerPanelFrame>
+    );
+    fireEvent.keyDown(window, { key: "Escape" });
     expect(cinemaClose).toHaveBeenCalledTimes(1);
+    expect(cinemaNavigate).not.toHaveBeenCalled();
   });
 
   it("se tait sous une fenêtre de dialogue", async () => {
-    const { cinemaClose } = await import("@/lib/cinemaRoute");
+    const { cinemaClose, cinemaNavigate } = await import("@/lib/cinemaRoute");
     vi.mocked(cinemaClose).mockClear();
+    vi.mocked(cinemaNavigate).mockClear();
     render(panel(false));
     const dialog = document.createElement("div");
     dialog.setAttribute("aria-modal", "true");
     document.body.appendChild(dialog);
     fireEvent.keyDown(window, { key: "Escape" });
     expect(cinemaClose).not.toHaveBeenCalled();
+    expect(vi.mocked((await import("@/lib/cinemaRoute")).cinemaNavigate)).not.toHaveBeenCalled();
     dialog.remove();
   });
 
   it("laisse Échap à l'élément qui le gère lui-même", async () => {
-    const { cinemaClose } = await import("@/lib/cinemaRoute");
+    const { cinemaClose, cinemaNavigate } = await import("@/lib/cinemaRoute");
     vi.mocked(cinemaClose).mockClear();
+    vi.mocked(cinemaNavigate).mockClear();
     render(
       <PlayerPanelFrame title="Titre">
         <input data-owns-escape aria-label="ajout" />
@@ -173,6 +195,7 @@ describe("PlayerPanelFrame — Échap", () => {
     );
     fireEvent.keyDown(screen.getByLabelText("ajout"), { key: "Escape" });
     expect(cinemaClose).not.toHaveBeenCalled();
+    expect(cinemaNavigate).not.toHaveBeenCalled();
   });
 });
 
@@ -190,32 +213,53 @@ describe("PlayerPanelFrame — le bas", () => {
 // texte commencée dedans et relâchée dehors, que le navigateur livre comme un clic sur la racine.
 describe("PlayerPanelFrame — clic à côté de la fenêtre", () => {
   const root = () => document.querySelector<HTMLElement>("[data-panel-root]")!;
+  const reset = async () => {
+    const m = await import("@/lib/cinemaRoute");
+    vi.mocked(m.cinemaClose).mockClear();
+    vi.mocked(m.cinemaNavigate).mockClear();
+    return m;
+  };
 
-  it("ferme le panneau", async () => {
-    const { cinemaClose } = await import("@/lib/cinemaRoute");
-    vi.mocked(cinemaClose).mockClear();
+  // Accueil → Ma liste → Compte, puis un clic à côté : l'accueil, pas Ma liste (26/09/2026).
+  it("ramène à l'accueil, pas à l'écran d'avant", async () => {
+    const { cinemaClose, cinemaNavigate } = await reset();
     render(panel(false));
     fireEvent.pointerDown(root());
     fireEvent.click(root());
-    expect(cinemaClose).toHaveBeenCalledTimes(1);
+    expect(cinemaNavigate).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(cinemaNavigate).mock.calls[0][0]).toMatchObject({ search: false, list: false, account: false });
+    expect(cinemaClose).not.toHaveBeenCalled();
+  });
+
+  it("ramène à l'accueil même depuis un écran poussé", async () => {
+    const { cinemaClose, cinemaNavigate } = await reset();
+    render(
+      <PlayerPanelFrame title="Titre" back>
+        <p>contenu</p>
+      </PlayerPanelFrame>
+    );
+    fireEvent.pointerDown(root());
+    fireEvent.click(root());
+    expect(cinemaNavigate).toHaveBeenCalledTimes(1);
+    expect(cinemaClose).not.toHaveBeenCalled();
   });
 
   it("ne ferme pas sur un clic dans la fenêtre", async () => {
-    const { cinemaClose } = await import("@/lib/cinemaRoute");
-    vi.mocked(cinemaClose).mockClear();
+    const { cinemaClose, cinemaNavigate } = await reset();
     render(panel(false));
     fireEvent.pointerDown(screen.getByText("un"));
     fireEvent.click(screen.getByText("un"));
     expect(cinemaClose).not.toHaveBeenCalled();
+    expect(cinemaNavigate).not.toHaveBeenCalled();
   });
 
   it("ne ferme pas sur un geste commencé dans la fenêtre et relâché dehors", async () => {
-    const { cinemaClose } = await import("@/lib/cinemaRoute");
-    vi.mocked(cinemaClose).mockClear();
+    const { cinemaClose, cinemaNavigate } = await reset();
     render(panel(false));
     fireEvent.pointerDown(screen.getByText("un"));
     fireEvent.click(root());
     expect(cinemaClose).not.toHaveBeenCalled();
+    expect(cinemaNavigate).not.toHaveBeenCalled();
   });
 });
 
