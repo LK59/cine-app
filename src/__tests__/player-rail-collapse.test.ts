@@ -14,6 +14,6 @@ const css = fs.readFileSync(path.resolve(__dirname, "../..", "src/app/globals.cs
 describe("rail du bureau", () => {
   it("ne reste déplié que pour le focus du clavier", () => {
     expect(css).not.toMatch(/\.player-rail:focus-within/);
-    expect(css).toMatch(/\.player-rail:has\(:focus-visible\)\s*\{[^}]*width: 15rem/);
+    expect(css).toMatch(/\.player-rail:has\(:focus-visible\)\s*\{[^}]*width: 11rem/);
   });
 });

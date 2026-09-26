@@ -15,15 +15,19 @@ import { inHiddenTab } from "@/lib/keptTabs";
 /**
  * Le rail du lecteur — desktop.
  *
- * C'est une bande d'icônes posée sur le contenu, qui se déploie en libellés au survol comme au
- * focus. Deux raisons de le poser *par-dessus* plutôt que de le mettre en colonne à côté :
+ * Une pilule d'icônes qui flotte au bord gauche, et se déploie en libellés au survol comme au
+ * focus. Deux raisons de la poser *par-dessus* plutôt que de la mettre en colonne à côté :
  *
  * 1. L'écran cinéma se dessine en `fixed inset-0` (il est porté dans document.body, voir
  *    CinemaClient) ; un frère en flex ne l'aurait pas poussé, il l'aurait recouvert à moitié.
  * 2. C'est l'idiome des interfaces de télévision : la navigation ne prend de la place que
  *    lorsqu'on la regarde. Le contenu garde toute la largeur le reste du temps.
  *
- * Le contenu réserve quand même la bande repliée : la variable `--player-rail` est posée par
+ * Une pilule et non plus une bande pleine hauteur (26/09/2026) : la bande découpait l'image de
+ * fond sur toute la hauteur de l'écran, pour quatre icônes. Flottante, elle laisse l'image aller
+ * jusqu'au bord, et parle la même langue que la barre du téléphone (`player-bar`).
+ *
+ * Le contenu réserve quand même la pilule repliée : la variable `--player-rail` est posée par
  * PlayerShell sur l'élément racine, et l'écran cinéma s'en sert comme retrait à gauche. Sans ça
  * la première affiche de chaque ligne passerait sous les icônes.
  */
@@ -78,23 +82,24 @@ export function PlayerRail() {
       // ~844 px de large et franchit `md`, tout en restant un téléphone). Deux définitions
       // concurrentes du même « est-ce un mobile » laissaient l'écran sans navigation du tout en
       // paysage : le composant rendait le tiroir, et la classe `md:hidden` le cachait.
-      className="player-rail fixed inset-y-0 left-0 z-50 flex flex-col"
+      //
+      // Le `nav` n'est qu'un repère pleine hauteur, transparent aux clics : seules la pilule et
+      // ses boutons en prennent. Sinon la colonne vide au-dessus et au-dessous de la pilule
+      // aurait avalé les clics destinés à l'image et aux fiches.
+      className="player-rail-anchor pointer-events-none fixed inset-y-0 z-50 w-12"
       data-player-nav
       // La grille renvoie ici quand on va à gauche depuis sa première colonne — voir
       // useTvGridNav, qui a déjà le même renvoi vers le haut pour la bascule Films/Séries.
       data-tv-escape-left
       onKeyDown={onKeyDown}
     >
-      <div className="flex h-16 shrink-0 items-center gap-3 overflow-hidden px-[1.35rem]">
-        <Clapperboard size={22} className="shrink-0 text-accent-400" />
-        {/* Le nom entier, comme la barre latérale de la gestion et l'écran d'installation : « Cine »
-            seul était resté depuis la création du rail (relevé le 23/09/2026). */}
-        <span className="player-rail-label whitespace-nowrap font-display text-base font-semibold text-white">
-          Cine App
-        </span>
+      {/* Le logo seul, posé sur l'axe de la pilule : un repère, pas une entrée. Le nom reste dit. */}
+      <div className="flex h-16 items-center justify-center">
+        <Clapperboard size={22} className="text-accent-400" aria-hidden />
+        <span className="sr-only">Cine App</span>
       </div>
 
-      <div className="flex flex-1 flex-col gap-1 overflow-hidden px-3 pt-4">
+      <div className="player-rail player-bar pointer-events-auto absolute left-0 top-1/2 flex -translate-y-1/2 flex-col gap-1 overflow-hidden p-1">
         {PLAYER_NAV.map(({ panel, labelKey, icon: Icon }) => {
           const isActive = active === panel;
           return (
@@ -103,14 +108,14 @@ export function PlayerRail() {
               type="button"
               onClick={() => openPanel(panel, route)}
               aria-current={isActive ? "page" : undefined}
-              className={`relative flex h-11 shrink-0 items-center gap-4 overflow-hidden rounded-lg pl-[0.85rem] pr-3 text-left text-sm font-medium transition-colors active:transform-none active:bg-white/15 active:delay-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
-                isActive
-                  ? "text-white before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-accent-500"
-                  : "text-muted hover:bg-white/10 hover:text-white"
+              // L'onglet actif s'allume en pastille, comme sur le téléphone : un trait bleu au
+              // bord n'a plus de bord où s'appuyer une fois la barre détachée de la fenêtre.
+              className={`relative flex h-10 shrink-0 items-center gap-3.5 overflow-hidden rounded-full pl-[0.625rem] pr-3 text-left text-sm font-medium transition-colors active:transform-none active:bg-white/15 active:delay-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
+                isActive ? "bg-white/12 text-white" : "text-subtle hover:bg-white/8 hover:text-white"
               }`}
             >
               <span className="relative shrink-0">
-                <Icon size={21} />
+                <Icon size={20} strokeWidth={isActive ? 2.4 : 1.8} />
                 {panel === "account" && badge.any && <NavDot />}
               </span>
               <span className="player-rail-label whitespace-nowrap">
@@ -119,27 +124,28 @@ export function PlayerRail() {
             </button>
           );
         })}
-      </div>
 
-      {/* La porte vers la gestion : toujours là, jamais mise en avant. Une ligne de séparation,
-          un corps plus petit, une couleur en retrait — celui qui la cherche la trouve, l'autre ne
-          la lit jamais. */}
-      {isAdmin && (
-      <div className="shrink-0 overflow-hidden border-t border-white/10 px-3 py-3">
-        <button
-          type="button"
-          onClick={() => router.push(MANAGE_ITEM.href)}
-          onMouseEnter={() => prefetchRoute(MANAGE_ITEM.href)}
-          onFocus={() => prefetchRoute(MANAGE_ITEM.href)}
-          className="flex h-9 w-full items-center gap-4 overflow-hidden rounded-lg pl-[0.95rem] pr-3 text-left text-[11px] text-subtle transition-colors hover:bg-white/5 hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-        >
-          <MANAGE_ITEM.icon size={17} className="shrink-0" />
-          <span className="player-rail-label whitespace-nowrap">
-            {t(MANAGE_ITEM.labelKey)}
-          </span>
-        </button>
+        {/* La porte vers la gestion : toujours là, jamais mise en avant. Une ligne de séparation,
+            une icône plus petite, une couleur en retrait — celui qui la cherche la trouve,
+            l'autre ne la lit jamais. */}
+        {isAdmin && (
+          <>
+            <div className="mx-2 my-0.5 h-px shrink-0 bg-white/10" />
+            <button
+              type="button"
+              onClick={() => router.push(MANAGE_ITEM.href)}
+              onMouseEnter={() => prefetchRoute(MANAGE_ITEM.href)}
+              onFocus={() => prefetchRoute(MANAGE_ITEM.href)}
+              className="flex h-10 shrink-0 items-center gap-3.5 overflow-hidden rounded-full pl-[0.75rem] pr-3 text-left text-xs text-subtle transition-colors hover:bg-white/5 hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+            >
+              <MANAGE_ITEM.icon size={16} className="shrink-0" />
+              <span className="player-rail-label whitespace-nowrap">
+                {t(MANAGE_ITEM.labelKey)}
+              </span>
+            </button>
+          </>
+        )}
       </div>
-      )}
     </nav>
   );
 }

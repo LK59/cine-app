@@ -38,11 +38,11 @@ const PushResumePrompt = dynamic(() => import("./PushResumePrompt").then((m) => 
 const DecoderWarmup = dynamic(() => import("./DecoderWarmup").then((m) => m.DecoderWarmup), { ssr: false });
 
 /**
- * La largeur que le rail replié occupe, réservée par le contenu.
+ * La place que la pilule repliée occupe — sa marge au bord plus sa largeur —, réservée par le contenu.
  *
  * La même valeur que `.player-rail` dans globals.css : si l'une change, l'autre aussi.
  */
-const RAIL_WIDTH = "4rem";
+const RAIL_WIDTH = "3.75rem";
 
 /** La hauteur que la barre du téléphone occupe, réservée par le bas des panneaux. */
 const BAR_SPACE = "5.5rem";

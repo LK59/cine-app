@@ -1014,46 +1014,34 @@
   --player-rail: 0px;
 }
 
-.player-rail {
-  /* Doit rester d'accord avec `RAIL_WIDTH` dans PlayerShell.tsx, qui publie la même valeur en
-     variable pour que le contenu réserve la bande. Deux endroits pour une décision : si l'un
-     change, l'autre aussi. */
-  width: 4rem;
-  /* Du verre, plus une bande noire.
-   *
-   * Le fond était opaque, et ce n'était pas un oubli : le contenu est décalé de la largeur du
-   * rail, donc rien ne passait dessous et l'opacité ne coûtait rien. Sauf que `--player-rail` est
-   * appliqué en *padding* et non en décalage — les arrière-plans, eux, s'étendent bien sous la
-   * bande. Il y avait donc quelque chose à laisser voir depuis le début.
-   *
-   * Le dégradé va du plus dense au bord gauche vers le plus clair à droite : la bande se fond dans
-   * l'image au lieu de s'y découper. Et une ligne d'un pixel à droite, plutôt qu'une coupure
-   * franche, pour que la limite se devine sans se voir. */
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--color-ink) 88%, transparent),
-    color-mix(in srgb, var(--color-ink) 58%, transparent)
-  );
-  /* Un dégradé, et non un flou.
-   *
-   * `backdrop-filter` se recalcule à chaque image, sur toute la hauteur de l'écran, pendant que des
-   * rangées d'affiches défilent juste à côté — c'est le poste le plus cher qu'on puisse poser ici,
-   * et pour un effet que le dégradé ci-dessus rend déjà à quatre-vingt-dix pour cent : la bande se
-   * fond dans l'image parce qu'elle est translucide, pas parce qu'elle est floue.
-   *
-   * La leçon est déjà écrite deux fois dans ce fichier, pour `.btn` et pour la pastille des
-   * cartes. Elle valait aussi ici. */
-  box-shadow: inset -1px 0 0 rgb(255 255 255 / 0.06);
-  transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease, background 260ms ease;
+/* La pilule posée à 0,75 rem du bord (plus la zone sûre d'un iPad en paysage) : c'est l'ancre,
+   pleine hauteur et transparente aux clics, qui porte la position. */
+.player-rail-anchor {
+  left: calc(0.75rem + env(safe-area-inset-left, 0px));
 }
-/* Replié, le rail est une bande opaque et le contenu se décale d'exactement sa largeur : pas de
-   dégradé à raccorder, pas d'affiche coupée. Déployé, il passe par-dessus — une ombre portée
-   suffit à dire qu'il flotte, et le décalage du contenu ne bouge pas d'un pixel.
 
-   Le petit délai au survol n'est pas de la coquetterie : la souris traverse forcément le rail
-   pour atteindre la première affiche de chaque ligne, et sans lui, le menu se dépliait pour
-   recouvrir exactement ce qu'on visait. Au clavier, l'ouverture reste immédiate — d'où la règle
-   du focus posée après, qui l'emporte quand les deux s'appliquent.
+.player-rail {
+  /* Doit rester d'accord avec `RAIL_WIDTH` dans PlayerShell.tsx, qui publie la réserve du contenu :
+     marge de 0,75 rem + cette largeur. Deux endroits pour une décision : si l'un change, l'autre
+     aussi.
+
+     Le fond est celui de la barre du téléphone (`player-bar`, un fond franc et une ombre, pas de
+     flou) : la même pièce sur les deux écrans. */
+  width: 3rem;
+  /* Concentrique à ses boutons, et pas `rounded-full` : pilule repliée, 24 px, c'est bien une
+     demi-largeur ; mais un rayon « infini » sur la pilule déployée (11 rem × sa hauteur) en ferait
+     un ovale. Boutons ronds de 20 px de rayon + 4 px de marge = 24 px, qui tient aux deux tailles. */
+  border-radius: 1.5rem;
+  transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Replié, la pilule tient dans la réserve du contenu : pas d'affiche coupée. Déployée, elle passe
+   par-dessus — son ombre dit déjà qu'elle flotte, et le décalage du contenu ne bouge pas d'un
+   pixel.
+
+   Le petit délai au survol n'est pas de la coquetterie : la souris traverse forcément la pilule
+   pour atteindre la première affiche des lignes qu'elle longe, et sans lui, le menu se dépliait
+   pour recouvrir exactement ce qu'on visait. Au clavier, l'ouverture reste immédiate — d'où la
+   règle du focus posée après, qui l'emporte quand les deux s'appliquent.
 
    Le focus du *clavier* seulement (`:focus-visible`), pas n'importe quel focus (`:focus-within`,
    jusqu'au 23/09/2026). Un clic à la souris donne aussi le focus au bouton cliqué : « Ma liste »,
@@ -1062,15 +1050,7 @@
    jusqu'à un clic ailleurs. Un clic de souris n'est pas `:focus-visible` : le survol décide seul. */
 .player-rail:hover,
 .player-rail:has(:focus-visible) {
-  width: 15rem;
-  /* Déployé, il recouvre des affiches et porte du texte : la transparence qui l'allège au repos
-     rendrait les libellés illisibles. Il se densifie donc en s'ouvrant. */
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--color-ink) 96%, transparent),
-    color-mix(in srgb, var(--color-ink) 88%, transparent)
-  );
-  box-shadow: 0 0 3rem rgb(0 0 0 / 0.55);
+  width: 11rem;
 }
 .player-rail:hover {
   transition-delay: 140ms;
