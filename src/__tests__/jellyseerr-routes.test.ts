@@ -120,6 +120,14 @@ describe("POST /api/jellyseerr/requests/[id]", () => {
     const res = await POST(fakeReq({ body: { action: "explode" } }), { params: Promise.resolve({ id: "3" }) });
     expect(res.status).toBe(400);
   });
+
+  it("répond 400, pas 500, à un corps illisible (26/09/2026)", async () => {
+    const { POST } = await import("@/app/api/jellyseerr/requests/[id]/route");
+    const req = { ...fakeReq({}), json: async () => { throw new SyntaxError("bad"); } } as unknown as NextRequest;
+    const res = await POST(req, { params: Promise.resolve({ id: "3" }) });
+    expect(res.status).toBe(400);
+    expect(mockJellyseerr.approveRequest).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/jellyseerr/requests", () => {

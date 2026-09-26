@@ -6,7 +6,9 @@ import { verifySessionFull } from "@/lib/session";
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const { action } = await req.json();
+  // Un corps illisible levait hors de tout `catch` : 500 au lieu de 400 (26/09/2026).
+  const body = await req.json().catch(() => null);
+  const action = body?.action;
   const id = Number(params.id);
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (action === "approve") return withErrorHandling(() => jellyseerr.approveRequest(id, session?.jsCookie));

@@ -104,6 +104,46 @@ describe("POST /api/watchlist", () => {
   });
 });
 
+describe("POST /api/watchlist — corps validé (26/09/2026)", () => {
+  const post = async (body: unknown) => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
+    const { POST } = await import("@/app/api/watchlist/route");
+    return POST(fakeReq({ cookie: "t", body }));
+  };
+
+  it("répond 400, pas 500, à un corps illisible", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
+    const { POST } = await import("@/app/api/watchlist/route");
+    const req = { ...fakeReq({ cookie: "t" }), json: async () => { throw new SyntaxError("bad"); } } as unknown as NextRequest;
+    expect((await POST(req)).status).toBe(400);
+    expect(mockWatchlistDb.upsert).not.toHaveBeenCalled();
+  });
+
+  it("refuse un identifiant, un type, un titre ou une affiche hors forme", async () => {
+    for (const body of [
+      { mediaType: "movie", tmdbId: -3, title: "Dune" },
+      { mediaType: "movie", tmdbId: 1.5, title: "Dune" },
+      { mediaType: "movie", tmdbId: { $gt: 0 }, title: "Dune" },
+      { mediaType: "person", tmdbId: 42, title: "Dune" },
+      { mediaType: "movie", tmdbId: 42, title: "x".repeat(301) },
+      { mediaType: "movie", tmdbId: 42, title: ["Dune"] },
+      { mediaType: "movie", tmdbId: 42, title: "Dune", posterPath: "x".repeat(301) },
+      { mediaType: "movie", tmdbId: 42, title: "Dune", posterPath: 7 },
+    ]) {
+      expect((await post(body)).status).toBe(400);
+    }
+    expect(mockWatchlistDb.upsert).not.toHaveBeenCalled();
+  });
+
+  it("accepte ce que les écrans envoient réellement", async () => {
+    mockWatchlistDb.upsert.mockReturnValue({ id: 1 });
+    // Fiche série (usePlayerTitleActions) et recherche (GlobalSearch, URL d'affiche complète).
+    expect((await post({ mediaType: "series", tmdbId: 1399, title: "Game of Thrones", year: 2011, posterPath: null, voteAverage: 8.4, status: "to_watch" })).status).toBe(200);
+    expect((await post({ mediaType: "movie", tmdbId: 438631, title: "Dune", year: 2021, posterPath: "https://image.tmdb.org/t/p/w342/d5NXSklXo0qyIYkgV94XAgMIckC.jpg" })).status).toBe(200);
+    expect(mockWatchlistDb.upsert).toHaveBeenLastCalledWith(expect.objectContaining({ tmdbId: 438631, year: 2021, posterPath: expect.stringContaining("tmdb") }));
+  });
+});
+
 describe("DELETE /api/watchlist", () => {
   it("returns 401 when not authenticated", async () => {
     mockVerifySessionFull.mockResolvedValue(null);
