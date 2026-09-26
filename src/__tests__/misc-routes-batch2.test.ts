@@ -120,6 +120,21 @@ describe("POST /api/push/test", () => {
     expect(mockPushDb.remove).toHaveBeenCalledWith("https://push.example/abc");
     expect(body.ok).toBe(false);
   });
+
+  it("ne renvoie jamais le corps de la réponse de l'adresse abonnée (26/09/2026)", async () => {
+    // C'était lire, depuis le navigateur, ce que répondait une adresse interne enregistrée comme
+    // abonnement.
+    mockVerifySessionFull.mockResolvedValue({ u: "louis" });
+    mockIsWebPushConfigured.mockReturnValue(true);
+    mockPushDb.getByUser.mockReturnValue([{ endpoint: "https://push.example/abc", p256dh: "x", auth: "y" }]);
+    mockSendWebPush.mockRejectedValue({ statusCode: 500, body: "SECRET-INTERNE", message: "getaddrinfo radarr" });
+    mockShouldRemovePushSubscription.mockReturnValue(false);
+    const { POST } = await import("@/app/api/push/test/route");
+    const text = JSON.stringify(await (await POST(fakeReq())).json());
+    expect(text).not.toContain("SECRET-INTERNE");
+    expect(text).not.toContain("radarr");
+    expect(text).toContain("500");
+  });
 });
 
 describe("GET /api/push/vapid-key", () => {

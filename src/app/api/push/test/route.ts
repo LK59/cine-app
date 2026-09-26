@@ -28,9 +28,12 @@ export async function POST(req: NextRequest) {
         );
         return { endpoint: sub.endpoint.slice(0, 40) + "…", status: res.statusCode, ok: true };
       } catch (err: unknown) {
-        const e = err as { statusCode?: number; body?: string; message?: string };
+        const e = err as { statusCode?: number };
         if (shouldRemovePushSubscription(err)) pushDb.remove(sub.endpoint);
-        return { endpoint: sub.endpoint.slice(0, 40) + "…", status: e.statusCode, error: e.body ?? e.message ?? String(err), ok: false, removed: shouldRemovePushSubscription(err) };
+        // Le statut seul, jamais le corps de la réponse ni le message de l'exception : c'était
+        // lire, depuis le navigateur, ce que répondait l'adresse enregistrée — n'importe laquelle
+        // avant que `isAllowedPushEndpoint` ne les borne (26/09/2026). L'écran ne lit que `ok`.
+        return { endpoint: sub.endpoint.slice(0, 40) + "…", status: e.statusCode, error: "Échec de l'envoi", ok: false, removed: shouldRemovePushSubscription(err) };
       }
     })
   );

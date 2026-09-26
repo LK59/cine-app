@@ -497,6 +497,32 @@ export const pushDb = {
     getDb().prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(endpoint);
   },
 
+  /**
+   * Retirer un abonnement de ce compte-là seulement. `DELETE /api/push/subscribe` effaçait
+   * l'adresse donnée quel qu'en soit le propriétaire : qui la connaissait coupait les
+   * notifications d'un autre (26/09/2026).
+   */
+  removeForUser(userId: string, endpoint: string): void {
+    getDb().prepare("DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?").run(userId, endpoint);
+  },
+
+  /**
+   * Ne garder que les `keep` abonnements les plus récents du compte, `endpoint` (celui qu'on vient
+   * d'enregistrer) toujours compris : le panneau Compte renvoie l'abonnement à chaque ouverture
+   * sans en changer la date, et un appareil fidèle ne doit pas céder la place à des inconnus.
+   */
+  trimForUser(userId: string, keep: number, endpoint: string): void {
+    getDb()
+      .prepare(`
+        DELETE FROM push_subscriptions
+        WHERE user_id = ? AND endpoint != ? AND endpoint NOT IN (
+          SELECT endpoint FROM push_subscriptions WHERE user_id = ? AND endpoint != ?
+          ORDER BY created_at DESC, id DESC LIMIT ?
+        )
+      `)
+      .run(userId, endpoint, userId, endpoint, Math.max(0, keep - 1));
+  },
+
   /** Combien d'appareils reçoivent les notifications de ce compte (rangées sous son nom). */
   countForUser(userId: string): number {
     return (getDb().prepare("SELECT COUNT(*) as n FROM push_subscriptions WHERE user_id = ?").get(userId) as { n: number }).n;
