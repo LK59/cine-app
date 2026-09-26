@@ -70,6 +70,13 @@ services:
     # real use; under it Node caps its own heap and a leak ends in a clean exit that `restart`
     # recovers from.
     mem_limit: 2g
+    # No privilege to gain along the way and no kernel capability: the process already runs as an
+    # ordinary account, listens on an unprivileged port and writes only its own files. Not
+    # `read_only`: startup rewrites `.next/static` (server-boot).
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     # Alive and able to read its database. Docker does not restart an "unhealthy" container on
     # its own: the status is read in `docker ps` or by a monitoring tool.
     healthcheck:
