@@ -530,7 +530,7 @@ export function PlayerPersonSheet({
           type="button"
           onClick={requestClose}
           aria-label={t("common.close")}
-          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white transition hover:bg-black/70 active:scale-95"
+          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white float-edge transition hover:bg-black/70 active:scale-95"
         >
           <X size={18} />
         </button>

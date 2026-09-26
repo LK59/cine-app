@@ -790,6 +790,15 @@
     0 14px 34px rgb(0 0 0 / 0.55);
 }
 
+/* Le bord de la barre sans son fond : pour un bouton flottant qui garde sa propre teinte (« Retour »
+   des fiches, sur l'image) mais doit se lire comme la même pièce que la barre et le rail. Ni
+   transition ni geste ici — ceux du bouton restent les siens. */
+@utility float-edge {
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.12),
+    0 14px 34px rgb(0 0 0 / 0.55);
+}
+
 .player-glass {
   background: rgb(0 0 0 / 0.48);
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);

@@ -310,7 +310,7 @@ export function CinemaMovieDetail({
           mouse click aimed at it, leaving only the Escape/Backspace keyboard path working. */}
       <button
         onClick={requestClose}
-        className="btn btn-ghost fixed z-10 rounded-full bg-black/55 px-3 py-2"
+        className="btn btn-ghost fixed z-10 rounded-full bg-black/55 px-3 py-2 float-edge"
         style={{ top: "max(1rem, env(safe-area-inset-top))", left: "calc(1rem + var(--player-rail, 0px))" }}
       >
         <ArrowLeft size={16} /> {t("cinema.back")}

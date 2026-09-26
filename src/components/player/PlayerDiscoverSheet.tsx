@@ -201,7 +201,7 @@ export function PlayerDiscoverSheet({
           {...NOT_THE_HANDLE}
           onClick={requestClose}
           aria-label={t("cinema.back")}
-          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-inset ring-white/12 active:scale-95"
         >
           <X size={18} />
         </button>
@@ -334,7 +334,7 @@ export function PlayerDiscoverSheet({
         // il ignore le `padding-left` qui réserve le rail, et le bouton passait donc dessous. Le
         // retrait est écrit dans sa position — même correctif que la fiche personne, même cause,
         // et le commentaire d'origine portait ici aussi l'hypothèse fausse.
-        className="btn btn-ghost absolute z-10 rounded-full bg-black/55 px-3 py-2"
+        className="btn btn-ghost absolute z-10 rounded-full bg-black/55 px-3 py-2 float-edge"
         style={{
           top: "max(1rem, env(safe-area-inset-top))",
           left: "calc(1rem + var(--player-rail, 0px))",

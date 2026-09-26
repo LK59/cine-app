@@ -388,7 +388,7 @@ export function CinemaMobileDetail({
           {...NOT_THE_HANDLE}
           onClick={requestClose}
           aria-label={t("cinema.back")}
-          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-inset ring-white/12 active:scale-95"
         >
           <X size={18} />
         </button>

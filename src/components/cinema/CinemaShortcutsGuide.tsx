@@ -17,7 +17,7 @@ export function CinemaShortcutsGuide() {
       // be driving the screen with anyway.
       // Le coin haut-droit est de nouveau libre : la loupe qui l'occupait a rejoint le rail, à
       // gauche, avec le reste de la navigation.
-      className="fixed right-4 z-10 hidden items-center gap-3 rounded-full bg-black/40 px-4 py-2 text-xs text-muted backdrop-blur-xs md:flex"
+      className="fixed right-4 z-10 hidden items-center gap-3 rounded-full px-4 py-2 text-xs text-muted player-bar md:flex"
       style={{ top: "max(1rem, env(safe-area-inset-top))" }}
     >
       <span className="flex items-center gap-1">

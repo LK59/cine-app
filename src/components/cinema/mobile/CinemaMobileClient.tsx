@@ -485,16 +485,20 @@ export function CinemaMobileClient() {
 
         {/* Au centre, et non plus poussés à gauche : ce sont les deux onglets de la bibliothèque,
             la seule chose qu'on change souvent depuis cette barre. */}
-        <div className="flex justify-center gap-2">
+        {/* Une seule pilule, comme la bascule du bureau et dans le matériau de la barre du bas
+            (26/09/2026) : deux pastilles séparées, l'une pleine et l'autre en contour, étaient le
+            seul sélecteur de l'app à avoir cette forme. 36 px de haut, comme la loupe : la barre
+            garde sa hauteur. */}
+        <div className="player-bar flex justify-self-center gap-0.5 rounded-full p-0.5">
           {(["movies", "series"] as const).map((type) => (
             <button
               key={type}
               type="button"
               onClick={() => setMediaType(type)}
-              className={`rounded-full border px-4 py-1.5 text-sm transition-colors ${
+              className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
                 mediaType === type
-                  ? "border-white bg-white text-ink font-medium"
-                  : "border-white/25 text-muted"
+                  ? "bg-white text-ink font-medium"
+                  : "text-muted"
               }`}
             >
               {t(type === "movies" ? "cinema.moviesTab" : "cinema.seriesTab")}
@@ -505,7 +509,7 @@ export function CinemaMobileClient() {
           type="button"
           onClick={() => setSearchOpen(true)}
           aria-label={t("cinema.search")}
-          className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white active:scale-95"
+          className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full player-bar text-white active:scale-95"
         >
           <Search size={18} />
         </button>
