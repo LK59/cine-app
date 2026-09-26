@@ -165,7 +165,11 @@ export function CinemaEpisodeBrowser({
       {/* No position:fixed descendants here (the back button above is a sibling) — safe to
           transform, unlike the outer root (see globals.css's own note on this pitfall). */}
       <div className={`flex h-full pt-20 ${closing ? "animate-slide-out-right" : revealed ? "" : "animate-slide-in-right"}`}>
-        <div className="scrollbar-thin w-56 shrink-0 overflow-y-auto border-r border-white/10 px-3 pb-8 sm:w-64">
+        {/* Une colonne flottante, dans le matériau du rail (26/09/2026) : elle était collée au bord
+            gauche sur toute la hauteur, séparée des épisodes par un filet. Décollée d'un
+            trois-quarts de rem, comme la fenêtre des panneaux ; opaque, parce que la liste d'à côté
+            défile. */}
+        <div className="player-bar scrollbar-thin mb-3 ml-3 w-56 shrink-0 overflow-y-auto rounded-2xl px-3 pb-6 pt-3 sm:w-64">
           <p className="mb-3 truncate px-2 text-sm font-medium text-muted">{title}</p>
           {seasonNumbers.map((seasonNumber) => {
             const active = seasonNumber === selectedSeason;
