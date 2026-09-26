@@ -168,8 +168,11 @@ export function CinemaEpisodeBrowser({
         {/* Une colonne flottante, dans le matériau du rail (26/09/2026) : elle était collée au bord
             gauche sur toute la hauteur, séparée des épisodes par un filet. Décollée d'un
             trois-quarts de rem, comme la fenêtre des panneaux ; opaque, parce que la liste d'à côté
-            défile. */}
-        <div className="player-bar scrollbar-thin mb-3 ml-3 w-56 shrink-0 overflow-y-auto rounded-2xl px-3 pb-6 pt-3 sm:w-64">
+            défile. Le fond seul est arrondi, et c'est une zone intérieure, retirée des coins, qui
+            défile : un arrondi qui découpe ce qui défile se recalcule à chaque image (même leçon
+            que la fenêtre des panneaux). */}
+        <div className="player-bar mb-3 ml-3 flex w-56 shrink-0 rounded-2xl sm:w-64">
+        <div className="scrollbar-thin my-1.5 min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-1.5">
           <p className="mb-3 truncate px-2 text-sm font-medium text-muted">{title}</p>
           {seasonNumbers.map((seasonNumber) => {
             const active = seasonNumber === selectedSeason;
@@ -198,6 +201,7 @@ export function CinemaEpisodeBrowser({
               </button>
             );
           })}
+        </div>
         </div>
 
         <div className="scrollbar-thin flex-1 overflow-y-auto px-6 pb-16 pt-1 sm:px-10">

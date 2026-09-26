@@ -955,12 +955,6 @@
      marge autour d'elle suffit à dire. */
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 10px 30px -8px rgb(0 0 0 / 0.7);
 }
-/* Le même principe pour la fin d'une rangée qui défile de côté (filtres, segments) : elle s'efface
-   dans son fond au lieu d'y poser une bande de la couleur de l'app. */
-@utility fade-end-x {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent 100%);
-  mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent 100%);
-}
 
 /* Un panneau est le même matériau, plus dense — il porte du texte à lire. */
 .player-panel {

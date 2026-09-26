@@ -227,12 +227,12 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
         {/* Une seule ligne qui défile plutôt que cinq pastilles réparties sur trois rangs : sur
             téléphone, l'en-tête reprenait un tiers de l'écran avant la première affiche.
 
-            Le fondu sur le bord droit (`fade-end-x`, un masque : la fenêtre du bureau est
-            translucide) dit que la ligne continue. Sans lui, le dernier onglet
+            Le fondu sur le bord droit dit que la ligne continue — peint depuis le fond du panneau
+            (`--panel-bg`), qui n'est pas le même sur téléphone et dans la fenêtre du bureau. Sans lui, le dernier onglet
             arrivait coupé en plein mot contre le bord de l'écran, ce qui se lit comme un défaut
             d'affichage et non comme une invitation à faire glisser. */}
         <div className="relative -mx-1">
-          <div className="scrollbar-none flex gap-2 overflow-x-auto px-1 pb-1 fade-end-x">
+          <div className="scrollbar-none flex gap-2 overflow-x-auto px-1 pb-1">
             {SEGMENTS.map((key) => (
               <button
                 key={key}
@@ -262,6 +262,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
               </button>
             ))}
           </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-(--panel-bg) to-transparent" />
         </div>
 
         {/* Une phrase par segment qui en a besoin, à l'endroit où la question se pose. */}

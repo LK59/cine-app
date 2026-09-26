@@ -213,6 +213,11 @@ export function PlayerPanelFrame({
         // Celui qui part passe dessous : celui qui arrive doit le recouvrir, quel que soit leur
         // ordre dans la page (la recherche précède « Ma liste », qui précède le compte).
         zIndex: leaving ? 45 : 46,
+        // Le fond sur lequel le contenu est posé, pour les fondus qui s'y raccordent (sous
+        // l'en-tête, au bout des rangées de filtres) : le noir de l'app sur téléphone, la surface
+        // de la fenêtre sur grand écran. Des dégradés peints, et non des masques : ils ne coûtent
+        // rien au défilement.
+        ["--panel-bg" as string]: isMobile ? "var(--color-ink)" : "var(--panel-surface)",
         // Inerte pendant qu'il s'en va. Sa croix reste sous le doigt le temps de l'animation, et
         // un second appui fermerait l'écran d'en dessous — celui qu'on vient d'ouvrir.
         pointerEvents: leaving ? "none" : undefined,
@@ -319,7 +324,7 @@ export function PlayerPanelFrame({
             d'une fenêtre translucide ; peint, il ne coûte rien au défilement. */}
         <div
           aria-hidden
-          className={`pointer-events-none sticky top-0 z-10 bg-gradient-to-b ${isMobile ? "from-ink" : "from-(--panel-surface)"} to-transparent ${short ? "h-2" : "h-4"}`}
+          className={`pointer-events-none sticky top-0 z-10 bg-gradient-to-b from-(--panel-bg) to-transparent ${short ? "h-2" : "h-4"}`}
         />
         {children}
       </div>

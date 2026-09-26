@@ -88,7 +88,7 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
         {/* Les réglages tiennent sur une ligne qui défile plutôt que sur trois rangs empilés :
             debout, l'en-tête mangeait sinon la moitié de l'écran avant la première affiche. */}
         <div className="relative -mx-1 mb-5">
-          <div className="scrollbar-none flex gap-2 overflow-x-auto px-1 pb-1 fade-end-x">
+          <div className="scrollbar-none flex gap-2 overflow-x-auto px-1 pb-1">
             <input
               type="search"
               value={query}
@@ -141,6 +141,7 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
               </select>
             )}
           </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-(--panel-bg) to-transparent" />
         </div>
 
         {shown.length === 0 ? (
