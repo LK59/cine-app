@@ -229,7 +229,7 @@ function StoragePathsSection({ paths }: { paths: StoragePathHealth[] }) {
 
       <div className="card divide-y divide-white/5 overflow-hidden">
         {paths.map((p) => (
-          <div key={p.path} className="flex items-center gap-3 px-4 py-2.5">
+          <div key={p.name} className="flex items-center gap-3 px-4 py-2.5">
             <StatusIcon status={p.status} />
             <div className="min-w-0 flex-1">
               <span className="text-sm text-slate-200">{t(`health.storagePaths.names.${p.name}`)}</span>

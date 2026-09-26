@@ -140,7 +140,7 @@ describe("GET /api/health", () => {
   it("reports overall 'ok' when every service responds fine", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ Version: "1", version: "1" }) });
     const { GET } = await import("@/app/api/health/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
     expect(body.overall).toBe("ok");
     expect(body.services).toHaveLength(7);
   });
@@ -148,7 +148,7 @@ describe("GET /api/health", () => {
   it("reports overall 'down' when at least one service is unreachable", async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
     const { GET } = await import("@/app/api/health/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
     expect(body.overall).toBe("down");
     expect(body.services.every((s: { status: string }) => s.status === "down")).toBe(true);
   });
@@ -156,7 +156,39 @@ describe("GET /api/health", () => {
   it("reports 'degraded' overall when some services are ok and none are fully down", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
     const { GET } = await import("@/app/api/health/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
     expect(body.overall).toBe("degraded");
+  });
+
+  it("ne montre à un compte non admin ni adresses, ni chemins, ni messages bruts (26/09/2026)", async () => {
+    mockVerifySessionFull.mockResolvedValue({ role: "user" });
+    global.fetch = vi.fn().mockRejectedValue(new Error("getaddrinfo ENOTFOUND radarr"));
+    const { GET } = await import("@/app/api/health/route");
+    const body = await (await GET(fakeReq())).json();
+    const text = JSON.stringify(body);
+    expect(text).not.toContain("radarr.local");
+    expect(text).not.toContain("ENOTFOUND");
+    expect(text).not.toContain("/tmp");
+    // Les champs restent là, vides : la page les lit sans vérifier leur présence.
+    expect(body.services.every((s: { url: string; status: string }) => s.url === "" && s.status === "down")).toBe(true);
+    expect(body.paths.every((p: { path: string }) => p.path === "")).toBe(true);
+  });
+
+  it("garde un statut HTTP, qui ne dit rien de l'intérieur", async () => {
+    mockVerifySessionFull.mockResolvedValue({ role: "user" });
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+    const { GET } = await import("@/app/api/health/route");
+    const body = await (await GET(fakeReq())).json();
+    expect(body.services.some((s: { error: string | null }) => s.error === "HTTP 500")).toBe(true);
+  });
+
+  it("donne tout à l'admin", async () => {
+    mockVerifySessionFull.mockResolvedValue({ role: "admin" });
+    global.fetch = vi.fn().mockRejectedValue(new Error("getaddrinfo ENOTFOUND radarr"));
+    const { GET } = await import("@/app/api/health/route");
+    const body = await (await GET(fakeReq())).json();
+    const radarr = body.services.find((s: { name: string }) => s.name === "Radarr");
+    expect(radarr).toMatchObject({ url: "http://radarr.local", error: "getaddrinfo ENOTFOUND radarr" });
+    expect(body.paths[0].path).toBe("/tmp");
   });
 });
