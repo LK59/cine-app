@@ -548,13 +548,20 @@ only the viewer's browser may keep them, never a shared cache.
 ## Sessions
 
 A session is a signed token (HMAC-SHA256) in an `httpOnly` cookie, with a server-side row so it
-can be revoked immediately rather than only on expiry. Three things are worth knowing:
+can be revoked immediately rather than only on expiry. A few things are worth knowing:
 
 - **The Jellyfin token and the Jellyseerr cookie travel inside it, encrypted** (AES-GCM, key
   derived from `SESSION_SECRET`). Signing is not hiding: without this, a stolen cookie handed over
   a working Jellyfin token rather than just a Cine App session.
 - **Sessions slide.** The cookie is reissued past a day of age, keeping the same session id, so
   daily use never ends in a weekly sign-out.
+- **Writes from another page are refused.** The cookie is `SameSite=Lax`, which stops a
+  third-party site but not a sibling subdomain of the same domain. Every write to `/api/` is
+  checked in `src/proxy.ts`: `Sec-Fetch-Site` must say `same-origin` (or, from a browser that does
+  not send it, `Origin` must match the host).
+- **A casting pass dies with its session.** The pass a television uses to fetch one title's stream
+  without a cookie (six hours, read-only, that title only) names the session that asked for it,
+  and stops working once that session is signed out or closed.
 - **Signing your other devices out affects Cine App only.** The Jellyfin sessions those logins
   opened are left alone — deliberately: nobody clicking that button expects to lose Jellyfin
   with it.

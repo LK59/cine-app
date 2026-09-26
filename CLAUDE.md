@@ -145,7 +145,9 @@ runtime — so it can call `verifySessionFull`, whose SQLite revocation check is
 Edge. It owns the public-path list (shared with the client through `src/lib/publicPaths.ts`), the
 guest write whitelist, `308` redirects for addresses that moved (`/player`, `/cinema` → `/`),
 sliding session refresh, the reads a `user` may not make although they are `GET`s
-(`ADMIN_ONLY_READS`: interactive release/subtitle searches, `/api/activity`), and the
+(`ADMIN_ONLY_READS`: interactive release/subtitle searches, `/api/activity`), the refusal of any
+`/api/` write sent from another page (`crossSiteWrite`: `Sec-Fetch-Site`, else `Origin` — the
+`Lax` cookie rides along with sibling subdomains' POSTs), and the
 `x-session-expired: 1` header. **It is that header's only
 emitter**: a bare 401 may come from an upstream service whose key is wrong, and only this header
 means the viewer's own session is gone.
