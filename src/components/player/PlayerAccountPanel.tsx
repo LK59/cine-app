@@ -33,9 +33,10 @@ import { MAINTENANCE_KEY, type MaintenanceState } from "@/lib/useMaintenance";
  */
 function Section({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
   return (
-    // `py-7` debout, moitié moins couché : cinq sections à sept rems d'écart font descendre
-    // « Déconnexion » très loin sur un écran de 390 px.
-    <section className="border-t border-white/10 py-7 first:border-t-0 first:pt-0 [@media(max-height:500px)]:py-4">
+    // `py-6` debout, moins couché : cinq sections à six rems d'écart font descendre
+    // « Déconnexion » très loin sur un écran de 390 px. Le filet ne sépare plus que deux sections
+    // d'une même carte — la première n'en a pas (voir `Group`).
+    <section className="border-t border-white/8 py-6 first:border-t-0 [@media(max-height:500px)]:py-4">
       <h3 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
         <Icon size={16} className="text-subtle" />
         {title}
@@ -48,13 +49,15 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
 /**
  * Un groupe de sections, titré en petites capitales.
  *
- * La première section d'un groupe perd son filet : le titre du groupe sépare déjà.
+ * Une carte par groupe, façon Réglages d'iPhone (26/09/2026) : les sections se suivaient à plat,
+ * séparées par des filets, et rien ne disait où un groupe finissait. Le titre reste au-dessus de
+ * la carte ; dedans, un filet entre deux sections, jamais avant la première.
  */
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="mt-10 first:mt-0 [@media(max-height:500px)]:mt-6 [&>section:first-of-type]:border-t-0 [&>section:first-of-type]:pt-4">
-      <h2 className="text-xs font-medium uppercase tracking-wide text-subtle">{title}</h2>
-      {children}
+    <div className="mt-9 first:mt-0 [@media(max-height:500px)]:mt-6">
+      <h2 className="mb-2.5 px-1 text-xs font-medium uppercase tracking-wide text-subtle">{title}</h2>
+      <div className="rounded-2xl bg-white/4 px-4 ring-1 ring-inset ring-white/8 sm:px-5">{children}</div>
     </div>
   );
 }
@@ -178,7 +181,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
           </Group>
         )}
 
-        <div className="mt-10 border-t border-white/10 pt-7 [@media(max-height:500px)]:mt-6 [@media(max-height:500px)]:pt-4">
+        <div className="mt-9 [@media(max-height:500px)]:mt-6">
           <button type="button" onClick={logout} className="btn btn-ghost w-full justify-center text-danger">
             <LogOut size={16} />
             {t("player.account.signOutAction")}
@@ -480,7 +483,8 @@ function HelpSection() {
   }
 
   return (
-    <section className="pt-4">
+    // Première du groupe Aide, donc en haut de sa carte : la même marge que les autres sections.
+    <section className="py-4">
       <ul className="flex flex-col divide-y divide-white/5 rounded-xl border border-white/10 bg-white/5 px-4">
         {/* L'écran d'accueil, à revoir quand on veut — sans toucher au marqueur du compte :
             c'est le bouton de fin de l'accueil qui l'éteint, pas son ouverture. */}

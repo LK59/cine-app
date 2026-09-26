@@ -44,7 +44,7 @@ export function BenchSection() {
   };
 
   return (
-    <section className="border-t border-white/10 py-7 [@media(max-height:500px)]:py-4">
+    <section className="border-t border-white/8 py-6 [@media(max-height:500px)]:py-4">
       <h3 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
         <FlaskConical size={16} className="text-subtle" />
         {t("bench.title")}
