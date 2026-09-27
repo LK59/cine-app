@@ -205,10 +205,27 @@ describe("reconstruire : automatique ou demandé", () => {
     expect(lifecycle.sourceLost(100, 0).kind).toBe("rebuild");
   });
 
-  it("sauf pendant la fermeture, où rien ne redonne la main", () => {
+  it("sauf pendant la fermeture, où même une demande du spectateur est refusée", () => {
     const lifecycle = new PlayerLifecycle();
     lifecycle.noteClosing();
-    lifecycle.restart(100, { ...facts, byViewer: true });
+    expect(lifecycle.restart(100, { ...facts, byViewer: true })).toBe(false);
+    expect(lifecycle.rebuildAt).toBeNull();
     expect(lifecycle.isOver()).toBe(true);
+  });
+
+  it("une relance du spectateur rend un budget neuf", () => {
+    const lifecycle = new PlayerLifecycle();
+    for (let i = 0; i < MAX_REBUILDS; i++) lifecycle.sourceLost(100 * i, i);
+    expect(lifecycle.sourceLost(900, 10)).toEqual({ kind: "giveUp" });
+    lifecycle.restart(900, { ...facts, byViewer: true });
+    expect(lifecycle.sourceLost(950, 11).kind).toBe("rebuild");
+  });
+
+  it("une coupure signalée retient la lecture jusqu'à la reconstruction suivante", () => {
+    const lifecycle = new PlayerLifecycle();
+    lifecycle.noteNetworkLost();
+    expect(lifecycle.isNetworkLost()).toBe(true);
+    lifecycle.restart(300, facts);
+    expect(lifecycle.isNetworkLost()).toBe(false);
   });
 });

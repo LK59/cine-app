@@ -2014,7 +2014,7 @@ describe("cycle de vie — comportement figé", () => {
   // coupure qu'une fois sa boucle de lecture arrêtée : le lecteur « prêt » ne lira plus rien, et
   // c'est cet écran qui programme le nouvel essai. L'effacer figeait le film sans écran ni relance
   // (relevé par la relecture du 27/09/2026).
-  it("une coupure signalée pendant l'attache garde son écran, qui relancera la lecture", async () => {
+  it("une coupure signalée pendant l'attache garde son écran, ne joue pas derrière, et relance au retour du réseau", async () => {
     Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
     nextProbe = () => ({
       path: "remux",
@@ -2024,10 +2024,49 @@ describe("cycle de vie — comportement figé", () => {
       },
       discard: vi.fn(),
     });
-    mount();
-    await waitFor(() => expect(screen.getByText("connectionLost")).toBeTruthy());
+    mount({ resumeAt: 600 });
     await waitFor(() => expect(logged("start")).toHaveLength(1));
     expect(screen.getByText("connectionLost")).toBeTruthy();
+    // Ce qui est en tampon ne joue pas derrière l'écran : le nouvel essai rouvrira à 600 s, et ces
+    // secondes seraient entendues deux fois.
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+
+    remux = fakeRemux();
+    nextProbe = () => ({ path: "remux", start: async () => remux, discard: vi.fn() });
+    Object.defineProperty(navigator, "onLine", { value: true, writable: true, configurable: true });
+    act(() => void window.dispatchEvent(new Event("online")));
+    await waitFor(() => expect(probes).toHaveLength(2), { timeout: 3000 });
+    expect(probes[1].startSeconds).toBeCloseTo(600, 1);
+  });
+
+  // Sans lecteur serveur, un abandon pendant l'écran de coupure : l'erreur remplace l'écran, qui
+  // promettait sinon une reprise qui ne viendrait plus.
+  it("un abandon pendant l'écran de coupure montre l'erreur, sans lecteur serveur", async () => {
+    serverFallback = false;
+    Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
+    mount();
+    await ready();
+    act(() => probes[0].onError("plus de réseau", "network"));
+    expect(screen.getByText("connectionLost")).toBeTruthy();
+    act(() => probes[0].onError("panne du décodeur"));
+    await waitFor(() => expect(screen.getByText(/panne du décodeur/)).toBeTruthy());
+    expect(screen.queryByText("connectionLost")).toBeNull();
+  });
+
+  // Un pipeline lent qui aboutit après l'abandon, sans lecteur serveur : il se déclarait prêt et
+  // lançait le son sous l'écran d'erreur.
+  it("un pipeline qui aboutit après l'abandon est jeté, sans jouer", async () => {
+    serverFallback = false;
+    let open: () => void = () => {};
+    const late = fakeRemux();
+    nextProbe = () => ({ path: "remux", start: () => new Promise((resolve) => (open = () => resolve(late))), discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    act(() => probes[0].onError("panne avant la première image"));
+    await act(async () => open());
+    expect(late.destroy).toHaveBeenCalled();
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    expect(logged("start")).toHaveLength(0);
   });
 
   // Relu le 27/09/2026 : le contrôle ne se faisait qu'en armant le nouvel essai. Armé avant la

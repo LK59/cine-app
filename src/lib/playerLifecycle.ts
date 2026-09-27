@@ -47,7 +47,10 @@ export type LossDecision =
       kind: "rebuild";
       /** Où rouvrir — au-delà du passage fautif s'il vient d'échouer une seconde fois. */
       at: number;
-      /** Où la source a été perdue. */
+      /**
+       * Où la source a été perdue. Rendu plutôt que recalculé depuis `at` : le message du journal
+       * doit rester exactement celui d'avant le découpage, arrondi compris.
+       */
       from: number;
       /** Le passage a été sauté : le spectateur doit en être averti. */
       skipped: boolean;
@@ -88,6 +91,8 @@ export class PlayerLifecycle {
   private ended = false;
   /** Le spectateur a fermé : le lecteur vit encore le temps de son fondu, et ne décide plus rien. */
   private closing = false;
+  /** Une coupure réseau a été signalée, et aucune reconstruction n'a encore suivi. */
+  private networkDown = false;
 
   constructor(options: { startPaused?: boolean } = {}) {
     this.keepPaused = options.startPaused === true;
@@ -132,11 +137,19 @@ export class PlayerLifecycle {
     // Une reconstruction demandée par le spectateur (réessayer, une piste, le plafond HDR) passe
     // toujours, et redonne la main au lecteur : ses pannes suivantes doivent de nouveau s'afficher,
     // au lieu d'être ignorées par un lecteur qui se croirait encore abandonné.
+    // Pendant la fermeture, rien ne passe — pas même une demande du spectateur : un changement de
+    // piste pendant le fondu reconstruisait un lecteur en train de partir, et écrivait une ligne
+    // `start` après la ligne `stop`.
+    if (this.closing) return false;
     if (facts.byViewer) {
-      if (!this.closing) this.steppedAside = false;
+      // Le spectateur relance : le lecteur redevient le sien, avec un budget neuf — il vient de
+      // demander un nouvel essai, pas le quatrième d'une série épuisée.
+      this.steppedAside = false;
+      this.rebuilds = 0;
     } else if (this.isOver()) {
       return false;
     }
+    this.networkDown = false;
     const { viewerPausedAt: pausedAt, hiddenAt } = facts;
     if (pausedAt !== null && (hiddenAt === null || hiddenAt < pausedAt || pausedAt < hiddenAt - 1000)) this.keepPaused = true;
     // Un film fini attend sur son écran de fin, quelle que soit la cause de la reconstruction.
@@ -239,6 +252,27 @@ export class PlayerLifecycle {
    */
   networkRetryDelay(): number {
     return Math.min(800 * 2 ** this.networkRetries, 30_000);
+  }
+
+  /**
+   * Une coupure réseau est signalée.
+   *
+   * Le pipeline qui la signale peut encore finir de s'attacher et avoir quelques secondes en
+   * tampon : il ne doit pas les jouer derrière l'écran de coupure — le nouvel essai rouvrira à la
+   * position de la coupure, et ces secondes seraient entendues deux fois (relu le 27/09/2026).
+   */
+  noteNetworkLost(): void {
+    this.networkDown = true;
+  }
+
+  /** Une coupure attend son nouvel essai : rien ne doit jouer d'ici là. */
+  isNetworkLost(): boolean {
+    return this.networkDown;
+  }
+
+  /** Une reconstruction automatique serait-elle permise maintenant ? À demander avant d'en préparer une. */
+  mayRebuild(): boolean {
+    return !this.isOver();
   }
 
   /** Un nouvel essai réseau part. */

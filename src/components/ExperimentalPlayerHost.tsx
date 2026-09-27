@@ -457,6 +457,9 @@ export function ExperimentalPlayerHost({
       trace(`abandon : aucun lecteur serveur sur cette installation — ${reason}`);
       reportPlayback("error", { ...file, reason, path, ...tally.backgroundFacts(Date.now()) });
       setRuntimeError(reason);
+      // L'écran de coupure promettait une reprise qui ne viendra plus : l'erreur prend sa place, au
+      // lieu de rester cachée dessous (relu le 27/09/2026).
+      setNetworkLost(null);
       return;
     }
     // Un renoncement en cours de film emporte où en est le film. Seuls deux appelants passaient
@@ -1524,6 +1527,10 @@ export function ExperimentalPlayerHost({
     const startRemux = async (element: HTMLVideoElement, begin: (video: HTMLVideoElement) => Promise<RemuxPlayback>) => {
       const playback = await begin(element);
       if (cancelled) return playback.destroy();
+      // Arrivé après que le lecteur a passé la main, ou pendant sa fermeture : il ne sert plus. Sans
+      // cela, un pipeline lent qui aboutissait après l'abandon (sans lecteur serveur) se déclarait
+      // prêt et lançait le son sous l'écran d'erreur (relu le 27/09/2026).
+      if (lifecycle.isOver()) return playback.destroy();
 
       remuxRef.current = playback;
       pathRef.current = "remux";
@@ -1578,7 +1585,7 @@ export function ExperimentalPlayerHost({
         wantedAudio !== null && wantedAudio !== playback.currentAudioTrack
           ? playback.requestAudioTrack(wantedAudio)
           : null;
-      if (openingSwitch === "rebuild" && wantedAudio !== null) {
+      if (openingSwitch === "rebuild" && wantedAudio !== null && lifecycle.mayRebuild()) {
         pendingSwitchRef.current = {
           from: playback.currentAudioTrack,
           fromLabel: playback.diagnostics["Audio"] ?? "",
@@ -1718,6 +1725,9 @@ export function ExperimentalPlayerHost({
 
       // Reconstruit pour un changement de piste pendant une pause : il reste en pause.
       if (lifecycle.consumeKeepPaused()) return;
+      // Une coupure signalée pendant l'attache : l'écran de coupure est là, et le nouvel essai
+      // rouvrira à sa position — ce qui est en tampon ne doit pas jouer derrière lui.
+      if (lifecycle.isNetworkLost()) return;
       await element.play().catch(() => {});
     };
 
@@ -1731,6 +1741,9 @@ export function ExperimentalPlayerHost({
     const revertFailedSwitch = (why: string): boolean => {
       const pending = pendingSwitchRef.current;
       if (!pending || pending.from === null) return false;
+      // Le lecteur a passé la main ou se ferme : rien à rétablir, et surtout rien à écrire — une
+      // ligne `audio` après la ligne `stop`, un menu qui change sous un écran qui part.
+      if (!lifecycle.mayRebuild()) return true;
       pendingSwitchRef.current = null;
       trace(`changement de piste impossible par ce lecteur (${why}) — retour à la piste ${pending.from}`);
       reportPlayback("audio", {
@@ -1782,6 +1795,7 @@ export function ExperimentalPlayerHost({
           // Le lecteur a passé la main ou se ferme : une coupure n'a plus d'écran à montrer.
           if (lifecycle.isOver()) return;
           trace(`réseau : lecture interrompue — ${message}`);
+          lifecycle.noteNetworkLost();
           reportPlayback("network", { ...describeFileRef.current(), reason: message, at: positionRef.current });
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
           setPlaying(false);
@@ -1852,6 +1866,7 @@ export function ExperimentalPlayerHost({
         if (isNetworkFailure(cause)) {
           if (lifecycle.isOver()) return;
           trace(`réseau : ouverture impossible — ${message}`);
+          lifecycle.noteNetworkLost();
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
           setPlaying(false);
           return;
@@ -1874,7 +1889,8 @@ export function ExperimentalPlayerHost({
   // pour laquelle il peut y figurer — voir la note sur les rappels lus à travers une `ref`. Même
   // chose pour `showPipelineWarning`, qui ne dépend que de `showWarning`, stable lui aussi, et
   // pour `tally`, créé une fois au montage (`useState`) et jamais remplacé, pour
-  // `reopenAfterEnd`, sans dépendance (`useCallback([])`), et pour `itemId` et `session.bench`,
+  // `reopenAfterEnd`, qui ne dépend que de `lifecycle` — créé une fois au montage (`useState`),
+  // comme `tally` —, et pour `itemId` et `session.bench`,
   // fixés pour toute la vie de ce lecteur — sa clé est `itemId:openId` (voir PlayerHost).
   }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, reportAudioSwitch, tally, reopenAfterEnd, itemId, session.bench]);
 
@@ -1941,6 +1957,7 @@ export function ExperimentalPlayerHost({
     const at = networkLost.at;
     const delay = lifecycle.networkRetryDelay();
     const id = setTimeout(() => {
+      if (!lifecycle.mayRebuild()) return;
       lifecycle.noteNetworkRetry();
       restart(at, "le réseau est revenu");
     }, delay);

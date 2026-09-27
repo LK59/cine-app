@@ -134,11 +134,17 @@ stockée.
 
 ### Les briques qui portent les transitions
 
-- **`restart(at, why)`** — la seule façon de reconstruire. Elle pose `lifecycle.rebuildAt = at`, remet
-  `openedAt`, efface `networkLost`, `ready`, `playing`, `runtimeError`, et augmente
-  `rebuildCount`, ce qui démonte l'ancien pipeline (nettoyage de l'effet) et en monte un neuf. Elle
-  décide aussi de rester en pause si le spectateur avait mis en pause *avant* un passage en
-  arrière-plan (une pause d'iOS lui-même ne compte pas).
+- **`restart(at, why, byViewer?)`** — la seule façon de reconstruire. Elle demande d'abord à
+  `lifecycle.restart`, **le seul point de contrôle** : pendant la fermeture, tout est refusé ; une
+  fois la main passée, les reconstructions automatiques le sont ; une demande du spectateur
+  (`byViewer` : réessayer, une piste, le plafond HDR) redonne la main au lecteur, budget compris.
+  Acceptée, elle pose la position de reconstruction, remet `openedAt`, efface `networkLost`,
+  `ready`, `playing`, `runtimeError`, et augmente `rebuildCount`, ce qui démonte l'ancien pipeline
+  et en monte un neuf. Elle garde en pause un film que le spectateur avait mis en pause avant un
+  passage en arrière-plan (une pause d'iOS lui-même ne compte pas), et un film fini. Les appelants
+  qui préparent quelque chose avant de reconstruire (retour à la piste d'avant, piste d'ouverture
+  différente, nouvel essai réseau) demandent `lifecycle.mayRebuild()` d'abord, pour ne rien écrire
+  pour une reconstruction qui serait refusée.
 - **`declareReady()`** — le seul endroit où une reconstruction est considérée finie :
   `lifecycle.rebuildAt = null`, saut demandé entre-temps honoré, `ready`, `announced`, `everReadyRef`,
   compteur réseau remis à zéro.
@@ -300,7 +306,7 @@ l'observe par ses événements.
 | Reconstruction pendant une reconstruction | la seconde augmente `rebuildCount`, l'effet annule la première | acceptable ; `pendingSwitchRef` survit jusqu'au pipeline qui aboutit |
 | Retour d'arrière-plan + retenue + source perdue | la retenue est lue par la vérification → reste en pause | cohérent |
 | Arrière-plan pendant l'ouverture | la vérification de source perdue n'est active qu'une fois `path === "remux"` | une source fermée par iOS avant l'attache n'est vue que si l'attache échoue |
-| Fin de film + reconstruction | seul le chemin « retour d'arrière-plan » regarde `lifecycle.isEnded()` | **fragile** (point n° 2) |
+| Fin de film + reconstruction | `restart` garde en pause toute reconstruction d'un film fini (`lifecycle.isEnded()`) | corrigé (point 2) |
 | Bascule pendant la fermeture | `fallToStable` ne regarde que `steppedAside` | **fragile** (point n° 5) |
 | Fermer pendant la négociation serveur | la génération n'est pas revérifiée après la lecture du corps de la réponse | **fragile** (point n° 6) |
 | Deux fermetures du lecteur serveur | rien ne garde la ligne `stop` | **fragile** (point n° 7) |
