@@ -1971,9 +1971,10 @@ describe("cycle de vie — comportement figé", () => {
     expect((probes[1] as unknown as { startPaused?: boolean }).startPaused).toBe(true);
   });
 
-  // Comportement actuel, point 4 : sans lecteur serveur, un abandon affiche son erreur — et un
-  // retour d'arrière-plan qui trouve la source fermée reconstruit quand même, effaçant l'erreur.
-  it("comportement actuel, point 4 : sans lecteur serveur, un abandon peut repartir au retour d'arrière-plan", async () => {
+  // Point 4, corrigé : sans lecteur serveur, un abandon affiche son erreur — et un retour
+  // d'arrière-plan qui trouvait la source fermée reconstruisait quand même, effaçant l'erreur et
+  // relançant un film abandonné.
+  it("point 4 : sans lecteur serveur, un abandon reste un abandon au retour d'arrière-plan", async () => {
     serverFallback = false;
     mount();
     await ready();
@@ -1985,20 +1986,27 @@ describe("cycle de vie — comportement figé", () => {
     remux.lost = true;
     remux.position = 300;
     act(() => setVisibility("visible"));
-    await waitFor(() => expect(probes).toHaveLength(2), { timeout: 3000 });
-    await waitFor(() => expect(screen.queryByText(/panne du décodeur/)).toBeNull());
+    // Les deux vérifications du retour (tout de suite, puis 400 ms après) : aucune ne reconstruit.
+    await act(async () => void (await new Promise((resolve) => setTimeout(resolve, 500))));
+    expect(probes).toHaveLength(1);
+    expect(screen.getByText(/panne du décodeur/)).toBeTruthy();
   });
 
-  // Comportement actuel, point 5 : la fermeture ne tient pas le pipeline pendant son fondu ; une
-  // panne qui tombe dans ces 200 ms passe encore la main au lecteur serveur, après la ligne `stop`.
-  it("comportement actuel, point 5 : une panne pendant le fondu de fermeture passe encore la main", async () => {
+  // Point 5, corrigé : une panne qui tombait dans les 200 ms du fondu passait encore la main au
+  // lecteur serveur, après la ligne `stop` — et rangeait le film parmi ceux que le natif ne lit pas.
+  it("point 5 : une panne pendant le fondu de fermeture ne passe plus la main", async () => {
     serverFallback = true;
     mount();
     await ready();
     act(() => void fireEvent.click(screen.getByText("fermer")));
     expect(logged("stop")).toHaveLength(1);
     act(() => probes[0].onError("panne tardive"));
-    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(logged("fallback")).toHaveLength(0);
+    // Ni reconstruction : la source perdue pendant le fondu n'a plus de lecteur à relancer.
+    remux.lost = true;
+    act(() => probes[0].onError("source perdue pendant le fondu"));
+    expect(probes).toHaveLength(1);
   });
 
   // Comportement actuel, relevé en cartographiant : une coupure réseau signalée pendant l'attache,

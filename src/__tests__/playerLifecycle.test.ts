@@ -153,3 +153,29 @@ describe("passer la main", () => {
     expect(lifecycle.hasSteppedAside()).toBe(true);
   });
 });
+
+// Points 4 et 5 (docs/cycle-de-vie-lecteur.md) : après avoir passé la main, ou pendant la
+// fermeture, le lecteur ne prend plus d'initiative.
+describe("un lecteur qui a fini de décider", () => {
+  it("après avoir passé la main : ni reconstruction après une perte, ni au retour d'arrière-plan", () => {
+    const lifecycle = new PlayerLifecycle();
+    lifecycle.stepAside();
+    expect(lifecycle.isOver()).toBe(true);
+    expect(lifecycle.sourceLost(100, 0)).toEqual({ kind: "ignore" });
+    expect(lifecycle.backgroundLost({ position: 100, hold: null }, 0)).toBeNull();
+  });
+
+  it("pendant la fermeture : ni bascule, ni reconstruction", () => {
+    const lifecycle = new PlayerLifecycle();
+    lifecycle.noteClosing();
+    expect(lifecycle.stepAside()).toBe(false);
+    expect(lifecycle.sourceLost(100, 0)).toEqual({ kind: "ignore" });
+    expect(lifecycle.backgroundLost({ position: 100, hold: null }, 0)).toBeNull();
+  });
+
+  it("un lecteur ordinaire décide encore", () => {
+    const lifecycle = new PlayerLifecycle();
+    expect(lifecycle.isOver()).toBe(false);
+    expect(lifecycle.sourceLost(100, 0).kind).toBe("rebuild");
+  });
+});

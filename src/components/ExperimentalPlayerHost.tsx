@@ -1292,6 +1292,8 @@ export function ExperimentalPlayerHost({
   useEffect(() => () => subtitleFetchRef.current?.abort(), []);
 
   const handleClose = useCallback(() => {
+    // Plus aucune initiative pendant le fondu — voir `PlayerLifecycle.stepAside`.
+    lifecycle.noteClosing();
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     reportStop("close");
     const reported = stopPlaybackNow();
@@ -1302,7 +1304,7 @@ export function ExperimentalPlayerHost({
     // Voir PlayerHost : la fiche et la rangée « Reprendre » sont fausses dès qu'on quitte le film,
     // et les deux lecteurs doivent les relire de la même façon.
     void refreshAfterPlayback(reported, itemId);
-  }, [playback, stopPlaybackNow, itemId, reportStop, session.openId]);
+  }, [playback, stopPlaybackNow, itemId, reportStop, session.openId, lifecycle]);
 
   const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
 
@@ -1770,6 +1772,8 @@ export function ExperimentalPlayerHost({
       onError: (message, kind) => {
         // A network failure is not this path's fault and not this path's to fix.
         if (kind === "network") {
+          // Le lecteur a passé la main ou se ferme : une coupure n'a plus d'écran à montrer.
+          if (lifecycle.isOver()) return;
           trace(`réseau : lecture interrompue — ${message}`);
           reportPlayback("network", { ...describeFileRef.current(), reason: message, at: positionRef.current });
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
@@ -1784,6 +1788,7 @@ export function ExperimentalPlayerHost({
         // Le même endroit deux fois, c'est ce que la plateforme ne peut pas prendre : la décision
         // (budget, saut au-delà du passage) est dans `lifecycle.sourceLost`.
         const lost = remuxRef.current?.lost ? lifecycle.sourceLost(remuxRef.current.position || positionRef.current, Date.now()) : null;
+        if (lost?.kind === "ignore") return;
         if (lost?.kind === "rebuild") {
           const { at, skipped: again, attempt } = lost;
           reportPlayback("rebuild", {
@@ -1838,6 +1843,7 @@ export function ExperimentalPlayerHost({
         // A file that could not even be opened because there is no network is not a file this
         // player cannot play. It gets the waiting screen, like a cut that happens mid-film.
         if (isNetworkFailure(cause)) {
+          if (lifecycle.isOver()) return;
           trace(`réseau : ouverture impossible — ${message}`);
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
           setPlaying(false);
@@ -1924,7 +1930,7 @@ export function ExperimentalPlayerHost({
   // 0,8 s, sans fin, une reconstruction vouée à échouer (relu le 22/09/2026). 0,8 s, puis 1,6,
   // 3,2… jusqu'à 30 s ; le compte repart à zéro dès qu'une image est revenue.
   useEffect(() => {
-    if (!networkLost || !online) return;
+    if (!networkLost || !online || lifecycle.isOver()) return;
     const at = networkLost.at;
     const delay = lifecycle.networkRetryDelay();
     const id = setTimeout(() => {

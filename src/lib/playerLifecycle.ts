@@ -52,7 +52,9 @@ export type LossDecision =
       /** Le numéro de cette reconstruction dans la série en cours. */
       attempt: number;
     }
-  | { kind: "giveUp" };
+  | { kind: "giveUp" }
+  /** Le lecteur n'est plus le sien : il a passé la main, ou il se ferme. Rien à faire. */
+  | { kind: "ignore" };
 
 export class PlayerLifecycle {
   /**
@@ -82,6 +84,8 @@ export class PlayerLifecycle {
   private steppedAside = false;
   /** Le fichier est allé au bout, et rien ne l'a relancé depuis. */
   private ended = false;
+  /** Le spectateur a fermé : le lecteur vit encore le temps de son fondu, et ne décide plus rien. */
+  private closing = false;
 
   constructor(options: { startPaused?: boolean } = {}) {
     this.keepPaused = options.startPaused === true;
@@ -182,6 +186,7 @@ export class PlayerLifecycle {
    * peut pas prendre : le relire échouerait de même, la lecture reprend au-delà.
    */
   sourceLost(where: number, now: number): LossDecision {
+    if (this.isOver()) return { kind: "ignore" };
     if (!this.spendRebuild(now)) return { kind: "giveUp" };
     const again = this.lastLossAt !== null && Math.abs(where - this.lastLossAt) < SAME_PLACE_SECONDS;
     this.lastLossAt = where;
@@ -196,7 +201,7 @@ export class PlayerLifecycle {
    * Un film fini aussi, par la règle de `restart`, qui vaut pour toute reconstruction.
    */
   backgroundLost(facts: { position: number; hold: { at: number } | null }, now: number): number | null {
-    if (this.rebuildAt !== null) return null;
+    if (this.isOver() || this.rebuildAt !== null) return null;
     if (!this.spendRebuild(now)) return null;
     if (facts.hold) this.keepPaused = true;
     return facts.hold ? facts.hold.at : facts.position;
@@ -219,11 +224,36 @@ export class PlayerLifecycle {
     this.networkRetries += 1;
   }
 
-  /** Passer la main — au lecteur serveur, ou à l'écran d'erreur. Une seule fois : vrai la première. */
+  /**
+   * Passer la main — au lecteur serveur, ou à l'écran d'erreur. Une seule fois : vrai la première.
+   *
+   * Et jamais pendant la fermeture : une panne qui tombait dans les 200 ms du fondu (le minuteur
+   * d'abandon, un pipeline qui meurt) écrivait une ligne `fallback` après la ligne `stop`, et
+   * rangeait le film parmi ceux que le lecteur natif ne sait pas lire — le lecteur serveur le
+   * rouvrait ensuite jusqu'au rechargement de l'app (point 5, docs/cycle-de-vie-lecteur.md).
+   */
   stepAside(): boolean {
-    if (this.steppedAside) return false;
+    if (this.steppedAside || this.closing) return false;
     this.steppedAside = true;
     return true;
+  }
+
+  /** Le spectateur ferme le lecteur. */
+  noteClosing(): void {
+    this.closing = true;
+  }
+
+  /**
+   * Le lecteur a-t-il cessé de décider pour lui-même ?
+   *
+   * Après avoir passé la main ou pendant la fermeture, plus aucune initiative : ni reconstruction
+   * après une perte, ni reconstruction au retour d'arrière-plan, ni nouvel essai réseau. Sans lecteur
+   * serveur, un abandon affiche son erreur — et un retour d'arrière-plan qui trouvait la source
+   * fermée reconstruisait quand même, effaçant l'erreur et relançant un film abandonné (point 4).
+   * Une relance demandée par le spectateur, elle, reste permise : elle ne passe pas par ici.
+   */
+  isOver(): boolean {
+    return this.steppedAside || this.closing;
   }
 
   /** La main a-t-elle déjà été passée ? */
