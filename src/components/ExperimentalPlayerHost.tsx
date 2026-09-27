@@ -82,6 +82,7 @@ import { seekArrived } from "@/lib/webcodecs/seekArrival";
 import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
 import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
 import { forgetResumeCache, openDiskChunks, openingFacts } from "@/lib/resumeCache/diskChunks";
+import { PlayerLifecycle, REBUILD_STEP_SECONDS } from "@/lib/playerLifecycle";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -117,29 +118,8 @@ const GIVE_UP_AFTER_MS = 35000;
  */
 const WARNING_MS = 6000;
 
-/** How many times a lost source is rebuilt before the loss is reported as a fault. */
-const MAX_REBUILDS = 3;
-
-/**
- * And how long a run of them counts as one run.
- *
- * A budget that never decays is a budget a long film exhausts by accident: three hiccups an hour
- * apart are not the fault that limit exists to stop.
- */
-const REBUILD_WINDOW_MS = 180_000;
-
-/**
- * How far past a position that has already killed the source a rebuild resumes.
- *
- * Reading the identical bytes again is a guaranteed way to die again, and the record proves it:
- * three rebuilds each re-read the same 5.5 MB segment and each lost the source ten milliseconds
- * after appending it. More than the longest gap between keyframes in this library, so the
- * resumed read starts on a different segment rather than the same one.
- */
-const REBUILD_STEP_SECONDS = 12;
-
-/** Two rebuild positions this close together are the same place. */
-const SAME_PLACE_SECONDS = 3;
+// Le budget de reconstructions, le saut au-delà d'un passage fautif et « le même endroit » vivent
+// désormais dans `playerLifecycle.ts`, avec les décisions qui s'en servent.
 
 /**
  * Milliseconds since a moment, or null when there is no moment.
@@ -385,8 +365,6 @@ export function ExperimentalPlayerHost({
    * des séances fantômes dans son activité, et « en cours » qui clignotait (relu le 22/09/2026).
    */
   const [announced, setAnnounced] = useState(false);
-  /** Relances automatiques après une coupure depuis la dernière image — voir leur espacement. */
-  const networkRetriesRef = useRef(0);
   // Only failures that happen *during* playback are state. The two that are already known from
   // the fetch — the server refusing the file, and the fetch itself failing — are derived below,
   // because pushing them into state from an effect is both a cascading render and a second
@@ -419,7 +397,12 @@ export function ExperimentalPlayerHost({
   } | null>(null);
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
 
-  const steppedAside = useRef(false);
+  /**
+   * Les décisions d'ouverture et de reconstruction — voir `playerLifecycle.ts`. Un objet par
+   * lecteur, créé une fois : l'état de montage (`useState`) le garde d'un rendu à l'autre sans
+   * qu'aucun rendu ne l'écrive.
+   */
+  const [lifecycle] = useState(() => new PlayerLifecycle({ startPaused: session.startPaused === true }));
   /**
    * Cette séance, de l'ouverture au démontage, reconstructions comprises : son identifiant, porté
    * par chacune de ses lignes, et le décompte qui fait son bilan — voir `SessionTally`.
@@ -465,8 +448,7 @@ export function ExperimentalPlayerHost({
    * film qui joue par le serveur au lieu d'une erreur — jamais l'inverse.
    */
   const fallToStable = useCallback((reason: string, takeover?: StableTakeover) => {
-    if (steppedAside.current) return;
-    steppedAside.current = true;
+    if (!lifecycle.stepAside()) return;
     // La ligne `fallback` dit comment la séance a fini ici : pas de bilan « perdu » en plus.
     clearUnsentStop(sessionId);
     const file = describeFileRef.current();
@@ -505,7 +487,7 @@ export function ExperimentalPlayerHost({
     // deux. Le 24/09/2026, une demi-heure de film passée par le serveur se lisait en deux séances,
     // dont une à zéro seconde regardée — et une soirée de diffusion vers la télé, deux heures à zéro.
     onFallbackRef.current(reason, handover, sessionId);
-  }, [sessionId, tally, watched]);
+  }, [sessionId, tally, watched, lifecycle]);
   /**
    * A passing notice, with the moment it was raised.
    *
@@ -612,7 +594,6 @@ export function ExperimentalPlayerHost({
   // page goes to the background, and a MediaSource it has closed cannot be reopened — so coming
   // back from a locked screen means starting over, at the position the viewer left.
   const [rebuildCount, setRebuildCount] = useState(0);
-  const rebuildAtRef = useRef<number | null>(null);
   /**
    * La dernière position demandée par le spectateur et pas encore atteinte — voir
    * `onSeekRequest`. Deux gestes rapprochés ne doivent pas en perdre un : un saut encore en
@@ -660,27 +641,6 @@ export function ExperimentalPlayerHost({
     if (element?.seeking) return element.currentTime;
     return positionRef.current;
   }, []);
-  // Bounded, so a source that closes the instant it opens cannot become a rebuild loop.
-  const rebuildsRef = useRef(0);
-  const lastRebuildAtTimeRef = useRef(0);
-  /**
-   * Spends one of the rebuilds a session is allowed, or refuses.
-   *
-   * The budget decays, which it did not: three losses spread across a two-hour film exhausted it
-   * as surely as three in nine seconds, and the fourth — an hour after the third, with everything
-   * having worked in between — handed the film to the stable player mid-viewing. A loss that
-   * keeps happening is a fault; one that happened once, was repaired, and did not come back for
-   * several minutes is not the same fault, and the source below already reasons this way about
-   * its own recoveries.
-   */
-  const spendRebuild = useCallback(() => {
-    if (Date.now() - lastRebuildAtTimeRef.current > REBUILD_WINDOW_MS) rebuildsRef.current = 0;
-    if (rebuildsRef.current >= MAX_REBUILDS) return false;
-    rebuildsRef.current += 1;
-    lastRebuildAtTimeRef.current = Date.now();
-    return true;
-  }, []);
-  const lastRebuildAtRef = useRef<number | null>(null);
   /**
    * What the viewer chose, so a restart gives it back to them.
    *
@@ -695,9 +655,9 @@ export function ExperimentalPlayerHost({
    * spectateur qui change de langue sur un film arrêté ne veut pas qu'il reparte tout seul.
    */
   const pendingSwitchRef = useRef<{ from: number | null; fromLabel: string; to: number; startedAt: number } | null>(null);
-  // Vrai d'emblée au retour d'une diffusion arrêtée d'elle-même : le film attend sur le téléphone
-  // au lieu d'y repartir tout seul (`PlaybackSession.startPaused`).
-  const keepPausedRef = useRef(session.startPaused === true);
+  // « Rester en pause » vit dans `lifecycle.keepPaused` : vrai d'emblée au retour d'une diffusion
+  // arrêtée d'elle-même — le film attend sur le téléphone au lieu d'y repartir tout seul
+  // (`PlaybackSession.startPaused`).
   /** Quand le spectateur a mis en pause (page visible, film pas fini) — nul dès que ça rejoue. */
   const viewerPausedAtRef = useRef<number | null>(null);
   /** Le dernier passage en arrière-plan. */
@@ -938,11 +898,8 @@ export function ExperimentalPlayerHost({
     // retour d'arrière-plan, repartait tout seul (relu le 24/09/2026). Une pause suivie de près par
     // le passage en arrière-plan peut être celle d'iOS lui-même : elle ne compte que si elle le
     // précède d'une seconde au moins — sinon la reprise se fait comme avant.
-    const pausedAt = viewerPausedAtRef.current;
-    const hiddenAt = hiddenAtRef.current;
-    if (pausedAt !== null && (hiddenAt === null || hiddenAt < pausedAt || pausedAt < hiddenAt - 1000)) keepPausedRef.current = true;
+    lifecycle.restart(at, { viewerPausedAt: viewerPausedAtRef.current, hiddenAt: hiddenAtRef.current });
     traceKeepAcrossReset();
-    rebuildAtRef.current = at;
     setOpenedAt(Date.now());
     setNetworkLost(null);
     setReady(false);
@@ -952,7 +909,7 @@ export function ExperimentalPlayerHost({
     setPlaying(false);
     setRuntimeError(null);
     setRebuildCount((count) => count + 1);
-  }, []);
+  }, [lifecycle]);
 
   // Fetched once and then left alone. The description of a file does not change while it is
   // being watched, and every revalidation handed back a fresh object — which the effect below
@@ -1166,12 +1123,12 @@ export function ExperimentalPlayerHost({
   );
   const reportStop = useCallback(
     (why: "close" | "next" | "page" | "unmount") => {
-      if (stopReportedRef.current || steppedAside.current) return;
+      if (stopReportedRef.current || lifecycle.hasSteppedAside()) return;
       stopReportedRef.current = true;
       reportPlayback("stop", stopFields(why));
       clearUnsentStop(sessionId);
     },
-    [stopFields, sessionId]
+    [stopFields, sessionId, lifecycle]
   );
   /**
    * Le bilan gardé sur l'appareil, réécrit tant que la séance vit.
@@ -1181,7 +1138,7 @@ export function ExperimentalPlayerHost({
    */
   useEffect(() => {
     const save = () => {
-      if (stopReportedRef.current || steppedAside.current) return;
+      if (stopReportedRef.current || lifecycle.hasSteppedAside()) return;
       saveUnsentStop(sessionId, stopFields("lost"));
     };
     save();
@@ -1271,7 +1228,7 @@ export function ExperimentalPlayerHost({
       document.removeEventListener("pointerdown", onGesture, true);
       document.removeEventListener("keydown", onGesture, true);
     };
-  }, [sessionId, stopFields, tally]);
+  }, [sessionId, stopFields, tally, lifecycle]);
   useEffect(() => {
     const onPageHide = () => reportStop("page");
     // Une page rendue depuis le cache du navigateur (retour arrière) reprend le film : son arrêt
@@ -1514,7 +1471,7 @@ export function ExperimentalPlayerHost({
       // tick as the start had its position wiped, so the film began again from zero instead of
       // resuming. Cleared at the exact moment the pipeline that consumed it is running, nothing
       // written afterwards can be undone by it.
-      rebuildAtRef.current = null;
+      lifecycle.ready();
       // Un saut demandé pendant la reconstruction, ailleurs que là où elle a rouvert : il est
       // honoré maintenant, sur le lecteur neuf, au lieu d'être écrasé par sa position de départ.
       const asked = requestedSeekRef.current;
@@ -1525,20 +1482,17 @@ export function ExperimentalPlayerHost({
       setReady(true);
       setAnnounced(true);
       everReadyRef.current = true;
-      networkRetriesRef.current = 0;
     };
     // Where to open. A rebuild that asked for a position gets it; otherwise the film resumes
     // where it actually is, and only a player that has never played anything falls back to where
     // it was told to start. Without that last part, a rebuild nobody asked for — and there was
     // one, every time the player was minimised — sent the film back to where it began.
-    let startSeconds =
-      rebuildAtRef.current ??
-      (positionRef.current > 0 ? positionRef.current : session.resumeAt ?? playbackState?.resumeSeconds ?? 0);
+    let startSeconds = lifecycle.openingSeconds(positionRef.current, session.resumeAt, playbackState?.resumeSeconds);
     // Reprendre quelques secondes avant, à la première ouverture seulement — jamais pour une
     // reconstruction, qui rouvre là où l'image vient de s'arrêter. Voir `resumeRewind.ts`.
     if (!openingDecidedRef.current) {
       openingDecidedRef.current = true;
-      if (rebuildAtRef.current === null && !session.bench) {
+      if (lifecycle.rebuildAt === null && !session.bench) {
         // La même règle que celle qui choisit, en arrière-plan, quels octets garder pour une reprise
         // instantanée (`src/lib/resumeCache/`) : une seule fonction, pour que les deux ne visent
         // jamais deux positions différentes.
@@ -1752,10 +1706,7 @@ export function ExperimentalPlayerHost({
       });
 
       // Reconstruit pour un changement de piste pendant une pause : il reste en pause.
-      if (keepPausedRef.current) {
-        keepPausedRef.current = false;
-        return;
-      }
+      if (lifecycle.consumeKeepPaused()) return;
       await element.play().catch(() => {});
     };
 
@@ -1813,7 +1764,7 @@ export function ExperimentalPlayerHost({
       audioTrackNumber: wantedAudioRef.current,
       // Reconstruit pour un changement de piste pendant une pause : rien ne doit le relancer, ni
       // ce composant (voir startRemux) ni la garde de démarrage de la source.
-      startPaused: keepPausedRef.current,
+      startPaused: lifecycle.keepPaused,
       onError: (message, kind) => {
         // A network failure is not this path's fault and not this path's to fix.
         if (kind === "network") {
@@ -1828,14 +1779,11 @@ export function ExperimentalPlayerHost({
         // seek, sometimes at a change of track — and everything that follows is wreckage. The
         // machinery for the sleep case already knows how to come back at the right position, so
         // it is used here too, and only a loss that keeps happening is finally reported.
-        if (remuxRef.current?.lost && spendRebuild()) {
-          const where = remuxRef.current.position || positionRef.current;
-          // The same place twice means the media there is what the platform cannot take. Reading
-          // it again would fail again, identically — the record shows three rebuilds doing
-          // exactly that — so the film resumes past it instead.
-          const again = lastRebuildAtRef.current !== null && Math.abs(where - lastRebuildAtRef.current) < SAME_PLACE_SECONDS;
-          const at = again ? where + REBUILD_STEP_SECONDS : where;
-          lastRebuildAtRef.current = where;
+        // Le même endroit deux fois, c'est ce que la plateforme ne peut pas prendre : la décision
+        // (budget, saut au-delà du passage) est dans `lifecycle.sourceLost`.
+        const lost = remuxRef.current?.lost ? lifecycle.sourceLost(remuxRef.current.position || positionRef.current, Date.now()) : null;
+        if (lost?.kind === "rebuild") {
+          const { at, skipped: again, attempt } = lost;
           reportPlayback("rebuild", {
             ...describeFileRef.current(),
             // Comme la reconstruction d'arrière-plan : sans lui, une ligne sur deux n'avait pas de
@@ -1843,7 +1791,7 @@ export function ExperimentalPlayerHost({
             path: "remux",
             reason: message,
             at,
-            attempt: rebuildsRef.current,
+            attempt,
             skipped: again,
             // Un retour d'arrière-plan récent, s'il y en a un — voir `backgroundFacts`.
             ...tally.backgroundFacts(Date.now()),
@@ -1853,8 +1801,8 @@ export function ExperimentalPlayerHost({
           });
           restart(
             at,
-            `la source a été perdue (${rebuildsRef.current})` +
-              (again ? `, au-delà de ${where.toFixed(1)} s qui vient d'échouer` : "")
+            `la source a été perdue (${attempt})` +
+              (again ? `, au-delà de ${(at - REBUILD_STEP_SECONDS).toFixed(1)} s qui vient d'échouer` : "")
           );
           // Only the first of these is the viewer's business: a passage of the film is being
           // skipped, and a jump nobody explained looks like a fault. Rebuilding in place and
@@ -1913,7 +1861,7 @@ export function ExperimentalPlayerHost({
   // pour `tally`, créé une fois au montage (`useState`) et jamais remplacé, pour
   // `reopenAfterEnd`, sans dépendance (`useCallback([])`), et pour `itemId` et `session.bench`,
   // fixés pour toute la vie de ce lecteur — sa clé est `itemId:openId` (voir PlayerHost).
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, spendRebuild, reportAudioSwitch, tally, reopenAfterEnd, itemId, session.bench]);
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, reportAudioSwitch, tally, reopenAfterEnd, itemId, session.bench]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -1922,13 +1870,16 @@ export function ExperimentalPlayerHost({
     if (path !== "remux") return;
     const check = () => {
       const playback = remuxRef.current;
-      if (!playback?.lost || rebuildAtRef.current !== null) return;
-      if (!spendRebuild()) return;
+      if (!playback?.lost) return;
       // Un retour qui laisse la lecture en pause (`holdPausedOnReturn`) : la reconstruction aussi,
-      // au même endroit un peu en arrière. Sans cela, le pipeline reconstruit repartait en lecture.
-      const hold = holdOnReturnRef.current;
-      const at = hold ? hold.at : playback.position || positionRef.current;
-      if (hold) keepPausedRef.current = true;
+      // au même endroit un peu en arrière. Un film fini aussi : reconstruit en lecture, il rejouait
+      // tout seul ses deux dernières secondes et annonçait sa fin une seconde fois (24/09/2026).
+      // Les deux règles, et le budget, sont dans `lifecycle.backgroundLost`.
+      const at = lifecycle.backgroundLost(
+        { position: playback.position || positionRef.current, hold: holdOnReturnRef.current, ended: endStoppedRef.current },
+        Date.now()
+      );
+      if (at === null) return;
       // Écrit au journal, et plus seulement dans la trace : une reconstruction au retour se lisait
       // comme une ouverture de plus, et combien de retours d'arrière-plan en coûtent une restait
       // une question sans réponse (23/09/2026).
@@ -1940,10 +1891,6 @@ export function ExperimentalPlayerHost({
         at,
         hiddenMs: tally.lastBackgroundMs,
       });
-      // Un film fini attend sur son écran de fin : reconstruit en lecture, il rejouait tout seul
-      // ses deux dernières secondes, son compris, et annonçait sa fin une seconde fois (relu le
-      // 24/09/2026). Reconstruit à l'arrêt, « Revoir » le relance comme avant.
-      if (endStoppedRef.current) keepPausedRef.current = true;
       restart(at, "la plateforme a fermé la source");
     };
     const onVisible = () => {
@@ -1953,7 +1900,7 @@ export function ExperimentalPlayerHost({
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [path, restart, spendRebuild, tally]);
+  }, [path, restart, lifecycle, tally]);
 
   // Watched only while something is waiting on it: an idle player has no use for the news.
   useEffect(() => {
@@ -1977,13 +1924,13 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     if (!networkLost || !online) return;
     const at = networkLost.at;
-    const delay = Math.min(800 * 2 ** networkRetriesRef.current, 30_000);
+    const delay = lifecycle.networkRetryDelay();
     const id = setTimeout(() => {
-      networkRetriesRef.current += 1;
+      lifecycle.noteNetworkRetry();
       restart(at, "le réseau est revenu");
     }, delay);
     return () => clearTimeout(id);
-  }, [networkLost, online, restart]);
+  }, [networkLost, online, restart, lifecycle]);
 
   /**
    * A notice withdraws itself.
@@ -2103,7 +2050,7 @@ export function ExperimentalPlayerHost({
   const noteSeekRequest = (seconds: number) => {
     requestedSeekRef.current = seconds;
     // Une reconstruction pas encore ouverte rouvre directement là.
-    if (rebuildAtRef.current !== null) rebuildAtRef.current = seconds;
+    lifecycle.seekDuringRebuild(seconds);
     // Mesuré une fois le chemin natif en marche : c'est le `seeked` de son élément qui ferme la
     // mesure. Avant, rien ne la fermerait, et le saut suivant écrirait celle-ci en ligne fausse —
     // tombée à 0, jamais arrivée (le cas du chemin canevas, chasse aux bugs du 22/09/2026).
@@ -2180,7 +2127,7 @@ export function ExperimentalPlayerHost({
       };
       // Un film à l'arrêt reste à l'arrêt : le spectateur a changé de langue, pas lancé
       // la lecture.
-      keepPausedRef.current = videoElRef.current?.paused ?? false;
+      lifecycle.setKeepPaused(videoElRef.current?.paused ?? false);
       wantedAudioRef.current = id;
       setCurrentAudio(id);
       setFrozen(freezeFrame());
@@ -2579,7 +2526,7 @@ export function ExperimentalPlayerHost({
                       // Le plafond est écrit dans l'en-tête du flux : il faut le reconstruire,
                       // à la même position, comme pour un changement de piste — pause et image
                       // figée comprises : sans elles, un film à l'arrêt repartait sur un écran noir.
-                      keepPausedRef.current = videoElRef.current?.paused ?? false;
+                      lifecycle.setKeepPaused(videoElRef.current?.paused ?? false);
                       setFrozen(freezeFrame());
                       restart(intendedPosition(), `plafond HDR ${choice}`);
                     },
