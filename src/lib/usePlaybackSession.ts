@@ -47,6 +47,18 @@ function report(
     .catch(() => undefined);
 }
 
+/**
+ * Referme chez Jellyfin une séance que ce lecteur a ouverte sans jamais la garder.
+ *
+ * Une négociation du lecteur serveur remplacée — ou fermée — pendant qu'on lisait sa réponse : le
+ * serveur a déjà ouvert la séance, et souvent lancé le transcodage, mais personne n'en tient
+ * l'identifiant, donc aucun battement ni aucun arrêt ne la concernera. Sans cet arrêt, le
+ * transcodage tournait jusqu'à ce que Jellyfin abandonne de lui-même.
+ */
+export function stopOrphanSession(info: Omit<PlaybackSessionInfo, "announce">, positionSeconds: number): Promise<void> {
+  return report("stop", info, Math.floor(Math.max(0, positionSeconds) * TICKS_PER_SECOND));
+}
+
 // Keeps Jellyfin's "now playing" / resume state in sync with an active
 // PlayerHost session: a progress heartbeat every 10s, and a stop report
 // (with the final position) on close, unmount, or tab close. Returns a

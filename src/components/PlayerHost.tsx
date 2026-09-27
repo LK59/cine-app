@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { createPortal, flushSync } from "react-dom";
-import { usePlaybackSession } from "@/lib/usePlaybackSession";
+import { usePlaybackSession, stopOrphanSession } from "@/lib/usePlaybackSession";
 import { refreshAfterPlayback } from "@/lib/swr";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
@@ -475,11 +475,23 @@ function ActivePlayer({
 
   const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
 
+  /**
+   * La séance est déjà fermée — une seule fois, comme `stopReportedRef` côté lecteur natif.
+   *
+   * Deux appuis pendant le fondu (Quitter sur l'écran d'erreur, puis la croix ; la croix, puis la
+   * fin du fichier) écrivaient deux lignes `stop`, la seconde avec zéro seconde regardée — le
+   * temps venait d'être pris par la première —, et lançaient deux relectures des vues (relevé le
+   * 27/09/2026 en cartographiant le lecteur, docs/cycle-de-vie-lecteur.md).
+   */
+  const closedRef = useRef(false);
+
   // Swaps to the next episode in place — reports the current one's final
   // position first, same as a manual close, but never triggers the
   // close/unmount fade since the player stays open for the new episode.
   const handleAdvance = useCallback(() => {
-    if (!nextEpisode) return;
+    // Rien à enchaîner sur une séance qu'on vient de fermer : le compte à rebours de l'épisode
+    // suivant peut arriver à zéro pendant le fondu.
+    if (!nextEpisode || closedRef.current) return;
     reportPlayback("stop", serverStopFields(logContext.current, "next", lastKnownTime.current, watched.take(Date.now())));
     stopPlaybackNow();
     playback.advance(nextEpisode);
@@ -492,6 +504,8 @@ function ActivePlayer({
   // not wherever currentTime drifts to during the fade delay.
   const CLOSE_MS = 200;
   const handleClose = useCallback(() => {
+    if (closedRef.current) return;
+    closedRef.current = true;
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     reportPlayback("stop", serverStopFields(logContext.current, "close", lastKnownTime.current, watched.take(Date.now())));
     const reported = stopPlaybackNow();
@@ -600,6 +614,14 @@ function ActivePlayer({
       // cache, where the next transcoded title will find it. The extra .catch() is only there so
       // an early return can't leave a rejected promise unhandled — the await below still sees
       // (and throws) the original rejection exactly as it did before.
+      /** La séance qu'une négociation remplacée a fait ouvrir chez Jellyfin — voir plus bas. */
+      const closeOrphan = (data: { playSessionId?: string; mediaSourceId?: string } | null) => {
+        if (!data?.playSessionId || !data?.mediaSourceId) return;
+        void stopOrphanSession(
+          { itemId, playSessionId: data.playSessionId, mediaSourceId: data.mediaSourceId },
+          opts?.resumeAt ?? lastKnownTime.current
+        );
+      };
       const nativeHls = playsHlsNatively(video);
       const hlsModule = nativeHls ? null : import("hls.js");
       hlsModule?.catch(() => {});
@@ -629,10 +651,17 @@ function ActivePlayer({
         }),
       });
       // Avant la lecture du corps, donc avant setNeedsReauth / setError : l'échec d'une
-      // négociation déjà remplacée n'a rien à afficher, c'est la nouvelle qui décide.
-      if (generation !== playbackGeneration.current) return;
+      // négociation déjà remplacée n'a rien à afficher, c'est la nouvelle qui décide. Sa réussite
+      // non plus — mais Jellyfin a ouvert une séance pour elle, qu'il faut lui refermer.
+      if (generation !== playbackGeneration.current) {
+        if (res.ok) void res.json().then(closeOrphan, () => {});
+        return;
+      }
       if (res.status === 401) {
         const body = await res.json().catch(() => null);
+        // Revérifiée après chaque lecture de corps, et non seulement avant : la réponse d'une
+        // négociation remplacée pendant qu'on la lisait n'a rien à afficher non plus.
+        if (generation !== playbackGeneration.current) return;
         if (body?.code === "jellyfin_reauth_required") {
           reportPlayback("error", serverFailureFields(logContext.current, "reconnexion à Jellyfin demandée", { status: 401 }));
           setNeedsReauth(true);
@@ -642,6 +671,7 @@ function ActivePlayer({
       }
       if (!res.ok) {
         const body = await res.json().catch(() => null);
+        if (generation !== playbackGeneration.current) return;
         reportPlayback(
           "error",
           serverFailureFields(logContext.current, "négociation refusée", { status: res.status, code: body?.code ?? body?.error ?? "" })
@@ -658,6 +688,20 @@ function ActivePlayer({
         return;
       }
       const data = await res.json();
+      /**
+       * Remplacée — ou le lecteur fermé — pendant qu'on lisait la réponse.
+       *
+       * La génération n'était vérifiée qu'avant cette lecture. Une réponse lue après coup écrivait
+       * encore la ligne `start`, posait la séance et lançait la lecture sur un élément que plus
+       * personne ne regarde ; et une séance fermée pendant la négociation laissait chez Jellyfin un
+       * transcodage que rien ne refermait : son identifiant n'était jamais gardé, donc jamais
+       * arrêté (relevé le 27/09/2026, docs/cycle-de-vie-lecteur.md). Jellyfin l'a ouverte : on la
+       * lui referme, à la position qu'elle devait prendre.
+       */
+      if (generation !== playbackGeneration.current) {
+        closeOrphan(data);
+        return;
+      }
       reportPlayback("start", {
         ...serverStartFields(logContext.current, {
           directPlay: !!data.isDirectPlay,
@@ -1112,10 +1156,33 @@ function ActivePlayer({
    * il resterait sur ce lecteur jusqu'à la fin du film.
    */
   const handleCastReturn = useCallback(() => {
+    const video = videoRef.current;
     // Pas `currentTime || 0` : une diffusion quittée pendant son chargement n'a pas encore posé sa
     // position, et le film repartait du début — voir `castHandBackPosition`.
-    onCastEnded?.(castHandBackPosition(videoRef.current?.currentTime ?? 0, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt));
-  }, [onCastEnded]);
+    const at = castHandBackPosition(video?.currentTime ?? 0, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt);
+    /**
+     * Revenir sur le téléphone arrête le téléviseur, et le dit — comme la croix.
+     *
+     * Ce bouton rendait la main sans rien toucher : or démonter l'élément ne coupe pas une session
+     * AirPlay (constaté le 26/09/2026 pour la croix), et la télé pouvait continuer pendant que le
+     * téléphone reprenait. Il n'écrivait pas non plus de ligne : le temps regardé sur la télé
+     * disparaissait du journal, puisque le démontage retire l'écoute de la route avant tout
+     * événement (relevé le 27/09/2026, docs/cycle-de-vie-lecteur.md). `closingRef` fait taire
+     * cette écoute, qui sinon rendrait la main une seconde fois, en pause.
+     */
+    reportPlayback("fallback", castEndedFields(logContext.current, "retour demandé sur le téléphone", at, watched.take(Date.now())));
+    if (video && castActiveRef.current) {
+      closingRef.current = true;
+      try {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      } catch {
+        // Déjà démonté : il n'y a plus rien à arrêter.
+      }
+    }
+    onCastEnded?.(at);
+  }, [onCastEnded, watched]);
 
   const castAttempted = useRef(false);
   /**
