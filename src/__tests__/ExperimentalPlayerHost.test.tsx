@@ -100,6 +100,13 @@ vi.mock("@/components/PlayerControls", () => ({
 type Info = Record<string, unknown>;
 let swr: { data: Info | undefined; error: unknown };
 vi.mock("swr", () => ({ default: () => swr }));
+// La relecture des vues après une fermeture : hors de ce qui est examiné ici, et bâtie sur le
+// `mutate` global que ce double de SWR n'a pas — les tests qui ferment le lecteur la laissaient
+// échouer en arrière-plan.
+vi.mock("@/lib/swr", async (original) => ({
+  ...(await original<typeof import("@/lib/swr")>()),
+  refreshAfterPlayback: vi.fn(async () => {}),
+}));
 
 /**
  * Y a-t-il un lecteur serveur derrière ? `undefined` par défaut, comme pendant l'attente réelle.
