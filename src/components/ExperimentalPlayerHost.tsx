@@ -1285,8 +1285,9 @@ export function ExperimentalPlayerHost({
   const reopenAfterEnd = useCallback(() => {
     if (!endStoppedRef.current) return;
     endStoppedRef.current = false;
+    lifecycle.noteResumedAfterEnd();
     resumePlaybackRef.current();
-  }, []);
+  }, [lifecycle]);
 
   useEffect(() => () => subtitleFetchRef.current?.abort(), []);
 
@@ -1649,6 +1650,7 @@ export function ExperimentalPlayerHost({
         // de fin ne l'envoyait jamais (relevé le 23/09/2026).
         void stopPlaybackRef.current();
         endStoppedRef.current = true;
+        lifecycle.noteEnded();
         // Fini : ses octets gardés pour une reprise instantanée n'ont plus rien à reprendre. Effacés
         // en arrière-plan ; le prochain passage l'aurait fait aussi, le titre quittant « Reprendre ».
         if (!session.bench) forgetResumeCache(itemId);
@@ -1876,7 +1878,7 @@ export function ExperimentalPlayerHost({
       // tout seul ses deux dernières secondes et annonçait sa fin une seconde fois (24/09/2026).
       // Les deux règles, et le budget, sont dans `lifecycle.backgroundLost`.
       const at = lifecycle.backgroundLost(
-        { position: playback.position || positionRef.current, hold: holdOnReturnRef.current, ended: endStoppedRef.current },
+        { position: playback.position || positionRef.current, hold: holdOnReturnRef.current },
         Date.now()
       );
       if (at === null) return;

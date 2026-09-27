@@ -84,6 +84,18 @@ describe("une reconstruction", () => {
     expect(before.consumeKeepPaused()).toBe(true);
   });
 
+  // Point 2 (docs/cycle-de-vie-lecteur.md) : seul le retour d'arrière-plan gardait un film fini en
+  // pause ; une source perdue ou un nouvel essai réseau sur l'écran de fin le relançaient.
+  it("garde en pause toute reconstruction d'un film fini, jusqu'à ce qu'il reprenne", () => {
+    const lifecycle = new PlayerLifecycle();
+    lifecycle.noteEnded();
+    lifecycle.restart(5400, { viewerPausedAt: null, hiddenAt: null });
+    expect(lifecycle.consumeKeepPaused()).toBe(true);
+    lifecycle.noteResumedAfterEnd();
+    lifecycle.restart(20, { viewerPausedAt: null, hiddenAt: null });
+    expect(lifecycle.consumeKeepPaused()).toBe(false);
+  });
+
   it("le retour d'une diffusion arrêtée d'elle-même commence en pause", () => {
     expect(new PlayerLifecycle({ startPaused: true }).consumeKeepPaused()).toBe(true);
     expect(new PlayerLifecycle().consumeKeepPaused()).toBe(false);
@@ -93,26 +105,28 @@ describe("une reconstruction", () => {
 describe("le retour d'arrière-plan sur une source fermée", () => {
   it("reconstruit là où en était le film", () => {
     const lifecycle = new PlayerLifecycle();
-    expect(lifecycle.backgroundLost({ position: 1200, hold: null, ended: false }, 0)).toBe(1200);
+    expect(lifecycle.backgroundLost({ position: 1200, hold: null }, 0)).toBe(1200);
     expect(lifecycle.consumeKeepPaused()).toBe(false);
   });
 
   it("en pause, un peu avant, quand le retour retient la lecture", () => {
     const lifecycle = new PlayerLifecycle();
-    expect(lifecycle.backgroundLost({ position: 1200, hold: { at: 1197 }, ended: false }, 0)).toBe(1197);
+    expect(lifecycle.backgroundLost({ position: 1200, hold: { at: 1197 } }, 0)).toBe(1197);
     expect(lifecycle.consumeKeepPaused()).toBe(true);
   });
 
   it("en pause sur l'écran de fin", () => {
     const lifecycle = new PlayerLifecycle();
-    lifecycle.backgroundLost({ position: 5400, hold: null, ended: true }, 0);
+    lifecycle.noteEnded();
+    const at = lifecycle.backgroundLost({ position: 5400, hold: null }, 0);
+    lifecycle.restart(at!, { viewerPausedAt: null, hiddenAt: null });
     expect(lifecycle.consumeKeepPaused()).toBe(true);
   });
 
   it("rien quand une reconstruction attend déjà", () => {
     const lifecycle = new PlayerLifecycle();
     lifecycle.restart(300, { viewerPausedAt: null, hiddenAt: null });
-    expect(lifecycle.backgroundLost({ position: 1200, hold: null, ended: false }, 0)).toBeNull();
+    expect(lifecycle.backgroundLost({ position: 1200, hold: null }, 0)).toBeNull();
   });
 });
 

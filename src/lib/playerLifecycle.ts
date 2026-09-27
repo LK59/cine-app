@@ -80,6 +80,8 @@ export class PlayerLifecycle {
   private lastLossAt: number | null = null;
   private networkRetries = 0;
   private steppedAside = false;
+  /** Le fichier est allé au bout, et rien ne l'a relancé depuis. */
+  private ended = false;
 
   constructor(options: { startPaused?: boolean } = {}) {
     this.keepPaused = options.startPaused === true;
@@ -117,7 +119,23 @@ export class PlayerLifecycle {
   restart(at: number, facts: { viewerPausedAt: number | null; hiddenAt: number | null }): void {
     const { viewerPausedAt: pausedAt, hiddenAt } = facts;
     if (pausedAt !== null && (hiddenAt === null || hiddenAt < pausedAt || pausedAt < hiddenAt - 1000)) this.keepPaused = true;
+    // Un film fini attend sur son écran de fin, quelle que soit la cause de la reconstruction.
+    // Seul le retour d'arrière-plan y veillait (24/09/2026) : une source perdue sur l'écran de fin,
+    // ou un nouvel essai après une coupure, reconstruisait en lecture — le film rejouait ses
+    // dernières secondes et annonçait sa fin une seconde fois. L'élément fini n'enregistre pas de
+    // pause du spectateur, d'où cette règle à part (point 2, docs/cycle-de-vie-lecteur.md).
+    if (this.ended) this.keepPaused = true;
     this.rebuildAt = at;
+  }
+
+  /** Le fichier est allé au bout. */
+  noteEnded(): void {
+    this.ended = true;
+  }
+
+  /** La lecture reprend après la fin — « Revoir », ou un saut en arrière. */
+  noteResumedAfterEnd(): void {
+    this.ended = false;
   }
 
   /** Le pipeline est prêt : la position de reconstruction est consommée, le réseau a répondu. */
@@ -174,15 +192,13 @@ export class PlayerLifecycle {
    * Au retour d'arrière-plan, la plateforme avait fermé la source : où reconstruire, ou `null`.
    *
    * Rien si une reconstruction attend déjà, ou si le budget est épuisé. Un retour qui laisse la
-   * lecture en pause (`hold`) garde la reconstruction en pause, au même endroit un peu en arrière ;
-   * un film fini aussi — reconstruit en lecture, il rejouait ses deux dernières secondes et
-   * annonçait sa fin une seconde fois (relu le 24/09/2026).
+   * lecture en pause (`hold`) garde la reconstruction en pause, au même endroit un peu en arrière.
+   * Un film fini aussi, par la règle de `restart`, qui vaut pour toute reconstruction.
    */
-  backgroundLost(facts: { position: number; hold: { at: number } | null; ended: boolean }, now: number): number | null {
+  backgroundLost(facts: { position: number; hold: { at: number } | null }, now: number): number | null {
     if (this.rebuildAt !== null) return null;
     if (!this.spendRebuild(now)) return null;
     if (facts.hold) this.keepPaused = true;
-    if (facts.ended) this.keepPaused = true;
     return facts.hold ? facts.hold.at : facts.position;
   }
 

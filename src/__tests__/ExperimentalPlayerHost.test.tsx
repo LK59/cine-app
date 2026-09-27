@@ -1957,10 +1957,10 @@ describe("cycle de vie — comportement figé", () => {
     expect(probes[2].startSeconds).toBeCloseTo(1500, 1);
   });
 
-  // Comportement actuel, point 2 : le retour d'arrière-plan sur l'écran de fin reconstruit à
-  // l'arrêt (test « retour d'arrière-plan sur l'écran de fin »), mais une source perdue *sans*
-  // passage en arrière-plan, sur ce même écran, est reconstruite en lecture.
-  it("comportement actuel, point 2 : une source perdue sur l'écran de fin reconstruit en lecture", async () => {
+  // Point 2, corrigé : le retour d'arrière-plan sur l'écran de fin reconstruisait déjà à l'arrêt
+  // (test « retour d'arrière-plan sur l'écran de fin ») ; une source perdue *sans* passage en
+  // arrière-plan, sur ce même écran, était reconstruite en lecture — le film rejouait sa fin.
+  it("point 2 : une source perdue sur l'écran de fin reconstruit à l'arrêt", async () => {
     mount();
     await ready();
     await act(async () => void fireEvent(videoElement(5400), new Event("ended")));
@@ -1968,7 +1968,7 @@ describe("cycle de vie — comportement figé", () => {
     remux.position = 5400;
     act(() => probes[0].onError("source perdue"));
     await waitFor(() => expect(probes).toHaveLength(2));
-    expect((probes[1] as unknown as { startPaused?: boolean }).startPaused).toBeFalsy();
+    expect((probes[1] as unknown as { startPaused?: boolean }).startPaused).toBe(true);
   });
 
   // Comportement actuel, point 4 : sans lecteur serveur, un abandon affiche son erreur — et un
