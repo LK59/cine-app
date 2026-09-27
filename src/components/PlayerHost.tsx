@@ -472,6 +472,9 @@ function ActivePlayer({
     // is what the server's own dashboard should show.
     // Rien pour un banc d'essai, comme le lecteur natif : il saute à la fin des films, et ses
     // battements puis son arrêt marquaient le film vu sur le compte qui le lançait (27/09/2026).
+    // Le prix : sans arrêt, Jellyfin ne tue pas le transcodage sur-le-champ — il est censé le faire
+    // de lui-même quand plus aucun segment n'est demandé (non mesuré ici). L'arrêter tout de suite
+    // demanderait de passer par ses encodages actifs, sans écrire de position.
     playSession && !bench ? { ...playSession, playMethod, client: PLAYBACK_CLIENTS.stable } : null,
     useCallback(() => videoRef.current?.paused ?? false, [])
   );
@@ -1187,7 +1190,13 @@ function ActivePlayer({
      * événement (relevé le 27/09/2026, docs/cycle-de-vie-lecteur.md). `closingRef` fait taire
      * cette écoute, qui sinon rendrait la main une seconde fois, en pause.
      */
-    reportPlayback("fallback", castEndedFields(logContext.current, "retour demandé sur le téléphone", at, watched.take(Date.now())));
+    //
+    // Seulement si une diffusion avait vraiment pris : sélecteur refermé sur le téléphone, télé
+    // jamais connectée, il n'y a pas de fin de diffusion à écrire — et le temps regardé ici l'a été
+    // sur le téléphone, il ne doit pas partir dans une ligne de télé (relu le 27/09/2026).
+    if (castActiveRef.current) {
+      reportPlayback("fallback", castEndedFields(logContext.current, "retour demandé sur le téléphone", at, watched.take(Date.now())));
+    }
     if (video && castActiveRef.current) {
       closingRef.current = true;
       try {

@@ -210,7 +210,7 @@ describe("lecteur serveur — revenir sur le téléphone", () => {
     expect(stepBack).toHaveBeenCalledTimes(1);
   });
 
-  it("sans route établie (sélecteur refermé sur le téléphone), écrit la ligne sans rien arrêter", async () => {
+  it("sans route établie (sélecteur refermé sur le téléphone), n'écrit ni n'arrête rien, et rend la main", async () => {
     diffusion();
     stubFetch();
     render(<PlayerHost />);
@@ -220,7 +220,8 @@ describe("lecteur serveur — revenir sur le téléphone", () => {
 
     fireEvent.click(screen.getByText("revenir"));
 
-    expect(lignes("fallback")).toHaveLength(1);
+    // Pas de fin de diffusion pour une diffusion qui n'a jamais commencé.
+    expect(lignes("fallback")).toHaveLength(0);
     expect(video.hasAttribute("src")).toBe(true);
     expect(stepBack).toHaveBeenCalledTimes(1);
   });
