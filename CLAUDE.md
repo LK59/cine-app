@@ -183,7 +183,10 @@ for weeks before that was fixed.
 `cinemaClose` goes through `history.back()`, and each entry records what it covers, so a sheet
 stays drawn under the one above it.
 
-**The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`.
+**The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`,
+and `docs/cycle-de-vie-lecteur.md` before touching `ExperimentalPlayerHost`, `PlayerHost` or the
+session layer — its states, transitions, races and known fragile paths, none of which the code
+stores anywhere.
 One local path — remux → native `<video>` — and the server player when it cannot carry a file.
 Every file goes through it, MP4 included: `mediaFile.ts` reads Matroska or MP4 into the same
 description, and a good container does not mean everything in it plays natively (there used to be
