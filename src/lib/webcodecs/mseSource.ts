@@ -832,6 +832,14 @@ export class MseSource {
           // Through the queue, for the same reason as the duration above: ending a stream while
           // a buffer is updating throws, and here the throw would be read as a refused append —
           // the film would be recovered from, at its own end, instead of simply finishing.
+          //
+          // Et après la file du son : `endOfStream` lève si *l'un ou l'autre* tampon travaille, et
+          // un retrait derrière la tête (`trimBehind`, `evict`) n'est jamais attendu — il pouvait
+          // encore occuper le tampon du son. L'erreur était avalée, `ended` déjà vrai, et rien ne
+          // réessayait : le flux pouvait ne jamais être déclaré fini (relevé le 27/09/2026,
+          // docs/cycle-de-vie-lecteur.md). Une opération vide dans sa file attend qu'il soit libre.
+          if (this.audioOps) await this.audioOps.enqueue(() => {}).catch(() => {});
+          if (this.generation !== generation || this.destroyed) break;
           if (this.videoOps) await this.videoOps.enqueue(() => this.endStream()).catch(() => this.endStream());
           else this.endStream();
           break;

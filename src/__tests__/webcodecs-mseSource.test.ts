@@ -214,6 +214,9 @@ class FakeSource extends EventTarget {
     this.removed.push(buffer as unknown as FakeBuffer);
   }
   endOfStream() {
+    // Comme un vrai : refusé tant qu'un des tampons travaille. Ce modèle l'acceptait toujours, et
+    // c'est ce qui cachait qu'une fin de flux pouvait tomber pendant un retrait du son.
+    if (this.buffers.some((b) => b.updating)) throw new DOMException("endOfStream while updating", "InvalidStateError");
     this.endedTimes += 1;
     this.readyState = "ended";
   }
@@ -458,6 +461,33 @@ describe("MseSource", () => {
     source.dispatchEvent(new Event("startstreaming"));
     await flush();
     expect(source.endedTimes).toBe(1);
+  });
+
+  // `endOfStream` lève si l'un *ou l'autre* tampon travaille ; la fin ne passait que par la file de
+  // l'image, et un retrait du son jamais attendu (`trimBehind`, `evict`) pouvait encore occuper son
+  // tampon : l'erreur était avalée et le flux jamais déclaré fini (27/09/2026).
+  it("attend le tampon du son avant de déclarer la fin du flux", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(2);
+    const next = remuxer.nextSegment.bind(remuxer);
+    let openGate: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (openGate = resolve));
+    remuxer.nextSegment = async () => {
+      const segment = await next();
+      if (!segment) await gate;
+      return segment;
+    };
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+    const source = FakeSource.instances[0];
+    const audio = source.buffers[1];
+    // Un retrait du son en cours au moment où le fichier s'achève, par sa file, comme `trimBehind`.
+    audio.busyMs = 30;
+    const audioOps = (mse as unknown as { audioOps: { enqueue(op: () => void): Promise<void> } }).audioOps;
+    void audioOps.enqueue(() => audio.remove(0, 1));
+    openGate();
+    await until(() => source.endedTimes === 1, "le flux déclaré fini", 1000);
+    expect(source.readyState).toBe("ended");
   });
 
   it("takes the presentation delay off a seek, because the file's clock is behind the player's", async () => {
