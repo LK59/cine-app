@@ -322,11 +322,14 @@ correction (`player-host-server.test.tsx`, le premier harnais du lecteur serveur
 `webcodecs-mseSource.test.ts`) ; 11 évalué et laissé tel quel (voir le point). Les autres attendent
 le découpage de l'hôte natif, où ils se corrigent à leur place.
 
-1. **`rebuildAtRef` n'est remis à zéro qu'en cas de succès** (vérifié). Seul `declareReady` l'efface.
+1. **Bénin, testé.** **`rebuildAtRef` n'est remis à zéro qu'en cas de succès** (vérifié). Seul `declareReady` l'efface.
    Une reconstruction qui finit en `networkLost` ou en abandon le laisse posé : la vérification de
    source perdue au retour d'arrière-plan est alors **désactivée** (`rebuildAtRef !== null`), et
    chaque saut suivant écrit dans ce champ au lieu de rien. Un nouvel essai réseau réussi le remet
-   en ordre.
+   en ordre. *Relu en écrivant les tests :* tant qu'une reconstruction n'a pas abouti, il n'y a pas
+   de pipeline à surveiller (`remuxRef` est vide), donc la vérification désactivée ne rate rien ;
+   et le nouvel essai rouvre bien à la position de la reconstruction (« une reconstruction ratée
+   faute de réseau rouvre… »). Pas de correction nécessaire.
 2. **Les reconstructions après perte et après coupure réseau ignorent la fin du film** (vérifié).
    Le chemin « source perdue » (`onError` + `lost`) et le nouvel essai réseau ne regardent pas
    `endStoppedRef`. Comme `onPause` n'enregistre pas de pause du spectateur quand l'élément est à
@@ -376,10 +379,29 @@ le découpage de l'hôte natif, où ils se corrigent à leur place.
 12. **Corrigé** (DECISIONS §28 ; `bench` transmis à la route, qui n'annonce rien). **Le lecteur serveur n'applique pas le recul d'ouverture** (`openingPosition`, DECISIONS §28)
     et **rapporte à Jellyfin pendant un banc** (son `usePlaybackSession` n'a pas la condition
     `bench` du natif). Deux décisions qui devraient être partagées et ne le sont pas.
-13. **L'effet du pipeline dépend de 17 identités censées rester stables.** Une seule qui change
+13. **Couvert par un test** (« se redessiner avec la même séance ne reconstruit rien »). **L'effet du pipeline dépend de 17 identités censées rester stables.** Une seule qui change
     reconstruit tout le lecteur **sans** passer par `restart` (donc sans position de
     reconstruction, sans ligne au journal). Même dépendance cachée pour l'arrêt rapporté au
     démontage : une dépendance ajoutée à `reportStop` écrirait `stop "unmount"` en pleine séance.
+
+14. **Une coupure signalée pendant l'attache laisse l'écran de coupure sur un lecteur prêt.**
+    Si le moteur signale une erreur réseau pendant `probe.start`, puis que l'attache aboutit
+    quand même, `declareReady` pose `ready` sans effacer `networkLost` : l'écran « connexion
+    perdue » reste affiché par-dessus un lecteur prêt, jusqu'au nouvel essai. Relevé par
+    l'inventaire, figé par un test (« comportement actuel : une coupure signalée pendant
+    l'attache… »).
+
+### Ce que les tests figent
+
+`ExperimentalPlayerHost.test.tsx`, section « cycle de vie — comportement figé », décrit
+l'hôte tel qu'il est aux croisements de cette carte — défauts compris : les tests des points 2, 4,
+5 et 14 s'intitulent « comportement actuel, point n » et seront inversés, exprès, dans le commit
+qui corrige chacun. Chaque ligne du tableau des transitions de l'hôte natif a au moins un test,
+dans cette section ou dans les 95 qui la précèdent.
+
+Un croisement de la carte n'est pas atteignable depuis l'écran : le changement de piste pendant
+une reconstruction. Le menu des pistes disparaît tant que le lecteur se reconstruit ; seuls le
+banc ou une touche média y arriveraient, et le code le traite (`wantedAudioRef`).
 
 ---
 

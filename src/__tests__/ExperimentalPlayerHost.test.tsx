@@ -66,8 +66,10 @@ vi.mock("@/components/PlayerControls", () => ({
     suspended?: boolean;
     subtitleOffset?: { seconds: number; onShift: (delta: number) => void };
     hdrCap?: { current: string | number; autoNits: number | null; onPick: (choice: string | number) => void };
+    onClose?: () => void;
   }) => (
     <div data-testid="controls" data-loading={String(props.loading)} data-suspended={String(!!props.suspended)}>
+      {props.onClose && <button onClick={props.onClose}>fermer</button>}
       {/* Un saut demandé depuis les commandes : le signal d'abord, puis l'élément, comme elles. */}
       <button
         onClick={(e) => {
@@ -1891,5 +1893,194 @@ describe("une reconstruction et ce qu'elle doit garder", () => {
     await waitFor(() => expect(screen.getByTestId("controls").dataset.suspended).toBe("false"));
     act(() => probes[0].onError("Plage inaccessible", "network"));
     await waitFor(() => expect(screen.getByTestId("controls").dataset.suspended).toBe("true"));
+  });
+});
+
+// ------------------------------------------------------------------------------------------------
+// Le cycle de vie, figé tel qu'il est (docs/cycle-de-vie-lecteur.md).
+//
+// Ces tests décrivent ce que fait l'hôte aujourd'hui aux croisements que la carte relève — y
+// compris là où ce n'est pas ce qu'on voudrait. Ils sont le filet du découpage en machine à états :
+// déplacer une décision sans en changer le comportement doit les laisser verts. Ceux qui décrivent
+// un point fragile le disent (« comportement actuel, point n ») : le jour où ce point est corrigé,
+// le test est inversé exprès, dans le même commit que la correction.
+// ------------------------------------------------------------------------------------------------
+
+describe("cycle de vie — comportement figé", () => {
+  const logged = (kind: string) =>
+    (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .filter((entry) => entry.kind === kind);
+  const setVisibility = (state: "visible" | "hidden") => {
+    Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  };
+  const ready = () => waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+
+  it("ne passe la main qu'une fois, même pour deux pannes", async () => {
+    serverFallback = true;
+    mount();
+    await ready();
+    act(() => probes[0].onError("première panne"));
+    act(() => probes[0].onError("seconde panne"));
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(onFallback.mock.calls[0][0]).toBe("première panne");
+    expect(logged("fallback")).toHaveLength(1);
+  });
+
+  it("une reconstruction ratée faute de réseau rouvre, au nouvel essai, là où elle devait rouvrir", async () => {
+    mount();
+    await ready();
+    Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
+    remux.lost = true;
+    remux.position = 1500;
+    // La reconstruction ne s'ouvre pas : le réseau manque.
+    nextProbe = () => {
+      throw Object.assign(new Error("Failed to fetch"), { network: true });
+    };
+    act(() => probes[0].onError("source perdue"));
+    await waitFor(() => expect(screen.getByText("connectionLost")).toBeTruthy());
+
+    remux = fakeRemux();
+    nextProbe = () => ({ path: "remux", start: async () => remux, discard: vi.fn() });
+    Object.defineProperty(navigator, "onLine", { value: true, writable: true, configurable: true });
+    await act(async () => void fireEvent.click(screen.getByRole("button", { name: /retry/ })));
+    await waitFor(() => expect(probes).toHaveLength(3));
+    expect(probes[2].startSeconds).toBeCloseTo(1500, 1);
+  });
+
+  // Comportement actuel, point 2 : le retour d'arrière-plan sur l'écran de fin reconstruit à
+  // l'arrêt (test « retour d'arrière-plan sur l'écran de fin »), mais une source perdue *sans*
+  // passage en arrière-plan, sur ce même écran, est reconstruite en lecture.
+  it("comportement actuel, point 2 : une source perdue sur l'écran de fin reconstruit en lecture", async () => {
+    mount();
+    await ready();
+    await act(async () => void fireEvent(videoElement(5400), new Event("ended")));
+    remux.lost = true;
+    remux.position = 5400;
+    act(() => probes[0].onError("source perdue"));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect((probes[1] as unknown as { startPaused?: boolean }).startPaused).toBeFalsy();
+  });
+
+  // Comportement actuel, point 4 : sans lecteur serveur, un abandon affiche son erreur — et un
+  // retour d'arrière-plan qui trouve la source fermée reconstruit quand même, effaçant l'erreur.
+  it("comportement actuel, point 4 : sans lecteur serveur, un abandon peut repartir au retour d'arrière-plan", async () => {
+    serverFallback = false;
+    mount();
+    await ready();
+    act(() => probes[0].onError("panne du décodeur"));
+    await waitFor(() => expect(screen.getByText(/panne du décodeur/)).toBeTruthy());
+    expect(onFallback).not.toHaveBeenCalled();
+
+    act(() => setVisibility("hidden"));
+    remux.lost = true;
+    remux.position = 300;
+    act(() => setVisibility("visible"));
+    await waitFor(() => expect(probes).toHaveLength(2), { timeout: 3000 });
+    await waitFor(() => expect(screen.queryByText(/panne du décodeur/)).toBeNull());
+  });
+
+  // Comportement actuel, point 5 : la fermeture ne tient pas le pipeline pendant son fondu ; une
+  // panne qui tombe dans ces 200 ms passe encore la main au lecteur serveur, après la ligne `stop`.
+  it("comportement actuel, point 5 : une panne pendant le fondu de fermeture passe encore la main", async () => {
+    serverFallback = true;
+    mount();
+    await ready();
+    act(() => void fireEvent.click(screen.getByText("fermer")));
+    expect(logged("stop")).toHaveLength(1);
+    act(() => probes[0].onError("panne tardive"));
+    expect(onFallback).toHaveBeenCalledTimes(1);
+  });
+
+  // Comportement actuel, relevé en cartographiant : une coupure réseau signalée pendant l'attache,
+  // puis l'attache qui aboutit quand même — l'écran « connexion perdue » reste sur un lecteur prêt,
+  // jusqu'au nouvel essai.
+  it("comportement actuel : une coupure signalée pendant l'attache laisse l'écran de coupure sur un lecteur prêt", async () => {
+    Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
+    nextProbe = () => ({
+      path: "remux",
+      start: async () => {
+        probes[probes.length - 1].onError("coupure pendant l'attache", "network");
+        return remux;
+      },
+      discard: vi.fn(),
+    });
+    mount();
+    await waitFor(() => expect(screen.getByText("connectionLost")).toBeTruthy());
+    await waitFor(() => expect(logged("start")).toHaveLength(1));
+    expect(screen.getByText("connectionLost")).toBeTruthy();
+  });
+
+  it("la fermeture rapporte l'arrêt une fois, à Jellyfin et au journal, puis se referme", async () => {
+    mount();
+    await ready();
+    await act(async () => void fireEvent(videoElement(900), new Event("timeupdate")));
+    act(() => void fireEvent.click(screen.getByText("fermer")));
+    act(() => void fireEvent.click(screen.getByText("fermer")));
+    expect(logged("stop")).toHaveLength(1);
+    expect(logged("stop")[0].fields).toMatchObject({ why: "close", at: 900 });
+    expect(stopPlaybackNow).toHaveBeenCalled();
+  });
+
+  // Les temps d'une ouverture qui n'aboutit pas : « chargement », puis à 8 s le mot qui dit qu'on
+  // cherche encore, à 20 s la proposition de signaler, et la main passée à 35 s.
+  it("une ouverture sans image : le mot à 8 s, le signalement à 20 s, la main passée à 35 s", async () => {
+    vi.useFakeTimers();
+    serverFallback = true;
+    nextProbe = () => new Promise(() => {}) as never;
+    mount();
+    await act(async () => void vi.advanceTimersByTime(7_000));
+    expect(screen.queryByText(/stillWorking/)).toBeNull();
+    expect(screen.queryByTestId("report")).toBeNull();
+    await act(async () => void vi.advanceTimersByTime(2_000));
+    expect(screen.getByText(/stillWorking/)).toBeTruthy();
+    expect(screen.queryByTestId("report")).toBeNull();
+    await act(async () => void vi.advanceTimersByTime(12_000));
+    expect(screen.getByTestId("report")).toBeTruthy();
+    expect(onFallback).not.toHaveBeenCalled();
+    await act(async () => void vi.advanceTimersByTime(15_000));
+    expect(onFallback).toHaveBeenCalledWith(expect.stringContaining("aucune image"));
+    vi.useRealTimers();
+  });
+
+  // Point 13 : l'effet du pipeline dépend de dix-sept identités censées rester stables après leur
+  // première valeur. Une seule qui change reconstruit tout le lecteur, sans passer par `restart`.
+  // Le parent se redessine pour mille raisons — un nouveau rappel à chaque fois, comme le fait
+  // `player()` — et le lecteur ne doit jamais s'en apercevoir.
+  it("se redessiner avec la même séance ne reconstruit rien, ni ne réécrit de ligne `start`", async () => {
+    const { rerender } = mount();
+    await ready();
+    for (let i = 0; i < 5; i++) rerender(player());
+    await settle();
+    expect(probes).toHaveLength(1);
+    expect(logged("start")).toHaveLength(1);
+    expect(logged("stop")).toHaveLength(0);
+  });
+
+  // Le croisement « changement de piste pendant une reconstruction » existe dans le code
+  // (`wantedAudioRef` le garde pour le pipeline suivant), mais l'écran ne le permet pas : le menu
+  // des pistes n'est plus proposé tant que le lecteur se reconstruit. Seuls le banc ou une touche
+  // média pourraient y arriver.
+  it("pendant une reconstruction, le menu des pistes n'est plus proposé ; il revient avec le lecteur", async () => {
+    swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
+    mount();
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    let open: () => void = () => {};
+    const rebuilt = fakeRemux();
+    nextProbe = () => ({
+      path: "remux",
+      start: () => new Promise((resolve) => (open = () => resolve(rebuilt))),
+      discard: vi.fn(),
+    });
+    remux.lost = true;
+    remux.position = 200;
+    act(() => probes[0].onError("source perdue"));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(screen.queryByText(/^audio:Anglais/)).toBeNull();
+
+    await act(async () => open());
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
   });
 });
