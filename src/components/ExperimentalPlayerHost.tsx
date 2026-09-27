@@ -29,7 +29,7 @@ import { useT, useLocale } from "@/components/TranslationProvider";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import { NATIVE_PATH } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset, traceRecent } from "@/lib/webcodecs/trace";
-import { holdPausedOnReturn, rewoundPosition } from "@/lib/backgroundReturn";
+import { BackgroundWatch } from "@/lib/backgroundReturn";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
@@ -644,19 +644,12 @@ export function ExperimentalPlayerHost({
   // « Rester en pause » vit dans `lifecycle.keepPaused` : vrai d'emblée au retour d'une diffusion
   // arrêtée d'elle-même — le film attend sur le téléphone au lieu d'y repartir tout seul
   // (`PlaybackSession.startPaused`).
-  /** Quand le spectateur a mis en pause (page visible, film pas fini) — nul dès que ça rejoue. */
-  const viewerPausedAtRef = useRef<number | null>(null);
-  /** Le dernier passage en arrière-plan. */
-  const hiddenAtRef = useRef<number | null>(null);
-  /** L'état de la vidéo au départ en arrière-plan — voir `holdPausedOnReturn`. */
-  const hiddenPlaybackRef = useRef<{ playing: boolean; at: number } | null>(null);
   /**
-   * Un retour qui doit laisser la lecture en pause : jusqu'à quand refuser la relance de WebKit, et
-   * où reprendre. Une reconstruction au retour (source fermée par iOS) le lit aussi.
+   * Les allers-retours en arrière-plan : la dernière pause du spectateur, le dernier départ, l'état
+   * de la vidéo au départ, la retenue au retour, le dernier geste — voir `BackgroundWatch`
+   * (backgroundReturn.ts). Un objet par lecteur, comme `lifecycle` et `seeks`.
    */
-  const holdOnReturnRef = useRef<{ until: number; at: number; since: number } | null>(null);
-  /** Le dernier geste du spectateur : une lecture qu'il demande lui-même n'est jamais refusée. */
-  const lastGestureAtRef = useRef(0);
+  const [background] = useState(() => new BackgroundWatch());
   /**
    * L'image figée d'une reconstruction pour changement de piste — voir `freezeFrame`. Sans elle,
    * l'image passait au noir le temps que le nouveau lecteur s'ouvre, puis revenait en fondu :
@@ -883,7 +876,7 @@ export function ExperimentalPlayerHost({
    * `lifecycle.restart` une fois la main passée ou pendant la fermeture.
    */
   const restart = useCallback((at: number, why: string, byViewer = false) => {
-    if (!lifecycle.restart(at, { viewerPausedAt: viewerPausedAtRef.current, hiddenAt: hiddenAtRef.current, byViewer })) {
+    if (!lifecycle.restart(at, { ...background.pauseFacts(), byViewer })) {
       trace(`reprise refusée : ${why} — le lecteur a passé la main ou se ferme`);
       return;
     }
@@ -903,7 +896,7 @@ export function ExperimentalPlayerHost({
     setPlaying(false);
     setRuntimeError(null);
     setRebuildCount((count) => count + 1);
-  }, [lifecycle]);
+  }, [lifecycle, background]);
 
   // Fetched once and then left alone. The description of a file does not change while it is
   // being watched, and every revalidation handed back a fresh object — which the effect below
@@ -1152,16 +1145,9 @@ export function ExperimentalPlayerHost({
       const element = videoElRef.current;
       if (document.visibilityState === "hidden") {
         tally.hidden(Date.now());
-        hiddenAtRef.current = Date.now();
-        // Un maintien d'un retour précédent n'a plus rien à dire : sans relance entre-temps, rien ne
-        // l'effaçait, et une source fermée au départ suivant rouvrait à sa vieille position — seize
-        // minutes en arrière après un glissement de la barre en pause (chasse aux défauts du 25/09/2026).
-        holdOnReturnRef.current = null;
-        // Une pause qui précède le départ de moins d'une seconde peut être celle d'iOS lui-même :
-        // la même règle que `restart`. Seule une pause plus ancienne est celle du spectateur.
-        const pausedAt = viewerPausedAtRef.current;
-        const iosPaused = element?.paused === true && pausedAt !== null && Date.now() - pausedAt < 1000;
-        hiddenPlaybackRef.current = element ? { playing: !element.paused || iosPaused, at: element.currentTime } : null;
+        // L'état au départ, la retenue d'un retour précédent effacée, la pause d'iOS reconnue —
+        // voir `BackgroundWatch.hide`.
+        background.hide(Date.now(), element);
         trace(`arrière-plan — ${state()}`);
         save();
       } else {
@@ -1170,17 +1156,9 @@ export function ExperimentalPlayerHost({
         // Verrouillé en plein film : la lecture attend au retour, un peu avant — voir
         // `holdPausedOnReturn`. WebKit la relance de lui-même un instant plus tard ; le refus de
         // cette relance-là est plus bas, dans `onPlay`.
-        const before = hiddenPlaybackRef.current;
-        hiddenPlaybackRef.current = null;
-        if (
-          element &&
-          before &&
-          holdPausedOnReturn({ awayMs: away, playingWhenHidden: before.playing, positionWhenHidden: before.at, positionOnReturn: element.currentTime })
-        ) {
-          // Une source que iOS a fermée peut laisser l'élément à zéro : la position au départ vaut
-          // mieux qu'une reprise au début du film.
-          const at = rewoundPosition(element.currentTime > 0 ? element.currentTime : before.at);
-          holdOnReturnRef.current = { until: Date.now() + 2500, at, since: Date.now() };
+        const hold = background.show(Date.now(), away, element);
+        if (element && hold) {
+          const at = hold.at;
           trace(`retour après ${(away / 1000).toFixed(1)} s : lecture laissée en pause, reprise à ${at.toFixed(1)} s`);
           try {
             element.pause();
@@ -1197,18 +1175,12 @@ export function ExperimentalPlayerHost({
     // La relance de WebKit au déverrouillage arrive après notre pause : refusée tant qu'aucun geste
     // du spectateur ne l'a demandée. `play` ne remonte pas : écouté en capture, sur le document.
     const onPlay = (event: Event) => {
-      const hold = holdOnReturnRef.current;
-      if (!hold || !(event.target instanceof HTMLVideoElement)) return;
-      if (Date.now() > hold.until || lastGestureAtRef.current > hold.since) {
-        holdOnReturnRef.current = null;
-        return;
-      }
+      if (!background.currentHold() || !(event.target instanceof HTMLVideoElement)) return;
+      if (!background.refusePlay(Date.now())) return;
       trace("relance du navigateur au retour refusée — la lecture attend le spectateur");
       event.target.pause();
     };
-    const onGesture = () => {
-      lastGestureAtRef.current = Date.now();
-    };
+    const onGesture = () => background.noteGesture(Date.now());
     document.addEventListener("visibilitychange", onVisibility);
     document.addEventListener("play", onPlay, true);
     document.addEventListener("pointerdown", onGesture, true);
@@ -1221,7 +1193,7 @@ export function ExperimentalPlayerHost({
       document.removeEventListener("pointerdown", onGesture, true);
       document.removeEventListener("keydown", onGesture, true);
     };
-  }, [sessionId, stopFields, tally, lifecycle]);
+  }, [sessionId, stopFields, tally, lifecycle, background]);
   useEffect(() => {
     const onPageHide = () => reportStop("page");
     // Une page rendue depuis le cache du navigateur (retour arrière) reprend le film : voir
@@ -1632,7 +1604,7 @@ export function ExperimentalPlayerHost({
           }
         }
         pausedAt = null;
-        viewerPausedAtRef.current = null;
+        background.notePlaying();
         setPlaying(true);
         setEnded(false);
         showWarning(null);
@@ -1640,7 +1612,7 @@ export function ExperimentalPlayerHost({
       };
       const onPause = () => {
         setPlaying(false);
-        if (document.visibilityState === "visible" && !element.ended) viewerPausedAtRef.current = Date.now();
+        background.notePaused(Date.now(), { visible: document.visibilityState === "visible", ended: element.ended });
         tally.waitEnded(Date.now());
         pausedAt = Date.now();
         if (!session.bench) noteWatching(itemId);
@@ -1881,9 +1853,9 @@ export function ExperimentalPlayerHost({
   // chose pour `showPipelineWarning`, qui ne dépend que de `showWarning`, stable lui aussi, et
   // pour `tally`, créé une fois au montage (`useState`) et jamais remplacé, pour
   // `reopenAfterEnd`, qui ne dépend que de `lifecycle` — créé une fois au montage (`useState`),
-  // comme `tally` et `seeks` —, et pour `itemId` et `session.bench`,
+  // comme `tally`, `seeks` et `background` —, et pour `itemId` et `session.bench`,
   // fixés pour toute la vie de ce lecteur — sa clé est `itemId:openId` (voir PlayerHost).
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, seeks, reportAudioSwitch, tally, reopenAfterEnd, itemId, session.bench]);
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, seeks, background, reportAudioSwitch, tally, reopenAfterEnd, itemId, session.bench]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -1898,7 +1870,7 @@ export function ExperimentalPlayerHost({
       // tout seul ses deux dernières secondes et annonçait sa fin une seconde fois (24/09/2026).
       // Les deux règles, et le budget, sont dans `lifecycle.backgroundLost`.
       const at = lifecycle.backgroundLost(
-        { position: playback.position || positionRef.current, hold: holdOnReturnRef.current },
+        { position: playback.position || positionRef.current, hold: background.currentHold() },
         Date.now()
       );
       if (at === null) return;
@@ -1922,7 +1894,7 @@ export function ExperimentalPlayerHost({
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [path, restart, lifecycle, tally]);
+  }, [path, restart, lifecycle, background, tally]);
 
   // Watched only while something is waiting on it: an idle player has no use for the news.
   useEffect(() => {

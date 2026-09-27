@@ -1,3 +1,5 @@
+import { IOS_PAUSE_WINDOW_MS } from "@/lib/backgroundReturn";
+
 /**
  * Les décisions d'ouverture et de reconstruction du lecteur natif, hors de React.
  *
@@ -153,7 +155,7 @@ export class PlayerLifecycle {
     }
     this.networkDown = false;
     const { viewerPausedAt: pausedAt, hiddenAt } = facts;
-    if (pausedAt !== null && (hiddenAt === null || hiddenAt < pausedAt || pausedAt < hiddenAt - 1000)) this.keepPaused = true;
+    if (pausedAt !== null && (hiddenAt === null || hiddenAt < pausedAt || pausedAt < hiddenAt - IOS_PAUSE_WINDOW_MS)) this.keepPaused = true;
     // Un film fini attend sur son écran de fin, quelle que soit la cause de la reconstruction.
     // Seul le retour d'arrière-plan y veillait (24/09/2026) : une source perdue sur l'écran de fin,
     // ou un nouvel essai après une coupure, reconstruisait en lecture — le film rejouait ses

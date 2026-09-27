@@ -469,8 +469,18 @@ rouvert pour une page revenue du cache du navigateur ; l'arrêt écrit au démon
 plus qu'au démontage. Les sauts vus par l'hôte sont dans `src/lib/hostSeek.ts` (`HostSeek`) : la
 cible demandée pas encore atteinte, et la mesure du saut en cours pour le journal. Les deux à
 l'identique : les tests existants de l'hôte passent sans modification (un test a été ajouté,
-le retour depuis le cache du navigateur). Reste l'étape 5, le retour d'arrière-plan — à faire avec
-un iPhone pour juge.
+le retour depuis le cache du navigateur). **Étape 5 faite (27/09/2026), à l'identique.** Les allers-retours en arrière-plan sont dans
+`BackgroundWatch` (`src/lib/backgroundReturn.ts`, à côté de `holdPausedOnReturn` et
+`rewoundPosition`) : la dernière pause du spectateur, le dernier départ, l'état de la vidéo au
+départ, la retenue au retour (refus de la relance de WebKit pendant 2,5 s, reprise 3 s avant), le
+dernier geste. La fenêtre « pause d'iOS » (`IOS_PAUSE_WINDOW_MS`) est désormais une seule
+constante pour les deux décisions qui en dépendent. Aucun comportement n'a changé : les tests
+existants de l'hôte passent sans modification.
+
+Restent deux améliorations possibles ici, **volontairement non faites** parce qu'elles changent un
+comportement que seul un iPhone peut juger : voir une source fermée par iOS *pendant l'ouverture*
+(la vérification au retour ne s'arme qu'une fois le lecteur attaché), et le point 3 (les rappels du
+moteur lisent le pipeline courant).
 
 1. **Les états de reconstruction** (`lifecycle.rebuildAt`, `rebuildCount`, `lifecycle.spendRebuild`,
    `networkLost`, `lifecycle.keepPaused`) : un réducteur pur « ouvrir / prêt / perdu / réseau perdu /
@@ -481,8 +491,8 @@ un iPhone pour juge.
    clarifiés le 22/09.
 3. **La fin de film et la fermeture** (`ended`, `lifecycle.isEnded()`, `closing`, `lifecycle.claimStop`,
    `steppedAside`) : un seul endroit qui dit « cette séance est finie » — points 5 et 7.
-4. **Le retour d'arrière-plan** (`hiddenAtRef`, `hiddenPlaybackRef`, `holdOnReturnRef`) — en
-   dernier : c'est là que vivent les défauts propres à iOS, et le seul juge est un appareil.
+4. **Le retour d'arrière-plan** (`BackgroundWatch`) — en dernier : c'est là que vivent les défauts
+   propres à iOS, et le seul juge est un appareil.
 
 Avant chaque étape : figer le comportement actuel par des tests, défauts compris ; puis déplacer ;
 les tests doivent rester verts. Après chaque étape : comparer au journal, par `build`, les
