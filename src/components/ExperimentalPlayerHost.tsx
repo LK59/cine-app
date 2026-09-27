@@ -1483,10 +1483,6 @@ export function ExperimentalPlayerHost({
         if (media) media.currentTime = asked;
       } else requestedSeekRef.current = null;
       setReady(true);
-      // Prêt, c'est que le réseau a répondu : une coupure signalée pendant l'attache, qui a abouti
-      // quand même, laissait l'écran « connexion perdue » sur un lecteur prêt jusqu'au nouvel
-      // essai (point 14, docs/cycle-de-vie-lecteur.md). Une coupure qui vient après le rouvre.
-      setNetworkLost(null);
       setAnnounced(true);
       everReadyRef.current = true;
     };

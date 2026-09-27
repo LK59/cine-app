@@ -2009,9 +2009,12 @@ describe("cycle de vie — comportement figé", () => {
     expect(probes).toHaveLength(1);
   });
 
-  // Point 14, corrigé : une coupure réseau signalée pendant l'attache, puis l'attache qui aboutit
-  // quand même — l'écran « connexion perdue » restait sur un lecteur prêt, jusqu'au nouvel essai.
-  it("point 14 : une coupure signalée pendant l'attache s'efface quand le lecteur est prêt", async () => {
+  // Voulu (ex-point 14) : une coupure réseau signalée pendant l'attache, puis l'attache qui aboutit
+  // quand même — l'écran « connexion perdue » reste, et c'est juste. Le moteur ne signale une
+  // coupure qu'une fois sa boucle de lecture arrêtée : le lecteur « prêt » ne lira plus rien, et
+  // c'est cet écran qui programme le nouvel essai. L'effacer figeait le film sans écran ni relance
+  // (relevé par la relecture du 27/09/2026).
+  it("une coupure signalée pendant l'attache garde son écran, qui relancera la lecture", async () => {
     Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
     nextProbe = () => ({
       path: "remux",
@@ -2022,9 +2025,9 @@ describe("cycle de vie — comportement figé", () => {
       discard: vi.fn(),
     });
     mount();
+    await waitFor(() => expect(screen.getByText("connectionLost")).toBeTruthy());
     await waitFor(() => expect(logged("start")).toHaveLength(1));
-    await waitFor(() => expect(screen.queryByText("connectionLost")).toBeNull());
-    expect(screen.getByTestId("controls").dataset.loading).toBe("false");
+    expect(screen.getByText("connectionLost")).toBeTruthy();
   });
 
   it("la fermeture rapporte l'arrêt une fois, à Jellyfin et au journal, puis se referme", async () => {
