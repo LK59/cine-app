@@ -317,6 +317,11 @@ Relevés à la lecture, puis vérifiés dans le code pour les marqués **vérifi
 connue dans le journal à ce jour : ce sont des chemins possibles, pas des bugs observés. Chacun est
 un candidat naturel pour un test, avant ou pendant un découpage.
 
+**État au 27/09/2026** : 6, 7, 8, 10 et 12 corrigés, chacun avec un test qui échoue sans sa
+correction (`player-host-server.test.tsx`, le premier harnais du lecteur serveur ;
+`webcodecs-mseSource.test.ts`) ; 11 évalué et laissé tel quel (voir le point). Les autres attendent
+le découpage de l'hôte natif, où ils se corrigent à leur place.
+
 1. **`rebuildAtRef` n'est remis à zéro qu'en cas de succès** (vérifié). Seul `declareReady` l'efface.
    Une reconstruction qui finit en `networkLost` ou en abandon le laisse posé : la vérification de
    source perdue au retour d'arrière-plan est alors **désactivée** (`rebuildAtRef !== null`), et
@@ -341,30 +346,34 @@ un candidat naturel pour un test, avant ou pendant un découpage.
    réseau peut appeler `restart`, et un `fallToStable` (le minuteur d'abandon, par exemple) peut
    écrire une ligne `fallback` **après** la ligne `stop` — et ajouter le film à `handedOver`, ce
    qui l'envoie au lecteur serveur pour tout le reste de la vie de l'application.
-6. **Lecteur serveur : fermer pendant la négociation peut laisser un transcodage ouvert.** La
+6. **Corrigé.** **Lecteur serveur : fermer pendant la négociation peut laisser un transcodage ouvert.** La
    génération est vérifiée avant la lecture du corps de la réponse de `/playback/start`, pas après.
    Une réponse lue après le démontage peut encore écrire la ligne `start`, poser `playSession` et
    lancer la lecture sur un élément détaché ; une réponse arrivée après le démontage ouvre un
    transcodage Jellyfin qu'aucun `stop` ne ferme.
-7. **Lecteur serveur : deux appuis sur Fermer écrivent deux lignes `stop`** (vérifié), la seconde
+7. **Corrigé** (`closedRef`). **Lecteur serveur : deux appuis sur Fermer écrivent deux lignes `stop`** (vérifié), la seconde
    avec `watched: 0`, et lancent deux `refreshAfterPlayback`. L'hôte natif, lui, a
    `stopReportedRef`.
-8. **La fin de flux ne passe que par la file vidéo** (vérifié). Une suppression non attendue sur la
+8. **Corrigé** (la fin attend aussi la file du son). **La fin de flux ne passe que par la file vidéo** (vérifié). Une suppression non attendue sur la
    file audio (`trimBehind`, `evict`) peut encore travailler : `endOfStream` lève, l'erreur est
    avalée, et `ended` est déjà vrai — le flux peut ne jamais être déclaré fini. Possible, jamais
    observé.
 9. **Un changement de préférence en plein film change de lecteur sans relais.** `legacy` et
    `serverFallback` sont des clés SWR non suspendues ; si l'une bascule (reconnexion), le lecteur
    est remplacé et repart de `session.resumeAt`, pas de la position courante.
-10. **Le bouton « revenir sur le téléphone » n'arrête pas la TV et n'écrit rien** (vérifié).
+10. **Corrigé** (la route est arrêtée comme par la croix, et la fin de diffusion écrite). **Le bouton « revenir sur le téléphone » n'arrête pas la TV et n'écrit rien** (vérifié).
     Contrairement à `handleClose`, `handleCastReturn` ne met pas l'élément en pause et ne le vide
     pas ; or le code a constaté le 26/09 que démonter l'élément n'arrête pas AirPlay. Aucune ligne
     `fallback`/fin de diffusion n'est écrite, donc le temps regardé sur la TV est perdu pour le
     journal.
-11. **Remplacer un film par un autre depuis le mini-lecteur** ne rafraîchit pas les vues du
-    premier (pas de `refreshAfterPlayback`, et la séance ne passe jamais par `null`), et le
-    lecteur serveur n'écrit pas de `stop` pour lui.
-12. **Le lecteur serveur n'applique pas le recul d'ouverture** (`openingPosition`, DECISIONS §28)
+11. **Évalué, laissé tel quel.** **Remplacer un film par un autre depuis le mini-lecteur** ne
+    rafraîchit pas les vues du premier (pas de `refreshAfterPlayback`, et la séance ne passe jamais
+    par `null`), et le lecteur serveur n'écrit pas de `stop` pour lui. En pratique, la fermeture du
+    second film relit toutes les progressions montées, les listes d'épisodes, Reprendre et À
+    suivre (`revalidateWatchState`) : le premier est rattrapé à ce moment-là. Il ne reste qu'un
+    décalage visible si le second joue réduit, et une ligne absente du journal — dont l'ajout
+    toucherait au regroupement des séances de la page d'activité, pour peu.
+12. **Corrigé** (DECISIONS §28 ; `bench` transmis à la route, qui n'annonce rien). **Le lecteur serveur n'applique pas le recul d'ouverture** (`openingPosition`, DECISIONS §28)
     et **rapporte à Jellyfin pendant un banc** (son `usePlaybackSession` n'a pas la condition
     `bench` du natif). Deux décisions qui devraient être partagées et ne le sont pas.
 13. **L'effet du pipeline dépend de 17 identités censées rester stables.** Une seule qui change
