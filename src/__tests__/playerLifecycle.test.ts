@@ -22,8 +22,8 @@ describe("le budget de reconstructions", () => {
 describe("une source perdue", () => {
   it("se reconstruit là où elle était, puis au-delà si le même endroit échoue encore", () => {
     const lifecycle = new PlayerLifecycle();
-    expect(lifecycle.sourceLost(100, 0)).toEqual({ kind: "rebuild", at: 100, skipped: false, attempt: 1 });
-    expect(lifecycle.sourceLost(101, 1)).toEqual({ kind: "rebuild", at: 101 + REBUILD_STEP_SECONDS, skipped: true, attempt: 2 });
+    expect(lifecycle.sourceLost(100, 0)).toEqual({ kind: "rebuild", at: 100, from: 100, skipped: false, attempt: 1 });
+    expect(lifecycle.sourceLost(101, 1)).toEqual({ kind: "rebuild", at: 101 + REBUILD_STEP_SECONDS, from: 101, skipped: true, attempt: 2 });
   });
 
   it("ailleurs, ce n'est pas le même endroit", () => {
@@ -177,5 +177,38 @@ describe("un lecteur qui a fini de décider", () => {
     const lifecycle = new PlayerLifecycle();
     expect(lifecycle.isOver()).toBe(false);
     expect(lifecycle.sourceLost(100, 0).kind).toBe("rebuild");
+  });
+});
+
+// Le point de contrôle unique des reconstructions automatiques (relu le 27/09/2026) : un nouvel
+// essai réseau armé avant la fermeture relançait le lecteur pendant son fondu.
+describe("reconstruire : automatique ou demandé", () => {
+  const facts = { viewerPausedAt: null, hiddenAt: null };
+
+  it("une reconstruction automatique est refusée une fois la main passée, ou pendant la fermeture", () => {
+    const stepped = new PlayerLifecycle();
+    stepped.stepAside();
+    expect(stepped.restart(100, facts)).toBe(false);
+    expect(stepped.rebuildAt).toBeNull();
+
+    const closing = new PlayerLifecycle();
+    closing.noteClosing();
+    expect(closing.restart(100, facts)).toBe(false);
+  });
+
+  it("une demande du spectateur passe toujours, et redonne la main au lecteur", () => {
+    const lifecycle = new PlayerLifecycle();
+    lifecycle.stepAside();
+    expect(lifecycle.restart(100, { ...facts, byViewer: true })).toBe(true);
+    // Ses pannes suivantes comptent de nouveau : elles ne sont plus ignorées.
+    expect(lifecycle.isOver()).toBe(false);
+    expect(lifecycle.sourceLost(100, 0).kind).toBe("rebuild");
+  });
+
+  it("sauf pendant la fermeture, où rien ne redonne la main", () => {
+    const lifecycle = new PlayerLifecycle();
+    lifecycle.noteClosing();
+    lifecycle.restart(100, { ...facts, byViewer: true });
+    expect(lifecycle.isOver()).toBe(true);
   });
 });

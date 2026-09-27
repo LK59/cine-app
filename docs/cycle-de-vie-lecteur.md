@@ -116,36 +116,36 @@ stockée.
 | Refusé avant ouverture | `info.refusedReason` → `fallToStable` ; description introuvable (hors service injoignable) → `fallToStable` ; service injoignable → écran d'erreur, pas de bascule |
 | Sondage | `probePlaybackPath` en cours ; `path === null`, `ready === false` |
 | Attache | `probe.start(element)` attendu dans `startRemux` |
-| Prêt, pas encore parti | `ready` vrai (`declareReady`) ; `startingAt` posé (roue de reprise) ou `keepPausedRef` consommé (reste en pause) |
+| Prêt, pas encore parti | `ready` vrai (`declareReady`) ; `startingAt` posé (roue de reprise) ou `lifecycle.keepPaused` consommé (reste en pause) |
 | Lecture | `playing` vrai, `ended` faux |
 | Pause du spectateur | `playing` faux, `viewerPausedAtRef` posé |
 | Attente en pleine lecture | aucun état React : `tally.waitingSince`, et `onStall` du moteur à 5 s |
 | Saut | `requestedSeekRef` et/ou `seekTimingRef` posés, et/ou `element.seeking` |
-| Reconstruction | `ready` faux et `rebuildAtRef` posé ; `rebuildCount` vient d'augmenter ; image figée possible (`frozen`) |
+| Reconstruction | `ready` faux et `lifecycle.rebuildAt` posé ; `rebuildCount` vient d'augmenter ; image figée possible (`frozen`) |
 | Changement de piste | reconstruction **et** `pendingSwitchRef` posé |
 | Reconstruction plafond HDR | reconstruction sans `pendingSwitchRef` |
 | Réseau perdu | `networkLost` posé ; nouvel essai programmé si `online`. `ready` peut rester vrai si la coupure a eu lieu en plein film |
 | Arrière-plan | `visibilityState === "hidden"`, `hiddenAtRef`. Au retour : `holdOnReturnRef` (2,5 s) puis la vérification de source perdue |
 | Bloqué | ouverture depuis plus de 20 s → message « toujours en train de chercher » |
 | Abandon | ouverture depuis plus de 35 s → `fallToStable("aucune image après 35 s")` |
-| Fin | `ended` vrai, `endStoppedRef` vrai (arrêt Jellyfin déjà envoyé) |
+| Fin | `ended` vrai, `lifecycle.isEnded()` vrai (arrêt Jellyfin déjà envoyé) |
 | Passé la main | `steppedAside` vrai ; avec lecteur serveur, l'hôte est démonté ; sans lui, `runtimeError` posé et écran d'erreur |
 | Fermeture | `closing` vrai, `stopReportedRef` vrai ; `close(openId)` 200 ms plus tard |
 
 ### Les briques qui portent les transitions
 
-- **`restart(at, why)`** — la seule façon de reconstruire. Elle pose `rebuildAtRef = at`, remet
+- **`restart(at, why)`** — la seule façon de reconstruire. Elle pose `lifecycle.rebuildAt = at`, remet
   `openedAt`, efface `networkLost`, `ready`, `playing`, `runtimeError`, et augmente
   `rebuildCount`, ce qui démonte l'ancien pipeline (nettoyage de l'effet) et en monte un neuf. Elle
   décide aussi de rester en pause si le spectateur avait mis en pause *avant* un passage en
   arrière-plan (une pause d'iOS lui-même ne compte pas).
 - **`declareReady()`** — le seul endroit où une reconstruction est considérée finie :
-  `rebuildAtRef = null`, saut demandé entre-temps honoré, `ready`, `announced`, `everReadyRef`,
+  `lifecycle.rebuildAt = null`, saut demandé entre-temps honoré, `ready`, `announced`, `everReadyRef`,
   compteur réseau remis à zéro.
 - **`fallToStable(reason, takeover?)`** — une seule fois (`steppedAside`). Avec lecteur serveur :
   ligne `fallback`, relais avec la position courante si le film a déjà montré une image. Sans lui
   (`PLAYER_SERVER_FALLBACK=false`) : ligne `error` et écran d'erreur.
-- **`spendRebuild()`** — budget de 3 reconstructions par fenêtre de 180 s.
+- **`lifecycle.spendRebuild`** — budget de 3 reconstructions par fenêtre de 180 s.
 - **L'effet du pipeline** (le grand `useEffect` qui sonde, attache et branche les écouteurs) —
   relancé par `rebuildCount`, et par tout changement d'identité de ses 17 dépendances. Toutes sont
   **censées rester stables** après leur première valeur ; le code le dit dans un commentaire, rien
@@ -155,19 +155,19 @@ stockée.
 
 | Déclencheur | Condition | Effet | Résultat |
 |---|---|---|---|
-| Description + état de reprise arrivés | pas de refus | position de départ : `rebuildAtRef` → position connue → `session.resumeAt` → reprise serveur → 0 ; recul d'ouverture appliqué une seule fois (`openingPosition`) ; `probePlaybackPath` | Sondage |
+| Description + état de reprise arrivés | pas de refus | position de départ : `lifecycle.rebuildAt` → position connue → `session.resumeAt` → reprise serveur → 0 ; recul d'ouverture appliqué une seule fois (`openingPosition`) ; `probePlaybackPath` | Sondage |
 | Pipeline prêt (`begin` résolu) | effet non annulé | ligne `start`, pistes, préférences du compte, `declareReady` | Prêt |
 | Après prêt : la piste voulue n'est pas celle ouverte | `requestAudioTrack` → `"rebuild"` | `pendingSwitchRef`, `restart` | Reconstruction |
 | Après prêt : la piste voulue n'est pas transportable | `!canCarryAudio` | `fallToStable` avec la piste demandée | Passé la main |
 | `onError(msg, "network")` du moteur | — | ligne `network`, `networkLost` | Réseau perdu |
-| `onError(msg)` avec `lost` | `spendRebuild()` | ligne `rebuild` ; même endroit deux fois (< 3 s) → reprise 12 s plus loin | Reconstruction |
+| `onError(msg)` avec `lost` | `lifecycle.spendRebuild` | ligne `rebuild` ; même endroit deux fois (< 3 s) → reprise 12 s plus loin | Reconstruction |
 | `onError(msg)` sinon | — | `fallToStable` | Passé la main |
-| Retour au premier plan | `path === "remux"`, `lost`, `rebuildAtRef === null`, `spendRebuild()` | ligne `rebuild` (`hiddenMs`), `restart`, en pause si retenu ou si le film était fini ; revérifié 400 ms plus tard | Reconstruction |
+| Retour au premier plan | `path === "remux"`, `lost`, `lifecycle.rebuildAt === null`, `lifecycle.spendRebuild` | ligne `rebuild` (`hiddenMs`), `restart`, en pause si retenu ou si le film était fini ; revérifié 400 ms plus tard | Reconstruction |
 | `networkLost` et en ligne | recul 0,8 s × 2ⁿ, plafond 30 s | `restart(networkLost.at)` | Reconstruction |
 | Minuteur d'abandon | pas prêt, pas d'erreur, pas de réseau perdu | après 35 s : `fallToStable` | Passé la main |
-| Changement de piste (menu) | `"rebuild"` | image figée, `keepPausedRef = paused`, `restart(intendedPosition())` | Changement de piste |
-| Saut (commandes) | — | `noteSeekRequest` : cible notée, réécrit `rebuildAtRef` si une reconstruction attend ; le déplacement lui-même est écrit sur l'élément par `PlayerControls` | Saut |
-| `ended` | — | arrêt Jellyfin, `endStoppedRef`, cache de reprise oublié | Fin |
+| Changement de piste (menu) | `"rebuild"` | image figée, `lifecycle.keepPaused = paused`, `restart(intendedPosition())` | Changement de piste |
+| Saut (commandes) | — | `noteSeekRequest` : cible notée, réécrit `lifecycle.rebuildAt` si une reconstruction attend ; le déplacement lui-même est écrit sur l'élément par `PlayerControls` | Saut |
+| `ended` | — | arrêt Jellyfin, `lifecycle.isEnded()`, cache de reprise oublié | Fin |
 | Fermer | — | ligne `stop`, arrêt Jellyfin, fondu, `close(openId)` | Fermeture |
 
 ---
@@ -294,13 +294,13 @@ l'observe par ses événements.
 | Ancien pipeline contre reconstruction | drapeau `cancelled` de l'effet après chaque `await` ; `destroy` du moteur | solide pour les promesses — **mais les rappels du moteur ne regardent pas `cancelled`** (point fragile n° 3) |
 | Saut pendant un remplissage | `requested` arrête la boucle, `prepareSeek` abandonne les lectures, `generation` rend les envois périmés inoffensifs | solide ; un saut attend une lecture gardée jusqu'au bout (60 s hors ligne au pire) |
 | Rafale de sauts | coalescence dans `seekState.requested`, `performSeek` sérialisé et revérifié après chaque attente | solide, éprouvé par le fuzz |
-| Saut pendant une reconstruction | `noteSeekRequest` réécrit `rebuildAtRef`, `declareReady` honore la cible | complet (les commandes sont inertes pendant la reconstruction ; seuls le banc et les touches média y arrivent) |
+| Saut pendant une reconstruction | `noteSeekRequest` réécrit `lifecycle.rebuildAt`, `declareReady` honore la cible | complet (les commandes sont inertes pendant la reconstruction ; seuls le banc et les touches média y arrivent) |
 | Changement de piste pendant un saut | `restart(intendedPosition())` lit la cible demandée, puis `element.seeking` | corrigé le 22/09 |
 | Changement de piste pendant une reconstruction | le choix est gardé dans `wantedAudioRef` | correct ; aucune ligne `audio` écrite pour ce changement-là |
 | Reconstruction pendant une reconstruction | la seconde augmente `rebuildCount`, l'effet annule la première | acceptable ; `pendingSwitchRef` survit jusqu'au pipeline qui aboutit |
 | Retour d'arrière-plan + retenue + source perdue | la retenue est lue par la vérification → reste en pause | cohérent |
 | Arrière-plan pendant l'ouverture | la vérification de source perdue n'est active qu'une fois `path === "remux"` | une source fermée par iOS avant l'attache n'est vue que si l'attache échoue |
-| Fin de film + reconstruction | seul le chemin « retour d'arrière-plan » regarde `endStoppedRef` | **fragile** (point n° 2) |
+| Fin de film + reconstruction | seul le chemin « retour d'arrière-plan » regarde `lifecycle.isEnded()` | **fragile** (point n° 2) |
 | Bascule pendant la fermeture | `fallToStable` ne regarde que `steppedAside` | **fragile** (point n° 5) |
 | Fermer pendant la négociation serveur | la génération n'est pas revérifiée après la lecture du corps de la réponse | **fragile** (point n° 6) |
 | Deux fermetures du lecteur serveur | rien ne garde la ligne `stop` | **fragile** (point n° 7) |
@@ -320,12 +320,13 @@ un candidat naturel pour un test, avant ou pendant un découpage.
 **État au 27/09/2026** : tous traités. 6, 7, 8, 10 et 12 corrigés à l'étape 0, chacun avec un
 test qui échoue sans sa correction (`player-host-server.test.tsx`, le premier harnais du lecteur
 serveur ; `webcodecs-mseSource.test.ts`). 2, 4, 5 et 14 corrigés à l'étape 2, dans
-`PlayerLifecycle` (voir plus bas), en inversant leur test « comportement actuel ». 1 s'est révélé
-bénin, 11 est laissé tel quel, 13 est couvert par un test, 3 et 9 restent notés.
+`PlayerLifecycle` (voir plus bas), en inversant leur test « comportement actuel ». 14 n'était
+pas un défaut (voir le point). 1 s'est révélé bénin, 11 est laissé tel quel, 13 est couvert par un
+test, 3 et 9 restent notés.
 
-1. **Bénin, testé.** **`rebuildAtRef` n'est remis à zéro qu'en cas de succès** (vérifié). Seul `declareReady` l'efface.
+1. **Bénin, testé.** **`lifecycle.rebuildAt` n'est remis à zéro qu'en cas de succès** (vérifié). Seul `declareReady` l'efface.
    Une reconstruction qui finit en `networkLost` ou en abandon le laisse posé : la vérification de
-   source perdue au retour d'arrière-plan est alors **désactivée** (`rebuildAtRef !== null`), et
+   source perdue au retour d'arrière-plan est alors **désactivée** (`lifecycle.rebuildAt !== null`), et
    chaque saut suivant écrit dans ce champ au lieu de rien. Un nouvel essai réseau réussi le remet
    en ordre. *Relu en écrivant les tests :* tant qu'une reconstruction n'a pas abouti, il n'y a pas
    de pipeline à surveiller (`remuxRef` est vide), donc la vérification désactivée ne rate rien ;
@@ -333,7 +334,7 @@ bénin, 11 est laissé tel quel, 13 est couvert par un test, 3 et 9 restent not�
    faute de réseau rouvre… »). Pas de correction nécessaire.
 2. **Corrigé** (`restart` garde en pause toute reconstruction d'un film fini). **Les reconstructions après perte et après coupure réseau ignorent la fin du film** (vérifié).
    Le chemin « source perdue » (`onError` + `lost`) et le nouvel essai réseau ne regardent pas
-   `endStoppedRef`. Comme `onPause` n'enregistre pas de pause du spectateur quand l'élément est à
+   `lifecycle.isEnded()`. Comme `onPause` n'enregistre pas de pause du spectateur quand l'élément est à
    sa fin, `restart` ne garde pas non plus la pause : une source perdue sur l'écran de fin est
    reconstruite **en lecture**. C'est le symptôme que le code a déjà corrigé le 24/09 pour le seul
    retour d'arrière-plan. De même, `restart` ne remet pas `ended` à faux.
@@ -385,12 +386,14 @@ bénin, 11 est laissé tel quel, 13 est couvert par un test, 3 et 9 restent not�
     reconstruction, sans ligne au journal). Même dépendance cachée pour l'arrêt rapporté au
     démontage : une dépendance ajoutée à `reportStop` écrirait `stop "unmount"` en pleine séance.
 
-14. **Corrigé** (`declareReady` efface l'écran de coupure). **Une coupure signalée pendant l'attache laisse l'écran de coupure sur un lecteur prêt.**
+14. **Pas un défaut — correction défaite.** **Une coupure signalée pendant l'attache laisse l'écran de coupure sur un lecteur prêt.**
     Si le moteur signale une erreur réseau pendant `probe.start`, puis que l'attache aboutit
     quand même, `declareReady` pose `ready` sans effacer `networkLost` : l'écran « connexion
-    perdue » reste affiché par-dessus un lecteur prêt, jusqu'au nouvel essai. Relevé par
-    l'inventaire, figé par un test (« comportement actuel : une coupure signalée pendant
-    l'attache… »).
+    perdue » reste affiché par-dessus un lecteur prêt, jusqu'au nouvel essai. C'est juste : le
+    moteur ne signale une coupure qu'une fois sa boucle de lecture arrêtée ; le lecteur « prêt » ne
+    lira plus rien, et c'est cet écran qui programme le nouvel essai. L'effacer (essayé, puis défait
+    le 27/09/2026) figeait le film au bout de son tampon, sans écran ni relance. Le test décrit
+    désormais ce comportement comme voulu.
 
 ### Ce que les tests figent
 
@@ -447,17 +450,21 @@ Un ordre de découpage, du moins au plus risqué, chaque étape sans changement 
 `src/lib/playerLifecycle.ts` (`PlayerLifecycle`) — budget, position de reconstruction, « même
 endroit », règle de pause, position d'ouverture, retour d'arrière-plan, nouveaux essais réseau,
 passage de main, fin de film et fermeture. Déplacé à l'identique d'abord (commit à part, les 105
-tests de l'hôte inchangés), puis les points 2, 4, 5 et 14 corrigés dedans. L'hôte l'appelle ; il n'y
-écrit plus de drapeau lui-même.
+tests de l'hôte inchangés), puis les points 2, 4 et 5 corrigés dedans. L'hôte l'appelle ; il n'y
+écrit plus de drapeau lui-même. `restart` y est **le seul point de contrôle** des reconstructions
+automatiques : refusées une fois la main passée ou pendant la fermeture, au moment où elles
+partiraient — un contrôle posé seulement là où elles se programmaient laissait passer un minuteur
+déjà armé. Une reconstruction demandée par le spectateur (réessayer, une piste, le plafond HDR)
+passe toujours et redonne la main au lecteur.
 
-1. **Les états de reconstruction** (`rebuildAtRef`, `rebuildCount`, `spendRebuild`,
-   `networkLost`, `keepPausedRef`) : un réducteur pur « ouvrir / prêt / perdu / réseau perdu /
+1. **Les états de reconstruction** (`lifecycle.rebuildAt`, `rebuildCount`, `lifecycle.spendRebuild`,
+   `networkLost`, `lifecycle.keepPaused`) : un réducteur pur « ouvrir / prêt / perdu / réseau perdu /
    abandon », avec ses tests. Règle naturellement les points 1, 2 et 4 — **mais en les corrigeant,
    pas en les déplaçant** : à faire en deux temps, d'abord à l'identique, puis la correction avec
    son test.
 2. **Les sauts côté hôte** (`requestedSeekRef`, `seekTimingRef`, `noteSeekRequest`) — déjà
    clarifiés le 22/09.
-3. **La fin de film et la fermeture** (`ended`, `endStoppedRef`, `closing`, `stopReportedRef`,
+3. **La fin de film et la fermeture** (`ended`, `lifecycle.isEnded()`, `closing`, `stopReportedRef`,
    `steppedAside`) : un seul endroit qui dit « cette séance est finie » — points 5 et 7.
 4. **Le retour d'arrière-plan** (`hiddenAtRef`, `hiddenPlaybackRef`, `holdOnReturnRef`) — en
    dernier : c'est là que vivent les défauts propres à iOS, et le seul juge est un appareil.

@@ -47,6 +47,8 @@ export type LossDecision =
       kind: "rebuild";
       /** Où rouvrir — au-delà du passage fautif s'il vient d'échouer une seconde fois. */
       at: number;
+      /** Où la source a été perdue. */
+      from: number;
       /** Le passage a été sauté : le spectateur doit en être averti. */
       skipped: boolean;
       /** Le numéro de cette reconstruction dans la série en cours. */
@@ -120,7 +122,21 @@ export class PlayerLifecycle {
    * arrière-plan peut être celle d'iOS lui-même : elle ne compte que si elle le précède d'une
    * seconde au moins.
    */
-  restart(at: number, facts: { viewerPausedAt: number | null; hiddenAt: number | null }): void {
+  restart(at: number, facts: { viewerPausedAt: number | null; hiddenAt: number | null; byViewer?: boolean }): boolean {
+    // Le seul point de contrôle des reconstructions automatiques — perte, retour d'arrière-plan,
+    // nouvel essai réseau, reprise d'un changement de piste : une fois la main passée ou pendant la
+    // fermeture, elles sont refusées ici, au moment même où elles partiraient. Un contrôle posé
+    // seulement là où elles se programment laissait passer un minuteur armé avant (relu le
+    // 27/09/2026 : le nouvel essai réseau relançait un lecteur en train de se fermer).
+    //
+    // Une reconstruction demandée par le spectateur (réessayer, une piste, le plafond HDR) passe
+    // toujours, et redonne la main au lecteur : ses pannes suivantes doivent de nouveau s'afficher,
+    // au lieu d'être ignorées par un lecteur qui se croirait encore abandonné.
+    if (facts.byViewer) {
+      if (!this.closing) this.steppedAside = false;
+    } else if (this.isOver()) {
+      return false;
+    }
     const { viewerPausedAt: pausedAt, hiddenAt } = facts;
     if (pausedAt !== null && (hiddenAt === null || hiddenAt < pausedAt || pausedAt < hiddenAt - 1000)) this.keepPaused = true;
     // Un film fini attend sur son écran de fin, quelle que soit la cause de la reconstruction.
@@ -130,6 +146,12 @@ export class PlayerLifecycle {
     // pause du spectateur, d'où cette règle à part (point 2, docs/cycle-de-vie-lecteur.md).
     if (this.ended) this.keepPaused = true;
     this.rebuildAt = at;
+    return true;
+  }
+
+  /** Le fichier est-il allé au bout, sans rien qui l'ait relancé depuis ? */
+  isEnded(): boolean {
+    return this.ended;
   }
 
   /** Le fichier est allé au bout. */
@@ -190,7 +212,7 @@ export class PlayerLifecycle {
     if (!this.spendRebuild(now)) return { kind: "giveUp" };
     const again = this.lastLossAt !== null && Math.abs(where - this.lastLossAt) < SAME_PLACE_SECONDS;
     this.lastLossAt = where;
-    return { kind: "rebuild", at: again ? where + REBUILD_STEP_SECONDS : where, skipped: again, attempt: this.rebuilds };
+    return { kind: "rebuild", at: again ? where + REBUILD_STEP_SECONDS : where, from: where, skipped: again, attempt: this.rebuilds };
   }
 
   /**

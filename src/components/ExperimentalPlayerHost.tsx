@@ -82,7 +82,7 @@ import { seekArrived } from "@/lib/webcodecs/seekArrival";
 import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
 import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
 import { forgetResumeCache, openDiskChunks, openingFacts } from "@/lib/resumeCache/diskChunks";
-import { PlayerLifecycle, REBUILD_STEP_SECONDS } from "@/lib/playerLifecycle";
+import { PlayerLifecycle } from "@/lib/playerLifecycle";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -891,14 +891,22 @@ export function ExperimentalPlayerHost({
     };
   }, [frozen, ready]);
 
-  const restart = useCallback((at: number, why: string) => {
+  /**
+   * Reconstruire le pipeline à `at`. `byViewer` : la demande vient du spectateur (réessayer, une
+   * piste, le plafond HDR) — elle passe toujours ; une reconstruction automatique est refusée par
+   * `lifecycle.restart` une fois la main passée ou pendant la fermeture.
+   */
+  const restart = useCallback((at: number, why: string, byViewer = false) => {
+    if (!lifecycle.restart(at, { viewerPausedAt: viewerPausedAtRef.current, hiddenAt: hiddenAtRef.current, byViewer })) {
+      trace(`reprise refusée : ${why} — le lecteur a passé la main ou se ferme`);
+      return;
+    }
     trace(`reprise : ${why} — reconstruction à ${at.toFixed(1)} s`);
     // Une reconstruction ne relance pas un film que le spectateur avait mis en pause : seuls le
     // changement de piste et le plafond HDR y veillaient, et un film arrêté, rendu par iOS au
     // retour d'arrière-plan, repartait tout seul (relu le 24/09/2026). Une pause suivie de près par
     // le passage en arrière-plan peut être celle d'iOS lui-même : elle ne compte que si elle le
     // précède d'une seconde au moins — sinon la reprise se fait comme avant.
-    lifecycle.restart(at, { viewerPausedAt: viewerPausedAtRef.current, hiddenAt: hiddenAtRef.current });
     traceKeepAcrossReset();
     setOpenedAt(Date.now());
     setNetworkLost(null);
@@ -1281,10 +1289,10 @@ export function ExperimentalPlayerHost({
    * seconde lecture ne battait plus et n'enregistrait plus rien : Jellyfin gardait l'épisode « vu à
    * la fin » (relu le 24/09/2026). Toute reprise de la lecture rouvre donc la séance.
    */
-  const endStoppedRef = useRef(false);
+  // « Fini, et l'arrêt déjà envoyé » vit dans `lifecycle` (`isEnded`) — un seul endroit pour ce
+  // fait : une seconde copie, tenue à la main à côté, finirait par diverger.
   const reopenAfterEnd = useCallback(() => {
-    if (!endStoppedRef.current) return;
-    endStoppedRef.current = false;
+    if (!lifecycle.isEnded()) return;
     lifecycle.noteResumedAfterEnd();
     resumePlaybackRef.current();
   }, [lifecycle]);
@@ -1606,7 +1614,7 @@ export function ExperimentalPlayerHost({
         if (
           pausedAt !== null &&
           Date.now() - pausedAt >= AWAY_MS &&
-          !endStoppedRef.current &&
+          !lifecycle.isEnded() &&
           !element.seeking &&
           !session.bench
         ) {
@@ -1651,7 +1659,6 @@ export function ExperimentalPlayerHost({
         // la position de la seconde vision, et une application tuée en arrière-plan sur l'écran
         // de fin ne l'envoyait jamais (relevé le 23/09/2026).
         void stopPlaybackRef.current();
-        endStoppedRef.current = true;
         lifecycle.noteEnded();
         // Fini : ses octets gardés pour une reprise instantanée n'ont plus rien à reprendre. Effacés
         // en arrière-plan ; le prochain passage l'aurait fait aussi, le titre quittant « Reprendre ».
@@ -1790,7 +1797,7 @@ export function ExperimentalPlayerHost({
         const lost = remuxRef.current?.lost ? lifecycle.sourceLost(remuxRef.current.position || positionRef.current, Date.now()) : null;
         if (lost?.kind === "ignore") return;
         if (lost?.kind === "rebuild") {
-          const { at, skipped: again, attempt } = lost;
+          const { at, from: where, skipped: again, attempt } = lost;
           reportPlayback("rebuild", {
             ...describeFileRef.current(),
             // Comme la reconstruction d'arrière-plan : sans lui, une ligne sur deux n'avait pas de
@@ -1809,7 +1816,7 @@ export function ExperimentalPlayerHost({
           restart(
             at,
             `la source a été perdue (${attempt})` +
-              (again ? `, au-delà de ${(at - REBUILD_STEP_SECONDS).toFixed(1)} s qui vient d'échouer` : "")
+              (again ? `, au-delà de ${where.toFixed(1)} s qui vient d'échouer` : "")
           );
           // Only the first of these is the viewer's business: a passage of the film is being
           // skipped, and a jump nobody explained looks like a fault. Rebuilding in place and
@@ -2141,7 +2148,7 @@ export function ExperimentalPlayerHost({
       setFrozen(freezeFrame());
       // Là où le spectateur a demandé d'être, pas seulement là où il en était : un saut
       // encore en chargement n'a pas encore déplacé la position lue.
-      restart(intendedPosition(), `piste ${id} — reconstruction sur elle`);
+      restart(intendedPosition(), `piste ${id} — reconstruction sur elle`, true);
       return;
     }
     // Avant que le chemin natif ne soit en marche : retenue, et le pipeline qui s'ouvre la prend.
@@ -2317,7 +2324,7 @@ export function ExperimentalPlayerHost({
           <div className="mt-1 flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
-              onClick={() => restart(networkLost.at, "réessai demandé")}
+              onClick={() => restart(networkLost.at, "réessai demandé", true)}
               className="btn-primary inline-flex items-center gap-2"
             >
               <RotateCw size={16} />
@@ -2536,7 +2543,7 @@ export function ExperimentalPlayerHost({
                       // figée comprises : sans elles, un film à l'arrêt repartait sur un écran noir.
                       lifecycle.setKeepPaused(videoElRef.current?.paused ?? false);
                       setFrozen(freezeFrame());
-                      restart(intendedPosition(), `plafond HDR ${choice}`);
+                      restart(intendedPosition(), `plafond HDR ${choice}`, true);
                     },
                   }
                 : undefined

@@ -2030,6 +2030,21 @@ describe("cycle de vie — comportement figé", () => {
     expect(screen.getByText("connectionLost")).toBeTruthy();
   });
 
+  // Relu le 27/09/2026 : le contrôle ne se faisait qu'en armant le nouvel essai. Armé avant la
+  // fermeture, il partait quand même pendant le fondu et reconstruisait un lecteur qui se fermait.
+  it("un nouvel essai réseau armé avant la fermeture ne relance rien pendant le fondu", async () => {
+    vi.useFakeTimers();
+    mount();
+    await act(async () => {});
+    act(() => probes[0].onError("plus de réseau", "network"));
+    // En ligne : l'essai est armé (0,8 s).
+    act(() => void window.dispatchEvent(new Event("online")));
+    act(() => void fireEvent.click(screen.getByText("fermer")));
+    await act(async () => void vi.advanceTimersByTime(2_000));
+    expect(probes).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
   it("la fermeture rapporte l'arrêt une fois, à Jellyfin et au journal, puis se referme", async () => {
     mount();
     await ready();
