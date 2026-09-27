@@ -83,6 +83,7 @@ import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSess
 import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
 import { forgetResumeCache, openDiskChunks, openingFacts } from "@/lib/resumeCache/diskChunks";
 import { PlayerLifecycle } from "@/lib/playerLifecycle";
+import { HostSeek, describeBufferedAround, type SeekTiming } from "@/lib/hostSeek";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -598,24 +599,17 @@ export function ExperimentalPlayerHost({
   // back from a locked screen means starting over, at the position the viewer left.
   const [rebuildCount, setRebuildCount] = useState(0);
   /**
-   * La dernière position demandée par le spectateur et pas encore atteinte — voir
-   * `onSeekRequest`. Deux gestes rapprochés ne doivent pas en perdre un : un saut encore en
-   * chargement suivi d'un changement de piste reconstruisait le lecteur à la position d'*avant*
-   * le saut, et un saut fait pendant la reconstruction était écrasé par la position de départ du
-   * nouveau lecteur (22/09/2026).
+   * Les sauts vus par l'hôte : la cible demandée pas encore atteinte, et la mesure du saut en cours
+   * pour le journal — voir `hostSeek.ts`. Un objet par lecteur, comme `lifecycle`.
    */
-  const requestedSeekRef = useRef<number | null>(null);
-  /** Le saut en cours de mesure, pour la ligne `seek` du journal — le dernier demandé seulement. */
-  const seekTimingRef = useRef<{ from: number; to: number; startedAt: number; hiddenAtStart: number; buffered: boolean; ranges: string } | null>(null);
+  const [seeks] = useState(() => new HostSeek());
   /**
    * Un saut qui n'arrive pas là où il était demandé n'écrivait rien : la ligne ne part qu'à
    * l'arrivée. 2012 sur iPhone (22/09/2026) : une tête passée de 2141 à 1681 s sans une trace.
    * Il est désormais écrit quand un autre geste le remplace, avec l'endroit où il est tombé.
    */
-  const reportUnarrivedSeek = (landedAt: number, stillSeeking: boolean) => {
-    const timing = seekTimingRef.current;
+  const reportUnarrivedSeek = (timing: SeekTiming | null, landedAt: number, stillSeeking: boolean) => {
     if (!timing) return;
-    seekTimingRef.current = null;
     // Remplacé par le geste suivant avant son `seeked` : le cas ordinaire d'une rafale. Arrivé
     // s'il était à sa cible — 125 lignes sur 128 « jamais arrivé » à tort le 22/09/2026.
     // Sauf pendant `seeking`, où currentTime vaut déjà la cible avant que rien n'y soit : un
@@ -636,14 +630,7 @@ export function ExperimentalPlayerHost({
     });
   };
   /** Où en est le film selon ce que le spectateur a demandé, pas seulement selon ce qu'il a vu. */
-  const intendedPosition = useCallback((): number => {
-    if (requestedSeekRef.current !== null) return requestedSeekRef.current;
-    const element = videoElRef.current;
-    // Un saut lancé par autre chose que les commandes (le système, la télécommande) : l'élément
-    // dit déjà où il va, la position lue ne le saura qu'une fois le saut fini.
-    if (element?.seeking) return element.currentTime;
-    return positionRef.current;
-  }, []);
+  const intendedPosition = useCallback((): number => seeks.intendedPosition(videoElRef.current, positionRef.current), [seeks]);
   /**
    * What the viewer chose, so a restart gives it back to them.
    *
@@ -1488,11 +1475,11 @@ export function ExperimentalPlayerHost({
       lifecycle.ready();
       // Un saut demandé pendant la reconstruction, ailleurs que là où elle a rouvert : il est
       // honoré maintenant, sur le lecteur neuf, au lieu d'être écrasé par sa position de départ.
-      const asked = requestedSeekRef.current;
-      if (asked !== null && Math.abs(asked - startSeconds) > 0.5) {
+      const asked = seeks.consumeAtReady(startSeconds);
+      if (asked !== null) {
         const media = videoElRef.current;
         if (media) media.currentTime = asked;
-      } else requestedSeekRef.current = null;
+      }
       setReady(true);
       setAnnounced(true);
       everReadyRef.current = true;
@@ -1651,7 +1638,7 @@ export function ExperimentalPlayerHost({
        */
       let playedOnce = false;
       const onWaiting = () => {
-        if (playedOnce && !element.seeking && requestedSeekRef.current === null) tally.waitStarted(Date.now());
+        if (playedOnce && !element.seeking && !seeks.pending()) tally.waitStarted(Date.now());
       };
       const onPlaying = () => {
         playedOnce = true;
@@ -1673,21 +1660,12 @@ export function ExperimentalPlayerHost({
       };
       // Le saut demandé est atteint : la position lue redevient la vérité.
       const onSeeked = () => {
-        if (requestedSeekRef.current !== null && seekArrived(element.currentTime, requestedSeekRef.current)) {
-          requestedSeekRef.current = null;
-        }
+        const timing = seeks.seeked(element.currentTime);
         // Posée ailleurs que la cible — sur le premier média, sur l'image clé suivante — mais
-        // arrivée selon la source : la cible demandée ne vaut plus. Restée en mémoire, elle servait
-        // de position au changement de piste suivant, fût-il vingt minutes plus tard (audit du
-        // 22/09/2026). Lu après ce tour : la source écoute le même événement, et après l'hôte.
-        setTimeout(() => {
-          if (requestedSeekRef.current !== null && remuxRef.current?.seekPending === false && !element.seeking) {
-            requestedSeekRef.current = null;
-          }
-        }, 0);
-        const timing = seekTimingRef.current;
-        if (timing && seekArrived(element.currentTime, timing.to)) {
-          seekTimingRef.current = null;
+        // arrivée selon la source : la cible demandée ne vaut plus (voir `HostSeek.settled`). Lu
+        // après ce tour : la source écoute le même événement, et après l'hôte.
+        setTimeout(() => seeks.settled(remuxRef.current?.seekPending, element.seeking), 0);
+        if (timing) {
           tally.seekArrived(seekElapsed(tally, timing));
           reportPlayback("seek", {
             ...describeFileRef.current(),
@@ -1890,9 +1868,9 @@ export function ExperimentalPlayerHost({
   // chose pour `showPipelineWarning`, qui ne dépend que de `showWarning`, stable lui aussi, et
   // pour `tally`, créé une fois au montage (`useState`) et jamais remplacé, pour
   // `reopenAfterEnd`, qui ne dépend que de `lifecycle` — créé une fois au montage (`useState`),
-  // comme `tally` —, et pour `itemId` et `session.bench`,
+  // comme `tally` et `seeks` —, et pour `itemId` et `session.bench`,
   // fixés pour toute la vie de ce lecteur — sa clé est `itemId:openId` (voir PlayerHost).
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, reportAudioSwitch, tally, reopenAfterEnd, itemId, session.bench]);
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, seeks, reportAudioSwitch, tally, reopenAfterEnd, itemId, session.bench]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -2080,39 +2058,23 @@ export function ExperimentalPlayerHost({
    * ce qu'il mesure soit ce que vit le spectateur.
    */
   const noteSeekRequest = (seconds: number) => {
-    requestedSeekRef.current = seconds;
+    seeks.request(seconds);
     // Une reconstruction pas encore ouverte rouvre directement là.
     lifecycle.seekDuringRebuild(seconds);
     // Mesuré une fois le chemin natif en marche : c'est le `seeked` de son élément qui ferme la
     // mesure. Avant, rien ne la fermerait, et le saut suivant écrirait celle-ci en ligne fausse —
     // tombée à 0, jamais arrivée (le cas du chemin canevas, chasse aux bugs du 22/09/2026).
     if (pathRef.current !== "remux") {
-      seekTimingRef.current = null;
+      seeks.dropMeasure();
       return;
     }
     // Mesuré jusqu'à l'arrivée (`seeked`). Un saut qui en remplace un autre en cours
     // remplace aussi sa mesure : c'est le dernier geste qui compte.
     const element = videoElRef.current;
-    let buffered = false;
-    // Les plages elles-mêmes, pas seulement « la cible y est » (24/09/2026) : trois sauts notés
-    // `buffered` ont trouvé leur cible vide 0,7 s plus tard, et la ligne ne permettait pas de
-    // dire ce qu'il y avait autour. Les quatre plus proches de la cible, écrites court.
-    const near: [number, number][] = [];
-    for (let i = 0; element && i < element.buffered.length; i++) {
-      const start = element.buffered.start(i);
-      const end = element.buffered.end(i);
-      if (start <= seconds && seconds < end) buffered = true;
-      near.push([start, end]);
-    }
-    const ranges =
-      near
-        .sort((a, b) => Math.abs((a[0] + a[1]) / 2 - seconds) - Math.abs((b[0] + b[1]) / 2 - seconds))
-        .slice(0, 4)
-        .sort((a, b) => a[0] - b[0])
-        .map(([start, end]) => `${start.toFixed(1)}–${end.toFixed(1)}`)
-        .join(" · ") || "vide";
-    reportUnarrivedSeek(element?.currentTime ?? positionRef.current, element?.seeking ?? false);
-    seekTimingRef.current = { from: positionRef.current, to: seconds, startedAt: Date.now(), hiddenAtStart: tally.hiddenMsSoFar(Date.now()), buffered, ranges };
+    // Les plages autour de la cible, pour la ligne du journal — voir `describeBufferedAround`.
+    const { buffered, ranges } = describeBufferedAround(element?.buffered ?? null, seconds);
+    const superseded = seeks.startMeasure({ from: positionRef.current, to: seconds, startedAt: Date.now(), hiddenAtStart: tally.hiddenMsSoFar(Date.now()), buffered, ranges });
+    reportUnarrivedSeek(superseded, element?.currentTime ?? positionRef.current, element?.seeking ?? false);
   };
 
   /** Un changement de piste audio — les commandes et le banc d'essai, par le même chemin. */
