@@ -1078,7 +1078,7 @@ export function ExperimentalPlayerHost({
    * Tout est lu par des refs : les appelants — un écouteur `pagehide`, un nettoyage d'effet —
    * vivent plus longtemps que le rendu qui les a créés.
    */
-  const stopReportedRef = useRef(false);
+  // « La ligne `stop` est partie » vit dans `lifecycle` (`claimStop`, `keepsUnsentStop`).
   const mountedAtRef = useRef(0);
   useEffect(() => {
     mountedAtRef.current = Date.now();
@@ -1121,8 +1121,7 @@ export function ExperimentalPlayerHost({
   );
   const reportStop = useCallback(
     (why: "close" | "next" | "page" | "unmount") => {
-      if (stopReportedRef.current || lifecycle.hasSteppedAside()) return;
-      stopReportedRef.current = true;
+      if (!lifecycle.claimStop()) return;
       reportPlayback("stop", stopFields(why));
       clearUnsentStop(sessionId);
     },
@@ -1136,7 +1135,7 @@ export function ExperimentalPlayerHost({
    */
   useEffect(() => {
     const save = () => {
-      if (stopReportedRef.current || lifecycle.hasSteppedAside()) return;
+      if (!lifecycle.keepsUnsentStop()) return;
       saveUnsentStop(sessionId, stopFields("lost"));
     };
     save();
@@ -1229,19 +1228,32 @@ export function ExperimentalPlayerHost({
   }, [sessionId, stopFields, tally, lifecycle]);
   useEffect(() => {
     const onPageHide = () => reportStop("page");
-    // Une page rendue depuis le cache du navigateur (retour arrière) reprend le film : son arrêt
-    // réel, plus tard, doit être noté lui aussi — il ne l'était jamais (23/09/2026).
+    // Une page rendue depuis le cache du navigateur (retour arrière) reprend le film : voir
+    // `lifecycle.reopenStop`.
     const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) stopReportedRef.current = false;
+      if (e.persisted) lifecycle.reopenStop();
     };
     window.addEventListener("pagehide", onPageHide);
     window.addEventListener("pageshow", onPageShow);
     return () => {
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("pageshow", onPageShow);
-      reportStop("unmount");
     };
+  }, [reportStop, lifecycle]);
+  /**
+   * L'arrêt écrit quand le lecteur disparaît — au démontage, et seulement là.
+   *
+   * Il vivait dans le nettoyage de l'effet ci-dessus, lié à l'identité de `reportStop` : une
+   * dépendance ajoutée un jour à `reportStop`, ou à `stopFields`, aurait relancé cet effet en pleine
+   * séance, et son nettoyage aurait écrit `stop "unmount"` au milieu du film (point 13,
+   * docs/cycle-de-vie-lecteur.md). Un effet sans dépendance, qui lit la dernière version par une
+   * référence, ne se nettoie qu'au démontage.
+   */
+  const reportStopRef = useRef(reportStop);
+  useEffect(() => {
+    reportStopRef.current = reportStop;
   }, [reportStop]);
+  useEffect(() => () => reportStopRef.current("unmount"), []);
 
   const { stop: stopPlaybackNow, resume: resumePlaybackSession } = usePlaybackSession(
     useCallback(() => positionRef.current, []),

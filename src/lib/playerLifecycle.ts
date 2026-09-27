@@ -93,6 +93,8 @@ export class PlayerLifecycle {
   private closing = false;
   /** Une coupure réseau a été signalée, et aucune reconstruction n'a encore suivi. */
   private networkDown = false;
+  /** La ligne `stop` de la séance est partie. */
+  private stopReported = false;
 
   constructor(options: { startPaused?: boolean } = {}) {
     this.keepPaused = options.startPaused === true;
@@ -292,6 +294,32 @@ export class PlayerLifecycle {
     if (this.steppedAside || this.closing) return false;
     this.steppedAside = true;
     return true;
+  }
+
+  /**
+   * La ligne `stop` peut-elle partir ? Vrai une seule fois — et jamais après avoir passé la main :
+   * la ligne `fallback` a déjà raconté la fin de la séance ici, le lecteur serveur prend la suite.
+   */
+  claimStop(): boolean {
+    if (this.stopReported || this.steppedAside) return false;
+    this.stopReported = true;
+    return true;
+  }
+
+  /**
+   * Le bilan gardé sur l'appareil (au cas où iOS tuerait la page) doit-il encore être réécrit ?
+   * Tant que la séance vit : ni après son arrêt, ni après avoir passé la main.
+   */
+  keepsUnsentStop(): boolean {
+    return !this.stopReported && !this.steppedAside;
+  }
+
+  /**
+   * La page revient du cache du navigateur (retour arrière) et le film reprend : son arrêt réel,
+   * plus tard, doit être noté lui aussi — il ne l'était jamais (23/09/2026).
+   */
+  reopenStop(): void {
+    this.stopReported = false;
   }
 
   /** Le spectateur ferme le lecteur. */

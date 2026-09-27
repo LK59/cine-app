@@ -1259,6 +1259,20 @@ describe("la fin d'une séance, au journal", () => {
     expect(stops[0].fields.why).toBe("page");
   });
 
+  // Une page rendue depuis le cache du navigateur (retour arrière) reprend le film : son arrêt réel,
+  // plus tard, doit être noté lui aussi (23/09/2026).
+  it("en écrit une seconde quand la page revient du cache du navigateur, puis s'en va", async () => {
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+
+    act(() => void window.dispatchEvent(new Event("pagehide")));
+    const shown = Object.assign(new Event("pageshow"), { persisted: true });
+    act(() => void window.dispatchEvent(shown));
+    unmount();
+
+    expect(logged("stop").map((line) => line.fields.why)).toEqual(["page", "unmount"]);
+  });
+
   it("dit combien de temps on a attendu quand on renonce avant la première image", async () => {
     nextProbe = () => new Promise(() => {}) as never; // n'aboutit jamais
     const { unmount } = mount();

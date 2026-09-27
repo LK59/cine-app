@@ -229,3 +229,28 @@ describe("reconstruire : automatique ou demandé", () => {
     expect(lifecycle.isNetworkLost()).toBe(false);
   });
 });
+
+// Étape 3 : la ligne `stop` de la séance, une fois — et jamais après avoir passé la main.
+describe("l'arrêt de la séance", () => {
+  it("part une seule fois", () => {
+    const lifecycle = new PlayerLifecycle();
+    expect(lifecycle.keepsUnsentStop()).toBe(true);
+    expect(lifecycle.claimStop()).toBe(true);
+    expect(lifecycle.claimStop()).toBe(false);
+    expect(lifecycle.keepsUnsentStop()).toBe(false);
+  });
+
+  it("ne part pas après avoir passé la main : la ligne `fallback` a tout dit", () => {
+    const lifecycle = new PlayerLifecycle();
+    lifecycle.stepAside();
+    expect(lifecycle.claimStop()).toBe(false);
+    expect(lifecycle.keepsUnsentStop()).toBe(false);
+  });
+
+  it("repart une fois pour une page revenue du cache du navigateur", () => {
+    const lifecycle = new PlayerLifecycle();
+    lifecycle.claimStop();
+    lifecycle.reopenStop();
+    expect(lifecycle.claimStop()).toBe(true);
+  });
+});

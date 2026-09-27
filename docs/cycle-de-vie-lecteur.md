@@ -387,7 +387,7 @@ test, 3 et 9 restent notés.
 12. **Corrigé** (DECISIONS §28 ; `bench` transmis à la route, qui n'annonce rien). **Le lecteur serveur n'applique pas le recul d'ouverture** (`openingPosition`, DECISIONS §28)
     et **rapporte à Jellyfin pendant un banc** (son `usePlaybackSession` n'a pas la condition
     `bench` du natif). Deux décisions qui devraient être partagées et ne le sont pas.
-13. **Couvert par un test** (« se redessiner avec la même séance ne reconstruit rien »). **L'effet du pipeline dépend de 17 identités censées rester stables.** Une seule qui change
+13. **Couvert par un test** (« se redessiner avec la même séance ne reconstruit rien ») ; **l'arrêt au démontage ne dépend plus d'aucune identité** (étape 3 : un effet sans dépendance, qui lit la dernière version par une référence). **L'effet du pipeline dépend de 17 identités censées rester stables.** Une seule qui change
     reconstruit tout le lecteur **sans** passer par `restart` (donc sans position de
     reconstruction, sans ligne au journal). Même dépendance cachée pour l'arrêt rapporté au
     démontage : une dépendance ajoutée à `reportStop` écrirait `stop "unmount"` en pleine séance.
@@ -462,6 +462,14 @@ automatiques : refusées une fois la main passée ou pendant la fermeture, au mo
 partiraient — un contrôle posé seulement là où elles se programmaient laissait passer un minuteur
 déjà armé. Une reconstruction demandée par le spectateur (réessayer, une piste, le plafond HDR)
 passe toujours et redonne la main au lecteur.
+
+**Étapes 3 et 4 faites (27/09/2026).** L'arrêt de la séance est dans `PlayerLifecycle`
+(`claimStop`, `keepsUnsentStop`, `reopenStop`) : une seule fois, jamais après avoir passé la main,
+rouvert pour une page revenue du cache du navigateur ; l'arrêt écrit au démontage ne se nettoie
+plus qu'au démontage. Les sauts vus par l'hôte sont dans `src/lib/hostSeek.ts` (`HostSeek`) : la
+cible demandée pas encore atteinte, et la mesure du saut en cours pour le journal. Les deux à
+l'identique, tests de l'hôte inchangés. Reste l'étape 5, le retour d'arrière-plan — à faire avec
+un iPhone pour juge.
 
 1. **Les états de reconstruction** (`lifecycle.rebuildAt`, `rebuildCount`, `lifecycle.spendRebuild`,
    `networkLost`, `lifecycle.keepPaused`) : un réducteur pur « ouvrir / prêt / perdu / réseau perdu /
