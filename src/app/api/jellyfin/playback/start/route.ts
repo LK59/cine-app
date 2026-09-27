@@ -118,6 +118,14 @@ export async function POST(req: NextRequest) {
    * notre cookie.
    */
   const forCast = body?.forCast === true;
+  /**
+   * Une lecture du banc d'essai : rien n'est annoncé à Jellyfin.
+   *
+   * Le banc saute à la fin des films ; annoncée, la séance aurait pu marquer le film vu et poser
+   * une reprise au milieu de nulle part sur le compte qui le lance — c'est la règle de
+   * `PlaybackSession.bench`, que le lecteur natif tenait et que ce chemin ignorait (27/09/2026).
+   */
+  const bench = body?.bench === true;
   const disableAudioCodecs = Array.isArray(body?.disableAudioCodecs)
     ? (body.disableAudioCodecs as unknown[]).filter((c): c is string => typeof c === "string" && /^[a-z0-9]{1,16}$/.test(c))
     : [];
@@ -293,9 +301,11 @@ export async function POST(req: NextRequest) {
     // Same for intro/credits timestamps — 404s for movies and unanalyzed
     // episodes, which just means no skip-intro / next-up prompt for this item.
     const [, timestamps, naming] = await Promise.all([
-      jellyfin
-        .reportPlaybackStart(session.jfId, itemId, session.jfToken, info.PlaySessionId, source.Id, playMethod)
-        .catch(() => {}),
+      bench
+        ? Promise.resolve()
+        : jellyfin
+            .reportPlaybackStart(session.jfId, itemId, session.jfToken, info.PlaySessionId, source.Id, playMethod)
+            .catch(() => {}),
       jellyfin.getEpisodeTimestamps(itemId).catch(() => null),
       // Alongside the others, so naming the film costs nothing on the way to its first frame.
       jellyfin.getItemNaming(session.jfId, itemId).catch(() => null),

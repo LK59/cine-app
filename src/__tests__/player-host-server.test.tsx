@@ -16,7 +16,6 @@ vi.mock("@/components/TranslationProvider", () => ({
 vi.mock("@/lib/useViewportResizing", () => ({ useViewportResizing: () => false }));
 vi.mock("@/lib/useWakeLock", () => ({ useWakeLock: () => {} }));
 vi.mock("@/lib/playerBench/bridge", () => ({ publishHandedOver: () => {} }));
-vi.mock("@/lib/resumeRewind", () => ({ noteWatching: vi.fn() }));
 vi.mock("@/components/MiniPlayer", () => ({
   MiniPlayerChrome: () => <div data-testid="mini" />,
   useMiniPlayerDrag: () => ({ pos: { x: 0, y: 0 }, size: { width: 1, height: 1 }, isDragging: false, handlers: {} }),
@@ -82,8 +81,13 @@ vi.mock("@/lib/castRoute", () => ({ castRouteActive: () => routeEtablie }));
 
 const stopNow = vi.fn(async () => {});
 const stopOrphanSession = vi.fn(async () => {});
+/** Ce que le lecteur annonce à Jellyfin, rendu après rendu : `null`/`false` veut dire « rien ». */
+const seancesAnnoncees: unknown[] = [];
 vi.mock("@/lib/usePlaybackSession", () => ({
-  usePlaybackSession: () => ({ stop: stopNow, resume: vi.fn() }),
+  usePlaybackSession: (_position: unknown, session: unknown) => {
+    seancesAnnoncees.push(session);
+    return { stop: stopNow, resume: vi.fn() };
+  },
   stopOrphanSession: (...args: unknown[]) => stopOrphanSession(...(args as [])),
 }));
 
@@ -130,6 +134,8 @@ beforeEach(() => {
   stopOrphanSession.mockClear();
   stepBack.mockClear();
   playback.close.mockClear();
+  seancesAnnoncees.length = 0;
+  localStorage.clear();
 });
 
 afterEach(() => {
@@ -166,7 +172,8 @@ describe("lecteur serveur — une négociation qui répond trop tard", () => {
     await waitFor(() => expect(stopOrphanSession).toHaveBeenCalledTimes(1));
     expect(stopOrphanSession).toHaveBeenCalledWith(
       { itemId: "film", playSessionId: "seance-jf", mediaSourceId: "source" },
-      120
+      // La position que cette ouverture devait prendre : 120 s, reculée de cinq.
+      115
     );
     expect(lignes("start")).toHaveLength(0);
     expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
@@ -216,5 +223,60 @@ describe("lecteur serveur — revenir sur le téléphone", () => {
     expect(lignes("fallback")).toHaveLength(1);
     expect(video.hasAttribute("src")).toBe(true);
     expect(stepBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** Ce que le lecteur a demandé à la route de négociation. */
+function negociation(): Record<string, unknown> {
+  const call = vi.mocked(fetch).mock.calls.find(([url]) => url === "/api/jellyfin/playback/start");
+  return JSON.parse((call![1] as RequestInit).body as string);
+}
+
+// Le recul de cinq secondes à l'ouverture (DECISIONS §28) : le lecteur natif l'avait depuis le
+// 25/09, celui-ci ouvrait pile à la position (27/09/2026).
+describe("lecteur serveur — où s'ouvre une reprise", () => {
+  it("recule de cinq secondes à la première ouverture", async () => {
+    stubFetch();
+    render(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(1));
+    expect(negociation().startTicks).toBe(115 * 10_000_000);
+  });
+
+  it("ne recule pas un titre quitté il y a moins de dix minutes", async () => {
+    // Joué sur cet appareil il y a un instant — la même mémoire que le lecteur natif.
+    const { noteWatching } = await import("@/lib/resumeRewind");
+    noteWatching("film");
+    stubFetch();
+    render(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(1));
+    expect(negociation().startTicks).toBe(120 * 10_000_000);
+  });
+
+  it("ne recule pas un relais : il porte la position exacte où le natif s'est arrêté", async () => {
+    relais = { takeover: { resumeAt: 842, owner: playback.session } };
+    stubFetch();
+    render(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(1));
+    expect(negociation().startTicks).toBe(842 * 10_000_000);
+  });
+});
+
+// Le banc saute à la fin des films : rien ne doit en être rapporté à Jellyfin (27/09/2026).
+describe("lecteur serveur — le banc d'essai", () => {
+  it("n'annonce rien : ni à la négociation, ni en battements, ni à l'arrêt", async () => {
+    playback.session = { ...playback.session, bench: "banc-1" };
+    stubFetch();
+    render(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(1));
+    expect(negociation().bench).toBe(true);
+    expect(seancesAnnoncees.every((s) => !s)).toBe(true);
+  });
+
+  it("une lecture ordinaire, elle, s'annonce", async () => {
+    stubFetch();
+    render(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(1));
+    expect(negociation().bench).toBeUndefined();
+    await waitFor(() => expect(seancesAnnoncees.some((s) => !!s)).toBe(true));
   });
 });

@@ -28,7 +28,7 @@ import { reportPlayback } from "@/lib/reportPlayback";
 import { serverStartFields, serverFailureFields, castEstablishedFields, castEndedFields, serverStopFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
 import { castRouteActive } from "@/lib/castRoute";
 import { WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
-import { noteWatching } from "@/lib/resumeRewind";
+import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
@@ -305,6 +305,7 @@ function ActivePlayer({
     initialAudioStreamIndex: sessionAudioStreamIndex,
     fromReload,
     reloadAttempt,
+    bench,
   } = session;
 
   // Le relais d'un repli survenu *pendant* la lecture prime sur ce que la séance portait : celle-ci
@@ -469,7 +470,9 @@ function ActivePlayer({
     useCallback(() => lastKnownTime.current, []),
     // Named as this app rather than as its engine: this player hands the file to Jellyfin, which
     // is what the server's own dashboard should show.
-    playSession && { ...playSession, playMethod, client: PLAYBACK_CLIENTS.stable },
+    // Rien pour un banc d'essai, comme le lecteur natif : il saute à la fin des films, et ses
+    // battements puis son arrêt marquaient le film vu sur le compte qui le lançait (27/09/2026).
+    playSession && !bench ? { ...playSession, playMethod, client: PLAYBACK_CLIENTS.stable } : null,
     useCallback(() => videoRef.current?.paused ?? false, [])
   );
 
@@ -616,7 +619,8 @@ function ActivePlayer({
       // (and throws) the original rejection exactly as it did before.
       /** La séance qu'une négociation remplacée a fait ouvrir chez Jellyfin — voir plus bas. */
       const closeOrphan = (data: { playSessionId?: string; mediaSourceId?: string } | null) => {
-        if (!data?.playSessionId || !data?.mediaSourceId) return;
+        // Un banc n'annonce rien : il n'y a rien à refermer.
+        if (bench || !data?.playSessionId || !data?.mediaSourceId) return;
         void stopOrphanSession(
           { itemId, playSessionId: data.playSessionId, mediaSourceId: data.mediaSourceId },
           opts?.resumeAt ?? lastKnownTime.current
@@ -648,6 +652,8 @@ function ActivePlayer({
           // slow first manifest patiently; Safari's native pipeline does not, which is who that
           // pre-warm was built for.
           nativeHls,
+          // Rien d'annoncé à Jellyfin pour un banc d'essai — voir la route.
+          ...(bench ? { bench: true } : {}),
         }),
       });
       // Avant la lecture du corps, donc avant setNeedsReauth / setError : l'échec d'une
@@ -1109,7 +1115,18 @@ function ActivePlayer({
     const graceTimer = setTimeout(() => {
       void resolveResumeAt(itemId, initialResumeAt).then((resumeAt) => {
         if (abandoned) return;
-        startPlayback({ resumeAt, audioStreamIndex: initialAudioStreamIndex });
+        /**
+         * Reprendre quelques secondes avant, comme le lecteur natif — DECISIONS §28.
+         *
+         * Ce lecteur ouvrait pile à la position : un compte qui a choisi le lecteur stable ne
+         * profitait pas du recul que tout le monde a depuis le 25/09 (relevé le 27/09/2026). À la
+         * première ouverture seulement : pas un relais (`mine`, qui porte la position exacte où le
+         * natif s'est arrêté, ou le retour d'une télé), pas un rechargement pour changer de piste,
+         * pas le banc. La durée n'est pas encore connue ici : le recul près de la fin n'est donc
+         * pas retenu, ce qui ne coûte que cinq secondes rejouées.
+         */
+        const at = !mine && !fromReload && !bench ? openingPosition(itemId, resumeAt, null) : resumeAt;
+        startPlayback({ resumeAt: at, audioStreamIndex: initialAudioStreamIndex });
       });
     }, graceMs);
     return () => {
@@ -1378,16 +1395,31 @@ function ActivePlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    // Retenu toutes les quinze secondes de lecture, et à la pause : ce qui distingue, à la
+    // prochaine ouverture, un retour rapide d'une vraie reprise (`resumeRewind.ts`). Sans lui, ce
+    // lecteur aurait reculé à chaque ouverture, même une minute après l'avoir quitté.
+    let notedAt = 0;
     const onTimeUpdate = () => {
       // Pas tant que rien n'est chargé : un changement de source remet l'élément à zéro et émet
       // un `timeupdate` à 0 — qui écrasait la position connue, puis celle de Jellyfin au premier
       // battement (relevé le 23/09/2026). La position semée par `startPlayback` tient jusque-là.
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
       lastKnownTime.current = video.currentTime;
+      if (!video.paused && !bench && Date.now() - notedAt > 15_000) {
+        notedAt = Date.now();
+        noteWatching(itemId);
+      }
+    };
+    const onPause = () => {
+      if (!bench && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) noteWatching(itemId);
     };
     video.addEventListener("timeupdate", onTimeUpdate);
-    return () => video.removeEventListener("timeupdate", onTimeUpdate);
-  }, [videoKey]);
+    video.addEventListener("pause", onPause);
+    return () => {
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("pause", onPause);
+    };
+  }, [videoKey, itemId, bench]);
 
   // Bad-connection badge: a real stall mid-playback ('waiting' firing after the video has
   // already played at least once — excludes ordinary startup buffering) is logged with a

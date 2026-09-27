@@ -209,6 +209,26 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "DirectPlay");
   });
 
+  // Le banc saute à la fin des films : annoncée, sa séance marquait le film vu sur le compte qui le
+  // lance. Le lecteur natif n'annonçait rien ; ce chemin annonçait tout (27/09/2026).
+  it("n'annonce rien à Jellyfin pour une lecture du banc d'essai", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "s",
+      MediaSources: [{
+        Id: "src-1",
+        Container: "mp4",
+        SupportsDirectPlay: true,
+        SupportsDirectStream: true,
+        MediaStreams: [{ Type: "Video", Index: 0, Codec: "h264" }],
+      }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const res = await POST(fakeReq({ itemId: validId, bench: true }));
+    expect(res.status).toBe(200);
+    expect(mockJellyfin.reportPlaybackStart).not.toHaveBeenCalled();
+  });
+
   it("labels playMethod Transcode when the source's own video codec isn't in the accepted VideoCodec list — a real re-encode, regardless of the reason text", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
     mockJellyfin.getPlaybackInfo.mockResolvedValue({

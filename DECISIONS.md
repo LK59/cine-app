@@ -836,15 +836,20 @@ l'index et les blocs depuis l'image clé qui précède la position reculée.
 **Porteur.** `openingPosition(itemId, position, durée)` (`src/lib/resumeRewind.ts`), sur `awayFrom`
 et `rewound`.
 
-**Appelants.** `ExperimentalPlayerHost` (la position d'ouverture) et `targetsFrom`
-(`src/lib/resumeCache/useResumeCache.ts`, ce qu'on garde). Deux calculs viseraient deux positions :
+**Appelants.** `ExperimentalPlayerHost` (la position d'ouverture), le lecteur serveur
+(`ActivePlayer` dans `PlayerHost.tsx`, depuis le 27/09/2026 : il ouvrait pile à la position, et
+ne retenait pas quand un titre venait d'être joué — il note désormais `noteWatching` comme le
+natif) et `targetsFrom` (`src/lib/resumeCache/useResumeCache.ts`, ce qu'on garde). Deux calculs viseraient deux positions :
 les octets gardés ne seraient plus ceux que le lecteur lit, et l'ouverture redeviendrait « mixte »
 sans que rien ne casse — seul le journal (`openedFrom`) le dirait.
 
 **Tests.** `resumeRewind.test.ts`, `resumeCache-core.test.ts`, `resumeCache-run.test.ts`,
 `decisions-partagees.test.ts` (ni l'hôte ni la reprise instantanée n'appellent `awayFrom` eux-mêmes).
 
-**Voulu.** Le retour d'une pause de plus de dix minutes pendant la lecture recule aussi, par
+**Voulu.** Le lecteur serveur ne recule pas un relais (la position exacte où le natif s'est
+arrêté, ou le retour d'une télé), ni un rechargement pour changer de piste ; et, faute de durée
+connue avant la négociation, il ne connaît pas l'exception de fin de film. Le retour d'une pause de
+plus de dix minutes pendant la lecture recule aussi, par
 `rewound` directement : c'est un autre moment (l'élément joue déjà), et rien n'y est gardé d'avance.
 
 **Décidé le 25/09/2026**, avec la reprise instantanée.
