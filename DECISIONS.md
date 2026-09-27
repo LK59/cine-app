@@ -721,16 +721,21 @@ l'image, lecture en arrière-plan) n'est pas touchée. La relance que WebKit fai
 déverrouillage est refusée tant qu'aucun geste du spectateur ne l'a demandée ; une reconstruction au
 retour (source fermée par iOS) repart elle aussi en pause, au même endroit.
 
-**Porteur.** `holdPausedOnReturn`, `rewoundPosition` (`src/lib/backgroundReturn.ts`).
+**Porteur.** `holdPausedOnReturn`, `rewoundPosition`, et depuis le 27/09/2026 `BackgroundWatch`
+(`src/lib/backgroundReturn.ts`) — le relevé au départ, la retenue au retour, le refus de la relance,
+les pauses du spectateur. « Cette pause est-elle celle d'iOS ? » a une seule définition,
+`pausedByViewer` (fenêtre `IOS_PAUSE_WINDOW_MS`), pour les deux décisions qui en dépendent :
+l'état noté au départ et la reconstruction qui garde la pause (`PlayerLifecycle.restart`). Les
+pauses que le lecteur fait lui-même pendant une retenue ne comptent pas comme celles du spectateur.
 
-**Appelants.** `ExperimentalPlayerHost.tsx` : le relevé au départ, la décision au retour, le refus de
-la relance, la reconstruction d'arrière-plan.
+**Appelants.** `ExperimentalPlayerHost.tsx` : les écouteurs (`visibilitychange`, `play` en capture,
+gestes, `play`/`pause` de l'élément), et la reconstruction d'arrière-plan (`currentHold`).
 
 **Différent exprès.** Le lecteur serveur (`PlayerHost.tsx`) n'applique pas la règle : sur iPhone, il
 sert surtout à diffuser vers un téléviseur, où la lecture continue par définition.
 
-**Tests.** `backgroundReturn.test.ts`, `ExperimentalPlayerHost.test.tsx` (« la lecture au retour
-d'une veille »).
+**Tests.** `backgroundReturn.test.ts` (dont `BackgroundWatch`, `pausedByViewer`),
+`ExperimentalPlayerHost.test.tsx` (« la lecture au retour d'une veille »), `playerLifecycle.test.ts`.
 
 **Décidé le 25/09/2026** : un film verrouillé une minute sur un iPhone repartait tout seul au
 déverrouillage — c'est WebKit qui le relançait, notre lecteur n'y était pour rien. Netflix, YouTube et

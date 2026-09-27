@@ -1156,13 +1156,14 @@ export function ExperimentalPlayerHost({
         // Verrouillé en plein film : la lecture attend au retour, un peu avant — voir
         // `holdPausedOnReturn`. WebKit la relance de lui-même un instant plus tard ; le refus de
         // cette relance-là est plus bas, dans `onPlay`.
+        // Une retenue n'existe qu'avec une vidéo (`show` rend `null` sans elle) ; `element` est
+        // testé ici pour le typage. Sa position est celle que la reconstruction au retour lira aussi.
         const hold = background.show(Date.now(), away, element);
         if (element && hold) {
-          const at = hold.at;
-          trace(`retour après ${(away / 1000).toFixed(1)} s : lecture laissée en pause, reprise à ${at.toFixed(1)} s`);
+          trace(`retour après ${(away / 1000).toFixed(1)} s : lecture laissée en pause, reprise à ${hold.at.toFixed(1)} s`);
           try {
             element.pause();
-            element.currentTime = at;
+            element.currentTime = hold.at;
           } catch {
             // Source déjà fermée par iOS : la reconstruction au retour reprendra en pause, à cet endroit.
           }
@@ -1175,8 +1176,8 @@ export function ExperimentalPlayerHost({
     // La relance de WebKit au déverrouillage arrive après notre pause : refusée tant qu'aucun geste
     // du spectateur ne l'a demandée. `play` ne remonte pas : écouté en capture, sur le document.
     const onPlay = (event: Event) => {
-      if (!background.currentHold() || !(event.target instanceof HTMLVideoElement)) return;
-      if (!background.refusePlay(Date.now())) return;
+      // Une lecture d'autre chose qu'une vidéo ne touche pas à la retenue.
+      if (!(event.target instanceof HTMLVideoElement) || !background.refusePlay(Date.now())) return;
       trace("relance du navigateur au retour refusée — la lecture attend le spectateur");
       event.target.pause();
     };

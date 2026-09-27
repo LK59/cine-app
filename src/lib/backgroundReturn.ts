@@ -49,6 +49,20 @@ export function rewoundPosition(position: number): number {
  */
 export const IOS_PAUSE_WINDOW_MS = 1000;
 
+/**
+ * Cette pause est-elle celle du spectateur, et non celle d'iOS qui suspend la vidéo en verrouillant ?
+ *
+ * Une seule définition pour les deux décisions qui en dépendent : l'état noté au départ
+ * (`BackgroundWatch.hide`) et la reconstruction qui garde la pause (`PlayerLifecycle.restart`).
+ * Écrite deux fois, la fenêtre s'y comparait l'une en `<`, l'autre en `>` : à la milliseconde près,
+ * les deux concluaient l'inverse (relu le 27/09/2026). Une pause après le départ — au retour — est
+ * celle du spectateur ; une page jamais partie aussi.
+ */
+export function pausedByViewer(pausedAt: number | null, hiddenAt: number | null): boolean {
+  if (pausedAt === null) return false;
+  return hiddenAt === null || hiddenAt < pausedAt || hiddenAt - pausedAt >= IOS_PAUSE_WINDOW_MS;
+}
+
 /** Combien de temps, au retour, la relance de WebKit est refusée si aucun geste ne l'a demandée. */
 export const REFUSE_RELAUNCH_MS = 2500;
 
@@ -95,8 +109,15 @@ export class BackgroundWatch {
     this.viewerPausedAt = null;
   }
 
-  /** La vidéo s'arrête. Une pause ne compte comme celle du spectateur que page visible et film pas fini. */
+  /**
+   * La vidéo s'arrête. Une pause ne compte comme celle du spectateur que page visible et film pas
+   * fini — et pas pendant une retenue de retour, où c'est le lecteur lui-même qui met en pause (au
+   * retour, puis en refusant la relance de WebKit). Comptée, elle faisait d'un nouveau verrouillage
+   * dans la seconde une « pause d'iOS », donc une vidéo notée en lecture : chaque aller-retour
+   * reculait encore de 3 s un film qui n'avait pas joué (relevé le 27/09/2026).
+   */
   notePaused(now: number, facts: { visible: boolean; ended: boolean }): void {
+    if (this.hold && now <= this.hold.until) return;
     if (facts.visible && !facts.ended) this.viewerPausedAt = now;
   }
 
@@ -128,7 +149,7 @@ export class BackgroundWatch {
     this.hiddenAt = now;
     this.hold = null;
     const pausedAt = this.viewerPausedAt;
-    const iosPaused = video?.paused === true && pausedAt !== null && now - pausedAt < IOS_PAUSE_WINDOW_MS;
+    const iosPaused = video?.paused === true && pausedAt !== null && !pausedByViewer(pausedAt, now);
     this.hiddenPlayback = video ? { playing: !video.paused || iosPaused, at: video.currentTime } : null;
   }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { BackgroundWatch, HOLD_AFTER_AWAY_MS, holdPausedOnReturn, rewoundPosition } from "@/lib/backgroundReturn";
+import { BackgroundWatch, HOLD_AFTER_AWAY_MS, IOS_PAUSE_WINDOW_MS, holdPausedOnReturn, pausedByViewer, rewoundPosition } from "@/lib/backgroundReturn";
 
 /** Verrouillé une minute en plein film, sur un iPhone : WebKit relançait tout seul (25/09/2026). */
 const locked = { awayMs: 60_000, playingWhenHidden: true, positionWhenHidden: 4115, positionOnReturn: 4115.2 };
@@ -104,5 +104,45 @@ describe("BackgroundWatch", () => {
     watch.notePaused(20_000, { visible: false, ended: false });
     watch.notePaused(21_000, { visible: true, ended: true });
     expect(watch.pauseFacts().viewerPausedAt).toBeNull();
+  });
+});
+
+// Relevé par la relecture de l'étape 5 (27/09/2026) : les pauses du lecteur lui-même, au retour,
+// comptaient comme celles du spectateur. Un nouveau verrouillage dans la seconde devenait une
+// « pause d'iOS », la vidéo était notée en lecture, et chaque aller-retour reculait encore de 3 s.
+describe("les pauses du lecteur pendant une retenue", () => {
+  it("ne comptent pas comme celles du spectateur, et un nouveau verrouillage ne recule plus", () => {
+    const watch = new BackgroundWatch();
+    watch.hide(10_000, { paused: false, currentTime: 1200 });
+    const first = watch.show(70_000, 60_000, { paused: true, currentTime: 1200 });
+    expect(first?.at).toBe(1197);
+    // Le lecteur met en pause (retour), puis refuse la relance de WebKit : deux pauses à lui.
+    watch.notePaused(70_001, { visible: true, ended: false });
+    watch.notePaused(70_300, { visible: true, ended: false });
+    expect(watch.pauseFacts().viewerPausedAt).toBeNull();
+    // Reverrouillé une demi-seconde plus tard, rien n'ayant joué : au retour suivant, pas de recul.
+    watch.hide(70_800, { paused: true, currentTime: 1197 });
+    expect(watch.show(130_000, 59_200, { paused: true, currentTime: 1197 })).toBeNull();
+  });
+
+  it("une pause du spectateur après la retenue compte de nouveau", () => {
+    const watch = new BackgroundWatch();
+    watch.hide(10_000, { paused: false, currentTime: 100 });
+    watch.show(70_000, 60_000, { paused: true, currentTime: 100 });
+    // Le spectateur relance d'un geste : la retenue se lève.
+    watch.noteGesture(71_000);
+    watch.refusePlay(71_000);
+    watch.notePaused(80_000, { visible: true, ended: false });
+    expect(watch.pauseFacts().viewerPausedAt).toBe(80_000);
+  });
+});
+
+describe("à qui est la pause — une seule définition", () => {
+  it("celle du spectateur si elle précède le départ d'au moins la fenêtre, ou le suit", () => {
+    expect(pausedByViewer(null, 10_000)).toBe(false);
+    expect(pausedByViewer(5_000, null)).toBe(true);
+    expect(pausedByViewer(12_000, 10_000)).toBe(true);
+    expect(pausedByViewer(10_000 - IOS_PAUSE_WINDOW_MS, 10_000)).toBe(true);
+    expect(pausedByViewer(10_000 - IOS_PAUSE_WINDOW_MS + 1, 10_000)).toBe(false);
   });
 });
