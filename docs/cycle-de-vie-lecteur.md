@@ -317,10 +317,11 @@ Relevés à la lecture, puis vérifiés dans le code pour les marqués **vérifi
 connue dans le journal à ce jour : ce sont des chemins possibles, pas des bugs observés. Chacun est
 un candidat naturel pour un test, avant ou pendant un découpage.
 
-**État au 27/09/2026** : 6, 7, 8, 10 et 12 corrigés, chacun avec un test qui échoue sans sa
-correction (`player-host-server.test.tsx`, le premier harnais du lecteur serveur ;
-`webcodecs-mseSource.test.ts`) ; 11 évalué et laissé tel quel (voir le point). Les autres attendent
-le découpage de l'hôte natif, où ils se corrigent à leur place.
+**État au 27/09/2026** : tous traités. 6, 7, 8, 10 et 12 corrigés à l'étape 0, chacun avec un
+test qui échoue sans sa correction (`player-host-server.test.tsx`, le premier harnais du lecteur
+serveur ; `webcodecs-mseSource.test.ts`). 2, 4, 5 et 14 corrigés à l'étape 2, dans
+`PlayerLifecycle` (voir plus bas), en inversant leur test « comportement actuel ». 1 s'est révélé
+bénin, 11 est laissé tel quel, 13 est couvert par un test, 3 et 9 restent notés.
 
 1. **Bénin, testé.** **`rebuildAtRef` n'est remis à zéro qu'en cas de succès** (vérifié). Seul `declareReady` l'efface.
    Une reconstruction qui finit en `networkLost` ou en abandon le laisse posé : la vérification de
@@ -330,7 +331,7 @@ le découpage de l'hôte natif, où ils se corrigent à leur place.
    de pipeline à surveiller (`remuxRef` est vide), donc la vérification désactivée ne rate rien ;
    et le nouvel essai rouvre bien à la position de la reconstruction (« une reconstruction ratée
    faute de réseau rouvre… »). Pas de correction nécessaire.
-2. **Les reconstructions après perte et après coupure réseau ignorent la fin du film** (vérifié).
+2. **Corrigé** (`restart` garde en pause toute reconstruction d'un film fini). **Les reconstructions après perte et après coupure réseau ignorent la fin du film** (vérifié).
    Le chemin « source perdue » (`onError` + `lost`) et le nouvel essai réseau ne regardent pas
    `endStoppedRef`. Comme `onPause` n'enregistre pas de pause du spectateur quand l'élément est à
    sa fin, `restart` ne garde pas non plus la pause : une source perdue sur l'écran de fin est
@@ -340,11 +341,11 @@ le découpage de l'hôte natif, où ils se corrigent à leur place.
    `onStall` et `onStarting` sont fermés sur l'effet d'un pipeline, mais le test « la source est
    perdue » lit `remuxRef.current`, c'est-à-dire le pipeline *courant*. La sûreté repose entièrement
    sur `MseSource`, qui se tait après `destroy` (elle le fait presque partout).
-4. **Après une bascule sans lecteur serveur, l'hôte peut se relancer.** La reconstruction après
+4. **Corrigé** (`isOver`). **Après une bascule sans lecteur serveur, l'hôte peut se relancer.** La reconstruction après
    perte, la vérification d'arrière-plan et le nouvel essai réseau ne regardent pas
    `steppedAside`. `restart` efface `runtimeError` : l'écran d'erreur peut disparaître et le
    pipeline repartir après un abandon. Ne concerne que `PLAYER_SERVER_FALLBACK=false`.
-5. **Fermer n'arrête ni le pipeline ni ses minuteurs pendant le fondu de 200 ms.** Un sondage qui
+5. **Corrigé** (`noteClosing` : plus de bascule, de reconstruction ni de nouvel essai pendant le fondu ; un `play()` d'un sondage qui aboutit reste possible). **Fermer n'arrête ni le pipeline ni ses minuteurs pendant le fondu de 200 ms.** Un sondage qui
    aboutit à ce moment appelle `play()` (le son peut démarrer pendant la sortie), le nouvel essai
    réseau peut appeler `restart`, et un `fallToStable` (le minuteur d'abandon, par exemple) peut
    écrire une ligne `fallback` **après** la ligne `stop` — et ajouter le film à `handedOver`, ce
@@ -384,7 +385,7 @@ le découpage de l'hôte natif, où ils se corrigent à leur place.
     reconstruction, sans ligne au journal). Même dépendance cachée pour l'arrêt rapporté au
     démontage : une dépendance ajoutée à `reportStop` écrirait `stop "unmount"` en pleine séance.
 
-14. **Une coupure signalée pendant l'attache laisse l'écran de coupure sur un lecteur prêt.**
+14. **Corrigé** (`declareReady` efface l'écran de coupure). **Une coupure signalée pendant l'attache laisse l'écran de coupure sur un lecteur prêt.**
     Si le moteur signale une erreur réseau pendant `probe.start`, puis que l'attache aboutit
     quand même, `declareReady` pose `ready` sans effacer `networkLost` : l'écran « connexion
     perdue » reste affiché par-dessus un lecteur prêt, jusqu'au nouvel essai. Relevé par
@@ -441,6 +442,13 @@ Les coutures existent déjà :
   `fallToStable`. Ce sont les points où un module d'état s'insérerait.
 
 Un ordre de découpage, du moins au plus risqué, chaque étape sans changement de comportement :
+
+**Où on en est (27/09/2026).** Étape 1 faite : le modèle d'ouverture et de reconstruction vit dans
+`src/lib/playerLifecycle.ts` (`PlayerLifecycle`) — budget, position de reconstruction, « même
+endroit », règle de pause, position d'ouverture, retour d'arrière-plan, nouveaux essais réseau,
+passage de main, fin de film et fermeture. Déplacé à l'identique d'abord (commit à part, les 105
+tests de l'hôte inchangés), puis les points 2, 4, 5 et 14 corrigés dedans. L'hôte l'appelle ; il n'y
+écrit plus de drapeau lui-même.
 
 1. **Les états de reconstruction** (`rebuildAtRef`, `rebuildCount`, `spendRebuild`,
    `networkLost`, `keepPausedRef`) : un réducteur pur « ouvrir / prêt / perdu / réseau perdu /
