@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { HostSeek, describeBufferedAround, type SeekTiming } from "@/lib/hostSeek";
+import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from "@/lib/hostSeek";
 
 // Les sauts vus par l'hôte natif, règle par règle. L'hôte les éprouve de bout en bout
 // (ExperimentalPlayerHost.test.tsx : « un changement de piste pendant un saut… », « écrit chaque
@@ -72,10 +72,18 @@ describe("la mesure d'un saut", () => {
     expect(seeks.seeked(200)).toBeNull();
   });
 
-  it("un nouveau saut rend celle qu'il remplace", () => {
+  it("un nouveau saut reprend celle qu'il remplace, avant de commencer la sienne", () => {
     const seeks = new HostSeek();
-    expect(seeks.startMeasure(timing(600))).toBeNull();
-    expect(seeks.startMeasure(timing(900))).toMatchObject({ to: 600 });
+    expect(seeks.takeMeasure()).toBeNull();
+    seeks.startMeasure(timing(600));
+    expect(seeks.takeMeasure()).toMatchObject({ to: 600 });
+    expect(seeks.takeMeasure()).toBeNull();
+  });
+
+  it("ne compte pas le temps passé en arrière-plan", () => {
+    // Lancé à 1 000 ms avec 5 000 ms d'arrière-plan déjà cumulés ; à 91 000 ms, 85 000 de plus.
+    expect(seekDuration({ startedAt: 1_000, hiddenAtStart: 5_000 }, 91_000, 90_000)).toBe(5_000);
+    expect(seekDuration({ startedAt: 1_000, hiddenAtStart: 0 }, 1_500, 0)).toBe(500);
   });
 
   it("abandonnée hors du chemin natif", () => {

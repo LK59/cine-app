@@ -120,7 +120,7 @@ stockée.
 | Lecture | `playing` vrai, `ended` faux |
 | Pause du spectateur | `playing` faux, `viewerPausedAtRef` posé |
 | Attente en pleine lecture | aucun état React : `tally.waitingSince`, et `onStall` du moteur à 5 s |
-| Saut | `requestedSeekRef` et/ou `seekTimingRef` posés, et/ou `element.seeking` |
+| Saut | une cible demandée ou une mesure en cours dans `seeks` (`HostSeek`), et/ou `element.seeking` |
 | Reconstruction | `ready` faux et `lifecycle.rebuildAt` posé ; `rebuildCount` vient d'augmenter ; image figée possible (`frozen`) |
 | Changement de piste | reconstruction **et** `pendingSwitchRef` posé |
 | Reconstruction plafond HDR | reconstruction sans `pendingSwitchRef` |
@@ -130,7 +130,7 @@ stockée.
 | Abandon | ouverture depuis plus de 35 s → `fallToStable("aucune image après 35 s")` |
 | Fin | `ended` vrai, `lifecycle.isEnded()` vrai (arrêt Jellyfin déjà envoyé) |
 | Passé la main | `steppedAside` vrai ; avec lecteur serveur, l'hôte est démonté ; sans lui, `runtimeError` posé et écran d'erreur |
-| Fermeture | `closing` vrai, `stopReportedRef` vrai ; `close(openId)` 200 ms plus tard |
+| Fermeture | `closing` vrai, arrêt déjà parti (`lifecycle.claimStop`) ; `close(openId)` 200 ms plus tard |
 
 ### Les briques qui portent les transitions
 
@@ -364,7 +364,7 @@ test, 3 et 9 restent notés.
    transcodage Jellyfin qu'aucun `stop` ne ferme.
 7. **Corrigé** (`closedRef`). **Lecteur serveur : deux appuis sur Fermer écrivent deux lignes `stop`** (vérifié), la seconde
    avec `watched: 0`, et lancent deux `refreshAfterPlayback`. L'hôte natif, lui, a
-   `stopReportedRef`.
+   `lifecycle.claimStop`.
 8. **Corrigé** (la fin attend aussi la file du son). **La fin de flux ne passe que par la file vidéo** (vérifié). Une suppression non attendue sur la
    file audio (`trimBehind`, `evict`) peut encore travailler : `endOfStream` lève, l'erreur est
    avalée, et `ended` est déjà vrai — le flux peut ne jamais être déclaré fini. Possible, jamais
@@ -468,7 +468,8 @@ passe toujours et redonne la main au lecteur.
 rouvert pour une page revenue du cache du navigateur ; l'arrêt écrit au démontage ne se nettoie
 plus qu'au démontage. Les sauts vus par l'hôte sont dans `src/lib/hostSeek.ts` (`HostSeek`) : la
 cible demandée pas encore atteinte, et la mesure du saut en cours pour le journal. Les deux à
-l'identique, tests de l'hôte inchangés. Reste l'étape 5, le retour d'arrière-plan — à faire avec
+l'identique : les tests existants de l'hôte passent sans modification (un test a été ajouté,
+le retour depuis le cache du navigateur). Reste l'étape 5, le retour d'arrière-plan — à faire avec
 un iPhone pour juge.
 
 1. **Les états de reconstruction** (`lifecycle.rebuildAt`, `rebuildCount`, `lifecycle.spendRebuild`,
@@ -476,9 +477,9 @@ un iPhone pour juge.
    abandon », avec ses tests. Règle naturellement les points 1, 2 et 4 — **mais en les corrigeant,
    pas en les déplaçant** : à faire en deux temps, d'abord à l'identique, puis la correction avec
    son test.
-2. **Les sauts côté hôte** (`requestedSeekRef`, `seekTimingRef`, `noteSeekRequest`) — déjà
+2. **Les sauts côté hôte** (`HostSeek`, `noteSeekRequest`) — déjà
    clarifiés le 22/09.
-3. **La fin de film et la fermeture** (`ended`, `lifecycle.isEnded()`, `closing`, `stopReportedRef`,
+3. **La fin de film et la fermeture** (`ended`, `lifecycle.isEnded()`, `closing`, `lifecycle.claimStop`,
    `steppedAside`) : un seul endroit qui dit « cette séance est finie » — points 5 et 7.
 4. **Le retour d'arrière-plan** (`hiddenAtRef`, `hiddenPlaybackRef`, `holdOnReturnRef`) — en
    dernier : c'est là que vivent les défauts propres à iOS, et le seul juge est un appareil.

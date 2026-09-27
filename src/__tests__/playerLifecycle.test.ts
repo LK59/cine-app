@@ -147,10 +147,10 @@ describe("les nouveaux essais réseau", () => {
 describe("passer la main", () => {
   it("une seule fois", () => {
     const lifecycle = new PlayerLifecycle();
-    expect(lifecycle.hasSteppedAside()).toBe(false);
+    expect(lifecycle.isOver()).toBe(false);
     expect(lifecycle.stepAside()).toBe(true);
     expect(lifecycle.stepAside()).toBe(false);
-    expect(lifecycle.hasSteppedAside()).toBe(true);
+    expect(lifecycle.isOver()).toBe(true);
   });
 });
 

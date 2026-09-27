@@ -301,7 +301,7 @@ export class PlayerLifecycle {
    * la ligne `fallback` a déjà raconté la fin de la séance ici, le lecteur serveur prend la suite.
    */
   claimStop(): boolean {
-    if (this.stopReported || this.steppedAside) return false;
+    if (!this.keepsUnsentStop()) return false;
     this.stopReported = true;
     return true;
   }
@@ -340,8 +340,5 @@ export class PlayerLifecycle {
     return this.steppedAside || this.closing;
   }
 
-  /** La main a-t-elle déjà été passée ? */
-  hasSteppedAside(): boolean {
-    return this.steppedAside;
-  }
+
 }

@@ -48,16 +48,22 @@ export class HostSeek {
   }
 
   /**
-   * Commence la mesure d'un saut, et rend celle qu'il remplace, s'il y en a une.
+   * Rend la mesure en cours et l'oublie — celle qu'un nouveau saut remplace.
    *
    * Un saut qui n'arrivait pas là où il était demandé n'écrivait rien : la ligne ne partait qu'à
    * l'arrivée — 2012 sur iPhone (22/09/2026), une tête passée de 2141 à 1681 s sans une trace. La
-   * mesure remplacée est rendue pour que l'hôte l'écrive, avec l'endroit où elle est tombée.
+   * mesure remplacée est rendue pour que l'hôte l'écrive, avec l'endroit où elle est tombée, avant
+   * de commencer la suivante.
    */
-  startMeasure(timing: SeekTiming): SeekTiming | null {
+  takeMeasure(): SeekTiming | null {
     const superseded = this.timing;
-    this.timing = timing;
+    this.timing = null;
     return superseded;
+  }
+
+  /** Commence la mesure d'un saut. */
+  startMeasure(timing: SeekTiming): void {
+    this.timing = timing;
   }
 
   /**
@@ -114,6 +120,16 @@ export class HostSeek {
     this.requested = null;
     return null;
   }
+}
+
+/**
+ * La durée d'un saut, sans le temps passé en arrière-plan pendant qu'il attendait.
+ *
+ * Un saut lancé juste avant de quitter l'application et arrivé au retour comptait l'absence
+ * entière : 286 s pour un Mac mis en veille (24/09/2026), ce qui faussait tout bilan des attentes.
+ */
+export function seekDuration(timing: Pick<SeekTiming, "startedAt" | "hiddenAtStart">, now: number, hiddenMsSoFar: number): number {
+  return Math.max(0, now - timing.startedAt - (hiddenMsSoFar - timing.hiddenAtStart));
 }
 
 /**

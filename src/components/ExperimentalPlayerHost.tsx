@@ -83,7 +83,7 @@ import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSess
 import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
 import { forgetResumeCache, openDiskChunks, openingFacts } from "@/lib/resumeCache/diskChunks";
 import { PlayerLifecycle } from "@/lib/playerLifecycle";
-import { HostSeek, describeBufferedAround, type SeekTiming } from "@/lib/hostSeek";
+import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from "@/lib/hostSeek";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -303,14 +303,10 @@ const TRANSITION =
 /** Le plus longtemps qu'une image figée reste à l'écran, quoi qu'il arrive. */
 const FREEZE_MAX_MS = 4000;
 
-/**
- * La durée d'un saut, sans le temps passé en arrière-plan pendant qu'il attendait. Un saut lancé
- * juste avant de quitter l'application et arrivé au retour comptait l'absence entière : 286 s pour
- * un Mac mis en veille (24/09/2026), ce qui faussait tout bilan des attentes.
- */
-function seekElapsed(tally: SessionTally, timing: { startedAt: number; hiddenAtStart: number }): number {
+/** La durée d'un saut, sans le temps passé en arrière-plan — voir `seekDuration` (hostSeek.ts). */
+function seekElapsed(tally: SessionTally, timing: SeekTiming): number {
   const now = Date.now();
-  return Math.max(0, now - timing.startedAt - (tally.hiddenMsSoFar(now) - timing.hiddenAtStart));
+  return seekDuration(timing, now, tally.hiddenMsSoFar(now));
 }
 
 export function ExperimentalPlayerHost({
@@ -1249,6 +1245,11 @@ export function ExperimentalPlayerHost({
    * docs/cycle-de-vie-lecteur.md). Un effet sans dépendance, qui lit la dernière version par une
    * référence, ne se nettoie qu'au démontage.
    */
+  //
+  // Sa place dans ce composant compte : au démontage, React nettoie les effets dans l'ordre où ils
+  // sont déclarés. Déclaré ici, l'arrêt est écrit *après* que l'horloge du temps regardé s'est
+  // arrêtée (l'effet `[playing, watched]`, plus haut) — sinon il manquerait le dernier morceau —, et
+  // *avant* l'arrêt que `usePlaybackSession`, plus bas, envoie à Jellyfin.
   const reportStopRef = useRef(reportStop);
   useEffect(() => {
     reportStopRef.current = reportStop;
@@ -2085,8 +2086,10 @@ export function ExperimentalPlayerHost({
     const element = videoElRef.current;
     // Les plages autour de la cible, pour la ligne du journal — voir `describeBufferedAround`.
     const { buffered, ranges } = describeBufferedAround(element?.buffered ?? null, seconds);
-    const superseded = seeks.startMeasure({ from: positionRef.current, to: seconds, startedAt: Date.now(), hiddenAtStart: tally.hiddenMsSoFar(Date.now()), buffered, ranges });
-    reportUnarrivedSeek(superseded, element?.currentTime ?? positionRef.current, element?.seeking ?? false);
+    // Le saut remplacé d'abord, puis la nouvelle mesure : son départ ne compte pas le temps d'écrire
+    // la ligne du précédent.
+    reportUnarrivedSeek(seeks.takeMeasure(), element?.currentTime ?? positionRef.current, element?.seeking ?? false);
+    seeks.startMeasure({ from: positionRef.current, to: seconds, startedAt: Date.now(), hiddenAtStart: tally.hiddenMsSoFar(Date.now()), buffered, ranges });
   };
 
   /** Un changement de piste audio — les commandes et le banc d'essai, par le même chemin. */

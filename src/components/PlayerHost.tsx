@@ -482,7 +482,7 @@ function ActivePlayer({
   const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
 
   /**
-   * La séance est déjà fermée — une seule fois, comme `stopReportedRef` côté lecteur natif.
+   * La séance est déjà fermée — une seule fois, comme `lifecycle.claimStop` côté lecteur natif.
    *
    * Deux appuis pendant le fondu (Quitter sur l'écran d'erreur, puis la croix ; la croix, puis la
    * fin du fichier) écrivaient deux lignes `stop`, la seconde avec zéro seconde regardée — le
