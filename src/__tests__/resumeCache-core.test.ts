@@ -241,6 +241,17 @@ describe("HttpByteSource avec des morceaux gardés", () => {
     source.close(false);
   });
 
+  it("dit « mémoire » d'une réouverture servie par ce que la lecture d'avant tenait encore", async () => {
+    // Sans lecture en avance : seul ce qui est lu compte, et la première lecture a tout ce qu'il faut.
+    const first = (await HttpByteSource.open("/j", FILE.length)).withoutReadahead();
+    await first.read(10, 20);
+    first.close();
+    const reopened = (await HttpByteSource.open("/j", FILE.length)).withoutReadahead();
+    expect(await reopened.read(10, 20)).toEqual(FILE.slice(10, 30));
+    expect(openingFacts("/j")).toMatchObject({ openedFrom: "mémoire", deviceBytes: 0 });
+    reopened.close(false);
+  });
+
   it("sans morceaux gardés, rien ne change", async () => {
     const source = await HttpByteSource.open("/i", FILE.length);
     expect(await source.read(10, 20)).toEqual(FILE.slice(10, 30));

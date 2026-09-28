@@ -69,14 +69,17 @@ export function forgetResumeCache(itemId: string): void {
 
 /**
  * Pour la ligne `start` : d'où l'ouverture a été servie, et combien d'octets venaient de l'appareil.
- * « appareil » : rien du réseau jusque-là ; « mixte » : les deux ; « réseau » : rien de l'appareil.
+ * « appareil » : rien du réseau jusque-là ; « mixte » : les deux ; « réseau » : rien de l'appareil ;
+ * « mémoire » : ni l'un ni l'autre — un titre rouvert dans les secondes qui suivent son arrêt reprend
+ * les octets que la lecture d'avant tenait encore (`handover`). Classées « réseau » jusqu'au
+ * 28/09/2026, ces réouvertures faisaient lire un téléchargement là où il n'y en avait aucun.
  * De quoi comparer `openedInMs` avant et après ce chantier, et voir une reprise qui aurait dû être
  * servie de l'appareil et ne l'a pas été.
  */
 export function openingFacts(streamUrl: string): Record<string, string | number> {
   const bytes = openingBytes(streamUrl);
   if (!bytes) return {};
-  const openedFrom = bytes.device === 0 ? "réseau" : bytes.network === 0 ? "appareil" : "mixte";
+  const openedFrom = bytes.device === 0 && bytes.network === 0 ? "mémoire" : bytes.device === 0 ? "réseau" : bytes.network === 0 ? "appareil" : "mixte";
   return { openedFrom, deviceBytes: bytes.device };
 }
 
