@@ -15,13 +15,27 @@
 
 /** Plus près que cela de la cible, la reprise a tenu. */
 export const CAST_RESUME_TOLERANCE_SECONDS = 10;
+/**
+ * Au-delà, la cible ne vaut plus : la course se joue dans les secondes de l'ouverture. Gardée plus
+ * longtemps, une reprise jamais « vue » — le spectateur a sauté ailleurs pendant qu'elle se posait —
+ * renvoyait la télé à cette position une heure plus tard (relecture du 28/09/2026).
+ */
+export const CAST_RESUME_WINDOW_MS = 60_000;
 
 export class CastResume {
   private target: number | null = null;
+  private plannedAt = 0;
+
+  constructor(private readonly now: () => number = () => Date.now()) {}
 
   /** Une lecture part à cette position (0 ou absente : du début, rien à surveiller). */
   planned(seconds: number | undefined): void {
     this.target = seconds !== undefined && Number.isFinite(seconds) && seconds > CAST_RESUME_TOLERANCE_SECONDS ? seconds : null;
+    this.plannedAt = this.now();
+  }
+
+  private expire(): void {
+    if (this.target !== null && this.now() - this.plannedAt > CAST_RESUME_WINDOW_MS) this.target = null;
   }
 
   /** L'élément se montre à cette position : près de la cible, elle a tenu et on l'oublie. */
@@ -31,6 +45,7 @@ export class CastResume {
 
   /** La cible à reposer maintenant, ou null. Une seule fois : rendue, elle est oubliée. */
   take(currentTime: number): number | null {
+    this.expire();
     const target = this.target;
     if (target === null) return null;
     this.target = null;
@@ -39,6 +54,7 @@ export class CastResume {
 
   /** La cible en attente, pour le journal. */
   get pending(): number | null {
+    this.expire();
     return this.target;
   }
 }

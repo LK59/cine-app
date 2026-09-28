@@ -1247,11 +1247,18 @@ export class MseSource {
    * iPhone). Le réaffecter relance l'algorithme ; la cible est alors dans les plages, et
    * `onSeeking` n'a rien à relire (`isBufferedAt`).
    */
+  //
+  // Seulement si la cible est dans les plages — le seul cas où relancer sert —, et comme un geste
+  // de cette source (`expectOwnMove`) : `onSeeking` n'a alors rien à relire. Sans ces deux gardes,
+  // une cible hors des plages relançait un saut, qui relisait jusqu'à la fin, qui relançait… en
+  // boucle (relecture du 28/09/2026, prouvée par un test).
   private reseekAfterEnd(): void {
     try {
       if (this.destroyed || !this.video.seeking) return;
       const target = this.video.currentTime;
+      if (!this.isBufferedAt(target)) return;
       trace(`fin du flux déclarée pendant un saut vers ${target.toFixed(1)} s — saut relancé sur place`);
+      this.seekState.expectOwnMove(target);
       this.video.currentTime = target;
     } catch {
       /* le chien de garde reste là */

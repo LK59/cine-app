@@ -35,6 +35,17 @@ describe("CastResume", () => {
     expect(resume.take(0)).toBeNull();
   });
 
+  it("ne vaut que pour l'ouverture : une heure plus tard, la télé n'est pas renvoyée en arrière", () => {
+    let clock = 0;
+    const resume = new CastResume(() => clock);
+    resume.planned(60);
+    // Le spectateur a sauté ailleurs pendant que la reprise se posait : jamais « vue ».
+    resume.observed(95);
+    clock += 3_600_000;
+    expect(resume.pending).toBeNull();
+    expect(resume.take(3700)).toBeNull();
+  });
+
   it("une position loin de la cible ne l'efface pas", () => {
     const resume = new CastResume();
     resume.planned(1246);
