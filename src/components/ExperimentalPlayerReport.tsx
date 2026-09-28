@@ -7,8 +7,8 @@
 // one sentence on it, or a spinner that never stops. On a phone there is no console behind either.
 // So the same facts are gathered into one block of text here, with a way to get it off the device.
 
-import { useCallback, useEffect, useState } from "react";
-import { ClipboardCheck, Copy } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ClipboardCheck, Copy, RefreshCw } from "lucide-react";
 import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
 import { traceText } from "@/lib/webcodecs/trace";
 import { useT } from "@/components/TranslationProvider";
@@ -74,45 +74,71 @@ export function ExperimentalPlayerReport({ input }: { input: ReportInput }) {
   const t = useT();
   const [capabilities, setCapabilities] = useState<Record<string, string> | null>(null);
   const [copied, setCopied] = useState(false);
+  /**
+   * Le rapport est une photo, prise à l'ouverture, et reprise quand les sondes répondent, sur
+   * « Actualiser » ou au moment de copier (28/09/2026). Reconstruit à chaque rendu — toutes les
+   * 500 ms, panneau ouvert —, il changeait à chaque fois (il commence par l'heure) : sur iPhone, la
+   * zone de texte de plusieurs centaines de lignes était réécrite, revenait en haut, et le défilement
+   * du panneau se figeait pendant qu'on le lisait.
+   */
+  const [report, setReport] = useState(() => buildReport(input, null));
+  const inputRef = useRef(input);
+  useEffect(() => {
+    inputRef.current = input;
+  });
 
   // Asked here rather than inherited from the panel: on this screen the panel never opened, and
   // what the device accepts is the single most useful thing to know about a refusal.
   useEffect(() => {
     let cancelled = false;
+    const settle = (found: Record<string, string>) => {
+      if (cancelled) return;
+      setCapabilities(found);
+      setReport(buildReport(inputRef.current, found));
+    };
     void probeCapabilities()
-      .then((found) => !cancelled && setCapabilities(describeCapabilities(found)))
-      .catch(() => !cancelled && setCapabilities({ "Sonde des capacités": "échec" }));
+      .then((found) => settle(describeCapabilities(found)))
+      .catch(() => settle({ "Sonde des capacités": "échec" }));
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const report = buildReport(input, capabilities);
+  const refresh = useCallback(() => setReport(buildReport(inputRef.current, capabilities)), [capabilities]);
 
   const copy = useCallback(() => {
+    // Ce qui part est l'état de maintenant, pas la photo de l'ouverture.
+    const fresh = buildReport(inputRef.current, capabilities);
+    setReport(fresh);
     // Only over HTTPS, and not on every browser. The textarea below is the fallback that always
     // works: it is selectable, so the report can be taken by hand when this cannot give it.
     void navigator.clipboard
-      ?.writeText(report)
+      ?.writeText(fresh)
       .then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       })
       .catch(() => {});
-  }, [report]);
+  }, [capabilities]);
 
   return (
     <div className="mt-2 w-full max-w-lg text-left">
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-xs uppercase tracking-wide text-slate-500">{t("player.report.details")}</p>
-        <button
-          type="button"
-          onClick={copy}
-          className="btn btn-ghost btn-sm"
-        >
-          {copied ? <ClipboardCheck size={14} /> : <Copy size={14} />}
-          {copied ? t("player.report.copied") : t("player.report.copy")}
-        </button>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={refresh} className="btn btn-ghost btn-sm" aria-label={t("player.report.refresh")}>
+            <RefreshCw size={14} />
+            {t("player.report.refresh")}
+          </button>
+          <button
+            type="button"
+            onClick={copy}
+            className="btn btn-ghost btn-sm"
+          >
+            {copied ? <ClipboardCheck size={14} /> : <Copy size={14} />}
+            {copied ? t("player.report.copied") : t("player.report.copy")}
+          </button>
+        </div>
       </div>
       {/* Read-only rather than disabled: a disabled textarea cannot be selected, and selecting it
           by hand is the only way to get this off a browser with no clipboard permission. */}

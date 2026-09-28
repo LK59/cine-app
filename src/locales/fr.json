@@ -1820,7 +1820,8 @@
     "report": {
       "details": "Détails techniques",
       "copy": "Copier",
-      "copied": "Copié"
+      "copied": "Copié",
+      "refresh": "Actualiser"
     },
     "pushResume": {
       "title": "Notifications",
