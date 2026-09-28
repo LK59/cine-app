@@ -8,6 +8,7 @@ import {
   safeName,
   saveResumeEntry,
   setResumeStoreForTests,
+  writeResumeChunk,
   type ResumeManifest,
 } from "@/lib/resumeCache/store";
 import { FakeDir } from "./helpers/fakeOpfs";
@@ -87,7 +88,7 @@ describe("le magasin de la reprise instantanée", () => {
       legacy.writeAt(path, data);
     });
     expect(await saveResumeEntry("louis", manifest("a", { chunks: [0] }), new Map([[0, chunk(9)]]))).toBe(true);
-    expect(written).toEqual(["cine-reprise/louis/a/c0", "cine-reprise/louis/a/manifest.json", "cine-reprise/louis/index.json"]);
+    expect(written).toEqual(["cine-reprise-2/louis/a/c0", "cine-reprise-2/louis/a/manifest.json", "cine-reprise-2/louis/index.json"]);
     expect((await readResumeChunk("louis", "a", 0))?.[0]).toBe(9);
   });
 
@@ -105,5 +106,34 @@ describe("le magasin de la reprise instantanée", () => {
     expect(safeName("../../etc")).not.toContain("/");
     expect(safeName("..")).not.toBe("..");
     expect(safeName("f14633c4fd177082ece2fa468acf8c67")).toBe("f14633c4fd177082ece2fa468acf8c67");
+  });
+
+  it("écrit un morceau découpé dans une plus grande plage à sa taille exacte — même sur un Safari qui écrirait tout", async () => {
+    // 28/09/2026 : 7 Go sur un iPhone pour ~800 Mo téléchargés — chaque morceau pesait sa plage de 8 Mio.
+    const safari = new FakeDir(true, true);
+    setResumeStoreForTests(async () => safari);
+    const range = new Uint8Array(8 << 20).map((_, i) => i & 0xff);
+    const third = range.subarray(2 << 20, 3 << 20);
+    expect(await writeResumeChunk("louis", "a", 2, third)).toBe(true);
+    const read = await readResumeChunk("louis", "a", 2);
+    expect(read!.byteLength).toBe(1 << 20);
+    expect(read![0]).toBe(third[0]);
+  });
+
+  it("la voie de repli aussi n'écrit que le morceau", async () => {
+    const written: Uint8Array[] = [];
+    setResumeStoreForTests(async () => new FakeDir(false), async (_path, data) => void written.push(data));
+    const range = new Uint8Array(4 << 20);
+    await writeResumeChunk("louis", "a", 1, range.subarray(1 << 20, 2 << 20));
+    expect(written[0].byteLength).toBe(1 << 20);
+    expect(written[0].buffer.byteLength).toBe(1 << 20);
+  });
+
+  it("efface l'ancien dossier au premier accès — les morceaux de huit fois leur taille partent", async () => {
+    await (await root.getDirectoryHandle("cine-reprise", { create: true })).getFileHandle("c0", { create: true });
+    setResumeStoreForTests(async () => root);
+    expect(root.dirs.has("cine-reprise")).toBe(true);
+    await readResumeIndex("louis");
+    expect(root.dirs.has("cine-reprise")).toBe(false);
   });
 });

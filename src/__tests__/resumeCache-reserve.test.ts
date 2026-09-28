@@ -23,6 +23,7 @@ let clock: number;
 let lead: number;
 let fetched: [number, number][];
 let parsed: Awaited<ReturnType<typeof openMediaFile>>;
+let usage: number | null;
 
 beforeEach(async () => {
   root = new FakeDir();
@@ -30,6 +31,7 @@ beforeEach(async () => {
   clock = 1_000_000;
   lead = 30;
   fetched = [];
+  usage = 50e6;
   parsed = await openMediaFile(new MemoryByteSource(FILE));
 });
 afterEach(() => setResumeStoreForTests(null));
@@ -72,7 +74,7 @@ function fakeSource(over: Record<string, unknown> = {}) {
 }
 
 function start(source = fakeSource(), video = { currentTime: 0, seeking: false }, budget: StorageBudget = NORMAL_BUDGET, report = vi.fn(), hidden = false) {
-  const deps: ReserveDeps = { fetch: fakeFetch(), now: () => clock, budget: async () => budget, hidden: () => hidden };
+  const deps: ReserveDeps = { fetch: fakeFetch(), now: () => clock, budget: async () => budget, hidden: () => hidden, usage: async () => usage };
   const reserve = DiskReserve.start(
     "louis",
     IDENTITY,
@@ -83,14 +85,23 @@ function start(source = fakeSource(), video = { currentTime: 0, seeking: false }
   return { reserve, source, video, report };
 }
 
+/** Des tours de boucle, l'horloge avançant de `stepMs` entre chacun — la cadence en dépend. */
+async function pump(reserve: DiskReserve, turns: number, stepMs = 10_000) {
+  for (let i = 0; i < turns; i++) {
+    await reserve.settleForTests();
+    clock += stepMs;
+  }
+}
+
 const fetchedChunks = () => fetched.flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, i) => a + i));
 
 describe("le tampon d'avance sur l'appareil", () => {
   it("prend de l'avance au-delà de ce que le lecteur lit déjà, par plages, et le lecteur la voit", async () => {
     const { reserve, source } = start();
-    await reserve.settleForTests();
-    expect(fetched.length).toBe(PARALLEL);
+    await pump(reserve, 3);
+    expect(fetched.length).toBeGreaterThanOrEqual(2);
     expect(fetched.every(([a, b]) => b - a + 1 <= RANGE_CHUNKS)).toBe(true);
+    expect(PARALLEL).toBeGreaterThanOrEqual(1);
     // Au-delà de la lecture en avance du lecteur (six morceaux après le dernier demandé).
     expect(Math.min(...fetchedChunks())).toBeGreaterThan(source.demandedChunk + 6);
     expect(source.diskLayer?.has(fetchedChunks()[0])).toBe(true);
@@ -134,7 +145,7 @@ describe("le tampon d'avance sur l'appareil", () => {
   it("ne garde jamais devant la tête plus que ce qui lui est permis", async () => {
     const small: StorageBudget = { ...NORMAL_BUDGET, poolChunks: 10 };
     const { reserve } = start(fakeSource(), undefined, small);
-    for (let i = 0; i < 5; i++) await reserve.settleForTests();
+    await pump(reserve, 5);
     await reserve.stop();
     expect((await readResumeManifest("louis", "x"))!.chunks.length).toBeLessThanOrEqual(10);
     expect(fetchedChunks().length).toBeLessThanOrEqual(10);
@@ -165,7 +176,7 @@ describe("le tampon d'avance sur l'appareil", () => {
     }
     // Les deux autres gardent 44 chacun : il ne reste que 12 de libre, 60 en les ramenant à 20.
     const { reserve } = start(fakeSource(), undefined, pool);
-    for (let i = 0; i < 6; i++) await reserve.settleForTests();
+    await pump(reserve, 8);
     await reserve.stop();
     const index = await readResumeIndex("louis");
     expect(index.b.reserveChunks).toBeLessThan(44);
@@ -210,7 +221,7 @@ describe("le tampon d'avance sur l'appareil", () => {
       new Map(chunks.map((i) => [i, FILE.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)]))
     );
     const { reserve } = start(fakeSource(), undefined, small);
-    for (let i = 0; i < 4; i++) await reserve.settleForTests();
+    await pump(reserve, 4);
     await reserve.stop();
     const manifest = await readResumeManifest("louis", "x");
     expect(fetchedChunks().length).toBeGreaterThan(0);
@@ -235,23 +246,108 @@ describe("le tampon d'avance sur l'appareil", () => {
     const source = fakeSource();
     for (let index = 0; index <= 6; index++) source.memory.set(index, FILE.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE));
     const { reserve } = start(source, undefined, NORMAL_BUDGET, report);
-    await reserve.settleForTests();
-    clock += 31_000;
+    await pump(reserve, 3, 10_000);
+    clock += 1_000;
     lead = 2;
     await reserve.settleForTests();
     await reserve.stop("fin de lecture");
     const events = report.mock.calls.map(([fields]) => fields.event);
     expect(events).toEqual(["départ", "point", "arrêt"]);
     const point = report.mock.calls[1][0];
-    expect(point).toMatchObject({ idle: `avance du navigateur sous ${MIN_LEAD_SECONDS} s`, limitMB: 1024 });
+    expect(point).toMatchObject({ idle: `avance du navigateur sous ${MIN_LEAD_SECONDS} s`, limitMB: 500 });
     expect(point.windowMB).toBeGreaterThan(0);
     expect(point.aheadMB).toBeGreaterThan(0);
     expect(point.aheadS).toBeGreaterThan(10);
     expect(report.mock.calls[2][0]).toMatchObject({ why: "fin de lecture", netMB: fetchedChunks().length, memMB: 7 });
   });
 
+  it("ne télécharge pas plus vite que quatre fois le débit du film", async () => {
+    // Le fichier fait 400 ko/s, soit 3,2 Mb/s : 12,8 Mb/s permis, 1,6 Mo par seconde.
+    const { reserve } = start();
+    await pump(reserve, 30, 1_000);
+    await reserve.stop();
+    const bytes = fetchedChunks().length * CHUNK_SIZE;
+    // Trente secondes à 1,6 Mo/s, plus la première plage partie d'emblée.
+    expect(bytes).toBeLessThanOrEqual(30 * 1.6e6 + RANGE_CHUNKS * CHUNK_SIZE);
+    expect(bytes).toBeGreaterThan(20 * 1.6e6);
+  });
+
+  it("jamais plus de 500 Mio devant la tête, quelle que soit la réserve commune", async () => {
+    const capped: StorageBudget = { ...NORMAL_BUDGET, titleChunks: 6 };
+    const { reserve } = start(fakeSource(), undefined, capped);
+    await pump(reserve, 6);
+    await reserve.stop();
+    expect(fetchedChunks().length).toBeLessThanOrEqual(6);
+    expect(NORMAL_BUDGET.titleChunks).toBe(500);
+  });
+
+  it("jamais plus de cinq minutes de film devant la tête", async () => {
+    // Dix minutes à 100 ko/s : les cinq premières tiennent dans ~29 Mio.
+    const LONG = bigMatroska(600, 100_000);
+    const longFile = await openMediaFile(new MemoryByteSource(LONG));
+    const deps: ReserveDeps = {
+      fetch: (async (_url: string, init?: RequestInit) => {
+        const [, from, to] = /bytes=(\d+)-(\d+)/.exec((init?.headers as Record<string, string>).Range)!.map(Number);
+        fetched.push([Math.floor(from / CHUNK_SIZE), Math.floor(to / CHUNK_SIZE)]);
+        return { status: 206, headers: { get: (n: string) => (n === "Content-Range" ? `bytes ${from}-${to}/${LONG.length}` : null) }, arrayBuffer: async () => LONG.slice(from, to + 1).buffer } as unknown as Response;
+      }) as typeof fetch,
+      now: () => clock,
+      budget: async () => NORMAL_BUDGET,
+      hidden: () => false,
+      usage: async () => usage,
+    };
+    const source = { ...fakeSource(), size: LONG.length };
+    const report = vi.fn();
+    const reserve = DiskReserve.start(
+      "louis",
+      { itemId: "long", streamUrl: "/long", size: LONG.length, fileVersion: "e" },
+      { source: source as unknown as HttpByteSource, file: longFile, video: { currentTime: 0, seeking: false } as unknown as HTMLVideoElement, lead: () => 30, delay: () => 0 },
+      report,
+      deps
+    )!;
+    await pump(reserve, 40);
+    await reserve.stop();
+    const fiveMinutes = Math.floor(longFile.cues.filter((c) => c.timeUs <= 300e6).at(-1)!.clusterOffset / CHUNK_SIZE);
+    expect(Math.max(...fetchedChunks())).toBeLessThanOrEqual(fiveMinutes);
+    expect(Math.max(...fetchedChunks())).toBeGreaterThanOrEqual(fiveMinutes - RANGE_CHUNKS);
+  });
+
+  it("s'arrête et le dit quand le navigateur mesure plus que le plafond", async () => {
+    const report = vi.fn();
+    const { reserve } = start(fakeSource(), undefined, NORMAL_BUDGET, report);
+    await pump(reserve, 1);
+    usage = 7e9;
+    clock += 16_000;
+    await pump(reserve, 2);
+    const before = fetched.length;
+    await pump(reserve, 3);
+    expect(fetched.length).toBe(before);
+    // Déjà arrêté par le garde-fou : un second arrêt attend la fin du premier.
+    await reserve.stop();
+    const errors = report.mock.calls.map(([f]) => f).filter((f) => f.event === "erreur");
+    expect(errors[0].message).toMatch(/au-delà du plafond/);
+    expect(report.mock.calls.map(([f]) => f.event)).toContain("arrêt");
+  });
+
+  it("à l'arrêt, mesure depuis la dernière position lue — l'élément est déjà vidé", async () => {
+    const report = vi.fn();
+    const video = { currentTime: 30, seeking: false };
+    const source = fakeSource({ demandedChunk: 12 });
+    for (let index = 0; index <= 20; index++) source.memory.set(index, FILE.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE));
+    const { reserve } = start(source, video, NORMAL_BUDGET, report);
+    await pump(reserve, 2);
+    video.currentTime = 0;
+    await reserve.stop();
+    const stopLine = report.mock.calls.map(([f]) => f).find((f) => f.event === "arrêt");
+    expect(stopLine.aheadMB).toBeGreaterThan(3);
+    // Et ce qui est derrière la position d'arrêt, au-delà de la petite marge, est effacé.
+    const manifest = await readResumeManifest("louis", "x");
+    const head = Math.floor(parsed.cues.filter((c) => c.timeUs <= 30e6).at(-1)!.clusterOffset / CHUNK_SIZE);
+    expect(manifest!.chunks.filter((i) => i > 0 && i < head - 8)).toEqual([]);
+  });
+
   it("un fichier sans version ou d'une autre taille : pas de tampon du tout", () => {
-    const deps: ReserveDeps = { fetch: fakeFetch(), now: () => clock, budget: async () => NORMAL_BUDGET, hidden: () => false };
+    const deps: ReserveDeps = { fetch: fakeFetch(), now: () => clock, budget: async () => NORMAL_BUDGET, hidden: () => false, usage: async () => usage };
     const ctx = { source: fakeSource() as unknown as HttpByteSource, file: parsed, video: {} as HTMLVideoElement, lead: () => 30, delay: () => 0 };
     expect(DiskReserve.start("louis", { ...IDENTITY, fileVersion: null }, ctx, vi.fn(), deps)).toBeNull();
     expect(DiskReserve.start("louis", { ...IDENTITY, size: FILE.length + 1 }, ctx, vi.fn(), deps)).toBeNull();

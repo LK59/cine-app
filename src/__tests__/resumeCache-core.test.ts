@@ -40,7 +40,8 @@ describe("quels titres garder", () => {
 
   it("réduit au repos ce qui garde plus que sa part, sans jamais rien agrandir", () => {
     const now = 10 * 24 * 3600_000;
-    // Deux titres actifs : 512 Mio chacun. Un troisième, lu il y a six jours, n'a plus de part.
+    // Deux titres actifs : la moitié de la réserve chacun, plafonnée à 500 Mio. Un troisième, lu il y a
+    // six jours, n'a plus de part.
     const index = {
       a: entry({ playedAt: now - 1000, reserveChunks: 700, minimalChunks: 3 }),
       b: entry({ playedAt: now - 2000, reserveChunks: 400, minimalChunks: 3 }),
@@ -48,7 +49,7 @@ describe("quels titres garder", () => {
     };
     const plan = planResumeCache([t("a"), t("b"), t("c")], index, now);
     expect(plan.record.map((x) => [x.itemId, x.shareChunks])).toEqual([
-      ["a", 512],
+      ["a", 500],
       ["c", 0],
     ]);
   });
@@ -132,6 +133,15 @@ describe("un morceau n'est servi que pour ce fichier-là", () => {
     expect(sameFile(manifest, { ...identity, fileVersion: "etag-2" })).toBe(false);
     expect(sameFile(manifest, { ...identity, size: manifest.size + 1 })).toBe(false);
     expect(sameFile(manifest, { ...identity, fileVersion: null })).toBe(false);
+  });
+
+  it("ne sert pas un morceau de mauvaise taille, et l'efface", async () => {
+    const dropChunk = vi.fn(async () => {});
+    const disk = diskChunksFor("louis", { ...manifest, chunks: [0, 1] }, async () => new Uint8Array(8 * CHUNK_SIZE), async () => {}, dropChunk);
+    expect(await disk.read(0)).toBeNull();
+    expect(disk.has(0)).toBe(false);
+    expect(disk.has(1)).toBe(true);
+    expect(dropChunk).toHaveBeenCalledWith(0);
   });
 
   it("se tait et se jette dès que le serveur annonce un autre fichier", () => {
@@ -361,7 +371,8 @@ describe("ce que l'appareil garde, selon sa place", () => {
     expect(active).toEqual(["e", "a", "b", "c"]);
     expect(restingShare("a", active, NORMAL_BUDGET)).toBe(256);
     expect(restingShare("d", active, NORMAL_BUDGET)).toBe(0);
-    expect(restingShare("a", ["a", "e"], NORMAL_BUDGET)).toBe(512);
+    // 512 pour chacun des deux, plafonné à 500 par titre.
+    expect(restingShare("a", ["a", "e"], NORMAL_BUDGET)).toBe(500);
   });
 });
 

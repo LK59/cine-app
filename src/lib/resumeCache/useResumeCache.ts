@@ -7,7 +7,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 import { openingPosition } from "@/lib/resumeRewind";
 import { fetcher, followOnlyOptions, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
-import { deviceBudget } from "./budget";
+import { deviceBudget, deviceUsage, overQuota } from "./budget";
 import { planResumeCache, remainingChunks, resumeTargets, type ResumeTarget } from "./plan";
 import { mustStop, recordTitle } from "./recordTitle";
 import { readResumeIndex, removeResumeEntry } from "./store";
@@ -89,6 +89,8 @@ async function onePass(targets: ResumeTarget[], signal: AbortSignal, now: number
     await removeResumeEntry(account, itemId);
   }
   let remaining = remainingChunks(index, plan, budget.totalChunks);
+  // Le garde-fou sur la mesure réelle (`overQuota`) : au-delà du plafond, on efface mais on n'écrit plus.
+  if (overQuota(await deviceUsage(), budget)) return;
   for (const target of plan.record) {
     if (mustStop(signal) || remaining <= 0) return;
     remaining -= await recordTitle(account, target, remaining, signal);

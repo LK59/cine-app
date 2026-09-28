@@ -878,15 +878,27 @@ live: `DiskChunks.add` / `forget`).
 
 It yields to the player in every case: nothing until the browser buffer has `MIN_LEAD_SECONDS` (10 s),
 nothing while a read waits (`HttpByteSource.readsWaiting`), during a seek (`seekFocused`) or with the
-page hidden; it starts beyond the player's own readahead; it fetches `RANGE_CHUNKS` (8 MiB) ranges,
-`PARALLEL` (3) at a time — larger than the player's so a fast link is filled despite the round trip —
-and stops fetching while as many chunks are downloaded but not yet written. What the player already
-holds in memory ahead of the head is written without a request.
+page hidden; it starts beyond the player's own readahead; it fetches `RANGE_CHUNKS` (8 MiB) ranges and
+stops fetching while as many chunks are downloaded but not yet written. What the player already holds
+in memory ahead of the head is written without a request.
+
+It is paced (28/09/2026, after the first iPhone session took 616 MB in 80 s at 51 Mb/s and heated the
+phone): each range waits for its slot at `reserveSpeedBps` — 4× the film's mean bitrate, 50 Mb/s at
+most — and it never holds more than `titleChunks` (500 MiB) or `MAX_AHEAD_SECONDS` (five minutes) ahead
+of the head. Only the reserve is paced; the player's own reads are not.
+
+**Writes are exact.** A chunk cut from a range is a `subarray` view on the range's whole buffer; Safari
+wrote the whole buffer for each such view — every 1 MiB chunk weighed 8 MiB, 7 GB after two sessions,
+and the player refused them for their length. `exactBytes` copies any view that does not span its
+buffer, on both write paths; the store moved to `cine-reprise-2` and deletes the old folder on first
+access; a chunk read back at the wrong length is deleted (`diskChunksFor`). `overQuota` compares the
+browser's *measured* usage with the ceiling: past it, the reserve stops (an `erreur` line says so) and
+the background pass only deletes.
 
 The budget is one pool shared by the active titles (played on this device in the last five days, the
-four most recent). The playing title may take all of it except the others' floor (128 MiB each), trimming
+four most recent), 500 MiB per title at most. The playing title may take all of it except the others' floor (128 MiB each), trimming
 the least recently played first, farthest chunks first, header and index never. Behind the head,
-`behindChunks` (128 MiB) are kept for a step back; the rest is deleted as playback moves on. When the
+`behindChunks` (128 MiB) are kept for a step back — 8 once playback stops; the rest is deleted as playback moves on. When the
 limit is reached by islands far ahead (after a step back), the farthest go first so the lead is
 contiguous where it is needed. At rest nothing grows: the background pass (`recordTitle`) keeps a
 title's lead contiguous from the keyframe before its resume position, trims it to its share, and deletes

@@ -17,7 +17,16 @@
  * lève vers l'appelant : sans OPFS, la reprise se fait par le réseau comme avant.
  */
 
-export const ROOT_DIR = "cine-reprise";
+/**
+ * Le dossier du magasin. « cine-reprise-2 » depuis le 28/09/2026 : sous « cine-reprise », le tampon
+ * d'avance avait écrit chaque morceau de 1 Mio avec toute la plage de 8 Mio dont il était une vue
+ * (voir `writeFile`) — sept gigaoctets sur un iPhone après deux lectures, et des morceaux que le
+ * lecteur refusait à la relecture. L'ancien dossier est effacé au premier accès (`LEGACY_ROOT_DIRS`).
+ */
+export const ROOT_DIR = "cine-reprise-2";
+/** Les dossiers d'avant, effacés une fois par page au premier accès au magasin. */
+const LEGACY_ROOT_DIRS = ["cine-reprise"];
+let legacyCleared = false;
 
 /** Ce qu'on garde d'un titre : de quoi le rouvrir à une position, et de quoi savoir si c'est encore lui. */
 export interface ResumeManifest {
@@ -106,6 +115,7 @@ let workerWrite: ((path: string[], data: Uint8Array) => Promise<void>) | null = 
 /** Pour les tests : un OPFS en mémoire, et l'écriture de repli. */
 export function setResumeStoreForTests(provider: RootProvider | null, fallbackWrite?: ((path: string[], data: Uint8Array) => Promise<void>) | null): void {
   rootProvider = provider ?? browserRoot;
+  legacyCleared = false;
   workerWrite = fallbackWrite === undefined ? defaultWorkerWrite : fallbackWrite;
   queue = Promise.resolve();
 }
@@ -118,6 +128,10 @@ export function safeName(name: string): string {
 async function accountDir(account: string, create: boolean): Promise<DirHandleLike | null> {
   const root = await rootProvider();
   if (!root) return null;
+  if (!legacyCleared) {
+    legacyCleared = true;
+    for (const name of LEGACY_ROOT_DIRS) await root.removeEntry(name, { recursive: true }).catch(() => {});
+  }
   const top = await root.getDirectoryHandle(ROOT_DIR, { create });
   return top.getDirectoryHandle(safeName(account), { create });
 }
@@ -185,7 +199,19 @@ function defaultWorkerWrite(path: string[], data: Uint8Array): Promise<void> {
   });
 }
 
-async function writeFile(dir: DirHandleLike, path: string[], name: string, data: Uint8Array | string): Promise<void> {
+/**
+ * Une vue exactement de sa taille. Un morceau découpé dans une plage plus grande (`subarray`) est une
+ * vue sur tout le tampon de la plage : écrit tel quel dans l'OPFS, Safari y a écrit la plage entière
+ * — huit fois la taille du morceau (28/09/2026, iPhone : 7 Go pour ~800 Mo téléchargés, et des
+ * morceaux que le lecteur refusait parce qu'ils n'avaient pas la bonne longueur). Copié quand ce
+ * n'est pas déjà le cas, par les deux voies d'écriture.
+ */
+export function exactBytes(data: Uint8Array): Uint8Array {
+  return data.byteOffset === 0 && data.byteLength === data.buffer.byteLength ? data : data.slice();
+}
+
+async function writeFile(dir: DirHandleLike, path: string[], name: string, input: Uint8Array | string): Promise<void> {
+  const data = typeof input === "string" ? input : exactBytes(input);
   const file = await dir.getFileHandle(name, { create: true });
   if (typeof file.createWritable === "function") {
     const writable = await file.createWritable();
@@ -250,6 +276,20 @@ export async function readResumeManifest(account: string, itemId: string): Promi
   } catch {
     return null;
   }
+}
+
+/** Efface un morceau gardé (de mauvaise taille, par exemple), sans toucher au manifeste. Ne lève jamais. */
+export function dropResumeChunk(account: string, itemId: string, index: number): Promise<void> {
+  return serial(async () => {
+    try {
+      const dir = await accountDir(account, false);
+      if (!dir) return;
+      const item = await dir.getDirectoryHandle(safeName(itemId));
+      await item.removeEntry(`c${index}`);
+    } catch {
+      /* déjà absent */
+    }
+  });
 }
 
 /** Un morceau gardé, ou null. */
@@ -455,7 +495,7 @@ export function clearResumeStore(): Promise<void> {
   return serial(async () => {
     try {
       const root = await rootProvider();
-      await root?.removeEntry(ROOT_DIR, { recursive: true });
+      for (const name of [ROOT_DIR, ...LEGACY_ROOT_DIRS]) await root?.removeEntry(name, { recursive: true }).catch(() => {});
     } catch {
       /* déjà vide */
     }

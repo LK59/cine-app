@@ -8,13 +8,20 @@ import type { DirHandleLike, FileHandleLike } from "@/lib/resumeCache/store";
 export class FakeDir implements DirHandleLike {
   readonly dirs = new Map<string, FakeDir>();
   readonly files = new Map<string, Uint8Array>();
-  constructor(private readonly writable = true) {}
+  /**
+   * @param wholeBuffer écrire, d'une vue, tout le tampon qu'elle regarde — ce qu'a fait Safari le
+   *   28/09/2026 (voir `exactBytes`). Par défaut, la vue seule, comme le veut la spécification.
+   */
+  constructor(
+    private readonly writable = true,
+    private readonly wholeBuffer = false
+  ) {}
 
   async getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<FakeDir> {
     let dir = this.dirs.get(name);
     if (!dir) {
       if (!options?.create) throw new DOMException("absent", "NotFoundError");
-      dir = new FakeDir(this.writable);
+      dir = new FakeDir(this.writable, this.wholeBuffer);
       this.dirs.set(name, dir);
     }
     return dir;
@@ -26,6 +33,7 @@ export class FakeDir implements DirHandleLike {
       this.files.set(name, new Uint8Array(0));
     }
     const files = this.files;
+    const wholeBuffer = this.wholeBuffer;
     const handle: FileHandleLike = {
       getFile: async () => new Blob([files.get(name)! as BlobPart]),
     };
@@ -34,7 +42,16 @@ export class FakeDir implements DirHandleLike {
         const parts: Uint8Array[] = [];
         return {
           write: async (data: BufferSource | string) => {
-            parts.push(typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data instanceof ArrayBuffer ? data : (data as ArrayBufferView).buffer.slice((data as ArrayBufferView).byteOffset, (data as ArrayBufferView).byteOffset + (data as ArrayBufferView).byteLength)));
+            const view = data as ArrayBufferView;
+            parts.push(
+              typeof data === "string"
+                ? new TextEncoder().encode(data)
+                : data instanceof ArrayBuffer
+                  ? new Uint8Array(data)
+                  : wholeBuffer
+                    ? new Uint8Array(view.buffer.slice(0))
+                    : new Uint8Array(view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength))
+            );
           },
           close: async () => {
             const total = parts.reduce((n, p) => n + p.length, 0);

@@ -1,7 +1,7 @@
-import { openingBytes, type DiskChunks } from "@/lib/webcodecs/byteSource";
+import { CHUNK_SIZE, openingBytes, type DiskChunks } from "@/lib/webcodecs/byteSource";
 import { trace } from "@/lib/webcodecs/trace";
 import { persistedCacheAccount } from "@/lib/persistentCache";
-import { readResumeChunk, readResumeManifest, removeResumeEntry, type ResumeManifest } from "./store";
+import { dropResumeChunk, readResumeChunk, readResumeManifest, removeResumeEntry, type ResumeManifest } from "./store";
 
 /** Au-delà, un titre gardé n'est plus servi : il est effacé. */
 export const RESUME_CACHE_MAX_AGE_MS = 14 * 24 * 3600_000;
@@ -85,10 +85,25 @@ export function diskChunksFor(
   account: string,
   manifest: ResumeManifest,
   read: (index: number) => Promise<Uint8Array | null> = (index) => readResumeChunk(account, manifest.itemId, index),
-  remove: () => Promise<void> = () => removeResumeEntry(account, manifest.itemId)
+  remove: () => Promise<void> = () => removeResumeEntry(account, manifest.itemId),
+  dropChunk: (index: number) => Promise<void> = (index) => dropResumeChunk(account, manifest.itemId, index)
 ): DiskChunks {
   const kept = new Set(manifest.chunks);
   let disabled = false;
+  /**
+   * Un morceau relu d'une autre taille que celle qu'il doit avoir n'est pas servi — le réseau prend le
+   * relais —, et il est effacé : laissé là, il était relu et refusé à chaque lecture, et il occupait
+   * sa place (les morceaux de huit fois leur taille du 28/09/2026, voir `exactBytes`).
+   */
+  const expected = (index: number) => Math.max(0, Math.min(CHUNK_SIZE, manifest.size - index * CHUNK_SIZE));
+  const readChecked = async (index: number): Promise<Uint8Array | null> => {
+    const bytes = await read(index);
+    if (!bytes || bytes.byteLength === expected(index)) return bytes;
+    kept.delete(index);
+    trace(`appareil : morceau ${index} de ${bytes.byteLength} octets au lieu de ${expected(index)} — effacé, lu au réseau`);
+    void dropChunk(index);
+    return null;
+  };
   trace(
     `reprise sur l'appareil : ${manifest.chunks.length} Mo gardés (` +
       (manifest.partial ? "en-tête et index" : manifest.coveredTo < 0 ? "gardés à l'arrêt, couverture pas encore mesurée" : `jusqu'à ${manifest.coveredTo.toFixed(0)} s`) +
@@ -96,7 +111,7 @@ export function diskChunksFor(
   );
   return {
     has: (index) => !disabled && kept.has(index),
-    read: (index) => (disabled ? Promise.resolve(null) : read(index)),
+    read: (index) => (disabled ? Promise.resolve(null) : readChecked(index)),
     // Vivante : le tampon d'avance (`DiskReserve`) y ajoute ce qu'il écrit, et en retire ce qu'il efface.
     add: (index) => void kept.add(index),
     forget: (index) => void kept.delete(index),

@@ -17,9 +17,15 @@
  *
  * L'avance est une **réserve commune** (`poolChunks`), partagée entre les titres *actifs* — lus sur
  * cet appareil dans les `ACTIVE_DAYS` derniers jours, les `ACTIVE_TITLES` plus récents. Au repos,
- * chacun garde au plus sa part (la réserve divisée par leur nombre). Pendant une lecture, le titre en
- * cours emprunte aux autres, jusqu'à ce qu'ils ne gardent plus que `floorChunks` chacun. Un titre qui
- * n'est plus actif redescend au minimum de démarrage.
+ * chacun garde au plus sa part (la réserve divisée par leur nombre, `titleChunks` au plus). Pendant
+ * une lecture, le titre en cours emprunte aux autres, jusqu'à ce qu'ils ne gardent plus que
+ * `floorChunks` chacun. Un titre qui n'est plus actif redescend au minimum de démarrage.
+ *
+ * **Modérée** (28/09/2026, après le premier essai sur iPhone : 616 Mo pris en 80 s à 51 Mb/s, un
+ * téléphone qui chauffait) : `titleChunks` (500 Mio) par titre, pendant la lecture comme après ;
+ * jamais plus de `MAX_AHEAD_SECONDS` devant la tête ; et un débit borné à `SPEED_FACTOR` fois celui
+ * du film, `SPEED_CAP_MBPS` au plus. Seul le tampon d'avance est bridé — la lecture elle-même
+ * (le tampon du navigateur) prend tout le lien dont elle a besoin.
  *
  * Un appareil à court de place (moins de `LOW_SPACE_BYTES` entre ce qu'il annonce et ce qu'il
  * occupe) passe en mode réduit. Un navigateur ne dit pas l'espace libre du disque ; le quota moins
@@ -42,6 +48,19 @@ export const ACTIVE_TITLES = 4;
 /** Un titre pas lu sur cet appareil depuis plus longtemps n'a plus de part. */
 export const ACTIVE_DAYS = 5;
 
+/** Jamais plus que cela de film devant la tête, sur l'appareil. */
+export const MAX_AHEAD_SECONDS = 300;
+/** Le tampon d'avance ne télécharge pas plus vite que ce multiple du débit du film… */
+export const SPEED_FACTOR = 4;
+/** …ni que ce plafond absolu, en Mb/s. */
+export const SPEED_CAP_MBPS = 50;
+
+/** Le débit que le tampon d'avance s'autorise pour un film de ce débit moyen, en bits par seconde. */
+export function reserveSpeedBps(filmBps: number | null): number {
+  const cap = SPEED_CAP_MBPS * 1e6;
+  return filmBps !== null && Number.isFinite(filmBps) && filmBps > 0 ? Math.min(cap, SPEED_FACTOR * filmBps) : cap;
+}
+
 /** En dessous, le mode réduit. */
 export const LOW_SPACE_BYTES = 5e9;
 
@@ -51,14 +70,16 @@ export interface StorageBudget {
   totalChunks: number;
   /** La réserve d'avance, partagée entre les titres actifs. */
   poolChunks: number;
+  /** Le plus qu'un titre garde devant sa position, pendant la lecture comme après. */
+  titleChunks: number;
   /** Ce qu'un titre actif garde au moins quand un autre, en lecture, lui emprunte. */
   floorChunks: number;
   /** Ce qui est gardé derrière la tête pendant une lecture, pour les retours en arrière. */
   behindChunks: number;
 }
 
-export const NORMAL_BUDGET: StorageBudget = { mode: "normal", totalChunks: 2560, poolChunks: 1024, floorChunks: 128, behindChunks: 128 };
-export const REDUCED_BUDGET: StorageBudget = { mode: "réduit", totalChunks: 750, poolChunks: 256, floorChunks: 64, behindChunks: 64 };
+export const NORMAL_BUDGET: StorageBudget = { mode: "normal", totalChunks: 2560, poolChunks: 1024, titleChunks: 500, floorChunks: 128, behindChunks: 128 };
+export const REDUCED_BUDGET: StorageBudget = { mode: "réduit", totalChunks: 750, poolChunks: 256, titleChunks: 128, floorChunks: 64, behindChunks: 64 };
 
 /**
  * Le budget pour un appareil qui annonce ce quota et cette occupation. Sans mesure (un navigateur
@@ -108,5 +129,24 @@ export function activeTitles(index: Record<string, ActivityEntry>, now: number):
 
 /** La part d'avance d'un titre au repos : la réserve divisée entre les actifs, rien s'il ne l'est pas. */
 export function restingShare(itemId: string, active: string[], budget: StorageBudget): number {
-  return active.includes(itemId) ? Math.floor(budget.poolChunks / active.length) : 0;
+  return active.includes(itemId) ? Math.min(budget.titleChunks, Math.floor(budget.poolChunks / active.length)) : 0;
+}
+
+/**
+ * L'occupation que le navigateur mesure, au-delà de laquelle plus rien n'est écrit : le plafond commun,
+ * plus une marge pour le reste du site (catalogue, code). Un garde-fou sur la mesure réelle, pas sur
+ * nos comptes — ce sont nos comptes qui s'étaient trompés le 28/09/2026 (`exactBytes`).
+ */
+export function overQuota(usageBytes: number | null | undefined, budget: StorageBudget): boolean {
+  return typeof usageBytes === "number" && Number.isFinite(usageBytes) && usageBytes > budget.totalChunks * MIB + 256 * MIB;
+}
+
+/** L'occupation du site selon le navigateur, ou null. Ne lève jamais. */
+export async function deviceUsage(): Promise<number | null> {
+  try {
+    const estimate = await navigator.storage?.estimate?.();
+    return typeof estimate?.usage === "number" ? estimate.usage : null;
+  } catch {
+    return null;
+  }
 }

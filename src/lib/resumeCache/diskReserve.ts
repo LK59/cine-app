@@ -3,7 +3,7 @@ import { clusterOffsetForTime, type MatroskaFile } from "@/lib/webcodecs/matrosk
 import { diagRequest, diagReserve } from "@/lib/webcodecs/playbackDiagnosis";
 import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { trace } from "@/lib/webcodecs/trace";
-import { activeTitles, deviceBudget, NORMAL_BUDGET, type StorageBudget } from "./budget";
+import { MAX_AHEAD_SECONDS, activeTitles, deviceBudget, deviceUsage, NORMAL_BUDGET, overQuota, reserveSpeedBps, type StorageBudget } from "./budget";
 import { coverageFrom } from "./coverage";
 import { diskChunksFor, sameFile, type FileIdentity } from "./diskChunks";
 import { mergeResumeEntry, readResumeIndex, readResumeManifest, writeResumeChunk, type ResumeFile, type ResumeManifest } from "./store";
@@ -88,6 +88,8 @@ export interface ReserveDeps {
   now: () => number;
   budget: () => Promise<StorageBudget>;
   hidden: () => boolean;
+  /** L'occupation du site selon le navigateur — le garde-fou `overQuota`. */
+  usage: () => Promise<number | null>;
 }
 
 const browserDeps: ReserveDeps = {
@@ -95,7 +97,11 @@ const browserDeps: ReserveDeps = {
   now: () => Date.now(),
   budget: deviceBudget,
   hidden: () => typeof document !== "undefined" && document.visibilityState === "hidden",
+  usage: deviceUsage,
 };
+
+/** Ce qui reste derrière la tête une fois la lecture arrêtée : de quoi reprendre un peu avant. */
+const STOP_BEHIND_CHUNKS = 8;
 
 export class DiskReserve {
   private stopped = false;
@@ -135,6 +141,14 @@ export class DiskReserve {
   private startedAt = 0;
   /** Les morceaux de l'en-tête (début du fichier) : jamais effacés comme « derrière la tête ». */
   private readonly protectedBelow: number;
+  /** Le débit que le tampon s'autorise (`reserveSpeedBps`), et quand il peut lancer la prochaine plage. */
+  private readonly speedBps: number;
+  private nextFetchAt = 0;
+  /**
+   * La position au dernier tour. À l'arrêt, l'élément est déjà vidé (`currentTime` à zéro) quand le
+   * manifeste est écrit : la tête se lit ici. La ligne `arrêt` disait « 1 Mo devant » pour 640.
+   */
+  private lastSeconds: number | null = null;
 
   private constructor(
     private readonly account: string,
@@ -144,6 +158,8 @@ export class DiskReserve {
     private readonly report: ReserveReport
   ) {
     this.protectedBelow = Math.floor((ctx.file.firstClusterOffset ?? ctx.file.segmentDataStart) / CHUNK_SIZE);
+    const duration = ctx.file.durationSeconds;
+    this.speedBps = reserveSpeedBps(duration && duration > 0 ? (file.size * 8) / duration : null);
   }
 
   /** Démarre le tampon d'un lecteur. Null quand il n'y a rien de sûr à écrire (fichier sans version). */
@@ -224,7 +240,7 @@ export class DiskReserve {
 
   /** Ce que ce titre peut garder devant la tête sans rien prendre aux autres. */
   private limit(): number {
-    return Math.min(this.allowed, Math.max(0, this.budget.poolChunks - this.othersReserve));
+    return Math.min(this.budget.titleChunks, this.allowed, Math.max(0, this.budget.poolChunks - this.othersReserve));
   }
 
   /**
@@ -259,12 +275,22 @@ export class DiskReserve {
     }
   }
 
-  /** Le morceau sous la tête de lecture. */
-  private headChunk(): number {
-    const seconds = Math.max(0, this.ctx.video.currentTime - this.ctx.delay());
+  /** La position de lecture, sur l'horloge du fichier — figée au dernier tour une fois arrêté. */
+  private seconds(): number {
+    if (this.stopped && this.lastSeconds !== null) return this.lastSeconds;
+    return Math.max(0, this.ctx.video.currentTime - this.ctx.delay());
+  }
+
+  /** Le morceau où commence le groupe d'images qui contient cet instant. */
+  private chunkAt(seconds: number): number {
     const video = this.ctx.file.tracks.find((track) => track.type === "video");
     const offset = clusterOffsetForTime(this.ctx.file, seconds * 1e6, video?.number) ?? this.ctx.file.firstClusterOffset ?? 0;
     return Math.floor(offset / CHUNK_SIZE);
+  }
+
+  /** Le morceau sous la tête de lecture. */
+  private headChunk(): number {
+    return this.chunkAt(this.seconds());
   }
 
   private aheadCount(head = this.headChunk()): number {
@@ -303,7 +329,7 @@ export class DiskReserve {
    */
   private aheadSpan(): { chunks: number; seconds: number } {
     try {
-      const now = Math.max(0, this.ctx.video.currentTime - this.ctx.delay());
+      const now = this.seconds();
       const has = (index: number) => this.onDisk.has(index) || this.ctx.source.memoryChunk(index) !== null;
       const coverage = coverageFrom(this.ctx.file, now, has);
       if (!coverage) return { chunks: 0, seconds: 0 };
@@ -372,11 +398,24 @@ export class DiskReserve {
           this.persisting = null;
         });
       }
+      this.lastSeconds = this.seconds();
+      this.fill();
+      // Après les décisions du tour : la raison d'attente écrite est celle de ce tour-ci.
+      if (this.deps.now() - this.lastReport >= REPORT_EVERY_MS) this.point();
+    } catch {
+      /* un tour de moins */
+    }
+  }
+
+  /** Un tour : ce que la mémoire du lecteur tient, puis le réseau, dans les limites. */
+  private fill(): void {
+    try {
       const blocked = this.blocked();
       this.idle = blocked ?? "";
-      if (this.deps.now() - this.lastReport >= REPORT_EVERY_MS) this.point();
       if (blocked) return;
       const head = this.headChunk();
+      // Jamais plus de `MAX_AHEAD_SECONDS` de film devant la tête.
+      const lastWanted = Math.min(this.lastChunk(), this.chunkAt(this.seconds() + MAX_AHEAD_SECONDS));
       // Ce que le lecteur tient déjà en mémoire devant la tête : écrit tel quel, sans réseau.
       let ahead = this.aheadCount(head);
       const limit = this.limit();
@@ -404,7 +443,7 @@ export class DiskReserve {
           });
       }
       if (ahead + this.inflight.size >= limit) this.idle = limit < this.allowed ? "limite : place prise aux autres titres" : "réserve pleine";
-      for (let index = head; index <= this.lastChunk() && ahead + this.inflight.size < limit; index++) {
+      for (let index = head; index <= lastWanted && ahead + this.inflight.size < limit; index++) {
         if (this.onDisk.has(index) || this.inflight.has(index)) continue;
         const held = this.ctx.source.memoryChunk(index);
         if (!held) {
@@ -417,17 +456,26 @@ export class DiskReserve {
       // Puis le réseau, au-delà de la lecture en avance du lecteur.
       const from = Math.max(head, this.ctx.source.demandedChunk + PLAYER_READAHEAD_CHUNKS + 1);
       let fetching = this.controllers.size;
-      for (let index = from; index <= this.lastChunk() && fetching < PARALLEL; ) {
+      if (from > lastWanted && ahead + this.inflight.size < limit) this.idle = `${MAX_AHEAD_SECONDS / 60} min d'avance atteintes`;
+      for (let index = from; index <= lastWanted && fetching < PARALLEL; ) {
         if (ahead + this.inflight.size >= limit) break;
+        // Au débit permis, pas plus vite : la plage suivante attend son tour.
+        if (this.deps.now() < this.nextFetchAt) {
+          this.idle = `débit limité à ${Math.round(this.speedBps / 1e5) / 10} Mb/s`;
+          break;
+        }
         if (this.onDisk.has(index) || this.inflight.has(index)) {
           index += 1;
           continue;
         }
         let count = 0;
-        while (count < RANGE_CHUNKS && index + count <= this.lastChunk() && !this.onDisk.has(index + count) && !this.inflight.has(index + count) && ahead + this.inflight.size + count < limit) {
+        while (count < RANGE_CHUNKS && index + count <= lastWanted && !this.onDisk.has(index + count) && !this.inflight.has(index + count) && ahead + this.inflight.size + count < limit) {
           count += 1;
         }
         if (count === 0) break;
+        // Le créneau de cette plage au débit permis : la suivante partira après.
+        const bytes = Math.min(count * CHUNK_SIZE, this.file.size - index * CHUNK_SIZE);
+        this.nextFetchAt = Math.max(this.deps.now(), this.nextFetchAt) + ((bytes * 8) / this.speedBps) * 1000;
         void this.fetchRange(index, count);
         fetching += 1;
         index += count;
@@ -553,8 +601,10 @@ export class DiskReserve {
     this.lastPersist = this.deps.now();
     try {
       const head = this.headChunk();
+      // En lecture, une marge pour les retours en arrière ; à l'arrêt, juste de quoi reprendre un peu avant.
+      const behind = this.stopped ? STOP_BEHIND_CHUNKS : this.budget.behindChunks;
       for (const index of this.onDisk) {
-        if (index >= head - this.budget.behindChunks || index <= this.protectedBelow) continue;
+        if (index >= head - behind || index <= this.protectedBelow) continue;
         this.onDisk.delete(index);
         this.layer?.forget?.(index);
         this.added.delete(index);
@@ -580,6 +630,12 @@ export class DiskReserve {
         return;
       }
       await this.reckon();
+      // Le garde-fou sur la mesure réelle : au-delà du plafond, plus rien n'est écrit.
+      if (!this.stopped && overQuota(await this.deps.usage(), this.budget)) {
+        const usage = await this.deps.usage();
+        this.emit("erreur", { message: `occupation ${Math.round((usage ?? 0) / 1e6)} Mo au-delà du plafond`, failures: 0 });
+        void this.stop("occupation au-delà du plafond");
+      }
     } catch {
       /* au prochain tour */
     }
@@ -607,9 +663,16 @@ export class DiskReserve {
    * Arrête le tampon : plus de requête, les écritures en cours finissent, le manifeste est mis à jour.
    * Sûr à appeler deux fois. Ne lève jamais.
    */
-  async stop(why = "fin de lecture"): Promise<ReserveFacts> {
-    const facts = this.facts();
-    if (this.stopped) return facts;
+  stop(why = "fin de lecture"): Promise<ReserveFacts> {
+    // Un second appel attend le premier : l'hôte efface un film fini *après* l'arrêt du tampon, et un
+    // arrêt qui rendait la main tout de suite laissait ses dernières écritures passer après l'effacement.
+    this.stopping ??= this.stopNow(why);
+    return this.stopping;
+  }
+
+  private stopping: Promise<ReserveFacts> | null = null;
+
+  private async stopNow(why: string): Promise<ReserveFacts> {
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
     for (const control of this.controllers) control.abort();
