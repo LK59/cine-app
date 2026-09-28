@@ -6,8 +6,16 @@ import type { DirHandleLike, FileHandleLike } from "@/lib/resumeCache/store";
  * `createSyncAccessHandle` dans un worker.
  */
 export class FakeDir implements DirHandleLike {
+  /** L'horloge des dates de fichiers — `sweepResumeStore` épargne ce qui est récent. */
+  static now: () => number = () => Date.now();
   readonly dirs = new Map<string, FakeDir>();
   readonly files = new Map<string, Uint8Array>();
+  readonly modified = new Map<string, number>();
+
+  /** Les noms du dossier, comme `FileSystemDirectoryHandle.keys()`. */
+  async *keys(): AsyncIterable<string> {
+    for (const name of [...this.dirs.keys(), ...this.files.keys()]) yield name;
+  }
   /**
    * @param wholeBuffer écrire, d'une vue, tout le tampon qu'elle regarde — ce qu'a fait Safari le
    *   28/09/2026 (voir `exactBytes`). Par défaut, la vue seule, comme le veut la spécification.
@@ -33,9 +41,10 @@ export class FakeDir implements DirHandleLike {
       this.files.set(name, new Uint8Array(0));
     }
     const files = this.files;
+    const modified = this.modified;
     const wholeBuffer = this.wholeBuffer;
     const handle: FileHandleLike = {
-      getFile: async () => new Blob([files.get(name)! as BlobPart]),
+      getFile: async () => new File([files.get(name)! as BlobPart], name, { lastModified: modified.get(name) ?? FakeDir.now() }),
     };
     if (this.writable) {
       handle.createWritable = async () => {
@@ -62,6 +71,7 @@ export class FakeDir implements DirHandleLike {
               at += p.length;
             }
             files.set(name, out);
+            modified.set(name, FakeDir.now());
           },
         };
       };
@@ -85,5 +95,6 @@ export class FakeDir implements DirHandleLike {
       dir = next;
     }
     dir.files.set(path[path.length - 1], data.slice());
+    dir.modified.set(path[path.length - 1], FakeDir.now());
   }
 }

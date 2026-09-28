@@ -57,7 +57,7 @@ export interface ResumeManifest {
    * qu'un passage d'arrière-plan n'a pas relu le fichier (un titre gardé à l'arrêt).
    */
   headerChunks?: number[];
-  /** Quand une lecture de ce titre s'est arrêtée sur cet appareil pour la dernière fois — voir `activeTitles`. */
+  /** Quand une lecture de ce titre s'est arrêtée sur cet appareil pour la dernière fois. */
   playedAt?: number;
   /** Les morceaux, hors en-tête, du minimum de démarrage à la position visée. */
   minimalChunks?: number;
@@ -474,6 +474,94 @@ async function removeIndexLine(dir: DirHandleLike, account: string, itemId: stri
     delete index[itemId];
     await writeFile(dir, [ROOT_DIR, safeName(account)], "index.json", JSON.stringify(index));
   }
+}
+
+/** Un dossier qu'on peut parcourir — `keys()` n'existe pas dans tous les navigateurs. */
+type ListableDir = DirHandleLike & { keys?: () => AsyncIterable<string> };
+
+/** Les noms d'un dossier, ou null quand le navigateur ne sait pas les lister. */
+async function namesOf(dir: DirHandleLike): Promise<string[] | null> {
+  const keys = (dir as ListableDir).keys;
+  if (typeof keys !== "function") return null;
+  const names: string[] = [];
+  for await (const name of keys.call(dir)) names.push(name);
+  return names;
+}
+
+/** L'âge d'un fichier en millisecondes, ou null quand le navigateur ne le dit pas. */
+async function ageOf(dir: DirHandleLike, name: string, now: number): Promise<number | null> {
+  try {
+    const file = await (await dir.getFileHandle(name)).getFile();
+    const modified = (file as Blob & { lastModified?: number }).lastModified;
+    return typeof modified === "number" ? now - modified : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ce qu'un balayage épargne : de quoi finir d'écrire un titre et son manifeste. */
+export const SWEEP_MIN_AGE_MS = 10 * 60_000;
+
+/**
+ * Le balayage : ce qu'aucun manifeste ne décrit, effacé (28/09/2026).
+ *
+ * Un morceau n'est connu que de son manifeste, et un manifeste que de l'index. Ce qui a été écrit
+ * sans y être inscrit — une application tuée entre l'écriture d'un morceau et la mise à jour du
+ * manifeste, la réserve d'avance sur l'appareil des versions du 28/09/2026 au matin — n'était plus
+ * lu par personne, et plus jamais effacé tant que le titre restait gardé. Effacé ici : les morceaux
+ * absents du manifeste de leur titre, et les dossiers de titres absents de l'index.
+ *
+ * Prudent : seulement ce qui a plus de `SWEEP_MIN_AGE_MS` — un arrêt qui vient d'écrire ses morceaux
+ * et n'a pas encore écrit son manifeste ne perd rien —, et seulement là où le navigateur sait lister
+ * un dossier et dater un fichier. Ailleurs, rien ne change. Rend le nombre de fichiers et de dossiers
+ * effacés. Ne lève jamais.
+ */
+export function sweepResumeStore(account: string, now = Date.now()): Promise<number> {
+  return serial(async () => {
+    let removed = 0;
+    try {
+      const dir = await accountDir(account, false);
+      if (!dir) return 0;
+      const names = await namesOf(dir);
+      if (!names) return 0;
+      const index = (await readJson<ResumeIndex>(dir, "index.json")) || {};
+      const known = new Set(Object.keys(index).map(safeName));
+      for (const name of names) {
+        if (name === "index.json") continue;
+        let item: DirHandleLike;
+        try {
+          item = await dir.getDirectoryHandle(name);
+        } catch {
+          continue;
+        }
+        const files = (await namesOf(item)) ?? [];
+        const manifest = await readJson<ResumeManifest>(item, "manifest.json");
+        const listed = new Set(known.has(name) && manifest ? manifest.chunks.map((index) => `c${index}`) : []);
+        let kept = 0;
+        for (const file of files) {
+          if (file === "manifest.json" || listed.has(file)) {
+            kept += 1;
+            continue;
+          }
+          const age = await ageOf(item, file, now);
+          if (age === null || age < SWEEP_MIN_AGE_MS) {
+            kept += 1;
+            continue;
+          }
+          await item.removeEntry(file).catch(() => {});
+          removed += 1;
+        }
+        // Un titre que l'index ignore et dont il ne reste rien de récent : le dossier part.
+        if (!known.has(name) && (kept === 0 || (kept === 1 && files.includes("manifest.json") && ((await ageOf(item, "manifest.json", now)) ?? 0) >= SWEEP_MIN_AGE_MS))) {
+          await dir.removeEntry(name, { recursive: true }).catch(() => {});
+          removed += 1;
+        }
+      }
+    } catch {
+      /* ce qui a pu être balayé */
+    }
+    return removed;
+  });
 }
 
 /** Efface un titre, et sa ligne de l'index. Ne lève jamais. */

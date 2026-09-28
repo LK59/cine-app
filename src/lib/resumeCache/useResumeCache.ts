@@ -10,7 +10,7 @@ import { fetcher, followOnlyOptions, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import { deviceBudget, deviceUsage, overQuota } from "./budget";
 import { planResumeCache, remainingChunks, resumeTargets, type ResumeTarget } from "./plan";
 import { mustStop, recordTitle } from "./recordTitle";
-import { readResumeIndex, removeResumeEntry } from "./store";
+import { readResumeIndex, removeResumeEntry, sweepResumeStore } from "./store";
 
 export { recordTitle } from "./recordTitle";
 
@@ -78,9 +78,16 @@ export function runResumeCache(targets: ResumeTarget[], signal: AbortSignal, now
   return next;
 }
 
+/** Le balayage (`sweepResumeStore`) une fois par page : ce que les versions d'avant ont laissé. */
+let swept = false;
+
 async function onePass(targets: ResumeTarget[], signal: AbortSignal, now: number): Promise<void> {
   const account = persistedCacheAccount();
   if (!account || mustStop(signal)) return;
+  if (!swept) {
+    swept = true;
+    await sweepResumeStore(account, now);
+  }
   const index = await readResumeIndex(account);
   const budget = await deviceBudget();
   const plan = planResumeCache(targets, index, now);

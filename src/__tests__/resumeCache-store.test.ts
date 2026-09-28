@@ -9,6 +9,8 @@ import {
   saveResumeEntry,
   setResumeStoreForTests,
   writeResumeChunk,
+  sweepResumeStore,
+  SWEEP_MIN_AGE_MS,
   type ResumeManifest,
 } from "@/lib/resumeCache/store";
 import { FakeDir } from "./helpers/fakeOpfs";
@@ -135,5 +137,32 @@ describe("le magasin de la reprise instantanée", () => {
     expect(root.dirs.has("cine-reprise")).toBe(true);
     await readResumeIndex("louis");
     expect(root.dirs.has("cine-reprise")).toBe(false);
+  });
+
+  it("balaye ce qu'aucun manifeste ne décrit — et épargne ce qui vient d'être écrit", async () => {
+    // 28/09/2026 : la réserve sur l'appareil de la version du matin a pu laisser des morceaux jamais
+    // inscrits (une application tuée entre deux mises à jour du manifeste).
+    await saveResumeEntry("louis", manifest("a", { chunks: [0] }), new Map([[0, chunk(1)]]));
+    await writeResumeChunk("louis", "a", 7, chunk(7));
+    await writeResumeChunk("louis", "orphelin", 2, chunk(2));
+    const later = Date.now() + SWEEP_MIN_AGE_MS + 1_000;
+    // Récents : rien ne part.
+    expect(await sweepResumeStore("louis", Date.now())).toBe(0);
+    expect(await readResumeChunk("louis", "a", 7)).not.toBeNull();
+    // Assez vieux : le morceau non inscrit et le titre inconnu de l'index partent, le reste demeure.
+    expect(await sweepResumeStore("louis", later)).toBeGreaterThanOrEqual(2);
+    expect(await readResumeChunk("louis", "a", 7)).toBeNull();
+    expect(await readResumeChunk("louis", "a", 0)).not.toBeNull();
+    expect(await readResumeManifest("louis", "a")).not.toBeNull();
+    const account = root.dirs.get("cine-reprise-2")!.dirs.get("louis")!;
+    expect(account.dirs.has("orphelin")).toBe(false);
+  });
+
+  it("sans moyen de lister un dossier, le balayage ne fait rien", async () => {
+    await writeResumeChunk("louis", "orphelin", 2, chunk(2));
+    const account = root.dirs.get("cine-reprise-2")!.dirs.get("louis")!;
+    (account as unknown as { keys?: unknown }).keys = undefined;
+    expect(await sweepResumeStore("louis", Date.now() + 1e9)).toBe(0);
+    expect(account.dirs.has("orphelin")).toBe(true);
   });
 });
