@@ -18,7 +18,7 @@ const resume: ResumeFeedItem[] = [
   { id: "ep-7", positionTicks: 10 * MIN, runtimeTicks: 45 * MIN, cinemaHref: "/sonarr/9" },
 ];
 const nextUp: CinemaNextUpItem[] = [
-  { jellyfinItemId: "ep-3", title: "Série", thumbnailUrl: null, seasonNumber: 2, episodeNumber: 3, resumeTicks: 5 * MIN, runtimeTicks: 40 * MIN, sonarrId: 4 },
+  { jellyfinItemId: "ep-3", title: "Série", thumbnailUrl: null, seasonNumber: 2, episodeNumber: 3, resumeTicks: 5 * MIN, runtimeTicks: 40 * MIN, sonarrId: 4, lastPlayedAt: null },
 ];
 
 describe("localPlayTarget — ce que l'appareil sait déjà", () => {

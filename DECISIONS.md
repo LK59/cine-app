@@ -971,3 +971,29 @@ les unes sur les autres, et en sortir revient bien à celle d'en dessous. Aller 
 entrée d'historique, comme le rail : le retour du navigateur rouvre la fenêtre fermée.
 
 **Décidé le 26/09/2026.**
+
+## 33. L'ordre de la rangée « Reprendre »
+
+**Règle.** Le dernier lu d'abord, films et épisodes mêlés. Un épisode jamais ouvert (le suivant d'une
+série) prend la date du dernier épisode lu de sa série. Sans date, une carte garde sa place relative,
+après les datées. Un titre qui remonte glisse à sa place.
+
+**Pourquoi.** La rangée mettait bout à bout les films du flux « Reprendre », puis les épisodes
+d'« À suivre » dans l'ordre de Jellyfin : un film laissé l'avant-veille restait devant l'épisode lancé
+cinq minutes plus tôt, et l'ordre d'« À suivre » selon Jellyfin n'est pas celui de la dernière lecture
+(Ted Lasso devant Mr. Robot, lu une minute après — 28/09/2026). Aucun rafraîchissement n'y changeait rien.
+
+**Porteurs.** `continueOrder` (`src/lib/continueOrder.ts`) ; `lastPlayedAt` posé par
+`/api/jellyfin/resume` et `/api/cinema/next-up` (`jellyfin.getSeriesLastPlayed` pour un épisode sans date).
+
+**Appelants.** `CinemaClient.tsx` et `mobile/CinemaMobileClient.tsx` — la rangée et son animation
+(`useFlipGrid`, sur l'ordre rendu).
+
+**Tests.** `continueOrder.test.ts`, `cinema-next-up-route.test.ts` (« date chaque épisode… »).
+
+**Voulu.** Les cartes gardent leurs gestes propres (un film ouvre sa fiche Radarr et son menu « Retirer
+de Reprendre », un épisode la fiche de sa série) : seul l'ordre est commun. `PERSISTED_CACHE_SCHEMA` est
+passé à 3 avec ce champ.
+
+**Décidé le 28/09/2026.**
+

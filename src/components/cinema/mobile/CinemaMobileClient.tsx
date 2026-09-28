@@ -9,6 +9,7 @@ import { useLongPress } from "@/lib/useLongPress";
 import { prefetchLibraryItem } from "@/lib/prefetch";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
+import { continueOrder } from "@/lib/continueOrder";
 import { heroOffscreen } from "@/lib/heroCarousel";
 import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
 import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
@@ -60,6 +61,8 @@ interface CinemaResumeItem {
   imageTag: string | null;
   /** `/radarr/12` ou `/sonarr/34` — ce qui relie une reprise à sa fiche. */
   cinemaHref: string | null;
+  /** Quand il a été lu pour la dernière fois — l'ordre de la rangée (`continueOrder`). */
+  lastPlayedAt?: string | null;
 }
 
 const POSTER_WIDTH = "w-28 sm:w-32";
@@ -229,7 +232,10 @@ export function CinemaMobileClient() {
   const removeFromResume = useRemoveFromResume();
   const continueTrack = useRef<HTMLDivElement>(null);
   // Avec les options du catalogue, comme sur le bureau — voir `CATALOGUE_FLIP`.
-  useFlipGrid(continueTrack, [...resumeMovies.map((m) => m.id), ...continueSeries.map((e) => e.jellyfinItemId)], CATALOGUE_FLIP);
+  // Le dernier lu d'abord, films et épisodes mêlés — la même fonction que le bureau (DECISIONS § 33).
+  // Un titre qui remonte glisse à sa place (`useFlipGrid`).
+  const continueEntries = continueOrder(resumeMovies, continueSeries);
+  useFlipGrid(continueTrack, continueEntries.map((entry) => entry.key), CATALOGUE_FLIP);
   // La place tenue tant que l'une des deux réponses n'est pas arrivée — voir `CinemaSkeletonCards`.
   const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
   const isSeries = mediaType === "series";
@@ -626,86 +632,92 @@ export function CinemaMobileClient() {
         )}
         {hasContinue && (
           <MobileRow label={t("cinema.continueWatching")} trackRef={continueTrack}>
-            {resumeMovies.map((entry) => (
-              <LongPressButton
-                key={entry.id}
-                onLongPress={() =>
-                  setResumeMenu({
-                    id: entry.id,
-                    title: entry.name,
-                    poster: entry.imageTag ? `/api/jellyfin/image?itemId=${entry.id}&tag=${entry.imageTag}` : null,
-                  })
-                }
-                onClick={() =>
-                  openResume(entry.cinemaHref, () =>
-                    playback.play({
-                      itemId: entry.id,
-                      title: entry.name,
-                      resumeAt: feedResumeAt(entry.positionTicks, RESUME_KEY),
-                    })
-                  )
-                }
-                className={`${CONTINUE_WIDTH} pressable shrink-0 select-none text-left [-webkit-touch-callout:none]`}
-              >
-                <div className="relative overflow-hidden rounded-lg">
-                  <PosterImage
-                    src={entry.imageTag ? `/api/jellyfin/image?itemId=${entry.id}&tag=${entry.imageTag}` : null}
-                    alt={entry.name}
-                    aspectRatio="aspect-video"
-                    unoptimized
-                    subtle
-                  />
-                  <span className="absolute inset-0 flex items-center justify-center">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-xs">
-                      <Play size={16} fill="currentColor" />
-                    </span>
-                  </span>
-                  <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
-                    <ProgressFill percent={entry.progress} />
-                  </div>
-                </div>
-                <p className="mt-1.5 truncate text-xs font-medium text-white">{entry.name}</p>
-                <p className="truncate text-xs text-subtle">
-                  {formatContinueCaption(t, entry.positionTicks, entry.runtimeTicks)}
-                </p>
-              </LongPressButton>
-            ))}
-            {continueSeries.map((entry) => (
-              <button
-                key={entry.jellyfinItemId}
-                type="button"
-                // La rangée des séries était restée sur la lecture directe quand celle des films
-                // est passée à la fiche : deux rangées voisines, deux gestes différents.
-                onClick={() =>
-                  openResume(entry.sonarrId ? `/sonarr/${entry.sonarrId}` : null, () =>
-                    playback.play({
-                      itemId: entry.jellyfinItemId,
-                      title: entry.title,
-                      resumeAt: feedResumeAt(entry.resumeTicks, NEXT_UP_KEY),
-                    })
-                  )
-                }
-                className={`${CONTINUE_WIDTH} pressable shrink-0 text-left`}
-              >
-                <div className="relative overflow-hidden rounded-lg">
-                  <PosterImage src={entry.thumbnailUrl} alt={entry.title} aspectRatio="aspect-video" unoptimized subtle />
-                  <span className="absolute inset-0 flex items-center justify-center">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-xs">
-                      <Play size={16} fill="currentColor" />
-                    </span>
-                  </span>
-                  {entry.resumeTicks && entry.runtimeTicks ? (
-                    <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
-                      <ProgressFill percent={Math.min((entry.resumeTicks / entry.runtimeTicks) * 100, 99)} />
+            {continueEntries.map((row) => {
+              if (row.kind === "movie") {
+                const entry = row.item;
+                return (
+                  <LongPressButton
+                    key={row.key}
+                    onLongPress={() =>
+                      setResumeMenu({
+                        id: entry.id,
+                        title: entry.name,
+                        poster: entry.imageTag ? `/api/jellyfin/image?itemId=${entry.id}&tag=${entry.imageTag}` : null,
+                      })
+                    }
+                    onClick={() =>
+                      openResume(entry.cinemaHref, () =>
+                        playback.play({
+                          itemId: entry.id,
+                          title: entry.name,
+                          resumeAt: feedResumeAt(entry.positionTicks, RESUME_KEY),
+                        })
+                      )
+                    }
+                    className={`${CONTINUE_WIDTH} pressable shrink-0 select-none text-left [-webkit-touch-callout:none]`}
+                  >
+                    <div className="relative overflow-hidden rounded-lg">
+                      <PosterImage
+                        src={entry.imageTag ? `/api/jellyfin/image?itemId=${entry.id}&tag=${entry.imageTag}` : null}
+                        alt={entry.name}
+                        aspectRatio="aspect-video"
+                        unoptimized
+                        subtle
+                      />
+                      <span className="absolute inset-0 flex items-center justify-center">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-xs">
+                          <Play size={16} fill="currentColor" />
+                        </span>
+                      </span>
+                      <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
+                        <ProgressFill percent={entry.progress} />
+                      </div>
                     </div>
-                  ) : null}
-                </div>
-                <p className="mt-1.5 truncate text-xs font-medium text-white">{entry.title}</p>
-                <p className="truncate text-xs text-subtle">
-                  {formatContinueCaption(t, entry.resumeTicks, entry.runtimeTicks, entry.seasonNumber, entry.episodeNumber)}
-                </p>
-              </button>
-            ))}
+                    <p className="mt-1.5 truncate text-xs font-medium text-white">{entry.name}</p>
+                    <p className="truncate text-xs text-subtle">
+                      {formatContinueCaption(t, entry.positionTicks, entry.runtimeTicks)}
+                    </p>
+                  </LongPressButton>
+                );
+              }
+              const entry = row.item;
+              return (
+                <button
+                  key={row.key}
+                  type="button"
+                  // La rangée des séries était restée sur la lecture directe quand celle des films
+                  // est passée à la fiche : deux rangées voisines, deux gestes différents.
+                  onClick={() =>
+                    openResume(entry.sonarrId ? `/sonarr/${entry.sonarrId}` : null, () =>
+                      playback.play({
+                        itemId: entry.jellyfinItemId,
+                        title: entry.title,
+                        resumeAt: feedResumeAt(entry.resumeTicks, NEXT_UP_KEY),
+                      })
+                    )
+                  }
+                  className={`${CONTINUE_WIDTH} pressable shrink-0 text-left`}
+                >
+                  <div className="relative overflow-hidden rounded-lg">
+                    <PosterImage src={entry.thumbnailUrl} alt={entry.title} aspectRatio="aspect-video" unoptimized subtle />
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-xs">
+                        <Play size={16} fill="currentColor" />
+                      </span>
+                    </span>
+                    {entry.resumeTicks && entry.runtimeTicks ? (
+                      <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
+                        <ProgressFill percent={Math.min((entry.resumeTicks / entry.runtimeTicks) * 100, 99)} />
+                      </div>
+                    ) : null}
+                  </div>
+                  <p className="mt-1.5 truncate text-xs font-medium text-white">{entry.title}</p>
+                  <p className="truncate text-xs text-subtle">
+                    {formatContinueCaption(t, entry.resumeTicks, entry.runtimeTicks, entry.seasonNumber, entry.episodeNumber)}
+                  </p>
+                </button>
+              );
+            })}
           </MobileRow>
         )}
 

@@ -595,6 +595,17 @@ export const jellyfin = {
 
   getDevices: () => fetchJson<{ Items: JellyfinDevice[] }>(`${url}/Devices`, { headers }).then((res) => res.Items ?? []),
 
+  /**
+   * Quand le compte a lu un épisode de cette série pour la dernière fois — la date d'un épisode
+   * d'« À suivre » jamais ouvert, pour l'ordre de « Reprendre » (`continueOrder`). Jellyfin ne date pas
+   * la série elle-même (`LastPlayedDate` absent, vérifié le 28/09/2026).
+   */
+  getSeriesLastPlayed: async (userId: string, seriesId: string) =>
+    fetchJson<{ Items: JellyfinItem[] }>(
+      `${url}/Users/${idSegment(userId)}/Items?ParentId=${idSegment(seriesId)}&IncludeItemTypes=Episode&Recursive=true&SortBy=DatePlayed&SortOrder=Descending&Limit=1&Fields=UserData`,
+      { headers }
+    ).then((res) => res.Items[0]?.UserData?.LastPlayedDate ?? null),
+
   getNextUpGlobal: async (userId: string, limit = 10) =>
     fetchJson<{ Items: JellyfinItem[] }>(
       `${url}/Shows/NextUp?UserId=${idSegment(userId)}&Limit=${limit}&Fields=UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,SeriesName,SeriesId`,

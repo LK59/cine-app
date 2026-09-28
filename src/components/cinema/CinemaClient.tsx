@@ -5,6 +5,7 @@ import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
+import { continueOrder } from "@/lib/continueOrder";
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -90,6 +91,8 @@ interface CinemaResumeItem {
   imageTag: string | null;
   /** `/radarr/12` ou `/sonarr/34` — ce qui relie une reprise à sa fiche. */
   cinemaHref: string | null;
+  /** Quand il a été lu pour la dernière fois — l'ordre de la rangée (`continueOrder`). */
+  lastPlayedAt?: string | null;
 }
 
 const TV_NAV_RING =
@@ -364,7 +367,10 @@ export function CinemaClient() {
   const continueTrack = useRef<HTMLDivElement>(null);
   // Avec les options du catalogue : à l'arrivée des données fraîches, le film fini sur la télé
   // quitte la rangée et celui qu'on reprend remonte en tête, en glissant — voir `CATALOGUE_FLIP`.
-  useFlipGrid(continueTrack, [...resumeMovies.map((m) => m.id), ...continueSeries.map((e) => e.jellyfinItemId)], CATALOGUE_FLIP);
+  // Le dernier lu d'abord, films et épisodes mêlés — la même fonction que le téléphone (DECISIONS § 33).
+  // Un titre qui remonte glisse à sa place (`useFlipGrid`).
+  const continueEntries = continueOrder(resumeMovies, continueSeries);
+  useFlipGrid(continueTrack, continueEntries.map((entry) => entry.key), CATALOGUE_FLIP);
   // La place tenue tant que l'une des deux réponses n'est pas arrivée — voir `CinemaSkeletonCards`.
   const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
   const myListPending = useCinemaMyListPending();
@@ -932,69 +938,75 @@ export function CinemaClient() {
     <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
       <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{t("cinema.continueWatching")}</h2>
       <div ref={continueTrack} className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
-        {resumeMovies.map((item, i) => (
-          <ContinueCard
-            key={item.id}
-            itemId={item.id}
-            title={item.name}
-            thumbnailUrl={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
-            progress={item.progress}
-            resumeTicks={item.positionTicks}
-            runtimeTicks={item.runtimeTicks}
-            rowKey="continue"
-            index={i}
-            onMenu={() =>
-              setResumeMenu({
-                id: item.id,
-                title: item.name,
-                poster: item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null,
-              })
-            }
-            onFocus={() => {
-              const inLibrary = matchRadarr(item.cinemaHref);
-              if (inLibrary) focusMovie(inLibrary);
-            }}
-            onOpen={() =>
-              openResume(item.cinemaHref, () =>
-                playback.play({
-                  itemId: item.id,
-                  title: item.name,
-                  resumeAt: feedResumeAt(item.positionTicks, RESUME_KEY),
-                })
-              )
-            }
-          />
-        ))}
-        {continueSeries.map((item, i) => (
-          <ContinueCard
-            key={item.jellyfinItemId}
-            itemId={item.jellyfinItemId}
-            title={item.title}
-            thumbnailUrl={item.thumbnailUrl}
-            progress={
-              item.resumeTicks && item.runtimeTicks ? Math.min((item.resumeTicks / item.runtimeTicks) * 100, 99) : 0
-            }
-            resumeTicks={item.resumeTicks}
-            runtimeTicks={item.runtimeTicks}
-            seasonNumber={item.seasonNumber}
-            episodeNumber={item.episodeNumber}
-            rowKey="continue"
-            index={resumeMovies.length + i}
-            onFocus={() => {
-              const inLibrary = item.sonarrId ? seriesById.get(item.sonarrId) : undefined;
-              if (inLibrary) focusSeries(inLibrary);
-            }}
-            onOpen={() =>
-              openResume(item.sonarrId ? `/sonarr/${item.sonarrId}` : null, () =>
-                playback.play({
-                  itemId: item.jellyfinItemId,
-                  title: item.title,
-                  resumeAt: feedResumeAt(item.resumeTicks, NEXT_UP_KEY),
-                })
-              )
-            }
-          />
-        ))}
+        {continueEntries.map((entry, i) => {
+          if (entry.kind === "movie") {
+            const item = entry.item;
+            return (
+              <ContinueCard
+                key={entry.key}
+                itemId={item.id}
+                title={item.name}
+                thumbnailUrl={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
+                progress={item.progress}
+                resumeTicks={item.positionTicks}
+                runtimeTicks={item.runtimeTicks}
+                rowKey="continue"
+                index={i}
+                onMenu={() =>
+                  setResumeMenu({
+                    id: item.id,
+                    title: item.name,
+                    poster: item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null,
+                  })
+                }
+                onFocus={() => {
+                  const inLibrary = matchRadarr(item.cinemaHref);
+                  if (inLibrary) focusMovie(inLibrary);
+                }}
+                onOpen={() =>
+                  openResume(item.cinemaHref, () =>
+                    playback.play({
+                      itemId: item.id,
+                      title: item.name,
+                      resumeAt: feedResumeAt(item.positionTicks, RESUME_KEY),
+                    })
+                  )
+                }
+              />
+            );
+          }
+          const item = entry.item;
+          return (
+            <ContinueCard
+              key={entry.key}
+              itemId={item.jellyfinItemId}
+              title={item.title}
+              thumbnailUrl={item.thumbnailUrl}
+              progress={
+                item.resumeTicks && item.runtimeTicks ? Math.min((item.resumeTicks / item.runtimeTicks) * 100, 99) : 0
+              }
+              resumeTicks={item.resumeTicks}
+              runtimeTicks={item.runtimeTicks}
+              seasonNumber={item.seasonNumber}
+              episodeNumber={item.episodeNumber}
+              rowKey="continue"
+              index={i}
+              onFocus={() => {
+                const inLibrary = item.sonarrId ? seriesById.get(item.sonarrId) : undefined;
+                if (inLibrary) focusSeries(inLibrary);
+              }}
+              onOpen={() =>
+                openResume(item.sonarrId ? `/sonarr/${item.sonarrId}` : null, () =>
+                  playback.play({
+                    itemId: item.jellyfinItemId,
+                    title: item.title,
+                    resumeAt: feedResumeAt(item.resumeTicks, NEXT_UP_KEY),
+                  })
+                )
+              }
+            />
+          );
+        })}
       </div>
     </div>
   );

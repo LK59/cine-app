@@ -68,6 +68,8 @@ export async function GET(req: NextRequest) {
       runtimeTicks,
       imageTag: item.ImageTags?.Primary ?? null,
       cinemaHref,
+      // L'ordre de « Reprendre » : le dernier lu d'abord (`continueOrder`).
+      lastPlayedAt: item.UserData?.LastPlayedDate ?? null,
     };
   });
 

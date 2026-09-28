@@ -16,13 +16,18 @@ export interface CinemaNextUpItem {
   runtimeTicks: number | null;
   /** La série dans Sonarr, quand elle y est — c'est ce qui ouvre sa fiche depuis la reprise. */
   sonarrId: number | null;
+  /**
+   * Quand cet épisode a été lu pour la dernière fois — ou, jamais ouvert, le dernier épisode lu de sa
+   * série. L'ordre de « Reprendre » (`continueOrder`).
+   */
+  lastPlayedAt: string | null;
 }
 
 export interface CinemaNextUpPayload {
   items: CinemaNextUpItem[];
 }
 
-function toNextUpItem(item: JellyfinItem, sonarrId: number | null): CinemaNextUpItem {
+function toNextUpItem(item: JellyfinItem, sonarrId: number | null, lastPlayedAt: string | null): CinemaNextUpItem {
   return {
     jellyfinItemId: item.Id,
     title: item.SeriesName ?? item.Name,
@@ -32,6 +37,7 @@ function toNextUpItem(item: JellyfinItem, sonarrId: number | null): CinemaNextUp
     resumeTicks: item.UserData?.PlaybackPositionTicks ?? null,
     runtimeTicks: item.RunTimeTicks ?? null,
     sonarrId,
+    lastPlayedAt,
   };
 }
 
@@ -55,8 +61,21 @@ export async function GET(req: NextRequest) {
     items.map((i) => i.SeriesId).filter((id): id is string => !!id)
   );
 
+  // La date d'un épisode jamais ouvert : celle du dernier épisode lu de sa série, demandée pour ceux-là
+  // seulement, en parallèle. Un échec laisse la carte sans date — elle garde sa place, après les datées.
+  const undated = [...new Set(items.filter((i) => !i.UserData?.LastPlayedDate && i.SeriesId).map((i) => i.SeriesId!))];
+  const seriesPlayed = new Map(
+    await Promise.all(undated.map(async (id) => [id, await jellyfin.getSeriesLastPlayed(session.jfId!, id).catch(() => null)] as const))
+  );
+
   const payload: CinemaNextUpPayload = {
-    items: items.map((item) => toNextUpItem(item, (item.SeriesId ? sonarrBySeries.get(item.SeriesId) : undefined) ?? null)),
+    items: items.map((item) =>
+      toNextUpItem(
+        item,
+        (item.SeriesId ? sonarrBySeries.get(item.SeriesId) : undefined) ?? null,
+        item.UserData?.LastPlayedDate ?? (item.SeriesId ? seriesPlayed.get(item.SeriesId) ?? null : null)
+      )
+    ),
   };
   return NextResponse.json(payload);
 }

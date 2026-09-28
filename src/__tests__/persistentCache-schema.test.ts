@@ -25,6 +25,8 @@ const FINGERPRINTS: Record<number, string> = {
   1: "602c82816f0ecea7",
   // 25/09/2026 : la configuration publique du lecteur rejoint le cache (le bouton Lire des fiches).
   2: "8faaa82aa564ea57",
+  // 28/09/2026 : `lastPlayedAt` sur « Reprendre » et « À suivre » — l'ordre de la rangée (`continueOrder`).
+  3: "0fbf8c19ee223a94",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

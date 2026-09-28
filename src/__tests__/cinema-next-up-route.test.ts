@@ -6,10 +6,12 @@ const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...args: unknown[]) => mockVerifySessionFull(...args) }));
 const mockGetNextUpGlobal = vi.fn();
 const mockGetItemProviderIds = vi.fn();
+const mockGetSeriesLastPlayed = vi.fn();
 vi.mock("@/lib/clients/jellyfin", () => ({
   jellyfin: {
     getNextUpGlobal: (...a: unknown[]) => mockGetNextUpGlobal(...a),
     getItemProviderIds: (...a: unknown[]) => mockGetItemProviderIds(...a),
+    getSeriesLastPlayed: (...a: unknown[]) => mockGetSeriesLastPlayed(...a),
   },
 }));
 const mockGetSeries = vi.fn();
@@ -31,6 +33,7 @@ beforeEach(async () => {
   cache.invalidateJellyfinLibrary();
   mockGetItemProviderIds.mockResolvedValue(null);
   mockGetSeries.mockResolvedValue([]);
+  mockGetSeriesLastPlayed.mockResolvedValue(null);
 });
 
 describe("GET /api/cinema/next-up", () => {
@@ -93,6 +96,25 @@ describe("GET /api/cinema/next-up", () => {
 
     expect(body.items[0].resumeTicks).toBeNull();
     expect(body.items[0].thumbnailUrl).toBeNull();
+  });
+
+  it("date chaque épisode par sa dernière lecture, ou par celle de sa série s'il n'a jamais été ouvert", async () => {
+    // 28/09/2026 : l'ordre de « Reprendre » — le dernier lu d'abord (`continueOrder`).
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
+    mockGetNextUpGlobal.mockResolvedValue([
+      { Id: "ep-a", Name: "A", Type: "Episode", SeriesId: "s-a", UserData: { Played: false, PlayCount: 0, LastPlayedDate: "2026-09-28T09:27:30Z" } },
+      { Id: "ep-b", Name: "B", Type: "Episode", SeriesId: "s-b", UserData: { Played: false, PlayCount: 0 } },
+      { Id: "ep-c", Name: "C", Type: "Episode", SeriesId: "s-c" },
+    ]);
+    mockGetSeriesLastPlayed.mockImplementation(async (_user: string, seriesId: string) => {
+      if (seriesId === "s-b") return "2026-09-27T20:00:00Z";
+      throw new Error("jellyfin");
+    });
+    const { GET } = await import("@/app/api/cinema/next-up/route");
+    const body = await (await GET(fakeReq())).json();
+    expect(body.items.map((i: { lastPlayedAt: string | null }) => i.lastPlayedAt)).toEqual(["2026-09-28T09:27:30Z", "2026-09-27T20:00:00Z", null]);
+    // Seulement pour ceux qui n'ont pas de date à eux.
+    expect(mockGetSeriesLastPlayed).toHaveBeenCalledTimes(2);
   });
 
   it("falls back to an empty list when the Jellyfin call fails", async () => {
