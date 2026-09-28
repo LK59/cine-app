@@ -13,6 +13,33 @@ import { logStartupTiming } from "@/lib/eventLogs";
 const ms = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 86_400_000 * 30 ? Math.round(value) : null;
 
+/** Des mégaoctets : un nombre positif, sous le pétaoctet. */
+const megabytes = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1e9 ? Math.round(value * 10) / 10 : null;
+
+const PERSIST_OUTCOMES = new Set(["accordé", "déjà", "refusé", "ignoré"]);
+
+/**
+ * Le stockage de l'appareil (28/09/2026, `storageFacts`) : la persistance demandée et obtenue, le
+ * quota, l'occupation et la reprise instantanée. Seuls les champs connus, bornés ; le reste tombe.
+ */
+function storageOf(value: unknown): Record<string, string | number | boolean> {
+  if (!value || typeof value !== "object") return {};
+  const raw = value as Record<string, unknown>;
+  const out: Record<string, string | number | boolean> = {};
+  if (typeof raw.persist === "string" && PERSIST_OUTCOMES.has(raw.persist)) out.persist = raw.persist;
+  if (typeof raw.persisted === "boolean") out.persisted = raw.persisted;
+  if (raw.storageTimedOut === true) out.storageTimedOut = true;
+  for (const key of ["quotaMB", "usageMB", "idbMB", "cacheMB", "opfsMB", "resumeMB"] as const) {
+    const n = megabytes(raw[key]);
+    if (n !== null) out[key] = n;
+  }
+  if (typeof raw.resumeTitles === "number" && Number.isInteger(raw.resumeTitles) && raw.resumeTitles >= 0 && raw.resumeTitles < 1000) {
+    out.resumeTitles = raw.resumeTitles;
+  }
+  return out;
+}
+
 export async function POST(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return new NextResponse(null, { status: 401 });
@@ -27,6 +54,7 @@ export async function POST(req: NextRequest) {
     cacheMs: ms(body.cacheMs),
     networkMs: ms(body.networkMs),
     standalone: body.standalone === true,
+    ...storageOf(body.storage),
   });
   return new NextResponse(null, { status: 204 });
 }

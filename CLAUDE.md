@@ -132,7 +132,10 @@ it was drawn from the catalogue kept on the device (`src/lib/persistentCache.ts`
 account, seven days, wiped at sign-out) and how old that cache was, and when the cache and then the
 network answered (`cacheMs`, `networkMs`, from navigation start). The cache exists because every
 launch used to ask for the whole catalogue again — one to two seconds of loading screen for a phone
-roaming abroad; the log says what it actually saves. Its format is versioned
+roaming abroad; the log says what it actually saves. Since 2026-09-28 the same line carries the
+device's storage (`storageFacts`): the answer to `persist()` and whether storage is persistent,
+`quotaMB` / `usageMB` (and `idbMB` / `cacheMB` / `opfsMB` where Chromium details them), and what the
+resume cache holds for the account — measured before keeping more on the device. Its format is versioned
 (`PERSISTED_CACHE_SCHEMA`), and `persistentCache-schema.test.ts` fails when the kept responses'
 types change without the version moving.
 **Reports** (« Signaler un problème », `src/lib/reports.ts`) freeze a snapshot of the author's logs

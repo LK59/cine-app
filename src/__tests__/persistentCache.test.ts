@@ -191,6 +191,7 @@ describe("le journal des vitesses", () => {
     await hydrateFromDisk("louis", { has: () => false, set: () => {} });
     noteResponse(MOVIES_CATALOGUE_KEY, { genres: ["Drame"] });
     noteResponse(MOVIES_CATALOGUE_KEY, { genres: ["Drame", "Comédie"] });
+    await settle();
     const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/startup-timing");
     expect(calls).toHaveLength(1);
     const body = JSON.parse((calls[0][1] as RequestInit).body as string);
@@ -203,6 +204,7 @@ describe("le journal des vitesses", () => {
   it("dit aussi une ouverture sans cache", async () => {
     await hydrateFromDisk("louis", { has: () => false, set: () => {} });
     noteResponse(MOVIES_CATALOGUE_KEY, { genres: [] });
+    await settle();
     const [call] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/startup-timing");
     expect(JSON.parse((call[1] as RequestInit).body as string)).toMatchObject({ cacheUsed: false, cacheMs: null });
   });

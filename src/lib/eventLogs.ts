@@ -29,6 +29,17 @@ export function logStartupTiming(fields: {
   cacheMs: number | null;
   networkMs: number | null;
   standalone: boolean;
+  /** Le stockage de l'appareil — voir `storageFacts` (persistentCache.ts). */
+  persist?: string;
+  persisted?: boolean;
+  quotaMB?: number;
+  usageMB?: number;
+  idbMB?: number;
+  cacheMB?: number;
+  opfsMB?: number;
+  resumeTitles?: number;
+  resumeMB?: number;
+  storageTimedOut?: boolean;
 }): void {
   try {
     appendJsonLine(STARTUP_LOG(), { timestamp: new Date().toISOString(), kind: "ouverture", ...fields }, { keep: EVENT_LOG_KEEP });

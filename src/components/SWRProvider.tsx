@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { SWRConfig, useSWRConfig } from "swr";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
-import { hydrateFromDisk, persistMiddleware, requestPersistence } from "@/lib/persistentCache";
+import { hydrateFromDisk, persistMiddleware, startPersistence } from "@/lib/persistentCache";
 
 /**
  * Relit, au démarrage, le catalogue gardé sur l'appareil pour ce compte — voir `persistentCache.ts`.
@@ -21,7 +21,7 @@ function PersistentCacheHydrator({ account }: { account: string | null }) {
       has: (key) => cache.get(key) !== undefined,
       set: (key, data) => void mutate(key, data, { revalidate: false }),
     });
-    if (account && typeof navigator !== "undefined") void requestPersistence(navigator.userAgent, navigator.storage);
+    if (account && typeof navigator !== "undefined") startPersistence(navigator.userAgent, navigator.storage);
   }, [account, cache, mutate]);
   return null;
 }

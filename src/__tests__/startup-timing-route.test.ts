@@ -48,6 +48,23 @@ describe("POST /api/startup-timing", () => {
     expect(mockLog.mock.calls[0][0].build).toHaveLength(40);
   });
 
+  it("écrit le stockage de l'appareil, borné, et rien d'autre de ce qu'il contient", async () => {
+    // 28/09/2026 : la persistance était demandée et sa réponse jetée ; le quota, jamais mesuré.
+    await post({
+      cacheUsed: true,
+      storage: { persist: "accordé", persisted: true, quotaMB: 61234.56, usageMB: 212.3, opfsMB: 180, resumeTitles: 4, resumeMB: 96, intrus: "x" },
+    });
+    const line = mockLog.mock.calls[0][0];
+    expect(line).toMatchObject({ persist: "accordé", persisted: true, quotaMB: 61234.6, usageMB: 212.3, opfsMB: 180, resumeTitles: 4, resumeMB: 96 });
+    expect(line.intrus).toBeUndefined();
+  });
+
+  it("jette un stockage qui ment", async () => {
+    await post({ storage: { persist: "<script>", persisted: "oui", quotaMB: -1, usageMB: Number.POSITIVE_INFINITY, resumeTitles: 2.5 } });
+    const line = mockLog.mock.calls[0][0];
+    for (const key of ["persist", "persisted", "quotaMB", "usageMB", "resumeTitles"]) expect(line[key]).toBeUndefined();
+  });
+
   it("n'écoute pas un visiteur sans session", async () => {
     mockVerifySessionFull.mockResolvedValue(null);
     expect((await post({ cacheUsed: true }, "")).status).toBe(401);

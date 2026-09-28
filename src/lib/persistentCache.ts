@@ -4,6 +4,7 @@ import type { Middleware } from "swr";
 import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/catalogueKeys";
 import { geckoVersion } from "@/lib/webcodecs/bufferBudget";
 import { APP_BUILD } from "@/lib/appBuild";
+import { readResumeIndex } from "@/lib/resumeCache/store";
 
 /**
  * Le catalogue de la dernière visite, gardé sur l'appareil pour s'afficher dès l'ouverture.
@@ -370,6 +371,76 @@ export async function requestPersistence(
   }
 }
 
+/** La réponse de la demande de cette page, lue par la ligne d'ouverture — voir `storageFacts`. */
+let persistence: Promise<Awaited<ReturnType<typeof requestPersistence>>> | null = null;
+
+/** Demande la persistance (`requestPersistence`) et garde sa réponse pour le journal. */
+export function startPersistence(userAgent: string, storage: Parameters<typeof requestPersistence>[1]): void {
+  persistence = requestPersistence(userAgent, storage);
+}
+
+/**
+ * Le stockage de l'appareil, pour la ligne d'ouverture (28/09/2026).
+ *
+ * La persistance était demandée et sa réponse jetée : on ne savait pas si iOS garderait le
+ * catalogue et la reprise instantanée, ni combien de place chaque appareil offrait — deux
+ * questions à trancher avant de garder davantage sur l'appareil (un tampon sur disque pendant la
+ * lecture, le téléchargement hors ligne). Le détail par type n'existe que sur Chromium
+ * (`usageDetails`) ; ailleurs, le total et ce que la reprise instantanée occupe, lu dans son index.
+ *
+ * Borné dans le temps : la ligne part sans ces chiffres plutôt qu'après une seconde et demie.
+ * Ne lève jamais.
+ */
+export async function storageFacts(
+  storage: StorageManager | undefined,
+  account: string | null,
+  timeoutMs = 1500
+): Promise<Record<string, string | number | boolean>> {
+  const mb = (bytes: unknown) => (typeof bytes === "number" && Number.isFinite(bytes) ? Math.round(bytes / 1e5) / 10 : null);
+  const read = async () => {
+    const facts: Record<string, string | number | boolean> = {};
+    try {
+      if (persistence) facts.persist = await persistence;
+      if (storage && typeof storage.persisted === "function") facts.persisted = await storage.persisted();
+      if (storage && typeof storage.estimate === "function") {
+        const estimate = (await storage.estimate()) as StorageEstimate & {
+          usageDetails?: { indexedDB?: number; caches?: number; fileSystem?: number; serviceWorkerRegistrations?: number };
+        };
+        const quota = mb(estimate.quota);
+        const usage = mb(estimate.usage);
+        if (quota !== null) facts.quotaMB = quota;
+        if (usage !== null) facts.usageMB = usage;
+        const details = estimate.usageDetails;
+        if (details) {
+          const idb = mb(details.indexedDB);
+          const caches = mb(details.caches);
+          const opfs = mb(details.fileSystem);
+          if (idb !== null) facts.idbMB = idb;
+          if (caches !== null) facts.cacheMB = caches;
+          if (opfs !== null) facts.opfsMB = opfs;
+        }
+      }
+      if (account) {
+        const index = Object.values(await readResumeIndex(account));
+        facts.resumeTitles = index.length;
+        facts.resumeMB = mb(index.reduce((sum, entry) => sum + entry.bytes, 0)) ?? 0;
+      }
+    } catch {
+      /* ce qu'on a pu lire */
+    }
+    return facts;
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<Record<string, string | number | boolean>>((resolve) => {
+    timer = setTimeout(() => resolve({ storageTimedOut: true }), timeoutMs);
+  });
+  try {
+    return await Promise.race([read(), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Le journal des vitesses : ce que le cache a fait gagner, mesuré plutôt que supposé.
 
@@ -394,19 +465,24 @@ function nowMs(): number {
 function reportTiming(): void {
   if (timing.sent || !currentAccount) return;
   timing.sent = true;
-  const body = JSON.stringify({
+  const fields = {
     build: APP_BUILD,
     cacheUsed: timing.cacheUsed,
     cacheAgeMs: timing.cacheAgeMs,
     cacheMs: timing.cacheMs,
     networkMs: timing.networkMs,
     standalone: typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches === true,
-  });
-  try {
-    void fetch("/api/startup-timing", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
-  } catch {
-    /* un journal ne vaut pas une erreur */
-  }
+  };
+  const send = (storage: Record<string, string | number | boolean>) => {
+    try {
+      const body = JSON.stringify({ ...fields, storage });
+      void fetch("/api/startup-timing", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+    } catch {
+      /* un journal ne vaut pas une erreur */
+    }
+  };
+  // Les mesures d'ouverture sont déjà prises : attendre le stockage ne les change pas.
+  void storageFacts(typeof navigator !== "undefined" ? navigator.storage : undefined, currentAccount).then(send, () => send({}));
 }
 
 /** Pour les tests : repartir d'une page neuve. */
