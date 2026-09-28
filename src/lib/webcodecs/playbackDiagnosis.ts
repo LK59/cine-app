@@ -101,6 +101,8 @@ interface Session {
   connectionChanges: number;
   downlinkMin: number | null;
   battery: { level: number; charging: boolean } | null;
+  /** Ce que le tampon d'avance sur l'appareil a fait — voir `diagReserve`. */
+  reserve: { netChunks: number; memoryChunks: number; aheadChunks: number; allowedChunks: number; deviceMB: number; networkMB: number } | null;
   cleanup: (() => void)[];
 }
 
@@ -172,6 +174,7 @@ export function diagBegin(id: string): void {
       connectionChanges: 0,
       downlinkMin: null,
       battery: null,
+      reserve: null,
       cleanup: [],
     };
     current = session;
@@ -323,6 +326,33 @@ export function diagRequest(sentAt: number, headersAt: number, endAt: number, by
 /** Une tentative de requête qui a échoué (pas une lecture abandonnée pour un saut). */
 export function diagRequestFailed(): void {
   if (current) current.failedRequests += 1;
+}
+
+/**
+ * Le tampon d'avance sur l'appareil (`DiskReserve`, 28/09/2026) : ce qu'il a écrit depuis le réseau
+ * et depuis la mémoire du lecteur, ce qui est devant la tête, et ce qu'il peut garder. Cumulé sur la
+ * séance, une reconstruction du lecteur en ouvrant un nouveau.
+ */
+export function diagReserve(facts: { netChunks: number; memoryChunks: number; aheadChunks: number; allowedChunks: number; deviceMB: number; networkMB: number }): void {
+  try {
+    if (current) current.reserve = { ...facts };
+  } catch {
+    /* une mesure n'est pas une lecture */
+  }
+}
+
+function reserveFacts(session: Session): Record<string, number> {
+  const r = session.reserve;
+  return r
+    ? {
+        reserveNetMB: r.netChunks,
+        reserveMemMB: r.memoryChunks,
+        reserveAheadMB: r.aheadChunks,
+        reserveAllowedMB: r.allowedChunks,
+        readDeviceMB: r.deviceMB,
+        readNetworkMB: r.networkMB,
+      }
+    : {};
 }
 
 /** Le fichier de la séance : son poids et sa durée, pour le débit qu'il demande. */
@@ -493,7 +523,7 @@ export function diagStallFacts(lead: number | null, windowMs = STALL_WINDOW_MS):
       facts.dropped = last.dropped! - first.dropped!;
     }
     if (session.failedRequests > 0) facts.reqFailed = session.failedRequests;
-    return { ...facts, ...connectionFacts(session) };
+    return { ...facts, ...reserveFacts(session), ...connectionFacts(session) };
   } catch {
     return {};
   }
@@ -594,7 +624,7 @@ export function diagSessionFacts(): Record<string, string | number | boolean> {
     } catch {
       /* rien */
     }
-    return { ...facts, ...connectionFacts(session) };
+    return { ...facts, ...reserveFacts(session), ...connectionFacts(session) };
   } catch {
     return {};
   }

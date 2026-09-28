@@ -43,6 +43,15 @@ export interface ResumeManifest {
   bytes: number;
   /** Vrai quand seuls l'en-tête et l'index ont été gardés — le passage visé dépassait la borne. */
   partial: boolean;
+  /**
+   * Les morceaux de l'en-tête et de l'index, qu'aucune réduction n'efface (28/09/2026). Absent tant
+   * qu'un passage d'arrière-plan n'a pas relu le fichier (un titre gardé à l'arrêt).
+   */
+  headerChunks?: number[];
+  /** Quand une lecture de ce titre s'est arrêtée sur cet appareil pour la dernière fois — voir `activeTitles`. */
+  playedAt?: number;
+  /** Les morceaux, hors en-tête, du minimum de démarrage à la position visée. */
+  minimalChunks?: number;
 }
 
 /** Une ligne de l'index du compte — ce qu'il faut pour décider sans rien relire. */
@@ -53,6 +62,10 @@ export interface ResumeIndexEntry {
   coveredTo: number;
   bytes: number;
   partial: boolean;
+  playedAt?: number;
+  /** Les morceaux au-delà de l'en-tête et de l'index — la réserve et le minimum de démarrage. */
+  reserveChunks?: number;
+  minimalChunks?: number;
 }
 
 export type ResumeIndex = Record<string, ResumeIndexEntry>;
@@ -323,6 +336,7 @@ export function commitResumeEntry(account: string, manifest: ResumeManifest, dro
 
 async function writeIndexLine(dir: DirHandleLike, account: string, manifest: ResumeManifest): Promise<void> {
   const index = (await readJson<ResumeIndex>(dir, "index.json")) || {};
+  const header = new Set(manifest.headerChunks ?? []);
   index[manifest.itemId] = {
     savedAt: manifest.savedAt,
     startSeconds: manifest.startSeconds,
@@ -330,8 +344,96 @@ async function writeIndexLine(dir: DirHandleLike, account: string, manifest: Res
     coveredTo: manifest.coveredTo,
     bytes: manifest.bytes,
     partial: manifest.partial,
+    ...(manifest.playedAt !== undefined ? { playedAt: manifest.playedAt } : {}),
+    reserveChunks: manifest.chunks.filter((index) => !header.has(index)).length,
+    ...(manifest.minimalChunks !== undefined ? { minimalChunks: manifest.minimalChunks } : {}),
   };
   await writeFile(dir, [ROOT_DIR, safeName(account)], "index.json", JSON.stringify(index));
+}
+
+/** L'identité d'un fichier, telle qu'un manifeste la porte. */
+export interface ResumeFile {
+  itemId: string;
+  streamUrl: string;
+  size: number;
+  fileVersion: string;
+  lastModified: string | null;
+}
+
+/**
+ * Change la liste des morceaux d'un titre par différence : `add` (déjà écrits par
+ * `writeResumeChunk`) rejoint ce que le manifeste décrit, `remove` le quitte et ses fichiers sont
+ * effacés. Le manifeste est relu *dans* la file des opérations : le tampon d'une lecture, l'arrêt et
+ * une reconstruction du lecteur y écrivent chacun à leur tour sans jamais défaire ce que l'autre a
+ * écrit — un manifeste réécrit en entier par chacun perdait les morceaux des autres.
+ *
+ * Un manifeste d'un autre fichier est remplacé, ses morceaux effacés. `patch` précise les autres
+ * champs (couverture, date de lecture). Rend vrai si tout est écrit. Ne lève jamais.
+ */
+export function mergeResumeEntry(
+  account: string,
+  file: ResumeFile,
+  add: Iterable<number>,
+  remove: Iterable<number>,
+  patch: Partial<Pick<ResumeManifest, "startSeconds" | "coveredFrom" | "coveredTo" | "playedAt" | "partial">> = {}
+): Promise<boolean> {
+  return serial(async () => {
+    try {
+      const dir = await accountDir(account, true);
+      if (!dir) return false;
+      const name = safeName(file.itemId);
+      const item = await dir.getDirectoryHandle(name, { create: true });
+      const found = await readJson<ResumeManifest>(item, "manifest.json");
+      const same =
+        found && found.v === 1 && found.itemId === file.itemId && found.size === file.size && found.fileVersion === file.fileVersion && found.streamUrl === file.streamUrl
+          ? found
+          : null;
+      if (found && !same) {
+        // Un autre fichier : ce qui était gardé ne vaut plus rien — sauf ce que l'appelant vient
+        // d'écrire pour le nouveau, qu'on retire alors aussi (son dossier est vidé).
+        await dir.removeEntry(name, { recursive: true }).catch(() => {});
+        await removeIndexLine(dir, account, file.itemId);
+        return false;
+      }
+      const drop = new Set(remove);
+      const chunks = new Set(same?.chunks ?? []);
+      for (const index of add) chunks.add(index);
+      for (const index of drop) {
+        if (!chunks.has(index)) continue;
+        chunks.delete(index);
+        await item.removeEntry(`c${index}`).catch(() => {});
+      }
+      const list = [...chunks].sort((a, b) => a - b);
+      const bytes = list.reduce((sum, index) => sum + Math.max(0, Math.min(1 << 20, file.size - index * (1 << 20))), 0);
+      const manifest: ResumeManifest = {
+        ...(same ?? { startSeconds: -1, coveredFrom: -1, coveredTo: -1, partial: false }),
+        v: 1,
+        itemId: file.itemId,
+        streamUrl: file.streamUrl,
+        size: file.size,
+        fileVersion: file.fileVersion,
+        lastModified: file.lastModified ?? same?.lastModified ?? null,
+        savedAt: Date.now(),
+        chunks: list,
+        bytes,
+        ...patch,
+      } as ResumeManifest;
+      if (manifest.headerChunks) manifest.headerChunks = manifest.headerChunks.filter((index) => chunks.has(index));
+      await writeFile(item, [ROOT_DIR, safeName(account), name], "manifest.json", JSON.stringify(manifest));
+      await writeIndexLine(dir, account, manifest);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+async function removeIndexLine(dir: DirHandleLike, account: string, itemId: string): Promise<void> {
+  const index = await readJson<ResumeIndex>(dir, "index.json");
+  if (index && itemId in index) {
+    delete index[itemId];
+    await writeFile(dir, [ROOT_DIR, safeName(account)], "index.json", JSON.stringify(index));
+  }
 }
 
 /** Efface un titre, et sa ligne de l'index. Ne lève jamais. */
@@ -341,11 +443,7 @@ export function removeResumeEntry(account: string, itemId: string): Promise<void
       const dir = await accountDir(account, false);
       if (!dir) return;
       await dir.removeEntry(safeName(itemId), { recursive: true }).catch(() => {});
-      const index = await readJson<ResumeIndex>(dir, "index.json");
-      if (index && itemId in index) {
-        delete index[itemId];
-        await writeFile(dir, [ROOT_DIR, safeName(account)], "index.json", JSON.stringify(index));
-      }
+      await removeIndexLine(dir, account, itemId);
     } catch {
       /* rien à effacer */
     }

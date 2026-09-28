@@ -821,6 +821,7 @@ unwitnessed.
 | `stall` | The element says it is playing and the clock has covered under a second in 5 s — once per stall, at most one a minute. Position, `readyState`/`networkState`/`seeking`, source state, video and audio ranges near the head, lead, whether a read is running, `recoveryStreak`/`frozenNudges`/`recoveries`, ms since the last append, `streaming` (ManagedMediaSource only), `diag.*` for the 30 s before it (see *Supply diagnosis* below), and `steps`: the last 20 s of trace. Emitted by `MseSource.watchForStall` on the watchdog tick |
 | `audio` | A track change: both tracks described, copied or re-encoded, `applied`, how long, and `steps` |
 | `cast` | Server player only: a television has actually taken the route |
+| `reserve` | The on-device lead reserve (`DiskReserve`, below). `event`: `départ` (what is already on disk, the limit), `point` every 30 s (`aheadMB` / `aheadS` contiguous on disk ahead of the head, `limitMB`, `leadS` of the browser buffer, `windowMB` / `fetchMbps` fetched since the last point, `deviceMB` / `networkMB` the player read from each, `behindRemovedMB`, `borrowedMB`, and `idle` — why it is not fetching), `emprunt` (room taken from another active title), `erreur`, `arrêt` |
 | `stop` | The session's summary. `why` (`close`, `next`, `page`, `unmount`, or `lost` — see below), `watched` seconds, `ended`, `rebuild`; `waits` / `waitedMs` / `longestWaitMs` — stops of 250 ms or more mid-playback, excluding opening and seeks (`stall` only fires at 5 s); `seeks` / `seekWaitMs`; `audioSwitches`; `backgrounds` / `backgroundMs` / `backgroundRebuilds` — times the page went to the background, for how long, and how many returns found the source closed by the platform and rebuilt (each also written as a `rebuild` line, reason "source fermée en arrière-plan", with `hiddenMs`); `recoveries`, `frozenNudges`, `escalations` when any; `audioSync` and `frames` (presented / dropped); `diag.*`, the session's supply diagnosis with every wait classified. The server player writes `why` and `at` |
 
 Each line carries the time, **the account taken from the session** (never from the request body:
@@ -865,6 +866,35 @@ rebuilds stay inside it.
 | `fps`, `dropped` | Frames presented per second and dropped, over the window (`stall` only) |
 | `conn`, `connSeen`, `connChanges`, `effectiveType`, `downlinkMbps`, `downlinkMinMbps`, `rttMs` | What the browser says of the network |
 | `verdict` (`stall`), `waitsNet` / `waitsCpu` / `waitsDecoder` / `waitsOther` and their `…Ms` (`stop`) | A hint, not a proof: *décodeur* when a second or more was buffered under the head, *réseau* when reads waited half the window or more, *calcul* when building outside reads, appends and long tasks took half, *autre* otherwise. A wait is judged on the 10 s before it and itself, since the buffer emptied before it began; waits of a second or more are also written to the trace with their numbers |
+
+### The on-device lead reserve
+
+Added on 2026-09-28 (`src/lib/resumeCache/diskReserve.ts`, budgets in `budget.ts`). WebKit caps a
+SourceBuffer at 105 MB on iPhone — ~31 s of 4K — so a link that drops for longer stops the picture
+even if it ran at twice the film's bitrate the minute before. While a film plays, the reserve uses
+every moment of spare throughput to download further ahead into OPFS, in the same 1 MiB chunks the
+player reads; `HttpByteSource.fromDiskOrNetwork` serves them before the network (the disk layer is
+live: `DiskChunks.add` / `forget`).
+
+It yields to the player in every case: nothing until the browser buffer has `MIN_LEAD_SECONDS` (10 s),
+nothing while a read waits (`HttpByteSource.readsWaiting`), during a seek (`seekFocused`) or with the
+page hidden; it starts beyond the player's own readahead; it fetches `RANGE_CHUNKS` (8 MiB) ranges,
+`PARALLEL` (3) at a time — larger than the player's so a fast link is filled despite the round trip —
+and stops fetching while as many chunks are downloaded but not yet written. What the player already
+holds in memory ahead of the head is written without a request.
+
+The budget is one pool shared by the active titles (played on this device in the last five days, the
+four most recent). The playing title may take all of it except the others' floor (128 MiB each), trimming
+the least recently played first, farthest chunks first, header and index never. Behind the head,
+`behindChunks` (128 MiB) are kept for a step back; the rest is deleted as playback moves on. When the
+limit is reached by islands far ahead (after a step back), the farthest go first so the lead is
+contiguous where it is needed. At rest nothing grows: the background pass (`recordTitle`) keeps a
+title's lead contiguous from the keyframe before its resume position, trims it to its share, and deletes
+what lies behind — measured from the index (`coverage.ts`), without reading a picture.
+
+Every write is a delta through `mergeResumeEntry`, read inside the store's queue: the reserve, the
+stop (`keepOnStop`) and a rebuilt pipeline's new reserve write the same manifest without undoing one
+another. Any failure stops the reserve and leaves playback to the network.
 
 Lines carrying `bench` (a device test bench session) are written to `data/logs/bench-player.log`
 instead — same format, two generations — so a bench never rotates real viewers' history away.

@@ -410,6 +410,11 @@ export class MseSource {
   }
 
   /** Where the player's clock sits relative to the file's. Already applied to every seek here. */
+  /** L'avance sous la tête, en secondes — ce que le tampon d'avance sur l'appareil (`DiskReserve`) regarde avant de prendre le lien. */
+  get bufferedLead(): number {
+    return this.lead;
+  }
+
   get presentationDelay(): number {
     return this.delaySeconds;
   }

@@ -1,7 +1,7 @@
 import { CHUNK_SIZE, type HeldBytes } from "@/lib/webcodecs/byteSource";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 import { sameFile, type FileIdentity } from "./diskChunks";
-import { commitResumeEntry, readResumeManifest, removeResumeEntry, writeResumeChunk, type ResumeManifest } from "./store";
+import { mergeResumeEntry, readResumeManifest, removeResumeEntry, writeResumeChunk } from "./store";
 
 /**
  * Ce que le lecteur tenait en mémoire à l'arrêt, gardé sur l'appareil (28/09/2026).
@@ -22,37 +22,25 @@ import { commitResumeEntry, readResumeManifest, removeResumeEntry, writeResumeCh
 export async function keepOnStop(identity: FileIdentity, held: HeldBytes | null): Promise<number> {
   try {
     const account = persistedCacheAccount();
-    if (!account || !held || held.chunks.size === 0 || !identity.fileVersion || identity.size !== held.size) return 0;
+    if (!account || !held || !identity.fileVersion || identity.size !== held.size) return 0;
     const previous = await readResumeManifest(account, identity.itemId);
     const reusable = previous && sameFile(previous, identity) ? previous : null;
     if (previous && !reusable) await removeResumeEntry(account, identity.itemId);
     const expected = (index: number) => Math.max(0, Math.min(CHUNK_SIZE, held.size - index * CHUNK_SIZE));
-    const kept = new Set(reusable?.chunks ?? []);
-    let written = 0;
+    const onDisk = new Set(reusable?.chunks ?? []);
+    const added: number[] = [];
     for (const [index, bytes] of held.chunks) {
-      if (kept.has(index) || bytes.byteLength !== expected(index)) continue;
+      if (onDisk.has(index) || bytes.byteLength !== expected(index)) continue;
       if (!(await writeResumeChunk(account, identity.itemId, index, bytes))) break;
-      kept.add(index);
-      written += 1;
+      added.push(index);
     }
-    if (written === 0) return 0;
-    const chunks = [...kept].sort((a, b) => a - b);
-    const manifest: ResumeManifest = {
-      v: 1,
-      itemId: identity.itemId,
-      streamUrl: identity.streamUrl,
-      size: held.size,
-      fileVersion: identity.fileVersion,
-      lastModified: held.lastModified ?? reusable?.lastModified ?? null,
-      savedAt: Date.now(),
-      startSeconds: -1,
-      coveredFrom: -1,
-      coveredTo: -1,
-      chunks,
-      bytes: chunks.reduce((sum, index) => sum + expected(index), 0),
-      partial: false,
-    };
-    return (await commitResumeEntry(account, manifest, [])) ? written : 0;
+    // Rien de neuf et rien de gardé : rien à décrire. Sinon, par différence (`mergeResumeEntry`) — le
+    // tampon de la lecture (`DiskReserve`) écrit dans le même manifeste au même moment. La date de
+    // lecture fait de ce titre un titre actif ; la couverture sera mesurée au prochain passage.
+    if (added.length === 0 && !reusable) return 0;
+    const file = { itemId: identity.itemId, streamUrl: identity.streamUrl, size: held.size, fileVersion: identity.fileVersion, lastModified: held.lastModified };
+    const ok = await mergeResumeEntry(account, file, added, [], { startSeconds: -1, coveredFrom: -1, coveredTo: -1, partial: false, playedAt: Date.now() });
+    return ok ? added.length : 0;
   } catch {
     return 0;
   }

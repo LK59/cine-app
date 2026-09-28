@@ -171,4 +171,58 @@ describe("un passage de la reprise instantanée", () => {
     expect(await readResumeIndex("louis")).toEqual({});
     expect(await openDiskChunks({ itemId: "a", streamUrl: URL_A, size: FILE.length, fileVersion: "etag-1" })).toBeNull();
   });
+
+  it("règle fondamentale : au repos, une reprise ne télécharge que de quoi démarrer", async () => {
+    // 28/09/2026 : la version d'avant prenait 128 Mio par titre commencé, d'elle-même, depuis l'accueil.
+    info = { streamUrl: URL_B, sizeBytes: BIG.length, fileVersion: "etag-1" };
+    await run([{ itemId: "b", startSeconds: 60.5, started: true }]);
+    const manifest = await readResumeManifest("louis", "b");
+    // L'en-tête, l'index, le groupe de la position et le suivant : quelques mégaoctets, rien d'autre.
+    expect(new Set(fetchedChunks).size).toBeLessThanOrEqual(5);
+    expect(manifest!.coveredFrom).toBeLessThanOrEqual(60.5);
+    expect(manifest!.coveredTo).toBeGreaterThanOrEqual(62);
+    expect(manifest!.minimalChunks).toBeLessThanOrEqual(3);
+    // Et un second passage ne télécharge plus rien.
+    fetchedChunks = [];
+    await run([{ itemId: "b", startSeconds: 60.5, started: true }]);
+    expect(fetchedChunks).toEqual([]);
+  });
+
+  it("garde l'avance qu'une lecture a laissée, dans la part du titre, sans rien télécharger de plus", async () => {
+    const { keepOnStop } = await import("@/lib/resumeCache/keepOnStop");
+    info = { streamUrl: URL_B, sizeBytes: BIG.length, fileVersion: "etag-1" };
+    const identity = { itemId: "b", streamUrl: URL_B, size: BIG.length, fileVersion: "etag-1" };
+    // Une lecture arrêtée vers 50 s a laissé l'en-tête, derrière elle, et 20 Mio devant.
+    const lastChunk = Math.floor((BIG.length - 1) / (1 << 20));
+    const held = new Map<number, Uint8Array>();
+    for (const i of [0, lastChunk, ...Array.from({ length: 30 }, (_, k) => 10 + k)]) held.set(i, BIG.slice(i << 20, Math.min(BIG.length, (i + 1) << 20)));
+    await keepOnStop(identity, { size: BIG.length, lastModified: null, chunks: held });
+    fetchedChunks = [];
+    await run([{ itemId: "b", startSeconds: 50, started: true }]);
+    const manifest = await readResumeManifest("louis", "b");
+    expect(fetchedChunks).toEqual([]);
+    // Seul titre actif : toute la réserve est à lui. Ce qui est derrière la position est effacé.
+    const anchor = Math.floor((50 * 400_000) / (1 << 20));
+    expect(manifest!.chunks.filter((i) => i > 0 && i < anchor - 1)).toEqual([]);
+    expect(manifest!.chunks).toEqual(expect.arrayContaining([0, lastChunk, 39]));
+    expect(manifest!.coveredTo).toBeGreaterThan(90);
+    expect(manifest!.headerChunks).toEqual(expect.arrayContaining([0, lastChunk]));
+  });
+
+  it("réduit une réserve à la part du titre en effaçant le plus lointain", async () => {
+    const { recordTitle } = await import("@/lib/resumeCache/recordTitle");
+    const { keepOnStop } = await import("@/lib/resumeCache/keepOnStop");
+    info = { streamUrl: URL_B, sizeBytes: BIG.length, fileVersion: "etag-1" };
+    const identity = { itemId: "b", streamUrl: URL_B, size: BIG.length, fileVersion: "etag-1" };
+    const lastChunk = Math.floor((BIG.length - 1) / (1 << 20));
+    const held = new Map<number, Uint8Array>();
+    for (const i of [0, lastChunk, ...Array.from({ length: 30 }, (_, k) => 10 + k)]) held.set(i, BIG.slice(i << 20, Math.min(BIG.length, (i + 1) << 20)));
+    await keepOnStop(identity, { size: BIG.length, lastModified: null, chunks: held });
+    await recordTitle("louis", { itemId: "b", startSeconds: 50, started: true, shareChunks: 8 }, 1000, new AbortController().signal);
+    const manifest = await readResumeManifest("louis", "b");
+    const reserve = manifest!.chunks.filter((i) => i !== 0 && i !== lastChunk);
+    expect(reserve.length).toBeLessThanOrEqual(8);
+    expect(Math.max(...reserve)).toBeLessThan(30);
+    expect(manifest!.coveredTo).toBeLessThan(80);
+  });
 });

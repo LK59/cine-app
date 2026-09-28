@@ -1,5 +1,5 @@
 import { CHUNK_SIZE, type ByteSource } from "@/lib/webcodecs/byteSource";
-import { clusterOffsetForTime } from "@/lib/webcodecs/matroska";
+import { clusterOffsetForTime, type MatroskaFile } from "@/lib/webcodecs/matroska";
 import { createSampleReader, openMediaFile } from "@/lib/webcodecs/mediaFile";
 import { OPENING_TITLE_CHUNKS } from "./budget";
 import { MIN_COVERED_AHEAD_SECONDS } from "./plan";
@@ -67,6 +67,10 @@ export interface RecordedOpening {
   coveredTo: number;
   /** Seuls l'en-tête et l'index : le budget ne couvrait pas la position et ce qui la suit. */
   partial: boolean;
+  /** Les morceaux de l'en-tête et de l'index. */
+  headerChunks: number[];
+  /** Le fichier tel que son en-tête le décrit — son index sert à mesurer ce que couvre l'appareil. */
+  file: MatroskaFile;
 }
 
 /**
@@ -75,13 +79,16 @@ export interface RecordedOpening {
  * @param shouldStop interrogé entre deux échantillons — un film qui démarre arrête tout.
  * @param budgetChunks les morceaux du passage, au-delà de l'en-tête et de l'index.
  * @param onChunk chaque morceau touché, au moment où il l'est — voir `RecordingSource`.
+ * @param until pour une reprise : jusqu'où lire, selon le fichier (`resumeEnd`) — le budget n'est
+ *   alors qu'un plafond. Sans lui, une ouverture : tout le budget.
  */
 export async function recordOpening(
   source: ByteSource,
   startSeconds: number,
   shouldStop: () => boolean = () => false,
   budgetChunks = OPENING_TITLE_CHUNKS,
-  onChunk?: (index: number) => void
+  onChunk?: (index: number) => void,
+  until?: (file: MatroskaFile) => number
 ): Promise<RecordedOpening | null> {
   // Les morceaux du passage, comptés à mesure : tout morceau touché après l'en-tête et l'index.
   let headerRead = false;
@@ -97,6 +104,7 @@ export async function recordOpening(
   const video = file.tracks.find((track) => track.type === "video");
   if (!video || shouldStop()) return null;
 
+  const stopAt = until ? until(file) : Number.POSITIVE_INFINITY;
   const targetUs = Math.max(0, startSeconds) * 1e6;
   const offset = clusterOffsetForTime(file, targetUs, video.number) ?? file.firstClusterOffset ?? file.segmentDataStart;
   const reader = createSampleReader(recorder, file, offset);
@@ -112,15 +120,19 @@ export async function recordOpening(
       const at = sample.timestampUs / 1e6;
       coveredFrom = Math.min(coveredFrom, at);
       coveredTo = Math.max(coveredTo, at);
+      if (at >= stopAt) break;
     }
   }
   if (coveredTo < startSeconds + MIN_COVERED_AHEAD_SECONDS && passage >= budgetChunks) {
-    return { chunks: [...headerChunks].sort((a, b) => a - b), coveredFrom: 0, coveredTo: 0, partial: true };
+    const header = [...headerChunks].sort((a, b) => a - b);
+    return { chunks: header, coveredFrom: 0, coveredTo: 0, partial: true, headerChunks: header, file };
   }
   return {
     chunks: [...recorder.touched].sort((a, b) => a - b),
     coveredFrom: Number.isFinite(coveredFrom) ? coveredFrom : startSeconds,
     coveredTo,
     partial: false,
+    headerChunks: [...headerChunks].sort((a, b) => a - b),
+    file,
   };
 }

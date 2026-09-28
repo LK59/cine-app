@@ -333,6 +333,22 @@ export class RemuxPlayback {
     return playback;
   }
 
+  /**
+   * De quoi faire tourner le tampon d'avance sur l'appareil (`DiskReserve`) à côté de ce lecteur : sa
+   * source, l'index du fichier, l'élément et l'avance du tampon. Null pour une source qui ne lit pas
+   * le réseau.
+   */
+  reserveContext(): { source: HttpByteSource; file: MatroskaFile; video: HTMLVideoElement; lead: () => number; delay: () => number } | null {
+    if (this.destroyed || !(this.source instanceof HttpByteSource)) return null;
+    return {
+      source: this.source,
+      file: this.file,
+      video: this.video,
+      lead: () => this.mse?.bufferedLead ?? 0,
+      delay: () => this.mse?.presentationDelay ?? 0,
+    };
+  }
+
   /** Ce que la source tient en mémoire — voir `ByteSource.held`. Ne lève jamais. */
   heldBytes(): HeldBytes | null {
     try {

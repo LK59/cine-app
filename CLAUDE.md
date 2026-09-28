@@ -207,15 +207,27 @@ background, idle, never during a film or with the page hidden, the opening bytes
 before the network. They serve only the same file: Jellyfin's MediaSource `ETag`, the size, and
 the stream's `Last-Modified` (forwarded by the stream route for that) — a mismatch discards them
 and says so in the trace. The `start` line carries `openedFrom` (`appareil` / `réseau` / `mixte`)
-and `deviceBytes`. Since 2026-09-28 it is sized in **bytes, not seconds** (`budget.ts`): 128 MiB past
-header and index for a started title, 16 MiB for one not yet started, up to five of each, under a
-shared budget (768 MiB; 480 when the browser reports under 5 GB between quota and usage). Re-recording
-a title — the position moved on another device — reads what is already on the device first and
-fetches only what is missing; header and index are never fetched twice for one file. **Stopping keeps
-what the player held in memory** (`keepOnStop`, coverage unknown until the next pass measures it),
-so a phone closed right after a film still resumes from the device. None of it is load-bearing: any
-chunk may vanish (system eviction, « Vider le cache » in the Account panel) and is read from the
-network instead.
+and `deviceBytes`. Since 2026-09-28 it is sized in **bytes, not seconds** (`budget.ts`), under one
+**fundamental rule: at rest, nothing is downloaded ahead.** The home screen fetches only what a start
+needs — 16 MiB past header and index for an « À suivre » title; for a « Reprendre » title, from the
+keyframe before the position to one group past it (64 MiB at most). **Lead is built only while
+watching** (`DiskReserve`, `src/lib/resumeCache/diskReserve.ts`): once the browser's own buffer has
+10 s and no read is waiting, it downloads further ahead into OPFS — 8 MiB ranges, three at a time,
+beyond the player's own readahead, never during a seek or with the page hidden — and `HttpByteSource`
+reads it before the network. The reserve is one pool (1 GiB; 256 MiB when the browser reports under
+5 GB between quota and usage) shared by the *active* titles — played on this device within five days,
+the four most recent; the playing title borrows from the others down to a 128 MiB floor each, their
+farthest chunks first. 128 MiB behind the head is kept during a session. Stopping keeps everything
+ahead (`keepOnStop` writes what the player held in memory); at rest a title is only ever trimmed to its
+share, farthest first, header and index untouched. Re-recording a title reads the device first — header
+and index are never fetched twice. The next episode's 16 MiB opening is written a minute before the
+end. Every write goes through `mergeResumeEntry` (a delta read inside the store's queue), so the
+reserve, the stop and a pipeline rebuild never undo each other. `player.log` gets `reserve` lines
+(`départ`, `point` every 30 s with MB and seconds ahead on disk, MB the player read from the device
+and from the network, what the reserve fetched and at what rate, and `idle` — why it is waiting —,
+`emprunt`, `erreur`, `arrêt`), and `diag.*` on `stall`/`stop` carries the same totals. None of it is
+load-bearing: any chunk may vanish (system eviction, « Vider le cache » in the Account panel) and is
+read from the network instead.
 `PlayerHost` chooses between the native player and the legacy server-transcoding one;
 `fallToStable` hands over rather than closing — unless `PLAYER_SERVER_FALLBACK=false`, where there
 is no server-side player to hand to and the same call surfaces a clean playback error instead.

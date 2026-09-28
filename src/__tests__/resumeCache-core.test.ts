@@ -5,7 +5,8 @@ import { createSampleReader, openMediaFile } from "@/lib/webcodecs/mediaFile";
 import { diskChunksFor, openingFacts, sameFile, type FileIdentity } from "@/lib/resumeCache/diskChunks";
 import { recordOpening } from "@/lib/resumeCache/record";
 import { MAX_TITLES, MAX_TOTAL_CHUNKS, MIN_COVERED_AHEAD_SECONDS, RECENT_GRACE_MS, covers, planResumeCache, remainingChunks, resumeTargets, titleChunks } from "@/lib/resumeCache/plan";
-import { LOW_SPACE_BYTES, NORMAL_BUDGET, OPENING_TITLE_CHUNKS, REDUCED_BUDGET, STARTED_TITLE_CHUNKS, budgetFor } from "@/lib/resumeCache/budget";
+import { ACTIVE_DAYS, LOW_SPACE_BYTES, NORMAL_BUDGET, OPENING_TITLE_CHUNKS, REDUCED_BUDGET, RESUME_MINIMAL_MAX_CHUNKS, activeTitles, budgetFor, restingShare } from "@/lib/resumeCache/budget";
+import { chunksBetween, coverageFrom, resumeEnd } from "@/lib/resumeCache/coverage";
 import type { ResumeIndex, ResumeManifest } from "@/lib/resumeCache/store";
 import { bigMatroska } from "./helpers/bigMatroska";
 
@@ -29,12 +30,31 @@ describe("quels titres garder", () => {
     expect(targets.length).toBe(MAX_TITLES);
   });
 
-  it("une reprise garde plus qu'une ouverture — en octets, pas en secondes", () => {
+  it("une reprise ne télécharge que son minimum, une ouverture ses 16 Mio — en octets, pas en secondes", () => {
     const [started, opening] = resumeTargets([t("a")], [t("b", 0)]);
     expect(started.started).toBe(true);
     expect(opening.started).toBe(false);
-    expect(titleChunks(started)).toBe(STARTED_TITLE_CHUNKS);
+    expect(titleChunks(started)).toBe(RESUME_MINIMAL_MAX_CHUNKS);
     expect(titleChunks(opening)).toBe(OPENING_TITLE_CHUNKS);
+  });
+
+  it("réduit au repos ce qui garde plus que sa part, sans jamais rien agrandir", () => {
+    const now = 10 * 24 * 3600_000;
+    // Deux titres actifs : 512 Mio chacun. Un troisième, lu il y a six jours, n'a plus de part.
+    const index = {
+      a: entry({ playedAt: now - 1000, reserveChunks: 700, minimalChunks: 3 }),
+      b: entry({ playedAt: now - 2000, reserveChunks: 400, minimalChunks: 3 }),
+      c: entry({ playedAt: now - 6 * 24 * 3600_000, reserveChunks: 200, minimalChunks: 3 }),
+    };
+    const plan = planResumeCache([t("a"), t("b"), t("c")], index, now);
+    expect(plan.record.map((x) => [x.itemId, x.shareChunks])).toEqual([
+      ["a", 512],
+      ["c", 0],
+    ]);
+  });
+
+  it("mesure une fois un titre gardé avant que sa réserve ne soit comptée", () => {
+    expect(planResumeCache([t("a")], { a: entry({ reserveChunks: undefined }) }, 2_000).record.map((x) => x.itemId)).toEqual(["a"]);
   });
 
   const entry = (over: Partial<ResumeIndex[string]> = {}): ResumeIndex[string] => ({
@@ -44,6 +64,8 @@ describe("quels titres garder", () => {
     coveredTo: 110,
     bytes: 5 << 20,
     partial: false,
+    reserveChunks: 4,
+    minimalChunks: 4,
     ...over,
   });
 
@@ -80,7 +102,7 @@ describe("quels titres garder", () => {
 
   it("compte la place restante sans ce qui part ou sera refait", () => {
     const index = { a: entry({ bytes: 10 << 20 }), b: entry({ bytes: 20 << 20 }) };
-    expect(remainingChunks(index, { record: [t("a")], remove: [] })).toBe(MAX_TOTAL_CHUNKS - 20);
+    expect(remainingChunks(index, { record: [{ ...t("a"), shareChunks: 0 }], remove: [] })).toBe(MAX_TOTAL_CHUNKS - 20);
   });
 });
 
@@ -312,10 +334,74 @@ describe("ce que l'appareil garde, selon sa place", () => {
     expect(budgetFor({})).toBe(NORMAL_BUDGET);
   });
 
-  it("le mode réduit tient dans ce qui a été décidé : 256 Mio de tampon, 750 au total", () => {
-    expect(REDUCED_BUDGET.bufferChunks).toBe(256);
+  it("le mode réduit tient dans ce qui a été décidé : 256 Mio de réserve, 750 au total", () => {
+    expect(REDUCED_BUDGET.poolChunks).toBe(256);
     expect(REDUCED_BUDGET.totalChunks).toBe(750);
-    expect(REDUCED_BUDGET.bufferChunks + REDUCED_BUDGET.resumeChunks).toBeLessThanOrEqual(REDUCED_BUDGET.totalChunks);
-    expect(NORMAL_BUDGET.bufferChunks + NORMAL_BUDGET.resumeChunks).toBeLessThanOrEqual(NORMAL_BUDGET.totalChunks);
+    expect(NORMAL_BUDGET.poolChunks).toBe(1024);
+    expect(NORMAL_BUDGET.floorChunks).toBe(128);
+    expect(NORMAL_BUDGET.behindChunks).toBe(128);
+    for (const budget of [NORMAL_BUDGET, REDUCED_BUDGET]) {
+      expect(budget.poolChunks + budget.behindChunks).toBeLessThanOrEqual(budget.totalChunks);
+    }
+  });
+
+  it("les titres actifs : lus depuis moins de cinq jours, les quatre plus récents", () => {
+    const now = 100 * 24 * 3600_000;
+    const day = 24 * 3600_000;
+    const index = {
+      a: { playedAt: now - 1 * day },
+      b: { playedAt: now - 2 * day },
+      c: { playedAt: now - 3 * day },
+      d: { playedAt: now - 4 * day },
+      e: { playedAt: now - 0.5 * day },
+      f: { playedAt: now - (ACTIVE_DAYS + 1) * day },
+      g: {},
+    };
+    const active = activeTitles(index, now);
+    expect(active).toEqual(["e", "a", "b", "c"]);
+    expect(restingShare("a", active, NORMAL_BUDGET)).toBe(256);
+    expect(restingShare("d", active, NORMAL_BUDGET)).toBe(0);
+    expect(restingShare("a", ["a", "e"], NORMAL_BUDGET)).toBe(512);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Ce que l'appareil couvre, lu dans l'index.
+
+describe("ce que des morceaux gardés couvrent", () => {
+  // Une grappe par seconde, 400 ko chacune : environ deux secondes et demie par Mio.
+  const FILE = bigMatroska(60, 400_000);
+  let file: Awaited<ReturnType<typeof openMediaFile>>;
+  beforeEach(async () => {
+    file = await openMediaFile(new MemoryByteSource(FILE));
+  });
+
+  it("tout est là : de l'image clé qui précède la position jusqu'à la fin", () => {
+    const coverage = coverageFrom(file, 20.5, () => true)!;
+    expect(coverage.coveredFrom).toBe(20);
+    expect(coverage.coveredTo).toBeGreaterThanOrEqual(59);
+    expect(coverage.chunks[0]).toBe(Math.floor(clusterOffsetForTime(file, 20e6)! / CHUNK_SIZE));
+  });
+
+  it("un trou arrête la couverture : ce qui suit est une île", () => {
+    const start = Math.floor(clusterOffsetForTime(file, 20e6)! / CHUNK_SIZE);
+    const coverage = coverageFrom(file, 20.5, (index) => index !== start + 4)!;
+    expect(coverage.chunks.every((index) => index < start + 4)).toBe(true);
+    expect(coverage.coveredTo).toBeLessThan(35);
+    expect(coverage.coveredTo).toBeGreaterThan(21);
+  });
+
+  it("borné en morceaux : le plus lointain part en premier", () => {
+    const whole = coverageFrom(file, 20.5, () => true)!;
+    const bounded = coverageFrom(file, 20.5, () => true, 5)!;
+    expect(bounded.chunks.length).toBeLessThanOrEqual(5);
+    expect(bounded.chunks).toEqual(whole.chunks.slice(0, bounded.chunks.length));
+    expect(bounded.coveredTo).toBeLessThan(whole.coveredTo);
+  });
+
+  it("une reprise va jusqu'au groupe qui suit celui de la position, deux secondes au moins", () => {
+    expect(resumeEnd(file, 20.5, 2)).toBe(22.5);
+    expect(resumeEnd(file, 20, 0.5)).toBe(22);
+    expect(chunksBetween(0, CHUNK_SIZE + 1)).toEqual([0, 1]);
   });
 });

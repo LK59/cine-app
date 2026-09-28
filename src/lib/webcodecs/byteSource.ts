@@ -452,6 +452,12 @@ export interface DiskChunks {
   read(index: number): Promise<Uint8Array | null>;
   /** Ce que le serveur annonce à la première réponse : un écart retire la couche pour de bon. */
   verify(total: number, lastModified: string | null): void;
+  /** Un morceau vient d'être écrit sur l'appareil (le tampon d'avance) : servi désormais. Optionnel. */
+  add?(index: number): void;
+  /** Un morceau vient d'être effacé de l'appareil : plus servi. Optionnel. */
+  forget?(index: number): void;
+  /** Retirée (un autre fichier) : plus rien n'est servi, ni ne doit être écrit. Optionnel. */
+  readonly disabled?: boolean;
 }
 
 /** D'où sont venus les octets d'une ouverture — pour la ligne `start` du journal. */
@@ -758,8 +764,22 @@ export class HttpByteSource implements ByteSource {
    * without this, every chunk boundary is a full network round trip the decoder sits through.
    * That stall is what turns a decoder that can keep up into one that visibly cannot.
    */
+  /** Voir `withoutReadahead`. */
+  private readahead = true;
+
+  /**
+   * Plus de lecture en avance : chaque octet lu est un octet demandé, rien de plus (28/09/2026). Pour
+   * les sources qui préparent un titre au repos (`recordTitle`, l'épisode suivant) — la lecture en
+   * avance y téléchargeait six mégaoctets après chaque lecture, que personne ne gardait. Jamais pour
+   * le lecteur, dont c'est l'avance.
+   */
+  withoutReadahead(): this {
+    this.readahead = false;
+    return this;
+  }
+
   private prefetchAfter(index: number): void {
-    if (this.controller.signal.aborted) return;
+    if (this.controller.signal.aborted || !this.readahead) return;
     const depth = performance.now() < this.focusUntil ? SEEK_PREFETCH_CHUNKS : PREFETCH_CHUNKS;
     for (let ahead = 1; ahead <= depth; ahead++) {
       const next = index + ahead;
@@ -802,11 +822,62 @@ export class HttpByteSource implements ByteSource {
    */
   async read(offset: number, length: number): Promise<Uint8Array> {
     const from = diagNow();
+    // Une lecture dont un morceau n'est pas en mémoire attend : le tampon d'avance (`DiskReserve`)
+    // se retient tant qu'il y en a une — le lien est d'abord au lecteur.
+    const start = Math.max(0, Math.min(offset, this.size));
+    const end = Math.max(start, Math.min(offset + length, this.size));
+    let waiting = false;
+    for (let index = Math.floor(start / CHUNK_SIZE); end > start && index <= Math.floor((end - 1) / CHUNK_SIZE); index++) {
+      if (!this.chunks.has(index)) {
+        waiting = true;
+        break;
+      }
+    }
+    if (waiting) this.waitingReads += 1;
     try {
       return await this.readBytes(offset, length);
     } finally {
+      if (waiting) this.waitingReads -= 1;
       if (diagNow() - from >= 2) diagInterval("read", from);
     }
+  }
+
+  /** Les lectures en cours qui attendent un morceau absent de la mémoire — voir `read`. */
+  private waitingReads = 0;
+
+  /**
+   * Ce que le tampon d'avance (`DiskReserve`, 28/09/2026) lit de la source, sans rien y changer : où
+   * en est le lecteur, s'il attend, ce qu'il tient en mémoire. Rien ici ne lance de requête.
+   */
+  get streamUrl(): string {
+    return this.url;
+  }
+  get readsWaiting(): number {
+    return this.waitingReads;
+  }
+  /** Le dernier morceau qu'une lecture a demandé — la lecture en avance court jusqu'à `PREFETCH_CHUNKS` au-delà. */
+  get demandedChunk(): number {
+    return this.lastDemanded;
+  }
+  /** Un saut attend sa première image : la lecture en avance est bridée, le lien est au saut. */
+  get seekFocused(): boolean {
+    return performance.now() < this.focusUntil;
+  }
+  /** Un morceau entier en mémoire, ou null — sans le demander au réseau. */
+  memoryChunk(index: number): Uint8Array | null {
+    const chunk = this.chunks.get(index);
+    return chunk && chunk.byteLength === this.expectedLength(index) ? chunk : null;
+  }
+  /** La couche de l'appareil, s'il y en a une. */
+  get diskLayer(): DiskChunks | null {
+    return this.disk;
+  }
+  /**
+   * Pose une couche de l'appareil sur une source ouverte sans elle — un titre dont rien n'était gardé,
+   * que le tampon d'avance commence à écrire. Sans effet s'il y en a déjà une.
+   */
+  attachDisk(disk: DiskChunks): void {
+    if (!this.disk) this.disk = disk;
   }
 
   private async readBytes(offset: number, length: number): Promise<Uint8Array> {

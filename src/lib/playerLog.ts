@@ -59,7 +59,7 @@ export function benchPlayerLogFiles(): string[] {
 }
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
-const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast"]);
+const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast", "reserve"]);
 
 /**
  * `audio` est arrivé le 20/09/2026, et pour une raison qui vaut d'être dite : le changement de
@@ -84,7 +84,13 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  * (le `fallback` du lecteur natif), sa fin aussi ; qu'elle se soit établie ne l'était pas, si bien
  * qu'un téléviseur resté en chargement ne se distinguait pas d'un téléviseur qui jouait.
  */
-export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast";
+/**
+ * `reserve` (28/09/2026) : le tampon d'avance sur l'appareil (`DiskReserve`), de quoi suivre une
+ * lecture Mo par Mo — `event` : `départ`, `point` (toutes les 30 s : avance sur le disque en Mo et en
+ * secondes, ce que le lecteur a lu de l'appareil et du réseau, ce que le tampon a téléchargé et à quel
+ * débit, et `idle`, pourquoi il attend), `emprunt` (place reprise à un autre titre), `erreur`, `arrêt`.
+ */
+export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve";
 
 export function isPlayerEventKind(value: unknown): value is PlayerEventKind {
   return typeof value === "string" && KINDS.has(value);

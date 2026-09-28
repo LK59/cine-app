@@ -1,6 +1,6 @@
 import type { ResumeIndex } from "./store";
 import { RESUME_CACHE_MAX_AGE_MS } from "./diskChunks";
-import { NORMAL_BUDGET, OPENING_TITLE_CHUNKS, STARTED_TITLE_CHUNKS } from "./budget";
+import { NORMAL_BUDGET, OPENING_TITLE_CHUNKS, RESUME_MINIMAL_MAX_CHUNKS, activeTitles, restingShare, type StorageBudget } from "./budget";
 
 /**
  * Quels titres garder sur l'appareil, lesquels refaire, lesquels effacer — sans rien lire ni écrire.
@@ -12,13 +12,13 @@ import { NORMAL_BUDGET, OPENING_TITLE_CHUNKS, STARTED_TITLE_CHUNKS } from "./bud
 
 /**
  * Combien de titres de « Reprendre », et combien au total avec « À suivre ». Cinq et dix depuis le
- * 28/09/2026 (trois et quatre avant) : le budget se compte désormais en octets (`budget.ts`), et
- * c'est lui qui borne, pas le nombre de titres.
+ * 28/09/2026 (trois et quatre avant) : ce qu'on télécharge pour chacun au repos n'est que de quoi
+ * démarrer (`budget.ts`), quelques mégaoctets.
  */
 export const MAX_RESUME_TITLES = 5;
 export const MAX_TITLES = 10;
-/** La borne commune de l'ouverture et de la reprise en mode normal, en Mio — voir `budget.ts`. */
-export const MAX_TOTAL_CHUNKS = NORMAL_BUDGET.resumeChunks;
+/** La borne de sûreté, tous titres confondus, en mode normal — voir `budget.ts`. */
+export const MAX_TOTAL_CHUNKS = NORMAL_BUDGET.totalChunks;
 /**
  * Une position de reprise qui sort de ce que les octets couvrent — il a regardé plus loin — refait le
  * titre. Il faut au moins cette avance au-delà de la position pour qu'une ouverture n'aille pas tout
@@ -36,19 +36,24 @@ export interface ResumeTarget {
   /** La position à laquelle le lecteur s'ouvrira — recul de reprise déjà appliqué. */
   startSeconds: number;
   /**
-   * Commencé (« Reprendre ») : la reprise, `STARTED_TITLE_CHUNKS`. Sinon (« À suivre ») : l'ouverture,
-   * `OPENING_TITLE_CHUNKS`.
+   * Commencé (« Reprendre ») : la reprise minimale, de l'image clé qui précède la position jusqu'à un
+   * groupe après elle. Sinon (« À suivre ») : l'ouverture, `OPENING_TITLE_CHUNKS`.
    */
   started?: boolean;
 }
 
-/** Ce qu'un titre visé garde au-delà de son en-tête et de son index. */
+/** Un titre à refaire, et la part d'avance qu'il peut garder — rien s'il n'est pas actif. */
+export interface PlannedTitle extends ResumeTarget {
+  shareChunks: number;
+}
+
+/** Le plus qu'un titre visé télécharge pour démarrer, au-delà de son en-tête et de son index. */
 export function titleChunks(target: ResumeTarget): number {
-  return target.started ? STARTED_TITLE_CHUNKS : OPENING_TITLE_CHUNKS;
+  return target.started ? RESUME_MINIMAL_MAX_CHUNKS : OPENING_TITLE_CHUNKS;
 }
 
 export interface ResumeCachePlan {
-  record: ResumeTarget[];
+  record: PlannedTitle[];
   remove: string[];
 }
 
@@ -78,20 +83,34 @@ export function covers(entry: ResumeIndex[string], startSeconds: number): boolea
 }
 
 /**
- * Efface ce qui n'est plus visé (fini, sorti de la liste) ou trop ancien ; refait ce qui manque ou
- * ce que la position a quitté. L'ordre de `record` est celui de la priorité.
+ * Efface ce qui n'est plus visé (fini, sorti de la liste) ou trop ancien ; refait ce qui manque, ce
+ * que la position a quitté, ce dont la couverture n'est pas encore mesurée (gardé à l'arrêt), et ce
+ * qui garde plus que sa part — un titre sorti des actifs, ou des actifs devenus plus nombreux. Un
+ * titre refait n'est jamais agrandi au repos : sa part est un plafond, pas une cible (`budget.ts`).
+ * L'ordre de `record` est celui de la priorité.
  */
-export function planResumeCache(targets: ResumeTarget[], index: ResumeIndex, now = Date.now()): ResumeCachePlan {
+export function planResumeCache(targets: ResumeTarget[], index: ResumeIndex, now = Date.now(), budget: StorageBudget = NORMAL_BUDGET): ResumeCachePlan {
   const wanted = new Set(targets.map((target) => target.itemId));
   const remove: string[] = [];
   for (const [itemId, entry] of Object.entries(index)) {
     const age = now - entry.savedAt;
     if (age > RESUME_CACHE_MAX_AGE_MS || (!wanted.has(itemId) && age > RECENT_GRACE_MS)) remove.push(itemId);
   }
-  const record = targets.filter((target) => {
+  const active = activeTitles(index, now);
+  const record: PlannedTitle[] = [];
+  for (const target of targets) {
     const entry = index[target.itemId];
-    return !entry || remove.includes(target.itemId) || !covers(entry, target.startSeconds);
-  });
+    const shareChunks = restingShare(target.itemId, active, budget);
+    const planned = { ...target, shareChunks };
+    if (!entry || remove.includes(target.itemId) || !covers(entry, target.startSeconds)) {
+      record.push(planned);
+      continue;
+    }
+    // Plus que sa part : réduit. `reserveChunks` absent — un titre gardé avant cette mesure — aussi,
+    // une fois, pour l'écrire.
+    const limit = Math.max(shareChunks, entry.minimalChunks ?? titleChunks(target));
+    if (entry.reserveChunks === undefined || entry.reserveChunks > limit) record.push(planned);
+  }
   return { record, remove };
 }
 

@@ -51,7 +51,7 @@ describe("le magasin de la reprise instantanée", () => {
     expect(await readResumeManifest("louis", "a")).toMatchObject({ itemId: "a", chunks: [0, 3] });
     expect((await readResumeChunk("louis", "a", 3))?.[0]).toBe(3);
     expect(await readResumeChunk("louis", "a", 1)).toBeNull();
-    expect(await readResumeIndex("louis")).toEqual({ a: { savedAt: 1_000, startSeconds: 100, coveredFrom: 98, coveredTo: 110, bytes: 2 << 20, partial: false } });
+    expect(await readResumeIndex("louis")).toEqual({ a: { savedAt: 1_000, startSeconds: 100, coveredFrom: 98, coveredTo: 110, bytes: 2 << 20, partial: false, reserveChunks: 2 } });
   });
 
   it("un compte ne voit jamais ce qu'un autre a gardé", async () => {
