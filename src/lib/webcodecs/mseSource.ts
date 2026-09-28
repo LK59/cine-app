@@ -999,7 +999,19 @@ export class MseSource {
         // Et rien de tout cela tant que la tête n'a pas atterri : le lecteur remplit alors vers
         // une position que personne n'occupe encore, par construction, et `placePendingStart` l'y
         // posera dès que le média la couvrira. Il n'y a rien à récupérer, seulement à attendre.
-        const distance = this.pendingStart !== null ? 0 : this.distanceToMedia(this.anchor);
+        //
+        // Ni pendant un saut dont le lecteur approche encore : il repart de l'image clé qui précède
+        // la cible, et quand le groupe d'images est plus long que `MISPLACED_SECONDS`, le premier
+        // média arrive loin *derrière* la tête par construction. *WALL·E* (28/09/2026, iPhone) : un
+        // générique en un seul groupe de 35 s, un saut à la dernière seconde ; chaque envoi lisait
+        // « média à 32.9 s de la tête », chaque reprise relançait la lecture depuis la même image
+        // clé, trois fois, puis l'abandon laissait la tête sur une image jamais envoyée —
+        // chargement sans fin au lieu de l'écran de fin. Même borne que la garde « rien retenu ».
+        const approaching =
+          this.video.seeking &&
+          segment.endSeconds + this.delaySeconds <= this.anchor &&
+          this.anchor - (segment.endSeconds + this.delaySeconds) <= PRE_ROLL_SECONDS;
+        const distance = this.pendingStart !== null || approaching ? 0 : this.distanceToMedia(this.anchor);
         if (Number.isFinite(distance) && distance > MISPLACED_SECONDS) {
           trace(
             `reprise : média à ${distance.toFixed(1)} s de la tête (${this.anchor.toFixed(1)} s), ` +

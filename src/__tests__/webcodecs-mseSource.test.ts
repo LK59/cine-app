@@ -1308,6 +1308,48 @@ describe("MseSource", () => {
     });
   });
 
+  it("un saut loin dans un long groupe d'images n'est pas un lecteur égaré : il lit jusqu'à la cible", async () => {
+    // WALL·E, 28/09/2026 : générique en un seul groupe de 35 s, saut à la dernière seconde. Le
+    // premier média arrivait 33 s derrière la tête, trois reprises relançaient la même lecture, puis
+    // l'abandon laissait la tête sans image — chargement sans fin au lieu de l'écran de fin.
+    traceReset();
+    const video = fakeVideo();
+    let base = 0;
+    let index = 0;
+    const seeks: number[] = [];
+    const remuxer = {
+      seeks,
+      seekable: true,
+      plan: () => PLAN,
+      // Une image clé toutes les quarante secondes.
+      keyframeAtOrBefore: (t: number) => Math.floor(t / 40) * 40,
+      diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0 }),
+      seekTo: (t: number) => {
+        seeks.push(t);
+        base = Math.floor(t / 40) * 40;
+        index = 0;
+      },
+      nextSegment: async (): Promise<RemuxSegment | null> => {
+        index += 1;
+        if (base + index * 2 > 3600) return null;
+        return { video: [new Uint8Array([10])], audio: new Uint8Array([20]), subtitles: [], endSeconds: base + index * 2 };
+      },
+    } as unknown as Remuxer & { seeks: number[] };
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+    const timer = (mse as unknown as { watchdogTimer: ReturnType<typeof setInterval> | null }).watchdogTimer;
+    if (timer) clearInterval(timer);
+    // Le média du saut commence à l'image clé de 1000 s ; la tête attend à 1033 s.
+    mediaStartsAtDefault = 1000;
+    Object.defineProperty(video, "seeking", { value: true, configurable: true });
+    (video as unknown as { currentTime: number }).currentTime = 1033;
+    video.dispatchEvent(new Event("seeking"));
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) >= 1034, "le média jusqu'à la cible");
+    expect(seeks.filter((t) => t > 1000)).toHaveLength(1);
+    expect(traceText()).not.toContain("reprise : média à");
+    mse.destroy();
+  });
+
   it("ne signale pas une seconde erreur après avoir passé la main à l'hôte", async () => {
     const video = fakeVideo();
     const onError = vi.fn();
