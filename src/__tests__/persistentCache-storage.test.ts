@@ -44,7 +44,7 @@ describe("storageFacts", () => {
     };
     startPersistence(WEBKIT, storage);
     const facts = await storageFacts(storage as unknown as StorageManager, null);
-    expect(facts).toEqual({ persist: "déjà", persisted: true, quotaMB: 61234.6, usageMB: 212.3, idbMB: 2, cacheMB: 30, opfsMB: 180 });
+    expect(facts).toEqual({ persist: "déjà", persisted: true, quotaMB: 61234.6, usageMB: 212.3, storageMode: "normal", idbMB: 2, cacheMB: 30, opfsMB: 180 });
   });
 
   it("dit ce que la reprise instantanée garde pour ce compte", async () => {

@@ -31,7 +31,10 @@ export interface ResumeManifest {
   /** Le `Last-Modified` du flux au moment de l'enregistrement, s'il y en avait un. */
   lastModified: string | null;
   savedAt: number;
-  /** La position d'ouverture visée, et ce que les octets gardés couvrent, en secondes. */
+  /**
+   * La position d'ouverture visée, et ce que les octets gardés couvrent, en secondes. `coveredTo`
+   * négatif : gardé à l'arrêt d'une lecture (`keepOnStop`), couverture pas encore mesurée.
+   */
   startSeconds: number;
   coveredFrom: number;
   coveredTo: number;
@@ -265,21 +268,70 @@ export function saveResumeEntry(account: string, manifest: ResumeManifest, chunk
       const path = [ROOT_DIR, safeName(account), name];
       for (const [index, bytes] of chunks) await writeFile(item, path, `c${index}`, bytes);
       await writeFile(item, path, "manifest.json", JSON.stringify(manifest));
-      const index = (await readJson<ResumeIndex>(dir, "index.json")) || {};
-      index[manifest.itemId] = {
-        savedAt: manifest.savedAt,
-        startSeconds: manifest.startSeconds,
-        coveredFrom: manifest.coveredFrom,
-        coveredTo: manifest.coveredTo,
-        bytes: manifest.bytes,
-        partial: manifest.partial,
-      };
-      await writeFile(dir, [ROOT_DIR, safeName(account)], "index.json", JSON.stringify(index));
+      await writeIndexLine(dir, account, manifest);
       return true;
     } catch {
       return false;
     }
   });
+}
+
+/**
+ * Un morceau de plus pour un titre, écrit tout de suite — sans toucher au manifeste. Un enregistrement
+ * interrompu laisse l'ancien manifeste, qui ne décrit que des morceaux encore là (rien n'est effacé
+ * avant `commitResumeEntry`). Rend vrai si le morceau est écrit.
+ */
+export function writeResumeChunk(account: string, itemId: string, index: number, bytes: Uint8Array): Promise<boolean> {
+  return serial(async () => {
+    try {
+      const dir = await accountDir(account, true);
+      if (!dir) return false;
+      const name = safeName(itemId);
+      const item = await dir.getDirectoryHandle(name, { create: true });
+      await writeFile(item, [ROOT_DIR, safeName(account), name], `c${index}`, bytes);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * Le manifeste d'un titre dont les morceaux sont déjà écrits (`writeResumeChunk`, ou gardés d'un
+ * enregistrement précédent du même fichier) : les morceaux de `drop` sont effacés, puis le manifeste
+ * et l'index sont écrits. Rend vrai si tout est écrit.
+ */
+export function commitResumeEntry(account: string, manifest: ResumeManifest, drop: Iterable<number>): Promise<boolean> {
+  return serial(async () => {
+    try {
+      const dir = await accountDir(account, true);
+      if (!dir) return false;
+      const name = safeName(manifest.itemId);
+      const item = await dir.getDirectoryHandle(name, { create: true });
+      const keep = new Set(manifest.chunks);
+      for (const index of drop) {
+        if (!keep.has(index)) await item.removeEntry(`c${index}`).catch(() => {});
+      }
+      await writeFile(item, [ROOT_DIR, safeName(account), name], "manifest.json", JSON.stringify(manifest));
+      await writeIndexLine(dir, account, manifest);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+async function writeIndexLine(dir: DirHandleLike, account: string, manifest: ResumeManifest): Promise<void> {
+  const index = (await readJson<ResumeIndex>(dir, "index.json")) || {};
+  index[manifest.itemId] = {
+    savedAt: manifest.savedAt,
+    startSeconds: manifest.startSeconds,
+    coveredFrom: manifest.coveredFrom,
+    coveredTo: manifest.coveredTo,
+    bytes: manifest.bytes,
+    partial: manifest.partial,
+  };
+  await writeFile(dir, [ROOT_DIR, safeName(account)], "index.json", JSON.stringify(index));
 }
 
 /** Efface un titre, et sa ligne de l'index. Ne lève jamais. */

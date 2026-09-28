@@ -40,6 +40,7 @@ export function logStartupTiming(fields: {
   resumeTitles?: number;
   resumeMB?: number;
   storageTimedOut?: boolean;
+  storageMode?: string;
 }): void {
   try {
     appendJsonLine(STARTUP_LOG(), { timestamp: new Date().toISOString(), kind: "ouverture", ...fields }, { keep: EVENT_LOG_KEEP });

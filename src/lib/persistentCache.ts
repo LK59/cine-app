@@ -5,6 +5,7 @@ import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/catalogueKeys"
 import { geckoVersion } from "@/lib/webcodecs/bufferBudget";
 import { APP_BUILD } from "@/lib/appBuild";
 import { readResumeIndex } from "@/lib/resumeCache/store";
+import { budgetFor } from "@/lib/resumeCache/budget";
 
 /**
  * Le catalogue de la dernière visite, gardé sur l'appareil pour s'afficher dès l'ouverture.
@@ -410,6 +411,8 @@ export async function storageFacts(
         const usage = mb(estimate.usage);
         if (quota !== null) facts.quotaMB = quota;
         if (usage !== null) facts.usageMB = usage;
+        // Le budget que ce quota donne aux octets gardés — voir `budget.ts`.
+        facts.storageMode = budgetFor(estimate).mode;
         const details = estimate.usageDetails;
         if (details) {
           const idb = mb(details.indexedDB);

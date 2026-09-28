@@ -1714,7 +1714,12 @@
       "report": "Problem melden",
       "reportHint": "Ein Problem oder eine Idee? Beschreiben Sie es in wenigen Schritten und verfolgen Sie hier die Antwort.",
       "reportNew": "Problem melden",
-      "reportMine": "Meine Meldungen"
+      "reportMine": "Meine Meldungen",
+      "storage": "Speicher auf diesem Gerät",
+      "storageHint": "Der Anfang laufender Filme und Serien wird hier gespeichert, damit sie sofort starten. Leeren löscht nichts anderes: alles kommt von selbst zurück.",
+      "storageUsed": "{size} belegt",
+      "storageClear": "Cache leeren",
+      "storageCleared": "Cache geleert"
     },
     "browse": {
       "seeAll": "Alle anzeigen",

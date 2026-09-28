@@ -1714,7 +1714,12 @@
       "report": "Report a problem",
       "reportHint": "Something wrong, or an idea? Describe it in a few steps, then follow the answer here.",
       "reportNew": "Report a problem",
-      "reportMine": "My reports"
+      "reportMine": "My reports",
+      "storage": "Storage on this device",
+      "storageHint": "The beginning of films and series you are watching is kept here so they start instantly. Clearing it removes nothing else: it all comes back on its own.",
+      "storageUsed": "{size} used",
+      "storageClear": "Clear cache",
+      "storageCleared": "Cache cleared"
     },
     "browse": {
       "seeAll": "See all",

@@ -40,8 +40,20 @@ export interface ByteSource {
   seekSettled?(): void;
   /** Le réseau depuis le dernier saut (`abandon`) — voir `NetworkWindow`. Optionnel. */
   networkSinceSeek?(): NetworkWindow | null;
+  /**
+   * Les morceaux entiers en mémoire, et la date du fichier selon le serveur — ce que l'arrêt d'une
+   * lecture garde sur l'appareil (`keepOnStop`). Optionnel : une source en mémoire n'a rien à garder.
+   */
+  held?(): HeldBytes | null;
   /** Releases any pending work. Safe to call twice. */
   close(): void;
+}
+
+/** Voir `ByteSource.held`. */
+export interface HeldBytes {
+  size: number;
+  lastModified: string | null;
+  chunks: Map<number, Uint8Array>;
 }
 
 /**
@@ -946,6 +958,11 @@ export class HttpByteSource implements ByteSource {
       serverMaxMs: w.server,
       protocols: { ...w.protocols },
     };
+  }
+
+  held(): HeldBytes | null {
+    // Une copie de la carte, pas des octets : la source peut continuer, ou être fermée, sans rien changer à ce qui est rendu.
+    return { size: this.size, lastModified: this.lastModified, chunks: new Map(this.chunks) };
   }
 
   keep(from: number, to: number): void {

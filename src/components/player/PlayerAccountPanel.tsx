@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, ListChecks } from "lucide-react";
+import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, ListChecks, HardDrive } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { hardNavigate, signOut } from "@/lib/signOut";
@@ -22,6 +22,8 @@ import { openOnboarding } from "./onboardingEvents";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import type { OtherSession } from "@/app/api/auth/sessions/route";
 import { MAINTENANCE_KEY, type MaintenanceState } from "@/lib/useMaintenance";
+import { clearDeviceCache, deviceCacheUsage } from "@/lib/resumeCache/clearDeviceCache";
+import { fmtSize } from "@/lib/format";
 
 /**
  * Le compte, en une feuille.
@@ -144,6 +146,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab, swapIn }: { lea
             </Section>
           )}
           <SessionsSection />
+          <StorageSection />
         </Group>
 
         <Group title={t("player.account.groups.help")}>
@@ -371,6 +374,51 @@ function PasswordSection() {
         </div>
       </form>
       )}
+    </Section>
+  );
+}
+
+/**
+ * Ce que l'application garde sur cet appareil, et de quoi le vider (28/09/2026) — voir
+ * `clearDeviceCache`. La taille est celle que le navigateur annonce pour le site entier ; elle
+ * n'apparaît pas quand il ne la donne pas.
+ */
+function StorageSection() {
+  const t = useT();
+  const toast = useToast();
+  const [usage, setUsage] = useState<number | null>(null);
+  const [clearing, setClearing] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void deviceCacheUsage().then((bytes) => {
+      if (alive) setUsage(bytes);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function clear() {
+    setClearing(true);
+    try {
+      await clearDeviceCache();
+      setUsage(await deviceCacheUsage());
+      toast.success(t("player.account.storageCleared"));
+    } finally {
+      setClearing(false);
+    }
+  }
+
+  return (
+    <Section icon={HardDrive} title={t("player.account.storage")}>
+      <p className="mb-3 text-xs text-subtle">{t("player.account.storageHint")}</p>
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
+        <p className="text-sm text-muted">{usage !== null && usage > 0 ? t("player.account.storageUsed", { size: fmtSize(usage) }) : "\u00a0"}</p>
+        <button type="button" onClick={() => void clear()} disabled={clearing} className="btn btn-ghost shrink-0">
+          {t("player.account.storageClear")}
+        </button>
+      </div>
     </Section>
   );
 }

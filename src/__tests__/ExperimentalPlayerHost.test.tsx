@@ -115,6 +115,9 @@ vi.mock("@/lib/swr", async (original) => ({
  */
 let serverFallback: boolean | undefined;
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => serverFallback }));
+// Ce que l'arrêt garde sur l'appareil (28/09/2026) : examiné par ce qui lui est transmis.
+const keepOnStop = vi.fn(async () => 0);
+vi.mock("@/lib/resumeCache/keepOnStop", () => ({ keepOnStop: (...args: unknown[]) => keepOnStop(...(args as [])) }));
 
 /**
  * Ce que la route `playback-state` répond — position et préférences.
@@ -1226,6 +1229,37 @@ describe("la fin d'une séance, au journal", () => {
     unmount();
 
     expect(logged("stop")[0].fields).toMatchObject({ recoveries: 7, frozenNudges: 3, escalations: 1 });
+  });
+
+  it("garde à l'arrêt ce que le lecteur tient en mémoire, pour ce fichier-là", async () => {
+    // 28/09/2026 : l'arrêt oubliait tout, et la reprise retéléchargeait plus tard ce qui était là.
+    const held = { size: 5e9, lastModified: null, chunks: new Map([[7, new Uint8Array(1)]]) };
+    remux = fakeRemux({ heldBytes: () => held });
+    swr = { data: info({ sizeBytes: 5e9, fileVersion: "etag-1" }), error: undefined };
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+
+    unmount();
+
+    expect(keepOnStop).toHaveBeenCalledTimes(1);
+    expect(keepOnStop).toHaveBeenCalledWith({ itemId: "item-1", streamUrl: "/stream.mkv", size: 5e9, fileVersion: "etag-1" }, held);
+  });
+
+  it("ne garde rien d'un film fini, et l'arrêt se fait même si la sauvegarde lève", async () => {
+    remux = fakeRemux({ heldBytes: () => { throw new Error("mémoire illisible"); } });
+    swr = { data: info({ sizeBytes: 5e9, fileVersion: "etag-1" }), error: undefined };
+    const first = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    first.unmount();
+    expect(logged("stop")).toHaveLength(1);
+
+    remux = fakeRemux({ heldBytes: () => ({ size: 5e9, lastModified: null, chunks: new Map() }) });
+    keepOnStop.mockClear();
+    const second = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    await act(async () => void fireEvent(videoElement(5400), new Event("ended")));
+    second.unmount();
+    expect(keepOnStop).not.toHaveBeenCalled();
   });
 
   it("écrit un blocage que la source signale, avec le fichier et le chemin", async () => {

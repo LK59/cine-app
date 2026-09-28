@@ -8,7 +8,7 @@
 import { displayIsHdr, hdrLightCap } from "./hdrDisplay";
 import { reachable } from "./seekArrival";
 import { playerWarning, type PlayerWarning } from "./playerWarning";
-import { HttpByteSource, type ByteSource, type DiskChunks } from "./byteSource";
+import { HttpByteSource, type ByteSource, type DiskChunks, type HeldBytes } from "./byteSource";
 import { fromMatroskaTrack, type PlayerTrack } from "./playerTrack";
 import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { openMediaFile } from "./mediaFile";
@@ -331,6 +331,15 @@ export class RemuxPlayback {
       throw error;
     }
     return playback;
+  }
+
+  /** Ce que la source tient en mémoire — voir `ByteSource.held`. Ne lève jamais. */
+  heldBytes(): HeldBytes | null {
+    try {
+      return this.source.held?.() ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** Où la zone gardée a été posée pour la dernière fois, en secondes du lecteur. */

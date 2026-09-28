@@ -30,6 +30,7 @@ function storageOf(value: unknown): Record<string, string | number | boolean> {
   if (typeof raw.persist === "string" && PERSIST_OUTCOMES.has(raw.persist)) out.persist = raw.persist;
   if (typeof raw.persisted === "boolean") out.persisted = raw.persisted;
   if (raw.storageTimedOut === true) out.storageTimedOut = true;
+  if (raw.storageMode === "normal" || raw.storageMode === "réduit") out.storageMode = raw.storageMode;
   for (const key of ["quotaMB", "usageMB", "idbMB", "cacheMB", "opfsMB", "resumeMB"] as const) {
     const n = megabytes(raw[key]);
     if (n !== null) out[key] = n;

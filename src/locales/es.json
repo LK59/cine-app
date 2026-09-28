@@ -1714,7 +1714,12 @@
       "report": "Informar de un problema",
       "reportHint": "¿Un problema o una idea? Descríbelo en unos pasos y sigue la respuesta aquí.",
       "reportNew": "Informar de un problema",
-      "reportMine": "Mis informes"
+      "reportMine": "Mis informes",
+      "storage": "Almacenamiento en este dispositivo",
+      "storageHint": "El inicio de las películas y series en curso se guarda aquí para que empiecen al instante. Vaciarlo no borra nada más: todo vuelve por sí solo.",
+      "storageUsed": "{size} usados",
+      "storageClear": "Vaciar la caché",
+      "storageCleared": "Caché vaciada"
     },
     "browse": {
       "seeAll": "Ver todo",

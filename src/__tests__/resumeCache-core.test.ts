@@ -3,8 +3,9 @@ import { CHUNK_SIZE, HttpByteSource, MemoryByteSource, forgetHandover, openingBy
 import { clusterOffsetForTime } from "@/lib/webcodecs/matroska";
 import { createSampleReader, openMediaFile } from "@/lib/webcodecs/mediaFile";
 import { diskChunksFor, openingFacts, sameFile, type FileIdentity } from "@/lib/resumeCache/diskChunks";
-import { MAX_TITLE_CHUNKS, RECORD_AHEAD_SECONDS, recordOpening } from "@/lib/resumeCache/record";
-import { MAX_TITLES, MAX_TOTAL_CHUNKS, covers, planResumeCache, remainingChunks, resumeTargets } from "@/lib/resumeCache/plan";
+import { recordOpening } from "@/lib/resumeCache/record";
+import { MAX_TITLES, MAX_TOTAL_CHUNKS, MIN_COVERED_AHEAD_SECONDS, RECENT_GRACE_MS, covers, planResumeCache, remainingChunks, resumeTargets, titleChunks } from "@/lib/resumeCache/plan";
+import { LOW_SPACE_BYTES, NORMAL_BUDGET, OPENING_TITLE_CHUNKS, REDUCED_BUDGET, STARTED_TITLE_CHUNKS, budgetFor } from "@/lib/resumeCache/budget";
 import type { ResumeIndex, ResumeManifest } from "@/lib/resumeCache/store";
 import { bigMatroska } from "./helpers/bigMatroska";
 
@@ -21,9 +22,19 @@ describe("quels titres garder", () => {
   const t = (itemId: string, startSeconds = 100) => ({ itemId, startSeconds });
 
   it("les premiers de « Reprendre », puis « À suivre », sans doublon et bornés", () => {
-    const targets = resumeTargets([t("a"), t("b"), t("c"), t("d")], [t("b"), t("e"), t("f")]);
-    expect(targets.map((x) => x.itemId)).toEqual(["a", "b", "c", "e"]);
-    expect(targets.length).toBeLessThanOrEqual(MAX_TITLES);
+    const resume = ["a", "b", "c", "d", "e", "f", "g"].map((id) => t(id));
+    const nextUp = ["b", "h", "i", "j", "k", "l", "m"].map((id) => t(id));
+    const targets = resumeTargets(resume, nextUp);
+    expect(targets.map((x) => x.itemId)).toEqual(["a", "b", "c", "d", "e", "h", "i", "j", "k", "l"]);
+    expect(targets.length).toBe(MAX_TITLES);
+  });
+
+  it("une reprise garde plus qu'une ouverture — en octets, pas en secondes", () => {
+    const [started, opening] = resumeTargets([t("a")], [t("b", 0)]);
+    expect(started.started).toBe(true);
+    expect(opening.started).toBe(false);
+    expect(titleChunks(started)).toBe(STARTED_TITLE_CHUNKS);
+    expect(titleChunks(opening)).toBe(OPENING_TITLE_CHUNKS);
   });
 
   const entry = (over: Partial<ResumeIndex[string]> = {}): ResumeIndex[string] => ({
@@ -46,13 +57,25 @@ describe("quels titres garder", () => {
   });
 
   it("efface ce qui a quitté la liste — fini, ou retiré de « Reprendre »", () => {
-    expect(planResumeCache([t("b")], { a: entry(), b: entry() }, 2_000)).toEqual({ record: [], remove: ["a"] });
+    // Passé le délai de grâce de ce qu'on vient d'arrêter (voir le test suivant).
+    expect(planResumeCache([t("b")], { a: entry(), b: entry() }, 1_000 + RECENT_GRACE_MS + 1)).toEqual({ record: [], remove: ["a"] });
   });
 
   it("efface et refait ce qui est trop ancien", () => {
     const plan = planResumeCache([t("a")], { a: entry({ savedAt: 0 }) }, 15 * 24 * 3600_000);
     expect(plan.remove).toEqual(["a"]);
     expect(plan.record.map((x) => x.itemId)).toEqual(["a"]);
+  });
+
+  it("refait un titre gardé à l'arrêt, dont la couverture n'est pas encore mesurée", () => {
+    expect(covers(entry({ startSeconds: -1, coveredFrom: -1, coveredTo: -1 }), 100)).toBe(false);
+    expect(planResumeCache([t("a")], { a: entry({ coveredFrom: -1, coveredTo: -1 }) }, 2_000).record.map((x) => x.itemId)).toEqual(["a"]);
+  });
+
+  it("n'efface pas ce qu'on vient d'arrêter parce que « Reprendre » ne le montre pas encore", () => {
+    const index = { a: entry({ savedAt: 10_000 }) };
+    expect(planResumeCache([], index, 10_000 + RECENT_GRACE_MS - 1).remove).toEqual([]);
+    expect(planResumeCache([], index, 10_000 + RECENT_GRACE_MS + 1).remove).toEqual(["a"]);
   });
 
   it("compte la place restante sans ce qui part ou sera refait", () => {
@@ -222,7 +245,7 @@ describe("enregistrer ce que l'ouverture lit", () => {
     expect(recorded).not.toBeNull();
     expect(recorded!.partial).toBe(false);
     expect(recorded!.coveredFrom).toBe(20);
-    expect(recorded!.coveredTo).toBeGreaterThanOrEqual(20.5 + RECORD_AHEAD_SECONDS);
+    expect(recorded!.coveredTo).toBeGreaterThanOrEqual(20.5 + MIN_COVERED_AHEAD_SECONDS);
     // L'en-tête (début) et l'index (fin) sont dans des morceaux différents du passage.
     expect(recorded!.chunks).toContain(0);
     expect(recorded!.chunks).toContain(Math.floor((FILE.length - 1) / CHUNK_SIZE));
@@ -236,25 +259,63 @@ describe("enregistrer ce que l'ouverture lit", () => {
     const video = file.tracks.find((track) => track.type === "video")!;
     const reader = createSampleReader(offline, file, clusterOffsetForTime(file, 20.5e6, video.number)!);
     let lastVideo = 0;
-    while (lastVideo < 20.5 + RECORD_AHEAD_SECONDS) {
+    while (lastVideo < 20.5 + MIN_COVERED_AHEAD_SECONDS) {
       const sample = await reader.next();
       expect(sample).not.toBeNull();
       if (sample!.trackNumber === video.number) lastVideo = sample!.timestampUs / 1e6;
     }
   });
 
-  it("ne garde que l'en-tête et l'index quand le passage dépasse la borne", async () => {
-    // 8 Mo par seconde : les quatre secondes de 10 à 13 font 32 Mio, au-delà des 24 par titre.
+  it("ne garde que l'en-tête et l'index quand le budget ne couvre pas la position", async () => {
+    // 8 Mo par seconde : 4 Mio ne couvrent pas les deux secondes qui suivent la position.
     const heavy = bigMatroska(15, 8_000_000);
-    const recorded = await recordOpening(new MemoryByteSource(heavy), 10);
+    const recorded = await recordOpening(new MemoryByteSource(heavy), 10, undefined, 4);
     expect(recorded!.partial).toBe(true);
-    expect(recorded!.chunks.length).toBeLessThanOrEqual(MAX_TITLE_CHUNKS);
     expect(recorded!.chunks).toContain(0);
+    expect(recorded!.chunks.length).toBeLessThanOrEqual(3);
+  });
+
+  it("vise des octets : le même budget couvre plus d'un fichier léger que d'un lourd", async () => {
+    const light = await recordOpening(new MemoryByteSource(bigMatroska(60, 300_000)), 5, undefined, 4);
+    const heavy = await recordOpening(new MemoryByteSource(bigMatroska(60, 900_000)), 5, undefined, 4);
+    expect(light!.partial).toBe(false);
+    expect(heavy!.partial).toBe(false);
+    expect(light!.coveredTo - light!.coveredFrom).toBeGreaterThan(2 * (heavy!.coveredTo - heavy!.coveredFrom));
+  });
+
+  it("signale chaque morceau une fois, au moment où il est touché", async () => {
+    const seen: number[] = [];
+    const recorded = await recordOpening(new MemoryByteSource(FILE), 20.5, undefined, 16, (index) => seen.push(index));
+    expect(new Set(seen).size).toBe(seen.length);
+    expect([...seen].sort((a, b) => a - b)).toEqual(recorded!.chunks);
   });
 
   it("s'arrête net quand on le lui demande — un film qui démarre", async () => {
     let asked = 0;
     const recorded = await recordOpening(new MemoryByteSource(FILE), 20.5, () => ++asked > 3);
     expect(recorded).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Le budget de l'appareil.
+
+describe("ce que l'appareil garde, selon sa place", () => {
+  it("le budget normal, sauf sous 5 Go entre le quota et l'occupation", () => {
+    expect(budgetFor({ quota: 41e9, usage: 5e7 })).toBe(NORMAL_BUDGET);
+    expect(budgetFor({ quota: 10.8e9, usage: 6e9 })).toBe(REDUCED_BUDGET);
+    expect(budgetFor({ quota: LOW_SPACE_BYTES - 1, usage: 0 })).toBe(REDUCED_BUDGET);
+  });
+
+  it("sans mesure, le budget normal : une écriture refusée n'est qu'un titre de moins", () => {
+    expect(budgetFor(null)).toBe(NORMAL_BUDGET);
+    expect(budgetFor({})).toBe(NORMAL_BUDGET);
+  });
+
+  it("le mode réduit tient dans ce qui a été décidé : 256 Mio de tampon, 750 au total", () => {
+    expect(REDUCED_BUDGET.bufferChunks).toBe(256);
+    expect(REDUCED_BUDGET.totalChunks).toBe(750);
+    expect(REDUCED_BUDGET.bufferChunks + REDUCED_BUDGET.resumeChunks).toBeLessThanOrEqual(REDUCED_BUDGET.totalChunks);
+    expect(NORMAL_BUDGET.bufferChunks + NORMAL_BUDGET.resumeChunks).toBeLessThanOrEqual(NORMAL_BUDGET.totalChunks);
   });
 });

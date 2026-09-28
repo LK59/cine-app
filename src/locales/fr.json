@@ -1714,7 +1714,12 @@
       "report": "Signaler un problème",
       "reportHint": "Un souci, ou une idée ? Décrivez-le en quelques étapes : vous suivez ensuite la réponse ici.",
       "reportNew": "Signaler un problème",
-      "reportMine": "Mes signalements"
+      "reportMine": "Mes signalements",
+      "storage": "Stockage sur cet appareil",
+      "storageHint": "Le début des films et séries en cours est gardé ici pour qu'ils démarrent instantanément. Le vider ne supprime rien d'autre : tout revient de lui-même.",
+      "storageUsed": "{size} utilisés",
+      "storageClear": "Vider le cache",
+      "storageCleared": "Cache vidé"
     },
     "browse": {
       "seeAll": "Voir tout",

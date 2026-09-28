@@ -207,7 +207,15 @@ background, idle, never during a film or with the page hidden, the opening bytes
 before the network. They serve only the same file: Jellyfin's MediaSource `ETag`, the size, and
 the stream's `Last-Modified` (forwarded by the stream route for that) — a mismatch discards them
 and says so in the trace. The `start` line carries `openedFrom` (`appareil` / `réseau` / `mixte`)
-and `deviceBytes`.
+and `deviceBytes`. Since 2026-09-28 it is sized in **bytes, not seconds** (`budget.ts`): 128 MiB past
+header and index for a started title, 16 MiB for one not yet started, up to five of each, under a
+shared budget (768 MiB; 480 when the browser reports under 5 GB between quota and usage). Re-recording
+a title — the position moved on another device — reads what is already on the device first and
+fetches only what is missing; header and index are never fetched twice for one file. **Stopping keeps
+what the player held in memory** (`keepOnStop`, coverage unknown until the next pass measures it),
+so a phone closed right after a film still resumes from the device. None of it is load-bearing: any
+chunk may vanish (system eviction, « Vider le cache » in the Account panel) and is read from the
+network instead.
 `PlayerHost` chooses between the native player and the legacy server-transcoding one;
 `fallToStable` hands over rather than closing — unless `PLAYER_SERVER_FALLBACK=false`, where there
 is no server-side player to hand to and the same call surfaces a clean playback error instead.

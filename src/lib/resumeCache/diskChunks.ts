@@ -89,7 +89,11 @@ export function diskChunksFor(
 ): DiskChunks {
   const kept = new Set(manifest.chunks);
   let disabled = false;
-  trace(`reprise sur l'appareil : ${manifest.chunks.length} Mo gardés (${manifest.partial ? "en-tête et index" : `jusqu'à ${manifest.coveredTo.toFixed(0)} s`})`);
+  trace(
+    `reprise sur l'appareil : ${manifest.chunks.length} Mo gardés (` +
+      (manifest.partial ? "en-tête et index" : manifest.coveredTo < 0 ? "gardés à l'arrêt, couverture pas encore mesurée" : `jusqu'à ${manifest.coveredTo.toFixed(0)} s`) +
+      ")"
+  );
   return {
     has: (index) => !disabled && kept.has(index),
     read: (index) => (disabled ? Promise.resolve(null) : read(index)),

@@ -82,7 +82,8 @@ import { registerBenchBridge } from "@/lib/playerBench/bridge";
 import { seekArrived } from "@/lib/webcodecs/seekArrival";
 import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
 import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
-import { forgetResumeCache, openDiskChunks, openingFacts } from "@/lib/resumeCache/diskChunks";
+import { forgetResumeCache, openDiskChunks, openingFacts, type FileIdentity } from "@/lib/resumeCache/diskChunks";
+import { keepOnStop } from "@/lib/resumeCache/keepOnStop";
 import { PlayerLifecycle } from "@/lib/playerLifecycle";
 import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from "@/lib/hostSeek";
 
@@ -1101,6 +1102,11 @@ export function ExperimentalPlayerHost({
     watched.run(Date.now());
     return () => watched.halt(Date.now());
   }, [playing, watched]);
+  /** Le fichier tel que le cache de reprise l'identifie — pour `keepOnStop`, lu à l'arrêt. */
+  const keepFileRef = useRef<FileIdentity | null>(null);
+  useEffect(() => {
+    keepFileRef.current = info?.streamUrl ? { itemId, streamUrl: info.streamUrl, size: info.sizeBytes ?? null, fileVersion: info.fileVersion ?? null } : null;
+  }, [info, itemId]);
   const stopFactsRef = useRef({ ready: false, ended: false, error: null as string | null, audio: null as number | null, rebuilds: 0 });
   useEffect(() => {
     stopFactsRef.current = { ready, ended, error, audio: currentAudio, rebuilds: rebuildCount };
@@ -1140,8 +1146,18 @@ export function ExperimentalPlayerHost({
       if (!lifecycle.claimStop()) return;
       reportPlayback("stop", stopFields(why));
       clearUnsentStop(sessionId);
+      // Ce que le lecteur tient en mémoire autour de la position, gardé pour la reprise — voir
+      // `keepOnStop`. Lu ici, avant que le pipeline soit détruit (la croix, puis `stopPlaybackNow` ;
+      // au démontage, cet effet-ci est nettoyé avant celui du pipeline). Pas pour un film fini.
+      // Gardé à part : une sauvegarde sur le chemin de l'arrêt ne doit jamais empêcher l'arrêt.
+      try {
+        const kept = keepFileRef.current;
+        if (kept && !stopFactsRef.current.ended && !session.bench) void keepOnStop(kept, remuxRef.current?.heldBytes?.() ?? null);
+      } catch {
+        /* la reprise se fera par le réseau */
+      }
     },
-    [stopFields, sessionId, lifecycle]
+    [stopFields, sessionId, lifecycle, session.bench]
   );
   /**
    * Le bilan gardé sur l'appareil, réécrit tant que la séance vit.
