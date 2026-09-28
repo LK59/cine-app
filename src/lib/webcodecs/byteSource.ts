@@ -1,5 +1,6 @@
 import { noteUnauthorized, SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { trace } from "./trace";
+import { diagInterval, diagNow, diagRequest, diagRequestFailed } from "./playbackDiagnosis";
 // Random access over a media file, for the native player's remuxer.
 //
 // The demuxer needs to jump around a file that can be 40 GB: read the header, jump to the end
@@ -651,7 +652,11 @@ export class HttpByteSource implements ByteSource {
         const headersAt = performance.now();
         const bytes = new Uint8Array(await res.arrayBuffer());
         this.networkBytes += bytes.byteLength;
-        this.note(sentAt, headersAt, performance.now(), bytes.byteLength, res);
+        const endAt = performance.now();
+        this.note(sentAt, headersAt, endAt, bytes.byteLength, res);
+        // Toutes les requêtes, pas seulement celles d'un saut : le débit en pleine lecture — voir
+        // playbackDiagnosis.ts.
+        diagRequest(sentAt, headersAt, endAt, bytes.byteLength, serverTimingApp(res.headers?.get?.("Server-Timing") ?? null));
         return bytes;
       } catch (error) {
         // Cancelled by the player itself, and a server that ignores ranges: neither improves by
@@ -662,6 +667,7 @@ export class HttpByteSource implements ByteSource {
         if (error instanceof Error && error.message.includes("statut 200")) throw error;
         if (error instanceof SessionEnded) throw error;
         last = error;
+        diagRequestFailed();
         if (muted) trace(`réseau : aucun octet en ${SEEK_FIRST_BYTE_MS / 1000} s après un saut, plage ${start}-${end} redemandée`);
         else if (attempt === 0) trace(`réseau : plage ${start}-${end} refusée, nouvelle tentative`);
       } finally {
@@ -777,7 +783,21 @@ export class HttpByteSource implements ByteSource {
     this.prefetchAfter(first);
   }
 
+  /**
+   * La lecture, et ce qu'elle a fait attendre : une lecture servie par le cache revient dans la
+   * milliseconde, une qui attend le réseau ou le disque est notée — c'est le remultiplexeur à sec
+   * (voir playbackDiagnosis.ts).
+   */
   async read(offset: number, length: number): Promise<Uint8Array> {
+    const from = diagNow();
+    try {
+      return await this.readBytes(offset, length);
+    } finally {
+      if (diagNow() - from >= 2) diagInterval("read", from);
+    }
+  }
+
+  private async readBytes(offset: number, length: number): Promise<Uint8Array> {
     if (this.controller.signal.aborted) throw closedSource();
     const start = Math.max(0, Math.min(offset, this.size));
     const end = Math.max(start, Math.min(offset + length, this.size));

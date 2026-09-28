@@ -117,6 +117,12 @@ background with the element's state — a decode failure just after an unlock re
 JSON object per line, rotated at 5 MB (`src/lib/logFile.ts`) — `player.log` keeping five archives
 (`.1` newest … `.5`), `server.log` three — and read with `tail`/`jq`; `logGenerations` lists a log
 and its archives oldest first for any reader.
+Since 2026-09-28 `stall` and `stop` also carry `diag.*` (`src/lib/webcodecs/playbackDiagnosis.ts`,
+under its own field budget): throughput received and while the link was busy against the file's
+bitrate, time the remuxer waited for bytes, time spent building segments, re-encoding sound and
+appending, main-thread long tasks, what `navigator.connection` says (Wi-Fi or cellular on Android),
+and each wait classified *réseau* / *calcul* / *décodeur*. It exists because a phone waited fifty
+times an episode while a Mac on the same router never did, and nothing said which of the three it was.
 `data/logs/auth.log` (since 2026-09-24) records sign-ins, refusals, sign-outs, closed sessions and
 refused tokens, with device and address; `data/logs/notifications.log` records every push sent,
 with what happened to it per account (delivered, failed, subscription removed, turned off). Both are

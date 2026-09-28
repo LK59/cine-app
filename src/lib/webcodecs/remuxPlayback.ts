@@ -17,6 +17,7 @@ import { choosePlaybackPath, NATIVE_PATH, type ChosenPath } from "./pathSelector
 import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
+import { diagMedia } from "./playbackDiagnosis";
 import { simultaneousText } from "./subtitleMarkup";
 
 /** L'attente maximale des octets gardés sur l'appareil, à l'ouverture — voir `RemuxPlaybackOptions.disk`. */
@@ -352,6 +353,8 @@ export class RemuxPlayback {
 
   private async attach(plan: Parameters<typeof MseSource.attach>[2], startSeconds: number): Promise<void> {
     trace(`attachement de MediaSource — ${plan.videoMimeType} + ${plan.audioMimeType ?? "aucun audio"}`);
+    // Le débit que ce fichier demande, et l'élément dont on compte les images — voir playbackDiagnosis.ts.
+    diagMedia(this.source.size, plan.durationSeconds, this.video);
     this.mse = await MseSource.attach(
       this.video,
       this.remuxer,

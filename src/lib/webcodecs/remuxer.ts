@@ -20,6 +20,7 @@ import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./
 import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
 import { transcodeTargetCodec, AudioTranscoder, transcodableAudio, type TranscodedFrame } from "./audioTranscode";
 import { trace } from "./trace";
+import { diagInterval, diagNow } from "./playbackDiagnosis";
 import { containerAccepts } from "./mseSource";
 import { createSampleReader, type MediaSampleReader } from "./mediaFile";
 import type { ByteSource } from "./byteSource";
@@ -1095,8 +1096,11 @@ export class Remuxer {
     }
 
     let frames: TranscodedFrame[];
+    // Le son ré-encodé, décodage et encodage : ce que seul un navigateur qui refuse la piste paie.
+    const transcodeFrom = diagNow();
     try {
       frames = await this.transcoder.framesUpTo(untilSeconds);
+      diagInterval("audio", transcodeFrom);
     } catch (error) {
       // Abandonnée pour un saut : rien à réparer, et reconstruire l'encodeur serait en payer un
       // neuf pour rien. Le saut repositionne le transcodeur derrière (`transcoderSeekPending`).

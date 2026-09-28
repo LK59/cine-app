@@ -29,6 +29,7 @@ import { useT, useLocale } from "@/components/TranslationProvider";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import { NATIVE_PATH } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset, traceRecent } from "@/lib/webcodecs/trace";
+import { diagBegin, diagEnd, diagSessionFacts, diagWaitEnded, diagWaitStarted } from "@/lib/webcodecs/playbackDiagnosis";
 import { BackgroundWatch } from "@/lib/backgroundReturn";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
@@ -155,6 +156,23 @@ function useElapsedSince(startedAt: number | null): number | null {
  * décale aussi l'image du son. Mesuré sans rien montrer, et sans jamais faire échouer la ligne
  * qui le porte.
  */
+/**
+ * L'avance que l'élément voit sous sa tête — la plage qui la contient, jusqu'à sa fin. Au début
+ * d'une attente, c'est ce qui dit si le média manquait ou s'il était là (voir playbackDiagnosis.ts).
+ */
+function leadAt(element: HTMLVideoElement): number | null {
+  try {
+    const at = element.currentTime;
+    const ranges = element.buffered;
+    for (let i = 0; i < ranges.length; i++) {
+      if (ranges.start(i) <= at + 0.1 && ranges.end(i) > at) return Math.round((ranges.end(i) - at) * 100) / 100;
+    }
+    return 0;
+  } catch {
+    return null;
+  }
+}
+
 function syncFacts(
   remux: {
     audioTiming(): { sourceMs: number; encoderMs: number } | null;
@@ -1072,6 +1090,12 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     mountedAtRef.current = Date.now();
   }, []);
+  // Les mesures d'approvisionnement de cette séance — voir playbackDiagnosis.ts. Les reconstructions
+  // restent dans la même séance, donc dans les mêmes totaux.
+  useEffect(() => {
+    diagBegin(sessionId);
+    return () => diagEnd(sessionId);
+  }, [sessionId]);
   useEffect(() => {
     if (!playing) return;
     watched.run(Date.now());
@@ -1104,6 +1128,9 @@ export function ExperimentalPlayerHost({
         // Attentes, sauts, changements de piste : le confort de la séance en quelques chiffres.
         ...tally.summary(now),
         ...syncFacts(remuxRef.current, videoElRef.current ?? lastVideoElRef.current),
+        // Réseau, calcul, décodeur : ce qui a retenu la chaîne, et chaque attente classée. Aplati en
+        // `diag.*`, sous son propre plafond de champs (playerLog.ts).
+        diag: diagSessionFacts(),
       };
     },
     [tally, watched]
@@ -1615,6 +1642,7 @@ export function ExperimentalPlayerHost({
         setPlaying(false);
         background.notePaused(Date.now(), { visible: document.visibilityState === "visible", ended: element.ended });
         tally.waitEnded(Date.now());
+        diagWaitEnded();
         pausedAt = Date.now();
         if (!session.bench) noteWatching(itemId);
       };
@@ -1624,13 +1652,20 @@ export function ExperimentalPlayerHost({
        */
       let playedOnce = false;
       const onWaiting = () => {
-        if (playedOnce && !element.seeking && !seeks.pending()) tally.waitStarted(Date.now());
+        if (playedOnce && !element.seeking && !seeks.pending()) {
+          tally.waitStarted(Date.now());
+          diagWaitStarted(leadAt(element));
+        }
       };
       const onPlaying = () => {
         playedOnce = true;
         tally.waitEnded(Date.now());
+        diagWaitEnded();
       };
-      const onSeeking = () => tally.waitAbandoned();
+      const onSeeking = () => {
+        tally.waitAbandoned();
+        diagWaitEnded(false);
+      };
       const onEnded = () => {
         setPlaying(false);
         setEnded(true);

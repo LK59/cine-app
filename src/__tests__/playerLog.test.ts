@@ -50,6 +50,18 @@ describe("logPlaybackEvent", () => {
     expect(Object.keys(line).filter((k) => k.startsWith("f"))).toHaveLength(40);
   });
 
+  it("donne aux mesures d'approvisionnement leur propre plafond, sans rien chasser du reste", async () => {
+    // 28/09/2026 : une trentaine de `diag.*` sur une ligne `stop` qui touchait déjà les quarante.
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    const many = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`f${i}`, i]));
+    const diag = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`m${i}`, i]));
+    logPlaybackEvent("lucas", "stop", { ...many, diag: { verdict: "réseau", ...diag } });
+    const line = lines()[0];
+    expect(Object.keys(line).filter((k) => k.startsWith("f"))).toHaveLength(40);
+    expect(Object.keys(line).filter((k) => k.startsWith("diag."))).toHaveLength(40);
+    expect(line["diag.verdict"]).toBe("réseau");
+  });
+
   it("crée son dossier plutôt que d'échouer parce qu'il n'existe pas", async () => {
     const { logPlaybackEvent } = await import("@/lib/playerLog");
     expect(fs.existsSync(path.join(dir, "logs"))).toBe(false);

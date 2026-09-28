@@ -2112,8 +2112,13 @@ describe("l'échelle des reprises", () => {
     expect(facts.audioBuffered).toMatch(/–/);
     expect(facts.lead).toBeGreaterThan(0);
     expect(typeof facts.sinceAppendMs).toBe("number");
-    // Rien d'imbriqué au-delà d'un niveau : `clean()` jetterait le reste.
-    for (const value of Object.values(facts)) expect(typeof value === "object" && value !== null).toBe(false);
+    // Rien d'imbriqué au-delà d'un niveau : `clean()` aplatit un objet (`diag.*`), et jetterait le reste.
+    const nested = (value: unknown) => typeof value === "object" && value !== null;
+    for (const value of Object.values(facts)) {
+      if (nested(value)) for (const inner of Object.values(value as object)) expect(nested(inner)).toBe(false);
+    }
+    // Hors séance, le diagnostic est vide ; la ligne le porte quand même.
+    expect(facts).toHaveProperty("diag");
     expect(facts.steps).toContain("lecture bloquée");
 
     // Le même blocage qui dure : pas une ligne de plus.

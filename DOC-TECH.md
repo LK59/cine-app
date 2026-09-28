@@ -818,10 +818,10 @@ unwitnessed.
 | `rebuild` | Source lost and rebuilt, with the attempt number and whether a passage was skipped |
 | `error` | An error shown to the viewer |
 | `seek` | A seek from the controls: from, to, already buffered or not, how long, and `steps` — the trace since the request |
-| `stall` | The element says it is playing and the clock has covered under a second in 5 s — once per stall, at most one a minute. Position, `readyState`/`networkState`/`seeking`, source state, video and audio ranges near the head, lead, whether a read is running, `recoveryStreak`/`frozenNudges`/`recoveries`, ms since the last append, `streaming` (ManagedMediaSource only), and `steps`: the last 20 s of trace. Emitted by `MseSource.watchForStall` on the watchdog tick |
+| `stall` | The element says it is playing and the clock has covered under a second in 5 s — once per stall, at most one a minute. Position, `readyState`/`networkState`/`seeking`, source state, video and audio ranges near the head, lead, whether a read is running, `recoveryStreak`/`frozenNudges`/`recoveries`, ms since the last append, `streaming` (ManagedMediaSource only), `diag.*` for the 30 s before it (see *Supply diagnosis* below), and `steps`: the last 20 s of trace. Emitted by `MseSource.watchForStall` on the watchdog tick |
 | `audio` | A track change: both tracks described, copied or re-encoded, `applied`, how long, and `steps` |
 | `cast` | Server player only: a television has actually taken the route |
-| `stop` | The session's summary. `why` (`close`, `next`, `page`, `unmount`, or `lost` — see below), `watched` seconds, `ended`, `rebuild`; `waits` / `waitedMs` / `longestWaitMs` — stops of 250 ms or more mid-playback, excluding opening and seeks (`stall` only fires at 5 s); `seeks` / `seekWaitMs`; `audioSwitches`; `backgrounds` / `backgroundMs` / `backgroundRebuilds` — times the page went to the background, for how long, and how many returns found the source closed by the platform and rebuilt (each also written as a `rebuild` line, reason "source fermée en arrière-plan", with `hiddenMs`); `recoveries`, `frozenNudges`, `escalations` when any; `audioSync` and `frames` (presented / dropped). The server player writes `why` and `at` |
+| `stop` | The session's summary. `why` (`close`, `next`, `page`, `unmount`, or `lost` — see below), `watched` seconds, `ended`, `rebuild`; `waits` / `waitedMs` / `longestWaitMs` — stops of 250 ms or more mid-playback, excluding opening and seeks (`stall` only fires at 5 s); `seeks` / `seekWaitMs`; `audioSwitches`; `backgrounds` / `backgroundMs` / `backgroundRebuilds` — times the page went to the background, for how long, and how many returns found the source closed by the platform and rebuilt (each also written as a `rebuild` line, reason "source fermée en arrière-plan", with `hiddenMs`); `recoveries`, `frozenNudges`, `escalations` when any; `audioSync` and `frames` (presented / dropped); `diag.*`, the session's supply diagnosis with every wait classified. The server player writes `why` and `at` |
 
 Each line carries the time, **the account taken from the session** (never from the request body:
 the one field that says who this is must not be the one anybody can invent), the file, its
@@ -838,9 +838,33 @@ server accepts it — the app also opens on the login screen, where it would be 
 after being declared lost still sends its real `stop`: keep the last line per `session`. The
 `stop` itself leaves through `navigator.sendBeacon`, which the browser keeps queued after the page.
 
-Three guardrails, since a browser decides what gets written: fields are **bounded** (24 at most,
-500 characters each — 4 000 for `steps` —, objects flattened one level and no deeper), the file **rotates** at 5 MB keeping five generations (`player.log.1` newest … `.5`), and a
+Three guardrails, since a browser decides what gets written: fields are **bounded** (40 at most,
+plus 40 `diag.*`; 500 characters each — 4 000 for `steps` —, objects flattened one level and no deeper), the file **rotates** at 5 MB keeping five generations (`player.log.1` newest … `.5`), and a
 failed write **never brings down a playback**.
+
+#### Supply diagnosis (`diag.*`)
+
+Added on 2026-09-28 for a phone that waited fifty times an episode on a 27.5 Mb/s 4K file while a
+Mac behind the same router had no wait at all: nothing in the log could say whether the phone's
+Wi-Fi, the work only it paid (E-AC3 decoded and re-encoded to AAC), or its decoder held the chain.
+`playbackDiagnosis.ts` keeps timestamped intervals from every stage — each request (sent → last
+byte, first-byte delay, `Server-Timing`), each read that had to wait for bytes (the remuxer
+starved), each segment built, the re-encoded sound of each segment, each append until
+`updateend`, and Chromium's long tasks — plus a 500 ms sampler for event-loop lag and presented
+frames, `navigator.connection` (`type` is `wifi`/`cellular` on Android Chrome; `downlink` saturates
+at 10) and the battery. A session is delimited by the host (`diagBegin`/`diagEnd`, by session id);
+rebuilds stay inside it.
+
+| Field | Meaning |
+|---|---|
+| `recvMbps` / `linkMbps` / `linkBusyPct` | Bytes received over the window, over the time a request was in flight, and that time's share. Low `recvMbps` with a busy link is the network; low with an idle link means the chain was not asking |
+| `needMbps` | The file's mean bitrate — what the chain must sustain |
+| `readWaitMs` (`readWaitS`) | Time the remuxer waited for bytes |
+| `buildMs`, `audioMs`, `appendMs`, `longTaskMs`, `lagMaxMs` | Segments built (reads included), sound re-encoded, appends, main-thread long tasks, worst timer lag |
+| `fbMaxMs` / `fbMedMs` / `fbP90Ms`, `slowestMs`, `serverMaxMs`, `reqFailed` | Request health |
+| `fps`, `dropped` | Frames presented per second and dropped, over the window (`stall` only) |
+| `conn`, `connSeen`, `connChanges`, `effectiveType`, `downlinkMbps`, `downlinkMinMbps`, `rttMs` | What the browser says of the network |
+| `verdict` (`stall`), `waitsNet` / `waitsCpu` / `waitsDecoder` / `waitsOther` and their `…Ms` (`stop`) | A hint, not a proof: *décodeur* when a second or more was buffered under the head, *réseau* when reads waited half the window or more, *calcul* when building outside reads, appends and long tasks took half, *autre* otherwise. A wait is judged on the 10 s before it and itself, since the buffer emptied before it began; waits of a second or more are also written to the trace with their numbers |
 
 Lines carrying `bench` (a device test bench session) are written to `data/logs/bench-player.log`
 instead — same format, two generations — so a bench never rotates real viewers' history away.

@@ -99,21 +99,30 @@ export function isPlayerEventKind(value: unknown): value is PlayerEventKind {
 function clean(fields: Record<string, unknown>): Record<string, string | number | boolean> {
   const out: Record<string, string | number | boolean> = {};
   let kept = 0;
+  /**
+   * Les mesures d'approvisionnement (`diag.*`, playbackDiagnosis.ts) ont leur propre plafond
+   * (28/09/2026). Une trentaine de chiffres de plus sur des lignes qui touchaient déjà les
+   * quarante : sous le même plafond, ils auraient chassé les derniers faits de la ligne — ou
+   * été chassés eux-mêmes, selon l'ordre d'arrivée. La borne de disque reste : quarante de plus.
+   */
+  let keptDiag = 0;
   const keep = (key: string, value: unknown): void => {
+    const diag = key.startsWith("diag.");
     // 28 : le banc d'essai ajoute `bench` en tête des lignes, et une ligne `stall` en portait déjà
     // 24 — la dernière, `steps`, la plus précieuse, serait tombée.
     // 40 depuis le 24/09/2026 : la ligne `stop` touchait les 28 depuis que le bilan de séance y
     // est, et perdait en silence ses derniers champs — les images perdues, et `lateByMs` d'un
     // bilan renvoyé après coup, sans lequel la frise le place au mauvais moment. Le plafond reste
     // une borne de disque ; il n'a jamais voulu choisir quels faits d'une ligne honnête écrire.
-    if (kept >= 40 || key.length > 40) return;
+    if ((diag ? keptDiag : kept) >= 40 || key.length > 40) return;
     if (typeof value === "number" && Number.isFinite(value)) out[key] = Math.round(value * 1000) / 1000;
     else if (typeof value === "boolean") out[key] = value;
     // `steps` is the one long field: the device's own timeline of a track change, which is the
     // whole point of the line it rides on. Still bounded — by eight times the rest, not by trust.
     else if (typeof value === "string" && value) out[key] = value.slice(0, key === "steps" ? 4000 : 500);
     else return;
-    kept += 1;
+    if (diag) keptDiag += 1;
+    else kept += 1;
   };
   for (const [key, value] of Object.entries(fields)) {
     /**

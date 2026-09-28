@@ -10,6 +10,7 @@
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import type { Remuxer, RemuxPlan, TrackedCue } from "./remuxer";
 import { trace, traceRecent } from "./trace";
+import { diagInterval, diagNow, diagStallFacts } from "./playbackDiagnosis";
 import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource";
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
@@ -814,7 +815,9 @@ export class MseSource {
         // is what makes a second seek feel like it does nothing for several seconds.
         if (this.seekState.requested !== null) break;
 
+        const builtFrom = diagNow();
         const segment = await this.remuxer.nextSegment();
+        diagInterval("segment", builtFrom);
         if (this.generation !== generation || this.destroyed) break;
         if (this.appendsTraced < TRACED_APPENDS) {
           this.appendsTraced++;
@@ -1031,7 +1034,9 @@ export class MseSource {
   private async appendTo(queue: BufferQueue, data: Uint8Array, generation: number): Promise<void> {
     if (this.destroyed || this.generation !== generation) return;
     try {
+      const sentFrom = diagNow();
       await queue.enqueue(() => queue.buffer.appendBuffer(data as BufferSource));
+      diagInterval("append", sentFrom, data.byteLength);
       this.appendFailures = 0;
       this.networkRetries = 0;
     } catch (error) {
@@ -1758,7 +1763,7 @@ export class MseSource {
 
   /**
    * What a stall line carries: one level deep and short, for `clean()` in playerLog.ts, which keeps
-   * 24 fields — with the file's own six and the path, this leaves room and no more.
+   * 40 fields — and 40 more for `diag.*`, the supply diagnosis (playbackDiagnosis.ts).
    */
   private stallReport(now: number, stalledMs: number): Record<string, unknown> {
     const managed = (this.source as ManagedMediaSource).streaming;
@@ -1774,6 +1779,9 @@ export class MseSource {
       evictions: this.evictions,
       // Only ManagedMediaSource has the signal; plain MediaSource says so rather than `true`.
       streaming: typeof managed === "boolean" ? managed : "sans objet",
+      // Ce qui a retenu la chaîne dans les 30 s d'avant : réseau, calcul ou décodeur — voir
+      // playbackDiagnosis.ts. Aplati en `diag.*`, sous son propre plafond de champs.
+      diag: diagStallFacts(this.lead),
       steps: traceRecent(STALL_TRACE_MS).join(" | "),
     };
   }
