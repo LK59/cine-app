@@ -850,6 +850,7 @@ export class MseSource {
           if (this.generation !== generation || this.destroyed) break;
           if (this.videoOps) await this.videoOps.enqueue(() => this.endStream()).catch(() => this.endStream());
           else this.endStream();
+          this.reseekAfterEnd();
           break;
         }
 
@@ -1230,6 +1231,30 @@ export class MseSource {
       if (!queue || !buffer || buffer.buffered.length === 0) continue;
       if (buffer.buffered.start(0) >= until - TRIM_SLACK_SECONDS) continue;
       void this.removeRange(queue, 0, until).catch(() => {});
+    }
+  }
+
+  /**
+   * Un saut encore en cours quand la fin du flux est déclarée est relancé, au même endroit.
+   *
+   * Les films de Pixar de la bibliothèque finissent par ~30 s de son sans image (*WALL·E* : image
+   * jusqu'à 5904,8 s, son jusqu'à 5934,5 s ; *Là-haut* : 5767,8 / 5798,5). Là, seule la fin du flux
+   * rend la tête lisible : une MediaSource `ended` prolonge la dernière plage de chaque piste
+   * jusqu'à la plus tardive, et la queue sans image entre dans les plages de l'élément. Un saut
+   * demandé *après* la fin arrive en un instant ; un saut demandé *avant* — la dernière seconde,
+   * depuis le début du film — restait `seeking` pour toujours sur Safari, `readyState` à 4, média
+   * présent : WebKit ne réexamine pas un saut en cours quand les plages changent ainsi (28/09/2026,
+   * iPhone). Le réaffecter relance l'algorithme ; la cible est alors dans les plages, et
+   * `onSeeking` n'a rien à relire (`isBufferedAt`).
+   */
+  private reseekAfterEnd(): void {
+    try {
+      if (this.destroyed || !this.video.seeking) return;
+      const target = this.video.currentTime;
+      trace(`fin du flux déclarée pendant un saut vers ${target.toFixed(1)} s — saut relancé sur place`);
+      this.video.currentTime = target;
+    } catch {
+      /* le chien de garde reste là */
     }
   }
 

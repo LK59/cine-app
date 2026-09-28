@@ -1267,6 +1267,19 @@ describe("la fin d'une séance, au journal", () => {
     expect(reserveStop).toHaveBeenCalledWith("fin du pipeline", true);
   });
 
+  it("fermé pendant un saut encore en chargement : la position est la cible, pas celle d'avant", async () => {
+    // Enquête du 28/09 : la ligne `stop` et Jellyfin recevaient la position d'avant le saut.
+    remux = fakeRemux();
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(5400);
+    await act(async () => void screen.getByText("saut:600").click());
+    Object.defineProperty(element, "seeking", { value: true, configurable: true });
+    act(() => void element.dispatchEvent(new Event("seeking")));
+    unmount();
+    expect(logged("stop")[0].fields.at).toBe(600);
+  });
+
   it("la ligne `stop` d'une fermeture porte ses mesures d'approvisionnement", async () => {
     // Chasse aux défauts du 28/09 : `diagEnd` passait avant l'arrêt au démontage, et la ligne partait sans `diag`.
     remux = fakeRemux();

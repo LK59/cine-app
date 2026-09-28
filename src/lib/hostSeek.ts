@@ -105,8 +105,16 @@ export class HostSeek {
    * le moteur : la cible demandée ne vaut plus. Restée en mémoire, elle servait de position au
    * changement de piste suivant, fût-il vingt minutes plus tard (audit du 22/09/2026).
    */
-  settled(engineSeekPending: boolean | undefined, elementSeeking: boolean): void {
-    if (this.requested !== null && engineSeekPending === false && !elementSeeking) this.requested = null;
+  settled(engineSeekPending: boolean | undefined, elementSeeking: boolean): SeekTiming | null {
+    if (engineSeekPending !== false || elementSeeking) return null;
+    if (this.requested !== null) this.requested = null;
+    // Et sa mesure, rendue pour être écrite : un saut posé loin de sa cible — vers 0 sur un film dont
+    // le son commence à 12 s, la tête posée sur le premier média — ne laissait aucune ligne `seek`,
+    // n'était compté nulle part, et une position de fermeture « en retard » passait pour figée
+    // (enquête du 28/09/2026).
+    const timing = this.timing;
+    this.timing = null;
+    return timing;
   }
 
   /**

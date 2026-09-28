@@ -48,6 +48,18 @@ describe("la cible demandée", () => {
     expect(seeks.pending()).toBe(false);
   });
 
+  it("posé loin de sa cible et fini selon le moteur : sa mesure est rendue, pour être écrite", () => {
+    // 28/09/2026 : un saut vers 0 posé à 12,17 s (son qui commence à 12 s) ne laissait aucune ligne.
+    const seeks = new HostSeek();
+    seeks.request(0);
+    seeks.startMeasure({ from: 5767, to: 0, startedAt: 1, hiddenAtStart: 0 } as never);
+    expect(seeks.seeked(12.17)).toBeNull();
+    expect(seeks.settled(true, false)).toBeNull();
+    expect(seeks.settled(false, false)).toMatchObject({ to: 0 });
+    expect(seeks.settled(false, false)).toBeNull();
+    expect(seeks.pending()).toBe(false);
+  });
+
   it("au pipeline prêt : rendue si l'ouverture ne l'a pas atteinte, oubliée sinon", () => {
     const seeks = new HostSeek();
     seeks.request(900);

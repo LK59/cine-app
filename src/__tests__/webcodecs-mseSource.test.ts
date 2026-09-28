@@ -1353,6 +1353,39 @@ describe("MseSource", () => {
     mse.destroy();
   });
 
+  it("relance sur place un saut encore en cours quand la fin du flux est déclarée", async () => {
+    // WALL·E et Là-haut, 28/09/2026, iPhone : 30 s de son sans image à la fin. Un saut à la
+    // dernière seconde demandé avant la fin du flux restait `seeking` pour toujours : seule la fin
+    // du flux rend cette queue lisible, et WebKit ne réexamine pas un saut déjà en cours.
+    traceReset();
+    const video = fakeVideo();
+    let playhead = 0;
+    const sets: number[] = [];
+    Object.defineProperty(video, "currentTime", {
+      get: () => playhead,
+      set: (v: number) => {
+        sets.push(v);
+        playhead = v;
+      },
+      configurable: true,
+    });
+    Object.defineProperty(video, "seeking", { value: true, configurable: true });
+    const mse = await MseSource.attach(video, fakeRemuxer(3), PLAN, { onError: vi.fn() });
+    await until(() => traceText().includes("saut relancé sur place"), "la relance");
+    expect(sets.at(-1)).toBe(playhead);
+    mse.destroy();
+  });
+
+  it("ne relance rien quand la fin du flux arrive sans saut en cours", async () => {
+    traceReset();
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(3), PLAN, { onError: vi.fn() });
+    await until(() => traceText().includes("fin du fichier"), "la fin");
+    await flush();
+    expect(traceText()).not.toContain("saut relancé");
+    mse.destroy();
+  });
+
   it("ne signale pas une seconde erreur après avoir passé la main à l'hôte", async () => {
     const video = fakeVideo();
     const onError = vi.fn();

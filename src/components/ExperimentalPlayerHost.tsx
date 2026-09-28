@@ -626,7 +626,7 @@ export function ExperimentalPlayerHost({
    * l'arrivée. 2012 sur iPhone (22/09/2026) : une tête passée de 2141 à 1681 s sans une trace.
    * Il est désormais écrit quand un autre geste le remplace, avec l'endroit où il est tombé.
    */
-  const reportUnarrivedSeek = (timing: SeekTiming | null, landedAt: number, stillSeeking: boolean) => {
+  const reportUnarrivedSeek = (timing: SeekTiming | null, landedAt: number, stillSeeking: boolean, superseded = true) => {
     if (!timing) return;
     // Remplacé par le geste suivant avant son `seeked` : le cas ordinaire d'une rafale. Arrivé
     // s'il était à sa cible — 125 lignes sur 128 « jamais arrivé » à tort le 22/09/2026.
@@ -641,12 +641,18 @@ export function ExperimentalPlayerHost({
       buffered: timing.buffered,
       ranges: timing.ranges,
       ...(stillSeeking ? {} : { arrived: seekArrived(landedAt, timing.to) }),
-      superseded: true,
+      ...(superseded ? { superseded: true } : {}),
       landedAt: Math.round(landedAt * 10) / 10,
       tookMs: seekElapsed(tally, timing),
       steps: traceRecent(Date.now() - timing.startedAt + 500).join(" | "),
     });
   };
+  // Lu par le pipeline à travers une `ref` : le nommer dans ses dépendances le reconstruirait à
+  // chaque rendu.
+  const reportUnarrivedSeekRef = useRef(reportUnarrivedSeek);
+  useEffect(() => {
+    reportUnarrivedSeekRef.current = reportUnarrivedSeek;
+  });
   /** Où en est le film selon ce que le spectateur a demandé, pas seulement selon ce qu'il a vu. */
   const intendedPosition = useCallback((): number => seeks.intendedPosition(videoElRef.current, positionRef.current), [seeks]);
   /**
@@ -1120,7 +1126,9 @@ export function ExperimentalPlayerHost({
         ...describeFileRef.current(),
         path: pathRef.current ?? "non décidé",
         why,
-        at: positionRef.current,
+        // Où le spectateur a demandé d'être, pas seulement ce qu'il a vu : fermé pendant un saut
+        // encore en chargement, la position d'avant le saut partait au journal et à Jellyfin.
+        at: intendedPosition(),
         watched: watched.seconds(now),
         ended: facts.ended,
         rebuild: facts.rebuilds,
@@ -1136,7 +1144,7 @@ export function ExperimentalPlayerHost({
         diag: diagSessionFacts(),
       };
     },
-    [tally, watched]
+    [tally, watched, intendedPosition]
   );
   const reportStop = useCallback(
     (why: "close" | "next" | "page" | "unmount") => {
@@ -1282,7 +1290,8 @@ export function ExperimentalPlayerHost({
   }, [sessionId]);
 
   const { stop: stopPlaybackNow, resume: resumePlaybackSession } = usePlaybackSession(
-    useCallback(() => positionRef.current, []),
+    // La cible d'un saut en cours plutôt que la position d'avant — voir `stopFields`.
+    intendedPosition,
     // The native player reads the file directly, so there is no Jellyfin transcode session — but
     // progress still has to be reported, or resume points would stop updating for this player.
     // It announces its own start for the same reason: nothing else tells the server this film is
@@ -1729,7 +1738,13 @@ export function ExperimentalPlayerHost({
         // Posée ailleurs que la cible — sur le premier média, sur l'image clé suivante — mais
         // arrivée selon la source : la cible demandée ne vaut plus (voir `HostSeek.settled`). Lu
         // après ce tour : la source écoute le même événement, et après l'hôte.
-        setTimeout(() => seeks.settled(remuxRef.current?.seekPending, element.seeking), 0);
+        // Posé ailleurs et fini : sa ligne part ici, avec l'endroit où il est tombé.
+        setTimeout(() => {
+          const landed = seeks.settled(remuxRef.current?.seekPending, element.seeking);
+          if (!landed) return;
+          tally.seekArrived(seekElapsed(tally, landed));
+          reportUnarrivedSeekRef.current(landed, element.currentTime, false, false);
+        }, 0);
         if (timing) {
           tally.seekArrived(seekElapsed(tally, timing));
           reportPlayback("seek", {
