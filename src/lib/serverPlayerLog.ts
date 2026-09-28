@@ -57,10 +57,23 @@ export function serverFailureFields(ctx: ServerPlayerContext, reason: string, ex
 }
 
 /** Le téléviseur a pris la route : la diffusion est établie, et non seulement demandée. */
-export function castEstablishedFields(ctx: ServerPlayerContext, at: number): Record<string, unknown> {
+export function castEstablishedFields(ctx: ServerPlayerContext, at: number, resumeAt?: number | null): Record<string, unknown> {
   // `cast: true` quel que soit le contexte : une route prise depuis les commandes de la vidéo, dans
   // une séance qui n'avait pas été ouverte pour diffuser, est une diffusion tout autant.
-  return { ...base(ctx), cast: true, path: "serveur", reason: "diffusion établie", at: Math.round(at) };
+  // `resumeAt` : la reprise pas encore prise par l'élément à cet instant — voir `CastResume`.
+  return {
+    ...base(ctx),
+    cast: true,
+    path: "serveur",
+    reason: "diffusion établie",
+    at: Math.round(at),
+    ...(resumeAt != null ? { resumeAt: Math.round(resumeAt) } : {}),
+  };
+}
+
+/** La reprise reposée sur le téléviseur, qui était reparti d'ailleurs — voir `CastResume`. */
+export function castResumeFields(ctx: ServerPlayerContext, from: number, resumeAt: number): Record<string, unknown> {
+  return { ...base(ctx), cast: true, path: "serveur", reason: "reprise reposée sur le téléviseur", at: Math.round(from), resumeAt: Math.round(resumeAt) };
 }
 
 /**

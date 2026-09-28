@@ -25,7 +25,8 @@ import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { reportPlayback } from "@/lib/reportPlayback";
-import { serverStartFields, serverFailureFields, castEstablishedFields, castEndedFields, serverStopFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
+import { serverStartFields, serverFailureFields, castEstablishedFields, castEndedFields, castResumeFields, serverStopFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
+import { CastResume } from "@/lib/castResume";
 import { castRouteActive } from "@/lib/castRoute";
 import { WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
@@ -352,6 +353,8 @@ function ActivePlayer({
   // oubliait la position, le film quittait « Reprendre », et cliquer sur « Reprendre » pour se
   // raviser aussitôt effaçait donc précisément ce qu'on venait de vouloir reprendre.
   const lastKnownTime = useRef(initialResumeAt ?? 0);
+  /** La reprise que l'élément n'a pas encore prise — reposée sur le téléviseur s'il la manque. */
+  const [castResume] = useState(() => new CastResume());
   const loadWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Belt-and-braces for the native (non-hls.js) path: iOS's media daemon releases HLS sessions
   // asynchronously, so even with the reload-based track switch a fresh load can race the old
@@ -770,6 +773,7 @@ function ActivePlayer({
       // l'arrivée des métadonnées il s'écoule plusieurs secondes sur un gros fichier, et c'est
       // exactement la fenêtre pendant laquelle une fermeture rapportait zéro.
       lastKnownTime.current = resumeAt ?? 0;
+      castResume.planned(resumeAt);
       video.addEventListener(
         // Root cause found live via real Jellyfin logs during a reproduced test: setting
         // currentTime this early (previously on 'loadedmetadata', which only guarantees
@@ -1295,10 +1299,35 @@ function ActivePlayer({
       // En pause : la route est tombée sans que personne ne demande à continuer sur le téléphone.
       if (castSession) onCastEnded?.(castHandBackPosition(video.currentTime, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt), true);
     };
+    // La reprise que la route vient peut-être d'emporter à 0, reposée quand la télé joue — voir
+    // `CastResume`. Une fois par établissement, et retirée avec les autres écouteurs.
+    let resumeOnTv: (() => void) | null = null;
+    const armCastResume = () => {
+      if (resumeOnTv) video.removeEventListener("playing", resumeOnTv);
+      resumeOnTv = () => {
+        if (resumeOnTv) video.removeEventListener("playing", resumeOnTv);
+        resumeOnTv = null;
+        const from = video.currentTime || 0;
+        const target = castResume.take(from);
+        if (target === null) return;
+        reportPlayback("cast", castResumeFields(logContext.current, from, target));
+        try {
+          video.currentTime = target;
+        } catch {
+          /* la télé garde sa position ; le spectateur peut encore y aller lui-même */
+        }
+      };
+      video.addEventListener("playing", resumeOnTv);
+      // Déjà en train de jouer : la télé a fini de charger avant que la route ne se dise établie.
+      if (!video.paused && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) resumeOnTv();
+    };
     const setActive = (active: boolean) => {
       // Établie, et pas seulement demandée : sans cette ligne, un téléviseur resté en chargement
       // ne se distinguait pas d'un téléviseur qui jouait (22/09/2026).
-      if (active && !castActiveRef.current) reportPlayback("cast", castEstablishedFields(logContext.current, video.currentTime || 0));
+      if (active && !castActiveRef.current) {
+        reportPlayback("cast", castEstablishedFields(logContext.current, video.currentTime || 0, castResume.pending));
+        if (castResume.pending !== null) armCastResume();
+      }
       castActiveRef.current = active;
       setCastActive(active);
     };
@@ -1324,6 +1353,7 @@ function ActivePlayer({
     if (castRouteActive(video)) setActive(true);
 
     return () => {
+      if (resumeOnTv) video.removeEventListener("playing", resumeOnTv);
       video.removeEventListener("loadedmetadata", openPicker);
       video.removeEventListener("webkitcurrentplaybacktargetiswirelesschanged", onWirelessChanged);
       video.remote?.removeEventListener?.("connect", onConnect);
@@ -1332,7 +1362,7 @@ function ActivePlayer({
     // Les lignes du journal se nomment par `logContext`, lu au moment d'écrire : ni le titre ni
     // l'épisode ne sont des dépendances, et un changement d'épisode ne réarme pas les écouteurs —
     // ce qui perdrait la route en cours.
-  }, [castSession, onCastEnded, videoKey, watched]);
+  }, [castSession, onCastEnded, videoKey, watched, castResume]);
 
   // Ends playback entirely (not just minimize) when the video finishes — same in both modes.
   //
@@ -1414,6 +1444,7 @@ function ActivePlayer({
       // battement (relevé le 23/09/2026). La position semée par `startPlayback` tient jusque-là.
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
       lastKnownTime.current = video.currentTime;
+      castResume.observed(video.currentTime);
       if (!video.paused && !bench && Date.now() - notedAt > 15_000) {
         notedAt = Date.now();
         noteWatching(itemId);
@@ -1428,7 +1459,7 @@ function ActivePlayer({
       video.removeEventListener("timeupdate", onTimeUpdate);
       video.removeEventListener("pause", onPause);
     };
-  }, [videoKey, itemId, bench]);
+  }, [videoKey, itemId, bench, castResume]);
 
   // Bad-connection badge: a real stall mid-playback ('waiting' firing after the video has
   // already played at least once — excludes ordinary startup buffering) is logged with a
