@@ -1348,8 +1348,9 @@ describe("MseSource", () => {
     (video as unknown as { currentTime: number }).currentTime = 1033;
     video.dispatchEvent(new Event("seeking"));
     await until(() => video.buffered.length > 0 && video.buffered.end(0) >= 1034, "le média jusqu'à la cible");
+    // Une seule lecture vers la cible : sans le correctif, trois reprises relançaient la même. Pas
+    // la trace, commune à tout le fichier — une source d'un test précédent peut encore y écrire.
     expect(seeks.filter((t) => t > 1000)).toHaveLength(1);
-    expect(traceText()).not.toContain("reprise : média à");
     mse.destroy();
   });
 
