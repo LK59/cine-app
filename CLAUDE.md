@@ -214,11 +214,14 @@ before the position to one group past it (64 MiB at most). **At rest nothing is 
 stopping keeps only that same passage from what the player held (`keepOnStop`). Re-recording a title
 reads the device first — header and index are never fetched twice — and trims anything beyond the
 minimum. **Lead lives in RAM, never on disk** (`MemoryReserve`, `src/lib/webcodecs/memoryReserve.ts`):
-once the browser's buffer has 10 s and no read waits, it downloads 8 MiB ranges beyond the player's
-readahead into a reserve inside `HttpByteSource`, apart from its 64 MiB cache, which the player reads
-before the network — at most 4× the film's bitrate and 50 Mb/s, five minutes of film, 150 MB on
-iPhone/iPad (Safari hides device memory and kills greedy pages), 100–500 MB elsewhere by
-`deviceMemory`; emptied when the page is hidden. A disk reserve existed for a few hours that day
+after a minute actually watched (a quarter of sessions are shorter), once the browser's buffer has
+10 s and no read waits, it downloads 8 MiB ranges beyond the player's readahead into a reserve inside
+`HttpByteSource`, apart from its 64 MiB cache, which the player reads before the network — **in
+bursts**: filled at up to 50 Mb/s, then silent until it falls to half, so the radio sleeps between
+refills (what costs energy is the number of wake-ups, not the volume); five minutes of film at most,
+150 MB on iPhone/iPad (Safari hides device memory and kills greedy pages), 100–500 MB elsewhere by
+`deviceMemory`; emptied when the page is hidden. Hidden controls follow the clock once a second, not
+on every `timeupdate`. A disk reserve existed for a few hours that day
 (`DiskReserve`): nearly every watched byte went through flash — ~12 GB per hour of 4K — and it was
 removed for the devices' sake. **A view is never written as-is** (`exactBytes`): Safari wrote a 1 MiB
 `subarray` of an 8 MiB range as the whole 8 MiB — 7 GB on an iPhone after two sessions; the store moved

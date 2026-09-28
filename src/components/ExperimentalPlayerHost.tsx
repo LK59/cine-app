@@ -1588,7 +1588,9 @@ export function ExperimentalPlayerHost({
         reserveRef.current?.stop("reconstruction");
         // Ses lignes `reserve`, décrites comme les autres lignes du lecteur (fichier, séance, appareil).
         const report = (fields: Record<string, unknown>) => reportPlayback("reserve", { ...describeFileRef.current(), path: "remux", ...fields });
-        reserveRef.current = context ? MemoryReserve.start(context, report) : null;
+        // Le temps regardé de la séance, qui survit aux reconstructions : la réserve attend une
+        // minute de lecture réelle avant de rien télécharger (`START_AFTER_WATCHED_SECONDS`).
+        reserveRef.current = context ? MemoryReserve.start({ ...context, watched: () => watched.seconds(Date.now()) }, report) : null;
       } catch {
         reserveRef.current = null;
       }
@@ -1930,8 +1932,10 @@ export function ExperimentalPlayerHost({
   // pour `tally`, créé une fois au montage (`useState`) et jamais remplacé, pour
   // `reopenAfterEnd`, qui ne dépend que de `lifecycle` — créé une fois au montage (`useState`),
   // comme `tally`, `seeks` et `background` —, et pour `itemId` et `session.bench`,
-  // fixés pour toute la vie de ce lecteur — sa clé est `itemId:openId` (voir PlayerHost).
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, seeks, background, reportAudioSwitch, tally, reopenAfterEnd, itemId, session.bench]);
+  // fixés pour toute la vie de ce lecteur — sa clé est `itemId:openId` (voir PlayerHost). Même
+  // chose pour `watched`, créé une fois au montage (`useState`) et jamais remplacé (la réserve lit
+  // le temps regardé, 28/09/2026).
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure

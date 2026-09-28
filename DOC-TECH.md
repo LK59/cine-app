@@ -875,11 +875,14 @@ keeps it **in memory**, in a map inside `HttpByteSource` kept apart from its 64 
 cache's evictions cannot chase it (`offerReserve`); `fetchChunk` moves a reserved chunk into the cache
 when the player reads it, and the player's own readahead skips what the reserve holds.
 
-It yields to the player in every case: nothing until the browser buffer has `MIN_LEAD_SECONDS` (10 s),
-nothing while a read waits (`readsWaiting`) or during a seek (`seekFocused`); it starts beyond the
-player's readahead; ranges of `RANGE_CHUNKS` (8 MiB), `PARALLEL` (2) at most, each waiting for its
-slot at `reserveSpeedBps` — 4× the film's mean bitrate, 50 Mb/s at most; never more than
-`MAX_AHEAD_SECONDS` (five minutes) ahead; what the head passes is dropped. Its size is
+It yields to the player in every case: nothing before `START_AFTER_WATCHED_SECONDS` (60 s) actually
+watched in the session — a quarter of sessions are shorter —, nothing until the browser buffer has
+`MIN_LEAD_SECONDS` (10 s), nothing while a read waits (`readsWaiting`) or during a seek
+(`seekFocused`); it starts beyond the player's readahead; ranges of `RANGE_CHUNKS` (8 MiB),
+`PARALLEL` (2) at most, paced at `reserveSpeedBps` (50 Mb/s); never more than `MAX_AHEAD_SECONDS`
+(five minutes) ahead; what the head passes is dropped. It fills **in bursts**: up to capacity, then
+nothing until it has fallen to `REFILL_BELOW` (half) — a radio stays awake seconds after each
+transfer, so wake-ups, not bytes, cost energy (`bursts` on the `arrêt` line, `phase` on `point`). Its size is
 `reserveBudgetBytes`: 150 MB on iPhone and iPad — Safari does not expose device memory and kills a page
 that takes too much, the threshold unpublished — and by `navigator.deviceMemory` elsewhere (100 MB at
 ≤ 2 GB, 200 at 4, 500 at 8, 300 unknown). Chunks are copied, not viewed: a `subarray` would keep its

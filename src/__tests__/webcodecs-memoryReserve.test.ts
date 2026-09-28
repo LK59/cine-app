@@ -144,16 +144,53 @@ describe("la réserve d'avance en mémoire", () => {
     reserve.stop();
   });
 
-  it("ne télécharge pas plus vite que quatre fois le débit du film", async () => {
-    // 3,2 Mb/s : 12,8 Mb/s permis, 1,6 Mo par seconde.
+  it("ne télécharge pas plus vite que 50 Mb/s", async () => {
+    // 50 Mb/s : 6,25 Mo par seconde. Quatre secondes, et la première plage partie d'emblée.
     const { reserve } = await start();
-    await pump(reserve, 30, 1_000);
+    await pump(reserve, 4, 1_000);
     reserve.stop();
     const bytes = fetched.length * CHUNK_SIZE;
-    expect(bytes).toBeLessThanOrEqual(30 * 1.6e6 + RANGE_CHUNKS * CHUNK_SIZE);
-    expect(bytes).toBeGreaterThan(20 * 1.6e6);
-    expect(reserveSpeedBps(3.2e6)).toBeCloseTo(12.8e6);
-    expect(reserveSpeedBps(27.5e6)).toBe(50e6);
+    expect(bytes).toBeLessThanOrEqual(4 * 6.25e6 + RANGE_CHUNKS * CHUNK_SIZE);
+    expect(reserveSpeedBps()).toBe(50e6);
+  });
+
+  it("attend une minute de lecture réelle avant de rien télécharger", async () => {
+    // Un quart des séances des autres comptes durent moins d'une minute (28/09/2026).
+    let watched = 20;
+    const source = (await HttpByteSource.open(URL, FILE.length)).withoutReadahead();
+    const report = vi.fn();
+    const reserve = MemoryReserve.start(
+      { source, file: parsed, video: { currentTime: 0, seeking: false } as unknown as HTMLVideoElement, lead: () => 30, delay: () => 0, watched: () => watched },
+      report,
+      deps()
+    );
+    await pump(reserve, 4);
+    expect(fetched).toEqual([]);
+    watched = 61;
+    await pump(reserve, 2);
+    expect(fetched.length).toBeGreaterThan(0);
+    reserve.stop();
+  });
+
+  it("remplit par rafales : pleine, elle se tait jusqu'à redescendre à la moitié", async () => {
+    // Pour que la radio dorme entre deux rafales : ce qui coûte, c'est le nombre de réveils.
+    const report = vi.fn();
+    const video = { currentTime: 0, seeking: false };
+    const { reserve, source } = await start(video, 16 * CHUNK_SIZE, report);
+    await pump(reserve, 8);
+    expect(source.reserveIndices.length).toBe(16);
+    const afterFirst = fetched.length;
+    // La tête avance un peu : quelques morceaux consommés, moins de la moitié — aucune requête.
+    for (const index of source.reserveIndices.slice(0, 4)) await source.read(index * CHUNK_SIZE, 10);
+    await pump(reserve, 3);
+    expect(fetched.length).toBe(afterFirst);
+    // Sous la moitié : une rafale, jusqu'à la pleine capacité.
+    for (const index of source.reserveIndices.slice(0, 6)) await source.read(index * CHUNK_SIZE, 10);
+    await pump(reserve, 6);
+    expect(fetched.length).toBeGreaterThan(afterFirst);
+    expect(source.reserveIndices.length).toBe(16);
+    reserve.stop();
+    expect(report.mock.calls.at(-1)![0]).toMatchObject({ event: "arrêt", bursts: 2 });
   });
 
   it("jamais plus de cinq minutes de film devant la tête", async () => {
@@ -197,10 +234,8 @@ describe("la réserve d'avance en mémoire", () => {
     reserve.stop("fin de lecture");
     const events = report.mock.calls.map(([fields]) => fields.event);
     expect(events).toEqual(["départ", "point", "arrêt"]);
-    // 150 Mo en morceaux de 1 Mio ; quatre fois le débit du fichier, un peu plus de 3 Mb/s.
-    expect(report.mock.calls[0][0]).toMatchObject({ allowedMB: 143 });
-    expect(report.mock.calls[0][0].speedMbps).toBeGreaterThan(12);
-    expect(report.mock.calls[0][0].speedMbps).toBeLessThan(14);
+    // 150 Mo en morceaux de 1 Mio ; 50 Mb/s au plus.
+    expect(report.mock.calls[0][0]).toMatchObject({ allowedMB: 143, speedMbps: 50 });
     const point = report.mock.calls[1][0];
     expect(point).toMatchObject({ idle: `avance du navigateur sous ${MIN_LEAD_SECONDS} s` });
     expect(point.windowMB).toBeGreaterThan(0);

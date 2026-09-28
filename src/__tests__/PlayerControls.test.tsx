@@ -794,6 +794,39 @@ describe("PlayerControls — une touche pendant le film", () => {
   });
 });
 
+describe("PlayerControls — masquées, elles suivent la position une fois par seconde", () => {
+  it("ne se recalculent pas à chaque timeupdate quand personne ne les voit", async () => {
+    // 28/09/2026 : ~4 recalculs par seconde de tout le composant, contrôles masqués compris.
+    stubMediaFetches();
+    vi.useFakeTimers();
+    let clock = 10_000;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    let video!: HTMLVideoElement;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    Object.defineProperty(video, "paused", { value: false, configurable: true });
+    Object.defineProperty(video, "duration", { value: 3600, configurable: true });
+    act(() => void video.dispatchEvent(new Event("durationchange")));
+    act(() => void video.dispatchEvent(new Event("play")));
+    await act(async () => void vi.advanceTimersByTime(4000));
+    const seek = () => Number((container.querySelector('input[data-player-nav="seek"]') as HTMLInputElement).value);
+    const at = (t: number) => {
+      Object.defineProperty(video, "currentTime", { value: t, configurable: true, writable: true });
+      act(() => void video.dispatchEvent(new Event("timeupdate")));
+    };
+    clock += 5_000;
+    at(100);
+    expect(seek()).toBe(100);
+    clock += 250;
+    at(100.25);
+    expect(seek()).toBe(100);
+    clock += 1_000;
+    at(101.25);
+    expect(seek()).toBe(101.25);
+    now.mockRestore();
+  });
+});
+
 describe("PlayerControls — suspendues pendant une reconstruction", () => {
   it("ne répondent plus au clavier", async () => {
     // Une barre d'espace pendant la reconstruction relançait un film qui devait rester en pause.

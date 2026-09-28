@@ -108,6 +108,8 @@ interface PlayerControlsProps {
 
 const NEXT_UP_COUNTDOWN_S = 10;
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+/** Masqués, les contrôles ne suivent la position qu'à ce rythme — voir `visibleRef`. */
+const HIDDEN_UPDATE_MS = 1000;
 export const VOLUME_STORAGE_KEY = "cine:player-volume";
 
 /** How long a seek may take before it is worth showing as a wait rather than as a still button. */
@@ -222,6 +224,17 @@ export function PlayerControls({
   }, []);
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(true);
+  /**
+   * Masqués, les contrôles ne prennent la position qu'une fois par seconde (28/09/2026). Chaque
+   * `timeupdate` (~4 par seconde) faisait recalculer tout ce composant, même invisible — du travail
+   * pour rien, et de quoi réveiller l'affichage. Une seconde suffit à ce qui en dépend quand rien
+   * n'est affiché (« Passer l'intro », le compte à rebours de l'épisode suivant) ; affichés, le
+   * `timeupdate` suivant les remet à la seconde près.
+   */
+  const visibleRef = useRef(visible);
+  useEffect(() => {
+    visibleRef.current = visible;
+  }, [visible]);
   const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "more">(null);
   /** « Auto · 203 nits », « Natif », « 400 nits » — le réglage de luminosité HDR, en mots. */
   const hdrCapLabel = (choice: HdrCapChoice): string =>
@@ -426,8 +439,13 @@ export function PlayerControls({
     // Suppressed while dragging the seek bar — otherwise the real (not-yet-seeked) playback
     // position keeps overwriting the dragged thumb position on every tick, fighting the user's
     // own drag mid-gesture.
+    let timeAt = 0;
     const onTime = () => {
-      if (!seekingRef.current) setCurrentTime(video.currentTime);
+      if (seekingRef.current) return;
+      const now = performance.now();
+      if (!visibleRef.current && now - timeAt < HIDDEN_UPDATE_MS) return;
+      timeAt = now;
+      setCurrentTime(video.currentTime);
     };
     const onDuration = () => {
       setDuration(video.duration || 0);
@@ -480,7 +498,12 @@ export function PlayerControls({
     // The range containing currentTime (not just the last one) — a rewind past hls.js's
     // in-memory buffer can leave an earlier, already-downloaded range that's no longer the
     // last entry in video.buffered once new data has since loaded ahead of the original spot.
+    let progressAt = 0;
     const onProgress = () => {
+      // La jauge de ce qui est chargé ne se voit pas non plus quand les contrôles sont masqués.
+      const now = performance.now();
+      if (!visibleRef.current && now - progressAt < HIDDEN_UPDATE_MS) return;
+      progressAt = now;
       const ranges = video.buffered;
       for (let i = 0; i < ranges.length; i++) {
         if (ranges.start(i) <= video.currentTime && video.currentTime <= ranges.end(i)) {

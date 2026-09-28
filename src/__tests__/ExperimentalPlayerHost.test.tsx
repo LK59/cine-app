@@ -1241,7 +1241,9 @@ describe("la fin d'une séance, au journal", () => {
     const { unmount } = mount();
     await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
     expect(reserveStart).toHaveBeenCalledTimes(1);
-    expect(reserveStart.mock.calls[0][0]).toBe(context);
+    // Le contexte du lecteur, plus le temps regardé de la séance — la réserve attend une minute.
+    expect(reserveStart.mock.calls[0][0]).toMatchObject(context);
+    expect(typeof (reserveStart.mock.calls[0][0] as { watched: () => number }).watched()).toBe("number");
     // Ses lignes partent au journal comme celles du lecteur : le fichier, la séance, le chemin.
     const report = reserveStart.mock.calls[0][1] as (fields: Record<string, unknown>) => void;
     report({ event: "point", aheadMB: 120 });

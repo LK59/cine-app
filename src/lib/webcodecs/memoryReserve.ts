@@ -28,8 +28,18 @@ import { coverageFrom } from "@/lib/resumeCache/coverage";
  *    tiennent de la mémoire ;
  *  - rien dans la zone de la lecture en avance du lecteur ; au plus `MAX_AHEAD_SECONDS` de film
  *    devant la tête ;
- *  - un débit borné à `SPEED_FACTOR` fois celui du film, `SPEED_CAP_MBPS` au plus — seule la réserve
- *    est bridée, jamais la lecture.
+ *  - rien avant `START_AFTER_WATCHED_SECONDS` de lecture réelle : un quart des séances durent moins
+ *    d'une minute (vérifier un épisode, se tromper de titre), et les 30 s du navigateur suffisent à la
+ *    première ;
+ *  - `SPEED_CAP_MBPS` au plus — seule la réserve est bridée, jamais la lecture.
+ *
+ * **Par rafales** (28/09/2026) : une radio reste éveillée plusieurs secondes après chaque transfert
+ * (la « traîne », ~10 s en 4G) ; ce qui coûte, c'est le nombre de réveils, pas le volume. La réserve
+ * se remplit donc d'un coup jusqu'à sa capacité, puis se tait jusqu'à redescendre à
+ * `REFILL_BELOW` de celle-ci, et recommence — au lieu de compléter 8 Mio par 8 Mio dès qu'elle
+ * baisse. Même volume, même plafond, une radio qui dort l'essentiel du temps à débit modéré. Le
+ * facteur « quatre fois le débit du film » qui bornait la vitesse est retiré avec : une rafale
+ * courte coûte moins qu'une rafale lente.
  */
 
 /** L'avance du navigateur sous laquelle le lien reste tout entier au lecteur. */
@@ -40,10 +50,12 @@ export const PARALLEL = 2;
 export const RANGE_CHUNKS = 8;
 /** Jamais plus que cela de film devant la tête. */
 export const MAX_AHEAD_SECONDS = 300;
-/** La réserve ne télécharge pas plus vite que ce multiple du débit du film… */
-export const SPEED_FACTOR = 4;
-/** …ni que ce plafond absolu, en Mb/s. */
+/** La réserve ne télécharge pas plus vite que ce plafond, en Mb/s. */
 export const SPEED_CAP_MBPS = 50;
+/** Rien avant ce temps de lecture réelle dans la séance. */
+export const START_AFTER_WATCHED_SECONDS = 60;
+/** Une rafale part quand la réserve redescend à cette part de sa capacité. */
+export const REFILL_BELOW = 0.5;
 /** La lecture en avance du lecteur (`PREFETCH_CHUNKS` dans byteSource.ts) : la réserve commence au-delà. */
 const PLAYER_READAHEAD_CHUNKS = 6;
 const TICK_MS = 1000;
@@ -52,10 +64,9 @@ const REPORT_EVERY_MS = 30_000;
 /** Après ces échecs d'affilée, la réserve s'arrête pour la séance. */
 const MAX_FAILURES = 3;
 
-/** Le débit que la réserve s'autorise pour un film de ce débit moyen, en bits par seconde. */
-export function reserveSpeedBps(filmBps: number | null): number {
-  const cap = SPEED_CAP_MBPS * 1e6;
-  return filmBps !== null && Number.isFinite(filmBps) && filmBps > 0 ? Math.min(cap, SPEED_FACTOR * filmBps) : cap;
+/** Le débit que la réserve s'autorise, en bits par seconde. */
+export function reserveSpeedBps(): number {
+  return SPEED_CAP_MBPS * 1e6;
 }
 
 /**
@@ -84,6 +95,11 @@ export interface ReserveContext {
   lead: () => number;
   /** Le décalage de présentation du remultiplexeur : l'horloge de l'élément moins celle du fichier. */
   delay: () => number;
+  /**
+   * Le temps réellement regardé dans la séance, en secondes — celui de l'hôte (`WatchedClock`), qui
+   * survit aux reconstructions du lecteur. Absent : la réserve part sans attendre.
+   */
+  watched?: () => number;
 }
 
 /** Une ligne `reserve` du journal lecteur. */
@@ -132,6 +148,11 @@ export class MemoryReserve {
   private readonly allowed: number;
   private readonly speedBps: number;
   private nextFetchAt = 0;
+  /** En rafale (on remplit) ou au repos (la radio dort) — voir `REFILL_BELOW`. */
+  private refilling = true;
+  /** Rafales lancées, et si celle en cours a déjà été comptée (à sa première requête). */
+  private bursts = 0;
+  private burstCounted = false;
   private failures = 0;
   private pausedUntil = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -153,8 +174,7 @@ export class MemoryReserve {
     private readonly deps: ReserveDeps
   ) {
     this.allowed = Math.max(0, Math.floor(deps.budgetBytes() / CHUNK_SIZE));
-    const duration = ctx.file.durationSeconds;
-    this.speedBps = reserveSpeedBps(duration && duration > 0 ? (ctx.source.size * 8) / duration : null);
+    this.speedBps = reserveSpeedBps();
     this.startedAt = deps.now();
     this.lastReport = this.startedAt;
   }
@@ -193,6 +213,8 @@ export class MemoryReserve {
     if (video.seeking || source.seekFocused) return "saut";
     if (source.readsWaiting > 0) return "le lecteur attend un octet";
     if (this.deps.now() < this.pausedUntil) return "pause après un échec réseau";
+    const watched = this.ctx.watched?.();
+    if (watched !== undefined && watched < START_AFTER_WATCHED_SECONDS) return `${START_AFTER_WATCHED_SECONDS} s de lecture d'abord`;
     if (this.ctx.lead() < MIN_LEAD_SECONDS) return `avance du navigateur sous ${MIN_LEAD_SECONDS} s`;
     return null;
   }
@@ -257,13 +279,23 @@ export class MemoryReserve {
       if (index < head || index > lastWanted) source.dropReserve(index);
     }
     const held = () => source.reserveIndices.length + this.inflight.size;
-    if (held() >= this.allowed) {
-      this.idle = "réserve pleine";
-      return;
+    // La capacité : la part de mémoire, ou les cinq minutes devant la tête si elles tiennent en moins.
+    const capacity = Math.min(this.allowed, Math.max(0, lastWanted - head + 1));
+    if (!this.refilling) {
+      if (held() > capacity * REFILL_BELOW) {
+        this.idle = "au repos — la radio dort";
+        return;
+      }
+      this.refilling = true;
     }
     const from = Math.max(head, source.demandedChunk + PLAYER_READAHEAD_CHUNKS + 1);
-    if (from > lastWanted) {
-      this.idle = `${MAX_AHEAD_SECONDS / 60} min d'avance atteintes`;
+    const full = () => {
+      this.refilling = false;
+      this.burstCounted = false;
+      this.idle = held() >= this.allowed ? "réserve pleine" : `${MAX_AHEAD_SECONDS / 60} min d'avance atteintes`;
+    };
+    if (held() >= this.allowed || from > lastWanted) {
+      if (this.inflight.size === 0) full();
       return;
     }
     for (let index = from; index <= lastWanted && this.controllers.size < PARALLEL; ) {
@@ -289,8 +321,18 @@ export class MemoryReserve {
       if (count === 0) break;
       const bytes = Math.min(count * CHUNK_SIZE, source.size - index * CHUNK_SIZE);
       this.nextFetchAt = Math.max(this.deps.now(), this.nextFetchAt) + ((bytes * 8) / this.speedBps) * 1000;
+      if (!this.burstCounted) {
+        this.burstCounted = true;
+        this.bursts += 1;
+      }
       this.fetchRange(index, count);
       index += count;
+    }
+    // Plus rien à prendre dans la fenêtre, et rien en route : la rafale est finie.
+    if (this.inflight.size === 0 && this.controllers.size === 0) {
+      let missing = false;
+      for (let index = from; index <= lastWanted && !missing; index++) if (!source.hasInMemory(index)) missing = true;
+      if (!missing || held() >= this.allowed) full();
     }
   }
 
@@ -375,6 +417,8 @@ export class MemoryReserve {
       deviceMB: facts.deviceMB,
       networkMB: facts.networkMB,
       emptiedMB: this.emptiedChunks,
+      phase: this.refilling ? "rafale" : "repos",
+      bursts: this.bursts,
       ...(this.idle ? { idle: this.idle } : {}),
     });
     diagReserve(facts);
@@ -428,6 +472,7 @@ export class MemoryReserve {
       networkMB: final.networkMB,
       emptied: this.emptied,
       emptiedMB: this.emptiedChunks,
+      bursts: this.bursts,
     });
     return final;
   }
