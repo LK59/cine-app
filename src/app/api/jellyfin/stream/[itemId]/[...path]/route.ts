@@ -183,8 +183,14 @@ export async function GET(
       // of assuming 200, so native <video> seeking works.
       // `private` : la réponse n'est servie qu'à une session ou à un laissez-passer, et aucun cache
       // partagé — relais inverse, proxy d'entreprise — ne doit la resservir à qui n'en a pas
-      // (chasse aux défauts du 25/09/2026). Le cache du navigateur, le seul qui serve ici, la garde.
-      const passthroughHeaders: Record<string, string> = { "Content-Type": contentType, "Cache-Control": "private, max-age=21600" };
+      // (chasse aux défauts du 25/09/2026).
+      // `no-store` (28/09/2026) : pas même le cache du navigateur. Gardées (`max-age`), ces plages
+      // pouvaient toutes être écrites dans son cache sur disque — Chromium garde les réponses
+      // partielles, par blocs — soit à peu près la taille de ce qu'on regarde, en écritures sur la
+      // mémoire flash, pour rien : le lecteur a sa propre mémoire (`HttpByteSource`, sa réserve) et la
+      // reprise sa copie sur l'appareil (`src/lib/resumeCache/`). La même raison qui a retiré la réserve
+      // d'avance du disque le même jour.
+      const passthroughHeaders: Record<string, string> = { "Content-Type": contentType, "Cache-Control": "private, no-store" };
       const contentRange = res.headers.get("Content-Range");
       const contentLength = res.headers.get("Content-Length");
       const acceptRanges = res.headers.get("Accept-Ranges");

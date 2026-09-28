@@ -52,6 +52,18 @@ describe("GET /api/jellyfin/stream/[itemId]/[...path]", () => {
     expect(mockFetch).toHaveBeenCalledOnce();
   });
 
+  it("le fichier lu par plages n'est gardé par aucun cache, pas même celui du navigateur", async () => {
+    // 28/09/2026 : chaque plage aurait pu finir dans le cache disque du navigateur — la taille de ce
+    // qu'on regarde, en écritures sur la mémoire flash, pour rien.
+    mockFetch.mockResolvedValue(upstream(206));
+    const { GET } = await import("@/app/api/jellyfin/stream/[itemId]/[...path]/route");
+    const res = await GET(fakeReq(`http://app/api/jellyfin/stream/${validId}/stream.mkv?static=true&mediaSourceId=${validId}`), {
+      params: Promise.resolve({ itemId: validId, path: ["stream.mkv"] }),
+    });
+    expect(res.status).toBe(206);
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
   // The race this retry exists for: right after a fresh transcode starts, the very first segment
   // can beat ffmpeg's own disk writes and come back 500. Safari gives up on one such failure.
   it("retries a transient 5xx from Jellyfin", async () => {
