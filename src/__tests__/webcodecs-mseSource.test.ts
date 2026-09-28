@@ -1312,7 +1312,6 @@ describe("MseSource", () => {
     // WALL·E, 28/09/2026 : générique en un seul groupe de 35 s, saut à la dernière seconde. Le
     // premier média arrivait 33 s derrière la tête, trois reprises relançaient la même lecture, puis
     // l'abandon laissait la tête sans image — chargement sans fin au lieu de l'écran de fin.
-    traceReset();
     const video = fakeVideo();
     let base = 0;
     let index = 0;
@@ -1339,6 +1338,10 @@ describe("MseSource", () => {
     await flush();
     const timer = (mse as unknown as { watchdogTimer: ReturnType<typeof setInterval> | null }).watchdogTimer;
     if (timer) clearInterval(timer);
+    // La lecture de l'ouverture finie d'abord : un de ses envois jugé après le saut serait un autre sujet.
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) >= 12, "l'ouverture");
+    await new Promise((r) => setTimeout(r, 100));
+    traceReset();
     // Le média du saut commence à l'image clé de 1000 s ; la tête attend à 1033 s.
     mediaStartsAtDefault = 1000;
     Object.defineProperty(video, "seeking", { value: true, configurable: true });
