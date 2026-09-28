@@ -5,7 +5,7 @@ import { createSampleReader, openMediaFile } from "@/lib/webcodecs/mediaFile";
 import { diskChunksFor, openingFacts, sameFile, type FileIdentity } from "@/lib/resumeCache/diskChunks";
 import { recordOpening } from "@/lib/resumeCache/record";
 import { MAX_TITLES, MAX_TOTAL_CHUNKS, MIN_COVERED_AHEAD_SECONDS, RECENT_GRACE_MS, covers, planResumeCache, remainingChunks, resumeTargets, titleChunks } from "@/lib/resumeCache/plan";
-import { ACTIVE_DAYS, LOW_SPACE_BYTES, NORMAL_BUDGET, OPENING_TITLE_CHUNKS, REDUCED_BUDGET, RESUME_MINIMAL_MAX_CHUNKS, activeTitles, budgetFor, restingShare } from "@/lib/resumeCache/budget";
+import { LOW_SPACE_BYTES, NORMAL_BUDGET, OPENING_TITLE_CHUNKS, REDUCED_BUDGET, RESUME_MINIMAL_MAX_CHUNKS, budgetFor } from "@/lib/resumeCache/budget";
 import { chunksBetween, coverageFrom, resumeEnd } from "@/lib/resumeCache/coverage";
 import type { ResumeIndex, ResumeManifest } from "@/lib/resumeCache/store";
 import { bigMatroska } from "./helpers/bigMatroska";
@@ -38,20 +38,12 @@ describe("quels titres garder", () => {
     expect(titleChunks(opening)).toBe(OPENING_TITLE_CHUNKS);
   });
 
-  it("réduit au repos ce qui garde plus que sa part, sans jamais rien agrandir", () => {
-    const now = 10 * 24 * 3600_000;
-    // Deux titres actifs : la moitié de la réserve chacun, plafonnée à 500 Mio. Un troisième, lu il y a
-    // six jours, n'a plus de part.
+  it("ramène au minimum de démarrage ce qui en garde plus — l'ancienne réserve sur l'appareil comprise", () => {
     const index = {
-      a: entry({ playedAt: now - 1000, reserveChunks: 700, minimalChunks: 3 }),
-      b: entry({ playedAt: now - 2000, reserveChunks: 400, minimalChunks: 3 }),
-      c: entry({ playedAt: now - 6 * 24 * 3600_000, reserveChunks: 200, minimalChunks: 3 }),
+      a: entry({ reserveChunks: 700, minimalChunks: 3 }),
+      b: entry({ reserveChunks: 3, minimalChunks: 3 }),
     };
-    const plan = planResumeCache([t("a"), t("b"), t("c")], index, now);
-    expect(plan.record.map((x) => [x.itemId, x.shareChunks])).toEqual([
-      ["a", 500],
-      ["c", 0],
-    ]);
+    expect(planResumeCache([t("a"), t("b")], index, 2_000).record.map((x) => x.itemId)).toEqual(["a"]);
   });
 
   it("mesure une fois un titre gardé avant que sa réserve ne soit comptée", () => {
@@ -103,7 +95,7 @@ describe("quels titres garder", () => {
 
   it("compte la place restante sans ce qui part ou sera refait", () => {
     const index = { a: entry({ bytes: 10 << 20 }), b: entry({ bytes: 20 << 20 }) };
-    expect(remainingChunks(index, { record: [{ ...t("a"), shareChunks: 0 }], remove: [] })).toBe(MAX_TOTAL_CHUNKS - 20);
+    expect(remainingChunks(index, { record: [t("a")], remove: [] })).toBe(MAX_TOTAL_CHUNKS - 20);
   });
 });
 
@@ -355,35 +347,10 @@ describe("ce que l'appareil garde, selon sa place", () => {
     expect(budgetFor({})).toBe(NORMAL_BUDGET);
   });
 
-  it("le mode réduit tient dans ce qui a été décidé : 256 Mio de réserve, 750 au total", () => {
-    expect(REDUCED_BUDGET.poolChunks).toBe(256);
-    expect(REDUCED_BUDGET.totalChunks).toBe(750);
-    expect(NORMAL_BUDGET.poolChunks).toBe(1024);
-    expect(NORMAL_BUDGET.floorChunks).toBe(128);
-    expect(NORMAL_BUDGET.behindChunks).toBe(128);
-    for (const budget of [NORMAL_BUDGET, REDUCED_BUDGET]) {
-      expect(budget.poolChunks + budget.behindChunks).toBeLessThanOrEqual(budget.totalChunks);
-    }
-  });
-
-  it("les titres actifs : lus depuis moins de cinq jours, les quatre plus récents", () => {
-    const now = 100 * 24 * 3600_000;
-    const day = 24 * 3600_000;
-    const index = {
-      a: { playedAt: now - 1 * day },
-      b: { playedAt: now - 2 * day },
-      c: { playedAt: now - 3 * day },
-      d: { playedAt: now - 4 * day },
-      e: { playedAt: now - 0.5 * day },
-      f: { playedAt: now - (ACTIVE_DAYS + 1) * day },
-      g: {},
-    };
-    const active = activeTitles(index, now);
-    expect(active).toEqual(["e", "a", "b", "c"]);
-    expect(restingShare("a", active, NORMAL_BUDGET)).toBe(256);
-    expect(restingShare("d", active, NORMAL_BUDGET)).toBe(0);
-    // 512 pour chacun des deux, plafonné à 500 par titre.
-    expect(restingShare("a", ["a", "e"], NORMAL_BUDGET)).toBe(500);
+  it("un plafond de sûreté bien au-dessus de ce que dix titres gardent pour démarrer", () => {
+    expect(NORMAL_BUDGET.totalChunks).toBe(1024);
+    expect(REDUCED_BUDGET.totalChunks).toBe(512);
+    expect(10 * (RESUME_MINIMAL_MAX_CHUNKS + 4)).toBeLessThan(REDUCED_BUDGET.totalChunks * 2);
   });
 });
 

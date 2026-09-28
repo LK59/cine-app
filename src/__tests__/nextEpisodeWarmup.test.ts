@@ -46,7 +46,7 @@ describe("warmNextEpisode", () => {
   it("garde son ouverture sur l'appareil — 16 Mio, pendant le film, rien de plus", async () => {
     // 28/09/2026 : l'épisode démarre depuis le disque même si le réseau tombe au générique.
     await warmNextEpisode("ep-5");
-    expect(h.recordTitle).toHaveBeenCalledWith("louis", { itemId: "ep-5", startSeconds: 0, started: false, shareChunks: 0 }, 16, expect.anything(), true);
+    expect(h.recordTitle).toHaveBeenCalledWith("louis", { itemId: "ep-5", startSeconds: 0, started: false }, 16, expect.anything(), true);
     // Et la source de préparation ne lit rien en avance : six mégaoctets pour rien, avant.
     const source = await h.open.mock.results[0].value;
     expect(source.withoutReadahead).toHaveBeenCalled();

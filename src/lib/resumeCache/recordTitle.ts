@@ -4,7 +4,7 @@ import { directInfoKey } from "@/lib/playbackPrefetch";
 import { preloadQuietly } from "@/lib/prefetch";
 import { CHUNK_SIZE, HttpByteSource } from "@/lib/webcodecs/byteSource";
 import type { MatroskaFile } from "@/lib/webcodecs/matroska";
-import { coverageFrom, resumeEnd } from "./coverage";
+import { resumeEnd } from "./coverage";
 import { diskChunksFor, sameFile } from "./diskChunks";
 import { MIN_COVERED_AHEAD_SECONDS, titleChunks, type ResumeTarget } from "./plan";
 import { recordOpening } from "./record";
@@ -21,16 +21,13 @@ export function mustStop(signal: AbortSignal): boolean {
 }
 
 /**
- * Refait un titre : ce qu'il faut pour le démarrer depuis l'appareil, et ce qu'une lecture a laissé
- * d'avance, dans la limite de sa part. Rend le nombre de morceaux gardés (0 si rien). Ne lève jamais :
- * un échec laisse simplement ce titre au réseau.
+ * Refait un titre : ce qu'il faut pour le démarrer depuis l'appareil, et rien de plus. Rend le nombre
+ * de morceaux gardés (0 si rien). Ne lève jamais : un échec laisse simplement ce titre au réseau.
  *
- * **Au repos, rien n'est téléchargé d'avance** (28/09/2026, `budget.ts`). Seul le minimum de
- * démarrage part au réseau s'il manque : l'ouverture (« À suivre ») ou, pour une reprise, de l'image
- * clé qui précède la position jusqu'à un groupe après elle. L'avance qu'une lecture a accumulée
- * (`DiskReserve`, `keepOnStop`) est gardée d'un seul tenant depuis cette image clé, réduite à la part
- * du titre en effaçant le plus éloigné ; ce qui est derrière la position, et les îles laissées par un
- * saut, sont effacés. L'en-tête et l'index restent toujours.
+ * **Au repos, rien n'est téléchargé d'avance** (`budget.ts`). Seul le minimum de démarrage part au
+ * réseau s'il manque : l'ouverture (« À suivre ») ou, pour une reprise, de l'image clé qui précède la
+ * position jusqu'à un groupe après elle. Tout le reste de ce qui est gardé pour ce fichier — ce que
+ * l'arrêt a gardé autour de la position, une ancienne réserve — est effacé. L'en-tête et l'index restent.
  *
  * **Ce qui est déjà là sert.** La source lit l'appareil d'abord, comme celle du lecteur : l'en-tête
  * et l'index ne sont jamais retéléchargés pour un même fichier, et un titre gardé à l'arrêt est mesuré
@@ -44,7 +41,7 @@ export function mustStop(signal: AbortSignal): boolean {
  */
 export async function recordTitle(
   account: string,
-  target: ResumeTarget & { shareChunks?: number },
+  target: ResumeTarget,
   budgetChunks: number,
   signal: AbortSignal,
   whilePlaying = false
@@ -105,12 +102,7 @@ export async function recordTitle(
       }
       const header = new Set(recorded.headerChunks);
       const minimal = recorded.chunks.filter((index) => !header.has(index));
-      // L'avance qu'une lecture a laissée, d'un seul tenant depuis l'image clé, dans la part du titre.
-      const share = target.shareChunks ?? 0;
-      const reserve = share > minimal.length ? coverageFrom(recorded.file, target.startSeconds, present, share) : null;
-      const reserveCovers = reserve !== null && reserve.coveredTo >= target.startSeconds + MIN_COVERED_AHEAD_SECONDS;
-      const keep = new Set([...recorded.chunks, ...(reserve?.chunks ?? [])]);
-      const useReserve = reserve !== null && reserveCovers && reserve.coveredTo > recorded.coveredTo;
+      const keep = new Set(recorded.chunks);
       const drop = [...onDisk, ...written].filter((index) => !keep.has(index));
       const chunks = [...keep].sort((a, b) => a - b);
       const bytes = chunks.reduce((sum, index) => sum + Math.min(CHUNK_SIZE, source.size - index * CHUNK_SIZE), 0);
@@ -123,11 +115,11 @@ export async function recordTitle(
         lastModified: source.lastModified ?? reusable?.lastModified ?? null,
         savedAt: Date.now(),
         startSeconds: target.startSeconds,
-        coveredFrom: useReserve ? reserve.coveredFrom : recorded.coveredFrom,
-        coveredTo: useReserve ? reserve.coveredTo : recorded.coveredTo,
+        coveredFrom: recorded.coveredFrom,
+        coveredTo: recorded.coveredTo,
         chunks,
         bytes,
-        partial: recorded.partial && !reserveCovers,
+        partial: recorded.partial,
         headerChunks: recorded.headerChunks,
         minimalChunks: minimal.length,
         ...(reusable?.playedAt !== undefined ? { playedAt: reusable.playedAt } : {}),

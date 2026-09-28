@@ -84,8 +84,7 @@ import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSess
 import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
 import { forgetResumeCache, openDiskChunks, openingFacts, type FileIdentity } from "@/lib/resumeCache/diskChunks";
 import { keepOnStop } from "@/lib/resumeCache/keepOnStop";
-import { DiskReserve } from "@/lib/resumeCache/diskReserve";
-import { persistedCacheAccount } from "@/lib/persistentCache";
+import { MemoryReserve } from "@/lib/webcodecs/memoryReserve";
 import { PlayerLifecycle } from "@/lib/playerLifecycle";
 import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from "@/lib/hostSeek";
 
@@ -351,8 +350,8 @@ export function ExperimentalPlayerHost({
 
   const videoElRef = useRef<HTMLVideoElement>(null);
   const remuxRef = useRef<RemuxPlayback | null>(null);
-  /** Le tampon d'avance sur l'appareil du lecteur en cours — voir `DiskReserve`. */
-  const reserveRef = useRef<DiskReserve | null>(null);
+  /** La réserve d'avance en mémoire du lecteur en cours — voir `MemoryReserve`. */
+  const reserveRef = useRef<MemoryReserve | null>(null);
   /** Le dernier élément vidéo du pipeline, pour `syncFacts` — voir `reportStop`. */
   const lastVideoElRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1150,13 +1149,17 @@ export function ExperimentalPlayerHost({
       if (!lifecycle.claimStop()) return;
       reportPlayback("stop", stopFields(why));
       clearUnsentStop(sessionId);
-      // Ce que le lecteur tient en mémoire autour de la position, gardé pour la reprise — voir
-      // `keepOnStop`. Lu ici, avant que le pipeline soit détruit (la croix, puis `stopPlaybackNow` ;
-      // au démontage, cet effet-ci est nettoyé avant celui du pipeline). Pas pour un film fini.
-      // Gardé à part : une sauvegarde sur le chemin de l'arrêt ne doit jamais empêcher l'arrêt.
+      // De quoi reprendre, pris dans ce que le lecteur tient en mémoire — voir `keepOnStop`. Lu ici,
+      // avant que le pipeline soit détruit (la croix, puis `stopPlaybackNow` ; au démontage, cet
+      // effet-ci est nettoyé avant celui du pipeline). Pas pour un film fini. Gardé à part : une
+      // sauvegarde sur le chemin de l'arrêt ne doit jamais empêcher l'arrêt.
       try {
         const kept = keepFileRef.current;
-        if (kept && !stopFactsRef.current.ended && !session.bench) void keepOnStop(kept, remuxRef.current?.heldBytes?.() ?? null);
+        const remux = remuxRef.current;
+        const file = remux?.reserveContext?.()?.file;
+        if (kept && !stopFactsRef.current.ended && !session.bench) {
+          void keepOnStop(kept, remux?.heldBytes?.() ?? null, file ? { file, seconds: positionRef.current } : null);
+        }
       } catch {
         /* la reprise se fera par le réseau */
       }
@@ -1577,20 +1580,17 @@ export function ExperimentalPlayerHost({
       setCurrentSubtitle(wantedSubtitle);
       setCurrentAudio(playback.currentAudioTrack);
       declareReady();
-      // Le tampon d'avance sur l'appareil, à côté de ce lecteur-ci — voir `DiskReserve`. Celui d'un
-      // lecteur remplacé (reconstruction) est arrêté d'abord ; tous deux écrivent par différence.
-      if (!session.bench) {
-        try {
-          const account = persistedCacheAccount();
-          const context = playback.reserveContext?.();
-          const identity = keepFileRef.current;
-          void reserveRef.current?.stop("reconstruction");
-          // Ses lignes `reserve`, décrites comme les autres lignes du lecteur (fichier, séance, appareil).
-          const report = (fields: Record<string, unknown>) => reportPlayback("reserve", { ...describeFileRef.current(), path: "remux", ...fields });
-          reserveRef.current = account && context && identity ? DiskReserve.start(account, identity, context, report) : null;
-        } catch {
-          reserveRef.current = null;
-        }
+      // La réserve d'avance en mémoire, à côté de ce lecteur-ci — voir `MemoryReserve`. Celle d'un
+      // lecteur remplacé (reconstruction) est arrêtée d'abord. Pendant un banc aussi : c'est la lecture
+      // que le banc éprouve.
+      try {
+        const context = playback.reserveContext?.();
+        reserveRef.current?.stop("reconstruction");
+        // Ses lignes `reserve`, décrites comme les autres lignes du lecteur (fichier, séance, appareil).
+        const report = (fields: Record<string, unknown>) => reportPlayback("reserve", { ...describeFileRef.current(), path: "remux", ...fields });
+        reserveRef.current = context ? MemoryReserve.start(context, report) : null;
+      } catch {
+        reserveRef.current = null;
       }
       // Un changement de piste qui a demandé cette reconstruction : il se termine ici, sur la
       // piste voulue, et c'est ici qu'on sait combien il a coûté.
@@ -1713,11 +1713,9 @@ export function ExperimentalPlayerHost({
         // Fini : ses octets gardés pour une reprise instantanée n'ont plus rien à reprendre. Effacés
         // en arrière-plan ; le prochain passage l'aurait fait aussi, le titre quittant « Reprendre ».
         // Le tampon d'avance d'abord arrêté : il écrirait encore dans ce qu'on efface.
-        if (!session.bench) {
-          const reserve = reserveRef.current;
-          reserveRef.current = null;
-          void (reserve ? reserve.stop("fin du film") : Promise.resolve()).then(() => forgetResumeCache(itemId));
-        }
+        reserveRef.current?.stop("fin du film");
+        reserveRef.current = null;
+        if (!session.bench) forgetResumeCache(itemId);
       };
       // Le saut demandé est atteint : la position lue redevient la vérité.
       const onSeeked = () => {
@@ -1920,7 +1918,7 @@ export function ExperimentalPlayerHost({
     return () => {
       cancelled = true;
       for (const unsubscribe of unsubscribes) unsubscribe();
-      void reserveRef.current?.stop();
+      reserveRef.current?.stop();
       reserveRef.current = null;
       remuxRef.current?.destroy();
       remuxRef.current = null;

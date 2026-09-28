@@ -85,10 +85,11 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  * qu'un téléviseur resté en chargement ne se distinguait pas d'un téléviseur qui jouait.
  */
 /**
- * `reserve` (28/09/2026) : le tampon d'avance sur l'appareil (`DiskReserve`), de quoi suivre une
- * lecture Mo par Mo — `event` : `départ`, `point` (toutes les 30 s : avance sur le disque en Mo et en
- * secondes, ce que le lecteur a lu de l'appareil et du réseau, ce que le tampon a téléchargé et à quel
- * débit, et `idle`, pourquoi il attend), `emprunt` (place reprise à un autre titre), `erreur`, `arrêt`.
+ * `reserve` (28/09/2026) : la réserve d'avance en mémoire (`MemoryReserve`), de quoi suivre une
+ * lecture Mo par Mo — `event` : `départ` (plafond, débit permis), `point` (toutes les 30 s : ce qui est
+ * en réserve en Mo et en secondes d'avance, ce que le lecteur a lu de la réserve, de l'appareil et du
+ * réseau, ce que la réserve a téléchargé et à quel débit, ce qu'elle a rendu en arrière-plan, et
+ * `idle`, pourquoi elle attend), `erreur`, `arrêt`.
  */
 export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve";
 

@@ -821,7 +821,7 @@ unwitnessed.
 | `stall` | The element says it is playing and the clock has covered under a second in 5 s — once per stall, at most one a minute. Position, `readyState`/`networkState`/`seeking`, source state, video and audio ranges near the head, lead, whether a read is running, `recoveryStreak`/`frozenNudges`/`recoveries`, ms since the last append, `streaming` (ManagedMediaSource only), `diag.*` for the 30 s before it (see *Supply diagnosis* below), and `steps`: the last 20 s of trace. Emitted by `MseSource.watchForStall` on the watchdog tick |
 | `audio` | A track change: both tracks described, copied or re-encoded, `applied`, how long, and `steps` |
 | `cast` | Server player only: a television has actually taken the route |
-| `reserve` | The on-device lead reserve (`DiskReserve`, below). `event`: `départ` (what is already on disk, the limit), `point` every 30 s (`aheadMB` / `aheadS` contiguous on disk ahead of the head, `limitMB`, `leadS` of the browser buffer, `windowMB` / `fetchMbps` fetched since the last point, `deviceMB` / `networkMB` the player read from each, `behindRemovedMB`, `borrowedMB`, and `idle` — why it is not fetching), `emprunt` (room taken from another active title), `erreur`, `arrêt` |
+| `reserve` | The lead reserve in memory (`MemoryReserve`, below). `event`: `départ` (`allowedMB`, `speedMbps`), `point` every 30 s (`aheadMB` / `aheadS` held ahead of the head, `leadS` of the browser buffer, `windowMB` / `fetchMbps` fetched since the last point, `reserveMB` / `deviceMB` / `networkMB` the player read from each, `emptiedMB` given back when the page was hidden, and `idle` — why it is not fetching), `erreur`, `arrêt` |
 | `stop` | The session's summary. `why` (`close`, `next`, `page`, `unmount`, or `lost` — see below), `watched` seconds, `ended`, `rebuild`; `waits` / `waitedMs` / `longestWaitMs` — stops of 250 ms or more mid-playback, excluding opening and seeks (`stall` only fires at 5 s); `seeks` / `seekWaitMs`; `audioSwitches`; `backgrounds` / `backgroundMs` / `backgroundRebuilds` — times the page went to the background, for how long, and how many returns found the source closed by the platform and rebuilt (each also written as a `rebuild` line, reason "source fermée en arrière-plan", with `hiddenMs`); `recoveries`, `frozenNudges`, `escalations` when any; `audioSync` and `frames` (presented / dropped); `diag.*`, the session's supply diagnosis with every wait classified. The server player writes `why` and `at` |
 
 Each line carries the time, **the account taken from the session** (never from the request body:
@@ -867,46 +867,31 @@ rebuilds stay inside it.
 | `conn`, `connSeen`, `connChanges`, `effectiveType`, `downlinkMbps`, `downlinkMinMbps`, `rttMs` | What the browser says of the network |
 | `verdict` (`stall`), `waitsNet` / `waitsCpu` / `waitsDecoder` / `waitsOther` and their `…Ms` (`stop`) | A hint, not a proof: *décodeur* when a second or more was buffered under the head, *réseau* when reads waited half the window or more, *calcul* when building outside reads, appends and long tasks took half, *autre* otherwise. A wait is judged on the 10 s before it and itself, since the buffer emptied before it began; waits of a second or more are also written to the trace with their numbers |
 
-### The on-device lead reserve
+### The lead reserve, in memory
 
-Added on 2026-09-28 (`src/lib/resumeCache/diskReserve.ts`, budgets in `budget.ts`). WebKit caps a
-SourceBuffer at 105 MB on iPhone — ~31 s of 4K — so a link that drops for longer stops the picture
-even if it ran at twice the film's bitrate the minute before. While a film plays, the reserve uses
-every moment of spare throughput to download further ahead into OPFS, in the same 1 MiB chunks the
-player reads; `HttpByteSource.fromDiskOrNetwork` serves them before the network (the disk layer is
-live: `DiskChunks.add` / `forget`).
+`src/lib/webcodecs/memoryReserve.ts` (28/09/2026). WebKit caps a SourceBuffer at 105 MB on iPhone —
+~31 s of 4K. While a film plays, the reserve uses spare throughput to download further ahead and
+keeps it **in memory**, in a map inside `HttpByteSource` kept apart from its 64 MiB cache so the
+cache's evictions cannot chase it (`offerReserve`); `fetchChunk` moves a reserved chunk into the cache
+when the player reads it, and the player's own readahead skips what the reserve holds.
 
 It yields to the player in every case: nothing until the browser buffer has `MIN_LEAD_SECONDS` (10 s),
-nothing while a read waits (`HttpByteSource.readsWaiting`), during a seek (`seekFocused`) or with the
-page hidden; it starts beyond the player's own readahead; it fetches `RANGE_CHUNKS` (8 MiB) ranges and
-stops fetching while as many chunks are downloaded but not yet written. What the player already holds
-in memory ahead of the head is written without a request.
+nothing while a read waits (`readsWaiting`) or during a seek (`seekFocused`); it starts beyond the
+player's readahead; ranges of `RANGE_CHUNKS` (8 MiB), `PARALLEL` (2) at most, each waiting for its
+slot at `reserveSpeedBps` — 4× the film's mean bitrate, 50 Mb/s at most; never more than
+`MAX_AHEAD_SECONDS` (five minutes) ahead; what the head passes is dropped. Its size is
+`reserveBudgetBytes`: 150 MB on iPhone and iPad — Safari does not expose device memory and kills a page
+that takes too much, the threshold unpublished — and by `navigator.deviceMemory` elsewhere (100 MB at
+≤ 2 GB, 200 at 4, 500 at 8, 300 unknown). Chunks are copied, not viewed: a `subarray` would keep its
+whole 8 MiB range alive while one chunk sits in the cache. **Hidden page, emptied reserve**: iOS kills
+memory-heavy pages first in the background.
 
-It is paced (28/09/2026, after the first iPhone session took 616 MB in 80 s at 51 Mb/s and heated the
-phone): each range waits for its slot at `reserveSpeedBps` — 4× the film's mean bitrate, 50 Mb/s at
-most — and it never holds more than `titleChunks` (500 MiB) or `MAX_AHEAD_SECONDS` (five minutes) ahead
-of the head. Only the reserve is paced; the player's own reads are not.
-
-**Writes are exact.** A chunk cut from a range is a `subarray` view on the range's whole buffer; Safari
-wrote the whole buffer for each such view — every 1 MiB chunk weighed 8 MiB, 7 GB after two sessions,
-and the player refused them for their length. `exactBytes` copies any view that does not span its
-buffer, on both write paths; the store moved to `cine-reprise-2` and deletes the old folder on first
-access; a chunk read back at the wrong length is deleted (`diskChunksFor`). `overQuota` compares the
-browser's *measured* usage with the ceiling: past it, the reserve stops (an `erreur` line says so) and
-the background pass only deletes.
-
-The budget is one pool shared by the active titles (played on this device in the last five days, the
-four most recent), 500 MiB per title at most. The playing title may take all of it except the others' floor (128 MiB each), trimming
-the least recently played first, farthest chunks first, header and index never. Behind the head,
-`behindChunks` (128 MiB) are kept for a step back — 8 once playback stops; the rest is deleted as playback moves on. When the
-limit is reached by islands far ahead (after a step back), the farthest go first so the lead is
-contiguous where it is needed. At rest nothing grows: the background pass (`recordTitle`) keeps a
-title's lead contiguous from the keyframe before its resume position, trims it to its share, and deletes
-what lies behind — measured from the index (`coverage.ts`), without reading a picture.
-
-Every write is a delta through `mergeResumeEntry`, read inside the store's queue: the reserve, the
-stop (`keepOnStop`) and a rebuilt pipeline's new reserve write the same manifest without undoing one
-another. Any failure stops the reserve and leaves playback to the network.
+A version of the reserve written to OPFS (`DiskReserve`) lived for a few hours that day: nearly every
+byte watched passed once through flash — the size of what is watched, ~12 GB per hour of 4K — and it
+was removed for the devices' sake. The device keeps only what a start needs (`budget.ts`); the
+background pass trims anything else. That version also found that Safari writes a `subarray` view as
+its whole underlying buffer: `exactBytes` copies any partial view before an OPFS write, and a chunk
+read back at the wrong length is deleted.
 
 Lines carrying `bench` (a device test bench session) are written to `data/logs/bench-player.log`
 instead — same format, two generations — so a bench never rotates real viewers' history away.

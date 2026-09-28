@@ -452,12 +452,6 @@ export interface DiskChunks {
   read(index: number): Promise<Uint8Array | null>;
   /** Ce que le serveur annonce à la première réponse : un écart retire la couche pour de bon. */
   verify(total: number, lastModified: string | null): void;
-  /** Un morceau vient d'être écrit sur l'appareil (le tampon d'avance) : servi désormais. Optionnel. */
-  add?(index: number): void;
-  /** Un morceau vient d'être effacé de l'appareil : plus servi. Optionnel. */
-  forget?(index: number): void;
-  /** Retirée (un autre fichier) : plus rien n'est servi, ni ne doit être écrit. Optionnel. */
-  readonly disabled?: boolean;
 }
 
 /** D'où sont venus les octets d'une ouverture — pour la ligne `start` du journal. */
@@ -705,6 +699,15 @@ export class HttpByteSource implements ByteSource {
     if (this.controller.signal.aborted) throw closedSource();
     const cached = this.chunks.get(index);
     if (cached) return cached;
+    // Téléchargé d'avance par la réserve mémoire (`MemoryReserve`) : il rejoint le cache, lu.
+    const reserved = this.reserve.get(index);
+    if (reserved) {
+      this.reserve.delete(index);
+      this.chunks.set(index, reserved);
+      this.evict();
+      this.reserveBytes += reserved.byteLength;
+      return reserved;
+    }
     const pending = this.inflight.get(index);
     if (pending) return pending;
 
@@ -784,7 +787,7 @@ export class HttpByteSource implements ByteSource {
     for (let ahead = 1; ahead <= depth; ahead++) {
       const next = index + ahead;
       if (next * CHUNK_SIZE >= this.size) return;
-      if (this.chunks.has(next) || this.inflight.has(next)) continue;
+      if (this.chunks.has(next) || this.inflight.has(next) || this.reserve.has(next)) continue;
       void this.fetchChunk(next).catch(() => {
         // A failed read-ahead is not an error: the real read will try again and report properly.
       });
@@ -822,13 +825,13 @@ export class HttpByteSource implements ByteSource {
    */
   async read(offset: number, length: number): Promise<Uint8Array> {
     const from = diagNow();
-    // Une lecture dont un morceau n'est pas en mémoire attend : le tampon d'avance (`DiskReserve`)
+    // Une lecture dont un morceau n'est pas en mémoire attend : la réserve d'avance (`MemoryReserve`)
     // se retient tant qu'il y en a une — le lien est d'abord au lecteur.
     const start = Math.max(0, Math.min(offset, this.size));
     const end = Math.max(start, Math.min(offset + length, this.size));
     let waiting = false;
     for (let index = Math.floor(start / CHUNK_SIZE); end > start && index <= Math.floor((end - 1) / CHUNK_SIZE); index++) {
-      if (!this.chunks.has(index)) {
+      if (!this.chunks.has(index) && !this.reserve.has(index)) {
         waiting = true;
         break;
       }
@@ -846,8 +849,38 @@ export class HttpByteSource implements ByteSource {
   private waitingReads = 0;
 
   /**
-   * Ce que le tampon d'avance (`DiskReserve`, 28/09/2026) lit de la source, sans rien y changer : où
-   * en est le lecteur, s'il attend, ce qu'il tient en mémoire. Rien ici ne lance de requête.
+   * La réserve d'avance en mémoire (`MemoryReserve`, 28/09/2026) : des morceaux téléchargés au-delà de
+   * la lecture en avance, gardés à part du cache pour que ses évictions ne les chassent pas avant
+   * qu'ils servent. Un morceau lu la quitte pour le cache (`fetchChunk`) ; la réserve retire elle-même
+   * ce que la tête a dépassé. Rien sur l'appareil : la mémoire seulement, rendue à la fermeture.
+   */
+  private reserve = new Map<number, Uint8Array>();
+  /** Octets que le lecteur a lus depuis la réserve mémoire. */
+  reserveBytes = 0;
+
+  /** Un morceau pour la réserve — refusé s'il est déjà là, ou s'il n'a pas sa longueur. */
+  offerReserve(index: number, bytes: Uint8Array): boolean {
+    if (this.controller.signal.aborted || this.chunks.has(index) || bytes.byteLength !== this.expectedLength(index)) return false;
+    this.reserve.set(index, bytes);
+    return true;
+  }
+  dropReserve(index: number): void {
+    this.reserve.delete(index);
+  }
+  clearReserve(): void {
+    this.reserve.clear();
+  }
+  get reserveIndices(): number[] {
+    return [...this.reserve.keys()];
+  }
+  /** Le morceau est-il en mémoire, dans le cache ou dans la réserve ? */
+  hasInMemory(index: number): boolean {
+    return this.chunks.has(index) || this.reserve.has(index);
+  }
+
+  /**
+   * Ce que la réserve d'avance (`MemoryReserve`, 28/09/2026) lit de la source, sans rien y changer : où
+   * en est le lecteur, s'il attend. Rien ici ne lance de requête.
    */
   get streamUrl(): string {
     return this.url;
@@ -863,23 +896,6 @@ export class HttpByteSource implements ByteSource {
   get seekFocused(): boolean {
     return performance.now() < this.focusUntil;
   }
-  /** Un morceau entier en mémoire, ou null — sans le demander au réseau. */
-  memoryChunk(index: number): Uint8Array | null {
-    const chunk = this.chunks.get(index);
-    return chunk && chunk.byteLength === this.expectedLength(index) ? chunk : null;
-  }
-  /** La couche de l'appareil, s'il y en a une. */
-  get diskLayer(): DiskChunks | null {
-    return this.disk;
-  }
-  /**
-   * Pose une couche de l'appareil sur une source ouverte sans elle — un titre dont rien n'était gardé,
-   * que le tampon d'avance commence à écrire. Sans effet s'il y en a déjà une.
-   */
-  attachDisk(disk: DiskChunks): void {
-    if (!this.disk) this.disk = disk;
-  }
-
   private async readBytes(offset: number, length: number): Promise<Uint8Array> {
     if (this.controller.signal.aborted) throw closedSource();
     const start = Math.max(0, Math.min(offset, this.size));
@@ -1084,6 +1100,7 @@ export class HttpByteSource implements ByteSource {
     // rouvrira, s'il y en a une bientôt. Les requêtes en cours, elles, meurent avec celle-ci.
     if (leaveForNext) leaveHandover(this.url, this.size, this.chunks, this.kept);
     this.chunks = new Map();
+    this.reserve = new Map();
     this.inflight.clear();
   }
 }

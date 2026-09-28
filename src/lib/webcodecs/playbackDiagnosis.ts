@@ -102,7 +102,7 @@ interface Session {
   downlinkMin: number | null;
   battery: { level: number; charging: boolean } | null;
   /** Ce que le tampon d'avance sur l'appareil a fait — voir `diagReserve`. */
-  reserve: { netChunks: number; memoryChunks: number; aheadChunks: number; allowedChunks: number; deviceMB: number; networkMB: number } | null;
+  reserve: { netChunks: number; aheadChunks: number; allowedChunks: number; reserveMB: number; deviceMB: number; networkMB: number } | null;
   cleanup: (() => void)[];
 }
 
@@ -329,11 +329,11 @@ export function diagRequestFailed(): void {
 }
 
 /**
- * Le tampon d'avance sur l'appareil (`DiskReserve`, 28/09/2026) : ce qu'il a écrit depuis le réseau
- * et depuis la mémoire du lecteur, ce qui est devant la tête, et ce qu'il peut garder. Cumulé sur la
- * séance, une reconstruction du lecteur en ouvrant un nouveau.
+ * La réserve d'avance en mémoire (`MemoryReserve`, 28/09/2026) : ce qu'elle a téléchargé, ce qu'elle
+ * tient devant la tête, ce qu'elle peut tenir, et d'où le lecteur a lu — la réserve, l'appareil (le
+ * minimum de démarrage), le réseau.
  */
-export function diagReserve(facts: { netChunks: number; memoryChunks: number; aheadChunks: number; allowedChunks: number; deviceMB: number; networkMB: number }): void {
+export function diagReserve(facts: { netChunks: number; aheadChunks: number; allowedChunks: number; reserveMB: number; deviceMB: number; networkMB: number }): void {
   try {
     if (current) current.reserve = { ...facts };
   } catch {
@@ -346,9 +346,9 @@ function reserveFacts(session: Session): Record<string, number> {
   return r
     ? {
         reserveNetMB: r.netChunks,
-        reserveMemMB: r.memoryChunks,
         reserveAheadMB: r.aheadChunks,
         reserveAllowedMB: r.allowedChunks,
+        readReserveMB: r.reserveMB,
         readDeviceMB: r.deviceMB,
         readNetworkMB: r.networkMB,
       }

@@ -115,12 +115,7 @@ export function diskChunksFor(
   return {
     has: (index) => !disabled && kept.has(index),
     read: (index) => (disabled ? Promise.resolve(null) : readChecked(index)),
-    // Vivante : le tampon d'avance (`DiskReserve`) y ajoute ce qu'il écrit, et en retire ce qu'il efface.
-    add: (index) => void kept.add(index),
-    forget: (index) => void kept.delete(index),
-    get disabled() {
-      return disabled;
-    },
+
     verify(total, lastModified) {
       if (disabled) return;
       const sizeDiffers = total !== manifest.size;

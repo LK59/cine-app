@@ -47,7 +47,7 @@ export async function warmNextEpisode(itemId: string): Promise<void> {
     }
     const account = persistedCacheAccount();
     if (account) {
-      const kept = await recordTitle(account, { itemId, startSeconds: 0, started: false, shareChunks: 0 }, OPENING_TITLE_CHUNKS, new AbortController().signal, true);
+      const kept = await recordTitle(account, { itemId, startSeconds: 0, started: false }, OPENING_TITLE_CHUNKS, new AbortController().signal, true);
       if (kept > 0) trace(`épisode suivant : ${kept} Mo gardés sur l'appareil`);
     }
   } catch {

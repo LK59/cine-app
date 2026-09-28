@@ -134,32 +134,45 @@ describe("un passage de la reprise instantanée", () => {
     expect(second!.chunks.filter((i) => first!.chunks.includes(i) && i !== 0 && i !== lastChunk && i < 10)).toEqual([]);
   });
 
-  it("garde à l'arrêt ce que le lecteur tenait en mémoire, et ne le retélécharge pas ensuite", async () => {
+  it("à l'arrêt, ne garde que de quoi reprendre, et ne le retélécharge pas ensuite", async () => {
     const { keepOnStop } = await import("@/lib/resumeCache/keepOnStop");
+    const { openMediaFile } = await import("@/lib/webcodecs/mediaFile");
+    const { MemoryByteSource } = await import("@/lib/webcodecs/byteSource");
     info = { streamUrl: URL_B, sizeBytes: BIG.length, fileVersion: "etag-1" };
+    const file = await openMediaFile(new MemoryByteSource(BIG));
+    // Le lecteur tenait 40 Mio autour de 55 s : seuls l'en-tête, l'index et le passage de la reprise partent.
     const held = new Map<number, Uint8Array>();
-    for (let i = 20; i <= 40; i++) held.set(i, BIG.slice(i << 20, (i + 1) << 20));
+    for (let i = 0; i < 40; i++) held.set(i, BIG.slice(i << 20, (i + 1) << 20));
     const identity = { itemId: "b", streamUrl: URL_B, size: BIG.length, fileVersion: "etag-1" };
-    expect(await keepOnStop(identity, { size: BIG.length, lastModified: null, chunks: held })).toBe(21);
+    const written = await keepOnStop(identity, { size: BIG.length, lastModified: null, chunks: held }, { file, seconds: 55 });
+    expect(written).toBeGreaterThan(0);
+    expect(written).toBeLessThan(12);
     const kept = await readResumeManifest("louis", "b");
     expect(kept!.coveredTo).toBeLessThan(0);
-    // Le lecteur s'en sert déjà.
-    const disk = await openDiskChunks(identity);
-    expect(disk?.has(25)).toBe(true);
-    // Le passage suivant mesure la couverture en relisant l'appareil : seuls l'en-tête et l'index manquent.
-    const at = (22 << 20) / 400_000;
-    await run([{ itemId: "b", startSeconds: at, started: true }]);
-    const measured = await readResumeManifest("louis", "b");
-    expect(measured!.coveredFrom).toBeLessThanOrEqual(at);
-    expect(measured!.coveredTo).toBeGreaterThan(at);
-    expect(fetchedChunks.filter((i) => i >= 21 && i <= 40)).toEqual([]);
+    expect(kept!.chunks).toContain(0);
+    expect(kept!.chunks).not.toContain(5);
+    // Le passage suivant mesure depuis l'appareil : il ne retélécharge pas le passage, seulement l'index s'il manquait.
+    await run([{ itemId: "b", startSeconds: 50, started: true }]);
+    const at = (50 * 400_000) / (1 << 20);
+    expect(fetchedChunks.filter((i) => i >= Math.floor(at) - 1 && i <= Math.floor(at) + 2)).toEqual([]);
+    expect((await readResumeManifest("louis", "b"))!.coveredTo).toBeGreaterThanOrEqual(52);
+  });
+
+  it("sans index du fichier, l'arrêt n'écrit rien", async () => {
+    const { keepOnStop } = await import("@/lib/resumeCache/keepOnStop");
+    const held = new Map([[3, BIG.slice(3 << 20, 4 << 20)]]);
+    expect(await keepOnStop({ itemId: "b", streamUrl: URL_B, size: BIG.length, fileVersion: "etag-1" }, { size: BIG.length, lastModified: null, chunks: held }, null)).toBe(0);
+    expect(await readResumeIndex("louis")).toEqual({});
   });
 
   it("n'écrit rien à l'arrêt pour un autre fichier que celui décrit", async () => {
     const { keepOnStop } = await import("@/lib/resumeCache/keepOnStop");
     const held = new Map([[3, BIG.slice(3 << 20, 4 << 20)]]);
-    expect(await keepOnStop({ itemId: "b", streamUrl: URL_B, size: BIG.length + 1, fileVersion: "etag-1" }, { size: BIG.length, lastModified: null, chunks: held })).toBe(0);
-    expect(await keepOnStop({ itemId: "b", streamUrl: URL_B, size: BIG.length, fileVersion: null }, { size: BIG.length, lastModified: null, chunks: held })).toBe(0);
+    const { openMediaFile } = await import("@/lib/webcodecs/mediaFile");
+    const { MemoryByteSource } = await import("@/lib/webcodecs/byteSource");
+    const around = { file: await openMediaFile(new MemoryByteSource(BIG)), seconds: 5 };
+    expect(await keepOnStop({ itemId: "b", streamUrl: URL_B, size: BIG.length + 1, fileVersion: "etag-1" }, { size: BIG.length, lastModified: null, chunks: held }, around)).toBe(0);
+    expect(await keepOnStop({ itemId: "b", streamUrl: URL_B, size: BIG.length, fileVersion: null }, { size: BIG.length, lastModified: null, chunks: held }, around)).toBe(0);
     expect(await readResumeIndex("louis")).toEqual({});
   });
 
@@ -188,41 +201,20 @@ describe("un passage de la reprise instantanée", () => {
     expect(fetchedChunks).toEqual([]);
   });
 
-  it("garde l'avance qu'une lecture a laissée, dans la part du titre, sans rien télécharger de plus", async () => {
-    const { keepOnStop } = await import("@/lib/resumeCache/keepOnStop");
+  it("ramène au minimum une réserve laissée sur l'appareil par la version d'avant", async () => {
+    // 28/09/2026 : la réserve d'avance sur l'appareil a été retirée ; ce qu'elle avait laissé part.
+    const { mergeResumeEntry, writeResumeChunk } = await import("@/lib/resumeCache/store");
     info = { streamUrl: URL_B, sizeBytes: BIG.length, fileVersion: "etag-1" };
-    const identity = { itemId: "b", streamUrl: URL_B, size: BIG.length, fileVersion: "etag-1" };
-    // Une lecture arrêtée vers 50 s a laissé l'en-tête, derrière elle, et 20 Mio devant.
     const lastChunk = Math.floor((BIG.length - 1) / (1 << 20));
-    const held = new Map<number, Uint8Array>();
-    for (const i of [0, lastChunk, ...Array.from({ length: 30 }, (_, k) => 10 + k)]) held.set(i, BIG.slice(i << 20, Math.min(BIG.length, (i + 1) << 20)));
-    await keepOnStop(identity, { size: BIG.length, lastModified: null, chunks: held });
+    const chunks = [0, lastChunk, ...Array.from({ length: 30 }, (_, k) => 10 + k)];
+    for (const i of chunks) await writeResumeChunk("louis", "b", i, BIG.slice(i << 20, Math.min(BIG.length, (i + 1) << 20)));
+    await mergeResumeEntry("louis", { itemId: "b", streamUrl: URL_B, size: BIG.length, fileVersion: "etag-1", lastModified: null }, chunks, []);
     fetchedChunks = [];
     await run([{ itemId: "b", startSeconds: 50, started: true }]);
     const manifest = await readResumeManifest("louis", "b");
     expect(fetchedChunks).toEqual([]);
-    // Seul titre actif : toute la réserve est à lui. Ce qui est derrière la position est effacé.
-    const anchor = Math.floor((50 * 400_000) / (1 << 20));
-    expect(manifest!.chunks.filter((i) => i > 0 && i < anchor - 1)).toEqual([]);
-    expect(manifest!.chunks).toEqual(expect.arrayContaining([0, lastChunk, 39]));
-    expect(manifest!.coveredTo).toBeGreaterThan(90);
-    expect(manifest!.headerChunks).toEqual(expect.arrayContaining([0, lastChunk]));
-  });
-
-  it("réduit une réserve à la part du titre en effaçant le plus lointain", async () => {
-    const { recordTitle } = await import("@/lib/resumeCache/recordTitle");
-    const { keepOnStop } = await import("@/lib/resumeCache/keepOnStop");
-    info = { streamUrl: URL_B, sizeBytes: BIG.length, fileVersion: "etag-1" };
-    const identity = { itemId: "b", streamUrl: URL_B, size: BIG.length, fileVersion: "etag-1" };
-    const lastChunk = Math.floor((BIG.length - 1) / (1 << 20));
-    const held = new Map<number, Uint8Array>();
-    for (const i of [0, lastChunk, ...Array.from({ length: 30 }, (_, k) => 10 + k)]) held.set(i, BIG.slice(i << 20, Math.min(BIG.length, (i + 1) << 20)));
-    await keepOnStop(identity, { size: BIG.length, lastModified: null, chunks: held });
-    await recordTitle("louis", { itemId: "b", startSeconds: 50, started: true, shareChunks: 8 }, 1000, new AbortController().signal);
-    const manifest = await readResumeManifest("louis", "b");
-    const reserve = manifest!.chunks.filter((i) => i !== 0 && i !== lastChunk);
-    expect(reserve.length).toBeLessThanOrEqual(8);
-    expect(Math.max(...reserve)).toBeLessThan(30);
-    expect(manifest!.coveredTo).toBeLessThan(80);
+    expect(manifest!.chunks.length).toBeLessThanOrEqual(6);
+    expect(manifest!.chunks).toEqual(expect.arrayContaining([0, lastChunk]));
+    expect(manifest!.chunks.filter((i) => i > 25)).toEqual([lastChunk]);
   });
 });

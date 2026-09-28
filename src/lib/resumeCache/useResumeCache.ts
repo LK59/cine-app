@@ -83,16 +83,18 @@ async function onePass(targets: ResumeTarget[], signal: AbortSignal, now: number
   if (!account || mustStop(signal)) return;
   const index = await readResumeIndex(account);
   const budget = await deviceBudget();
-  const plan = planResumeCache(targets, index, now, budget);
+  const plan = planResumeCache(targets, index, now);
   for (const itemId of plan.remove) {
     if (signal.aborted) return;
     await removeResumeEntry(account, itemId);
   }
   let remaining = remainingChunks(index, plan, budget.totalChunks);
-  // Le garde-fou sur la mesure réelle (`overQuota`) : au-delà du plafond, on efface mais on n'écrit plus.
-  if (overQuota(await deviceUsage(), budget)) return;
+  // Le garde-fou sur la mesure réelle (`overQuota`) : au-delà du plafond, on efface et on réduit ce qui
+  // est gardé, mais on n'ajoute plus de titre.
+  const over = overQuota(await deviceUsage(), budget);
   for (const target of plan.record) {
-    if (mustStop(signal) || remaining <= 0) return;
+    if (mustStop(signal)) return;
+    if ((over || remaining <= 0) && !index[target.itemId]) continue;
     remaining -= await recordTitle(account, target, remaining, signal);
     await new Promise((resolve) => setTimeout(resolve, BETWEEN_TITLES_MS));
   }

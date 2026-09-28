@@ -1,36 +1,20 @@
 /**
- * Ce que l'appareil garde, en octets — pas en secondes.
+ * Ce que l'appareil garde, en octets — pas en secondes : **de quoi démarrer, rien de plus.**
  *
- * Décidé le 28/09/2026, mesures en main : les deux appareils mesurés annonçaient 41 Go (iPhone,
- * application de l'écran d'accueil) et 10,8 Go (Chrome Windows) de quota, tous deux en stockage
- * persistant. Une durée ne dit rien de la place : 250 Mio font 5 min d'un film au débit médian de
- * la bibliothèque (6,4 Mb/s) et 73 s d'un 4K à 27 Mb/s. On vise donc des octets, et c'est le fichier
- * qui décide combien de temps ils couvrent.
+ * - un titre d'« À suivre » : l'en-tête, l'index et `OPENING_TITLE_CHUNKS` ;
+ * - un titre de « Reprendre » : l'en-tête, l'index, et de l'image clé qui précède la position
+ *   jusqu'à un groupe après elle (`RESUME_MINIMAL_MAX_CHUNKS` au plus).
  *
- * **La règle fondamentale : au repos, rien n'est téléchargé d'avance.** L'accueil ne prend que ce
- * qu'il faut pour *démarrer* instantanément :
- *  - un titre d'« À suivre » : l'en-tête, l'index et `OPENING_TITLE_CHUNKS` ;
- *  - un titre de « Reprendre » : l'en-tête, l'index, et de l'image clé qui précède la position
- *    jusqu'à un groupe après elle (`RESUME_MINIMAL_MAX_CHUNKS` au plus).
- * L'**avance** ne se construit que pendant une lecture (`DiskReserve`) ; à l'arrêt, elle est gardée
- * pour la reprise suivante. Au repos, elle ne peut que diminuer.
+ * Au repos, rien n'est téléchargé d'avance ; pendant une lecture, l'avance vit **en mémoire**
+ * (`MemoryReserve`), jamais sur l'appareil. Une réserve d'avance écrite dans l'OPFS a existé le
+ * 28/09/2026 au matin (`DiskReserve`) : presque chaque octet regardé passait une fois par la mémoire
+ * flash — de l'ordre de 12 Go par heure de 4K. Retirée le jour même, pour la santé des appareils ; ce
+ * qu'elle avait laissé est ramené au minimum par le passage d'arrière-plan.
  *
- * L'avance est une **réserve commune** (`poolChunks`), partagée entre les titres *actifs* — lus sur
- * cet appareil dans les `ACTIVE_DAYS` derniers jours, les `ACTIVE_TITLES` plus récents. Au repos,
- * chacun garde au plus sa part (la réserve divisée par leur nombre, `titleChunks` au plus). Pendant
- * une lecture, le titre en cours emprunte aux autres, jusqu'à ce qu'ils ne gardent plus que
- * `floorChunks` chacun. Un titre qui n'est plus actif redescend au minimum de démarrage.
- *
- * **Modérée** (28/09/2026, après le premier essai sur iPhone : 616 Mo pris en 80 s à 51 Mb/s, un
- * téléphone qui chauffait) : `titleChunks` (500 Mio) par titre, pendant la lecture comme après ;
- * jamais plus de `MAX_AHEAD_SECONDS` devant la tête ; et un débit borné à `SPEED_FACTOR` fois celui
- * du film, `SPEED_CAP_MBPS` au plus. Seul le tampon d'avance est bridé — la lecture elle-même
- * (le tampon du navigateur) prend tout le lien dont elle a besoin.
- *
- * Un appareil à court de place (moins de `LOW_SPACE_BYTES` entre ce qu'il annonce et ce qu'il
- * occupe) passe en mode réduit. Un navigateur ne dit pas l'espace libre du disque ; le quota moins
- * l'occupation est la seule mesure qu'il donne, et c'est aussi celle qui borne réellement nos
- * écritures.
+ * Mesures du 28/09/2026 : 41 Go de quota sur l'iPhone (application de l'écran d'accueil), 10,8 Go
+ * sur Chrome Windows, tous deux en stockage persistant. Un appareil à court de place (moins de
+ * `LOW_SPACE_BYTES` entre ce qu'il annonce et ce qu'il occupe) passe en mode réduit. Un navigateur ne
+ * dit pas l'espace libre du disque ; le quota moins l'occupation est la seule mesure qu'il donne.
  *
  * Rien de ce qui est gardé n'est indispensable : un morceau absent, effacé par le système ou par
  * « Vider le cache », est lu au réseau (`HttpByteSource.fromDiskOrNetwork`).
@@ -43,43 +27,18 @@ const MIB = 1 << 20;
 export const OPENING_TITLE_CHUNKS = 16;
 /** Le plus qu'une reprise minimale garde au-delà de son en-tête et de son index — au-delà, l'en-tête seul. */
 export const RESUME_MINIMAL_MAX_CHUNKS = 64;
-/** Combien de titres se partagent la réserve, au plus. */
-export const ACTIVE_TITLES = 4;
-/** Un titre pas lu sur cet appareil depuis plus longtemps n'a plus de part. */
-export const ACTIVE_DAYS = 5;
-
-/** Jamais plus que cela de film devant la tête, sur l'appareil. */
-export const MAX_AHEAD_SECONDS = 300;
-/** Le tampon d'avance ne télécharge pas plus vite que ce multiple du débit du film… */
-export const SPEED_FACTOR = 4;
-/** …ni que ce plafond absolu, en Mb/s. */
-export const SPEED_CAP_MBPS = 50;
-
-/** Le débit que le tampon d'avance s'autorise pour un film de ce débit moyen, en bits par seconde. */
-export function reserveSpeedBps(filmBps: number | null): number {
-  const cap = SPEED_CAP_MBPS * 1e6;
-  return filmBps !== null && Number.isFinite(filmBps) && filmBps > 0 ? Math.min(cap, SPEED_FACTOR * filmBps) : cap;
-}
 
 /** En dessous, le mode réduit. */
 export const LOW_SPACE_BYTES = 5e9;
 
 export interface StorageBudget {
   mode: "normal" | "réduit";
-  /** Le plafond commun, tous étages confondus, en morceaux de 1 Mio — une borne de sûreté. */
+  /** Le plafond de sûreté, tous titres confondus, en morceaux de 1 Mio. */
   totalChunks: number;
-  /** La réserve d'avance, partagée entre les titres actifs. */
-  poolChunks: number;
-  /** Le plus qu'un titre garde devant sa position, pendant la lecture comme après. */
-  titleChunks: number;
-  /** Ce qu'un titre actif garde au moins quand un autre, en lecture, lui emprunte. */
-  floorChunks: number;
-  /** Ce qui est gardé derrière la tête pendant une lecture, pour les retours en arrière. */
-  behindChunks: number;
 }
 
-export const NORMAL_BUDGET: StorageBudget = { mode: "normal", totalChunks: 2560, poolChunks: 1024, titleChunks: 500, floorChunks: 128, behindChunks: 128 };
-export const REDUCED_BUDGET: StorageBudget = { mode: "réduit", totalChunks: 750, poolChunks: 256, titleChunks: 128, floorChunks: 64, behindChunks: 64 };
+export const NORMAL_BUDGET: StorageBudget = { mode: "normal", totalChunks: 1024 };
+export const REDUCED_BUDGET: StorageBudget = { mode: "réduit", totalChunks: 512 };
 
 /**
  * Le budget pour un appareil qui annonce ce quota et cette occupation. Sans mesure (un navigateur
@@ -107,29 +66,6 @@ export async function deviceBudget(): Promise<StorageBudget> {
 /** Des octets en morceaux entiers. */
 export function chunksOf(bytes: number): number {
   return Math.ceil(bytes / MIB);
-}
-
-/** Ce que l'index dit d'un titre, pour décider de sa part. */
-export interface ActivityEntry {
-  /** Quand une lecture de ce titre s'est arrêtée sur cet appareil pour la dernière fois. */
-  playedAt?: number;
-}
-
-/**
- * Les titres actifs, du plus récemment lu au moins récent : lus dans les `ACTIVE_DAYS` derniers
- * jours, les `ACTIVE_TITLES` plus récents.
- */
-export function activeTitles(index: Record<string, ActivityEntry>, now: number): string[] {
-  return Object.entries(index)
-    .filter(([, entry]) => typeof entry.playedAt === "number" && now - entry.playedAt <= ACTIVE_DAYS * 24 * 3600_000)
-    .sort((a, b) => (b[1].playedAt ?? 0) - (a[1].playedAt ?? 0))
-    .slice(0, ACTIVE_TITLES)
-    .map(([itemId]) => itemId);
-}
-
-/** La part d'avance d'un titre au repos : la réserve divisée entre les actifs, rien s'il ne l'est pas. */
-export function restingShare(itemId: string, active: string[], budget: StorageBudget): number {
-  return active.includes(itemId) ? Math.min(budget.titleChunks, Math.floor(budget.poolChunks / active.length)) : 0;
 }
 
 /**

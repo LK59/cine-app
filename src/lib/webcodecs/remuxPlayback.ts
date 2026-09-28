@@ -334,7 +334,7 @@ export class RemuxPlayback {
   }
 
   /**
-   * De quoi faire tourner le tampon d'avance sur l'appareil (`DiskReserve`) à côté de ce lecteur : sa
+   * De quoi faire tourner la réserve d'avance en mémoire (`MemoryReserve`) à côté de ce lecteur : sa
    * source, l'index du fichier, l'élément et l'avance du tampon. Null pour une source qui ne lit pas
    * le réseau.
    */

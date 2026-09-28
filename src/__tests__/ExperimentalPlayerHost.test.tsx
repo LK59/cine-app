@@ -115,15 +115,10 @@ vi.mock("@/lib/swr", async (original) => ({
  */
 let serverFallback: boolean | undefined;
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => serverFallback }));
-// Le tampon d'avance sur l'appareil (28/09/2026) : examiné par quand il démarre et s'arrête.
-const reserveStop = vi.fn(async () => ({}));
+// La réserve d'avance en mémoire (28/09/2026) : examinée par quand elle démarre et s'arrête.
+const reserveStop = vi.fn(() => ({}));
 const reserveStart = vi.fn((..._args: unknown[]) => ({ stop: reserveStop }));
-vi.mock("@/lib/resumeCache/diskReserve", () => ({ DiskReserve: { start: (...args: unknown[]) => reserveStart(...args) } }));
-let cacheAccount: string | null = null;
-vi.mock("@/lib/persistentCache", async (original) => ({
-  ...(await original<typeof import("@/lib/persistentCache")>()),
-  persistedCacheAccount: () => cacheAccount,
-}));
+vi.mock("@/lib/webcodecs/memoryReserve", () => ({ MemoryReserve: { start: (...args: unknown[]) => reserveStart(...args) } }));
 // Ce que l'arrêt garde sur l'appareil (28/09/2026) : examiné par ce qui lui est transmis.
 const keepOnStop = vi.fn(async () => 0);
 vi.mock("@/lib/resumeCache/keepOnStop", () => ({ keepOnStop: (...args: unknown[]) => keepOnStop(...(args as [])) }));
@@ -1240,41 +1235,35 @@ describe("la fin d'une séance, au journal", () => {
     expect(logged("stop")[0].fields).toMatchObject({ recoveries: 7, frozenNudges: 3, escalations: 1 });
   });
 
-  it("fait tourner le tampon d'avance avec le lecteur prêt, et l'arrête avec lui", async () => {
-    cacheAccount = "louis";
+  it("fait tourner la réserve en mémoire avec le lecteur prêt, et l'arrête avec lui", async () => {
     const context = { source: {}, file: {}, video: {}, lead: () => 30, delay: () => 0 };
     remux = fakeRemux({ reserveContext: () => context });
-    swr = { data: info({ sizeBytes: 5e9, fileVersion: "etag-1" }), error: undefined };
     const { unmount } = mount();
     await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
     expect(reserveStart).toHaveBeenCalledTimes(1);
-    expect(reserveStart.mock.calls[0].slice(0, 3)).toEqual(["louis", { itemId: "item-1", streamUrl: "/stream.mkv", size: 5e9, fileVersion: "etag-1" }, context]);
+    expect(reserveStart.mock.calls[0][0]).toBe(context);
     // Ses lignes partent au journal comme celles du lecteur : le fichier, la séance, le chemin.
-    const report = reserveStart.mock.calls[0][3] as (fields: Record<string, unknown>) => void;
-    report({ event: "point", aheadMB: 300 });
-    expect(logged("reserve")[0].fields).toMatchObject({ event: "point", aheadMB: 300, itemId: "item-1", path: "remux" });
+    const report = reserveStart.mock.calls[0][1] as (fields: Record<string, unknown>) => void;
+    report({ event: "point", aheadMB: 120 });
+    expect(logged("reserve")[0].fields).toMatchObject({ event: "point", aheadMB: 120, itemId: "item-1", path: "remux" });
     expect(reserveStop).not.toHaveBeenCalled();
 
     unmount();
     expect(reserveStop).toHaveBeenCalledTimes(1);
-    cacheAccount = null;
   });
 
-  it("arrête le tampon avant d'effacer un film fini", async () => {
-    cacheAccount = "louis";
+  it("arrête la réserve à la fin du film", async () => {
     remux = fakeRemux({ reserveContext: () => ({ source: {}, file: {}, video: {}, lead: () => 30, delay: () => 0 }) });
-    swr = { data: info({ sizeBytes: 5e9, fileVersion: "etag-1" }), error: undefined };
     const { unmount } = mount();
     await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
     await act(async () => void fireEvent(videoElement(5400), new Event("ended")));
     expect(reserveStop).toHaveBeenCalledWith("fin du film");
     unmount();
-    // Déjà arrêté : le démontage n'en arrête pas un second.
+    // Déjà arrêtée : le démontage n'en arrête pas une seconde.
     expect(reserveStop).toHaveBeenCalledTimes(1);
-    cacheAccount = null;
   });
 
-  it("sans compte sur l'appareil ni contexte, pas de tampon — et rien ne casse", async () => {
+  it("sans contexte de réserve, pas de réserve — et rien ne casse", async () => {
     remux = fakeRemux();
     const { unmount } = mount();
     await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
@@ -1294,7 +1283,8 @@ describe("la fin d'une séance, au journal", () => {
     unmount();
 
     expect(keepOnStop).toHaveBeenCalledTimes(1);
-    expect(keepOnStop).toHaveBeenCalledWith({ itemId: "item-1", streamUrl: "/stream.mkv", size: 5e9, fileVersion: "etag-1" }, held);
+    // Sans index du fichier (ce faux lecteur n'en a pas), rien ne dit où est la reprise : `null`.
+    expect(keepOnStop).toHaveBeenCalledWith({ itemId: "item-1", streamUrl: "/stream.mkv", size: 5e9, fileVersion: "etag-1" }, held, null);
   });
 
   it("ne garde rien d'un film fini, et l'arrêt se fait même si la sauvegarde lève", async () => {
