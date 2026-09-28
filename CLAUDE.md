@@ -220,8 +220,9 @@ after a minute actually watched (a quarter of sessions are shorter), once the br
 bursts**: filled at up to 50 Mb/s, then silent until it falls to half, so the radio sleeps between
 refills (what costs energy is the number of wake-ups, not the volume); five minutes of film at most,
 150 MB on iPhone/iPad (Safari hides device memory and kills greedy pages), 100–500 MB elsewhere by
-`deviceMemory`; emptied when the page is hidden. Hidden controls follow the clock once a second, not
-on every `timeupdate`. A disk reserve existed for a few hours that day
+`deviceMemory`; emptied when the page is hidden; silent for 10 s after the last seek; kept across a
+rebuild through the source's handover. Hidden controls follow the clock once a second, not
+on every `timeupdate` — except the last one before a pause or the end, which the end screen needs. A disk reserve existed for a few hours that day
 (`DiskReserve`): nearly every watched byte went through flash — ~12 GB per hour of 4K — and it was
 removed for the devices' sake. **A view is never written as-is** (`exactBytes`): Safari wrote a 1 MiB
 `subarray` of an 8 MiB range as the whole 8 MiB — 7 GB on an iPhone after two sessions; the store moved

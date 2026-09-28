@@ -71,3 +71,20 @@ export function openingPosition(itemId: string, positionSeconds: number, runtime
   if (!(positionSeconds > 0)) return 0;
   return awayFrom(itemId) ? rewound(positionSeconds, runtimeSeconds) : positionSeconds;
 }
+
+/**
+ * Toutes les positions où `openingPosition` peut ouvrir ce titre, quel que soit le moment : de la
+ * position reculée à la position exacte. Pour ce qu'on garde *d'avance* sur l'appareil.
+ *
+ * `openingPosition` dépend de l'heure (`awayFrom`, dix minutes) : calculée quand la liste arrive,
+ * elle donnait la position exacte d'un titre qu'on venait de quitter — et le lecteur, ouvert une
+ * heure plus tard, reculait de cinq secondes, vers une image clé que l'appareil n'avait pas. Relevé
+ * au journal le 28/09/2026 : une reprise « mixte », neuf mégaoctets de l'appareil et le groupe de
+ * l'ouverture au réseau. Garder l'intervalle couvre les deux ouvertures, pour une image clé de plus
+ * au pire.
+ */
+export function openingSpan(positionSeconds: number, runtimeSeconds?: number | null): { from: number; position: number } {
+  // `openingPosition` ouvre à l'une des deux ; `rewound` ne recule jamais au-delà.
+  if (!(positionSeconds > 0)) return { from: 0, position: 0 };
+  return { from: rewound(positionSeconds, runtimeSeconds), position: positionSeconds };
+}

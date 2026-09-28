@@ -33,8 +33,16 @@ export const RECENT_GRACE_MS = 5 * 60_000;
 
 export interface ResumeTarget {
   itemId: string;
-  /** La position à laquelle le lecteur s'ouvrira — recul de reprise déjà appliqué. */
+  /**
+   * La première position à laquelle le lecteur peut s'ouvrir — recul de reprise compris
+   * (`openingSpan`) : ce qu'on garde commence à l'image clé qui la précède.
+   */
   startSeconds: number;
+  /**
+   * La position exacte, sans recul — ce qu'on garde s'étend jusqu'à un groupe après elle. Absente :
+   * `startSeconds`.
+   */
+  positionSeconds?: number;
   /**
    * Commencé (« Reprendre ») : la reprise minimale, de l'image clé qui précède la position jusqu'à un
    * groupe après elle. Sinon (« À suivre ») : l'ouverture, `OPENING_TITLE_CHUNKS`.

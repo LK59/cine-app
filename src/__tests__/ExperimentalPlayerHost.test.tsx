@@ -1254,15 +1254,26 @@ describe("la fin d'une séance, au journal", () => {
     expect(reserveStop).toHaveBeenCalledTimes(1);
   });
 
-  it("arrête la réserve à la fin du film", async () => {
+  it("garde la réserve à la fin du film — « Revoir » repart sur le même pipeline —, et l'arrête avec lui", async () => {
+    // Chasse aux défauts du 28/09 : arrêtée à la fin, elle manquait à tout le second visionnage.
     remux = fakeRemux({ reserveContext: () => ({ source: {}, file: {}, video: {}, lead: () => 30, delay: () => 0 }) });
     const { unmount } = mount();
     await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
     await act(async () => void fireEvent(videoElement(5400), new Event("ended")));
-    expect(reserveStop).toHaveBeenCalledWith("fin du film");
+    expect(reserveStop).not.toHaveBeenCalled();
     unmount();
-    // Déjà arrêtée : le démontage n'en arrête pas une seconde.
+    // Arrêtée une fois, avec le pipeline, ses morceaux laissés à la source pour une reconstruction.
     expect(reserveStop).toHaveBeenCalledTimes(1);
+    expect(reserveStop).toHaveBeenCalledWith("fin du pipeline", true);
+  });
+
+  it("la ligne `stop` d'une fermeture porte ses mesures d'approvisionnement", async () => {
+    // Chasse aux défauts du 28/09 : `diagEnd` passait avant l'arrêt au démontage, et la ligne partait sans `diag`.
+    remux = fakeRemux();
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    unmount();
+    expect(logged("stop")[0].fields.diag).toMatchObject({ netMB: expect.any(Number), req: expect.any(Number) });
   });
 
   it("sans contexte de réserve, pas de réserve — et rien ne casse", async () => {

@@ -398,8 +398,10 @@ export async function storageFacts(
   timeoutMs = 1500
 ): Promise<Record<string, string | number | boolean>> {
   const mb = (bytes: unknown) => (typeof bytes === "number" && Number.isFinite(bytes) ? Math.round(bytes / 1e5) / 10 : null);
+  // Rempli au fil de la lecture : à l'échéance, ce qui est déjà lu part avec la ligne — l'index de la
+  // reprise, lu en dernier, retenait tout le reste (persistance, quota) avec lui.
+  const facts: Record<string, string | number | boolean> = {};
   const read = async () => {
-    const facts: Record<string, string | number | boolean> = {};
     try {
       if (persistence) facts.persist = await persistence;
       if (storage && typeof storage.persisted === "function") facts.persisted = await storage.persisted();
@@ -435,7 +437,7 @@ export async function storageFacts(
   };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<Record<string, string | number | boolean>>((resolve) => {
-    timer = setTimeout(() => resolve({ storageTimedOut: true }), timeoutMs);
+    timer = setTimeout(() => resolve({ ...facts, storageTimedOut: true }), timeoutMs);
   });
   try {
     return await Promise.race([read(), late]);

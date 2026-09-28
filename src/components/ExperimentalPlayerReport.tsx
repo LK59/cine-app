@@ -7,7 +7,7 @@
 // one sentence on it, or a spinner that never stops. On a phone there is no console behind either.
 // So the same facts are gathered into one block of text here, with a way to get it off the device.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ClipboardCheck, Copy } from "lucide-react";
 import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
 import { traceText } from "@/lib/webcodecs/trace";
@@ -95,6 +95,26 @@ export function ExperimentalPlayerReport({ input, flow = false }: { input: Repor
   // En direct, à chaque rendu. Le 28/09/2026, défiler dans le rapport figeait le panneau sur
   // iPhone ; ce n'était pas cette mise à jour, mais la zone de saisie qui le portait (voir plus bas).
   const report = buildReport(input, capabilities);
+  const reportRef = useRef(report);
+  useEffect(() => {
+    reportRef.current = report;
+  });
+
+  // Figé tant qu'une sélection est posée dedans (chasse aux défauts du 28/09) : chaque rendu réécrit
+  // le texte — ne serait-ce que la ligne « Quand » —, et une sélection faite à la main, le recours
+  // d'un navigateur sans presse-papiers, disparaissait à la demi-seconde suivante.
+  const preRef = useRef<HTMLPreElement>(null);
+  const [frozen, setFrozen] = useState<string | null>(null);
+  useEffect(() => {
+    const onSelection = () => {
+      const selection = document.getSelection();
+      const pre = preRef.current;
+      const inside = !!selection && !selection.isCollapsed && !!pre && !!selection.anchorNode && pre.contains(selection.anchorNode);
+      setFrozen((was) => (inside ? (was ?? reportRef.current) : null));
+    };
+    document.addEventListener("selectionchange", onSelection);
+    return () => document.removeEventListener("selectionchange", onSelection);
+  }, []);
 
   const copy = useCallback(() => {
     // Only over HTTPS, and not on every browser. The text below is the fallback that always works:
@@ -127,13 +147,14 @@ export function ExperimentalPlayerReport({ input, flow = false }: { input: Repor
           passait en mode sélection, et ni le rapport ni le panneau ne défilaient plus. Le texte
           reste sélectionnable à la main (appui long), pour un navigateur sans presse-papiers. */}
       <pre
+        ref={preRef}
         data-testid="player-report-text"
         className={
           "select-text whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-black/50 p-3 font-mono text-[11px] leading-4 text-slate-300" +
           (flow ? "" : " max-h-48 overflow-y-auto overscroll-contain")
         }
       >
-        {report}
+        {frozen ?? report}
       </pre>
     </div>
   );

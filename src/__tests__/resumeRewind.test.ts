@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from "vitest";
-import { awayFrom, noteWatching, rewound, AWAY_MS } from "@/lib/resumeRewind";
+import { awayFrom, noteWatching, openingPosition, openingSpan, rewound, AWAY_MS } from "@/lib/resumeRewind";
 
 beforeEach(() => window.localStorage.clear());
 
@@ -37,5 +37,27 @@ describe("awayFrom", () => {
     expect(kept).toHaveLength(50);
     expect(kept).not.toContain("t0");
     expect(kept).toContain("t59");
+  });
+});
+
+describe("openingSpan — ce qu'on garde d'avance couvre toutes les ouvertures possibles", () => {
+  it("de la position reculée à la position exacte, que le titre vienne d'être joué ou non", () => {
+    // 28/09/2026 : calculé juste après l'avoir quitté, le passage gardait la position exacte ; le
+    // lecteur, ouvert une heure plus tard, reculait de cinq secondes vers une image clé absente.
+    noteWatching("a");
+    expect(openingPosition("a", 600, 3600)).toBe(600);
+    expect(openingSpan(600, 3600)).toEqual({ from: 595, position: 600 });
+    expect(openingSpan(0, 3600)).toEqual({ from: 0, position: 0 });
+    expect(openingSpan(20, 3600)).toEqual({ from: 20, position: 20 });
+  });
+
+  it("targetsFrom vise l'intervalle, pas l'ouverture du moment", async () => {
+    noteWatching("film");
+    const { targetsFrom } = await import("@/lib/resumeCache/useResumeCache");
+    const [target] = targetsFrom(
+      [{ id: "film", type: "Movie", positionTicks: 600 * 1e7, runtimeTicks: 3600 * 1e7 } as never],
+      []
+    );
+    expect(target).toMatchObject({ itemId: "film", startSeconds: 595, positionSeconds: 600, started: true });
   });
 });

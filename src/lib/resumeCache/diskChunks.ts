@@ -101,7 +101,14 @@ export function diskChunksFor(
   const expected = (index: number) => Math.max(0, Math.min(CHUNK_SIZE, manifest.size - index * CHUNK_SIZE));
   const readChecked = async (index: number): Promise<Uint8Array | null> => {
     const bytes = await read(index);
-    if (!bytes || bytes.byteLength === expected(index)) return bytes;
+    if (!bytes) {
+      // Absent de l'appareil (effacé par le système, écriture perdue) : il n'y est plus pour cette
+      // source — un enregistrement qui le relit au réseau le réécrit (`recordTitle`), au lieu de
+      // croire l'appareil et de jeter tout le titre faute de lui.
+      kept.delete(index);
+      return null;
+    }
+    if (bytes.byteLength === expected(index)) return bytes;
     kept.delete(index);
     trace(`appareil : morceau ${index} de ${bytes.byteLength} octets au lieu de ${expected(index)} — effacé, lu au réseau`);
     void dropChunk(index);

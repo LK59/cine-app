@@ -247,6 +247,19 @@ async function readJson<T>(dir: DirHandleLike, name: string): Promise<T | null> 
 // Une opération à la fois : l'index est relu puis réécrit, deux écritures croisées en perdraient une.
 
 let queue: Promise<unknown> = Promise.resolve();
+
+/**
+ * La génération du magasin : `clearResumeStore` (déconnexion, « Vider le cache ») la fait avancer.
+ * Une écriture demandée avant — un passage d'arrière-plan en route, l'arrêt d'une lecture — attendait
+ * son tour dans la file, passait *après* l'effacement et recréait le dossier : un titre regardé par le
+ * compte précédent, gardé sur l'appareil du suivant (chasse aux défauts du 28/09).
+ */
+let generation = 0;
+/** Pour un travail plus long qu'une écriture (`recordTitle`) : s'arrêter si elle a changé depuis son début. */
+export function resumeStoreGeneration(): number {
+  return generation;
+}
+
 function serial<T>(work: () => Promise<T>): Promise<T> {
   const run = queue.then(work, work);
   queue = run.catch(() => undefined);
@@ -310,7 +323,9 @@ export async function readResumeChunk(account: string, itemId: string, index: nu
  * prochain nettoyage efface. Rend vrai si tout est écrit.
  */
 export function saveResumeEntry(account: string, manifest: ResumeManifest, chunks: Map<number, Uint8Array>): Promise<boolean> {
+  const asked = generation;
   return serial(async () => {
+    if (asked !== generation) return false;
     try {
       const dir = await accountDir(account, true);
       if (!dir) return false;
@@ -335,7 +350,9 @@ export function saveResumeEntry(account: string, manifest: ResumeManifest, chunk
  * avant `commitResumeEntry`). Rend vrai si le morceau est écrit.
  */
 export function writeResumeChunk(account: string, itemId: string, index: number, bytes: Uint8Array): Promise<boolean> {
+  const asked = generation;
   return serial(async () => {
+    if (asked !== generation) return false;
     try {
       const dir = await accountDir(account, true);
       if (!dir) return false;
@@ -353,14 +370,26 @@ export function writeResumeChunk(account: string, itemId: string, index: number,
  * Le manifeste d'un titre dont les morceaux sont déjà écrits (`writeResumeChunk`, ou gardés d'un
  * enregistrement précédent du même fichier) : les morceaux de `drop` sont effacés, puis le manifeste
  * et l'index sont écrits. Rend vrai si tout est écrit.
+ *
+ * @param basedOn le `savedAt` du manifeste que l'appelant a lu avant de commencer (null : il n'y en
+ *   avait pas). Si un autre l'a remplacé entre-temps — l'arrêt d'une lecture (`mergeResumeEntry`) —,
+ *   rien n'est écrit et le résultat est faux : le remplacer en entier perdait les morceaux de l'autre.
+ *   Le prochain passage refait le titre sur ce qui est vraiment là. Absent : pas de vérification.
  */
-export function commitResumeEntry(account: string, manifest: ResumeManifest, drop: Iterable<number>): Promise<boolean> {
+export function commitResumeEntry(account: string, manifest: ResumeManifest, drop: Iterable<number>, basedOn?: number | null): Promise<boolean> {
+  const asked = generation;
   return serial(async () => {
+    if (asked !== generation) return false;
     try {
       const dir = await accountDir(account, true);
       if (!dir) return false;
       const name = safeName(manifest.itemId);
       const item = await dir.getDirectoryHandle(name, { create: true });
+      if (basedOn !== undefined) {
+        const found = await readJson<ResumeManifest>(item, "manifest.json");
+        const current = found && found.v === 1 && found.itemId === manifest.itemId ? found.savedAt : null;
+        if (current !== basedOn) return false;
+      }
       const keep = new Set(manifest.chunks);
       for (const index of drop) {
         if (!keep.has(index)) await item.removeEntry(`c${index}`).catch(() => {});
@@ -417,7 +446,9 @@ export function mergeResumeEntry(
   remove: Iterable<number>,
   patch: Partial<Pick<ResumeManifest, "startSeconds" | "coveredFrom" | "coveredTo" | "playedAt" | "partial">> = {}
 ): Promise<boolean> {
+  const asked = generation;
   return serial(async () => {
+    if (asked !== generation) return false;
     try {
       const dir = await accountDir(account, true);
       if (!dir) return false;
@@ -536,6 +567,9 @@ export function sweepResumeStore(account: string, now = Date.now()): Promise<num
         }
         const files = (await namesOf(item)) ?? [];
         const manifest = await readJson<ResumeManifest>(item, "manifest.json");
+        // Un titre de l'index dont le manifeste ne se lit pas — maintenant : ne rien juger sur une
+        // lecture manquée. Sans cette garde, tous ses morceaux passaient pour orphelins.
+        if (known.has(name) && !manifest) continue;
         const listed = new Set(known.has(name) && manifest ? manifest.chunks.map((index) => `c${index}`) : []);
         let kept = 0;
         for (const file of files) {
@@ -580,6 +614,8 @@ export function removeResumeEntry(account: string, itemId: string): Promise<void
 
 /** Tout, tous comptes confondus — la déconnexion. Ne lève jamais. */
 export function clearResumeStore(): Promise<void> {
+  // Tout de suite, pas à son tour : ce qui attend dans la file derrière lui ne doit plus écrire.
+  generation += 1;
   return serial(async () => {
     try {
       const root = await rootProvider();

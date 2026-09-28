@@ -23,6 +23,7 @@ import { openMediaFile } from "@/lib/webcodecs/mediaFile";
 import { trace } from "@/lib/webcodecs/trace";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 import { OPENING_TITLE_CHUNKS } from "@/lib/resumeCache/budget";
+import { openDiskChunks } from "@/lib/resumeCache/diskChunks";
 import { recordTitle } from "@/lib/resumeCache/recordTitle";
 
 /** Les fichiers déjà préparés dans cette page : un seul essai chacun. */
@@ -36,19 +37,26 @@ export async function warmNextEpisode(itemId: string): Promise<void> {
     const info = await preloadQuietly<DirectPlayInfo>(directInfoKey(itemId));
     if (!info?.streamUrl) return;
     const startedAt = Date.now();
+    // L'appareil d'abord, puis l'en-tête lu *depuis* l'appareil : dans l'ordre inverse, l'en-tête et
+    // l'index étaient téléchargés deux fois — une pour le cache d'en-têtes, une pour l'appareil —,
+    // plusieurs mégaoctets de trop au générique (chasse aux défauts du 28/09).
+    const account = persistedCacheAccount();
+    if (account) {
+      const kept = await recordTitle(account, { itemId, startSeconds: 0, started: false }, OPENING_TITLE_CHUNKS, new AbortController().signal, true);
+      if (kept > 0) trace(`épisode suivant : ${kept} Mo gardés sur l'appareil`);
+    }
+    const disk =
+      account && info.sizeBytes && info.fileVersion
+        ? await openDiskChunks({ itemId, streamUrl: info.streamUrl, size: info.sizeBytes, fileVersion: info.fileVersion }).catch(() => null)
+        : null;
     // Sans lecture en avance : elle téléchargeait six mégaoctets après l'en-tête, que personne ne gardait.
-    const source = (await HttpByteSource.open(info.streamUrl, info.sizeBytes)).withoutReadahead();
+    const source = (await HttpByteSource.open(info.streamUrl, info.sizeBytes, disk)).withoutReadahead();
     try {
       // Nommé par son adresse, comme à l'ouverture : c'est ce qui la rendra instantanée.
       await openMediaFile(source, info.streamUrl);
       trace(`épisode suivant préparé en ${Date.now() - startedAt} ms`);
     } finally {
       source.close(false);
-    }
-    const account = persistedCacheAccount();
-    if (account) {
-      const kept = await recordTitle(account, { itemId, startSeconds: 0, started: false }, OPENING_TITLE_CHUNKS, new AbortController().signal, true);
-      if (kept > 0) trace(`épisode suivant : ${kept} Mo gardés sur l'appareil`);
     }
   } catch {
     // Préparer n'est pas lire : un échec ici laisse simplement l'ouverture faire son travail.

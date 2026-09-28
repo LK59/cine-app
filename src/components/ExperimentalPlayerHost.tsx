@@ -1094,12 +1094,6 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     mountedAtRef.current = Date.now();
   }, []);
-  // Les mesures d'approvisionnement de cette séance — voir playbackDiagnosis.ts. Les reconstructions
-  // restent dans la même séance, donc dans les mêmes totaux.
-  useEffect(() => {
-    diagBegin(sessionId);
-    return () => diagEnd(sessionId);
-  }, [sessionId]);
   useEffect(() => {
     if (!playing) return;
     watched.run(Date.now());
@@ -1278,6 +1272,14 @@ export function ExperimentalPlayerHost({
     reportStopRef.current = reportStop;
   }, [reportStop]);
   useEffect(() => () => reportStopRef.current("unmount"), []);
+  // Les mesures d'approvisionnement de cette séance — voir playbackDiagnosis.ts. Les reconstructions
+  // restent dans la même séance, donc dans les mêmes totaux. Déclaré *après* l'arrêt ci-dessus, pour
+  // la même raison d'ordre : déclaré plus haut, `diagEnd` passait avant, et la ligne `stop` d'une
+  // fermeture partait sans son champ `diag` (chasse aux défauts du 28/09).
+  useEffect(() => {
+    diagBegin(sessionId);
+    return () => diagEnd(sessionId);
+  }, [sessionId]);
 
   const { stop: stopPlaybackNow, resume: resumePlaybackSession } = usePlaybackSession(
     useCallback(() => positionRef.current, []),
@@ -1581,11 +1583,12 @@ export function ExperimentalPlayerHost({
       setCurrentAudio(playback.currentAudioTrack);
       declareReady();
       // La réserve d'avance en mémoire, à côté de ce lecteur-ci — voir `MemoryReserve`. Celle d'un
-      // lecteur remplacé (reconstruction) est arrêtée d'abord. Pendant un banc aussi : c'est la lecture
-      // que le banc éprouve.
+      // lecteur remplacé a été arrêtée par le nettoyage de l'effet, ses morceaux laissés au relais de
+      // la source : celle-ci les a repris. Pendant un banc aussi : c'est la lecture que le banc éprouve.
       try {
         const context = playback.reserveContext?.();
-        reserveRef.current?.stop("reconstruction");
+        // Une seule réserve par source, quoi qu'il arrive ; ses morceaux restent à celle qui suit.
+        reserveRef.current?.stop("remplacée", true);
         // Ses lignes `reserve`, décrites comme les autres lignes du lecteur (fichier, séance, appareil).
         const report = (fields: Record<string, unknown>) => reportPlayback("reserve", { ...describeFileRef.current(), path: "remux", ...fields });
         // Le temps regardé de la séance, qui survit aux reconstructions : la réserve attend une
@@ -1714,9 +1717,10 @@ export function ExperimentalPlayerHost({
         lifecycle.noteEnded();
         // Fini : ses octets gardés pour une reprise instantanée n'ont plus rien à reprendre. Effacés
         // en arrière-plan ; le prochain passage l'aurait fait aussi, le titre quittant « Reprendre ».
-        // Le tampon d'avance d'abord arrêté : il écrirait encore dans ce qu'on efface.
-        reserveRef.current?.stop("fin du film");
-        reserveRef.current = null;
+        // La réserve d'avance, elle, reste : elle ne vit qu'en mémoire, n'écrit rien sur l'appareil,
+        // et à la fin du fichier elle n'a plus rien à prendre — mais « Revoir » repart au début sur
+        // ce même pipeline, et l'arrêter ici l'en privait pour tout le second visionnage (chasse aux
+        // défauts du 28/09). Elle s'arrête avec le pipeline.
         if (!session.bench) forgetResumeCache(itemId);
       };
       // Le saut demandé est atteint : la position lue redevient la vérité.
@@ -1920,7 +1924,10 @@ export function ExperimentalPlayerHost({
     return () => {
       cancelled = true;
       for (const unsubscribe of unsubscribes) unsubscribe();
-      reserveRef.current?.stop();
+      // Ses morceaux restent à la source, que `destroy` ferme en les laissant au relais : une
+      // reconstruction sur le même fichier les retrouve. Une fermeture du lecteur les rend au bout
+      // de quelques secondes (`HANDOVER_MS`).
+      reserveRef.current?.stop("fin du pipeline", true);
       reserveRef.current = null;
       remuxRef.current?.destroy();
       remuxRef.current = null;

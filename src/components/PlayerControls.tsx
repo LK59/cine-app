@@ -431,6 +431,9 @@ export function PlayerControls({
     const onPlay = () => setPlaying(true);
     const onPause = () => {
       setPlaying(false);
+      // La position exacte à l'arrêt, que le rythme des contrôles masqués ait laissé passer la
+      // dernière ou non — voir `onTime`. Pas pendant qu'on tire la barre : c'est elle qui dit l'instant.
+      if (!seekingRef.current) setCurrentTime(video.currentTime);
       // And anything already on its way is called off: the pause may well arrive first.
       if (seekSpinner.current) clearTimeout(seekSpinner.current);
       seekSpinner.current = null;
@@ -443,7 +446,10 @@ export function PlayerControls({
     const onTime = () => {
       if (seekingRef.current) return;
       const now = performance.now();
-      if (!visibleRef.current && now - timeAt < HIDDEN_UPDATE_MS) return;
+      // Jamais la dernière : à l'arrêt ou à la fin, aucune autre ne viendra. La fin de fichier
+      // tombait à moins d'une seconde de la précédente, était sautée, et l'écran de fin (« Revoir »,
+      // l'épisode suivant — `atEnd`) n'apparaissait pas contrôles masqués (chasse aux défauts du 28/09).
+      if (!visibleRef.current && now - timeAt < HIDDEN_UPDATE_MS && !video.paused && !video.ended) return;
       timeAt = now;
       setCurrentTime(video.currentTime);
     };
@@ -493,7 +499,11 @@ export function PlayerControls({
         if (video.seeking && !video.paused) setBuffering(true);
       }, SEEK_SPINNER_MS);
     };
-    const onSeeked = () => onPlaying();
+    const onSeeked = () => {
+      onPlaying();
+      if (!seekingRef.current) setCurrentTime(video.currentTime);
+    };
+    const onEnded = () => setCurrentTime(video.currentTime);
     const onRateChange = () => setSpeed(video.playbackRate || 1);
     // The range containing currentTime (not just the last one) — a rewind past hls.js's
     // in-memory buffer can leave an earlier, already-downloaded range that's no longer the
@@ -531,6 +541,7 @@ export function PlayerControls({
     video.addEventListener("canplay", onPlaying);
     video.addEventListener("ratechange", onRateChange);
     video.addEventListener("progress", onProgress);
+    video.addEventListener("ended", onEnded);
     onProgress(); // seed immediately — otherwise the bar stays empty until the next chunk lands
 
     // Cast — AirPlay (Safari, webkit-prefixed) where available, else the standard Remote
@@ -577,6 +588,7 @@ export function PlayerControls({
       video.removeEventListener("volumechange", onVolume);
       video.removeEventListener("ratechange", onRateChange);
       video.removeEventListener("progress", onProgress);
+      video.removeEventListener("ended", onEnded);
     };
   }, [videoRef, probeVolume]);
 

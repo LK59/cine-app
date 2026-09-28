@@ -8,7 +8,7 @@ import { resumeEnd } from "./coverage";
 import { diskChunksFor, sameFile } from "./diskChunks";
 import { MIN_COVERED_AHEAD_SECONDS, titleChunks, type ResumeTarget } from "./plan";
 import { recordOpening } from "./record";
-import { commitResumeEntry, readResumeManifest, removeResumeEntry, writeResumeChunk, type ResumeManifest } from "./store";
+import { commitResumeEntry, readResumeManifest, removeResumeEntry, resumeStoreGeneration, writeResumeChunk, type ResumeManifest } from "./store";
 
 /**
  * Refaire un titre sur l'appareil — le passage d'arrière-plan (`useResumeCache`) et l'épisode suivant
@@ -46,7 +46,9 @@ export async function recordTitle(
   signal: AbortSignal,
   whilePlaying = false
 ): Promise<number> {
-  const stop = () => (whilePlaying ? signal.aborted : mustStop(signal));
+  // « Vider le cache » ou une déconnexion en route : ce passage ne recrée rien de ce qu'ils ont effacé.
+  const generation = resumeStoreGeneration();
+  const stop = () => resumeStoreGeneration() !== generation || (whilePlaying ? signal.aborted : mustStop(signal));
   try {
     const info = await preloadQuietly<DirectPlayInfo>(directInfoKey(target.itemId));
     if (!info?.streamUrl || !info.sizeBytes || !info.fileVersion || stop()) return 0;
@@ -64,14 +66,19 @@ export async function recordTitle(
     let failed = false;
     try {
       const cap = Math.min(titleChunks(target), budgetChunks);
-      const until = target.started ? (file: MatroskaFile) => resumeEnd(file, target.startSeconds, MIN_COVERED_AHEAD_SECONDS) : undefined;
+      // Jusqu'à un groupe après la position *exacte* : le lecteur peut aussi bien y ouvrir, sans recul
+      // (`openingSpan`).
+      const until = target.started
+        ? (file: MatroskaFile) => resumeEnd(file, Math.max(target.startSeconds, target.positionSeconds ?? target.startSeconds), MIN_COVERED_AHEAD_SECONDS)
+        : undefined;
       const recorded = await recordOpening(
         source,
         target.startSeconds,
         stop,
         cap,
         (index) => {
-          if (onDisk.has(index)) return;
+          // Sur l'appareil *et* relu de l'appareil : sinon le réseau l'a apporté, et on le réécrit.
+          if (onDisk.has(index) && disk?.has(index) === true) return;
           const length = Math.min(CHUNK_SIZE, source.size - index * CHUNK_SIZE);
           writes.push(
             source
@@ -95,7 +102,7 @@ export async function recordTitle(
       }
       // Ce qui est sur l'appareil maintenant. Le serveur a pu annoncer en route un autre fichier
       // (`DiskChunks.verify`) : les morceaux réutilisés ont alors été effacés.
-      const present = (index: number) => (onDisk.has(index) ? disk?.has(index) === true : written.has(index));
+      const present = (index: number) => written.has(index) || (onDisk.has(index) && disk?.has(index) === true);
       if (source.size !== info.sizeBytes || !recorded.chunks.every(present)) {
         await removeResumeEntry(account, target.itemId);
         return 0;
@@ -124,7 +131,9 @@ export async function recordTitle(
         minimalChunks: minimal.length,
         ...(reusable?.playedAt !== undefined ? { playedAt: reusable.playedAt } : {}),
       };
-      return (await commitResumeEntry(account, manifest, drop)) ? chunks.length : 0;
+      // Sur le manifeste qu'on a lu en commençant, et aucun autre : un arrêt du lecteur (`keepOnStop`) a
+      // pu en écrire un entre-temps, et le remplacer en entier perdait ses morceaux.
+      return (await commitResumeEntry(account, manifest, drop, reusable?.savedAt ?? null)) ? chunks.length : 0;
     } finally {
       // Sans laisser ses morceaux au relais : il revient au film qu'on regarde, pas à une préparation.
       source.close(false);
@@ -139,7 +148,7 @@ export async function recordTitle(
  * décrit que des morceaux qui étaient déjà là.
  */
 async function dropChunks(account: string, itemId: string, previous: ResumeManifest | null, written: Set<number>): Promise<void> {
-  if (previous) await commitResumeEntry(account, previous, written);
+  if (previous) await commitResumeEntry(account, previous, written, previous.savedAt);
   else await removeResumeEntry(account, itemId);
 }
 

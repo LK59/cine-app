@@ -5,7 +5,7 @@ import useSWR from "swr";
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { persistedCacheAccount } from "@/lib/persistentCache";
-import { openingPosition } from "@/lib/resumeRewind";
+import { openingSpan } from "@/lib/resumeRewind";
 import { fetcher, followOnlyOptions, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import { deviceBudget, deviceUsage, overQuota } from "./budget";
 import { planResumeCache, remainingChunks, resumeTargets, type ResumeTarget } from "./plan";
@@ -51,16 +51,20 @@ interface ResumeFeedItem {
 export function targetsFrom(resume: ResumeFeedItem[] | undefined, nextUp: CinemaNextUpPayload["items"] | undefined): ResumeTarget[] {
   const fromResume = (resume ?? [])
     .filter((item) => item.type === "Movie" || item.type === "Episode")
-    .map((item) => ({
-      itemId: item.id,
-      startSeconds: openingPosition(item.id, item.positionTicks / 1e7, item.runtimeTicks > 0 ? item.runtimeTicks / 1e7 : null),
-    }));
-  const fromNextUp = (nextUp ?? []).map((item) => ({
-    itemId: item.jellyfinItemId,
-    startSeconds: openingPosition(item.jellyfinItemId, (item.resumeTicks ?? 0) / 1e7, item.runtimeTicks ? item.runtimeTicks / 1e7 : null),
-    // Un épisode d'« À suivre » déjà entamé est une reprise, pas une ouverture.
-    started: (item.resumeTicks ?? 0) > 0,
-  }));
+    .map((item) => {
+      const span = openingSpan(item.positionTicks / 1e7, item.runtimeTicks > 0 ? item.runtimeTicks / 1e7 : null);
+      return { itemId: item.id, startSeconds: span.from, positionSeconds: span.position };
+    });
+  const fromNextUp = (nextUp ?? []).map((item) => {
+    const span = openingSpan((item.resumeTicks ?? 0) / 1e7, item.runtimeTicks ? item.runtimeTicks / 1e7 : null);
+    return {
+      itemId: item.jellyfinItemId,
+      startSeconds: span.from,
+      positionSeconds: span.position,
+      // Un épisode d'« À suivre » déjà entamé est une reprise, pas une ouverture.
+      started: (item.resumeTicks ?? 0) > 0,
+    };
+  });
   return resumeTargets(fromResume, fromNextUp);
 }
 

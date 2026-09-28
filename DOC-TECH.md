@@ -878,7 +878,14 @@ when the player reads it, and the player's own readahead skips what the reserve 
 It yields to the player in every case: nothing before `START_AFTER_WATCHED_SECONDS` (60 s) actually
 watched in the session — a quarter of sessions are shorter —, nothing until the browser buffer has
 `MIN_LEAD_SECONDS` (10 s), nothing while a read waits (`readsWaiting`) or during a seek
-(`seekFocused`); it starts beyond the player's readahead; ranges of `RANGE_CHUNKS` (8 MiB),
+(`seekFocused`) — **nor for `SEEK_SETTLE_MS` (10 s) after the last one**, each seek restarting the
+count, so a run of quick ±10 s seeks does not launch a burst between each (a seek too short for a tick
+to see `seeking` is recognised by the position jumping). A seek, or a read still waiting on the
+second tick, aborts the reserve's ranges in flight. Each range has a deadline
+(`REQUEST_TIMEOUT_MS`, 60 s — a connection that died silently used to hold one of the two slots for
+the whole session), and failures back off from 5 s doubling to 60 s rather than stopping the reserve
+for the session. It starts beyond the player's readahead, never asks for a chunk the player already
+has in flight, and the player's readahead skips what the reserve has in flight (`reserveInflight`); ranges of `RANGE_CHUNKS` (8 MiB),
 `PARALLEL` (2) at most, paced at `reserveSpeedBps` (50 Mb/s); never more than `MAX_AHEAD_SECONDS`
 (five minutes) ahead; what the head passes is dropped. It fills **in bursts**: up to capacity, then
 nothing until it has fallen to `REFILL_BELOW` (half) — a radio stays awake seconds after each
@@ -887,7 +894,14 @@ transfer, so wake-ups, not bytes, cost energy (`bursts` on the `arrêt` line, `p
 that takes too much, the threshold unpublished — and by `navigator.deviceMemory` elsewhere (100 MB at
 ≤ 2 GB, 200 at 4, 500 at 8, 300 unknown). Chunks are copied, not viewed: a `subarray` would keep its
 whole 8 MiB range alive while one chunk sits in the cache. **Hidden page, emptied reserve**: iOS kills
-memory-heavy pages first in the background.
+memory-heavy pages first in the background — emptied on `visibilitychange` itself, since iOS suspends
+the timers of a hidden page and the next tick might never come. Near the end of the file the window
+runs to the last byte (the index only gives the *start* of the last group). **A rebuild keeps it**:
+stopping with its pipeline leaves its chunks in the source, which hands them over with its cache
+(`handover`, 5 s), and the next reserve adopts them — a track change no longer re-downloads up to
+150 MB. It is not stopped at the end of the film, so « Revoir » still has one. Its fetches are not
+counted in the player's own network measurements (`diagRequest`), and `diag.*` gets its totals every
+tick rather than every 30 s.
 
 A version of the reserve written to OPFS (`DiskReserve`) lived for a few hours that day: nearly every
 byte watched passed once through flash — the size of what is watched, ~12 GB per hour of 4K — and it

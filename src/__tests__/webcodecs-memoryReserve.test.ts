@@ -6,6 +6,7 @@ import {
   MIN_LEAD_SECONDS,
   MemoryReserve,
   RANGE_CHUNKS,
+  SEEK_SETTLE_MS,
   reserveBudgetBytes,
   reserveSpeedBps,
   type ReserveDeps,
@@ -249,6 +250,139 @@ describe("la réserve d'avance en mémoire", () => {
     expect(source.reserveIndices.length).toBeGreaterThan(0);
     reserve.stop();
     expect(source.reserveIndices).toEqual([]);
+  });
+});
+
+describe("la réserve d'avance — chasse aux défauts du 28/09", () => {
+  it("attend dix secondes de calme après un saut avant de relancer une rafale, et chaque saut remet le compte à zéro", async () => {
+    const video = { currentTime: 0, seeking: false };
+    const { reserve } = await start(video);
+    video.seeking = true;
+    await pump(reserve, 1, 4_000);
+    video.seeking = false;
+    // Moins de dix secondes après : rien.
+    await pump(reserve, 2, 4_000);
+    expect(fetched).toEqual([]);
+    // Un second saut, trop bref pour qu'un tour voie `seeking` : la position a bondi.
+    video.currentTime = 50;
+    await pump(reserve, 2, 4_000);
+    expect(fetched).toEqual([]);
+    clock += SEEK_SETTLE_MS;
+    await pump(reserve, 1, 1_000);
+    expect(fetched.length).toBeGreaterThan(0);
+    reserve.stop();
+  });
+
+  it("coupe ce qu'elle a en route quand un saut arrive", async () => {
+    let signal: AbortSignal | undefined;
+    const source = (await HttpByteSource.open(URL, FILE.length)).withoutReadahead();
+    const video = { currentTime: 0, seeking: false };
+    const reserve = MemoryReserve.start(
+      { source, file: parsed, video: video as unknown as HTMLVideoElement, lead: () => 30, delay: () => 0 },
+      vi.fn(),
+      {
+        ...deps(),
+        fetch: ((_url: string, init?: RequestInit) => {
+          signal = init?.signal ?? undefined;
+          return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new Error("aborted"))));
+        }) as unknown as typeof fetch,
+      }
+    );
+    reserve.settleForTests();
+    expect(source.reserveInflight.size).toBeGreaterThan(0);
+    video.seeking = true;
+    await reserve.settleForTests();
+    expect(signal?.aborted).toBe(true);
+    expect(source.reserveInflight.size).toBe(0);
+    reserve.stop();
+  });
+
+  it("une requête sans réponse est coupée à son échéance, et la réserve reprend après un repos au lieu de s'arrêter", async () => {
+    const report = vi.fn();
+    let calls = 0;
+    const source = (await HttpByteSource.open(URL, FILE.length)).withoutReadahead();
+    const reserve = MemoryReserve.start(
+      { source, file: parsed, video: { currentTime: 0, seeking: false } as unknown as HTMLVideoElement, lead: () => 30, delay: () => 0 },
+      report,
+      {
+        ...deps(),
+        requestTimeoutMs: 5,
+        fetch: ((_url: string, init?: RequestInit) => {
+          calls += 1;
+          return new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new Error("aborted"))));
+        }) as unknown as typeof fetch,
+      }
+    );
+    // Quatre salves d'échecs — l'ancienne réserve s'arrêtait pour la séance au troisième.
+    for (let i = 0; i < 4; i++) {
+      await reserve.settleForTests();
+      clock += 120_000;
+    }
+    const events = report.mock.calls.map(([fields]) => fields.event);
+    expect(events).not.toContain("arrêt");
+    const errors = report.mock.calls.filter(([fields]) => fields.event === "erreur").map(([fields]) => fields);
+    expect(errors.length).toBeGreaterThanOrEqual(4);
+    expect(errors[0].message).toMatch(/sans réponse/);
+    expect(errors.at(-1)!.backoffS).toBeLessThanOrEqual(60);
+    expect(calls).toBeGreaterThanOrEqual(4);
+    reserve.stop();
+  });
+
+  it("rend sa mémoire dès que la page est cachée, sans attendre un tour que iOS ne donnera peut-être pas", async () => {
+    let onHidden: () => void = () => {};
+    const source = (await HttpByteSource.open(URL, FILE.length)).withoutReadahead();
+    const reserve = MemoryReserve.start(
+      { source, file: parsed, video: { currentTime: 0, seeking: false } as unknown as HTMLVideoElement, lead: () => 30, delay: () => 0 },
+      vi.fn(),
+      { ...deps(), onHidden: (listener) => ((onHidden = listener), () => (onHidden = () => {})) }
+    );
+    await pump(reserve, 3);
+    expect(source.reserveIndices.length).toBeGreaterThan(0);
+    onHidden();
+    expect(source.reserveIndices).toEqual([]);
+    reserve.stop();
+  });
+
+  it("près de la fin, prend jusqu'au dernier octet du fichier — le dernier groupe compris", async () => {
+    // Des groupes de 3 Mo : le dernier s'étend sur plusieurs morceaux après le début que donne l'index.
+    const DENSE = bigMatroska(20, 3_000_000);
+    const denseFile = await openMediaFile(new MemoryByteSource(DENSE));
+    vi.stubGlobal("fetch", respond(DENSE, playerFetched));
+    const source = (await HttpByteSource.open("/dense", DENSE.length)).withoutReadahead();
+    const reserve = MemoryReserve.start(
+      { source, file: denseFile, video: { currentTime: 5, seeking: false } as unknown as HTMLVideoElement, lead: () => 30, delay: () => 0 },
+      vi.fn(),
+      deps(150e6, DENSE)
+    );
+    await pump(reserve, 12);
+    // Tout, du groupe de la dernière image clé jusqu'à la fin (l'index, lui, est lu à l'ouverture).
+    const lastGroup = Math.floor(denseFile.cues.at(-1)!.clusterOffset / CHUNK_SIZE);
+    const last = Math.floor((DENSE.length - 1) / CHUNK_SIZE);
+    for (let index = lastGroup; index <= last; index++) expect(source.hasInMemory(index), `morceau ${index}`).toBe(true);
+    reserve.stop();
+  });
+
+  it("arrêtée avec son pipeline, elle passe par le relais : la reconstruction retrouve sa réserve", async () => {
+    const { reserve, source } = await start();
+    await pump(reserve, 3);
+    const kept = source.reserveIndices;
+    expect(kept.length).toBeGreaterThan(0);
+    reserve.stop("fin du pipeline", true);
+    source.close();
+    const again = await HttpByteSource.open(URL, FILE.length);
+    expect(again.reserveIndices.sort((a, b) => a - b)).toEqual(kept.sort((a, b) => a - b));
+    again.close(false);
+  });
+
+  it("la lecture en avance du lecteur ne redemande pas ce que la réserve a en route, ni l'inverse", async () => {
+    const source = await HttpByteSource.open(URL, FILE.length);
+    source.reserveInflight.add(3);
+    await source.read(0, 10);
+    await Promise.resolve();
+    expect(playerFetched).toContain(1);
+    expect(playerFetched).not.toContain(3);
+    expect(source.isFetching(0) || source.hasInMemory(0)).toBe(true);
+    source.close(false);
   });
 });
 

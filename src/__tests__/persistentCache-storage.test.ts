@@ -57,7 +57,17 @@ describe("storageFacts", () => {
 
   it("part sans ces chiffres plutôt que d'attendre un navigateur qui ne répond pas", async () => {
     const storage = { estimate: () => new Promise<StorageEstimate>(() => {}) };
-    expect(await storageFacts(storage as unknown as StorageManager, null, 20)).toEqual({ storageTimedOut: true });
+    const facts = await storageFacts(storage as unknown as StorageManager, null, 20);
+    expect(facts.storageTimedOut).toBe(true);
+    expect(facts.quotaMB).toBeUndefined();
+  });
+
+  it("à l'échéance, garde ce qu'il a déjà lu", async () => {
+    // Chasse aux défauts du 28/09 : l'index de la reprise, lu en dernier, emportait le quota avec lui.
+    setResumeStoreForTests(() => new Promise(() => {}));
+    const storage = { persisted: async () => true, estimate: async () => ({ quota: 10_000_000_000, usage: 100_000_000 }) };
+    const facts = await storageFacts(storage as unknown as StorageManager, "louis", 20);
+    expect(facts).toMatchObject({ storageTimedOut: true, persisted: true, quotaMB: 10000, usageMB: 100 });
   });
 
   it("ne lève jamais", async () => {

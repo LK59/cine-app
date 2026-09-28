@@ -825,6 +825,48 @@ describe("PlayerControls — masquées, elles suivent la position une fois par s
     expect(seek()).toBe(101.25);
     now.mockRestore();
   });
+
+  it("ne sautent jamais la dernière position : à la fin et à l'arrêt, aucune autre ne viendra", async () => {
+    // Chasse aux défauts du 28/09 : la fin du fichier tombait moins d'une seconde après la position
+    // précédente, était sautée, et l'écran de fin n'apparaissait pas contrôles masqués.
+    stubMediaFetches();
+    vi.useFakeTimers();
+    let clock = 10_000;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    let video!: HTMLVideoElement;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    Object.defineProperty(video, "paused", { value: false, configurable: true });
+    Object.defineProperty(video, "duration", { value: 3600, configurable: true });
+    act(() => void video.dispatchEvent(new Event("durationchange")));
+    act(() => void video.dispatchEvent(new Event("play")));
+    await act(async () => void vi.advanceTimersByTime(4000));
+    const seek = () => Number((container.querySelector('input[data-player-nav="seek"]') as HTMLInputElement).value);
+    const at = (t: number, event = "timeupdate") => {
+      Object.defineProperty(video, "currentTime", { value: t, configurable: true, writable: true });
+      act(() => void video.dispatchEvent(new Event(event)));
+    };
+    clock += 5_000;
+    at(3598.5);
+    expect(seek()).toBe(3598.5);
+    // La fin, 500 ms plus tard : l'élément est `ended`, et ce `timeupdate` est le dernier.
+    clock += 500;
+    Object.defineProperty(video, "ended", { value: true, configurable: true });
+    Object.defineProperty(video, "paused", { value: true, configurable: true });
+    at(3600);
+    expect(seek()).toBe(3600);
+    // L'arrêt aussi : la position à laquelle on s'arrête, pas celle d'il y a une seconde.
+    Object.defineProperty(video, "ended", { value: false, configurable: true });
+    Object.defineProperty(video, "paused", { value: false, configurable: true });
+    clock += 5_000;
+    at(1000);
+    clock += 200;
+    Object.defineProperty(video, "currentTime", { value: 1000.2, configurable: true, writable: true });
+    Object.defineProperty(video, "paused", { value: true, configurable: true });
+    act(() => void video.dispatchEvent(new Event("pause")));
+    expect(seek()).toBe(1000.2);
+    now.mockRestore();
+  });
 });
 
 describe("PlayerControls — suspendues pendant une reconstruction", () => {

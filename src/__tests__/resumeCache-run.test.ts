@@ -58,7 +58,7 @@ afterEach(() => {
   setWatchingFullScreen(false);
 });
 
-async function run(targets: { itemId: string; startSeconds: number; started?: boolean }[], now = Date.now()) {
+async function run(targets: { itemId: string; startSeconds: number; positionSeconds?: number; started?: boolean }[], now = Date.now()) {
   const { runResumeCache } = await import("@/lib/resumeCache/useResumeCache");
   await runResumeCache(targets, new AbortController().signal, now);
 }
@@ -199,6 +199,59 @@ describe("un passage de la reprise instantanée", () => {
     fetchedChunks = [];
     await run([{ itemId: "b", startSeconds: 60.5, started: true }]);
     expect(fetchedChunks).toEqual([]);
+  });
+
+  it("garde de la position reculée jusqu'à un groupe après la position exacte — les deux ouvertures démarrent de l'appareil", async () => {
+    // 28/09/2026 : ne gardait que depuis l'une des deux ; l'autre ouvrait « mixte ».
+    info = { streamUrl: URL_B, sizeBytes: BIG.length, fileVersion: "etag-1" };
+    await run([{ itemId: "b", startSeconds: 55.5, positionSeconds: 60.5, started: true }]);
+    const manifest = await readResumeManifest("louis", "b");
+    expect(manifest!.coveredFrom).toBeLessThanOrEqual(55.5);
+    expect(manifest!.coveredTo).toBeGreaterThanOrEqual(62);
+  });
+
+  it("un morceau que le manifeste décrit mais que l'appareil a perdu est réécrit, pas le titre jeté", async () => {
+    // Chasse aux défauts du 28/09 : relu au réseau, il n'était pas réécrit, et le titre entier
+    // était effacé faute de lui.
+    const { recordTitle } = await import("@/lib/resumeCache/recordTitle");
+    const { dropResumeChunk, readResumeChunk } = await import("@/lib/resumeCache/store");
+    info = { streamUrl: URL_B, sizeBytes: BIG.length, fileVersion: "etag-1" };
+    await run([{ itemId: "b", startSeconds: 60.5, started: true }]);
+    const before = await readResumeManifest("louis", "b");
+    const lost = before!.chunks.at(-1)!;
+    await dropResumeChunk("louis", "b", lost);
+    const kept = await recordTitle("louis", { itemId: "b", startSeconds: 60.5, started: true }, 1024, new AbortController().signal);
+    expect(kept).toBeGreaterThan(0);
+    const after = await readResumeManifest("louis", "b");
+    expect(after!.chunks).toContain(lost);
+    expect(await readResumeChunk("louis", "b", lost)).not.toBeNull();
+  });
+
+  it("« Vider le cache » pendant un passage : le passage ne recrée rien", async () => {
+    const { clearResumeStore } = await import("@/lib/resumeCache/store");
+    info = { streamUrl: URL_B, sizeBytes: BIG.length, fileVersion: "etag-1" };
+    const real = globalThis.fetch;
+    let cleared = false;
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      if (!cleared) {
+        cleared = true;
+        void clearResumeStore();
+      }
+      return real(url, init);
+    });
+    await run([{ itemId: "b", startSeconds: 60.5, started: true }]);
+    expect(await readResumeIndex("louis")).toEqual({});
+    expect(await readResumeManifest("louis", "b")).toBeNull();
+  });
+
+  it("ne remplace pas un manifeste qu'un autre a écrit depuis sa lecture", async () => {
+    const { commitResumeEntry } = await import("@/lib/resumeCache/store");
+    await run([{ itemId: "a", startSeconds: 20.5 }]);
+    const current = await readResumeManifest("louis", "a");
+    const stale = { ...current!, chunks: [0], savedAt: current!.savedAt + 1 };
+    expect(await commitResumeEntry("louis", stale, [], current!.savedAt - 1)).toBe(false);
+    expect((await readResumeManifest("louis", "a"))!.chunks).toEqual(current!.chunks);
+    expect(await commitResumeEntry("louis", stale, [], current!.savedAt)).toBe(true);
   });
 
   it("ramène au minimum une réserve laissée sur l'appareil par la version d'avant", async () => {

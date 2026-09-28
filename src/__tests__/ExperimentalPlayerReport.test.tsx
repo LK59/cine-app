@@ -50,6 +50,22 @@ describe("ExperimentalPlayerReport", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
+  it("se fige tant qu'une sélection y est posée, pour qu'on puisse la copier à la main", () => {
+    // Chasse aux défauts du 28/09 : la sélection disparaissait au rendu suivant.
+    const { rerender } = render(<ExperimentalPlayerReport input={input("10 s")} />);
+    const pre = screen.getByTestId("player-report-text");
+    const range = document.createRange();
+    range.selectNodeContents(pre);
+    document.getSelection()!.removeAllRanges();
+    document.getSelection()!.addRange(range);
+    act(() => void document.dispatchEvent(new Event("selectionchange")));
+    rerender(<ExperimentalPlayerReport input={input("42 s")} />);
+    expect(pre.textContent).toContain("Position: 10 s");
+    document.getSelection()!.removeAllRanges();
+    act(() => void document.dispatchEvent(new Event("selectionchange")));
+    expect(pre.textContent).toContain("Position: 42 s");
+  });
+
   it("ailleurs (écran d'erreur, attente), garde sa propre zone bornée", () => {
     render(<ExperimentalPlayerReport input={input("10 s")} />);
     expect(screen.getByTestId("player-report-text").className).toContain("max-h-48");

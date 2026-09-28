@@ -1,7 +1,7 @@
 import { CHUNK_SIZE, type HttpByteSource } from "./byteSource";
 import { sourceBufferQuota } from "./bufferBudget";
 import { clusterOffsetForTime, type MatroskaFile } from "./matroska";
-import { diagRequest, diagReserve } from "./playbackDiagnosis";
+import { diagReserve } from "./playbackDiagnosis";
 import { trace } from "./trace";
 import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { coverageFrom } from "@/lib/resumeCache/coverage";
@@ -23,7 +23,8 @@ import { coverageFrom } from "@/lib/resumeCache/coverage";
  *
  * Ce qu'elle s'interdit — le lecteur passe toujours avant :
  *  - rien tant que le tampon du navigateur n'a pas `MIN_LEAD_SECONDS`, ni pendant qu'une lecture
- *    attend un octet, ni pendant un saut ;
+ *    attend un octet, ni pendant un saut ni dans les `SEEK_SETTLE_MS` qui le suivent — ce qui était
+ *    en route est coupé ;
  *  - la page cachée : la réserve est *vidée* — iOS tue d'abord, en arrière-plan, les pages qui
  *    tiennent de la mémoire ;
  *  - rien dans la zone de la lecture en avance du lecteur ; au plus `MAX_AHEAD_SECONDS` de film
@@ -56,13 +57,25 @@ export const SPEED_CAP_MBPS = 50;
 export const START_AFTER_WATCHED_SECONDS = 60;
 /** Une rafale part quand la réserve redescend à cette part de sa capacité. */
 export const REFILL_BELOW = 0.5;
+/**
+ * Après un saut, le calme exigé avant une rafale (28/09/2026, demandé par l'administrateur) : des
+ * sauts rapprochés — chercher une scène à coups de ±10 s — relançaient une rafale entre chacun, pour
+ * une position quittée la seconde d'après. Chaque saut remet le compte à zéro.
+ */
+export const SEEK_SETTLE_MS = 10_000;
+/**
+ * Une plage qui n'a pas abouti en ce temps est coupée et comptée comme un échec. Sans échéance, une
+ * connexion morte sans erreur (réseau mobile qui change d'antenne) gardait sa place parmi les
+ * `PARALLEL` pour toute la séance : plus une seule rafale, sans une ligne au journal.
+ */
+export const REQUEST_TIMEOUT_MS = 60_000;
+/** Le plus long repos après des échecs d'affilée — il double à chaque échec à partir de 5 s. */
+const MAX_BACKOFF_MS = 60_000;
 /** La lecture en avance du lecteur (`PREFETCH_CHUNKS` dans byteSource.ts) : la réserve commence au-delà. */
 const PLAYER_READAHEAD_CHUNKS = 6;
 const TICK_MS = 1000;
 /** Tous les combien une ligne `point` résume la réserve, au journal et dans la trace. */
 const REPORT_EVERY_MS = 30_000;
-/** Après ces échecs d'affilée, la réserve s'arrête pour la séance. */
-const MAX_FAILURES = 3;
 
 /** Le débit que la réserve s'autorise, en bits par seconde. */
 export function reserveSpeedBps(): number {
@@ -124,6 +137,10 @@ export interface ReserveDeps {
   now: () => number;
   hidden: () => boolean;
   budgetBytes: () => number;
+  /** Prévient dès que la page passe en arrière-plan ; rend de quoi ne plus écouter. Optionnel. */
+  onHidden?: (listener: () => void) => () => void;
+  /** L'échéance d'une plage — `REQUEST_TIMEOUT_MS` hors des tests. */
+  requestTimeoutMs?: number;
 }
 
 const browserDeps: ReserveDeps = {
@@ -138,11 +155,18 @@ const browserDeps: ReserveDeps = {
       return 150e6;
     }
   },
+  onHidden: (listener) => {
+    if (typeof document === "undefined") return () => {};
+    const onChange = () => {
+      if (document.visibilityState === "hidden") listener();
+    };
+    document.addEventListener("visibilitychange", onChange);
+    return () => document.removeEventListener("visibilitychange", onChange);
+  },
 };
 
 export class MemoryReserve {
   private stopped = false;
-  private readonly inflight = new Set<number>();
   private readonly controllers = new Set<AbortController>();
   private readonly fetches = new Set<Promise<void>>();
   private readonly allowed: number;
@@ -167,6 +191,13 @@ export class MemoryReserve {
   private windowBusyMs = 0;
   /** La position au dernier tour — l'élément est vidé quand l'arrêt écrit sa ligne. */
   private lastSeconds: number | null = null;
+  /** Quand ce tour-là a lu la position — pour reconnaître un saut trop bref pour qu'un tour voie `seeking`. */
+  private lastTickAt: number | null = null;
+  /** Le dernier saut vu, pour `SEEK_SETTLE_MS`. */
+  private lastSeekAt = -Infinity;
+  /** Le tour précédent attendait-il déjà une lecture du lecteur ? — voir `fill`. */
+  private waitedLastTick = false;
+  private unlistenHidden: () => void = () => {};
 
   private constructor(
     private readonly ctx: ReserveContext,
@@ -184,7 +215,27 @@ export class MemoryReserve {
     trace(`réserve en mémoire : jusqu'à ${reserve.allowed} Mo, ${Math.round(reserve.speedBps / 1e5) / 10} Mb/s au plus`);
     reserve.emit("départ", { allowedMB: reserve.allowed, speedMbps: Math.round(reserve.speedBps / 1e5) / 10 });
     reserve.timer = setInterval(() => reserve.tick(), TICK_MS);
+    // Rendue dès que la page est cachée, sans attendre le tour suivant : iOS suspend les minuteries
+    // d'une page en arrière-plan, et ce tour-là pouvait ne jamais venir — la mémoire restait tenue
+    // par une page que le système choisit alors d'abord de tuer.
+    try {
+      reserve.unlistenHidden = deps.onHidden?.(() => {
+        if (reserve.stopped) return;
+        reserve.empty();
+        reserve.idle = "page cachée — réserve vidée";
+      }) ?? (() => {});
+    } catch {
+      /* le tour suivant le fera */
+    }
     return reserve;
+  }
+
+  /**
+   * Les morceaux que la réserve a en route, tenus par la source : sa lecture en avance ne relance pas
+   * au même instant la requête d'un morceau déjà demandé ici (`HttpByteSource.prefetchAfter`).
+   */
+  private get inflight(): Set<number> {
+    return this.ctx.source.reserveInflight;
   }
 
   private seconds(): number {
@@ -210,7 +261,11 @@ export class MemoryReserve {
   private blocked(): string | null {
     const { source, video } = this.ctx;
     if (this.stopped) return "arrêtée";
-    if (video.seeking || source.seekFocused) return "saut";
+    if (video.seeking || source.seekFocused) {
+      this.lastSeekAt = this.deps.now();
+      return "saut";
+    }
+    if (this.deps.now() - this.lastSeekAt < SEEK_SETTLE_MS) return `saut récent — ${SEEK_SETTLE_MS / 1000} s de calme d'abord`;
     if (source.readsWaiting > 0) return "le lecteur attend un octet";
     if (this.deps.now() < this.pausedUntil) return "pause après un échec réseau";
     const watched = this.ctx.watched?.();
@@ -247,13 +302,40 @@ export class MemoryReserve {
         this.empty();
         this.idle = "page cachée — réserve vidée";
       } else {
-        this.lastSeconds = this.seconds();
+        this.noticeJump();
         this.fill();
       }
       if (this.deps.now() - this.lastReport >= REPORT_EVERY_MS) this.point();
+      // Chaque tour, pas seulement toutes les trente secondes : la ligne `stop` et un `stall` lisent
+      // ces chiffres, et ils avaient jusqu'à trente secondes de retard (chasse aux défauts du 28/09).
+      diagReserve(this.facts());
     } catch {
       /* un tour de moins */
     }
+  }
+
+  /**
+   * Un saut que les tours n'ont pas vu `seeking` — il a duré moins d'une seconde — se lit dans la
+   * position : elle a reculé, ou avancé plus que le temps écoulé ne le permet (vitesse ×2 comprise).
+   */
+  private noticeJump(): void {
+    const now = this.deps.now();
+    const seconds = this.seconds();
+    if (this.lastSeconds !== null && this.lastTickAt !== null) {
+      const moved = seconds - this.lastSeconds;
+      const elapsed = Math.max(0, now - this.lastTickAt) / 1000;
+      if (moved < -3 || moved > elapsed * 2 + 3) this.lastSeekAt = now;
+    }
+    this.lastSeconds = seconds;
+    this.lastTickAt = now;
+  }
+
+  /** Coupe ce qui est en route — le saut ou le lecteur en ont besoin, pas la réserve. */
+  private abortInflight(): void {
+    if (this.controllers.size === 0) return;
+    for (const control of this.controllers) control.abort();
+    // Le rythme avait compté ces octets comme partis : ils ne le sont pas.
+    this.nextFetchAt = this.deps.now();
   }
 
   /** Rend la mémoire de la réserve et coupe ce qui est en route. */
@@ -267,17 +349,37 @@ export class MemoryReserve {
     trace(`réserve en mémoire vidée (page cachée) : ${held} Mo rendus`);
   }
 
+  /** Le dernier morceau voulu : cinq minutes devant la tête, ou la fin du fichier s'il est plus près. */
+  private lastWanted(seconds: number): number {
+    const until = seconds + MAX_AHEAD_SECONDS;
+    const duration = this.ctx.file.durationSeconds;
+    // L'index donne le *début* du groupe qui contient l'instant : près de la fin, le dernier groupe
+    // du film n'était jamais pris (chasse aux défauts du 28/09).
+    const lastCue = this.ctx.file.cues.reduce((latest, cue) => Math.max(latest, cue.timeUs), 0) / 1e6;
+    if ((duration !== null && until >= duration) || until >= lastCue) return this.lastChunk();
+    return Math.min(this.lastChunk(), this.chunkAt(until));
+  }
+
   private fill(): void {
-    const blocked = this.blocked();
-    this.idle = blocked ?? "";
-    if (blocked) return;
     const { source } = this.ctx;
-    const head = this.chunkAt(this.seconds());
-    const lastWanted = Math.min(this.lastChunk(), this.chunkAt(this.seconds() + MAX_AHEAD_SECONDS));
-    // Ce que la tête a dépassé, et les îles laissées par un saut : rendu.
+    const seconds = this.seconds();
+    const head = this.chunkAt(seconds);
+    const lastWanted = this.lastWanted(seconds);
+    // Ce que la tête a dépassé, et les îles laissées par un saut : rendu — même quand le lien n'est
+    // pas libre, rendre de la mémoire ne coûte rien au lecteur.
     for (const index of source.reserveIndices) {
       if (index < head || index > lastWanted) source.dropReserve(index);
     }
+    const blocked = this.blocked();
+    this.idle = blocked ?? "";
+    // Un saut, ou une lecture qui attend encore au second tour : ce qui est en route est coupé. Pour
+    // un saut, la plage vise l'ancienne position ; pour une lecture, chaque octet de la réserve est
+    // un octet de moins pour elle. Une attente d'un seul tour est l'ordinaire d'une lecture en
+    // avance — couper là jetterait des plages à moitié reçues pour rien.
+    const waiting = source.readsWaiting > 0;
+    if (blocked && (this.deps.now() - this.lastSeekAt < SEEK_SETTLE_MS || (waiting && this.waitedLastTick))) this.abortInflight();
+    this.waitedLastTick = waiting;
+    if (blocked) return;
     const held = () => source.reserveIndices.length + this.inflight.size;
     // La capacité : la part de mémoire, ou les cinq minutes devant la tête si elles tiennent en moins.
     const capacity = Math.min(this.allowed, Math.max(0, lastWanted - head + 1));
@@ -292,7 +394,8 @@ export class MemoryReserve {
     const full = () => {
       this.refilling = false;
       this.burstCounted = false;
-      this.idle = held() >= this.allowed ? "réserve pleine" : `${MAX_AHEAD_SECONDS / 60} min d'avance atteintes`;
+      this.idle =
+        held() >= this.allowed ? "réserve pleine" : lastWanted === this.lastChunk() ? "fin du fichier atteinte" : `${MAX_AHEAD_SECONDS / 60} min d'avance atteintes`;
     };
     if (held() >= this.allowed || from > lastWanted) {
       if (this.inflight.size === 0) full();
@@ -304,7 +407,9 @@ export class MemoryReserve {
         this.idle = `débit limité à ${Math.round(this.speedBps / 1e5) / 10} Mb/s`;
         break;
       }
-      if (source.hasInMemory(index) || this.inflight.has(index)) {
+      // Déjà là, ou déjà demandé — par la réserve, ou par le lecteur lui-même.
+      const taken = (at: number) => source.hasInMemory(at) || this.inflight.has(at) || source.isFetching(at);
+      if (taken(index)) {
         index += 1;
         continue;
       }
@@ -312,8 +417,7 @@ export class MemoryReserve {
       while (
         count < RANGE_CHUNKS &&
         index + count <= lastWanted &&
-        !source.hasInMemory(index + count) &&
-        !this.inflight.has(index + count) &&
+        !taken(index + count) &&
         held() + count < this.allowed
       ) {
         count += 1;
@@ -345,14 +449,19 @@ export class MemoryReserve {
   private async fetchRangeNow(first: number, count: number): Promise<void> {
     const control = new AbortController();
     this.controllers.add(control);
-    for (let i = 0; i < count; i++) this.inflight.add(first + i);
+    const inflight = this.inflight;
+    for (let i = 0; i < count; i++) inflight.add(first + i);
     const size = this.ctx.source.size;
     const start = first * CHUNK_SIZE;
     const end = Math.min((first + count) * CHUNK_SIZE, size) - 1;
+    let timedOut = false;
+    const deadline = setTimeout(() => {
+      timedOut = true;
+      control.abort();
+    }, this.deps.requestTimeoutMs ?? REQUEST_TIMEOUT_MS);
     try {
       const sentAt = performance.now();
       const res = await this.deps.fetch(this.ctx.source.streamUrl, { headers: { Range: `bytes=${start}-${end}` }, signal: control.signal });
-      const headersAt = performance.now();
       if (res.status === 401 && res.headers.get(SESSION_EXPIRED_HEADER) === "1") {
         this.stop("session terminée");
         return;
@@ -361,8 +470,9 @@ export class MemoryReserve {
       if (res.status !== 206 || total !== size) throw new Error(`réponse ${res.status}`);
       const bytes = new Uint8Array(await res.arrayBuffer());
       if (bytes.byteLength !== end - start + 1) throw new Error("longueur inattendue");
+      // Pas dans les mesures réseau du lecteur (`diagRequest`) : une plage de 8 Mio bridée n'y dit rien
+      // de ce que le lecteur a attendu, et y faussait la requête la plus lente et les premiers octets.
       const endAt = performance.now();
-      diagRequest(sentAt, headersAt, endAt, bytes.byteLength, null);
       this.windowBytes += bytes.byteLength;
       this.windowBusyMs += endAt - sentAt;
       this.failures = 0;
@@ -376,15 +486,18 @@ export class MemoryReserve {
         if (this.ctx.source.offerReserve(index, bytes.slice(from, from + this.expected(index)))) this.netChunks += 1;
       }
     } catch (error) {
-      if (this.stopped || control.signal.aborted) return;
+      if (this.stopped || (control.signal.aborted && !timedOut)) return;
       this.failures += 1;
-      const message = error instanceof Error ? error.message : String(error);
-      this.pausedUntil = this.deps.now() + 5000 * this.failures;
-      trace(`réserve : plage ${first}–${first + count - 1} Mo refusée (${message}), échec ${this.failures}/${MAX_FAILURES}`);
-      this.emit("erreur", { chunk: first, count, message: message.slice(0, 200), failures: this.failures });
-      if (this.failures >= MAX_FAILURES) this.stop(`réseau : ${message}`);
+      const message = timedOut ? `sans réponse en ${Math.round((this.deps.requestTimeoutMs ?? REQUEST_TIMEOUT_MS) / 1000)} s` : error instanceof Error ? error.message : String(error);
+      // Un repos qui double, jusqu'à une minute — plus d'arrêt pour la séance : trois échecs dans un
+      // tunnel coupaient la réserve pour tout le reste du film, réseau revenu ou pas.
+      const backoff = Math.min(MAX_BACKOFF_MS, 5000 * 2 ** (this.failures - 1));
+      this.pausedUntil = this.deps.now() + backoff;
+      trace(`réserve : plage ${first}–${first + count - 1} Mo refusée (${message}), échec ${this.failures} — reprise dans ${backoff / 1000} s`);
+      this.emit("erreur", { chunk: first, count, message: message.slice(0, 200), failures: this.failures, backoffS: backoff / 1000 });
     } finally {
-      for (let i = 0; i < count; i++) this.inflight.delete(first + i);
+      clearTimeout(deadline);
+      for (let i = 0; i < count; i++) inflight.delete(first + i);
       this.controllers.delete(control);
     }
   }
@@ -443,16 +556,28 @@ export class MemoryReserve {
     await Promise.all([...this.fetches]);
   }
 
-  /** Arrête la réserve et rend sa mémoire. Sûr à appeler deux fois. Ne lève jamais. */
-  stop(why = "fin de lecture"): ReserveFacts {
+  /**
+   * Arrête la réserve. Sûr à appeler deux fois. Ne lève jamais.
+   *
+   * @param keep laisser ses morceaux à la source : c'est la fin d'un pipeline, et la source qui se
+   *   ferme les passe au relais (`HttpByteSource.close`) — une reconstruction (changement de piste,
+   *   reprise après une erreur) retrouve alors sa réserve au lieu de retélécharger jusqu'à 150 Mo.
+   *   Faux : sa mémoire est rendue tout de suite.
+   */
+  stop(why = "fin de lecture", keep = false): ReserveFacts {
     if (this.stopped) return this.facts();
     const ahead = this.aheadSpan();
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
+    try {
+      this.unlistenHidden();
+    } catch {
+      /* rien */
+    }
     for (const control of this.controllers) control.abort();
     const final = this.facts();
     try {
-      this.ctx.source.clearReserve();
+      if (!keep) this.ctx.source.clearReserve();
     } catch {
       /* rien */
     }

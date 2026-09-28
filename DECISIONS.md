@@ -835,11 +835,15 @@ redémarrage.
 
 **Règle.** À la première ouverture d'un titre (pas une reconstruction, pas le banc), le lecteur
 recule de 5 s si l'on a quitté le titre depuis plus de dix minutes, sauf près des deux bords. La
-reprise instantanée garde, en arrière-plan, les octets de **cette** ouverture-là : l'en-tête,
-l'index et les blocs depuis l'image clé qui précède la position reculée.
+reprise instantanée garde, en arrière-plan, les octets de **toutes** les ouvertures possibles :
+l'en-tête, l'index et les blocs depuis l'image clé qui précède la position reculée jusqu'à un groupe
+après la position exacte (`openingSpan`). Elle ne sait pas quand on ouvrira : calculée par
+`openingPosition` quand la liste arrive, elle gardait la position exacte d'un titre qu'on venait de
+quitter, et le lecteur ouvert une heure plus tard reculait vers une image clé absente — ouverture
+« mixte », relevée au journal le 28/09/2026.
 
 **Porteur.** `openingPosition(itemId, position, durée)` (`src/lib/resumeRewind.ts`), sur `awayFrom`
-et `rewound`.
+et `rewound` ; `openingSpan(position, durée)` pour ce qu'on garde d'avance, sur `rewound`.
 
 **Appelants.** `ExperimentalPlayerHost` (la position d'ouverture), le lecteur serveur
 (`ActivePlayer` dans `PlayerHost.tsx`, depuis le 27/09/2026 : il ouvrait pile à la position, et
@@ -849,7 +853,8 @@ les octets gardés ne seraient plus ceux que le lecteur lit, et l'ouverture rede
 sans que rien ne casse — seul le journal (`openedFrom`) le dirait.
 
 **Tests.** `resumeRewind.test.ts`, `resumeCache-core.test.ts`, `resumeCache-run.test.ts`,
-`decisions-partagees.test.ts` (ni l'hôte ni la reprise instantanée n'appellent `awayFrom` eux-mêmes).
+`decisions-partagees.test.ts` (ni l'hôte ni la reprise instantanée n'appellent `awayFrom` eux-mêmes ;
+l'hôte passe par `openingPosition`, la reprise instantanée par `openingSpan`).
 
 **Voulu.** Le lecteur serveur ne recule pas un relais (la position exacte où le natif s'est
 arrêté, ou le retour d'une télé), ni un rechargement pour changer de piste ; et, faute de durée

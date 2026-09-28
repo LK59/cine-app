@@ -121,7 +121,10 @@ function clean(fields: Record<string, unknown>): Record<string, string | number 
     // est, et perdait en silence ses derniers champs — les images perdues, et `lateByMs` d'un
     // bilan renvoyé après coup, sans lequel la frise le place au mauvais moment. Le plafond reste
     // une borne de disque ; il n'a jamais voulu choisir quels faits d'une ligne honnête écrire.
-    if ((diag ? keptDiag : kept) >= 40 || key.length > 40) return;
+    // `diag.*` : 60 depuis le 28/09 au soir — une séance complète (attentes des quatre sortes,
+    // batterie, réserve d'avance, connexion) en porte jusqu'à 44, et les derniers arrivés — la
+    // connexion — tombaient en silence.
+    if ((diag ? keptDiag : kept) >= (diag ? 60 : 40) || key.length > 40) return;
     if (typeof value === "number" && Number.isFinite(value)) out[key] = Math.round(value * 1000) / 1000;
     else if (typeof value === "boolean") out[key] = value;
     // `steps` is the one long field: the device's own timeline of a track change, which is the

@@ -405,26 +405,32 @@ function closedSource(): Error {
  */
 const HANDOVER_MS = 5_000;
 type Kept = { first: number; last: number } | null;
-let handover: { url: string; size: number; chunks: Map<number, Uint8Array>; kept: Kept; timer: ReturnType<typeof setTimeout> } | null = null;
+type Handover = { size: number; chunks: Map<number, Uint8Array>; kept: Kept; reserve: Map<number, Uint8Array> };
+let handover: (Handover & { url: string; timer: ReturnType<typeof setTimeout> }) | null = null;
 
-function takeHandover(url: string): { size: number; chunks: Map<number, Uint8Array>; kept: Kept } | null {
+function takeHandover(url: string): Handover | null {
   if (!handover || handover.url !== url) return null;
   const taken = handover;
   clearTimeout(taken.timer);
   handover = null;
-  return { size: taken.size, chunks: taken.chunks, kept: taken.kept };
+  return { size: taken.size, chunks: taken.chunks, kept: taken.kept, reserve: taken.reserve };
 }
 
-function leaveHandover(url: string, size: number, chunks: Map<number, Uint8Array>, kept: Kept): void {
+/**
+ * La réserve d'avance (`MemoryReserve`) passe aussi : une reconstruction — changement de piste, reprise
+ * après une erreur — la retrouve au lieu de retélécharger jusqu'à 150 Mo (chasse aux défauts du 28/09).
+ * La réserve de la nouvelle source rend d'elle-même ce qui ne sert plus à sa position.
+ */
+function leaveHandover(url: string, size: number, chunks: Map<number, Uint8Array>, kept: Kept, reserve: Map<number, Uint8Array>): void {
   if (handover) clearTimeout(handover.timer);
-  if (chunks.size === 0) {
+  if (chunks.size === 0 && reserve.size === 0) {
     handover = null;
     return;
   }
   const timer = setTimeout(() => {
     if (handover?.chunks === chunks) handover = null;
   }, HANDOVER_MS);
-  handover = { url, size, chunks, kept, timer };
+  handover = { url, size, chunks, kept, reserve, timer };
 }
 
 /** Pour les tests : l'état d'une page neuve. */
@@ -541,10 +547,14 @@ export class HttpByteSource implements ByteSource {
       const source = new HttpByteSource(url, inherited.size);
       source.disk = disk ?? null;
       source.chunks = inherited.chunks;
+      source.reserve = inherited.reserve;
       // La zone autour de la tête aussi : c'est elle que la reconstruction relit d'abord, et ses
       // premiers téléchargements l'auraient chassée avant que le lecteur ne la redésigne.
       source.kept = inherited.kept;
-      trace(`flux repris de la lecture précédente — ${inherited.chunks.size} Mo déjà là`);
+      trace(
+        `flux repris de la lecture précédente — ${inherited.chunks.size} Mo déjà là` +
+          (inherited.reserve.size > 0 ? `, ${inherited.reserve.size} en réserve` : "")
+      );
       return source;
     }
     if (typeof knownSize === "number" && Number.isFinite(knownSize) && knownSize > 0) {
@@ -787,7 +797,9 @@ export class HttpByteSource implements ByteSource {
     for (let ahead = 1; ahead <= depth; ahead++) {
       const next = index + ahead;
       if (next * CHUNK_SIZE >= this.size) return;
-      if (this.chunks.has(next) || this.inflight.has(next) || this.reserve.has(next)) continue;
+      // Un morceau que la réserve d'avance a déjà en route n'est pas demandé une seconde fois : elle
+      // le livre dans quelques instants, et la lecture en avance n'est jamais pressée.
+      if (this.chunks.has(next) || this.inflight.has(next) || this.reserve.has(next) || this.reserveInflight.has(next)) continue;
       void this.fetchChunk(next).catch(() => {
         // A failed read-ahead is not an error: the real read will try again and report properly.
       });
@@ -872,6 +884,12 @@ export class HttpByteSource implements ByteSource {
   }
   get reserveIndices(): number[] {
     return [...this.reserve.keys()];
+  }
+  /** Les morceaux que la réserve a en route — tenus par elle, lus par `prefetchAfter`. */
+  readonly reserveInflight = new Set<number>();
+  /** Le lecteur a-t-il ce morceau en route ? La réserve ne le demande pas une seconde fois. */
+  isFetching(index: number): boolean {
+    return this.inflight.has(index);
   }
   /** Le morceau est-il en mémoire, dans le cache ou dans la réserve ? */
   hasInMemory(index: number): boolean {
@@ -1098,9 +1116,10 @@ export class HttpByteSource implements ByteSource {
     this.inflightControllers.clear();
     // Les morceaux arrivés entiers restent valables pour ce fichier : laissés à la source qui le
     // rouvrira, s'il y en a une bientôt. Les requêtes en cours, elles, meurent avec celle-ci.
-    if (leaveForNext) leaveHandover(this.url, this.size, this.chunks, this.kept);
+    if (leaveForNext) leaveHandover(this.url, this.size, this.chunks, this.kept, this.reserve);
     this.chunks = new Map();
     this.reserve = new Map();
+    this.reserveInflight.clear();
     this.inflight.clear();
   }
 }

@@ -713,19 +713,20 @@ describe("une seule position d'ouverture pour le lecteur et pour la reprise inst
    * 25/09/2026 : la reprise instantanée garde les octets de l'ouverture à la position reculée. Si
    * l'hôte recalculait le recul à sa façon, les octets gardés ne seraient plus ceux qu'il lit — rien
    * ne casserait, l'ouverture redeviendrait simplement « mixte ». Les deux passent par
-   * `openingPosition`.
+   * `openingPosition` — et la reprise instantanée, qui garde d'avance sans savoir quand on ouvrira,
+   * par `openingSpan`, qui couvre toutes ses ouvertures possibles (28/09/2026).
    */
-  it.each(["src/components/ExperimentalPlayerHost.tsx", "src/lib/resumeCache/useResumeCache.ts"])(
-    "%s passe par openingPosition, sans appeler awayFrom",
-    (f) => {
-      const code = lire(f)
-        .split("\n")
-        .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
-        .join("\n");
-      expect(code).toMatch(/openingPosition\(/);
-      expect(code).not.toMatch(/awayFrom\(/);
-    }
-  );
+  it.each([
+    ["src/components/ExperimentalPlayerHost.tsx", /openingPosition\(/],
+    ["src/lib/resumeCache/useResumeCache.ts", /openingSpan\(/],
+  ])("%s passe par le porteur, sans appeler awayFrom", (f, porteur) => {
+    const code = lire(f)
+      .split("\n")
+      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+      .join("\n");
+    expect(code).toMatch(porteur);
+    expect(code).not.toMatch(/awayFrom\(/);
+  });
 });
 
 describe("une seule décision pour ce qu'une fiche montre avant le réseau", () => {
