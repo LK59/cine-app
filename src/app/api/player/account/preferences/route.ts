@@ -51,6 +51,12 @@ export async function POST(req: NextRequest) {
     const current = (user.Configuration ?? {}) as Record<string, unknown>;
     const next = { ...current };
     if ("audioLanguage" in body) next.AudioLanguagePreference = body.audioLanguage || null;
+    // Choisir une langue, c'est ne pas vouloir la piste par défaut du fichier. Laissée active,
+    // l'option Jellyfin « lire la piste audio par défaut » l'emportait sur ce choix — chez nous
+    // comme dans les applications Jellyfin — et un compte réglé sur l'anglais s'ouvrait en
+    // français, à corriger à la main à chaque épisode (relevé le 28/09/2026 ; désactivée ce jour-là
+    // sur tous les comptes).
+    if (body.audioLanguage) next.PlayDefaultAudioTrack = false;
     if ("subtitleLanguage" in body) next.SubtitleLanguagePreference = body.subtitleLanguage || null;
     if ("subtitleMode" in body && body.subtitleMode) next.SubtitleMode = body.subtitleMode;
 
