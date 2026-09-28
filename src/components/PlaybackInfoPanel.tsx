@@ -149,7 +149,8 @@ export function PlaybackInfoPanel({
 
       {/* Gardé là où on peut l'atteindre pendant la lecture : les fautes qui restent à traquer
           sont justement celles qui arrivent *après* un démarrage réussi. */}
-      {data.report && <ExperimentalPlayerReport input={data.report} />}
+      {/* Le panneau défile déjà : le rapport suit, sans zone défilante imbriquée. */}
+      {data.report && <ExperimentalPlayerReport input={data.report} flow />}
     </div>
   );
 }

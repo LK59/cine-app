@@ -66,8 +66,8 @@ describe("panneau d'infos de lecture", () => {
       report: { error: null, elapsedMs: null, title: "Un Film", itemId: "abc", file: null, pathReason: "Lecteur stable", diagnostics: {}, running: true },
     };
     render(<PlaybackInfoPanel data={data} open onClose={vi.fn()} />);
-    await waitFor(() => expect(screen.getByRole("textbox")).toBeInTheDocument());
-    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toContain("Un Film");
+    await waitFor(() => expect(screen.getByTestId("player-report-text")).toBeInTheDocument());
+    expect(screen.getByTestId("player-report-text").textContent).toContain("Un Film");
   });
 });
 

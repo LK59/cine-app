@@ -7,8 +7,8 @@
 // one sentence on it, or a spinner that never stops. On a phone there is no console behind either.
 // So the same facts are gathered into one block of text here, with a way to get it off the device.
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ClipboardCheck, Copy, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ClipboardCheck, Copy } from "lucide-react";
 import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
 import { traceText } from "@/lib/webcodecs/trace";
 import { useT } from "@/components/TranslationProvider";
@@ -70,84 +70,71 @@ export function buildReport(input: ReportInput, capabilities: Record<string, str
   return lines.join("\n");
 }
 
-export function ExperimentalPlayerReport({ input }: { input: ReportInput }) {
+/**
+ * @param flow dans un conteneur qui défile déjà (le panneau technique) : le texte suit ce défilement,
+ *   sans zone défilante à lui. Ailleurs (l'écran d'erreur, l'attente), rien ne défile autour, et le
+ *   texte a sa propre zone bornée.
+ */
+export function ExperimentalPlayerReport({ input, flow = false }: { input: ReportInput; flow?: boolean }) {
   const t = useT();
   const [capabilities, setCapabilities] = useState<Record<string, string> | null>(null);
   const [copied, setCopied] = useState(false);
-  /**
-   * Le rapport est une photo, prise à l'ouverture, et reprise quand les sondes répondent, sur
-   * « Actualiser » ou au moment de copier (28/09/2026). Reconstruit à chaque rendu — toutes les
-   * 500 ms, panneau ouvert —, il changeait à chaque fois (il commence par l'heure) : sur iPhone, la
-   * zone de texte de plusieurs centaines de lignes était réécrite, revenait en haut, et le défilement
-   * du panneau se figeait pendant qu'on le lisait.
-   */
-  const [report, setReport] = useState(() => buildReport(input, null));
-  const inputRef = useRef(input);
-  useEffect(() => {
-    inputRef.current = input;
-  });
 
   // Asked here rather than inherited from the panel: on this screen the panel never opened, and
   // what the device accepts is the single most useful thing to know about a refusal.
   useEffect(() => {
     let cancelled = false;
-    const settle = (found: Record<string, string>) => {
-      if (cancelled) return;
-      setCapabilities(found);
-      setReport(buildReport(inputRef.current, found));
-    };
     void probeCapabilities()
-      .then((found) => settle(describeCapabilities(found)))
-      .catch(() => settle({ "Sonde des capacités": "échec" }));
+      .then((found) => !cancelled && setCapabilities(describeCapabilities(found)))
+      .catch(() => !cancelled && setCapabilities({ "Sonde des capacités": "échec" }));
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const refresh = useCallback(() => setReport(buildReport(inputRef.current, capabilities)), [capabilities]);
+  // En direct, à chaque rendu. Le 28/09/2026, défiler dans le rapport figeait le panneau sur
+  // iPhone ; ce n'était pas cette mise à jour, mais la zone de saisie qui le portait (voir plus bas).
+  const report = buildReport(input, capabilities);
 
   const copy = useCallback(() => {
-    // Ce qui part est l'état de maintenant, pas la photo de l'ouverture.
-    const fresh = buildReport(inputRef.current, capabilities);
-    setReport(fresh);
-    // Only over HTTPS, and not on every browser. The textarea below is the fallback that always
-    // works: it is selectable, so the report can be taken by hand when this cannot give it.
+    // Only over HTTPS, and not on every browser. The text below is the fallback that always works:
+    // it is selectable, so the report can be taken by hand when this cannot give it.
     void navigator.clipboard
-      ?.writeText(fresh)
+      ?.writeText(report)
       .then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       })
       .catch(() => {});
-  }, [capabilities]);
+  }, [report]);
 
   return (
     <div className="mt-2 w-full max-w-lg text-left">
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-xs uppercase tracking-wide text-slate-500">{t("player.report.details")}</p>
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={refresh} className="btn btn-ghost btn-sm" aria-label={t("player.report.refresh")}>
-            <RefreshCw size={14} />
-            {t("player.report.refresh")}
-          </button>
-          <button
-            type="button"
-            onClick={copy}
-            className="btn btn-ghost btn-sm"
-          >
-            {copied ? <ClipboardCheck size={14} /> : <Copy size={14} />}
-            {copied ? t("player.report.copied") : t("player.report.copy")}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={copy}
+          className="btn btn-ghost btn-sm"
+        >
+          {copied ? <ClipboardCheck size={14} /> : <Copy size={14} />}
+          {copied ? t("player.report.copied") : t("player.report.copy")}
+        </button>
       </div>
-      {/* Read-only rather than disabled: a disabled textarea cannot be selected, and selecting it
-          by hand is the only way to get this off a browser with no clipboard permission. */}
-      <textarea
-        readOnly
-        value={report}
-        onFocus={(event) => event.currentTarget.select()}
-        className="h-48 w-full resize-none rounded-lg border border-white/10 bg-black/50 p-3 font-mono text-[11px] leading-4 text-slate-300"
-      />
+      {/* Un bloc de texte, plus une zone de saisie (28/09/2026). La zone de texte défilait dans le
+          panneau qui défile, et sélectionnait tout dès qu'elle recevait le focus : sur iPhone, le
+          toucher qui commençait un défilement la sélectionnait — des centaines de lignes —, iOS
+          passait en mode sélection, et ni le rapport ni le panneau ne défilaient plus. Le texte
+          reste sélectionnable à la main (appui long), pour un navigateur sans presse-papiers. */}
+      <pre
+        data-testid="player-report-text"
+        className={
+          "select-text whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-black/50 p-3 font-mono text-[11px] leading-4 text-slate-300" +
+          (flow ? "" : " max-h-48 overflow-y-auto overscroll-contain")
+        }
+      >
+        {report}
+      </pre>
     </div>
   );
 }

@@ -28,27 +28,30 @@ const input = (position: string): ReportInput => ({
  * ramenait sans cesse la zone de texte en haut et figeait le défilement sur iPhone.
  */
 describe("ExperimentalPlayerReport", () => {
-  it("est une photo : les rendus suivants ne la réécrivent pas, « Actualiser » la reprend", async () => {
-    const { rerender } = render(<ExperimentalPlayerReport input={input("10 s")} />);
-    const text = () => (screen.getByRole("textbox") as HTMLTextAreaElement).value;
-    await waitFor(() => expect(text()).toContain("HEVC matériel"));
-    expect(text()).toContain("Position: 10 s");
-
-    rerender(<ExperimentalPlayerReport input={input("11 s")} />);
-    rerender(<ExperimentalPlayerReport input={input("12 s")} />);
-    expect(text()).toContain("Position: 10 s");
-
-    await act(async () => void screen.getByRole("button", { name: "player.report.refresh" }).click());
-    expect(text()).toContain("Position: 12 s");
-  });
-
-  it("copie l'état du moment, pas la photo de l'ouverture", async () => {
+  it("se tient à jour en direct, et copie ce qu'il montre", async () => {
     const writeText = vi.fn(async (_text: string) => {});
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     const { rerender } = render(<ExperimentalPlayerReport input={input("10 s")} />);
-    await waitFor(() => expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toContain("HEVC"));
+    const text = () => screen.getByTestId("player-report-text").textContent ?? "";
+    await waitFor(() => expect(text()).toContain("HEVC matériel"));
     rerender(<ExperimentalPlayerReport input={input("42 s")} />);
+    expect(text()).toContain("Position: 42 s");
     await act(async () => void screen.getByText("player.report.copy").click());
     expect(writeText.mock.calls[0][0]).toContain("Position: 42 s");
+  });
+
+  it("dans le panneau, suit son défilement — aucune zone défilante imbriquée, aucune sélection au toucher", () => {
+    // 28/09/2026, iPhone : défiler dans le rapport bloquait tout le panneau.
+    render(<ExperimentalPlayerReport input={input("10 s")} flow />);
+    const text = screen.getByTestId("player-report-text");
+    expect(text.tagName).toBe("PRE");
+    expect(text.className).not.toContain("overflow-y-auto");
+    expect(text.className).toContain("select-text");
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("ailleurs (écran d'erreur, attente), garde sa propre zone bornée", () => {
+    render(<ExperimentalPlayerReport input={input("10 s")} />);
+    expect(screen.getByTestId("player-report-text").className).toContain("max-h-48");
   });
 });
