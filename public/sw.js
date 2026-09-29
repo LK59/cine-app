@@ -31,6 +31,8 @@ const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.
  * repris du cache précédent sans être retéléchargé. Tout ce que le build courant n'a pas
  * redemandé disparaît au déploiement suivant. Deux générations au plus, jamais davantage.
  */
+// Repris tel quel par `SW_STATIC_CACHE_PREFIX` (src/lib/pwaRefresh.ts) : « Actualiser l'application »
+// n'évince que ces caches-là.
 const STATIC_PREFIX = "cine-static-";
 const BUILD = (() => {
   try {
