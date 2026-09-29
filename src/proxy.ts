@@ -11,6 +11,11 @@ import { sessionDb } from "@/lib/db";
 import { forgetJellyfinToken, jellyfinTokenAlive } from "@/lib/jellyfinToken";
 import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
 import { logAuthEvent } from "@/lib/eventLogs";
+import { crossSiteWrite } from "@/lib/crossSite";
+
+// Réexportée : la règle est écrite une fois, dans `crossSite.ts`, et les signalements — hors du
+// proxy (voir `HORS_PROXY`) — la posent eux-mêmes avec la même fonction.
+export { crossSiteWrite };
 
 // Next.js 16's Proxy (formerly "middleware") always runs on the Node.js runtime — unlike the old
 // Edge-only middleware, so verifySessionFull's better-sqlite3-backed revocation check (a native
@@ -113,6 +118,8 @@ const GUEST_ALLOWED_PATTERNS: RegExp[] = [
   // Retirer sa propre demande — côté Jellyseerr seulement, jamais côté Radarr.
   /^DELETE \/api\/player\/requests\/\d+$/,
   // Ses propres signalements — la route refuse ceux des autres (`reportFor`, `canSetStatus`).
+  // Hors du matcher depuis A2 (`HORS_PROXY`) : ces entrées et celle de `POST /api/reports` ne
+  // servent plus, et restent pour le jour où ils y reviendraient — sans elles, 403 aux comptes.
   /^(PUT|DELETE) \/api\/reports\/\d+$/,
   /^POST \/api\/reports\/\d+\/(messages|status)$/,
   /^DELETE \/api\/reports\/\d+\/images\/\d+$/,
@@ -198,34 +205,6 @@ async function signedInElsewhere(req: NextRequest): Promise<NextResponse | null>
 async function tokenStillAccepted(session: Parameters<typeof jellyfinTokenAlive>[0]): Promise<boolean> {
   try {
     return await jellyfinTokenAlive(session);
-  } catch {
-    return true;
-  }
-}
-
-/**
- * Une écriture envoyée par une autre page que la nôtre.
- *
- * Le cookie de session est `SameSite=Lax`, ce qui arrête un site tiers — mais pas un « même site » :
- * pour le navigateur, tous les sous-domaines du domaine qui héberge l'application en sont un, et le
- * cookie part avec leurs POST. Une page compromise sur n'importe lequel d'entre eux pouvait écrire
- * ici au nom de qui était connecté — un `text/plain` sur `/api/watchlist` passait (audit du
- * 26/09/2026).
- *
- * `Sec-Fetch-Site` d'abord : tout navigateur récent l'envoie, et c'est lui qui dit le vrai — `same-
- * origin` pour nos propres appels, `sendBeacon` et le service worker compris. `Origin` ensuite, pour
- * un navigateur qui ne l'enverrait pas. Sans l'un ni l'autre (un script, un test), rien n'est
- * refusé : ce n'est pas un navigateur qu'on pourrait abuser.
- */
-export function crossSiteWrite(req: NextRequest): boolean {
-  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return false;
-  if (!req.nextUrl.pathname.startsWith("/api/") || !req.headers) return false;
-  const site = req.headers.get("sec-fetch-site");
-  if (site) return site !== "same-origin" && site !== "none";
-  const origin = req.headers.get("origin");
-  if (!origin) return false;
-  try {
-    return new URL(origin).host !== req.headers.get("host");
   } catch {
     return true;
   }
@@ -392,7 +371,28 @@ const ACTIFS_PUBLICS = [
 ];
 
 /**
- * Écrit à la main, et non construit depuis le tableau ci-dessus : Next exige une **chaîne
+ * Ce que le proxy ne voit pas non plus, mais qui n'a rien de public : les signalements.
+ *
+ * Dès qu'un proxy existe, Next garde en mémoire le corps de chaque requête qu'il couvre, jusqu'à
+ * `proxyClientMaxBodySize`, avant que le proxy ait rien décidé. Cette limite avait été portée à
+ * 100 Mo pour les captures jointes à un signalement — et valait alors pour toute l'API, requêtes
+ * anonymes comprises : vingt POST de 95 Mo sans cookie remplissaient les 2 Go du conteneur (audit
+ * A2, 29/09/2026). La limite est revenue au défaut de Next, et les seules routes qui ont besoin de
+ * gros corps sortent du proxy.
+ *
+ * Elles en portent elles-mêmes les contrôles, tous dans `reportCaller` (`reportRequest.ts`) et
+ * tous **avant** de lire le corps : l'écriture venue d'une autre page (`crossSiteWrite`, la même
+ * fonction), la session (401 avec `x-session-expired`), et un corps annoncé trop lourd. Le rôle n'a
+ * rien à reporter : toutes leurs écritures figuraient dans la liste des invités, et chaque route
+ * vérifie que le signalement est celui de l'appelant. Le renouvellement glissant du cookie n'y a
+ * pas lieu — n'importe quelle autre requête de la page s'en charge.
+ *
+ * Un préfixe, comme les entrées ci-dessus : `/api/reportsX` échapperait aussi, et n'existe pas.
+ */
+export const HORS_PROXY = ["api/reports"];
+
+/**
+ * Écrit à la main, et non construit depuis les tableaux ci-dessus : Next exige une **chaîne
  * littérale** ici — il lit ce fichier à la compilation, sans l'exécuter, et refuse tout ce qu'il
  * ne peut pas lire tel quel (« matcher[0] need to be static strings »). La tentative de
  * l'assembler a été refusée par la construction de l'image le 20/09/2026.
@@ -403,6 +403,6 @@ const ACTIFS_PUBLICS = [
  */
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|favicon.svg|favicon-32.png|manifest.json|sw.js|offline.html|icon-192.png|icon-512.png|icon.svg|apple-touch-icon.png|splash/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|favicon.svg|favicon-32.png|manifest.json|sw.js|offline.html|icon-192.png|icon-512.png|icon.svg|apple-touch-icon.png|splash/|api/reports).*)",
   ],
 };

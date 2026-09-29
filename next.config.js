@@ -5,14 +5,12 @@ const nextConfig = {
   // Pas de `x-powered-by: Next.js` : rien à gagner à annoncer la pile à qui sonde le site.
   poweredByHeader: false,
   output: "standalone",
-  experimental: {
-    // Le corps d'une requête que le proxy (`src/proxy.ts`) doit laisser passer entier. 10 Mo par
-    // défaut, au-delà Next n'en garde que le début : deux captures d'iPhone jointes à un
-    // signalement rendaient le formulaire illisible (relu le 24/09/2026). Au-dessus de
-    // `MAX_REQUEST_BYTES` (reportLimits.ts), que le téléphone respecte — un test compare les deux.
-    // Pas plus : Next garde ce corps en mémoire, et le conteneur a 2 Go.
-    proxyClientMaxBodySize: "100mb",
-  },
+  // Pas de `experimental.proxyClientMaxBodySize` : la limite reste celle de Next (10 Mo). Dès qu'un
+  // proxy existe, Next garde en mémoire jusqu'à cette limite le corps de chaque requête qu'il
+  // couvre, avant que le proxy n'ait rien décidé. Portée à 100 Mo pour les captures des
+  // signalements, elle valait pour toute l'API, anonymes compris : vingt POST de 95 Mo sans cookie
+  // remplissaient les 2 Go du conteneur (audit A2, 29/09/2026). Les signalements sont sortis du
+  // proxy à la place (`HORS_PROXY`, src/proxy.ts) ; un test tient cette limite au défaut.
   // Lets the development stack compile into its own directory (see docker-compose.dev.yml), so a
   // `next dev` running against the working tree and a production image build never overwrite each
   // other's output.

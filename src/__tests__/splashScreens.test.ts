@@ -119,8 +119,11 @@ describe("les actifs que le système va chercher lui-même sont publics", () => 
   it("la liste documentée et celle que Next lit sont la même", () => {
     // Next veut une chaîne littérale — il lit ce fichier sans l'exécuter — donc la liste est
     // écrite deux fois. Ce test est tout ce qui empêche les deux de se séparer.
+    // Suivie des chemins sortis du proxy sans être publics (`HORS_PROXY` : les signalements, A2).
+    const horsBloc = proxy.slice(proxy.indexOf("HORS_PROXY = ["), proxy.indexOf("];", proxy.indexOf("HORS_PROXY = [")));
+    const hors = [...horsBloc.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     const matcher = proxy.match(/"(\/\(\(\?![^"]+)"/)![1];
-    expect(matcher).toBe(`/((?!${actifs.join("|")}).*)`);
+    expect(matcher).toBe(`/((?!${[...actifs, ...hors].join("|")}).*)`);
   });
 
   it("et rien d'autre : une page ou une API reste derrière la session", () => {

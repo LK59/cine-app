@@ -335,15 +335,14 @@ describe("signalements — relus le 24/09/2026 au soir", () => {
     expect(push.admins).toHaveBeenCalledTimes(1);
   });
 
-  // Au-delà de 10 Mo par défaut, le proxy de Next ne garde que le début du corps : deux captures
-  // d'iPhone rendaient le formulaire illisible.
-  it("laisse passer au proxy tout ce que le téléphone peut envoyer", async () => {
-    const { MAX_REQUEST_BYTES } = await import("@/lib/reportLimits");
-    const { createRequire } = await import("node:module");
-    const config = createRequire(`${process.cwd()}/`)("./next.config.js") as { experimental?: { proxyClientMaxBodySize?: string } };
-    const raw = config.experimental?.proxyClientMaxBodySize ?? "10mb";
-    const mb = Number(/^(\d+)mb$/i.exec(raw)?.[1]);
-    expect(mb * 1024 * 1024).toBeGreaterThan(MAX_REQUEST_BYTES);
+  // Au-delà de sa limite, le proxy de Next ne garde que le début du corps : deux captures d'iPhone
+  // rendaient le formulaire illisible. Les signalements sont donc hors du proxy (A2) — la limite
+  // de Next, elle, est revenue à son défaut et ne les concerne plus.
+  it("les signalements échappent au proxy, dont Next borne le corps", async () => {
+    const { MAX_REQUEST_BYTES, REPORT_BODY_LIMIT } = await import("@/lib/reportLimits");
+    const { HORS_PROXY } = await import("@/proxy");
+    expect(HORS_PROXY).toContain("api/reports");
+    expect(REPORT_BODY_LIMIT).toBeGreaterThan(MAX_REQUEST_BYTES);
   });
 });
 

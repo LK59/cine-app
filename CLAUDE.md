@@ -162,8 +162,15 @@ sliding session refresh, the reads a `user` may not make although they are `GET`
 `/api/` write sent from another page (`crossSiteWrite`: `Sec-Fetch-Site`, else `Origin` — the
 `Lax` cookie rides along with sibling subdomains' POSTs), and the
 `x-session-expired: 1` header. **It is that header's only
-emitter**: a bare 401 may come from an upstream service whose key is wrong, and only this header
-means the viewer's own session is gone.
+emitter** (with the one exception below): a bare 401 may come from an upstream service whose key
+is wrong, and only this header means the viewer's own session is gone.
+
+**`/api/reports*` is outside the proxy's matcher** (`HORS_PROXY`) and carries its checks itself, in
+`reportCaller` (`src/lib/reportRequest.ts`), before any body is read: `crossSiteWrite` (the same
+function, `src/lib/crossSite.ts`), the session with `x-session-expired`, and a declared-size cap.
+Next buffers every body the proxy covers up to `proxyClientMaxBodySize` before the proxy decides
+anything; raised to 100 MB for report screenshots, it let anonymous POSTs fill the container's
+memory, so that setting stays at Next's default.
 
 It also owns `ACTIFS_PUBLICS`, **the files served without a session** — the manifest, the service
 worker, the offline page, the icons, and `/splash/`. These are what a browser or an operating

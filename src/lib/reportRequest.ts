@@ -3,6 +3,9 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { reportsDb, type ReportRow } from "@/lib/db";
 import { canSee, whoIs, type Who } from "@/lib/reports";
+import { crossSiteWrite } from "@/lib/crossSite";
+import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
+import { REPORT_BODY_LIMIT } from "@/lib/reportLimits";
 
 /**
  * Ce que l'écran sait dire d'un refus, dans la langue du compte (`report.errors.<code>`). Le
@@ -21,16 +24,36 @@ export type ReportErrorCode =
   | "draftNoComment"
   | "refused"
   | "incomplete"
-  | "quota";
+  | "quota"
+  // Posé aussi par le téléphone avant d'envoyer (`prepareImage.ts`) ; le serveur le renvoie quand
+  // un corps annoncé dépasse `REPORT_BODY_LIMIT` — la même phrase à l'écran.
+  | "requestTooLarge";
 
 export function reportError(code: ReportErrorCode, status: number, detail?: string): NextResponse {
   return NextResponse.json({ error: detail ?? code, code }, { status });
 }
 
-/** La session de qui appelle, ou la réponse qui la refuse. */
+/**
+ * La session de qui appelle, ou la réponse qui la refuse — et ce que le proxy faisait pour ces
+ * routes, qu'il ne voit plus.
+ *
+ * Les signalements sont sortis du matcher du proxy (A2, 29/09/2026, voir `HORS_PROXY`) : il fallait
+ * laisser Next garder 100 Mo de *chaque* corps d'API pour leurs captures, et vingt POST anonymes
+ * suffisaient à remplir la mémoire. Tout ce qui suit passe donc ici, et **avant que la route ne
+ * lise le corps** — chaque route l'appelle en premier. Dans l'ordre du proxy : l'écriture venue
+ * d'une autre page (la même fonction que lui), puis la session, avec l'en-tête qui dit à la page
+ * que c'est la sienne qui a disparu et pas un service amont. Le corps annoncé trop lourd vient
+ * après la session : un anonyme n'apprend rien de nos limites.
+ */
 export async function reportCaller(req: NextRequest): Promise<Who | NextResponse> {
+  if (crossSiteWrite(req)) return reportError("refused", 403, "Requête refusée");
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) return reportError("unauthenticated", 401, "Non authentifié");
+  if (!session) {
+    const refused = reportError("unauthenticated", 401, "Non authentifié");
+    refused.headers.set(SESSION_EXPIRED_HEADER, "1");
+    return refused;
+  }
+  if (Number(req.headers?.get("content-length")) > REPORT_BODY_LIMIT) return reportError("requestTooLarge", 413, "Envoi trop lourd");
   return whoIs(session);
 }
 

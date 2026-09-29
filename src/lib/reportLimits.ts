@@ -18,10 +18,19 @@ export const MAX_REPORTS_PER_DAY = 30;
 export const MAX_OPEN_DRAFTS = 20;
 
 /**
- * Par requête, tout compris. Au-delà, le proxy de Next ne garde que le début du corps et le
- * formulaire devient illisible : sa limite, `experimental.proxyClientMaxBodySize` dans
- * next.config.js, doit rester au-dessus — un test le vérifie. Il garde ce corps en mémoire, et le
- * conteneur a 2 Go : la limite n'est pas le produit des deux autres, et le téléphone réduit ce
- * qu'il peut avant (voir `prepareImage.ts`).
+ * Par requête, tout compris : ce que le téléphone s'interdit d'envoyer (voir `prepareImage.ts`).
+ * Il ne réduit pas tout — une image illisible pour lui part telle quelle —, d'où la marge de
+ * `REPORT_BODY_LIMIT`.
  */
 export const MAX_REQUEST_BYTES = 90 * 1024 * 1024;
+
+/**
+ * Ce que le serveur accepte d'un corps annoncé, refusé en 413 avant toute lecture.
+ *
+ * Les signalements sont hors du proxy (A2, 29/09/2026) : Next ne borne plus leur corps — il le
+ * bornait à 100 Mo, `proxyClientMaxBodySize`, pour *toute* l'API, ce qui laissait n'importe qui
+ * remplir la mémoire du conteneur sans session. La même borne, ici, et pour elles seules. Elle ne
+ * lit que `Content-Length`, que tout navigateur envoie avec un `FormData` ; elle ne passe qu'après
+ * la session, qui reste la vraie garde.
+ */
+export const REPORT_BODY_LIMIT = 100 * 1024 * 1024;
