@@ -218,7 +218,12 @@ export function PlayerHost() {
   // fichier que le navigateur ne sait pas porter finit sur une erreur de lecture, pas sur un
   // transcodage — c'est tout l'objet du réglage.
   const carried = castCarriedTo(takeover, session);
-  const useNative = !serverFallback || (!legacy && !handedOver.includes(session.itemId) && !carried && !castingNow(takeover, session));
+  // Une page rechargée par le lecteur serveur (piste WebKit, escalade de l'échelle audio) revient
+  // à lui : le rechargement a effacé le relais qui l'avait choisi — voir `reloadedOnServer`.
+  const reloadedOnServer = session.reloadedOnServer === session.itemId;
+  const useNative =
+    !serverFallback ||
+    (!legacy && !handedOver.includes(session.itemId) && !carried && !castingNow(takeover, session) && !reloadedOnServer);
   if (useNative) {
     return (
       <ExperimentalPlayerHost
@@ -1039,7 +1044,8 @@ function ActivePlayer({
         try {
           sessionStorage.setItem(
             PLAYER_RELOAD_INTENT_KEY,
-            JSON.stringify({ itemId, title, audioStreamIndex: id, resumeAt })
+            // `server` : la page rechargée revient au lecteur serveur — voir `reloadedOnServer`.
+            JSON.stringify({ itemId, title, audioStreamIndex: id, resumeAt, server: true })
           );
         } catch {
           // Storage unavailable (private browsing, quota) — falls through to the in-place
@@ -1617,6 +1623,7 @@ function ActivePlayer({
               title,
               resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt || 0,
               attempt: (reloadAttempt ?? 0) + 1,
+              server: true,
               ...(audioIdx !== undefined ? { audioStreamIndex: audioIdx } : {}),
             })
           );

@@ -66,7 +66,7 @@ Deux règles de montage, qui définissent ce qu'est « la même lecture » :
 |---|---|
 | Fermée | `session === null`, `mode === "closed"` |
 | Demandée | `session` posée, `mode === "full"` ; tant que la préférence `legacy` ou le réglage `serverFallback` ne sont pas connus, `PlayerHost` ne rend rien |
-| Lecteur natif | `useNative` vrai : `!serverFallback \|\| (!legacy && !handedOver.includes(itemId) && !carried && !castingNow(...))` |
+| Lecteur natif | `useNative` vrai : `!serverFallback \|\| (!legacy && !handedOver.includes(itemId) && !carried && !castingNow(...) && !reloadedOnServer)` |
 | Lecteur serveur : négociation | `ActivePlayer` monté, `loading && !playSession` pendant `POST /api/jellyfin/playback/start` |
 | Lecteur serveur : chargement | `playSession` posé, `loading` jusqu'à `loadeddata` ; chien de garde de 20 s |
 | Lecteur serveur : lecture | `!loading && !error` |
@@ -100,6 +100,10 @@ terminé », sinon `loading` qui retombe dans `ActivePlayer`.
 
 Ce qui est perdu au rechargement WebKit : `getNextEpisode`, la route AirPlay, `handedOver` et
 `takeover`, l'identifiant de séance du journal, `openId`. C'est accepté et documenté dans le code.
+Le choix du lecteur serveur, lui, survit : l'intention porte `server: true`, relue en
+`reloadedOnServer` (l'élément rouvert), sans quoi la page revenait sur le lecteur natif, qui ignore
+la piste demandée. Il ne vaut que pour cet élément : l'épisode suivant repart par l'aiguillage
+ordinaire.
 
 ---
 

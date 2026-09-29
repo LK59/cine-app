@@ -54,6 +54,17 @@ export interface PlaybackSession {
   fromReload?: boolean;
   /** How many reload attempts this switch has already consumed — see PLAYER_RELOAD_ATTEMPTS_KEY. */
   reloadAttempt?: number;
+  /**
+   * L'élément que le lecteur **serveur** a rechargé la page pour rouvrir — posé seulement par la
+   * relecture d'une intention marquée `server: true`, jamais par un appelant.
+   *
+   * Le rechargement efface `handedOver` et `takeover` : sans ce champ, l'aiguillage de PlayerHost
+   * rouvrait le lecteur natif, qui ignore `initialAudioStreamIndex` — la piste choisie était perdue,
+   * et après l'escalade de l'échelle audio le natif reprenait le fichier qu'il venait d'abandonner.
+   * Un identifiant et non un booléen : il ne vaut que pour cet élément-là, comme `handedOver`.
+   * L'épisode suivant, ou toute nouvelle séance, repart par l'aiguillage ordinaire.
+   */
+  reloadedOnServer?: string;
   /** Resolves the episode after `currentItemId`, if any — recomputed on every advance so the
    *  "next up" prompt keeps working after auto-advancing more than once in a row. Lost across a
    *  reload-based track switch (the page context it closed over doesn't survive) — an accepted,
@@ -270,7 +281,9 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     }
     if (!raw) return;
     try {
-      const intent = JSON.parse(raw) as { itemId: string; title: string; audioStreamIndex: number; resumeAt: number; attempt?: number };
+      // `server` : écrit par le lecteur serveur depuis le 29/09/2026. Une intention sans ce champ
+      // (une page d'avant, rechargée sur ce code) garde l'aiguillage ordinaire.
+      const intent = JSON.parse(raw) as { itemId: string; title: string; audioStreamIndex: number; resumeAt: number; attempt?: number; server?: boolean };
       // eslint-disable-next-line react-hooks/set-state-in-effect
       play({
         itemId: intent.itemId,
@@ -279,6 +292,7 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
         initialAudioStreamIndex: intent.audioStreamIndex,
         fromReload: true,
         reloadAttempt: intent.attempt ?? 0,
+        ...(intent.server === true ? { reloadedOnServer: intent.itemId } : {}),
       });
     } catch {
       // Malformed — ignore, nothing to resume.
