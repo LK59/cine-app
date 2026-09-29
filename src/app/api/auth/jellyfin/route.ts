@@ -11,6 +11,15 @@ import { passwordAttempts, hasLeadingSpace, readCredentials } from "@/lib/passwo
 import { loginToJellyseerr } from "@/lib/jellyseerrIdentity";
 import { forwardedFor } from "@/lib/clientAddress";
 import { logAuthEvent } from "@/lib/eventLogs";
+import { upstreamSignal } from "@/lib/http";
+
+/**
+ * La borne de `AuthenticateByName`, plus large que les 5 s des autres appels amont : Jellyfin y
+ * dérive le mot de passe (PBKDF2) et crée un appareil, ce qu'un serveur occupé par un scan de
+ * bibliothèque fait lentement — un refus à tort y coûterait une connexion ratée. Dix secondes
+ * restent une attente qu'un écran de connexion peut montrer ; les 300 s d'undici, non.
+ */
+const JELLYFIN_AUTH_TIMEOUT_MS = 10_000;
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -52,6 +61,7 @@ export async function POST(req: NextRequest) {
           Authorization: `MediaBrowser Client="CineApp", Device="Server", DeviceId="${deviceId}", Version="1.0.0"`,
         },
         body: JSON.stringify({ Username: username, Pw: candidate }),
+        signal: upstreamSignal(JELLYFIN_AUTH_TIMEOUT_MS),
       });
       if (jellyfinRes.ok) break;
     }
@@ -95,7 +105,9 @@ export async function POST(req: NextRequest) {
   // first time it sees it (same mechanism as logging into Jellyseerr's own web UI). Best-effort:
   // a Jellyseerr outage or misconfiguration must not block signing into cine-app itself, whose
   // own auth is against Jellyfin, not Jellyseerr. A Jellyfin account Jellyseerr doesn't know yet
-  // is imported and retried — see `loginToJellyseerr`.
+  // is imported and retried — see `loginToJellyseerr`. Each call there is bounded (5 s for the
+  // login, 8 s through `fetchJson`) and an unreachable Jellyseerr stops at the first: this await
+  // used to wait on undici's 300 s alone, contradicting the rule above.
   const jellyseerrCookie = config.jellyseerr.apiKey
     ? await loginToJellyseerr(username, password, jellyfinId || undefined, jellyfinUsername).catch(() => null)
     : null;

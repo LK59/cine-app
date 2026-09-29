@@ -142,6 +142,9 @@ export async function resolveJellyseerrIdentity(session: SessionPayload): Promis
  * à la volée se cogne à l'index unique sur l'adresse, qu'aucun compte Jellyfin n'a ici. On
  * l'importe donc, puis on réessaie une fois — c'est ce qui dispense d'importer chaque nouveau
  * compte à la main *avant* sa première connexion.
+ *
+ * Un Jellyseerr qui ne répond pas (le premier `login` lève) s'arrête là : importer puis
+ * réessayer ajoutait deux attentes à la première, et la connexion à cine-app les subit toutes.
  */
 export async function loginToJellyseerr(
   username: string,
@@ -149,7 +152,12 @@ export async function loginToJellyseerr(
   jfId: string | undefined,
   jfUser: string | undefined,
 ): Promise<string | null> {
-  const cookie = await jellyseerr.login(username, password).catch(() => null);
+  let cookie: string | null;
+  try {
+    cookie = await jellyseerr.login(username, password);
+  } catch {
+    return null;
+  }
   if (cookie) return cookie;
   const userId = await ensureJellyseerrUserId(jfId, jfUser);
   if (userId == null) return null;

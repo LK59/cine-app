@@ -1,5 +1,12 @@
 import { config } from "@/lib/config";
-import { fetchJson } from "@/lib/http";
+import { fetchJson, upstreamSignal } from "@/lib/http";
+
+/**
+ * Le téléchargement d'un sous-titre : Bazarr va le chercher chez le fournisseur avant de répondre,
+ * comme pour la recherche interactive — d'où la même borne de 30 s, pas les 5 s d'un appel local.
+ * Sans borne du tout, un Bazarr muet tenait la requête jusqu'aux 300 s d'undici.
+ */
+const SUBTITLE_DOWNLOAD_TIMEOUT_MS = 30_000;
 
 const { url, apiKey } = config.bazarr;
 const headers = { "X-API-KEY": apiKey };
@@ -117,6 +124,7 @@ export const bazarr = {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
       body,
+      signal: upstreamSignal(SUBTITLE_DOWNLOAD_TIMEOUT_MS),
     });
   },
   downloadEpisodeSubtitle: (params: {
@@ -137,6 +145,7 @@ export const bazarr = {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
       body,
+      signal: upstreamSignal(SUBTITLE_DOWNLOAD_TIMEOUT_MS),
     });
   },
 };

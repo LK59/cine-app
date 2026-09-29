@@ -1,5 +1,5 @@
 import { config } from "@/lib/config";
-import { HttpError } from "@/lib/http";
+import { HttpError, upstreamSignal, UPSTREAM_TIMEOUT_MS } from "@/lib/http";
 
 const { url, username, password } = config.qbittorrent;
 
@@ -27,6 +27,9 @@ async function login(): Promise<string> {
     headers: { "Content-Type": "application/x-www-form-urlencoded", ...originHeaders },
     body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
     cache: "no-store",
+    // Borné : sans délai, un qBittorrent qui accepte la connexion sans répondre tenait l'appel
+    // jusqu'aux 300 s d'undici, et le suivi des torrents en empilait un par tick.
+    signal: upstreamSignal(UPSTREAM_TIMEOUT_MS),
   });
 
   if (res.status === 403) {
@@ -74,6 +77,8 @@ async function request<T>(path: string, init: RequestInit = {}, _retried = false
     ...init,
     headers: { ...init.headers, ...originHeaders, Cookie: cookie },
     cache: "no-store",
+    // Même borne que la connexion ; une annulation de l'appelant reste entendue.
+    signal: upstreamSignal(UPSTREAM_TIMEOUT_MS, init.signal),
   });
   if ((res.status === 401 || res.status === 403) && !_retried) {
     cachedCookie = null;

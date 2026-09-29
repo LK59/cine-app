@@ -1,5 +1,5 @@
 import { config } from "@/lib/config";
-import { fetchJson } from "@/lib/http";
+import { fetchJson, upstreamSignal, UPSTREAM_TIMEOUT_MS } from "@/lib/http";
 
 const { url, apiKey } = config.jellyseerr;
 const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
@@ -50,15 +50,21 @@ export const jellyseerr = {
   // (Jellyseerr auto-provisions/links an account the first time a Jellyfin user logs in there,
   // same as logging into its own web UI) — returns the raw connect.sid cookie value (already
   // URL-encoded exactly as Set-Cookie sent it; reused verbatim, never re-encoded/decoded) or
-  // null on failure. Best-effort: callers must not let a Jellyseerr outage block a cine-app
-  // login, since cine-app's own auth is against Jellyfin, not Jellyseerr.
+  // null when Jellyseerr answers with a refusal. Best-effort: callers must not let a Jellyseerr
+  // outage block a cine-app login, since cine-app's own auth is against Jellyfin, not Jellyseerr.
+  //
+  // Un Jellyseerr qui ne répond pas, lui, **lève** — délai dépassé ou transport rompu — au lieu
+  // de rendre `null` : `loginToJellyseerr` ne doit pas le prendre pour un compte inconnu, puis
+  // importer et réessayer, chaque étape attendant à son tour. Le délai est borné (5 s) : sans
+  // lui, la connexion à cine-app attendait ce service jusqu'aux 300 s d'undici.
   login: async (username: string, password: string): Promise<string | null> => {
+    const res = await fetch(`${url}/api/v1/auth/jellyfin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+      signal: upstreamSignal(UPSTREAM_TIMEOUT_MS),
+    });
     try {
-      const res = await fetch(`${url}/api/v1/auth/jellyfin`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
       if (!res.ok) return null;
       const setCookies =
         typeof res.headers.getSetCookie === "function"

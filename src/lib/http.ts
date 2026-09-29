@@ -37,6 +37,33 @@ export class UpstreamUnreachableError extends Error {
   }
 }
 
+/**
+ * Un délai de garde pour un `fetch` qui ne passe pas par `fetchJson` — une connexion qui lit un
+ * cookie dans les en-têtes, une réponse relayée telle quelle.
+ *
+ * Sans lui, le seul délai est celui d'undici : 300 s pour les en-têtes. Un service qui accepte la
+ * connexion sans jamais répondre tenait donc la requête cinq minutes — la connexion à cine-app
+ * attendait Jellyseerr, et chaque tick du suivi des torrents empilait un appel pendant vers
+ * qBittorrent.
+ *
+ * Une minuterie plutôt que `AbortSignal.timeout` : c'est la même que `fetchJson`, et les faux
+ * minuteurs des tests la font avancer (ils n'atteignent pas celle de `AbortSignal.timeout`).
+ * Détachée du processus (`unref`) : elle ne retient rien une fois la réponse arrivée. Une
+ * annulation de l'appelant, s'il y en a une, reste entendue.
+ */
+export function upstreamSignal(timeoutMs: number, external?: AbortSignal | null): AbortSignal {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new DOMException(`délai de ${timeoutMs} ms dépassé`, "TimeoutError")),
+    timeoutMs
+  );
+  (timer as { unref?: () => void }).unref?.();
+  return external ? AbortSignal.any([controller.signal, external]) : controller.signal;
+}
+
+/** Le délai par défaut d'un appel amont hors `fetchJson` : un service local répond en bien moins. */
+export const UPSTREAM_TIMEOUT_MS = 5000;
+
 export class HttpError extends Error {
   status: number;
   constructor(message: string, status: number) {
