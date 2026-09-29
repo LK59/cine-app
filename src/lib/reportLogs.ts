@@ -36,6 +36,7 @@ export function captureReportLogs(userName: string, item: { id: string | null; t
   const lower = userName.toLowerCase();
   const mine = (r: LogRecord) => String(r.user ?? "").toLowerCase() === lower;
   const recentStart = now - 48 * HOUR;
+  const weekStart = now - 7 * 24 * HOUR;
 
   const seances = buildSeances(readRecords("player", now - 30 * 24 * HOUR)).filter((s) => s.user.toLowerCase() === lower);
   const recent = seances.filter((s) => s.start >= recentStart).slice(0, 20);
@@ -51,9 +52,12 @@ export function captureReportLogs(userName: string, item: { id: string | null; t
     seances: recent,
     itemSeances,
     errors: readRecords("server", recentStart).filter((r) => r._t >= recentStart && mine(r)).slice(-40).map(slim),
-    auth: readRecords("auth", now - 7 * 24 * HOUR).filter(mine).slice(-20).map(slim),
-    notifications: readRecords("notifications", now - 7 * 24 * HOUR)
-      .filter((r) => Array.isArray(r.recipients) && (r.recipients as { user?: string }[]).some((x) => String(x.user ?? "").toLowerCase() === lower))
+    // `readRecords` rend en entier la génération qui chevauche `since` : sans ce second filtre sur
+    // `_t`, un auth.log récent qui remontait à un mois figeait dans le ticket des connexions et des
+    // notifications de trente jours au lieu des sept annoncés (même forme que les erreurs).
+    auth: readRecords("auth", weekStart).filter((r) => r._t >= weekStart && mine(r)).slice(-20).map(slim),
+    notifications: readRecords("notifications", weekStart)
+      .filter((r) => r._t >= weekStart && Array.isArray(r.recipients) && (r.recipients as { user?: string }[]).some((x) => String(x.user ?? "").toLowerCase() === lower))
       .slice(-20)
       .map(slim),
   };
