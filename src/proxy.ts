@@ -141,9 +141,19 @@ function isAllowedForEveryone(method: string, pathname: string): boolean {
  * `/api/activity`, lui, lit bien : l'historique de Radarr et Sonarr — ce qui a été récupéré,
  * importé, supprimé, et d'où. Seule la page d'état de la gestion l'affiche ; un compte ordinaire
  * n'a aucune raison de le lire (même jour).
+ *
+ * Mais la même donnée sortait encore par `/api/dashboard` (son champ `activity`) et par
+ * `/api/timeline/imports` : la règle ci-dessus ne protégeait rien. Et `/api/stats/storage?refresh=1`
+ * laissait n'importe quel compte relancer en boucle le parcours complet des disques. Les trois ne
+ * servent que la gestion ; le seul appel venu du cinéma — le préchargement de `/gestion` au survol
+ * du bouton du rail — n'existe que pour l'administrateur (`PlayerRail`). Motifs exacts :
+ * `/api/stats/storage-forecast` et les autres `/api/stats/*` ne sont pas attrapés (29/09/2026).
  */
 const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/activity\/?$/,
+  /^\/api\/dashboard\/?$/,
+  /^\/api\/timeline\/imports\/?$/,
+  /^\/api\/stats\/storage\/?$/,
   /^\/api\/radarr\/movies\/[^/]+\/releases\/?$/,
   /^\/api\/sonarr\/series\/[^/]+\/releases\/?$/,
   /^\/api\/bazarr\/(movies|episodes)\/[^/]+\/subtitles\/?$/,
