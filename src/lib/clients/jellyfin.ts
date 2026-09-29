@@ -310,10 +310,10 @@ export const jellyfin = {
    *
    * La question la plus légère qu'on puisse lui poser avec. Court et sans nouvel essai : elle est
    * posée sur le chemin d'un chargement de page, qui ne doit pas attendre un serveur lent — voir
-   * `jellyfinToken.ts`, qui ne conclut qu'un 401.
+   * `jellyfinToken.ts`, qui ne conclut que d'un 401, d'un 403, ou de ce que `Policy` dit du compte.
    */
   checkUserToken: async (token: string) =>
-    fetchJson<{ Id?: string }>(`${url}/Users/Me`, { headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()) } }, 2500, undefined, 0),
+    fetchJson<{ Id?: string; Policy?: { IsAdministrator?: boolean; IsDisabled?: boolean } }>(`${url}/Users/Me`, { headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()) } }, 2500, undefined, 0),
 
   /**
    * Écrire la position d'une personne avec la clé d'administration.

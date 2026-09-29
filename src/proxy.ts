@@ -295,7 +295,8 @@ export async function proxy(req: NextRequest) {
    * question est posée au plus une fois par heure et par session (`jellyfinToken.ts`), et jamais
    * sur une route d'API : fermer la session là couperait aussi le flux d'un film en cours. Un film
    * déjà lancé garde sa position autrement (`playbackReport.ts`) ; la connexion est redemandée à la
-   * prochaine page.
+   * prochaine page. La même question ferme aussi la session d'un compte désactivé ou dont le rôle a
+   * changé dans Jellyfin : sans elle, la prolongation glissante recopiait le rôle de la connexion à vie.
    */
   if (!pathname.startsWith("/api/") && session.jfToken && !(await tokenStillAccepted(session))) {
     // Son jeton est déjà refusé ; l'appareil, lui, reste inscrit chez Jellyfin : on le retire.
