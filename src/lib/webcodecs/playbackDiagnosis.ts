@@ -366,10 +366,15 @@ export function diagMedia(bytes: number, seconds: number, video: HTMLVideoElemen
   }
 }
 
-/** L'union des intervalles d'un type dans [from, to]. */
-function busyMs(intervals: Interval[], kind: DiagKind, from: number, to: number): number {
+/**
+ * L'union des intervalles d'un ou plusieurs types dans [from, to]. Plusieurs types parce qu'un même
+ * instant peut être noté deux fois par deux étages : sur Chromium, un segment construit sur le fil
+ * principal en plus de 50 ms est aussi une tâche longue, aux mêmes instants (voir `verdictOf`).
+ */
+function busyMs(intervals: Interval[], kinds: DiagKind | readonly DiagKind[], from: number, to: number): number {
+  const wanted: readonly DiagKind[] = typeof kinds === "string" ? [kinds] : kinds;
   const spans = intervals
-    .filter((i) => i.kind === kind && i.to > from && i.from < to)
+    .filter((i) => wanted.includes(i.kind) && i.to > from && i.from < to)
     .map((i) => [Math.max(i.from, from), Math.min(i.to, to)] as const)
     .sort((a, b) => a[0] - b[0]);
   let total = 0;
@@ -421,6 +426,11 @@ interface Window {
   appendMs: number;
   longTaskMs: number;
   longTasks: number;
+  /**
+   * Le calcul : l'union de la construction des segments hors attente d'octets, des envois et des
+   * tâches longues — chaque instant une fois. Voir `computeMs`.
+   */
+  computeMs: number;
 }
 
 function windowOf(session: Session, from: number, to: number): Window {
@@ -436,7 +446,28 @@ function windowOf(session: Session, from: number, to: number): Window {
     appendMs: busyMs(intervals, "append", from, to),
     longTaskMs: busyMs(intervals, "longtask", from, to),
     longTasks: intervals.filter((i) => i.kind === "longtask" && i.to > from && i.from < to).length,
+    computeMs: computeMs(intervals, from, to),
   };
+}
+
+/**
+ * Le temps de calcul de [from, to] : l'union de (segments − lectures), envois et tâches longues.
+ *
+ * C'était la somme `segment − read + append + longTask`. Sur Chromium, un segment construit sur le
+ * fil principal en plus de 50 ms est aussi une tâche longue, rapportée aux mêmes instants : il
+ * comptait deux fois, et 30 % de calcul réel sur une fenêtre de 30 s se lisait « calcul » (seuil
+ * 50 %) — sur Chrome Android précisément, le cas pour lequel `diag` a été écrit.
+ *
+ * La différence « segments hors lecture » n'est pas un type noté ; elle s'obtient par unions seules.
+ * Avec S les segments, R les lectures, X = envois ∪ tâches longues, et R disjoint de S − R :
+ *   |(S − R) ∪ X| = |S ∪ R ∪ X| − |R − X| = |S ∪ R ∪ X| − |R ∪ X| + |X|.
+ * Exact, sans supposer comme l'ancienne somme que chaque lecture tombe dans un segment.
+ */
+function computeMs(intervals: Interval[], from: number, to: number): number {
+  const all = busyMs(intervals, ["segment", "read", "append", "longtask"], from, to);
+  const readOrOther = busyMs(intervals, ["read", "append", "longtask"], from, to);
+  const other = busyMs(intervals, ["append", "longtask"], from, to);
+  return Math.max(0, all - readOrOther + other);
 }
 
 /**
@@ -448,7 +479,8 @@ function windowOf(session: Session, from: number, to: number): Window {
  *    ne bougeait pas. Rien à approvisionner : c'est l'élément qui n'avance pas.
  *  - **réseau** : la chaîne a passé la moitié de la fenêtre au moins à attendre ses octets.
  *  - **calcul** : la construction des segments hors attente d'octets, le son ré-encodé, les envois
- *    et les tâches longues du fil principal en ont occupé la moitié au moins.
+ *    et les tâches longues du fil principal en ont occupé la moitié au moins —
+ *    leur union, un instant noté par deux étages ne comptant qu'une fois (`computeMs`).
  *  - **autre** : ni l'un ni l'autre — une chaîne à l'arrêt (saut, budget atteint), ou ce qu'on ne
  *    mesure pas.
  */
@@ -458,8 +490,7 @@ function verdictOf(w: Window, lead: number | null): Verdict {
   if (lead !== null && lead >= DECODER_LEAD_SECONDS) return "décodeur";
   if (w.spanMs <= 0) return "autre";
   if (w.readMs / w.spanMs >= 0.5) return "réseau";
-  const compute = Math.max(0, w.segmentMs - w.readMs) + w.appendMs + w.longTaskMs;
-  if (compute / w.spanMs >= 0.5) return "calcul";
+  if (w.computeMs / w.spanMs >= 0.5) return "calcul";
   return "autre";
 }
 
