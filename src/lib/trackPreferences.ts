@@ -200,7 +200,19 @@ export interface TrackPreferences {
  */
 export type Carriable<T> = (track: T) => boolean;
 
-function rank<T extends NamedTrack>(tracks: T[], wanted: string | null, carriable?: Carriable<T>): T[] {
+/**
+ * Ce que le spectateur recevra de cette piste par ce chemin : copiée telle quelle ou ré-encodée,
+ * et en combien de canaux — une question du lecteur, comme {@link Carriable}, que celui-ci pose
+ * (`deliveredAudio` pour le chemin natif). Sans elle, les canaux de la source et aucune copie.
+ */
+export type Delivered<T> = (track: T) => { channels: number; copied: boolean };
+
+function rank<T extends NamedTrack>(
+  tracks: T[],
+  wanted: string | null,
+  carriable?: Carriable<T>,
+  delivered?: Delivered<T>
+): T[] {
   return tracks
     .map((track, order) => {
       const language = trackLanguage(track);
@@ -229,7 +241,8 @@ function rank<T extends NamedTrack>(tracks: T[], wanted: string | null, carriabl
       if (carriable && carriable(track)) score += 20;
       if (isAudioDescription(track)) score -= 200;
       if (isCommentary(track)) score -= 150;
-      return { track, score, order };
+      const out = delivered ? delivered(track) : { channels: canaux(track), copied: false };
+      return { track, score, order, channels: out.channels, copied: out.copied };
     })
     /**
      * L'ordre des départages, et `isDefault` **après** la richesse — corrigé le 20/09/2026.
@@ -245,11 +258,21 @@ function rank<T extends NamedTrack>(tracks: T[], wanted: string | null, carriabl
      *
      * Rien ne change pour les sous-titres : ils n'ont pas de canaux, donc la comparaison est
      * toujours nulle et `isDefault` tranche exactement comme avant.
+     *
+     * **Les canaux livrés, puis la copie** — depuis le 29/09/2026 (audit P5). « La plus riche »
+     * comptait les canaux de la source. Sur un iPhone, la TrueHD 7.1 du « Mans 66 » passait donc
+     * devant l'AC-3 5.1 d'à côté, pour sortir en 5.1 elle aussi : l'AAC d'Apple ne produit pas
+     * plus de six canaux. Un décodage WebAssembly sur le fil principal et un ré-encodage, pour
+     * aucun canal de plus. On compte désormais ce que le spectateur reçoit — le moindre de la
+     * source et de ce que l'encodeur de ce navigateur sait produire —, et à égalité, la piste
+     * copiée telle quelle passe devant celle qu'il faudrait ré-encoder. Là où la 7.1 sort bien
+     * en 7.1 — l'Opus huit canaux de Firefox —, elle gagne toujours.
      */
     .sort(
       (a, b) =>
         b.score - a.score ||
-        canaux(b.track) - canaux(a.track) ||
+        b.channels - a.channels ||
+        Number(b.copied) - Number(a.copied) ||
         Number(b.track.isDefault) - Number(a.track.isDefault) ||
         a.order - b.order
     )
@@ -280,14 +303,15 @@ function canaux(track: unknown): number {
 export function chooseAudioTrack<T extends NamedTrack>(
   tracks: T[],
   preferences: TrackPreferences,
-  carriable?: Carriable<T>
+  carriable?: Carriable<T>,
+  delivered?: Delivered<T>
 ): T | null {
   if (tracks.length === 0) return null;
   if (preferences.playDefaultAudioTrack) return null;
   const wanted = normaliseLanguage(preferences.audioLanguage);
   if (!wanted) return null;
 
-  const best = rank(tracks, wanted, carriable)[0];
+  const best = rank(tracks, wanted, carriable, delivered)[0];
   return best && trackLanguage(best) === wanted ? best : null;
 }
 

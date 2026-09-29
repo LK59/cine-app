@@ -86,13 +86,25 @@ elles le sont à la fermeture (`refreshAfterPlayback`), qui couvre toute la séa
 ## 3. Quelle piste audio ouvre
 
 **Règle** (voir `CLAUDE.md`) : la langue demandée, puis ce que le chemin porte, puis le plus de
-canaux, puis le drapeau du fichier, puis l'ordre du fichier. **Choisie avant de construire le
-pipeline**, et par la même fonction que l'écran, sinon la bascule revient.
+canaux **livrés**, puis la piste copiée plutôt que ré-encodée, puis le drapeau du fichier, puis
+l'ordre du fichier. **Choisie avant de construire le pipeline**, et par la même fonction que
+l'écran, sinon la bascule revient.
 
-**Porteur.** `chooseAudioTrack` / `rank` — `src/lib/trackPreferences.ts`.
+Les canaux livrés sont le moindre de la source et de ce que l'encodeur du navigateur sait
+produire — depuis le 29/09/2026. Compter ceux de la source faisait passer, sur un système Apple,
+une TrueHD 7.1 devant une AC-3 5.1 de la même langue : décodée en WebAssembly, ré-encodée par
+l'AAC d'Apple plafonné à six canaux, elle sortait en 5.1 comme l'AC-3, qui aurait été copiée.
+Là où la 7.1 sort réellement en 7.1 (l'Opus huit canaux de Firefox), elle gagne toujours.
+
+**Porteur.** `chooseAudioTrack` / `rank` — `src/lib/trackPreferences.ts`. Les canaux livrés et
+la copie viennent de `deliveredAudio` (`remuxer.ts`) : la copie de `audioDelivery`, le prédicat de
+`playableAudio` ; les canaux ré-encodés du plan que `chooseTranscodePlan` a obtenu du navigateur
+(`knownTranscodePlan`), demandé pour chaque piste à ré-encoder par `primeAudioDelivery` juste
+avant le choix (`probeOpened`). Aucune liste de plafonds n'est écrite à part.
 
 **Appelants.**
-- Remux : `preferredAudio` (`remuxPlayback.ts`) à l'ouverture ; `applyPreferences` à l'écran.
+- Remux : `preferredAudio` (`remuxPlayback.ts`) à l'ouverture ; `applyPreferences` à l'écran,
+  qui lit les mêmes réponses sur `PlayerTrack.delivered` (posé par `RemuxPlayback.audioTracks`).
   Un pipeline **reconstruit** ouvre sur la piste choisie par le spectateur quand elle joue ici
   (`openingAudio`, depuis le 22/09/2026) : tout changement de piste passe par cette
   reconstruction (`requestAudioTrack`), et ouvrir ailleurs puis y basculer en redemanderait une
@@ -100,7 +112,8 @@ pipeline**, et par la même fonction que l'écran, sinon la bascule revient.
 - Lecteur stable : Jellyfin choisit (l'index passé à `playback/start`).
 
 **Tests.** `trackPreferences.test.ts`, `preferredAudio.test.ts`, `decisions-partagees.test.ts`
-(« le chemin natif ouvre sur la piste que l'écran choisira »).
+(« le chemin natif ouvre sur la piste que l'écran choisira »), `audio-canaux-livres.test.ts`
+(iPhone et Firefox simulés : ouverture et écran d'accord sur l'AC-3 copiée, puis sur la 7.1).
 
 **Corrigé le 21/09.** Le lecteur canevas (retiré le 24/09/2026) ouvrait toujours sur la piste par
 défaut et basculait ensuite — la bascule supprimée la veille pour le remux. Et sa conversion des
@@ -112,8 +125,11 @@ pistes oubliait les canaux : le départage « le plus riche » y était inerte.
   joue, et choisir cette piste à l'écran passe la main au lecteur serveur (test dédié dans
   `preferredAudio.test.ts`). Le TrueHD était ce cas jusqu'au 21/09/2026 ; il est décodé ici depuis,
   et il n'en reste plus dans la bibliothèque — le test garde la règle avec du RealAudio.
-- Sans préférence, `preferredAudio` prend la plus riche des pistes jouables, et l'écran ne touche
-  à rien (`chooseAudioTrack` rend `null`) : pas de désaccord possible, donc pas de bascule.
+- Sans préférence, `preferredAudio` prend la plus riche des pistes jouables — au même sens :
+  canaux livrés, puis copie —, et l'écran ne touche à rien (`chooseAudioTrack` rend `null`) : pas
+  de désaccord possible, donc pas de bascule.
+- Un plan jamais demandé (hors `probeOpened`, dans les tests sans navigateur) laisse compter les
+  canaux de la source : c'est le classement d'avant, pas une supposition sur l'encodeur.
 
 ## 4. Quand un fichier va au lecteur serveur
 

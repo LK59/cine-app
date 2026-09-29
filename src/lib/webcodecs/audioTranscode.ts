@@ -387,12 +387,35 @@ export async function chooseTranscodePlan(sampleRate: number, channels: number):
       if (!containerAccepts(`audio/mp4; codecs="${codec}"`)) continue;
       if (await firstSupported(codec, sampleRate, target)) {
         chosenTarget = codec;
-        return { codec, channels: target };
+        const plan = { codec, channels: target };
+        knownPlans.set(planKey(sampleRate, channels), plan);
+        return plan;
       }
     }
   }
+  knownPlans.set(planKey(sampleRate, channels), null);
   return null;
 }
+
+/**
+ * La dernière réponse de {@link chooseTranscodePlan} pour cette source — `undefined` tant que la
+ * question n'a pas été posée sur cette page.
+ *
+ * Pour qui doit savoir, sans attendre, combien de canaux une piste ré-encodée sortira : le
+ * classement des pistes (`rank`, via `deliveredAudio`) est synchrone, et il départage par les
+ * canaux *livrés* depuis le 29/09/2026 — une TrueHD 7.1 sort en 5.1 sur un système Apple, et
+ * passait devant une AC-3 5.1 copiée telle quelle (audit P5). La réponse est celle du navigateur,
+ * gardée telle quelle ; elle n'est jamais devinée ici. `primeAudioDelivery` la pose avant le choix.
+ *
+ * Toujours recalculée quand on la redemande : ce n'est pas un cache devant le navigateur, seulement
+ * la mémoire de ce qu'il a répondu.
+ */
+export function knownTranscodePlan(sampleRate: number, channels: number): TranscodePlan | null | undefined {
+  return knownPlans.get(planKey(sampleRate, channels));
+}
+
+const knownPlans = new Map<string, TranscodePlan | null>();
+const planKey = (sampleRate: number, channels: number) => `${sampleRate}/${channels}`;
 
 /**
  * The answer to the question above, kept for the places that cannot wait for it.

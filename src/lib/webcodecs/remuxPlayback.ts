@@ -14,7 +14,7 @@ import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { forgetMediaHeader, mediaHeaderKey, openMediaFile } from "./mediaFile";
 import { MseSource, type RecoveryFacts } from "./mseSource";
 import { choosePlaybackPath, NATIVE_PATH, type ChosenPath } from "./pathSelector";
-import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
+import { Remuxer, playableAudio, deliveredAudio, primeAudioDelivery, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
 import { diagMedia } from "./playbackDiagnosis";
@@ -172,7 +172,9 @@ export function preferredAudio(file: MatroskaFile, preferences?: TrackPreference
      * Les deux tombent d'accord dans le cas qui nous occupe — deux pistes de la même langue dont
      * une seule joue, « Le Mans 66 » — et c'est là que le changement de piste disparaît.
      */
-    const wanted = chooseAudioTrack(playable, preferences, playableAudio);
+    // Et les canaux *livrés*, puis la copie, pour départager (29/09/2026, audit P5) — la même
+    // question que l'écran pose par `RemuxPlayback.deliveredAudio`.
+    const wanted = chooseAudioTrack(playable, preferences, playableAudio, deliveredAudio);
     if (wanted) return wanted;
   }
   // Nothing here works: the file's own default is returned so the refusal names its real codec.
@@ -184,9 +186,13 @@ export function preferredAudio(file: MatroskaFile, preferences?: TrackPreference
   // language with only a stereo track beside it in another — silently switching language is a
   // worse surprise than dropping from surround to stereo, so the language is held onto and the
   // richest track in it wins. The menu still offers everything.
+  // « La plus riche » au sens de `rank` : les canaux livrés, puis la copie (29/09/2026, audit P5).
   const sameLanguage = playable.filter((t) => t.language === language);
   const pool = sameLanguage.length > 0 ? sameLanguage : playable;
-  return pool.reduce((best, t) => ((t.audio?.channels ?? 0) > (best.audio?.channels ?? 0) ? t : best), pool[0]);
+  return pool.reduce((best, t) => {
+    const [a, b] = [deliveredAudio(t), deliveredAudio(best)];
+    return a.channels > b.channels || (a.channels === b.channels && a.copied && !b.copied) ? t : best;
+  }, pool[0]);
 }
 
 /**
@@ -277,6 +283,9 @@ async function probeOpened(source: ByteSource, options: RemuxPlaybackOptions, li
 
   const videoTrack = file.tracks.find((t) => t.type === "video");
   if (!videoTrack) throw new Error("Ce fichier ne contient aucune piste vidéo.");
+  // Ce que le navigateur produira de chaque piste à ré-encoder, demandé avant le choix : le
+  // classement compte les canaux livrés (audit P5), et l'écran relira les mêmes réponses.
+  await primeAudioDelivery(file);
   const audioTrack = openingAudio(file, options.audioPreferences, options.audioTrackNumber);
   trace(`piste audio retenue : ${audioTrack ? `${audioTrack.codecId} ${audioTrack.audio?.channels ?? "?"}ch ${audioTrack.language ?? "?"}` : "aucune"}`);
 
@@ -441,7 +450,9 @@ export class RemuxPlayback {
   }
 
   get audioTracks(): PlayerTrack[] {
-    return this.remuxer.audioTracks().map(fromMatroskaTrack);
+    // Avec ce que ce chemin en livrerait — canaux reçus, copie —, pour que l'écran départage comme
+    // l'ouverture (`deliveredAudio`, DECISIONS §3, audit P5).
+    return this.remuxer.audioTracks().map((t) => ({ ...fromMatroskaTrack(t), delivered: deliveredAudio(t) }));
   }
 
   get subtitleTracks(): PlayerTrack[] {

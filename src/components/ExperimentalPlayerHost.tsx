@@ -1454,7 +1454,12 @@ export function ExperimentalPlayerHost({
        */
       carriable?: (track: PlayerTrack) => boolean,
       /** La piste sur laquelle ce chemin s'est ouvert — celle qu'on entend faute de préférence. */
-      openedAudio: number | null = null
+      openedAudio: number | null = null,
+      /**
+       * Ce que ce chemin livrerait de chaque piste — canaux reçus, copie —, le départage de `rank`
+       * depuis le 29/09/2026 (audit P5). Le même que celui de l'ouverture, sinon on bascule.
+       */
+      delivered?: (track: PlayerTrack) => { channels: number; copied: boolean }
     ): number | null => {
       const preferences = playbackState?.preferences ?? null;
       if (!preferences || preferencesAppliedRef.current || wantedAudioRef.current !== null || wantedSubtitleRef.current !== null) return null;
@@ -1468,7 +1473,7 @@ export function ExperimentalPlayerHost({
       // que ce chemin ne porte pas ne doit pas être « voulue », sinon on ouvre sur l'une et on
       // bascule vers l'autre — ou, pire, on cède la place au lecteur serveur alors qu'une piste
       // de la même langue joue très bien ici. Voir `preferredAudio` et `rank`.
-      const wantedAudio = chooseAudioTrack(audio, preferences, carriable);
+      const wantedAudio = chooseAudioTrack(audio, preferences, carriable, delivered);
       // La langue qu'on entend vraiment : sans préférence, celle de la piste ouverte, et non celle
       // que le fichier marque par défaut — une VO japonaise marquée par défaut sous une piste
       // française ouverte donnait des sous-titres complets en français sur du français (23/09/2026).
@@ -1592,7 +1597,9 @@ export function ExperimentalPlayerHost({
         playback.audioTracks,
         playback.subtitleTracks,
         (track) => playback.canCarryAudio(track.number),
-        playback.currentAudioTrack
+        playback.currentAudioTrack,
+        // Sans réponse du chemin, les canaux de la source et aucune copie : le classement d'avant.
+        (track) => track.delivered ?? { channels: track.channels ?? 0, copied: false }
       );
       const wantedAudio = wantedAudioRef.current ?? preferred;
       const wantedSubtitle = wantedSubtitleRef.current;

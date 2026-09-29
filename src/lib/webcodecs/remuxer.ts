@@ -18,7 +18,14 @@ import { clusterOffsetForTime, cueTimeAfter, cueTimeAtOrBefore } from "./matrosk
 import { isReadAbandoned, type NetworkWindow } from "./byteSource";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
-import { transcodeTargetCodec, AudioTranscoder, transcodableAudio, type TranscodedFrame } from "./audioTranscode";
+import {
+  transcodeTargetCodec,
+  AudioTranscoder,
+  transcodableAudio,
+  chooseTranscodePlan,
+  knownTranscodePlan,
+  type TranscodedFrame,
+} from "./audioTranscode";
 import { trace } from "./trace";
 import { diagInterval, diagNow } from "./playbackDiagnosis";
 import { containerAccepts } from "./mseSource";
@@ -406,6 +413,51 @@ export function audioDelivery(track: MatroskaTrack, file?: MatroskaFile, options
 /** Carried through at all — either untouched, or by being decoded and encoded again. */
 export function playableAudio(track: MatroskaTrack): boolean {
   return audioDelivery(track) !== "none";
+}
+
+/**
+ * Ce que le spectateur reçoit de cette piste : copiée telle quelle ou non, et en combien de canaux.
+ *
+ * Posé pour le classement des pistes (`rank`, DECISIONS §3), le 29/09/2026. Il départageait par les
+ * canaux de la *source* : sur un iPhone, la TrueHD 7.1 du « Mans 66 » passait devant l'AC-3 5.1
+ * d'à côté — décodée en WebAssembly sur le fil principal, ré-encodée par l'AAC d'Apple plafonné à
+ * six canaux, pour sortir en 5.1 comme l'AC-3 qui, elle, aurait été copiée (audit P5).
+ *
+ * Les deux réponses viennent de ceux qui décident vraiment, et d'aucune liste : la copie de
+ * {@link audioDelivery} — celle de `playableAudio` —, les canaux ré-encodés du plan que
+ * `chooseTranscodePlan` a obtenu du navigateur (`knownTranscodePlan`). Jamais plus que la source :
+ * un 5.0 porté à six rangs n'a pas un canal de plus. Plan jamais demandé — `primeAudioDelivery`
+ * pas encore passé — : les canaux de la source, le classement d'avant.
+ */
+export interface DeliveredAudio {
+  copied: boolean;
+  channels: number;
+}
+
+export function deliveredAudio(track: MatroskaTrack): DeliveredAudio {
+  const delivery = audioDelivery(track);
+  const source = track.audio?.channels ?? 1;
+  if (delivery !== "transcode") return { copied: delivery === "copy", channels: source };
+  const plan = knownTranscodePlan(track.audio?.sampleRate ?? 48000, source);
+  return { copied: false, channels: plan ? Math.min(source, plan.channels) : source };
+}
+
+/**
+ * Pose au navigateur, avant de choisir la piste d'ouverture, la question du plan de chaque piste
+ * à ré-encoder — pour que {@link deliveredAudio} ait une réponse. Une par une : chaque réponse
+ * retient aussi le codec de remplacement (`transcodeTargetCodec`), que `tryRemux` repose ensuite
+ * pour la piste retenue. Quelques `isConfigSupported`, rien de lu dans le fichier.
+ */
+export async function primeAudioDelivery(file: MatroskaFile): Promise<void> {
+  for (const track of file.tracks) {
+    if (track.type !== "audio" || audioDelivery(track) !== "transcode") continue;
+    try {
+      await chooseTranscodePlan(track.audio?.sampleRate ?? 48000, track.audio?.channels ?? 1);
+    } catch {
+      // Une question qui échoue laisse la piste classée sur ses canaux source, comme avant : le
+      // classement est un départage, il ne doit pas devenir la panne de l'ouverture.
+    }
+  }
 }
 
 /** La grappe où la lecture va commencer — voir `describeAudio`. */

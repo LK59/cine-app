@@ -31,6 +31,12 @@ export interface PlayerTrack {
    * Jellyfin, en reconnaissait 112. Les deux lecteurs doivent dire la même chose d'une même piste.
    */
   isHearingImpaired?: boolean;
+  /**
+   * Ce que le chemin natif livrerait de cette piste audio : copiée telle quelle ou non, et en
+   * combien de canaux — posé par `RemuxPlayback.audioTracks` (`deliveredAudio`). C'est le
+   * départage de `rank` depuis le 29/09/2026 : les canaux *reçus*, puis la copie (audit P5).
+   */
+  delivered?: { channels: number; copied: boolean };
 }
 
 /**
