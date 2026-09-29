@@ -289,7 +289,11 @@ that are two different masters. `Intl.DisplayNames` gives the language names in 
 languages, so there is no dictionary to keep.
 
 **Which audio track is opened, in order: the language asked for (100), then what this path can
-carry (20), then the most channels, then the file's own default flag, then file order.** The flag
+carry (20), then the most channels *delivered* — min(source, what this browser's encoder outputs:
+Apple's AAC stops at six) —, then a copied track over a re-encoded one, then the file's own default
+flag, then file order** (`deliveredAudio`, DECISIONS §3). Counting source channels opened a TrueHD
+7.1 on an iPhone — decoded in WebAssembly and re-encoded to AAC 5.1 — beside an AC-3 5.1 that would
+have been copied untouched. The flag
 used to be worth points *in the score* and so outranked channels, which opened *2001* on its
 stereo track while the 5.1 sat next to it. And the track is chosen **before the pipeline is
 built** — it used to be built on the file's default and switched a second later, which cost 429 ms
