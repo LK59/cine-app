@@ -37,8 +37,9 @@ docker run --rm -v "$PWD":/app -w /app node:24-alpine sh -c \
 # One test file
 docker run --rm -v "$PWD":/app -w /app node:24-alpine npx vitest run src/__tests__/<file>
 
-# Deploy (the Dockerfile runs the tests before building)
-docker compose build && docker compose up -d
+# Deploy (the Dockerfile runs the tests before building). BUILD_REF names the build in the logs'
+# `build` field: the short commit, `-dirty` if tracked files differ; without it, a timestamp.
+BUILD_REF=$(tools/build-ref.sh) docker compose build && docker compose up -d
 ```
 
 The suite writes into a throwaway `DATA_DIR` (`vitest.config.ts`): the gate mounts the whole

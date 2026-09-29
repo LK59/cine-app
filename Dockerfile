@@ -10,7 +10,7 @@ RUN --mount=type=cache,target=/root/.npm npm install
 FROM node:24-alpine AS builder
 # Le repère du build, repris tel quel dans les réglages. `.git` n'entre pas dans le contexte de
 # build (voir .dockerignore), donc le hash ne peut venir que d'ici :
-#   BUILD_REF=$(git rev-parse --short HEAD) docker compose build
+#   BUILD_REF=$(tools/build-ref.sh) docker compose build
 ARG BUILD_REF=""
 ENV BUILD_REF=$BUILD_REF
 WORKDIR /app
