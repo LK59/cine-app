@@ -86,26 +86,38 @@ export async function GET(req: NextRequest) {
     // Radarr — movies in library with upcoming release dates
     if (radarrMovies.status === "fulfilled") {
       const libraryTmdbIds = new Set(radarrMovies.value.map((m) => m.tmdbId));
+      // Un événement par date de sortie (salle, numérique, physique), chacune émise seulement si
+      // elle tombe dans [start, end]. Le film était placé sur `digitalRelease || physicalRelease ||
+      // inCinemas` : sorti en salle ce mois-ci avec une date numérique plus tard, il quittait le
+      // mois affiché et son étiquette ne disait jamais « Au cinéma » — Radarr le renvoie pourtant
+      // parce qu'une de ses dates est dans la fenêtre. Pas de « soon » ici : il sert aux films à
+      // venir de TMDb, dont on ne connaît que la date de sortie en salle ; pour un film de la
+      // bibliothèque, Radarr dit de quelle sortie il s'agit, et c'est ce que l'écran doit dire.
+      // L'id porte le genre de sortie : la clé React des pastilles et de la liste, et la
+      // déduplication ci-dessous, se font par `id`.
       for (const m of radarrMovies.value) {
-        const date = (m.digitalRelease || m.physicalRelease || m.inCinemas)?.slice(0, 10);
-        if (!date) continue;
-        const release: CalendarReleaseKind = m.inCinemas && m.inCinemas.slice(0, 10) === date
-          ? "cinema"
-          : m.digitalRelease && m.digitalRelease.slice(0, 10) === date
-            ? "digital"
-            : "physical";
-        list.push({
-          id: `radarr-${m.id}`,
-          date,
-          title: m.title,
-          type: "movie",
-          source: "library-movie",
-          posterPath: posterUrl(m.images, "thumb") ?? null,
-          href: `/radarr/${m.id}`,
-          release,
-          detail: null,
-          tmdbId: m.tmdbId,
-        });
+        const releases: [CalendarReleaseKind, string | undefined][] = [
+          ["cinema", m.inCinemas],
+          ["digital", m.digitalRelease],
+          ["physical", m.physicalRelease],
+        ];
+        for (const [release, raw] of releases) {
+          const date = raw?.slice(0, 10);
+          // Comparaison de chaînes AAAA-MM-JJ, bornes incluses comme dans l'appel à Radarr.
+          if (!date || date < start.slice(0, 10) || date > end.slice(0, 10)) continue;
+          list.push({
+            id: `radarr-${m.id}-${release}`,
+            date,
+            title: m.title,
+            type: "movie",
+            source: "library-movie",
+            posterPath: posterUrl(m.images, "thumb") ?? null,
+            href: `/radarr/${m.id}`,
+            release,
+            detail: null,
+            tmdbId: m.tmdbId,
+          });
+        }
       }
 
       // TMDb cinema — exclude movies already in Radarr library

@@ -12,7 +12,9 @@ vi.mock("@/lib/server-cache", () => ({
   TTL: { SHORT: 60_000 },
 }));
 
-function fakeReq(params: Record<string, string> = {}): NextRequest {
+// Fenêtre explicite : la route n'émet une date de sortie Radarr que si elle tombe dedans (B6), et
+// la fenêtre par défaut (aujourd'hui + 60 jours) aurait écarté les dates de 2024 ci-dessous.
+function fakeReq(params: Record<string, string> = { start: "2024-01-01", end: "2024-03-31" }): NextRequest {
   return { nextUrl: { searchParams: new URLSearchParams(params) } } as unknown as NextRequest;
 }
 
@@ -49,7 +51,7 @@ describe("GET /api/calendar", () => {
     const body = await res.json();
 
     const ids = body.events.map((e: { id: string }) => e.id);
-    expect(ids).toContain("radarr-1");
+    expect(ids).toContain("radarr-1-digital");
     expect(ids).toContain("tmdb-now_playing-99");
     expect(ids).not.toContain("tmdb-now_playing-42");
   });
@@ -105,6 +107,6 @@ describe("GET /api/calendar", () => {
     const res = await GET(fakeReq());
     const body = await res.json();
     expect(body.events).toHaveLength(2);
-    expect(body.events.map((e: { id: string }) => e.id)).toEqual(["radarr-2", "radarr-1"]);
+    expect(body.events.map((e: { id: string }) => e.id)).toEqual(["radarr-2-digital", "radarr-1-digital"]);
   });
 });

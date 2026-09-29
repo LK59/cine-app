@@ -46,7 +46,7 @@ beforeEach(() => {
 
 async function events() {
   const { GET } = await import("@/app/api/calendar/route");
-  const res = await GET({ nextUrl: { searchParams: new URLSearchParams() } } as unknown as NextRequest);
+  const res = await GET({ nextUrl: { searchParams: new URLSearchParams({ start: "2026-09-01", end: "2026-10-31" }) } } as unknown as NextRequest);
   return (await res.json()).events as import("@/app/api/calendar/route").CalendarEvent[];
 }
 
@@ -61,7 +61,7 @@ describe("calendrier : la route renvoie un code, l'écran le traduit", () => {
   it("chaque film porte le genre de sa sortie", async () => {
     const byId = Object.fromEntries((await events()).map((e) => [e.id, e.release]));
     expect(byId).toMatchObject({
-      "radarr-1": "cinema", "radarr-2": "digital", "radarr-3": "physical",
+      "radarr-1-cinema": "cinema", "radarr-2-digital": "digital", "radarr-3-physical": "physical",
       "tmdb-now_playing-7": "cinema", "tmdb-upcoming-8": "soon",
     });
   });
@@ -71,14 +71,14 @@ describe("calendrier : la route renvoie un code, l'écran le traduit", () => {
     const t = createT(en, fr, "en");
     const evs = await events();
     const detail = (id: string) => calendarEventDetail(evs.find((e) => e.id === id)!, t);
-    expect(detail("radarr-1")).toBe("In cinemas");
-    expect(detail("radarr-2")).toBe("Digital release");
-    expect(detail("radarr-3")).toBe("Physical release");
+    expect(detail("radarr-1-cinema")).toBe("In cinemas");
+    expect(detail("radarr-2-digital")).toBe("Digital release");
+    expect(detail("radarr-3-physical")).toBe("Physical release");
     expect(detail("tmdb-upcoming-8")).toBe("Coming soon");
     // L'épisode garde son numéro et son titre, qui ne sont pas des libellés.
     expect(detail("sonarr-5")).toBe("S01E02 · Pilot");
     expect(calendarEventTitle(evs.find((e) => e.id === "sonarr-5")!, t)).toBe("Series");
-    expect(calendarEventTitle(evs.find((e) => e.id === "radarr-2")!, t)).toBe("Numérique");
+    expect(calendarEventTitle(evs.find((e) => e.id === "radarr-2-digital")!, t)).toBe("Numérique");
   });
 
   it("les clés existent dans les quatre langues", () => {
