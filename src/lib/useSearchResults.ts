@@ -16,7 +16,9 @@ import type { SearchResponse } from "@/app/api/search/route";
  *
  * Les deux écrans de recherche du lecteur — la recherche générale et l'ajout dans « Ma liste » —
  * posaient chacun le même `useSWR` avec la même option ; ils partagent donc ce crochet, et la
- * règle : une erreur pour *cette* clé efface ce qu'on montre, et se dit (`failed`).
+ * règle : une erreur pour *cette* clé efface ce qu'on montre, et se dit (`failed`). La recherche
+ * globale de la gestion en avait une troisième copie, sans option mais sous le `keepPreviousData`
+ * que `SWRProvider` donne à toute l'application — même défaut, même crochet.
  */
 export function useSearchResults(url: string | null): {
   data: SearchResponse | undefined;
@@ -30,5 +32,7 @@ export function useSearchResults(url: string | null): {
   // L'erreur de SWR est celle de la clé courante, jamais d'une précédente : si elle est là, les
   // données qu'on tient sont forcément celles d'une autre frappe.
   const failed = url !== null && error !== undefined;
-  return { data: failed ? undefined : data, isLoading, failed };
+  // Sans clé, `keepPreviousData` rend encore la dernière réponse : le champ vidé de la recherche
+  // globale montrait toujours les résultats de « dune ». Pas de question, pas de réponse.
+  return { data: failed || url === null ? undefined : data, isLoading, failed };
 }

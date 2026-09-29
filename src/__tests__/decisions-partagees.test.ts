@@ -477,7 +477,8 @@ describe("ce que Lire trouve déjà prêt", () => {
 describe("une seule recherche du lecteur", () => {
   // `keepPreviousData` gardait les résultats d'avant sous une recherche qui avait échoué, sur les
   // deux écrans à la fois. Voir `useSearchResults`.
-  it.each(["src/components/player/PlayerSearchPanel.tsx", "src/components/player/PlayerListAdd.tsx"])("%s", (f) => {
+  // La recherche de la gestion en était une troisième copie, sous le `keepPreviousData` global.
+  it.each(["src/components/player/PlayerSearchPanel.tsx", "src/components/player/PlayerListAdd.tsx", "src/components/GlobalSearch.tsx"])("%s", (f) => {
     const src = lire(f);
     expect(src).toContain("useSearchResults(");
     // L'option, pas le mot : les commentaires l'expliquent, et c'est bien leur rôle.

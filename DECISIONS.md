@@ -272,15 +272,19 @@ bannière se démontait en plein glissement.
 échoué — jamais « rien trouvé », qui affirme ce qu'on ne sait pas.
 
 **Porteur.** `useSearchResults(url)` (`src/lib/useSearchResults.ts`). Appelants :
-`PlayerSearchPanel`, `PlayerListAdd`.
+`PlayerSearchPanel`, `PlayerListAdd`, `GlobalSearch` (la recherche de la gestion). Sans clé (champ
+vidé), le crochet ne rend rien : `keepPreviousData` y rendait encore la dernière réponse.
 
 **Corrigé le 21/09.** Les deux posaient leur propre `useSWR` avec `keepPreviousData` : hors ligne,
-on lisait sous « dune » les résultats de « matrix ».
+on lisait sous « dune » les résultats de « matrix ». Le 29/09, `GlobalSearch` : un `useSWR` sans
+option, mais sous le `keepPreviousData` global de `SWRProvider` — même défaut, et l'erreur n'était
+jamais lue.
 
 **Voulu.** Les résultats de la bibliothèque, cherchés sur place, restent affichés dans la recherche
 générale : ils ne dépendent pas du réseau. La ligne d'échec s'affiche à côté d'eux.
 
-**Tests.** `player-search-panel.test.tsx`, `player-list-add.test.tsx`, `decisions-partagees.test.ts`.
+**Tests.** `player-search-panel.test.tsx`, `player-list-add.test.tsx`, `global-search-previous.test.tsx`,
+`decisions-partagees.test.ts`.
 
 ## 7 sexies. Se déconnecter
 

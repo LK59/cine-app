@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
-import type { SearchResponse, UnifiedSearchResult, PersonResult } from "@/app/api/search/route";
+import type { UnifiedSearchResult, PersonResult } from "@/app/api/search/route";
+import { useSearchResults } from "@/lib/useSearchResults";
 import { posterUrl } from "@/lib/images";
 import { useSWRConfig } from "swr";
 import { useRole } from "@/lib/useRole";
@@ -204,12 +205,14 @@ export function GlobalSearch() {
   const { data: movies } = useSWR<RadarrMovie[]>("/api/radarr/movies", fetcher);
   const { data: series } = useSWR<SonarrSeries[]>("/api/sonarr/series", fetcher);
 
-  // Remote search (TMDb + persons) — only fire when query ≥ 2 chars
-  const { data: remoteData, isLoading: remoteLoading } = useSWR<SearchResponse>(
+  // Remote search (TMDb + persons) — only fire when query ≥ 2 chars.
+  // Par `useSearchResults`, comme les deux recherches du cinéma (DECISIONS §7 cinquies) : un
+  // `useSWR` nu héritait du `keepPreviousData` global, et le champ vidé gardait les résultats de
+  // « dune », ou hors ligne ceux de « matrix » s'affichaient sous « dune » sans un mot d'échec.
+  const { data: remoteData, isLoading: remoteLoading, failed: remoteFailed } = useSearchResults(
     open && debouncedQuery.length >= 2
       ? `/api/search?q=${encodeURIComponent(debouncedQuery)}${role === "admin" && searchDebug ? "&debug=1" : ""}`
-      : null,
-    fetcher
+      : null
   );
 
   // ── Keyboard shortcut + custom event trigger (for mobile) ──
@@ -362,7 +365,9 @@ export function GlobalSearch() {
 
   if (!open) return null;
 
-  const showEmpty = query.length >= 2 && !remoteLoading && libraryResults.length === 0 && tmdbResults.length === 0 && persons.length === 0;
+  // Un échec n'est pas « rien trouvé » : on n'en sait rien. La ligne d'échec se dit à la place,
+  // à côté des résultats de la bibliothèque cherchés sur place, qui ne dépendent pas du réseau.
+  const showEmpty = query.length >= 2 && !remoteLoading && !remoteFailed && libraryResults.length === 0 && tmdbResults.length === 0 && persons.length === 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[10vh]" onClick={() => setOpen(false)}>
@@ -540,6 +545,10 @@ export function GlobalSearch() {
                 );
               })}
             </div>
+          )}
+
+          {remoteFailed && query.length >= 2 && (
+            <p role="alert" className="px-4 py-6 text-center text-sm text-warning/90">{t('player.search.failed')}</p>
           )}
 
           {showEmpty && (
