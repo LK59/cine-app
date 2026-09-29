@@ -633,8 +633,10 @@ then:
 BUILD_REF=$(tools/build-ref.sh) docker compose up -d --build
 ```
 
-`BUILD_REF` names the build: it is shown next to the version in the settings page and names the
-service worker's cache generation. `tools/build-ref.sh` prints the short commit, with `-dirty`
+`BUILD_REF` names the build: it is shown next to the version in the settings page (« Version 8.1
+(5526f39) ») and names the service worker's cache generation. The version itself comes from
+`package.json` and is chosen by hand before each release (major, minor, patch); it is shown
+without a zero patch, as iOS does. `tools/build-ref.sh` prints the short commit, with `-dirty`
 appended when tracked files differ from it, so a build of modified sources never passes for the
 commit. The published images carry their commit this way (the GHCR workflow passes it); without it (`.git` is not in the build context) the build names itself with
 its own date and time. The build runs the test suite first: it fails loudly instead of

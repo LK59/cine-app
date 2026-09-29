@@ -9,6 +9,7 @@ import { jellyfinAuth, jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { forwardedFor } from "@/lib/clientAddress";
 import { jellyfinIdSegment as idSegment } from "@/lib/jellyfinPath";
 import type { JellyfinDeviceProfile } from "@/lib/deviceProfile";
+import { APP_VERSION } from "@/lib/appBuild";
 
 const { url, apiKey } = config.jellyfin;
 const headers = jellyfinAuthHeaders(apiKey);
@@ -182,7 +183,7 @@ async function playbackHeaders(token: string, client: PlaybackClient, userId: st
       client,
       device: "Navigateur",
       deviceId,
-      version: "1.0.0",
+      version: APP_VERSION,
     }),
   };
 }

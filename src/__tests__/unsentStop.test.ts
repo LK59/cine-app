@@ -30,7 +30,7 @@ describe("le bilan gardé sur l'appareil", () => {
     const [found] = findOrphanStops(ORPHAN_AFTER_MS + 5000);
     // Avec le build de la séance, gardé à l'enregistrement : le lancement qui l'envoie peut tourner
     // sur un autre code (25/09/2026).
-    expect(found.fields).toEqual({ build: expect.any(String), itemId: "x", watched: 60, why: "lost", lateByMs: ORPHAN_AFTER_MS + 5000 });
+    expect(found.fields).toEqual({ build: expect.any(String), version: expect.any(String), itemId: "x", watched: 60, why: "lost", lateByMs: ORPHAN_AFTER_MS + 5000 });
   });
 
   it("disparaît quand l'arrêt est parti normalement", () => {

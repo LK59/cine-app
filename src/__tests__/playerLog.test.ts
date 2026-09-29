@@ -50,6 +50,17 @@ describe("logPlaybackEvent", () => {
     expect(Object.keys(line).filter((k) => k.startsWith("f"))).toHaveLength(40);
   });
 
+  it("garde la version à côté du build, hors plafond elle aussi", async () => {
+    // 29/09/2026 : la version de package.json nomme la livraison, le build le commit.
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    const many = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`f${i}`, i]));
+    logPlaybackEvent("lucas", "stop", { ...many, build: "5526f39", version: "8.1.0" });
+    const line = lines()[0];
+    expect(Object.keys(line).slice(0, 5)).toEqual(["timestamp", "kind", "user", "build", "version"]);
+    expect(line.version).toBe("8.1.0");
+    expect(Object.keys(line).filter((k) => k.startsWith("f"))).toHaveLength(40);
+  });
+
   it("donne aux mesures d'approvisionnement leur propre plafond, sans rien chasser du reste", async () => {
     // 28/09/2026 : une trentaine de `diag.*` sur une ligne `stop` qui touchait déjà les quarante.
     const { logPlaybackEvent } = await import("@/lib/playerLog");

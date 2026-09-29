@@ -24,6 +24,8 @@ export function logStartupTiming(fields: {
   user: string;
   device: string | null;
   build: string | null;
+  /** La version de package.json que le navigateur exécutait, à côté du build. */
+  version: string | null;
   cacheUsed: boolean;
   cacheAgeMs: number | null;
   cacheMs: number | null;

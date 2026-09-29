@@ -34,10 +34,10 @@ beforeEach(() => {
 
 describe("POST /api/startup-timing", () => {
   it("écrit la mesure au nom du compte de la session, avec l'appareil", async () => {
-    const res = await post({ user: "lucas", build: "b1", cacheUsed: true, cacheAgeMs: 3600_000, cacheMs: 212.4, networkMs: 1480, standalone: true });
+    const res = await post({ user: "lucas", build: "b1", version: "8.1.0", cacheUsed: true, cacheAgeMs: 3600_000, cacheMs: 212.4, networkMs: 1480, standalone: true });
     expect(res.status).toBe(204);
     expect(mockLog).toHaveBeenCalledWith(
-      expect.objectContaining({ user: "Louis", build: "b1", cacheUsed: true, cacheAgeMs: 3600_000, cacheMs: 212, networkMs: 1480, standalone: true })
+      expect.objectContaining({ user: "Louis", build: "b1", version: "8.1.0", cacheUsed: true, cacheAgeMs: 3600_000, cacheMs: 212, networkMs: 1480, standalone: true })
     );
     expect(mockLog.mock.calls[0][0].device).toBeTruthy();
   });

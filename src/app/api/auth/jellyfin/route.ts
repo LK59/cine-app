@@ -12,6 +12,7 @@ import { loginToJellyseerr } from "@/lib/jellyseerrIdentity";
 import { forwardedFor } from "@/lib/clientAddress";
 import { logAuthEvent } from "@/lib/eventLogs";
 import { upstreamSignal } from "@/lib/http";
+import { APP_VERSION } from "@/lib/appBuild";
 
 /**
  * La borne de `AuthenticateByName`, plus large que les 5 s des autres appels amont : Jellyfin y
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
           // Sans quoi Jellyfin inscrit chaque connexion depuis l'adresse du conteneur.
           ...(await forwardedFor()),
           "Content-Type": "application/json",
-          Authorization: `MediaBrowser Client="CineApp", Device="Server", DeviceId="${deviceId}", Version="1.0.0"`,
+          Authorization: `MediaBrowser Client="CineApp", Device="Server", DeviceId="${deviceId}", Version="${APP_VERSION}"`,
         },
         body: JSON.stringify({ Username: username, Pw: candidate }),
         signal: upstreamSignal(JELLYFIN_AUTH_TIMEOUT_MS),

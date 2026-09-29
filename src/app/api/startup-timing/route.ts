@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
     user: session.jfUser ?? session.u,
     device: deviceLabel(req.headers.get("user-agent")),
     build: typeof body.build === "string" ? body.build.slice(0, 40) : null,
+    version: typeof body.version === "string" ? body.version.slice(0, 20) : null,
     cacheUsed: body.cacheUsed === true,
     cacheAgeMs: ms(body.cacheAgeMs),
     cacheMs: ms(body.cacheMs),

@@ -1,6 +1,6 @@
 "use client";
 
-import { APP_BUILD } from "@/lib/appBuild";
+import { APP_BUILD, APP_VERSION } from "@/lib/appBuild";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 
 /**
@@ -46,7 +46,7 @@ export function saveUnsentStop(session: string, fields: Record<string, unknown>,
     // sur un autre code.
     localStorage.setItem(
       PREFIX + session,
-      JSON.stringify({ savedAt: now, fields: { build: APP_BUILD, ...fields }, account: persistedCacheAccount() } satisfies Saved)
+      JSON.stringify({ savedAt: now, fields: { build: APP_BUILD, version: APP_VERSION, ...fields }, account: persistedCacheAccount() } satisfies Saved)
     );
   } catch {
     // Pas de stockage : la séance se passera de filet.

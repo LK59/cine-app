@@ -3,7 +3,7 @@
 import type { Middleware } from "swr";
 import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/catalogueKeys";
 import { geckoVersion } from "@/lib/webcodecs/bufferBudget";
-import { APP_BUILD } from "@/lib/appBuild";
+import { APP_BUILD, APP_VERSION } from "@/lib/appBuild";
 import { readResumeIndex } from "@/lib/resumeCache/store";
 import { budgetFor } from "@/lib/resumeCache/budget";
 
@@ -472,6 +472,7 @@ function reportTiming(): void {
   timing.sent = true;
   const fields = {
     build: APP_BUILD,
+    version: APP_VERSION,
     cacheUsed: timing.cacheUsed,
     cacheAgeMs: timing.cacheAgeMs,
     cacheMs: timing.cacheMs,

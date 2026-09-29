@@ -1148,6 +1148,7 @@
       "subtitle": "Installierte PWA aktualisieren",
       "updateTitle": "PWA aktualisieren",
       "updateDesc": "Service Worker auf die neueste Version prüfen und installieren",
+      "version": "Version {version}",
       "alreadyUpToDate": "Bereits aktuell",
       "updateApplied": "Update angewendet",
       "checking": "Prüfen…",

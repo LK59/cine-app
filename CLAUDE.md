@@ -512,3 +512,9 @@ Four rules, each of which cost a real failure:
 `RUNBOOK.private.md` has the operator's checklist. Push to `main` triggers the GHCR publish, whose
 first job is the same verify workflow. `./data:/app/data` is the only writable volume — SQLite,
 the image cache, and the player log all live there. Never commit `.env`, `data/`, or `*.db*`.
+
+**Before each deployment, the version in `package.json` is chosen by the weight of what ships** —
+major for a redesign, minor for new features or a batch of behaviour changes, patch for fixes
+only — in a commit of its own. It is the only source: `APP_VERSION` / `displayVersion`
+(`src/lib/appBuild.ts`) show it iOS-style (« 8.1 », « 8.1.1 ») next to the commit, send it to
+Jellyfin as the client version, and write it beside `build` on every player line.

@@ -1,7 +1,7 @@
 "use client";
 
 import type { PlayerEventKind } from "@/lib/playerLog";
-import { APP_BUILD } from "@/lib/appBuild";
+import { APP_BUILD, APP_VERSION } from "@/lib/appBuild";
 
 /**
  * Tells the server what the player did, so a silent step down stops being an invisible one.
@@ -15,7 +15,8 @@ export function reportPlayback(kind: PlayerEventKind, fields: Record<string, unk
     // Le code qui a écrit la ligne, et non celui que le serveur sert : un onglet ouvert depuis le
     // matin écrivait au journal avec le code du matin, et ses blocages passaient pour ceux de la
     // version du soir (25/09/2026). Un bilan renvoyé après coup porte déjà le sien (`unsentStop`).
-    const body = JSON.stringify({ kind, fields: { build: APP_BUILD, ...fields } });
+    // La version à côté : le build dit quel commit, elle dit quelle livraison.
+    const body = JSON.stringify({ kind, fields: { build: APP_BUILD, version: APP_VERSION, ...fields } });
     /**
      * L'arrêt part par `sendBeacon` quand le navigateur le propose.
      *

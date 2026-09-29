@@ -10,6 +10,7 @@ import { Toggle } from "@/components/Toggle";
 import { useTheme } from "@/components/ThemeProvider";
 import { ACCENT_PRESETS } from "@/lib/theme";
 import { useRole } from "@/lib/useRole";
+import { APP_BUILD, APP_VERSION, displayVersion } from "@/lib/appBuild";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 import { hardRefreshApp } from "@/lib/pwaRefresh";
@@ -326,12 +327,12 @@ function PwaUpdateCard() {
       <div>
         <p className="text-sm font-medium text-white">{t('settings.app.updateTitle')}</p>
         <p className="text-xs text-slate-500 mt-0.5">{t('settings.app.updateDesc')}</p>
-        {process.env.NEXT_PUBLIC_APP_VERSION && (
-          <p className="text-[11px] text-slate-600 mt-1">
-            v{process.env.NEXT_PUBLIC_APP_VERSION}
-            {process.env.NEXT_PUBLIC_APP_BUILD ? ` · ${process.env.NEXT_PUBLIC_APP_BUILD}` : ""}
-          </p>
-        )}
+        {/* La version d'abord, façon iOS (« 8.1 »), le commit entre parenthèses : la première dit
+            quelle livraison, le second quel code exact — deux builds d'une même version ne se
+            distinguent que par lui. */}
+        <p className="text-[11px] text-slate-600 mt-1">
+          {t('settings.app.version', { version: displayVersion(APP_VERSION) })} ({APP_BUILD})
+        </p>
       </div>
       <button
         onClick={refresh}

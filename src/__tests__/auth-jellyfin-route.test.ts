@@ -142,4 +142,24 @@ describe("POST /api/auth/jellyfin", () => {
     const body = await res.json();
     expect(body.role).toBe("user");
   });
+
+  it("annonce à Jellyfin la version de package.json, et plus « 1.0.0 »", async () => {
+    // Posée par next.config.js au build ; ici comme lui, puis modules rechargés pour la relire.
+    const { readFileSync } = await import("node:fs");
+    const { version } = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
+    vi.stubEnv("NEXT_PUBLIC_APP_VERSION", version);
+    vi.resetModules();
+    try {
+      global.fetch = vi.fn().mockResolvedValue({ ok: false });
+      const { POST } = await import("@/app/api/auth/jellyfin/route");
+      await POST(fakeReq({ username: "louis", password: "x" }));
+      const init = vi.mocked(global.fetch).mock.calls[0][1] as RequestInit;
+      const auth = (init.headers as Record<string, string>).Authorization;
+      expect(auth).toContain(`Version="${version}"`);
+      expect(auth).not.toContain('Version="1.0.0"');
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
 });

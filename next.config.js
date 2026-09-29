@@ -42,10 +42,12 @@ const nextConfig = {
     minimumCacheTTL: 31536000,
   },
   env: {
+    // La version livrée, choisie à la main dans package.json avant chaque déploiement (majeur,
+    // mineur, correctif) : lue par `APP_VERSION` (src/lib/appBuild.ts), affichée façon iOS,
+    // annoncée à Jellyfin et écrite au journal du lecteur à côté du build.
     NEXT_PUBLIC_APP_VERSION: version,
-    // Ce qui distingue réellement deux builds. `version` vient de package.json et n'a pas bougé
-    // depuis le premier jour : la ligne des réglages affichait « v1.0.0 » quel que soit le code
-    // effectivement servi, donc ne répondait pas à la seule question qu'on lui pose. BUILD_REF
+    // Ce qui distingue réellement deux builds. La version ne bouge qu'aux livraisons : deux
+    // builds d'une même version ne se distinguent que par celui-ci. BUILD_REF
     // est passé par le Dockerfile (le hash court du commit quand on le lui donne) ; à défaut,
     // l'horodatage du build, qui change lui aussi à chaque fois.
     NEXT_PUBLIC_APP_BUILD:
