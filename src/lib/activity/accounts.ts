@@ -223,10 +223,14 @@ export function weekSignals(now = Date.now()): WeekSignals {
     scopes.set(scope, (scopes.get(scope) ?? 0) + 1);
   }
   const perDay: WeekSignals["perDay"] = [];
+  // Les bornes sont des minuits locaux calculés par le calendrier, jamais « minuit + 24 h » ni
+  // « maintenant − d × 24 h » : aux changements d'heure un jour dure 23 ou 25 h, et une séance
+  // à 23 h 30 le jour du passage à l'heure d'hiver comptait dans la semaine sans tomber dans
+  // aucune barre (celle du passage à l'heure d'été débordait, elle, sur le lendemain).
+  const today = new Date(now);
   for (let d = 6; d >= 0; d--) {
-    const start = new Date(now - d * DAY);
-    start.setHours(0, 0, 0, 0);
-    const end = start.getTime() + DAY;
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - d);
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() - d + 1).getTime();
     const day = seances.filter((s) => s.start >= start.getTime() && s.start < end);
     perDay.push({ day: localDay(start), seances: day.length, problems: day.reduce((n, s) => n + problemsOf(s), 0) });
   }
