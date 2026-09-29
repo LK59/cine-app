@@ -44,6 +44,11 @@ export function carryOverStatic({ appDir, dataDir, now = Date.now() }) {
     fs.rmSync(partial, { recursive: true, force: true });
     fs.cpSync(staticDir, partial, { recursive: true });
     fs.renameSync(partial, own);
+  } else {
+    // Déjà archivé : c'est un retour arrière vers un build qu'un autre avait retiré. Il sert de
+    // nouveau, il n'est donc plus retiré — sans cela, sa marque de premier retrait le faisait effacer
+    // au déploiement suivant, alors que des onglets venaient de le charger (ChunkLoadError).
+    fs.rmSync(path.join(own, RETIRED), { force: true });
   }
 
   // Les autres sont des builds retirés. Leur âge compte depuis leur retrait — le premier démarrage

@@ -75,6 +75,20 @@ describe("les fichiers statiques des builds précédents", () => {
     expect(has(g, "chunks/C.js")).toBe(false);
   });
 
+  it("un build redevenu courant (retour arrière) n'est plus retiré : son âge repart du déploiement suivant", () => {
+    carryOverStatic({ appDir: image("A", { "chunks/a1.js": "a1" }), dataDir: data, now: 0 });
+    // B retire A ; puis retour à A, une heure plus tard : A resert, et son archive existe déjà.
+    carryOverStatic({ appDir: image("B", { "chunks/b1.js": "b1" }), dataDir: data, now: HOUR });
+    carryOverStatic({ appDir: image("A", { "chunks/a1.js": "a1" }), dataDir: data, now: 2 * HOUR });
+    // C arrive peu après : A vient seulement d'être retiré, même si son premier retrait date de plus
+    // de KEEP_HOURS. L'ancienne marque le faisait effacer alors que des onglets tournaient dessus.
+    const c = image("C", { "chunks/c1.js": "c1" });
+    const result = carryOverStatic({ appDir: c, dataDir: data, now: HOUR + (KEEP_HOURS + 1) * HOUR });
+
+    expect(result.carried).toContain("A");
+    expect(has(c, "chunks/a1.js")).toBe(true);
+  });
+
   it("une archive interrompue ne passe jamais pour un build", () => {
     fs.mkdirSync(path.join(data, "static-previous", "Z.partiel", "chunks"), { recursive: true });
     fs.writeFileSync(path.join(data, "static-previous", "Z.partiel", "chunks", "z.js"), "tronqué");
