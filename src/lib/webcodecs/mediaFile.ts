@@ -11,8 +11,8 @@
 // fini lu par un chemin à part, qui ne savait rien des pistes ni des sous-titres.
 
 import type { ByteSource } from "./byteSource";
-import { parseMatroska, type MatroskaFile, type MediaSample } from "./matroska";
-import { isIsoBaseMedia, Mp4SampleReader, parseMp4 } from "./mp4Demux";
+import { forgetMatroskaHeader, parseMatroska, type MatroskaFile, type MediaSample } from "./matroska";
+import { forgetMp4Header, isIsoBaseMedia, Mp4SampleReader, parseMp4 } from "./mp4Demux";
 import { SampleReader } from "./sampleReader";
 import { hevcParameterSets, hevcRecordHasParameterSets, hevcRecordWithParameterSets, nalLengthSize } from "./codecConfig";
 import { trace } from "./trace";
@@ -41,6 +41,31 @@ export async function openMediaFile(source: ByteSource, key?: string): Promise<M
   const file = mp4 ? await parseMp4(source, key) : await parseMatroska(source, key);
   await completeParameterSets(source, file);
   return file;
+}
+
+/**
+ * Le nom sous lequel l'en-tête d'un fichier est gardé : son adresse, et sa version quand on la connaît.
+ *
+ * L'adresse seule ne nomme pas un fichier. Remplacé au même chemin par son gestionnaire (mise à
+ * niveau, réencodage), il garde son itemId et son mediaSourceId, donc la même adresse : la
+ * réouverture dans la même page recevait l'en-tête de l'ancien dès qu'il tenait dans la taille du
+ * nouveau, et démultiplexait le film avec l'index et les pistes d'un autre (audit B3). La version
+ * est l'ETag de la MediaSource Jellyfin (`DirectPlayInfo.fileVersion`), celle qui valide déjà les
+ * morceaux gardés sur l'appareil. Sans elle, l'adresse seule, comme avant — et `forgetMediaHeader`
+ * quand le serveur annonce une autre taille.
+ *
+ * Tout ce qui garde un en-tête pour l'ouverture passe par ici — l'ouverture elle-même, et la
+ * préparation de l'épisode suivant, qui ne servirait à rien sous un autre nom.
+ */
+export function mediaHeaderKey(streamUrl: string, fileVersion?: string | null): string {
+  return fileVersion ? `${streamUrl}#${fileVersion}` : streamUrl;
+}
+
+/** Oublie l'en-tête et le conteneur gardés sous `key` — pour qui a des raisons de croire le fichier changé. */
+export function forgetMediaHeader(key: string): void {
+  containers.delete(key);
+  forgetMatroskaHeader(key);
+  forgetMp4Header(key);
 }
 
 /** Combien d'échantillons lire au plus pour trouver la première image clé vidéo. */

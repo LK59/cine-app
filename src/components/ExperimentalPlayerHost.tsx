@@ -1829,6 +1829,9 @@ export function ExperimentalPlayerHost({
       // La taille, déjà dans la description du fichier : l'ouverture n'a plus à la demander par
       // un HEAD, et les deux premières plages partent sans attendre cet aller-retour.
       knownSize: info.sizeBytes,
+      // Sa version (l'ETag de la MediaSource) : l'en-tête gardé en mémoire est nommé par elle et
+      // l'adresse, qu'un fichier remplacé au même chemin garde — voir `mediaHeaderKey`.
+      fileVersion: info.fileVersion ?? null,
       // L'en-tête, l'index et le passage de reprise, s'ils sont gardés sur l'appareil pour ce
       // fichier-là (`src/lib/resumeCache/`). Vérifiés contre ce que la description dit du fichier ;
       // l'ouverture ne les attend que 150 ms au plus.

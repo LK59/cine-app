@@ -179,8 +179,10 @@ them structural:
   makes wrong are dropped.
 - **Both ends of the file are requested at open**, in parallel: the header at the start, the index
   wherever the Cues were written (the very end, for a streaming-oriented file). The parse result is
-  **cached under the file name**, so reopening the same file — or rebuilding after the platform
-  dropped the source — does not pay for it again.
+  **cached under the file name and its version** (`mediaHeaderKey`: the stream URL plus Jellyfin's
+  MediaSource `ETag`), so reopening the same file — or rebuilding after the platform dropped the
+  source — does not pay for it again, while a file replaced at the same path (same URL) is read
+  afresh. Without a version, the URL alone, and a size corrected by the server forgets the entry.
 - **`warm(offset)` on seek.** The index knows which cluster a seek lands in several milliseconds
   before the parser asks for its first byte. Without warming, every seek began with a single
   request on an idle link; on a dense 4K file, 4 MB must arrive before the first frame, for ~12 ms

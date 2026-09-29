@@ -19,7 +19,7 @@ import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 import { directInfoKey, prefetchPlaybackState } from "@/lib/playbackPrefetch";
 import { preloadQuietly } from "@/lib/prefetch";
 import { HttpByteSource } from "@/lib/webcodecs/byteSource";
-import { openMediaFile } from "@/lib/webcodecs/mediaFile";
+import { mediaHeaderKey, openMediaFile } from "@/lib/webcodecs/mediaFile";
 import { trace } from "@/lib/webcodecs/trace";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 import { OPENING_TITLE_CHUNKS } from "@/lib/resumeCache/budget";
@@ -52,8 +52,8 @@ export async function warmNextEpisode(itemId: string): Promise<void> {
     // Sans lecture en avance : elle téléchargeait six mégaoctets après l'en-tête, que personne ne gardait.
     const source = (await HttpByteSource.open(info.streamUrl, info.sizeBytes, disk)).withoutReadahead();
     try {
-      // Nommé par son adresse, comme à l'ouverture : c'est ce qui la rendra instantanée.
-      await openMediaFile(source, info.streamUrl);
+      // Nommé comme à l'ouverture — adresse et version du fichier : c'est ce qui la rendra instantanée.
+      await openMediaFile(source, mediaHeaderKey(info.streamUrl, info.fileVersion));
       trace(`épisode suivant préparé en ${Date.now() - startedAt} ms`);
     } finally {
       source.close(false);

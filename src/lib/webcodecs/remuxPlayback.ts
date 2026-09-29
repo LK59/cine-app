@@ -11,7 +11,7 @@ import { playerWarning, type PlayerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource, type DiskChunks, type HeldBytes } from "./byteSource";
 import { fromMatroskaTrack, type PlayerTrack } from "./playerTrack";
 import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
-import { openMediaFile } from "./mediaFile";
+import { forgetMediaHeader, mediaHeaderKey, openMediaFile } from "./mediaFile";
 import { MseSource, type RecoveryFacts } from "./mseSource";
 import { choosePlaybackPath, NATIVE_PATH, type ChosenPath } from "./pathSelector";
 import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
@@ -43,6 +43,11 @@ export interface RemuxPlaybackOptions {
    * `HttpByteSource.open`.
    */
   knownSize?: number | null;
+  /**
+   * La version du fichier selon Jellyfin (`DirectPlayInfo.fileVersion`, l'ETag de sa MediaSource).
+   * Nomme l'en-tête gardé en mémoire avec l'adresse : voir `mediaHeaderKey`.
+   */
+  fileVersion?: string | null;
   /**
    * Les morceaux de ce fichier gardés sur l'appareil pour une reprise instantanée, s'il y en a
    * (`src/lib/resumeCache/`). Une promesse : l'ouverture ne l'attend que `DISK_WAIT_MS` au plus.
@@ -251,9 +256,15 @@ async function probeOpened(source: ByteSource, options: RemuxPlaybackOptions, li
   const headerAt = Date.now();
   const resuming = options.startSeconds > NO_INDEX_REACH_SECONDS;
   if (resuming) source.holdReadahead?.(true);
+  // Un en-tête rendu de mémoire ne lit rien : c'est la première réponse de la lecture qui dit la
+  // vraie taille. Si elle en corrige une périmée, le fichier a changé sous cette adresse, et
+  // l'en-tête gardé ne doit pas servir à la prochaine ouverture — une reconstruction, un changement
+  // de piste (audit B3).
+  const headerKey = mediaHeaderKey(options.streamUrl, options.fileVersion);
+  source.whenSizeCorrected?.(() => forgetMediaHeader(headerKey));
   let file: MatroskaFile;
   try {
-    file = await openMediaFile(source, options.streamUrl);
+    file = await openMediaFile(source, headerKey);
   } finally {
     if (resuming) source.holdReadahead?.(false);
   }

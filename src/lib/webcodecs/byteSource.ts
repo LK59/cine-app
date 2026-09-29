@@ -43,6 +43,8 @@ export interface ByteSource {
    * ouverture en reprise — voir `HttpByteSource.holdReadahead`. Optionnel.
    */
   holdReadahead?(held: boolean): void;
+  /** Prévenir si le serveur annonce une autre taille — voir `HttpByteSource.whenSizeCorrected`. Optionnel. */
+  whenSizeCorrected?(fn: () => void): void;
   /** Le réseau depuis le dernier saut (`abandon`) — voir `NetworkWindow`. Optionnel. */
   networkSinceSeek?(): NetworkWindow | null;
   /**
@@ -499,6 +501,20 @@ export class HttpByteSource implements ByteSource {
     return this.total;
   }
   private total: number;
+  /** Voir `whenSizeCorrected`. */
+  private sizeCorrected = false;
+  private onSizeCorrected: (() => void) | null = null;
+
+  /**
+   * `fn` est appelée une fois si `checkTotal` corrige la taille : le fichier n'est plus celui qu'on
+   * croyait, et ce qui a été gardé ailleurs sous son adresse (l'en-tête lu) doit être oublié.
+   * Tout de suite si c'est déjà fait : les deux premières plages partent dès l'ouverture
+   * (`warmed`), et leur réponse peut précéder celui qui s'y abonne.
+   */
+  whenSizeCorrected(fn: () => void): void {
+    if (this.sizeCorrected) fn();
+    else this.onSizeCorrected = fn;
+  }
   /** Le total annoncé par une réponse a été lu et comparé : voir `checkTotal`. */
   private totalChecked = false;
   private readonly url: string;
@@ -1038,6 +1054,8 @@ export class HttpByteSource implements ByteSource {
       for (const [index, bytes] of this.chunks) {
         if (bytes.byteLength !== this.expectedLength(index)) this.chunks.delete(index);
       }
+      this.sizeCorrected = true;
+      this.onSizeCorrected?.();
     } catch {
       /* une vérification n'est pas une lecture */
     }

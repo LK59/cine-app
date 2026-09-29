@@ -13,7 +13,10 @@ const h = vi.hoisted(() => ({
 vi.mock("@/lib/webcodecs/byteSource", () => ({
   HttpByteSource: { open: (...a: unknown[]) => h.open(...a) },
 }));
-vi.mock("@/lib/webcodecs/mediaFile", () => ({ openMediaFile: (...a: unknown[]) => h.openMediaFile(...(a as [])) }));
+vi.mock("@/lib/webcodecs/mediaFile", async (importOriginal) => ({
+  mediaHeaderKey: (await importOriginal<typeof import("@/lib/webcodecs/mediaFile")>()).mediaHeaderKey,
+  openMediaFile: (...a: unknown[]) => h.openMediaFile(...(a as [])),
+}));
 vi.mock("@/lib/prefetch", () => ({ preloadQuietly: () => h.preload() }));
 vi.mock("@/lib/playbackPrefetch", () => ({
   directInfoKey: (id: string) => `/api/jellyfin/direct/${id}`,
@@ -40,7 +43,8 @@ describe("warmNextEpisode", () => {
     await warmNextEpisode("ep-2");
     expect(h.prefetchState).toHaveBeenCalledWith("ep-2");
     expect(h.open).toHaveBeenCalledWith("/api/jellyfin/stream/next/stream.mkv?static=true", 1234, null);
-    expect(h.openMediaFile).toHaveBeenCalledWith(expect.anything(), "/api/jellyfin/stream/next/stream.mkv?static=true");
+    // Adresse et version du fichier, comme l'ouverture les nomme (`mediaHeaderKey`, audit B3).
+    expect(h.openMediaFile).toHaveBeenCalledWith(expect.anything(), "/api/jellyfin/stream/next/stream.mkv?static=true#etag-1");
     // Sans prendre au film en cours la place unique du relais.
     expect(h.close).toHaveBeenCalledWith(false);
   });
