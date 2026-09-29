@@ -173,9 +173,15 @@ function videoQualityOf(m: RadarrMovie): VideoQuality | undefined {
  * serveur est correcte sur les deux versions.
  *
  * Ce que ça implique, et qu'il faut savoir avant de le changer : le catalogue est **le même pour
- * tout le monde**, et les permissions ne s'appliquent qu'à la lecture, où Jellyfin refuse. Le jour
- * où un compte devra voir une bibliothèque restreinte, la vue serveur deviendra franchement
- * fausse — elle lui montrerait des titres qu'il ne peut pas ouvrir. `cachedJellyfinMovies(userId)`
+ * tout le monde**, et donne à chaque compte l'identifiant Jellyfin de *tous* les titres, y compris
+ * ceux que ses droits (tags bloqués, bibliothèques, contrôle parental) lui cachent. Ce n'est pas
+ * Jellyfin qui refuse ensuite : les octets passent par nos relais signés avec la clé
+ * d'administration, qui voit tout. Le refus vient de `assertVisible` (`src/lib/itemVisibility.ts`),
+ * que chacun de ces relais appelle avant de signer — et de `direct/[itemId]`, qui lit l'élément
+ * sous l'identifiant du compte (audit du 29/09/2026 : un titre bloqué s'ouvrait par une adresse
+ * fabriquée à la main). Le jour où un compte devra voir une bibliothèque restreinte, la vue
+ * serveur deviendra franchement fausse — elle lui montrerait des titres qu'il ne peut pas ouvrir.
+ * `cachedJellyfinMovies(userId)`
  * existe déjà pour ce jour-là ; le prix à payer sera un cache par compte au lieu d'un seul, pour
  * une charge utile qui ne se partagera plus.
  */

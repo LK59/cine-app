@@ -8,6 +8,7 @@ import { castPassFor, withCastPass, CAST_TOKEN_PARAM } from "@/lib/castToken";
 import { stripAccessToken } from "@/lib/stripAccessToken";
 import { castMasterPlaylist } from "@/lib/castMaster";
 import { fixVttTimestampMap } from "@/lib/vttTimestampMap";
+import { assertVisible } from "@/lib/itemVisibility";
 
 // Root cause found live via temporary request logging: right after a fresh remux job starts
 // (e.g. on an audio-track switch, which always requests a brand new PlaySessionId/ffmpeg job),
@@ -59,6 +60,11 @@ export async function GET(
     const token = req.cookies.get(SESSION_COOKIE)?.value;
     const session = await verifySessionFull(token);
     if (!session?.jfId) return new NextResponse(null, { status: 403 });
+    // La clé d'administration signe l'appel ci-dessous et voit tout : le droit du compte sur ce
+    // titre est demandé à Jellyfin d'abord, une fois par séance — voir `assertVisible`. Le
+    // laissez-passer de diffusion n'y passe pas (il ne porte pas le `jfId`, voir là-bas).
+    const refused = await assertVisible(session, itemId);
+    if (refused) return refused;
   }
 
   const restPath = path.join("/");

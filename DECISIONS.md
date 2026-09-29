@@ -1002,3 +1002,33 @@ passé à 3 avec ce champ.
 
 **Décidé le 28/09/2026.**
 
+
+---
+
+## 34. Qui peut voir un élément servi avec la clé d'administration
+
+**Règle.** La visibilité d'un élément pour un compte se décide chez Jellyfin, jamais ici : tout octet
+de Jellyfin servi avec la clé d'administration (flux, sous-titres, images, vignettes de la barre)
+n'est servi qu'après `/Users/{jfId}/Items/{itemId}` répondu favorablement pour ce compte. Le verdict
+est gardé par séance et par titre (six heures s'il est favorable, cinq minutes s'il ne l'est pas,
+5 000 entrées au plus). Refus : 404, sans détail. Jellyfin injoignable : un verdict favorable déjà
+obtenu vaut encore, même périmé (un film en cours ne s'arrête pas) ; sans verdict, 503 — une panne
+n'ouvre jamais l'accès.
+
+**Porteur.** `assertVisible` (`src/lib/itemVisibility.ts`).
+
+**Appelants.** `/api/jellyfin/stream/[itemId]/[...path]`, `/api/jellyfin/stream/subtitle/[itemId]`,
+`/api/jellyfin/image`, `/api/jellyfin/trickplay/tile`.
+
+**Différent exprès.** Un administrateur passe sans question (il tient la clé ; le compte
+administrateur local n'a pas d'identité Jellyfin). Le laissez-passer de diffusion d'un téléviseur
+n'y passe pas : il ne porte que le compte de l'application, pas son `jfId`, et il n'est émis que par
+`playback/start`, qui négocie avec Jellyfin sous l'identité du compte. `direct/[itemId]` n'appelle
+pas `assertVisible` : il lit déjà l'élément par `/Users/{jfId}/Items`, ce qui revient au même refus.
+Le catalogue reste commun à tous (voir `cinema/movies`).
+
+**Tests.** `item-visibility.test.ts`.
+
+**Trouvé le 29/09/2026** par l'audit : les relais ne vérifiaient qu'une session, et le catalogue
+donne à chaque compte l'identifiant de tous les titres ; un titre bloqué par tag s'ouvrait par une
+adresse de flux fabriquée à la main.

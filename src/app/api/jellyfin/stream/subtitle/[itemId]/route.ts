@@ -5,6 +5,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId, isSubtitleStreamIndex, isUnderJellyfinPrefix } from "@/lib/jellyfinPath";
 import { castPassFor } from "@/lib/castToken";
+import { assertVisible } from "@/lib/itemVisibility";
 
 export async function GET(
   req: NextRequest,
@@ -28,6 +29,12 @@ export async function GET(
   const session = await verifySessionFull(token);
   const castPass = session?.jfId ? null : await castPassFor(req);
   if (!session?.jfId && !castPass) return new NextResponse(null, { status: 403 });
+  // Signé avec la clé d'administration : le droit du compte sur ce titre est demandé à Jellyfin
+  // d'abord — voir `assertVisible` (le laissez-passer de diffusion n'y passe pas, voir là-bas).
+  if (session?.jfId) {
+    const refused = await assertVisible(session, itemId);
+    if (refused) return refused;
+  }
 
   const mediaSourceId = req.nextUrl.searchParams.get("mediaSourceId");
   const index = req.nextUrl.searchParams.get("index");

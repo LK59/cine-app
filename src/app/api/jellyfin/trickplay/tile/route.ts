@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { isJellyfinId } from "@/lib/jellyfinPath";
+import { SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionFull } from "@/lib/session";
+import { assertVisible } from "@/lib/itemVisibility";
 
 // One tile is a sprite sheet covering many thumbnails (see trickplay/info/route.ts) — a modest
 // number of distinct tiles covers a whole movie, so caching them aggressively is safe and cuts
@@ -16,6 +19,11 @@ export async function GET(req: NextRequest) {
   if (!width || !/^\d+$/.test(width) || !index || !/^\d+$/.test(index)) {
     return new NextResponse(null, { status: 400 });
   }
+
+  // Signé avec la clé d'administration, qui voit tout : le droit du compte sur ce titre est
+  // demandé à Jellyfin d'abord, une fois par séance — voir `assertVisible`.
+  const refused = await assertVisible(await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value), itemId);
+  if (refused) return refused;
 
   try {
     const res = await fetch(

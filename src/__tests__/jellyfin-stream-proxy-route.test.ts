@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { NextRequest } from "next/server";
 
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
+// Le droit du compte sur le titre a ses propres tests (`item-visibility.test.ts`) ; ici, accordé.
+vi.mock("@/lib/itemVisibility", () => ({ assertVisible: async () => null }));
 const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (..._args: unknown[]) => mockVerifySessionFull(..._args) }));
 vi.mock("@/lib/config", () => ({
