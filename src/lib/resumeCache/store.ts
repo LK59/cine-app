@@ -85,6 +85,7 @@ export type ResumeIndex = Record<string, ResumeIndexEntry>;
 interface Writable {
   write(data: BufferSource | string): Promise<void>;
   close(): Promise<void>;
+  abort?(reason?: unknown): Promise<void>;
 }
 export interface FileHandleLike {
   getFile(): Promise<Blob>;
@@ -215,7 +216,16 @@ async function writeFile(dir: DirHandleLike, path: string[], name: string, input
   const file = await dir.getFileHandle(name, { create: true });
   if (typeof file.createWritable === "function") {
     const writable = await file.createWritable();
-    await writable.write(data as BufferSource | string);
+    try {
+      await writable.write(data as BufferSource | string);
+    } catch (error) {
+      // Un `write` refusé (QuotaExceededError, sur un appareil à court d'espace — le cas même
+      // qu'`overQuota` anticipe) laissait le flux ouvert : ni `close` ni `abort`, le `.crswap` et le
+      // verrou du fichier tenus jusqu'au ramasse-miettes. Abandonné ici ; un abandon qui lève à son
+      // tour ne doit pas remplacer l'erreur d'origine, que les appelants lisent comme un échec.
+      await writable.abort?.(error).catch(() => {});
+      throw error;
+    }
     await writable.close();
     return;
   }
