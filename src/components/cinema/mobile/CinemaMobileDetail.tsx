@@ -586,7 +586,13 @@ export function CinemaMobileDetail({
                 <button
                   key={episode.jellyfinItemId}
                   type="button"
-                  onClick={() => playEpisode(episode)}
+                  // Lecture intégrée fermée : la ligne reste lisible et ne lance rien, sans pastille
+                  // de lecture — même garde que Lire au-dessus. Elle lançait l'épisode quoi qu'il
+                  // arrive, vers « Lecteur intégré désactivé » (29/09/2026).
+                  aria-disabled={playerEnabled !== true || undefined}
+                  onClick={() => {
+                    if (playerEnabled === true) playEpisode(episode);
+                  }}
                   // Une ligne pleine largeur s'allume, elle ne s'enfonce pas : à 0,95 elle glissait
                   // d'une quinzaine de pixels sous le doigt — voir `pressable` dans globals.css.
                   // `active:transform-none` écarte aussi l'enfoncement de base des boutons.
@@ -594,11 +600,13 @@ export function CinemaMobileDetail({
                 >
                   <div className="relative w-32 shrink-0">
                     <PosterImage src={episode.thumbnailUrl} alt={episode.title} aspectRatio="aspect-video" unoptimized subtle />
-                    <span className="absolute inset-0 flex items-center justify-center">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white">
-                        <Play size={14} fill="currentColor" />
+                    {playerEnabled === true && (
+                      <span className="absolute inset-0 flex items-center justify-center">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white">
+                          <Play size={14} fill="currentColor" />
+                        </span>
                       </span>
-                    </span>
+                    )}
                     {episode.watched && (
                       <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent-500/90">
                         <Check size={10} className="text-white" />

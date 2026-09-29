@@ -268,6 +268,15 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
     }
   });
 
+  it("« Recommencer » des fiches du bureau passe par `PlayButton`, pas par une ligne réécrite", () => {
+    // Les deux copies n'avaient pas la garde de lecture intégrée : avec `PLAYER_ENABLED=false`,
+    // elles s'affichaient et menaient à « Lecteur intégré désactivé » (29/09/2026).
+    for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"]) {
+      expect([f, codeOnly(f)]).toEqual([f, expect.stringMatching(/<PlayButton\s+restart\b/)]);
+      expect([f, /resumeAt: 0\s*[,}]/.test(codeOnly(f))]).toEqual([f, false]);
+    }
+  });
+
   it("« connu » veut dire que Jellyfin a répondu, pas que la requête est revenue", () => {
     for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"]) {
       expect([f, /progress !== undefined/.test(codeOnly(f))]).toEqual([f, false]);

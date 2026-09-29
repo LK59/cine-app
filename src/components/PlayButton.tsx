@@ -6,6 +6,7 @@ import { useT } from "@/components/TranslationProvider";
 import { usePlayerEnabledState } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { resumeAtFor } from "@/lib/resumePosition";
+import { MENU_BADGE } from "@/components/cinema/detailMenu";
 
 interface PlayButtonProps {
   itemId: string;
@@ -153,10 +154,10 @@ export function PlayButton({
       )}
       {variant === "row" ? (
         <>
-          {/* `bg-current/15` et non `bg-white/10` : la pastille se teinte de la couleur du texte de la
-              ligne, donc elle reste visible aussi bien sur une ligne sombre que sur la ligne
-              blanche de l'action principale, sans que l'appelant ait à s'en occuper. */}
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-current/15 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8">
+          {/* La pastille du menu des fiches, `MENU_BADGE`, et non une copie : les deux lignes
+              « Recommencer » des fiches du bureau passent par ici depuis le 29/09/2026 et
+              portaient déjà celle-là, transition comprise — voir `detailMenu.ts`. */}
+          <span className={MENU_BADGE}>
             <Icon size={iconSize} />
           </span>
           <span className="text-sm font-medium">{label}</span>

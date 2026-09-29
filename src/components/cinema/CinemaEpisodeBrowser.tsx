@@ -14,6 +14,7 @@ import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes
 import { useT } from "@/components/TranslationProvider";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
+import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import type { CinemaSeason, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 
 // "Plus d'épisodes" — Netflix's own TV-app episode browser: seasons as a vertical list on the
@@ -44,6 +45,11 @@ export function CinemaEpisodeBrowser({
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const missing = usePlayerSeriesRequests(sonarrId);
+  // Lecture intégrée fermée (`PLAYER_ENABLED=false`) : la liste reste lisible, mais une ligne ne
+  // lance plus rien et ne montre plus de bouton de lecture. Elle appelait `onPlayEpisode` quoi qu'il
+  // arrive, et menait à « Lecteur intégré désactivé » (29/09/2026) — même garde que `PlayButton`,
+  // et « non » tant qu'on ne sait pas.
+  const playerEnabled = usePlayerEnabled();
 
   // La liste des saisons vient de Jellyfin, donc de ce qu'on possède : une saison entière absente
   // n'y figurait pas du tout. On voyait quatre saisons d'une série qui en compte cinq, sans rien
@@ -229,14 +235,20 @@ export function CinemaEpisodeBrowser({
               <button
                 key={ep.jellyfinItemId}
                 data-episode-item="true"
-                onClick={() => onPlayEpisode(ep)}
+                // Focalisable quand même : les flèches parcourent la liste et font défiler le synopsis.
+                aria-disabled={!playerEnabled || undefined}
+                onClick={() => {
+                  if (playerEnabled) onPlayEpisode(ep);
+                }}
                 className="flex items-start gap-4 rounded-lg p-3 text-left transition-colors hover:bg-white/10 active:transform-none active:bg-white/15 active:delay-75 focus-visible:bg-white/10 focus-visible:outline-none"
               >
                 <div className="relative w-40 shrink-0 sm:w-48">
                   <PosterImage src={ep.thumbnailUrl} alt={ep.title} aspectRatio="aspect-video" unoptimized subtle />
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity hover:bg-black/30 hover:opacity-100">
-                    <Play size={28} className="text-white drop-shadow-lg" fill="currentColor" />
-                  </span>
+                  {playerEnabled && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity hover:bg-black/30 hover:opacity-100">
+                      <Play size={28} className="text-white drop-shadow-lg" fill="currentColor" />
+                    </span>
+                  )}
                   {ep.watched && (
                     <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent-500/90">
                       <Check size={12} className="text-white" />

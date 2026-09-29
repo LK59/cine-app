@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, BookmarkCheck, Check, CircleCheck, ListVideo, Plus, RotateCcw, Video } from "lucide-react";
+import { ArrowLeft, BookmarkCheck, Check, CircleCheck, ListVideo, Plus, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
@@ -254,7 +254,6 @@ export function CinemaSeriesDetail({
 
   const inList = addedStatus === "to_watch";
   const playTargetId = facts.targetId;
-  const hasResume = facts.hasResume;
 
   return createPortal(
     <div
@@ -431,20 +430,21 @@ export function CinemaSeriesDetail({
                 justifiait par le lecteur stable, qui ne saute que sur une valeur vraie. Le lecteur
                 natif lit un champ absent comme « prends la position du serveur » : « Recommencer »
                 reprenait donc l'épisode là où on l'avait laissé. Le jumeau côté film a été corrigé
-                d'abord et celui-ci oublié — c'est exactement la dérive que le CLAUDE.md décrit. */}
-            {playTargetId && hasResume && !fileMissing && (
-              <button
-                data-detail-menu
-                onClick={() =>
-                  playback.play({ itemId: playTargetId, title: facts.title, resumeAt: 0, getNextEpisode })
-                }
+                d'abord et celui-ci oublié — c'est exactement la dérive que le CLAUDE.md décrit.
+                La garde de lecture intégrée l'a été aussi, des deux côtés : d'où `PlayButton`, qui
+                porte les trois (29/09/2026, DECISIONS §1). */}
+            {playTargetId && (
+              <PlayButton
+                restart
+                itemId={playTargetId}
+                title={facts.title}
+                resumeTicks={facts.resumeTicks ?? undefined}
+                unavailable={fileMissing}
+                getNextEpisode={getNextEpisode}
+                variant="row"
+                label={t("cinema.restartFromBeginning")}
                 className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-              >
-                <span className={MENU_BADGE}>
-                  <RotateCcw size={14} />
-                </span>
-                <span className="text-sm font-medium">{t("cinema.restartFromBeginning")}</span>
-              </button>
+              />
             )}
 
             {/* Sa place est tenue, invisible et hors du clavier, tant que la description n'est pas là. */}

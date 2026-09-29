@@ -27,13 +27,15 @@ une position que si **Jellyfin a répondu** — pas seulement si la requête est
 - `resolveResumeAt(itemId, resumeAt)` — ce qu'un lecteur fait d'une absence : il lit
   `playback-state` (8 s de garde, puis le début).
 
-**Appelants.** `PlayButton` (fiche film bureau, fiche série bureau), `CinemaMobileDetail.play`.
+**Appelants.** `PlayButton` (fiche film bureau, fiche série bureau — Lire et « Recommencer »,
+variante `row`, `restart`), `CinemaMobileDetail.play`.
 Lecteur stable : `PlayerHost` passe par `resolveResumeAt` avant d'ouvrir. Lecteur natif : sa
 propre lecture de `playback-state` (qui rapporte aussi les préférences de pistes) puis
 `session.resumeAt ?? playbackState.resumeSeconds`.
 
 **Tests.** `resumePosition.test.ts`, `PlayButton.test.tsx`, `resumeContract.test.ts` (chaque
-`.play({` du dépôt porte un `resumeAt` explicite ou le dit), `decisions-partagees.test.ts`.
+`.play({` du dépôt porte un `resumeAt` explicite ou le dit), `decisions-partagees.test.ts`,
+`cinema-player-disabled.test.tsx`.
 
 **Corrigé le 21/09.**
 - Les fiches film (bureau et mobile) lisaient `progress !== undefined`. La route revient
@@ -42,6 +44,14 @@ propre lecture de `playback-state` (qui rapporte aussi les préférences de pist
   Elles lisent maintenant `progress?.known === true`.
 - Le lecteur stable lisait une absence comme zéro (`if (resumeAt) …`) : un compte réglé sur le
   lecteur stable repartait du début.
+
+**Corrigé le 29/09.** Les deux fiches du bureau réécrivaient leur ligne « Recommencer » au lieu
+de passer par `PlayButton`, et en avaient perdu la garde de lecture intégrée : avec
+`PLAYER_ENABLED=false`, la ligne s'affichait et menait à « Lecteur intégré désactivé ». Elles
+rendent maintenant `<PlayButton restart variant="row">`. Les lignes d'épisode (navigateur du
+bureau, liste du téléphone), qui ne passent pas par `PlayButton`, lisent la même réponse
+(`usePlayerEnabled` / `usePlayerEnabledState`) : sans lecture intégrée, elles restent lisibles,
+sans pastille de lecture, et ne lancent rien.
 
 **Voulu.** Les boutons d'épisode passent `episode.resumeTicks … : 0` sans `known` : la liste
 d'épisodes n'existe que si la route a répondu, et elle porte la position de chaque épisode.

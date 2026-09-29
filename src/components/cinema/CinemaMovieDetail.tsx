@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Plus, RotateCcw, Video } from "lucide-react";
+import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Plus, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { formatMinutes } from "@/lib/format";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
@@ -115,7 +115,6 @@ export function CinemaMovieDetail({
     item.title,
     progress ? { kind: "movie", known: progress?.known === true, resumeTicks: progress.resumeTicks, runtimeTicks: progress.runtimeTicks } : undefined
   );
-  const hasResume = facts.hasResume;
   // Grisé seulement si Jellyfin a répondu que le fichier n'existe plus — voir `missingFiles.ts`.
   const fileMissing = useFileMissing(item.jellyfinItemId);
   // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
@@ -439,19 +438,22 @@ export function CinemaMovieDetail({
                 `resumeAt: 0`, explicitement. Le champ était omis, et le commentaire d'origine le
                 justifiait par le lecteur stable, qui ne saute que sur une valeur vraie. Le
                 lecteur natif, lui, lit un champ absent comme « prends la position du serveur » :
-                « Recommencer » reprenait donc exactement là où l'on venait de s'arrêter. */}
-            {hasResume && !fileMissing && (
-              <button
-                data-detail-menu
-                onClick={() => playback.play({ itemId: item.jellyfinItemId, title: item.title, resumeAt: 0 })}
-                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-              >
-                <span className={MENU_BADGE}>
-                  <RotateCcw size={14} />
-                </span>
-                <span className="text-sm font-medium">{t("cinema.restartFromBeginning")}</span>
-              </button>
-            )}
+                « Recommencer » reprenait donc exactement là où l'on venait de s'arrêter.
+
+                Par `PlayButton` et non une ligne réécrite ici (29/09/2026) : la copie locale
+                n'avait pas sa garde de lecture intégrée, et s'affichait avec `PLAYER_ENABLED=false`
+                pour mener à « Lecteur intégré désactivé ». La reprise à écarter, le fichier absent
+                et le zéro explicite y sont décidés une fois — voir DECISIONS §1. */}
+            <PlayButton
+              restart
+              itemId={item.jellyfinItemId}
+              title={item.title}
+              resumeTicks={facts.resumeTicks ?? undefined}
+              unavailable={fileMissing}
+              variant="row"
+              label={t("cinema.restartFromBeginning")}
+              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+            />
 
             {/* Sa place est tenue, invisible et hors du clavier, tant que la description n'est pas là. */}
             {late.pending && (
