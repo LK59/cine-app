@@ -26,10 +26,14 @@ export { crossSiteWrite };
 // force-expired) stayed fully usable against most of the app for up to its full 7-day lifetime.
 
 // The slideshow page (/random, og:image preview + <img> tags) and the individual photo files it
-// hotlinks (/[filename]) both need to work for an anonymous visitor (a public link to the gallery). The list
-// endpoint (/api/gallery/clara, no trailing segment) is deliberately excluded: it's what lets
-// someone enumerate the whole gallery in one call, and is only used by the in-app authenticated
-// person page.
+// hotlinks (/[filename]) both need to work for an anonymous visitor (a public link to the gallery).
+// La liste de la galerie est donc publique de fait : /random embarque dans sa page l'adresse de
+// chaque photo (230 noms lus sans session sur l'installation de référence, 29/09/2026). Ce
+// commentaire disait que l'exclusion de la route de liste JSON (/api/gallery/clara, sans segment)
+// empêchait « d'énumérer la galerie en un appel » — c'était faux, et c'est assumé : la galerie est
+// faite pour être partagée. Cette route reste derrière la session seulement parce que son unique
+// lecteur est la fiche personne de l'interface connectée, et qu'il n'y a aucune raison d'ouvrir
+// une adresse de plus ; ce n'est pas une protection.
 function isPublicClaraPhoto(pathname: string): boolean {
   return pathname !== "/api/gallery/clara" && pathname.startsWith("/api/gallery/clara/");
 }
