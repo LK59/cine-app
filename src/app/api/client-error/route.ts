@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { logClientError } from "@/lib/logger";
+import { clientErrorAllowed } from "@/lib/writeLimits";
 
 /**
  * Le navigateur signalant une erreur qu'il a rencontrée — voir `reportClientError`.
@@ -18,6 +19,9 @@ import { logClientError } from "@/lib/logger";
 export async function POST(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session?.u) return new NextResponse(null, { status: 403 });
+  // Par compte (D12, voir `writeLimits.ts`) : un onglet pris dans une boucle d'erreurs aurait fait
+  // tourner `server.log`, et effacé les erreurs du serveur qu'il gardait.
+  if (!clientErrorAllowed(session.u)) return new NextResponse(null, { status: 429 });
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body || typeof body !== "object" || Array.isArray(body)) {

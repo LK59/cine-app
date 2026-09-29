@@ -9,6 +9,13 @@ export const MAX_IMAGES = 6;
 /** Par signalement, commentaires compris : `data/` porte aussi la base et les journaux. */
 export const MAX_IMAGES_PER_REPORT = 24;
 /**
+ * Par compte non admin, sur 24 heures glissantes : images des signalements et des commentaires,
+ * un seul compteur (`imageQuota`). Le plafond par signalement ne bornait pas le jour : un fil
+ * après l'autre, environ 18 Go par compte (D12, 29/09/2026). Soixante, c'est dix envois complets
+ * — ici, une ou deux captures par signalement.
+ */
+export const MAX_IMAGES_PER_DAY = 60;
+/**
  * Par compte non admin : signalements créés sur 24 heures glissantes (brouillons compris), et
  * brouillons ouverts à la fois. Rien ne bornait ni l'un ni l'autre : chaque création peut porter
  * six images de 25 Mo, et `data/` porte aussi la base et les journaux — un compte pouvait remplir

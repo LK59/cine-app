@@ -12,7 +12,7 @@ import { sendPushToAdmins, sendPushToUser } from "@/lib/push";
 import { config } from "@/lib/config";
 import { logError } from "@/lib/logger";
 import type { ReportLogs } from "@/lib/reportLogs";
-import { MAX_OPEN_DRAFTS, MAX_REPORTS_PER_DAY } from "@/lib/reportLimits";
+import { MAX_IMAGES_PER_DAY, MAX_OPEN_DRAFTS, MAX_REPORTS_PER_DAY } from "@/lib/reportLimits";
 
 export interface Who {
   userId: string;
@@ -55,6 +55,21 @@ export function reportQuota(who: Who, draft: boolean, now = Date.now()): string 
   const { created, drafts } = reportsDb.quotaCounts(who.userId, now - 24 * 3600_000);
   if (created >= MAX_REPORTS_PER_DAY) return `${MAX_REPORTS_PER_DAY} signalements au plus par 24 heures`;
   if (draft && drafts >= MAX_OPEN_DRAFTS) return `${MAX_OPEN_DRAFTS} brouillons ouverts au plus`;
+  return null;
+}
+
+/**
+ * Ce qui empêche ce compte de joindre `adding` images de plus, ou `null` : un seul compteur sur
+ * 24 heures pour les images des signalements *et* des commentaires (D12, 29/09/2026). Les
+ * commentaires n'y étaient pas : le plafond par fil (24) laissait remplir un fil après l'autre,
+ * environ 18 Go par jour et par compte sur le disque de l'hôte. L'administrateur n'a pas de
+ * plafond, et ses réponses ne comptent pas dans celui de l'auteur.
+ */
+export function imageQuota(who: Who, adding: number, now = Date.now()): string | null {
+  if (who.admin || adding === 0) return null;
+  if (reportsDb.imagesSince(who.userId, now - 24 * 3600_000) + adding > MAX_IMAGES_PER_DAY) {
+    return `${MAX_IMAGES_PER_DAY} images au plus par 24 heures`;
+  }
   return null;
 }
 

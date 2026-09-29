@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
-import { detail, markSeenBy, notifyAdmin, reportQuota, seanceFor, readContext, readFields, summarize } from "@/lib/reports";
+import { detail, imageQuota, markSeenBy, notifyAdmin, reportQuota, seanceFor, readContext, readFields, summarize } from "@/lib/reports";
 import { imagesFromForm, saveReportImage } from "@/lib/reportImages";
 import { captureReportLogs } from "@/lib/reportLogs";
 import { jsonField, reportCaller, reportError } from "@/lib/reportRequest";
@@ -36,6 +36,9 @@ export async function POST(req: NextRequest) {
   if (typeof fields === "string") return reportError("incomplete", 400, fields);
   const images = imagesFromForm(form);
   if ("code" in images) return reportError(images.code, 400, images.detail);
+  // Le même plafond d'images du jour que les commentaires (D12, voir `imageQuota`).
+  const overImages = imageQuota(who, images.length);
+  if (overImages) return reportError("quota", 429, overImages);
 
   const report = reportsDb.create(who.userId, who.userName, fields, draft, readContext(jsonField(form, "context"), req.headers.get("user-agent")));
   for (const image of images) await saveReportImage(report.id, null, image.original, image.shown);

@@ -4,6 +4,7 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { logPlaybackEvent, isPlayerEventKind } from "@/lib/playerLog";
 import { recoverLostPosition } from "@/lib/lostStopPosition";
+import { playerLogAllowed } from "@/lib/writeLimits";
 
 /**
  * The player telling the server what happened to it.
@@ -19,6 +20,11 @@ export async function POST(req: NextRequest) {
   if (!session?.u) return new NextResponse(null, { status: 403 });
 
   const body = (await req.json().catch(() => null)) as { kind?: unknown; fields?: unknown } | null;
+  // Une limite par compte (D12, voir `writeLimits.ts`) : un client qui boucle faisait tourner le
+  // journal en quelques minutes. Le banc d'un administrateur n'y est pas soumis — il écrit bien
+  // plus vite, et dans son propre journal ; un autre compte qui pose `bench` se le voit retirer.
+  const benchLine = session.role === "admin" && Boolean((body?.fields as { bench?: unknown } | undefined)?.bench);
+  if (!benchLine && !playerLogAllowed(session.u)) return NextResponse.json({ error: "Trop d'envois" }, { status: 429 });
   if (!isPlayerEventKind(body?.kind)) return NextResponse.json({ error: "Événement inconnu" }, { status: 400 });
 
   const fields = body?.fields;

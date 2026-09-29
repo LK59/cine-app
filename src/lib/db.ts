@@ -1116,6 +1116,23 @@ export const reportsDb = {
     return { created: row.created ?? 0, drafts: row.drafts ?? 0 };
   },
 
+  /**
+   * Pour le plafond d'images du jour (`imageQuota`) : celles que ce compte a jointes depuis
+   * `sinceMs` à ses signalements — à la création, au brouillon ou en commentaire. Les réponses de
+   * l'administrateur dans ses fils ne sont pas les siennes.
+   */
+  imagesSince(userId: string, sinceMs: number): number {
+    const row = getDb()
+      .prepare(
+        `SELECT COUNT(*) AS n FROM report_images i
+           JOIN reports r ON r.id = i.report_id
+           LEFT JOIN report_messages m ON m.id = i.message_id
+          WHERE r.user_id = ? AND i.created_at >= ? AND (i.message_id IS NULL OR m.author = 'user')`
+      )
+      .get(userId, sinceMs) as { n: number };
+    return row.n;
+  },
+
   listForUser(userId: string): ReportRow[] {
     return (getDb().prepare("SELECT * FROM reports WHERE user_id = ? ORDER BY updated_at DESC").all(userId) as ReportDbRow[]).map(toReport);
   },

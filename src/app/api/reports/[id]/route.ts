@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
-import { detail, isOwner, markSeenBy, notifyAdmin, seanceFor, readContext, readFields } from "@/lib/reports";
+import { detail, imageQuota, isOwner, markSeenBy, notifyAdmin, seanceFor, readContext, readFields } from "@/lib/reports";
 import fs from "node:fs";
 import path from "node:path";
 import { imagesFromForm, REPORTS_DIR, saveReportImage } from "@/lib/reportImages";
@@ -45,6 +45,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (reportsDb.images(report.id).length + images.length > MAX_IMAGES_PER_REPORT) {
     return reportError("tooMany", 400, `${MAX_IMAGES_PER_REPORT} images au plus par signalement`);
   }
+  // Le même plafond d'images du jour que les commentaires (D12, voir `imageQuota`).
+  const overImages = imageQuota(who, images.length);
+  if (overImages) return reportError("quota", 429, overImages);
 
   reportsDb.updateDraft(report.id, fields, readContext(jsonField(form, "context"), req.headers.get("user-agent")));
   for (const image of images) await saveReportImage(report.id, null, image.original, image.shown);

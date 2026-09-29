@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
-import { detail, isOwner, LIMITS, markSeenBy, notifyAdmin, notifyAuthor } from "@/lib/reports";
+import { detail, imageQuota, isOwner, LIMITS, markSeenBy, notifyAdmin, notifyAuthor } from "@/lib/reports";
 import { imagesFromForm, saveReportImage } from "@/lib/reportImages";
 import { reportCaller, reportError, reportFor } from "@/lib/reportRequest";
 import { MAX_IMAGES_PER_REPORT } from "@/lib/reportLimits";
+import { reportMessageAllowed } from "@/lib/writeLimits";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,9 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const who = await reportCaller(req);
   if (who instanceof NextResponse) return who;
+  // Avant le formulaire, qui peut peser 90 Mo : un commentaire se tape à la main, et vingt par
+  // minute n'en sont plus (D12, voir `writeLimits.ts`).
+  if (!reportMessageAllowed(who.userId)) return reportError("quota", 429, "Trop de commentaires en peu de temps");
   const report = reportFor((await params).id, who);
   if (report instanceof NextResponse) return report;
   if (report.status === "draft") return reportError("draftNoComment", 409, "Un brouillon ne se commente pas");
@@ -28,6 +32,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (reportsDb.images(report.id).length + images.length > MAX_IMAGES_PER_REPORT) {
     return reportError("tooMany", 400, `${MAX_IMAGES_PER_REPORT} images au plus par signalement`);
   }
+  // Et le plafond du jour, que les images des commentaires ne comptaient pas : un fil après
+  // l'autre, chacun rempli jusqu'à 24, faisait environ 18 Go par jour et par compte (D12).
+  const overImages = imageQuota(who, images.length);
+  if (overImages) return reportError("quota", 429, overImages);
 
   const byAuthor = isOwner(report, who);
   const message = reportsDb.addMessage(report.id, byAuthor ? "user" : "admin", who.userName, body);

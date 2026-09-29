@@ -3,6 +3,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { deviceLabel } from "@/lib/deviceLabel";
 import { logStartupTiming } from "@/lib/eventLogs";
+import { startupTimingAllowed } from "@/lib/writeLimits";
 
 /**
  * Ce que l'ouverture du cinéma a coûté, cache de l'appareil ou réseau — voir `persistentCache.ts`.
@@ -44,6 +45,8 @@ function storageOf(value: unknown): Record<string, string | number | boolean> {
 export async function POST(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return new NextResponse(null, { status: 401 });
+  // Une mesure par ouverture ; au-delà du seuil, une boucle (D12, voir `writeLimits.ts`).
+  if (!startupTimingAllowed(session.u)) return new NextResponse(null, { status: 429 });
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: "Corps invalide" }, { status: 400 });
   logStartupTiming({
