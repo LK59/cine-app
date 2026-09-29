@@ -498,8 +498,10 @@ Four rules, each of which cost a real failure:
   per-build caches (`cine-static-<build>`, the build number rides on `/sw.js?v=`): the current
   generation and the previous one, an unchanged file carried over without a download — so a
   deploy no longer needs a bump, and the cache no longer grows. Images are left to the HTTP cache.
-- **`SESSION_SECRET`.** Startup throws on the default value rather than warning — a forged admin
-  session is not a log line.
+- **`SESSION_SECRET`.** Startup exits on the default value rather than warning — a forged admin
+  session is not a log line. The check runs in `server-boot/boot.mjs` before the server is imported
+  (rules in `server-boot/startupChecks.mjs`, re-exported by `src/lib/sessionSecret.ts`): thrown from
+  `instrumentation.ts` alone, Next caught it and the container stayed "Up" answering 500.
 
 ## Deployment
 

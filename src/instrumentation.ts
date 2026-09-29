@@ -9,19 +9,17 @@ export async function register() {
      *
      * Ici et pas dans la configuration elle-même : `register` s'exécute au démarrage du serveur,
      * jamais pendant la compilation, où le secret n'a aucune raison d'être présent.
+     *
+     * En production, `server-boot/boot.mjs` a déjà refusé avant d'importer le serveur, et sort :
+     * une exception levée ici, Next la rattrape en « Failed to prepare server » sans quitter, et le
+     * conteneur restait « Up » à répondre 500 (audit du 29/09/2026). Ce second contrôle, mêmes
+     * règles et même message, reste pour `next dev` — qui ne passe pas par `boot.mjs` — et pour
+     * toute autre façon de lancer `server.js` directement.
      */
     const { config } = await import("./lib/config");
-    const { sessionSecretProblem, adminPasswordProblem } = await import("./lib/sessionSecret");
-    const secretProblem = sessionSecretProblem(config.app.sessionSecret);
-    if (secretProblem) {
-      throw new Error(
-        `${secretProblem} Posez-en un dans .env (openssl rand -hex 32) — sans lui, une session administrateur peut être forgée.`
-      );
-    }
-    const passwordProblem = adminPasswordProblem(config.app.adminPassword);
-    if (passwordProblem) {
-      throw new Error(`${passwordProblem} Choisissez-en un dans .env, ou laissez-le vide pour désactiver le compte local.`);
-    }
+    const { startupRefusal } = await import("./lib/sessionSecret");
+    const refusal = startupRefusal({ sessionSecret: config.app.sessionSecret, adminPassword: config.app.adminPassword });
+    if (refusal) throw new Error(refusal);
 
     const { startNotificationCron } = await import("./lib/notificationJobs");
     startNotificationCron();

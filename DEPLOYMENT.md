@@ -348,8 +348,8 @@ sudo chown -R 1001:1001 data
 
 If you set `user: "1001:1000"` in the compose file, match it here: `sudo chown -R 1001:1000 data`.
 
-Skipping this step is the single most common failed first start: the app cannot create its
-database and exits.
+Skipping this step is the single most common failed first start: the app cannot write to its
+data directory and exits.
 
 ---
 
@@ -373,7 +373,7 @@ container keeps running.
 |---|---|
 | `SESSION_SECRET est vide.` (or `…est la valeur d'exemple publiée.`, or `…fait N caractères — 16 au moins.`) followed by `Posez-en un dans .env (openssl rand -hex 32) — sans lui, une session administrateur peut être forgée.`, and an immediate exit | Step 4 was skipped, or the secret is too short. The message is in French. This is intentional. |
 | `APP_ADMIN_PASSWORD est la valeur d'exemple publiée.` and an immediate exit | The admin password was left at `change-me`. Choose one, or leave it empty to disable the local admin account. |
-| `SQLITE_CANTOPEN` / `EACCES` on `/app/data` | Step 7 was skipped, or the ownership does not match `user:`. |
+| `DATA_DIR (/app/data) ne peut pas être écrit (EACCES).` and an immediate exit | Step 7 was skipped, or the ownership does not match `user:`. |
 | `network media_net declared as external, but could not be found` | The network name in the compose file does not match `docker network ls`. |
 | The container restarts in a loop | `docker compose logs --tail=50 cine-app` has the reason; the loop itself is `restart: unless-stopped` doing its job. |
 
