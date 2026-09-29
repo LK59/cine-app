@@ -249,3 +249,18 @@ export function nothingToShowYet(isLoading: boolean, data: unknown): boolean {
   return isLoading && data === undefined;
 }
 
+
+/**
+ * Ce qu'une erreur du catalogue prend à l'écran : tout (`"plein"`), une ligne (`"ligne"`), ou rien.
+ *
+ * SWR garde la donnée quand une *revalidation* échoue et pose l'erreur à côté : `data` et `error`
+ * sont alors vrais ensemble — un redéploiement pendant `revalidateOnReconnect`, ou un lancement
+ * depuis le catalogue gardé sur l'appareil pendant que le proxy répond 502. Le bureau testait
+ * l'erreur seule et remplaçait tout l'écran par le message, accueil et fiches ouvertes démontés,
+ * quand le téléphone gardait ses rangées sous une ligne (29/09/2026). L'écran plein n'est dû
+ * qu'à un catalogue qu'on n'a pas. DECISIONS.md §37.
+ */
+export function catalogueErrorView(error: unknown, data: unknown): "plein" | "ligne" | null {
+  if (!error) return null;
+  return data === undefined ? "plein" : "ligne";
+}

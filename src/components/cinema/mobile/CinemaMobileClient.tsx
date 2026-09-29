@@ -14,7 +14,7 @@ import { heroOffscreen } from "@/lib/heroCarousel";
 import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
 import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
 import { useFreshPersonalLists } from "@/lib/freshLists";
-import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet } from "@/lib/swr";
+import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet, catalogueErrorView } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
@@ -560,7 +560,8 @@ export function CinemaMobileClient() {
           </div>
         )}
 
-        {moviesError && <p className="px-4 pt-6 text-sm text-danger">{errorMessage(moviesError, t, t("common.unknown"))}</p>}
+        {/* Une ligne, avec ou sans catalogue : le téléphone n'a pas d'écran plein d'erreur. */}
+        {catalogueErrorView(moviesError, movies) !== null && <p className="px-4 pt-6 text-sm text-danger">{errorMessage(moviesError, t, t("common.unknown"))}</p>}
         {!loading && payload && payload.spotlight.length === 0 && (
           <p className="px-4 pt-6 text-sm text-muted">{t("cinema.empty")}</p>
         )}

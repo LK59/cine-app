@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Play, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet } from "@/lib/swr";
+import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet, catalogueErrorView } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
@@ -883,7 +883,9 @@ export function CinemaClient() {
     );
   }
 
-  if (moviesError) {
+  // Tout l'écran seulement sans catalogue : une revalidation ratée, catalogue en main, garde
+  // l'accueil et ses fiches sous une ligne d'erreur (voir `catalogueErrorView`).
+  if (catalogueErrorView(moviesError, movies) === "plein") {
     return createPortal(
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
         <p className="max-w-sm text-sm text-danger">{errorMessage(moviesError, t, t("common.unknown"))}</p>
@@ -1178,6 +1180,10 @@ export function CinemaClient() {
               {mediaType === "movies" && continueSkeleton}
               {mediaType === "movies" && continueRow}
 
+              {catalogueErrorView(moviesError, movies) === "ligne" && (
+                <p className="px-8 text-sm text-danger sm:px-12">{errorMessage(moviesError, t, t("common.unknown"))}</p>
+              )}
+
               {/* The curated rails, ahead of the alphabetical genre rows: what's best, what just
                   arrived, what you saved. A library sorted A→Z is a catalogue; these three are
                   what make it read as a home screen. Each one hides itself when empty. */}
@@ -1300,7 +1306,8 @@ export function CinemaClient() {
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
                 </div>
               )}
-              {seriesError && (
+              {/* Une ligne dans les deux cas : le volet des séries vit dans l'écran des films. */}
+              {catalogueErrorView(seriesError, series) !== null && (
                 <p className="px-8 text-sm text-danger sm:px-12">{seriesError.message || t("common.unknown")}</p>
               )}
               {series && series.spotlight.length === 0 && (

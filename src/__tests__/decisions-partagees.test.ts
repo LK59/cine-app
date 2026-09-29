@@ -762,3 +762,20 @@ describe("un seul endroit rend le volume retenu", () => {
     }
   });
 });
+
+describe("une seule règle pour l'erreur du catalogue", () => {
+  // DECISIONS.md §37. Le bureau testait `moviesError` seul et remplaçait tout l'écran, catalogue en
+  // main ; le téléphone gardait ses rangées (29/09/2026). Les deux clients passent par
+  // `catalogueErrorView`, et aucun ne teste plus l'erreur nue.
+  it.each([
+    "src/components/cinema/CinemaClient.tsx",
+    "src/components/cinema/mobile/CinemaMobileClient.tsx",
+  ])("%s appelle `catalogueErrorView`", (f) => {
+    const code = lire(f)
+      .split("\n")
+      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+      .join("\n");
+    expect([f, code.includes("catalogueErrorView(moviesError, movies)")]).toEqual([f, true]);
+    expect([f, /if \(moviesError\)|\{moviesError &&|\{seriesError &&/.test(code)]).toEqual([f, false]);
+  });
+});

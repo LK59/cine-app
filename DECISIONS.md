@@ -1104,3 +1104,25 @@ porte alors la séance.
 **Trouvé le 29/09/2026** par l'audit : le lecteur serveur tenait la garde depuis le 27/09, l'hôte
 natif non — un épisode suivant monté puis démonté aussitôt pendant le fondu (faux `stop unmount`,
 avance automatique comptée, flash), et deux relectures des vues pour deux appuis sur la croix.
+
+## 37. Ce qu'une erreur du catalogue prend à l'écran
+
+**Règle.** Une erreur du catalogue ne prend tout l'écran que si le catalogue manque. Catalogue en
+main — SWR garde la donnée quand une revalidation échoue et pose l'erreur à côté —, l'écran reste
+et l'erreur tient en une ligne.
+
+**Porteur.** `catalogueErrorView(error, data)` (`src/lib/swr.ts`) : `"plein"`, `"ligne"` ou `null`.
+
+**Appelants.** `CinemaClient` (écran plein des films, ligne dans le volet des films, ligne du volet
+des séries) et `CinemaMobileClient` (ligne des films).
+
+**Tests.** `CinemaClient-catalogue-error.test.tsx` ; `decisions-partagees.test.ts` (« une seule
+règle pour l'erreur du catalogue »).
+
+**Voulu.** Seul le catalogue des films du bureau a un écran plein d'erreur : le téléphone et le
+volet des séries du bureau montrent une ligne dans les deux cas, parce que leur écran existe sans
+ce catalogue.
+
+**Trouvé le 29/09/2026** par l'audit : le bureau testait l'erreur seule, et une revalidation ratée
+pendant un redéploiement démontait l'accueil et les fiches ouvertes ; le téléphone gardait ses
+rangées.
