@@ -856,6 +856,18 @@ export const sessionDb = {
     return row?.jf_device ?? null;
   },
 
+  /**
+   * Les appareils Jellyfin des sessions encore valides — vues depuis moins que la durée d'une
+   * session. Le ménage des appareils (`jellyfinDevicePrune.ts`) ne les touche jamais : une session
+   * vivante peut ne pas employer son jeton pendant des semaines.
+   */
+  liveJfDevices(now = Date.now()): string[] {
+    const rows = getDb()
+      .prepare("SELECT jf_device FROM sessions WHERE jf_device IS NOT NULL AND last_seen_at >= ?")
+      .all(now - SESSION_MAX_AGE_MS) as { jf_device: string }[];
+    return rows.map((r) => r.jf_device);
+  },
+
   /** Ferme une session. Rend l'appareil Jellyfin qui lui était lié, s'il est connu. */
   delete(jti: string): string | null {
     const row = getDb().prepare("SELECT jf_device FROM sessions WHERE jti = ?").get(jti) as { jf_device: string | null } | undefined;

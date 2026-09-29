@@ -404,7 +404,8 @@
         "others-closed": "Closed {n} other session|Closed {n} other sessions",
         "closed-by-admin": "Session closed by the administrator",
         "token-refused": "Token refused",
-        "expired": "Session expired"
+        "expired": "Session expired",
+        "devices-pruned": "{n} inactive device removed from Jellyfin|{n} inactive devices removed from Jellyfin"
       }
     },
     "habits": {

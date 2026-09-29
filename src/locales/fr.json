@@ -404,7 +404,8 @@
         "others-closed": "A fermé {n} autre session|A fermé {n} autres sessions",
         "closed-by-admin": "Session fermée par l'administrateur",
         "token-refused": "Jeton refusé",
-        "expired": "Session expirée"
+        "expired": "Session expirée",
+        "devices-pruned": "{n} appareil inactif retiré de Jellyfin|{n} appareils inactifs retirés de Jellyfin"
       }
     },
     "habits": {

@@ -404,7 +404,8 @@
         "others-closed": "{n} andere Sitzung beendet|{n} andere Sitzungen beendet",
         "closed-by-admin": "Sitzung vom Administrator beendet",
         "token-refused": "Token abgelehnt",
-        "expired": "Sitzung abgelaufen"
+        "expired": "Sitzung abgelaufen",
+        "devices-pruned": "{n} inaktives Gerät aus Jellyfin entfernt|{n} inaktive Geräte aus Jellyfin entfernt"
       }
     },
     "habits": {

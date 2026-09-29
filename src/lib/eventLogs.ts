@@ -65,7 +65,9 @@ export type AuthEvent =
   /** Fermée parce que Jellyfin refusait son jeton (mot de passe changé). */
   | "token-refused"
   /** Sessions expirées effacées au passage d'une connexion. */
-  | "expired";
+  | "expired"
+  /** Appareils « CineApp » inactifs depuis trente jours supprimés chez Jellyfin (`jellyfinDevicePrune.ts`). */
+  | "devices-pruned";
 
 /** Ne lève jamais : un journal qui échoue ne doit pas empêcher quelqu'un de se connecter. */
 export function logAuthEvent(kind: AuthEvent, fields: { user: string; device?: string | null; ip?: string | null } & Record<string, unknown>): void {
