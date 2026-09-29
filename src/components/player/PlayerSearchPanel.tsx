@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { Search as SearchIcon, X } from "lucide-react";
-import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { useSearchResults } from "@/lib/useSearchResults";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
@@ -208,8 +208,8 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
    * ils sont plus pertinents, et on peut les lancer tout de suite.
    */
   const { locale } = useLocale();
-  const { data: moviesPayload } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher);
-  const { data: seriesPayload } = useSWR<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY, cinemaFetcher);
+  const { data: moviesPayload } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
+  const { data: seriesPayload } = useSWR<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
   const allMovies = useMemo(
     () => uniqueById([...(moviesPayload?.spotlight ?? []), ...Object.values(moviesPayload?.rows ?? {}).flat()], (m) => m.radarrId),
     [moviesPayload]
@@ -487,11 +487,7 @@ function SearchStart({ onPick }: { onPick: (query: string) => void }) {
   const [forgotten, setForgotten] = useState(false);
   const recent = forgotten ? [] : stored;
 
-  const { data: movies } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, {
-    revalidateOnMount: false,
-    revalidateIfStale: false,
-    revalidateOnFocus: false,
-  });
+  const { data: movies } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
   const fresh = (movies?.recentlyAdded ?? []).slice(0, 12);
 
   return (

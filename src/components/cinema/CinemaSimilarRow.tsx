@@ -2,7 +2,7 @@
 
 import { memo, useMemo } from "react";
 import useSWR from "swr";
-import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { similarInLibrary } from "@/lib/cinemaSimilar";
 import { uniqueById } from "@/lib/cinemaRails";
@@ -40,16 +40,15 @@ export function useCinemaSimilar(
   // chaque ouverture de fiche la revalidait, et une revalidation rend un nouvel objet, ce qui
   // faisait tout recalculer et redessiner ici — y compris sur la fiche du dessous, qui n'avait
   // pourtant pas bougé.
-  const swrOptions = { revalidateOnMount: false, revalidateOnFocus: false, revalidateIfStale: false };
   const { data: movies } = useSWR<CinemaMoviesPayload>(
     mediaType === "movies" ? MOVIES_CATALOGUE_KEY : null,
     cinemaFetcher,
-    swrOptions
+    cacheOnlyOptions
   );
   const { data: series } = useSWR<CinemaSeriesPayload>(
     mediaType === "series" ? SERIES_CATALOGUE_KEY : null,
     cinemaFetcher,
-    swrOptions
+    cacheOnlyOptions
   );
 
   // L'identifiant plutôt que l'objet : une revalidation du catalogue rend des objets neufs pour

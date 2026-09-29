@@ -38,6 +38,15 @@ vi.mock("@/lib/cinemaPayload", () => ({
       ? { items: [], rows: {}, spotlight: [], recentlyAdded: [], top10: [] }
       : { items: [HANNIBAL], rows: { Thriller: [HANNIBAL] }, spotlight: [], recentlyAdded: [], top10: [] },
 }));
+/**
+ * Le cache tel que l'accueil le laisse. La recherche lit le catalogue sans jamais le demander
+ * (`cacheOnlyOptions`) : c'est l'accueil qui le tient, et monté seul le panneau n'aurait rien.
+ */
+const homeCache = () =>
+  new Map<string, { data: unknown }>([
+    ["/api/cinema/movies", { data: { items: [HANNIBAL], rows: { Thriller: [HANNIBAL] }, spotlight: [], recentlyAdded: [], top10: [] } }],
+    ["/api/cinema/series", { data: { items: [], rows: {}, spotlight: [], recentlyAdded: [], top10: [] } }],
+  ]);
 vi.mock("@/components/PosterImage", () => ({
   // eslint-disable-next-line @next/next/no-img-element
   PosterImage: ({ alt }: { alt: string }) => <img alt={alt} />,
@@ -83,7 +92,7 @@ beforeEach(() => {
   forgetSearchQuery();
   failing = false;
   render(
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+    <SWRConfig value={{ provider: homeCache, dedupingInterval: 0 }}>
       <PlayerSearchPanel />
     </SWRConfig>
   );
@@ -220,7 +229,7 @@ describe("PlayerSearchPanel — remembering the query", () => {
 
     cleanup();
     render(
-      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <SWRConfig value={{ provider: homeCache, dedupingInterval: 0 }}>
         <PlayerSearchPanel />
       </SWRConfig>
     );

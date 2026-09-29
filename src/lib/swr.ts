@@ -50,6 +50,25 @@ export const followOnlyOptions = {
   revalidateOnReconnect: false,
 } as const;
 
+/**
+ * Lire le catalogue que l'accueil tient déjà, sans jamais le redemander.
+ *
+ * Pour tout écran qui n'est pas l'accueil — recherche, signalement, fiches, fin de film,
+ * premier réglage. Les options par défaut (`revalidateIfStale`) relançaient la requête à chaque
+ * montage passé la fenêtre de dédoublonnage : ouvrir la recherche onze secondes après l'accueil
+ * redemandait les deux catalogues, et la réponse — un objet neuf — faisait redessiner toute la
+ * grille derrière (29/09/2026). Chaque écran recopiait ces trois options à la main, et deux les
+ * avaient oubliées sous un commentaire promettant « zéro réseau ».
+ *
+ * `revalidateOnReconnect` reste celui du fournisseur : c'est l'accueil qui le porte de toute
+ * façon, et un catalogue manqué pendant une coupure mérite d'être repris.
+ */
+export const cacheOnlyOptions = {
+  revalidateOnMount: false,
+  revalidateIfStale: false,
+  revalidateOnFocus: false,
+} as const;
+
 export const liveFeedOptions = {
   revalidateOnFocus: true,
   focusThrottleInterval: 30_000,

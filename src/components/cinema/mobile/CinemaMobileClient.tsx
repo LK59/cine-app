@@ -16,7 +16,7 @@ import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
 import { useFreshPersonalLists } from "@/lib/freshLists";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
-import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
+import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
@@ -282,14 +282,15 @@ export function CinemaMobileClient() {
 
   // Le filet : une adresse qui ne mène à aucune fiche ne doit pas laisser l'écran sans
   // navigation. Voir `useRepairUnresolvedSheet` — la cause est corrigée à la source, ceci couvre
-  // les suivantes.
+  // les suivantes. Il relit une fois le catalogue du titre demandé avant de conclure.
   useRepairUnresolvedSheet(
-    route.film !== null || route.serie !== null,
+    unresolvedSheetRequest(route.film, route.serie),
     selected !== null,
     // Le catalogue qui décide est **celui du titre demandé**, pas les deux. Exiger les deux rendait
     // ce filet inerte tant que celui des séries n'était pas chargé — or il ne l'est qu'au premier
     // besoin, donc le cas courant était précisément celui où le filet ne servait à rien.
-    route.film !== null ? !!byIdMovies : !!byIdSeries
+    route.film !== null ? !!byIdMovies : !!byIdSeries,
+    route.film !== null ? MOVIES_CATALOGUE_KEY : SERIES_CATALOGUE_KEY
   );
 
   /**

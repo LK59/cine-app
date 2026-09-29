@@ -829,6 +829,30 @@ lui-même à son ouverture (SWR, donnée de plus de 10 s).
 l'iPhone, n'y apparaissait ni en changeant d'onglet ni en ouvrant une fiche — seulement au
 redémarrage.
 
+**Le catalogue, lui, n'est relu en séance que dans un cas** : l'adresse nomme un titre (`film=`,
+`serie=`) qu'il ne contient pas. Le filet `useRepairUnresolvedSheet` fait alors un `mutate` de ce
+catalogue — un seul par titre demandé, une fois l'écran rendu par le film (SWR y est en pause et
+jetterait la relecture) — et n'efface l'adresse qu'après sa réponse, si le titre manque toujours.
+Tout autre lecteur du catalogue le lit dans le cache sans jamais le demander : `cacheOnlyOptions`
+(`src/lib/swr.ts`), avec le vrai récupérateur, puisque `mutate` relit par le premier crochet
+inscrit sur la clé.
+
+- **Porteurs.** `useRepairUnresolvedSheet` et `unresolvedSheetRequest`
+  (`src/lib/useRepairUnresolvedSheet.ts`) ; `cacheOnlyOptions` (`src/lib/swr.ts`).
+- **Appelants.** Le filet : `CinemaClient.tsx`, `CinemaMobileClient.tsx`. Les options :
+  `PlayerSearchPanel`, `ReportWizard`, `PlayerEndScreen`, `PlayerOnboarding`, `CinemaSimilarRow`,
+  `CinemaCollectionRow`.
+- **Tests.** `repair-unresolved-refresh.test.tsx`, `useRepairUnresolvedSheet.test.tsx`,
+  `catalogue-lu-dans-le-cache.test.tsx` (qui refuse aussi un lecteur sans ces options, ou une copie
+  en ligne).
+- **Voulu.** Les deux clients demandent le catalogue au montage : ce sont eux qui le tiennent.
+
+**Décidé le 29/09/2026** : un titre importé pendant la séance ne s'ouvrait pas depuis la
+notification « Disponible », Ma liste ou une filmographie — le filet effaçait l'adresse au bout de
+2 s. Et ouvrir la recherche ou l'assistant de signalement redemandait les deux catalogues, alors
+que leur commentaire promettait « zéro réseau » : c'était la seule relecture en séance, par
+accident.
+
 ---
 
 ## 28. Où s'ouvre une reprise, et ce qu'on garde sur l'appareil pour elle

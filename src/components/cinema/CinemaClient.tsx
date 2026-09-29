@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { leaveCinema } from "@/lib/leaveCinema";
-import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
+import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, sheetIsBehind, readCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
@@ -508,12 +508,15 @@ export function CinemaClient() {
   // Le même filet que sur téléphone : une adresse qui ne mène à aucune fiche s'efface. Le rail
   // étant permanent ici, le symptôme visible y est moindre — mais l'adresse est fausse des deux
   // côtés, et un correctif posé d'un seul est un demi-correctif.
+  // Avant de conclure, il relit une fois le catalogue du titre demandé : un titre importé pendant
+  // la séance n'est pas dans celui qu'on tient — voir le crochet.
   useRepairUnresolvedSheet(
-    route.film !== null || route.serie !== null,
+    unresolvedSheetRequest(route.film, route.serie),
     selectedItem !== null || seriesSelectedItem !== null,
     // Celui du titre demandé, et lui seul : exiger les deux catalogues rendait ce filet inerte
     // tant que celui des séries n'était pas chargé, c'est-à-dire dans le cas le plus courant.
-    route.film !== null ? moviesById.size > 0 : seriesById.size > 0
+    route.film !== null ? moviesById.size > 0 : seriesById.size > 0,
+    route.film !== null ? MOVIES_CATALOGUE_KEY : SERIES_CATALOGUE_KEY
   );
   const seriesCarouselOfficial = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
   const [seriesOrderIndex, setSeriesCarouselIndex, seriesOrder] = useHeroOrder(

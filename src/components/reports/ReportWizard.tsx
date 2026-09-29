@@ -7,7 +7,7 @@ import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
 import { cinemaClose, cinemaNavigate } from "@/lib/cinemaRoute";
-import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { searchCinemaLibrary } from "@/lib/cinemaSearch";
 import { ISSUE_SETS, OTHER, REPORT_ZONES, issueSetFor, needsTitle, reportPathParts, zoneOf, type ReportNode } from "@/lib/reportTaxonomy";
@@ -102,8 +102,8 @@ function TitleStep({ value, onPick }: { value: Draft["item"]; onPick: (item: Non
   const { locale } = useLocale();
   const [query, setQuery] = useState(value?.title ?? "");
   const [free, setFree] = useState(value !== null && value.id === null);
-  const { data: movies } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher);
-  const { data: series } = useSWR<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY, cinemaFetcher);
+  const { data: movies } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
+  const { data: series } = useSWR<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
   const results = useMemo(() => {
     const allMovies = [...(movies?.spotlight ?? []), ...Object.values(movies?.rows ?? {}).flat()];
     const allSeries = [...(series?.spotlight ?? []), ...Object.values(series?.rows ?? {}).flat()];

@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { RotateCcw, X } from "lucide-react";
-import { fetcher, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -40,11 +40,7 @@ export function PlayerEndScreen({
   const t = useT();
   // Lu dans le cache, jamais redemandé : c'est la charge utile que l'écran d'accueil tient déjà
   // à jour, et la revalider ici coûterait un mégaoctet et demi pour une rangée de fin.
-  const { data } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, {
-    revalidateOnMount: false,
-    revalidateIfStale: false,
-    revalidateOnFocus: false,
-  });
+  const { data } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
 
   const all = data ? uniqueById([...data.spotlight, ...Object.values(data.rows).flat()], (m) => m.radarrId) : [];
   const subject = all.find((m) => m.jellyfinItemId === itemId) ?? null;

@@ -14,7 +14,7 @@ import { PushToggle } from "@/components/PushToggle";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices } from "./accountControls";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import { OPEN_ONBOARDING_EVENT } from "./onboardingEvents";
-import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { prefetchImages, warmUpUrls } from "@/lib/cinemaWarmup";
 import { scheduleDecoderWarmup } from "@/lib/webcodecs/decoderWarmup";
@@ -155,9 +155,8 @@ export function PlayerOnboarding({
    * décodeurs du lecteur. Après un temps, pour ne rien disputer à l'affichage de l'accueil
    * lui-même, et quelques requêtes à la fois.
    */
-  const swrOptions = { revalidateOnMount: false, revalidateOnFocus: false, revalidateIfStale: false };
-  const { data: moviesCatalogue } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, swrOptions);
-  const { data: seriesCatalogue } = useSWR<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY, cinemaFetcher, swrOptions);
+  const { data: moviesCatalogue } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
+  const { data: seriesCatalogue } = useSWR<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
   useEffect(() => {
     /**
      * Le budget d'un téléphone, pas celui du bureau : les bannières de la une (dix titres), puis
