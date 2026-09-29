@@ -2284,5 +2284,9 @@
       "requestTooLarge": "Las imágenes pesan demasiado para un solo envío: quita una.",
       "quota": "Ya has enviado muchos informes hoy o guardado muchos borradores: envía o elimina alguno, o inténtalo mañana."
     }
+  },
+  "signature": {
+    "by": "por",
+    "sourceLink": "Código fuente en GitHub (nueva pestaña)"
   }
 }

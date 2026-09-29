@@ -29,3 +29,13 @@ export function displayVersion(version: string): string {
   const [, major, minor, patch] = match;
   return Number(patch) === 0 ? `${major}.${minor}` : `${major}.${minor}.${patch}`;
 }
+
+/**
+ * La signature de l'application — « CineApp 8.1 by LK59 · GitHub » —, écrite ici une fois pour
+ * ses trois emplacements (panneau Compte du cinéma, page de connexion, menu de la gestion ; voir
+ * `AppSignature` et DECISIONS.md). `package.json` n'a ni `author` ni `repository` à relire : c'est
+ * donc ici qu'ils vivent. Le nom s'écrit d'un seul mot, comme une marque, et n'est pas traduit.
+ */
+export const APP_NAME = "CineApp";
+export const APP_AUTHOR = "LK59";
+export const APP_REPOSITORY_URL = "https://github.com/LK59/cine-app";

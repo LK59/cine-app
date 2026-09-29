@@ -1221,3 +1221,23 @@ la dernière question soumise répond.
 **Trouvé le 29/09/2026** par l'audit : les deux fenêtres faisaient `setResults(await res.json())`
 sans lire `res.ok` ni rattraper l'erreur ; sur un 502 elles restaient vides et muettes, une réponse
 vide ne disait rien non plus, et une coupure réseau devenait un rejet non géré.
+
+## 41. La signature de l'application
+
+**Règle.** Une ligne discrète — « CineApp 8.1 par LK59 · GitHub » — s'affiche à trois endroits et
+à trois seulement : tout en bas du panneau Compte du cinéma, sous le formulaire de la page de
+connexion, et en bas du menu de la gestion. La version est celle du build (`displayVersion(APP_VERSION)`,
+« dev » hors build) ; seul « by » se traduit (« par », « por », « von ») ; « GitHub » mène au dépôt
+dans un nouvel onglet (`noopener noreferrer`). Pas de pied de page global.
+
+**Porteur.** `AppSignature` (`src/components/AppSignature.tsx`) ; le nom, l'auteur et l'adresse du
+dépôt dans `src/lib/appBuild.ts` (`APP_NAME`, `APP_AUTHOR`, `APP_REPOSITORY_URL`) — `package.json`
+n'a ni `author` ni `repository`.
+
+**Appelants.** `PlayerAccountPanel`, `app/login/page.tsx`, `Sidebar` (gestion au bureau) et
+`MobileNav` (feuille « Plus », la gestion sur téléphone n'ayant pas de barre latérale).
+
+**Tests.** `AppSignature.test.tsx` ; `decisions-partagees.test.ts` (« une seule signature »).
+
+**Voulu.** La page de connexion est publique et la montre quand même : la version s'y lit déjà par
+`/sw.js?v=`. Au bureau, alignée à gauche sous « Déconnexion » ; ailleurs, centrée.

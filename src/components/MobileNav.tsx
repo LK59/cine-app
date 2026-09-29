@@ -11,6 +11,7 @@ import { prefetchRoute } from "@/lib/prefetch";
 import { NAV_GROUPS, NAV_ITEMS, NAV_BAR_HREFS } from "@/components/navItems";
 import { useT } from "@/components/TranslationProvider";
 import { hardRefreshApp } from "@/lib/pwaRefresh";
+import { AppSignature } from "@/components/AppSignature";
 
 function SheetSection({
   title,
@@ -324,6 +325,11 @@ export function MobileNav() {
               <LogOut size={16} /> {t('nav.logout')}
             </button>
           </div>
+
+          {/* Le pendant de la barre latérale du bureau, qui n'existe pas ici : la gestion sur
+              téléphone n'a que cette feuille, et sa dernière ligne est l'endroit le plus discret
+              (DECISIONS.md §41). La marge de l'indicateur d'accueil est déjà celle de la feuille. */}
+          <AppSignature className="mt-4 text-center" />
           </div>{/* end px-4 pb-4 */}
         </div>
       </div>

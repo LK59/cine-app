@@ -14,6 +14,7 @@ import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
+import { AppSignature } from "@/components/AppSignature";
 import { useReportBadge } from "@/lib/useReportBadge";
 import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { BenchSection } from "./BenchSection";
@@ -191,6 +192,11 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab, swapIn }: { lea
             {t("player.account.signOutAction")}
           </button>
         </div>
+
+        {/* La signature, sous tout le reste : la dernière chose de la page, jamais une qu'on lit
+            en cherchant un réglage (DECISIONS.md §41). Le cadre du panneau garde déjà la marge
+            du bas — indicateur d'accueil et barre du téléphone compris. */}
+        <AppSignature className="mt-6 text-center" />
       </div>
     </PlayerPanelFrame>
   );

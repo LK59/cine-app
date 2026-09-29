@@ -2284,5 +2284,9 @@
       "requestTooLarge": "The images are too heavy for one upload: remove one.",
       "quota": "You have already sent many reports today, or kept many drafts: send or delete some, or try again tomorrow."
     }
+  },
+  "signature": {
+    "by": "by",
+    "sourceLink": "Source code on GitHub (new tab)"
   }
 }

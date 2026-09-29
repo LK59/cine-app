@@ -834,3 +834,31 @@ describe("une seule recherche d'ajout de la gestion", () => {
     expect([f, src.includes(`fetch(\`${url}`)]).toEqual([f, false]);
   });
 });
+
+describe("une seule signature", () => {
+  // DECISIONS.md §41. « CineApp 8.1 par LK59 · GitHub » s'affiche à trois endroits, et à trois
+  // endroits seulement : chacun rend `<AppSignature />`, et le texte n'est écrit nulle part ailleurs
+  // — une version recopiée à la main finit toujours par en annoncer une autre (29/09/2026).
+  const EMPLACEMENTS = [
+    "src/components/player/PlayerAccountPanel.tsx",
+    "src/app/login/page.tsx",
+    "src/components/Sidebar.tsx",
+    "src/components/MobileNav.tsx",
+  ];
+
+  it.each(EMPLACEMENTS)("%s rend <AppSignature />", (f) => {
+    expect([f, /<AppSignature\b[^>]*\/>/.test(lire(f))]).toEqual([f, true]);
+  });
+
+  it("aucun autre fichier ne l'écrit ni ne l'appelle", () => {
+    const files = (readdirSync("src", { recursive: true }) as string[])
+      .filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"))
+      .map((f) => `src/${f.replaceAll("\\", "/")}`);
+    const porteurs = ["src/components/AppSignature.tsx", "src/lib/appBuild.ts"];
+    const autres = files.filter((f) => !porteurs.includes(f) && !EMPLACEMENTS.includes(f));
+    // Ni le composant ailleurs, ni l'adresse du dépôt, ni « by LK59 » recopiés à la main.
+    const fautifs = autres.filter((f) => /<AppSignature\b|github\.com\/LK59|\bby LK59\b|APP_REPOSITORY_URL/.test(lire(f)));
+    expect(fautifs).toEqual([]);
+    for (const f of EMPLACEMENTS) expect([f, /github\.com\/LK59|by LK59/.test(lire(f))]).toEqual([f, false]);
+  });
+});

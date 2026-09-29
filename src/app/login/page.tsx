@@ -7,6 +7,7 @@ import { Clapperboard, Activity, Eye, EyeOff } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { hardNavigate, safeNextPath } from "@/lib/signOut";
 import { touchHintHeaders } from "@/lib/deviceLabel";
+import { AppSignature } from "@/components/AppSignature";
 
 export default function LoginPage() {
   return (
@@ -71,7 +72,12 @@ function LoginForm() {
   }
 
   return (
-    <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink px-5 py-10">
+    <main
+      className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink px-5 py-10"
+      // La signature est la dernière ligne de la page : quand le formulaire de secours est ouvert
+      // sur un petit téléphone, c'est elle qui touche le bas, et l'indicateur d'accueil la couvrait.
+      style={{ paddingBottom: "max(2.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))" }}
+    >
       {/*
         Une lueur, pas une image.
         
@@ -253,6 +259,10 @@ function LoginForm() {
         >
           <Activity size={13} /> {t("auth.statusLink")}
         </Link>
+
+        {/* Sous le formulaire, après le lien d'état : rien de ce qu'elle montre n'est privé — la
+            version se lit déjà dans `/sw.js?v=`, public lui aussi (DECISIONS.md §41). */}
+        <AppSignature className="mt-4 text-center" />
       </div>
     </main>
   );

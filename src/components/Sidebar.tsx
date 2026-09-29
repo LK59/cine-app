@@ -10,6 +10,7 @@ import { prefetchRoute } from "@/lib/prefetch";
 import { useT } from "@/components/TranslationProvider";
 import { useConfiguredServices } from "@/lib/useConfiguredServices";
 import { enterCinema } from "@/lib/leaveCinema";
+import { AppSignature } from "@/components/AppSignature";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -129,6 +130,10 @@ export function Sidebar() {
         <LogOut size={18} className="shrink-0" />
         <span className="truncate">{t('nav.logout')}</span>
       </button>
+
+      {/* Sous « Déconnexion », hors de la liste qui défile : toujours au même endroit, jamais
+          sous le masque de fondu (DECISIONS.md §41). Alignée sur le texte des entrées. */}
+      <AppSignature className="mt-2 shrink-0 px-3" />
     </aside>
   );
 }

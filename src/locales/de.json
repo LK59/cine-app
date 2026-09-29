@@ -2284,5 +2284,9 @@
       "requestTooLarge": "Die Bilder sind für eine Sendung zu groß: Entfernen Sie eines.",
       "quota": "Sie haben heute schon viele Meldungen gesendet oder viele Entwürfe behalten: Senden oder löschen Sie einige, oder versuchen Sie es morgen erneut."
     }
+  },
+  "signature": {
+    "by": "von",
+    "sourceLink": "Quellcode auf GitHub (neuer Tab)"
   }
 }
