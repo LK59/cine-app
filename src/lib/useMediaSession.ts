@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * Tells the system what is playing, and takes its buttons.
@@ -35,13 +35,28 @@ function split(title: string): { track: string; album: string } {
 }
 
 export function useMediaSession(info: MediaSessionInfo | null): void {
-  const { title, artworkUrl, playing, onPlay, onPause, onSeek, onSkip, onNext } = info ?? {};
+  const { title, artworkUrl, playing } = info ?? {};
+  const present = info != null;
+  const hasNext = !!info?.onNext;
+
+  // Les boutons lisent les rappels par une référence. L'appelant (PlayerControls) passe un littéral
+  // d'objet et des flèches neufs à chaque rendu — quatre par seconde, au rythme de timeupdate — et
+  // l'effet ci-dessous en dépendait : à chaque rendu, six setActionHandler(null), metadata = null,
+  // un nouveau MediaMetadata et six enregistrements (21 écritures de metadata et 105
+  // setActionHandler pour dix rendus où seule la position bougeait). La référence garde les
+  // boutons branchés sur le rappel le plus récent sans rien réenregistrer.
+  const latest = useRef(info);
+  useEffect(() => {
+    latest.current = info;
+  }, [info]);
 
   // Metadata, and the handlers that go with it. Deliberately separate from the position below,
-  // which changes four times a second and must not re-register anything.
+  // which changes four times a second and must not re-register anything. Only what changes the
+  // metadata or the list of buttons is a dependency: the title, the picture, whether anything is
+  // shown at all, and whether there is a next episode to offer.
   useEffect(() => {
     const media = typeof navigator === "undefined" ? undefined : navigator.mediaSession;
-    if (!media || !info || !title) return;
+    if (!media || !present || !title) return;
 
     const { track, album } = split(title);
     try {
@@ -59,12 +74,14 @@ export function useMediaSession(info: MediaSessionInfo | null): void {
     // Registered as a list so every one of them is removed again on the way out: a handler left
     // behind belongs to a film that is no longer playing, and the buttons would still reach it.
     const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
-      ["play", () => onPlay?.()],
-      ["pause", () => onPause?.()],
-      ["seekbackward", (details) => onSkip?.(-(details.seekOffset ?? 10))],
-      ["seekforward", (details) => onSkip?.(details.seekOffset ?? 10)],
-      ["seekto", (details) => details.seekTime != null && onSeek?.(details.seekTime)],
-      ...(onNext ? ([["nexttrack", () => onNext()]] as [MediaSessionAction, MediaSessionActionHandler][]) : []),
+      ["play", () => latest.current?.onPlay()],
+      ["pause", () => latest.current?.onPause()],
+      ["seekbackward", (details) => latest.current?.onSkip(-(details.seekOffset ?? 10))],
+      ["seekforward", (details) => latest.current?.onSkip(details.seekOffset ?? 10)],
+      ["seekto", (details) => details.seekTime != null && latest.current?.onSeek(details.seekTime)],
+      ...(hasNext
+        ? ([["nexttrack", () => latest.current?.onNext?.()]] as [MediaSessionAction, MediaSessionActionHandler][])
+        : []),
     ];
     for (const [action, handler] of handlers) {
       try {
@@ -84,7 +101,7 @@ export function useMediaSession(info: MediaSessionInfo | null): void {
       }
       media.metadata = null;
     };
-  }, [info, title, artworkUrl, onPlay, onPause, onSeek, onSkip, onNext]);
+  }, [present, title, artworkUrl, hasNext]);
 
   // What the scrubber on a lock screen reads. Updated on its own so the metadata above is not
   // rebuilt four times a second.
