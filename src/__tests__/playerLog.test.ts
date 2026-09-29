@@ -196,6 +196,24 @@ describe("logPlaybackEvent", () => {
     expect(benchPlayerLogFiles().at(-1)).toBe(bench);
   });
 
+  it("écrit à part les lignes d'un serveur de développement, jamais dans l'historique des spectateurs", async () => {
+    // [D10] La pile de dev monte le dépôt entier, `data/` compris : sous `next dev`, StrictMode monte
+    // le lecteur deux fois et écrit un `stop "unmount"` dès l'ouverture — dans le `player.log` de prod.
+    vi.stubEnv("NODE_ENV", "development");
+    try {
+      const { logPlaybackEvent } = await import("@/lib/playerLog");
+      logPlaybackEvent("louis", "stop", { why: "unmount", itemId: "a" });
+
+      expect(fs.existsSync(path.join(dir, "logs", "player.log"))).toBe(false);
+      const dev = path.join(dir, "logs", "dev-player.log");
+      const written = fs.readFileSync(dev, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+      expect(written).toHaveLength(1);
+      expect(written[0]).toMatchObject({ kind: "stop", user: "louis", why: "unmount", itemId: "a" });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("ne fait jamais tomber une lecture parce que le disque refuse", async () => {
     const { logPlaybackEvent } = await import("@/lib/playerLog");
     vi.spyOn(fs, "appendFileSync").mockImplementation(() => {

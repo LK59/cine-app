@@ -30,6 +30,14 @@ import { LOG_DIR, appendJsonLine, logGenerations } from "@/lib/logFile";
  */
 export const playerLogFile = () => path.join(LOG_DIR, "player.log");
 export const benchPlayerLogFile = () => path.join(LOG_DIR, "bench-player.log");
+/**
+ * Un troisième, pour un serveur de développement. La pile de dev monte le dépôt entier, `data/`
+ * compris (la base partagée est voulue) : sous `next dev`, StrictMode monte le lecteur deux fois et
+ * écrivait un `stop "unmount"` dès l'ouverture, puis plus rien à la fermeture — dans le `player.log`
+ * de la production, où la lecture hebdomadaire et le diagnostic « fichier ou appareil » le prenaient
+ * pour une vraie séance abandonnée. Le processus sait ce qu'il est ; le navigateur n'a rien à dire.
+ */
+export const devPlayerLogFile = () => path.join(LOG_DIR, "dev-player.log");
 
 /**
  * Cent vingt générations pour les spectateurs (≈ 600 Mo au plus) : l'administrateur veut une vraie
@@ -38,6 +46,8 @@ export const benchPlayerLogFile = () => path.join(LOG_DIR, "bench-player.log");
  */
 export const PLAYER_LOG_KEEP = 120;
 export const BENCH_PLAYER_LOG_KEEP = 10;
+/** Le développement ne relit que ses dernières lignes. */
+export const DEV_PLAYER_LOG_KEEP = 2;
 
 /** `player.log` et ses archives, du plus ancien au plus récent — les spectateurs seulement. */
 export function playerLogFiles(): string[] {
@@ -176,10 +186,13 @@ export function logPlaybackEvent(
   // onglet a écrit toute une soirée avec le code du matin).
   const { build, ...rest } = fields;
   const head = typeof build === "string" && build ? { ...server, build: build.slice(0, 40) } : server;
-  appendJsonLine(
-    bench ? benchPlayerLogFile() : playerLogFile(),
-    { ...head, ...clean(rest), ...server },
-    { keep: bench ? BENCH_PLAYER_LOG_KEEP : PLAYER_LOG_KEEP }
-  );
+  // Lu à l'appel : un test bascule `NODE_ENV` sans recharger le module.
+  const dev = process.env.NODE_ENV === "development";
+  const [file, keep] = dev
+    ? [devPlayerLogFile(), DEV_PLAYER_LOG_KEEP]
+    : bench
+      ? [benchPlayerLogFile(), BENCH_PLAYER_LOG_KEEP]
+      : [playerLogFile(), PLAYER_LOG_KEEP];
+  appendJsonLine(file, { ...head, ...clean(rest), ...server }, { keep });
 }
 

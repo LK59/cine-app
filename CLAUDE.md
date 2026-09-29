@@ -149,6 +149,7 @@ bench"). **The player lines a bench causes do not go to `player.log`**: any line
 is written to `data/logs/bench-player.log` (same format, same cleaning, two archives). A full
 bench used to rotate the previous day's viewers out of `player.log`, and the bench plan — which
 picks its films from that log — counted the bench's own stalls as a viewer's.
+Likewise every player line written by a `next dev` server goes to `data/logs/dev-player.log`: the dev stack shares `data/`, and StrictMode's double mount wrote a `stop "unmount"` into production's `player.log` at each opening.
 
 ## Architecture
 
