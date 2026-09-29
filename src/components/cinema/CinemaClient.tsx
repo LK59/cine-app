@@ -31,7 +31,7 @@ import { PosterImage } from "@/components/PosterImage";
 import { CinemaHero } from "@/components/cinema/CinemaHero";
 import { CinemaRow } from "@/components/cinema/CinemaRow";
 import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
-import { BROWSE_ALL } from "@/lib/cinemaBrowse";
+import { BROWSE_ALL, browseSheetKey } from "@/lib/cinemaBrowse";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { useIsTouch } from "@/lib/useIsMobile";
 import { useCentredCard } from "@/lib/useCentredCard";
@@ -1404,8 +1404,8 @@ export function CinemaClient() {
         <CinemaBrowseSheet
           // Une autre grille est un autre écran (règle 1 du cycle de vie des fiches) : sans clé,
           // rouvrir « Voir tout » sur un autre genre pendant la sortie de la précédente gardait
-          // son filtre, son tri et sa décennie.
-          key={`${mediaType}:${lastBrowse}`}
+          // son filtre, son tri et sa décennie. Même clé sur le téléphone : `browseSheetKey`.
+          key={browseSheetKey(mediaType, lastBrowse)}
           leaving={browseExit.leaving}
           genre={lastBrowse}
           mediaType={mediaType}

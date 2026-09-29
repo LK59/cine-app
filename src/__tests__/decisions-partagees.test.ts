@@ -796,3 +796,17 @@ describe("une seule règle pour la saison ouverte", () => {
     expect([f, /defaultSeason\(/.test(code)]).toEqual([f, false]);
   });
 });
+
+describe("une seule clé pour la grille complète", () => {
+  // DECISIONS.md §39. Le bureau donnait à `CinemaBrowseSheet` une clé par genre, le téléphone
+  // aucune : rouvrir « Voir tout » sur un autre genre pendant la sortie de la grille précédente y
+  // gardait son tri, sa décennie et sa recherche (29/09/2026). Les deux passent par `browseSheetKey`.
+  it.each([
+    "src/components/cinema/CinemaClient.tsx",
+    "src/components/cinema/mobile/CinemaMobileClient.tsx",
+  ])("%s donne à chaque grille la clé de `browseSheetKey`", (f) => {
+    const grids = lire(f).match(/<CinemaBrowseSheet[\s\S]*?\/>/g) ?? [];
+    expect([f, grids.length > 0]).toEqual([f, true]);
+    for (const g of grids) expect([f, /key=\{browseSheetKey\(/.test(g)]).toEqual([f, true]);
+  });
+});

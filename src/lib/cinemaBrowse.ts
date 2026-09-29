@@ -32,6 +32,19 @@ export const BROWSE_SORTS: BrowseSort[] = ["added", "title", "year", "rating"];
 export const BROWSE_ALL = "*";
 
 /**
+ * La clé de la grille complète : une autre grille est un autre écran (règle 1 du cycle de vie
+ * des fiches, CLAUDE.md).
+ *
+ * Tri, décennie, durée et recherche sont des états locaux de `CinemaBrowseSheet`, et
+ * `useExitDelay` garde l'instance montée pendant sa sortie : sans clé, rouvrir « Voir tout » sur
+ * un autre genre pendant cette sortie reprenait l'instance, donc les réglages de la précédente.
+ * Le bureau avait la clé, le téléphone non (audit du 29/09/2026) — d'où une seule fonction.
+ */
+export function browseSheetKey(mediaType: "movies" | "series", genre: string): string {
+  return `${mediaType}:${genre}`;
+}
+
+/**
  * Une note IMDb comparable.
  *
  * Elle arrive en texte — « 7.8 », parfois vide, parfois absente. Un titre sans note se range

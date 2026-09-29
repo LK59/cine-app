@@ -21,7 +21,7 @@ import { top10Label, genreLabel } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
 import { uniqueById } from "@/lib/cinemaRails";
-import { BROWSE_ALL } from "@/lib/cinemaBrowse";
+import { BROWSE_ALL, browseSheetKey } from "@/lib/cinemaBrowse";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
 import { useIsShortViewport } from "@/lib/useIsMobile";
@@ -755,6 +755,10 @@ export function CinemaMobileClient() {
           précédente. */}
       {browseExit.render && lastBrowse !== null && payload && (
         <CinemaBrowseSheet
+          // Une autre grille est un autre écran (règle 1 des fiches) : sans clé, rouvrir « Voir
+          // tout » sur un autre genre pendant la sortie de la précédente gardait son tri, sa
+          // décennie et sa recherche. La clé du bureau, par la même fonction.
+          key={browseSheetKey(mediaType, lastBrowse)}
           leaving={browseExit.leaving}
           genre={lastBrowse}
           mediaType={mediaType}

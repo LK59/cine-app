@@ -1150,3 +1150,23 @@ attend : c'est pourquoi l'un fige au montage et l'autre à la première réponse
 chaque rendu, et une série dont seule la saison 15 est là sautait à la saison 1, vide, à l'arrivée
 des manquants ; le bureau décidait sur les possédées, mais posait le focus sur la première saison de
 la liste, ce qui la choisissait aussi quand les manquants étaient déjà connus.
+
+## 39. La clé de la grille complète
+
+**Règle.** La grille « Voir tout » d'un genre est un écran à part (règle 1 du cycle de vie des
+fiches) : son instance est clée par type et par genre, et un autre genre la remonte, réglages
+compris.
+
+**Porteur.** `browseSheetKey(mediaType, genre)` (`src/lib/cinemaBrowse.ts`).
+
+**Appelants.** `CinemaClient` et `CinemaMobileClient`, sur leur `<CinemaBrowseSheet>`.
+
+**Tests.** `browse-sheet-key.test.tsx` ; `decisions-partagees.test.ts` (« une seule clé pour la
+grille complète »).
+
+**Voulu.** Tri, décennie, durée et recherche restent des états locaux de la grille, hors de
+l'adresse : trier ne change pas d'écran. Seul un changement de genre ou d'onglet les remet au
+défaut.
+
+**Trouvé le 29/09/2026** par l'audit : le bureau avait la clé, le téléphone non ; rouvrir « Voir
+tout » sur un autre genre pendant la sortie de la grille précédente y gardait ses réglages.
