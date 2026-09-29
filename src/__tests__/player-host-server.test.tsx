@@ -281,3 +281,45 @@ describe("lecteur serveur — le banc d'essai", () => {
     await waitFor(() => expect(seancesAnnoncees.some((s) => !!s)).toBe(true));
   });
 });
+
+/** Toutes les négociations demandées, dans l'ordre. */
+function negociations(): Record<string, unknown>[] {
+  return vi
+    .mocked(fetch)
+    .mock.calls.filter(([url]) => url === "/api/jellyfin/playback/start")
+    .map(([, init]) => JSON.parse((init as RequestInit).body as string));
+}
+
+// « Réessayer » relançait avec la seule position (29/09/2026, audit A8) : la piste audio de la
+// séance — celle d'un relais du natif, d'une reprise WebKit, du menu — était perdue, et le film
+// repartait dans la langue par défaut du fichier. Les deux autres relances rejouaient déjà la
+// même demande.
+describe("lecteur serveur — Réessayer", () => {
+  it("garde la piste audio que la séance a demandée", async () => {
+    playback.session = { itemId: "film", openId: 1, resumeAt: 120, title: "Film", initialAudioStreamIndex: 3 };
+    let premiere = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/jellyfin/playback/start") {
+          // La première négociation échoue : écran d'erreur, bouton Réessayer.
+          if (premiere) {
+            premiere = false;
+            return { ok: false, status: 500, json: async () => ({ error: "boum" }) };
+          }
+          return { ok: true, status: 200, json: async () => reponse };
+        }
+        return { ok: true, status: 200, json: async () => ({}), text: async () => "" };
+      })
+    );
+    render(<PlayerHost />);
+    await waitFor(() => expect(screen.getByText("common.retry")).toBeTruthy());
+    expect(negociations()[0].audioStreamIndex).toBe(3);
+
+    fireEvent.click(screen.getByText("common.retry"));
+    await waitFor(() => expect(negociations()).toHaveLength(2));
+    expect(negociations()[1].audioStreamIndex).toBe(3);
+    // La position n'est pas perdue non plus : un nombre, jamais « demande au serveur ».
+    expect(negociations()[1].startTicks).toBeGreaterThan(0);
+  });
+});

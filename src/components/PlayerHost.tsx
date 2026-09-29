@@ -1072,8 +1072,28 @@ function ActivePlayer({
   // Manual "Réessayer" after retries are exhausted and `error` is showing — a full re-fetch
   // of PlaybackInfo (not just hls.startLoad()) since the old PlaySessionId/manifest may itself
   // be stale by then, picking up from the last position we saw before the stream died.
+  //
+  // La même demande que la précédente, comme les deux autres relances (l'échelle audio, la
+  // relance d'une diffusion) : ce bouton ne passait que la position, et perdait la piste audio
+  // de la séance — celle du menu, du relais venu du natif, de la reprise WebKit — ainsi que les
+  // codecs que l'échelle venait d'écarter. Le film repartait dans la langue par défaut du fichier,
+  // souvent la VO que le natif venait de confier à ce lecteur, et rejouait la négociation qui
+  // avait échoué (audit A8, 29/09/2026).
+  //
+  // La position : `lastKnownTime` d'abord, la position de la demande précédente s'il vaut zéro.
+  // Zéro ne dit pas toujours « le spectateur était au début » : une négociation qui échoue avant
+  // d'avoir semé la référence la laisse à sa valeur de montage, zéro quand la séance n'en portait
+  // pas, alors que la demande, elle, avait une position résolue. Le même choix que les deux autres
+  // relances, pour qu'un même échec ne reparte pas de deux endroits selon le chemin.
   const handleRetry = useCallback(() => {
-    startPlayback({ resumeAt: lastKnownTime.current });
+    // Un appui du spectateur, et non une reprise automatique : il rouvre l'échelle audio en
+    // entier. Sans cela, l'échelle déjà épuisée qui a conduit à cet écran faisait retomber le
+    // moindre nouvel échec directement dessus, sans un seul des essais de repli.
+    nativeErrorRetryCount.current = 0;
+    startPlayback({
+      ...lastPlaybackOpts.current,
+      resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
+    });
   }, [startPlayback]);
 
   // Always toggles the native <track> elements rendered from externalSubtitleTracks below —
