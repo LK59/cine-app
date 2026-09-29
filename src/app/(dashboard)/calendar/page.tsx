@@ -15,6 +15,7 @@ import { usePersistentState } from "@/lib/usePersistentState";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { scrollBehavior } from "@/lib/reducedMotion";
+import { calendarEventDetail, calendarEventTitle } from "@/lib/calendarLabels";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -98,6 +99,7 @@ function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => v
   const t = useT();
   const style = SOURCE_STYLE[ev.source];
   const isLibrary = ev.source === "library-movie" || ev.source === "library-series";
+  const detail = calendarEventDetail(ev, t);
   return (
     <div className="mt-3 rounded-xl border border-white/10 bg-slate-900/90 backdrop-blur-xs p-4 flex gap-4 items-start">
       <div className="h-20 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-800">
@@ -112,8 +114,8 @@ function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => v
           <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
           <span className="text-xs text-slate-500">{new Date(ev.date + "T12:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long" })}</span>
         </div>
-        <p className="font-semibold text-white">{ev.title}</p>
-        {ev.detail && <p className="mt-0.5 text-xs text-slate-400">{ev.detail}</p>}
+        <p className="font-semibold text-white">{calendarEventTitle(ev, t)}</p>
+        {detail && <p className="mt-0.5 text-xs text-slate-400">{detail}</p>}
         <div className="mt-3">
           {isLibrary && ev.href
             ? <Link href={ev.href} className="inline-flex items-center gap-1.5 rounded-lg bg-accent-600/20 px-3 py-1.5 text-xs font-medium text-accent-400 hover:bg-accent-600/30">{t('calendar.viewSheet')}</Link>
@@ -131,13 +133,14 @@ function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => v
 // ── Event pill (month grid) ───────────────────────────────────────────────────
 
 function EventPill({ ev, onSelect }: { ev: CalendarEvent; onSelect: (ev: CalendarEvent) => void }) {
+  const t = useT();
   const style = SOURCE_STYLE[ev.source];
   const isLibrary = ev.source === "library-movie" || ev.source === "library-series";
 
   const inner = (
     <div className={`flex items-center gap-1 rounded-sm px-1 py-0.5 text-[10px] font-medium truncate cursor-pointer ${style.badge} hover:opacity-80`}>
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} />
-      <span className="truncate">{ev.title}</span>
+      <span className="truncate">{calendarEventTitle(ev, t)}</span>
     </div>
   );
 
@@ -255,6 +258,7 @@ function ListView({ events, today, dateLocale }: { events: CalendarEvent[]; toda
               {dayEvs.map((ev) => {
                 const style = SOURCE_STYLE[ev.source];
                 const isLibrary = ev.source === "library-movie" || ev.source === "library-series";
+                const detail = calendarEventDetail(ev, t);
                 const row = (
                   <div className="flex items-center gap-3 p-3 hover:bg-white/3 transition-colors">
                     <div className="h-14 w-10 shrink-0 overflow-hidden rounded-sm bg-slate-800">
@@ -267,8 +271,8 @@ function ListView({ events, today, dateLocale }: { events: CalendarEvent[]; toda
                       }
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-white">{ev.title}</p>
-                      {ev.detail && <p className="truncate text-xs text-slate-500">{ev.detail}</p>}
+                      <p className="truncate text-sm font-medium text-white">{calendarEventTitle(ev, t)}</p>
+                      {detail && <p className="truncate text-xs text-slate-500">{detail}</p>}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {!isLibrary && <EventActions ev={ev} compact />}

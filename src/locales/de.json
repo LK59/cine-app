@@ -920,6 +920,12 @@
       "libraryMovie": "Film",
       "librarySeries": "Serie"
     },
+    "release": {
+      "cinema": "Im Kino",
+      "soon": "Demnächst",
+      "digital": "Digitaler Release",
+      "physical": "Physischer Release"
+    },
     "actionRequested": "Angefragt",
     "actionRequesting": "Wird angefragt…",
     "actionRequest": "Anfragen",

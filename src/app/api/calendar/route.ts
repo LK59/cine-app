@@ -7,15 +7,28 @@ import { posterUrl } from "@/lib/images";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Le *genre* de sortie d'un film, pas son libellé : l'écran le traduit (`calendar.release.*`,
+ * `calendarEventDetail`). Ces libellés étaient écrits ici en français (« Au cinéma », « Bientôt »,
+ * « Sortie digitale », « Sortie physique ») et s'affichaient tels quels dans les quatre langues —
+ * même approche que `ActivityKind` dans `/api/dashboard`.
+ */
+export type CalendarReleaseKind = "cinema" | "soon" | "digital" | "physical";
+
 export interface CalendarEvent {
   id: string;
   date: string; // YYYY-MM-DD
+  // Vide quand Sonarr ne donne pas le titre de la série : l'écran écrit alors « Série » dans la
+  // langue du compte (`calendarEventTitle`) — la route le mettait en français.
   title: string;
   type: "movie" | "series";
   // cinema = TMDb now_playing (not in library), upcoming = TMDb upcoming, library-movie/series = Radarr/Sonarr
   source: "cinema" | "upcoming" | "library-movie" | "library-series";
   posterPath: string | null;
   href: string | null;
+  /** Films seulement. */
+  release: CalendarReleaseKind | null;
+  /** Épisodes seulement : « S01E02 · Titre » — numéro et titre de l'épisode, rien à traduire. */
   detail: string | null;
   tmdbId?: number;
 }
@@ -48,7 +61,8 @@ async function getTmdbMovies(type: "now_playing" | "upcoming"): Promise<Calendar
       source: type === "now_playing" ? "cinema" as const : "upcoming" as const,
       posterPath: m.poster_path ? `${TMDB_IMG}${m.poster_path}` : null,
       href: null,
-      detail: type === "now_playing" ? "Au cinéma" : "Bientôt",
+      release: type === "now_playing" ? "cinema" as const : "soon" as const,
+      detail: null,
       tmdbId: m.id,
     }));
 }
@@ -75,11 +89,11 @@ export async function GET(req: NextRequest) {
       for (const m of radarrMovies.value) {
         const date = (m.digitalRelease || m.physicalRelease || m.inCinemas)?.slice(0, 10);
         if (!date) continue;
-        const releaseLabel = m.inCinemas && m.inCinemas.slice(0, 10) === date
-          ? "Au cinéma"
+        const release: CalendarReleaseKind = m.inCinemas && m.inCinemas.slice(0, 10) === date
+          ? "cinema"
           : m.digitalRelease && m.digitalRelease.slice(0, 10) === date
-            ? "Sortie digitale"
-            : "Sortie physique";
+            ? "digital"
+            : "physical";
         list.push({
           id: `radarr-${m.id}`,
           date,
@@ -88,7 +102,8 @@ export async function GET(req: NextRequest) {
           source: "library-movie",
           posterPath: posterUrl(m.images, "thumb") ?? null,
           href: `/radarr/${m.id}`,
-          detail: releaseLabel,
+          release,
+          detail: null,
           tmdbId: m.tmdbId,
         });
       }
@@ -121,11 +136,12 @@ export async function GET(req: NextRequest) {
         list.push({
           id: `sonarr-${e.id}`,
           date,
-          title: e.series?.title ?? "Série",
+          title: e.series?.title ?? "",
           type: "series",
           source: "library-series",
           posterPath: posterUrl(e.series?.images, "thumb") ?? null,
           href: `/sonarr/${e.seriesId}`,
+          release: null,
           detail: `S${s}E${ep} · ${e.title}`,
           tmdbId: undefined,
         });
