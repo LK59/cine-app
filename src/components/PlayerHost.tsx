@@ -32,6 +32,7 @@ import { castRouteActive } from "@/lib/castRoute";
 import { WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
+import { touchHintHeaders } from "@/lib/deviceLabel";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
 
@@ -654,7 +655,9 @@ function ActivePlayer({
 
       const res = await fetch("/api/jellyfin/playback/start", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // L'indice tactile : cette négociation annonce la séance à Jellyfin, sous le nom de
+        // l'appareil — un iPad s'y nommerait « Mac » sans lui (`deviceLabel.ts`).
+        headers: { "Content-Type": "application/json", ...touchHintHeaders() },
         body: JSON.stringify({
           itemId,
           maxBitrate: pickMaxBitrate(),

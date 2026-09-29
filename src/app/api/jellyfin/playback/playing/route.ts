@@ -6,6 +6,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { reportPlayback } from "@/lib/playbackReport";
+import { playbackDevice } from "@/lib/playbackDevice";
 
 /**
  * Tells Jellyfin a film has started playing.
@@ -38,7 +39,9 @@ export async function POST(req: NextRequest) {
   }
 
   const { jfId, jfToken } = session;
+  // L'appareil de la connexion et son vrai nom, plus un appareil fantôme par compte — `playbackDevice.ts`.
+  const device = playbackDevice(req, session.jti);
   return reportPlayback({ ...session, jfId }, "playing", itemId, 0, () =>
-    jellyfin.reportPlaybackStart(jfId, itemId, jfToken, playSessionId, mediaSourceId, playMethod, client)
+    jellyfin.reportPlaybackStart(jfId, itemId, jfToken, playSessionId, mediaSourceId, playMethod, client, device)
   );
 }

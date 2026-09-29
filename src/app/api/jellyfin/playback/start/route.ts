@@ -1,6 +1,8 @@
 import { publicOrigin } from "@/lib/publicOrigin";
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
+import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
+import { playbackDevice } from "@/lib/playbackDevice";
 import { HttpError } from "@/lib/http";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -304,7 +306,8 @@ export async function POST(req: NextRequest) {
       bench
         ? Promise.resolve()
         : jellyfin
-            .reportPlaybackStart(session.jfId, itemId, session.jfToken, info.PlaySessionId, source.Id, playMethod)
+            // Sous l'appareil de la connexion, comme les rapports qui suivront — `playbackDevice.ts`.
+            .reportPlaybackStart(session.jfId, itemId, session.jfToken, info.PlaySessionId, source.Id, playMethod, PLAYBACK_CLIENTS.stable, playbackDevice(req, session.jti))
             .catch(() => {}),
       jellyfin.getEpisodeTimestamps(itemId).catch(() => null),
       // Alongside the others, so naming the film costs nothing on the way to its first frame.

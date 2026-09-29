@@ -1,6 +1,6 @@
 import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
 import { NextRequest, NextResponse } from "next/server";
-import { deviceLabel } from "@/lib/deviceLabel";
+import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { config } from "@/lib/config";
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/auth";
 import { sessionDb, userPrefsDb } from "@/lib/db";
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     passwordAttempts(password).some((candidate) => timingSafeEquals(candidate, config.app.adminPassword));
 
   if (!isAdmin) {
-    logAuthEvent("login-failed", { user: username, ip, device: deviceLabel(req.headers.get("user-agent")), reason: "compte local refusé" });
+    logAuthEvent("login-failed", { user: username, ip, device: requestDeviceLabel(req), reason: "compte local refusé" });
     return NextResponse.json(
       { error: "Identifiants invalides", ...(hasLeadingSpace(password) ? { code: "password-leading-space" } : {}) },
       { status: 401 }
@@ -43,10 +43,10 @@ export async function POST(req: NextRequest) {
   }
 
   const { token, jti } = await createSessionToken(username, "admin");
-  const expired = sessionDb.create(jti, username, deviceLabel(req.headers.get("user-agent")));
+  const expired = sessionDb.create(jti, username, requestDeviceLabel(req));
   // Les sessions expirées effacées au passage : leurs jetons Jellyfin ne serviront plus.
   void revokeJellyfinDevices(expired, "session expirée");
-  logAuthEvent("login", { user: username, ip, device: deviceLabel(req.headers.get("user-agent")), role: "admin", local: true });
+  logAuthEvent("login", { user: username, ip, device: requestDeviceLabel(req), role: "admin", local: true });
   const lang = userPrefsDb.getLang(username, config.app.language);
   const res = NextResponse.json({ ok: true, role: "admin" });
   res.cookies.set(SESSION_COOKIE, token, {

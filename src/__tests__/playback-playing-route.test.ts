@@ -6,6 +6,10 @@ const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...args: unknown[]) => mockVerifySessionFull(...args) }));
 const mockJellyfin = { reportPlaybackStart: vi.fn() };
 vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: mockJellyfin }));
+const mockJfDevice = vi.fn<(jti: string) => string | null>(() => null);
+vi.mock("@/lib/db", () => ({ sessionDb: { jfDevice: (jti: string) => mockJfDevice(jti) } }));
+// Session sans `jti` ni appareil gardé, sans signature : l'ancien identifiant, le nom de repli.
+const NO_DEVICE = { name: "Navigateur", id: null };
 
 let playerEnabled = true;
 vi.mock("@/lib/config", () => ({ config: { get player() { return { enabled: playerEnabled }; } } }));
@@ -14,6 +18,7 @@ function fakeReq(body: unknown, cookie = "t"): NextRequest {
   return {
     cookies: { get: (name: string) => (name === "cine_session" && cookie ? { value: cookie } : undefined) },
     json: async () => body,
+    headers: new Headers(),
   } as unknown as NextRequest;
 }
 
@@ -32,7 +37,7 @@ describe("POST /api/jellyfin/playback/playing", () => {
     expect(res.status).toBe(200);
     // Reported with the viewer's own token, never the admin key: this is their watch history.
     expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith(
-      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", "DirectPlay", "CineEngine By CineApp"
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", "DirectPlay", "CineEngine By CineApp", NO_DEVICE
     );
   });
 
@@ -40,7 +45,7 @@ describe("POST /api/jellyfin/playback/playing", () => {
     const { POST } = await import("@/app/api/jellyfin/playback/playing/route");
     await POST(fakeReq({ ...complete, client: "Netflix" }));
     expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith(
-      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", "DirectPlay", "CineApp"
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", "DirectPlay", "CineApp", NO_DEVICE
     );
   });
 

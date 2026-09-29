@@ -6,14 +6,19 @@ const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...args: unknown[]) => mockVerifySessionFull(...args) }));
 const mockJellyfin = { reportPlaybackProgress: vi.fn() };
 vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: mockJellyfin }));
+const mockJfDevice = vi.fn<(jti: string) => string | null>(() => null);
+vi.mock("@/lib/db", () => ({ sessionDb: { jfDevice: (jti: string) => mockJfDevice(jti) } }));
+// Session sans `jti` ni appareil gardé, sans signature : l'ancien identifiant, le nom de repli.
+const NO_DEVICE = { name: "Navigateur", id: null };
 
 let playerEnabled = true;
 vi.mock("@/lib/config", () => ({ config: { get player() { return { enabled: playerEnabled }; } } }));
 
-function fakeReq(body: unknown, cookie = "t"): NextRequest {
+function fakeReq(body: unknown, cookie = "t", headers: Record<string, string> = {}): NextRequest {
   return {
     cookies: { get: (name: string) => (name === "cine_session" && cookie ? { value: cookie } : undefined) },
     json: async () => body,
+    headers: new Headers(headers),
   } as unknown as NextRequest;
 }
 
@@ -23,6 +28,26 @@ beforeEach(() => {
 });
 
 describe("POST /api/jellyfin/playback/progress", () => {
+  // Un appareil réel, une seule identité chez Jellyfin : le rapport reprend l'appareil inscrit à la
+  // connexion de cette session, sous le libellé de l'appareil qui l'envoie (29/09/2026).
+  it("s'annonce sous l'appareil de la connexion de la session, iPad reconnu par l'indice", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jfToken: "tok", jti: "jti-9" });
+    mockJfDevice.mockImplementation((jti) => (jti === "jti-9" ? "cine-app-0000-1111" : null));
+    const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
+    const ipad = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
+    await POST(
+      fakeReq(
+        { itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m", positionTicks: 5, client: "CineEngine By CineApp" },
+        "t",
+        { "user-agent": ipad, "x-cine-touch": "1" }
+      )
+    );
+    expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith(
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 5, "Transcode", "CineEngine By CineApp", false,
+      { name: "iPad · Safari", id: "cine-app-0000-1111" }
+    );
+  });
+
   it("returns 404 when the in-app player is disabled", async () => {
     playerEnabled = false;
     const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
@@ -57,7 +82,7 @@ describe("POST /api/jellyfin/playback/progress", () => {
     const res = await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m", positionTicks: 12345 }));
     expect(res.status).toBe(200);
     expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith(
-      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 12345, "Transcode", "CineApp", false
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 12345, "Transcode", "CineApp", false, NO_DEVICE
     );
   });
 
@@ -66,7 +91,7 @@ describe("POST /api/jellyfin/playback/progress", () => {
     const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
     await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m", positionTicks: 1, playMethod: "DirectPlay" }));
     expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith(
-      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 1, "DirectPlay", "CineApp", false
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 1, "DirectPlay", "CineApp", false, NO_DEVICE
     );
   });
 
@@ -96,7 +121,7 @@ describe("le nom du client, et l'état de pause", () => {
       })
     );
     expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith(
-      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 5, "Transcode", "CineEngine By CineApp", true
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 5, "Transcode", "CineEngine By CineApp", true, NO_DEVICE
     );
   });
 
@@ -108,7 +133,7 @@ describe("le nom du client, et l'état de pause", () => {
       fakeReq({ itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m", positionTicks: 5, client: "<script>Netflix" })
     );
     expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith(
-      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 5, "Transcode", "CineApp", false
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 5, "Transcode", "CineApp", false, NO_DEVICE
     );
   });
 });

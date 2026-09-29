@@ -1,4 +1,5 @@
 import { PLAYBACK_CLIENTS, type PlaybackClient } from "@/lib/playbackClients";
+import type { PlaybackDevice } from "@/lib/playbackDevice";
 import type { NamedItem } from "@/lib/displayTitle";
 
 export { PLAYBACK_CLIENTS, isPlaybackClient, type PlaybackClient } from "@/lib/playbackClients";
@@ -168,20 +169,23 @@ export interface PlaybackInfoOptions {
 /**
  * Identifies the client for one playback report.
  *
- * The device id is stable per user and per client, so the two players are two devices and
- * neither multiplies sessions as films are opened and closed. It is deliberately *not* the id
- * minted at login: that one belongs to an authentication, and re-registering a device id through
- * AuthenticateByName is what used to evict other people's tokens (see the auth route). Nothing
- * here authenticates, so nothing here can evict anything.
+ * L'appareil est celui de la connexion (`device.id`, gardé avec la session) et son nom le libellé
+ * de l'appareil qui envoie le rapport — voir `playbackDevice.ts`, qui dit aussi pourquoi c'est sans
+ * danger : un rapport n'authentifie pas, et seul `AuthenticateByName` évince un jeton. Les deux
+ * lecteurs restent deux sessions chez Jellyfin parce qu'il clé les sessions par client *et*
+ * appareil.
+ *
+ * Sans appareil connu (session ouverte avant qu'on le garde), l'ancien identifiant stable par
+ * compte et par client : il ne multiplie pas les sessions à chaque film, et ne réinscrit rien.
  */
-async function playbackHeaders(token: string, client: PlaybackClient, userId: string) {
-  const deviceId = `${client === PLAYBACK_CLIENTS.engine ? "cine-engine" : "cine-app"}-${userId}`;
+async function playbackHeaders(token: string, client: PlaybackClient, userId: string, device?: PlaybackDevice) {
+  const deviceId = device?.id ?? `${client === PLAYBACK_CLIENTS.engine ? "cine-engine" : "cine-app"}-${userId}`;
   return {
     ...(await forwardedFor()),
     "Content-Type": "application/json",
     Authorization: jellyfinAuth(token, {
       client,
-      device: "Navigateur",
+      device: device?.name ?? "Navigateur",
       deviceId,
       version: APP_VERSION,
     }),
@@ -242,11 +246,12 @@ export const jellyfin = {
     playSessionId: string,
     mediaSourceId: string,
     playMethod: "DirectPlay" | "DirectStream" | "Transcode",
-    client: PlaybackClient = PLAYBACK_CLIENTS.stable
+    client: PlaybackClient = PLAYBACK_CLIENTS.stable,
+    device?: PlaybackDevice
   ) =>
     fetchJson<void>(`${url}/Sessions/Playing`, {
       method: "POST",
-      headers: await playbackHeaders(token, client, userId),
+      headers: await playbackHeaders(token, client, userId, device),
       body: JSON.stringify({
         UserId: userId,
         ItemId: itemId,
@@ -266,11 +271,12 @@ export const jellyfin = {
     positionTicks: number,
     playMethod: "DirectPlay" | "DirectStream" | "Transcode",
     client: PlaybackClient = PLAYBACK_CLIENTS.stable,
-    isPaused = false
+    isPaused = false,
+    device?: PlaybackDevice
   ) =>
     fetchJson<void>(`${url}/Sessions/Playing/Progress`, {
       method: "POST",
-      headers: await playbackHeaders(token, client, userId),
+      headers: await playbackHeaders(token, client, userId, device),
       body: JSON.stringify({
         UserId: userId,
         ItemId: itemId,
@@ -292,11 +298,12 @@ export const jellyfin = {
     playSessionId: string,
     mediaSourceId: string,
     positionTicks: number,
-    client: PlaybackClient = PLAYBACK_CLIENTS.stable
+    client: PlaybackClient = PLAYBACK_CLIENTS.stable,
+    device?: PlaybackDevice
   ) =>
     fetchJson<void>(`${url}/Sessions/Playing/Stopped`, {
       method: "POST",
-      headers: await playbackHeaders(token, client, userId),
+      headers: await playbackHeaders(token, client, userId, device),
       body: JSON.stringify({
         UserId: userId,
         ItemId: itemId,

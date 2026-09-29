@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useMemo } from "react";
 import { PLAYBACK_CLIENTS, type PlaybackClient } from "@/lib/playbackClients";
+import { touchHintHeaders } from "@/lib/deviceLabel";
 
 interface PlaybackSessionInfo {
   itemId: string;
@@ -39,7 +40,9 @@ function report(
   // et de réafficher « Lecture » sur un film qu'on vient de quitter.
   return fetch(`/api/jellyfin/playback/${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    // L'indice tactile : c'est sous le libellé de l'appareil que Jellyfin range la séance, et sans
+    // lui un iPad s'y nomme « Mac » (`deviceLabel.ts`).
+    headers: { "Content-Type": "application/json", ...touchHintHeaders() },
     body: JSON.stringify({ client: PLAYBACK_CLIENTS.stable, ...info, positionTicks, isPaused }),
     keepalive: true,
   })

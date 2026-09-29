@@ -846,6 +846,16 @@ export const sessionDb = {
     return !!(db.prepare("SELECT 1 FROM sessions WHERE jti = ?").get(jti));
   },
 
+  /**
+   * L'appareil Jellyfin inscrit à la connexion de cette session (`cine-app-<aléatoire>`), ou
+   * `null` pour une session ouverte avant qu'on le garde. Les rapports de lecture s'annoncent sous
+   * lui, pour qu'un appareil réel soit un seul appareil chez Jellyfin (`playbackDevice.ts`).
+   */
+  jfDevice(jti: string): string | null {
+    const row = getDb().prepare("SELECT jf_device FROM sessions WHERE jti = ?").get(jti) as { jf_device: string | null } | undefined;
+    return row?.jf_device ?? null;
+  },
+
   /** Ferme une session. Rend l'appareil Jellyfin qui lui était lié, s'il est connu. */
   delete(jti: string): string | null {
     const row = getDb().prepare("SELECT jf_device FROM sessions WHERE jti = ?").get(jti) as { jf_device: string | null } | undefined;

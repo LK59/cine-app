@@ -38,6 +38,7 @@ function fakeReq(body?: unknown, cookie = "t"): NextRequest {
   return {
     cookies: { get: (name: string) => (name === "cine_session" && cookie ? { value: cookie } : undefined) },
     json: async () => body ?? null,
+    headers: new Headers(),
   } as unknown as NextRequest;
 }
 
@@ -206,7 +207,7 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(body.isDirectPlay).toBe(true);
     expect(body.manifestUrl).toBe(`/api/jellyfin/stream/${validId}/stream.mp4?static=true&mediaSourceId=src-1`);
     expect(body.playbackInfo.playMethod).toBe("DirectPlay");
-    expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "DirectPlay");
+    expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "DirectPlay", "CineApp", { name: "Navigateur", id: null });
   });
 
   // Le banc saute à la fin des films : annoncée, sa séance marquait le film vu sur le compte qui le
@@ -247,7 +248,7 @@ describe("POST /api/jellyfin/playback/start", () => {
     // is exactly the real-world case found live: two browsers negotiating the same file, same
     // kind of reason text, but one got a real video copy and the other a full re-encode.
     expect(body.playbackInfo.playMethod).toBe("Transcode");
-    expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "Transcode");
+    expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "Transcode", "CineApp", { name: "Navigateur", id: null });
   });
 
   it("excludes disableAudioCodecs from the negotiated DeviceProfile even when the browser claims support", async () => {
@@ -307,7 +308,7 @@ describe("POST /api/jellyfin/playback/start", () => {
     const res = await POST(fakeReq({ itemId: validId }));
     const body = await res.json();
     expect(body.playbackInfo.playMethod).toBe("Transcode");
-    expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "Transcode");
+    expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "Transcode", "CineApp", { name: "Navigateur", id: null });
   });
 
   // The counterpart the closed list protects: a container remux with the video copied. Same file,

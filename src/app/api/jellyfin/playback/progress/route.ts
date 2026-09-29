@@ -6,6 +6,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { reportPlayback } from "@/lib/playbackReport";
+import { playbackDevice } from "@/lib/playbackDevice";
 
 export async function POST(req: NextRequest) {
   if (!config.player.enabled) {
@@ -35,7 +36,9 @@ export async function POST(req: NextRequest) {
   }
 
   const { jfId, jfToken } = session;
+  // L'appareil de la connexion et son vrai nom, plus un appareil fantôme par compte — `playbackDevice.ts`.
+  const device = playbackDevice(req, session.jti);
   return reportPlayback({ ...session, jfId }, "progress", itemId, positionTicks, () =>
-    jellyfin.reportPlaybackProgress(jfId, itemId, jfToken, playSessionId, mediaSourceId, positionTicks, playMethod, client, isPaused)
+    jellyfin.reportPlaybackProgress(jfId, itemId, jfToken, playSessionId, mediaSourceId, positionTicks, playMethod, client, isPaused, device)
   );
 }

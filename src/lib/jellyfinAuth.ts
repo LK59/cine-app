@@ -48,9 +48,26 @@ export interface JellyfinIdentity {
  */
 export function jellyfinAuth(token: string, identity?: JellyfinIdentity): string {
   if (!identity) return `MediaBrowser Token="${token}"`;
+  return `${jellyfinIdentityAuth(identity)}, Token="${token}"`;
+}
+
+/**
+ * L'en-tête sans jeton — celui de la connexion, qui vient justement en chercher un.
+ *
+ * `Device` est encodé, et lui seul : c'est le seul champ qui ne soit pas une constante de ce dépôt
+ * ou un identifiant hexadécimal — le libellé de l'appareil (« iPad · Safari », `deviceLabel.ts`).
+ * `encodeURIComponent` échappe la virgule et le guillemet, qui couperaient la valeur au découpage
+ * (`AuthorizationContext.GetParts`, v12.1), le `+` que `UrlDecode` lirait comme une espace, et le
+ * « · » (U+00B7) : envoyé en clair, Node le passe en Latin-1 et le serveur répond **400** à la
+ * requête entière — mesuré le 29/09/2026 contre le Jellyfin de production, sur
+ * `/System/Info/Public` : 400 en clair, 200 encodé. Le serveur rend « iPad · Safari » en UTF-8
+ * après `UrlDecode`. Les noms de client restent tels quels : leurs espaces passent le
+ * découpage, et c'est sous ce nom exact que Jellyfin range l'historique.
+ */
+export function jellyfinIdentityAuth(identity: JellyfinIdentity): string {
   return (
-    `MediaBrowser Client="${identity.client}", Device="${identity.device}", ` +
-    `DeviceId="${identity.deviceId}", Version="${identity.version}", Token="${token}"`
+    `MediaBrowser Client="${identity.client}", Device="${encodeURIComponent(identity.device)}", ` +
+    `DeviceId="${identity.deviceId}", Version="${identity.version}"`
   );
 }
 

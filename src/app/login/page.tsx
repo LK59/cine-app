@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Clapperboard, Activity, Eye, EyeOff } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { hardNavigate, safeNextPath } from "@/lib/signOut";
+import { touchHintHeaders } from "@/lib/deviceLabel";
 
 export default function LoginPage() {
   return (
@@ -33,7 +34,8 @@ function LoginForm() {
     try {
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // L'indice tactile : sans lui, un iPad se connecte sous le nom « Mac » (`deviceLabel.ts`).
+        headers: { "Content-Type": "application/json", ...touchHintHeaders() },
         body: JSON.stringify({ username, password }),
       });
       if (!res.ok) {

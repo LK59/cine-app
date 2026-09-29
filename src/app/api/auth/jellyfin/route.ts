@@ -1,6 +1,7 @@
 import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
 import { NextRequest, NextResponse } from "next/server";
-import { deviceLabel } from "@/lib/deviceLabel";
+import { jellyfinDeviceName, requestDeviceLabel } from "@/lib/deviceLabel";
+import { jellyfinIdentityAuth } from "@/lib/jellyfinAuth";
 import { config } from "@/lib/config";
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE, type Role } from "@/lib/auth";
 import { sessionDb, userPrefsDb } from "@/lib/db";
@@ -35,6 +36,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Identifiants requis" }, { status: 400 });
   }
   const { username, password } = credentials;
+  // « iPad · Safari » : l'indice tactile de la page de connexion distingue l'iPad du Mac. Le même
+  // libellé va au journal des connexions, à la session et à Jellyfin.
+  const device = requestDeviceLabel(req);
 
   let jellyfinRes: Response;
   // DeviceId used to be a single hardcoded constant ("cine-app-server") shared by every login,
@@ -59,7 +63,9 @@ export async function POST(req: NextRequest) {
           // Sans quoi Jellyfin inscrit chaque connexion depuis l'adresse du conteneur.
           ...(await forwardedFor()),
           "Content-Type": "application/json",
-          Authorization: `MediaBrowser Client="CineApp", Device="Server", DeviceId="${deviceId}", Version="${APP_VERSION}"`,
+          // Le vrai nom de l'appareil, plus « Server » : le tableau de bord de Jellyfin montrait
+          // tous les comptes sur un même appareil anonyme (29/09/2026).
+          Authorization: jellyfinIdentityAuth({ client: "CineApp", device: jellyfinDeviceName(device), deviceId, version: APP_VERSION }),
         },
         body: JSON.stringify({ Username: username, Pw: candidate }),
         signal: upstreamSignal(JELLYFIN_AUTH_TIMEOUT_MS),
@@ -67,7 +73,7 @@ export async function POST(req: NextRequest) {
       if (jellyfinRes.ok) break;
     }
   } catch {
-    logAuthEvent("login-failed", { user: username, ip, device: deviceLabel(req.headers.get("user-agent")), reason: "serveur média injoignable" });
+    logAuthEvent("login-failed", { user: username, ip, device, reason: "serveur média injoignable" });
     return NextResponse.json({ error: "Impossible de contacter Jellyfin" }, { status: 502 });
   }
 
@@ -75,7 +81,7 @@ export async function POST(req: NextRequest) {
     logAuthEvent("login-failed", {
       user: username,
       ip,
-      device: deviceLabel(req.headers.get("user-agent")),
+      device,
       reason: hasLeadingSpace(password) ? "mot de passe refusé (espace en tête)" : "mot de passe refusé",
     });
     // Nommer ce qu'on voit dans ce que la personne a tapé, jamais ce qu'on sait du mot de passe
@@ -122,10 +128,10 @@ export async function POST(req: NextRequest) {
     jellyseerrCookie ?? undefined
   );
   const userId = jellyfinId || jellyfinUsername;
-  const expired = sessionDb.create(jti, userId, deviceLabel(req.headers.get("user-agent")), deviceId);
+  const expired = sessionDb.create(jti, userId, device, deviceId);
   // Les sessions expirées que ce passage vient d'effacer : leurs jetons ne serviront plus.
   void revokeJellyfinDevices(expired, "session expirée");
-  logAuthEvent("login", { user: jellyfinUsername, ip, device: deviceLabel(req.headers.get("user-agent")), role });
+  logAuthEvent("login", { user: jellyfinUsername, ip, device, role });
   if (expired.length) logAuthEvent("expired", { user: jellyfinUsername, count: expired.length });
   const lang = userPrefsDb.getLang(userId, config.app.language);
   const res = NextResponse.json({ ok: true, role });

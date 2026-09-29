@@ -26,11 +26,11 @@ vi.mock("@/lib/rateLimiter", () => ({ checkRateLimit: () => rateLimitOk }));
 vi.mock("@/lib/i18n", () => ({ LOCALE_COOKIE: "cine-lang" }));
 vi.mock("@/lib/api-helpers", () => ({ getClientIp: () => "1.2.3.4" }));
 
-function fakeReq(body: unknown): NextRequest {
+function fakeReq(body: unknown, headers: Record<string, string> = {}): NextRequest {
   return {
     json: async () => body,
     // La signature du navigateur, pour l'appareil que retient la session (23/09/2026).
-    headers: new Headers({ "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1" }),
+    headers: new Headers({ "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1", ...headers }),
   } as unknown as NextRequest;
 }
 
@@ -49,6 +49,36 @@ afterEach(() => {
 });
 
 describe("POST /api/auth/jellyfin", () => {
+  // La connexion s'annonçait « Server » : tous les comptes sur un même appareil anonyme dans le
+  // tableau de bord de Jellyfin (29/09/2026).
+  it("s'annonce à Jellyfin sous le nom de l'appareil, iPad compris grâce à l'indice tactile", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ User: { Name: "louis", Id: "jf-1", Policy: {} }, AccessToken: "jf-token" }),
+    });
+    const { POST } = await import("@/app/api/auth/jellyfin/route");
+    const ipad = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
+    await POST(fakeReq({ username: "louis", password: "x" }, { "user-agent": ipad, "x-cine-touch": "1" }));
+    const auth = ((vi.mocked(global.fetch).mock.calls[0][1] as RequestInit).headers as Record<string, string>).Authorization;
+    expect(auth).toContain('Device="iPad%20%C2%B7%20Safari"');
+    expect(auth).toContain('Client="CineApp"');
+    expect(auth).not.toContain("Server");
+    // Le même libellé va à la session (panneau Compte) — et donc au journal des connexions.
+    expect(mockSessionDb.create).toHaveBeenCalledWith("jti-1", "jf-1", "iPad · Safari", expect.stringMatching(/^cine-app-/));
+  });
+
+  it("retombe sur « Navigateur », jamais « Server », sans signature reconnaissable", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ User: { Name: "louis", Id: "jf-1", Policy: {} }, AccessToken: "jf-token" }),
+    });
+    const { POST } = await import("@/app/api/auth/jellyfin/route");
+    await POST(fakeReq({ username: "louis", password: "x" }, { "user-agent": "curl/8.0" }));
+    const auth = ((vi.mocked(global.fetch).mock.calls[0][1] as RequestInit).headers as Record<string, string>).Authorization;
+    expect(auth).toContain('Device="Navigateur"');
+    expect(auth).not.toContain("Server");
+  });
+
   it("returns 429 when the IP is rate-limited", async () => {
     rateLimitOk = false;
     const { POST } = await import("@/app/api/auth/jellyfin/route");

@@ -31,6 +31,7 @@ function fakeReq(body?: unknown, params: Record<string, string> = {}, cookie = "
     cookies: { get: (name: string) => (name === "cine_session" && cookie ? { value: cookie } : undefined) },
     json: async () => body ?? null,
     nextUrl: { searchParams: new URLSearchParams(params) },
+    headers: new Headers(),
   } as unknown as NextRequest;
 }
 
@@ -148,7 +149,7 @@ describe("POST /api/jellyfin/playback/stop", () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
     const { POST } = await import("@/app/api/jellyfin/playback/stop/route");
     await POST(fakeReq({ itemId: "0123456789abcdef0123456789abcdef", playSessionId: "s", mediaSourceId: "m" }));
-    expect(mockJellyfin.reportPlaybackStopped).toHaveBeenCalledWith("jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 0, "CineApp");
+    expect(mockJellyfin.reportPlaybackStopped).toHaveBeenCalledWith("jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 0, "CineApp", { name: "Navigateur", id: null });
   });
 });
 
