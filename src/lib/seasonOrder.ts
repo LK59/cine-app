@@ -17,6 +17,22 @@ export function defaultSeason(numbers: Iterable<number>): number | null {
 }
 
 /**
+ * La saison qu'une fiche ouvre : la première *possédée* (règle de `defaultSeason`), et une saison
+ * manquante seulement quand on n'en possède aucune.
+ *
+ * Les deux écrans en décidaient chacun : le bureau sur les saisons possédées, le téléphone sur la
+ * réunion des possédées et des manquantes signalées par Sonarr. Une série dont seule la saison 15
+ * est là ouvrait la 15 sur le bureau ; le téléphone l'ouvrait aussi, puis sautait à la 1 — vide —
+ * quand la réponse des manquants arrivait (29/09/2026). Ouvrir une saison qu'on ne peut pas
+ * regarder n'a pas de sens tant qu'il en existe une qu'on peut.
+ *
+ * Le choix se fait une fois : l'appelant le fige à la première réponse qui le permet.
+ */
+export function openingSeason(owned: Iterable<number>, missing: Iterable<number>): number | null {
+  return defaultSeason(owned) ?? defaultSeason(missing);
+}
+
+/**
  * Le nombre affiché sur la pastille d'une saison : les épisodes qui *manquent*.
  *
  * Il comptait aussi ceux qui ne sont pas encore sortis — « 10 » sur une saison annoncée dont

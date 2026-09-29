@@ -1126,3 +1126,27 @@ ce catalogue.
 **Trouvé le 29/09/2026** par l'audit : le bureau testait l'erreur seule, et une revalidation ratée
 pendant un redéploiement démontait l'accueil et les fiches ouvertes ; le téléphone gardait ses
 rangées.
+
+## 38. La saison qu'ouvre une fiche de série
+
+**Règle.** Une fiche de série ouvre la première saison possédée, spéciaux en dernier (règle de
+`defaultSeason`) ; une saison manquante n'est ouverte que si la série n'en possède aucune. Le choix
+se fait une fois et ne bouge plus quand la liste des manquants arrive.
+
+**Porteur.** `openingSeason(possédées, manquantes)` (`src/lib/seasonOrder.ts`).
+
+**Appelants.** `CinemaEpisodeBrowser` (bureau, figé au montage — le focus posé au montage va sur
+cette saison, puisque le focus choisit la saison) et `CinemaMobileDetail` (téléphone, figé à la
+première réponse des épisodes qui permet de choisir).
+
+**Tests.** `opening-season.test.tsx` ; `decisions-partagees.test.ts` (« une seule règle pour la
+saison ouverte »).
+
+**Voulu.** La liste des pastilles réunit toujours possédées et manquantes (`orderSeasons`) : seule
+l'ouverture les distingue. Le bureau reçoit les saisons possédées dès le montage, le téléphone les
+attend : c'est pourquoi l'un fige au montage et l'autre à la première réponse.
+
+**Trouvé le 29/09/2026** par l'audit : le téléphone décidait sur la réunion des deux listes à
+chaque rendu, et une série dont seule la saison 15 est là sautait à la saison 1, vide, à l'arrivée
+des manquants ; le bureau décidait sur les possédées, mais posait le focus sur la première saison de
+la liste, ce qui la choisissait aussi quand les manquants étaient déjà connus.

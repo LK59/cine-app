@@ -1,6 +1,6 @@
 "use client";
 
-import { defaultSeason, missingCount, orderSeasons } from "@/lib/seasonOrder";
+import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play, Check } from "lucide-react";
@@ -55,7 +55,14 @@ export function CinemaEpisodeBrowser({
     return orderSeasons(all);
   }, [seasons, missing.seasons]);
 
-  const [selectedSeason, setSelectedSeason] = useState(() => defaultSeason(seasons.map((s) => s.seasonNumber)) ?? 0);
+  // Figée au montage, par la même règle que le téléphone — voir `openingSeason`.
+  const [selectedSeason, setSelectedSeason] = useState(
+    () =>
+      openingSeason(
+        seasons.map((s) => s.seasonNumber),
+        missing.seasons.map((s) => s.seasonNumber)
+      ) ?? 0
+  );
 
   // Same debounce-before-crossfade pattern CinemaClient's own hero backdrop uses (see its doc
   // comment on "ghosting") — selectedSeason changes on every arrow-key press while scrubbing
@@ -82,9 +89,18 @@ export function CinemaEpisodeBrowser({
   const sheetBehind = useSheetBehind();
   const { closing, requestClose } = useDelayedClose(onClose, sheetBehind ? 0 : 220);
 
+  // Le focus va sur la saison ouverte, et non sur la première de la liste : poser le focus la
+  // choisit (`onFocus`), et la première est une saison manquante dès que Sonarr a déjà répondu —
+  // la fiche ouvrait alors la saison 1, vide, d'une série dont seule la 15 est là (29/09/2026).
+  // Au montage seulement : la saison choisie ensuite suit déjà le focus.
+  const [openedOn] = useState(selectedSeason);
   useEffect(() => {
-    containerRef.current?.querySelector<HTMLButtonElement>('[data-episode-season="true"]')?.focus();
-  }, []);
+    const list = containerRef.current;
+    (
+      list?.querySelector<HTMLButtonElement>(`[data-episode-season="true"][data-season="${openedOn}"]`) ??
+      list?.querySelector<HTMLButtonElement>('[data-episode-season="true"]')
+    )?.focus();
+  }, [openedOn]);
 
   // The episode pane is keyed by displayedSeason, so changing season unmounts every button in it
   // — including the focused one if focus was over there (hovering the season list with the mouse

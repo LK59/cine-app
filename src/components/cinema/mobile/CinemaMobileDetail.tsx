@@ -1,6 +1,6 @@
 "use client";
 
-import { defaultSeason, missingCount, orderSeasons } from "@/lib/seasonOrder";
+import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -193,7 +193,19 @@ export function CinemaMobileDetail({
     return orderSeasons(all);
   }, [seasons, missing.seasons]);
 
-  const activeSeason = selectedSeason ?? defaultSeason(seasonNumbers);
+  // La saison ouverte se décide une fois, à la première réponse de Jellyfin qui la permet, et ne
+  // bouge plus : recalculée à chaque rendu sur la réunion possédées ∪ manquantes, elle sautait de
+  // la 15 à la 1 — vide — quand la liste des manquants arrivait après (29/09/2026). Voir
+  // `openingSeason`, que l'écran des épisodes du bureau appelle aussi. Retenue pendant le rendu,
+  // et non dans un effet, comme ailleurs dans le cinéma.
+  const opening = episodesData
+    ? openingSeason(
+        seasons.map((s) => s.seasonNumber),
+        missing.seasons.map((s) => s.seasonNumber)
+      )
+    : null;
+  if (selectedSeason === null && opening !== null) setSelectedSeason(opening);
+  const activeSeason = selectedSeason ?? opening;
   const episodes = seasons.find((s) => s.seasonNumber === activeSeason)?.episodes ?? [];
 
   // Escape still closes on the mobile layout — a hardware/bluetooth keyboard on a tablet, and

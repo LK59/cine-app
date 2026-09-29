@@ -779,3 +779,20 @@ describe("une seule règle pour l'erreur du catalogue", () => {
     expect([f, /if \(moviesError\)|\{moviesError &&|\{seriesError &&/.test(code)]).toEqual([f, false]);
   });
 });
+
+describe("une seule règle pour la saison ouverte", () => {
+  // DECISIONS.md §38. Le bureau ouvrait la première saison possédée, le téléphone la première de
+  // la réunion possédées ∪ manquantes, recalculée à chaque rendu (29/09/2026). Les deux passent par
+  // `openingSeason`, et aucun n'appelle plus `defaultSeason` lui-même.
+  it.each([
+    "src/components/cinema/CinemaEpisodeBrowser.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+  ])("%s appelle `openingSeason`", (f) => {
+    const code = lire(f)
+      .split("\n")
+      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+      .join("\n");
+    expect([f, code.includes("openingSeason(")]).toEqual([f, true]);
+    expect([f, /defaultSeason\(/.test(code)]).toEqual([f, false]);
+  });
+});
