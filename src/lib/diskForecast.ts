@@ -33,9 +33,12 @@ export function computeDiskForecast(): DiskForecast {
   // rate (e.g. "3 GB so far" on the 2nd of the month reads as a near-empty month).
   const nowMonth = monthlyGrowth[monthlyGrowth.length - 1]?.month;
   const completeMonths = nowMonth ? monthlyGrowth.filter((m) => m.month !== nowMonth) : monthlyGrowth;
-  const recentMonths = completeMonths.slice(-MONTHS_FOR_AVERAGE).filter((m) => m.bytes > 0);
+  // Un mois sans ajout compte pour zéro : la série de storage-scan est continue exprès. Les
+  // retirer lisait « 900 Go, 0, 0 » comme 900 Go/mois au lieu de 300, et avançait la date de
+  // saturation justement quand l'activité baisse. Seul un trio entièrement vide ne dit rien.
+  const recentMonths = completeMonths.slice(-MONTHS_FOR_AVERAGE);
 
-  if (recentMonths.length === 0 || disk.disk.total <= 0) {
+  if (recentMonths.every((m) => m.bytes <= 0) || disk.disk.total <= 0) {
     return { trend: "insufficient_data", growthBytesPerDay: null, daysUntilFull: null, monthlyGrowth, monthsUsed: recentMonths.length };
   }
 
