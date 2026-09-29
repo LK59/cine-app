@@ -8,6 +8,7 @@ import { useLocalState } from "@/hooks/useLocalState";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
+import { useLookupSearch } from "@/lib/useLookupSearch";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
 import { PosterSkeletonGrid } from "@/components/SkeletonCard";
@@ -361,8 +362,10 @@ export default function SonarrPage() {
 function AddSeriesModal({ onClose }: { onClose: () => void }) {
   const { mutate } = useSWRConfig();
   const [term, setTerm] = useState("");
-  const [results, setResults] = useState<SonarrSeries[]>([]);
-  const [searching, setSearching] = useState(false);
+  // Trouvé, rien trouvé ou échec : trois issues que la fenêtre dit chacune (`useLookupSearch`,
+  // partagé avec l'autre fenêtre d'ajout). Un 502 la laissait vide et muette.
+  const lookup = useLookupSearch<SonarrSeries>("/api/sonarr/series/lookup");
+  const { results, searching } = lookup;
   const [adding, setAdding] = useState<number | null>(null);
   const [added, setAdded] = useState<Set<number>>(new Set());
   const toast = useToast();
@@ -373,16 +376,9 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
     fetcher
   );
 
-  async function handleSearch(e: React.FormEvent) {
+  function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    if (!term.trim()) return;
-    setSearching(true);
-    try {
-      const res = await fetch(`/api/sonarr/series/lookup?term=${encodeURIComponent(term)}`);
-      setResults(await res.json());
-    } finally {
-      setSearching(false);
-    }
+    void lookup.search(term);
   }
 
   async function add(show: SonarrSeries) {
@@ -431,6 +427,11 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
       </form>
 
       {searching && <LoadingState />}
+
+      {lookup.state.status === "failed" && (
+        <ErrorState message={lookup.state.message ?? t('modals.releases.error')} onRetry={lookup.retry} />
+      )}
+      {lookup.state.status === "empty" && <EmptyState label={t('search.noResults', { query: lookup.state.term })} />}
 
       {results.length > 0 && !searching && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

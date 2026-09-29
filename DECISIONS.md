@@ -1174,3 +1174,24 @@ défaut.
 
 **Trouvé le 29/09/2026** par l'audit : le bureau avait la clé, le téléphone non ; rouvrir « Voir
 tout » sur un autre genre pendant la sortie de la grille précédente y gardait ses réglages.
+
+## 40. La recherche de la fenêtre « Ajouter » de la gestion
+
+**Règle.** Une recherche d'ajout (un titre soumis, cherché chez Radarr ou Sonarr) a trois issues, et
+la fenêtre dit chacune : des résultats, « aucun résultat », ou un échec avec le message du serveur
+et de quoi réessayer. Jamais « rien trouvé » — ni rien du tout — pour une recherche qui a échoué.
+
+**Porteur.** `useLookupSearch(endpoint)` (`src/lib/useLookupSearch.ts`), qui lit par `fetcher`.
+
+**Appelants.** `AddMovieModal` (`radarr/page.tsx`) et `AddSeriesModal` (`sonarr/page.tsx`).
+
+**Tests.** `gestion-ajout-recherche.test.tsx` ; `decisions-partagees.test.ts` (« une seule
+recherche d'ajout de la gestion »).
+
+**Voulu.** Pas de SWR : la question est posée à la soumission, ce n'est pas une clé qu'on suit, et
+le `keepPreviousData` global y rendrait les résultats d'une autre frappe (voir §7 cinquies). Seule
+la dernière question soumise répond.
+
+**Trouvé le 29/09/2026** par l'audit : les deux fenêtres faisaient `setResults(await res.json())`
+sans lire `res.ok` ni rattraper l'erreur ; sur un 502 elles restaient vides et muettes, une réponse
+vide ne disait rien non plus, et une coupure réseau devenait un rejet non géré.

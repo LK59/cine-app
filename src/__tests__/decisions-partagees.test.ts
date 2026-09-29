@@ -811,3 +811,17 @@ describe("une seule clé pour la grille complète", () => {
     for (const g of grids) expect([f, /key=\{browseSheetKey\(/.test(g)]).toEqual([f, true]);
   });
 });
+
+describe("une seule recherche d'ajout de la gestion", () => {
+  // DECISIONS.md §40. Les fenêtres « Ajouter » de Radarr et de Sonarr lisaient chacune la réponse
+  // sans `res.ok` : un 502 les laissait vides et muettes (29/09/2026). Les deux passent par
+  // `useLookupSearch`, et aucune n'appelle plus l'adresse de recherche elle-même.
+  it.each([
+    ["src/app/(dashboard)/radarr/page.tsx", "/api/radarr/movies/lookup"],
+    ["src/app/(dashboard)/sonarr/page.tsx", "/api/sonarr/series/lookup"],
+  ])("%s", (f, url) => {
+    const src = lire(f);
+    expect([f, src.includes(`useLookupSearch<`)]).toEqual([f, true]);
+    expect([f, src.includes(`fetch(\`${url}`)]).toEqual([f, false]);
+  });
+});
