@@ -9,6 +9,7 @@ import { directInfoKey, fetchPlaybackState, takePrefetchedPlaybackState } from "
 import { errorMessage, isUpstreamUnreachable } from "@/lib/upstreamError";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
+import { restoreRememberedVolume } from "@/lib/rememberedVolume";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { isPlayerWarning } from "@/lib/webcodecs/playerWarning";
 import { subtitlePlacement } from "@/lib/webcodecs/subtitleMarkup";
@@ -349,6 +350,12 @@ export function ExperimentalPlayerHost({
   const { itemId, title: openedAs } = session;
 
   const videoElRef = useRef<HTMLVideoElement>(null);
+  // Le volume mémorisé, rendu une fois à l'élément. Il est monté avec l'hôte et gardé tel quel :
+  // une reconstruction ne change que le pipeline, un passage plein écran ↔ réduit que son cadre.
+  // Ce lecteur ne le relisait pas — chaque film repartait à plein volume. DECISIONS.md §35.
+  useEffect(() => {
+    restoreRememberedVolume(videoElRef.current);
+  }, []);
   const remuxRef = useRef<RemuxPlayback | null>(null);
   /** La réserve d'avance en mémoire du lecteur en cours — voir `MemoryReserve`. */
   const reserveRef = useRef<MemoryReserve | null>(null);

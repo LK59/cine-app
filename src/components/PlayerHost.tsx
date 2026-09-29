@@ -9,7 +9,8 @@ import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useStableFallback, takeoverFor, castCarriedTo, castingNow, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
 import { publishHandedOver } from "@/lib/playerBench/bridge";
-import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
+import { PlayerControls, type Track } from "@/components/PlayerControls";
+import { restoreRememberedVolume } from "@/lib/rememberedVolume";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { useViewportResizing } from "@/lib/useViewportResizing";
 import { pickMaxBitrate } from "@/lib/networkBitrate";
@@ -1101,17 +1102,9 @@ function ActivePlayer({
     // weight. Waiting here lets that release finish before the new session asks for its slot.
     // Remembered volume — applied once here, right when the session starts, rather than in
     // PlayerControls (which remounts on every full<->mini toggle and would otherwise re-apply
-    // it on top of whatever the video's actual live volume already is).
-    try {
-      const stored = localStorage.getItem(VOLUME_STORAGE_KEY);
-      if (stored && videoRef.current) {
-        const { volume, muted } = JSON.parse(stored) as { volume: number; muted: boolean };
-        if (typeof volume === "number") videoRef.current.volume = volume;
-        if (typeof muted === "boolean") videoRef.current.muted = muted;
-      }
-    } catch {
-      // Malformed or unavailable — video just keeps its own default volume.
-    }
+    // it on top of whatever the video's actual live volume already is). Le lecteur natif fait de
+    // même, par la même fonction — DECISIONS.md §35.
+    restoreRememberedVolume(videoRef.current);
 
     const graceMs = fromReload ? 3000 : 0;
     // Une position absente veut dire « demande au serveur », pas « du début » — voir

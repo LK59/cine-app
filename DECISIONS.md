@@ -1032,3 +1032,26 @@ Le catalogue reste commun à tous (voir `cinema/movies`).
 **Trouvé le 29/09/2026** par l'audit : les relais ne vérifiaient qu'une session, et le catalogue
 donne à chaque compte l'identifiant de tous les titres ; un titre bloqué par tag s'ouvrait par une
 adresse de flux fabriquée à la main.
+
+---
+
+## 35. Le volume retenu d'une séance à l'autre
+
+**Règle.** Le volume et le muet du spectateur sont gardés sur l'appareil (`cine:player-volume`) à
+chaque changement, et rendus à l'élément vidéo une fois, à son montage, par les deux lecteurs.
+
+**Porteur.** `restoreRememberedVolume` (`src/lib/rememberedVolume.ts`), qui porte aussi la clé.
+
+**Appelants.** `ExperimentalPlayerHost` (effet de montage, à côté de `videoElRef`) et `PlayerHost`
+(effet de montage du lecteur serveur). `PlayerControls` écrit la valeur, sur `volumechange`.
+
+**Tests.** `remembered-volume.test.tsx` ; `decisions-partagees.test.ts` (« un seul endroit rend le
+volume retenu »).
+
+**Voulu.** Rendu au montage de l'élément, pas dans `PlayerControls` : les contrôles se remontent à
+chaque passage plein écran ↔ réduit et reposeraient l'ancienne valeur par-dessus celle qu'on vient de
+régler. Le lecteur natif garde le même élément à travers ses reconstructions (seul le pipeline
+change) : une reconstruction ne le repose pas. Une valeur hors de [0, 1] est ignorée.
+
+**Trouvé le 29/09/2026** par l'audit : seul le lecteur serveur relisait la valeur ; dans le lecteur
+natif, chaque film repartait à plein volume, le son coupé oublié.

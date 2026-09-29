@@ -13,6 +13,7 @@ import {
   SUBTITLE_BACKGROUNDS,
 } from "@/lib/subtitleStyle";
 import { useMediaSession } from "@/lib/useMediaSession";
+import { VOLUME_STORAGE_KEY } from "@/lib/rememberedVolume";
 
 export interface Track {
   id: number;
@@ -110,7 +111,6 @@ const NEXT_UP_COUNTDOWN_S = 10;
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 /** Masqués, les contrôles ne suivent la position qu'à ce rythme — voir `visibleRef`. */
 const HIDDEN_UPDATE_MS = 1000;
-export const VOLUME_STORAGE_KEY = "cine:player-volume";
 
 /** How long a seek may take before it is worth showing as a wait rather than as a still button. */
 const SEEK_SPINNER_MS = 150;
@@ -460,8 +460,9 @@ export function PlayerControls({
     const onVolume = () => {
       setVolume(video.volume);
       setMuted(video.muted);
-      // Remembered across sessions — applied back on a fresh session in PlayerHost's mount
-      // effect, so the user doesn't have to turn the volume back up every single time.
+      // Gardé d'une séance à l'autre, et rendu à l'élément par les deux lecteurs à son montage
+      // (`restoreRememberedVolume`). Seul le lecteur serveur le relisait : dans le lecteur natif,
+      // chaque film repartait à plein volume. DECISIONS.md §35.
       try {
         localStorage.setItem(VOLUME_STORAGE_KEY, JSON.stringify({ volume: video.volume, muted: video.muted }));
       } catch {

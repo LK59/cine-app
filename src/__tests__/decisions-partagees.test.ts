@@ -750,3 +750,15 @@ describe("une seule décision pour ce qu'une fiche montre avant le réseau", () 
     expect(code).not.toMatch(/info\?\.tmdb\?\.overview \|\|/);
   });
 });
+
+describe("un seul endroit rend le volume retenu", () => {
+  // DECISIONS.md §35. Le lecteur serveur relisait la valeur à la main, le lecteur natif pas du
+  // tout (29/09/2026) : les deux passent par `restoreRememberedVolume`, et la clé n'est lue nulle
+  // part ailleurs.
+  it("les deux lecteurs appellent `restoreRememberedVolume`", () => {
+    for (const f of ["src/components/ExperimentalPlayerHost.tsx", "src/components/PlayerHost.tsx"]) {
+      expect([f, lire(f)]).toEqual([f, expect.stringContaining("restoreRememberedVolume(")]);
+      expect([f, /VOLUME_STORAGE_KEY/.test(lire(f))]).toEqual([f, false]);
+    }
+  });
+});
