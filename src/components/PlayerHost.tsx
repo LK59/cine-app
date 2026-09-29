@@ -369,6 +369,13 @@ function ActivePlayer({
   // request (audio track included) — state like currentAudioId would be stale inside the
   // error listener's closure.
   const lastPlaybackOpts = useRef<{ audioStreamIndex?: number; resumeAt?: number; disableAudioCodecs?: string[] } | undefined>(undefined);
+  // La séance Jellyfin a été close par la fin de l'épisode, lecteur resté ouvert (voir l'effet
+  // `ended`) : le prochain `play` doit la rouvrir. Une ref et non une variable de l'effet : celui-ci
+  // se réinstalle quand le lecteur passe en mini-lecteur ou revient en plein écran, et l'état remis
+  // à faux laissait un second visionnage, relancé après ce passage, sans aucun rapport à Jellyfin
+  // (audit du 29/09/2026). Remise à faux seulement là où une séance s'ouvre vraiment : à la relance,
+  // ou par `startPlayback`, dont la négociation en ouvre une neuve (autre épisode, autre piste).
+  const endStoppedRef = useRef(false);
   // Re-tested in isolation now that the Range/206 and manifest-prewarm bugs are both confirmed
   // fixed — a previous attempt at this (ebc2d2d) was reverted after appearing not to help, but
   // that test ran while the Range-truncation bug was still live, which may have masked whether
@@ -579,6 +586,8 @@ function ActivePlayer({
       // negotiation, not rediscovered through a failure on every playback.
       const disableAudioCodecs = [...new Set([...readAudioBlocklist(), ...(opts?.disableAudioCodecs ?? [])])];
       lastPlaybackOpts.current = opts;
+      // Une négociation ouvre sa propre séance : la fin de la précédente n'a plus rien à rouvrir.
+      endStoppedRef.current = false;
 
       // WebKit only — hls.js (Firefox, Chrome/Edge desktop & Android) already handles reusing
       // the element correctly via its own MediaSource and was never affected by this.
@@ -1394,18 +1403,17 @@ function ActivePlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    let endStopped = false;
     function onEnded() {
       if (!hasNextEpisode) {
         handleClose();
         return;
       }
-      endStopped = true;
+      endStoppedRef.current = true;
       void stopPlaybackNow();
     }
     function onPlay() {
-      if (!endStopped) return;
-      endStopped = false;
+      if (!endStoppedRef.current) return;
+      endStoppedRef.current = false;
       resumePlaybackSession();
     }
     video.addEventListener("ended", onEnded);
