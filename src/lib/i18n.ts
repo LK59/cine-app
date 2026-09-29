@@ -97,6 +97,17 @@ export function localeOf(req: { headers?: { get(name: string): string | null } }
   // défaut de cette installation, et c'est exactement ce que rend un cookie absent.
   const cookie = req.headers?.get("cookie") ?? "";
   const match = cookie.match(new RegExp(`(?:^|;\\s*)${LOCALE_COOKIE}=([^;]+)`));
-  const raw = match ? decodeURIComponent(match[1]) : "";
+  // Un cookie mal encodé (`cine-lang=%E0`, qu'un sous-domaine voisin peut poser) faisait lever
+  // URIError ici, et le catalogue répondait 502 alors que l'écran s'affichait. Il vaut un cookie
+  // absent. Les lectures par `req.cookies` / `cookies()` n'ont pas ce défaut : le parseur de Next
+  // avale déjà l'erreur.
+  let raw = "";
+  if (match) {
+    try {
+      raw = decodeURIComponent(match[1]);
+    } catch {
+      raw = "";
+    }
+  }
   return LOCALES.includes(raw as Locale) ? (raw as Locale) : "fr";
 }
