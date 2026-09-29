@@ -491,7 +491,8 @@ function ActivePlayer({
    * Deux appuis pendant le fondu (Quitter sur l'écran d'erreur, puis la croix ; la croix, puis la
    * fin du fichier) écrivaient deux lignes `stop`, la seconde avec zéro seconde regardée — le
    * temps venait d'être pris par la première —, et lançaient deux relectures des vues (relevé le
-   * 27/09/2026 en cartographiant le lecteur, docs/cycle-de-vie-lecteur.md).
+   * 27/09/2026 en cartographiant le lecteur, docs/cycle-de-vie-lecteur.md). L'hôte natif tient la
+   * même règle par `lifecycle.noteClosing()` / `isOver()` — DECISIONS.md « Une séance close ».
    */
   const closedRef = useRef(false);
 

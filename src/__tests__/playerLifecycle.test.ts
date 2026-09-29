@@ -173,6 +173,14 @@ describe("un lecteur qui a fini de décider", () => {
     expect(lifecycle.backgroundLost({ position: 100, hold: null }, 0)).toBeNull();
   });
 
+  // DECISIONS.md « Une séance close » : un second appui sur la croix ne refait rien.
+  it("une séance ne se ferme qu'une fois, et elle est close dès la croix", () => {
+    const lifecycle = new PlayerLifecycle();
+    expect(lifecycle.noteClosing()).toBe(true);
+    expect(lifecycle.isOver()).toBe(true);
+    expect(lifecycle.noteClosing()).toBe(false);
+  });
+
   it("un lecteur ordinaire décide encore", () => {
     const lifecycle = new PlayerLifecycle();
     expect(lifecycle.isOver()).toBe(false);

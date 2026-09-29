@@ -1055,3 +1055,28 @@ change) : une reconstruction ne le repose pas. Une valeur hors de [0, 1] est ign
 
 **Trouvé le 29/09/2026** par l'audit : seul le lecteur serveur relisait la valeur ; dans le lecteur
 natif, chaque film repartait à plein volume, le son coupé oublié.
+
+## 36. Une séance close
+
+**Règle.** Une fois la croix appuyée, la séance est close : elle ne se ferme qu'une fois (une seule
+ligne `stop`, un seul arrêt Jellyfin, une seule relecture des vues) et n'enchaîne plus l'épisode
+suivant, même si son décompte arrive à zéro pendant le fondu de 200 ms.
+
+**Porteurs.** Deux, chacun dans l'état de son hôte :
+- hôte natif : `PlayerLifecycle.noteClosing()` (`src/lib/playerLifecycle.ts`), vrai la première
+  fois seulement, et `isOver()`, vrai dès la croix ;
+- lecteur serveur : `closedRef` dans `PlayerHost`.
+
+**Appelants.** `handleClose` et `handleAdvance` de `ExperimentalPlayerHost` et de `PlayerHost`.
+
+**Tests.** `native-close-once.test.tsx` (hôte natif) ; `playerLifecycle.test.ts`.
+
+**Voulu.** Pas de fonction commune : l'hôte natif range « close » avec le reste de sa machine à
+états (`isOver` refuse aussi reconstructions, nouveaux essais réseau et bascule pendant le fondu),
+le lecteur serveur n'a pas cette machine. `isOver()` est aussi vrai après avoir passé la main au
+lecteur serveur : l'hôte natif n'enchaîne rien non plus dans ce cas, c'est le lecteur serveur qui
+porte alors la séance.
+
+**Trouvé le 29/09/2026** par l'audit : le lecteur serveur tenait la garde depuis le 27/09, l'hôte
+natif non — un épisode suivant monté puis démonté aussitôt pendant le fondu (faux `stop unmount`,
+avance automatique comptée, flash), et deux relectures des vues pour deux appuis sur la croix.

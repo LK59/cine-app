@@ -1344,8 +1344,9 @@ export function ExperimentalPlayerHost({
   useEffect(() => () => subtitleFetchRef.current?.abort(), []);
 
   const handleClose = useCallback(() => {
-    // Plus aucune initiative pendant le fondu — voir `PlayerLifecycle.stepAside`.
-    lifecycle.noteClosing();
+    // Plus aucune initiative pendant le fondu — voir `PlayerLifecycle.stepAside`. Et une seule
+    // fermeture : un second appui ne renvoie ni arrêt ni relecture des vues.
+    if (!lifecycle.noteClosing()) return;
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     reportStop("close");
     const reported = stopPlaybackNow();
@@ -1364,11 +1365,14 @@ export function ExperimentalPlayerHost({
   // on a manual close, but the player stays open so there is no close/reopen flicker between
   // episodes.
   const handleAdvance = useCallback(() => {
-    if (!nextEpisode) return;
+    // Rien à enchaîner sur une séance close : le décompte de l'épisode suivant peut arriver à zéro
+    // pendant le fondu de la croix, et l'épisode 2 était alors monté puis démonté aussitôt (faux
+    // `stop unmount`, avance automatique comptée, flash). Même garde que `PlayerHost`.
+    if (!nextEpisode || lifecycle.isOver()) return;
     reportStop("next");
     stopPlaybackNow();
     playback.advance(nextEpisode);
-  }, [nextEpisode, playback, stopPlaybackNow, reportStop]);
+  }, [nextEpisode, playback, stopPlaybackNow, reportStop, lifecycle]);
 
   // Lu par les écouteurs de l'horloge, posés une fois pour toutes — voir `warmNextEpisode`.
   const nextEpisodeIdRef = useRef<string | null>(null);

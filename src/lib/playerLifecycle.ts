@@ -324,9 +324,16 @@ export class PlayerLifecycle {
     this.stopReported = false;
   }
 
-  /** Le spectateur ferme le lecteur. */
-  noteClosing(): void {
+  /**
+   * Le spectateur ferme le lecteur. Vrai la première fois seulement : une séance ne se ferme qu'une
+   * fois. Deux appuis sur la croix pendant le fondu écrivaient deux arrêts Jellyfin et lançaient
+   * deux relectures des vues (audit du 29/09/2026) — le lecteur serveur tenait déjà cette garde
+   * (`closedRef`), voir DECISIONS.md « Une séance close ».
+   */
+  noteClosing(): boolean {
+    if (this.closing) return false;
     this.closing = true;
+    return true;
   }
 
   /**
