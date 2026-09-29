@@ -2615,6 +2615,67 @@ describe("une coupure réseau avec de l'avance", () => {
     expect(remuxer.seeks.length).toBeGreaterThan(seeksBefore);
     mse.destroy();
   });
+
+  // `readUpTo` est sur l'horloge du fichier : le nouvel essai lui retirait pourtant le décalage de
+  // présentation une seconde fois. Arrêtée pile sur une image clé, la lecture repartait alors du
+  // groupe précédent, qui commence sous la tête — et la « reprise habituelle » vidait les deux
+  // tampons, exactement ce que ce mécanisme existe pour éviter (audit du 29/09/2026).
+  it("reprend au groupe qui commence là où la lecture s'était arrêtée, même pile sur une image clé", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    const video = fakeVideo();
+    const onError = vi.fn();
+    // Des groupes de 8 s livrés en segments de 2 s, comme le vrai remultiplexeur livre un groupe en
+    // plusieurs fragments ; `seekTo` repart de l'image clé à l'instant demandé ou avant.
+    const GROUP = 8;
+    let next = 0;
+    let groupStart = 0;
+    let failOnce = false;
+    const seeks: number[] = [];
+    const remuxer = Object.assign(fakeRemuxer(500), {
+      seeks,
+      keyframeAtOrBefore: (s: number) => Math.floor(s / GROUP) * GROUP,
+      seekTo: (at: number) => {
+        seeks.push(at);
+        groupStart = Math.floor(at / GROUP) * GROUP;
+        next = groupStart / 2;
+      },
+      diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0, segmentStartSeconds: groupStart }),
+      nextSegment: async () => {
+        if (failOnce) {
+          failOnce = false;
+          throw networkError();
+        }
+        next += 1;
+        groupStart = Math.floor(((next - 1) * 2) / GROUP) * GROUP;
+        return { video: [new Uint8Array([next])], audio: new Uint8Array([next]), subtitles: [], endSeconds: next * 2 };
+      },
+    });
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError });
+    await vi.waitFor(() => expect(video.buffered.length > 0 && video.buffered.end(0) >= 30).toBe(true));
+    const internals = mse as unknown as { fill: () => Promise<void>; readUpTo: number; lead: number };
+    // Un segment de plus, qui ferme un groupe : la lecture s'arrête pile sur une image clé (32 s).
+    (video as unknown as { currentTime: number }).currentTime = 1;
+    await internals.fill();
+    expect(internals.readUpTo).toBe(32);
+    const buffers = FakeSource.instances[0].buffers;
+    const removedBefore = buffers.map((b) => b.removed.length);
+
+    // La tête à 25 s : 7 s d'avance, au-dessus des 5 s qui font garder le tampon.
+    (video as unknown as { currentTime: number }).currentTime = 25;
+    expect(internals.lead).toBeGreaterThanOrEqual(5);
+    failOnce = true;
+    const seeksBefore = seeks.length;
+    await internals.fill();
+    await vi.advanceTimersByTimeAsync(1100);
+
+    // Le nouvel essai repart de 32 s, l'image clé où la lecture s'était arrêtée…
+    expect(seeks[seeksBefore]).toBeGreaterThanOrEqual(32 - 0.01);
+    // …et le tampon d'avant est gardé : aucun vidage depuis zéro.
+    const removals = buffers.flatMap((b, i) => b.removed.slice(removedBefore[i]));
+    for (const [from] of removals) expect(from).toBeGreaterThan(25);
+    expect(onError).not.toHaveBeenCalled();
+    mse.destroy();
+  });
 });
 
 // Fuzz du 24/09/2026 (graine 30054481) : pendant qu'un saut est servi, le spectateur saute dans une

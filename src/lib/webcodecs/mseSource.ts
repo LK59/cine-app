@@ -285,7 +285,15 @@ export class MseSource {
    */
   private pendingStart: number | null = null;
   private lastAppendAt = 0;
-  /** How far the reader has read, on the player's clock — for the trace of a misplaced reader. */
+  /**
+   * Jusqu'où le lecteur de fichier a lu, **sur l'horloge du fichier** — celle de
+   * `segment.endSeconds` et de `Remuxer.seekTo`, sans le décalage de présentation. Qui la compare
+   * au tampon ou à la tête lui ajoute `delaySeconds` ; qui y range une position du lecteur le lui
+   * retire. Le commentaire la disait sur l'horloge du lecteur, et trois écrivains sur quatre l'ont
+   * cru : le nouvel essai d'une coupure réseau retirait le décalage une seconde fois, repartait du
+   * groupe d'avant quand la lecture s'était arrêtée pile sur une image clé, et ce groupe, commencé
+   * sous la tête, faisait vider les deux tampons (audit du 29/09/2026).
+   */
   private readUpTo = 0;
 
 
@@ -1180,7 +1188,8 @@ export class MseSource {
       }
       trace(`relecture de ce que le navigateur a retiré, depuis ${hole.toFixed(1)} s`);
       this.remuxer.seekTo(Math.max(0, hole - this.delaySeconds));
-      this.readUpTo = hole;
+      // Sur l'horloge du fichier, comme la lecture qui vient de lui être demandée.
+      this.readUpTo = Math.max(0, hole - this.delaySeconds);
       this.ended = false;
       this.trimBeforeNextAppend = true;
       void this.fill();
@@ -1432,7 +1441,8 @@ export class MseSource {
     this.generation += 1;
     this.ended = false;
     this.seekState.serving(playerSeconds);
-    this.readUpTo = playerSeconds;
+    // Sur l'horloge du fichier : là où le lecteur de fichier va être envoyé, plus bas.
+    this.readUpTo = Math.max(0, playerSeconds - this.delaySeconds);
     this.seeksServed += 1;
     // The refill starting below deserves the same grace as any other: without this the watchdog
     // sees a playhead on nothing, does not know a seek has just served it, and seeks again to
@@ -1577,7 +1587,9 @@ export class MseSource {
       // Un saut, une reprise ou une destruction entre-temps a tout repositionné : rien à reprendre.
       if (this.destroyed || this.generation !== generation) return;
       this.networkHold = false;
-      this.remuxer.seekTo(Math.max(0, this.readUpTo - this.delaySeconds));
+      // `readUpTo` est déjà sur l'horloge du fichier : lui retirer le décalage repartait du groupe
+      // d'avant quand la lecture s'était arrêtée pile sur une image clé — sous la tête, donc vidage.
+      this.remuxer.seekTo(this.readUpTo);
       this.trimBeforeNextAppend = true;
       void this.fill();
     }, delay);
