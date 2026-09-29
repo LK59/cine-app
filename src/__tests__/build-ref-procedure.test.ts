@@ -7,7 +7,7 @@
 // vient de `tools/build-ref.sh` (hash court, suffixé `-dirty` si l'arbre suivi a des changements),
 // et chaque commande de build locale montrée par la doc doit la passer : c'est celle qu'on copie.
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const RACINE = join(__dirname, "..", "..");
@@ -36,7 +36,13 @@ function construitLocalement(ligne: string): boolean {
   return /docker compose(\s+-\S+(\s+\S+)?)*\s+build\b/.test(ligne) || /\s--build\b/.test(ligne);
 }
 
-describe("procédure de build : BUILD_REF", () => {
+// Le build de l'image n'embarque pas la documentation (`.dockerignore` : `*.md` sauf README) et
+// y lance la suite (`RUN npm test`) : ce test y trouvait `/app/CLAUDE.md` absent et cassait le
+// build alors que la porte et la CI, qui ont le dépôt entier, passaient. La doc n'est vérifiée que
+// là où elle est.
+const DOC_PRESENTE = DOCS.every((doc) => existsSync(join(RACINE, doc)));
+
+describe.skipIf(!DOC_PRESENTE)("procédure de build : BUILD_REF", () => {
   for (const doc of DOCS) {
     it(`${doc} : chaque build local passe ${REF}`, () => {
       const fautives = lignesDeCode(readFileSync(join(RACINE, doc), "utf8"))
