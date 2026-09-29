@@ -38,6 +38,11 @@ export interface ByteSource {
   abandon?(keepOffset: number): void;
   /** Le saut a sa première image : la lecture en avance reprend en entier. Optionnel. */
   seekSettled?(): void;
+  /**
+   * Suspend (`true`) ou rend (`false`) la lecture en avance, le temps de lire l'en-tête d'une
+   * ouverture en reprise — voir `HttpByteSource.holdReadahead`. Optionnel.
+   */
+  holdReadahead?(held: boolean): void;
   /** Le réseau depuis le dernier saut (`abandon`) — voir `NetworkWindow`. Optionnel. */
   networkSinceSeek?(): NetworkWindow | null;
   /**
@@ -791,8 +796,23 @@ export class HttpByteSource implements ByteSource {
     return this;
   }
 
+  /**
+   * La lecture en avance suspendue le temps de lire l'en-tête d'une ouverture en reprise
+   * (29/09/2026). Lire le morceau 0 lançait les morceaux 1 à 6 — le début du film, six mégaoctets
+   * qu'une reprise à vingt minutes ne lit jamais, demandés avant que quiconque sache où elle
+   * tomberait. Même un titre dont l'appareil tenait l'en-tête, l'index et la zone de reprise
+   * allait chercher ces six-là sur le réseau, et rien d'autre. Rendue dès l'en-tête lu : la
+   * lecture suivante, à la position de reprise, relance l'avance là où elle sert. Jamais pour une
+   * ouverture au début, dont ces morceaux sont les premières images.
+   */
+  private readaheadHeld = false;
+
+  holdReadahead(held: boolean): void {
+    this.readaheadHeld = held;
+  }
+
   private prefetchAfter(index: number): void {
-    if (this.controller.signal.aborted || !this.readahead) return;
+    if (this.controller.signal.aborted || !this.readahead || this.readaheadHeld) return;
     const depth = performance.now() < this.focusUntil ? SEEK_PREFETCH_CHUNKS : PREFETCH_CHUNKS;
     for (let ahead = 1; ahead <= depth; ahead++) {
       const next = index + ahead;

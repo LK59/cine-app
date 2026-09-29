@@ -164,7 +164,10 @@ them structural:
 
 - **Six-chunk readahead**, never one. One chunk is a relay rather than a pipeline: every megabyte
   paid for its own round trip before its first byte. It is never speculative — the fill loop wants
-  30 s of lead, about 20 MB.
+  30 s of lead, about 20 MB. The one exception is the header of an opening at a resume position
+  (`holdReadahead`): reading chunk 0 used to fetch chunks 1–6, the start of the film, which a resume
+  never reads — 6 MiB per resume, and the only network traffic of a resume served from the device.
+  The readahead comes back with the first read at the resume position.
 - **Chunks of one read are requested together**, so a read straddling four chunks costs one round
   trip rather than four.
 - **No round trip before the first range when the size is known.** The file description the host

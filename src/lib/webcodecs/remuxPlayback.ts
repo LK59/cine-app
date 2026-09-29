@@ -6,7 +6,7 @@
 // could branch once between the two; that engine was removed on 2026-09-24 (docs/lecteur-canvas.md).
 
 import { displayIsHdr, hdrLightCap } from "./hdrDisplay";
-import { reachable } from "./seekArrival";
+import { NO_INDEX_REACH_SECONDS, reachable } from "./seekArrival";
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource, type DiskChunks, type HeldBytes } from "./byteSource";
 import { fromMatroskaTrack, type PlayerTrack } from "./playerTrack";
@@ -244,8 +244,19 @@ async function probeOpened(source: ByteSource, options: RemuxPlaybackOptions, li
   // Named by its URL, so opening the same file again — or rebuilding after the platform closed
   // the source — does not pay for its header and index a second time. Matroska or MP4, told
   // apart by the file's own first bytes.
+  //
+  // En reprise, sans lecture en avance : elle partirait du morceau 0, vers le début du film, qu'une
+  // ouverture à cette position ne lit pas — voir `HttpByteSource.holdReadahead`. Le même seuil que
+  // celui où `MseSource.open` positionne le lecteur : en deçà, la lecture part bien du début.
   const headerAt = Date.now();
-  const file = await openMediaFile(source, options.streamUrl);
+  const resuming = options.startSeconds > NO_INDEX_REACH_SECONDS;
+  if (resuming) source.holdReadahead?.(true);
+  let file: MatroskaFile;
+  try {
+    file = await openMediaFile(source, options.streamUrl);
+  } finally {
+    if (resuming) source.holdReadahead?.(false);
+  }
   const headerMs = Date.now() - headerAt;
   trace(
     `en-tête ${headerMs < 15 ? "déjà connu" : "lu"} en ${headerMs} ms — ` +
