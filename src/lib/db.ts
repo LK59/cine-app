@@ -483,6 +483,14 @@ export interface PushSubscription {
   createdAt: number;
 }
 
+/**
+ * Les colonnes renommées vers `PushSubscription`. Un `SELECT *` rendait `user_id` et `created_at`
+ * sous un type qui annonce `userId` / `createdAt` : `push.ts` lisait `undefined` partout — les
+ * notifications aux administrateurs ne partaient vers personne, les catégories coupées par un
+ * compte partaient quand même, et le journal ne nommait aucun destinataire (29/09/2026).
+ */
+const PUSH_COLUMNS = "id, user_id AS userId, endpoint, p256dh, auth, created_at AS createdAt";
+
 export const pushDb = {
   upsert(userId: string, endpoint: string, p256dh: string, auth: string): void {
     const db = getDb();
@@ -537,11 +545,11 @@ export const pushDb = {
   },
 
   getAll(): PushSubscription[] {
-    return getDb().prepare("SELECT * FROM push_subscriptions").all() as PushSubscription[];
+    return getDb().prepare(`SELECT ${PUSH_COLUMNS} FROM push_subscriptions`).all() as PushSubscription[];
   },
 
   getByUser(userId: string): PushSubscription[] {
-    return getDb().prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").all(userId) as PushSubscription[];
+    return getDb().prepare(`SELECT ${PUSH_COLUMNS} FROM push_subscriptions WHERE user_id = ?`).all(userId) as PushSubscription[];
   },
 };
 
