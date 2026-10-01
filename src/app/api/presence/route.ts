@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { recordBeat } from "@/lib/activity/presence";
-import { deviceLabel } from "@/lib/deviceLabel";
+import { deviceLabel, readTouchHint } from "@/lib/deviceLabel";
 
 /**
  * « Je suis là » — un signal par minute de chaque onglet ouvert, pour la vue en direct de
@@ -13,7 +13,7 @@ import { deviceLabel } from "@/lib/deviceLabel";
 export async function POST(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return new NextResponse(null, { status: 401 });
-  const body = (await req.json().catch(() => null)) as { visible?: unknown; itemId?: unknown; title?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { visible?: unknown; itemId?: unknown; title?: unknown; touch?: unknown } | null;
   const itemId = typeof body?.itemId === "string" ? body.itemId.slice(0, 64) : null;
   const title = typeof body?.title === "string" ? body.title.slice(0, 200) : null;
   recordBeat(session.jti, {
@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
     at: Date.now(),
     visible: body?.visible !== false,
     playing: itemId ? { itemId, title: title ?? "" } : null,
-    device: deviceLabel(req.headers.get("user-agent")),
+    // Dans le corps et non en en-tête : le signal de départ part par `sendBeacon`.
+    device: deviceLabel(req.headers.get("user-agent"), { touch: readTouchHint(typeof body?.touch === "string" ? body.touch : null) }),
   });
   return new NextResponse(null, { status: 204 });
 }

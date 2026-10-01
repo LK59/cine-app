@@ -201,6 +201,44 @@ describe("le journal des vitesses", () => {
     expect(typeof body.build).toBe("string");
   });
 
+  it("n'envoie pas un temps compté pendant que la page était en arrière-plan", async () => {
+    // iPhone de Louis, 29-30/09/2026 : 240 s, 310 s, 717 s pour un catalogue arrivé en une ou deux
+    // secondes une fois l'application revenue — le temps passé ailleurs, compté comme une attente.
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState });
+    vi.stubGlobal("document", page);
+    try {
+      await hydrateFromDisk("louis", { has: () => false, set: () => {} });
+      page.visibilityState = "hidden";
+      page.dispatchEvent(new Event("visibilitychange"));
+      page.visibilityState = "visible";
+      page.dispatchEvent(new Event("visibilitychange"));
+      noteResponse(MOVIES_CATALOGUE_KEY, { genres: [] });
+      await settle();
+      const [call] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/startup-timing");
+      const body = JSON.parse((call[1] as RequestInit).body as string);
+      expect(body.networkMs).toBeNull();
+      expect(typeof body.hiddenAtMs).toBe("number");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("garde le temps d'une ouverture restée à l'écran", async () => {
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState });
+    vi.stubGlobal("document", page);
+    try {
+      await hydrateFromDisk("louis", { has: () => false, set: () => {} });
+      noteResponse(MOVIES_CATALOGUE_KEY, { genres: [] });
+      await settle();
+      const [call] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/startup-timing");
+      const body = JSON.parse((call[1] as RequestInit).body as string);
+      expect(typeof body.networkMs).toBe("number");
+      expect(body).not.toHaveProperty("hiddenAtMs");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("dit aussi une ouverture sans cache", async () => {
     await hydrateFromDisk("louis", { has: () => false, set: () => {} });
     noteResponse(MOVIES_CATALOGUE_KEY, { genres: [] });

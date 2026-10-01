@@ -30,6 +30,8 @@ export function logStartupTiming(fields: {
   cacheAgeMs: number | null;
   cacheMs: number | null;
   networkMs: number | null;
+  /** Quand la page est passée en arrière-plan avant la fin de l'ouverture — mesures d'après omises. */
+  hiddenAtMs?: number;
   standalone: boolean;
   /** Le stockage de l'appareil — voir `storageFacts` (persistentCache.ts). */
   persist?: string;

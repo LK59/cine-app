@@ -66,6 +66,17 @@ describe("séances", () => {
     expect(s.stop?.watched).toBe(120);
   });
 
+  it("nomme un iPad d'après l'indice tactile de ses lignes, pas d'après sa signature de Mac", () => {
+    // 30/09/2026 : l'iPad de Lucas figurait en « Mac · Safari », son lecteur le sachant pourtant iPad.
+    const IPAD_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15";
+    const [ipad, mac] = buildSeances([
+      rec({ kind: "start", session: "ipad", user: "lucas", itemId: "f", agent: IPAD_UA, touch: true }, 1000),
+      rec({ kind: "start", session: "mac", user: "sarah", itemId: "f", agent: IPAD_UA }, 2000),
+    ]).sort((a, b) => a.start - b.start);
+    expect(ipad.device).toBe("iPad · Safari");
+    expect(mac.device).toBe("Mac · Safari");
+  });
+
   it("reconstitue une séance d'avant les identifiants, sans y mêler une reconstruction", () => {
     const seances = buildSeances([
       rec({ kind: "start", user: "raphael", itemId: "p", title: "Le Parrain", rebuild: 0 }, 1000),

@@ -4,7 +4,7 @@ import { sessionDb } from "@/lib/db";
 import { revokeJellyfinDevices, revokeJellyfinToken } from "@/lib/jellyfinRevoke";
 import { forgetBeat } from "@/lib/activity/presence";
 import { logAuthEvent } from "@/lib/eventLogs";
-import { deviceLabel } from "@/lib/deviceLabel";
+import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { getClientIp } from "@/lib/api-helpers";
 
 /**
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     forgetBeat(payload.jti);
     if (device) void revokeJellyfinDevices([device], "déconnexion");
     else void revokeJellyfinToken(payload.jfToken, "déconnexion");
-    logAuthEvent("logout", { user: payload.jfUser ?? payload.u, ip: getClientIp(req), device: deviceLabel(req.headers.get("user-agent")) });
+    logAuthEvent("logout", { user: payload.jfUser ?? payload.u, ip: getClientIp(req), device: requestDeviceLabel(req) });
   }
   const res = NextResponse.json({ ok: true });
   res.cookies.set(SESSION_COOKIE, "", { maxAge: 0, path: "/" });

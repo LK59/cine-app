@@ -17,7 +17,7 @@ describe("signOut", () => {
     vi.stubGlobal("fetch", fetchMock);
     const go = vi.fn();
     await signOut(go);
-    expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", expect.objectContaining({ method: "POST" }));
     expect(go).toHaveBeenCalledWith("/login");
   });
 

@@ -70,6 +70,17 @@ export function touchHintHeaders(): Record<string, string> {
   return { [TOUCH_HINT_HEADER]: navigator.maxTouchPoints > 1 ? "1" : "0" };
 }
 
+/**
+ * Côté navigateur : un iPad qui se dit Mac — la seule signature que l'indice corrige.
+ *
+ * Pour les lignes du journal du lecteur, qui portent la signature (`agent`) et dont l'activité tire
+ * le nom de l'appareil : l'iPad de Lucas y figurait en « Mac · Safari » (30/09/2026). Seulement
+ * pour cette signature-là, pour ne pas ajouter un champ à chaque ligne d'un téléphone.
+ */
+export function isIPadPosingAsMac(): boolean {
+  return typeof navigator !== "undefined" && /Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+}
+
 /** Côté serveur : l'indice tel qu'on l'accepte — « 1 » ou « 0 », tout le reste ignoré. */
 export function readTouchHint(value: string | null | undefined): boolean | undefined {
   return value === "1" ? true : value === "0" ? false : undefined;

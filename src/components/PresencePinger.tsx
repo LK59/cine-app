@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { isPublicPath } from "@/lib/publicPaths";
 import { PRESENCE_EVERY_MS } from "@/lib/activity/presence";
+import { TOUCH_HINT_HEADER, touchHintHeaders } from "@/lib/deviceLabel";
 
 /**
  * Dit au serveur, une fois par minute, que l'application est ouverte — et ce qui y joue.
@@ -33,7 +34,10 @@ export function PresencePinger() {
     let refused = false;
     const send = (visible = document.visibilityState === "visible") => {
       if (refused) return;
-      const body = JSON.stringify({ visible, itemId: playing.current?.itemId, title: playing.current?.title });
+      // L'indice tactile dans le corps : une balise ne pose pas d'en-tête, et sans lui un iPad
+      // passait pour un Mac dans la vue en direct (`deviceLabel.ts`).
+      const touch = touchHintHeaders()[TOUCH_HINT_HEADER];
+      const body = JSON.stringify({ visible, itemId: playing.current?.itemId, title: playing.current?.title, touch });
       // En partant (arrière-plan, page fermée), `sendBeacon` survit à la page là où un fetch est coupé.
       if (!visible && typeof navigator.sendBeacon === "function") {
         navigator.sendBeacon("/api/presence", new Blob([body], { type: "application/json" }));

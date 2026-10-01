@@ -42,6 +42,24 @@ describe("POST /api/startup-timing", () => {
     expect(mockLog.mock.calls[0][0].device).toBeTruthy();
   });
 
+  it("nomme un iPad d'après l'indice tactile, et non d'après sa signature de Mac", async () => {
+    const { POST } = await import("@/app/api/startup-timing/route");
+    const req = fakeReq({ cacheUsed: false });
+    (req as unknown as { headers: Headers }).headers = new Headers({
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15",
+      "x-cine-touch": "1",
+    });
+    await POST(req);
+    expect(mockLog.mock.calls[0][0].device).toBe("iPad · Safari");
+  });
+
+  it("dit quand la page est passée en arrière-plan pendant l'ouverture", async () => {
+    await post({ cacheUsed: true, cacheMs: 400, networkMs: null, hiddenAtMs: 1200 });
+    expect(mockLog).toHaveBeenCalledWith(expect.objectContaining({ cacheMs: 400, networkMs: null, hiddenAtMs: 1200 }));
+    await post({ cacheUsed: true, cacheMs: 400, networkMs: 900 });
+    expect(mockLog.mock.calls[1][0]).not.toHaveProperty("hiddenAtMs");
+  });
+
   it("borne ce qui vient du navigateur", async () => {
     await post({ cacheUsed: "oui", cacheMs: -5, networkMs: Number.NaN, build: "x".repeat(200) });
     expect(mockLog).toHaveBeenCalledWith(expect.objectContaining({ cacheUsed: false, cacheMs: null, networkMs: null }));

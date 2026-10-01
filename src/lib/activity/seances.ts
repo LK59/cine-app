@@ -114,7 +114,7 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     title: str(r.title) ?? "?",
     start: lineTime(r),
     end: lineTime(r),
-    device: deviceLabel(str(r.agent)),
+    device: deviceLabel(str(r.agent), { touch: r.touch === true }),
     openedMs: null,
     player: r.player === "serveur" ? "serveur" : "natif",
     path: str(r.path),
@@ -151,7 +151,7 @@ function absorb(s: Seance, r: LogRecord): void {
   const t = lineTime(r);
   s.end = Math.max(s.end, t);
   s.start = Math.min(s.start, t);
-  s.device ??= deviceLabel(str(r.agent));
+  s.device ??= deviceLabel(str(r.agent), { touch: r.touch === true });
   if (r.player === "serveur") s.player = "serveur";
   const reason = str(r.reason) ?? str(r.message) ?? str(r.why) ?? "";
   switch (r.kind) {

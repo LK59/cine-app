@@ -2,6 +2,7 @@
 
 import { forgetPrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { forgetDirectInfo } from "@/lib/directInfo";
+import { touchHintHeaders } from "@/lib/deviceLabel";
 import { clearPersistedCache } from "@/lib/persistentCache";
 import { clearResumeStore } from "@/lib/resumeCache/store";
 import { forgetSearches } from "@/lib/recentSearches";
@@ -39,7 +40,7 @@ export async function signOut(go: (path: string) => void): Promise<void> {
     new Promise((resolve) => setTimeout(resolve, 500)),
   ]);
   try {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch("/api/auth/logout", { method: "POST", headers: touchHintHeaders() });
   } catch {
     // Hors ligne ou serveur absent : la page de connexion reste la destination demandée.
   }

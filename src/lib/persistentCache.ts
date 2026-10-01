@@ -4,6 +4,7 @@ import type { Middleware } from "swr";
 import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/catalogueKeys";
 import { geckoVersion } from "@/lib/webcodecs/bufferBudget";
 import { APP_BUILD, APP_VERSION } from "@/lib/appBuild";
+import { touchHintHeaders } from "@/lib/deviceLabel";
 import { readResumeIndex } from "@/lib/resumeCache/store";
 import { budgetFor } from "@/lib/resumeCache/budget";
 
@@ -257,6 +258,7 @@ export interface Hydrator {
 export async function hydrateFromDisk(account: string | null, target: Hydrator, now = Date.now()): Promise<number> {
   currentAccount = account;
   timing.startedAt = nowMs();
+  watchVisibility();
   if (!account) {
     resolveReady?.();
     return 0;
@@ -458,6 +460,33 @@ const timing: {
   sent: boolean;
 } = { startedAt: null, cacheUsed: false, cacheAgeMs: null, cacheMs: null, networkMs: null, sent: false };
 
+/**
+ * Le premier passage en arrière-plan depuis le début de la navigation, s'il y en a eu un.
+ *
+ * Une mesure prise après ne dit plus ce que la personne a attendu : la PWA lancée puis quittée
+ * aussitôt, ou suspendue par iOS pendant son chargement, comptait tout le temps passé ailleurs —
+ * 240 s, 310 s, 717 s pour un catalogue arrivé en une ou deux secondes une fois l'application
+ * revenue (iPhone de Louis, 29-30/09/2026), et la médiane de la semaine avec. Une mesure qui le
+ * suit n'est pas envoyée ; `hiddenAtMs` dit pourquoi elle manque.
+ */
+let firstHiddenAt: number | null = null;
+let watchingVisibility = false;
+
+function watchVisibility(): void {
+  if (watchingVisibility || typeof document === "undefined") return;
+  watchingVisibility = true;
+  // Déjà cachée quand le code arrive : chargée en arrière-plan, rien de ce qui suit n'est une attente.
+  if (document.visibilityState === "hidden") firstHiddenAt = nowMs();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && firstHiddenAt === null) firstHiddenAt = nowMs();
+  });
+}
+
+/** Une mesure prise avant tout passage en arrière-plan, seule à valoir quelque chose. */
+function beforeHidden(ms: number | null): number | null {
+  return ms !== null && (firstHiddenAt === null || ms < firstHiddenAt) ? ms : null;
+}
+
 /** Depuis le début de la navigation : c'est ce que la personne a attendu, chargement compris. */
 function nowMs(): number {
   try {
@@ -475,14 +504,16 @@ function reportTiming(): void {
     version: APP_VERSION,
     cacheUsed: timing.cacheUsed,
     cacheAgeMs: timing.cacheAgeMs,
-    cacheMs: timing.cacheMs,
-    networkMs: timing.networkMs,
+    cacheMs: beforeHidden(timing.cacheMs),
+    networkMs: beforeHidden(timing.networkMs),
+    ...(firstHiddenAt !== null && (timing.networkMs === null || timing.networkMs >= firstHiddenAt) ? { hiddenAtMs: firstHiddenAt } : {}),
     standalone: typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches === true,
   };
   const send = (storage: Record<string, string | number | boolean>) => {
     try {
       const body = JSON.stringify({ ...fields, storage });
-      void fetch("/api/startup-timing", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+      // L'indice tactile : sans lui, un iPad s'inscrit « Mac » au journal (`deviceLabel.ts`).
+      void fetch("/api/startup-timing", { method: "POST", headers: { "Content-Type": "application/json", ...touchHintHeaders() }, body, keepalive: true }).catch(() => {});
     } catch {
       /* un journal ne vaut pas une erreur */
     }
@@ -501,6 +532,8 @@ export function resetPersistentCacheForTests(): void {
   writeTimer = null;
   dbPromise = null;
   Object.assign(timing, { startedAt: null, cacheUsed: false, cacheAgeMs: null, cacheMs: null, networkMs: null, sent: false });
+  firstHiddenAt = null;
+  watchingVisibility = false;
 }
 
 /** Pour les tests : écrire tout de suite ce qui attend. */

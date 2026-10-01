@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
-import { deviceLabel } from "@/lib/deviceLabel";
+import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { logStartupTiming } from "@/lib/eventLogs";
 import { startupTimingAllowed } from "@/lib/writeLimits";
 
@@ -51,13 +51,16 @@ export async function POST(req: NextRequest) {
   if (!body) return NextResponse.json({ error: "Corps invalide" }, { status: 400 });
   logStartupTiming({
     user: session.jfUser ?? session.u,
-    device: deviceLabel(req.headers.get("user-agent")),
+    device: requestDeviceLabel(req),
     build: typeof body.build === "string" ? body.build.slice(0, 40) : null,
     version: typeof body.version === "string" ? body.version.slice(0, 20) : null,
     cacheUsed: body.cacheUsed === true,
     cacheAgeMs: ms(body.cacheAgeMs),
     cacheMs: ms(body.cacheMs),
     networkMs: ms(body.networkMs),
+    // La page est passée en arrière-plan pendant l'ouverture : les mesures d'après ne sont pas
+    // envoyées (`beforeHidden`, persistentCache.ts), et ceci dit pourquoi elles manquent.
+    ...(ms(body.hiddenAtMs) !== null ? { hiddenAtMs: ms(body.hiddenAtMs) as number } : {}),
     standalone: body.standalone === true,
     ...storageOf(body.storage),
   });
