@@ -725,6 +725,66 @@ describe("MseSource", () => {
       for (const end of ends) expect(end).toBeLessThanOrEqual(10.2);
     });
 
+    /** *Forrest Gump* sur l'iPad de Lucas : 4K légère, son à 0,09 Mo/s — 180 ko par segment de 2 s. */
+    function forrestGumpRemuxer(segments: number, keyframeAtOrBefore?: (s: number) => number) {
+      const remuxer = fakeRemuxer(segments);
+      const next = remuxer.nextSegment.bind(remuxer);
+      remuxer.nextSegment = async () => {
+        const segment = await next();
+        if (!segment) return segment;
+        const picture = new Uint8Array(1);
+        Object.defineProperty(picture, "byteLength", { value: 2e6 });
+        const sound = new Uint8Array(1);
+        Object.defineProperty(sound, "byteLength", { value: 180e3 });
+        return { ...segment, video: [picture], audio: sound };
+      };
+      return keyframeAtOrBefore ? Object.assign(remuxer, { keyframeAtOrBefore }) : remuxer;
+    }
+
+    it("après un saut en avant, ne refait pas toute l'avance du son tant que son arrière n'est pas retiré", async () => {
+      // 30/09/2026 : +10 s, l'arrière du son pas encore retiré (le retrait attend la fin du saut),
+      // l'avance refaite en entier — 60 s de son pour un plafond qui en tenait à peine autant, et
+      // WebKit a retiré lui-même le son sous la tête.
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue(IPAD);
+      Object.defineProperty(navigator, "maxTouchPoints", { value: 5, configurable: true });
+      traceReset();
+      const video = fakeVideo();
+      await MseSource.attach(video, forrestGumpRemuxer(400), PLAN, { onError: vi.fn() });
+      await until(() => traceText().includes("budget WebKit mobile"), "le budget écrit dans la trace");
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) >= 20, "l'avance faite");
+      await new Promise((r) => setTimeout(r, 50));
+      const [videoBuffer, audioBuffer] = FakeSource.instances[0].buffers;
+      // La tête vient de sauter à 40 s, encore `seeking` : 30 s derrière, 20 s devant.
+      Object.assign(video, { seeking: true });
+      (video as unknown as { currentTime: number }).currentTime = 40;
+      videoBuffer.setBuffered(10, 60);
+      audioBuffer.setBuffered(10, 60);
+      const sent = audioBuffer.appended.length;
+      video.dispatchEvent(new Event("timeupdate"));
+      await new Promise((r) => setTimeout(r, 50));
+      // 5,5 Mo × 0,75 à 0,09 Mo/s, moins la marge : ~39 s en tout, dont 30 déjà derrière — il ne
+      // reste pas de quoi aller au-delà des 20 s déjà devant.
+      expect(audioBuffer.appended.length).toBe(sent);
+      expect(audioBuffer.buffered.end(0)).toBe(60);
+    });
+
+    it("retire le son derrière la tête jusqu'à son budget, sans attendre l'image clé de l'image", async () => {
+      // Un groupe de 28 s ouvert à 10 s : l'image ne peut rien retirer après 10 s, le son si.
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue(IPAD);
+      Object.defineProperty(navigator, "maxTouchPoints", { value: 5, configurable: true });
+      const video = fakeVideo();
+      const remuxer = forrestGumpRemuxer(400, (s: number) => (s >= 10 && s < 38 ? 10 : Math.floor(s / 2) * 2));
+      await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) > 12, "du média chargé");
+      const [videoBuffer, audioBuffer] = FakeSource.instances[0].buffers;
+      (video as unknown as { currentTime: number }).currentTime = 30;
+      videoBuffer.setBuffered(0, 36);
+      audioBuffer.setBuffered(0, 36);
+      video.dispatchEvent(new Event("timeupdate"));
+      await until(() => audioBuffer.removed.some(([s, e]) => s === 0 && e > 10.2 && e < 30), "le son retiré au-delà de l'image clé");
+      for (const [, end] of videoBuffer.removed.filter(([s]) => s === 0)) expect(end).toBeLessThanOrEqual(10.2);
+    });
+
     it("sur Chrome, borne aussi l'avance à ses 150 Mio", async () => {
       vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
       traceReset();

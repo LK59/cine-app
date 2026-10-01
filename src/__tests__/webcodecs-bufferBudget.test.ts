@@ -112,7 +112,7 @@ describe("le budget d'un tampon", () => {
   it("garde derrière les trente secondes d'avant quand le plafond est loin", () => {
     // Banc du 25/09/2026, Chrome, 12 Angry Men (1,8 Mo/s) : une part fixe du plafond ne gardait que
     // 17,6 s derrière quand 87 s tenaient — un « −30 s » allait relire le réseau pour rien.
-    expect(laneBudget(150 * 1024 * 1024, 1.8e6, 30, 30, 8)).toEqual({ aheadSeconds: 30, behindSeconds: 30 });
+    expect(laneBudget(150 * 1024 * 1024, 1.8e6, 30, 30, 8)).toMatchObject({ aheadSeconds: 30, behindSeconds: 30 });
   });
 
   it("laisse toujours de quoi faire un petit pas en arrière sur un iPad en 4K", () => {
@@ -127,12 +127,20 @@ describe("le budget d'un tampon", () => {
     expect(b.behindSeconds).toBeLessThan(6);
   });
 
+  it("dit ce que le tampon tient en tout, avance et arrière réunis", () => {
+    const b = laneBudget(WEBKIT_MOBILE_SOURCE_BUFFER_BYTES, TED_LASSO, 30, 30, 8)!;
+    expect(b.totalSeconds * TED_LASSO).toBeCloseTo(WEBKIT_MOBILE_SOURCE_BUFFER_BYTES * 0.85, -3);
+    expect(b.aheadSeconds + b.behindSeconds).toBeLessThanOrEqual(b.totalSeconds + 1e-9);
+  });
+
   it("ne dit rien tant que le débit n'est pas mesuré", () => {
     expect(laneBudget(WEBKIT_MOBILE_SOURCE_BUFFER_BYTES, null, 30, 30, 8)).toBeNull();
   });
 
   it("prend le plus serré des deux tampons", () => {
-    expect(tightest({ aheadSeconds: 20, behindSeconds: 10 }, { aheadSeconds: 12, behindSeconds: 15 }, null)).toEqual({ aheadSeconds: 12, behindSeconds: 10 });
+    expect(
+      tightest({ aheadSeconds: 20, behindSeconds: 10, totalSeconds: 40 }, { aheadSeconds: 12, behindSeconds: 15, totalSeconds: 30 }, null)
+    ).toEqual({ aheadSeconds: 12, behindSeconds: 10, totalSeconds: 30 });
     expect(tightest(null, null)).toBeNull();
   });
 });

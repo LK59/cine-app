@@ -33,6 +33,21 @@ export const WEBKIT_MAC_SOURCE_BUFFER_BYTES = 318_767_104;
 const AUDIO_ONLY_SHARE = 0.05;
 
 /**
+ * La part du plafond du son qu'on se donne vraiment, avant la marge de `USABLE_SHARE`.
+ *
+ * 30/09/2026, iPad de Lucas, *Forrest Gump* en 4K : deux arrêts de cinq secondes, tous deux juste
+ * après un saut de +10 s, tous deux ouverts par « le navigateur a retiré audio 1559.87–1590.37 —
+ * tête à 1563.7 s » : WebKit avait vidé le son *sous* la tête, l'image restant là. Le budget comptait
+ * 5,5 Mo de son à 0,09 Mo/s ; tenus, 60 s (1530–1590 s) — le plafond, à quelques pour cent près. Le
+ * débit mesuré est celui des segments envoyés ; ce que WebKit compte pour chaque échantillon en plus
+ * de ses octets n'est pas mesuré, et le son en a une trentaine par seconde de quelques kilo-octets
+ * chacun. Un quart de plafond en moins ne coûte qu'un peu d'avance de son, qui se relit en un
+ * instant ; le son retiré sous la tête, lui, coûte un arrêt. L'autre moitié du correctif est dans
+ * `MseSource.audioRoom`.
+ */
+export const AUDIO_LANE_SHARE = 0.75;
+
+/**
  * La part du plafond pour l'avance, et pour l'avance et l'arrière réunis — le reste est la marge
  * des envois en vol, que le navigateur compte avant de les accepter.
  */
@@ -168,6 +183,12 @@ export interface BufferBudget {
   aheadSeconds: number;
   /** Ce qu'on garde derrière la tête ; au-delà, on retire nous-mêmes. */
   behindSeconds: number;
+  /**
+   * Ce que le tampon peut tenir en tout, devant et derrière réunis. L'avance et l'arrière n'y
+   * tiennent ensemble que si l'arrière a été retiré à temps — ce qui n'est pas le cas juste après un
+   * saut en avant, où ce qui était devant passe derrière d'un coup.
+   */
+  totalSeconds: number;
 }
 
 /**
@@ -184,7 +205,7 @@ export function laneBudget(quotaBytes: number, bytesPerSecond: number | null, ma
   // du plafond le rognait pour rien sur un fichier léger : 17,6 s gardées derrière sur Chrome quand
   // 87 s tenaient (banc du 25/09/2026). Un débit si lourd que l'avance minimale mange déjà le
   // plafond : c'est lui qui cède, jusqu'à une seconde.
-  return { aheadSeconds: ahead, behindSeconds: Math.max(1, Math.min(maxBehind, usable - ahead)) };
+  return { aheadSeconds: ahead, behindSeconds: Math.max(1, Math.min(maxBehind, usable - ahead)), totalSeconds: usable };
 }
 
 /** Le plus serré des deux tampons : l'image et le son se lisent ensemble. */
@@ -194,5 +215,6 @@ export function tightest(...budgets: (BufferBudget | null)[]): BufferBudget | nu
   return {
     aheadSeconds: Math.min(...known.map((b) => b.aheadSeconds)),
     behindSeconds: Math.min(...known.map((b) => b.behindSeconds)),
+    totalSeconds: Math.min(...known.map((b) => b.totalSeconds)),
   };
 }

@@ -17,7 +17,7 @@ import { PlaybackGuard } from "./playbackGuard";
 import { NO_INDEX_REACH_SECONDS, reachable, seekArrived } from "./seekArrival";
 import { LANDING_REACH_SECONDS, SeekLifecycle, landingFor } from "./seekLifecycle";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
-import { ByteRate, currentSourceBufferQuota, laneBudget, tightest, type BufferBudget } from "./bufferBudget";
+import { AUDIO_LANE_SHARE, ByteRate, currentSourceBufferQuota, laneBudget, tightest, type BufferBudget } from "./bufferBudget";
 
 // Kept exported from here as well: every caller of these already reaches for this module, and
 // moving where they live should not mean touching a dozen call sites.
@@ -809,6 +809,10 @@ export class MseSource {
 
   private async runFill(): Promise<void> {
     if (this.destroyed || this.ended || this.networkHold) return;
+    // À chaque battement d'horloge aussi, pas seulement après un envoi : une avance bornée par la
+    // place du son (`audioRoom`) n'envoie plus rien, et l'arrière qui la bornait ne serait alors
+    // retiré qu'une fois l'avance tombée au plancher.
+    this.trimBehind();
     const generation = this.generation;
     // Media accepted but not retained leaves the depth where it was. A handful of segments that
     // change nothing is a browser quietly discarding what it is given, and reading the rest of
@@ -1204,7 +1208,7 @@ export class MseSource {
     if (!this.quota) return null;
     const budget = tightest(
       this.videoOps ? laneBudget(this.quota.video, this.videoRate.bytesPerSecond, TARGET_BUFFER_SECONDS, KEEP_BEHIND_SECONDS, MIN_BUFFER_SECONDS) : null,
-      this.audioOps ? laneBudget(this.quota.audio, this.audioRate.bytesPerSecond, TARGET_BUFFER_SECONDS, KEEP_BEHIND_SECONDS, MIN_BUFFER_SECONDS) : null
+      this.audioBudget
     );
     // Écrit à la première mesure, puis quand il bouge d'au moins trois secondes : de quoi lire au
     // journal ce que le lecteur visait, sans une ligne par segment.
@@ -1220,9 +1224,47 @@ export class MseSource {
     return budget;
   }
 
-  /** L'avance visée : la plus petite de la cible de ce fichier et du budget en octets. */
+  /** Le budget du son seul, sur la part de son plafond qu'on se donne (`AUDIO_LANE_SHARE`). */
+  private get audioBudget(): BufferBudget | null {
+    if (!this.quota || !this.audioOps) return null;
+    return laneBudget(this.quota.audio * AUDIO_LANE_SHARE, this.audioRate.bytesPerSecond, TARGET_BUFFER_SECONDS, KEEP_BEHIND_SECONDS, MIN_BUFFER_SECONDS);
+  }
+
+  /**
+   * L'avance que le tampon du son peut encore prendre sans passer son plafond, compte tenu de ce
+   * qu'il tient *réellement* derrière la tête (et ailleurs) — null sans budget.
+   *
+   * Le budget suppose l'arrière déjà ramené au sien. Ce n'est pas le cas juste après un saut en
+   * avant : ce qui était devant passe derrière d'un coup, le retrait attend que le saut soit fini
+   * (`trimBehind`), et l'avance, elle, se refaisait aussitôt en entier. iPad, *Forrest Gump*,
+   * 30/09/2026 : +10 s, 60 s de son tenus pour un plafond qui en tenait à peine autant, et WebKit
+   * a retiré lui-même le son de 1559,87 à 1590,37 s, tête à 1563,7 s — l'élément est resté
+   * `seeking` cinq secondes sur une image présente. Deux fois dans le film. L'image n'a pas cette
+   * borne : son arrière ne peut pas descendre sous l'image clé de la tête (`behindLimit`), et un
+   * long groupe la tiendrait au plancher de huit secondes pendant tout le groupe.
+   */
+  private audioRoom(): number | null {
+    const budget = this.audioBudget;
+    const ranges = this.audioOps?.buffer.buffered;
+    if (!budget || !ranges) return null;
+    const now = this.anchor;
+    let held = 0;
+    let ahead = 0;
+    for (let i = 0; i < ranges.length; i++) {
+      held += ranges.end(i) - ranges.start(i);
+      if (ranges.start(i) <= now + 0.1 && now < ranges.end(i)) ahead = ranges.end(i) - now;
+    }
+    return budget.totalSeconds - (held - ahead);
+  }
+
+  /**
+   * L'avance visée : la plus petite de la cible de ce fichier, du budget en octets, et de la place
+   * que le son a réellement (`audioRoom`) — jamais sous le plancher de huit secondes, sans quoi un
+   * arrière pas encore retiré arrêterait la lecture elle-même.
+   */
   private get aheadTarget(): number {
-    return Math.min(this.targetBuffer, this.budget?.aheadSeconds ?? Infinity);
+    const room = this.audioRoom();
+    return Math.min(this.targetBuffer, this.budget?.aheadSeconds ?? Infinity, room === null ? Infinity : Math.max(MIN_BUFFER_SECONDS, room));
   }
 
   /**
@@ -1230,14 +1272,19 @@ export class MseSource {
    * choisir quoi jeter au milieu d'un envoi — souvent juste après un saut, pendant que la tête
    * se déplace. Pas pendant un saut : la tête n'y est pas encore à sa place.
    */
+  //
+  // Le son jusqu'à la limite exacte, lui : chacune de ses trames est une image clé, et rien de ce
+  // qui précède la tête n'emporte celle qu'on entend. Borné comme l'image à l'image clé de la tête,
+  // il gardait derrière lui tout un groupe — 28 s sur *Ford v Ferrari* — dans un plafond de 5,5 Mo.
   private trimBehind(): void {
     const budget = this.budget;
     if (!budget || this.seekState.pending || this.video.seeking) return;
-    const until = this.behindLimit(this.video.currentTime - budget.behindSeconds, 0);
-    if (until <= 0) return;
+    const wanted = this.video.currentTime - budget.behindSeconds;
     for (const queue of [this.videoOps, this.audioOps]) {
       const buffer = queue?.buffer;
       if (!queue || !buffer || buffer.buffered.length === 0) continue;
+      const until = queue === this.audioOps ? wanted : this.behindLimit(wanted, 0);
+      if (until <= 0) continue;
       if (buffer.buffered.start(0) >= until - TRIM_SLACK_SECONDS) continue;
       void this.removeRange(queue, 0, until).catch(() => {});
     }
