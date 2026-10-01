@@ -17,9 +17,8 @@ vi.mock("@/lib/webcodecs/mediaFile", async (importOriginal) => ({
   mediaHeaderKey: (await importOriginal<typeof import("@/lib/webcodecs/mediaFile")>()).mediaHeaderKey,
   openMediaFile: (...a: unknown[]) => h.openMediaFile(...(a as [])),
 }));
-vi.mock("@/lib/prefetch", () => ({ preloadQuietly: () => h.preload() }));
+vi.mock("@/lib/directInfo", () => ({ fetchDirectInfo: () => h.preload() }));
 vi.mock("@/lib/playbackPrefetch", () => ({
-  directInfoKey: (id: string) => `/api/jellyfin/direct/${id}`,
   prefetchPlaybackState: (id: string) => h.prefetchState(id),
 }));
 

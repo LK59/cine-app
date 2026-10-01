@@ -476,7 +476,7 @@ describe("ce que Lire trouve déjà prêt", () => {
 
   it("le lecteur lit la description sous la clé que la fiche précharge", () => {
     const host = code("src/components/ExperimentalPlayerHost.tsx");
-    expect(host).toContain("useSWR<DirectPlayInfo>(directInfoKey(itemId)");
+    expect(host).toContain("useSWR<DirectPlayInfo>([directInfoKey(itemId), openingId], () => directInfoForOpening(itemId)");
     expect(host).toContain("takePrefetchedPlaybackState(itemId) ?? fetchPlaybackState(itemId)");
     // L'adresse écrite à la main, qui ferait précharger dans le vide.
     expect(host).not.toMatch(/`\/api\/jellyfin\/(direct|playback-state)\//);

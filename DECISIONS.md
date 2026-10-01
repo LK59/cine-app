@@ -444,25 +444,34 @@ film, ou l'épisode à reprendre —, **jamais** depuis une carte ni une ligne d
 quand c'est le lecteur natif qui ouvrira (même règle que `PlayerHost`). L'état du spectateur n'est
 repris que s'il a moins de trente secondes, une seule fois, et il est oublié à chaque fermeture de
 lecteur et à chaque « vu » coché à la main : une position gardée à travers une lecture ferait
-reprendre le film là où il en était avant.
+reprendre le film là où il en était avant. La description n'est reprise que si elle a moins de
+cinq minutes : elle porte la taille et l'ETag qui décident si les octets gardés sur l'appareil sont
+ceux du fichier.
 
 **Porteurs.** `usePlaybackPrefetch(itemId)` (`src/lib/usePlaybackPrefetch.ts`) côté fiche ;
-`src/lib/playbackPrefetch.ts` pour le reste — `directInfoKey`, `fetchPlaybackState`,
-`prefetchPlaybackState`, `takePrefetchedPlaybackState`, `forgetPrefetchedPlaybackState`.
+`src/lib/playbackPrefetch.ts` pour l'état du spectateur — `directInfoKey`, `fetchPlaybackState`,
+`prefetchPlaybackState`, `takePrefetchedPlaybackState`, `forgetPrefetchedPlaybackState` ;
+`src/lib/directInfo.ts` pour la description — `fetchDirectInfo`, `directInfoForOpening`,
+`forgetDirectInfo`. Jamais `preload` de SWR pour la description : il garde une réponse jusqu'à ce
+qu'un hook la prenne, des heures s'il le faut.
 
 **Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`. Lecteur natif :
-`ExperimentalPlayerHost` lit la description sous `directInfoKey` (SWR reprend la demande en vol)
-et prend l'état préparé, sinon le demande. L'oubli : `refreshAfterPlayback` (avant et après le
+`ExperimentalPlayerHost` lit la description par `directInfoForOpening`, sous une clé SWR propre à
+chaque ouverture, et prend l'état préparé, sinon le demande. Le cache de reprise (`recordTitle`) et
+l'épisode suivant (`warmNextEpisode`) passent par `fetchDirectInfo`. L'oubli : `refreshAfterPlayback` (avant et après le
 rapport d'arrêt) et `revalidateWatchState`.
 
-**Tests.** `playbackPrefetch.test.tsx`, `ExperimentalPlayerHost.test.tsx` (« ce que la fiche a
-préparé avant Lire »), `decisions-partagees.test.ts`.
+**Tests.** `playbackPrefetch.test.tsx`, `directInfo.test.ts`, `ExperimentalPlayerHost.test.tsx`
+(« ce que la fiche a préparé avant Lire »), `decisions-partagees.test.ts`.
 
 **Voulu.** Le lecteur serveur ne consomme rien de ce qui est préparé : il ne lit pas la
 description, et `resolveResumeAt` ne sert qu'aux appelants qui ne connaissent pas la position.
-La description, elle, reste en cache toute la session — c'était déjà le cas dans l'hôte, et le
-fichier ne change pas sous un film ; une taille périmée est corrigée par le flux lui-même (voir
-DOC-TECH, « `byteSource` — HTTP range reads »).
+La description restait en cache toute la session, sur l'idée qu'une taille périmée serait corrigée
+par le flux lui-même. C'était vrai tant que tout venait du réseau ; avec la reprise depuis
+l'appareil, une description périmée *et* des octets gardés du même fichier s'accordent, et le
+contrôle les sert : *Ted Lasso* S04E09 ouvert en 1080p chez Lucas après son remplacement par une 4K
+(30/09/2026). Une fois ouverte, la description ne bouge plus pendant le film — le fichier ne change
+pas sous lui, et la revalider reconstruisait le lecteur.
 
 ---
 

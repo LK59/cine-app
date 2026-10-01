@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { AlertTriangle, RotateCw, WifiOff, X } from "lucide-react";
-import { fetcher, playerBootstrapOptions, refreshAfterPlayback } from "@/lib/swr";
+import { playerBootstrapOptions, refreshAfterPlayback } from "@/lib/swr";
+import { directInfoForOpening } from "@/lib/directInfo";
 import { directInfoKey, fetchPlaybackState, takePrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { errorMessage, isUpstreamUnreachable } from "@/lib/upstreamError";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -938,9 +939,15 @@ export function ExperimentalPlayerHost({
   // depends on, so the whole pipeline was torn down and rebuilt behind the viewer's back: a
   // second decoder, a second encoder, a second MediaSource, and the first one's read loop still
   // running against buffers its source had already released.
-  // La clé que la fiche a préchargée à son ouverture (`usePlaybackPrefetch`) : la même, sans quoi
-  // le préchargement tomberait à côté et Lire reposerait la question.
-  const { data: info, error: infoError } = useSWR<DirectPlayInfo>(directInfoKey(itemId), fetcher, {
+  //
+  // Fetched once *per opening*, though: the key carries this mount's identity. Under the bare
+  // address, SWR served whatever an earlier opening — or a `preload` nobody had taken yet — left
+  // there, never revalidated, and that description names the file the device's bytes must match:
+  // a file replaced since was opened on its old bytes (Ted Lasso S04E09, Android, 30/09/2026).
+  // What the sheet asked for in advance is still taken, through `directInfoForOpening`, as long
+  // as it is under five minutes old (`directInfo.ts`).
+  const openingId = useId();
+  const { data: info, error: infoError } = useSWR<DirectPlayInfo>([directInfoKey(itemId), openingId], () => directInfoForOpening(itemId), {
     // La description du fichier est ce qui décide du chemin de lecture : la mettre en pause parce
     // qu'un film occupe l'écran, c'est attendre que le film commence pour savoir comment le lire.
     ...playerBootstrapOptions,

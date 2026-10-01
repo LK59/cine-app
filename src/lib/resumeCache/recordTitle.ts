@@ -1,7 +1,5 @@
-import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
+import { fetchDirectInfo } from "@/lib/directInfo";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
-import { directInfoKey } from "@/lib/playbackPrefetch";
-import { preloadQuietly } from "@/lib/prefetch";
 import { CHUNK_SIZE, HttpByteSource } from "@/lib/webcodecs/byteSource";
 import type { MatroskaFile } from "@/lib/webcodecs/matroska";
 import { resumeEnd } from "./coverage";
@@ -50,7 +48,9 @@ export async function recordTitle(
   const generation = resumeStoreGeneration();
   const stop = () => resumeStoreGeneration() !== generation || (whilePlaying ? signal.aborted : mustStop(signal));
   try {
-    const info = await preloadQuietly<DirectPlayInfo>(directInfoKey(target.itemId));
+    // Jamais une description de plus de cinq minutes (`directInfo.ts`) : c'est elle qui nomme le
+    // fichier gardé, et celle du lecteur doit pouvoir la démentir quand le fichier a changé.
+    const info = await fetchDirectInfo(target.itemId).catch(() => undefined);
     if (!info?.streamUrl || !info.sizeBytes || !info.fileVersion || stop()) return 0;
     const identity = { itemId: target.itemId, streamUrl: info.streamUrl, size: info.sizeBytes, fileVersion: info.fileVersion };
     const previous = await readResumeManifest(account, target.itemId);

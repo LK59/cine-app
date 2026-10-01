@@ -1,6 +1,7 @@
 "use client";
 
 import { forgetPrefetchedPlaybackState } from "@/lib/playbackPrefetch";
+import { forgetDirectInfo } from "@/lib/directInfo";
 import { clearPersistedCache } from "@/lib/persistentCache";
 import { clearResumeStore } from "@/lib/resumeCache/store";
 import { forgetSearches } from "@/lib/recentSearches";
@@ -21,6 +22,8 @@ export async function signOut(go: (path: string) => void): Promise<void> {
   // ne recharge pas la page : le compte suivant, ouvrant le même film dans les trente secondes,
   // reprenait à la position du compte qui venait de partir (chasse aux bugs du 22/09/2026).
   forgetPrefetchedPlaybackState();
+  // La description des fichiers aussi : la route la refuse à un compte qui lit par le serveur.
+  forgetDirectInfo();
   // Les recherches récentes ne sont rangées sous aucun compte : le suivant voyait ce que le
   // précédent avait tapé et ouvert (audit du 26/09/2026).
   forgetSearches();

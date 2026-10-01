@@ -5,7 +5,7 @@
  * description du fichier, la position et les préférences du compte, puis l'en-tête et l'index du
  * fichier lui-même — deux plages aux deux bouts de plusieurs gigaoctets. Depuis un serveur
  * lointain, c'est l'essentiel de l'attente entre deux épisodes. Les trois sont posées ici, à une
- * minute de la fin, et gardées où l'ouverture les cherche déjà : SWR pour la description,
+ * minute de la fin, et gardées où l'ouverture les cherche déjà : `directInfo.ts` pour la description (cinq minutes),
  * `prefetchPlaybackState` pour la position, le cache d'en-têtes de `parseMatroska` pour le fichier.
  *
  * Depuis le 28/09/2026, son ouverture est aussi gardée sur l'appareil — l'en-tête, l'index et
@@ -15,9 +15,8 @@
  * questions, comme avant.
  */
 
-import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
-import { directInfoKey, prefetchPlaybackState } from "@/lib/playbackPrefetch";
-import { preloadQuietly } from "@/lib/prefetch";
+import { fetchDirectInfo } from "@/lib/directInfo";
+import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
 import { HttpByteSource } from "@/lib/webcodecs/byteSource";
 import { mediaHeaderKey, openMediaFile } from "@/lib/webcodecs/mediaFile";
 import { trace } from "@/lib/webcodecs/trace";
@@ -34,7 +33,7 @@ export async function warmNextEpisode(itemId: string): Promise<void> {
   prepared.add(itemId);
   try {
     prefetchPlaybackState(itemId);
-    const info = await preloadQuietly<DirectPlayInfo>(directInfoKey(itemId));
+    const info = await fetchDirectInfo(itemId).catch(() => undefined);
     if (!info?.streamUrl) return;
     const startedAt = Date.now();
     // L'appareil d'abord, puis l'en-tête lu *depuis* l'appareil : dans l'ordre inverse, l'en-tête et

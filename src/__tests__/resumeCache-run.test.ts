@@ -22,8 +22,8 @@ const FILES: Record<string, Uint8Array> = { [URL_A]: FILE, [URL_B]: BIG };
 let fetchedChunks: number[] = [];
 let info: { streamUrl: string; sizeBytes: number | null; fileVersion: string | null } = { streamUrl: URL_A, sizeBytes: FILE.length, fileVersion: "etag-1" };
 
-vi.mock("@/lib/prefetch", () => ({
-  preloadQuietly: async () => info,
+vi.mock("@/lib/directInfo", () => ({
+  fetchDirectInfo: async () => info,
 }));
 
 let root: FakeDir;
