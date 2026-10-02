@@ -1777,7 +1777,8 @@
     "end": {
       "finished": "Finished",
       "replay": "Watch again",
-      "done": "Done"
+      "done": "Done",
+      "suite": "Next in the collection"
     },
     "unplayable": "This file cannot be played in this browser.",
     "handingOver": "Getting playback ready…",

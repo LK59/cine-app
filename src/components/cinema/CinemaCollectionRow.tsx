@@ -2,7 +2,7 @@
 
 import { memo, useMemo } from "react";
 import useSWR from "swr";
-import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY, playerBootstrapOptions } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { PosterImage } from "@/components/PosterImage";
 import type { CinemaMovie, CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
@@ -22,7 +22,7 @@ interface CollectionPart {
 }
 
 /** Le même épisode de saga, une fois confronté à ce que cet écran sait réellement ouvrir. */
-interface ResolvedPart extends CollectionPart {
+export interface ResolvedPart extends CollectionPart {
   /**
    * Le titre du catalogue, quand cet écran le connaît — l'objet entier, pas son identifiant.
    *
@@ -71,15 +71,27 @@ interface MovieInfo {
  * *avant* de dessiner s'il y aura quelque chose, faute de quoi elle réserve un écran entier de
  * défilement à une rangée vide.
  */
-export function useCinemaCollection(radarrId: number): { name: string; parts: ResolvedPart[] } {
+export function useCinemaCollection(
+  radarrId: number | null,
+  options: {
+    /**
+     * Lu depuis le lecteur (l'écran de fin, « La suite ») : SWR est suspendu tant qu'un film tient
+     * l'écran, et une requête suspendue est abandonnée, pas différée (CLAUDE.md). Les mêmes clés,
+     * le même chemin que la rangée de la fiche — seulement autorisées à partir.
+     */
+    whilePlaying?: boolean;
+  } = {}
+): { name: string; parts: ResolvedPart[]; all: ResolvedPart[] } {
+  const live = options.whilePlaying ? playerBootstrapOptions : {};
   // La même clé que la fiche interroge déjà pour la bande-annonce : la réponse est en cache, et
   // cette rangée ne coûte donc pas une requête de plus.
-  const { data: info } = useSWR<MovieInfo>(`/api/radarr/movies/${radarrId}/info`, fetcher, {
+  const { data: info } = useSWR<MovieInfo>(radarrId === null ? null : `/api/radarr/movies/${radarrId}/info`, fetcher, {
     // Même raison que ci-dessous : la fiche ouverte au-dessus revalidait cette clé, ce qui rendait
     // un nouvel objet à la fiche du dessous et la faisait se redessiner pendant l'animation.
     revalidateOnFocus: false,
     revalidateIfStale: false,
     keepPreviousData: true,
+    ...live,
   });
   const collectionId = info?.tmdb?.collection?.id ?? null;
   const { data } = useSWR<CollectionPayload>(
@@ -88,7 +100,7 @@ export function useCinemaCollection(radarrId: number): { name: string; parts: Re
     // Lu une fois et gardé : une saga ne change pas pendant qu'on regarde une fiche, et chaque
     // revalidation rend un nouvel objet — donc une nouvelle liste, donc un nouveau rendu de la
     // rangée, au moment précis où la fiche est en train de s'animer.
-    { revalidateOnFocus: false, revalidateIfStale: false, keepPreviousData: true }
+    { revalidateOnFocus: false, revalidateIfStale: false, keepPreviousData: true, ...live }
   );
 
   /**
@@ -121,15 +133,15 @@ export function useCinemaCollection(radarrId: number): { name: string; parts: Re
    * téléphone se redessine à chaque pixel du geste de fermeture, puisque le glissement vit dans
    * son état. La rangée mémoïsée ci-dessous n'aurait alors jamais rien mémoïsé.
    */
-  const parts = useMemo(
-    () =>
-      (data?.parts ?? [])
-        .map((part): ResolvedPart => ({ ...part, movie: openableByTmdb.get(part.tmdbId) ?? null }))
-        .filter((part) => part.movie?.radarrId !== radarrId),
-    [data, openableByTmdb, radarrId]
+  // `all` : la saga entière, le film ouvert compris — ce que « La suite » de l'écran de fin lit pour
+  // savoir ce qui vient *après* lui (`collectionSuite`). La rangée, elle, le retire.
+  const all = useMemo(
+    () => (data?.parts ?? []).map((part): ResolvedPart => ({ ...part, movie: openableByTmdb.get(part.tmdbId) ?? null })),
+    [data, openableByTmdb]
   );
+  const parts = useMemo(() => all.filter((part) => part.movie?.radarrId !== radarrId), [all, radarrId]);
 
-  return { name: data?.name ?? "", parts };
+  return { name: data?.name ?? "", parts, all };
 }
 
 /**

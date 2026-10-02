@@ -1,13 +1,17 @@
 "use client";
 
 import useSWR from "swr";
-import { RotateCcw, X } from "lucide-react";
-import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
+import { Play, RotateCcw, X } from "lucide-react";
+import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY, playerBootstrapOptions } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { similarInLibrary } from "@/lib/cinemaSimilar";
 import { uniqueById } from "@/lib/cinemaRails";
+import { useCinemaCollection, type ResolvedPart } from "@/components/cinema/CinemaCollectionRow";
+import { collectionSuite } from "@/lib/collectionSuite";
+import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
+import { resumeAtFor } from "@/lib/resumePosition";
 import type { CinemaMovie, CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 
 /**
@@ -30,12 +34,18 @@ export function PlayerEndScreen({
   onReplay,
   onClose,
   onOpenTitle,
+  onPlayNext,
 }: {
   itemId: string;
   title: string;
   onReplay: () => void;
   onClose: () => void;
   onOpenTitle: (movie: CinemaMovie) => void;
+  /**
+   * Lancer « la suite » de la saga. `resumeAt` est toujours un nombre : l'état du film est lu
+   * avant de le proposer, donc sa position est connue — zéro pour un film jamais commencé.
+   */
+  onPlayNext?: (movie: CinemaMovie, resumeAt: number) => void;
 }) {
   const t = useT();
   // Lu dans le cache, jamais redemandé : c'est la charge utile que l'écran d'accueil tient déjà
@@ -45,6 +55,9 @@ export function PlayerEndScreen({
   const all = data ? uniqueById([...data.spotlight, ...Object.values(data.rows).flat()], (m) => m.radarrId) : [];
   const subject = all.find((m) => m.jellyfinItemId === itemId) ?? null;
   const similar = subject ? similarInLibrary(subject, all, (m) => m.radarrId === subject.radarrId).slice(0, 8) : [];
+  // La saga de ce film, par le même chemin que sa rangée sur la fiche — les mêmes clés, souvent déjà
+  // en cache depuis la fiche d'où le film a été lancé.
+  const collection = useCinemaCollection(subject?.radarrId ?? null, { whilePlaying: true });
 
   return (
     <div className="absolute inset-0 z-30 flex flex-col justify-end bg-linear-to-t from-black via-black/85 to-black/40">
@@ -62,6 +75,10 @@ export function PlayerEndScreen({
             {t("player.end.done")}
           </button>
         </div>
+
+        {subject && onPlayNext && (
+          <CollectionSuiteCard parts={collection.all} currentRadarrId={subject.radarrId} watched={{}} resumeTicks={{}} onPlay={onPlayNext} />
+        )}
 
         {similar.length > 0 && (
           <section className="mt-8">
@@ -82,5 +99,63 @@ export function PlayerEndScreen({
         )}
       </div>
     </div>
+  );
+}
+
+interface SuiteProps {
+  parts: ResolvedPart[];
+  currentRadarrId: number;
+  /** Ce qu'on sait déjà de « vu », titre par titre — voir `collectionSuite`. */
+  watched: Readonly<Record<string, boolean>>;
+  /** La position de reprise de ces mêmes titres, lue dans la même réponse. */
+  resumeTicks: Readonly<Record<string, number | null>>;
+  onPlay: (movie: CinemaMovie, resumeAt: number) => void;
+}
+
+/**
+ * « La suite » d'une saga : le film qui vient après, s'il y en a un à voir.
+ *
+ * La décision est `collectionSuite`, et seulement elle (DECISIONS.md §44). Elle attend l'état « vu »
+ * d'un film à la fois : ce composant le demande à Jellyfin (`SuiteAsk`) puis la rappelle avec la
+ * réponse — un film déjà vu passe la main au suivant, sans autre règle que la sienne.
+ *
+ * La même forme que la carte de l'épisode suivant, sans décompte ni lecture automatique : un film
+ * n'enchaîne pas, il se propose.
+ */
+function CollectionSuiteCard(props: SuiteProps) {
+  const t = useT();
+  const suite = collectionSuite(props.parts, props.currentRadarrId, props.watched);
+  if (suite.kind === "none") return null;
+  if (suite.kind === "ask") return <SuiteAsk key={suite.movie.jellyfinItemId} movie={suite.movie} {...props} />;
+  const { movie } = suite;
+  const resumeAt = resumeAtFor({ known: true, resumeTicks: props.resumeTicks[movie.jellyfinItemId] });
+  return (
+    <div data-collection-suite className="player-panel mt-6 w-72 max-w-full animate-fade-in-scale rounded-2xl p-4">
+      <p className="mb-1 text-xs text-subtle">{t("player.end.suite")}</p>
+      <p className="mb-3 truncate text-sm font-medium text-white">{movie.title}</p>
+      <button
+        type="button"
+        onClick={() => props.onPlay(movie, resumeAt ?? 0)}
+        className="btn-primary w-full justify-center py-1.5 text-xs"
+      >
+        <Play size={14} />
+        {t("player.playNow")}
+      </button>
+    </div>
+  );
+}
+
+/** L'état d'un film de la saga, lu chez Jellyfin pendant que le lecteur tient l'écran. */
+function SuiteAsk({ movie, ...props }: SuiteProps & { movie: CinemaMovie }) {
+  const state = useJellyfinItemState(movie.jellyfinItemId, "movie", playerBootstrapOptions);
+  // Tant qu'on ne sait pas — ou si Jellyfin n'a pas pu répondre —, rien : proposer un film peut-être
+  // déjà vu serait affirmer ce qu'on ignore.
+  if (!state.known) return null;
+  return (
+    <CollectionSuiteCard
+      {...props}
+      watched={{ ...props.watched, [movie.jellyfinItemId]: state.watched }}
+      resumeTicks={{ ...props.resumeTicks, [movie.jellyfinItemId]: state.progress?.resumeTicks ?? null }}
+    />
   );
 }

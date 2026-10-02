@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import useSWR, { mutate as globalMutate } from "swr";
+import useSWR, { mutate as globalMutate, type SWRConfiguration } from "swr";
 import { fetcher, progressKey, revalidateWatchState } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
@@ -24,7 +24,15 @@ import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/r
  * si le serveur refuse, en le disant. Attendre un aller-retour pour cocher une case donne
  * l'impression que le bouton est mort.
  */
-export function useJellyfinItemState(itemId: string | null | undefined, kind: "movie" | "series" = "movie") {
+export function useJellyfinItemState(
+  itemId: string | null | undefined,
+  kind: "movie" | "series" = "movie",
+  /**
+   * Pour un lecteur qui le lit pendant le film (`playerBootstrapOptions`) : la même clé, le même
+   * état — seulement autorisé à partir pendant que SWR est suspendu.
+   */
+  swrOptions?: SWRConfiguration
+) {
   const t = useT();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -32,7 +40,7 @@ export function useJellyfinItemState(itemId: string | null | undefined, kind: "m
   // `revalidateWatchState` relit, et deux écritures de la même clé finissent par ne plus
   // désigner la même chose.
   const key = itemId ? progressKey(itemId) : null;
-  const { data, mutate } = useSWR<CinemaProgressPayload>(key, fetcher);
+  const { data, mutate } = useSWR<CinemaProgressPayload>(key, fetcher, swrOptions);
   /**
    * Sait-on seulement ce qu'il en est ?
    *

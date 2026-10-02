@@ -912,3 +912,15 @@ describe("une seule minuterie de veille", () => {
     expect(files.filter((f) => /tickSleepTimer|chooseSleepTimer\(/.test(lire(f)))).toEqual([]);
   });
 });
+
+describe("une seule suite de saga", () => {
+  // DECISIONS.md §44. L'écran de fin lit la saga par le crochet de la rangée de la fiche — pas par
+  // une seconde route qui finirait par ranger les films autrement — et ne décide de la suite que
+  // par `collectionSuite`.
+  it("l'écran de fin passe par useCinemaCollection et collectionSuite", () => {
+    const src = lire("src/components/player/PlayerEndScreen.tsx");
+    expect(src).toMatch(/useCinemaCollection\(/);
+    expect(src).toMatch(/collectionSuite\(/);
+    expect(src).not.toMatch(/\/api\/tmdb\/collection/);
+  });
+});

@@ -1777,7 +1777,8 @@
     "end": {
       "finished": "Terminé",
       "replay": "Revoir",
-      "done": "Retour"
+      "done": "Retour",
+      "suite": "Suite"
     },
     "unplayable": "Ce fichier ne peut pas être lu dans ce navigateur.",
     "handingOver": "Préparation de la lecture…",

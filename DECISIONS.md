@@ -1312,3 +1312,28 @@ serveur, qui n'en a pas, reste sur la dernière image — en mini-lecteur, il se
 d'un film. Sur iPhone et iPad, `volume` est en lecture seule : la pause a lieu, pas la descente. Le
 rechargement de page qu'impose WebKit pour changer de piste sur le lecteur serveur la perd, comme
 le reste de la séance (docs/cycle-de-vie-lecteur.md).
+
+## 44. La suite d'une saga à la fin d'un film
+
+**Règle.** Quand un film finit, l'écran de fin propose le premier film **après** lui dans l'ordre de
+sa saga — l'ordre de la rangée de la fiche —, que le cinéma sait ouvrir et que le spectateur n'a pas
+vu (« vu » de Jellyfin). Rien pour le dernier de la saga, un film hors saga, ou quand tout ce qui suit
+a été vu ; jamais un film d'avant. Une carte « Suite · titre · Lire maintenant », de la forme de celle
+de l'épisode suivant, **sans décompte ni lecture automatique**. Lire passe la position lue chez
+Jellyfin pour ce film — un nombre, zéro s'il n'a jamais été commencé (§1).
+
+**Porteur.** `collectionSuite` (`src/lib/collectionSuite.ts`), qui dit aussi sur quel film elle
+attend l'état « vu » (`ask`). La saga vient de `useCinemaCollection` (`CinemaCollectionRow.tsx`),
+qui rend désormais `all` (la saga entière, le film ouvert compris) à côté de `parts`.
+
+**Appelants.** `PlayerEndScreen` (`CollectionSuiteCard` / `SuiteAsk`, l'état par
+`useJellyfinItemState`), lancé par `ExperimentalPlayerHost` (`onPlayNext` : fermeture comme à la
+croix, puis `playback.play`).
+
+**Tests.** `collectionSuite.test.ts`, `PlayerEndScreen.test.tsx`, `decisions-partagees.test.ts`
+(« une seule suite de saga »), `resumeContract.test.ts`.
+
+**Voulu.** Les requêtes de la saga et de l'état « vu » partent pendant que le film tient l'écran
+(`whilePlaying` → `playerBootstrapOptions`) : SWR y est suspendu, et une requête suspendue est
+abandonnée. Un film jamais ouvrable ici (absent du catalogue du cinéma) est sauté, pas proposé. Le
+lecteur serveur n'a pas d'écran de fin — il se ferme à la fin d'un film — et ne propose donc rien.

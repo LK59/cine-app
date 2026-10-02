@@ -2494,6 +2494,13 @@ export function ExperimentalPlayerHost({
             handleClose();
             openLibraryTitle("movie", movie.radarrId);
           }}
+          // « La suite » de la saga : ce film-ci se ferme comme à la croix (arrêt, relecture des
+          // vues), et le suivant s'ouvre à la position que l'écran de fin a lue chez Jellyfin —
+          // un nombre, zéro pour un film jamais commencé (DECISIONS.md §1).
+          onPlayNext={(movie, resumeAt) => {
+            handleClose();
+            playback.play({ itemId: movie.jellyfinItemId, title: movie.title, resumeAt });
+          }}
         />
       )}
 

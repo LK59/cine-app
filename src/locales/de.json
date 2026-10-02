@@ -1777,7 +1777,8 @@
     "end": {
       "finished": "Beendet",
       "replay": "Noch einmal",
-      "done": "Zurück"
+      "done": "Zurück",
+      "suite": "Weiter in der Reihe"
     },
     "unplayable": "Diese Datei kann in diesem Browser nicht abgespielt werden.",
     "handingOver": "Wiedergabe wird vorbereitet…",
