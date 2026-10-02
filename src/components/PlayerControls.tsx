@@ -1539,9 +1539,9 @@ export function PlayerControls({
                 handleCloseClick();
               }}
               aria-label={t("common.close")}
-              className="player-pill player-pill-btn shrink-0"
+              className="player-pill player-pill-btn player-pill-solo shrink-0"
             >
-              <X size={22} />
+              <X size={24} />
             </button>
             <div ref={castPillRef} data-cast-pill className="player-pill flex min-w-0 items-center p-1">
               {/* Les deux boutons au repos, et la confirmation qui prend leur place : deux segments
@@ -1567,7 +1567,7 @@ export function PlayerControls({
                     data-active={castActive ? "" : undefined}
                     className="player-pill-btn"
                   >
-                    <Cast size={20} />
+                    <Cast size={22} />
                   </button>
                 )}
                 <button
@@ -1580,7 +1580,7 @@ export function PlayerControls({
                   aria-label={t('player.minimize')}
                   className="player-pill-btn"
                 >
-                  <PictureInPicture2 size={20} />
+                  <PictureInPicture2 size={22} />
                 </button>
               </div>
               <div
@@ -1613,7 +1613,7 @@ export function PlayerControls({
               tactile — il reste déplié, et sur iPhone il n'y a que le bouton, iOS ignorant le
               volume d'une page. Jamais une fonction réservée au survol. Le temps d'une confirmation
               de diffusion, sur un écran étroit, il cède sa place à la pilule qui s'ouvre. */}
-          <div className={`player-volume player-pill flex shrink-0 items-center p-0.5 ${castConfirm ? "max-sm:hidden" : ""}`}>
+          <div className={`player-volume player-pill flex shrink-0 items-center p-1 ${castConfirm ? "max-sm:hidden" : ""}`}>
             <button
               data-player-nav="mute"
               onClick={(e) => {
@@ -1623,7 +1623,7 @@ export function PlayerControls({
               aria-label={t("player.mute")}
               className="player-pill-btn"
             >
-              {muted || volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
+              {muted || volume === 0 ? <VolumeX size={22} /> : <Volume2 size={22} />}
             </button>
             {/* Four pixels tall is a target a finger cannot land on, let alone drag along: every
                 touch became a tap, and a tap on a range input jumps straight to the end it
@@ -2035,7 +2035,7 @@ export function PlayerControls({
                 data-on={menu === "speed" ? "" : undefined}
                 className="player-pill-btn"
               >
-                {speed !== 1 ? <span className="text-[13px] font-semibold tabular-nums">{speed}×</span> : <Gauge size={20} />}
+                {speed !== 1 ? <span className="text-[13px] font-semibold tabular-nums">{speed}×</span> : <Gauge size={22} />}
               </button>
               {audioTracks.length > 1 && (
                 <button
@@ -2045,7 +2045,7 @@ export function PlayerControls({
                   data-on={menu === "audio" ? "" : undefined}
                   className="player-pill-btn"
                 >
-                  <AudioLines size={20} />
+                  <AudioLines size={22} />
                 </button>
               )}
               {subtitleTracks.length > 0 && (
@@ -2057,7 +2057,7 @@ export function PlayerControls({
                   data-active={currentSubtitleId !== null ? "" : undefined}
                   className="player-pill-btn"
                 >
-                  <Captions size={20} />
+                  <Captions size={22} />
                 </button>
               )}
               <button
@@ -2068,7 +2068,7 @@ export function PlayerControls({
                 data-on={menu === "more" ? "" : undefined}
                 className="player-pill-btn"
               >
-                <EllipsisVertical size={20} />
+                <EllipsisVertical size={22} />
               </button>
               {fullscreenSupported && (
                 <button
@@ -2077,7 +2077,7 @@ export function PlayerControls({
                   aria-label={t("player.fullscreen")}
                   className="player-pill-btn"
                 >
-                  {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+                  {isFullscreen ? <Minimize size={22} /> : <Maximize size={22} />}
                 </button>
               )}
             </div>

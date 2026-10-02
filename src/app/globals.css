@@ -835,7 +835,7 @@
   /* 0,62 et 0,5 au départ, puis 0,72 et 0,6 : sur un ciel ou un texte blanc à l'image, on lisait
      encore les lettres à travers le bouton lecture (02/10/2026). */
   --pill-fill: rgb(32 32 36 / 0.82);
-  --pill-fill-light: rgb(32 32 36 / 0.78);
+  --pill-fill-light: rgb(32 32 36 / 0.82);
   /* Le liseré sombre du centre : sur une image blanche, le liseré clair disparaît, et le bouton avec. */
   --pill-hairline-dark: rgb(0 0 0 / 0.14);
   --pill-sheen: linear-gradient(to bottom, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.02));
@@ -874,11 +874,18 @@
   color: rgb(255 255 255 / 0.92);
   transition: background-color 150ms ease-out, transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
+/* Un rond seul (fermer) à la hauteur d'une pilule — bouton de 44 px plus 4 px de marge de chaque
+   côté, 52 ; 48 au pointeur fin. À 44, son rayon (22) n'était pas celui des pilules (26) : deux
+   pièces qui auraient dû être la même (02/10/2026). */
+.player-pill-btn.player-pill-solo { width: 52px; height: 52px; }
 @media (pointer: fine) {
   .player-pill-btn { width: 40px; height: 40px; }
+  .player-pill-btn.player-pill-solo { width: 48px; height: 48px; }
 }
+/* Trait de 2 et icônes de 22 px : à 1,75 et 20 px, les pilules sombres paraissaient vides et
+   lourdes à côté d'un titre en gras (02/10/2026). Plus près du poids des symboles d'Apple. */
 .player-pill-btn svg,
-.player-center-btn svg { stroke-width: 1.75; }
+.player-center-btn svg { stroke-width: 2; }
 .player-pill-btn[data-on] { background: var(--pill-on); }
 /* Un réglage en service (sous-titres affichés, diffusion en cours) : un point sous l'icône, pas un
    fond. Le fond allumé disait la même chose qu'un menu ouvert, et sur un téléphone, sous-titres
