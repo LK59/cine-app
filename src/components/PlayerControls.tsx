@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject, type SyntheticEvent } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight } from "lucide-react";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
@@ -1317,12 +1317,30 @@ export function PlayerControls({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullscreenSupported, menu, volumeSettable]);
 
+  // Le rebond d'un bouton du lecteur, joué jusqu'au bout plutôt que tenu par `:active` : un tap
+  // franc dure quarante millisecondes, l'enfoncement n'avait pas atteint son creux que le retour
+  // commençait, et l'interface paraissait inerte — « fragile », dit le 02/10/2026. Même principe
+  // que les onglets du bas (`player-tab[data-pressed]`). Posé au contact, sur le bouton lui-même ;
+  // retiré puis reposé si l'on appuie de nouveau avant la fin, pour que chaque appui rebondisse.
+  function playPressSpring(e: SyntheticEvent) {
+    const button = (e.target as Element | null)?.closest?.(".player-pill-btn, .player-center-btn");
+    if (!(button instanceof HTMLElement)) return;
+    button.removeAttribute("data-pressed");
+    void button.offsetWidth;
+    button.setAttribute("data-pressed", "");
+    button.addEventListener("animationend", () => button.removeAttribute("data-pressed"), { once: true });
+  }
+
   if (hidden) return null;
 
   return (
     <div
       className="absolute inset-0 z-10"
       onClick={toggleControls}
+      onPointerDownCapture={playPressSpring}
+      onKeyDownCapture={(e) => {
+        if (e.key === "Enter" || e.key === " ") playPressSpring(e);
+      }}
       onPointerMove={(e) => {
         // Only real mouse hover implies "show" — a touch pointer fires a
         // synthetic move right before its click, which would otherwise force
@@ -1477,7 +1495,7 @@ export function PlayerControls({
             (encoche en paysage, Dynamic Island en portrait). */}
         <div
           data-player-navgroup="topbar"
-          className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none -translate-y-1"} flex items-center justify-between gap-3 pb-4 transition-transform duration-300 ease-out motion-reduce:translate-y-0`}
+          className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none -translate-y-2"} player-spring flex items-center justify-between gap-3 pb-4 motion-reduce:translate-y-0`}
           // Capture phase: children stopPropagation() in the bubble phase, which is exactly why
           // the old timer never got reset by button use — capture fires on the way DOWN, before
           // any child handler, so every top-bar interaction reliably re-arms the long timer.
@@ -1496,12 +1514,12 @@ export function PlayerControls({
             >
               <X size={22} />
             </button>
-            <div ref={castPillRef} data-cast-pill className="player-pill flex min-w-0 items-center p-0.5">
+            <div ref={castPillRef} data-cast-pill className="player-pill flex min-w-0 items-center p-1">
               {/* Les deux boutons au repos, et la confirmation qui prend leur place : deux segments
                   toujours là, l'un se resserrant pendant que l'autre s'ouvre — la pilule grandit
                   d'un geste au lieu de sauter d'une largeur à l'autre. */}
               <div
-                className={`player-pill-seg flex items-center ${castConfirm ? "player-pill-seg-closed" : ""}`}
+                className={`player-pill-seg flex items-center gap-1 ${castConfirm ? "player-pill-seg-closed" : ""}`}
                 inert={castConfirm}
                 aria-hidden={castConfirm || undefined}
               >
@@ -1517,7 +1535,7 @@ export function PlayerControls({
                       else void showCastPicker();
                     }}
                     aria-label={t("player.cast")}
-                    data-on={castActive ? "" : undefined}
+                    data-active={castActive ? "" : undefined}
                     className="player-pill-btn"
                   >
                     <Cast size={20} />
@@ -1609,7 +1627,7 @@ export function PlayerControls({
                and a box that scrolls in one direction scrolls in both, which is where the
                horizontal bar came from. Wide enough that the row fits and "Taille sous-titres"
                stops wrapping onto two lines with it. */
-            className="player-panel player-menu player-chrome-right pointer-events-auto absolute w-72 max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl"
+            className="player-panel player-menu player-chrome-right pointer-events-auto absolute z-30 w-72 max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl"
             style={{
               // `bottom` deliberately not set here: an absolutely-positioned element with both
               // `top` and `bottom` stretches to fill the space between them regardless of
@@ -1913,7 +1931,7 @@ export function PlayerControls({
             conflict with the tap-to-toggle-controls handler covering the same area). Hidden
             while a spinner is already showing. */}
         {!loading && !buffering && (
-          <div data-player-navgroup="center" className={`${visible ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-6 max-[379px]:gap-4`}>
+          <div data-player-navgroup="center" className={`${visible ? "pointer-events-auto" : "pointer-events-none"} player-spring absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-9 sm:gap-12 max-[379px]:gap-6 ${visible ? "scale-100" : "scale-90"}`}>
             <button
               data-player-nav="skip-back"
               onClick={(e) => {
@@ -1954,7 +1972,7 @@ export function PlayerControls({
         {/* En bas : le titre et la pilule des réglages sur une rangée, la barre et ses deux temps
             dessous. */}
         <div
-          className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none translate-y-1"} flex flex-col gap-3 pt-4 transition-transform duration-300 ease-out motion-reduce:translate-y-0`}
+          className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none translate-y-2"} player-spring flex flex-col gap-3 pt-4 motion-reduce:translate-y-0`}
           onClick={(e) => e.stopPropagation()}
           onClickCapture={() => showControls(10000)}
           style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
@@ -1980,12 +1998,12 @@ export function PlayerControls({
             {/* Vitesse · audio · sous-titres · ⋮ — et le plein écran au bout, là où il existe : à
                 côté du temps restant, il aurait cassé la symétrie de la ligne du temps. Les menus
                 s'ouvrent vers le haut depuis cette pilule. */}
-            <div data-player-navgroup="bottombar" data-settings-pill className="player-pill flex shrink-0 items-center p-0.5">
+            <div data-player-navgroup="bottombar" data-settings-pill className="player-pill flex shrink-0 items-center gap-1 p-1 max-[379px]:gap-0.5">
               <button
                 data-player-nav="speed"
                 onClick={() => setMenu(menu === "speed" ? null : "speed")}
                 aria-label={t("player.speed")}
-                data-on={menu === "speed" || speed !== 1 ? "" : undefined}
+                data-on={menu === "speed" ? "" : undefined}
                 className="player-pill-btn"
               >
                 {speed !== 1 ? <span className="text-[13px] font-semibold tabular-nums">{speed}×</span> : <Gauge size={20} />}
@@ -2006,7 +2024,8 @@ export function PlayerControls({
                   data-player-nav="captions"
                   onClick={() => setMenu(menu === "subtitles" ? null : "subtitles")}
                   aria-label={t("player.subtitles")}
-                  data-on={menu === "subtitles" || currentSubtitleId !== null ? "" : undefined}
+                  data-on={menu === "subtitles" ? "" : undefined}
+                  data-active={currentSubtitleId !== null ? "" : undefined}
                   className="player-pill-btn"
                 >
                   <Captions size={20} />

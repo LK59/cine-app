@@ -858,6 +858,7 @@
    fin —, des icônes blanches à 0,92 au trait de 1,75. Allumé (sous-titres actifs, menu ouvert) :
    un fond blanc léger, pas la couleur d'accent, qui ferait d'un réglage une alerte. */
 .player-pill-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -874,6 +875,21 @@
 .player-pill-btn svg,
 .player-center-btn svg { stroke-width: 1.75; }
 .player-pill-btn[data-on] { background: var(--pill-on); }
+/* Un réglage en service (sous-titres affichés, diffusion en cours) : un point sous l'icône, pas un
+   fond. Le fond allumé disait la même chose qu'un menu ouvert, et sur un téléphone, sous-titres
+   actifs, il se lisait comme un bouton resté enfoncé (02/10/2026). Le fond reste au menu ouvert. */
+.player-pill-btn[data-active]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.95);
+  pointer-events: none;
+}
 @media (hover: hover) {
   .player-pill-btn:hover { background: var(--pill-hover); }
   .player-pill-btn[data-on]:hover { background: var(--pill-on); }
@@ -956,13 +972,55 @@
 }
 /* Des lignes de 44 px, la taille d'un doigt. */
 .player-menu button.w-full { min-height: 44px; }
+/* Il sort de la pilule et se pose en dépassant à peine : un menu qui ne fait que s'allumer paraît
+   collé sur le film, un qui arrive a du poids. */
 @keyframes player-menu-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
+  0% { opacity: 0; transform: translateY(8px) scale(0.9); }
+  60% { opacity: 1; transform: translateY(0) scale(1.015); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Le rebond d'un appui (`playPressSpring`, PlayerControls) : creux rapide, léger dépassement, puis
+   posé. Joué jusqu'au bout quelle que soit la durée de l'appui — c'est ce qui le rend visible. Les
+   ±10 s y gardent leur rotation, plus marquée. */
+@keyframes player-press-spring {
+  0% { transform: scale(1); }
+  30% { transform: scale(0.84); }
+  62% { transform: scale(1.07); }
+  82% { transform: scale(0.98); }
+  100% { transform: scale(1); }
+}
+@keyframes player-press-spring-back {
+  0% { transform: scale(1) rotate(0deg); }
+  30% { transform: scale(0.86) rotate(-22deg); }
+  62% { transform: scale(1.05) rotate(5deg); }
+  82% { transform: scale(0.99) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+@keyframes player-press-spring-fwd {
+  0% { transform: scale(1) rotate(0deg); }
+  30% { transform: scale(0.86) rotate(22deg); }
+  62% { transform: scale(1.05) rotate(-5deg); }
+  82% { transform: scale(0.99) rotate(1deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.player-pill-btn[data-pressed],
+.player-center-btn[data-pressed] { animation: player-press-spring 460ms cubic-bezier(0.22, 1, 0.36, 1); }
+.player-center-btn.player-glass-back[data-pressed] { animation-name: player-press-spring-back; }
+.player-center-btn.player-glass-fwd[data-pressed] { animation-name: player-press-spring-fwd; }
+/* L'arrivée des commandes : les rangées glissent de 8 px et le centre grandit depuis 0,9, sur une
+   courbe qui dépasse un peu avant de se poser. `translate` et `scale` sont les propriétés que
+   posent les classes de Tailwind, distinctes de `transform` — d'où leur nom ici. */
+.player-spring {
+  transition:
+    translate 480ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    scale 480ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @media (prefers-reduced-motion: reduce) {
   .player-menu { animation: none; }
   .player-pill-seg { transition: none; }
+  .player-spring { transition: none; }
+  .player-pill-btn[data-pressed],
+  .player-center-btn[data-pressed] { animation: none; }
 }
 
 .player-glass {

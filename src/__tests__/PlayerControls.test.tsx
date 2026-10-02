@@ -1238,8 +1238,35 @@ describe("PlayerControls — la disposition", () => {
     const pill = container.querySelector("[data-settings-pill]")!;
     const order = Array.from(pill.querySelectorAll("[data-player-nav]")).map((b) => b.getAttribute("data-player-nav"));
     expect(order.slice(0, 4)).toEqual(["speed", "audio", "captions", "more"]);
-    // Sous-titres actifs : allumé, sans la couleur d'accent.
+    // Sous-titres actifs : un point sous l'icône, pas le fond allumé — celui-ci se lisait comme un
+    // bouton resté enfoncé sur un téléphone (02/10/2026) ; il reste réservé au menu ouvert.
+    expect(nav(container, "captions")!.hasAttribute("data-active")).toBe(true);
+    expect(nav(container, "captions")!.hasAttribute("data-on")).toBe(false);
+    fireEvent.click(nav(container, "captions")!);
     expect(nav(container, "captions")!.hasAttribute("data-on")).toBe(true);
+  });
+
+  it("place le menu ouvert devant les boutons du centre", async () => {
+    stubMediaFetches();
+    const { container } = render(
+      <Harness title="Film" subtitleTracks={[{ id: 3, label: "Français" }]} currentSubtitleId={null} />
+    );
+    await act(async () => {});
+    fireEvent.click(nav(container, "captions")!);
+    // Le menu précède le centre dans le document, tous deux en position absolue : sans z-index, le
+    // centre — pause, ±10 s — passait par-dessus les pistes (02/10/2026).
+    expect(container.querySelector(".player-menu")!.className).toMatch(/\bz-30\b/);
+  });
+
+  it("fait rebondir un bouton à l'appui, jusqu'au bout de l'animation", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness title="Film" />);
+    await act(async () => {});
+    const more = nav(container, "more")!;
+    fireEvent.pointerDown(more);
+    expect(more.hasAttribute("data-pressed")).toBe(true);
+    fireEvent.animationEnd(more);
+    expect(more.hasAttribute("data-pressed")).toBe(false);
   });
 
   it("met le plein écran au bout de la pilule du bas là où le navigateur le permet", async () => {
