@@ -161,6 +161,12 @@ function clean(fields: Record<string, unknown>): Record<string, string | number 
 }
 
 /**
+ * Au-delà, le chiffre est faux ou forgé : la file de l'appareil garde une semaine, et un bilan perdu
+ * attend au pire que son compte revienne.
+ */
+const MAX_LATE_MS = 365 * 24 * 3600_000;
+
+/**
  * Appends one event. Never throws: a player must not fail because a log could not be written.
  *
  * `user` comes from the session on the server, never from the request body — otherwise the one
@@ -185,11 +191,20 @@ export function logPlaybackEvent(
   // quarante, et c'est le champ qui dit si le reste décrit le code d'aujourd'hui (25/09/2026 — un
   // onglet a écrit toute une soirée avec le code du matin). La version de package.json le suit,
   // hors plafond elle aussi : c'est le même fait, dit en livraison plutôt qu'en commit.
-  const { build, version, ...rest } = fields;
+  //
+  // `resent` et `lateByMs` de même (01/10/2026) : une ligne renvoyée après coup (`unsentLines.ts`)
+  // se lit à l'instant qu'elle décrit, `timestamp` moins `lateByMs`. Sous le plafond, un bilan qui
+  // touchait les quarante perdait justement ce champ-là. Le serveur date toujours la ligne de son
+  // arrivée : le navigateur ne fait que dire de combien elle est en retard, borné à un an,
+  // et ne peut déplacer que ses propres lignes.
+  const { build, version, resent, lateByMs, ...rest } = fields;
+  const late = typeof lateByMs === "number" && Number.isFinite(lateByMs) && lateByMs >= 0 && lateByMs <= MAX_LATE_MS ? Math.round(lateByMs) : null;
   const head = {
     ...server,
     ...(typeof build === "string" && build ? { build: build.slice(0, 40) } : {}),
     ...(typeof version === "string" && version ? { version: version.slice(0, 20) } : {}),
+    ...(resent === true ? { resent: true } : {}),
+    ...(late !== null ? { lateByMs: late } : {}),
   };
   // Lu à l'appel : un test bascule `NODE_ENV` sans recharger le module.
   const dev = process.env.NODE_ENV === "development";

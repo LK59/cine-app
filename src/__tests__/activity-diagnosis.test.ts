@@ -162,6 +162,23 @@ describe("relus le 24/09/2026 au soir", () => {
     expect(s.end - s.start).toBeLessThan(11 * 60_000);
   });
 
+  // 01/10/2026 : une ligne renvoyée après un redémarrage du serveur arrive derrière celles écrites
+  // depuis ; elle est placée à l'instant qu'elle décrit, et la frise ne trace pas de trait en arrière.
+  it("une ligne renvoyée est placée à l'instant qu'elle décrit", () => {
+    const start = Date.parse("2026-10-01T19:40:00Z");
+    const lines = [
+      { timestamp: "2026-10-01T19:40:00Z", kind: "start", at: 0 },
+      { timestamp: "2026-10-01T19:48:00Z", kind: "stop", at: 470, why: "close" },
+      { timestamp: "2026-10-01T19:48:10Z", kind: "stall", position: 400, stalledMs: 5000, resent: true, lateByMs: 77_000 },
+    ];
+    const m = friseModel(lines, start, 3436);
+    expect(m.marks.map((k) => k.kind)).toEqual(["start", "stall", "stop"]);
+    for (const run of m.runs) for (let i = 1; i < run.length; i++) expect(run[i].t).toBeGreaterThanOrEqual(run[i - 1].t);
+    const records = lines.map((l, i) => ({ ...l, user: "c", itemId: "x", session: "s1", _t: Date.parse(l.timestamp), _file: "player.log", _line: i })) as LogRecord[];
+    const [s] = buildSeances(records);
+    expect(s.end).toBe(Date.parse("2026-10-01T19:48:00Z"));
+  });
+
   it("date un jour dans l'heure du foyer, pas en UTC", () => {
     const tz = process.env.TZ;
     process.env.TZ = "Europe/Paris";

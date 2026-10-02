@@ -256,6 +256,31 @@ describe("logPlaybackEvent", () => {
  * lui, sont des reprises après coupure réseau : deux choses différentes qui se seraient mélangées
  * dans la même lecture du journal.
  */
+// 01/10/2026 : une ligne renvoyée après un redémarrage du serveur (`unsentLines.ts`) se lit à
+// l'instant qu'elle décrit — le serveur la date toujours de son arrivée.
+describe("une ligne renvoyée après coup", () => {
+  it("garde la date du serveur, sa marque et son retard, même au plafond de champs", async () => {
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    const many = Object.fromEntries(Array.from({ length: 45 }, (_, i) => [`f${i}`, i]));
+    logPlaybackEvent("louis", "reserve", { ...many, resent: true, lateByMs: 40_000.4, timestamp: "2020-01-01T00:00:00Z" });
+    const [line] = lines();
+    expect(line).toMatchObject({ resent: true, lateByMs: 40_000 });
+    expect(line.timestamp).not.toBe("2020-01-01T00:00:00Z");
+    expect(Math.abs(Date.parse(line.timestamp) - Date.now())).toBeLessThan(60_000);
+  });
+
+  it("ne laisse passer ni une marque ni un retard qui n'en sont pas", async () => {
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    logPlaybackEvent("louis", "seek", { resent: "oui", lateByMs: -5 });
+    logPlaybackEvent("louis", "seek", { lateByMs: 10 * 365 * 24 * 3600_000 });
+    logPlaybackEvent("louis", "seek", { lateByMs: "40000" });
+    for (const line of lines()) {
+      expect(line).not.toHaveProperty("resent");
+      expect(line).not.toHaveProperty("lateByMs");
+    }
+  });
+});
+
 describe("l'événement d'un changement de piste audio", () => {
   it("est accepté, et reste distinct d'une reconstruction", async () => {
     const { isPlayerEventKind } = await import("@/lib/playerLog");

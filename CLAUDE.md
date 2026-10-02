@@ -109,7 +109,11 @@ is read again at once). A `seek` line carries `ranges`, the
 element's buffered ranges when the viewer asked, and its trace the two buffers separately. A page iOS kills in the background never gets to send
 it, so the summary is kept in `localStorage` while the session lives (`src/lib/unsentStop.ts`)
 and sent on the next launch as `why: "lost"` with `lateByMs`; the weekly reading keeps the last
-line per `session`. Since 2026-09-25 every native- and server-player line carries `build`, the code the *browser* ran:
+line per `session`. Since 2026-10-01 any other line that fails to send (no response, or a 5xx — a
+restart, a dropped network) waits in a bounded `localStorage` queue (`src/lib/unsentLines.ts`) and
+is resent after the next successful send or launch, marked `resent: true` with `lateByMs`; a
+`lineId` the route remembers keeps it from being written twice, and `lineLateByMs` places it where
+it happened (DECISIONS §42). Since 2026-09-25 every native- and server-player line carries `build`, the code the *browser* ran:
 a tab left open all day wrote an evening of stalls with the morning's code, and only the reverse
 proxy's `/sw.js?v=` requests said so. Since the same day `rebuild`, `fallback`, `error` and `stall` lines
 carry `shownAgoMs` / `lastHiddenMs` (or `hiddenNow`), and the trace records each trip to the

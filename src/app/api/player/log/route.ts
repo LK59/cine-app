@@ -5,6 +5,7 @@ import { config } from "@/lib/config";
 import { logPlaybackEvent, isPlayerEventKind } from "@/lib/playerLog";
 import { recoverLostPosition } from "@/lib/lostStopPosition";
 import { playerLogAllowed } from "@/lib/writeLimits";
+import { alreadyWritten, isLineId } from "@/lib/playerLogIds";
 
 /**
  * The player telling the server what happened to it.
@@ -34,6 +35,12 @@ export async function POST(req: NextRequest) {
   // `bench` envoie la ligne dans le journal du banc : réservé à l'administrateur, qui seul lance
   // un banc. Sinon, n'importe quel compte pourrait sortir ses lignes du journal des spectateurs.
   if (session.role !== "admin") delete cleaned.bench;
+  // L'identifiant de la ligne sert à ne pas écrire deux fois un renvoi (`unsentLines.ts`) ; il
+  // n'apprend rien au lecteur du journal et n'y va pas. Une ligne déjà écrite est acceptée — que
+  // le navigateur la retire de sa file — sans être réécrite.
+  const lineId = cleaned.lineId;
+  delete cleaned.lineId;
+  if (isLineId(lineId) && alreadyWritten(session.u, lineId)) return NextResponse.json({ ok: true, duplicate: true });
   // Un bilan perdu connaît la dernière position mieux que Jellyfin : il la lui rend, s'il n'a rien
   // de plus récent (voir `lostStopPosition.ts`). Ce que ça a donné part dans la ligne ; un échec ici
   // ne coûte que la reprise d'avant, jamais la ligne elle-même.

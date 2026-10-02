@@ -1250,3 +1250,29 @@ n'a ni `author` ni `repository`.
 
 **Voulu.** La page de connexion est publique et la montre quand même : la version s'y lit déjà par
 `/sw.js?v=`. Au bureau, alignée à gauche sous « Déconnexion » ; ailleurs, centrée.
+
+## 42. L'instant qu'une ligne du journal du lecteur décrit
+
+**Règle.** Le serveur date chaque ligne de `player.log` à son arrivée (`timestamp`), jamais le
+navigateur. Une ligne qui arrive en retard le dit par `lateByMs` — l'écart, mesuré sur l'appareil,
+entre ce qu'elle décrit et son envoi — et se lit à `timestamp − lateByMs`. Deux sortes en portent :
+le bilan perdu (`stop`, `why: "lost"`) et, depuis le 01/10/2026, toute ligne renvoyée après un échec
+d'envoi (`resent: true`). Un `lateByMs` sur une autre ligne est ignoré.
+
+**Porteur.** `lineLateByMs` (`src/lib/activity/seances.ts`). Côté écriture, `logPlaybackEvent`
+(`src/lib/playerLog.ts`) garde `resent` et `lateByMs` en tête, hors plafond de champs, bornés.
+
+**Appelants.** `lineTime` (`buildSeances`, et par elle le diagnostic) et `friseModel`, qui trie ses lignes
+par cet instant.
+
+**Tests.** `activity-diagnosis.test.ts` (bilan perdu, ligne renvoyée), `playerLog.test.ts`,
+`decisions-partagees.test.ts` (« un seul instant pour une ligne en retard »).
+
+**Voulu.** Le fichier reste dans l'ordre d'arrivée — il est lu par `tail` et tourne par taille ;
+c'est la lecture qui replace. La file des lignes en attente (`src/lib/unsentLines.ts`) et celle des
+bilans (`src/lib/unsentStop.ts`) restent deux : un bilan est réécrit toutes les 30 s tant que la
+séance vit et n'est déclaré perdu qu'après deux minutes de silence ; une ligne ordinaire est écrite
+une fois, et n'entre en file que sur un échec d'envoi.
+
+**Trouvé le 01/10/2026** : un redémarrage du conteneur à 19:47:06 a emporté un point de réserve
+d'une séance en cours ; seul le bilan avait un filet.

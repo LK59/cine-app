@@ -7,6 +7,7 @@ import { isAwaitingFresh } from "@/lib/persistentCache";
 import { setWatchingFullScreen } from "@/lib/playbackBusy";
 import { NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import { flushOrphanStops } from "@/lib/unsentStop";
+import { flushUnsentLines } from "@/lib/unsentLines";
 
 export interface PlaybackSession {
   itemId: string;
@@ -128,10 +129,15 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   // Les bilans de séance restés sur l'appareil — une page tuée par iOS en arrière-plan n'a pas
   // pu envoyer le sien (voir unsentStop.ts). Au lancement, puis chaque minute : une application
   // relancée dans les deux minutes rouvre souvent le même film, et le bilan n'est déclaré perdu
-  // qu'après ce délai.
+  // qu'après ce délai. Avec elles, les lignes du journal qui n'ont pas pu partir — un redémarrage du
+  // serveur, une coupure du réseau (voir unsentLines.ts, 01/10/2026).
   useEffect(() => {
-    void flushOrphanStops();
-    const timer = setInterval(() => void flushOrphanStops(), 60_000);
+    const flush = () => {
+      void flushOrphanStops();
+      void flushUnsentLines();
+    };
+    flush();
+    const timer = setInterval(flush, 60_000);
     return () => clearInterval(timer);
   }, []);
 

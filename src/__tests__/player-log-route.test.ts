@@ -86,6 +86,34 @@ describe("POST /api/player/log", () => {
   });
 });
 
+// 01/10/2026 : une ligne qui n'a pas pu partir est renvoyée plus tard (`unsentLines.ts`). Si sa
+// première réponse s'est seulement perdue, la ligne est déjà écrite : elle ne doit pas l'être deux fois.
+describe("une ligne renvoyée", () => {
+  beforeEach(async () => (await import("@/lib/playerLogIds")).forgetLineIds());
+
+  it("n'est pas écrite deux fois, et son identifiant n'entre pas au journal", async () => {
+    const res1 = await post({ kind: "rebuild", fields: { event: "point", lineId: "k3j9x0abcdef1234" } });
+    const res2 = await post({ kind: "rebuild", fields: { event: "point", lineId: "k3j9x0abcdef1234", resent: true, lateByMs: 40_000 } });
+    expect(res1.status).toBe(200);
+    // Acceptée — que le navigateur la retire de sa file — mais pas réécrite.
+    expect(res2.status).toBe(200);
+    expect(mockLog).toHaveBeenCalledTimes(1);
+    expect(mockLog.mock.calls[0][2]).not.toHaveProperty("lineId");
+  });
+
+  it("l'est si elle n'était jamais arrivée, marquée et avec son retard", async () => {
+    await post({ kind: "audio", fields: { lineId: "aaaabbbbcccc", resent: true, lateByMs: 40_000 } });
+    expect(mockLog).toHaveBeenCalledWith("louis", "audio", { resent: true, lateByMs: 40_000 });
+  });
+
+  it("l'identifiant d'un compte ne fait pas taire les lignes d'un autre", async () => {
+    await post({ kind: "audio", fields: { lineId: "aaaabbbbcccc" } });
+    mockVerifySessionFull.mockResolvedValue({ u: "timeo", jfId: "jf-3" });
+    await post({ kind: "audio", fields: { lineId: "aaaabbbbcccc" } });
+    expect(mockLog).toHaveBeenCalledTimes(2);
+  });
+});
+
 // Love Story, 24/09/2026 : le réseau perdu 25 s avant qu'iOS ferme la page — Jellyfin avait 40:21,
 // le téléphone 40:48, et l'épisode a repris à 40:16. Le bilan perdu rend la position à Jellyfin.
 describe("un bilan perdu rend sa position à Jellyfin", () => {

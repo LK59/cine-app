@@ -862,3 +862,26 @@ describe("une seule signature", () => {
     for (const f of EMPLACEMENTS) expect([f, /github\.com\/LK59|by LK59/.test(lire(f))]).toEqual([f, false]);
   });
 });
+
+describe("un seul instant pour une ligne en retard", () => {
+  // DECISIONS.md §42. La séance et la frise lisaient chacune `lateByMs`, chacune pour `stop`
+  // seulement : le jour où les lignes renvoyées l'ont porté aussi (01/10/2026), il fallait les
+  // changer toutes deux, ou placer la même ligne à deux instants.
+  it("seul `lineLateByMs` lit le retard d'une ligne", () => {
+    const lecteurs = (readdirSync("src/lib/activity", { recursive: true }) as string[])
+      .filter((f) => /\.(ts|tsx)$/.test(f))
+      .map((f) => `src/lib/activity/${f.replaceAll("\\", "/")}`);
+    const codeOnly = (f: string) =>
+      lire(f)
+        .split("\n")
+        .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+        .join("\n");
+    // Permis : le porteur lui-même, et le résumé de la séance qui garde le chiffre brut
+    // (`lateByMs: num(r.lateByMs)`) — ce n'est pas une datation.
+    const reste = (f: string) =>
+      codeOnly(f)
+        .replace(/export function lineLateByMs[\s\S]*?\n}\n/, "")
+        .replace(/lateByMs: num\(r\.lateByMs\)/g, "");
+    expect(lecteurs.filter((f) => /\.lateByMs\b/.test(reste(f)))).toEqual([]);
+  });
+});

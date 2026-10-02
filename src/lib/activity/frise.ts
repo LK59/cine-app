@@ -8,6 +8,8 @@
 //
 // Écrit une fois ici, pour les deux écrans qui la montrent : la séance, et le signalement qui la cite.
 
+import { lineLateByMs } from "@/lib/activity/seances";
+
 export interface FrisePoint {
   /** Millisecondes depuis l'ouverture. */
   t: number;
@@ -53,18 +55,22 @@ export function friseModel(lines: Record<string, unknown>[], start: number, runt
   let last = 0;
   let maxPos = 0;
 
-  // Un bilan perdu est placé à l'instant qu'il décrit, pas à son arrivée (voir `lineTime`).
+  // Un bilan perdu, ou une ligne renvoyée, est placé à l'instant qu'il décrit, pas à son arrivée
+  // (voir `lineLateByMs`).
   const at = (line: Record<string, unknown>) => {
     const t = Date.parse(text(line.timestamp)) || start;
-    const late = text(line.kind) === "stop" ? num(line.lateByMs) : null;
-    return Math.max(0, (late !== null && late > 0 ? t - late : t) - start);
+    return Math.max(0, t - (lineLateByMs(line) ?? 0) - start);
   };
   const push = (p: FrisePoint) => {
     runs[runs.length - 1].push(p);
     maxPos = Math.max(maxPos, p.pos);
   };
 
-  for (const line of lines) {
+  // Dans l'ordre des instants décrits, et non de l'arrivée : une ligne renvoyée après une coupure
+  // arrive derrière celles écrites depuis, et tirait un trait en arrière (01/10/2026). Le tri est
+  // stable, les lignes d'un même instant gardent leur ordre.
+  const ordered = [...lines].sort((a, b) => at(a) - at(b));
+  for (const line of ordered) {
     const t = at(line);
     last = Math.max(last, t);
     const kind = text(line.kind);

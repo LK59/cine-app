@@ -142,9 +142,21 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
  * une heure après ; il porte `lateByMs`, l'écart entre sa mesure et son envoi. Daté de son arrivée,
  * il étirait dix minutes de film sur une heure dans la frise (relu le 24/09/2026).
  */
-export function lineTime(r: { _t: number; kind?: unknown; lateByMs?: unknown }): number {
-  const late = r.kind === "stop" ? num(r.lateByMs) : null;
-  return late !== null && late > 0 ? r._t - late : r._t;
+export function lineTime(r: { _t: number; kind?: unknown; lateByMs?: unknown; resent?: unknown }): number {
+  const late = lineLateByMs(r);
+  return late !== null ? r._t - late : r._t;
+}
+
+/**
+ * Le retard d'une ligne sur l'instant qu'elle décrit, ou `null`. Un bilan perdu, et depuis le
+ * 01/10/2026 toute ligne renvoyée après un échec d'envoi (`resent`, voir `unsentLines.ts`) : un point
+ * de réserve parti pendant un redémarrage du serveur arrive à la reconnexion, une minute plus tard.
+ * Lu ici pour la séance et pour la frise, qui ne doivent pas placer la même ligne à deux instants.
+ */
+export function lineLateByMs(r: { kind?: unknown; lateByMs?: unknown; resent?: unknown }): number | null {
+  if (r.kind !== "stop" && r.resent !== true) return null;
+  const late = num(r.lateByMs);
+  return late !== null && late > 0 ? late : null;
 }
 
 function absorb(s: Seance, r: LogRecord): void {
