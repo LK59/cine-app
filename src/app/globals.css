@@ -850,6 +850,17 @@
   box-shadow: inset 0 0 0 1px var(--pill-hairline), 0 0 0 1px var(--pill-hairline-dark), var(--pill-shadow);
   border-radius: 999px;
 }
+/* Un flou léger sous les pilules, seulement pendant qu'elles sont affichées (`player-chrome-live`).
+   Ce qui coûte, c'est la surface floutée multipliée par le rayon, recalculée à chaque image de la
+   vidéo : les panneaux et la barre du téléphone l'ont prouvé (28/09/2026), et ils restent sans flou.
+   Ici, quelques ronds de 40 à 72 px — moins de 5 % de l'écran —, un petit rayon, et rien du tout
+   dès que les commandes se cachent, c'est-à-dire presque tout le film. Il fallait au moins ça : sur
+   un texte blanc à l'image, l'opacité seule laissait lire les lettres à travers « lecture »
+   (02/10/2026). */
+.player-chrome-live .player-pill {
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  backdrop-filter: blur(12px) saturate(1.3);
+}
 .player-pill-light {
   background: var(--pill-sheen), var(--pill-fill-light);
   /* Les deux liserés : le clair tient sur une image sombre, le sombre sur une image claire —
@@ -981,33 +992,6 @@
   65% { opacity: 1; transform: translateY(0) scale(1.01); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
-/* Le rebond d'un appui (`playPressSpring`, PlayerControls) : creux franc, un seul petit dépassement,
-   puis posé. Joué jusqu'au bout quelle que soit la durée de l'appui — c'est ce qui le rend visible.
-   Une première version descendait à 0,84 et oscillait deux fois (1,07 puis 0,98) : l'interface
-   paraissait en gelée, « fragile » (02/10/2026). Un objet solide rebondit une fois. Les ±10 s
-   gardent leur rotation. */
-@keyframes player-press-spring {
-  0% { transform: scale(1); }
-  35% { transform: scale(0.9); }
-  70% { transform: scale(1.03); }
-  100% { transform: scale(1); }
-}
-@keyframes player-press-spring-back {
-  0% { transform: scale(1) rotate(0deg); }
-  35% { transform: scale(0.9) rotate(-16deg); }
-  70% { transform: scale(1.02) rotate(3deg); }
-  100% { transform: scale(1) rotate(0deg); }
-}
-@keyframes player-press-spring-fwd {
-  0% { transform: scale(1) rotate(0deg); }
-  35% { transform: scale(0.9) rotate(16deg); }
-  70% { transform: scale(1.02) rotate(-3deg); }
-  100% { transform: scale(1) rotate(0deg); }
-}
-.player-pill-btn[data-pressed],
-.player-center-btn[data-pressed] { animation: player-press-spring 380ms cubic-bezier(0.22, 1, 0.36, 1); }
-.player-center-btn.player-glass-back[data-pressed] { animation-name: player-press-spring-back; }
-.player-center-btn.player-glass-fwd[data-pressed] { animation-name: player-press-spring-fwd; }
 /* L'arrivée des commandes : les rangées glissent de 4 px, en simple décélération. Pas d'élastique
    ici : elles apparaissent à chaque toucher du film, sans qu'on les ait visées, et un rebond à
    chaque fois faisait bouger l'interface toute seule (02/10/2026). Le rebond est réservé au doigt.
@@ -1019,8 +1003,6 @@
   .player-menu { animation: none; }
   .player-pill-seg { transition: none; }
   .player-spring { transition: none; }
-  .player-pill-btn[data-pressed],
-  .player-center-btn[data-pressed] { animation: none; }
 }
 
 .player-glass {

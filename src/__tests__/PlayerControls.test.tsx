@@ -1258,15 +1258,29 @@ describe("PlayerControls — la disposition", () => {
     expect(container.querySelector(".player-menu")!.className).toMatch(/\bz-30\b/);
   });
 
-  it("fait rebondir un bouton à l'appui, jusqu'au bout de l'animation", async () => {
+  it("fait rebondir un bouton à l'appui par l'API Web Animations, sans toucher au style", async () => {
     stubMediaFetches();
-    const { container } = render(<Harness title="Film" />);
-    await act(async () => {});
-    const more = nav(container, "more")!;
-    fireEvent.pointerDown(more);
-    expect(more.hasAttribute("data-pressed")).toBe(true);
-    fireEvent.animationEnd(more);
-    expect(more.hasAttribute("data-pressed")).toBe(false);
+    // jsdom n'a pas `animate` : on l'observe. Ni attribut ni lecture de mise en page — c'est ce qui
+    // rend le geste gratuit au moment où le bouton lance une pause ou un saut.
+    const animate = vi.fn(() => ({ id: "", cancel: vi.fn() }) as unknown as Animation);
+    Object.defineProperty(HTMLElement.prototype, "animate", { value: animate, configurable: true });
+    Object.defineProperty(HTMLElement.prototype, "getAnimations", { value: () => [], configurable: true });
+    try {
+      const { container } = render(<Harness title="Film" />);
+      await act(async () => {});
+      const more = nav(container, "more")!;
+      fireEvent.pointerDown(more);
+      expect(animate).toHaveBeenCalledTimes(1);
+      expect(more.hasAttribute("data-pressed")).toBe(false);
+      const back = nav(container, "skip-back")!;
+      fireEvent.pointerDown(back);
+      // Les ±10 s tournent dans leur sens.
+      const frames = (animate.mock.calls[1] as unknown[])[0] as Keyframe[];
+      expect(String(frames[1].transform)).toContain("rotate(-16deg)");
+    } finally {
+      delete (HTMLElement.prototype as { animate?: unknown }).animate;
+      delete (HTMLElement.prototype as { getAnimations?: unknown }).getAnimations;
+    }
   });
 
   it("met le plein écran au bout de la pilule du bas là où le navigateur le permet", async () => {

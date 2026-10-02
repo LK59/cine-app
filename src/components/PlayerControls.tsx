@@ -127,6 +127,18 @@ const CAST_CONFIRM_MS = 4000;
  * Où se posent les invites flottantes (« Passer l'intro », l'épisode suivant, la minuterie) : au-dessus
  * du bas des commandes — titre, pilule et barre —, pour ne jamais les couvrir quand elles sont là.
  */
+// Creux franc, un seul petit dépassement, puis posé. Une première version descendait à 0,84 et
+// oscillait deux fois (1,07 puis 0,98) : l'interface paraissait en gelée (02/10/2026). Les ±10 s
+// y tournent dans leur sens (`turn` = −1 ou 1).
+function pressKeyframes(turn: number): Keyframe[] {
+  return [
+    { transform: "scale(1) rotate(0deg)" },
+    { transform: `scale(0.9) rotate(${16 * turn}deg)`, offset: 0.35 },
+    { transform: `scale(${turn ? 1.02 : 1.03}) rotate(${-3 * turn}deg)`, offset: 0.7 },
+    { transform: "scale(1) rotate(0deg)" },
+  ];
+}
+
 // Le bord bas des commandes : 8 px au-dessus de la barre d'accueil d'iOS (ou 1,5 rem sans elle).
 // Collée au bord sûr, la barre de progression se trouvait sous le pouce qui allait chercher le
 // geste du système, et l'un prenait l'autre (02/10/2026). Partagé par tout ce qui se place au-dessus
@@ -527,6 +539,7 @@ export function PlayerControls({
     // position keeps overwriting the dragged thumb position on every tick, fighting the user's
     // own drag mid-gesture.
     let timeAt = 0;
+    let shownSecond = -1;
     const onTime = () => {
       if (seekingRef.current) return;
       const now = performance.now();
@@ -534,6 +547,13 @@ export function PlayerControls({
       // tombait à moins d'une seconde de la précédente, était sautée, et l'écran de fin (« Revoir »,
       // l'épisode suivant — `atEnd`) n'apparaissait pas contrôles masqués (chasse aux défauts du 28/09).
       if (!visibleRef.current && now - timeAt < HIDDEN_UPDATE_MS && !video.paused && !video.ended) return;
+      // Affichés aussi, une fois par seconde affichée et pas à chaque `timeupdate` (~4/s) : les deux
+      // temps ne changent qu'à la seconde, et la barre avance d'un quart de pixel entre deux — un
+      // rendu de tout ce composant pour rien, trois fois sur quatre, pendant qu'on touche aux boutons
+      // (revue des performances du 02/10/2026).
+      const second = Math.floor(video.currentTime);
+      if (visibleRef.current && second === shownSecond && !video.paused && !video.ended) return;
+      shownSecond = second;
       timeAt = now;
       setCurrentTime(video.currentTime);
     };
@@ -1324,16 +1344,20 @@ export function PlayerControls({
 
   // Le rebond d'un bouton du lecteur, joué jusqu'au bout plutôt que tenu par `:active` : un tap
   // franc dure quarante millisecondes, l'enfoncement n'avait pas atteint son creux que le retour
-  // commençait, et l'interface paraissait inerte — « fragile », dit le 02/10/2026. Même principe
-  // que les onglets du bas (`player-tab[data-pressed]`). Posé au contact, sur le bouton lui-même ;
-  // retiré puis reposé si l'on appuie de nouveau avant la fin, pour que chaque appui rebondisse.
+  // commençait, et l'interface paraissait inerte — « fragile », dit le 02/10/2026.
+  // Par l'API Web Animations, et non en reposant un attribut : relancer une animation CSS demandait
+  // de lire `offsetWidth` entre le retrait et la pose, soit une mise en page forcée à chaque appui,
+  // au moment même où le bouton lance une pause ou un saut. `animate()` ne touche ni au style ni à
+  // la mise en page, ne porte que sur `transform` et tourne dans le compositeur ; un nouvel appui
+  // remplace le précédent (`id` commun, l'ancien est annulé).
   function playPressSpring(e: SyntheticEvent) {
     const button = (e.target as Element | null)?.closest?.(".player-pill-btn, .player-center-btn");
-    if (!(button instanceof HTMLElement)) return;
-    button.removeAttribute("data-pressed");
-    void button.offsetWidth;
-    button.setAttribute("data-pressed", "");
-    button.addEventListener("animationend", () => button.removeAttribute("data-pressed"), { once: true });
+    if (!(button instanceof HTMLElement) || typeof button.animate !== "function") return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    for (const running of button.getAnimations?.() ?? []) if (running.id === "press") running.cancel();
+    const turn = button.classList.contains("player-glass-back") ? -1 : button.classList.contains("player-glass-fwd") ? 1 : 0;
+    const press = button.animate(pressKeyframes(turn), { duration: 380, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+    press.id = "press";
   }
 
   if (hidden) return null;
@@ -1482,7 +1506,7 @@ export function PlayerControls({
           `pointer-events-none` avec elles, et l'appui retombe sur le fond, qui les rappelle. */}
       <div
         className={`pointer-events-none absolute inset-0 flex flex-col justify-between transition-opacity duration-300 ${
-          visible ? "opacity-100" : "opacity-0"
+          visible ? "player-chrome-live opacity-100" : "opacity-0"
         }`}
       >
         {/* Deux bandes plutôt qu'un dégradé plein écran. Le milieu était transparent mais était
@@ -1719,16 +1743,16 @@ export function PlayerControls({
                       onTogglePlaybackInfo();
                       setMenu(null);
                     }}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-xs text-white/60 hover:bg-white/10"
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white/85 hover:bg-white/10"
                   >
-                    <Info size={14} /> {t('player.playbackInfo')}
+                    <Info size={16} /> {t('player.playbackInfo')}
                   </button>
                   {hdrCap && (
                     <button
                       onClick={() => setMenu("hdrCap")}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left text-xs text-white/60 hover:bg-white/10"
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white/85 hover:bg-white/10"
                     >
-                      <Sun size={14} /> {t("player.hdrCap.title")} · {hdrCapLabel(hdrCap.current)}
+                      <Sun size={16} /> {t("player.hdrCap.title")} · {hdrCapLabel(hdrCap.current)}
                     </button>
                   )}
                 </div>
