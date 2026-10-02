@@ -1845,7 +1845,17 @@
       "warning": "Stopp in {n} s",
       "continue": "Weiter"
     },
-    "timeDisplay": "Verstrichene oder verbleibende Zeit"
+    "castConfirm": {
+      "airplay": "Zu AirPlay wechseln",
+      "remote": "Zum Fernseher wechseln",
+      "confirm": "Bestätigen"
+    },
+    "play": "Wiedergabe",
+    "pause": "Pause",
+    "audio": "Audio",
+    "subtitles": "Untertitel",
+    "fullscreen": "Vollbild",
+    "mute": "Ton aus- oder einschalten"
   },
   "cinema": {
     "fileMissing": "Datei nicht gefunden",

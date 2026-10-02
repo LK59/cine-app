@@ -1845,7 +1845,17 @@
       "warning": "Se detiene en {n} s",
       "continue": "Continuar"
     },
-    "timeDisplay": "Tiempo transcurrido o restante"
+    "castConfirm": {
+      "airplay": "Pasar a AirPlay",
+      "remote": "Pasar al televisor",
+      "confirm": "Confirmar"
+    },
+    "play": "Reproducir",
+    "pause": "Pausa",
+    "audio": "Audio",
+    "subtitles": "Subtítulos",
+    "fullscreen": "Pantalla completa",
+    "mute": "Silenciar o activar el sonido"
   },
   "cinema": {
     "fileMissing": "Archivo no encontrado",

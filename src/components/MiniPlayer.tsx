@@ -160,7 +160,8 @@ export function MiniPlayerChrome({ title, playing, onTogglePlay, onClose }: Mini
             e.stopPropagation();
             onClose();
           }}
-          className="rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70"
+          // La matière des commandes plein écran (`player-pill`, globals.css), à la taille du mini-lecteur.
+          className="player-pill p-1.5 text-white"
         >
           <X size={16} />
         </button>
@@ -172,9 +173,9 @@ export function MiniPlayerChrome({ title, playing, onTogglePlay, onClose }: Mini
             e.stopPropagation();
             onTogglePlay();
           }}
-          className="shrink-0 rounded-full bg-white/15 p-2 text-white hover:bg-white/25"
+          className="player-pill shrink-0 p-2 text-white"
         >
-          {playing ? <Pause size={18} /> : <Play size={18} />}
+          {playing ? <Pause size={18} fill="currentColor" strokeWidth={0} /> : <Play size={18} fill="currentColor" strokeWidth={0} />}
         </button>
         <p className="truncate text-sm font-medium text-white/90">{title}</p>
       </div>

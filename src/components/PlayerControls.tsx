@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight } from "lucide-react";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
@@ -121,6 +121,13 @@ interface PlayerControlsProps {
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
+/** Combien de temps la confirmation de diffusion reste dépliée sans qu'on y touche. */
+const CAST_CONFIRM_MS = 4000;
+/**
+ * Où se posent les invites flottantes (« Passer l'intro », l'épisode suivant, la minuterie) : au-dessus
+ * du bas des commandes — titre, pilule et barre —, pour ne jamais les couvrir quand elles sont là.
+ */
+const PROMPT_BOTTOM = "calc(max(1rem, env(safe-area-inset-bottom)) + 8.5rem)";
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 /** Masqués, les contrôles ne suivent la position qu'à ce rythme — voir `visibleRef`. */
 const HIDDEN_UPDATE_MS = 1000;
@@ -136,16 +143,6 @@ const SEEK_SPINNER_MS = 150;
 const TOUCH_ECHO_MS = 800;
 /** En dessous, un déplacement du doigt est son tremblement, pas un geste — voir `lastTouchXRef`. */
 const TOUCH_JITTER_PX = 1;
-
-/** Où l'appareil retient la façon d'afficher le temps — voir `showRemaining`. */
-const TIME_DISPLAY_KEY = "cine:player-time-display";
-function readRemainingPreference(): boolean {
-  try {
-    return typeof localStorage !== "undefined" && localStorage.getItem(TIME_DISPLAY_KEY) === "remaining";
-  } catch {
-    return false;
-  }
-}
 
 /**
  * La flèche de ±10 s, avec son « 10 » dedans — dessinée en vecteurs, nette à toute taille : sans le
@@ -288,6 +285,31 @@ export function PlayerControls({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [castSupported, setCastSupported] = useState(false);
+  /** AirPlay (WebKit) ou Remote Playback : ne change que le mot de la confirmation. */
+  const [castKind, setCastKind] = useState<"airplay" | "remote">("remote");
+  /**
+   * La pilule de diffusion dépliée en « Passer sur AirPlay · Confirmer » — lecteur natif seulement.
+   *
+   * Passer sur AirPlay quitte le lecteur natif pour le lecteur serveur : un geste qui coûte une
+   * nouvelle ouverture, et le bouton est voisin de celui du mini-lecteur, sous le même pouce. Le
+   * premier appui demande, le second fait. Le lecteur serveur, lui, ouvre le sélecteur du système
+   * au premier appui : il n'y a rien à quitter.
+   */
+  const [castConfirm, setCastConfirm] = useState(false);
+  const castPillRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!castConfirm) return;
+    // Repliée d'elle-même au bout de quatre secondes, ou par un appui ailleurs.
+    const timer = setTimeout(() => setCastConfirm(false), CAST_CONFIRM_MS);
+    const onPointerDown = (e: PointerEvent) => {
+      if (!castPillRef.current?.contains(e.target as Node)) setCastConfirm(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [castConfirm]);
   const [speed, setSpeed] = useState(1);
   const [chapters, setChapters] = useState<{ start: number; name: string | null }[]>([]);
   const [bufferedEnd, setBufferedEnd] = useState(0);
@@ -614,6 +636,7 @@ export function PlayerControls({
     let unmounted = false;
     if (typeof castVideo.webkitShowPlaybackTargetPicker === "function") {
       setCastSupported(true);
+      setCastKind("airplay");
     } else if (castVideo.remote) {
       const remote = castVideo.remote;
       remote
@@ -986,21 +1009,6 @@ export function PlayerControls({
   const chapterThumbScale = trickplay ? chapterThumbWidth / trickplay.width : 1;
   const chapterThumbHeight = trickplay ? Math.round(trickplay.height * chapterThumbScale) : 36;
 
-  /**
-   * Écoulé / total, ou le temps qui reste (« −10:35 »). Un choix d'appareil, gardé d'un film à
-   * l'autre — on regarde l'un ou l'autre par habitude, pas selon le film.
-   */
-  const [showRemaining, setShowRemaining] = useState(readRemainingPreference);
-  function toggleTimeDisplay() {
-    const next = !showRemaining;
-    setShowRemaining(next);
-    try {
-      localStorage.setItem(TIME_DISPLAY_KEY, next ? "remaining" : "elapsed");
-    } catch {
-      // Stockage indisponible : le choix vaut pour ce film seulement.
-    }
-  }
-
   function toggleMute() {
     const video = videoRef.current;
     if (video) video.muted = !video.muted;
@@ -1101,21 +1109,21 @@ export function PlayerControls({
   // predictability. Falls back to the old global skip(±10) behavior when nothing in here has
   // focus at all (e.g. right after a menu closes and returns focus to <body>), so arrow keys
   // still do something sane even outside the nav chain.
+  // Haut (fermer, diffusion, mini-lecteur, son) → centre (−10, lecture, +10) → pilule du bas
+  // (vitesse, audio, sous-titres, ⋮, plein écran) → barre. ←/→ parcourent chaque rangée.
   const NAV_DOWN: Record<string, string> = {
-    captions: "playpause", audio: "playpause", more: "playpause", minimize: "playpause", close: "playpause",
-    "skip-back": "seek", playpause: "seek", "skip-fwd": "seek",
-    seek: "volume",
-    volume: "fullscreen",
+    close: "playpause", cast: "playpause", "cast-confirm": "playpause", minimize: "playpause", mute: "playpause", volume: "playpause",
+    "skip-back": "more", playpause: "more", "skip-fwd": "more",
+    speed: "seek", audio: "seek", captions: "seek", more: "seek", fullscreen: "seek",
   };
   const NAV_UP: Record<string, string> = {
-    "skip-back": "captions", playpause: "captions", "skip-fwd": "captions",
-    seek: "playpause",
-    volume: "seek",
-    fullscreen: "volume",
+    "skip-back": "close", playpause: "close", "skip-fwd": "close",
+    speed: "playpause", audio: "playpause", captions: "playpause", more: "playpause", fullscreen: "playpause",
+    seek: "more",
   };
 
   // Which topbar control reopens each menu on Escape, to land focus back where it came from.
-  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more", subtitleStyle: "captions", hdrCap: "more", sleep: "more" };
+  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "speed", subtitleStyle: "captions", hdrCap: "more", sleep: "more" };
 
   // Lands focus on the menu's first item the instant it opens — clicking captions/audio/more
   // only focuses THAT button (native click behavior), never moves focus into the popup that
@@ -1354,9 +1362,9 @@ export function PlayerControls({
               videoRef.current.currentTime = introSkip!.end;
             }
           }}
-          className="player-glass pointer-events-auto absolute rounded-full px-4 py-2 text-sm font-medium text-white"
+          className="player-pill pointer-events-auto absolute px-4 py-2.5 text-sm font-medium text-white"
           style={{
-            bottom: "max(6rem, calc(env(safe-area-inset-bottom) + 5rem))",
+            bottom: PROMPT_BOTTOM,
             right: "max(1rem, env(safe-area-inset-right))",
           }}
         >
@@ -1369,9 +1377,9 @@ export function PlayerControls({
       {sleepWarning !== null && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="player-glass pointer-events-auto absolute flex items-center gap-2 rounded-full py-1.5 pl-3.5 pr-1.5 text-xs text-white/80"
+          className="player-pill pointer-events-auto absolute flex items-center gap-2 py-1.5 pl-3.5 pr-1.5 text-xs text-white/80"
           style={{
-            bottom: "max(6rem, calc(env(safe-area-inset-bottom) + 5rem))",
+            bottom: PROMPT_BOTTOM,
             left: "max(1rem, env(safe-area-inset-left))",
           }}
         >
@@ -1416,7 +1424,7 @@ export function PlayerControls({
           onClick={(e) => e.stopPropagation()}
           className="player-panel pointer-events-auto absolute w-72 max-w-[calc(100vw-2rem)] animate-fade-in-scale rounded-2xl p-4"
           style={{
-            bottom: "max(6rem, calc(env(safe-area-inset-bottom) + 5rem))",
+            bottom: PROMPT_BOTTOM,
             right: "max(1rem, env(safe-area-inset-right))",
           }}
         >
@@ -1456,33 +1464,24 @@ export function PlayerControls({
             image, par-dessus une vidéo qui peut être en 4K. Ces deux-là couvrent ce qu'il y a à
             couvrir — le titre en haut, les contrôles en bas — et laissent les quarante pour cent
             du milieu tranquilles. */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/60 to-transparent" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent" />
-        {/* Top bar — padded past the safe area so the close button isn't
-            hidden under the notch / rounded corners in landscape PWA mode,
-            plus extra clearance for the Dynamic Island / translucent status
-            bar in portrait, which sits below the strict safe-area edge. */}
+        {/* Plus hauts au bureau, où l'écran l'est aussi. Le bas porte le titre : un palier à mi-hauteur
+            le garde lisible sur une image claire, sans voile sur le reste de l'image. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[140px] bg-gradient-to-b from-black/55 to-transparent lg:h-[180px]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[180px] bg-gradient-to-t from-black/60 via-black/25 to-transparent lg:h-[240px]" />
+        {/* En haut : fermer, puis — à distance, pour que le pouce ne prenne pas l'un pour l'autre — la
+            pilule de la diffusion et du mini-lecteur ; à droite, le son seul. Le reste est en bas,
+            près de la barre, comme sur l'Apple TV. Marges : 16, 24 puis 32 px, plus les bords sûrs
+            (encoche en paysage, Dynamic Island en portrait). */}
         <div
-          // Le groupe de navigation est la rangée entière : la flèche de retour, à gauche, en est le
-          // premier arrêt, et ←/→ la parcourent jusqu'à « réduire » comme avant jusqu'à la croix.
           data-player-navgroup="topbar"
-          className={`${visible ? "pointer-events-auto" : "pointer-events-none"} flex items-center justify-between p-4 transition-transform duration-300 ease-out ${
-            visible ? "translate-y-0" : "-translate-y-2"
-          }`}
+          className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none -translate-y-1"} flex items-center justify-between gap-3 pb-4 transition-transform duration-300 ease-out motion-reduce:translate-y-0`}
           // Capture phase: children stopPropagation() in the bubble phase, which is exactly why
           // the old timer never got reset by button use — capture fires on the way DOWN, before
           // any child handler, so every top-bar interaction reliably re-arms the long timer.
           onClickCapture={() => showControls(10000)}
-          style={{
-            paddingTop: "max(1rem, calc(env(safe-area-inset-top) + 1.5rem))",
-            paddingLeft: "max(1rem, env(safe-area-inset-left))",
-            paddingRight: "max(1rem, env(safe-area-inset-right))",
-          }}
+          style={{ paddingTop: "max(1rem, calc(env(safe-area-inset-top) + 1rem))" }}
         >
-          {/* Fermer, en flèche de retour devant le titre — là où l'Apple TV et les autres lecteurs la
-              mettent, et non plus en croix au bout d'une rangée de cinq boutons identiques. Même
-              geste, même rappel : `onClose`, le fondu et le rapport d'arrêt de l'hôte. */}
-          <div className="flex min-w-0 items-center gap-3 pr-4">
+          <div className="flex min-w-0 items-center gap-4 max-[379px]:gap-3">
             <button
               data-player-nav="close"
               onClick={(e) => {
@@ -1490,80 +1489,112 @@ export function PlayerControls({
                 handleCloseClick();
               }}
               aria-label={t("common.close")}
-              className="player-glass shrink-0 rounded-full p-2.5 text-white"
+              className="player-pill player-pill-btn shrink-0"
             >
-              <ArrowLeft size={20} />
+              <X size={22} />
             </button>
-            {/* "Série — S02E05 · Le pilote" arrive d'une seule pièce du serveur : la série
-                passe au-dessus, discrète, et l'épisode garde la ligne forte. Un titre qui ne
-                suit pas cette forme — un film — reste sur une ligne, inchangé. */}
-            <div className="min-w-0">
-              {(() => {
-                const cut = title.indexOf(" — ");
-                if (cut === -1) return <p className="truncate text-sm font-medium text-white">{title}</p>;
-                return (
-                  <>
-                    <p className="truncate text-[11px] font-medium uppercase tracking-[0.08em] text-white/55">
-                      {title.slice(0, cut)}
-                    </p>
-                    <p className="truncate text-sm font-semibold text-white">{title.slice(cut + 3)}</p>
-                  </>
-                );
-              })()}
+            <div ref={castPillRef} data-cast-pill className="player-pill flex min-w-0 items-center p-0.5">
+              {/* Les deux boutons au repos, et la confirmation qui prend leur place : deux segments
+                  toujours là, l'un se resserrant pendant que l'autre s'ouvre — la pilule grandit
+                  d'un geste au lieu de sauter d'une largeur à l'autre. */}
+              <div
+                className={`player-pill-seg flex items-center ${castConfirm ? "player-pill-seg-closed" : ""}`}
+                inert={castConfirm}
+                aria-hidden={castConfirm || undefined}
+              >
+                {castSupported && (
+                  <button
+                    data-player-nav="cast"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Le lecteur serveur joue une adresse : le sélecteur s'ouvre tout de suite, dans
+                      // ce geste même — `showCastPicker` l'appelle avant tout `await`, ce qu'iOS exige.
+                      // Le lecteur natif doit d'abord céder la place (`onCastRequest`) : on demande.
+                      if (onCastRequest) setCastConfirm(true);
+                      else void showCastPicker();
+                    }}
+                    aria-label={t("player.cast")}
+                    data-on={castActive ? "" : undefined}
+                    className="player-pill-btn"
+                  >
+                    <Cast size={20} />
+                  </button>
+                )}
+                <button
+                  data-player-nav="minimize"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleMinimizeClick();
+                  }}
+                  title={t('player.minimize')}
+                  aria-label={t('player.minimize')}
+                  className="player-pill-btn"
+                >
+                  <PictureInPicture2 size={20} />
+                </button>
+              </div>
+              <div
+                data-cast-confirm={castConfirm ? "open" : "closed"}
+                className={`player-pill-seg flex min-w-0 items-center gap-2 ${castConfirm ? "" : "player-pill-seg-closed"}`}
+                inert={!castConfirm}
+                aria-hidden={!castConfirm || undefined}
+              >
+                <span className="min-w-0 truncate pl-3 text-sm text-white/90 max-[379px]:text-[13px]">
+                  {t(castKind === "airplay" ? "player.castConfirm.airplay" : "player.castConfirm.remote")}
+                </span>
+                <button
+                  data-player-nav="cast-confirm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCastConfirm(false);
+                    // Exactement le chemin d'avant : le lecteur natif cède la place au lecteur
+                    // serveur, qui ouvre le sélecteur quand son élément est prêt.
+                    onCastRequest?.();
+                  }}
+                  className="player-capsule shrink-0"
+                >
+                  {t("player.castConfirm.confirm")}
+                </button>
+              </div>
             </div>
           </div>
-          {/* Only the controls used constantly (subtitles/audio) plus minimize stay directly on
-              the bar — on a portrait phone, 9 icons in a row was too much. Everything else
-              (chapters, speed, the sleep timer, AirPlay, info) lives one tap deeper behind "···",
-              grouped as a labeled list rather than more bare icons. Closing is the back arrow on
-              the left. */}
-          <div className="flex shrink-0 items-center gap-2">
-            {subtitleTracks.length > 0 && (
-              <button
-                data-player-nav="captions"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenu(menu === "subtitles" ? null : "subtitles");
-                }}
-                className={`player-glass rounded-full p-2.5 text-white ${menu === "subtitles" ? "player-glass-on" : ""}`}
-              >
-                <Captions size={18} />
-              </button>
-            )}
-            {audioTracks.length > 1 && (
-              <button
-                data-player-nav="audio"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenu(menu === "audio" ? null : "audio");
-                }}
-                className={`player-glass rounded-full p-2.5 text-white ${menu === "audio" ? "player-glass-on" : ""}`}
-              >
-                <AudioLines size={18} />
-              </button>
-            )}
+          {/* Le son, seul à droite. Au bureau, le curseur se replie et se déplie sous le pointeur ou
+              au clavier (`.player-volume`, globals.css) ; partout ailleurs — doigt, tablette, écran
+              tactile — il reste déplié, et sur iPhone il n'y a que le bouton, iOS ignorant le
+              volume d'une page. Jamais une fonction réservée au survol. Le temps d'une confirmation
+              de diffusion, sur un écran étroit, il cède sa place à la pilule qui s'ouvre. */}
+          <div className={`player-volume player-pill flex shrink-0 items-center p-0.5 ${castConfirm ? "max-sm:hidden" : ""}`}>
             <button
-              data-player-nav="more"
+              data-player-nav="mute"
               onClick={(e) => {
                 e.stopPropagation();
-                setMenu(menu === "more" ? null : "more");
+                toggleMute();
               }}
-              title={t('player.moreOptions')}
-              className={`player-glass rounded-full p-2.5 text-white ${menu === "more" ? "player-glass-on" : ""}`}
+              aria-label={t("player.mute")}
+              className="player-pill-btn"
             >
-              <EllipsisVertical size={18} />
+              {muted || volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
             </button>
-            <button
-              data-player-nav="minimize"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleMinimizeClick();
-              }}
-              title={t('player.minimize')}
-              className="player-glass rounded-full p-2.5 text-white"
-            >
-              <ChevronDown size={20} />
-            </button>
+            {/* Four pixels tall is a target a finger cannot land on, let alone drag along: every
+                touch became a tap, and a tap on a range input jumps straight to the end it
+                landed nearest. Twenty is the same bar with room to hold on to. */}
+            {volumeSettable && (
+              <span className="player-volume-slider flex items-center">
+                <input
+                  data-player-nav="volume"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={muted ? 0 : volume}
+                  onChange={(e) => changeVolume(Number(e.target.value))}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={t("player.volume")}
+                  className="mr-3 h-5 w-20 cursor-pointer accent-white"
+                  style={{ WebkitTouchCallout: "none", touchAction: "none" }}
+                />
+              </span>
+            )}
           </div>
         </div>
 
@@ -1575,15 +1606,17 @@ export function PlayerControls({
                and a box that scrolls in one direction scrolls in both, which is where the
                horizontal bar came from. Wide enough that the row fits and "Taille sous-titres"
                stops wrapping onto two lines with it. */
-            className="player-panel pointer-events-auto absolute w-72 max-h-[60vh] origin-top-right animate-fade-in-scale overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl"
+            className="player-panel player-menu player-chrome-right pointer-events-auto absolute w-72 max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl"
             style={{
               // `bottom` deliberately not set here: an absolutely-positioned element with both
               // `top` and `bottom` stretches to fill the space between them regardless of
               // content — which made this menu always ~half the screen tall even with only 2-3
               // items. `max-h-[60vh]` alone already caps growth for a long track list; the menu
               // otherwise just sizes to its content.
-              top: "max(4rem, calc(env(safe-area-inset-top) + 5rem))",
-              right: "max(1rem, env(safe-area-inset-right))",
+              // Juste au-dessus de la pilule du bas, d'où il s'ouvre ; et jamais plus haut que ce
+              // que l'écran laisse sous la rangée du haut — un téléphone en paysage n'a pas 60 %.
+              bottom: "calc(max(1rem, env(safe-area-inset-bottom)) + 5.75rem)",
+              maxHeight: "min(60vh, calc(100dvh - max(1rem, env(safe-area-inset-bottom)) - 10.5rem))",
             }}
             onClick={(e) => e.stopPropagation()}
             onClickCapture={() => showControls(10000)}
@@ -1602,19 +1635,13 @@ export function PlayerControls({
                     <ListVideo size={16} /> {t('player.chapters')}
                   </button>
                 )}
-                <button
-                  onClick={() => setMenu("speed")}
-                  className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                >
-                  <Gauge size={16} /> {t('player.speed')}{speed !== 1 ? ` · ${speed}x` : ""}
-                </button>
-                {/* Une ligne comme la vitesse ; active, la lune à la place du chronomètre, et ce qui
-                    reste. Rien d'autre à l'écran ne dit qu'une minuterie court. */}
+                {/* Active, la lune à la place du chronomètre, et ce qui reste. Rien d'autre à l'écran
+                    ne dit qu'une minuterie court. */}
                 <button
                   onClick={() => setMenu("sleep")}
                   className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                 >
-                  {sleepMode === "off" ? <Timer size={16} /> : <Moon size={16} className="text-accent-400" data-sleep-active="" />}
+                  {sleepMode === "off" ? <Timer size={16} /> : <Moon size={16} fill="currentColor" data-sleep-active="" />}
                   {t("player.sleep.title")}
                   {sleepMode === "episode"
                     ? ` · ${t("player.sleep.episode")}`
@@ -1622,6 +1649,22 @@ export function PlayerControls({
                       ? ` · ${t("player.sleep.minutes", { n: sleepMinutes })}`
                       : ""}
                 </button>
+                {/* Le retour, tant que cette séance existe pour diffuser. Il ne dépend d'aucun
+                    événement — voir `onCastReturn` — et c'est précisément ce qui le rend sûr :
+                    la seule partie de la diffusion qu'on ne puisse pas éprouver depuis ici est
+                    la détection, et celle-ci s'en passe. La diffusion elle-même est en haut. */}
+                {onCastReturn && (
+                  <button
+                    onClick={() => {
+                      onCastReturn();
+                      setMenu(null);
+                    }}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    <MonitorSmartphone size={16} />
+                    {castActive ? t("player.castStop") : t("player.castReturn")}
+                  </button>
+                )}
                 {frameFit && (
                   // Le menu reste ouvert : l'image glisse derrière, et c'est ce qu'on veut voir.
                   <button
@@ -1636,45 +1679,15 @@ export function PlayerControls({
                     </span>
                     <span
                       aria-hidden
-                      className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${frameFit.on ? "bg-accent-600" : "bg-white/20"}`}
+                      className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${frameFit.on ? "bg-white/80" : "bg-white/20"}`}
                     >
                       <span
-                        className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${frameFit.on ? "translate-x-4" : ""}`}
+                        className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform ${frameFit.on ? "translate-x-4 bg-black" : "bg-white"}`}
                       />
                     </span>
                   </button>
                 )}
-                {castSupported && (
-                  <button
-                    onClick={() => {
-                      // Voir `onCastRequest` : un MediaSource ne se diffuse pas, il faut d'abord
-                      // que le lecteur cède la place à celui qui joue une adresse.
-                      if (onCastRequest) onCastRequest();
-                      else showCastPicker();
-                      setMenu(null);
-                    }}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                  >
-                    <Cast size={16} /> {t('player.cast')}
-                  </button>
-                )}
-                {/* Le retour, tant que cette séance existe pour diffuser. Il ne dépend d'aucun
-                    événement — voir `onCastReturn` — et c'est précisément ce qui le rend sûr :
-                    la seule partie de la diffusion qu'on ne puisse pas éprouver depuis ici est
-                    la détection, et celle-ci s'en passe. */}
-                {onCastReturn && (
-                  <button
-                    onClick={() => {
-                      onCastReturn();
-                      setMenu(null);
-                    }}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                  >
-                    <MonitorSmartphone size={16} />
-                    {castActive ? t("player.castStop") : t("player.castReturn")}
-                  </button>
-                )}
-                <div data-menu-secondary className="border-t border-white/10">
+                <div data-menu-secondary className="border-t border-white/[0.08]">
                   <button
                     onClick={() => {
                       onTogglePlaybackInfo();
@@ -1695,7 +1708,7 @@ export function PlayerControls({
                 </div>
               </>
             )}
-            {(menu === "chapters" || menu === "speed" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep") && (
+            {(menu === "chapters" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep") && (
               <button
                 onClick={() => setMenu(menu === "subtitleStyle" ? "subtitles" : "more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
@@ -1897,14 +1910,14 @@ export function PlayerControls({
             conflict with the tap-to-toggle-controls handler covering the same area). Hidden
             while a spinner is already showing. */}
         {!loading && !buffering && (
-          <div data-player-navgroup="center" className={`${visible ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-6`}>
+          <div data-player-navgroup="center" className={`${visible ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-6 max-[379px]:gap-4`}>
             <button
               data-player-nav="skip-back"
               onClick={(e) => {
                 e.stopPropagation();
                 skip(-10);
               }}
-              className="player-glass player-glass-back rounded-full p-3 text-white"
+              className="player-pill player-pill-light player-center-btn player-glass-back"
               title={t('player.rewind10')}
             >
               <SkipGlyph direction="back" />
@@ -1915,9 +1928,11 @@ export function PlayerControls({
                 e.stopPropagation();
                 togglePlay();
               }}
-              className="player-glass rounded-full p-4 text-white"
+              aria-label={playing ? t("player.pause") : t("player.play")}
+              data-size="main"
+              className="player-pill player-pill-light player-center-btn"
             >
-              {playing ? <Pause size={28} /> : <Play size={28} />}
+              {playing ? <Pause size={30} fill="currentColor" strokeWidth={0} /> : <Play size={30} fill="currentColor" strokeWidth={0} className="translate-x-[2px]" />}
             </button>
             <button
               data-player-nav="skip-fwd"
@@ -1925,7 +1940,7 @@ export function PlayerControls({
                 e.stopPropagation();
                 skip(10);
               }}
-              className="player-glass player-glass-fwd rounded-full p-3 text-white"
+              className="player-pill player-pill-light player-center-btn player-glass-fwd"
               title={t('player.forward10')}
             >
               <SkipGlyph direction="forward" />
@@ -1933,22 +1948,96 @@ export function PlayerControls({
           </div>
         )}
 
-        {/* Bottom bar */}
+        {/* En bas : le titre et la pilule des réglages sur une rangée, la barre et ses deux temps
+            dessous. */}
         <div
-          className={`${visible ? "pointer-events-auto" : "pointer-events-none"} flex flex-col gap-2 p-4 transition-transform duration-300 ease-out ${
-            visible ? "translate-y-0" : "translate-y-2"
-          }`}
+          className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none translate-y-1"} flex flex-col gap-3 pt-4 transition-transform duration-300 ease-out motion-reduce:translate-y-0`}
           onClick={(e) => e.stopPropagation()}
           onClickCapture={() => showControls(10000)}
-          style={{
-            paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
-            paddingLeft: "max(1rem, env(safe-area-inset-left))",
-            paddingRight: "max(1rem, env(safe-area-inset-right))",
-          }}
+          style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
         >
+          <div className="flex items-end gap-3">
+            {/* La série en grand, l'épisode en petit dessous ; un film, son titre seul. Une ombre
+                douce sous le texte et le palier du voile du bas : lisible sur une image claire, sans
+                flou. "Série — S02E05 · Le pilote" arrive d'une seule pièce du serveur. */}
+            <div className="player-title min-w-0 flex-1 pb-0.5">
+              {(() => {
+                const cut = title.indexOf(" — ");
+                const main = cut === -1 ? title : title.slice(0, cut);
+                return (
+                  <>
+                    <p data-player-title className="player-title-main truncate text-white">{main}</p>
+                    {cut !== -1 && (
+                      <p className="truncate text-[13px] font-medium text-white/70 sm:text-sm">{title.slice(cut + 3)}</p>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+            {/* Vitesse · audio · sous-titres · ⋮ — et le plein écran au bout, là où il existe : à
+                côté du temps restant, il aurait cassé la symétrie de la ligne du temps. Les menus
+                s'ouvrent vers le haut depuis cette pilule. */}
+            <div data-player-navgroup="bottombar" data-settings-pill className="player-pill flex shrink-0 items-center p-0.5">
+              <button
+                data-player-nav="speed"
+                onClick={() => setMenu(menu === "speed" ? null : "speed")}
+                aria-label={t("player.speed")}
+                data-on={menu === "speed" || speed !== 1 ? "" : undefined}
+                className="player-pill-btn"
+              >
+                {speed !== 1 ? <span className="text-[13px] font-semibold tabular-nums">{speed}×</span> : <Gauge size={20} />}
+              </button>
+              {audioTracks.length > 1 && (
+                <button
+                  data-player-nav="audio"
+                  onClick={() => setMenu(menu === "audio" ? null : "audio")}
+                  aria-label={t("player.audio")}
+                  data-on={menu === "audio" ? "" : undefined}
+                  className="player-pill-btn"
+                >
+                  <AudioLines size={20} />
+                </button>
+              )}
+              {subtitleTracks.length > 0 && (
+                <button
+                  data-player-nav="captions"
+                  onClick={() => setMenu(menu === "subtitles" ? null : "subtitles")}
+                  aria-label={t("player.subtitles")}
+                  data-on={menu === "subtitles" || currentSubtitleId !== null ? "" : undefined}
+                  className="player-pill-btn"
+                >
+                  <Captions size={20} />
+                </button>
+              )}
+              <button
+                data-player-nav="more"
+                onClick={() => setMenu(menu === "more" ? null : "more")}
+                title={t('player.moreOptions')}
+                aria-label={t('player.moreOptions')}
+                data-on={menu === "more" ? "" : undefined}
+                className="player-pill-btn"
+              >
+                <EllipsisVertical size={20} />
+              </button>
+              {fullscreenSupported && (
+                <button
+                  data-player-nav="fullscreen"
+                  onClick={toggleFullscreen}
+                  aria-label={t("player.fullscreen")}
+                  className="player-pill-btn"
+                >
+                  {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+                </button>
+              )}
+            </div>
+          </div>
+          {/* Le temps écoulé à gauche, ce qui reste à droite — sans signe moins, toujours, en pause
+              comme en lecture. Il n'y a plus de bascule : les deux sont là. */}
+          <div className="flex items-center gap-3">
+          <span data-player-elapsed className="player-time shrink-0 text-left">{formatTime(currentTime)}</span>
           <div
             ref={seekBarRef}
-            className="relative select-none"
+            className="relative min-w-0 flex-1 select-none"
             // Posé et retiré par le composant, qui sait exactement quand la barre est sous un
             // doigt ou un curseur — c'est déjà ce qui décide d'afficher la vignette. Laisser
             // faire `:hover` voulait dire la laisser épaissie longtemps après le doigt parti,
@@ -2024,7 +2113,7 @@ export function PlayerControls({
             {/* The rail at rest. Painted here rather than left to the native track, which cannot
                 be sized at all without giving up `accent-color` — and giving that up is what
                 lets the bar answer to a finger as well as to a pointer. */}
-            <div className={`pointer-events-none absolute top-1/2 w-full -translate-y-1/2 rounded-full bg-white/15 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-2" : "h-1"}`} />
+            <div className={`pointer-events-none absolute top-1/2 w-full -translate-y-1/2 rounded-full bg-white/20 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-2" : "h-1"}`} />
             {/* Buffered range — deliberately subtle (a slightly lighter track, not a bold
                 second color): its only job is "can I scrub ahead without waiting", not
                 competing for attention with the actual playback position. Sits under the
@@ -2032,7 +2121,7 @@ export function PlayerControls({
                 portion — exactly the part worth showing. */}
             {duration > 0 && bufferedEnd > 0 && (
               <div
-                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/25 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-2" : "h-1"}`}
+                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/35 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-2" : "h-1"}`}
                 // Both pointer-events-none (blocks click/drag) AND the two -webkit- properties
                 // (blocks the native long-press "Look Up / Copy / Writing Tools" callout menu,
                 // which iOS can still trigger on an element even with pointer-events: none —
@@ -2186,7 +2275,7 @@ export function PlayerControls({
               // default margin in some engines' UA stylesheets that isn't reset by Tailwind's
               // own base styles — left in place, that margin would throw off centering the
               // buffered/chapter overlays on this taller box (see their top-1/2 above).
-              className="player-seek relative m-0 block h-5 w-full cursor-pointer text-accent-500"
+              className="player-seek relative m-0 block h-6 w-full cursor-pointer text-white"
               style={{
                 // La part lue, que la piste native ne peut plus peindre elle-même.
                 ["--played" as string]: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%`,
@@ -2194,60 +2283,7 @@ export function PlayerControls({
               }}
             />
           </div>
-          <div className="flex items-center gap-3 text-xs text-white/80">
-            {/* Écoulé / total, ou ce qui reste — au clic comme au doigt, retenu sur l'appareil. */}
-            <button
-              type="button"
-              data-player-time
-              onClick={toggleTimeDisplay}
-              title={t("player.timeDisplay")}
-              className="-mx-1.5 flex items-center gap-3 rounded px-1.5 py-0.5 tabular-nums hover:bg-white/10"
-            >
-              {showRemaining ? (
-                <span>−{formatTime(Math.max(0, duration - currentTime))}</span>
-              ) : (
-                <>
-                  <span>{formatTime(currentTime)}</span>
-                  <span className="text-white/40">/</span>
-                  <span>{formatTime(duration)}</span>
-                </>
-              )}
-            </button>
-            <div className="ml-auto flex items-center gap-2">
-              {/* Le son et son curseur, ensemble : au bureau, le curseur reste replié et se déplie
-                  sous le pointeur ou au clavier (`.player-volume`, globals.css) ; partout ailleurs —
-                  doigt, tablette, écran tactile —, il reste déplié comme avant. Jamais une fonction
-                  réservée au survol. */}
-              <div className="player-volume flex items-center gap-2">
-                <button onClick={toggleMute} className="btn btn-ghost btn-icon p-1.5">
-                  {muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
-                </button>
-                {/* Four pixels tall is a target a finger cannot land on, let alone drag along: every
-                    touch became a tap, and a tap on a range input jumps straight to the end it
-                    landed nearest. Twenty is the same bar with room to hold on to. */}
-                {volumeSettable && (
-                  <span className="player-volume-slider flex items-center">
-                    <input
-                      data-player-nav="volume"
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={muted ? 0 : volume}
-                      onChange={(e) => changeVolume(Number(e.target.value))}
-                      aria-label={t("player.volume")}
-                      className="h-5 w-20 cursor-pointer accent-accent-500"
-                      style={{ WebkitTouchCallout: "none", touchAction: "none" }}
-                    />
-                  </span>
-                )}
-              </div>
-              {fullscreenSupported && (
-                <button data-player-nav="fullscreen" onClick={toggleFullscreen} className="btn btn-ghost btn-icon p-1.5">
-                  {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
-                </button>
-              )}
-            </div>
+          <span data-player-remaining className="player-time shrink-0 text-right">{formatTime(Math.max(0, duration - currentTime))}</span>
           </div>
         </div>
       </div>

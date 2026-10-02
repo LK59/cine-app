@@ -1845,7 +1845,17 @@
       "warning": "Arrêt dans {n} s",
       "continue": "Continuer"
     },
-    "timeDisplay": "Temps écoulé ou restant"
+    "castConfirm": {
+      "airplay": "Passer sur AirPlay",
+      "remote": "Passer sur le téléviseur",
+      "confirm": "Confirmer"
+    },
+    "play": "Lecture",
+    "pause": "Pause",
+    "audio": "Audio",
+    "subtitles": "Sous-titres",
+    "fullscreen": "Plein écran",
+    "mute": "Couper ou rétablir le son"
   },
   "cinema": {
     "fileMissing": "Fichier introuvable",

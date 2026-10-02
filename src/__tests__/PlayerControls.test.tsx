@@ -286,13 +286,12 @@ describe("PlayerControls — un seul matériau", () => {
     const { container } = render(<Harness subtitleTracks={[{ id: 1, label: "Français" }]} currentSubtitleId={1} />);
     await act(async () => {});
 
-    const buttons = screen
-      .getAllByRole("button")
-      .filter((b) => ["captions", "more", "minimize", "close", "playpause", "skip-back", "skip-fwd"].includes(b.getAttribute("data-player-nav") ?? ""));
-    expect(buttons.length).toBeGreaterThanOrEqual(6);
-    for (const button of buttons) {
-      expect(button.className).toContain("player-glass");
-      expect(button.className).toContain("rounded-full");
+    // Une seule matière (`player-pill`) : les boutons seuls la portent, ceux des pilules sont posés dedans.
+    const nav = (name: string) => container.querySelector(`[data-player-nav="${name}"]`)!;
+    for (const name of ["close", "playpause", "skip-back", "skip-fwd"]) expect(nav(name).className).toContain("player-pill");
+    for (const name of ["captions", "more", "minimize", "speed", "mute"]) {
+      expect(nav(name).className).toContain("player-pill-btn");
+      expect(nav(name).parentElement!.closest(".player-pill")).not.toBeNull();
     }
 
     await act(async () => void fireEvent.click(screen.getAllByRole("button").find((b) => b.getAttribute("data-player-nav") === "more")!));
@@ -314,7 +313,7 @@ describe("PlayerControls — le menu", () => {
     const more = container.querySelector('[data-player-nav="more"]') ?? screen.getAllByRole("button").at(-1)!;
     await act(async () => void fireEvent.click(more));
 
-    const menu = container.querySelector(".max-h-\\[60vh\\]");
+    const menu = container.querySelector(".player-menu");
     expect(menu).not.toBeNull();
     expect(menu!.className).toContain("overflow-x-hidden");
   });
@@ -1181,41 +1180,80 @@ describe("PlayerControls — la minuterie de veille", () => {
   });
 });
 
+
 /**
- * La disposition revue le 02/10/2026 : fermer en flèche de retour à gauche, le menu ⋮ allégé, les
- * réglages des sous-titres dans leur menu, « 10 » dans les flèches, le temps qui bascule, et le
- * volume replié au bureau seulement.
+ * La disposition façon Apple TV (02/10/2026) : en haut, fermer puis la pilule diffusion · mini-
+ * lecteur, et le son seul à droite ; en bas, le titre et la pilule vitesse · audio · sous-titres · ⋮,
+ * puis la barre entre le temps écoulé et le temps restant.
  */
 describe("PlayerControls — la disposition", () => {
-  afterEach(() => {
-    try {
-      localStorage.clear();
-    } catch {
-      /* rien */
-    }
-  });
+  const nav = (container: HTMLElement, name: string) => container.querySelector<HTMLElement>(`[data-player-nav="${name}"]`);
 
-  it("ferme par une flèche de retour à gauche, devant le titre, et plus par une croix à droite", async () => {
+  /** Un élément qui sait ouvrir le sélecteur AirPlay — avant que l'effet des commandes ne le cherche. */
+  function airplay(onPicker = vi.fn()) {
+    return (v: HTMLVideoElement) => {
+      (v as HTMLVideoElement & { webkitShowPlaybackTargetPicker?: () => void }).webkitShowPlaybackTargetPicker = onPicker;
+    };
+  }
+
+  it("ferme par une croix en haut à gauche, à distance de la pilule diffusion · mini-lecteur", async () => {
     stubMediaFetches();
     const onClose = vi.fn();
-    const { container } = render(<Harness onClose={onClose} title="Some Title" />);
+    const onMinimize = vi.fn();
+    const { container } = render(<Harness onClose={onClose} onMinimize={onMinimize} onVideoRef={airplay()} />);
     await act(async () => {});
     const close = screen.getByRole("button", { name: "common.close" });
-    expect(close.querySelector("svg.lucide-arrow-left")).not.toBeNull();
-    // Avant le titre dans la rangée, et hors du groupe de droite, qui finit par « réduire ».
-    const title = screen.getByText("Some Title");
-    expect(close.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const minimize = container.querySelector('[data-player-nav="minimize"]')!;
-    expect(minimize.parentElement!.contains(close)).toBe(false);
-    expect(minimize.parentElement!.lastElementChild).toBe(minimize);
-    expect(container.querySelector("svg.lucide-x")).toBeNull();
-    // ←/→ la parcourent avec le reste de la rangée.
-    expect(close.closest('[data-player-navgroup="topbar"]')?.contains(minimize)).toBe(true);
+    expect(close.querySelector("svg.lucide-x")).not.toBeNull();
+    const pill = container.querySelector("[data-cast-pill]")!;
+    expect(pill.contains(close)).toBe(false);
+    expect(pill.contains(nav(container, "cast"))).toBe(true);
+    expect(pill.contains(nav(container, "minimize"))).toBe(true);
+    expect(nav(container, "minimize")!.querySelector("svg")).not.toBeNull();
+    // Fermer vient d'abord, puis la pilule, dans la même rangée que le son.
+    expect(close.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const top = close.closest('[data-player-navgroup="topbar"]')!;
+    expect(top.contains(nav(container, "mute"))).toBe(true);
+    // Rien d'autre en haut : sous-titres, audio et ⋮ sont en bas.
+    expect(top.contains(nav(container, "more"))).toBe(false);
     fireEvent.click(close);
     expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(nav(container, "minimize")!);
+    expect(onMinimize).toHaveBeenCalledTimes(1);
   });
 
-  it("garde dans ⋮ chapitres, vitesse et minuterie, puis, sous un trait, infos et luminosité HDR", async () => {
+  it("met le titre en bas, la série en grand et l'épisode en petit, à côté de la pilule des réglages", async () => {
+    stubMediaFetches();
+    const { container } = render(
+      <Harness
+        title="Ted Lasso — S02E01 · Richmond"
+        audioTracks={[{ id: 1, label: "Anglais" }, { id: 2, label: "Français" }]}
+        currentAudioId={1}
+        subtitleTracks={[{ id: 3, label: "Français" }]}
+        currentSubtitleId={3}
+      />
+    );
+    await act(async () => {});
+    expect(container.querySelector("[data-player-title]")!.textContent).toBe("Ted Lasso");
+    expect(screen.getByText("S02E01 · Richmond")).toBeInTheDocument();
+    const pill = container.querySelector("[data-settings-pill]")!;
+    const order = Array.from(pill.querySelectorAll("[data-player-nav]")).map((b) => b.getAttribute("data-player-nav"));
+    expect(order.slice(0, 4)).toEqual(["speed", "audio", "captions", "more"]);
+    // Sous-titres actifs : allumé, sans la couleur d'accent.
+    expect(nav(container, "captions")!.hasAttribute("data-on")).toBe(true);
+  });
+
+  it("ouvre la vitesse directement depuis sa pilule, vers le haut", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(nav(container, "speed")!));
+    const menu = container.querySelector<HTMLElement>(".player-menu")!;
+    expect(menu.textContent).toContain("player.speedNormal");
+    expect(menu.style.bottom).not.toBe("");
+    expect(menu.textContent).not.toContain("common.back");
+  });
+
+  it("garde dans ⋮ chapitres, minuterie, puis, sous un trait, infos et luminosité HDR", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) =>
@@ -1223,36 +1261,38 @@ describe("PlayerControls — la disposition", () => {
       )
     );
     const { container } = render(
-      <Harness
-        subtitleTracks={[{ id: 1, label: "Français" }]}
-        currentSubtitleId={1}
-        hdrCap={{ current: "auto", autoNits: 203, onPick: vi.fn() }}
-      />
+      <Harness subtitleTracks={[{ id: 1, label: "Français" }]} currentSubtitleId={1} hdrCap={{ current: "auto", autoNits: 203, onPick: vi.fn() }} />
     );
     await act(async () => {});
-    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));
+    await act(async () => void fireEvent.click(nav(container, "more")!));
     await screen.findByText("player.chapters");
-    const menu = container.querySelector(".player-panel")!;
+    const menu = container.querySelector(".player-menu")!;
     const labels = Array.from(menu.querySelectorAll("button")).map((b) => b.textContent ?? "");
     expect(labels[0]).toContain("player.chapters");
-    expect(labels[1]).toContain("player.speed");
-    expect(labels[2]).toContain("player.sleep.title");
+    expect(labels[1]).toContain("player.sleep.title");
     expect(labels.at(-2)).toContain("player.playbackInfo");
     expect(labels.at(-1)).toContain("player.hdrCap.title");
-    // Les deux derniers, sous un trait et plus discrets.
-    const secondary = menu.querySelector("[data-menu-secondary]")!;
-    expect(secondary.className).toContain("border-t");
-    expect(secondary.querySelectorAll("button")).toHaveLength(2);
-    // Les réglages des sous-titres n'y sont plus.
+    expect(menu.querySelector("[data-menu-secondary]")!.querySelectorAll("button")).toHaveLength(2);
+    expect(menu.textContent).not.toContain("player.speed");
+    expect(menu.textContent).not.toContain("player.cast");
     expect(menu.textContent).not.toContain("player.subtitleStyle.title");
-    expect(menu.textContent).not.toContain("player.subtitleOffset");
+  });
+
+  it("garde le retour de diffusion dans ⋮", async () => {
+    stubMediaFetches();
+    const onCastReturn = vi.fn();
+    const { container } = render(<Harness onCastReturn={onCastReturn} />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(nav(container, "more")!));
+    fireEvent.click(screen.getByText("player.castReturn"));
+    expect(onCastReturn).toHaveBeenCalledTimes(1);
   });
 
   it("n'y montre la luminosité HDR que pour un film qui en a une", async () => {
     stubMediaFetches();
     const { container } = render(<Harness />);
     await act(async () => {});
-    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));
+    await act(async () => void fireEvent.click(nav(container, "more")!));
     expect(screen.queryByText(/player\.hdrCap\.title/)).toBeNull();
     expect(screen.getByText("player.playbackInfo")).toBeInTheDocument();
   });
@@ -1261,71 +1301,56 @@ describe("PlayerControls — la disposition", () => {
     stubMediaFetches();
     const { container } = render(<Harness subtitleTracks={[{ id: 1, label: "Français" }]} currentSubtitleId={1} />);
     await act(async () => {});
-    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="captions"]')!));
-    const menu = container.querySelector(".player-panel")!;
-    expect(menu.textContent).toContain("Français");
-    expect(menu.textContent).toContain("player.none");
+    await act(async () => void fireEvent.click(nav(container, "captions")!));
+    const menu = container.querySelector(".player-menu")!;
     expect(menu.textContent).toContain("player.subtitleStyle.title");
     expect(menu.textContent).toContain("player.subtitleOffset");
-
     await act(async () => void fireEvent.click(screen.getByText("player.subtitleStyle.title")));
     expect(screen.getByText("player.subtitleSize")).toBeInTheDocument();
     await act(async () => void fireEvent.click(screen.getByText("common.back")));
     expect(screen.getByText("Français")).toBeInTheDocument();
   });
 
-  it("ne propose le décalage qu'une piste choisie", async () => {
-    stubMediaFetches();
-    const { container } = render(<Harness subtitleTracks={[{ id: 1, label: "Français" }]} currentSubtitleId={null} />);
-    await act(async () => {});
-    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="captions"]')!));
-    expect(screen.getByText("player.subtitleStyle.title")).toBeInTheDocument();
-    expect(screen.queryByText("player.subtitleOffset")).toBeNull();
-  });
-
   it("écrit « 10 » dans les deux flèches de saut", async () => {
     stubMediaFetches();
     const { container } = render(<Harness />);
     await act(async () => {});
-    for (const nav of ["skip-back", "skip-fwd"]) {
-      const button = container.querySelector(`[data-player-nav="${nav}"]`)!;
-      expect(button.querySelector("svg text")?.textContent).toBe("10");
-    }
+    for (const name of ["skip-back", "skip-fwd"]) expect(nav(container, name)!.querySelector("svg text")?.textContent).toBe("10");
   });
 
-  it("bascule le temps entre écoulé / total et restant, au clic comme au doigt, et s'en souvient", async () => {
+  it("montre le temps écoulé à gauche et le temps restant à droite, sans signe moins ni bascule", async () => {
     stubMediaFetches();
     let video!: HTMLVideoElement;
-    const { container, unmount } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
     await act(async () => {});
-    Object.defineProperty(video, "duration", { value: 1865, configurable: true });
-    Object.defineProperty(video, "currentTime", { value: 1230, configurable: true });
+    Object.defineProperty(video, "duration", { value: 3448, configurable: true });
+    Object.defineProperty(video, "currentTime", { value: 10, configurable: true });
     act(() => void video.dispatchEvent(new Event("durationchange")));
     act(() => void video.dispatchEvent(new Event("timeupdate")));
-    const time = () => container.querySelector("[data-player-time]")!;
-    expect(time().textContent).toBe("20:30/31:05");
-
-    // Un toucher arrive en clic : c'est un bouton, rien ne dépend du survol.
-    await act(async () => void fireEvent.click(time()));
-    expect(time().textContent).toBe("−10:35");
-    expect(localStorage.getItem("cine:player-time-display")).toBe("remaining");
-
-    unmount();
-    const again = render(<Harness />);
-    await act(async () => {});
-    expect(again.container.querySelector("[data-player-time]")!.textContent).toMatch(/^−/);
+    const elapsed = container.querySelector("[data-player-elapsed]")!;
+    const remaining = container.querySelector("[data-player-remaining]")!;
+    expect(elapsed.textContent).toBe("0:10");
+    expect(remaining.textContent).toBe("57:18");
+    // De part et d'autre de la barre.
+    const bar = container.querySelector(".player-seek")!;
+    expect(elapsed.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(bar.compareDocumentPosition(remaining) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Pas un bouton : un appui n'y change rien.
+    expect(remaining.closest("button")).toBeNull();
+    fireEvent.click(remaining);
+    expect(remaining.textContent).toBe("57:18");
+    expect(remaining.textContent).not.toContain("−");
+    // En pause aussi.
+    act(() => void video.dispatchEvent(new Event("pause")));
+    expect(container.querySelector("[data-player-remaining]")!.textContent).toBe("57:18");
   });
 
   it("garde le curseur du volume dans la page partout, et ne le replie qu'au pointeur fin qui survole", async () => {
     stubMediaFetches();
     const { container } = render(<Harness />);
     await act(async () => {});
-    // Présent dans le document, à côté du bouton du son, dans un même groupe.
-    const slider = container.querySelector('[data-player-nav="volume"]')!;
+    const slider = nav(container, "volume")!;
     expect(slider.closest(".player-volume-slider")?.closest(".player-volume")).not.toBeNull();
-
-    // Le repli n'existe que dans la requête du pointeur fin qui survole — jamais ailleurs, et il se
-    // défait au clavier comme au survol.
     const { readFileSync } = await import("node:fs");
     const css = readFileSync("src/app/globals.css", "utf8");
     const at = css.indexOf("@media (hover: hover) and (pointer: fine) {\n  .player-volume-slider");
@@ -1336,3 +1361,71 @@ describe("PlayerControls — la disposition", () => {
   });
 });
 
+describe("PlayerControls — passer sur AirPlay", () => {
+  const nav = (container: HTMLElement, name: string) => container.querySelector<HTMLElement>(`[data-player-nav="${name}"]`)!;
+  const confirmState = (container: HTMLElement) => container.querySelector("[data-cast-confirm]")!.getAttribute("data-cast-confirm");
+
+  function withPicker(picker: () => void) {
+    return (v: HTMLVideoElement) => {
+      (v as HTMLVideoElement & { webkitShowPlaybackTargetPicker?: () => void }).webkitShowPlaybackTargetPicker = picker;
+    };
+  }
+
+  it("demande d'abord sur le lecteur natif : le premier appui ne passe pas la main, « Confirmer » oui", async () => {
+    stubMediaFetches();
+    const onCastRequest = vi.fn();
+    const picker = vi.fn();
+    const { container } = render(<Harness onCastRequest={onCastRequest} onVideoRef={withPicker(picker)} />);
+    await act(async () => {});
+    expect(confirmState(container)).toBe("closed");
+
+    await act(async () => void fireEvent.click(nav(container, "cast")));
+    expect(onCastRequest).not.toHaveBeenCalled();
+    expect(picker).not.toHaveBeenCalled();
+    expect(confirmState(container)).toBe("open");
+    expect(screen.getByText("player.castConfirm.airplay")).toBeInTheDocument();
+
+    await act(async () => void fireEvent.click(screen.getByText("player.castConfirm.confirm")));
+    expect(onCastRequest).toHaveBeenCalledTimes(1);
+    expect(confirmState(container)).toBe("closed");
+  });
+
+  it("se replie seule au bout de quatre secondes", async () => {
+    stubMediaFetches();
+    vi.useFakeTimers();
+    const onCastRequest = vi.fn();
+    const { container } = render(<Harness onCastRequest={onCastRequest} onVideoRef={withPicker(vi.fn())} />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(nav(container, "cast")));
+    expect(confirmState(container)).toBe("open");
+    await act(async () => void vi.advanceTimersByTime(4100));
+    expect(confirmState(container)).toBe("closed");
+    expect(onCastRequest).not.toHaveBeenCalled();
+  });
+
+  it("se replie sur un appui ailleurs", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness onCastRequest={vi.fn()} onVideoRef={withPicker(vi.fn())} />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(nav(container, "cast")));
+    await act(async () => void fireEvent.pointerDown(document.body));
+    expect(confirmState(container)).toBe("closed");
+  });
+
+  it("ouvre le sélecteur du système tout de suite sur le lecteur serveur, sans confirmation", async () => {
+    stubMediaFetches();
+    const picker = vi.fn();
+    const { container } = render(<Harness onVideoRef={withPicker(picker)} />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(nav(container, "cast")));
+    expect(picker).toHaveBeenCalledTimes(1);
+    expect(confirmState(container)).toBe("closed");
+  });
+
+  it("n'existe pas là où rien ne diffuse", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness />);
+    await act(async () => {});
+    expect(container.querySelector('[data-player-nav="cast"]')).toBeNull();
+  });
+});

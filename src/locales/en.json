@@ -1845,7 +1845,17 @@
       "warning": "Stopping in {n} s",
       "continue": "Keep watching"
     },
-    "timeDisplay": "Elapsed or remaining time"
+    "castConfirm": {
+      "airplay": "Switch to AirPlay",
+      "remote": "Switch to the TV",
+      "confirm": "Confirm"
+    },
+    "play": "Play",
+    "pause": "Pause",
+    "audio": "Audio",
+    "subtitles": "Subtitles",
+    "fullscreen": "Full screen",
+    "mute": "Mute or unmute"
   },
   "cinema": {
     "fileMissing": "File not found",
