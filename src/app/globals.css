@@ -832,9 +832,10 @@
    Sur une image claire, c'est l'opacité, avec les voiles du haut et du bas, qui garde les icônes
    lisibles. Les valeurs vivent dans ces variables, pour se régler à un seul endroit. */
 :root {
-  /* 0,62 et 0,5 au départ : sur un ciel ou un sous-titre clair, le bouton se perdait (02/10/2026). */
-  --pill-fill: rgb(32 32 36 / 0.72);
-  --pill-fill-light: rgb(32 32 36 / 0.6);
+  /* 0,62 et 0,5 au départ, puis 0,72 et 0,6 : sur un ciel ou un texte blanc à l'image, on lisait
+     encore les lettres à travers le bouton lecture (02/10/2026). */
+  --pill-fill: rgb(32 32 36 / 0.82);
+  --pill-fill-light: rgb(32 32 36 / 0.78);
   /* Le liseré sombre du centre : sur une image blanche, le liseré clair disparaît, et le bouton avec. */
   --pill-hairline-dark: rgb(0 0 0 / 0.14);
   --pill-sheen: linear-gradient(to bottom, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.02));
@@ -850,17 +851,8 @@
   box-shadow: inset 0 0 0 1px var(--pill-hairline), 0 0 0 1px var(--pill-hairline-dark), var(--pill-shadow);
   border-radius: 999px;
 }
-/* Un flou léger sous les pilules, seulement pendant qu'elles sont affichées (`player-chrome-live`).
-   Ce qui coûte, c'est la surface floutée multipliée par le rayon, recalculée à chaque image de la
-   vidéo : les panneaux et la barre du téléphone l'ont prouvé (28/09/2026), et ils restent sans flou.
-   Ici, quelques ronds de 40 à 72 px — moins de 5 % de l'écran —, un petit rayon, et rien du tout
-   dès que les commandes se cachent, c'est-à-dire presque tout le film. Il fallait au moins ça : sur
-   un texte blanc à l'image, l'opacité seule laissait lire les lettres à travers « lecture »
-   (02/10/2026). */
-.player-chrome-live .player-pill {
-  -webkit-backdrop-filter: blur(12px) saturate(1.3);
-  backdrop-filter: blur(12px) saturate(1.3);
-}
+/* Pas de flou sous les pilules : essayé le 02/10/2026 (8.2.4), il mettait un instant à se former à
+   chaque apparition des commandes — on voyait le bouton net, puis flou. L'opacité fait le travail. */
 .player-pill-light {
   background: var(--pill-sheen), var(--pill-fill-light);
   /* Les deux liserés : le clair tient sur une image sombre, le sombre sur une image claire —

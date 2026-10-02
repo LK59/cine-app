@@ -1506,7 +1506,7 @@ export function PlayerControls({
           `pointer-events-none` avec elles, et l'appui retombe sur le fond, qui les rappelle. */}
       <div
         className={`pointer-events-none absolute inset-0 flex flex-col justify-between transition-opacity duration-300 ${
-          visible ? "player-chrome-live opacity-100" : "opacity-0"
+          visible ? "opacity-100" : "opacity-0"
         }`}
       >
         {/* Deux bandes plutôt qu'un dégradé plein écran. Le milieu était transparent mais était
