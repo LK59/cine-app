@@ -662,8 +662,7 @@ describe("PlayerControls", () => {
     await user.click(screen.getByTitle("player.minimize"));
     expect(onMinimize).toHaveBeenCalled();
 
-    const closeButton = screen.getAllByRole("button").find((b) => b.querySelector("svg.lucide-x") && !b.title);
-    await user.click(closeButton!);
+    await user.click(screen.getByRole("button", { name: "common.close" }));
     expect(onClose).toHaveBeenCalled();
   });
 });
@@ -960,7 +959,7 @@ describe("PlayerControls — relu le 23/09/2026", () => {
       />
     );
     await act(async () => {});
-    fireEvent.click(document.querySelector('[data-player-nav="more"]')!);
+    fireEvent.click(document.querySelector('[data-player-nav="captions"]')!);
     // Le chiffre affiché est celui de l'hôte, pas un compte tenu à part.
     expect(screen.getByText((_, el) => el?.tagName === "SPAN" && el.textContent === "+1.5s")).toBeInTheDocument();
     fireEvent.click(screen.getByText("+0.5s"));
@@ -1179,6 +1178,161 @@ describe("PlayerControls — la minuterie de veille", () => {
     await act(async () => void fireEvent.click(screen.getByText("player.sleep.continue")));
     expect(sleepTimerStore.get()).toMatchObject({ mode: "15", remainingMs: 15 * 60_000 });
     expect(screen.queryByText("player.sleep.continue")).toBeNull();
+  });
+});
+
+/**
+ * La disposition revue le 02/10/2026 : fermer en flèche de retour à gauche, le menu ⋮ allégé, les
+ * réglages des sous-titres dans leur menu, « 10 » dans les flèches, le temps qui bascule, et le
+ * volume replié au bureau seulement.
+ */
+describe("PlayerControls — la disposition", () => {
+  afterEach(() => {
+    try {
+      localStorage.clear();
+    } catch {
+      /* rien */
+    }
+  });
+
+  it("ferme par une flèche de retour à gauche, devant le titre, et plus par une croix à droite", async () => {
+    stubMediaFetches();
+    const onClose = vi.fn();
+    const { container } = render(<Harness onClose={onClose} title="Some Title" />);
+    await act(async () => {});
+    const close = screen.getByRole("button", { name: "common.close" });
+    expect(close.querySelector("svg.lucide-arrow-left")).not.toBeNull();
+    // Avant le titre dans la rangée, et hors du groupe de droite, qui finit par « réduire ».
+    const title = screen.getByText("Some Title");
+    expect(close.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const minimize = container.querySelector('[data-player-nav="minimize"]')!;
+    expect(minimize.parentElement!.contains(close)).toBe(false);
+    expect(minimize.parentElement!.lastElementChild).toBe(minimize);
+    expect(container.querySelector("svg.lucide-x")).toBeNull();
+    // ←/→ la parcourent avec le reste de la rangée.
+    expect(close.closest('[data-player-navgroup="topbar"]')?.contains(minimize)).toBe(true);
+    fireEvent.click(close);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("garde dans ⋮ chapitres, vitesse et minuterie, puis, sous un trait, infos et luminosité HDR", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).includes("/chapters") ? { ok: true, json: async () => [{ start: 0, name: "Début" }] } : { ok: false, json: async () => null }
+      )
+    );
+    const { container } = render(
+      <Harness
+        subtitleTracks={[{ id: 1, label: "Français" }]}
+        currentSubtitleId={1}
+        hdrCap={{ current: "auto", autoNits: 203, onPick: vi.fn() }}
+      />
+    );
+    await act(async () => {});
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));
+    await screen.findByText("player.chapters");
+    const menu = container.querySelector(".player-panel")!;
+    const labels = Array.from(menu.querySelectorAll("button")).map((b) => b.textContent ?? "");
+    expect(labels[0]).toContain("player.chapters");
+    expect(labels[1]).toContain("player.speed");
+    expect(labels[2]).toContain("player.sleep.title");
+    expect(labels.at(-2)).toContain("player.playbackInfo");
+    expect(labels.at(-1)).toContain("player.hdrCap.title");
+    // Les deux derniers, sous un trait et plus discrets.
+    const secondary = menu.querySelector("[data-menu-secondary]")!;
+    expect(secondary.className).toContain("border-t");
+    expect(secondary.querySelectorAll("button")).toHaveLength(2);
+    // Les réglages des sous-titres n'y sont plus.
+    expect(menu.textContent).not.toContain("player.subtitleStyle.title");
+    expect(menu.textContent).not.toContain("player.subtitleOffset");
+  });
+
+  it("n'y montre la luminosité HDR que pour un film qui en a une", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));
+    expect(screen.queryByText(/player\.hdrCap\.title/)).toBeNull();
+    expect(screen.getByText("player.playbackInfo")).toBeInTheDocument();
+  });
+
+  it("met l'apparence et le décalage dans le menu des sous-titres, et en revient", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness subtitleTracks={[{ id: 1, label: "Français" }]} currentSubtitleId={1} />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="captions"]')!));
+    const menu = container.querySelector(".player-panel")!;
+    expect(menu.textContent).toContain("Français");
+    expect(menu.textContent).toContain("player.none");
+    expect(menu.textContent).toContain("player.subtitleStyle.title");
+    expect(menu.textContent).toContain("player.subtitleOffset");
+
+    await act(async () => void fireEvent.click(screen.getByText("player.subtitleStyle.title")));
+    expect(screen.getByText("player.subtitleSize")).toBeInTheDocument();
+    await act(async () => void fireEvent.click(screen.getByText("common.back")));
+    expect(screen.getByText("Français")).toBeInTheDocument();
+  });
+
+  it("ne propose le décalage qu'une piste choisie", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness subtitleTracks={[{ id: 1, label: "Français" }]} currentSubtitleId={null} />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="captions"]')!));
+    expect(screen.getByText("player.subtitleStyle.title")).toBeInTheDocument();
+    expect(screen.queryByText("player.subtitleOffset")).toBeNull();
+  });
+
+  it("écrit « 10 » dans les deux flèches de saut", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness />);
+    await act(async () => {});
+    for (const nav of ["skip-back", "skip-fwd"]) {
+      const button = container.querySelector(`[data-player-nav="${nav}"]`)!;
+      expect(button.querySelector("svg text")?.textContent).toBe("10");
+    }
+  });
+
+  it("bascule le temps entre écoulé / total et restant, au clic comme au doigt, et s'en souvient", async () => {
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    const { container, unmount } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    Object.defineProperty(video, "duration", { value: 1865, configurable: true });
+    Object.defineProperty(video, "currentTime", { value: 1230, configurable: true });
+    act(() => void video.dispatchEvent(new Event("durationchange")));
+    act(() => void video.dispatchEvent(new Event("timeupdate")));
+    const time = () => container.querySelector("[data-player-time]")!;
+    expect(time().textContent).toBe("20:30/31:05");
+
+    // Un toucher arrive en clic : c'est un bouton, rien ne dépend du survol.
+    await act(async () => void fireEvent.click(time()));
+    expect(time().textContent).toBe("−10:35");
+    expect(localStorage.getItem("cine:player-time-display")).toBe("remaining");
+
+    unmount();
+    const again = render(<Harness />);
+    await act(async () => {});
+    expect(again.container.querySelector("[data-player-time]")!.textContent).toMatch(/^−/);
+  });
+
+  it("garde le curseur du volume dans la page partout, et ne le replie qu'au pointeur fin qui survole", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness />);
+    await act(async () => {});
+    // Présent dans le document, à côté du bouton du son, dans un même groupe.
+    const slider = container.querySelector('[data-player-nav="volume"]')!;
+    expect(slider.closest(".player-volume-slider")?.closest(".player-volume")).not.toBeNull();
+
+    // Le repli n'existe que dans la requête du pointeur fin qui survole — jamais ailleurs, et il se
+    // défait au clavier comme au survol.
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync("src/app/globals.css", "utf8");
+    const at = css.indexOf("@media (hover: hover) and (pointer: fine) {\n  .player-volume-slider");
+    expect(at).toBeGreaterThan(-1);
+    const outside = css.slice(0, at) + css.slice(css.indexOf("\n}\n", at));
+    expect(outside).not.toMatch(/\.player-volume-slider\s*\{[^}]*width:\s*0/);
+    expect(css.slice(at, css.indexOf("\n}\n", at))).toMatch(/\.player-volume:focus-within \.player-volume-slider/);
   });
 });
 

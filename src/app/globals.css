@@ -840,6 +840,24 @@
 .player-glass-fwd:active { transform: scale(0.94) rotate(14deg); }
 .player-glass-on { background: rgb(255 255 255 / 0.22); }
 
+/* Le curseur du volume, replié au bureau et déplié sous le pointeur ou au clavier (`:focus-within` :
+   la touche Tab ou les flèches qui l'atteignent l'ouvrent aussi). Seulement là où un pointeur fin
+   survole vraiment : sur un écran tactile — téléphone, tablette, portable tactile —, la règle ne
+   s'applique pas et le curseur reste déplié, comme avant. Rien ne doit dépendre du seul survol. */
+@media (hover: hover) and (pointer: fine) {
+  .player-volume-slider {
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: width 200ms ease-out, opacity 150ms ease-out;
+  }
+  .player-volume:hover .player-volume-slider,
+  .player-volume:focus-within .player-volume-slider {
+    width: 5rem;
+    opacity: 1;
+  }
+}
+
 /* Les onglets du bas : appui instantané, retour élastique.
  *
  * Deux courbes et non une, parce que le geste n'est pas symétrique. L'enfoncement doit être

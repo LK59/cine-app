@@ -1844,7 +1844,8 @@
       "episode": "Ende der Folge",
       "warning": "Stopp in {n} s",
       "continue": "Weiter"
-    }
+    },
+    "timeDisplay": "Verstrichene oder verbleibende Zeit"
   },
   "cinema": {
     "fileMissing": "Datei nicht gefunden",

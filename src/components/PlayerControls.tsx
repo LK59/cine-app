@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight } from "lucide-react";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
@@ -136,6 +136,34 @@ const SEEK_SPINNER_MS = 150;
 const TOUCH_ECHO_MS = 800;
 /** En dessous, un déplacement du doigt est son tremblement, pas un geste — voir `lastTouchXRef`. */
 const TOUCH_JITTER_PX = 1;
+
+/** Où l'appareil retient la façon d'afficher le temps — voir `showRemaining`. */
+const TIME_DISPLAY_KEY = "cine:player-time-display";
+function readRemainingPreference(): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(TIME_DISPLAY_KEY) === "remaining";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * La flèche de ±10 s, avec son « 10 » dedans — dessinée en vecteurs, nette à toute taille : sans le
+ * chiffre, rien ne disait de combien la flèche déplaçait le film.
+ */
+function SkipGlyph({ direction }: { direction: "back" | "forward" }) {
+  const Arrow = direction === "back" ? RotateCcw : RotateCw;
+  return (
+    <span className="relative block h-[22px] w-[22px]">
+      <Arrow size={22} aria-hidden />
+      <svg viewBox="0 0 22 22" aria-hidden className="absolute inset-0 h-full w-full">
+        <text x="11" y="13.8" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="currentColor" fontFamily="inherit">
+          10
+        </text>
+      </svg>
+    </span>
+  );
+}
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -958,6 +986,21 @@ export function PlayerControls({
   const chapterThumbScale = trickplay ? chapterThumbWidth / trickplay.width : 1;
   const chapterThumbHeight = trickplay ? Math.round(trickplay.height * chapterThumbScale) : 36;
 
+  /**
+   * Écoulé / total, ou le temps qui reste (« −10:35 »). Un choix d'appareil, gardé d'un film à
+   * l'autre — on regarde l'un ou l'autre par habitude, pas selon le film.
+   */
+  const [showRemaining, setShowRemaining] = useState(readRemainingPreference);
+  function toggleTimeDisplay() {
+    const next = !showRemaining;
+    setShowRemaining(next);
+    try {
+      localStorage.setItem(TIME_DISPLAY_KEY, next ? "remaining" : "elapsed");
+    } catch {
+      // Stockage indisponible : le choix vaut pour ce film seulement.
+    }
+  }
+
   function toggleMute() {
     const video = videoRef.current;
     if (video) video.muted = !video.muted;
@@ -1072,7 +1115,7 @@ export function PlayerControls({
   };
 
   // Which topbar control reopens each menu on Escape, to land focus back where it came from.
-  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more", subtitleStyle: "more", hdrCap: "more", sleep: "more" };
+  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more", subtitleStyle: "captions", hdrCap: "more", sleep: "more" };
 
   // Lands focus on the menu's first item the instant it opens — clicking captions/audio/more
   // only focuses THAT button (native click behavior), never moves focus into the popup that
@@ -1420,6 +1463,9 @@ export function PlayerControls({
             plus extra clearance for the Dynamic Island / translucent status
             bar in portrait, which sits below the strict safe-area edge. */}
         <div
+          // Le groupe de navigation est la rangée entière : la flèche de retour, à gauche, en est le
+          // premier arrêt, et ←/→ la parcourent jusqu'à « réduire » comme avant jusqu'à la croix.
+          data-player-navgroup="topbar"
           className={`${visible ? "pointer-events-auto" : "pointer-events-none"} flex items-center justify-between p-4 transition-transform duration-300 ease-out ${
             visible ? "translate-y-0" : "-translate-y-2"
           }`}
@@ -1433,28 +1479,45 @@ export function PlayerControls({
             paddingRight: "max(1rem, env(safe-area-inset-right))",
           }}
         >
-          {/* "Série — S02E05 · Le pilote" arrive d'une seule pièce du serveur : la série
-              passe au-dessus, discrète, et l'épisode garde la ligne forte. Un titre qui ne
-              suit pas cette forme — un film — reste sur une ligne, inchangé. */}
-          <div className="min-w-0 pr-4">
-            {(() => {
-              const cut = title.indexOf(" — ");
-              if (cut === -1) return <p className="truncate text-sm font-medium text-white">{title}</p>;
-              return (
-                <>
-                  <p className="truncate text-[11px] font-medium uppercase tracking-[0.08em] text-white/55">
-                    {title.slice(0, cut)}
-                  </p>
-                  <p className="truncate text-sm font-semibold text-white">{title.slice(cut + 3)}</p>
-                </>
-              );
-            })()}
+          {/* Fermer, en flèche de retour devant le titre — là où l'Apple TV et les autres lecteurs la
+              mettent, et non plus en croix au bout d'une rangée de cinq boutons identiques. Même
+              geste, même rappel : `onClose`, le fondu et le rapport d'arrêt de l'hôte. */}
+          <div className="flex min-w-0 items-center gap-3 pr-4">
+            <button
+              data-player-nav="close"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCloseClick();
+              }}
+              aria-label={t("common.close")}
+              className="player-glass shrink-0 rounded-full p-2.5 text-white"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            {/* "Série — S02E05 · Le pilote" arrive d'une seule pièce du serveur : la série
+                passe au-dessus, discrète, et l'épisode garde la ligne forte. Un titre qui ne
+                suit pas cette forme — un film — reste sur une ligne, inchangé. */}
+            <div className="min-w-0">
+              {(() => {
+                const cut = title.indexOf(" — ");
+                if (cut === -1) return <p className="truncate text-sm font-medium text-white">{title}</p>;
+                return (
+                  <>
+                    <p className="truncate text-[11px] font-medium uppercase tracking-[0.08em] text-white/55">
+                      {title.slice(0, cut)}
+                    </p>
+                    <p className="truncate text-sm font-semibold text-white">{title.slice(cut + 3)}</p>
+                  </>
+                );
+              })()}
+            </div>
           </div>
-          {/* Only the controls used constantly (subtitles/audio) plus navigation (minimize/
-              close) stay directly on the bar — on a portrait phone, 9 icons in a row was too
-              much. Everything else (info, chapters, speed, AirPlay, PiP) lives one tap deeper
-              behind "···", grouped as a labeled list rather than more bare icons. */}
-          <div data-player-navgroup="topbar" className="flex shrink-0 items-center gap-2">
+          {/* Only the controls used constantly (subtitles/audio) plus minimize stay directly on
+              the bar — on a portrait phone, 9 icons in a row was too much. Everything else
+              (chapters, speed, the sleep timer, AirPlay, info) lives one tap deeper behind "···",
+              grouped as a labeled list rather than more bare icons. Closing is the back arrow on
+              the left. */}
+          <div className="flex shrink-0 items-center gap-2">
             {subtitleTracks.length > 0 && (
               <button
                 data-player-nav="captions"
@@ -1501,16 +1564,6 @@ export function PlayerControls({
             >
               <ChevronDown size={20} />
             </button>
-            <button
-              data-player-nav="close"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCloseClick();
-              }}
-              className="player-glass rounded-full p-2.5 text-white"
-            >
-              <X size={20} />
-            </button>
           </div>
         </div>
 
@@ -1535,17 +1588,12 @@ export function PlayerControls({
             onClick={(e) => e.stopPropagation()}
             onClickCapture={() => showControls(10000)}
           >
+            {/* ⋮ : ce qu'on règle en regardant — chapitres, vitesse, minuterie —, puis, sous un trait
+                et en plus discret, ce qu'on ne touche que pour comprendre ou ajuster l'appareil.
+                Les réglages des sous-titres vivent dans le menu des sous-titres : ils avaient ici
+                la même icône que lui, et deux lignes de plus pour une question qui n'est pas d'ici. */}
             {menu === "more" && (
               <>
-                <button
-                  onClick={() => {
-                    onTogglePlaybackInfo();
-                    setMenu(null);
-                  }}
-                  className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                >
-                  <Info size={16} /> {t('player.playbackInfo')}
-                </button>
                 {chapters.length > 0 && (
                   <button
                     onClick={() => setMenu("chapters")}
@@ -1596,14 +1644,6 @@ export function PlayerControls({
                     </span>
                   </button>
                 )}
-                {hdrCap && (
-                  <button
-                    onClick={() => setMenu("hdrCap")}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                  >
-                    <Sun size={16} /> {t("player.hdrCap.title")} · {hdrCapLabel(hdrCap.current)}
-                  </button>
-                )}
                 {castSupported && (
                   <button
                     onClick={() => {
@@ -1634,47 +1674,30 @@ export function PlayerControls({
                     {castActive ? t("player.castStop") : t("player.castReturn")}
                   </button>
                 )}
-                {/* Une porte plutôt que trois lignes de plus : la taille, la couleur et le fond
-                    vivent ensemble et se règlent au même moment, et les poser à plat dans ce menu
-                    l'aurait fait doubler de hauteur pour des réglages qu'on touche une fois. */}
-                {subtitleTracks.length > 0 && (
+                <div data-menu-secondary className="border-t border-white/10">
                   <button
-                    onClick={() => setMenu("subtitleStyle")}
-                    className="flex w-full items-center gap-3 border-t border-white/10 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                    onClick={() => {
+                      onTogglePlaybackInfo();
+                      setMenu(null);
+                    }}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-xs text-white/60 hover:bg-white/10"
                   >
-                    <Captions size={16} /> {t("player.subtitleStyle.title")}
+                    <Info size={14} /> {t('player.playbackInfo')}
                   </button>
-                )}
-                {subtitleTracks.length > 0 && currentSubtitleId !== null && (
-                  <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-white">
-                    <span className="flex min-w-0 items-center gap-3">
-                      <Captions size={16} className="shrink-0" /> {t('player.subtitleOffset')}
-                    </span>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        onClick={() => shiftSubtitles(-0.5)}
-                        className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
-                      >
-                        −0.5s
-                      </button>
-                      <span className="w-12 text-center tabular-nums text-xs text-white/70">
-                        {subtitleOffset > 0 ? "+" : ""}
-                        {subtitleOffset}s
-                      </span>
-                      <button
-                        onClick={() => shiftSubtitles(0.5)}
-                        className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
-                      >
-                        +0.5s
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  {hdrCap && (
+                    <button
+                      onClick={() => setMenu("hdrCap")}
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left text-xs text-white/60 hover:bg-white/10"
+                    >
+                      <Sun size={14} /> {t("player.hdrCap.title")} · {hdrCapLabel(hdrCap.current)}
+                    </button>
+                  )}
+                </div>
               </>
             )}
             {(menu === "chapters" || menu === "speed" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep") && (
               <button
-                onClick={() => setMenu("more")}
+                onClick={() => setMenu(menu === "subtitleStyle" ? "subtitles" : "more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
               >
                 <ArrowLeft size={14} /> {t('common.back')}
@@ -1717,6 +1740,42 @@ export function PlayerControls({
               >
                 {t('player.none')}
               </button>
+            )}
+            {/* Sous les pistes, ce qui règle leur affichage : l'apparence (une porte, la taille, la
+                couleur et le fond se réglant ensemble) et, une piste choisie, son décalage. */}
+            {menu === "subtitles" && (
+              <div className="border-t border-white/10">
+                <button
+                  onClick={() => setMenu("subtitleStyle")}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                >
+                  {t("player.subtitleStyle.title")}
+                  <ChevronRight size={14} className="shrink-0 text-white/50" />
+                </button>
+                {currentSubtitleId !== null && (
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-white">
+                    <span className="min-w-0">{t('player.subtitleOffset')}</span>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        onClick={() => shiftSubtitles(-0.5)}
+                        className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
+                      >
+                        −0.5s
+                      </button>
+                      <span className="w-12 text-center tabular-nums text-xs text-white/70">
+                        {subtitleOffset > 0 ? "+" : ""}
+                        {subtitleOffset}s
+                      </span>
+                      <button
+                        onClick={() => shiftSubtitles(0.5)}
+                        className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
+                      >
+                        +0.5s
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             {menu === "subtitleStyle" && (
               <>
@@ -1848,7 +1907,7 @@ export function PlayerControls({
               className="player-glass player-glass-back rounded-full p-3 text-white"
               title={t('player.rewind10')}
             >
-              <RotateCcw size={22} />
+              <SkipGlyph direction="back" />
             </button>
             <button
               data-player-nav="playpause"
@@ -1869,7 +1928,7 @@ export function PlayerControls({
               className="player-glass player-glass-fwd rounded-full p-3 text-white"
               title={t('player.forward10')}
             >
-              <RotateCw size={22} />
+              <SkipGlyph direction="forward" />
             </button>
           </div>
         )}
@@ -2136,30 +2195,53 @@ export function PlayerControls({
             />
           </div>
           <div className="flex items-center gap-3 text-xs text-white/80">
-            <span className="tabular-nums">{formatTime(currentTime)}</span>
-            <span className="text-white/40">/</span>
-            <span className="tabular-nums">{formatTime(duration)}</span>
-            <div className="ml-auto flex items-center gap-2">
-              <button onClick={toggleMute} className="btn btn-ghost btn-icon p-1.5">
-                {muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
-              </button>
-              {/* Four pixels tall is a target a finger cannot land on, let alone drag along: every
-                  touch became a tap, and a tap on a range input jumps straight to the end it
-                  landed nearest. Twenty is the same bar with room to hold on to. */}
-              {volumeSettable && (
-                <input
-                  data-player-nav="volume"
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={muted ? 0 : volume}
-                  onChange={(e) => changeVolume(Number(e.target.value))}
-                  aria-label={t("player.volume")}
-                  className="h-5 w-20 cursor-pointer accent-accent-500"
-                  style={{ WebkitTouchCallout: "none", touchAction: "none" }}
-                />
+            {/* Écoulé / total, ou ce qui reste — au clic comme au doigt, retenu sur l'appareil. */}
+            <button
+              type="button"
+              data-player-time
+              onClick={toggleTimeDisplay}
+              title={t("player.timeDisplay")}
+              className="-mx-1.5 flex items-center gap-3 rounded px-1.5 py-0.5 tabular-nums hover:bg-white/10"
+            >
+              {showRemaining ? (
+                <span>−{formatTime(Math.max(0, duration - currentTime))}</span>
+              ) : (
+                <>
+                  <span>{formatTime(currentTime)}</span>
+                  <span className="text-white/40">/</span>
+                  <span>{formatTime(duration)}</span>
+                </>
               )}
+            </button>
+            <div className="ml-auto flex items-center gap-2">
+              {/* Le son et son curseur, ensemble : au bureau, le curseur reste replié et se déplie
+                  sous le pointeur ou au clavier (`.player-volume`, globals.css) ; partout ailleurs —
+                  doigt, tablette, écran tactile —, il reste déplié comme avant. Jamais une fonction
+                  réservée au survol. */}
+              <div className="player-volume flex items-center gap-2">
+                <button onClick={toggleMute} className="btn btn-ghost btn-icon p-1.5">
+                  {muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                </button>
+                {/* Four pixels tall is a target a finger cannot land on, let alone drag along: every
+                    touch became a tap, and a tap on a range input jumps straight to the end it
+                    landed nearest. Twenty is the same bar with room to hold on to. */}
+                {volumeSettable && (
+                  <span className="player-volume-slider flex items-center">
+                    <input
+                      data-player-nav="volume"
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={muted ? 0 : volume}
+                      onChange={(e) => changeVolume(Number(e.target.value))}
+                      aria-label={t("player.volume")}
+                      className="h-5 w-20 cursor-pointer accent-accent-500"
+                      style={{ WebkitTouchCallout: "none", touchAction: "none" }}
+                    />
+                  </span>
+                )}
+              </div>
               {fullscreenSupported && (
                 <button data-player-nav="fullscreen" onClick={toggleFullscreen} className="btn btn-ghost btn-icon p-1.5">
                   {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
