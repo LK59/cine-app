@@ -1495,7 +1495,7 @@ export function PlayerControls({
             (encoche en paysage, Dynamic Island en portrait). */}
         <div
           data-player-navgroup="topbar"
-          className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none -translate-y-2"} player-spring flex items-center justify-between gap-3 pb-4 motion-reduce:translate-y-0`}
+          className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none -translate-y-1"} player-spring flex items-center justify-between gap-3 pb-4 motion-reduce:translate-y-0`}
           // Capture phase: children stopPropagation() in the bubble phase, which is exactly why
           // the old timer never got reset by button use — capture fires on the way DOWN, before
           // any child handler, so every top-bar interaction reliably re-arms the long timer.
@@ -1931,7 +1931,7 @@ export function PlayerControls({
             conflict with the tap-to-toggle-controls handler covering the same area). Hidden
             while a spinner is already showing. */}
         {!loading && !buffering && (
-          <div data-player-navgroup="center" className={`${visible ? "pointer-events-auto" : "pointer-events-none"} player-spring absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-9 sm:gap-12 max-[379px]:gap-6 ${visible ? "scale-100" : "scale-90"}`}>
+          <div data-player-navgroup="center" className={`${visible ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-9 sm:gap-12 max-[379px]:gap-6`}>
             <button
               data-player-nav="skip-back"
               onClick={(e) => {
@@ -1972,7 +1972,7 @@ export function PlayerControls({
         {/* En bas : le titre et la pilule des réglages sur une rangée, la barre et ses deux temps
             dessous. */}
         <div
-          className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none translate-y-2"} player-spring flex flex-col gap-3 pt-4 motion-reduce:translate-y-0`}
+          className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none translate-y-1"} player-spring flex flex-col gap-3 pt-4 motion-reduce:translate-y-0`}
           onClick={(e) => e.stopPropagation()}
           onClickCapture={() => showControls(10000)}
           style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}

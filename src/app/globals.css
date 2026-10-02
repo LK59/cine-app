@@ -972,48 +972,46 @@
 }
 /* Des lignes de 44 px, la taille d'un doigt. */
 .player-menu button.w-full { min-height: 44px; }
-/* Il sort de la pilule et se pose en dépassant à peine : un menu qui ne fait que s'allumer paraît
-   collé sur le film, un qui arrive a du poids. */
+/* Il sort de la pilule et se pose : un menu qui ne fait que s'allumer paraît collé sur le film, un
+   qui arrive a du poids. Un dépassement presque invisible — plus, il tremblait (02/10/2026). */
 @keyframes player-menu-in {
-  0% { opacity: 0; transform: translateY(8px) scale(0.9); }
-  60% { opacity: 1; transform: translateY(0) scale(1.015); }
+  0% { opacity: 0; transform: translateY(6px) scale(0.94); }
+  65% { opacity: 1; transform: translateY(0) scale(1.01); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
-/* Le rebond d'un appui (`playPressSpring`, PlayerControls) : creux rapide, léger dépassement, puis
-   posé. Joué jusqu'au bout quelle que soit la durée de l'appui — c'est ce qui le rend visible. Les
-   ±10 s y gardent leur rotation, plus marquée. */
+/* Le rebond d'un appui (`playPressSpring`, PlayerControls) : creux franc, un seul petit dépassement,
+   puis posé. Joué jusqu'au bout quelle que soit la durée de l'appui — c'est ce qui le rend visible.
+   Une première version descendait à 0,84 et oscillait deux fois (1,07 puis 0,98) : l'interface
+   paraissait en gelée, « fragile » (02/10/2026). Un objet solide rebondit une fois. Les ±10 s
+   gardent leur rotation. */
 @keyframes player-press-spring {
   0% { transform: scale(1); }
-  30% { transform: scale(0.84); }
-  62% { transform: scale(1.07); }
-  82% { transform: scale(0.98); }
+  35% { transform: scale(0.9); }
+  70% { transform: scale(1.03); }
   100% { transform: scale(1); }
 }
 @keyframes player-press-spring-back {
   0% { transform: scale(1) rotate(0deg); }
-  30% { transform: scale(0.86) rotate(-22deg); }
-  62% { transform: scale(1.05) rotate(5deg); }
-  82% { transform: scale(0.99) rotate(-1deg); }
+  35% { transform: scale(0.9) rotate(-16deg); }
+  70% { transform: scale(1.02) rotate(3deg); }
   100% { transform: scale(1) rotate(0deg); }
 }
 @keyframes player-press-spring-fwd {
   0% { transform: scale(1) rotate(0deg); }
-  30% { transform: scale(0.86) rotate(22deg); }
-  62% { transform: scale(1.05) rotate(-5deg); }
-  82% { transform: scale(0.99) rotate(1deg); }
+  35% { transform: scale(0.9) rotate(16deg); }
+  70% { transform: scale(1.02) rotate(-3deg); }
   100% { transform: scale(1) rotate(0deg); }
 }
 .player-pill-btn[data-pressed],
-.player-center-btn[data-pressed] { animation: player-press-spring 460ms cubic-bezier(0.22, 1, 0.36, 1); }
+.player-center-btn[data-pressed] { animation: player-press-spring 380ms cubic-bezier(0.22, 1, 0.36, 1); }
 .player-center-btn.player-glass-back[data-pressed] { animation-name: player-press-spring-back; }
 .player-center-btn.player-glass-fwd[data-pressed] { animation-name: player-press-spring-fwd; }
-/* L'arrivée des commandes : les rangées glissent de 8 px et le centre grandit depuis 0,9, sur une
-   courbe qui dépasse un peu avant de se poser. `translate` et `scale` sont les propriétés que
-   posent les classes de Tailwind, distinctes de `transform` — d'où leur nom ici. */
+/* L'arrivée des commandes : les rangées glissent de 4 px, en simple décélération. Pas d'élastique
+   ici : elles apparaissent à chaque toucher du film, sans qu'on les ait visées, et un rebond à
+   chaque fois faisait bouger l'interface toute seule (02/10/2026). Le rebond est réservé au doigt.
+   `translate` est la propriété que posent les classes de Tailwind, distincte de `transform`. */
 .player-spring {
-  transition:
-    translate 480ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    scale 480ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: translate 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (prefers-reduced-motion: reduce) {
   .player-menu { animation: none; }
