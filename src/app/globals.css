@@ -832,8 +832,9 @@
    Sur une image claire, c'est l'opacité, avec les voiles du haut et du bas, qui garde les icônes
    lisibles. Les valeurs vivent dans ces variables, pour se régler à un seul endroit. */
 :root {
-  --pill-fill: rgb(32 32 36 / 0.62);
-  --pill-fill-light: rgb(32 32 36 / 0.5);
+  /* 0,62 et 0,5 au départ : sur un ciel ou un sous-titre clair, le bouton se perdait (02/10/2026). */
+  --pill-fill: rgb(32 32 36 / 0.72);
+  --pill-fill-light: rgb(32 32 36 / 0.6);
   /* Le liseré sombre du centre : sur une image blanche, le liseré clair disparaît, et le bouton avec. */
   --pill-hairline-dark: rgb(0 0 0 / 0.14);
   --pill-sheen: linear-gradient(to bottom, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.02));
@@ -845,7 +846,8 @@
 }
 .player-pill {
   background: var(--pill-sheen), var(--pill-fill);
-  box-shadow: inset 0 0 0 1px var(--pill-hairline), var(--pill-shadow);
+  /* Le liseré sombre aussi, comme au centre : c'est lui qui dessine le bord sur une image claire. */
+  box-shadow: inset 0 0 0 1px var(--pill-hairline), 0 0 0 1px var(--pill-hairline-dark), var(--pill-shadow);
   border-radius: 999px;
 }
 .player-pill-light {

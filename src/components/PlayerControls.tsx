@@ -127,7 +127,12 @@ const CAST_CONFIRM_MS = 4000;
  * Où se posent les invites flottantes (« Passer l'intro », l'épisode suivant, la minuterie) : au-dessus
  * du bas des commandes — titre, pilule et barre —, pour ne jamais les couvrir quand elles sont là.
  */
-const PROMPT_BOTTOM = "calc(max(1rem, env(safe-area-inset-bottom)) + 8.5rem)";
+// Le bord bas des commandes : 8 px au-dessus de la barre d'accueil d'iOS (ou 1,5 rem sans elle).
+// Collée au bord sûr, la barre de progression se trouvait sous le pouce qui allait chercher le
+// geste du système, et l'un prenait l'autre (02/10/2026). Partagé par tout ce qui se place au-dessus
+// de la rangée du bas, pour que l'écart reste le même partout.
+const BOTTOM_EDGE = "max(1.5rem, calc(env(safe-area-inset-bottom) + 0.5rem))";
+const PROMPT_BOTTOM = `calc(${BOTTOM_EDGE} + 8.5rem)`;
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 /** Masqués, les contrôles ne suivent la position qu'à ce rythme — voir `visibleRef`. */
 const HIDDEN_UPDATE_MS = 1000;
@@ -1636,8 +1641,8 @@ export function PlayerControls({
               // otherwise just sizes to its content.
               // Juste au-dessus de la pilule du bas, d'où il s'ouvre ; et jamais plus haut que ce
               // que l'écran laisse sous la rangée du haut — un téléphone en paysage n'a pas 60 %.
-              bottom: "calc(max(1rem, env(safe-area-inset-bottom)) + 5.75rem)",
-              maxHeight: "min(60vh, calc(100dvh - max(1rem, env(safe-area-inset-bottom)) - 10.5rem))",
+              bottom: `calc(${BOTTOM_EDGE} + 5.75rem)`,
+              maxHeight: `min(60vh, calc(100dvh - ${BOTTOM_EDGE} - 10.5rem))`,
             }}
             onClick={(e) => e.stopPropagation()}
             onClickCapture={() => showControls(10000)}
@@ -1975,7 +1980,7 @@ export function PlayerControls({
           className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none translate-y-1"} player-spring flex flex-col gap-3 pt-4 motion-reduce:translate-y-0`}
           onClick={(e) => e.stopPropagation()}
           onClickCapture={() => showControls(10000)}
-          style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+          style={{ paddingBottom: BOTTOM_EDGE }}
         >
           <div className="flex items-end gap-3">
             {/* La série en grand, l'épisode en petit dessous ; un film, son titre seul. Une ombre
