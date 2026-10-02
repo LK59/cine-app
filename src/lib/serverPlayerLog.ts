@@ -12,6 +12,8 @@
  * qu'elles décident — les champs, et le nom du lecteur sur chaque ligne — se vérifie ici.
  */
 
+import type { SleepMode } from "@/lib/sleepTimer";
+
 /** Ce que toute ligne du lecteur serveur porte, pour se distinguer de celles du lecteur natif. */
 export interface ServerPlayerContext {
   itemId: string;
@@ -94,11 +96,28 @@ export function castEndedFields(ctx: ServerPlayerContext, source: string, at: nu
  * Il notait son démarrage et jamais sa fin : chacune de ses séances se lisait « commencée, jamais
  * finie » dans le journal, comme un lecteur disparu (relevé le 23/09/2026).
  */
-export function serverStopFields(ctx: ServerPlayerContext, why: "close" | "next", at: number, watched: number): Record<string, unknown> {
+export function serverStopFields(
+  ctx: ServerPlayerContext,
+  why: "close" | "next",
+  at: number,
+  watched: number,
+  sleep: { sleepTimer?: SleepMode } = {}
+): Record<string, unknown> {
   // `watched` : le temps joué par ce lecteur-ci depuis sa dernière ligne qui en rendait compte, et
   // non la position — un film repris à une heure n'a pas été regardé une heure. Sans lui, une
   // séance passée par le serveur se lisait à zéro seconde regardée (24/09/2026).
-  return { ...base(ctx), path: "serveur", why, at: Math.round(at), watched };
+  // `sleep` : la minuterie de veille choisie ou déclenchée, comme le bilan du lecteur natif
+  // (`sleepTimerLogFields`).
+  return { ...base(ctx), path: "serveur", why, at: Math.round(at), watched, ...sleep };
+}
+
+/**
+ * La minuterie de veille a mis le film en pause — ou retenu l'épisode à sa fin. Une ligne `pause`,
+ * la même que celle du lecteur natif : sans elle, un film arrêté en pleine soirée et jamais fermé
+ * se lisait comme un spectateur parti sans prévenir.
+ */
+export function serverSleepFields(ctx: ServerPlayerContext, mode: SleepMode, at: number): Record<string, unknown> {
+  return { ...base(ctx), path: "serveur", why: "veille", sleepTimer: mode, at: Math.round(at) };
 }
 
 function base(ctx: ServerPlayerContext): Record<string, unknown> {

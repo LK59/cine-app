@@ -69,7 +69,7 @@ export function benchPlayerLogFiles(): string[] {
 }
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
-const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast", "reserve"]);
+const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast", "reserve", "pause"]);
 
 /**
  * `audio` est arrivé le 20/09/2026, et pour une raison qui vaut d'être dite : le changement de
@@ -101,7 +101,15 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  * réseau, ce que la réserve a téléchargé et à quel débit, ce qu'elle a rendu en arrière-plan, et
  * `idle`, pourquoi elle attend), `erreur`, `arrêt`.
  */
-export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve";
+/**
+ * `pause` (02/10/2026) : une pause que le spectateur n'a pas faite — la minuterie de veille
+ * (`why: "veille"`, `sleepTimer` : la minuterie). Les pauses ordinaires ne s'écrivent pas ; celle-ci
+ * oui, parce qu'un film arrêté à minuit et jamais fermé se lisait sinon comme un abandon.
+ */
+export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve" | "pause";
+
+/** Les valeurs de `sleepTimer` qu'une ligne peut porter — celles du menu, et rien d'autre. */
+const SLEEP_TIMER_VALUES = new Set(["15", "30", "60", "90", "episode"]);
 
 export function isPlayerEventKind(value: unknown): value is PlayerEventKind {
   return typeof value === "string" && KINDS.has(value);
@@ -197,7 +205,10 @@ export function logPlaybackEvent(
   // touchait les quarante perdait justement ce champ-là. Le serveur date toujours la ligne de son
   // arrivée : le navigateur ne fait que dire de combien elle est en retard, borné à un an,
   // et ne peut déplacer que ses propres lignes.
-  const { build, version, resent, lateByMs, ...rest } = fields;
+  //
+  // `sleepTimer` de même (02/10/2026), la minuterie de veille : une valeur du menu, ajoutée à un
+  // bilan déjà plein — sous le plafond, elle aurait été la première à tomber.
+  const { build, version, resent, lateByMs, sleepTimer, ...rest } = fields;
   const late = typeof lateByMs === "number" && Number.isFinite(lateByMs) && lateByMs >= 0 && lateByMs <= MAX_LATE_MS ? Math.round(lateByMs) : null;
   const head = {
     ...server,
@@ -205,6 +216,7 @@ export function logPlaybackEvent(
     ...(typeof version === "string" && version ? { version: version.slice(0, 20) } : {}),
     ...(resent === true ? { resent: true } : {}),
     ...(late !== null ? { lateByMs: late } : {}),
+    ...(typeof sleepTimer === "string" && SLEEP_TIMER_VALUES.has(sleepTimer) ? { sleepTimer } : {}),
   };
   // Lu à l'appel : un test bascule `NODE_ENV` sans recharger le module.
   const dev = process.env.NODE_ENV === "development";

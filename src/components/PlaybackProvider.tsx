@@ -8,6 +8,7 @@ import { setWatchingFullScreen } from "@/lib/playbackBusy";
 import { NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import { flushOrphanStops } from "@/lib/unsentStop";
 import { flushUnsentLines } from "@/lib/unsentLines";
+import { sleepTimerStore } from "@/lib/sleepTimer";
 
 export interface PlaybackSession {
   itemId: string;
@@ -242,6 +243,10 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const play = useCallback((s: PlaybackSession) => {
+    // La minuterie de veille appartient à la séance (`sleepTimer.ts`) : une nouvelle ouverture
+    // repart sans elle. L'épisode suivant, lui, passe par `advance`, qui la garde — c'est pour lui
+    // qu'elle existe.
+    sleepTimerStore.clear();
     openCounter += 1;
     setSession({ ...s, openId: openCounter });
     setMode("full");
@@ -253,6 +258,7 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   }, [session]);
   const close = useCallback((openId?: number) => {
     if (openId !== undefined && currentOpenId.current !== openId) return;
+    sleepTimerStore.clear();
     setMode("closed");
     setSession(null);
   }, []);

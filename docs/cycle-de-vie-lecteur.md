@@ -431,6 +431,7 @@ banc ou une touche média y arriveraient, et le code le traite (`wantedAudioRef`
 | `network` | coupure en pleine lecture — **pas** pendant le sondage ou l'attache | — |
 | `seek`, `stall`, `audio` | oui | — |
 | `cast` | — | route AirPlay établie |
+| `pause` | minuterie de veille : pause à échéance, épisode retenu à sa fin (`why: "veille"`) | idem |
 
 Trous connus côté serveur : aucune ligne quand les nouveaux essais hls.js ou l'échelle audio sont
 épuisés, ni pour l'escalade par rechargement WebKit, le bouton Réessayer ou le retour de

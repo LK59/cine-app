@@ -10,6 +10,7 @@ vi.mock("@/components/TranslationProvider", () => ({
 }));
 
 import { PlayerControls } from "@/components/PlayerControls";
+import { sleepTimerStore } from "@/lib/sleepTimer";
 
 afterEach(() => {
   cleanup();
@@ -1117,6 +1118,67 @@ describe("ajuster à l'écran", () => {
     fireEvent.click(toggle);
     expect(onChange).toHaveBeenCalledWith(false);
     expect(screen.getByRole("switch")).toBeTruthy();
+  });
+});
+
+describe("PlayerControls — la minuterie de veille", () => {
+  afterEach(() => sleepTimerStore.clear());
+
+  async function openSleepMenu(props: Record<string, unknown> = {}) {
+    stubMediaFetches();
+    const view = render(<Harness {...props} />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(view.container.querySelector('[data-player-nav="more"]')!));
+    await act(async () => void fireEvent.click(screen.getByText(/player\.sleep\.title/)));
+    return view;
+  }
+
+  it("se règle depuis le menu, et la lune dit qu'elle court", async () => {
+    const { container } = await openSleepMenu();
+    const choices = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(choices).toContain("player.sleep.off");
+    expect(choices).toContain('player.sleep.minutes:{"n":30}');
+    // Pas d'épisode après : « Fin de l'épisode » ne changerait rien.
+    expect(choices).not.toContain("player.sleep.episode");
+
+    await act(async () => void fireEvent.click(screen.getByText('player.sleep.minutes:{"n":30}')));
+    expect(sleepTimerStore.get().mode).toBe("30");
+
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));
+    expect(container.querySelector("[data-sleep-active]")).not.toBeNull();
+    expect(screen.getByText(/player\.sleep\.title/).textContent).toContain('player.sleep.minutes:{"n":30}');
+  });
+
+  it("propose « Fin de l'épisode » quand un épisode suit, et alors ne l'enchaîne pas", async () => {
+    let video!: HTMLVideoElement;
+    const onAdvance = vi.fn();
+    await openSleepMenu({ nextEpisode: { itemId: "next-1", title: "Next Ep" }, creditsStart: 50, onAdvance, onVideoRef: (v: HTMLVideoElement) => (video = v) });
+    await act(async () => void fireEvent.click(screen.getByText("player.sleep.episode")));
+    expect(sleepTimerStore.get().mode).toBe("episode");
+
+    Object.defineProperty(video, "currentTime", { value: 55, configurable: true });
+    act(() => void video.dispatchEvent(new Event("play")));
+    act(() => void video.dispatchEvent(new Event("timeupdate")));
+    // Ni carte, ni décompte.
+    expect(screen.queryByText("Next Ep")).toBeNull();
+    expect(onAdvance).not.toHaveBeenCalled();
+  });
+
+  it("prévient trente secondes avant, et « Continuer » relance la durée", async () => {
+    stubMediaFetches();
+    render(<Harness />);
+    await act(async () => {});
+    expect(screen.queryByText("player.sleep.continue")).toBeNull();
+
+    act(() => {
+      sleepTimerStore.choose("15");
+      sleepTimerStore.tick(15 * 60_000 - 30_000, true);
+    });
+    expect(screen.getByText('player.sleep.warning:{"n":30}')).toBeInTheDocument();
+
+    await act(async () => void fireEvent.click(screen.getByText("player.sleep.continue")));
+    expect(sleepTimerStore.get()).toMatchObject({ mode: "15", remainingMs: 15 * 60_000 });
+    expect(screen.queryByText("player.sleep.continue")).toBeNull();
   });
 });
 

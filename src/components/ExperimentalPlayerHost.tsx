@@ -80,6 +80,8 @@ import {
 import { chooseAudioTrack, chooseSubtitleTrack, trackLanguage } from "@/lib/trackPreferences";
 import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useWakeLock } from "@/lib/useWakeLock";
+import { useSleepTimer } from "@/lib/useSleepTimer";
+import { sleepTimerLogFields, sleepTimerStore, type SleepMode } from "@/lib/sleepTimer";
 import { registerBenchBridge } from "@/lib/playerBench/bridge";
 import { seekArrived } from "@/lib/webcodecs/seekArrival";
 import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
@@ -1156,6 +1158,8 @@ export function ExperimentalPlayerHost({
         // Réseau, calcul, décodeur : ce qui a retenu la chaîne, et chaque attente classée. Aplati en
         // `diag.*`, sous son propre plafond de champs (playerLog.ts).
         diag: diagSessionFacts(),
+        // La minuterie de veille choisie, ou celle qui a arrêté le film (`sleepTimer.ts`).
+        ...sleepTimerLogFields(sleepTimerStore.get()),
       };
     },
     [tally, watched, intendedPosition]
@@ -1303,7 +1307,7 @@ export function ExperimentalPlayerHost({
     return () => diagEnd(sessionId);
   }, [sessionId]);
 
-  const { stop: stopPlaybackNow, resume: resumePlaybackSession } = usePlaybackSession(
+  const { stop: stopPlaybackNow, resume: resumePlaybackSession, savePaused } = usePlaybackSession(
     // La cible d'un saut en cours plutôt que la position d'avant — voir `stopFields`.
     intendedPosition,
     // The native player reads the file directly, so there is no Jellyfin transcode session — but
@@ -1367,6 +1371,37 @@ export function ExperimentalPlayerHost({
   }, [playback, stopPlaybackNow, itemId, reportStop, session.openId, lifecycle]);
 
   const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
+
+  /**
+   * La minuterie de veille — son décompte vit au-dessus de ce lecteur, remonté à chaque épisode
+   * (`sleepTimer.ts`). Quand elle arrête le film : une ligne `pause` au journal, et la position à
+   * Jellyfin tout de suite, comme une pause qu'on ne reprendra que demain.
+   */
+  const onSlept = useCallback(
+    (mode: SleepMode) => {
+      reportPlayback("pause", {
+        ...describeFileRef.current(),
+        path: pathRef.current ?? "non décidé",
+        why: "veille",
+        sleepTimer: mode,
+        at: intendedPosition(),
+      });
+      savePaused();
+    },
+    [intendedPosition, savePaused]
+  );
+  const { blocksAdvance: sleepHoldsAtEnd, holdAtEnd } = useSleepTimer(videoElRef, onSlept);
+  // Lu par l'écouteur `ended`, posé une fois pour toutes avec le pipeline.
+  const holdAtEndRef = useRef(holdAtEnd);
+  useEffect(() => {
+    holdAtEndRef.current = holdAtEnd;
+  }, [holdAtEnd]);
+  /**
+   * L'écran de fin : celle d'un film — ou d'un épisode que « Fin de l'épisode » retient. Jamais
+   * sinon pour un épisode : une série a son propre enchaînement, et deux propositions au même moment
+   * se disputeraient l'écran.
+   */
+  const endScreen = ended && (!nextEpisode || sleepHoldsAtEnd) && !isMini && !error;
 
   // Swaps to the next episode in place: the current one's final position is reported first, as
   // on a manual close, but the player stays open so there is no close/reopen flicker between
@@ -1749,6 +1784,8 @@ export function ExperimentalPlayerHost({
         // de fin ne l'envoyait jamais (relevé le 23/09/2026).
         void stopPlaybackRef.current();
         lifecycle.noteEnded();
+        // « Fin de l'épisode » : l'écran de fin, et la mise en veille au journal.
+        holdAtEndRef.current();
         // Fini : ses octets gardés pour une reprise instantanée n'ont plus rien à reprendre. Effacés
         // en arrière-plan ; le prochain passage l'aurait fait aussi, le titre quittant « Reprendre ».
         // La réserve d'avance, elle, reste : elle ne vit qu'en mémoire, n'écrit rien sur l'appareil,
@@ -2437,9 +2474,8 @@ export function ExperimentalPlayerHost({
         </div>
       )}
 
-      {/* La fin d'un film. Jamais celle d'un épisode : une série a son propre enchaînement, et
-          deux propositions au même moment se disputeraient l'écran. */}
-      {ended && !nextEpisode && !isMini && !error && (
+      {/* La fin d'un film, ou d'un épisode retenu par la minuterie de veille — voir `endScreen`. */}
+      {endScreen && (
         <PlayerEndScreen
           itemId={itemId}
           title={info?.title ?? openedAs}
@@ -2623,7 +2659,7 @@ export function ExperimentalPlayerHost({
             // rouvrir la séance que la fin avait close — « Revoir » le fait, pas le clavier.
             // Sous l'écran « connexion perdue » aussi : une flèche y déplaçait la reprise annoncée,
             // et la barre d'espace jouait un élément mort (relu le 24/09/2026).
-            suspended={!ready || networkLost !== null || (ended && !nextEpisode && !isMini && !error)}
+            suspended={!ready || networkLost !== null || endScreen}
             // L'interrupteur n'apparaît que s'il y a un agrandissement à défaire — voir `useFrameFit`.
             frameFit={frameFitState.available ? { on: frameFitState.on, onChange: frameFitState.setOn } : undefined}
             hdrCap={

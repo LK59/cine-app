@@ -26,7 +26,9 @@ import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { reportPlayback } from "@/lib/reportPlayback";
-import { serverStartFields, serverFailureFields, castEstablishedFields, castEndedFields, castResumeFields, serverStopFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
+import { serverStartFields, serverFailureFields, castEstablishedFields, castEndedFields, castResumeFields, serverStopFields, serverSleepFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
+import { useSleepTimer } from "@/lib/useSleepTimer";
+import { sleepTimerLogFields, sleepTimerStore, type SleepMode } from "@/lib/sleepTimer";
 import { CastResume } from "@/lib/castResume";
 import { castRouteActive } from "@/lib/castRoute";
 import { WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
@@ -483,7 +485,7 @@ function ActivePlayer({
   const [showPlaybackInfo, setShowPlaybackInfo] = useState(false);
   const playMethod = playbackInfo?.playMethod ?? "Transcode";
 
-  const { stop: stopPlaybackNow, resume: resumePlaybackSession } = usePlaybackSession(
+  const { stop: stopPlaybackNow, resume: resumePlaybackSession, savePaused } = usePlaybackSession(
     useCallback(() => lastKnownTime.current, []),
     // Named as this app rather than as its engine: this player hands the file to Jellyfin, which
     // is what the server's own dashboard should show.
@@ -497,6 +499,20 @@ function ActivePlayer({
   );
 
   const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
+
+  /**
+   * La minuterie de veille, la même que celle du lecteur natif (`useSleepTimer`) : ses commandes
+   * sont les mêmes, son décompte vit au-dessus des deux lecteurs, et un relais de l'un à l'autre le
+   * garde. Quand elle arrête le film : la ligne `pause` et la position à Jellyfin tout de suite.
+   */
+  const onSlept = useCallback(
+    (sleptMode: SleepMode) => {
+      reportPlayback("pause", serverSleepFields(logContext.current, sleptMode, lastKnownTime.current));
+      savePaused();
+    },
+    [savePaused]
+  );
+  const { holdAtEnd } = useSleepTimer(videoRef, onSlept);
 
   /**
    * La séance est déjà fermée — une seule fois, comme `lifecycle.claimStop` côté lecteur natif.
@@ -516,7 +532,7 @@ function ActivePlayer({
     // Rien à enchaîner sur une séance qu'on vient de fermer : le compte à rebours de l'épisode
     // suivant peut arriver à zéro pendant le fondu.
     if (!nextEpisode || closedRef.current) return;
-    reportPlayback("stop", serverStopFields(logContext.current, "next", lastKnownTime.current, watched.take(Date.now())));
+    reportPlayback("stop", serverStopFields(logContext.current, "next", lastKnownTime.current, watched.take(Date.now()), sleepTimerLogFields(sleepTimerStore.get())));
     stopPlaybackNow();
     playback.advance(nextEpisode);
   }, [nextEpisode, playback, stopPlaybackNow, watched]);
@@ -531,7 +547,7 @@ function ActivePlayer({
     if (closedRef.current) return;
     closedRef.current = true;
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    reportPlayback("stop", serverStopFields(logContext.current, "close", lastKnownTime.current, watched.take(Date.now())));
+    reportPlayback("stop", serverStopFields(logContext.current, "close", lastKnownTime.current, watched.take(Date.now()), sleepTimerLogFields(sleepTimerStore.get())));
     const reported = stopPlaybackNow();
     /**
      * En diffusion, fermer le lecteur arrête aussi le téléviseur.
@@ -1419,6 +1435,9 @@ function ActivePlayer({
       }
       endStoppedRef.current = true;
       void stopPlaybackNow();
+      // « Fin de l'épisode » : les commandes n'ont montré ni carte ni décompte, le lecteur reste sur
+      // la dernière image — il n'a pas d'écran de fin — et la mise en veille part au journal.
+      holdAtEnd();
     }
     function onPlay() {
       if (!endStoppedRef.current) return;
@@ -1431,7 +1450,7 @@ function ActivePlayer({
       video.removeEventListener("ended", onEnded);
       video.removeEventListener("play", onPlay);
     };
-  }, [handleClose, videoKey, hasNextEpisode, stopPlaybackNow, resumePlaybackSession]);
+  }, [handleClose, videoKey, hasNextEpisode, stopPlaybackNow, resumePlaybackSession, holdAtEnd]);
 
   // Tracked independently of PlayerControls (which keeps its own copy for the full-mode UI)
   // so the mini player's play/pause icon stays correct without threading state through props.

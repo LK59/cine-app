@@ -281,6 +281,26 @@ describe("une ligne renvoyée après coup", () => {
   });
 });
 
+describe("la minuterie de veille", () => {
+  it("accepte la ligne `pause` et garde `sleepTimer` hors plafond, sur un bilan plein", async () => {
+    const { logPlaybackEvent, isPlayerEventKind } = await import("@/lib/playerLog");
+    expect(isPlayerEventKind("pause")).toBe(true);
+    const many = Object.fromEntries(Array.from({ length: 45 }, (_, i) => [`f${i}`, i]));
+    logPlaybackEvent("louis", "stop", { ...many, sleepTimer: "30" });
+    logPlaybackEvent("louis", "pause", { why: "veille", sleepTimer: "episode", at: 1834 });
+    const [stop, pause] = lines();
+    expect(stop.sleepTimer).toBe("30");
+    expect(pause).toMatchObject({ kind: "pause", why: "veille", sleepTimer: "episode", at: 1834 });
+  });
+
+  it("n'écrit qu'une valeur du menu", async () => {
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    logPlaybackEvent("louis", "stop", { sleepTimer: "toute la nuit" });
+    logPlaybackEvent("louis", "stop", { sleepTimer: 30 });
+    for (const line of lines()) expect(line).not.toHaveProperty("sleepTimer");
+  });
+});
+
 describe("l'événement d'un changement de piste audio", () => {
   it("est accepté, et reste distinct d'une reconstruction", async () => {
     const { isPlayerEventKind } = await import("@/lib/playerLog");

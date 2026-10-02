@@ -885,3 +885,30 @@ describe("un seul instant pour une ligne en retard", () => {
     expect(lecteurs.filter((f) => /\.lateByMs\b/.test(reste(f)))).toEqual([]);
   });
 });
+
+describe("une seule minuterie de veille", () => {
+  // DECISIONS.md §43. Les deux lecteurs ont les mêmes commandes et la même minuterie : chacun monte
+  // `useSleepTimer`, et « Fin de l'épisode » se lit par `blocksAutoAdvance` — dans les commandes
+  // (ni carte ni décompte) comme à la fin du fichier (l'hôte reste sur sa fin).
+  it.each([
+    ["src/components/ExperimentalPlayerHost.tsx", /useSleepTimer\(/, /holdAtEndRef\.current\(\)/],
+    ["src/components/PlayerHost.tsx", /useSleepTimer\(/, /holdAtEnd\(\)/],
+  ])("%s monte useSleepTimer et lui demande la fin", (f, monte, fin) => {
+    const src = lire(f);
+    expect([f, monte.test(src), fin.test(src)]).toEqual([f, true, true]);
+  });
+
+  it("les commandes retirent la carte de l'épisode suivant par la même règle", () => {
+    const src = lire("src/components/PlayerControls.tsx");
+    expect(src).toMatch(/const showNextUp =[^;]*!sleepBlocksAdvance;/);
+    expect(lire("src/lib/sleepTimer.ts")).toMatch(/sleepBlocksAdvanceSnapshot = \(\): boolean => blocksAutoAdvance\(state\)/);
+  });
+
+  it("aucun minuteur de veille n'est tenu ailleurs que dans le magasin", () => {
+    const files = (readdirSync("src", { recursive: true }) as string[])
+      .filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"))
+      .map((f) => `src/${f.replaceAll("\\", "/")}`)
+      .filter((f) => f !== "src/lib/sleepTimer.ts");
+    expect(files.filter((f) => /tickSleepTimer|chooseSleepTimer\(/.test(lire(f)))).toEqual([]);
+  });
+});

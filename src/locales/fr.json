@@ -280,7 +280,8 @@
       "fallback": "Passage au lecteur serveur : {reason}",
       "stop": "Fin ({why}) · {watched} regardé · arrêt à {at}",
       "error": "Erreur",
-      "cast": "Diffusion sur un téléviseur"
+      "cast": "Diffusion sur un téléviseur",
+      "sleep": "Mise en veille ({mode}) à {at}"
     },
     "logs": {
       "title": "Journaux",
@@ -1834,6 +1835,14 @@
       "title": "Notifications",
       "body": "Vous les aviez activées sur cet appareil avant de vous déconnecter. Les réactiver ?",
       "later": "Plus tard"
+    },
+    "sleep": {
+      "title": "Minuterie de veille",
+      "off": "Désactivée",
+      "minutes": "{n} min",
+      "episode": "Fin de l'épisode",
+      "warning": "Arrêt dans {n} s",
+      "continue": "Continuer"
     }
   },
   "cinema": {

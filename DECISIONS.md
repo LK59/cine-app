@@ -1276,3 +1276,39 @@ une fois, et n'entre en file que sur un échec d'envoi.
 
 **Trouvé le 01/10/2026** : un redémarrage du conteneur à 19:47:06 a emporté un point de réserve
 d'une séance en cours ; seul le bilan avait un filet.
+
+## 43. La minuterie de veille
+
+**Règle.** Une durée (15, 30, 60, 90 min) se compte en temps de film : seulement pendant la
+lecture. Trente secondes avant la fin, une ligne « Arrêt dans 30 s · Continuer » ; « Continuer »
+relance la même durée en entier. Les cinq dernières secondes, le son descend ; à zéro, le film se
+met en pause — le lecteur reste ouvert —, le volume du spectateur est rendu à l'élément arrêté, la
+position part à Jellyfin tout de suite et une ligne `pause` (`why: "veille"`, `sleepTimer`) au
+journal ; la minuterie retombe à « off ». « Fin de l'épisode » (proposée seulement quand un épisode
+suit) retire la carte de l'épisode suivant et son décompte, et retient l'épisode à sa fin. La
+minuterie appartient à la séance : elle survit à l'épisode suivant, aux reconstructions et au
+relais vers le lecteur serveur ; fermer le lecteur ou ouvrir un autre titre l'efface ; elle n'est
+gardée nulle part sur l'appareil.
+
+**Porteur.** `src/lib/sleepTimer.ts` — les règles en fonctions pures (`tickSleepTimer`,
+`sleepVolumeFactor`, `sleepTimerDue`, `sleepWarningSeconds`, `continueSleepTimer`,
+`blocksAutoAdvance`, `sleepTimerLogFields`) et le magasin hors de React (`sleepTimerStore`) ;
+`src/lib/useSleepTimer.ts` — le moteur (battement, descente du son, pause, `holdAtEnd`).
+
+**Appelants.** `PlayerControls` (l'entrée du menu ⋮, la ligne des trente secondes, la carte de
+l'épisode suivant) ; `ExperimentalPlayerHost` et `PlayerHost` (`useSleepTimer`, la ligne `pause`,
+`sleepTimer` sur la ligne `stop`, `savePaused` de `usePlaybackSession`) ; `PlaybackProvider`
+(`clear` dans `play` et `close`) ; `logPlaybackEvent` (`sleepTimer` hors plafond, valeurs du menu
+seulement).
+
+**Tests.** `sleepTimer.test.ts`, `useSleepTimer.test.ts`, `PlayerControls.test.tsx` (« la minuterie
+de veille »), `PlaybackProvider.test.tsx`, `playerLog.test.ts`, `serverPlayerLog.test.ts`,
+`decisions-partagees.test.ts` (« une seule minuterie de veille »).
+
+**Voulu.** Le moteur est dans les hôtes, pas dans les commandes : elles ne sont montées ni en
+mini-lecteur ni pendant une reconstruction, et la minuterie doit courir dans les deux. À la fin
+retenue d'un épisode, le lecteur natif montre son écran de fin (« Revoir », « Retour ») ; le lecteur
+serveur, qui n'en a pas, reste sur la dernière image — en mini-lecteur, il se ferme comme à la fin
+d'un film. Sur iPhone et iPad, `volume` est en lecture seule : la pause a lieu, pas la descente. Le
+rechargement de page qu'impose WebKit pour changer de piste sur le lecteur serveur la perd, comme
+le reste de la séance (docs/cycle-de-vie-lecteur.md).

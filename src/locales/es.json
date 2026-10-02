@@ -280,7 +280,8 @@
       "fallback": "Paso al reproductor del servidor: {reason}",
       "stop": "Fin ({why}) · {watched} vistos · parada en {at}",
       "error": "Error",
-      "cast": "Transmisión a un televisor"
+      "cast": "Transmisión a un televisor",
+      "sleep": "Temporizador ({mode}): pausa en {at}"
     },
     "logs": {
       "title": "Registros",
@@ -1834,6 +1835,14 @@
       "title": "Notificaciones",
       "body": "Las tenías activadas en este dispositivo antes de cerrar sesión. ¿Volver a activarlas?",
       "later": "Más tarde"
+    },
+    "sleep": {
+      "title": "Temporizador",
+      "off": "Desactivado",
+      "minutes": "{n} min",
+      "episode": "Fin del episodio",
+      "warning": "Se detiene en {n} s",
+      "continue": "Continuar"
     }
   },
   "cinema": {

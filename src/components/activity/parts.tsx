@@ -370,6 +370,9 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
       return strOf(line.reason) ?? strOf(line.message) ?? t("activity.line.error");
     case "cast":
       return t("activity.line.cast");
+    // La seule pause écrite : celle de la minuterie de veille (`sleepTimer.ts`).
+    case "pause":
+      return t("activity.line.sleep", { mode: strOf(line.sleepTimer) ?? "?", at: clock(numOf(line.at)) });
     default:
       return strOf(line.message) ?? strOf(line.reason) ?? "";
   }

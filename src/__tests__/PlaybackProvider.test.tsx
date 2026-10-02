@@ -176,3 +176,32 @@ describe("PlaybackProvider — bilans restés sur l'appareil", () => {
     vi.unstubAllGlobals();
   });
 });
+
+/**
+ * La minuterie de veille appartient à la séance (02/10/2026) : l'épisode suivant la garde — c'est
+ * pour lui qu'elle existe —, une fermeture ou une nouvelle ouverture l'efface.
+ */
+describe("PlaybackProvider — la minuterie de veille", () => {
+  it("survit à l'épisode suivant, et s'efface à la fermeture", async () => {
+    const { sleepTimerStore } = await import("@/lib/sleepTimer");
+    const { result } = renderHook(() => usePlayback(), { wrapper });
+    act(() => result.current.play({ itemId: "ep1", title: "Episode 1", resumeAt: 0 }));
+    act(() => sleepTimerStore.choose("30"));
+    sleepTimerStore.tick(10 * 60_000, true);
+
+    act(() => result.current.advance({ itemId: "ep2", title: "Episode 2" }));
+    expect(sleepTimerStore.get()).toMatchObject({ mode: "30", remainingMs: 20 * 60_000 });
+
+    act(() => result.current.close());
+    expect(sleepTimerStore.get().mode).toBe("off");
+  });
+
+  it("ne passe pas d'une ouverture à la suivante", async () => {
+    const { sleepTimerStore } = await import("@/lib/sleepTimer");
+    const { result } = renderHook(() => usePlayback(), { wrapper });
+    act(() => result.current.play({ itemId: "1", title: "Movie A", resumeAt: 0 }));
+    act(() => sleepTimerStore.choose("episode"));
+    act(() => result.current.play({ itemId: "2", title: "Movie B", resumeAt: 0 }));
+    expect(sleepTimerStore.get().mode).toBe("off");
+  });
+});

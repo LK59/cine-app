@@ -280,7 +280,8 @@
       "fallback": "Handed to the server player: {reason}",
       "stop": "End ({why}) · {watched} watched · stopped at {at}",
       "error": "Error",
-      "cast": "Cast to a TV"
+      "cast": "Cast to a TV",
+      "sleep": "Sleep timer ({mode}) paused at {at}"
     },
     "logs": {
       "title": "Logs",
@@ -1834,6 +1835,14 @@
       "title": "Notifications",
       "body": "You had them on for this device before signing out. Turn them back on?",
       "later": "Later"
+    },
+    "sleep": {
+      "title": "Sleep timer",
+      "off": "Off",
+      "minutes": "{n} min",
+      "episode": "End of episode",
+      "warning": "Stopping in {n} s",
+      "continue": "Keep watching"
     }
   },
   "cinema": {

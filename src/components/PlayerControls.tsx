@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer } from "lucide-react";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
@@ -14,6 +14,19 @@ import {
 } from "@/lib/subtitleStyle";
 import { useMediaSession } from "@/lib/useMediaSession";
 import { VOLUME_STORAGE_KEY } from "@/lib/rememberedVolume";
+import {
+  SLEEP_DURATIONS,
+  sleepBlocksAdvanceSnapshot,
+  sleepFading,
+  sleepFalseServerSnapshot,
+  sleepMinutesSnapshot,
+  sleepModeSnapshot,
+  sleepNullServerSnapshot,
+  sleepServerSnapshot,
+  sleepTimerStore,
+  sleepWarningSnapshot,
+  type SleepMode,
+} from "@/lib/sleepTimer";
 
 export interface Track {
   id: number;
@@ -235,7 +248,7 @@ export function PlayerControls({
   useEffect(() => {
     visibleRef.current = visible;
   }, [visible]);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "more">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "more">(null);
   /** « Auto · 203 nits », « Natif », « 400 nits » — le réglage de luminosité HDR, en mots. */
   const hdrCapLabel = (choice: HdrCapChoice): string =>
     choice === "auto"
@@ -336,7 +349,20 @@ export function PlayerControls({
    */
   const atEnd = duration > 0 && currentTime >= duration - 1;
   const nextUpFrom = creditsStart ?? (duration > 0 ? duration - 1 : null);
-  const showNextUp = nextUpFrom != null && currentTime >= nextUpFrom && !!nextEpisode && !nextUpDismissed;
+  /**
+   * La minuterie de veille — voir `sleepTimer.ts`. Lue ici pour trois choses : son entrée du menu,
+   * la ligne des trente dernières secondes, et « Fin de l'épisode », qui retire la carte de
+   * l'épisode suivant et donc son décompte : l'épisode finit, et rien ne s'enchaîne. Le décompte
+   * lui-même et la pause appartiennent à l'hôte (`useSleepTimer`), qui tourne aussi en mini-lecteur.
+   */
+  const sleepMode = useSyncExternalStore(sleepTimerStore.subscribe, sleepModeSnapshot, sleepServerSnapshot);
+  const sleepMinutes = useSyncExternalStore(sleepTimerStore.subscribe, sleepMinutesSnapshot, sleepNullServerSnapshot);
+  const sleepWarning = useSyncExternalStore(sleepTimerStore.subscribe, sleepWarningSnapshot, sleepNullServerSnapshot);
+  const sleepBlocksAdvance = useSyncExternalStore(sleepTimerStore.subscribe, sleepBlocksAdvanceSnapshot, sleepFalseServerSnapshot);
+  const sleepLabel = (mode: SleepMode): string =>
+    mode === "off" ? t("player.sleep.off") : mode === "episode" ? t("player.sleep.episode") : t("player.sleep.minutes", { n: Number(mode) });
+  const showNextUp =
+    nextUpFrom != null && currentTime >= nextUpFrom && !!nextEpisode && !nextUpDismissed && !sleepBlocksAdvance;
 
   // Le décompte repart de zéro quand la carte s'en va — un retour en arrière avant le générique —,
   // sans quoi il reprenait là où il en était, à trois secondes au lieu de dix.
@@ -463,6 +489,9 @@ export function PlayerControls({
       // Gardé d'une séance à l'autre, et rendu à l'élément par les deux lecteurs à son montage
       // (`restoreRememberedVolume`). Seul le lecteur serveur le relisait : dans le lecteur natif,
       // chaque film repartait à plein volume. DECISIONS.md §35.
+      // Pas pendant la descente du son de la minuterie de veille : retenu, ce volume presque nul
+      // aurait ouvert le film du lendemain en silence.
+      if (sleepFading()) return;
       try {
         localStorage.setItem(VOLUME_STORAGE_KEY, JSON.stringify({ volume: video.volume, muted: video.muted }));
       } catch {
@@ -1043,7 +1072,7 @@ export function PlayerControls({
   };
 
   // Which topbar control reopens each menu on Escape, to land focus back where it came from.
-  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more", subtitleStyle: "more" };
+  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more", subtitleStyle: "more", hdrCap: "more", sleep: "more" };
 
   // Lands focus on the menu's first item the instant it opens — clicking captions/audio/more
   // only focuses THAT button (native click behavior), never moves focus into the popup that
@@ -1292,6 +1321,33 @@ export function PlayerControls({
         </button>
       )}
 
+      {/* Les trente dernières secondes de la minuterie de veille : une ligne, à la place de rien.
+          Visible commandes masquées — c'est précisément quand personne ne les regarde qu'elle sert. */}
+      {sleepWarning !== null && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="player-glass pointer-events-auto absolute flex items-center gap-2 rounded-full py-1.5 pl-3.5 pr-1.5 text-xs text-white/80"
+          style={{
+            bottom: "max(6rem, calc(env(safe-area-inset-bottom) + 5rem))",
+            left: "max(1rem, env(safe-area-inset-left))",
+          }}
+        >
+          <Moon size={12} aria-hidden />
+          <span className="tabular-nums">{t("player.sleep.warning", { n: sleepWarning })}</span>
+          <span aria-hidden>·</span>
+          <button
+            type="button"
+            onClick={() => {
+              noteViewerPresent();
+              sleepTimerStore.continue();
+            }}
+            className="rounded-full px-2 py-0.5 font-medium text-white hover:bg-white/10"
+          >
+            {t("player.sleep.continue")}
+          </button>
+        </div>
+      )}
+
       {/* La question, à la place de l'épisode suivant. Elle occupe tout l'écran plutôt qu'un coin :
           si personne n'est là, autant que la pièce cesse d'être éclairée par un film qui joue. */}
       {askStillThere && nextEpisode && (
@@ -1504,6 +1560,20 @@ export function PlayerControls({
                 >
                   <Gauge size={16} /> {t('player.speed')}{speed !== 1 ? ` · ${speed}x` : ""}
                 </button>
+                {/* Une ligne comme la vitesse ; active, la lune à la place du chronomètre, et ce qui
+                    reste. Rien d'autre à l'écran ne dit qu'une minuterie court. */}
+                <button
+                  onClick={() => setMenu("sleep")}
+                  className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                >
+                  {sleepMode === "off" ? <Timer size={16} /> : <Moon size={16} className="text-accent-400" data-sleep-active="" />}
+                  {t("player.sleep.title")}
+                  {sleepMode === "episode"
+                    ? ` · ${t("player.sleep.episode")}`
+                    : sleepMinutes !== null
+                      ? ` · ${t("player.sleep.minutes", { n: sleepMinutes })}`
+                      : ""}
+                </button>
                 {frameFit && (
                   // Le menu reste ouvert : l'image glisse derrière, et c'est ce qu'on veut voir.
                   <button
@@ -1602,7 +1672,7 @@ export function PlayerControls({
                 )}
               </>
             )}
-            {(menu === "chapters" || menu === "speed" || menu === "subtitleStyle" || menu === "hdrCap") && (
+            {(menu === "chapters" || menu === "speed" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep") && (
               <button
                 onClick={() => setMenu("more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
@@ -1690,6 +1760,24 @@ export function PlayerControls({
                   }`}
                 >
                   {hdrCapLabel(choice)}
+                </button>
+              ))}
+            {menu === "sleep" &&
+              // « Fin de l'épisode » seulement quand il y a un épisode après : sans lui, l'épisode
+              // s'arrête déjà à sa fin, et l'option ne changerait rien.
+              (["off", ...SLEEP_DURATIONS, ...(nextEpisode ? (["episode"] as const) : [])] as SleepMode[]).map((choice) => (
+                <button
+                  key={choice}
+                  onClick={() => {
+                    setMenu(null);
+                    // Rechoisir la durée en cours la relance en entier, comme « Continuer ».
+                    sleepTimerStore.choose(choice);
+                  }}
+                  className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
+                    sleepMode === choice ? "text-accent-400" : "text-white"
+                  }`}
+                >
+                  {sleepLabel(choice)}
                 </button>
               ))}
             {menu === "speed" &&

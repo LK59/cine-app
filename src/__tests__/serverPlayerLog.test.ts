@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { serverStartFields, serverFailureFields, castEstablishedFields, castEndedFields, serverStopFields } from "@/lib/serverPlayerLog";
+import { serverStartFields, serverFailureFields, castEstablishedFields, castEndedFields, serverStopFields, serverSleepFields } from "@/lib/serverPlayerLog";
 import { isPlayerEventKind } from "@/lib/playerLog";
 
 // Le lecteur serveur n'écrivait rien : l'AirPlay figé du 22/09/2026 ne s'est compris qu'au journal
@@ -76,6 +76,15 @@ describe("arrêt du lecteur serveur", () => {
     expect(serverStopFields(CTX, "close", 3600, 95)).toMatchObject({ at: 3600, watched: 95 });
     expect(castEndedFields(CTX, "appareil distant déconnecté", 3600, 1800)).toMatchObject({ watched: 1800 });
     expect(castEndedFields(CTX, "appareil distant déconnecté", 3600)).not.toHaveProperty("watched");
+  });
+});
+
+describe("la minuterie de veille sur le lecteur serveur", () => {
+  it("écrit la même ligne `pause` que le lecteur natif, et la minuterie sur le bilan", () => {
+    expect(serverSleepFields(CTX, "30", 1834.6)).toMatchObject({ player: "serveur", why: "veille", sleepTimer: "30", at: 1835 });
+    expect(isPlayerEventKind("pause")).toBe(true);
+    expect(serverStopFields(CTX, "close", 10, 0, { sleepTimer: "episode" })).toMatchObject({ sleepTimer: "episode" });
+    expect(serverStopFields(CTX, "close", 10, 0)).not.toHaveProperty("sleepTimer");
   });
 });
 

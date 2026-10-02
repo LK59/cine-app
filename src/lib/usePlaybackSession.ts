@@ -80,7 +80,7 @@ export function usePlaybackSession(
   getPositionSeconds: () => number,
   session: PlaybackSessionInfo | null,
   getPaused?: () => boolean
-): { stop: () => Promise<void>; resume: () => void } {
+): { stop: () => Promise<void>; resume: () => void; savePaused: () => void } {
   const sessionRef = useRef(session);
   const stoppedRef = useRef(false);
   const positionRef = useRef(getPositionSeconds);
@@ -184,5 +184,18 @@ export function usePlaybackSession(
     report("playing", s, Math.floor(positionRef.current() * TICKS_PER_SECOND));
   }, []);
 
-  return useMemo(() => ({ stop, resume }), [stop, resume]);
+  /**
+   * La position, tout de suite, film en pause — la minuterie de veille vient de l'arrêter.
+   *
+   * Le battement suivant l'aurait dite dans dix secondes ; mais quelqu'un qui s'endort laisse le
+   * téléphone se verrouiller, et une page mise de côté n'a plus de battement. C'est l'instant où le
+   * spectateur s'est endormi qu'il faut retrouver demain, pas celui d'avant.
+   */
+  const savePaused = useCallback(() => {
+    const s = sessionRef.current;
+    if (!s || stoppedRef.current) return;
+    void report("progress", s, Math.floor(positionRef.current() * TICKS_PER_SECOND), true);
+  }, []);
+
+  return useMemo(() => ({ stop, resume, savePaused }), [stop, resume, savePaused]);
 }
