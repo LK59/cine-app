@@ -1246,6 +1246,31 @@ describe("PlayerControls — la disposition", () => {
     expect(nav(container, "captions")!.hasAttribute("data-on")).toBe(true);
   });
 
+  it("cache le curseur avec les commandes pendant la lecture, et le rend au mouvement", async () => {
+    vi.useFakeTimers();
+    try {
+      stubMediaFetches();
+      const { container } = render(<Harness title="Film" />);
+      await act(async () => {});
+      const root = container.querySelector(".absolute.inset-0.z-10") as HTMLElement;
+      const video = document.querySelector("video") as HTMLVideoElement;
+      Object.defineProperty(video, "paused", { value: false, configurable: true });
+      await act(async () => {
+        video.dispatchEvent(new Event("play"));
+      });
+      fireEvent.pointerMove(root, { pointerType: "mouse" });
+      expect(root.className).not.toMatch(/cursor-none/);
+      await act(async () => {
+        vi.advanceTimersByTime(4000);
+      });
+      expect(root.className).toMatch(/cursor-none/);
+      fireEvent.pointerMove(root, { pointerType: "mouse" });
+      expect(root.className).not.toMatch(/cursor-none/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("place le menu ouvert devant les boutons du centre", async () => {
     stubMediaFetches();
     const { container } = render(

@@ -1398,7 +1398,10 @@ export function PlayerControls({
 
   return (
     <div
-      className="absolute inset-0 z-10"
+      // Commandes cachées pendant la lecture, le curseur s'en va avec elles : il restait planté au
+      // milieu de l'image sous Windows (02/10/2026). Le moindre mouvement de souris rappelle les
+      // commandes (`onPointerMove`), et le curseur avec. En pause, il reste : on s'attend à agir.
+      className={`absolute inset-0 z-10 ${!visible && playing ? "cursor-none" : ""}`}
       onClick={toggleControls}
       onPointerDownCapture={playPressSpring}
       onKeyDownCapture={(e) => {
