@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, act, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useRef, type RefObject } from "react";
+import { Profiler, useRef, type RefObject } from "react";
 
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string, vars?: Record<string, unknown>) =>
@@ -1485,5 +1485,138 @@ describe("PlayerControls — passer sur AirPlay", () => {
     const { container } = render(<Harness />);
     await act(async () => {});
     expect(container.querySelector('[data-player-nav="cast"]')).toBeNull();
+  });
+});
+
+describe("PlayerControls — ce qui coûte un rendu (banc du 02/10/2026)", () => {
+  function stubTrickplay() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).includes("/trickplay/info")
+          ? { ok: true, json: async () => ({ width: 320, height: 180, tileWidth: 10, tileHeight: 10, thumbnailCount: 100, intervalMs: 10_000 }) }
+          : { ok: false, json: async () => null }
+      )
+    );
+  }
+
+  /** Un élément qui joue, et des plages chargées qu'on fait avancer à la main. */
+  async function playing(onCommit: () => void, withTrickplay = false) {
+    if (withTrickplay) stubTrickplay();
+    else stubMediaFetches();
+    vi.useFakeTimers();
+    let clock = 10_000;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    let video!: HTMLVideoElement;
+    let end = 100;
+    const { container } = render(
+      <Profiler id="pc" onRender={onCommit}>
+        <Harness
+          onVideoRef={(v) => {
+            if (video) return;
+            video = v;
+            Object.defineProperty(v, "buffered", { configurable: true, get: () => ({ length: 1, start: () => 0, end: () => end }) });
+          }}
+        />
+      </Profiler>
+    );
+    await act(async () => {});
+    Object.defineProperty(video, "paused", { value: false, configurable: true });
+    Object.defineProperty(video, "duration", { value: 3600, configurable: true });
+    act(() => void video.dispatchEvent(new Event("durationchange")));
+    act(() => void video.dispatchEvent(new Event("play")));
+    const at = (t: number) => {
+      Object.defineProperty(video, "currentTime", { value: t, configurable: true, writable: true });
+      act(() => void video.dispatchEvent(new Event("timeupdate")));
+    };
+    const gauge = () => container.querySelector<HTMLElement>('[class*="bg-white/35"]')?.style.width ?? null;
+    return {
+      video,
+      at,
+      gauge,
+      advance: (ms: number) => void (clock += ms),
+      setEnd: (seconds: number) => void (end = seconds),
+      restore: () => now.mockRestore(),
+    };
+  }
+
+  it("la jauge du chargé suit le tic de la position, sans rendu à elle", async () => {
+    // Une source MediaSource fait tirer `progress` à chaque ajout de données : 4,5 rendus de tout
+    // le composant par seconde au repos, pour une jauge qui avançait d'un quart de pixel.
+    let commits = 0;
+    const p = await playing(() => void commits++);
+    p.advance(1_000);
+    p.at(100);
+    p.setEnd(200);
+    commits = 0;
+    for (let i = 0; i < 3; i++) {
+      p.advance(200);
+      act(() => void p.video.dispatchEvent(new Event("progress")));
+    }
+    expect(commits).toBe(0);
+    // Le tic suivant l'emporte, dans son propre rendu.
+    p.advance(400);
+    p.at(101);
+    expect(commits).toBe(1);
+    expect(p.gauge()).toMatch(/^5\.55/);
+    // Et le minuteur qui attendait ce `progress` ne rend pas une seconde fois (2 s : il aurait tiré
+    // à 1,5 s ; avant 3 s, où les commandes se masquent, ce qui est un rendu à part).
+    await act(async () => void vi.advanceTimersByTime(2_000));
+    expect(commits).toBe(1);
+    p.restore();
+  });
+
+  it("pendant une attente, sans tic, la jauge avance quand même", async () => {
+    // L'horloge ne bouge plus, donc plus de rendu de la position : c'est précisément le moment où
+    // la jauge dit si ça charge.
+    const p = await playing(() => {});
+    p.advance(1_000);
+    p.at(100);
+    p.setEnd(300);
+    p.advance(100);
+    act(() => void p.video.dispatchEvent(new Event("progress")));
+    expect(p.gauge()).not.toMatch(/^8\.3/);
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(p.gauge()).toMatch(/^8\.3/);
+    p.restore();
+  });
+
+  it("ne lit pas la largeur de l'écran pendant le rendu", async () => {
+    // `window.innerWidth` force une mise en page dès que la page a changé depuis la dernière image :
+    // au banc, 14 mises en page forcées pour 16 appuis en paysage iPhone, toutes venues de là.
+    // Avec des vignettes : sans elles, l'échelle n'a pas à être calculée et rien n'était lu.
+    const p = await playing(() => {}, true);
+    const width = vi.spyOn(window, "innerWidth", "get");
+    p.advance(1_000);
+    p.at(100);
+    p.advance(1_000);
+    p.at(101);
+    expect(width).not.toHaveBeenCalled();
+    width.mockRestore();
+    p.restore();
+  });
+
+  it("garde la vignette à l'échelle de l'écran quand il change de taille", async () => {
+    stubTrickplay();
+    const width = vi.spyOn(window, "innerWidth", "get").mockReturnValue(1920);
+    let video!: HTMLVideoElement;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    Object.defineProperty(video, "duration", { value: 3600, configurable: true });
+    bar.getBoundingClientRect = () => ({ left: 0, width: 200, top: 0, height: 20, right: 200, bottom: 20, x: 0, y: 0, toJSON: () => ({}) });
+    await act(async () => void video.dispatchEvent(new Event("durationchange")));
+    const preview = () => bar.querySelector<HTMLElement>(".bottom-full");
+
+    await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 50 }] }));
+    expect(preview()?.style.width).toBe("320px");
+    await act(async () => void fireEvent.touchEnd(bar));
+
+    // Un téléphone tourné en portrait : 400 px de large, la vignette en prend 35 %.
+    width.mockReturnValue(400);
+    await act(async () => void window.dispatchEvent(new Event("resize")));
+    await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 50 }] }));
+    expect(preview()?.style.width).toBe("140px");
+    width.mockRestore();
   });
 });

@@ -148,6 +148,8 @@ const PROMPT_BOTTOM = `calc(${BOTTOM_EDGE} + 8.5rem)`;
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 /** Masqués, les contrôles ne suivent la position qu'à ce rythme — voir `visibleRef`. */
 const HIDDEN_UPDATE_MS = 1000;
+/** En lecture, le plus long qu'un `progress` attende le tic de la position — voir `readBufferedEnd`. */
+const BUFFERED_LATE_MS = 1500;
 
 /** How long a seek may take before it is worth showing as a wait rather than as a still button. */
 const SEEK_SPINNER_MS = 150;
@@ -535,6 +537,32 @@ export function PlayerControls({
       seekSpinner.current = null;
       setBuffering(false);
     };
+    // The range containing currentTime (not just the last one) — a rewind past hls.js's
+    // in-memory buffer can leave an earlier, already-downloaded range that's no longer the
+    // last entry in video.buffered once new data has since loaded ahead of the original spot.
+    //
+    // Lue au plus une fois par seconde, et en lecture dans le rendu du tic de la position plutôt que
+    // dans le sien (`onTime`). Avec une source MediaSource, chaque ajout de données fait tirer
+    // `progress` : au banc du 02/10/2026, 4,5 rendus de tout ce composant par seconde commandes
+    // affichées au repos, et 2 masquées — pour une jauge qui avance d'un quart de pixel par ajout.
+    // Un `progress` que le tic n'a pas repris (une attente : l'horloge ne bouge plus ; une pause :
+    // il n'y a plus de tic) est lu par le minuteur, au plus tard `BUFFERED_LATE_MS` après la
+    // dernière lecture — la jauge reste ce qui dit, pendant une attente, que ça charge.
+    let bufferedAt = -Infinity;
+    let bufferedTimer: ReturnType<typeof setTimeout> | null = null;
+    const readBufferedEnd = () => {
+      if (bufferedTimer) clearTimeout(bufferedTimer);
+      bufferedTimer = null;
+      bufferedAt = performance.now();
+      const ranges = video.buffered;
+      for (let i = 0; i < ranges.length; i++) {
+        if (ranges.start(i) <= video.currentTime && video.currentTime <= ranges.end(i)) {
+          setBufferedEnd(ranges.end(i));
+          return;
+        }
+      }
+      setBufferedEnd(ranges.length > 0 ? ranges.end(ranges.length - 1) : 0);
+    };
     // Suppressed while dragging the seek bar — otherwise the real (not-yet-seeked) playback
     // position keeps overwriting the dragged thumb position on every tick, fighting the user's
     // own drag mid-gesture.
@@ -556,6 +584,8 @@ export function PlayerControls({
       shownSecond = second;
       timeAt = now;
       setCurrentTime(video.currentTime);
+      // La jauge du chargé prend ce même tic, dans le même rendu — voir `readBufferedEnd`.
+      readBufferedEnd();
     };
     const onDuration = () => {
       setDuration(video.duration || 0);
@@ -613,23 +643,14 @@ export function PlayerControls({
     };
     const onEnded = () => setCurrentTime(video.currentTime);
     const onRateChange = () => setSpeed(video.playbackRate || 1);
-    // The range containing currentTime (not just the last one) — a rewind past hls.js's
-    // in-memory buffer can leave an earlier, already-downloaded range that's no longer the
-    // last entry in video.buffered once new data has since loaded ahead of the original spot.
-    let progressAt = 0;
     const onProgress = () => {
-      // La jauge de ce qui est chargé ne se voit pas non plus quand les contrôles sont masqués.
-      const now = performance.now();
-      if (!visibleRef.current && now - progressAt < HIDDEN_UPDATE_MS) return;
-      progressAt = now;
-      const ranges = video.buffered;
-      for (let i = 0; i < ranges.length; i++) {
-        if (ranges.start(i) <= video.currentTime && video.currentTime <= ranges.end(i)) {
-          setBufferedEnd(ranges.end(i));
-          return;
-        }
-      }
-      setBufferedEnd(ranges.length > 0 ? ranges.end(ranges.length - 1) : 0);
+      if (bufferedTimer) return;
+      // En lecture, le tic suivant arrive dans la seconde (`timeupdate` tire toutes les ~250 ms) et
+      // emporte la jauge avec lui : le minuteur n'attend donc pas une seconde mais une et demie, pour
+      // ne jamais passer avant lui. À l'arrêt, il n'y a pas de tic : une seconde suffit.
+      const wait = bufferedAt + (video.paused ? HIDDEN_UPDATE_MS : BUFFERED_LATE_MS) - performance.now();
+      if (wait <= 0) readBufferedEnd();
+      else bufferedTimer = setTimeout(readBufferedEnd, wait);
     };
     // 'canplay' also clears buffering: when autoplay is blocked (iOS after the reload-based
     // track switch — no user activation on the fresh page), 'playing' never fires without a
@@ -689,6 +710,7 @@ export function PlayerControls({
       video.removeEventListener("seeking", onSeeking);
       video.removeEventListener("seeked", onSeeked);
       if (seekSpinner.current) clearTimeout(seekSpinner.current);
+      if (bufferedTimer) clearTimeout(bufferedTimer);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("canplay", onPlaying);
       video.removeEventListener("timeupdate", onTime);
@@ -922,6 +944,13 @@ export function PlayerControls({
     }
   }, [trickplay, itemId]);
 
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth));
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const seekBarRef = useRef<HTMLDivElement>(null);
   const [previewTime, setPreviewTime] = useState<number | null>(null);
   /** The bar is under a finger or a pointer — the one state that thickens it. */
@@ -990,7 +1019,12 @@ export function PlayerControls({
   // on a small phone (iPhone mini reported live) it could cover close to the whole screen width.
   // Scaled down to fit a fraction of the actual screen instead, capped at 1x so it's never
   // upscaled past its native resolution (would just look blurry).
-  const previewScale = trickplay && typeof window !== "undefined" ? Math.min(1, (window.innerWidth * 0.35) / trickplay.width) : 1;
+  //
+  // La largeur de l'écran est tenue à jour au redimensionnement, jamais lue pendant le rendu : lire
+  // `window.innerWidth` force une mise en page synchrone quand la page a changé depuis la dernière
+  // image — à chaque rendu, donc à chaque seconde affichée et à chaque appui. Au banc du 02/10/2026,
+  // en paysage iPhone émulé : 14 mises en page forcées pour 16 appuis, toutes venues d'ici.
+  const previewScale = trickplay && viewportWidth > 0 ? Math.min(1, (viewportWidth * 0.35) / trickplay.width) : 1;
   const previewDisplayWidth = trickplay ? Math.round(trickplay.width * previewScale) : 160;
   const previewDisplayHeight = trickplay ? Math.round(trickplay.height * previewScale) : 90;
 
