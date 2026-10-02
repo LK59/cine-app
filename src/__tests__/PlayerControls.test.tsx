@@ -1242,6 +1242,23 @@ describe("PlayerControls — la disposition", () => {
     expect(nav(container, "captions")!.hasAttribute("data-on")).toBe(true);
   });
 
+  it("met le plein écran au bout de la pilule du bas là où le navigateur le permet", async () => {
+    // jsdom ne connaît pas l'API plein écran (`fullscreenEnabled` absent) : c'est pourquoi le bouton
+    // manquait aux premières captures, faites depuis ce même rendu. Chrome, Firefox et Safari sur Mac
+    // répondent vrai.
+    stubMediaFetches();
+    Object.defineProperty(document, "fullscreenEnabled", { value: true, configurable: true });
+    try {
+      const { container } = render(<Harness />);
+      await act(async () => {});
+      const pill = container.querySelector("[data-settings-pill]")!;
+      const buttons = Array.from(pill.querySelectorAll("[data-player-nav]"));
+      expect(buttons.at(-1)?.getAttribute("data-player-nav")).toBe("fullscreen");
+    } finally {
+      Object.defineProperty(document, "fullscreenEnabled", { value: false, configurable: true });
+    }
+  });
+
   it("ouvre la vitesse directement depuis sa pilule, vers le haut", async () => {
     stubMediaFetches();
     const { container } = render(<Harness />);

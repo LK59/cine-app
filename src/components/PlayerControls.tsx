@@ -150,11 +150,14 @@ const TOUCH_JITTER_PX = 1;
  */
 function SkipGlyph({ direction }: { direction: "back" | "forward" }) {
   const Arrow = direction === "back" ? RotateCcw : RotateCw;
+  // À la taille du bouton : 26 px dans un bouton de 48, 30 dans un de 56 — le chiffre suit, ≈ 10 puis
+  // 12 px. Fixé à 22 px, il ne faisait que 8 px au bureau, à peine lisible (02/10/2026).
   return (
-    <span className="relative block h-[22px] w-[22px]">
-      <Arrow size={22} aria-hidden />
-      <svg viewBox="0 0 22 22" aria-hidden className="absolute inset-0 h-full w-full">
-        <text x="11" y="13.8" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="currentColor" fontFamily="inherit">
+    <span className="relative block h-[26px] w-[26px] sm:h-[30px] sm:w-[30px]">
+      <Arrow size="100%" aria-hidden className="absolute inset-0" />
+      {/* Centré sur le cercle de la flèche (12, 12 sur 24) ; la ligne de base un tiers de corps plus bas. */}
+      <svg viewBox="0 0 24 24" aria-hidden className="absolute inset-0 h-full w-full">
+        <text x="12" y="15.3" textAnchor="middle" fontSize="9.6" fontWeight="700" fill="currentColor" fontFamily="inherit" letterSpacing="-0.3">
           10
         </text>
       </svg>
