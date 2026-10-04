@@ -137,7 +137,10 @@ export function useLiquidLens({
       rest: DOMRect;
       pull: { r: number; angle: number };
       navigatedOnDown: boolean;
+      /** L'élément touché à l'appui. */
+      downKey: string | null;
     } = null;
+    let reconcile = 0;
 
     const clampMain = (pointer: number, rest: DOMRect) => {
       const all = items();
@@ -170,7 +173,9 @@ export function useLiquidLens({
         pull: { r: 0, angle: 0 },
         // Lu avant que l'élément ne navigue au contact (cet écouteur passe avant celui de React).
         navigatedOnDown: key !== null && key !== activeRef.current,
+        downKey: key,
       };
+      window.clearTimeout(reconcile);
       // Des calques à eux le temps du geste seulement : la barre floutée et la pastille bougent à
       // chaque mouvement du doigt, et sans calque chaque image repeignait la barre et son flou.
       bar.style.willChange = "transform";
@@ -251,7 +256,16 @@ export function useLiquidLens({
       }
       const targetKey = target?.dataset.lens ?? null;
       const current = activeRef.current;
-      const rest = itemOf(bar, targetKey ?? current);
+      /**
+       * Un simple appui sur un autre élément : la pastille reste sur lui.
+       *
+       * Une barre qui choisit au clic (la bascule Films/Séries) n'a pas encore changé d'actif au
+       * relâchement — le clic arrive juste après. Revenir sur l'actif renvoyait la pastille vers
+       * l'onglet quitté, que le clic, un instant plus tard, ramenait sur le bon (04/10/2026). Si
+       * le clic ne vient pas, la vérification plus bas la rend à l'actif.
+       */
+      const tapped = !d.moved && !cancelled && d.downKey !== null ? d.downKey : null;
+      const rest = itemOf(bar, targetKey ?? tapped ?? current);
       const from = l.main;
       const to = rest ? mainOf(rest) : l.main;
       l.held = false;
@@ -287,6 +301,24 @@ export function useLiquidLens({
         el.animate(land.keyframes, { duration: land.duration, easing: "linear" });
       }
       if (targetKey && targetKey !== current) selectRef.current?.(targetKey, d.navigatedOnDown);
+      // Rien n'a changé l'actif dans la demi-seconde (clic refusé, élément désactivé) : la pastille
+      // retourne sur l'actif réel, sur le ressort.
+      if (tapped && tapped !== current) {
+        reconcile = window.setTimeout(() => {
+          const l2 = lens.current;
+          const item = itemOf(bar, activeRef.current);
+          if (l2.held || !item || mainOf(item) === l2.main) return;
+          const from2 = l2.main;
+          const to2 = mainOf(item);
+          const cross2 = crossOf(item);
+          l2.main = to2;
+          l2.cross = cross2;
+          el.style.transform = lensTransform(to2, cross2, axis, 1, 0);
+          const back2 = springKeyframes(from2, to2, LIQUID_SPRING, ({ x, v }) => ({ transform: lensTransform(x, cross2, axis, 1, stretchFor(v)) }));
+          el.getAnimations().forEach((a) => a.cancel());
+          el.animate(back2.keyframes, { duration: back2.duration, easing: "linear" });
+        }, 500);
+      }
     };
     const onUp = (e: PointerEvent) => {
       if (drag && e.pointerId === drag.pointerId) settle(false);
@@ -296,6 +328,7 @@ export function useLiquidLens({
     };
     bar.addEventListener("pointerdown", onDown);
     return () => {
+      window.clearTimeout(reconcile);
       bar.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
