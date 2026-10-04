@@ -1384,8 +1384,11 @@ toucher au recalage du son fait à la pause (`PlaybackGuard`).
 joué par `element.animate()`). La matière : les variables `--glass-*` et `.player-liquid`,
 `.nav-glass` dans `globals.css`.
 
-**Appelants.** `PlayerControls` (délégation sur `[data-liquid]`), `LiquidMenu`, `PlayerBottomBar`
-(lentille et barre, avec `liquidTransform`), et la page d'administration « Tests animations »
+**Appelants.** `PlayerControls` (délégation sur `[data-liquid]`), `LiquidMenu`, `MiniPlayerChrome`
+(le mini-lecteur, même verre et même geste depuis le 04/10), la lentille `useLiquidLens`
+(`src/lib/liquidGlass/useLiquidLens.ts`, axe horizontal ou vertical) dans `PlayerBottomBar`,
+`PlayerRail` (rail du bureau) et `CinemaModeToggle` (bascule Films/Séries, bureau et téléphone —
+une seule pièce, lentille blanche), et la page d'administration « Tests animations »
 (`src/components/animlab/`), qui branche le même geste avec ses réglages en direct.
 
 **Tests.** `liquid-press.test.ts` (clic natif intact, marge, annulation, clavier, secours),
@@ -1405,4 +1408,35 @@ pause, ← et → pour dix secondes, où que soit le focus ; le reste se fait à
 bouton cliqué à la souris ne prend plus le focus, et Espace n'active plus jamais un bouton : après
 avoir ouvert les sous-titres à la souris, Espace les rouvrait au lieu de mettre en pause.
 
+La carte « Épisode suivant » et les messages (`Toast`) portent le même verre, et entrent avec un
+rebond en CSS (`glass-pop`), l'opacité sur la surface elle-même.
+
 **Choisi le 04/10/2026** sur la page « Tests animations », sur iPhone et au bureau.
+
+## 46. Le cinéma répond tout de suite, quitte à montrer qu'il travaille
+
+**Règle.** Un geste a sa réponse visible dans l'image qui suit ; ce qui coûte se construit derrière,
+interruptible, avec un fil de chargement fin qui n'apparaît qu'après 150 ms. Trois cas :
+- changer d'onglet Films/Séries sur téléphone : la bascule suit l'adresse tout de suite, le contenu
+  suit `shownTab = useDeferredValue(mediaType)` ; l'autre onglet est monté d'avance, caché, dans une
+  transition, 1,5 s après que son catalogue est là (`useKeptTabs(active, prepared)`) ;
+- ouvrir la grille complète : le premier écran (28 cartes) d'abord, la liste entière ensuite
+  (`useDeferredValue(shown, firstScreen)`), un filtre changé par le même chemin ;
+- les boutons « Voir tout » du téléphone répondent au relâchement du doigt (`useTap`) : juste après
+  un défilement, iOS garde le premier `click` pour arrêter l'élan.
+
+**Porteur.** `useDeferredValue` aux deux endroits cités, `useKeptTabs` (`src/lib/keptTabs.ts`),
+`useTap` (`src/lib/useTap.ts`) et `TapButton`.
+
+**Appelants.** `CinemaMobileClient` (onglets, « Voir tout » des rangées et du bas de page),
+`CinemaBrowseSheet` (bureau et téléphone).
+
+**Tests.** `useTap.test.tsx`, `keptTabs.test.tsx` (onglet préparé), `CinemaBrowseSheet-duration.test.tsx`
+(ouverture en deux temps), `decisions-partagees.test.ts` (le décodage anticipé suit la liste dessinée).
+
+**Voulu.** L'adresse, les fiches et la grille suivent toujours l'onglet choisi, jamais l'onglet
+affiché : seul ce qui est dessiné prend du retard. Le bureau garde son `click` (la souris n'a pas
+l'élan d'un défilement tactile).
+
+**Trouvé le 04/10/2026** : premier passage sur « Séries » lent, et « Voir tous les films » qui
+demandait deux appuis au bout de la page.

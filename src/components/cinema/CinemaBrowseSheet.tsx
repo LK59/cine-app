@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useT } from "@/components/TranslationProvider";
 import { PlayerPanelFrame } from "@/components/player/PlayerPanelFrame";
 import { PlayerResultCard } from "@/components/player/PlayerResultCard";
@@ -29,6 +29,9 @@ import {
  * Un seul composant pour le bureau et le téléphone : il emprunte le cadre des panneaux du lecteur,
  * qui porte déjà le retrait du rail, le menu du téléphone, Échap et le focus.
  */
+/** De quoi remplir un premier écran, même grand : 7 colonnes × 4 rangées. */
+const FIRST_SCREEN_CARDS = 28;
+
 export function CinemaBrowseSheet<T extends BrowsableTitle>({
   genre,
   mediaType,
@@ -66,10 +69,23 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
     [items, genre, decade, sort, query, duration]
   );
 
+  /**
+   * La grille s'ouvre sur son premier écran, et le reste se construit derrière.
+   *
+   * Six cent soixante-dix cartes construites d'un coup avant le premier affichage : la grille
+   * mettait un temps à s'ouvrir sur téléphone (04/10/2026). Le premier rendu n'en porte que de quoi
+   * remplir l'écran ; React construit la liste entière en arrière-plan, interruptible — le
+   * défilement et les filtres restent servis. Un filtre changé suit le même chemin : l'ancienne
+   * grille reste le temps que la nouvelle soit prête, avec le fil de chargement au-dessus.
+   */
+  const firstScreen = useMemo(() => shown.slice(0, FIRST_SCREEN_CARDS), [shown]);
+  const grid = useDeferredValue(shown, firstScreen);
+  const building = grid !== shown;
+
   // Les affiches des deux écrans suivants sont décodées d'avance : c'est leur arrivée pendant le
   // défilement qui saccadait, et non la grille elle-même. Voir `useDecodeAhead`.
   const gridRef = useRef<HTMLDivElement>(null);
-  useDecodeAhead(gridRef, shown);
+  useDecodeAhead(gridRef, grid);
 
   // Le genre traduit, comme la rangée d'où l'on vient : « Comédie » sur l'accueil puis « Comedy »
   // ici, c'étaient deux noms pour la même chose à un appui d'intervalle.
@@ -144,6 +160,15 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
           <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-(--panel-bg) to-transparent" />
         </div>
 
+        {/* La grille se construit encore (ouverture, filtre changé) : un fil fin au-dessus, après
+            un instant seulement — voir `grid`. */}
+        <div className="relative h-0.5" aria-hidden>
+          {building && (
+            <div className="tab-switch-thread absolute inset-0 overflow-hidden rounded-full">
+              <div className="player-loading-line h-full w-full bg-accent-500" />
+            </div>
+          )}
+        </div>
         {shown.length === 0 ? (
           <p className="py-16 text-center text-sm text-subtle">{t("player.browse.nothing")}</p>
         ) : (
@@ -151,7 +176,7 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
           // met en page et dessine les six cent soixante-dix cartes d'un coup — la grille
           // complète est justement le seul écran où ce nombre est atteint.
           <div ref={gridRef} className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-            {shown.map((item) => (
+            {grid.map((item) => (
               <PlayerResultCard
                 key={idOf(item)}
                 kind={mediaType === "series" ? "series" : "movie"}

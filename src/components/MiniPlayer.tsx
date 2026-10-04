@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePointerCapture } from "@/lib/usePointerCapture";
 import { Play, Pause, X } from "lucide-react";
+import { createLiquidPress } from "@/lib/liquidGlass/liquid";
 
 const MARGIN = 16;
 // Below this width the mini player uses a slightly smaller box — same 16:9-ish
@@ -151,8 +152,26 @@ interface MiniPlayerChromeProps {
 // doesn't also register as the "tap anywhere else to expand" gesture handled by the drag
 // hook above on the shared container.
 export function MiniPlayerChrome({ title, playing, onTogglePlay, onClose }: MiniPlayerChromeProps) {
+  // Le verre liquide des commandes plein écran (`.player-liquid`) et le même geste — gonfle et
+  // s'étire sous le doigt —, à la taille du mini-lecteur (04/10/2026). Branché par délégation,
+  // en natif : il passe avant le `stopPropagation` des boutons, qui ne protège que le glisser.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const press = createLiquidPress({ targets: ".player-pill" });
+    const onDown = (e: PointerEvent) => {
+      const surface = (e.target as Element | null)?.closest?.<HTMLElement>("[data-liquid]");
+      if (surface && root.contains(surface)) press.down(e, surface);
+    };
+    root.addEventListener("pointerdown", onDown);
+    return () => {
+      root.removeEventListener("pointerdown", onDown);
+      press.dispose();
+    };
+  }, []);
   return (
-    <div className="pointer-events-none absolute inset-0 flex flex-col justify-between bg-gradient-to-t from-black/80 via-transparent to-black/40">
+    <div ref={rootRef} className="player-liquid player-mini pointer-events-none absolute inset-0 flex flex-col justify-between bg-gradient-to-t from-black/80 via-transparent to-black/40">
       <div className="pointer-events-auto flex justify-end p-2">
         <button
           onPointerDown={(e) => e.stopPropagation()}
@@ -161,6 +180,7 @@ export function MiniPlayerChrome({ title, playing, onTogglePlay, onClose }: Mini
             onClose();
           }}
           // La matière des commandes plein écran (`player-pill`, globals.css), à la taille du mini-lecteur.
+          data-liquid
           className="player-pill p-1.5 text-white"
         >
           <X size={16} />
@@ -173,6 +193,7 @@ export function MiniPlayerChrome({ title, playing, onTogglePlay, onClose }: Mini
             e.stopPropagation();
             onTogglePlay();
           }}
+          data-liquid
           className="player-pill shrink-0 p-2 text-white"
         >
           {playing ? <Pause size={18} fill="currentColor" strokeWidth={0} /> : <Play size={18} fill="currentColor" strokeWidth={0} />}

@@ -57,8 +57,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             // Le rayon du rail, pas `rounded-full` : sur une ligne c'est une pilule, et un message
             // qui passe à la ligne reste une carte aux coins ronds au lieu d'un ovale.
             style={{ borderRadius: "1.5rem" }}
-            className={`player-bar pointer-events-auto flex max-w-[min(28rem,calc(100vw-2rem))] items-center gap-3 py-3 pl-4 pr-3 text-sm font-medium text-white ${
-              t.leaving ? "animate-fade-out" : "animate-fade-in-up"
+            // Le verre liquide de la barre et du lecteur, et une entrée qui rebondit (04/10/2026).
+            className={`nav-glass pointer-events-auto flex max-w-[min(28rem,calc(100vw-2rem))] items-center gap-3 py-3 pl-4 pr-3 text-sm font-medium text-white ${
+              t.leaving ? "animate-fade-out" : "glass-pop"
             }`}
           >
             {t.type === "success" ? (

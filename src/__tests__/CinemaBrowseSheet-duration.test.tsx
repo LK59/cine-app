@@ -48,3 +48,15 @@ describe("CinemaBrowseSheet — la durée", () => {
     expect(screen.queryByLabelText("player.browse.duration")).toBeNull();
   });
 });
+
+// 04/10/2026 : 670 cartes construites avant le premier affichage, la grille tardait à s'ouvrir.
+describe("CinemaBrowseSheet — l'ouverture en deux temps", () => {
+  it("finit par montrer toute la bibliothèque, même au-delà du premier écran", async () => {
+    const many = Array.from({ length: 60 }, (_, i) => film(i + 1, `Titre ${i + 1}`, 100));
+    render(sheet("movies", many));
+    // Le premier écran tout de suite…
+    expect(screen.queryByText("Titre 1")).not.toBeNull();
+    // … et le reste, construit en arrière-plan.
+    expect(await screen.findByText("Titre 60")).not.toBeNull();
+  });
+});

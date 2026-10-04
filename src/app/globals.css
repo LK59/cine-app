@@ -823,8 +823,8 @@
 /* ─── La matière des commandes du lecteur ────────────────────────────────────
    Une seule pour toutes les pilules et les boutons ronds posés sur le film : fermer, la diffusion,
    le son, les réglages du bas, et — plus légère — le centre. Depuis le 04/10/2026, le lecteur plein
-   écran porte le verre liquide (`.player-liquid`, en fin de fichier, DECISIONS.md §45) : le fumé
-   ci-dessous reste la matière du mini-lecteur, et le repli de tout ce qui n'est pas dans
+   écran et le mini-lecteur portent le verre liquide (`.player-liquid`, en fin de fichier,
+   DECISIONS.md §45) : le fumé ci-dessous reste le repli de tout ce qui n'est pas dans
    `.player-liquid`. Il avait été choisi sans flou — huit `backdrop-filter` recalculés à chaque
    image faisaient hoqueter iOS ; le verre liquide en tient compte (un flou par pilule, retiré des
    pilules cachées). Ce qui tient lieu de flou ici :
@@ -854,8 +854,8 @@
   box-shadow: inset 0 0 0 1px var(--pill-hairline), 0 0 0 1px var(--pill-hairline-dark), var(--pill-shadow);
   border-radius: 999px;
 }
-/* Le fumé ci-dessus reste la matière du mini-lecteur. Le lecteur plein écran (`.player-liquid`)
-   porte le verre liquide, plus bas. Le flou essayé le 02/10/2026 (8.2.4) « se formait en retard » :
+/* Le fumé ci-dessus reste le repli hors du verre liquide. Le lecteur plein écran et le mini-lecteur
+   (`.player-liquid`) portent le verre liquide, plus bas. Le flou essayé le 02/10/2026 (8.2.4) « se formait en retard » :
    le fondu d'opacité était posé sur le *conteneur* des commandes, et un parent à opacité < 1 isole
    ce qui est dessous — le flou n'avait rien à flouter pendant tout le fondu (démontré sur la page
    « Tests animations », lot C). Le fondu est désormais porté par chaque pilule. */
@@ -1250,8 +1250,8 @@
      marge de 0,75 rem + cette largeur. Deux endroits pour une décision : si l'un change, l'autre
      aussi.
 
-     Le fond est celui de la barre du téléphone (`player-bar`, un fond franc et une ombre, pas de
-     flou) : la même pièce sur les deux écrans. */
+     Le fond est celui de la barre du téléphone — le verre liquide (`nav-glass`) et sa lentille
+     depuis le 04/10/2026 : la même pièce sur les deux écrans. */
   width: 3rem;
   /* Concentrique à ses boutons, et pas `rounded-full` : pilule repliée, 24 px, c'est bien une
      demi-largeur ; mais un rayon « infini » sur la pilule déployée (11 rem × sa hauteur) en ferait
@@ -1578,3 +1578,29 @@
 @media (prefers-reduced-motion: reduce) {
   .player-resume-ring { animation: player-resume-in 160ms ease-out 150ms forwards; }
 }
+/* La lentille pleine d'une bascule (Films / Séries) : elle remplace le fond blanc de l'onglet actif. */
+.nav-lens-solid {
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+}
+/* Le fil d'un onglet ou d'une grille en construction : après 150 ms seulement, pour qu'un passage
+   immédiat ne fasse rien clignoter. */
+.tab-switch-thread { opacity: 0; animation: player-resume-in 160ms ease-out 150ms forwards; }
+
+/* L'entrée d'une surface de verre (carte « Épisode suivant », messages) : elle naît un peu petite,
+   dépasse à peine, et se pose — le rebond des menus, en CSS puisqu'elle n'a pas de geste. Opacité
+   et échelle sur la surface elle-même, jamais sur un parent : son flou reste là dès la première
+   image. */
+@keyframes glass-pop {
+  0% { opacity: 0; transform: translateY(8px) scale(0.92); }
+  55% { opacity: 1; transform: translateY(0) scale(1.025); }
+  80% { transform: scale(0.995); }
+  100% { opacity: 1; transform: none; }
+}
+.glass-pop { animation: glass-pop 460ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .glass-pop { animation: fade-in 160ms ease-out both; }
+}
+
+/* Le mini-lecteur : le verre des commandes plein écran, à sa taille, et le même geste. */
+.player-mini .player-pill[data-lit] { box-shadow: var(--glass-edge), var(--glass-lit); }

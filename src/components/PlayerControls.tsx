@@ -1430,7 +1430,9 @@ export function PlayerControls({
         <div
           // Ses boutons ne doivent pas atteindre le fond, dont l'appui montre ou cache les commandes.
           onClick={(e) => e.stopPropagation()}
-          className="player-panel pointer-events-auto absolute w-72 max-w-[calc(100vw-2rem)] animate-fade-in-scale rounded-2xl p-4"
+          // Le verre des pilules, et une entrée qui rebondit (`glass-pop`) : une carte opaque à part
+          // était la dernière surface du lecteur à ne pas en être (04/10/2026).
+          className="nav-glass glass-pop pointer-events-auto absolute w-72 max-w-[calc(100vw-2rem)] rounded-[22px] p-4"
           style={{
             bottom: PROMPT_BOTTOM,
             right: "max(1rem, env(safe-area-inset-right))",

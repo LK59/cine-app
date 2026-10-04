@@ -26,12 +26,13 @@ function Grab({ onReady }: { onReady: (t: ReturnType<typeof useToast>) => void }
 const mount = () => render(<ToastProvider><Grab onReady={keep} /></ToastProvider>);
 
 describe("Toast", () => {
+  // Depuis le 04/10/2026, l'entrée du verre (`glass-pop`) : elle monte et se pose avec un rebond.
   it("entre en montant, et s'annonce", () => {
     mount();
     act(() => toast.success("Ajouté"));
     const el = screen.getByRole("status");
     expect(el).toHaveTextContent("Ajouté");
-    expect(el.className).toContain("animate-fade-in-up");
+    expect(el.className).toContain("glass-pop");
   });
 
   it("une erreur interrompt", () => {

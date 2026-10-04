@@ -244,7 +244,9 @@ describe("le décodage anticipé suit la liste, pas son nombre", () => {
    */
   it("la grille passe la liste elle-même", () => {
     const src = lire("src/components/cinema/CinemaBrowseSheet.tsx");
-    expect(src).toMatch(/useDecodeAhead\(gridRef, shown\)/);
+    // La liste que la grille dessine : `grid`, construite en arrière-plan depuis `shown` (04/10/2026,
+    // ouverture en deux temps) — toujours la liste elle-même, jamais son nombre.
+    expect(src).toMatch(/useDecodeAhead\(gridRef, grid\)/);
     expect(src).not.toMatch(/useDecodeAhead\([^)]*\.length\)/);
   });
 });

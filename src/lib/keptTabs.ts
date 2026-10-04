@@ -29,10 +29,13 @@ export const HIDDEN_TAB_ATTR = "data-tab-hidden";
  * Les onglets à garder montés : ceux qu'on a déjà visités. Tenu pendant le rendu, comme les autres
  * « dernier vu » de ces écrans, et non dans un effet.
  */
-export function useKeptTabs(active: CinemaTab): readonly CinemaTab[] {
+export function useKeptTabs(active: CinemaTab, prepared: CinemaTab | null = null): readonly CinemaTab[] {
   const [kept, setKept] = useState<readonly CinemaTab[]>([active]);
-  if (!kept.includes(active)) {
-    const next = [...kept, active];
+  // `prepared` : un onglet monté d'avance, caché, pour que son premier passage soit déjà construit
+  // (le téléphone, 04/10/2026). Il est gardé ensuite comme n'importe quel onglet visité.
+  const missing = [active, prepared].filter((tab): tab is CinemaTab => tab !== null && !kept.includes(tab));
+  if (missing.length > 0) {
+    const next = [...kept, ...missing];
     setKept(next);
     return next;
   }

@@ -22,6 +22,19 @@ describe("les onglets gardés", () => {
     expect(result.current).toEqual(["movies", "series"]);
   });
 
+  // 04/10/2026 : le premier passage sur « Séries » construisait tout au moment de l'appui. L'autre
+  // onglet est préparé d'avance, caché, et gardé ensuite comme un onglet visité.
+  it("monte d'avance l'onglet préparé, sans changer celui qu'on regarde", () => {
+    const { result, rerender } = renderHook(({ tab, prepared }) => useKeptTabs(tab, prepared), {
+      initialProps: { tab: "movies" as "movies" | "series", prepared: null as "movies" | "series" | null },
+    });
+    expect(result.current).toEqual(["movies"]);
+    rerender({ tab: "movies", prepared: "series" });
+    expect(result.current).toEqual(["movies", "series"]);
+    rerender({ tab: "series", prepared: null });
+    expect(result.current).toEqual(["movies", "series"]);
+  });
+
   it("cache l'onglet qu'on ne regarde pas, le rend inerte, et ne fond que le volet affiché", () => {
     expect(tabPaneProps("movies", "series", "fondu")).toEqual({ hidden: true, inert: true, [HIDDEN_TAB_ATTR]: "" });
     expect(tabPaneProps("series", "series", "fondu")).toEqual({ hidden: false, inert: false, className: "fondu" });

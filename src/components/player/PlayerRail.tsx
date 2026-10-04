@@ -11,6 +11,9 @@ import { PLAYER_NAV, MANAGE_ITEM, activePanel, openPanel } from "./playerNav";
 import { useReportBadge } from "@/lib/useReportBadge";
 import { NavDot } from "./NavDot";
 import { inHiddenTab } from "@/lib/keptTabs";
+import { useRef } from "react";
+import { useLiquidLens } from "@/lib/liquidGlass/useLiquidLens";
+import type { PlayerPanel } from "./playerNav";
 
 /**
  * Le rail du lecteur — desktop.
@@ -37,6 +40,22 @@ export function PlayerRail() {
   const t = useT();
   const badge = useReportBadge();
   const active = activePanel(route);
+  // La lentille de verre sous l'onglet actif (`useLiquidLens`, DECISIONS.md §45), comme la barre du
+  // téléphone : elle glisse d'un onglet à l'autre, se soulève sous le pointeur et le suit. Un
+  // glisser fini sur un autre onglet l'ouvre ; le clic qui suit, s'il vient, ne l'ouvre pas deux fois.
+  const railRef = useRef<HTMLDivElement>(null);
+  const lensRef = useRef<HTMLSpanElement>(null);
+  const draggedAt = useRef(0);
+  useLiquidLens({
+    barRef: railRef,
+    lensRef,
+    active,
+    axis: "y",
+    onDragSelect: (key) => {
+      draggedAt.current = Date.now();
+      openPanel(key as PlayerPanel, route);
+    },
+  });
   // La gestion est à l'administrateur, et le panneau Compte ne la propose qu'à lui : le rail la
   // montrait à tout le monde, vers des pages où chaque bouton répond 403 (23/09/2026).
   const { data: me } = useSWR<{ role: string }>("/api/auth/me", fetcher);
@@ -99,19 +118,25 @@ export function PlayerRail() {
         <span className="sr-only">Cine App</span>
       </div>
 
-      <div className="player-rail player-bar pointer-events-auto absolute left-0 top-1/2 flex -translate-y-1/2 flex-col gap-1 overflow-hidden p-1">
+      <div ref={railRef} className="player-rail nav-glass pointer-events-auto absolute left-0 top-1/2 flex -translate-y-1/2 flex-col gap-1 overflow-hidden p-1">
+        <span ref={lensRef} className="nav-lens" aria-hidden />
         {PLAYER_NAV.map(({ panel, labelKey, icon: Icon }) => {
           const isActive = active === panel;
           return (
             <button
               key={panel}
               type="button"
-              onClick={() => openPanel(panel, route)}
+              onClick={() => {
+                if (Date.now() - draggedAt.current < 700) return;
+                openPanel(panel, route);
+              }}
               aria-current={isActive ? "page" : undefined}
+              data-lens={panel}
               // L'onglet actif s'allume en pastille, comme sur le téléphone : un trait bleu au
               // bord n'a plus de bord où s'appuyer une fois la barre détachée de la fenêtre.
-              className={`relative flex h-10 shrink-0 items-center gap-3.5 overflow-hidden rounded-full pl-[0.625rem] pr-3 text-left text-sm font-medium transition-colors active:transform-none active:bg-white/15 active:delay-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
-                isActive ? "bg-white/12 text-white" : "text-subtle hover:bg-white/8 hover:text-white"
+              // L'actif n'a plus de fond à lui : c'est la lentille, posée dessous, qui l'allume.
+              className={`relative z-[1] flex h-10 shrink-0 items-center gap-3.5 overflow-hidden rounded-full pl-[0.625rem] pr-3 text-left text-sm font-medium transition-colors active:transform-none active:bg-white/15 active:delay-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
+                isActive ? "text-white" : "text-subtle hover:bg-white/8 hover:text-white"
               }`}
             >
               <span className="relative shrink-0">

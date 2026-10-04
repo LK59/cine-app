@@ -1,8 +1,10 @@
 "use client";
 
 import useSWR from "swr";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
+import { TapButton } from "@/components/TapButton";
 import { Clapperboard, Info, Play, Plus, Search, X } from "lucide-react";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/lib/useLongPress";
@@ -144,6 +146,18 @@ export function CinemaMobileClient() {
   const route = useCinemaRoute();
   const mediaType = route.tab;
   /**
+   * L'onglet que le contenu montre — en retard d'un rendu sur celui qu'on a choisi.
+   *
+   * Le premier passage sur « Séries » construisait toutes ses rangées dans le même rendu que
+   * l'appui : la bascule elle-même ne bougeait qu'une fois tout construit, d'où le petit temps au
+   * premier appui (04/10/2026). La bascule suit `mediaType`, tout de suite ; le contenu suit
+   * `shownTab`, que React construit en arrière-plan — interruptible, le doigt reste servi — avec un
+   * fil de chargement sous la barre en attendant. L'adresse, les fiches et la grille complète, eux,
+   * suivent toujours `mediaType`.
+   */
+  const shownTab = useDeferredValue(mediaType);
+  const switchingTab = shownTab !== mediaType;
+  /**
    * Changer d'onglet referme ce qui était ouvert.
    *
    * L'adresse n'écrivait que l'onglet, donc un `serie` déjà posé lui survivait — invisible tant
@@ -238,17 +252,30 @@ export function CinemaMobileClient() {
   useFlipGrid(continueTrack, continueEntries.map((entry) => entry.key), CATALOGUE_FLIP);
   // La place tenue tant que l'une des deux réponses n'est pas arrivée — voir `CinemaSkeletonCards`.
   const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
-  const isSeries = mediaType === "series";
+  const isSeries = shownTab === "series";
   const payload = isSeries ? series : movies;
+  /**
+   * L'autre onglet, préparé d'avance quand le téléphone est au repos : monté caché (ses affiches,
+   * paresseuses, ne se chargent pas tant qu'il est caché), il est prêt au premier passage. Construit
+   * dans une transition, après un temps : il ne passe jamais devant un geste ni devant l'ouverture.
+   */
+  const otherTab = shownTab === "movies" ? "series" : "movies";
+  const otherPayload = otherTab === "series" ? series : movies;
+  const [prepared, setPrepared] = useState(false);
+  useEffect(() => {
+    if (prepared || !otherPayload) return;
+    const id = window.setTimeout(() => startTransition(() => setPrepared(true)), 1500);
+    return () => window.clearTimeout(id);
+  }, [prepared, otherPayload]);
   // L'onglet quitté reste monté, caché et inerte — voir `keptTabs.ts`.
-  const keptTabs = useKeptTabs(mediaType);
+  const keptTabs = useKeptTabs(shownTab, prepared && otherPayload ? otherTab : null);
   // Le volet qui défile : ses rangées sont décodées avant qu'on les atteigne
   // (`useDecodeRowsAhead`).
   const rowsScrollRef = useRef<HTMLDivElement>(null);
   useDecodeRowsAhead(rowsScrollRef);
   // Chaque onglet garde sa hauteur : les deux volets gardés partagent ce conteneur — voir
   // `useTabScrollMemory`.
-  useTabScrollMemory(rowsScrollRef, mediaType);
+  useTabScrollMemory(rowsScrollRef, shownTab);
   // Ma liste, la reprise et « À suivre » redemandés au retour et au changement d'onglet.
   useFreshPersonalLists(mediaType);
 
@@ -467,7 +494,7 @@ export function CinemaMobileClient() {
           content scrolls under is one of the most reliable ways to make scrolling stutter on
           iOS, and a solid bar reads the same here. */}
       <header
-        className={`grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 bg-ink px-4 ${short ? "pb-2" : "pb-3"}`}
+        className={`relative grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 bg-ink px-4 ${short ? "pb-2" : "pb-3"}`}
         // Couché, l'écran fait ~390 px de haut : la barre en prenait un sixième avant la
         // première affiche.
         style={{ paddingTop: `calc(env(safe-area-inset-top, 0px) + ${short ? "0.6rem" : "1.25rem"})` }}
@@ -496,22 +523,7 @@ export function CinemaMobileClient() {
             (26/09/2026) : deux pastilles séparées, l'une pleine et l'autre en contour, étaient le
             seul sélecteur de l'app à avoir cette forme. 36 px de haut, comme la loupe : la barre
             garde sa hauteur. */}
-        <div className="player-bar flex justify-self-center gap-0.5 rounded-full p-0.5">
-          {(["movies", "series"] as const).map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setMediaType(type)}
-              className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
-                mediaType === type
-                  ? "bg-white text-ink font-medium"
-                  : "text-muted"
-              }`}
-            >
-              {t(type === "movies" ? "cinema.moviesTab" : "cinema.seriesTab")}
-            </button>
-          ))}
-        </div>
+        <CinemaModeToggle placement="inline" mode={mediaType} onChange={setMediaType} />
         <button
           type="button"
           onClick={() => setSearchOpen(true)}
@@ -520,6 +532,14 @@ export function CinemaMobileClient() {
         >
           <Search size={18} />
         </button>
+        {/* Le nouvel onglet se construit : un fil fin sous la barre, le temps que ses rangées
+            arrivent (`shownTab`). Rien ne clignote si c'est immédiat — il n'apparaît qu'après
+            un instant. */}
+        {(switchingTab || loading) && (
+          <div className="tab-switch-thread pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden" aria-hidden>
+            <div className="player-loading-line h-full w-full bg-accent-500" />
+          </div>
+        )}
       </header>
 
       {/* La recherche est rendue par la coquille du lecteur : c'est le moteur global, celui qui
@@ -590,7 +610,7 @@ export function CinemaMobileClient() {
           ["movies", heroMovies],
           ["series", heroSeries],
         ] as const).map(([tab, items]) => (
-          <div key={tab} hidden={mediaType !== tab}>
+          <div key={tab} hidden={shownTab !== tab}>
             <CinemaMobileHero
               items={items}
               // En pause dès qu'un écran la recouvre — l'autre onglet, les panneaux du rail, une
@@ -727,7 +747,7 @@ export function CinemaMobileClient() {
             rien n'est reconstruit et aucune affiche ne se recharge — voir `keptTabs.ts`. La
             bannière et « Reprendre » vivent au-dessus, communs aux deux. */}
         {keptTabs.map((tab) => (
-          <div key={tab} {...tabPaneProps(tab, mediaType)}>
+          <div key={tab} {...tabPaneProps(tab, shownTab)}>
             <MobileTabRows
               tab={tab}
               payload={tab === "series" ? series : movies}
@@ -1051,13 +1071,11 @@ const MobileTabRows = memo(function MobileTabRows({
           quelqu'un qui a fait défiler jusqu'ici sans rien trouver. */}
       {payload && (
         <div className="mt-8 px-4 pb-4">
-          <button
-            type="button"
-            onClick={() => cinemaNavigate({ browse: BROWSE_ALL })}
-            className="btn btn-ghost w-full justify-center py-3"
-          >
+          {/* Au bout d'une page qu'on vient de faire défiler : servi au relâchement, sans quoi iOS
+              gardait le premier appui pour arrêter l'élan et il en fallait deux (04/10/2026). */}
+          <TapButton onTap={() => cinemaNavigate({ browse: BROWSE_ALL })} className="btn btn-ghost w-full justify-center py-3">
             {t(`player.browse.all.${tab}`)}
-          </button>
+          </TapButton>
         </div>
       )}
     </>
@@ -1120,13 +1138,11 @@ function MobileRow({
           <h2 className="min-w-0 truncate text-sm font-semibold text-white">{label}</h2>
         </div>
         {onSeeAll && (
-          <button
-            type="button"
-            onClick={onSeeAll}
-            className="shrink-0 text-xs font-medium text-muted transition-colors active:text-white"
-          >
+          // Servi au relâchement : juste après un défilement, iOS gardait le premier clic pour
+          // arrêter l'élan — voir `useTap`.
+          <TapButton onTap={onSeeAll} className="shrink-0 text-xs font-medium text-muted transition-colors active:text-white">
             {t("player.browse.seeAll")}
-          </button>
+          </TapButton>
         )}
       </div>
       {/* Le contenu fond en arrivant — les cartes qui remplacent leur squelette, une rangée qui
