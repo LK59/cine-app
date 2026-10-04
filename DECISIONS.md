@@ -1358,7 +1358,10 @@ il ne s'étire que lorsque le doigt sort de ses bords (`pull: "outside"`), reste
 doigt le tient, revient sur le ressort au relâchement, et le clic qui suivrait un relâchement
 dehors est retenu (il refermait le menu). Le doigt reste au geste partout dans le menu, sauf sur une
 liste qui a de quoi défiler (`data-scrolls`) — avec `pan-y` sur tout le menu, le premier mouvement
-vertical rendait le doigt au navigateur et la boîte étirée revenait d'un coup. Le fondu des commandes est porté par chaque
+vertical rendait le doigt au navigateur et la boîte étirée revenait d'un coup. L'ouverture rebondit (ressort
+0,42 s / 0,62, dépassement lu en échelle, ≈ 3,5 %) ; une liste tirée au-delà de son bout étire la
+boîte verticalement (`scale`, lu sur la position de défilement que le rebond du système porte
+hors des bornes — iOS et Safari au pavé tactile ; rien sous Chrome Windows, qui ne rebondit pas). Le fondu des commandes est porté par chaque
 élément (`player-fade`), jamais par leur conteneur : un parent à opacité < 1 isole le fond, et le
 flou n'avait rien à flouter pendant le fondu (la 8.2.4 avait retiré le flou pour cette raison).
 La barre du bas a une lentille : une pastille de verre sous l'onglet ouvert, qui glisse sur le

@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { LIQUID_SPRING, prefersReducedMotion } from "@/lib/liquidGlass/liquid";
+import { LIQUID_SPRING, prefersReducedMotion, toSpring } from "@/lib/liquidGlass/liquid";
 import { springKeyframes } from "@/lib/liquidGlass/spring";
 
 /**
@@ -23,6 +23,17 @@ import { springKeyframes } from "@/lib/liquidGlass/spring";
  */
 
 const CLOSE_MS = 200;
+/**
+ * L'ouverture rebondit : un ressort moins amorti que celui des gestes (dépassement ≈ 7 %), dont le
+ * dépassement se lit en échelle — environ 3,5 %, le petit « pop » des menus d'iOS. Avec le ressort
+ * des gestes (amortissement 0,8), le dépassement restait sous le demi-pour-cent : rien ne se voyait
+ * (04/10/2026).
+ */
+const OPEN_SPRING = toSpring(0.42, 0.62);
+const OPEN_BOUNCE = 0.5;
+/** L'étirement d'une liste tirée au-delà de son bout : au plus 6 % de la hauteur du menu. */
+const OVERSCROLL_STRETCH = 0.35;
+const OVERSCROLL_MAX = 0.06;
 const HANDOVER_MS = 110;
 const RADIUS = 22;
 
@@ -128,12 +139,12 @@ export function LiquidMenu({
     g.pillRadius = anchor.offsetHeight / 2;
     g.height = H;
 
-    const shape = springKeyframes(0, 1, LIQUID_SPRING, ({ x }) => ({
+    const shape = springKeyframes(0, 1, OPEN_SPRING, ({ x }) => ({
       clipPath: clipAt(x, g.top, g.left, g.pillRadius),
       // Le dépassement ne peut pas agrandir la découpe au-delà de la boîte : il passe en échelle,
       // depuis le coin d'où le menu naît. Au repos, l'origine revient au centre : c'est d'elle que
       // le geste liquide gonfle et étire la surface.
-      transform: `scale(${1 + Math.max(0, x - 1) * 0.3})`,
+      transform: `scale(${1 + Math.max(0, x - 1) * OPEN_BOUNCE})`,
       transformOrigin: "100% 100%",
     }));
     box.animate(shape.keyframes, { duration: shape.duration, easing: "linear" });
@@ -146,7 +157,7 @@ export function LiquidMenu({
       const i = layoutBox(icon, parent);
       const dx = o.x + o.w / 2 - (i.x + i.w / 2);
       const dy = o.y + o.h / 2 - (i.y + i.h / 2);
-      const path = springKeyframes(0, 1, LIQUID_SPRING, ({ x }) => ({ transform: `translate(${dx * (1 - x)}px, ${dy * (1 - x)}px)` }));
+      const path = springKeyframes(0, 1, OPEN_SPRING, ({ x }) => ({ transform: `translate(${dx * (1 - x)}px, ${dy * (1 - x)}px)` }));
       icon.animate(path.keyframes, { duration: path.duration, easing: "linear" });
     }
     titleRef.current?.animate([{ opacity: 0, transform: "translateX(-6px)" }, { opacity: 1, transform: "none" }], { duration: 200, delay: 60, easing: "ease-out", fill: "backwards" });
@@ -211,6 +222,42 @@ export function LiquidMenu({
     // Une seule ouverture par montage : la vue qui change ensuite garde la surface (voir plus bas).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * Une liste tirée au-delà de son début ou de sa fin étire la boîte entière, vers le doigt, et la
+   * boîte revient avec le rebond de la liste (04/10/2026). Lu sur la position de défilement elle-
+   * même : pendant ce rebond, le système la porte au-delà des bornes (iOS, et Safari au pavé
+   * tactile), et c'est lui qui la ramène — la boîte suit, sans geste à elle ni minuterie. Écrit
+   * dans `scale` et non `transform` : le geste liquide et l'ouverture tiennent déjà celui-là.
+   */
+  useLayoutEffect(() => {
+    const box = menuRef.current;
+    const list = listRef.current;
+    if (!box || !list || prefersReducedMotion()) return;
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      const max = list.scrollHeight - list.clientHeight;
+      const over = list.scrollTop < 0 ? -list.scrollTop : list.scrollTop > max ? list.scrollTop - max : 0;
+      if (over <= 0) {
+        box.style.scale = "";
+        box.style.transformOrigin = "";
+        return;
+      }
+      const k = Math.min(OVERSCROLL_MAX, (over / Math.max(box.offsetHeight, 1)) * OVERSCROLL_STRETCH);
+      // Tirée vers le bas en haut de liste, la boîte s'allonge vers le bas ; en bas, vers le haut.
+      box.style.transformOrigin = list.scrollTop < 0 ? "50% 0%" : "50% 100%";
+      box.style.scale = `1 ${1 + k}`;
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(apply);
+    };
+    list.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      list.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [menuRef]);
 
   // La liste ne défile au doigt que si elle a de quoi défiler (voir `[data-scrolls]`, globals.css) :
   // ailleurs, le doigt reste au geste du menu. Relu à chaque rendu — une vue chasse l'autre.
