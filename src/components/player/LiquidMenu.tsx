@@ -212,6 +212,15 @@ export function LiquidMenu({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // La liste ne défile au doigt que si elle a de quoi défiler (voir `[data-scrolls]`, globals.css) :
+  // ailleurs, le doigt reste au geste du menu. Relu à chaque rendu — une vue chasse l'autre.
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    if (list.scrollHeight > list.clientHeight + 1) list.setAttribute("data-scrolls", "");
+    else list.removeAttribute("data-scrolls");
+  });
+
   // Une autre vue dans la même surface : le contenu arrive en fondu, et la surface qui grandit se
   // déroule vers le haut au lieu de sauter.
   useLayoutEffect(() => {

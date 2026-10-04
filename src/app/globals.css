@@ -1610,7 +1610,12 @@
 .player-liquid .player-menu[data-morph] { animation: none; }
 /* Le menu gonfle et s'étire depuis son centre ; on le fait toujours défiler à la verticale. */
 .player-liquid .player-menu { transform-origin: 50% 50%; }
-[data-liquid-soft] { touch-action: pan-y; }
+/* Le doigt reste au geste partout dans le menu — sauf sur une liste qui a de quoi défiler, où le
+   défilement vertical l'emporte (`data-scrolls`, posé par LiquidMenu). Avec `pan-y` sur tout le
+   menu, le premier mouvement vertical rendait le doigt au navigateur, et la boîte étirée
+   revenait d'un coup dès qu'on en sortait (04/10/2026). */
+[data-liquid-soft] { touch-action: none; }
+[data-liquid-soft] .player-menu-list[data-scrolls] { touch-action: pan-y; }
 .player-menu-head {
   display: flex;
   align-items: center;

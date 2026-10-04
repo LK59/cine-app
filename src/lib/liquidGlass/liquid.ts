@@ -69,6 +69,16 @@ export function liquidTransform(r: number, angle: number, swell: number, w: numb
   return `translate(${Math.cos(angle) * offset}px, ${Math.sin(angle) * offset}px) rotate(${angle}rad) scale(${elongate * swell}, ${squeeze * swell}) rotate(${-angle}rad)`;
 }
 
+/**
+ * Ce qui tire une boîte rectangulaire (un menu) : seulement ce qui dépasse de ses bords. Le doigt
+ * qui se promène dedans ne la déforme pas ; celui qui en sort l'étire vers lui (04/10/2026).
+ */
+export function pullOutside(dx: number, dy: number, w: number, h: number): { r: number; angle: number } {
+  const rx = Math.max(Math.abs(dx) - w / 2, 0) * Math.sign(dx);
+  const ry = Math.max(Math.abs(dy) - h / 2, 0) * Math.sign(dy);
+  return { r: Math.hypot(rx, ry), angle: Math.atan2(ry, rx) };
+}
+
 export function distanceOutside(box: DOMRect, x: number, y: number): number {
   const dx = Math.max(box.left - x, 0, x - box.right);
   const dy = Math.max(box.top - y, 0, y - box.bottom);
@@ -117,6 +127,12 @@ export type LiquidPressOptions = {
   swell?: (w: number, h: number) => number;
   pressMs?: number;
   pressEasing?: string;
+  /**
+   * `outside` : seule la sortie du doigt hors de la surface la tire (un menu, rectangle qu'on lit),
+   * au lieu de la forme de pilule. Relâché dehors, le clic qui suivrait sur le fond est retenu —
+   * il refermait le menu qu'on venait seulement d'étirer.
+   */
+  pull?: "shape" | "outside";
 };
 
 /** Ce qui garde son propre geste : le curseur du volume se fait glisser, il ne s'étire pas. */
@@ -142,6 +158,7 @@ export function createLiquidPress(options: LiquidPressOptions) {
   const swellOf = options.swell ?? swellFor;
   const pressMs = options.pressMs ?? PRESS_MS;
   const pressEasing = options.pressEasing ?? "cubic-bezier(0.2, 0.9, 0.3, 1.25)";
+  const pullOf = options.pull === "outside" ? pullOutside : pullFrom;
 
   type Session = {
     surface: HTMLElement;
@@ -176,6 +193,20 @@ export function createLiquidPress(options: LiquidPressOptions) {
     }
     return bestD <= LIQUID_SLOP ? best : null;
   };
+
+  /** Le clic qui suit un relâchement hors de la surface, s'il tombe hors d'elle : retenu, une fois. */
+  function swallowNextClick(surface: HTMLElement) {
+    const onClickOnce = (e: MouseEvent) => {
+      window.removeEventListener("click", onClickOnce, true);
+      window.clearTimeout(timer);
+      if (!trusted(e) || e.detail === 0) return;
+      if (e.target instanceof Node && surface.contains(e.target)) return;
+      e.stopPropagation();
+      e.preventDefault();
+    };
+    const timer = window.setTimeout(() => window.removeEventListener("click", onClickOnce, true), 400);
+    window.addEventListener("click", onClickOnce, true);
+  }
 
   function clearPending() {
     if (!pending) return;
@@ -222,7 +253,7 @@ export function createLiquidPress(options: LiquidPressOptions) {
     // ferait courir le verre après lui-même.
     const dx = e.clientX - (s.rest.left + s.rest.width / 2);
     const dy = e.clientY - (s.rest.top + s.rest.height / 2);
-    s.pull = pullFrom(dx, dy, s.w, s.h);
+    s.pull = pullOf(dx, dy, s.w, s.h);
     cancelOwn(s.surface);
     s.surface.style.transform = liquidTransform(s.pull.r, s.pull.angle, s.swell, s.w, s.h, strength);
   }
@@ -248,6 +279,7 @@ export function createLiquidPress(options: LiquidPressOptions) {
       play(surface, back.keyframes, { duration: back.duration * slow(), easing: "linear" });
     }
     if (s.chosen) light(s.chosen, false, s.last.x, s.last.y);
+    if (!redirect && !cancelled && options.pull === "outside" && s.pull.r > 0) swallowNextClick(s.surface);
     if (cancelled || !redirect) return;
     clearPending();
     const target = s.chosen;

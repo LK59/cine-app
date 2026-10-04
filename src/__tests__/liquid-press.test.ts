@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createLiquidPress, liquidTransform, pullFrom, swellFor } from "@/lib/liquidGlass/liquid";
+import { createLiquidPress, liquidTransform, pullFrom, pullOutside, swellFor } from "@/lib/liquidGlass/liquid";
 
 /**
  * Le geste liquide ne doit rien retirer au clic natif (DECISIONS.md §45) : c'est la garantie
@@ -123,6 +123,24 @@ describe("le geste liquide et le clic natif", () => {
     expect(onRoot).toHaveBeenCalledTimes(1); // le clic natif est parti tel quel
   });
 
+  it("un menu ne s'étire qu'au doigt sorti, reste étiré, et un relâchement dehors ne clique pas le fond", () => {
+    const { pill, root, onRoot } = setup();
+    const outside = document.createElement("div");
+    root.append(outside);
+    const menu = createLiquidPress({ targets: "[data-none]", redirect: false, pull: "outside", swell: () => 1, trusted: () => true });
+    menu.down(pointer("pointerdown", 150, 125), pill);
+    window.dispatchEvent(pointer("pointermove", 160, 130)); // dedans : rien ne bouge
+    expect(pill.style.transform).toBe(liquidTransform(0, 0, 1, 100, 50));
+    window.dispatchEvent(pointer("pointermove", 260, 125)); // 60 px à droite du bord
+    expect(pill.style.transform).toContain("translate(");
+    expect(pill.style.transform).not.toBe(liquidTransform(0, 0, 1, 100, 50));
+    window.dispatchEvent(pointer("pointerup", 260, 125));
+    fingerClick(outside);
+    expect(onRoot).not.toHaveBeenCalled(); // le menu ne se referme pas sur ce relâchement
+    fingerClick(outside); // le suivant, lui, part normalement
+    expect(onRoot).toHaveBeenCalledTimes(1);
+  });
+
   it("ignore le curseur du volume, qui garde son propre geste", () => {
     const { pill, press } = setup();
     const input = document.createElement("input");
@@ -143,6 +161,11 @@ describe("la forme du verre tiré", () => {
   it("ne tire pas une pilule tant que le doigt reste entre ses bouts", () => {
     expect(pullFrom(40, 0, 220, 52).r).toBe(0);
     expect(pullFrom(120, 0, 220, 52).r).toBeGreaterThan(0);
+  });
+
+  it("ne tire une boîte que de ce qui dépasse de ses bords", () => {
+    expect(pullOutside(100, 100, 288, 280).r).toBe(0);
+    expect(pullOutside(164, 0, 288, 280).r).toBe(20);
   });
 
   it("revient exactement au repos quand rien ne tire", () => {
