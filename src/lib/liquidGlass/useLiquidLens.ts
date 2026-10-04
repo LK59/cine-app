@@ -77,6 +77,11 @@ export function useLiquidLens({
     const bar = barRef.current;
     const el = lensRef.current;
     if (!bar || !el) return;
+    // L'actif du rendu qu'on pose, et pas celui du précédent. Mis à jour ici, avant de placer : la
+    // mise à jour d'après rendu (plus haut) passe *après* cet effet-ci, et la pastille repartait
+    // vers l'onglet quitté avant d'être recalée d'un coup sur le bon — au relâchement d'un glisser
+    // comme à l'appui sur un onglet (04/10/2026).
+    activeRef.current = active;
     const place = (animate: boolean) => {
       const item = itemOf(bar, activeRef.current);
       const l = lens.current;
