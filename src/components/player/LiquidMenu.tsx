@@ -130,8 +130,11 @@ export function LiquidMenu({
 
     const shape = springKeyframes(0, 1, LIQUID_SPRING, ({ x }) => ({
       clipPath: clipAt(x, g.top, g.left, g.pillRadius),
-      // Le dépassement ne peut pas agrandir la découpe au-delà de la boîte : il passe en échelle.
+      // Le dépassement ne peut pas agrandir la découpe au-delà de la boîte : il passe en échelle,
+      // depuis le coin d'où le menu naît. Au repos, l'origine revient au centre : c'est d'elle que
+      // le geste liquide gonfle et étire la surface.
       transform: `scale(${1 + Math.max(0, x - 1) * 0.3})`,
+      transformOrigin: "100% 100%",
     }));
     box.animate(shape.keyframes, { duration: shape.duration, easing: "linear" });
 
@@ -232,7 +235,9 @@ export function LiquidMenu({
   }, [view, menuRef, anchorRef]);
 
   return (
-    <div ref={menuRef} className={`${className} flex flex-col`} style={style} onClick={onClick} onClickCapture={onClickCapture}>
+    // `data-liquid-soft` : le menu bouge au doigt (geste liquide sans redirection de clic, voir
+    // `PlayerControls`) ; ses lignes gardent leur clic, la liste son défilement.
+    <div ref={menuRef} data-liquid-soft className={`${className} flex flex-col`} style={style} onClick={onClick} onClickCapture={onClickCapture}>
       {/* Un titre et non un bouton : le premier bouton du menu reste sa première entrée, celle que
           le clavier et la télécommande atteignent d'abord. */}
       <div className="player-menu-head">

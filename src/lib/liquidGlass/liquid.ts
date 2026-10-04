@@ -104,6 +104,11 @@ export type LiquidPressOptions = {
   follow?: (el: HTMLElement, x: number, y: number) => void;
   /** Ce qui distingue un clic du doigt : `isTrusted`, que les tests ne peuvent pas fabriquer. */
   trusted?: (e: MouseEvent) => boolean;
+  /**
+   * `false` : le geste ne fait que l'image — aucun bouton visé, aucun clic arrêté ni rendu. Pour
+   * une surface dont les lignes gardent leur propre clic, et qu'on fait défiler (un menu).
+   */
+  redirect?: boolean;
 };
 
 /** Ce qui garde son propre geste : le curseur du volume se fait glisser, il ne s'étire pas. */
@@ -125,6 +130,7 @@ export function createLiquidPress(options: LiquidPressOptions) {
   const slow = options.slow ?? (() => 1);
   const light = options.light ?? defaultLight;
   const trusted = options.trusted ?? ((e: MouseEvent) => e.isTrusted);
+  const redirect = options.redirect ?? true;
 
   type Session = {
     surface: HTMLElement;
@@ -170,10 +176,16 @@ export function createLiquidPress(options: LiquidPressOptions) {
   // Écouté sur `window`, en capture : avant tout le reste, et le seul clic attendu est celui
   // qui suit le relâchement.
   function onClick(e: MouseEvent) {
-    if (!pending || !trusted(e) || e.detail === 0) return;
+    if (!pending) return;
     const p = pending;
-    clearPending();
     const target = e.target as Node | null;
+    if (!trusted(e) || e.detail === 0) {
+      // Pas un clic du doigt — on n'y touche pas. Mais s'il arrive sur la surface, c'est le clic de
+      // ce geste : le secours ne doit pas en ajouter un second 300 ms plus tard.
+      if (target && (p.surface.contains(target) || p.target?.contains(target))) clearPending();
+      return;
+    }
+    clearPending();
     if (p.target && target && p.target.contains(target)) return; // le chemin ordinaire : intact
     if (!p.keep || !p.target) {
       // Annulé (ou rien de visé) : un clic qui tomberait dans la pilule n'actionne rien ;
@@ -225,7 +237,7 @@ export function createLiquidPress(options: LiquidPressOptions) {
       play(surface, back.keyframes, { duration: back.duration * slow(), easing: "linear" });
     }
     if (s.chosen) light(s.chosen, false, s.last.x, s.last.y);
-    if (cancelled) return;
+    if (cancelled || !redirect) return;
     clearPending();
     const target = s.chosen;
     pending = {
@@ -266,7 +278,7 @@ export function createLiquidPress(options: LiquidPressOptions) {
     const rest = surface.getBoundingClientRect();
     const s: Session = {
       surface,
-      chosen: nearest(surface, e.clientX, e.clientY),
+      chosen: redirect ? nearest(surface, e.clientX, e.clientY) : null,
       pointerId: e.pointerId,
       swell: swellFor(w, h),
       w,

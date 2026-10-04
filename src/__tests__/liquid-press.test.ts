@@ -104,6 +104,23 @@ describe("le geste liquide et le clic natif", () => {
     a.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
     expect(onA).toHaveBeenCalledTimes(1);
     expect(onRoot).toHaveBeenCalledTimes(1);
+    // Et ce clic-là désarme le secours : pas de second clic 300 ms plus tard.
+    vi.advanceTimersByTime(1000);
+    expect(onA).toHaveBeenCalledTimes(1);
+  });
+
+  it("en mode image seule (les menus), anime la surface sans viser ni arrêter aucun clic", () => {
+    const { pill, a, onA, onRoot } = setup();
+    const soft = createLiquidPress({ targets: ".btn", redirect: false, trusted: () => true });
+    const down = pointer("pointerdown", 206, 125); // dans la marge, près d'un bouton
+    soft.down(down, pill);
+    expect(soft.active()).toBe(true);
+    expect(a.hasAttribute("data-lit")).toBe(false);
+    window.dispatchEvent(pointer("pointerup", 206, 125));
+    fingerClick(pill);
+    vi.advanceTimersByTime(1000);
+    expect(onA).not.toHaveBeenCalled();
+    expect(onRoot).toHaveBeenCalledTimes(1); // le clic natif est parti tel quel
   });
 
   it("ignore le curseur du volume, qui garde son propre geste", () => {

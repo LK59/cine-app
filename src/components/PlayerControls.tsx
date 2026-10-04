@@ -357,14 +357,21 @@ export function PlayerControls({
     const root = liquidRootRef.current;
     if (!root) return;
     const press = createLiquidPress({ targets: ".player-pill-btn, .player-center-btn, .player-capsule" });
+    // Les menus (`data-liquid-soft`) bougent au doigt comme le reste — gonflement, étirement,
+    // rebond —, mais ne touchent à aucun clic : leurs lignes gardent le leur, et la liste défile.
+    const soft = createLiquidPress({ targets: "[data-liquid-target]", redirect: false });
     const onDown = (e: PointerEvent) => {
-      const surface = (e.target as Element | null)?.closest?.<HTMLElement>("[data-liquid]");
+      const target = e.target as Element | null;
+      const menu = target?.closest?.<HTMLElement>("[data-liquid-soft]");
+      if (menu && root.contains(menu)) return soft.down(e, menu);
+      const surface = target?.closest?.<HTMLElement>("[data-liquid]");
       if (surface && root.contains(surface)) press.down(e, surface);
     };
     root.addEventListener("pointerdown", onDown);
     return () => {
       root.removeEventListener("pointerdown", onDown);
       press.dispose();
+      soft.dispose();
     };
     // Rebranché quand les commandes réapparaissent : cachées (`hidden`), leur racine n'existe pas.
   }, [hidden]);

@@ -1608,6 +1608,9 @@
 
 /* ─── Le menu né de la pilule (`LiquidMenu`) ──────────────────────────────── */
 .player-liquid .player-menu[data-morph] { animation: none; }
+/* Le menu gonfle et s'étire depuis son centre ; on le fait toujours défiler à la verticale. */
+.player-liquid .player-menu { transform-origin: 50% 50%; }
+[data-liquid-soft] { touch-action: pan-y; }
 .player-menu-head {
   display: flex;
   align-items: center;

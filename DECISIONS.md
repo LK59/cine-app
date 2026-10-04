@@ -1351,7 +1351,9 @@ le doigt est relâché sur le bouton ; il n'est redirigé vers le bouton visé q
 clavier ou d'un programme n'est pas touché. Les menus du lecteur naissent de la pilule des réglages
 (une surface découpée à sa forme qui s'ouvre sur le ressort, l'icône du bouton glisse jusqu'au
 titre), hauts de 280 px au plus ; ils se démontent à l'instant où ils se ferment, et une copie inerte
-joue la fermeture (200 ms, depuis l'état atteint). Le fondu des commandes est porté par chaque
+joue la fermeture (200 ms, depuis l'état atteint). Les menus bougent eux aussi au doigt
+(gonflement, étirement, rebond) sans viser ni arrêter aucun clic (`redirect: false`) : leurs lignes
+gardent le leur, et la liste défile à la verticale. Le fondu des commandes est porté par chaque
 élément (`player-fade`), jamais par leur conteneur : un parent à opacité < 1 isole le fond, et le
 flou n'avait rien à flouter pendant le fondu (la 8.2.4 avait retiré le flou pour cette raison).
 La barre du bas a une lentille : une pastille de verre sous l'onglet ouvert, qui glisse sur le
