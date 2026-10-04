@@ -109,6 +109,14 @@ export type LiquidPressOptions = {
    * une surface dont les lignes gardent leur propre clic, et qu'on fait défiler (un menu).
    */
   redirect?: boolean;
+  /**
+   * Le gonflement et sa montée. Par défaut, celui des pilules : jusqu'à 12 %, en 130 ms avec un
+   * léger dépassement. Un menu, grande surface qu'on lit, monte plus doucement et bien moins —
+   * à la vitesse des pilules, il « sautait » sous le doigt (04/10/2026).
+   */
+  swell?: (w: number, h: number) => number;
+  pressMs?: number;
+  pressEasing?: string;
 };
 
 /** Ce qui garde son propre geste : le curseur du volume se fait glisser, il ne s'étire pas. */
@@ -131,6 +139,9 @@ export function createLiquidPress(options: LiquidPressOptions) {
   const light = options.light ?? defaultLight;
   const trusted = options.trusted ?? ((e: MouseEvent) => e.isTrusted);
   const redirect = options.redirect ?? true;
+  const swellOf = options.swell ?? swellFor;
+  const pressMs = options.pressMs ?? PRESS_MS;
+  const pressEasing = options.pressEasing ?? "cubic-bezier(0.2, 0.9, 0.3, 1.25)";
 
   type Session = {
     surface: HTMLElement;
@@ -280,7 +291,7 @@ export function createLiquidPress(options: LiquidPressOptions) {
       surface,
       chosen: redirect ? nearest(surface, e.clientX, e.clientY) : null,
       pointerId: e.pointerId,
-      swell: swellFor(w, h),
+      swell: swellOf(w, h),
       w,
       h,
       pull: { r: 0, angle: 0 },
@@ -293,8 +304,8 @@ export function createLiquidPress(options: LiquidPressOptions) {
     if (!s.still) {
       surface.style.transform = liquidTransform(0, 0, s.swell, w, h, strength);
       play(surface, [{ transform: from }, { transform: surface.style.transform }], {
-        duration: PRESS_MS * slow(),
-        easing: "cubic-bezier(0.2, 0.9, 0.3, 1.25)",
+        duration: pressMs * slow(),
+        easing: pressEasing,
       });
     }
     if (s.chosen) light(s.chosen, true, e.clientX, e.clientY);

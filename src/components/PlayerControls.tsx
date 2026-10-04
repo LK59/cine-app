@@ -368,7 +368,17 @@ export function PlayerControls({
     const press = createLiquidPress({ targets: ".player-pill-btn, .player-center-btn, .player-capsule" });
     // Les menus (`data-liquid-soft`) bougent au doigt comme le reste — gonflement, étirement,
     // rebond —, mais ne touchent à aucun clic : leurs lignes gardent le leur, et la liste défile.
-    const soft = createLiquidPress({ targets: "[data-liquid-target]", redirect: false });
+    // Plus doux que les pilules : un menu est une grande surface qu'on lit — 2 % au plus, montés en
+    // 280 ms sans dépassement, et un étirement moitié moindre. À la vitesse et à l'ampleur des
+    // pilules, il gonflait d'un coup sous le doigt, ce qui rendait l'appui étrange (04/10/2026).
+    const soft = createLiquidPress({
+      targets: "[data-liquid-target]",
+      redirect: false,
+      strength: 0.45,
+      swell: (w, h) => Math.min(1.02, 1 + 5 / Math.max(w, h, 1)),
+      pressMs: 280,
+      pressEasing: "cubic-bezier(0.25, 0.1, 0.25, 1)",
+    });
     const onDown = (e: PointerEvent) => {
       const target = e.target as Element | null;
       const menu = target?.closest?.<HTMLElement>("[data-liquid-soft]");
