@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight } from "lucide-react";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
+import { createLiquidPress, prefersReducedMotion } from "@/lib/liquidGlass/liquid";
+import { LiquidMenu } from "@/components/player/LiquidMenu";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
   subtitleStyleStore,
@@ -127,16 +129,18 @@ const CAST_CONFIRM_MS = 4000;
  * Où se posent les invites flottantes (« Passer l'intro », l'épisode suivant, la minuterie) : au-dessus
  * du bas des commandes — titre, pilule et barre —, pour ne jamais les couvrir quand elles sont là.
  */
-// Creux franc, un seul petit dépassement, puis posé. Une première version descendait à 0,84 et
-// oscillait deux fois (1,07 puis 0,98) : l'interface paraissait en gelée (02/10/2026). Les ±10 s
-// y tournent dans leur sens (`turn` = −1 ou 1).
-function pressKeyframes(turn: number): Keyframe[] {
-  return [
-    { transform: "scale(1) rotate(0deg)" },
-    { transform: `scale(0.9) rotate(${16 * turn}deg)`, offset: 0.35 },
-    { transform: `scale(${turn ? 1.02 : 1.03}) rotate(${-3 * turn}deg)`, offset: 0.7 },
-    { transform: "scale(1) rotate(0deg)" },
-  ];
+/**
+ * ±10 s : la flèche fait un tour autour du « 10 », qui reste immobile — un tour un peu trop loin,
+ * puis posé. Joué au clic, après le geste liquide du bouton, sur la flèche seule.
+ */
+function spinSkip(button: HTMLElement, turn: -1 | 1) {
+  const arrow = button.querySelector<HTMLElement>(".player-skip-arrow");
+  if (!arrow || typeof arrow.animate !== "function" || prefersReducedMotion()) return;
+  for (const a of arrow.getAnimations()) a.cancel();
+  arrow.animate(
+    [{ transform: "rotate(0deg)" }, { transform: `rotate(${turn * 380}deg)`, offset: 0.7 }, { transform: `rotate(${turn * 360}deg)` }],
+    { duration: 520, easing: "cubic-bezier(0.3, 0.7, 0.4, 1)" },
+  );
 }
 
 // Le bord bas des commandes : 8 px au-dessus de la barre d'accueil d'iOS (ou 1,5 rem sans elle).
@@ -167,13 +171,35 @@ const TOUCH_JITTER_PX = 1;
  * La flèche de ±10 s, avec son « 10 » dedans — dessinée en vecteurs, nette à toute taille : sans le
  * chiffre, rien ne disait de combien la flèche déplaçait le film.
  */
+/** Le titre de chaque vue des menus, et son icône — celle du bouton qui l'ouvre. */
+const MENU_TITLES: Record<string, string> = {
+  speed: "player.speed",
+  audio: "player.audio",
+  subtitles: "player.subtitles",
+  subtitleStyle: "player.subtitleStyle.title",
+  more: "player.moreOptions",
+  chapters: "player.chapters",
+  sleep: "player.sleep.title",
+  hdrCap: "player.hdrCap.title",
+};
+const MENU_ICONS: Record<string, React.ReactNode> = {
+  speed: <Gauge size={20} />,
+  audio: <AudioLines size={20} />,
+  subtitles: <Captions size={20} />,
+  subtitleStyle: <Captions size={20} />,
+  more: <EllipsisVertical size={20} />,
+  chapters: <ListVideo size={20} />,
+  sleep: <Timer size={20} />,
+  hdrCap: <Sun size={20} />,
+};
+
 function SkipGlyph({ direction }: { direction: "back" | "forward" }) {
   const Arrow = direction === "back" ? RotateCcw : RotateCw;
   // À la taille du bouton : 26 px dans un bouton de 48, 30 dans un de 56 — le chiffre suit, ≈ 10 puis
   // 12 px. Fixé à 22 px, il ne faisait que 8 px au bureau, à peine lisible (02/10/2026).
   return (
     <span className="relative block h-[26px] w-[26px] sm:h-[30px] sm:w-[30px]">
-      <Arrow size="100%" aria-hidden className="absolute inset-0" />
+      <Arrow size="100%" aria-hidden className="player-skip-arrow absolute inset-0" />
       {/* Centré sur le cercle de la flèche (12, 12 sur 24) ; la ligne de base un tiers de corps plus bas. */}
       <svg viewBox="0 0 24 24" aria-hidden className="absolute inset-0 h-full w-full">
         <text x="12" y="15.3" textAnchor="middle" fontSize="9.6" fontWeight="700" fill="currentColor" fontFamily="inherit" letterSpacing="-0.3">
@@ -319,6 +345,29 @@ export function PlayerControls({
    */
   const [castConfirm, setCastConfirm] = useState(false);
   const castPillRef = useRef<HTMLDivElement>(null);
+  // Le verre liquide (DECISIONS.md §45) : la pilule des réglages, d'où naissent les menus, et le
+  // bouton qui a ouvert le dernier — son icône glisse jusqu'au titre du menu.
+  const settingsPillRef = useRef<HTMLDivElement>(null);
+  const menuOriginRef = useRef<HTMLElement | null>(null);
+  const liquidRootRef = useRef<HTMLDivElement>(null);
+  // Le geste liquide, branché une fois par délégation sur tout ce qui porte `data-liquid` : les
+  // pilules, le rond seul, les boutons du centre. Il ne remplace pas le clic natif — voir
+  // `createLiquidPress` —, il ne fait qu'y ajouter le gonflement et l'étirement.
+  useEffect(() => {
+    const root = liquidRootRef.current;
+    if (!root) return;
+    const press = createLiquidPress({ targets: ".player-pill-btn, .player-center-btn, .player-capsule" });
+    const onDown = (e: PointerEvent) => {
+      const surface = (e.target as Element | null)?.closest?.<HTMLElement>("[data-liquid]");
+      if (surface && root.contains(surface)) press.down(e, surface);
+    };
+    root.addEventListener("pointerdown", onDown);
+    return () => {
+      root.removeEventListener("pointerdown", onDown);
+      press.dispose();
+    };
+    // Rebranché quand les commandes réapparaissent : cachées (`hidden`), leur racine n'existe pas.
+  }, [hidden]);
   useEffect(() => {
     if (!castConfirm) return;
     // Repliée d'elle-même au bout de quatre secondes, ou par un appui ailleurs.
@@ -1162,68 +1211,28 @@ export function PlayerControls({
     setCueOffsets((all) => ({ ...all, [id]: Math.round(((all[id] ?? 0) + deltaSeconds) * 10) / 10 }));
   }
 
-  // Directional control nav — a fixed adjacency map, not a generic geometric grid solver, since
-  // the actual layout is fixed: topbar (captions/audio/more/minimize/close) above center
-  // (skip-back/playpause/skip-fwd) above seek above volume above fullscreen. Left/Right cycle
-  // within whichever row currently has focus (clamped, no wraparound); Up/Down cross rows, always
-  // landing on a specific, predictable control rather than "whatever was last focused there" —
-  // e.g. Up from seek always lands on playpause specifically, matching a TV remote's own
-  // predictability. Falls back to the old global skip(±10) behavior when nothing in here has
-  // focus at all (e.g. right after a menu closes and returns focus to <body>), so arrow keys
-  // still do something sane even outside the nav chain.
-  // Haut (fermer, diffusion, mini-lecteur, son) → centre (−10, lecture, +10) → pilule du bas
-  // (vitesse, audio, sous-titres, ⋮, plein écran) → barre. ←/→ parcourent chaque rangée.
-  const NAV_DOWN: Record<string, string> = {
-    close: "playpause", cast: "playpause", "cast-confirm": "playpause", minimize: "playpause", mute: "playpause", volume: "playpause",
-    "skip-back": "more", playpause: "more", "skip-fwd": "more",
-    speed: "seek", audio: "seek", captions: "seek", more: "seek", fullscreen: "seek",
-  };
-  const NAV_UP: Record<string, string> = {
-    "skip-back": "close", playpause: "close", "skip-fwd": "close",
-    speed: "playpause", audio: "playpause", captions: "playpause", more: "playpause", fullscreen: "playpause",
-    seek: "more",
-  };
-
-  // Which topbar control reopens each menu on Escape, to land focus back where it came from.
-  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "speed", subtitleStyle: "captions", hdrCap: "more", sleep: "more" };
-
-  // Lands focus on the menu's first item the instant it opens — clicking captions/audio/more
-  // only focuses THAT button (native click behavior), never moves focus into the popup that
-  // then renders beside it, so without this, Up/Down here had no menu items to cycle through at
-  // all: the trigger button's own nav target (playpause) is what Down actually reached.
+  /**
+   * Le clavier du lecteur : un jeu fixe, et rien d'autre (demandé le 04/10/2026).
+   *
+   * Espace et K lisent ou mettent en pause, ← et → reculent ou avancent de dix secondes — où que
+   * soit le focus. Le reste se fait à la souris ou au doigt. Le clavier circulait avant entre les
+   * commandes (flèches de rangée en rangée, Échap, M, F, ↑/↓ pour le son), et la barre d'espace
+   * cédait la place au bouton qui avait le focus : or un clic de souris *donne* le focus au bouton
+   * cliqué, si bien qu'après avoir ouvert les sous-titres à la souris, Espace les rouvrait au lieu
+   * de mettre en pause. Les boutons du lecteur ne prennent plus le focus à la souris (voir
+   * `onMouseDown` sur la racine), et Espace n'active plus jamais un bouton.
+   */
+  // Les gestes du clavier lus au moment de la touche : `skip` dépend de `onSeekRequest`, qui peut
+  // changer d'un rendu à l'autre, et l'écouteur, lui, n'est posé qu'une fois.
+  const keyActionsRef = useRef({ togglePlay, skip });
   useEffect(() => {
-    if (!menu) return;
-    const id = requestAnimationFrame(() => {
-      menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-    });
-    return () => cancelAnimationFrame(id);
-  }, [menu]);
-
-  // Fallback for however else the menu can close besides Escape (which already refocuses its
-  // own trigger explicitly): picking a subtitle/audio track, or any other item whose own onClick
-  // just does setMenu(null) with no focus handling, removes the FOCUSED button from the DOM —
-  // the browser's default is to drop focus to <body> when that happens, with nothing to catch
-  // it, which silently locked the keyboard out of the whole nav chain (Up/Down/Left/Right all
-  // read "nothing recognized" from there). If focus landed somewhere outside the player
-  // entirely once the menu is gone, bring it back to play/pause rather than leaving it stranded.
-  const prevMenuRef = useRef(menu);
+    keyActionsRef.current = { togglePlay, skip };
+  });
   useEffect(() => {
-    if (prevMenuRef.current && !menu && !containerRef.current?.contains(document.activeElement)) {
-      containerRef.current?.querySelector<HTMLButtonElement>('[data-player-nav="playpause"]')?.focus();
-    }
-    prevMenuRef.current = menu;
-  }, [menu, containerRef]);
-
-  useEffect(() => {
-    function focusNav(name: string) {
-      containerRef.current?.querySelector<HTMLElement>(`[data-player-nav="${name}"]`)?.focus();
-    }
-
     function onKeyDown(e: KeyboardEvent) {
       if (suspendedRef.current) return;
       // Ctrl+F cherche dans la page, Cmd+← revient en arrière, Alt+↑ appartient au système : aucun
-      // n'est un raccourci du lecteur. Ils sautaient de dix secondes ou agrandissaient l'écran en
-      // plus de faire ce qu'on leur demandait (23/09/2026).
+      // n'est un raccourci du lecteur (23/09/2026).
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const active = document.activeElement;
       // Un champ où l'on écrit garde ses touches — la recherche de sous-titres en a un, et une
@@ -1235,164 +1244,26 @@ export function PlayerControls({
       ) {
         return;
       }
-      const navName = active instanceof HTMLElement ? active.getAttribute("data-player-nav") : null;
-      const navGroup = active instanceof HTMLElement ? active.closest<HTMLElement>("[data-player-navgroup]") : null;
-
-      /**
-       * Les raccourcis qui n'attendent aucun focus.
-       *
-       * Le clavier de ce lecteur supposait qu'on soit d'abord entré dedans : les flèches
-       * circulaient entre les commandes, la barre d'espace se retirait dès qu'un bouton avait le
-       * focus. Le lecteur stable amenait ce focus lui-même à l'ouverture ; le lecteur natif,
-       * devenu celui de tout le monde, ne l'a jamais fait — d'où l'impression, juste, qu'il
-       * n'avait plus de clavier du tout. Pire, un bouton resté focalisé *derrière* le lecteur
-       * suffisait à faire avaler la barre d'espace par la garde prévue pour les boutons du
-       * lecteur lui-même.
-       *
-       * Quand le focus est hors du lecteur, les touches valent donc pour ce qu'elles disent :
-       * espace lit ou met en pause, les flèches sautent et règlent le son, M coupe, F agrandit.
-       * La circulation entre commandes reste ce qu'elle était dès qu'on est entré dedans.
-       */
-      const outside = !(active instanceof Node) || !containerRef.current?.contains(active);
-      if (outside && !menu) {
-        if (e.code === "Space") {
-          e.preventDefault();
-          togglePlay();
-          showControls();
-          return;
-        }
-        if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
-          e.preventDefault();
-          skip(e.code === "ArrowRight" ? 10 : -10);
-          showControls();
-          return;
-        }
-        if (e.code === "ArrowUp" || e.code === "ArrowDown") {
-          const video = videoRef.current;
-          // Le volume ne se règle pas partout — iOS l'ignore en silence, ce que la barre elle-même
-          // a appris à ses dépens. Là où il est ignoré, la touche ne fait rien plutôt que de
-          // mentir.
-          if (!video || !volumeSettable) return;
-          e.preventDefault();
-          changeVolume(Math.min(1, Math.max(0, video.volume + (e.code === "ArrowUp" ? 0.1 : -0.1))));
-          showControls();
-          return;
-        }
-      }
-
-      // A menu (captions/audio/···/chapters/speed) is open — Up/Down/Escape belong entirely to
-      // it while it's up, not to the control-bar nav map below (its own targets, like Down from
-      // "captions" going to playpause, would otherwise fight this every press). No data-player-
-      // nav tagging needed on each item: every button rendered inside the popup is a valid stop,
-      // in the order they appear.
-      if (menu) {
-        if (e.code === "Escape") {
-          e.preventDefault();
-          setMenu(null);
-          focusNav(MENU_TRIGGER[menu] ?? "more");
-          return;
-        }
-        if (e.code === "ArrowUp" || e.code === "ArrowDown") {
-          e.preventDefault();
-          const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
-          if (items.length === 0) return;
-          const idx = items.indexOf(active as HTMLButtonElement);
-          const next = e.code === "ArrowDown" ? items[Math.min(idx + 1, items.length - 1)] : items[Math.max(idx - 1, 0)];
-          next?.focus();
-          return;
-        }
-        if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
-          // Not seekable controls — swallow rather than falling through to the global skip(±10)
-          // below, which would otherwise fire while browsing a plain list of menu items.
-          e.preventDefault();
-          return;
-        }
-        // Space/Enter fall through to native button activation as usual; everything else
-        // (M/F/etc.) is deliberately ignored while a menu has focus.
-        if (e.code !== "Space") return;
-      }
-
-      if (e.code === "Space") {
-        // A keyboard-focused control button (Tab'd to, or landed on via this nav) needs Space to
-        // actually activate IT — preventDefault() here suppresses the browser's own
-        // keyup-triggered click on that button (per spec, button activation via Space fires on
-        // keyup only if keydown's default wasn't prevented), which otherwise made every control
-        // except play/pause itself unreachable by keyboard.
-        if (active instanceof HTMLButtonElement) return;
-        e.preventDefault(); // default: page scroll
-        togglePlay();
-        showControls();
-        return;
-      }
-      if (e.code === "KeyM") {
-        toggleMute();
-        return;
-      }
-      if (e.code === "KeyF") {
-        if (fullscreenSupported) toggleFullscreen();
-        return;
-      }
-
-      if (e.code === "ArrowUp" || e.code === "ArrowDown") {
-        const target = (e.code === "ArrowUp" ? NAV_UP : NAV_DOWN)[navName ?? ""];
-        if (!target) return;
-        e.preventDefault(); // otherwise a focused range input's own Up/Down would also nudge its value
-        focusNav(target);
-        showControls();
-        return;
-      }
-
-      if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
-        // Range inputs (seek/volume) already handle their own Left/Right natively (adjust the
-        // value) — never hijack that.
-        if (active instanceof HTMLInputElement) return;
-
-        if (navGroup) {
-          const siblings = Array.from(navGroup.querySelectorAll<HTMLElement>("[data-player-nav]"));
-          const idx = siblings.indexOf(active as HTMLElement);
-          const next = e.code === "ArrowRight" ? siblings[idx + 1] : siblings[idx - 1];
-          if (next) {
-            e.preventDefault();
-            next.focus();
-            showControls();
-          }
-          return;
-        }
-
-        // Nothing player-related focused — same global shortcut this always was.
+      if (e.code === "Space" || e.code === "KeyK") {
+        // Empêché au `keydown` : c'est ce qui retient aussi l'activation d'un bouton qui aurait le
+        // focus (une espace l'active au relâchement, sauf si l'appui a été empêché).
         e.preventDefault();
-        skip(e.code === "ArrowRight" ? 10 : -10);
+        if (e.repeat) return;
+        keyActionsRef.current.togglePlay();
+        showControls();
+        return;
+      }
+      if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+        // Y compris sur la barre de progression focalisée : sa propre flèche la décalait d'un pas
+        // d'input, sans passer par le saut du lecteur.
+        e.preventDefault();
+        keyActionsRef.current.skip(e.code === "ArrowRight" ? 10 : -10);
         showControls();
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-    // menu is a real dependency (not just omitted-by-habit like the others here) — this branches
-    // on it directly, and without it in the array the closure would keep whatever `menu` was set
-    // to the last time fullscreenSupported changed, silently going stale every time a menu
-    // actually opens or closes.
-    // `volumeSettable` en dépend aussi : les flèches haut/bas se retirent là où la plateforme
-    // ignore le volume, et une fermeture capturant l'ancienne valeur ferait mentir la touche.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullscreenSupported, menu, volumeSettable]);
-
-  // Le rebond d'un bouton du lecteur, joué jusqu'au bout plutôt que tenu par `:active` : un tap
-  // franc dure quarante millisecondes, l'enfoncement n'avait pas atteint son creux que le retour
-  // commençait, et l'interface paraissait inerte — « fragile », dit le 02/10/2026.
-  // Par l'API Web Animations, et non en reposant un attribut : relancer une animation CSS demandait
-  // de lire `offsetWidth` entre le retrait et la pose, soit une mise en page forcée à chaque appui,
-  // au moment même où le bouton lance une pause ou un saut. `animate()` ne touche ni au style ni à
-  // la mise en page, ne porte que sur `transform` et tourne dans le compositeur ; un nouvel appui
-  // remplace le précédent (`id` commun, l'ancien est annulé).
-  function playPressSpring(e: SyntheticEvent) {
-    const button = (e.target as Element | null)?.closest?.(".player-pill-btn, .player-center-btn");
-    if (!(button instanceof HTMLElement) || typeof button.animate !== "function") return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    for (const running of button.getAnimations?.() ?? []) if (running.id === "press") running.cancel();
-    const turn = button.classList.contains("player-glass-back") ? -1 : button.classList.contains("player-glass-fwd") ? 1 : 0;
-    const press = button.animate(pressKeyframes(turn), { duration: 380, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
-    press.id = "press";
-  }
+  }, [showControls]);
 
   if (hidden) return null;
 
@@ -1401,11 +1272,14 @@ export function PlayerControls({
       // Commandes cachées pendant la lecture, le curseur s'en va avec elles : il restait planté au
       // milieu de l'image sous Windows (02/10/2026). Le moindre mouvement de souris rappelle les
       // commandes (`onPointerMove`), et le curseur avec. En pause, il reste : on s'attend à agir.
-      className={`absolute inset-0 z-10 ${!visible && playing ? "cursor-none" : ""}`}
+      className={`player-liquid absolute inset-0 z-10 ${!visible && playing ? "cursor-none" : ""}`}
+      ref={liquidRootRef}
       onClick={toggleControls}
-      onPointerDownCapture={playPressSpring}
-      onKeyDownCapture={(e) => {
-        if (e.key === "Enter" || e.key === " ") playPressSpring(e);
+      // Un bouton cliqué à la souris ne garde pas le focus : sinon Espace, qui doit mettre en
+      // pause, le réactivait (voir le clavier plus haut). Les curseurs (son, progression) gardent
+      // le leur — on les fait glisser.
+      onMouseDown={(e) => {
+        if ((e.target as Element).closest("button")) e.preventDefault();
       }}
       onPointerMove={(e) => {
         // Only real mouse hover implies "show" — a touch pointer fires a
@@ -1449,6 +1323,7 @@ export function PlayerControls({
               videoRef.current.currentTime = introSkip!.end;
             }
           }}
+          data-liquid
           className="player-pill pointer-events-auto absolute px-4 py-2.5 text-sm font-medium text-white"
           style={{
             bottom: PROMPT_BOTTOM,
@@ -1540,11 +1415,13 @@ export function PlayerControls({
       {/* Cachées, les commandes ne prennent plus les appuis : l'opacité ne change rien à ce qu'on
           touche, et un appui au milieu de l'écran pour les faire revenir mettait le film en pause —
           en haut à droite, il le fermait (relevé le 23/09/2026). Leurs trois groupes passent en
-          `pointer-events-none` avec elles, et l'appui retombe sur le fond, qui les rappelle. */}
+          `pointer-events-none` avec elles, et l'appui retombe sur le fond, qui les rappelle.
+          Le fondu n'est plus porté par ce conteneur mais par chacun de ses éléments (`player-fade`,
+          globals.css) : un parent à opacité < 1 isole le fond, et le verre des pilules n'aurait rien
+          à flouter pendant le fondu (DECISIONS.md §45). */}
       <div
-        className={`pointer-events-none absolute inset-0 flex flex-col justify-between transition-opacity duration-300 ${
-          visible ? "opacity-100" : "opacity-0"
-        }`}
+        className="player-chrome pointer-events-none absolute inset-0 flex flex-col justify-between"
+        data-chrome={visible ? "shown" : "hidden"}
       >
         {/* Deux bandes plutôt qu'un dégradé plein écran. Le milieu était transparent mais était
             composité quand même : le compositeur mélange toute la surface du calque, image par
@@ -1553,8 +1430,8 @@ export function PlayerControls({
             du milieu tranquilles. */}
         {/* Plus hauts au bureau, où l'écran l'est aussi. Le bas porte le titre : un palier à mi-hauteur
             le garde lisible sur une image claire, sans voile sur le reste de l'image. */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[140px] bg-gradient-to-b from-black/55 to-transparent lg:h-[180px]" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[180px] bg-gradient-to-t from-black/60 via-black/25 to-transparent lg:h-[240px]" />
+        <div className="player-fade pointer-events-none absolute inset-x-0 top-0 h-[140px] bg-gradient-to-b from-black/55 to-transparent lg:h-[180px]" />
+        <div className="player-fade pointer-events-none absolute inset-x-0 bottom-0 h-[180px] bg-gradient-to-t from-black/60 via-black/25 to-transparent lg:h-[240px]" />
         {/* En haut : fermer, puis — à distance, pour que le pouce ne prenne pas l'un pour l'autre — la
             pilule de la diffusion et du mini-lecteur ; à droite, le son seul. Le reste est en bas,
             près de la barre, comme sur l'Apple TV. Marges : 16, 24 puis 32 px, plus les bords sûrs
@@ -1576,11 +1453,12 @@ export function PlayerControls({
                 handleCloseClick();
               }}
               aria-label={t("common.close")}
-              className="player-pill player-pill-btn player-pill-solo shrink-0"
+              data-liquid
+              className="player-fade player-pill player-pill-btn player-pill-solo shrink-0"
             >
               <X size={24} />
             </button>
-            <div ref={castPillRef} data-cast-pill className="player-pill flex min-w-0 items-center p-1">
+            <div ref={castPillRef} data-cast-pill data-liquid className="player-fade player-pill flex min-w-0 items-center p-1">
               {/* Les deux boutons au repos, et la confirmation qui prend leur place : deux segments
                   toujours là, l'un se resserrant pendant que l'autre s'ouvre — la pilule grandit
                   d'un geste au lieu de sauter d'une largeur à l'autre. */}
@@ -1650,7 +1528,7 @@ export function PlayerControls({
               tactile — il reste déplié, et sur iPhone il n'y a que le bouton, iOS ignorant le
               volume d'une page. Jamais une fonction réservée au survol. Le temps d'une confirmation
               de diffusion, sur un écran étroit, il cède sa place à la pilule qui s'ouvre. */}
-          <div className={`player-volume player-pill flex shrink-0 items-center p-1 ${castConfirm ? "max-sm:hidden" : ""}`}>
+          <div data-liquid className={`player-fade player-volume player-pill flex shrink-0 items-center p-1 ${castConfirm ? "max-sm:hidden" : ""}`}>
             <button
               data-player-nav="mute"
               onClick={(e) => {
@@ -1660,7 +1538,11 @@ export function PlayerControls({
               aria-label={t("player.mute")}
               className="player-pill-btn"
             >
-              {muted || volume === 0 ? <VolumeX size={22} /> : <Volume2 size={22} />}
+              {/* Les deux icônes toujours là, l'une qui part pendant que l'autre arrive (`player-swap`). */}
+              <span className="player-swap" aria-hidden>
+                <span data-off={muted || volume === 0 ? "" : undefined}><Volume2 size={22} /></span>
+                <span data-off={muted || volume === 0 ? undefined : ""}><VolumeX size={22} /></span>
+              </span>
             </button>
             {/* Four pixels tall is a target a finger cannot land on, let alone drag along: every
                 touch became a tap, and a tap on a range input jumps straight to the end it
@@ -1686,24 +1568,30 @@ export function PlayerControls({
         </div>
 
         {menu && (
-          <div
-            ref={menuRef}
+          <LiquidMenu
+            menuRef={menuRef}
+            anchorRef={settingsPillRef}
+            originRef={menuOriginRef}
+            view={menu}
+            title={MENU_TITLES[menu] ? t(MENU_TITLES[menu]) : ""}
+            icon={MENU_ICONS[menu] ?? null}
             /* w-72 rather than w-56: the subtitle offset row asks for a label and three controls
                side by side, which came to about two hundred and sixty pixels — so it overflowed,
                and a box that scrolls in one direction scrolls in both, which is where the
                horizontal bar came from. Wide enough that the row fits and "Taille sous-titres"
-               stops wrapping onto two lines with it. */
-            className="player-panel player-menu player-chrome-right pointer-events-auto absolute z-30 w-72 max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl"
+               stops wrapping onto two lines with it. Le verre, l'ancrage sur la pilule et la
+               découpe qui en naît : `LiquidMenu`. */
+            className="player-menu player-fade player-chrome-right pointer-events-auto absolute z-30 w-72 max-w-[calc(100vw-2rem)] overflow-x-hidden rounded-[22px]"
             style={{
               // `bottom` deliberately not set here: an absolutely-positioned element with both
               // `top` and `bottom` stretches to fill the space between them regardless of
               // content — which made this menu always ~half the screen tall even with only 2-3
-              // items. `max-h-[60vh]` alone already caps growth for a long track list; the menu
-              // otherwise just sizes to its content.
-              // Juste au-dessus de la pilule du bas, d'où il s'ouvre ; et jamais plus haut que ce
-              // que l'écran laisse sous la rangée du haut — un téléphone en paysage n'a pas 60 %.
+              // items. The menu otherwise just sizes to its content.
+              // Repli tant que la pilule n'est pas mesurée ; `LiquidMenu` ancre ensuite le menu
+              // sur elle, et le borne à 280 px de haut — une liste plus longue défile plutôt que
+              // de couvrir le film (04/10/2026).
               bottom: `calc(${BOTTOM_EDGE} + 5.75rem)`,
-              maxHeight: `min(60vh, calc(100dvh - ${BOTTOM_EDGE} - 10.5rem))`,
+              maxHeight: `min(280px, calc(100dvh - ${BOTTOM_EDGE} - 10.5rem))`,
             }}
             onClick={(e) => e.stopPropagation()}
             onClickCapture={() => showControls(10000)}
@@ -1989,7 +1877,7 @@ export function PlayerControls({
                   </button>
                 );
               })}
-          </div>
+          </LiquidMenu>
         )}
 
         {/* Center play/pause, flanked by ±10s skip buttons — plain buttons only, not a
@@ -2003,8 +1891,10 @@ export function PlayerControls({
               onClick={(e) => {
                 e.stopPropagation();
                 skip(-10);
+                spinSkip(e.currentTarget, -1);
               }}
-              className="player-pill player-pill-light player-center-btn player-glass-back"
+              data-liquid
+              className="player-fade player-pill player-pill-light player-center-btn player-glass-back"
               title={t('player.rewind10')}
             >
               <SkipGlyph direction="back" />
@@ -2017,7 +1907,8 @@ export function PlayerControls({
               }}
               aria-label={playing ? t("player.pause") : t("player.play")}
               data-size="main"
-              className="player-pill player-pill-light player-center-btn"
+              data-liquid
+              className="player-fade player-pill player-pill-light player-center-btn"
             >
               {playing ? <Pause size={30} fill="currentColor" strokeWidth={0} /> : <Play size={30} fill="currentColor" strokeWidth={0} className="translate-x-[2px]" />}
             </button>
@@ -2026,8 +1917,10 @@ export function PlayerControls({
               onClick={(e) => {
                 e.stopPropagation();
                 skip(10);
+                spinSkip(e.currentTarget, 1);
               }}
-              className="player-pill player-pill-light player-center-btn player-glass-fwd"
+              data-liquid
+              className="player-fade player-pill player-pill-light player-center-btn player-glass-fwd"
               title={t('player.forward10')}
             >
               <SkipGlyph direction="forward" />
@@ -2047,7 +1940,7 @@ export function PlayerControls({
             {/* La série en grand, l'épisode en petit dessous ; un film, son titre seul. Une ombre
                 douce sous le texte et le palier du voile du bas : lisible sur une image claire, sans
                 flou. "Série — S02E05 · Le pilote" arrive d'une seule pièce du serveur. */}
-            <div className="player-title min-w-0 flex-1 pb-0.5">
+            <div className="player-fade player-title min-w-0 flex-1 pb-0.5">
               {(() => {
                 const cut = title.indexOf(" — ");
                 const main = cut === -1 ? title : title.slice(0, cut);
@@ -2064,10 +1957,13 @@ export function PlayerControls({
             {/* Vitesse · audio · sous-titres · ⋮ — et le plein écran au bout, là où il existe : à
                 côté du temps restant, il aurait cassé la symétrie de la ligne du temps. Les menus
                 s'ouvrent vers le haut depuis cette pilule. */}
-            <div data-player-navgroup="bottombar" data-settings-pill className="player-pill flex shrink-0 items-center gap-1 p-1 max-[379px]:gap-0.5">
+            <div ref={settingsPillRef} data-player-navgroup="bottombar" data-settings-pill data-liquid className="player-fade player-pill flex shrink-0 items-center gap-1 p-1 max-[379px]:gap-0.5">
               <button
                 data-player-nav="speed"
-                onClick={() => setMenu(menu === "speed" ? null : "speed")}
+                onClick={(e) => {
+                  menuOriginRef.current = e.currentTarget;
+                  setMenu(menu === "speed" ? null : "speed");
+                }}
                 aria-label={t("player.speed")}
                 data-on={menu === "speed" ? "" : undefined}
                 className="player-pill-btn"
@@ -2077,7 +1973,10 @@ export function PlayerControls({
               {audioTracks.length > 1 && (
                 <button
                   data-player-nav="audio"
-                  onClick={() => setMenu(menu === "audio" ? null : "audio")}
+                  onClick={(e) => {
+                  menuOriginRef.current = e.currentTarget;
+                  setMenu(menu === "audio" ? null : "audio");
+                }}
                   aria-label={t("player.audio")}
                   data-on={menu === "audio" ? "" : undefined}
                   className="player-pill-btn"
@@ -2088,7 +1987,10 @@ export function PlayerControls({
               {subtitleTracks.length > 0 && (
                 <button
                   data-player-nav="captions"
-                  onClick={() => setMenu(menu === "subtitles" ? null : "subtitles")}
+                  onClick={(e) => {
+                  menuOriginRef.current = e.currentTarget;
+                  setMenu(menu === "subtitles" ? null : "subtitles");
+                }}
                   aria-label={t("player.subtitles")}
                   data-on={menu === "subtitles" ? "" : undefined}
                   data-active={currentSubtitleId !== null ? "" : undefined}
@@ -2099,7 +2001,10 @@ export function PlayerControls({
               )}
               <button
                 data-player-nav="more"
-                onClick={() => setMenu(menu === "more" ? null : "more")}
+                onClick={(e) => {
+                  menuOriginRef.current = e.currentTarget;
+                  setMenu(menu === "more" ? null : "more");
+                }}
                 title={t('player.moreOptions')}
                 aria-label={t('player.moreOptions')}
                 data-on={menu === "more" ? "" : undefined}
@@ -2121,7 +2026,7 @@ export function PlayerControls({
           </div>
           {/* Le temps écoulé à gauche, ce qui reste à droite — sans signe moins, toujours, en pause
               comme en lecture. Il n'y a plus de bascule : les deux sont là. */}
-          <div className="flex items-center gap-3">
+          <div className="player-fade flex items-center gap-3">
           <span data-player-elapsed className="player-time shrink-0 text-left">{formatTime(currentTime)}</span>
           <div
             ref={seekBarRef}

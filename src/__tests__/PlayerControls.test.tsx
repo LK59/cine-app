@@ -295,7 +295,9 @@ describe("PlayerControls — un seul matériau", () => {
     }
 
     await act(async () => void fireEvent.click(screen.getAllByRole("button").find((b) => b.getAttribute("data-player-nav") === "more")!));
-    expect(container.querySelector(".player-panel")).not.toBeNull();
+    // Le menu porte le même verre que les pilules d'où il naît (`.player-liquid .player-menu`,
+    // DECISIONS.md §45) — il était un panneau opaque à part.
+    expect(container.querySelector(".player-liquid .player-menu")).not.toBeNull();
   });
 });
 
@@ -739,33 +741,46 @@ describe("PlayerControls au clavier, sans focus dans le lecteur", () => {
     expect(video!.currentTime).toBeCloseTo(100, 1);
   });
 
-  it("règle le son aux flèches haut et bas", async () => {
+  it("met aussi en pause avec K", async () => {
+    let video: HTMLVideoElement | null = null;
+    render(<Harness onVideoRef={(el) => { video = el; }} />);
+    const play = vi.spyOn(video!, "play").mockResolvedValue(undefined);
+    Object.defineProperty(video!, "paused", { value: true, configurable: true });
+    await act(async () => { press("KeyK"); });
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  // 04/10/2026 : un clic de souris donnait le focus au bouton cliqué, et la barre d'espace — qui
+  // cédait la place à un bouton focalisé — rouvrait les sous-titres au lieu de mettre en pause.
+  it("met en pause à la barre d'espace même quand un bouton du lecteur a le focus, sans l'activer", async () => {
+    let video: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(el) => { video = el; }} subtitleTracks={[{ id: 1, label: "Français" }]} currentSubtitleId={null} />);
+    const play = vi.spyOn(video!, "play").mockResolvedValue(undefined);
+    Object.defineProperty(video!, "paused", { value: true, configurable: true });
+    const captions = container.querySelector<HTMLButtonElement>('[data-player-nav="captions"]')!;
+    captions.focus();
+    const keydown = new KeyboardEvent("keydown", { code: "Space", bubbles: true, cancelable: true });
+    await act(async () => { captions.dispatchEvent(keydown); });
+    expect(keydown.defaultPrevented).toBe(true); // c'est ce qui retient l'activation du bouton
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(container.querySelector(".player-menu")).toBeNull();
+  });
+
+  it("ne garde pas le focus sur un bouton cliqué à la souris", async () => {
+    const { container } = render(<Harness />);
+    const more = container.querySelector<HTMLButtonElement>('[data-player-nav="more"]')!;
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    more.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+  });
+
+  it("ne règle plus ni le son ni rien d'autre au clavier : ↑, ↓, M et F ne font rien", async () => {
     let video: HTMLVideoElement | null = null;
     render(<Harness onVideoRef={(el) => { video = el; }} />);
     video!.volume = 0.5;
-
-    await act(async () => { press("ArrowUp"); });
-    expect(video!.volume).toBeCloseTo(0.6, 2);
-
-    await act(async () => { press("ArrowDown"); press("ArrowDown"); });
-    expect(video!.volume).toBeCloseTo(0.4, 2);
-  });
-
-  it("ne descend ni ne monte au-delà des bornes", async () => {
-    let video: HTMLVideoElement | null = null;
-    render(<Harness onVideoRef={(el) => { video = el; }} />);
-    video!.volume = 0.95;
-
-    await act(async () => { press("ArrowUp"); press("ArrowUp"); });
-    expect(video!.volume).toBe(1);
-  });
-
-  it("coupe le son avec M", async () => {
-    let video: HTMLVideoElement | null = null;
-    render(<Harness onVideoRef={(el) => { video = el; }} />);
-
-    await act(async () => { press("KeyM"); });
-    expect(video!.muted).toBe(true);
+    await act(async () => { press("ArrowUp"); press("ArrowDown"); press("KeyM"); press("KeyF"); });
+    expect(video!.volume).toBe(0.5);
+    expect(video!.muted).toBe(false);
   });
 });
 
@@ -783,7 +798,8 @@ describe("PlayerControls — une touche pendant le film", () => {
     act(() => void video.dispatchEvent(new Event("play")));
     await act(async () => void vi.advanceTimersByTime(4000));
     const overlay = () => container.querySelector(".absolute.inset-0.z-10 > div") as HTMLElement;
-    const shown = () => !overlay().className.includes("opacity-0");
+    // Le fondu est porté par chaque élément, plus par le conteneur : c'est lui qui dit l'état.
+    const shown = () => overlay().getAttribute("data-chrome") === "shown";
     expect(shown()).toBe(false);
 
     act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", code: "ArrowRight" })));
@@ -1049,7 +1065,7 @@ describe("PlayerControls — relu le 23/09/2026, suite", () => {
     await act(async () => void vi.advanceTimersByTime(10_000));
     expect(screen.getByText("player.playbackInfo")).toBeInTheDocument();
     const overlay = container.querySelector(".absolute.inset-0.z-10 > div") as HTMLElement;
-    expect(overlay.className.includes("opacity-0")).toBe(false);
+    expect(overlay.getAttribute("data-chrome")).toBe("shown");
   });
 });
 
@@ -1283,10 +1299,10 @@ describe("PlayerControls — la disposition", () => {
     expect(container.querySelector(".player-menu")!.className).toMatch(/\bz-30\b/);
   });
 
-  it("fait rebondir un bouton à l'appui par l'API Web Animations, sans toucher au style", async () => {
+  it("fait gonfler la pilule entière à l'appui d'un de ses boutons, par l'API Web Animations", async () => {
     stubMediaFetches();
-    // jsdom n'a pas `animate` : on l'observe. Ni attribut ni lecture de mise en page — c'est ce qui
-    // rend le geste gratuit au moment où le bouton lance une pause ou un saut.
+    // jsdom n'a pas `animate` : on l'observe. Le geste liquide (DECISIONS.md §45) anime la
+    // *surface* — la pilule qui porte le bouton, pas le bouton —, et seulement `transform`.
     const animate = vi.fn(() => ({ id: "", cancel: vi.fn() }) as unknown as Animation);
     Object.defineProperty(HTMLElement.prototype, "animate", { value: animate, configurable: true });
     Object.defineProperty(HTMLElement.prototype, "getAnimations", { value: () => [], configurable: true });
@@ -1294,18 +1310,35 @@ describe("PlayerControls — la disposition", () => {
       const { container } = render(<Harness title="Film" />);
       await act(async () => {});
       const more = nav(container, "more")!;
-      fireEvent.pointerDown(more);
+      fireEvent.pointerDown(more, { button: 0, pointerId: 1, pointerType: "touch" });
       expect(animate).toHaveBeenCalledTimes(1);
-      expect(more.hasAttribute("data-pressed")).toBe(false);
+      expect(animate.mock.contexts[0]).toBe(container.querySelector("[data-settings-pill]"));
+      const frames = (animate.mock.calls[0] as unknown[])[0] as Keyframe[];
+      expect(String(frames[1].transform)).toContain("scale(");
+      fireEvent.pointerUp(window, { pointerId: 1 });
+      // Le rond seul est sa propre surface.
       const back = nav(container, "skip-back")!;
-      fireEvent.pointerDown(back);
-      // Les ±10 s tournent dans leur sens.
-      const frames = (animate.mock.calls[1] as unknown[])[0] as Keyframe[];
-      expect(String(frames[1].transform)).toContain("rotate(-16deg)");
+      fireEvent.pointerDown(back, { button: 0, pointerId: 2, pointerType: "touch" });
+      expect(animate.mock.contexts.at(-1)).toBe(back);
+      fireEvent.pointerUp(window, { pointerId: 2 });
     } finally {
       delete (HTMLElement.prototype as { animate?: unknown }).animate;
       delete (HTMLElement.prototype as { getAnimations?: unknown }).getAnimations;
     }
+  });
+
+  it("laisse passer le clic natif d'un bouton tel quel, geste liquide ou non", async () => {
+    stubMediaFetches();
+    const onClose = vi.fn();
+    const { container } = render(<Harness title="Film" onClose={onClose} />);
+    await act(async () => {});
+    const close = nav(container, "close")!;
+    fireEvent.pointerDown(close, { button: 0, pointerId: 3, pointerType: "touch" });
+    fireEvent.pointerUp(window, { pointerId: 3 });
+    fireEvent.click(close, { detail: 1 });
+    await act(async () => {});
+    expect(close.closest("[data-liquid]")).not.toBeNull();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("met le plein écran au bout de la pilule du bas là où le navigateur le permet", async () => {

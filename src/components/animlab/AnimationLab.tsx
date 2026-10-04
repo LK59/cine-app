@@ -14,8 +14,9 @@ import { cinemaFetcher } from "@/lib/cinemaPayload";
 import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { tmdbResize } from "@/lib/images";
 import { isWebKitEngine } from "@/lib/webkitEngine";
-import { attachGesture, attachLiquid, liquidTransform, pullFrom, GESTURES, type GestureKind, type GestureSettings } from "./gestures";
-import { simulateSpring, springKeyframes, springOvershoot, type SpringParams } from "./spring";
+import { liquidTransform, pullFrom, toSpring } from "@/lib/liquidGlass/liquid";
+import { attachGesture, attachLabLiquid, GESTURES, type GestureKind, type GestureSettings } from "./gestures";
+import { simulateSpring, springKeyframes, springOvershoot, type SpringParams } from "@/lib/liquidGlass/spring";
 
 /**
  * « Tests animations » — un banc de gestes et de matières, pour l'administrateur.
@@ -60,10 +61,6 @@ const PRESETS: { name: string; response: number; ratio: number }[] = [
   { name: "Gelée", response: 0.6, ratio: 0.32 },
 ];
 
-/** Masse 1 : k = (2π / réponse)², c = 4π·ζ / réponse. */
-function toSpring(response: number, ratio: number): SpringParams {
-  return { stiffness: (2 * Math.PI / response) ** 2, damping: (4 * Math.PI * ratio) / response };
-}
 
 type LabImage = { full: string; thumb: string; title: string } | null;
 
@@ -414,12 +411,11 @@ function GlassPill({
   const { settingsRef } = useLab();
   const own = useRef<HTMLDivElement>(null);
   const ref = pillRef ?? own;
-  const { take, release } = usePointerCapture();
   useEffect(() => {
     const el = ref.current;
     if (!el || gesture !== "liquid") return;
-    return attachLiquid(el, () => settingsRef.current, { take, release });
-  }, [gesture, settingsRef, take, release, ref]);
+    return attachLabLiquid(el, () => settingsRef.current);
+  }, [gesture, settingsRef, ref]);
   return (
     // `alab-slop` écrit ici aussi : React réécrit `className` quand la matière change, et la
     // classe posée par `attachLiquid` aurait disparu avec.

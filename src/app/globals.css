@@ -822,9 +822,12 @@
 
 /* ─── La matière des commandes du lecteur ────────────────────────────────────
    Une seule pour toutes les pilules et les boutons ronds posés sur le film : fermer, la diffusion,
-   le son, les réglages du bas, et — plus légère — le centre. Sans flou : un `backdrop-filter`
-   au-dessus d'une vidéo, recalculé à chaque image, est ce qui faisait hoqueter iOS (voir plus
-   bas), et un grand voile flou a été refusé. Ce qui tient lieu de flou :
+   le son, les réglages du bas, et — plus légère — le centre. Depuis le 04/10/2026, le lecteur plein
+   écran porte le verre liquide (`.player-liquid`, en fin de fichier, DECISIONS.md §45) : le fumé
+   ci-dessous reste la matière du mini-lecteur, et le repli de tout ce qui n'est pas dans
+   `.player-liquid`. Il avait été choisi sans flou — huit `backdrop-filter` recalculés à chaque
+   image faisaient hoqueter iOS ; le verre liquide en tient compte (un flou par pilule, retiré des
+   pilules cachées). Ce qui tient lieu de flou ici :
    - un gris fumé plutôt qu'un noir, qui se décolle d'une image sombre au lieu de s'y fondre ;
    - un reflet venu du haut, à peine, qui dit « surface » ;
    - un liseré d'un pixel ;
@@ -851,8 +854,11 @@
   box-shadow: inset 0 0 0 1px var(--pill-hairline), 0 0 0 1px var(--pill-hairline-dark), var(--pill-shadow);
   border-radius: 999px;
 }
-/* Pas de flou sous les pilules : essayé le 02/10/2026 (8.2.4), il mettait un instant à se former à
-   chaque apparition des commandes — on voyait le bouton net, puis flou. L'opacité fait le travail. */
+/* Le fumé ci-dessus reste la matière du mini-lecteur. Le lecteur plein écran (`.player-liquid`)
+   porte le verre liquide, plus bas. Le flou essayé le 02/10/2026 (8.2.4) « se formait en retard » :
+   le fondu d'opacité était posé sur le *conteneur* des commandes, et un parent à opacité < 1 isole
+   ce qui est dessous — le flou n'avait rien à flouter pendant tout le fondu (démontré sur la page
+   « Tests animations », lot C). Le fondu est désormais porté par chaque pilule. */
 .player-pill-light {
   background: var(--pill-sheen), var(--pill-fill-light);
   /* Les deux liserés : le clair tient sur une image sombre, le sombre sur une image claire —
@@ -1472,3 +1478,163 @@
   will-change: transform;
 }
 
+
+
+/* ─── Le verre liquide (DECISIONS.md §45) ─────────────────────────────────────
+   Choisi le 04/10/2026 sur la page « Tests animations » : le « verre mixte » — le reflet et le bord
+   du verre clair d'iOS 26, le flou de 20 px du verre poli, et une teinte sombre de 32 % sans
+   laquelle il se perdait sur un fond clair.
+
+   Ce qu'il coûte, et comment on le borne :
+   - un flou d'arrière-plan est une passe de rendu *par élément* : une pilule porte le flou pour
+     tous ses boutons (jamais un bouton dans une pilule) ;
+   - il n'est recalculé que si ce qui est dessous bouge ; sur la vidéo, c'est à chaque image — d'où
+     le flou retiré des pilules cachées (`data-chrome="hidden"`, plus bas), qui sont l'état de presque
+     tout le film ;
+   - pas d'ombre floue sur une grande surface (mesuré le 26/09 : 5,9 ms par image) : le menu et la
+     barre du bas n'ont qu'une ombre courte ;
+   - « Réduire la transparence » : un fond franc, sans flou. */
+:root {
+  --glass-fill:
+    linear-gradient(160deg, rgb(255 255 255 / 0.2), rgb(255 255 255 / 0.04) 45%, rgb(255 255 255 / 0.09)),
+    rgb(18 18 22 / 0.32);
+  --glass-blur: blur(20px) saturate(1.6);
+  --glass-edge:
+    inset 0 1px 1px rgb(255 255 255 / 0.45),
+    inset 0 -1px 1px rgb(255 255 255 / 0.1),
+    inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  --glass-lit: inset 0 0 0 999px rgb(255 255 255 / 0.14);
+}
+.player-liquid .player-pill,
+.player-liquid .player-pill-light,
+.player-liquid .player-menu,
+.player-liquid .player-menu-ghost,
+.nav-glass {
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge), 0 8px 24px rgb(0 0 0 / 0.28);
+}
+.player-liquid .player-menu,
+.player-liquid .player-menu-ghost,
+.nav-glass {
+  box-shadow: var(--glass-edge), 0 6px 14px rgb(0 0 0 / 0.25);
+}
+.player-liquid .player-pill-btn > svg,
+.player-liquid .player-center-btn > svg,
+.player-liquid .player-center-btn > span > svg { filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.35)); }
+@media (prefers-reduced-transparency: reduce) {
+  .player-liquid .player-pill,
+  .player-liquid .player-pill-light,
+  .player-liquid .player-menu,
+  .player-liquid .player-menu-ghost,
+  .nav-glass {
+    background: rgb(28 28 32 / 0.96);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Le geste liquide (`createLiquidPress`) écrit `transform` lui-même : plus d'enfoncement par
+   `:active`, qui se serait battu avec lui. Le bouton visé s'allume (`data-lit`). */
+.player-liquid .player-pill-btn:active,
+.player-liquid .player-center-btn:active,
+.player-liquid .player-glass-back:active,
+.player-liquid .player-glass-fwd:active { transform: none; }
+.player-liquid .player-pill-btn:active { background: transparent; }
+.player-liquid .player-pill-btn[data-lit] { background: var(--pill-press); }
+.player-liquid .player-center-btn[data-lit],
+.player-liquid .player-pill-solo[data-lit] { box-shadow: var(--glass-edge), var(--glass-lit), 0 8px 24px rgb(0 0 0 / 0.28); }
+.player-liquid .player-capsule:active { transform: none; }
+.player-liquid .player-capsule[data-lit] { background: rgb(255 255 255 / 0.8); }
+
+/* La pilule cachée sous le menu qui naît d'elle (`LiquidMenu`) : invisible, elle n'a pas à refaire
+   son flou à chaque image de la vidéo. */
+.player-liquid [data-menu-cover="1"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* La zone de toucher élargie : 12 px autour du verre, invisibles (`LIQUID_SLOP`). */
+[data-liquid] { touch-action: none; }
+[data-liquid]:not(.absolute):not(.fixed) { position: relative; }
+[data-liquid]::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border-radius: 999px;
+}
+
+/* Le fondu des commandes, porté par chaque élément et jamais par leur conteneur : un parent à
+   opacité < 1 isole le fond, et le flou des pilules n'avait alors rien à flouter pendant le
+   fondu. Cachées, les pilules perdent aussi leur flou — une fois le fondu fini, quand plus
+   personne ne le voit : c'est l'état de presque tout le film, et un flou à opacité nulle se
+   recalculait quand même à chaque image de la vidéo. */
+.player-chrome .player-fade {
+  transition:
+    opacity 300ms ease-out,
+    background-color 150ms ease-out,
+    box-shadow 150ms ease-out,
+    -webkit-backdrop-filter 0s linear 0s,
+    backdrop-filter 0s linear 0s;
+}
+.player-chrome[data-chrome="hidden"] .player-fade {
+  opacity: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition:
+    opacity 300ms ease-out,
+    background-color 150ms ease-out,
+    box-shadow 150ms ease-out,
+    -webkit-backdrop-filter 0s linear 300ms,
+    backdrop-filter 0s linear 300ms;
+}
+
+/* ±10 s : la flèche fait un tour autour du « 10 », qui reste immobile (`spinSkip`). */
+.player-skip-arrow { transform-origin: 50% 50%; }
+
+/* Son ↔ coupé : un fondu enchaîné — l'une part en tournant et en rapetissant, l'autre arrive avec
+   un léger rebond. Deux icônes de 22 px : rien à payer. */
+.player-swap { display: inline-grid; }
+.player-swap > span {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  transition: opacity 200ms ease-out, transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.player-swap > span[data-off] { opacity: 0; transform: scale(0.55) rotate(-25deg); }
+@media (prefers-reduced-motion: reduce) {
+  .player-swap > span { transition: none; }
+}
+
+/* ─── Le menu né de la pilule (`LiquidMenu`) ──────────────────────────────── */
+.player-liquid .player-menu[data-morph] { animation: none; }
+.player-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem 1rem 0.45rem;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.player-menu-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+/* ─── La barre du bas à lentille (`PlayerBottomBar`) ──────────────────────── */
+.nav-lens {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.15);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  pointer-events: none;
+  z-index: 0;
+}
+.nav-glass .player-tab { z-index: 1; }

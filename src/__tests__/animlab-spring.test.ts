@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { simulateSpring, springKeyframes, springOvershoot } from "@/components/animlab/spring";
+import { simulateSpring, springKeyframes, springOvershoot } from "@/lib/liquidGlass/spring";
 
 describe("le ressort de la page Tests animations", () => {
   it("se pose exactement sur sa cible", () => {

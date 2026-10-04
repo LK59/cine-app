@@ -1337,3 +1337,52 @@ croix, puis `playback.play`).
 (`whilePlaying` → `playerBootstrapOptions`) : SWR y est suspendu, et une requête suspendue est
 abandonnée. Un film jamais ouvrable ici (absent du catalogue du cinéma) est sauté, pas proposé. Le
 lecteur serveur n'a pas d'écran de fin — il se ferme à la fin d'un film — et ne propose donc rien.
+
+## 45. Le verre liquide : matière, geste, menus, barre du bas
+
+**Règle.** Le lecteur plein écran et la barre de navigation du téléphone portent une seule matière,
+le verre « mixte » (reflet et bord du verre clair, flou 20 px saturé, teinte sombre 32 %), et un seul
+geste : la surface touchée gonfle et s'étire vers le doigt, puis revient sur un ressort (réponse
+0,45 s, amortissement 0,8). Dans une pilule, c'est la pilule entière qui gonfle et s'étire ; le
+bouton visé ne fait que s'allumer (`data-lit`). La zone de toucher déborde de 12 px, et l'appui
+tient jusqu'à 24 px hors du verre. **Le clic natif n'est jamais remplacé** : il part tel quel quand
+le doigt est relâché sur le bouton ; il n'est redirigé vers le bouton visé que s'il tombe à côté
+(marge, glissé), et cela depuis le clic natif lui-même, donc dans le geste utilisateur. Un clic du
+clavier ou d'un programme n'est pas touché. Les menus du lecteur naissent de la pilule des réglages
+(une surface découpée à sa forme qui s'ouvre sur le ressort, l'icône du bouton glisse jusqu'au
+titre), hauts de 280 px au plus ; ils se démontent à l'instant où ils se ferment, et une copie inerte
+joue la fermeture (200 ms, depuis l'état atteint). Le fondu des commandes est porté par chaque
+élément (`player-fade`), jamais par leur conteneur : un parent à opacité < 1 isole le fond, et le
+flou n'avait rien à flouter pendant le fondu (la 8.2.4 avait retiré le flou pour cette raison).
+La barre du bas a une lentille : une pastille de verre sous l'onglet ouvert, qui glisse sur le
+ressort, se soulève sous le doigt et le suit ; la barre gonfle et s'étire moitié moins que le
+lecteur. La navigation y part toujours au contact ; un glisser qui finit sur un autre onglet
+l'ouvre au relâchement, en remplaçant l'entrée d'historique du premier.
+
+**Porteur.** `src/lib/liquidGlass/liquid.ts` (`createLiquidPress`, `liquidTransform`, `pullFrom`,
+`swellFor`, `LIQUID_SPRING`) et `src/lib/liquidGlass/spring.ts` (le ressort simulé une fois et
+joué par `element.animate()`). La matière : les variables `--glass-*` et `.player-liquid`,
+`.nav-glass` dans `globals.css`.
+
+**Appelants.** `PlayerControls` (délégation sur `[data-liquid]`), `LiquidMenu`, `PlayerBottomBar`
+(lentille et barre, avec `liquidTransform`), et la page d'administration « Tests animations »
+(`src/components/animlab/`), qui branche le même geste avec ses réglages en direct.
+
+**Tests.** `liquid-press.test.ts` (clic natif intact, marge, annulation, clavier, secours),
+`PlayerControls.test.tsx` (pilule entière animée, clic natif, état des commandes par
+`data-chrome`), `animlab-spring.test.ts`, `AnimationLab.test.tsx`.
+
+**Voulu.** Le mini-lecteur garde le fumé opaque, sans flou ni geste. Les pilules cachées perdent
+leur flou une fois le fondu fini : c'est l'état de presque tout le film, et un flou à opacité nulle
+se recalculait quand même à chaque image ; la pilule cachée sous un menu aussi. Pas d'ombre floue
+sur une grande surface (mesuré le 26/09 : 5,9 ms par image) — le menu et la barre ont une ombre
+courte. « Réduire les animations » garde l'allumage et le clic, sans gonflement ni étirement ;
+« Réduire la transparence » donne un fond franc. Le menu qui naît de la pilule la recouvre : passer
+d'un menu à l'autre demande de refermer le premier (toucher à côté).
+
+**Le clavier du lecteur, depuis le même jour,** est un jeu fixe : Espace et K pour lire ou mettre en
+pause, ← et → pour dix secondes, où que soit le focus ; le reste se fait à la souris ou au doigt. Un
+bouton cliqué à la souris ne prend plus le focus, et Espace n'active plus jamais un bouton : après
+avoir ouvert les sous-titres à la souris, Espace les rouvrait au lieu de mettre en pause.
+
+**Choisi le 04/10/2026** sur la page « Tests animations », sur iPhone et au bureau.

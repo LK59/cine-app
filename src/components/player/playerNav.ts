@@ -50,7 +50,11 @@ export function activePanel(route: CinemaRoute): PlayerPanel {
  * dessus. C'est un `replace` quand on y est déjà, pour qu'un clic répété n'empile pas d'entrées
  * dans l'historique.
  */
-export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
+/**
+ * `mode` : `replace` pour le glisser de la lentille de la barre du bas, qui finit sur un autre onglet
+ * que celui où il a commencé — l'appui avait déjà ouvert le premier, et un seul retour doit suffire.
+ */
+export function openPanel(panel: PlayerPanel, current: CinemaRoute, mode: "push" | "replace" = "push"): void {
   const closed = {
     search: false,
     list: false,
@@ -73,7 +77,7 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
       !current.discover &&
       !current.person &&
       !current.browse;
-    cinemaNavigate(closed, alreadyHome ? "replace" : "push");
+    cinemaNavigate(closed, alreadyHome || mode === "replace" ? "replace" : "push");
     return;
   }
   // Sur le panneau demandé, et rien par-dessus : il n'y a rien à faire, et empiler une entrée
@@ -98,8 +102,11 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
     return;
   }
 
-  cinemaNavigate({
-    ...closed,
-    ...(panel === "search" ? { search: true } : panel === "list" ? { list: true } : { account: true }),
-  });
+  cinemaNavigate(
+    {
+      ...closed,
+      ...(panel === "search" ? { search: true } : panel === "list" ? { list: true } : { account: true }),
+    },
+    mode,
+  );
 }

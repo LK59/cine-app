@@ -1,4 +1,5 @@
-// Le ressort de la page « Tests animations » : un oscillateur amorti, échantillonné en images clés.
+// Le ressort du verre liquide (lecteur, barre du bas, page « Tests animations ») : un oscillateur
+// amorti, échantillonné en images clés.
 //
 // Les animations de la page passent par `element.animate()` sur `transform` : le compositeur les
 // joue seul, sans le fil principal. Un ressort calculé image par image en JavaScript aurait
