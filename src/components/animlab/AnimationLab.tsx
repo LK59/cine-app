@@ -4,7 +4,8 @@ import "./animLab.css";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import useSWR from "swr";
 import {
-  Bookmark, ChevronLeft, ChevronRight, Film, Heart, Home, Play, Plus, RotateCcw, Share2, SlidersHorizontal, Subtitles, Tv, Volume2, X,
+  AudioLines, Bookmark, Captions, Cast, Check, ChevronLeft, ChevronRight, EllipsisVertical, Film, Gauge, Heart, Home, Maximize, Pause,
+  PictureInPicture2, Play, Plus, RotateCcw, RotateCw, Share2, SlidersHorizontal, Subtitles, Tv, Volume2, X,
 } from "lucide-react";
 import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
 import { usePointerCapture } from "@/lib/usePointerCapture";
@@ -12,7 +13,7 @@ import { cinemaFetcher } from "@/lib/cinemaPayload";
 import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { tmdbResize } from "@/lib/images";
 import { isWebKitEngine } from "@/lib/webkitEngine";
-import { attachGesture, GESTURES, type GestureKind, type GestureSettings } from "./gestures";
+import { attachGesture, attachLiquid, liquidTransform, pullFrom, GESTURES, type GestureKind, type GestureSettings } from "./gestures";
 import { springKeyframes, springOvershoot, type SpringParams } from "./spring";
 
 /**
@@ -30,6 +31,7 @@ type Material = { cls: string; name: string; cost: Cost; hint: string; rim?: boo
 type Cost = "nul" | "faible" | "moyen" | "élevé";
 
 const MATERIALS: Material[] = [
+  { cls: "alab-mat-mixed", name: "Verre mixte — clair + poli (choix)", cost: "faible", hint: "Le choix du 04/10 : reflet et bord du verre clair, flou 20 px du verre poli, teinte sombre de 32 % pour rester lisible sur un fond clair." },
   { cls: "alab-mat-smoke", name: "Fumé opaque (actuel)", cost: "nul", hint: "La matière du lecteur aujourd'hui : gris à 82 %, reflet, double liseré. Aucun filtre." },
   { cls: "alab-mat-blur8", name: "Flou léger 8 px", cost: "faible", hint: "Un voile fin : le fond reste reconnaissable." },
   { cls: "alab-mat-frost", name: "Verre poli 20 px", cost: "faible", hint: "Flou 20 px + saturation 1,6 : le verre poli classique. Coût par image si le fond bouge." },
@@ -81,6 +83,7 @@ function useLab(): Lab {
 }
 
 const LOTS = [
+  { id: "F", name: "Lecteur simulé" },
   { id: "A", name: "Gestes d'appui" },
   { id: "B", name: "Matières" },
   { id: "C", name: "Apparition du flou" },
@@ -108,15 +111,15 @@ function detectSupport() {
 
 export function AnimationLab() {
   const [support] = useState(detectSupport);
-  const [lot, setLot] = useState<LotId>("A");
+  const [lot, setLot] = useState<LotId>("F");
   const [response, setResponse] = useState(0.45);
   const [ratio, setRatio] = useState(0.8);
   const [slow, setSlow] = useState(false);
   const [moving, setMoving] = useState(false);
   const [whiteText, setWhiteText] = useState(false);
   const [lensOn, setLensOn] = useState(support.lens);
-  const [gesture, setGesture] = useState<GestureKind>("swell");
-  const [materialIndex, setMaterialIndex] = useState(2);
+  const [gesture, setGesture] = useState<GestureKind>("liquid");
+  const [materialIndex, setMaterialIndex] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
 
   const { data: movies } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
@@ -219,7 +222,7 @@ export function AnimationLab() {
             </select>
           </Row>
         )}
-        {(lot === "B" || lot === "C" || lot === "D" || lot === "E") && (
+        {lot !== "A" && (
           <Row label="Geste des boutons">
             <select className="select max-w-full" value={gesture} onChange={(e) => setGesture(e.target.value as GestureKind)}>
               {GESTURES.map((g) => <option key={g.kind} value={g.kind}>{g.name}</option>)}
@@ -227,6 +230,7 @@ export function AnimationLab() {
           </Row>
         )}
 
+        {lot === "F" && <PlayerSimLot />}
         <div key={lot} className="grid gap-x-5 gap-y-7 sm:grid-cols-2 xl:grid-cols-3">
           {lot === "A" && GESTURES.map((g) => (
             <Card key={g.kind} title={g.name} hint={g.hint} cost="nul">
@@ -340,7 +344,8 @@ function GlassButton({
   className = "",
   onClick,
 }: {
-  gesture: GestureKind;
+  /** `grouped` : le bouton d'une pilule qui porte le geste liquide — c'est elle qui l'écoute. */
+  gesture: GestureKind | "grouped";
   material?: Material;
   size?: string;
   label: string;
@@ -355,7 +360,7 @@ function GlassButton({
   const { take, release } = usePointerCapture();
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || gesture === "grouped") return;
     return attachGesture(el, gesture, () => settingsRef.current, { take, release });
   }, [gesture, settingsRef, take, release]);
   return (
@@ -363,25 +368,57 @@ function GlassButton({
       ref={ref}
       type="button"
       aria-label={label}
-      onClick={onClick}
-      className={`alab-btn ${size} ${material?.cls ?? ""} ${gesture === "active" ? "alab-press-active" : ""} ${gesture === "stretch" ? "alab-stretchy" : ""} ${className}`}
+      // Le clic d'un bouton ne remonte pas jusqu'au fond : dans le lecteur simulé, le fond
+      // montre et cache les commandes.
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.();
+      }}
+      className={`alab-btn ${size} ${material?.cls ?? ""} ${gesture === "liquid" ? "alab-slop" : ""} ${gesture === "active" ? "alab-press-active" : ""} ${gesture === "stretch" ? "alab-stretchy" : ""} ${className}`}
     >
       {material?.copy && <PrefrostCopy />}
       {material?.rim && <span className="alab-rim" />}
       <span className="alab-sheen" />
-      <span className="alab-glow" />
+      <span className="alab-glowclip"><span className="alab-glow" /></span>
       {children}
     </button>
   );
 }
 
-/** Une pilule de trois boutons, la matière sur la pilule — un seul calque flou pour le groupe. */
-function GlassPill({ gesture, material, children }: { gesture: GestureKind; material: Material; children: (gesture: GestureKind) => ReactNode }) {
+/**
+ * Une pilule de boutons, la matière sur la pilule — un seul calque flou pour le groupe. Avec le
+ * geste liquide, c'est elle qui l'écoute et elle entière qui gonfle et s'étire (demandé le
+ * 04/10/2026) ; ses boutons reçoivent `grouped` et ne font que s'éclairer.
+ */
+function GlassPill({
+  gesture,
+  material,
+  children,
+  className = "",
+  pillRef,
+}: {
+  gesture: GestureKind;
+  material: Material;
+  children: (gesture: GestureKind | "grouped") => ReactNode;
+  className?: string;
+  pillRef?: RefObject<HTMLDivElement | null>;
+}) {
+  const { settingsRef } = useLab();
+  const own = useRef<HTMLDivElement>(null);
+  const ref = pillRef ?? own;
+  const { take, release } = usePointerCapture();
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || gesture !== "liquid") return;
+    return attachLiquid(el, () => settingsRef.current, { take, release });
+  }, [gesture, settingsRef, take, release, ref]);
   return (
-    <div className={`alab-pill ${material.cls}`}>
+    // `alab-slop` écrit ici aussi : React réécrit `className` quand la matière change, et la
+    // classe posée par `attachLiquid` aurait disparu avec.
+    <div ref={ref} className={`alab-pill ${material.cls} ${gesture === "liquid" ? "alab-slop" : ""} ${className}`}>
       {material.copy && <PrefrostCopy />}
       {material.rim && <span className="alab-rim" style={{ borderRadius: 999 }} />}
-      {children(gesture)}
+      {children(gesture === "liquid" ? "grouped" : gesture)}
     </div>
   );
 }
@@ -578,7 +615,11 @@ function AppearCard({ variant, title, hint, cost }: (typeof APPEAR)[number]) {
       for (const a of child.getAnimations()) if (a.id === "appear") a.cancel();
       if (shown) {
         const { keyframes, duration } = springKeyframes(0.4, 1, s.spring, (p) => ({ transform: `scale(${p.x})` }));
-        child.animate(keyframes, { duration: duration * s.slow, easing: "linear", fill: "both" }).id = "appear";
+        const entry = child.animate(keyframes, { duration: duration * s.slow, easing: "linear", fill: "both" });
+        entry.id = "appear";
+        // Rendue une fois jouée : une animation qui reste « remplie » l'emporterait sur le
+        // `transform` que le geste liquide écrit sur le nœud, et l'étirement ne se verrait plus.
+        entry.finished.then(() => entry.cancel(), () => {});
       } else {
         child.animate([{ transform: "scale(1)" }, { transform: "scale(0)" }], { duration: 180 * s.slow, easing: "ease-in", fill: "forwards" }).id = "appear";
       }
@@ -625,7 +666,7 @@ function AppearCard({ variant, title, hint, cost }: (typeof APPEAR)[number]) {
 
 function MorphLot() {
   const { gesture, material } = useLab();
-  const frost = MATERIALS[2];
+  const frost = MATERIALS.find((m) => m.cls === "alab-mat-frost") ?? MATERIALS[0];
   return (
     <>
       <Card
@@ -748,8 +789,8 @@ function LensTabsCard({ material }: { material: Material }) {
   const drag = useRef({ active: false, pos: 0, lastX: 0, lastT: 0, v: 0, moved: false });
   const { take, release } = usePointerCapture();
 
-  const lensAt = (x: number, swell: number, stretch: number) =>
-    `translateX(${x}px) scale(${swell * (1 + stretch)}, ${swell * (1 - stretch * 0.45)})`;
+  const lensAt = (x: number, swell: number, stretch: number, y = 0) =>
+    `translate(${x}px, ${y}px) scale(${swell * (1 + stretch)}, ${swell * (1 - stretch * 0.45)})`;
 
   useEffect(() => {
     const bar = barRef.current;
@@ -758,6 +799,22 @@ function LensTabsCard({ material }: { material: Material }) {
     const d = drag.current;
     const localX = (e: PointerEvent) => e.clientX - bar.getBoundingClientRect().left - 4 - TAB_W / 2;
     const clampPos = (x: number) => Math.min(Math.max(x, -10), (TABS.length - 1) * TAB_W + 10);
+    // La barre entière suit aussi le doigt, en plus léger que le geste liquide d'un bouton
+    // (demandé le 04/10/2026) : gonflée de 3 %, tirée à 60 % de la force.
+    const BAR_SWELL = 1.03;
+    const BAR_STRENGTH = 0.6;
+    let barSize = { w: 0, h: 0 };
+    let barPull = { r: 0, angle: 0 };
+    let lensY = 0;
+    const followFinger = (e: PointerEvent) => {
+      const box = bar.getBoundingClientRect();
+      const dx = e.clientX - (box.left + box.width / 2);
+      const dy = e.clientY - (box.top + box.height / 2);
+      barPull = pullFrom(dx, dy, barSize.w, barSize.h);
+      lensY = Math.max(-4, Math.min(4, dy * 0.12));
+      bar.getAnimations().forEach((a) => a.cancel());
+      bar.style.transform = liquidTransform(barPull.r, barPull.angle, BAR_SWELL, barSize.w, barSize.h, BAR_STRENGTH);
+    };
 
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
@@ -767,6 +824,13 @@ function LensTabsCard({ material }: { material: Material }) {
       d.lastX = e.clientX;
       d.lastT = e.timeStamp;
       take(e);
+      barSize = { w: bar.offsetWidth, h: bar.offsetHeight };
+      barPull = { r: 0, angle: 0 };
+      lensY = 0;
+      const s0 = settingsRef.current;
+      bar.getAnimations().forEach((a) => a.cancel());
+      bar.style.transform = liquidTransform(0, 0, BAR_SWELL, barSize.w, barSize.h, BAR_STRENGTH);
+      bar.animate([{ transform: "scale(1)" }, { transform: bar.style.transform }], { duration: 140 * s0.slow, easing: "cubic-bezier(0.2, 0.9, 0.3, 1.25)" });
       lens.getAnimations().forEach((a) => a.cancel());
       // Posée sous le doigt, gonflée : la lentille « se soulève » avant même de bouger.
       d.pos = clampPos(Math.round(localX(e) / TAB_W) * TAB_W);
@@ -780,11 +844,12 @@ function LensTabsCard({ material }: { material: Material }) {
       d.v = ((e.clientX - d.lastX) / dt) * 1000;
       d.lastX = e.clientX;
       d.lastT = e.timeStamp;
+      followFinger(e);
       if (Math.abs(localX(e) - d.pos) > 4) d.moved = true;
       if (!d.moved) return;
       d.pos = clampPos(localX(e));
       lens.getAnimations().forEach((a) => a.cancel());
-      lens.style.transform = lensAt(d.pos, 1.18, Math.min(Math.abs(d.v) / 3000, 0.25));
+      lens.style.transform = lensAt(d.pos, 1.18, Math.min(Math.abs(d.v) / 3000, 0.25), lensY);
     };
     const onUp = () => {
       if (!d.active) return;
@@ -793,17 +858,27 @@ function LensTabsCard({ material }: { material: Material }) {
       const target = Math.min(Math.max(Math.round(d.pos / TAB_W), 0), TABS.length - 1);
       setIndex(target);
       const s = settingsRef.current;
+      const { r: br, angle: ba } = barPull;
+      const { w: bw, h: bh } = barSize;
+      bar.style.transform = "";
+      const back = springKeyframes(1, 0, s.spring, ({ x }) => ({
+        transform: liquidTransform(br * Math.max(x, -0.5), ba, 1 + (BAR_SWELL - 1) * x, bw, bh, BAR_STRENGTH),
+      }));
+      bar.getAnimations().forEach((a) => a.cancel());
+      bar.animate(back.keyframes, { duration: back.duration * s.slow, easing: "linear" });
+      const fromY = lensY;
       const from = d.pos;
       const to = target * TAB_W;
       const span = Math.max(Math.abs(to - from), 1);
       const { keyframes, duration } = springKeyframes(from, to, s.spring, ({ x, v }) => {
         const swell = 1 + 0.18 * Math.min(1, Math.abs(to - x) / span);
-        return { transform: lensAt(x, from === to ? 1 : swell, Math.min(Math.abs(v) / 3000, 0.25)) };
+        const p = Math.min(1, Math.abs(to - x) / span);
+        return { transform: lensAt(x, from === to ? 1 : swell, Math.min(Math.abs(v) / 3000, 0.25), fromY * p) };
       }, d.moved ? d.v : 0);
       lens.getAnimations().forEach((a) => a.cancel());
       lens.style.transform = lensAt(to, 1, 0);
       if (from === to) {
-        lens.animate([{ transform: lensAt(to, 1.18, 0) }, { transform: lensAt(to, 0.96, 0), offset: 0.5 }, { transform: lensAt(to, 1, 0) }], { duration: 320 * s.slow, easing: "ease-out" });
+        lens.animate([{ transform: lensAt(to, 1.18, 0, fromY) }, { transform: lensAt(to, 0.96, 0), offset: 0.5 }, { transform: lensAt(to, 1, 0) }], { duration: 320 * s.slow, easing: "ease-out" });
       } else {
         lens.animate(keyframes, { duration: duration * s.slow, easing: "linear" });
       }
@@ -818,11 +893,12 @@ function LensTabsCard({ material }: { material: Material }) {
       bar.removeEventListener("pointerup", onUp);
       bar.removeEventListener("pointercancel", onUp);
       release();
+      bar.style.transform = "";
     };
   }, [settingsRef, take, release]);
 
   return (
-    <Card title="Onglets à lentille" hint="Tape un onglet : la lentille y glisse et s'étire selon sa vitesse. Appuie et fais-la glisser : elle se soulève et suit le doigt, puis se pose sur l'onglet le plus proche." cost="nul">
+    <Card title="Onglets à lentille" hint="Tape un onglet : la lentille y glisse et s'étire selon sa vitesse. Appuie et fais-la glisser : elle se soulève et suit le doigt, et la barre entière gonfle et s'étire légèrement vers lui, puis tout se pose sur le ressort." cost="nul">
       <div className="absolute inset-x-0 bottom-4 flex justify-center">
         <div ref={barRef} className={`alab-tabs ${material.cls}`} style={{ touchAction: "none" }}>
           {material.copy && <PrefrostCopy />}
@@ -956,6 +1032,7 @@ function SwitchCard() {
 /* ─── Lot E : défilement sous verre ────────────────────────────────────────── */
 
 const SCROLL_MATERIALS: { cls: string; name: string; cost: Cost }[] = [
+  { cls: "alab-mat-mixed", name: "Mixte (choix)", cost: "moyen" },
   { cls: "alab-mat-smoke", name: "Opaque", cost: "nul" },
   { cls: "alab-mat-blur8", name: "Flou 8", cost: "faible" },
   { cls: "alab-mat-frost", name: "Flou 20", cost: "moyen" },
@@ -965,7 +1042,7 @@ const SCROLL_MATERIALS: { cls: string; name: string; cost: Cost }[] = [
 
 function ScrollLot({ posters }: { posters: string[] }) {
   const { gesture } = useLab();
-  const [pick, setPick] = useState(2);
+  const [pick, setPick] = useState(0);
   const m = SCROLL_MATERIALS[pick];
   return (
     <>
@@ -1000,5 +1077,361 @@ function ScrollLot({ posters }: { posters: string[] }) {
         </div>
       </Card>
     </>
+  );
+}
+
+/* ─── Lot F : le lecteur simulé ─────────────────────────────────────────────── */
+
+const SIM_FORMATS = [
+  { id: "portrait", name: "Téléphone portrait", aspect: "9 / 19.5", maxWidth: "22rem", desktop: false },
+  { id: "landscape", name: "Téléphone paysage", aspect: "19.5 / 9", maxWidth: "54rem", desktop: false },
+  { id: "desktop", name: "Bureau", aspect: "16 / 9", maxWidth: "64rem", desktop: true },
+] as const;
+type SimFormat = (typeof SIM_FORMATS)[number];
+
+const SIM_MATERIALS = ["alab-mat-mixed", "alab-mat-clear", "alab-mat-frost", "alab-mat-smoke"]
+  .map((cls) => MATERIALS.find((m) => m.cls === cls && !m.rim))
+  .filter((m): m is Material => !!m);
+
+const AUDIO_TRACKS = ["Français — 5.1", "English — TrueHD Atmos — 7.1", "English — 5.1", "Español — Stéréo", "Deutsch — 5.1", "Italiano — Stéréo", "Commentaire — Stéréo"];
+const SUBTITLE_TRACKS = [
+  "Désactivés", "Français — Forcés", "Français", "Français — SDH", "English", "English — SDH", "Español", "Deutsch", "Italiano",
+  "Português (Brasil)", "Nederlands", "Polski", "Svenska", "Dansk", "Norsk", "Suomi",
+];
+
+type MenuKind = "audio" | "subs";
+/** Où le menu naît : le coin bas-droit de la pilule, sa taille, et le centre du bouton touché — dans le repère du lecteur. */
+type MenuAnchor = { right: number; bottom: number; pillW: number; pillH: number; btnX: number; btnY: number; maxHeight: number };
+
+/** La place d'un élément dans un ancêtre, en coordonnées de mise en page : les `transform` d'un geste en cours n'y entrent pas. */
+function layoutBox(el: HTMLElement, ancestor: HTMLElement) {
+  let x = 0;
+  let y = 0;
+  let node: HTMLElement | null = el;
+  while (node && node !== ancestor) {
+    x += node.offsetLeft;
+    y += node.offsetTop;
+    node = node.offsetParent as HTMLElement | null;
+  }
+  return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+}
+
+function PlayerSimLot() {
+  const [format, setFormat] = useState<SimFormat["id"]>(() =>
+    typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? "landscape" : "desktop",
+  );
+  const [matIndex, setMatIndex] = useState(0);
+  const f = SIM_FORMATS.find((x) => x.id === format) ?? SIM_FORMATS[0];
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap gap-1.5">
+        {SIM_FORMATS.map((x) => (
+          <button key={x.id} type="button" className={`chip ${x.id === format ? "chip-on" : ""}`} onClick={() => setFormat(x.id)}>{x.name}</button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {SIM_MATERIALS.map((m, i) => (
+          <button key={m.cls} type="button" className={`chip ${i === matIndex ? "chip-on" : ""}`} onClick={() => setMatIndex(i)}>{m.name}</button>
+        ))}
+      </div>
+      <p className="text-xs leading-relaxed text-subtle">
+        {"La disposition du vrai lecteur, avec les choix du 04/10 : geste liquide (les pilules s'étirent en entier), fondu sur chaque pilule, une pilule dès que des boutons se touchent. Touche le fond pour cacher ou montrer les commandes. Le son et les sous-titres s'ouvrent depuis leur pilule : l'icône s'écarte, devient le titre, et la liste défile si elle est longue."}
+      </p>
+      <PlayerSim key={f.id} format={f} material={SIM_MATERIALS[matIndex]} />
+    </section>
+  );
+}
+
+function PlayerSim({ format, material }: { format: SimFormat; material: Material }) {
+  const { gesture, image, moving, whiteText } = useLab();
+  const [shown, setShown] = useState(true);
+  const [playing, setPlaying] = useState(true);
+  const [menu, setMenu] = useState<{ kind: MenuKind; anchor: MenuAnchor; closing: boolean } | null>(null);
+  const [audio, setAudio] = useState(0);
+  const [subs, setSubs] = useState(0);
+  const simRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const audioBtn = useRef<HTMLSpanElement>(null);
+  const subsBtn = useRef<HTMLSpanElement>(null);
+
+  const openMenu = (kind: MenuKind) => {
+    const sim = simRef.current;
+    const pill = settingsRef.current;
+    const icon = (kind === "audio" ? audioBtn : subsBtn).current?.closest<HTMLElement>(".alab-btn");
+    if (!sim || !pill || !icon) return;
+    if (menu) {
+      setMenu({ ...menu, closing: true });
+      return;
+    }
+    const p = layoutBox(pill, sim);
+    const b = layoutBox(icon, sim);
+    setMenu({
+      kind,
+      closing: false,
+      anchor: {
+        right: sim.clientWidth - (p.x + p.w),
+        bottom: sim.clientHeight - (p.y + p.h),
+        pillW: p.w,
+        pillH: p.h,
+        btnX: b.x + b.w / 2,
+        btnY: b.y + b.h / 2,
+        maxHeight: p.y + p.h - 12,
+      },
+    });
+  };
+  const closeMenu = () => setMenu((m) => (m ? { ...m, closing: true } : m));
+
+  const btn = format.desktop ? 20 : 22;
+  return (
+    <div
+      ref={simRef}
+      className={`alab-sim ${format.desktop ? "alab-sim-desktop" : ""} ${moving ? "alab-moving" : ""}`}
+      style={{ aspectRatio: format.aspect, maxWidth: format.maxWidth, maxHeight: format.id === "portrait" ? "44rem" : undefined }}
+      data-shown={String(shown)}
+      onClick={() => (menu ? closeMenu() : setShown((v) => !v))}
+    >
+      <div
+        className="alab-bg alab-drift"
+        style={{ backgroundImage: image ? `url("${image.full}")` : "linear-gradient(135deg, #2a2340, #0d1b2a 60%, #3b2a1a)" }}
+      />
+      {whiteText && (
+        <div className="alab-white-text">
+          <span>TEXTE BLANC</span>
+          <span>SOUS LE VERRE</span>
+        </div>
+      )}
+      <div className="alab-sim-shade-top" />
+      <div className="alab-sim-shade-bottom" />
+
+      {/* Le centre : ±10 s et lecture, posés sur le film. */}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-6 sm:gap-10">
+        <div className="pointer-events-auto">
+          <GlassButton gesture={gesture} material={material} size="alab-sim-ctr" className="alab-fade-self" label="Reculer de 10 s">
+            <RotateCcw size={btn + 4} />
+          </GlassButton>
+        </div>
+        <div className="pointer-events-auto">
+          <GlassButton gesture={gesture} material={material} size="alab-sim-ctr-main" className="alab-fade-self" label={playing ? "Pause" : "Lecture"} onClick={() => setPlaying((v) => !v)}>
+            {playing ? <Pause size={btn + 12} fill="currentColor" /> : <Play size={btn + 12} fill="currentColor" />}
+          </GlassButton>
+        </div>
+        <div className="pointer-events-auto">
+          <GlassButton gesture={gesture} material={material} size="alab-sim-ctr" className="alab-fade-self" label="Avancer de 10 s">
+            <RotateCw size={btn + 4} />
+          </GlassButton>
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4 sm:p-6">
+        <div className="alab-sim-row alab-sim-row-top pointer-events-auto flex items-center justify-between gap-3" onClick={(e) => shown && e.stopPropagation()}>
+          <div className="flex items-center gap-3">
+            <GlassButton gesture={gesture} material={material} size="alab-sim-solo" className="alab-fade-self" label="Fermer"><X size={btn + 2} /></GlassButton>
+            <GlassPill gesture={gesture} material={material} className="alab-fade-self">
+              {(g) => (
+                <>
+                  <GlassButton gesture={g} label="Diffuser"><Cast size={btn} /></GlassButton>
+                  <GlassButton gesture={g} label="Réduire"><PictureInPicture2 size={btn} /></GlassButton>
+                </>
+              )}
+            </GlassPill>
+          </div>
+          {format.desktop && (
+            <GlassPill gesture={gesture} material={material} className="alab-fade-self">
+              {(g) => <GlassButton gesture={g} label="Son"><Volume2 size={btn} /></GlassButton>}
+            </GlassPill>
+          )}
+        </div>
+
+        <div className="alab-sim-row alab-sim-row-bottom pointer-events-auto flex flex-col gap-3" onClick={(e) => shown && e.stopPropagation()}>
+          <div className="flex items-end gap-3">
+            <p className="alab-sim-title alab-fade-self min-w-0 flex-1 truncate pb-0.5 text-lg sm:text-2xl">{image?.title ?? "Titre du film"}</p>
+            <GlassPill gesture={gesture} material={material} className="alab-fade-self shrink-0" pillRef={settingsRef}>
+              {(g) => (
+                <>
+                  <GlassButton gesture={g} label="Vitesse"><Gauge size={btn} /></GlassButton>
+                  <GlassButton gesture={g} label="Audio" onClick={() => openMenu("audio")}>
+                    <AudioLines size={btn} /><span ref={audioBtn} hidden />
+                  </GlassButton>
+                  <GlassButton gesture={g} label="Sous-titres" onClick={() => openMenu("subs")}>
+                    <Captions size={btn} /><span ref={subsBtn} hidden />
+                  </GlassButton>
+                  <GlassButton gesture={g} label="Plus d'options"><EllipsisVertical size={btn} /></GlassButton>
+                  {format.desktop && <GlassButton gesture={g} label="Plein écran"><Maximize size={btn} /></GlassButton>}
+                </>
+              )}
+            </GlassPill>
+          </div>
+          <div className="alab-fade-self flex items-center gap-3">
+            <span className="alab-sim-time">1:02:14</span>
+            <div className="alab-sim-track min-w-0 flex-1"><span style={{ width: "56%" }} /></div>
+            <span className="alab-sim-time">48:09</span>
+          </div>
+        </div>
+      </div>
+
+      {menu && (
+        <SimMenu
+          key={menu.kind}
+          kind={menu.kind}
+          anchor={menu.anchor}
+          closing={menu.closing}
+          material={material}
+          pillRef={settingsRef}
+          simRef={simRef}
+          items={menu.kind === "audio" ? AUDIO_TRACKS : SUBTITLE_TRACKS}
+          selected={menu.kind === "audio" ? audio : subs}
+          onPick={(i) => {
+            if (menu.kind === "audio") setAudio(i);
+            else setSubs(i);
+            closeMenu();
+          }}
+          onClose={closeMenu}
+          onClosed={() => setMenu(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Le menu du son ou des sous-titres, né de la pilule des réglages.
+ *
+ * Une seule surface qui change de forme : découpée au départ exactement à la pilule (même
+ * matière, même place — la pilule s'efface dessous), elle s'ouvre vers le haut et la gauche sur
+ * le ressort. L'icône du bouton touché glisse jusqu'à l'en-tête et devient le titre ; la liste
+ * apparaît en fondu — sur le contenu, jamais sur la surface floutée (lot C). Fermer rejoue tout
+ * à l'envers, puis rend la pilule.
+ */
+function SimMenu({
+  kind,
+  anchor,
+  closing,
+  material,
+  pillRef,
+  simRef,
+  items,
+  selected,
+  onPick,
+  onClose,
+  onClosed,
+}: {
+  kind: MenuKind;
+  anchor: MenuAnchor;
+  closing: boolean;
+  material: Material;
+  pillRef: RefObject<HTMLDivElement | null>;
+  simRef: RefObject<HTMLDivElement | null>;
+  items: string[];
+  selected: number;
+  onPick: (i: number) => void;
+  onClose: () => void;
+  onClosed: () => void;
+}) {
+  const { settingsRef } = useLab();
+  const boxRef = useRef<HTMLDivElement>(null);
+  const iconRef = useRef<HTMLSpanElement>(null);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const Icon = kind === "audio" ? AudioLines : Captions;
+
+  // Une ouverture ou une fermeture : la même trajectoire, dans un sens ou dans l'autre.
+  const run = (opening: boolean) => {
+    const box = boxRef.current;
+    const icon = iconRef.current;
+    const sim = simRef.current;
+    if (!box || !icon || !sim) return null;
+    const s = settingsRef.current;
+    const W = box.offsetWidth;
+    const H = box.offsetHeight;
+    const top = Math.max(0, H - anchor.pillH);
+    const left = Math.max(0, W - anchor.pillW);
+    const r0 = anchor.pillH / 2;
+    const shape = springKeyframes(opening ? 0 : 1, opening ? 1 : 0, s.spring, ({ x }) => {
+      const p = Math.min(Math.max(x, 0), 1);
+      // Le dépassement ne peut pas agrandir la découpe au-delà de la boîte : il passe en échelle.
+      const bounce = 1 + Math.max(0, x - 1) * 0.3 - Math.max(0, -x) * 0.3;
+      return {
+        clipPath: `inset(${top * (1 - p)}px 0px 0px ${left * (1 - p)}px round ${r0 * (1 - p) + 22 * p}px)`,
+        transform: `scale(${bounce})`,
+      };
+    });
+    box.getAnimations().forEach((a) => a.cancel());
+    const morph = box.animate(shape.keyframes, { duration: shape.duration * s.slow, easing: "linear", fill: "forwards" });
+
+    // L'icône part de celle du bouton touché.
+    const i = layoutBox(icon, sim);
+    const dx = anchor.btnX - (i.x + i.w / 2);
+    const dy = anchor.btnY - (i.y + i.h / 2);
+    const path = springKeyframes(opening ? 0 : 1, opening ? 1 : 0, s.spring, ({ x }) => ({
+      transform: `translate(${dx * (1 - x)}px, ${dy * (1 - x)}px)`,
+    }));
+    icon.getAnimations().forEach((a) => a.cancel());
+    icon.animate(path.keyframes, { duration: path.duration * s.slow, easing: "linear", fill: "forwards" });
+
+    const fade = (el: HTMLElement | null, delay: number) => {
+      if (!el) return;
+      el.getAnimations().forEach((a) => a.cancel());
+      el.animate(
+        opening
+          ? [{ opacity: 0, transform: "translateX(-6px)" }, { opacity: 1, transform: "none" }]
+          : [{ opacity: 1 }, { opacity: 0 }],
+        { duration: (opening ? 200 : 110) * s.slow, delay: opening ? delay * s.slow : 0, easing: "ease-out", fill: "both" },
+      );
+    };
+    fade(labelRef.current, 60);
+    fade(listRef.current, 90);
+
+    // La pilule s'efface sous le menu qui naît d'elle, et ne revient qu'une fois le menu refermé
+    // sur sa forme — sinon les deux verres se superposent pendant la fermeture.
+    const pill = pillRef.current;
+    if (pill && opening) {
+      for (const a of pill.getAnimations()) if (a.id === "menu-hide") a.cancel();
+      const hide = pill.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 90 * s.slow, fill: "forwards" });
+      hide.id = "menu-hide";
+    }
+    return morph;
+  };
+
+  // Ouvert au montage : la taille du menu n'est connue qu'une fois posé.
+  useLayoutEffect(() => {
+    run(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule ouverture, au montage ; `run` lit tout ce qu'il faut sur le moment
+  }, []);
+  useEffect(() => {
+    if (!closing) return;
+    const morph = run(false);
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      for (const a of pillRef.current?.getAnimations() ?? []) if (a.id === "menu-hide") a.cancel();
+      onClosed();
+    };
+    if (morph) morph.finished.then(finish, () => {});
+    else finish();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rejoué à la seule demande de fermeture
+  }, [closing]);
+
+  return (
+    <div
+      ref={boxRef}
+      className={`alab-sim-menu ${material.cls}`}
+      style={{ right: anchor.right, bottom: anchor.bottom, maxHeight: anchor.maxHeight }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {material.copy && <PrefrostCopy />}
+      <button type="button" className="alab-sim-menu-head relative z-[2] text-left" onClick={onClose}>
+        <span ref={iconRef} className="inline-flex"><Icon size={20} /></span>
+        <span ref={labelRef}>{kind === "audio" ? "Audio" : "Sous-titres"}</span>
+      </button>
+      <div ref={listRef} className="alab-sim-menu-list relative z-[2] min-h-0 flex-1">
+        {items.map((item, i) => (
+          <button key={item} type="button" className="alab-sim-menu-item" onClick={() => onPick(i)} disabled={closing}>
+            <span className="inline-flex w-4 justify-center">{i === selected && <Check size={16} />}</span>
+            {item}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
