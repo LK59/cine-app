@@ -1578,11 +1578,6 @@
 @media (prefers-reduced-motion: reduce) {
   .player-resume-ring { animation: player-resume-in 160ms ease-out 150ms forwards; }
 }
-/* La lentille pleine d'une bascule (Films / Séries) : elle remplace le fond blanc de l'onglet actif. */
-.nav-lens-solid {
-  background: #fff;
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
-}
 /* Le fil d'un onglet ou d'une grille en construction : après 150 ms seulement, pour qu'un passage
    immédiat ne fasse rien clignoter. */
 .tab-switch-thread { opacity: 0; animation: player-resume-in 160ms ease-out 150ms forwards; }

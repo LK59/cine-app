@@ -14,9 +14,10 @@ const TV_NAV_RING =
 // rows do, so once you've arrowed up you can flip tabs without reaching for Tab/mouse.
 //
 // La même bascule sur le téléphone, dans la barre du haut (`placement="inline"`) : une seule pièce
-// pour une seule décision. En verre liquide, avec une lentille blanche qui glisse d'un onglet à
-// l'autre et suit le doigt (`useLiquidLens`, DECISIONS.md §45). Elle change d'onglet tout de suite ;
-// le contenu du nouvel onglet suit en arrière-plan (voir `useDeferredValue` chez les appelants).
+// pour une seule décision. En verre liquide, avec une lentille translucide — celle de la barre du
+// bas — qui glisse d'un onglet à l'autre et suit le doigt (`useLiquidLens`, DECISIONS.md §45). Elle
+// change d'onglet tout de suite ; le contenu du nouvel onglet suit en arrière-plan (voir
+// `useDeferredValue` chez les appelants).
 export function CinemaModeToggle({
   mode,
   onChange,
@@ -63,7 +64,11 @@ export function CinemaModeToggle({
       className={`${floating ? "fixed top-4 z-10 -translate-x-1/2 gap-1 p-1" : "relative justify-self-center gap-0.5 p-0.5"} nav-glass flex items-center rounded-full`}
       style={style}
     >
-      <span ref={lensRef} className="nav-lens nav-lens-solid" aria-hidden />
+      {/* La pastille de verre de la barre du bas, et non un fond blanc plein : sous un fond blanc, le
+          libellé changeait de couleur d'un coup, si bien qu'un glisser lent montrait du noir sur noir
+          et du blanc sur blanc (04/10/2026). Translucide, la lentille laisse les libellés clairs
+          lisibles à toutes les positions. */}
+      <span ref={lensRef} className="nav-lens" aria-hidden />
       <button
         ref={moviesRef}
         onClick={() => onChange("movies")}
@@ -71,7 +76,7 @@ export function CinemaModeToggle({
         onKeyDown={onKeyDown}
         data-tv-escape-up={mode === "movies" ? "true" : undefined}
         className={`relative z-[1] rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${TV_NAV_RING} ${
-          mode === "movies" ? "text-ink" : "text-muted hover:text-white"
+          mode === "movies" ? "text-white" : "text-muted hover:text-white"
         }`}
       >
         {t("cinema.moviesTab")}
@@ -83,7 +88,7 @@ export function CinemaModeToggle({
         onKeyDown={onKeyDown}
         data-tv-escape-up={mode === "series" ? "true" : undefined}
         className={`relative z-[1] rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${TV_NAV_RING} ${
-          mode === "series" ? "text-ink" : "text-muted hover:text-white"
+          mode === "series" ? "text-white" : "text-muted hover:text-white"
         }`}
       >
         {t("cinema.seriesTab")}

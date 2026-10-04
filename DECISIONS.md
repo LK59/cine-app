@@ -1388,7 +1388,8 @@ joué par `element.animate()`). La matière : les variables `--glass-*` et `.pla
 (le mini-lecteur, même verre et même geste depuis le 04/10), la lentille `useLiquidLens`
 (`src/lib/liquidGlass/useLiquidLens.ts`, axe horizontal ou vertical) dans `PlayerBottomBar`,
 `PlayerRail` (rail du bureau) et `CinemaModeToggle` (bascule Films/Séries, bureau et téléphone —
-une seule pièce, lentille blanche), et la page d'administration « Tests animations »
+une seule pièce, lentille translucide : blanche pleine, un glisser lent montrait des libellés
+noir sur noir et blanc sur blanc), et la page d'administration « Tests animations »
 (`src/components/animlab/`), qui branche le même geste avec ses réglages en direct.
 
 **Tests.** `liquid-press.test.ts` (clic natif intact, marge, annulation, clavier, secours),
