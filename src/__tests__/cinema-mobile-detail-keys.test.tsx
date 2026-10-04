@@ -165,3 +165,33 @@ describe("CinemaMobileDetail — ce que l'appareil sait, tout de suite", () => {
     expect(document.body.querySelectorAll("[data-sheet-reserved]").length).toBe(3);
   });
 });
+
+// 04/10/2026 : la croix en verre liquide, les boutons du corps avec le geste qui laisse défiler.
+describe("CinemaMobileDetail — le verre et le geste des boutons", () => {
+  it("met la croix en verre avec le geste complet, et le geste qui laisse défiler sur les boutons du corps", () => {
+    draw(vi.fn());
+    const close = document.body.querySelector<HTMLElement>('[aria-label="cinema.back"]')!;
+    expect(close.hasAttribute("data-liquid")).toBe(true);
+    expect(close.className).toContain("nav-glass");
+    const pans = Array.from(root().querySelectorAll<HTMLElement>("[data-liquid-pan]"));
+    // À voir et Vu au moins, en petits boutons ; aucun ne garde l'ancien enfoncement par `:active`.
+    expect(pans.filter((b) => b.getAttribute("data-liquid-pan") === "icon").length).toBe(2);
+    for (const b of pans) expect(b.className).not.toContain("active:scale-95");
+  });
+
+  it("anime la surface touchée, et laisse le clic à l'ancienne", () => {
+    const animate = vi.fn(() => ({ id: "", cancel() {}, finished: Promise.resolve() }) as unknown as Animation);
+    Object.defineProperty(HTMLElement.prototype, "animate", { value: animate, configurable: true });
+    Object.defineProperty(HTMLElement.prototype, "getAnimations", { value: () => [], configurable: true });
+    try {
+      draw(vi.fn());
+      const watched = root().querySelectorAll<HTMLElement>('[data-liquid-pan="icon"]')[1];
+      fireEvent.pointerDown(watched, { button: 0, pointerId: 5, pointerType: "touch" });
+      expect(animate.mock.contexts.at(-1)).toBe(watched);
+      fireEvent.pointerUp(window, { pointerId: 5 });
+    } finally {
+      delete (HTMLElement.prototype as { animate?: unknown }).animate;
+      delete (HTMLElement.prototype as { getAnimations?: unknown }).getAnimations;
+    }
+  });
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
@@ -30,6 +30,7 @@ import { CinemaSimilarRow, useCinemaSimilar } from "@/components/cinema/CinemaSi
 import { CinemaMovieCollectionRow } from "@/components/cinema/CinemaCollectionRow";
 import { CinemaCastRow, type CinemaCastMember } from "@/components/cinema/CinemaCastRow";
 import { useT } from "@/components/TranslationProvider";
+import { createLiquidPress } from "@/lib/liquidGlass/liquid";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -132,6 +133,39 @@ export function CinemaMobileDetail({
   // Grab the banner and pull the sheet away — see the hook. Only the artwork above the title is
   // a handle; everything from the Lire button down scrolls as usual.
   const swipe = useSwipeToDismiss(requestClose);
+  /**
+   * Le geste liquide des boutons de la fiche (DECISIONS.md §45, 04/10/2026), par délégation.
+   *
+   * La croix, posée sur l'image, a le geste complet des commandes du lecteur (`data-liquid`). Les
+   * boutons du corps — Lire, Reprendre au début, Bande-annonce, À voir, Vu — sont dans une fiche
+   * qu'on fait défiler au doigt : leur geste (`data-liquid-pan`) laisse le défilement vertical au
+   * navigateur (`touch-action: pan-y`), qui le reprend dès que le doigt part à la verticale — le
+   * verre revient alors sur le ressort. Plus doux sur les grands boutons, à peine un rebond sur les
+   * petits. Le clic natif n'est jamais remplacé (voir `createLiquidPress`) : « Lire » garde le geste
+   * utilisateur dont la lecture a besoin.
+   */
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    const targets = "[data-liquid], [data-liquid-pan]";
+    const close = createLiquidPress({ targets });
+    const wide = createLiquidPress({ targets, strength: 0.6 });
+    const icon = createLiquidPress({ targets, strength: 0.5, swell: (w, h) => Math.min(1.08, 1 + 6 / Math.max(w, h, 1)) });
+    const onDown = (e: PointerEvent) => {
+      const surface = (e.target as Element | null)?.closest?.<HTMLElement>("[data-liquid], [data-liquid-pan]");
+      if (!surface || !sheet.contains(surface) || surface.matches(":disabled")) return;
+      const kind = surface.getAttribute("data-liquid-pan");
+      (kind === "icon" ? icon : kind === "wide" ? wide : close).down(e, surface);
+    };
+    sheet.addEventListener("pointerdown", onDown);
+    return () => {
+      sheet.removeEventListener("pointerdown", onDown);
+      close.dispose();
+      wide.dispose();
+      icon.dispose();
+    };
+  }, []);
   // Une fiche du dessous ne se ferme pas : elle attend qu'on la découvre.
   const inert = underneath;
 
@@ -318,6 +352,7 @@ export function CinemaMobileDetail({
 
   return createPortal(
     <div
+      ref={sheetRef}
       // The entrance animation is dropped from the first touch onwards, not just while the
       // finger is down: it animates the same transform this does (a running animation beats an
       // inline style, so the sheet wouldn't follow the finger at all), and letting it back in on
@@ -401,7 +436,10 @@ export function CinemaMobileDetail({
           {...NOT_THE_HANDLE}
           onClick={requestClose}
           aria-label={t("cinema.back")}
-          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-inset ring-white/12 active:scale-95"
+          // Le verre liquide et le geste des commandes du lecteur : la croix est posée sur l'image,
+          // seul endroit de la fiche où le verre a quelque chose à flouter.
+          data-liquid
+          className="nav-glass absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-white"
         >
           <X size={18} />
         </button>
@@ -459,8 +497,9 @@ export function CinemaMobileDetail({
             onClick={() => play()}
             disabled={fileMissing}
             data-play-unavailable={fileMissing ? "" : undefined}
-            className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink transition-transform ${
-              fileMissing ? "cursor-not-allowed opacity-45" : "active:scale-95"
+            data-liquid-pan="wide"
+            className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink ${
+              fileMissing ? "cursor-not-allowed opacity-45" : ""
             }`}
           >
             <Play size={18} fill="currentColor" />
@@ -474,7 +513,8 @@ export function CinemaMobileDetail({
           <button
             type="button"
             onClick={() => play(true)}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95"
+            data-liquid-pan="wide"
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white"
           >
             <RotateCcw size={16} />
             {t("cinema.restartFromBeginning")}
@@ -486,7 +526,8 @@ export function CinemaMobileDetail({
           <button
             type="button"
             onClick={() => setShowTrailer(true)}
-            className={`mb-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 ${late.fade}`}
+            data-liquid-pan="wide"
+            className={`mb-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white ${late.fade}`}
           >
             <Video size={16} />
             {t("cinema.trailer")}
@@ -510,7 +551,7 @@ export function CinemaMobileDetail({
               d'« ajouté » : rien ne distinguait les deux boutons ni les deux états. Un plus qui
               devient un marque-page coché se lit d'un coup d'œil, et le libellé dit l'état. */}
           {canJoinWatchlist(tmdbId) && (
-            <button type="button" onClick={toggleInList} aria-pressed={inList} className="flex w-16 flex-col items-center gap-1.5 active:scale-95">
+            <button type="button" onClick={toggleInList} aria-pressed={inList} data-liquid-pan="icon" className="flex w-16 flex-col items-center gap-1.5">
               <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={22} className="text-accent-400" />} offIcon={<Plus size={22} className="text-white" />} />
               <span className="text-center text-xs leading-tight text-muted">
                 {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
@@ -524,7 +565,8 @@ export function CinemaMobileDetail({
             onClick={toggleWatched}
             disabled={watchedBusy}
             aria-pressed={watched}
-            className={`flex w-16 flex-col items-center gap-1.5 active:scale-95 ${watchedKnown ? "" : "opacity-40"}`}
+            data-liquid-pan="icon"
+            className={`flex w-16 flex-col items-center gap-1.5 ${watchedKnown ? "" : "opacity-40"}`}
           >
             <ToggleGlyph on={watched} onIcon={<CircleCheck size={22} className="text-accent-400" />} offIcon={<Check size={22} className="text-white" />} />
             <span className="text-center text-xs leading-tight text-muted">

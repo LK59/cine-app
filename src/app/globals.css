@@ -1599,3 +1599,8 @@
 
 /* Le mini-lecteur : le verre des commandes plein écran, à sa taille, et le même geste. */
 .player-mini .player-pill[data-lit] { box-shadow: var(--glass-edge), var(--glass-lit); }
+
+/* Les boutons du corps d'une fiche (`data-liquid-pan`, CinemaMobileDetail) : le geste liquide, mais
+   la fiche défile — le défilement vertical reste au navigateur, qui le reprend dès que le doigt
+   part à la verticale. Pas de marge élargie : ce sont de grandes cibles. */
+[data-liquid-pan] { touch-action: pan-y; }
