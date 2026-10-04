@@ -1678,3 +1678,37 @@ describe("PlayerControls — ce qui coûte un rendu (banc du 02/10/2026)", () =>
     width.mockRestore();
   });
 });
+
+describe("PlayerControls — la reprise après une pause", () => {
+  // 04/10/2026 : la reprise empruntait le chargement — les boutons du centre disparaissaient sous
+  // une roue le temps de la première image. Elle garde maintenant tout en place.
+  it("garde les boutons du centre, tourne un anneau autour de lecture/pause, sans roue", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness resuming />);
+    await act(async () => {});
+    const playpause = container.querySelector('[data-player-nav="playpause"]')!;
+    expect(playpause).not.toBeNull();
+    expect(playpause.querySelector("[data-player-resuming]")).not.toBeNull();
+    expect(container.querySelector(".player-wait-wheel")).toBeNull();
+    expect(container.querySelector(".player-wait-thread.player-wait-late")).not.toBeNull();
+  });
+
+  it("laisse remettre en pause pendant la reprise", async () => {
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { container } = render(<Harness resuming onVideoRef={(el) => { video = el; }} />);
+    await act(async () => {});
+    const pause = vi.spyOn(video!, "pause").mockImplementation(() => {});
+    Object.defineProperty(video!, "paused", { value: false, configurable: true });
+    fireEvent.click(container.querySelector('[data-player-nav="playpause"]')!);
+    expect(pause).toHaveBeenCalledTimes(1);
+  });
+
+  it("garde l'ouverture d'un film comme un chargement", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness loading />);
+    await act(async () => {});
+    expect(container.querySelector('[data-player-nav="playpause"]')).toBeNull();
+    expect(container.querySelector(".player-wait-wheel")).not.toBeNull();
+  });
+});

@@ -5,7 +5,8 @@ import { useCinemaRoute, useSheetBehind, useSheetLeaving } from "@/lib/cinemaRou
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useHideOnScroll } from "@/lib/useHideOnScroll";
 import { useT } from "@/components/TranslationProvider";
-import { PLAYER_NAV, activePanel, openPanel } from "./playerNav";
+import { PLAYER_NAV, activePanel, isOnPanel, openPanel } from "./playerNav";
+import { requestSearchFocus } from "@/lib/searchFocus";
 import { useReportBadge } from "@/lib/useReportBadge";
 import { NavDot } from "./NavDot";
 import { LIQUID_SPRING, liquidTransform, prefersReducedMotion, pullFrom } from "@/lib/liquidGlass/liquid";
@@ -86,6 +87,16 @@ export function PlayerBottomBar() {
   const lensRef = useRef<HTMLSpanElement>(null);
   /** Où la lentille est posée (repère de la barre), et si un doigt la tient. */
   const lens = useRef({ x: 0, y: 0, placed: false, held: false });
+  /**
+   * Le second appui sur Recherche, armé au contact et tenu jusqu'au relâchement (04/10/2026).
+   *
+   * Il levait le clavier dès le contact : partir de Recherche en faisant glisser la lentille vers
+   * un autre onglet ouvrait le clavier, qui cassait le geste. Le clavier ne monte plus qu'à un
+   * appui relâché sur Recherche, sans glisser — toujours dans le geste, ce qu'iOS exige.
+   */
+  const searchArmed = useRef<number | null>(null);
+  /** Le doigt a fait glisser la lentille pendant cet appui. */
+  const lensMoved = useRef(false);
   // La route du moment, pour le relâchement d'un glisser — lue dans un écouteur, pas au rendu.
   const routeRef = useRef<CinemaRoute>(route);
   useEffect(() => {
@@ -140,7 +151,9 @@ export function PlayerBottomBar() {
     const barShape = (r: number, angle: number, swell: number) => liquidTransform(r, angle, swell, drag?.w ?? 0, drag?.h ?? 0, BAR_STRENGTH);
 
     const onDown = (e: PointerEvent) => {
-      if (drag || (e.pointerType === "mouse" && e.button !== 0) || prefersReducedMotion() || typeof el.animate !== "function") return;
+      if (drag) return;
+      lensMoved.current = false;
+      if ((e.pointerType === "mouse" && e.button !== 0) || prefersReducedMotion() || typeof el.animate !== "function") return;
       const tab = (e.target as Element | null)?.closest?.<HTMLElement>("[data-panel]") ?? null;
       const panel = (tab?.dataset.panel as PlayerPanel | undefined) ?? null;
       bar.getAnimations().forEach((a) => a.cancel());
@@ -186,6 +199,7 @@ export function PlayerBottomBar() {
       bar.style.transform = barShape(drag.pull.r, drag.pull.angle, BAR_SWELL);
       if (!drag.moved && Math.abs(e.clientX - drag.startX) < DRAG_PX) return;
       drag.moved = true;
+      lensMoved.current = true;
       const l = lens.current;
       l.x = lensX(e.clientX, drag.rest);
       el.getAnimations().forEach((a) => a.cancel());
@@ -307,8 +321,25 @@ export function PlayerBottomBar() {
               onPointerDown={(e) => {
                 if (e.button !== 0 && e.pointerType === "mouse") return;
                 handledAt.current = Date.now();
+                // Déjà sur Recherche : rien à ouvrir, et le clavier attend le relâchement.
+                if (panel === "search" && isOnPanel("search", route)) {
+                  searchArmed.current = e.pointerId;
+                  return;
+                }
                 // Le retour visuel est la lentille, qui se soulève sous le doigt (voir plus haut).
                 openPanel(panel, route);
+              }}
+              onPointerUp={(e) => {
+                if (searchArmed.current !== e.pointerId) return;
+                searchArmed.current = null;
+                if (lensMoved.current) return;
+                // Relâché sur Recherche ? Au doigt, l'événement vise toujours le bouton du contact :
+                // c'est le point de relâchement qui dit où l'on est.
+                const under = document.elementFromPoint?.(e.clientX, e.clientY) ?? e.target;
+                if ((under as Element | null)?.closest?.('[data-panel="search"]')) requestSearchFocus();
+              }}
+              onPointerCancel={() => {
+                searchArmed.current = null;
               }}
               /* Le bouton ne prend jamais le focus au doigt.
                *

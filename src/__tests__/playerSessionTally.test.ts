@@ -129,3 +129,16 @@ describe("WatchedClock", () => {
     expect(clock.take(70_000)).toBe(0);
   });
 });
+
+describe("SessionTally — reprises après une pause", () => {
+  it("compte chaque reprise, son total et la plus longue, sans redoubler un second signal", () => {
+    const t = new SessionTally();
+    t.resumeStarted(1000);
+    t.resumeStarted(1100); // la même reprise, signalée deux fois
+    t.resumeEnded(1400);
+    t.resumeEnded(1500); // rien en cours : sans effet
+    t.resumeStarted(5000);
+    t.resumeEnded(5900);
+    expect(t.summary(6000)).toMatchObject({ resumes: 2, resumeWaitMs: 1300, longestResumeMs: 900 });
+  });
+});

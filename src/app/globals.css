@@ -1641,3 +1641,26 @@
   z-index: 0;
 }
 .nav-glass .player-tab { z-index: 1; }
+
+/* ─── La reprise après une pause ──────────────────────────────────────────────
+   Pas un chargement (04/10/2026) : le bouton lecture/pause reste là et touchable, un anneau tourne
+   autour de lui, et le fil du haut court en paysage. Les deux n'apparaissent qu'après 150 ms, pour
+   qu'une reprise immédiate ne fasse rien clignoter. Une rotation et une opacité : rien à peindre. */
+.player-resume-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 999px;
+  border: 2px solid rgb(255 255 255 / 0.18);
+  border-top-color: rgb(255 255 255 / 0.95);
+  pointer-events: none;
+  opacity: 0;
+  animation:
+    player-resume-in 160ms ease-out 150ms forwards,
+    player-resume-spin 0.85s linear infinite;
+}
+.player-wait-late { opacity: 0; animation: player-resume-in 160ms ease-out 150ms forwards; }
+@keyframes player-resume-in { to { opacity: 1; } }
+@keyframes player-resume-spin { to { rotate: 360deg; } }
+@media (prefers-reduced-motion: reduce) {
+  .player-resume-ring { animation: player-resume-in 160ms ease-out 150ms forwards; }
+}

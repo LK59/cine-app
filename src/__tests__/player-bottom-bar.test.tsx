@@ -24,6 +24,9 @@ vi.mock("@/components/player/playerNav", async (importOriginal) => {
   return { ...actual, openPanel: (...a: unknown[]) => mockOpenPanel(...a) };
 });
 
+const mockSearchFocus = vi.fn();
+vi.mock("@/lib/searchFocus", () => ({ requestSearchFocus: () => mockSearchFocus() }));
+
 import { PlayerBottomBar } from "@/components/player/PlayerBottomBar";
 
 beforeEach(() => {
@@ -119,5 +122,41 @@ describe("PlayerBottomBar", () => {
     scrolledAway = false;
     rerender(<PlayerBottomBar />);
     expect(screen.getByLabelText("player.nav.label").style.transition).toContain("visibility 0s linear 0ms");
+  });
+});
+
+// 04/10/2026 : partir de Recherche en faisant glisser la lentille ouvrait le clavier dès le contact,
+// et le clavier cassait le geste. Il ne monte plus qu'à un appui relâché sur Recherche.
+describe("le second appui sur Recherche", () => {
+  const onSearch = () => {
+    route = { ...route, search: true, ...({ activity: null, report: null } as object) };
+  };
+  const searchButton = () => screen.getByText("player.nav.search").closest("button")!;
+
+  it("ne lève pas le clavier au contact, mais au relâchement sur Recherche", () => {
+    onSearch();
+    render(<PlayerBottomBar />);
+    fireEvent.pointerDown(searchButton(), { button: 0, pointerType: "touch", pointerId: 7 });
+    expect(mockSearchFocus).not.toHaveBeenCalled();
+    expect(mockOpenPanel).not.toHaveBeenCalled();
+    fireEvent.pointerUp(searchButton(), { pointerId: 7 });
+    expect(mockSearchFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it("ne le lève pas si le geste a été repris (défilement, système)", () => {
+    onSearch();
+    render(<PlayerBottomBar />);
+    fireEvent.pointerDown(searchButton(), { button: 0, pointerType: "touch", pointerId: 8 });
+    fireEvent.pointerCancel(searchButton(), { pointerId: 8 });
+    fireEvent.pointerUp(searchButton(), { pointerId: 8 });
+    expect(mockSearchFocus).not.toHaveBeenCalled();
+  });
+
+  it("ouvre toujours Recherche au contact depuis un autre onglet, sans clavier", () => {
+    render(<PlayerBottomBar />);
+    fireEvent.pointerDown(searchButton(), { button: 0, pointerType: "touch", pointerId: 9 });
+    expect(mockOpenPanel).toHaveBeenCalledWith("search", route);
+    fireEvent.pointerUp(searchButton(), { pointerId: 9 });
+    expect(mockSearchFocus).not.toHaveBeenCalled();
   });
 });

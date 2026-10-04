@@ -1359,7 +1359,17 @@ flou n'avait rien à flouter pendant le fondu (la 8.2.4 avait retiré le flou po
 La barre du bas a une lentille : une pastille de verre sous l'onglet ouvert, qui glisse sur le
 ressort, se soulève sous le doigt et le suit ; la barre gonfle et s'étire moitié moins que le
 lecteur. La navigation y part toujours au contact ; un glisser qui finit sur un autre onglet
-l'ouvre au relâchement, en remplaçant l'entrée d'historique du premier.
+l'ouvre au relâchement, en remplaçant l'entrée d'historique du premier. Déjà sur Recherche, le second
+appui lève le clavier au relâchement seulement, s'il est resté sur Recherche sans glisser
+(`isOnPanel`, `playerNav.ts`) — au contact, il ouvrait le clavier au départ d'un glisser vers un
+autre onglet.
+
+**La reprise après une pause n'est pas un chargement** (même jour) : `PlayerControls` reçoit
+`resuming` à part de `loading`. Les boutons du centre restent et lecture/pause reste touchable ; un
+anneau tourne autour de lui et le fil du haut court en paysage, tous deux après 150 ms ; la
+minuterie qui cache les commandes attend la première image. Le délai de chaque reprise est mesuré
+dans le bilan `stop` (`resumes`, `resumeWaitMs`, `longestResumeMs`, `SessionTally`) avant de
+toucher au recalage du son fait à la pause (`PlaybackGuard`).
 
 **Porteur.** `src/lib/liquidGlass/liquid.ts` (`createLiquidPress`, `liquidTransform`, `pullFrom`,
 `swellFor`, `LIQUID_SPRING`) et `src/lib/liquidGlass/spring.ts` (le ressort simulé une fois et

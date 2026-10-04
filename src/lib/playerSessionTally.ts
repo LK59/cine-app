@@ -34,6 +34,14 @@ export interface TallySummary {
   backgrounds: number;
   backgroundMs: number;
   backgroundRebuilds: number;
+  /**
+   * Les reprises après une pause : combien, le temps total et le plus long entre « Lecture » et la
+   * première image affichée (04/10/2026). Ce délai n'était lu que dans le panneau technique ; il
+   * dit, appareil par appareil, ce que coûte le recalage du son fait à la pause.
+   */
+  resumes: number;
+  resumeWaitMs: number;
+  longestResumeMs: number;
 }
 
 export class SessionTally {
@@ -51,6 +59,26 @@ export class SessionTally {
   private lastHiddenMs = 0;
   /** Le dernier retour au premier plan — voir `backgroundFacts`. */
   private lastShownAt: number | null = null;
+  private resumes = 0;
+  private resumeWaitMs = 0;
+  private longestResumeMs = 0;
+  private resumingSince: number | null = null;
+
+  /** « Lecture » après une pause. Un second signal pendant la même reprise ne la redouble pas. */
+  resumeStarted(now: number): void {
+    if (this.resumingSince === null) this.resumingSince = now;
+  }
+
+  /** La première image est là — ou la reprise a été abandonnée (pause, saut) : elle s'arrête là. */
+  resumeEnded(now: number): void {
+    const since = this.resumingSince;
+    if (since === null) return;
+    this.resumingSince = null;
+    const ms = Math.max(0, now - since);
+    this.resumes += 1;
+    this.resumeWaitMs += ms;
+    this.longestResumeMs = Math.max(this.longestResumeMs, ms);
+  }
 
   /** Le film s'arrête de lui-même. Un second signal pendant la même attente ne la redouble pas. */
   waitStarted(now: number): void {
@@ -146,6 +174,9 @@ export class SessionTally {
       backgrounds: this.backgrounds + (this.hiddenSince !== null ? 1 : 0),
       backgroundMs: Math.round(this.backgroundMs + (this.hiddenSince !== null ? now - this.hiddenSince : 0)),
       backgroundRebuilds: this.backgroundRebuilds,
+      resumes: this.resumes,
+      resumeWaitMs: Math.round(this.resumeWaitMs),
+      longestResumeMs: Math.round(this.longestResumeMs),
     };
   }
 

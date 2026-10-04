@@ -92,6 +92,14 @@ interface PlayerControlsProps {
   subtitleOffset?: { seconds: number; onShift: (deltaSeconds: number) => void };
   hidden: boolean;
   loading: boolean;
+  /**
+   * La lecture reprend après une pause et la première image n'est pas encore là (lecteur natif).
+   * Ce n'est pas un chargement : les commandes restent, lecture/pause passe aussitôt sur pause et
+   * reste touchable — remettre en pause tout de suite marche —, un anneau tourne autour du
+   * bouton, et le fil du haut court en paysage (04/10/2026). Avant, la reprise empruntait le
+   * chargement : les boutons du centre disparaissaient sous une roue.
+   */
+  resuming?: boolean;
   introSkip: { start: number; end: number } | null;
   creditsStart: number | null;
   nextEpisode: { itemId: string; title: string } | null;
@@ -237,6 +245,7 @@ export function PlayerControls({
   subtitleOffset: hostSubtitleOffset,
   hidden,
   loading,
+  resuming = false,
   introSkip,
   creditsStart,
   nextEpisode,
@@ -838,6 +847,11 @@ export function PlayerControls({
    * Tant qu'un menu est ouvert, rien ne se cache ; sa fermeture relance le décompte normal.
    */
   const menuOpenRef = useRef(false);
+  // Lu par la minuterie de masquage : pendant une reprise, elle attend la première image.
+  const resumingRef = useRef(resuming);
+  useEffect(() => {
+    resumingRef.current = resuming;
+  }, [resuming]);
   const showControls = useCallback(
     (delayMs: number = 3000) => {
       // Un geste vaut présence, et c'est ici qu'ils passent tous — un clic, une touche, un
@@ -847,10 +861,17 @@ export function PlayerControls({
       setVisible(true);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       if (playingRef.current && !menuOpenRef.current) {
-        hideTimer.current = setTimeout(() => {
+        const hide = () => {
+          // Pas pendant une reprise : la minuterie compte depuis la première image, pas depuis
+          // l'appui — les commandes ne partent pas pendant que le film n'a pas encore repris.
+          if (resumingRef.current) {
+            hideTimer.current = setTimeout(hide, delayMs);
+            return;
+          }
           setVisible(false);
           setMenu(null);
-        }, delayMs);
+        };
+        hideTimer.current = setTimeout(hide, delayMs);
       }
     },
     []
@@ -1308,14 +1329,23 @@ export function PlayerControls({
           pas le centre de l'image pendant qu'on regarde un film. Au-dessus de tout, y compris
           des contrôles cachés, pour la même raison qu'avant : une remise en tampon pendant que
           les contrôles ont disparu ne doit pas ressembler à un gel silencieux. */}
-      {(loading || buffering) && (
+      {/* Une reprise n'a que le fil (en paysage, voir globals.css) et l'anneau du bouton lecture :
+          ni roue au centre, ni boutons retirés. Le fil d'une reprise n'apparaît qu'après un
+          instant (`player-wait-late`), pour qu'une reprise immédiate ne fasse rien clignoter. */}
+      {(loading || buffering || resuming) && (
         <>
-          <div className="player-wait-thread pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden bg-white/10">
+          <div
+            className={`player-wait-thread pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden bg-white/10 ${
+              resuming && !loading && !buffering ? "player-wait-late" : ""
+            }`}
+          >
             <div className="player-loading-line h-full w-full bg-accent-500" />
           </div>
-          <div className="player-wait-wheel pointer-events-none absolute inset-0 z-20 items-center justify-center">
-            <Loader2 size={40} className="animate-spin text-white/80" />
-          </div>
+          {(loading || buffering) && !resuming && (
+            <div className="player-wait-wheel pointer-events-none absolute inset-0 z-20 items-center justify-center">
+              <Loader2 size={40} className="animate-spin text-white/80" />
+            </div>
+          )}
         </>
       )}
 
@@ -1891,7 +1921,7 @@ export function PlayerControls({
             double-tap-the-screen-edge gesture (too easy to trigger by accident, and would
             conflict with the tap-to-toggle-controls handler covering the same area). Hidden
             while a spinner is already showing. */}
-        {!loading && !buffering && (
+        {(resuming || (!loading && !buffering)) && (
           <div data-player-navgroup="center" className={`${visible ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-9 sm:gap-12 max-[379px]:gap-6`}>
             <button
               data-player-nav="skip-back"
@@ -1918,6 +1948,8 @@ export function PlayerControls({
               className="player-fade player-pill player-pill-light player-center-btn"
             >
               {playing ? <Pause size={30} fill="currentColor" strokeWidth={0} /> : <Play size={30} fill="currentColor" strokeWidth={0} className="translate-x-[2px]" />}
+              {/* La reprise en cours : un anneau qui tourne autour du bouton, qui reste touchable. */}
+              {resuming && <span className="player-resume-ring" aria-hidden data-player-resuming="" />}
             </button>
             <button
               data-player-nav="skip-fwd"

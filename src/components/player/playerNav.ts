@@ -51,6 +51,28 @@ export function activePanel(route: CinemaRoute): PlayerPanel {
  * dans l'historique.
  */
 /**
+ * Sur ce panneau, et rien par-dessus — la seule définition, pour `openPanel` et pour le second
+ * appui sur Recherche de la barre du bas (qui lève alors le clavier, au relâchement).
+ */
+export function isOnPanel(panel: PlayerPanel, current: CinemaRoute): boolean {
+  // Sur le panneau demandé, et rien par-dessus : il n'y a rien à faire, et empiler une entrée
+  // d'historique pour un clic sans effet ferait qu'un retour ne semblerait rien faire non plus.
+  //
+  // Mais si une fiche le recouvre, le même clic doit la refermer et redescendre sur le panneau —
+  // c'est ce qu'on attend d'un rail : y retourner. Sans cette nuance, le clic ne faisait rien.
+  const covered =
+    current.film !== null ||
+    current.serie !== null ||
+    current.discover !== null ||
+    current.person !== null ||
+    current.browse !== null ||
+    // L'activité remplace le panneau Compte : y retourner depuis le rail doit la refermer.
+    current.activity !== null ||
+    current.report !== null;
+  return activePanel(current) === panel && !covered;
+}
+
+/**
  * `mode` : `replace` pour le glisser de la lentille de la barre du bas, qui finit sur un autre onglet
  * que celui où il a commencé — l'appui avait déjà ouvert le premier, et un seul retour doit suffire.
  */
@@ -80,21 +102,7 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute, mode: "push"
     cinemaNavigate(closed, alreadyHome || mode === "replace" ? "replace" : "push");
     return;
   }
-  // Sur le panneau demandé, et rien par-dessus : il n'y a rien à faire, et empiler une entrée
-  // d'historique pour un clic sans effet ferait qu'un retour ne semblerait rien faire non plus.
-  //
-  // Mais si une fiche le recouvre, le même clic doit la refermer et redescendre sur le panneau —
-  // c'est ce qu'on attend d'un rail : y retourner. Sans cette nuance, le clic ne faisait rien.
-  const covered =
-    current.film !== null ||
-    current.serie !== null ||
-    current.discover !== null ||
-    current.person !== null ||
-    current.browse !== null ||
-    // L'activité remplace le panneau Compte : y retourner depuis le rail doit la refermer.
-    current.activity !== null ||
-    current.report !== null;
-  if (activePanel(current) === panel && !covered) {
+  if (isOnPanel(panel, current)) {
     // Déjà là, et rien par-dessus : il n'y a pas d'écran à changer. Mais sur la recherche, ce
     // second appui a un sens — c'est l'intention de taper, celle qu'on refuse au premier pour ne
     // pas lever un clavier que personne n'a demandé. Voir `searchFocus`.

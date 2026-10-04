@@ -385,6 +385,11 @@ export function ExperimentalPlayerHost({
   const takeoverNowRef = useRef<() => StableTakeover | undefined>(() => undefined);
 
   const [ready, setReady] = useState(false);
+  // Lu par la mesure des reprises, dans un rappel de la source posé une fois.
+  const readyRef = useRef(false);
+  useEffect(() => {
+    readyRef.current = ready;
+  }, [ready]);
   /**
    * Prêt au moins une fois : la séance Jellyfin commence là, et ne finit qu'avec le lecteur.
    *
@@ -1964,7 +1969,16 @@ export function ExperimentalPlayerHost({
         fallToStable(message);
       },
       onWarning: showPipelineWarning,
-      onStarting: (at) => setStartingAt(at),
+      onStarting: (at) => {
+        setStartingAt(at);
+        // Seules les reprises comptent : la toute première lecture est l'ouverture, que la ligne
+        // `start` mesure déjà (`openedInMs`).
+        if (at !== null) {
+          if (readyRef.current) tally.resumeStarted(at);
+        } else {
+          tally.resumeEnded(Date.now());
+        }
+      },
       // Une horloge qui ne bouge plus alors que l'élément dit jouer : écrit tel quel, une fois par
       // blocage. Rien à décider ici — les reprises sont déjà en cours dans la source.
       onStall: (facts) => reportPlayback("stall", { ...describeFileRef.current(), path: "remux", ...facts, ...tally.backgroundFacts(Date.now()) }),
@@ -2651,9 +2665,12 @@ export function ExperimentalPlayerHost({
             }}
             onTogglePlaybackInfo={() => setShowInfo((open) => !open)}
             hidden={false}
-            // The controls already answer this by swapping the button for a spinner, so restarting
-            // after a pause borrows the same treatment rather than growing a second indicator.
-            loading={!ready || resumeSpinner}
+            // L'ouverture seule est un chargement. Une reprise après une pause n'en est plus un
+            // (04/10/2026) : les commandes restent, lecture/pause passe aussitôt sur pause et reste
+            // touchable, et la reprise se dit par un anneau autour du bouton et le fil du haut —
+            // voir `resuming` dans PlayerControls.
+            loading={!ready}
+            resuming={ready && startingAt !== null}
             // Jellyfin's own analysis of the episode, fetched alongside the file's description.
             // Playback speed needs nothing here: on the native path these controls hold a real
             // media element, so it is the browser's own.
