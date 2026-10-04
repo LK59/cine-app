@@ -1010,25 +1010,6 @@
   .player-spring { transition: none; }
 }
 
-.player-glass {
-  background: rgb(0 0 0 / 0.48);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
-  transition: background-color 150ms ease-out, transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-/* Le survol seulement là où il existe vraiment. WebKit garde l'état de survol après un tap,
-   jusqu'à ce qu'on touche ailleurs — donc sur un téléphone, tout ce qui est écrit ici reste
-   allumé bien après que le doigt soit parti. Tailwind enveloppe déjà ses propres variantes
-   `hover:` de cette façon ; ces règles-ci sont écrites à la main et ne l'étaient pas. */
-@media (hover: hover) {
-  .player-glass:hover { background: rgb(0 0 0 / 0.62); }
-}
-/* Le retour au doigt : la surface s'enfonce, elle ne clignote pas.
-   Les deux variantes portent leur rotation ici plutôt que par une classe utilitaire : les deux
-   écriraient `transform`, celle-ci gagnerait, et le geste de ±10 s aurait disparu en silence. */
-.player-glass:active { transform: scale(0.94); }
-.player-glass-back:active { transform: scale(0.94) rotate(-14deg); }
-.player-glass-fwd:active { transform: scale(0.94) rotate(14deg); }
-.player-glass-on { background: rgb(255 255 255 / 0.22); }
 
 /* Le curseur du volume, replié au bureau et déplié sous le pointeur ou au clavier (`:focus-within` :
    la touche Tab ou les flèches qui l'atteignent l'ouvrent aussi). Seulement là où un pointeur fin
@@ -1048,80 +1029,10 @@
   }
 }
 
-/* Les onglets du bas : appui instantané, retour élastique.
- *
- * Deux courbes et non une, parce que le geste n'est pas symétrique. L'enfoncement doit être
- * *immédiat* — il accuse réception du doigt, et 90 ms le rendent solidaire du contact. Le retour,
- * lui, a le droit de dépasser un peu avant de se poser : c'est ce léger rebond qui fait la
- * différence entre un bouton qui bouge et un bouton qui répond. Une seule transition partagée
- * donnerait soit un appui mou, soit un retour sec.
- *
- * L'icône résiste pendant que la surface s'enfonce. Le décalage entre les deux échelles se lit
- * comme une matière qui s'écrase, plutôt que comme une image qu'on réduit.
- *
- * Plus profond que les 0,96 d'ailleurs, à dessein : c'est la cible qu'on touche le plus souvent de
- * toute l'application, et c'est la seule dont le geste mérite d'être remarqué. */
+/* Les onglets du bas : la couleur seule. Leur geste — creux, icône qui résiste, lueur — a laissé
+   la place à la lentille de verre de la barre (DECISIONS.md §45). */
 .player-tab {
-  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), color 150ms ease-out;
-}
-.player-tab svg {
-  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-/* Jouée jusqu'au bout, et non tenue tant que le doigt est là.
- *
- * `:active` ne dure que le contact. Un tap franc, c'est quarante millisecondes : l'échelle n'avait
- * pas atteint son creux que le retour commençait déjà, et on ne voyait rien. Il fallait appuyer
- * *longtemps* pour voir le geste — exactement l'inverse de ce qu'on veut d'une barre d'onglets.
- *
- * Déclenchée au contact et laissée se dérouler, l'animation dit la même chose quelle que soit la
- * durée de l'appui. Le creux est atteint à 38 % — assez tôt pour paraître solidaire du doigt — et
- * le reste est la remontée. */
-@keyframes tab-press {
-  0% { transform: scale(1); }
-  38% { transform: scale(0.82); }
-  100% { transform: scale(1); }
-}
-@keyframes tab-press-icon {
-  0% { transform: scale(1); }
-  38% { transform: scale(1.14); }
-  100% { transform: scale(1); }
-}
-/* Moitié moins marquée qu'à l'origine : elle compensait un creux qu'on ne voyait pas, et ce
-   problème est réglé depuis que le geste se joue jusqu'au bout. Deux signaux pleins pour un seul
-   appui, c'est un de trop — le creux mène, la lueur accompagne. */
-@keyframes tab-press-glow {
-  0% { background-color: rgb(255 255 255 / 0); }
-  30% { background-color: rgb(255 255 255 / 0.09); }
-  100% { background-color: rgb(255 255 255 / 0); }
-}
-.player-tab[data-pressed] {
-  animation: tab-press 380ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.player-tab[data-pressed] svg {
-  animation: tab-press-icon 380ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.player-tab[data-pressed]::before {
-  animation: tab-press-glow 380ms ease-out;
-}
-/* Un second signal, parce qu'un seul ne suffisait pas.
- *
- * Le creux était jugé trop discret — sur une cible de soixante pixels, quelques pour cent
- * d'échelle passent inaperçus dans un mouvement de pouce. Une pastille qui s'allume sous le doigt
- * se voit, elle, sans qu'on la cherche : c'est ce que font les barres natives, et ça donne au
- * geste une surface plutôt qu'un point.
- *
- * Elle s'éteint plus lentement qu'elle ne s'allume, pour la même raison que le creux : ce qui
- * accuse réception doit être instantané, ce qui retombe a le droit de prendre son temps. */
-.player-tab::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  background-color: rgb(255 255 255 / 0);
-  pointer-events: none;
-}
-@media (hover: hover) {
-  .player-glass-on:hover { background: rgb(255 255 255 / 0.3); }
+  transition: color 150ms ease-out;
 }
 
 /* La pile des messages (`Toast.tsx`).
@@ -1538,9 +1449,7 @@
 /* Le geste liquide (`createLiquidPress`) écrit `transform` lui-même : plus d'enfoncement par
    `:active`, qui se serait battu avec lui. Le bouton visé s'allume (`data-lit`). */
 .player-liquid .player-pill-btn:active,
-.player-liquid .player-center-btn:active,
-.player-liquid .player-glass-back:active,
-.player-liquid .player-glass-fwd:active { transform: none; }
+.player-liquid .player-center-btn:active { transform: none; }
 .player-liquid .player-pill-btn:active { background: transparent; }
 .player-liquid .player-pill-btn[data-lit] { background: var(--pill-press); }
 .player-liquid .player-center-btn[data-lit],

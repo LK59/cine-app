@@ -172,6 +172,10 @@ export function createLiquidPress(options: LiquidPressOptions) {
     still: boolean;
     /** La surface au repos, mesurée une fois à l'appui : aucune lecture de mise en page par mouvement. */
     rest: DOMRect;
+    /** Le tirage précédent et son instant : la vitesse du doigt au relâchement. */
+    prevR: number;
+    prevT: number;
+    lastT: number;
   };
   let session: Session | null = null;
   let pending: { target: HTMLElement | null; surface: HTMLElement; keep: boolean; timer: number } | null = null;
@@ -253,6 +257,9 @@ export function createLiquidPress(options: LiquidPressOptions) {
     // ferait courir le verre après lui-même.
     const dx = e.clientX - (s.rest.left + s.rest.width / 2);
     const dy = e.clientY - (s.rest.top + s.rest.height / 2);
+    s.prevR = s.pull.r;
+    s.prevT = s.lastT;
+    s.lastT = e.timeStamp;
     s.pull = pullOf(dx, dy, s.w, s.h);
     cancelOwn(s.surface);
     s.surface.style.transform = liquidTransform(s.pull.r, s.pull.angle, s.swell, s.w, s.h, strength);
@@ -270,13 +277,25 @@ export function createLiquidPress(options: LiquidPressOptions) {
       const { r, angle } = s.pull;
       const { swell, w, h, surface } = s;
       surface.style.transform = "";
+      // Le retour part avec l'élan du doigt : un verre lâché en plein mouvement ne repart pas de
+      // l'arrêt. En unités du ressort (1 = tout le tirage), borné pour qu'un saut de mesure ne le
+      // projette pas.
+      const dt = (s.lastT - s.prevT) / 1000;
+      const velocity = r > 1 && dt > 0 && dt < 0.1 ? Math.max(-12, Math.min(12, (r - s.prevR) / dt / r)) : 0;
       // Le retour : le ressort ramène le décalage *et* le gonflement ; ses dépassements passent de
       // l'autre côté, ce qui fait le rebond.
       const back = springKeyframes(1, 0, spring(), ({ x }) => ({
         transform: liquidTransform(r * Math.max(x, -0.5), angle, 1 + (swell - 1) * x, w, h, strength),
-      }));
+      }), velocity);
       cancelOwn(surface);
-      play(surface, back.keyframes, { duration: back.duration * slow(), easing: "linear" });
+      const anim = play(surface, back.keyframes, { duration: back.duration * slow(), easing: "linear" });
+      // Le calque du geste rendu une fois le verre posé — sauf si un autre appui l'a repris.
+      const release = () => {
+        if (session?.surface !== surface) surface.style.willChange = "";
+      };
+      // `finished` manque à certaines implémentations anciennes : l'habillage ne doit jamais lever.
+      if (anim?.finished) anim.finished.then(release, release);
+      else release();
     }
     if (s.chosen) light(s.chosen, false, s.last.x, s.last.y);
     if (!redirect && !cancelled && options.pull === "outside" && s.pull.r > 0) swallowNextClick(s.surface);
@@ -331,9 +350,16 @@ export function createLiquidPress(options: LiquidPressOptions) {
       // « Réduire les animations » : ni gonflement ni étirement — l'allumage et le clic restent.
       still: prefersReducedMotion(),
       rest,
+      prevR: 0,
+      prevT: e.timeStamp,
+      lastT: e.timeStamp,
     };
     session = s;
     if (!s.still) {
+      // Un calque à lui le temps du geste : sans, chaque mouvement du doigt repeignait la pilule et
+      // refaisait son flou. Promu ici seulement — permanent, il garderait de la mémoire graphique
+      // pour chaque pilule du lecteur pendant tout le film.
+      surface.style.willChange = "transform";
       surface.style.transform = liquidTransform(0, 0, s.swell, w, h, strength);
       play(surface, [{ transform: from }, { transform: surface.style.transform }], {
         duration: pressMs * slow(),
@@ -353,6 +379,7 @@ export function createLiquidPress(options: LiquidPressOptions) {
       end(true);
       cancelOwn(s.surface);
       s.surface.style.transform = "";
+      s.surface.style.willChange = "";
     }
     clearPending();
   }

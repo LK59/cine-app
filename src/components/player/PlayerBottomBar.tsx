@@ -173,6 +173,10 @@ export function PlayerBottomBar() {
         // Lu avant que le bouton ne navigue (cet écouteur passe avant celui de React).
         navigatedOnDown: panel !== null && panel !== activePanel(routeRef.current),
       };
+      // Des calques à eux le temps du geste seulement : la barre floutée et la lentille bougent à
+      // chaque mouvement du doigt, et sans calque chaque image repeignait la barre et son flou.
+      bar.style.willChange = "transform";
+      el.style.willChange = "transform";
       const l = lens.current;
       l.held = true;
       const x = tab ? tab.offsetLeft : l.x;
@@ -217,7 +221,14 @@ export function PlayerBottomBar() {
       bar.style.transform = "";
       const back = springKeyframes(1, 0, LIQUID_SPRING, ({ x }) => ({ transform: liquidTransform(r * Math.max(x, -0.5), angle, 1 + (BAR_SWELL - 1) * x, d.w, d.h, BAR_STRENGTH) }));
       bar.getAnimations().forEach((a) => a.cancel());
-      bar.animate(back.keyframes, { duration: back.duration, easing: "linear" });
+      const settled = bar.animate(back.keyframes, { duration: back.duration, easing: "linear" });
+      const release = () => {
+        if (drag) return;
+        bar.style.willChange = "";
+        el.style.willChange = "";
+      };
+      if (settled?.finished) settled.finished.then(release, release);
+      else release();
       // La lentille se pose : sur l'onglet le plus proche après un glisser, sinon sur l'onglet ouvert.
       const l = lens.current;
       const all = tabs();
