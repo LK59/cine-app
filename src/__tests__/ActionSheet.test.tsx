@@ -98,7 +98,7 @@ describe("ActionSheet", () => {
     vi.useFakeTimers();
     const onClose = vi.fn();
     const { rerender } = render(<ActionSheet open onClose={onClose} actions={actions()} />);
-    const sheet = document.querySelector<HTMLElement>(".glass-panel")!;
+    const sheet = document.querySelector<HTMLElement>('[role="dialog"]')!;
     const handle = sheet.firstElementChild as HTMLElement;
     const pointer = (type: string, clientY: number) =>
       act(() => void handle.dispatchEvent(new MouseEvent(type, { bubbles: true, clientY })));
@@ -111,6 +111,6 @@ describe("ActionSheet", () => {
     rerender(<ActionSheet open={false} onClose={onClose} actions={actions()} />);
     act(() => void vi.advanceTimersByTime(100));
     rerender(<ActionSheet open onClose={onClose} actions={actions()} />);
-    expect(document.querySelector<HTMLElement>(".glass-panel")!.style.transform).toBe("");
+    expect(document.querySelector<HTMLElement>('[role="dialog"]')!.style.transform).toBe("");
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { departmentLabel } from "@/lib/personDepartment";
+import { liquidButtonRef } from "@/lib/liquidGlass/liquid";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
@@ -157,7 +158,8 @@ function PhotoViewer({
           </button>
         </>
       )}
-      <button type="button" onClick={onClose} className="btn-overlay absolute right-3 top-3">
+      {/* La croix en verre liquide, comme celle des fiches de titre (DECISIONS.md §45). */}
+      <button type="button" onClick={onClose} ref={liquidButtonRef} data-liquid className="nav-glass absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full text-white">
         <X size={20} />
       </button>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -530,7 +532,10 @@ export function PlayerPersonSheet({
           type="button"
           onClick={requestClose}
           aria-label={t("common.close")}
-          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white float-edge transition hover:bg-black/70 active:scale-95"
+          // La croix en verre liquide, comme celle des fiches de titre (DECISIONS.md §45).
+          ref={liquidButtonRef}
+          data-liquid
+          className="nav-glass absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full text-white"
         >
           <X size={18} />
         </button>

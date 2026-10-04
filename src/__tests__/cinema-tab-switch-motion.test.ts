@@ -52,6 +52,8 @@ describe("du squelette au contenu, sur téléphone", () => {
   it("le contenu d'une rangée et la bannière fondent à leur arrivée", () => {
     const rows = lire("src/components/cinema/mobile/CinemaMobileClient.tsx");
     expect(rows).toMatch(/className="scrollbar-thin flex animate-fade-in gap-3 overflow-x-auto/);
-    expect(lire("src/components/cinema/mobile/CinemaMobileHero.tsx")).toContain('<section className="animate-fade-in px-4 pt-2">');
+    // D'autres attributs peuvent s'y ajouter (la référence du geste liquide, 04/10/2026) : c'est le
+    // fondu qu'on vérifie.
+    expect(lire("src/components/cinema/mobile/CinemaMobileHero.tsx")).toMatch(/<section[^>]*className="animate-fade-in px-4 pt-2"[^>]*>/);
   });
 });

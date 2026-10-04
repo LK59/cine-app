@@ -5,6 +5,7 @@ import { memo, startTransition, useCallback, useDeferredValue, useEffect, useMem
 import { createPortal } from "react-dom";
 import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
 import { TapButton } from "@/components/TapButton";
+import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import { Clapperboard, Info, Play, Plus, Search, X } from "lucide-react";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/lib/useLongPress";
@@ -273,6 +274,9 @@ export function CinemaMobileClient() {
   // (`useDecodeRowsAhead`).
   const rowsScrollRef = useRef<HTMLDivElement>(null);
   useDecodeRowsAhead(rowsScrollRef);
+  // La barre du haut : la loupe prend le verre et le geste liquide, à côté de la bascule.
+  const headerRef = useRef<HTMLElement>(null);
+  useLiquidDelegation(headerRef);
   // Chaque onglet garde sa hauteur : les deux volets gardés partagent ce conteneur — voir
   // `useTabScrollMemory`.
   useTabScrollMemory(rowsScrollRef, shownTab);
@@ -494,6 +498,7 @@ export function CinemaMobileClient() {
           content scrolls under is one of the most reliable ways to make scrolling stutter on
           iOS, and a solid bar reads the same here. */}
       <header
+        ref={headerRef}
         className={`relative grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 bg-ink px-4 ${short ? "pb-2" : "pb-3"}`}
         // Couché, l'écran fait ~390 px de haut : la barre en prenait un sixième avant la
         // première affiche.
@@ -528,7 +533,9 @@ export function CinemaMobileClient() {
           type="button"
           onClick={() => setSearchOpen(true)}
           aria-label={t("cinema.search")}
-          className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full player-bar text-white active:scale-95"
+          // Le verre et le geste de la bascule voisine (DECISIONS.md §45).
+          data-liquid
+          className="nav-glass ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
         >
           <Search size={18} />
         </button>

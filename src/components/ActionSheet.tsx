@@ -158,7 +158,14 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`glass-panel relative w-full max-w-lg mx-auto rounded-t-2xl border-x-0 border-b-0 shadow-glow transition-transform duration-300 ease-out ${show ? "translate-y-0" : "translate-y-full"}`}
+        // Le verre liquide (DECISIONS.md §45), et une carte qui flotte au lieu d'une bande collée au
+        // bas : arrondie de partout, à 8 px des bords. Elle arrive avec un léger rebond — le
+        // dépassement de la courbe la fait monter un peu au-delà de sa place, puis s'y poser — et
+        // repart sans (04/10/2026). Le glisser pour fermer ne change pas.
+        style={{ marginBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)" }}
+        className={`nav-glass relative mx-2 w-[calc(100%-1rem)] max-w-lg overflow-hidden rounded-[28px] transition-transform sm:mx-auto ${
+          show ? "translate-y-0 duration-[480ms] ease-[cubic-bezier(0.34,1.32,0.64,1)]" : "translate-y-[110%] duration-300 ease-in"
+        }`}
       >
         {/* Drag handle — main swipe target */}
         <div
@@ -225,7 +232,9 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
           ))}
         </div>
 
-        <div style={{ height: "max(env(safe-area-inset-bottom), 12px)" }} />
+        {/* La carte flotte déjà au-dessus de l'indicateur d'accueil (sa marge du bas) : il ne reste
+            qu'un souffle sous la dernière ligne. */}
+        <div style={{ height: 6 }} />
       </div>
     </div>,
     document.body

@@ -30,7 +30,7 @@ import { CinemaSimilarRow, useCinemaSimilar } from "@/components/cinema/CinemaSi
 import { CinemaMovieCollectionRow } from "@/components/cinema/CinemaCollectionRow";
 import { CinemaCastRow, type CinemaCastMember } from "@/components/cinema/CinemaCastRow";
 import { useT } from "@/components/TranslationProvider";
-import { createLiquidPress } from "@/lib/liquidGlass/liquid";
+import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -142,30 +142,10 @@ export function CinemaMobileDetail({
    * navigateur (`touch-action: pan-y`), qui le reprend dès que le doigt part à la verticale — le
    * verre revient alors sur le ressort. Plus doux sur les grands boutons, à peine un rebond sur les
    * petits. Le clic natif n'est jamais remplacé (voir `createLiquidPress`) : « Lire » garde le geste
-   * utilisateur dont la lecture a besoin.
+   * utilisateur dont la lecture a besoin. Branché par `useLiquidDelegation`, commun aux écrans.
    */
   const sheetRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const sheet = sheetRef.current;
-    if (!sheet) return;
-    const targets = "[data-liquid], [data-liquid-pan]";
-    const close = createLiquidPress({ targets });
-    const wide = createLiquidPress({ targets, strength: 0.6 });
-    const icon = createLiquidPress({ targets, strength: 0.5, swell: (w, h) => Math.min(1.08, 1 + 6 / Math.max(w, h, 1)) });
-    const onDown = (e: PointerEvent) => {
-      const surface = (e.target as Element | null)?.closest?.<HTMLElement>("[data-liquid], [data-liquid-pan]");
-      if (!surface || !sheet.contains(surface) || surface.matches(":disabled")) return;
-      const kind = surface.getAttribute("data-liquid-pan");
-      (kind === "icon" ? icon : kind === "wide" ? wide : close).down(e, surface);
-    };
-    sheet.addEventListener("pointerdown", onDown);
-    return () => {
-      sheet.removeEventListener("pointerdown", onDown);
-      close.dispose();
-      wide.dispose();
-      icon.dispose();
-    };
-  }, []);
+  useLiquidDelegation(sheetRef);
   // Une fiche du dessous ne se ferme pas : elle attend qu'on la découvre.
   const inert = underneath;
 

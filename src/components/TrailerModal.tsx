@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { liquidButtonRef } from "@/lib/liquidGlass/liquid";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useDelayedClose } from "@/lib/useDelayedClose";
@@ -36,9 +37,12 @@ export function TrailerModal({ youtubeKey, title, onClose }: {
       >
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-medium text-white truncate pr-4">{title}</p>
+          {/* La croix en verre liquide, comme celle des fiches (DECISIONS.md §45). */}
           <button
             onClick={requestClose}
-            className="btn btn-ghost btn-icon shrink-0 p-1.5"
+            ref={liquidButtonRef}
+            data-liquid
+            className="nav-glass flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
           >
             <X size={16} />
           </button>

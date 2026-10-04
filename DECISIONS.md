@@ -1388,7 +1388,13 @@ joué par `element.animate()`). La matière : les variables `--glass-*` et `.pla
 (le mini-lecteur, même verre et même geste depuis le 04/10), `CinemaMobileDetail` (la fiche du
 téléphone : croix en verre avec le geste complet ; Lire, Reprendre au début, Bande-annonce, À voir
 et Vu avec un geste qui laisse le défilement vertical au navigateur, `data-liquid-pan` — le bureau
-attend), la lentille `useLiquidLens`
+attend), et depuis la 8.8.0 la bannière d'accueil du téléphone (Lire, Plus d'infos en verre —
+geste « appui » qui rend la main au carrousel et au défilement dès que le doigt bouge), la loupe
+de la barre du haut, les croix des fiches personne et découverte, de la visionneuse de photos et
+de la bande-annonce, l'écran de fin du lecteur (Revoir en verre, Terminé, la carte de saga) et le
+menu de l'appui long (`ActionSheet`, carte de verre qui flotte, arrivée avec un léger rebond). Deux
+façons de brancher le geste : `useLiquidDelegation(racine)` (`data-liquid`, `data-liquid-pan` =
+`wide` | `icon` | `press`) et `liquidButtonRef` pour un bouton seul, la lentille `useLiquidLens`
 (`src/lib/liquidGlass/useLiquidLens.ts`, axe horizontal ou vertical) dans `PlayerBottomBar`,
 `PlayerRail` (rail du bureau) et `CinemaModeToggle` (bascule Films/Séries, bureau et téléphone —
 une seule pièce, lentille translucide : blanche pleine, un glisser lent montrait des libellés

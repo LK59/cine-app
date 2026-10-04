@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { liquidButtonRef } from "@/lib/liquidGlass/liquid";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, X } from "lucide-react";
@@ -200,7 +201,10 @@ export function PlayerDiscoverSheet({
           {...NOT_THE_HANDLE}
           onClick={requestClose}
           aria-label={t("cinema.back")}
-          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-inset ring-white/12 active:scale-95"
+          // La croix en verre liquide, comme celle des fiches de titre (DECISIONS.md §45).
+          ref={liquidButtonRef}
+          data-liquid
+          className="nav-glass absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-white"
         >
           <X size={18} />
         </button>

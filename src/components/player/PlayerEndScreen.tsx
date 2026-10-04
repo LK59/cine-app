@@ -12,6 +12,7 @@ import { useCinemaCollection, type ResolvedPart } from "@/components/cinema/Cine
 import { collectionSuite } from "@/lib/collectionSuite";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { resumeAtFor } from "@/lib/resumePosition";
+import { liquidButtonRef } from "@/lib/liquidGlass/liquid";
 import type { CinemaMovie, CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 
 /**
@@ -66,11 +67,12 @@ export function PlayerEndScreen({
         <h2 className="mt-1 truncate font-display text-2xl font-semibold text-white sm:text-3xl">{title}</h2>
 
         <div className="mt-5 flex flex-wrap gap-2.5">
-          <button type="button" onClick={onReplay} className="btn btn-ghost">
+          {/* Posés sur la vidéo, comme les commandes du lecteur : leur verre et leur geste (§45). */}
+          <button type="button" onClick={onReplay} ref={liquidButtonRef} data-liquid className="btn nav-glass rounded-full text-white">
             <RotateCcw size={16} />
             {t("player.end.replay")}
           </button>
-          <button type="button" onClick={onClose} className="btn-primary">
+          <button type="button" onClick={onClose} ref={liquidButtonRef} data-liquid className="btn-primary rounded-full">
             <X size={16} />
             {t("player.end.done")}
           </button>
@@ -130,12 +132,14 @@ function CollectionSuiteCard(props: SuiteProps) {
   const { movie } = suite;
   const resumeAt = resumeAtFor({ known: true, resumeTicks: props.resumeTicks[movie.jellyfinItemId] });
   return (
-    <div data-collection-suite className="player-panel mt-6 w-72 max-w-full animate-fade-in-scale rounded-2xl p-4">
+    <div data-collection-suite className="nav-glass glass-pop mt-6 w-72 max-w-full rounded-[22px] p-4">
       <p className="mb-1 text-xs text-subtle">{t("player.end.suite")}</p>
       <p className="mb-3 truncate text-sm font-medium text-white">{movie.title}</p>
       <button
         type="button"
         onClick={() => props.onPlay(movie, resumeAt ?? 0)}
+        ref={liquidButtonRef}
+        data-liquid
         className="btn-primary w-full justify-center py-1.5 text-xs"
       >
         <Play size={14} />

@@ -10,6 +10,7 @@ import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
+import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 
@@ -137,6 +138,12 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
     onDragStateChange: setDragging,
   });
 
+  // Le geste liquide des deux boutons (DECISIONS.md §45) : posés dans un carrousel qu'on fait glisser
+  // et une page qui défile, ils gonflent et rebondissent à l'appui, et rendent la main dès que le
+  // doigt bouge (`data-liquid-pan="press"`).
+  const sectionRef = useRef<HTMLElement>(null);
+  useLiquidDelegation(sectionRef);
+
   if (items.length === 0) return null;
 
   const actions = (item: Item) => {
@@ -146,7 +153,8 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
       <button
         type="button"
         onClick={() => onPlay(item)}
-        className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-ink transition-transform active:scale-95"
+        data-liquid-pan="press"
+        className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-ink"
       >
         <Play size={16} fill="currentColor" />
         {/* La même formule que les fiches et les rangées : « Reprendre — 40 min restantes ». Un
@@ -158,7 +166,9 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
       <button
         type="button"
         onClick={() => onOpen(item)}
-        className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-white/15 px-3 py-2.5 text-sm font-medium text-white transition-transform active:scale-95"
+        data-liquid-pan="press"
+        // Le verre liquide : posé sur l'affiche, il a quelque chose à flouter.
+        className="nav-glass flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-white"
       >
         <Info size={16} />
         {t("cinema.moreInfo")}
@@ -169,7 +179,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
 
   return (
     // Fond en remplaçant son squelette, au lieu de surgir (23/09/2026) — au montage seulement.
-    <section className="animate-fade-in px-4 pt-2">
+    <section ref={sectionRef} className="animate-fade-in px-4 pt-2">
       {/* Une piste, et non une affiche remplacée : toutes les affiches sont côte à côte et la
           piste est décalée d'une largeur par titre. Pendant le geste elle porte en plus le
           décalage du doigt, sans transition — elle n'anime pas vers une cible, elle est là où le

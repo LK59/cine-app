@@ -133,6 +133,13 @@ export type LiquidPressOptions = {
    * il refermait le menu qu'on venait seulement d'étirer.
    */
   pull?: "shape" | "outside";
+  /**
+   * Le doigt part à plus de tant de pixels : le geste lui rend la main — le verre revient sur le
+   * ressort, sans clic visé. Pour un bouton posé dans ce qu'on fait glisser (le carrousel de la
+   * bannière, une page qui défile) : il gonfle et rebondit à l'appui, et ne se bat pas avec le
+   * glisser.
+   */
+  yieldAfter?: number;
 };
 
 /** Ce qui garde son propre geste : le curseur du volume se fait glisser, il ne s'étire pas. */
@@ -176,6 +183,8 @@ export function createLiquidPress(options: LiquidPressOptions) {
     prevR: number;
     prevT: number;
     lastT: number;
+    downX: number;
+    downY: number;
   };
   let session: Session | null = null;
   let pending: { target: HTMLElement | null; surface: HTMLElement; keep: boolean; timer: number } | null = null;
@@ -250,6 +259,10 @@ export function createLiquidPress(options: LiquidPressOptions) {
   function onMove(e: PointerEvent) {
     const s = session;
     if (!s || e.pointerId !== s.pointerId) return;
+    if (options.yieldAfter !== undefined && Math.hypot(e.clientX - s.downX, e.clientY - s.downY) > options.yieldAfter) {
+      end(true);
+      return;
+    }
     s.last = { x: e.clientX, y: e.clientY };
     if (s.chosen) options.follow?.(s.chosen, e.clientX, e.clientY);
     if (s.still) return;
@@ -353,6 +366,8 @@ export function createLiquidPress(options: LiquidPressOptions) {
       prevR: 0,
       prevT: e.timeStamp,
       lastT: e.timeStamp,
+      downX: e.clientX,
+      downY: e.clientY,
     };
     session = s;
     if (!s.still) {
@@ -398,4 +413,14 @@ export function attachLiquid(surface: HTMLElement, options: LiquidPressOptions):
     surface.removeEventListener("pointerdown", onDown);
     press.dispose();
   };
+}
+
+/**
+ * Le geste complet sur un bouton seul, posé par sa référence : `<button ref={liquidButtonRef}
+ * data-liquid>`. Branché au montage, débranché au démontage (une référence de React 19 rend sa
+ * fonction de nettoyage). Pour une croix ou un bouton isolé, là où une délégation n'aurait pas de
+ * racine commune.
+ */
+export function liquidButtonRef(el: HTMLElement | null): (() => void) | undefined {
+  return el ? attachLiquid(el, { targets: "[data-liquid]" }) : undefined;
 }
