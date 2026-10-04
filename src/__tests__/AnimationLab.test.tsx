@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
-import { render, cleanup, fireEvent, screen, act } from "@testing-library/react";
+import { render, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 // Le catalogue : vide — la page doit se dessiner sans image, sur son dégradé de secours.
 vi.mock("swr", () => ({ default: () => ({ data: undefined }) }));
@@ -34,10 +34,18 @@ describe("la page Tests animations", () => {
     fireEvent.click(screen.getByRole("button", { name: /Lecteur simulé/ }));
     fireEvent.click(screen.getByRole("button", { name: "Sous-titres" }));
     expect(screen.getByText("Suomi")).toBeTruthy();
-    await act(async () => {
-      fireEvent.click(screen.getByText("English"));
-    });
-    expect(screen.queryByText("Suomi")).toBeNull();
+    fireEvent.click(screen.getByText("English"));
+    // Rendue à la pilule une fois le ressort revenu près de sa forme, puis après un court fondu.
+    await waitFor(() => expect(screen.queryByText("Suomi")).toBeNull(), { timeout: 3000 });
+    // Un sous-titre choisi : le point sous l'icône.
+    expect(screen.getByRole("button", { name: "Sous-titres" }).hasAttribute("data-active")).toBe(true);
+  });
+
+  it("ouvre aussi le menu vitesse depuis la pilule", () => {
+    render(<AnimationLab />);
+    fireEvent.click(screen.getByRole("button", { name: /Lecteur simulé/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Vitesse" }));
+    expect(screen.getByText("1,25×")).toBeTruthy();
   });
 
   it("garde sa zone de toucher élargie sur les pilules du geste liquide", () => {

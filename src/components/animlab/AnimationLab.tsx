@@ -1,11 +1,12 @@
 "use client";
 
 import "./animLab.css";
+import { createPortal } from "react-dom";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import useSWR from "swr";
 import {
-  AudioLines, Bookmark, Captions, Cast, Check, ChevronLeft, ChevronRight, EllipsisVertical, Film, Gauge, Heart, Home, Maximize, Pause,
-  PictureInPicture2, Play, Plus, RotateCcw, RotateCw, Share2, SlidersHorizontal, Subtitles, Tv, Volume2, X,
+  AudioLines, Bookmark, Captions, Cast, Check, ChevronLeft, ChevronRight, EllipsisVertical, Expand, Film, Gauge, Heart, Home, Maximize, Pause,
+  PictureInPicture2, Play, Plus, RotateCcw, RotateCw, Share2, SlidersHorizontal, Subtitles, Tv, Volume2, VolumeX, X,
 } from "lucide-react";
 import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
 import { usePointerCapture } from "@/lib/usePointerCapture";
@@ -14,7 +15,7 @@ import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { tmdbResize } from "@/lib/images";
 import { isWebKitEngine } from "@/lib/webkitEngine";
 import { attachGesture, attachLiquid, liquidTransform, pullFrom, GESTURES, type GestureKind, type GestureSettings } from "./gestures";
-import { springKeyframes, springOvershoot, type SpringParams } from "./spring";
+import { simulateSpring, springKeyframes, springOvershoot, type SpringParams } from "./spring";
 
 /**
  * « Tests animations » — un banc de gestes et de matières, pour l'administrateur.
@@ -68,6 +69,8 @@ type LabImage = { full: string; thumb: string; title: string } | null;
 
 type Lab = {
   settingsRef: RefObject<GestureSettings>;
+  /** Le facteur du ralenti, pour ce qui vit hors de la page (le lecteur en plein écran, porté dans `body`). */
+  slow: number;
   gesture: GestureKind;
   material: Material;
   image: LabImage;
@@ -149,8 +152,8 @@ export function AnimationLab() {
   }, [spring, slow]);
 
   const lab = useMemo<Lab>(
-    () => ({ settingsRef, gesture, material: MATERIALS[materialIndex], image, moving, whiteText }),
-    [gesture, materialIndex, image, moving, whiteText],
+    () => ({ settingsRef, slow: slow ? 5 : 1, gesture, material: MATERIALS[materialIndex], image, moving, whiteText }),
+    [slow, gesture, materialIndex, image, moving, whiteText],
   );
 
   return (
@@ -343,6 +346,7 @@ function GlassButton({
   children,
   className = "",
   onClick,
+  active,
 }: {
   /** `grouped` : le bouton d'une pilule qui porte le geste liquide — c'est elle qui l'écoute. */
   gesture: GestureKind | "grouped";
@@ -351,7 +355,10 @@ function GlassButton({
   label: string;
   children: ReactNode;
   className?: string;
-  onClick?: () => void;
+  /** Reçoit le bouton : un menu a besoin de savoir d'où il naît. */
+  onClick?: (button: HTMLButtonElement) => void;
+  /** Un réglage en service (sous-titres affichés) : un point sous l'icône, comme dans le lecteur. */
+  active?: boolean;
 }) {
   const { settingsRef } = useLab();
   const ref = useRef<HTMLButtonElement>(null);
@@ -370,9 +377,10 @@ function GlassButton({
       aria-label={label}
       // Le clic d'un bouton ne remonte pas jusqu'au fond : dans le lecteur simulé, le fond
       // montre et cache les commandes.
+      data-active={active ? "" : undefined}
       onClick={(e) => {
         e.stopPropagation();
-        onClick?.();
+        onClick?.(e.currentTarget);
       }}
       className={`alab-btn ${size} ${material?.cls ?? ""} ${gesture === "liquid" ? "alab-slop" : ""} ${gesture === "active" ? "alab-press-active" : ""} ${gesture === "stretch" ? "alab-stretchy" : ""} ${className}`}
     >
@@ -1093,13 +1101,31 @@ const SIM_MATERIALS = ["alab-mat-mixed", "alab-mat-clear", "alab-mat-frost", "al
   .map((cls) => MATERIALS.find((m) => m.cls === cls && !m.rim))
   .filter((m): m is Material => !!m);
 
-const AUDIO_TRACKS = ["Français — 5.1", "English — TrueHD Atmos — 7.1", "English — 5.1", "Español — Stéréo", "Deutsch — 5.1", "Italiano — Stéréo", "Commentaire — Stéréo"];
-const SUBTITLE_TRACKS = [
-  "Désactivés", "Français — Forcés", "Français", "Français — SDH", "English", "English — SDH", "Español", "Deutsch", "Italiano",
-  "Português (Brasil)", "Nederlands", "Polski", "Svenska", "Dansk", "Norsk", "Suomi",
-];
+type MenuKind = "speed" | "audio" | "subs" | "more";
+const MENUS: Record<MenuKind, { title: string; icon: typeof Gauge; items: string[] }> = {
+  speed: { title: "Vitesse", icon: Gauge, items: ["0,5×", "0,75×", "Normale", "1,25×", "1,5×", "1,75×", "2×"] },
+  audio: {
+    title: "Audio",
+    icon: AudioLines,
+    items: ["Français — 5.1", "English — TrueHD Atmos — 7.1", "English — 5.1", "Español — Stéréo", "Deutsch — 5.1", "Italiano — Stéréo", "Commentaire — Stéréo"],
+  },
+  subs: {
+    title: "Sous-titres",
+    icon: Captions,
+    items: [
+      "Désactivés", "Français — Forcés", "Français", "Français — SDH", "English", "English — SDH", "Español", "Deutsch", "Italiano",
+      "Português (Brasil)", "Nederlands", "Polski", "Svenska", "Dansk", "Norsk", "Suomi",
+    ],
+  },
+  more: {
+    title: "Plus d'options",
+    icon: EllipsisVertical,
+    items: ["Minuterie de veille · Désactivée", "Remplir l'écran", "Luminosité HDR · Auto", "Infos techniques", "Signaler un problème"],
+  },
+};
+/** Plus haut, la liste défile : un menu géant qui couvre le film a été refusé le 04/10/2026. */
+const MENU_MAX_HEIGHT = 280;
 
-type MenuKind = "audio" | "subs";
 /** Où le menu naît : le coin bas-droit de la pilule, sa taille, et le centre du bouton touché — dans le repère du lecteur. */
 type MenuAnchor = { right: number; bottom: number; pillW: number; pillH: number; btnX: number; btnY: number; maxHeight: number };
 
@@ -1121,6 +1147,7 @@ function PlayerSimLot() {
     typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? "landscape" : "desktop",
   );
   const [matIndex, setMatIndex] = useState(0);
+  const [full, setFull] = useState(false);
   const f = SIM_FORMATS.find((x) => x.id === format) ?? SIM_FORMATS[0];
   return (
     <section className="space-y-3">
@@ -1128,6 +1155,9 @@ function PlayerSimLot() {
         {SIM_FORMATS.map((x) => (
           <button key={x.id} type="button" className={`chip ${x.id === format ? "chip-on" : ""}`} onClick={() => setFormat(x.id)}>{x.name}</button>
         ))}
+        <button type="button" className="chip" onClick={() => setFull(true)}>
+          <Expand size={14} /> Plein écran
+        </button>
       </div>
       <div className="flex flex-wrap gap-1.5">
         {SIM_MATERIALS.map((m, i) => (
@@ -1135,36 +1165,78 @@ function PlayerSimLot() {
         ))}
       </div>
       <p className="text-xs leading-relaxed text-subtle">
-        {"La disposition du vrai lecteur, avec les choix du 04/10 : geste liquide (les pilules s'étirent en entier), fondu sur chaque pilule, une pilule dès que des boutons se touchent. Touche le fond pour cacher ou montrer les commandes. Le son et les sous-titres s'ouvrent depuis leur pilule : l'icône s'écarte, devient le titre, et la liste défile si elle est longue."}
+        {"La disposition du vrai lecteur, avec les choix du 04/10. Touche le fond pour cacher ou montrer les commandes. Vitesse, son, sous-titres et ⋮ s'ouvrent depuis leur pilule. « Plein écran » montre le lecteur à sa vraie taille — tourne le téléphone pour le paysage ; la croix en haut à gauche en sort."}
       </p>
-      <PlayerSim key={f.id} format={f} material={SIM_MATERIALS[matIndex]} />
+      {/* Pas les deux à la fois : celui de la page, caché sous le plein écran, ferait encore ses
+          flous à chaque image et fausserait ce qu'on juge. */}
+      {!full && <PlayerSim key={f.id} format={f} material={SIM_MATERIALS[matIndex]} />}
+      {full &&
+        createPortal(
+          <PlayerSim format={f} material={SIM_MATERIALS[matIndex]} full onExit={() => setFull(false)} />,
+          document.body,
+        )}
     </section>
   );
 }
 
-function PlayerSim({ format, material }: { format: SimFormat; material: Material }) {
-  const { gesture, image, moving, whiteText } = useLab();
+/** ±10 s : la flèche fait un tour autour du « 10 », qui reste immobile. */
+function TenIcon({ dir, size }: { dir: -1 | 1; size: number }) {
+  const Arrow = dir < 0 ? RotateCcw : RotateCw;
+  return (
+    <span className="alab-ten relative z-[2] inline-flex items-center justify-center">
+      <span className="alab-ten-arrow inline-flex"><Arrow size={size} strokeWidth={2} /></span>
+      <span className="alab-ten-label">10</span>
+    </span>
+  );
+}
+
+function spinTen(button: HTMLElement, dir: -1 | 1, slow: number) {
+  const arrow = button.querySelector<HTMLElement>(".alab-ten-arrow");
+  if (!arrow || typeof arrow.animate !== "function") return;
+  arrow.getAnimations().forEach((a) => a.cancel());
+  arrow.animate(
+    [{ transform: "rotate(0deg)" }, { transform: `rotate(${dir * 380}deg)`, offset: 0.7 }, { transform: `rotate(${dir * 360}deg)` }],
+    { duration: 520 * slow, easing: "cubic-bezier(0.3, 0.7, 0.4, 1)" },
+  );
+}
+
+/** Deux icônes l'une sur l'autre : l'une s'efface en tournant pendant que l'autre arrive. */
+function SwapIcon({ on, a, b }: { on: boolean; a: ReactNode; b: ReactNode }) {
+  return (
+    <span className="alab-swap relative z-[2]">
+      <span data-off={on ? "" : undefined}>{a}</span>
+      <span data-off={on ? undefined : ""}>{b}</span>
+    </span>
+  );
+}
+
+function PlayerSim({ format, material, full, onExit }: { format: SimFormat; material: Material; full?: boolean; onExit?: () => void }) {
+  const { gesture, image, moving, whiteText, slow } = useLab();
   const [shown, setShown] = useState(true);
   const [playing, setPlaying] = useState(true);
+  const [muted, setMuted] = useState(false);
   const [menu, setMenu] = useState<{ kind: MenuKind; anchor: MenuAnchor; closing: boolean } | null>(null);
-  const [audio, setAudio] = useState(0);
-  const [subs, setSubs] = useState(0);
+  const [picked, setPicked] = useState<Record<MenuKind, number>>({ speed: 2, audio: 0, subs: 0, more: -1 });
   const simRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
-  const audioBtn = useRef<HTMLSpanElement>(null);
-  const subsBtn = useRef<HTMLSpanElement>(null);
 
-  const openMenu = (kind: MenuKind) => {
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onExit?.();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [full, onExit]);
+
+  const openMenu = (kind: MenuKind, button: HTMLElement) => {
     const sim = simRef.current;
     const pill = settingsRef.current;
-    const icon = (kind === "audio" ? audioBtn : subsBtn).current?.closest<HTMLElement>(".alab-btn");
-    if (!sim || !pill || !icon) return;
+    if (!sim || !pill) return;
     if (menu) {
       setMenu({ ...menu, closing: true });
       return;
     }
     const p = layoutBox(pill, sim);
-    const b = layoutBox(icon, sim);
+    const b = layoutBox(button, sim);
     setMenu({
       kind,
       closing: false,
@@ -1175,18 +1247,21 @@ function PlayerSim({ format, material }: { format: SimFormat; material: Material
         pillH: p.h,
         btnX: b.x + b.w / 2,
         btnY: b.y + b.h / 2,
-        maxHeight: p.y + p.h - 12,
+        maxHeight: Math.min(MENU_MAX_HEIGHT, p.y + p.h - 12),
       },
     });
   };
   const closeMenu = () => setMenu((m) => (m ? { ...m, closing: true } : m));
 
   const btn = format.desktop ? 20 : 22;
+  const style: CSSProperties = full
+    ? ({ "--alab-slow": slow } as CSSProperties)
+    : { aspectRatio: format.aspect, maxWidth: format.maxWidth, maxHeight: format.id === "portrait" ? "44rem" : undefined };
   return (
     <div
       ref={simRef}
-      className={`alab-sim ${format.desktop ? "alab-sim-desktop" : ""} ${moving ? "alab-moving" : ""}`}
-      style={{ aspectRatio: format.aspect, maxWidth: format.maxWidth, maxHeight: format.id === "portrait" ? "44rem" : undefined }}
+      className={`alab-sim ${full ? "alab-sim-full" : ""} ${format.desktop ? "alab-sim-desktop" : ""} ${moving ? "alab-moving" : ""}`}
+      style={style}
       data-shown={String(shown)}
       onClick={() => (menu ? closeMenu() : setShown((v) => !v))}
     >
@@ -1206,8 +1281,8 @@ function PlayerSim({ format, material }: { format: SimFormat; material: Material
       {/* Le centre : ±10 s et lecture, posés sur le film. */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-6 sm:gap-10">
         <div className="pointer-events-auto">
-          <GlassButton gesture={gesture} material={material} size="alab-sim-ctr" className="alab-fade-self" label="Reculer de 10 s">
-            <RotateCcw size={btn + 4} />
+          <GlassButton gesture={gesture} material={material} size="alab-sim-ctr" className="alab-fade-self" label="Reculer de 10 s" onClick={(el) => spinTen(el, -1, slow)}>
+            <TenIcon dir={-1} size={btn + 8} />
           </GlassButton>
         </div>
         <div className="pointer-events-auto">
@@ -1216,16 +1291,18 @@ function PlayerSim({ format, material }: { format: SimFormat; material: Material
           </GlassButton>
         </div>
         <div className="pointer-events-auto">
-          <GlassButton gesture={gesture} material={material} size="alab-sim-ctr" className="alab-fade-self" label="Avancer de 10 s">
-            <RotateCw size={btn + 4} />
+          <GlassButton gesture={gesture} material={material} size="alab-sim-ctr" className="alab-fade-self" label="Avancer de 10 s" onClick={(el) => spinTen(el, 1, slow)}>
+            <TenIcon dir={1} size={btn + 8} />
           </GlassButton>
         </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4 sm:p-6">
+      <div className="alab-sim-chrome pointer-events-none absolute inset-0 flex flex-col justify-between">
         <div className="alab-sim-row alab-sim-row-top pointer-events-auto flex items-center justify-between gap-3" onClick={(e) => shown && e.stopPropagation()}>
           <div className="flex items-center gap-3">
-            <GlassButton gesture={gesture} material={material} size="alab-sim-solo" className="alab-fade-self" label="Fermer"><X size={btn + 2} /></GlassButton>
+            <GlassButton gesture={gesture} material={material} size="alab-sim-solo" className="alab-fade-self" label="Fermer" onClick={() => onExit?.()}>
+              <X size={btn + 2} />
+            </GlassButton>
             <GlassPill gesture={gesture} material={material} className="alab-fade-self">
               {(g) => (
                 <>
@@ -1235,11 +1312,13 @@ function PlayerSim({ format, material }: { format: SimFormat; material: Material
               )}
             </GlassPill>
           </div>
-          {format.desktop && (
-            <GlassPill gesture={gesture} material={material} className="alab-fade-self">
-              {(g) => <GlassButton gesture={g} label="Son"><Volume2 size={btn} /></GlassButton>}
-            </GlassPill>
-          )}
+          <GlassPill gesture={gesture} material={material} className="alab-fade-self">
+            {(g) => (
+              <GlassButton gesture={g} label={muted ? "Rétablir le son" : "Couper le son"} onClick={() => setMuted((v) => !v)}>
+                <SwapIcon on={!muted} a={<Volume2 size={btn} />} b={<VolumeX size={btn} />} />
+              </GlassButton>
+            )}
+          </GlassPill>
         </div>
 
         <div className="alab-sim-row alab-sim-row-bottom pointer-events-auto flex flex-col gap-3" onClick={(e) => shown && e.stopPropagation()}>
@@ -1248,14 +1327,12 @@ function PlayerSim({ format, material }: { format: SimFormat; material: Material
             <GlassPill gesture={gesture} material={material} className="alab-fade-self shrink-0" pillRef={settingsRef}>
               {(g) => (
                 <>
-                  <GlassButton gesture={g} label="Vitesse"><Gauge size={btn} /></GlassButton>
-                  <GlassButton gesture={g} label="Audio" onClick={() => openMenu("audio")}>
-                    <AudioLines size={btn} /><span ref={audioBtn} hidden />
+                  <GlassButton gesture={g} label="Vitesse" onClick={(el) => openMenu("speed", el)}>
+                    {picked.speed !== 2 ? <span className="relative z-[2] text-[13px] font-semibold tabular-nums">{MENUS.speed.items[picked.speed]}</span> : <Gauge size={btn} />}
                   </GlassButton>
-                  <GlassButton gesture={g} label="Sous-titres" onClick={() => openMenu("subs")}>
-                    <Captions size={btn} /><span ref={subsBtn} hidden />
-                  </GlassButton>
-                  <GlassButton gesture={g} label="Plus d'options"><EllipsisVertical size={btn} /></GlassButton>
+                  <GlassButton gesture={g} label="Audio" onClick={(el) => openMenu("audio", el)}><AudioLines size={btn} /></GlassButton>
+                  <GlassButton gesture={g} label="Sous-titres" active={picked.subs !== 0} onClick={(el) => openMenu("subs", el)}><Captions size={btn} /></GlassButton>
+                  <GlassButton gesture={g} label="Plus d'options" onClick={(el) => openMenu("more", el)}><EllipsisVertical size={btn} /></GlassButton>
                   {format.desktop && <GlassButton gesture={g} label="Plein écran"><Maximize size={btn} /></GlassButton>}
                 </>
               )}
@@ -1278,11 +1355,9 @@ function PlayerSim({ format, material }: { format: SimFormat; material: Material
           material={material}
           pillRef={settingsRef}
           simRef={simRef}
-          items={menu.kind === "audio" ? AUDIO_TRACKS : SUBTITLE_TRACKS}
-          selected={menu.kind === "audio" ? audio : subs}
+          selected={picked[menu.kind]}
           onPick={(i) => {
-            if (menu.kind === "audio") setAudio(i);
-            else setSubs(i);
+            if (menu.kind !== "more") setPicked((p) => ({ ...p, [menu.kind]: i }));
             closeMenu();
           }}
           onClose={closeMenu}
@@ -1294,13 +1369,17 @@ function PlayerSim({ format, material }: { format: SimFormat; material: Material
 }
 
 /**
- * Le menu du son ou des sous-titres, né de la pilule des réglages.
+ * Un menu du lecteur, né de la pilule des réglages.
  *
  * Une seule surface qui change de forme : découpée au départ exactement à la pilule (même
  * matière, même place — la pilule s'efface dessous), elle s'ouvre vers le haut et la gauche sur
  * le ressort. L'icône du bouton touché glisse jusqu'à l'en-tête et devient le titre ; la liste
- * apparaît en fondu — sur le contenu, jamais sur la surface floutée (lot C). Fermer rejoue tout
- * à l'envers, puis rend la pilule.
+ * apparaît en fondu — sur le contenu, jamais sur la surface floutée (lot C).
+ *
+ * La fermeture rend la pilule *dès que le menu a retrouvé sa forme*, pas à la fin du ressort :
+ * sa queue (les petites oscillations autour de zéro) durait près d'une seconde, pendant laquelle
+ * on ne voyait que l'icône du menu à la place des cinq boutons (04/10/2026). À ce moment-là, le
+ * menu s'efface en fondu pendant que la pilule revient.
  */
 function SimMenu({
   kind,
@@ -1309,7 +1388,6 @@ function SimMenu({
   material,
   pillRef,
   simRef,
-  items,
   selected,
   onPick,
   onClose,
@@ -1321,7 +1399,6 @@ function SimMenu({
   material: Material;
   pillRef: RefObject<HTMLDivElement | null>;
   simRef: RefObject<HTMLDivElement | null>;
-  items: string[];
   selected: number;
   onPick: (i: number) => void;
   onClose: () => void;
@@ -1332,14 +1409,13 @@ function SimMenu({
   const iconRef = useRef<HTMLSpanElement>(null);
   const labelRef = useRef<HTMLSpanElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const Icon = kind === "audio" ? AudioLines : Captions;
+  const { title, icon: Icon, items } = MENUS[kind];
 
-  // Une ouverture ou une fermeture : la même trajectoire, dans un sens ou dans l'autre.
   const run = (opening: boolean) => {
     const box = boxRef.current;
     const icon = iconRef.current;
     const sim = simRef.current;
-    if (!box || !icon || !sim) return null;
+    if (!box || !icon || !sim) return;
     const s = settingsRef.current;
     const W = box.offsetWidth;
     const H = box.offsetHeight;
@@ -1356,7 +1432,7 @@ function SimMenu({
       };
     });
     box.getAnimations().forEach((a) => a.cancel());
-    const morph = box.animate(shape.keyframes, { duration: shape.duration * s.slow, easing: "linear", fill: "forwards" });
+    box.animate(shape.keyframes, { duration: shape.duration * s.slow, easing: "linear", fill: "forwards" });
 
     // L'icône part de celle du bouton touché.
     const i = layoutBox(icon, sim);
@@ -1372,24 +1448,19 @@ function SimMenu({
       if (!el) return;
       el.getAnimations().forEach((a) => a.cancel());
       el.animate(
-        opening
-          ? [{ opacity: 0, transform: "translateX(-6px)" }, { opacity: 1, transform: "none" }]
-          : [{ opacity: 1 }, { opacity: 0 }],
+        opening ? [{ opacity: 0, transform: "translateX(-6px)" }, { opacity: 1, transform: "none" }] : [{ opacity: 1 }, { opacity: 0 }],
         { duration: (opening ? 200 : 110) * s.slow, delay: opening ? delay * s.slow : 0, easing: "ease-out", fill: "both" },
       );
     };
     fade(labelRef.current, 60);
     fade(listRef.current, 90);
 
-    // La pilule s'efface sous le menu qui naît d'elle, et ne revient qu'une fois le menu refermé
-    // sur sa forme — sinon les deux verres se superposent pendant la fermeture.
     const pill = pillRef.current;
     if (pill && opening) {
       for (const a of pill.getAnimations()) if (a.id === "menu-hide") a.cancel();
       const hide = pill.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 90 * s.slow, fill: "forwards" });
       hide.id = "menu-hide";
     }
-    return morph;
   };
 
   // Ouvert au montage : la taille du menu n'est connue qu'une fois posé.
@@ -1397,18 +1468,26 @@ function SimMenu({
     run(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule ouverture, au montage ; `run` lit tout ce qu'il faut sur le moment
   }, []);
+
   useEffect(() => {
     if (!closing) return;
-    const morph = run(false);
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      for (const a of pillRef.current?.getAnimations() ?? []) if (a.id === "menu-hide") a.cancel();
-      onClosed();
-    };
-    if (morph) morph.finished.then(finish, () => {});
-    else finish();
+    run(false);
+    const s = settingsRef.current;
+    // Le premier instant où le menu est revenu à 6 % de sa forme ouverte : la pilule revient là.
+    const samples = simulateSpring(1, 0, s.spring);
+    const back = (samples.find((q) => q.x <= 0.06)?.t ?? samples[samples.length - 1].t) * 1000 * s.slow;
+    const handover = 120 * s.slow;
+    const timers = [
+      window.setTimeout(() => {
+        const pill = pillRef.current;
+        for (const a of pill?.getAnimations() ?? []) if (a.id === "menu-hide") a.cancel();
+        pill?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: handover, easing: "ease-out" });
+        // Le menu s'efface lui-même : l'opacité portée par la surface floutée, jamais par un parent.
+        boxRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: handover, easing: "ease-out", fill: "forwards" });
+      }, back),
+      window.setTimeout(onClosed, back + handover),
+    ];
+    return () => timers.forEach((t) => window.clearTimeout(t));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- rejoué à la seule demande de fermeture
   }, [closing]);
 
@@ -1422,7 +1501,7 @@ function SimMenu({
       {material.copy && <PrefrostCopy />}
       <button type="button" className="alab-sim-menu-head relative z-[2] text-left" onClick={onClose}>
         <span ref={iconRef} className="inline-flex"><Icon size={20} /></span>
-        <span ref={labelRef}>{kind === "audio" ? "Audio" : "Sous-titres"}</span>
+        <span ref={labelRef}>{title}</span>
       </button>
       <div ref={listRef} className="alab-sim-menu-list relative z-[2] min-h-0 flex-1">
         {items.map((item, i) => (
