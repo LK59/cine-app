@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { LIQUID_SPRING, liquidTransform, prefersReducedMotion, pullFrom } from "./liquid";
-import { springKeyframes } from "./spring";
+import { springKeyframes, type SpringParams } from "./spring";
 
 /**
  * La lentille d'une barre de navigation (DECISIONS.md §45) — barre du téléphone, rail du bureau,
@@ -45,6 +45,7 @@ export function useLiquidLens({
   axis = "x",
   onDragSelect,
   relayout,
+  settleSpring,
 }: {
   barRef: RefObject<HTMLElement | null>;
   lensRef: RefObject<HTMLElement | null>;
@@ -55,15 +56,23 @@ export function useLiquidLens({
   onDragSelect?: (key: string, navigatedOnDown: boolean) => void;
   /** Ce qui, en changeant, déplace les éléments (une barre compacte en paysage). */
   relayout?: unknown;
+  /**
+   * Le ressort du relâchement — la pastille qui se pose et se dégonfle, la barre qui revient. Sans
+   * lui, ceux de la barre du bas : un dégonflement court (320 ms) et le ressort des gestes. La
+   * bascule Films/Séries, courte et souvent touchée, le veut plus souple (04/10/2026 : « sec »).
+   */
+  settleSpring?: SpringParams;
 }): { moved: RefObject<boolean> } {
   /** Où la pastille est posée, et si un doigt la tient. */
   const lens = useRef({ main: 0, cross: 0, placed: false, held: false });
   const moved = useRef(false);
   const activeRef = useRef(active);
   const selectRef = useRef(onDragSelect);
+  const settleSpringRef = useRef(settleSpring);
   useEffect(() => {
     activeRef.current = active;
     selectRef.current = onDragSelect;
+    settleSpringRef.current = settleSpring;
   });
 
   const itemOf = (bar: HTMLElement, key: string | null) =>
@@ -233,7 +242,8 @@ export function useLiquidLens({
       // La barre revient sur le ressort.
       const { r, angle } = d.pull;
       bar.style.transform = "";
-      const back = springKeyframes(1, 0, LIQUID_SPRING, ({ x }) => ({
+      const settle = settleSpringRef.current ?? LIQUID_SPRING;
+      const back = springKeyframes(1, 0, settle, ({ x }) => ({
         transform: liquidTransform(r * Math.max(x, -0.5), angle, 1 + (BAR_SWELL - 1) * x, d.w, d.h, BAR_STRENGTH),
       }));
       bar.getAnimations().forEach((a) => a.cancel());
@@ -280,7 +290,11 @@ export function useLiquidLens({
       const cross = l.cross;
       el.style.transform = lensTransform(to, cross, axis, 1, 0);
       el.getAnimations().forEach((a) => a.cancel());
-      if (from === to) {
+      if (from === to && settleSpringRef.current) {
+        // Posée où elle est : elle se dégonfle sur le ressort, un léger rebond sous sa taille.
+        const deflate = springKeyframes(LENS_LIFT, 1, settle, ({ x }) => ({ transform: lensTransform(to, cross, axis, x, 0) }));
+        el.animate(deflate.keyframes, { duration: deflate.duration, easing: "linear" });
+      } else if (from === to) {
         el.animate(
           [
             { transform: lensTransform(to, cross, axis, LENS_LIFT, 0) },
@@ -294,7 +308,7 @@ export function useLiquidLens({
         const land = springKeyframes(
           from,
           to,
-          LIQUID_SPRING,
+          settle,
           ({ x, v }) => ({ transform: lensTransform(x, cross, axis, 1 + (LENS_LIFT - 1) * Math.min(1, Math.abs(to - x) / span), stretchFor(v)) }),
           d.moved ? d.v : 0,
         );
