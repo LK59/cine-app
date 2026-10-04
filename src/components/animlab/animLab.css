@@ -1,0 +1,354 @@
+/* La page « Tests animations » (administrateur) — chargée avec elle seulement.
+ *
+ * Tout est préfixé `alab-` : ces règles ne doivent rien toucher du reste de l'application. Les
+ * matières ne sont pas celles du cinéma ; elles servent à comparer, et une matière retenue ici
+ * rejoindra `globals.css` sous son vrai nom. `--alab-slow` multiplie les durées (ralenti ×5). */
+
+.alab-root {
+  --alab-slow: 1;
+}
+
+/* ─── Les cartes ───────────────────────────────────────────────────────────── */
+.alab-card {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  background: #0b0b0e;
+  isolation: isolate;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.alab-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+/* Le fond qui bouge : ce qui se passe sous une commande pendant un film ou un défilement — un
+   `backdrop-filter` se recalcule alors à chaque image. Translation et échelle, rien d'autre : le
+   fond lui-même ne coûte rien, seul ce qui le floute coûte. */
+@keyframes alab-drift {
+  0% { transform: scale(1.15) translate3d(-4%, -2%, 0); }
+  50% { transform: scale(1.22) translate3d(4%, 2%, 0); }
+  100% { transform: scale(1.15) translate3d(-4%, -2%, 0); }
+}
+.alab-moving .alab-drift {
+  animation: alab-drift 9s ease-in-out infinite;
+}
+.alab-white-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 6%;
+  color: #fff;
+  font-weight: 800;
+  line-height: 0.95;
+  font-size: clamp(1.6rem, 6vw, 3.2rem);
+  letter-spacing: -0.03em;
+  pointer-events: none;
+}
+.alab-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 1rem;
+}
+
+/* ─── Les boutons ──────────────────────────────────────────────────────────── */
+.alab-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: rgb(255 255 255 / 0.95);
+  border-radius: 999px;
+  overflow: hidden;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+.alab-btn > svg,
+.alab-btn > .alab-icon {
+  position: relative;
+  z-index: 2;
+}
+.alab-round { width: 52px; height: 52px; }
+.alab-round-lg { width: 72px; height: 72px; }
+.alab-round-sm { width: 40px; height: 40px; }
+.alab-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  position: relative;
+  overflow: hidden;
+}
+.alab-pill .alab-btn { width: 44px; height: 44px; }
+.alab-label-btn {
+  height: 44px;
+  padding: 0 1.1rem;
+  gap: 0.45rem;
+  font-size: 14px;
+  font-weight: 600;
+}
+.alab-stretchy { touch-action: none; }
+
+/* Le geste d'aujourd'hui, pour comparer : tenu par `:active`, il dure ce que dure le contact. */
+.alab-press-active {
+  transition: transform calc(150ms * var(--alab-slow)) cubic-bezier(0.16, 1, 0.3, 1);
+}
+.alab-press-active:active { transform: scale(0.94); }
+
+/* La lueur qui monte quand le verre gonfle, et celle qui suit le doigt. */
+.alab-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(120% 90% at 50% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0.06) 60%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.alab-glow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 90px;
+  height: 90px;
+  margin: -45px 0 0 -45px;
+  border-radius: 999px;
+  background: radial-gradient(closest-side, rgb(255 255 255 / 0.45), transparent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ─── Les matières ─────────────────────────────────────────────────────────── */
+.alab-mat-smoke {
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.02)), rgb(32 32 36 / 0.82);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 0 0 1px rgb(0 0 0 / 0.14), 0 4px 16px rgb(0 0 0 / 0.35);
+}
+.alab-mat-blur8 {
+  background: rgb(24 24 28 / 0.42);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+.alab-mat-frost {
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0.03)), rgb(28 28 32 / 0.38);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 6px 20px rgb(0 0 0 / 0.3);
+}
+.alab-mat-thick {
+  background: rgb(20 20 24 / 0.3);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4) brightness(0.85);
+  backdrop-filter: blur(40px) saturate(1.4) brightness(0.85);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12), 0 6px 20px rgb(0 0 0 / 0.3);
+}
+/* Le verre clair d'iOS 26 : presque pas de teinte, un fort reflet en haut, un bord qui accroche. */
+.alab-mat-clear {
+  background: linear-gradient(160deg, rgb(255 255 255 / 0.26), rgb(255 255 255 / 0.06) 45%, rgb(255 255 255 / 0.12));
+  -webkit-backdrop-filter: blur(14px) saturate(1.8) brightness(1.05);
+  backdrop-filter: blur(14px) saturate(1.8) brightness(1.05);
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.55),
+    inset 0 -1px 1px rgb(255 255 255 / 0.15),
+    inset 0 0 0 1px rgb(255 255 255 / 0.18),
+    0 8px 24px rgb(0 0 0 / 0.25);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
+}
+.alab-mat-tint {
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.18), transparent), rgb(124 58 237 / 0.45);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  backdrop-filter: blur(18px) saturate(1.5);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3), inset 0 0 0 1px rgb(255 255 255 / 0.14), 0 6px 20px rgb(0 0 0 / 0.3);
+}
+/* Pré-flouté : aucun filtre. Le fond du bouton est l'image elle-même réduite à quelques dizaines de
+   pixels dans un <canvas>, agrandie par le GPU — l'agrandissement *est* le flou. */
+.alab-mat-prefrost {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 0 0 1px rgb(255 255 255 / 0.12), 0 6px 20px rgb(0 0 0 / 0.3);
+}
+.alab-mat-prefrost::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.12), rgb(0 0 0 / 0.18));
+  z-index: 1;
+  pointer-events: none;
+}
+.alab-copy-frame {
+  position: absolute;
+  left: calc(-1 * var(--alab-ox, 0px));
+  top: calc(-1 * var(--alab-oy, 0px));
+  width: var(--alab-cw, 100%);
+  height: var(--alab-ch, 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+.alab-copy-frame canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: saturate(1.5) brightness(0.8);
+}
+/* Le verre dépoli : un bruit qui déplace les pixels du fond. Chromium seulement — Safari et Firefox
+   n'acceptent pas `url()` dans `backdrop-filter`, d'où le fond de secours. */
+.alab-mat-lens {
+  background: rgb(28 28 32 / 0.5);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), inset 0 0 0 1px rgb(255 255 255 / 0.14);
+}
+.alab-lens-on .alab-mat-lens {
+  background: rgb(28 28 32 / 0.18);
+  backdrop-filter: url(#alab-frost) blur(3px) saturate(1.5);
+}
+/* Le liseré qui suit la lumière : un anneau de dégradé conique, tourné par `transform` — seule la
+   rotation change, rien n'est redessiné. */
+.alab-rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(from 0deg, rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.05) 25%, rgb(255 255 255 / 0.05) 50%, rgb(255 255 255 / 0.5) 62%, rgb(255 255 255 / 0.05) 80%, rgb(255 255 255 / 0.9));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.6px), #000 calc(100% - 0.6px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.6px), #000 calc(100% - 0.6px));
+  transform: rotate(var(--alab-angle, -30deg));
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* ─── Apparitions (lot C) ──────────────────────────────────────────────────── */
+.alab-fade-wrap { transition: opacity calc(300ms * var(--alab-slow)) ease-out; }
+.alab-fade-wrap[data-shown="false"] { opacity: 0; }
+.alab-fade-self { transition: opacity calc(300ms * var(--alab-slow)) ease-out; }
+[data-shown="false"] > .alab-fade-self { opacity: 0; }
+.alab-blur-late[data-shown="true"] .alab-late-target {
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+}
+.alab-late-target {
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0.03)), rgb(28 28 32 / 0.38);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 0 0 1px rgb(255 255 255 / 0.1);
+}
+
+/* ─── Métamorphoses (lot D) ────────────────────────────────────────────────── */
+.alab-morph {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  width: min(15rem, 80%);
+  margin-left: max(-7.5rem, -40%);
+  border-radius: 1.4rem;
+  overflow: hidden;
+}
+.alab-morph-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  font-size: 14px;
+  color: #fff;
+}
+.alab-morph-item + .alab-morph-item { border-top: 1px solid rgb(255 255 255 / 0.08); }
+.alab-tabs {
+  position: relative;
+  display: flex;
+  padding: 4px;
+  border-radius: 999px;
+}
+.alab-tab {
+  position: relative;
+  z-index: 2;
+  width: 64px;
+  height: 48px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.7);
+  -webkit-tap-highlight-color: transparent;
+  transition: color 200ms ease-out;
+}
+.alab-tab[data-on] { color: #fff; }
+.alab-lens {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: 64px;
+  height: 48px;
+  border-radius: 999px;
+  z-index: 1;
+  background: rgb(255 255 255 / 0.16);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+.alab-goo { filter: url(#alab-goo); display: flex; align-items: center; justify-content: center; }
+.alab-drop {
+  width: 60px;
+  height: 60px;
+  border-radius: 999px;
+  background: rgb(30 30 36);
+}
+.alab-drop-icons {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: #fff;
+}
+.alab-switch {
+  position: relative;
+  width: 64px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.22);
+  transition: background-color 250ms ease-out;
+  touch-action: none;
+}
+.alab-switch[data-on] { background: rgb(52 199 89); }
+.alab-switch-thumb {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 38px;
+  height: 26px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+}
+
+/* ─── Défilement sous verre (lot E) ────────────────────────────────────────── */
+.alab-scroller {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.75rem 0.75rem 5.5rem;
+}
+.alab-scroll-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 0.85rem;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  z-index: 2;
+}
+/* Les boutons d'une pilule passent au-dessus du voile de la matière pré-floutée (`::after`). */
+.alab-pill > .alab-btn { z-index: 2; }

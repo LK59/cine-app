@@ -16,7 +16,10 @@ export type ActivityView =
   | { kind: "account"; id: string }
   | { kind: "seance"; id: string }
   | { kind: "report"; id: number }
-  | { kind: "logs"; preset: LogsPreset };
+  | { kind: "logs"; preset: LogsPreset }
+  // Le banc de gestes et de matières (`AnimationLab`) : pas de l'activité à proprement parler, mais
+  // un panneau d'administrateur qui part du Compte et y revient — la même porte, le même retour.
+  | { kind: "animations" };
 
 export function encodeView(view: ActivityView): string {
   switch (view.kind) {
@@ -28,6 +31,8 @@ export function encodeView(view: ActivityView): string {
       return `seance:${view.id}`;
     case "report":
       return `signalement:${view.id}`;
+    case "animations":
+      return "animations";
     case "logs": {
       const params = new URLSearchParams();
       for (const [k, v] of Object.entries(view.preset)) if (v !== undefined && v !== "") params.set(k, String(v));
@@ -39,6 +44,7 @@ export function encodeView(view: ActivityView): string {
 
 export function decodeView(raw: string | null): ActivityView | null {
   if (!raw) return null;
+  if (raw === "animations") return { kind: "animations" };
   if (raw.startsWith("compte:")) return { kind: "account", id: raw.slice(7) };
   if (raw.startsWith("seance:")) return { kind: "seance", id: raw.slice(7) };
   if (raw.startsWith("signalement:")) {

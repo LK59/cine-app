@@ -183,6 +183,19 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab, swapIn }: { lea
 
             <MaintenanceSection />
             <BenchSection />
+            {/* Le banc des gestes et des matières, pour juger à l'œil sur l'appareil qu'on tient
+                (04/10/2026). Il s'ouvre comme l'activité, à la place de ce panneau. */}
+            <Section icon={Sparkles} title={t("player.account.animLab")}>
+              <p className="mb-3 text-xs text-subtle">{t("player.account.animLabHint")}</p>
+              <button
+                type="button"
+                onClick={() => cinemaNavigate({ account: false, activity: "animations" })}
+                className="btn btn-ghost w-full justify-center sm:w-auto"
+              >
+                <Sparkles size={16} />
+                {t("player.account.openAnimLab")}
+              </button>
+            </Section>
           </Group>
         )}
 

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 import { useT } from "@/components/TranslationProvider";
 import { decodeView } from "@/components/activity/nav";
@@ -8,6 +9,10 @@ import { ActivityAccount } from "@/components/activity/views/ActivityAccount";
 import { ActivityLogs } from "@/components/activity/views/ActivityLogs";
 import { ReportThread } from "@/components/reports/ReportThread";
 import { ActivitySeance } from "@/components/activity/views/ActivitySeance";
+
+// Chargé à l'ouverture seulement : ses gestes, ses matières et sa feuille de style ne concernent
+// que l'administrateur qui l'ouvre.
+const AnimationLab = dynamic(() => import("@/components/animlab/AnimationLab").then((m) => m.AnimationLab), { ssr: false });
 
 /**
  * L'activité des comptes, dans le cinéma — pour l'administrateur.
@@ -21,7 +26,11 @@ import { ActivitySeance } from "@/components/activity/views/ActivitySeance";
 export function PlayerActivityPanel({ raw, leaving, swapIn }: { raw: string; leaving?: boolean; swapIn?: boolean }) {
   const t = useT();
   const view = decodeView(raw) ?? { kind: "overview" as const };
-  const title = view.kind === "logs" ? t("activity.logs.title") : view.kind === "report" ? t("report.ui.threadTitle") : t("activity.title");
+  const title =
+    view.kind === "logs" ? t("activity.logs.title")
+    : view.kind === "report" ? t("report.ui.threadTitle")
+    : view.kind === "animations" ? t("player.account.animLab")
+    : t("activity.title");
   return (
     <PlayerPanelFrame contentWidth="80rem" title={title} back leaving={leaving} swapIn={swapIn}>
       <div className="mx-auto w-full max-w-7xl space-y-6 pt-2">
@@ -30,6 +39,7 @@ export function PlayerActivityPanel({ raw, leaving, swapIn }: { raw: string; lea
         {view.kind === "logs" && <ActivityLogs preset={view.preset} />}
         {view.kind === "seance" && <ActivitySeance id={view.id} />}
         {view.kind === "report" && <ReportThread id={view.id} />}
+        {view.kind === "animations" && <AnimationLab />}
       </div>
     </PlayerPanelFrame>
   );
