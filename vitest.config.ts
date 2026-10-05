@@ -44,7 +44,10 @@ export default defineConfig({
      * tests qui en dépendent, pas en montant de version.
      */
     clearMocks: false,
-    env: { DATA_DIR: TEST_DATA_DIR },
+    // `SETUP_COMPLETE` : la suite se comporte comme une installation configurée — sans lui, le
+    // proxy enverrait chaque page vers l'assistant de premier lancement (DECISIONS.md §48). Les
+    // tests de l'assistant le retirent eux-mêmes.
+    env: { DATA_DIR: TEST_DATA_DIR, SETUP_COMPLETE: "true" },
     // Les copies de travail d'agents (`.claude/worktrees/…`) vivent dans le dépôt : sans ceci,
     // la vérification lançait aussi leurs tests, à moitié écrits, contre leurs propres sources.
     exclude: [...configDefaults.exclude, "**/.claude/**"],

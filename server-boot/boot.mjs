@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { carryOverStatic } from "./staticCarryover.mjs";
 import { dataDirProblem, startupRefusal } from "./startupChecks.mjs";
+import { applyFirstRunSecrets } from "./firstRunSecrets.mjs";
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = process.env.DATA_DIR || path.join(appDir, "data");
@@ -15,11 +16,26 @@ const dataDir = process.env.DATA_DIR || path.join(appDir, "data");
 // conteneur « Up » répondait 500 à tout, aucune boucle de redémarrage ne signalait rien (audit du
 // 29/09/2026). Un secret absent est lu comme vide — « vide » est ce qu'il faut corriger —, là où
 // la configuration lui substitue sa valeur par défaut, refusée elle aussi.
-const refusal =
-  startupRefusal({
-    sessionSecret: process.env.SESSION_SECRET ?? "",
-    adminPassword: process.env.APP_ADMIN_PASSWORD ?? "",
-  }) ?? dataDirProblem(dataDir);
+// Le dossier de données d'abord : les secrets générés au premier lancement y vivent.
+const dataProblem = dataDirProblem(dataDir);
+if (dataProblem) {
+  console.error(`[démarrage] refusé : ${dataProblem}`);
+  process.exit(1);
+}
+
+// Les secrets que l'environnement ne donne pas : générés une fois, gardés dans data/config
+// (DECISIONS.md §48). Ceux de `.env` ne sont jamais touchés.
+try {
+  const generated = await applyFirstRunSecrets(dataDir);
+  if (generated.length) console.log(`[démarrage] secrets lus dans data/config/secrets.json : ${generated.join(", ")}`);
+} catch (error) {
+  console.error(`[démarrage] secrets du premier lancement indisponibles : ${error instanceof Error ? error.message : error}`);
+}
+
+const refusal = startupRefusal({
+  sessionSecret: process.env.SESSION_SECRET ?? "",
+  adminPassword: process.env.APP_ADMIN_PASSWORD ?? "",
+});
 if (refusal) {
   console.error(`[démarrage] refusé : ${refusal}`);
   process.exit(1);

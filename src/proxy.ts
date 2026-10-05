@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setupDone } from "@/lib/settings/setup";
 // `appConfig` et non `config` : le bas de ce fichier exporte déjà une constante nommée
 // `config`, qui est la configuration du proxy lui-même.
 import { config as appConfig } from "@/lib/config";
@@ -154,6 +155,8 @@ function isAllowedForEveryone(method: string, pathname: string): boolean {
  * `/api/stats/storage-forecast` et les autres `/api/stats/*` ne sont pas attrapés (29/09/2026).
  */
 const ADMIN_ONLY_READS: RegExp[] = [
+  // Les réglages de l'installation (adresses, état des clés) — DECISIONS.md §48.
+  /^\/api\/settings\/?$/,
   /^\/api\/activity\/?$/,
   /^\/api\/dashboard\/?$/,
   /^\/api\/timeline\/imports\/?$/,
@@ -224,11 +227,30 @@ async function tokenStillAccepted(session: Parameters<typeof jellyfinTokenAlive>
   }
 }
 
+function setupDoneSafe(): boolean {
+  try {
+    return setupDone();
+  } catch {
+    return true;
+  }
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (crossSiteWrite(req)) {
     return NextResponse.json({ error: "Requête refusée" }, { status: 403 });
+  }
+
+  /**
+   * Le premier lancement : tant que l'assistant n'est pas terminé, toute page y mène (DECISIONS.md
+   * §48). Restent ouverts l'assistant lui-même, la connexion (pour qui a déjà un compte dans
+   * `.env`), et toutes les routes d'API — elles gardent leurs propres règles. Gardé : une base
+   * illisible ne doit jamais enfermer une installation dans l'assistant — dans le doute, on laisse
+   * passer, c'est le comportement d'avant.
+   */
+  if (!pathname.startsWith("/api/") && pathname !== "/setup" && pathname !== "/login" && !pathname.startsWith("/_next") && !setupDoneSafe()) {
+    return NextResponse.redirect(new URL("/setup", req.url));
   }
 
   if (pathname === "/login") {

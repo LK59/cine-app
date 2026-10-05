@@ -41,8 +41,7 @@ describe("boot.mjs refuse avant d'importer le serveur", () => {
     expect(r.stdout).not.toContain(WITNESS);
   });
 
-  it("secret absent ou trop court : code 1", () => {
-    expect(boot({}).code).toBe(1);
+  it("secret trop court posé dans .env : code 1", () => {
     const court = boot({ SESSION_SECRET: "a".repeat(15) });
     expect(court.code).toBe(1);
     expect(court.stderr).toMatch(/16 au moins/);
@@ -63,6 +62,19 @@ describe("boot.mjs refuse avant d'importer le serveur", () => {
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/DATA_DIR/);
     expect(r.stdout).not.toContain(WITNESS);
+  });
+
+  // Depuis le déploiement simplifié (DECISIONS.md §48), un secret *absent* n'est plus refusé : il
+  // est généré au premier lancement dans data/config/secrets.json, et relu à l'identique ensuite.
+  it("secret absent : généré au premier lancement, gardé, et le serveur démarre", () => {
+    const r = boot({});
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(WITNESS);
+    const file = path.join(root, "data", "config", "secrets.json");
+    const first = JSON.parse(fs.readFileSync(file, "utf8")).SESSION_SECRET;
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    boot({});
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).SESSION_SECRET).toBe(first);
   });
 
   it("une configuration saine importe le serveur", () => {

@@ -21,6 +21,11 @@ export const PUBLIC_PATHS = [
   "/api/push/vapid-key",
   // La sonde de santé de Docker, qui n'a pas de session à présenter — voir la route.
   "/api/ping",
+  // L'assistant de premier lancement : il s'ouvre avant que quiconque ait un compte. La création du
+  // compte se ferme d'elle-même une fois servie (voir la route) — DECISIONS.md §48.
+  "/setup",
+  "/api/setup/status",
+  "/api/setup/admin",
 ] as const;
 
 /** Vrai pour une de ces adresses, et pour tout ce qu'elle contient. */

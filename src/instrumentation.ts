@@ -16,6 +16,16 @@ export async function register() {
      * règles et même message, reste pour `next dev` — qui ne passe pas par `boot.mjs` — et pour
      * toute autre façon de lancer `server.js` directement.
      */
+    // Les secrets du premier lancement, comme `boot.mjs` les pose en production : sans eux, `next
+    // dev` sur une installation neuve (sans `.env`) refuserait de démarrer (DECISIONS.md §48).
+    // Idempotent : ce que l'environnement donne déjà n'est jamais touché.
+    try {
+      const { applyFirstRunSecrets } = await import("../server-boot/firstRunSecrets.mjs");
+      const { DATA_DIR } = await import("./lib/dataDir");
+      await applyFirstRunSecrets(DATA_DIR);
+    } catch {
+      /* le contrôle ci-dessous dira ce qui manque */
+    }
     const { config } = await import("./lib/config");
     const { startupRefusal } = await import("./lib/sessionSecret");
     const refusal = startupRefusal({ sessionSecret: config.app.sessionSecret, adminPassword: config.app.adminPassword });

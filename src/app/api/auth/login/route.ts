@@ -1,15 +1,13 @@
-import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
 import { NextRequest, NextResponse } from "next/server";
 import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { config } from "@/lib/config";
-import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/auth";
-import { sessionDb, userPrefsDb } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rateLimiter";
-import { LOCALE_COOKIE } from "@/lib/i18n";
 import { getClientIp } from "@/lib/api-helpers";
 import { timingSafeEquals } from "@/lib/timingSafeEquals";
 import { passwordAttempts, hasLeadingSpace, readCredentials } from "@/lib/passwordAttempts";
 import { logAuthEvent } from "@/lib/eventLogs";
+import { adminSessionResponse } from "@/lib/adminSession";
+import { verifySetupAdmin } from "@/lib/settings/setup";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -29,10 +27,13 @@ export async function POST(req: NextRequest) {
   // deux passent par `timingSafeEquals` : une comparaison qui s'arrête au premier caractère
   // différent laisse deviner le mot de passe, et ce n'est pas parce qu'il y en a deux qu'on peut
   // se le permettre une fois.
+  // Le compte de `.env`, ou celui créé par l'assistant de premier lancement (DECISIONS.md §48) —
+  // gardé haché, vérifié par `verifySetupAdmin`.
   const isAdmin =
-    username === config.app.adminUser &&
-    !!config.app.adminPassword &&
-    passwordAttempts(password).some((candidate) => timingSafeEquals(candidate, config.app.adminPassword));
+    (username === config.app.adminUser &&
+      !!config.app.adminPassword &&
+      passwordAttempts(password).some((candidate) => timingSafeEquals(candidate, config.app.adminPassword))) ||
+    (!config.app.adminPassword && passwordAttempts(password).some((candidate) => verifySetupAdmin(username, candidate)));
 
   if (!isAdmin) {
     logAuthEvent("login-failed", { user: username, ip, device: requestDeviceLabel(req), reason: "compte local refusé" });
@@ -42,25 +43,5 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { token, jti } = await createSessionToken(username, "admin");
-  const expired = sessionDb.create(jti, username, requestDeviceLabel(req));
-  // Les sessions expirées effacées au passage : leurs jetons Jellyfin ne serviront plus.
-  void revokeJellyfinDevices(expired, "session expirée");
-  logAuthEvent("login", { user: username, ip, device: requestDeviceLabel(req), role: "admin", local: true });
-  const lang = userPrefsDb.getLang(username, config.app.language);
-  const res = NextResponse.json({ ok: true, role: "admin" });
-  res.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: config.app.cookieSecure,
-    maxAge: SESSION_MAX_AGE,
-    path: "/",
-  });
-  res.cookies.set(LOCALE_COOKIE, lang, {
-    sameSite: "lax",
-    secure: config.app.cookieSecure,
-    maxAge: SESSION_MAX_AGE,
-    path: "/",
-  });
-  return res;
+  return adminSessionResponse(req, username, ip);
 }
