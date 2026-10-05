@@ -345,6 +345,11 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0)
 }
 
 beforeEach(() => {
+  // La trace est commune au module : sans remise à zéro, celle d'un test portait les lignes des
+  // précédents — dont les sources, jamais détruites, écrivent encore. Elle ne garde que ses 120
+  // premières et 280 dernières lignes : sous la charge d'un build, la ligne attendue tombait dans
+  // le milieu effacé (« compte ses propres poussées », 05/10/2026).
+  traceReset();
   FakeBuffer.managed = false;
   playheadOf = () => 0;
   mediaStartsAtDefault = null;
@@ -2164,6 +2169,9 @@ describe("l'échelle des reprises", () => {
     const internals = internalsOf(mse);
     await until(() => video.buffered.length > 0 && video.buffered.end(0) > 5, "du média devant la tête");
     if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    // Le remplissage écrit encore dans la trace en arrière-plan : on la vide juste avant le geste
+    // observé, pour que la ligne attendue soit parmi les dernières, jamais dans le milieu effacé.
+    traceReset();
 
     setTime(video, 0.25);
     video.dispatchEvent(new Event("play"));
