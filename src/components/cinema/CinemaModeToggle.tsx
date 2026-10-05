@@ -3,14 +3,7 @@
 import { useRef, type CSSProperties } from "react";
 import { useT } from "@/components/TranslationProvider";
 import { useLiquidLens } from "@/lib/liquidGlass/useLiquidLens";
-import { toSpring } from "@/lib/liquidGlass/liquid";
-
-/**
- * Le relâchement de la bascule : un ressort plus souple que celui des gestes (réponse 0,55 s,
- * amortissement 0,62), qui laisse la pastille se poser avec un léger rebond. Le dégonflement court
- * de la barre du bas paraissait sec sur une bascule de deux onglets qu'on touche souvent.
- */
-const TOGGLE_SETTLE = toSpring(0.55, 0.62);
+import { TOGGLE_SETTLE } from "@/lib/liquidGlass/liquid";
 
 const TV_NAV_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40";

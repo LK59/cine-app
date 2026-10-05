@@ -1622,3 +1622,33 @@
 @media (prefers-reduced-motion: reduce) {
   .hello-word { animation: none; }
 }
+
+
+/* ─── Les accueils en verre liquide (05/10/2026) ──────────────────────────────
+   L'assistant de premier lancement et l'accueil d'un compte : le verre mixte de §45 sur ce qui est
+   petit (pilules, boutons, sélecteur de langue — `.nav-glass`, flou compris), et sur les grandes
+   surfaces (cartes, panneau) son reflet, son bord et sa teinte *sans flou* : une carte qui défile
+   ferait refaire son flou à chaque image, et le flou des grandes surfaces a été écarté le 26/09. */
+@utility glass-sheen {
+  background: var(--glass-fill);
+  border: 0;
+  box-shadow: var(--glass-edge), 0 6px 14px rgb(0 0 0 / 0.25);
+}
+.setup-liquid .settings-card {
+  border: 0;
+  border-radius: 1.5rem;
+  background: var(--glass-fill);
+  box-shadow: var(--glass-edge), 0 6px 14px rgb(0 0 0 / 0.25);
+}
+.setup-liquid .settings-glass-btn {
+  border: 0;
+  border-radius: 999px;
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .setup-liquid .settings-card,
+  .setup-liquid .settings-glass-btn { background: rgb(28 28 32 / 0.96); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

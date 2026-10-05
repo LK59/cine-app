@@ -2438,11 +2438,15 @@
       },
       "app": {
         "title": "Anwendung",
-        "why": "Standardsprache, integrierter Player, sichere Verbindung."
+        "why": "Standardsprache, sichere Verbindung, Vorbereitung der Poster."
       },
       "deployment": {
         "title": "Bereitstellungsoptionen",
         "why": "Diese Optionen werden beim Start des Containers gesetzt: Füge die angezeigte Zeile in deine docker-compose.yml (oder deine .env) ein und starte den Container neu."
+      },
+      "playback": {
+        "title": "Wiedergabe",
+        "why": "Der integrierte Player spielt Filme im Browser ab. Wenn eine Datei nicht abspielbar ist (ein Ton oder Bild, das das Gerät nicht dekodieren kann), übergibt er sie an Jellyfin, das sie live umwandelt — standardmäßig aktiv, empfohlen. Ausgeschaltet zeigen diese Dateien einen Wiedergabefehler, und der Server wandelt nie etwas um."
       }
     },
     "fields": {
@@ -2473,12 +2477,19 @@
       "VAPID_SUBJECT": "Kontakt für Benachrichtigungen (mailto:…)",
       "TZ": "Zeitzone",
       "MEDIA_ROOT": "Medienordner (Speicherstatistik)",
-      "APP_ADMIN_USER": "In der .env festgelegtes Administratorkonto"
+      "APP_ADMIN_USER": "In der .env festgelegtes Administratorkonto",
+      "POSTER_PREWARM": "Poster im Voraus vorbereiten (ab dem nächsten Start)",
+      "MEDIA_PATHS": "Unterordner der Bibliothek",
+      "CLARA_GALLERY": "Fotogalerie",
+      "POSTER_PREWARM_TUNING": "Größen und Sprachen der vorbereiteten Poster"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml unter „environment“:",
       "MEDIA_ROOT": "Den Ordner schreibgeschützt einbinden und angeben:",
-      "APP_ADMIN_USER": "Optional: Ein in der .env festgelegtes Administratorkonto ersetzt das hier angelegte."
+      "APP_ADMIN_USER": "Optional: Ein in der .env festgelegtes Administratorkonto ersetzt das hier angelegte.",
+      "MEDIA_PATHS": "Nur wenn Ihre Ordner von der üblichen Struktur von Radarr, Sonarr und qBittorrent unter dem Medienordner abweichen — für die Speicherstatistik:",
+      "CLARA_GALLERY": "Eine optionale Fotoseite: Ordner einbinden (JPG-, PNG- oder WebP-Fotos und clarabanner.jpg für das Banner), dann aktivieren:",
+      "POSTER_PREWARM_TUNING": "Optional: die vorbereiteten Breiten (standardmäßig 384 und 750) und die Postersprachen (Französisch und Standardsprache):"
     },
     "copy": "Kopieren",
     "copied": "Kopiert",

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CircleCheck, CircleAlert, Loader2, RotateCcw } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
-import { SETTINGS, TESTABLE_GROUPS, type SettingGroup, type SettingView, type TestableGroup } from "@/lib/settings/schema";
+import { DEPLOYMENT_GUIDE, SETTINGS, TESTABLE_GROUPS, type SettingGroup, type SettingView, type TestableGroup } from "@/lib/settings/schema";
 
 /**
  * Une carte de réglages par service — l'assistant de premier lancement et la page « Connexions »
@@ -31,8 +31,11 @@ export function SettingsGroupCard({
   onReset,
   errors,
   footer,
+  keys,
 }: {
   group: SettingGroup;
+  /** Seulement ces réglages du groupe (l'assistant montre le relais du lecteur à part, avec Jellyfin). */
+  keys?: readonly string[];
   views: Map<string, SettingView>;
   draft: Draft;
   onDraft: (key: string, value: string) => void;
@@ -42,7 +45,7 @@ export function SettingsGroupCard({
   footer?: React.ReactNode;
 }) {
   const t = useT();
-  const defs = SETTINGS.filter((s) => s.group === group);
+  const defs = SETTINGS.filter((s) => s.group === group && (!keys || keys.includes(s.key)));
   const need = defs.some((d) => d.need === "required") ? "required" : defs.some((d) => d.need === "library") ? "library" : "optional";
   const testable = (TESTABLE_GROUPS as readonly string[]).includes(group);
   // Une aide (où trouver la clé) seulement pour les services : un texte absent revient sous la
@@ -51,14 +54,14 @@ export function SettingsGroupCard({
   const help = t(helpKey) === helpKey ? "" : t(helpKey);
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+    <section className="settings-card rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
       <header className="mb-3 flex flex-wrap items-center gap-2">
         <h3 className="text-base font-semibold text-white">{t(`setup.groups.${group}.title`)}</h3>
-        {group !== "app" && group !== "deployment" && (
+        {group !== "app" && group !== "playback" && group !== "deployment" && (
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${NEED_TONE[need]}`}>{t(`setup.need.${need}`)}</span>
         )}
       </header>
-      <p className="mb-1 text-sm text-muted">{t(`setup.groups.${group}.why`)}</p>
+      <p className={`${help ? "mb-1" : "mb-4"} text-sm text-muted`}>{t(`setup.groups.${group}.why`)}</p>
       {help && <p className="mb-4 text-xs text-subtle">{help}</p>}
 
       <div className="space-y-4">
@@ -133,7 +136,7 @@ function BooleanChoice({ id, value, onChange }: { id: string; value: string; onC
   return (
     <div id={id} role="radiogroup" className="flex gap-1.5">
       {(["true", "false"] as const).map((v) => (
-        <button key={v} type="button" role="radio" aria-checked={value === v} onClick={() => onChange(v)} className={`chip ${value === v ? "chip-on" : ""}`}>
+        <button key={v} type="button" role="radio" aria-checked={value === v} onClick={() => onChange(v)} data-liquid-pan="icon" className={`chip ${value === v ? "chip-on" : ""}`}>
           {t(v === "true" ? "setup.on" : "setup.off")}
         </button>
       ))}
@@ -163,7 +166,7 @@ function ConnectionTest({ group, draft }: { group: TestableGroup; draft: Draft }
     detail === "unauthorized" || detail === "unreachable" || detail === "timeout" ? t(`setup.testFail.${detail}`) : t("setup.testFail.other", { detail });
   return (
     <div className="mt-4 flex flex-wrap items-center gap-3">
-      <button type="button" onClick={run} disabled={state === "running"} className="btn btn-ghost text-sm">
+      <button type="button" onClick={run} disabled={state === "running"} data-liquid-pan="wide" className="btn btn-ghost settings-glass-btn text-sm">
         {state === "running" ? <Loader2 size={15} className="animate-spin" /> : null}
         {state === "running" ? t("setup.testing") : t("setup.test")}
       </button>
@@ -181,34 +184,29 @@ function ConnectionTest({ group, draft }: { group: TestableGroup; draft: Draft }
   );
 }
 
-/** Les options de déploiement : la ligne à ajouter, à copier. */
+/** Les options de déploiement : ce qui ne se règle pas ici, et la ligne à ajouter, à copier. */
 export function DeploymentGuide() {
   const t = useT();
   const [copied, setCopied] = useState<string | null>(null);
-  const snippets: Record<string, string> = {
-    TZ: "    environment:\n      - TZ=Europe/Paris",
-    MEDIA_ROOT: "    volumes:\n      - /chemin/vers/medias:/mnt/media/video:ro\n    environment:\n      - MEDIA_ROOT=/mnt/media/video",
-    APP_ADMIN_USER: "APP_ADMIN_USER=admin\nAPP_ADMIN_PASSWORD=…",
-  };
-  function copy(key: string) {
-    void navigator.clipboard?.writeText(snippets[key]).then(() => {
-      setCopied(key);
-      window.setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
+  function copy(id: string, snippet: string) {
+    void navigator.clipboard?.writeText(snippet).then(() => {
+      setCopied(id);
+      window.setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500);
     });
   }
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+    <section className="settings-card rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
       <h3 className="mb-2 text-base font-semibold text-white">{t("setup.groups.deployment.title")}</h3>
       <p className="mb-4 text-sm text-muted">{t("setup.groups.deployment.why")}</p>
       <div className="space-y-4">
-        {Object.keys(snippets).map((key) => (
-          <div key={key}>
-            <p className="mb-1 text-sm font-medium text-white">{t(`setup.fields.${key}`)}</p>
-            <p className="mb-1.5 text-xs text-subtle">{t(`setup.deployHint.${key}`)}</p>
+        {DEPLOYMENT_GUIDE.map((entry) => (
+          <div key={entry.id}>
+            <p className="mb-1 text-sm font-medium text-white">{t(`setup.fields.${entry.id}`)}</p>
+            <p className="mb-1.5 text-xs text-subtle">{t(`setup.deployHint.${entry.id}`)}</p>
             <div className="relative">
-              <pre className="overflow-x-auto rounded-lg bg-black/40 p-3 pr-20 text-xs text-white">{snippets[key]}</pre>
-              <button type="button" onClick={() => copy(key)} className="chip absolute right-2 top-2 text-xs">
-                {copied === key ? t("setup.copied") : t("setup.copy")}
+              <pre className="overflow-x-auto rounded-lg bg-black/40 p-3 pr-20 text-xs text-white">{entry.snippet}</pre>
+              <button type="button" onClick={() => copy(entry.id, entry.snippet)} className="chip absolute right-2 top-2 text-xs">
+                {copied === entry.id ? t("setup.copied") : t("setup.copy")}
               </button>
             </div>
           </div>

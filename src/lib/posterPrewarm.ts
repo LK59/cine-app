@@ -20,6 +20,7 @@ import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { getTitleArt } from "@/lib/title-art";
 import { libraryPoster } from "@/lib/images";
 import { LOCALES, type Locale } from "@/lib/i18n";
+import { readOverride } from "@/lib/settings/store";
 
 /**
  * Les largeurs préparées par défaut. Relevées dans le journal du relais le 25/09/2026 sur 8 329
@@ -182,7 +183,15 @@ const done = new Set<string>();
  * demi-heures. Ne lève jamais — une affiche non préparée se prépare quand même à sa première
  * demande, comme avant.
  */
-export function startPosterPrewarm(settings: PrewarmSettings = prewarmSettings()): boolean {
+/**
+ * L'environnement du préchauffage, avec l'interrupteur réglé dans l'application s'il l'a été
+ * (DECISIONS.md §48) — lu au démarrage, d'où « au prochain démarrage » dans son libellé.
+ */
+function prewarmEnv(): Record<string, string | undefined> {
+  return { ...process.env, POSTER_PREWARM: readOverride("POSTER_PREWARM") ?? process.env.POSTER_PREWARM };
+}
+
+export function startPosterPrewarm(settings: PrewarmSettings = prewarmSettings(prewarmEnv())): boolean {
   if (!settings.enabled || started) return false;
   started = true;
   const base = `http://127.0.0.1:${process.env.PORT || 3000}`;

@@ -424,3 +424,10 @@ export function attachLiquid(surface: HTMLElement, options: LiquidPressOptions):
 export function liquidButtonRef(el: HTMLElement | null): (() => void) | undefined {
   return el ? attachLiquid(el, { targets: "[data-liquid]" }) : undefined;
 }
+
+/**
+ * Le relâchement d'une bascule (Films/Séries, langue) : un ressort plus souple que celui des gestes
+ * (réponse 0,55 s, amortissement 0,62), qui laisse la pastille se poser avec un léger rebond. Le
+ * dégonflement court de la barre du bas paraissait sec sur une bascule qu'on touche souvent.
+ */
+export const TOGGLE_SETTLE = toSpring(0.55, 0.62);

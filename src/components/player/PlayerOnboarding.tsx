@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { Check } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
-import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
+import { type Locale } from "@/lib/i18n";
+import { LanguageLens } from "@/components/LanguageLens";
+import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
@@ -205,6 +207,10 @@ export function PlayerOnboarding({
   const [edits, setEdits] = useState<Partial<PlayerPreferences>>({});
   const playback = initial ? { ...initial, ...edits } : null;
 
+  // Le verre liquide des accueils (05/10/2026) : le geste sur les boutons marqués `data-liquid-pan`.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useLiquidDelegation(rootRef);
+
   const pushSupported = typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
 
   async function next() {
@@ -260,6 +266,7 @@ export function PlayerOnboarding({
 
   return createPortal(
     <div
+      ref={rootRef}
       role="dialog"
       aria-modal="true"
       // Échap vaut « Passer », et Tab reste dans l'accueil : c'est une fenêtre par-dessus tout,
@@ -300,7 +307,7 @@ export function PlayerOnboarding({
       />
 
       <div
-        className="relative flex w-full max-w-md flex-col px-6 sm:my-10 sm:rounded-2xl sm:border sm:border-white/10 sm:bg-white/[0.03] sm:px-8 sm:py-8 sm:shadow-2xl"
+        className="relative flex w-full max-w-md flex-col px-6 sm:my-10 sm:rounded-2xl sm:px-8 sm:py-8 sm:glass-sheen"
         style={{
           // Un vrai écart sous la zone sûre, et non la zone sûre seule : dans l'application installée,
           // iOS voile et floute le haut de l'écran sous la barre d'état, et la progression comme
@@ -320,7 +327,7 @@ export function PlayerOnboarding({
             ))}
           </div>
           {step !== "done" && (
-            <button type="button" onClick={onSkip} className="text-sm font-medium text-subtle transition-colors hover:text-white">
+            <button type="button" onClick={onSkip} data-liquid-pan="wide" className="nav-glass rounded-full px-3.5 py-1.5 text-sm font-medium text-muted transition-colors hover:text-white">
               {t("player.onboarding.skip")}
             </button>
           )}
@@ -339,19 +346,7 @@ export function PlayerOnboarding({
               <p className="mb-2.5 mt-8 text-xs font-medium uppercase tracking-wider text-subtle">
                 {t("player.onboarding.languageLabel")}
               </p>
-              <div className="grid grid-cols-2 gap-2.5">
-                {LOCALES.map((l) => (
-                  <button
-                    key={l}
-                    type="button"
-                    onClick={() => setLang(l)}
-                    aria-pressed={lang === l}
-                    className={`chip justify-center py-2.5 ${lang === l ? "chip-on" : ""}`}
-                  >
-                    {LOCALE_LABELS[l]}
-                  </button>
-                ))}
-              </div>
+              <LanguageLens value={lang} onChange={setLang} disabled={busy} label={t("player.onboarding.languageLabel")} />
             </>
           )}
 
@@ -388,13 +383,13 @@ export function PlayerOnboarding({
               <p className="mt-3 text-base leading-relaxed text-muted">{t("player.onboarding.notifText")}</p>
               <div className="mt-8">
                 {pushSupported ? (
-                  <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
+                  <div className="glass-sheen rounded-2xl px-4 py-3.5">
                     <PushToggle />
                   </div>
                 ) : (
                   // Sur iPhone, une page ouverte dans Safari ne peut pas s'abonner : il faut
                   // l'application installée. On le dit, et on laisse passer.
-                  <p className="rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm leading-relaxed text-muted">
+                  <p className="glass-sheen rounded-2xl px-4 py-3.5 text-sm leading-relaxed text-muted">
                     {t("player.onboarding.notifInstall")}
                   </p>
                 )}
@@ -419,7 +414,8 @@ export function PlayerOnboarding({
             type="button"
             onClick={() => void next()}
             disabled={busy || (step === "playback" && !playback)}
-            className="flex w-full items-center justify-center rounded-lg bg-white px-4 py-3.5 text-base font-semibold text-ink transition-transform active:scale-[0.98] disabled:opacity-60"
+            data-liquid-pan="wide"
+            className="flex w-full items-center justify-center rounded-full bg-white px-4 py-3.5 text-base font-semibold text-ink disabled:opacity-60"
           >
             {step === "done" ? t("player.onboarding.finish") : t("player.onboarding.next")}
           </button>

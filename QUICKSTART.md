@@ -12,16 +12,35 @@ free TMDB key. No `.env`, no cloning, no secret to invent.
 
 ## 1. Start (1 minute)
 
-```sh
-mkdir cine-app && cd cine-app
-curl -O https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
-docker compose -f docker-compose.example.yml up -d
+Create a folder, save this as `docker-compose.yml` inside it, and run `docker compose up -d`:
+
+```yaml
+services:
+  cine-app:
+    image: ghcr.io/lk59/cine-app:latest
+    ports:
+      - "3000:3000"            # the address you will open: http://<server>:3000
+    volumes:
+      - cine-data:/app/data    # everything the app keeps: database, generated secrets, logs
+    restart: unless-stopped
+    # Optional — uncomment what you need:
+    # environment:
+    #   - TZ=Europe/Paris                # time zone for logs and schedules
+    #   - MEDIA_ROOT=/mnt/media/video    # storage statistics in the management area
+    # volumes:                           # (add to the list above, not a second key)
+    #   - /path/to/media:/mnt/media/video:ro
+    # networks:
+    #   - media_net                      # reach Jellyfin, Radarr… by container name
+
+volumes:
+  cine-data:
+
+# networks:                  # only if you uncommented `networks` above
+#   media_net:
+#     external: true         # the name of the Docker network your media services share
 ```
 
 Open `http://<server>:3000`. The first-launch assistant opens on its own.
-
-The compose file is three lines of substance: the image, port 3000, and a named volume that holds
-everything the app keeps (database, generated secrets, logs).
 
 ## 2. Have these at hand
 
@@ -70,23 +89,11 @@ The session secret and the push-notification keys are generated on first launch 
 
 ## Optional additions
 
-```yaml
-services:
-  cine-app:
-    environment:
-      - TZ=Europe/Paris                 # time zone for logs and schedules
-      - MEDIA_ROOT=/mnt/media/video     # storage statistics in the management area
-    volumes:
-      - /path/to/media:/mnt/media/video:ro
-    networks:
-      - media_net                       # reach other containers by name
+Every optional line is already in the compose file above, commented. The assistant's last step,
+and **Management → Settings → Service connections**, list the others (photo gallery, library
+sub-folders, poster preparation) with the exact lines to add.
 
-networks:
-  media_net:
-    external: true
-```
-
-Updating: `docker compose -f docker-compose.example.yml pull && docker compose -f docker-compose.example.yml up -d`.
+Updating: `docker compose pull && docker compose up -d`.
 
 Reverse proxy, HTTPS, resource limits and hardening: [DEPLOYMENT.md](DEPLOYMENT.md), with the
 annotated `docker-compose.advanced.yml`.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Share, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 
@@ -25,6 +26,7 @@ function isIosSafariBrowserTab(): boolean {
 export function InstallPrompt() {
   const t = useT();
   const [show, setShow] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!isIosSafariBrowserTab()) return;
@@ -44,7 +46,9 @@ export function InstallPrompt() {
     } catch {}
   }
 
-  if (!show) return null;
+  // Pas pendant l'assistant de premier lancement (05/10/2026) : sur un iPhone, la bannière couvrait
+  // ses boutons, et l'installation n'a de sens qu'une fois l'application prête.
+  if (!show || pathname?.startsWith("/setup")) return null;
 
   return (
     <div

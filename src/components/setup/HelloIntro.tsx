@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
+import { LOCALES, type Locale } from "@/lib/i18n";
+import { LanguageLens } from "@/components/LanguageLens";
 
 /**
  * Le tout premier écran : « Bonjour » qui défile dans les langues de l'application, comme le
@@ -34,19 +35,8 @@ export function HelloIntro({ current, busy, onChoose }: { current: Locale; busy:
           {word}
         </span>
       </div>
-      <div className="mt-10 grid w-full max-w-sm grid-cols-2 gap-2.5">
-        {LOCALES.map((l) => (
-          <button
-            key={l}
-            type="button"
-            lang={l}
-            disabled={busy !== null}
-            onClick={() => onChoose(l)}
-            className={`btn justify-center py-3 ${l === current ? "btn-primary" : "btn-ghost"}`}
-          >
-            {LOCALE_LABELS[l]}
-          </button>
-        ))}
+      <div className="mt-10 flex w-full justify-center">
+        <LanguageLens value={current} onChange={onChoose} disabled={busy !== null} label="Language · Langue · Idioma · Sprache" />
       </div>
     </div>
   );

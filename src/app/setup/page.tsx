@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
 import { useLocale, useT } from "@/components/TranslationProvider";
@@ -8,6 +8,7 @@ import { HelloIntro } from "@/components/setup/HelloIntro";
 import { DeploymentGuide, SettingsGroupCard, type Draft } from "@/components/settings/SettingsGroupCard";
 import { LOCALE_COOKIE, type Locale } from "@/lib/i18n";
 import { SETTINGS_BY_KEY, type SettingGroup, type SettingView } from "@/lib/settings/schema";
+import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 
 /**
  * L'assistant de premier lancement (DECISIONS.md §48).
@@ -23,11 +24,25 @@ type SettingsPayload = { settings: SettingView[]; missing: string[]; setupDone: 
 type Step = "welcome" | "admin" | "jellyfin" | "tmdb" | "library" | "extras" | "deployment" | "finish";
 
 const STEPS: Step[] = ["welcome", "admin", "jellyfin", "tmdb", "library", "extras", "deployment", "finish"];
-const STEP_GROUPS: Partial<Record<Step, SettingGroup[]>> = {
-  jellyfin: ["jellyfin"],
-  tmdb: ["tmdb"],
-  library: ["radarr", "sonarr"],
-  extras: ["jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "app"],
+/**
+ * Les cartes de chaque étape. Le relais vers Jellyfin (activé par défaut) se montre avec Jellyfin,
+ * dont il dépend, pour qu'on puisse le couper dès l'assistant (demandé le 05/10/2026) ; le reste
+ * du lecteur attend les compléments.
+ */
+type StepCard = { group: SettingGroup; keys?: readonly string[] };
+const STEP_CARDS: Partial<Record<Step, StepCard[]>> = {
+  jellyfin: [{ group: "jellyfin" }, { group: "playback", keys: ["PLAYER_SERVER_FALLBACK"] }],
+  tmdb: [{ group: "tmdb" }],
+  library: [{ group: "radarr" }, { group: "sonarr" }],
+  extras: [
+    { group: "jellyseerr" },
+    { group: "qbittorrent" },
+    { group: "bazarr" },
+    { group: "jackett" },
+    { group: "ratings" },
+    { group: "playback", keys: ["PLAYER_ENABLED", "PLAYER_AUTO_FRAME"] },
+    { group: "app" },
+  ],
 };
 const STEP_STORAGE = "cine:setup-step";
 
@@ -180,15 +195,16 @@ export default function SetupPage() {
           <h1 className="mb-2 font-display text-3xl font-semibold text-white">{t("setup.done.title")}</h1>
           <p className="mb-8 text-sm text-muted">{t("setup.done.text")}</p>
           <div className="flex flex-col gap-2.5 sm:flex-row sm:justify-center">
-            <a href="/gestion" className="btn btn-primary justify-center">{t("setup.done.manage")}</a>
-            <a href="/login" className="btn btn-ghost justify-center">{t("setup.done.cinema")}</a>
+            <a href="/gestion" data-liquid-pan="wide" className="btn btn-primary justify-center rounded-full">{t("setup.done.manage")}</a>
+            <a href="/login" data-liquid-pan="wide" className="btn settings-glass-btn justify-center rounded-full">{t("setup.done.cinema")}</a>
           </div>
         </div>
       </Shell>
     );
   }
 
-  const groups = STEP_GROUPS[current];
+  const cards = STEP_CARDS[current];
+  const groups = cards?.map((c) => c.group);
   return (
     <Shell>
       {current !== "welcome" && (
@@ -229,10 +245,11 @@ export default function SetupPage() {
         <div className="space-y-4">
           {current === "jellyfin" && <p className="text-sm text-subtle">{t("setup.welcome.urls")} {t("setup.welcome.env")}</p>}
           {current === "library" && <p className="text-sm text-warning">{t("setup.libraryRule")}</p>}
-          {groups.map((g) => (
+          {cards!.map((c) => (
             <SettingsGroupCard
-              key={g}
-              group={g}
+              key={`${c.group}-${c.keys?.join() ?? ""}`}
+              group={c.group}
+              keys={c.keys}
               views={views}
               draft={draft}
               errors={errors}
@@ -260,21 +277,21 @@ export default function SetupPage() {
 
       {current !== "welcome" && (
         <nav className="mt-8 flex items-center justify-between gap-3">
-          <button type="button" onClick={() => go(step - 1)} className="btn btn-ghost">
+          <button type="button" onClick={() => go(step - 1)} data-liquid-pan="wide" className="btn settings-glass-btn rounded-full">
             <ArrowLeft size={16} /> {t("setup.back")}
           </button>
           {current === "finish" ? (
-            <button type="button" onClick={finish} disabled={busy || !signedIn || (payload?.missing.length ?? 1) > 0} className="btn btn-primary">
+            <button type="button" onClick={finish} disabled={busy || !signedIn || (payload?.missing.length ?? 1) > 0} data-liquid-pan="wide" className="btn btn-primary rounded-full">
               {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
               {busy ? t("setup.done.finishing") : t("setup.finish")}
             </button>
           ) : groups ? (
-            <button type="button" onClick={() => saveAndNext(groups)} disabled={busy || !signedIn} className="btn btn-primary">
+            <button type="button" onClick={() => saveAndNext(groups)} disabled={busy || !signedIn} data-liquid-pan="wide" className="btn btn-primary rounded-full">
               {busy ? <Loader2 size={16} className="animate-spin" /> : null}
               {busy ? t("setup.saving") : t("setup.next")} {!busy && <ArrowRight size={16} />}
             </button>
           ) : current === "deployment" ? (
-            <button type="button" onClick={() => go(step + 1)} className="btn btn-primary">
+            <button type="button" onClick={() => go(step + 1)} data-liquid-pan="wide" className="btn btn-primary rounded-full">
               {t("setup.next")} <ArrowRight size={16} />
             </button>
           ) : null}
@@ -286,9 +303,26 @@ export default function SetupPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const t = useT();
+  // Le verre liquide des accueils (05/10/2026) : le geste sur ce qui porte `data-liquid-pan`.
+  const rootRef = useRef<HTMLElement>(null);
+  useLiquidDelegation(rootRef);
   return (
-    <main className="min-h-dvh bg-ink px-5 py-10" style={{ paddingBottom: "max(2.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))" }}>
-      <div className="mx-auto w-full max-w-xl">
+    <main
+      ref={rootRef}
+      className="setup-liquid relative min-h-dvh bg-ink px-4 py-10 sm:px-5"
+      style={{ paddingBottom: "max(2.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))" }}
+    >
+      {/* Deux lueurs fixes de la couleur d'accent, derrière tout : sans rien dessous, le verre ne
+          se distingue pas du fond. Fixes, elles ne coûtent rien au défilement. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0"
+        style={{
+          background:
+            "radial-gradient(60% 40% at 50% 0%, color-mix(in srgb, var(--color-accent-500) 24%, transparent), transparent 70%), radial-gradient(50% 35% at 85% 100%, color-mix(in srgb, var(--color-accent-400) 14%, transparent), transparent 70%)",
+        }}
+      />
+      <div className="relative mx-auto w-full max-w-xl">
         <header className="mb-8 text-center">
           <p className="font-display text-sm font-semibold tracking-tight text-accent-400">CineApp</p>
           <p className="mt-1 text-xs text-subtle">{t("setup.subtitle")}</p>
@@ -302,10 +336,10 @@ function Shell({ children }: { children: React.ReactNode }) {
 function NeedSignIn() {
   const t = useT();
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
+    <div className="settings-card rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
       <h2 className="mb-2 text-lg font-semibold text-white">{t("setup.admin.signInTitle")}</h2>
       <p className="mb-5 text-sm text-muted">{t("setup.admin.signInText")}</p>
-      <a href="/login?next=/setup" className="btn btn-primary justify-center">{t("setup.admin.signIn")}</a>
+      <a href="/login?next=/setup" data-liquid-pan="wide" className="btn btn-primary justify-center rounded-full">{t("setup.admin.signIn")}</a>
     </div>
   );
 }
@@ -340,7 +374,7 @@ function AdminStep({
           <Check size={24} />
         </div>
         <h2 className="mb-6 text-lg font-semibold text-white">{t("setup.admin.title")}</h2>
-        <button type="button" onClick={onNext} className="btn btn-primary">
+        <button type="button" onClick={onNext} data-liquid-pan="wide" className="btn btn-primary rounded-full">
           {t("setup.next")} <ArrowRight size={16} />
         </button>
       </div>
@@ -371,7 +405,7 @@ function AdminStep({
   }
 
   return (
-    <form onSubmit={create} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+    <form onSubmit={create} className="settings-card rounded-2xl border border-white/10 bg-white/[0.03] p-5">
       <h2 className="mb-1 text-lg font-semibold text-white">{t("setup.admin.title")}</h2>
       <p className="mb-5 text-sm text-muted">{t("setup.admin.text")}</p>
       <label className="mb-1.5 block text-sm font-medium text-white" htmlFor="setup-user">{t("setup.admin.username")}</label>
@@ -381,7 +415,7 @@ function AdminStep({
       <label className="mb-1.5 block text-sm font-medium text-white" htmlFor="setup-confirm">{t("setup.admin.confirm")}</label>
       <input id="setup-confirm" className="input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-      <button type="submit" disabled={busy} className="btn btn-primary mt-5 w-full justify-center">
+      <button type="submit" disabled={busy} data-liquid-pan="wide" className="btn btn-primary mt-5 w-full justify-center rounded-full">
         {busy ? <Loader2 size={16} className="animate-spin" /> : null}
         {t("setup.admin.create")}
       </button>

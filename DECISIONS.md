@@ -1514,5 +1514,13 @@ démarre sans rien préparer sur l'hôte ; le modèle annoté devient `docker-co
 route publique de création du compte se ferme dès qu'un compte existe ou que l'assistant est
 terminé ; celle de la langue, une fois l'assistant terminé.
 
+Chaque variable de `.env.example` est réglable, guidée (`DEPLOYMENT_GUIDE` : la galerie, les
+sous-dossiers de la bibliothèque, les tailles des affiches, le compte fixé par le `.env`) ou générée
+(`GENERATED_SECRETS`) ; `settings-couverture.test.ts` échoue sinon. Le lecteur et son relais vers
+Jellyfin sont activés par défaut ; le relais se montre à l'étape Jellyfin de l'assistant, pour
+pouvoir le couper dès l'installation. Les deux accueils (assistant, accueil d'un compte) portent le
+verre mixte de §45 : flou sur les pilules et les boutons, reflet et bord sans flou sur les cartes ;
+la langue s'y choisit par une même pilule à lentille (`LanguageLens`).
+
 **Décidé le 05/10/2026.**
 

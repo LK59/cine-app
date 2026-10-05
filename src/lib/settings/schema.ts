@@ -15,7 +15,7 @@
 
 export type SettingKind = "url" | "secret" | "text" | "boolean" | "select";
 export type SettingNeed = "required" | "library" | "optional";
-export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "app" | "deployment";
+export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "playback" | "app" | "deployment";
 
 export interface SettingDef {
   key: string;
@@ -56,9 +56,11 @@ export const SETTINGS: readonly SettingDef[] = [
   // ── L'application ──
   { key: "APP_LANGUAGE", group: "app", kind: "select", need: "optional", fallback: "en", inApp: true, options: ["fr", "en", "es", "de"] },
   { key: "COOKIE_SECURE", group: "app", kind: "boolean", need: "optional", fallback: "false", inApp: true },
-  { key: "PLAYER_ENABLED", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
-  { key: "PLAYER_SERVER_FALLBACK", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
-  { key: "PLAYER_AUTO_FRAME", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  { key: "PLAYER_ENABLED", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  { key: "PLAYER_SERVER_FALLBACK", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  // Lu au démarrage seulement : son libellé le dit (« au prochain démarrage »).
+  { key: "POSTER_PREWARM", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "VAPID_SUBJECT", group: "app", kind: "text", need: "optional", fallback: "mailto:admin@example.com", inApp: true, placeholder: "mailto:admin@example.com" },
   // ── Le déploiement : guidé, pas réglable ici ──
   { key: "TZ", group: "deployment", kind: "text", need: "optional", fallback: "", inApp: false, placeholder: "Europe/Paris" },
@@ -69,7 +71,48 @@ export const SETTINGS: readonly SettingDef[] = [
 export const SETTINGS_BY_KEY: ReadonlyMap<string, SettingDef> = new Map(SETTINGS.map((s) => [s.key, s]));
 
 /** Les groupes réglables, dans l'ordre de l'assistant et de la page. */
-export const SETTING_GROUPS: readonly SettingGroup[] = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "app", "deployment"];
+export const SETTING_GROUPS: readonly SettingGroup[] = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "playback", "app", "deployment"];
+
+/**
+ * Le guide de déploiement : ce qui ne se règle pas dans l'application — un dossier à monter, le
+ * fuseau, un compte fixé par le `.env` — avec la ligne à ajouter. Chaque entrée couvre les
+ * variables de `.env.example` qu'elle explique ; `settings-couverture.test.ts` vérifie qu'aucune
+ * variable n'est ni réglable, ni guidée, ni générée.
+ */
+export interface DeploymentGuideEntry {
+  /** Libellé `setup.fields.<id>`, explication `setup.deployHint.<id>`. */
+  id: string;
+  keys: readonly string[];
+  snippet: string;
+}
+export const DEPLOYMENT_GUIDE: readonly DeploymentGuideEntry[] = [
+  { id: "TZ", keys: ["TZ"], snippet: "    environment:\n      - TZ=Europe/Paris" },
+  {
+    id: "MEDIA_ROOT",
+    keys: ["MEDIA_ROOT"],
+    snippet: "    volumes:\n      - /path/to/media:/mnt/media/video:ro\n    environment:\n      - MEDIA_ROOT=/mnt/media/video",
+  },
+  {
+    id: "MEDIA_PATHS",
+    keys: ["MOVIES_PATH", "TV_PATH", "SEEDS_PATH", "SEED_MOVIES_PATH", "SEED_TV_PATH", "CROSS_SEED_PATH"],
+    snippet:
+      "    environment:\n      - MOVIES_PATH=/mnt/media/video/movies\n      - TV_PATH=/mnt/media/video/tv\n      - SEEDS_PATH=/mnt/media/video/downloads/seeds\n      - SEED_MOVIES_PATH=/mnt/media/video/downloads/seeds/movies\n      - SEED_TV_PATH=/mnt/media/video/downloads/seeds/tv\n      - CROSS_SEED_PATH=/mnt/media/video/downloads/seeds/cross-seed-links",
+  },
+  {
+    id: "CLARA_GALLERY",
+    keys: ["CLARA_GALLERY_ENABLED"],
+    snippet: "    volumes:\n      - /path/to/photos:/app/gallery/clara:ro\n    environment:\n      - CLARA_GALLERY_ENABLED=true",
+  },
+  {
+    id: "POSTER_PREWARM_TUNING",
+    keys: ["POSTER_PREWARM_WIDTHS", "POSTER_PREWARM_LOCALES"],
+    snippet: "    environment:\n      - POSTER_PREWARM_WIDTHS=384,750\n      - POSTER_PREWARM_LOCALES=fr,en",
+  },
+  { id: "APP_ADMIN_USER", keys: ["APP_ADMIN_USER", "APP_ADMIN_PASSWORD"], snippet: "APP_ADMIN_USER=admin\nAPP_ADMIN_PASSWORD=…" },
+];
+
+/** Générés au premier lancement (`server-boot/firstRunSecrets.mjs`) : ni affichés, ni à fournir. */
+export const GENERATED_SECRETS = ["SESSION_SECRET", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"] as const;
 
 /** Les services qu'on peut tester, et les réglages que le test lit. */
 export const TESTABLE_GROUPS = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett"] as const;

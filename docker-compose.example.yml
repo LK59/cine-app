@@ -1,22 +1,26 @@
-# CineApp — the minimal deployment.
-#
-#   docker compose up -d     then open http://<server>:3000
-#
-# A first-launch assistant asks for the rest in the browser: an administrator account, then
-# Jellyfin, TMDB and Radarr/Sonarr (the only required services), and optionally Jellyseerr,
-# qBittorrent, Bazarr, Jackett and ratings. Secrets are generated on first launch and kept in the
-# data volume. No .env is needed.
-#
-# Optional extras (time zone, a media folder for storage statistics, a shared Docker network,
-# resource limits, a reverse proxy) are described in QUICKSTART.md and DEPLOYMENT.md.
+# CineApp — the minimal deployment. Save as docker-compose.yml, run `docker compose up -d`, then
+# open http://<server>:3000: a first-launch assistant asks for the rest (see QUICKSTART.md).
+# No .env needed; secrets are generated on first launch.
 services:
   cine-app:
     image: ghcr.io/lk59/cine-app:latest
     ports:
-      - "3000:3000"
+      - "3000:3000"            # the address you will open: http://<server>:3000
     volumes:
-      - cine-data:/app/data
+      - cine-data:/app/data    # everything the app keeps: database, generated secrets, logs
     restart: unless-stopped
+    # Optional — uncomment what you need:
+    # environment:
+    #   - TZ=Europe/Paris                # time zone for logs and schedules
+    #   - MEDIA_ROOT=/mnt/media/video    # storage statistics in the management area
+    # volumes:                           # (add to the list above, not a second key)
+    #   - /path/to/media:/mnt/media/video:ro
+    # networks:
+    #   - media_net                      # reach Jellyfin, Radarr… by container name
 
 volumes:
   cine-data:
+
+# networks:                  # only if you uncommented `networks` above
+#   media_net:
+#     external: true         # the name of the Docker network your media services share

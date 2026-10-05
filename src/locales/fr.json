@@ -2438,11 +2438,15 @@
       },
       "app": {
         "title": "Application",
-        "why": "Langue par défaut, lecteur intégré, connexion sécurisée."
+        "why": "Langue par défaut, connexion sécurisée, préparation des affiches."
       },
       "deployment": {
         "title": "Options de déploiement",
         "why": "Ces options se règlent au lancement du conteneur : ajoutez la ligne indiquée à votre docker-compose.yml (ou à votre .env), puis relancez le conteneur."
+      },
+      "playback": {
+        "title": "Lecture",
+        "why": "Le lecteur intégré lit les films dans le navigateur. Quand un fichier ne passe pas (un son ou une image que l'appareil ne sait pas décoder), il le confie à Jellyfin, qui le convertit à la volée — activé par défaut, conseillé. Désactivé, ces fichiers affichent une erreur de lecture, et le serveur ne convertit jamais rien."
       }
     },
     "fields": {
@@ -2473,12 +2477,19 @@
       "VAPID_SUBJECT": "Contact des notifications (mailto:…)",
       "TZ": "Fuseau horaire",
       "MEDIA_ROOT": "Dossier des médias (statistiques de stockage)",
-      "APP_ADMIN_USER": "Compte administrateur défini dans le .env"
+      "APP_ADMIN_USER": "Compte administrateur défini dans le .env",
+      "POSTER_PREWARM": "Préparer les affiches à l'avance (au prochain démarrage)",
+      "MEDIA_PATHS": "Sous-dossiers de la bibliothèque",
+      "CLARA_GALLERY": "Galerie de photos",
+      "POSTER_PREWARM_TUNING": "Tailles et langues des affiches préparées"
     },
     "deployHint": {
       "TZ": "Dans docker-compose.yml, sous « environment » :",
       "MEDIA_ROOT": "Montez le dossier en lecture seule, puis indiquez-le :",
-      "APP_ADMIN_USER": "Facultatif : un compte administrateur fixé par le .env remplace celui créé ici."
+      "APP_ADMIN_USER": "Facultatif : un compte administrateur fixé par le .env remplace celui créé ici.",
+      "MEDIA_PATHS": "Seulement si votre arborescence diffère de celle de Radarr, Sonarr et qBittorrent sous le dossier des médias — pour les statistiques de stockage :",
+      "CLARA_GALLERY": "Une page de photos facultative : montez le dossier (photos JPG, PNG ou WebP, et clarabanner.jpg pour la bannière), puis activez-la :",
+      "POSTER_PREWARM_TUNING": "Facultatif : les largeurs préparées (384 et 750 par défaut) et les langues des affiches (français et langue par défaut) :"
     },
     "copy": "Copier",
     "copied": "Copié",
