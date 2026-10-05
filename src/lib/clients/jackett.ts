@@ -1,7 +1,8 @@
 import { config } from "@/lib/config";
 import { HttpError } from "@/lib/http";
 
-const { url, apiKey } = config.jackett;
+// Lu à chaque appel, et non recopié au chargement : réglable dans l'application (DECISIONS.md §48).
+const cfg = config.jackett;
 
 export interface JackettIndexer {
   id: string;
@@ -71,14 +72,14 @@ async function fetchXml(requestUrl: string, timeoutMs = 8000): Promise<string> {
 export const jackett = {
   getIndexers: async () => {
     const xml = await fetchXml(
-      `${url}/api/v2.0/indexers/all/results/torznab/api?apikey=${encodeURIComponent(apiKey)}&t=indexers&configured=true`
+      `${cfg.url}/api/v2.0/indexers/all/results/torznab/api?apikey=${encodeURIComponent(cfg.apiKey)}&t=indexers&configured=true`
     );
     return parseIndexersXml(xml);
   },
   testIndexer: async (id: string): Promise<boolean> => {
     try {
       await fetchXml(
-        `${url}/api/v2.0/indexers/${encodeURIComponent(id)}/results/torznab/api?apikey=${encodeURIComponent(apiKey)}&t=caps`,
+        `${cfg.url}/api/v2.0/indexers/${encodeURIComponent(id)}/results/torznab/api?apikey=${encodeURIComponent(cfg.apiKey)}&t=caps`,
         5000
       );
       return true;

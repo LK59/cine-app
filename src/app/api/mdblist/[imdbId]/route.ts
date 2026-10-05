@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { config } from "@/lib/config";
 import { withPersistentCache } from "@/lib/server-cache";
 import { createRateLimiter } from "@/lib/rateLimiter";
 import { getClientIp } from "@/lib/api-helpers";
@@ -21,7 +22,7 @@ export interface MdbRatings {
 const IMDB_RE = /^tt\d{6,8}$/;
 
 async function fetchRatings(imdbId: string): Promise<MdbRatings> {
-  const key = process.env.MDBLIST_API_KEY;
+  const key = config.mdblist.apiKey;
   if (!key) throw new Error("no key");
   const res = await fetch(`https://mdblist.com/api/?apikey=${key}&i=${imdbId}`, {
     signal: AbortSignal.timeout(8000),
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ imdbId: s
   if (!IMDB_RE.test(imdbId)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
-  if (!process.env.MDBLIST_API_KEY) {
+  if (!config.mdblist.apiKey) {
     return NextResponse.json({ ratings: null });
   }
   try {

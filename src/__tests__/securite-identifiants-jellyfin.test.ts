@@ -44,7 +44,8 @@ describe("le client Jellyfin", () => {
    */
   it("ne concatène aucun identifiant sans le faire passer par jellyfinIdSegment", () => {
     const source = readFileSync("src/lib/clients/jellyfin.ts", "utf8");
-    const urls = source.match(/`\$\{url\}[^`]*`/g) ?? [];
+    // `${cfg.url}` depuis que l'adresse se relit à chaque appel (réglable dans l'application, §48).
+    const urls = source.match(/`\$\{(?:cfg\.)?url\}[^`]*`/g) ?? [];
     expect(urls.length).toBeGreaterThan(30);
     const raw = urls.filter((u) => /\$\{\s*[A-Za-z]*Id\s*\}/.test(u));
     expect(raw).toEqual([]);

@@ -1,7 +1,8 @@
 import { config } from "@/lib/config";
 import { fetchJson } from "@/lib/http";
 
-const { apiKey } = config.omdb;
+// Lu à chaque appel, et non recopié au chargement : réglable dans l'application (DECISIONS.md §48).
+const cfg = config.omdb;
 
 export interface OmdbRating {
   imdbRating: string;
@@ -26,11 +27,11 @@ export function resetOmdbPause(): void {
 }
 
 export const omdb = {
-  isEnabled: () => Boolean(apiKey),
+  isEnabled: () => Boolean(cfg.apiKey),
   getRating: async (imdbId: string) => {
     if (Date.now() < pausedUntil) throw new Error("OMDb en pause après un refus");
     try {
-      return await fetchJson<OmdbRating>(`https://www.omdbapi.com/?i=${imdbId}&apikey=${apiKey}`);
+      return await fetchJson<OmdbRating>(`https://www.omdbapi.com/?i=${imdbId}&apikey=${cfg.apiKey}`);
     } catch (err) {
       pausedUntil = Date.now() + PAUSE_MS;
       throw err;
@@ -38,5 +39,5 @@ export const omdb = {
   },
   // The Shawshank Redemption — a fixed, always-valid IMDb id used purely to
   // verify the API key works.
-  checkKey: () => fetchJson<OmdbRating>(`https://www.omdbapi.com/?i=tt0111161&apikey=${apiKey}`),
+  checkKey: () => fetchJson<OmdbRating>(`https://www.omdbapi.com/?i=tt0111161&apikey=${cfg.apiKey}`),
 };

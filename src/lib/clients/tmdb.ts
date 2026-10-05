@@ -1,7 +1,8 @@
 import { config } from "@/lib/config";
 import { fetchJson } from "@/lib/http";
 
-const { apiKey } = config.tmdb;
+// Lu à chaque appel, et non recopié au chargement : réglable dans l'application (DECISIONS.md §48).
+const cfg = config.tmdb;
 const BASE = "https://api.themoviedb.org/3";
 
 export { TMDB_IMAGE_BASE } from "@/lib/tmdbImageBase";
@@ -157,7 +158,7 @@ export interface TmdbTrendingTv {
 }
 
 function enabled(): boolean {
-  return Boolean(apiKey);
+  return Boolean(cfg.apiKey);
 }
 
 export interface TmdbTranslation {
@@ -187,63 +188,63 @@ function createTmdbClient(lang = "fr-FR") {
   return {
     isEnabled: enabled,
     checkAuth: () =>
-      fetchJson<{ success: boolean }>(`${BASE}/authentication?api_key=${apiKey}`),
+      fetchJson<{ success: boolean }>(`${BASE}/authentication?api_key=${cfg.apiKey}`),
     getMovie: (tmdbId: number) =>
       fetchJson<TmdbMovie>(
-        `${BASE}/movie/${tmdbId}?api_key=${apiKey}&language=${lang}&append_to_response=credits`
+        `${BASE}/movie/${tmdbId}?api_key=${cfg.apiKey}&language=${lang}&append_to_response=credits`
       ),
     findTvByTvdbId: (tvdbId: number) =>
       fetchJson<{ tv_results: { id: number }[] }>(
-        `${BASE}/find/${tvdbId}?api_key=${apiKey}&external_source=tvdb_id&language=${lang}`
+        `${BASE}/find/${tvdbId}?api_key=${cfg.apiKey}&external_source=tvdb_id&language=${lang}`
       ),
     /** Les épisodes d'une saison, dans la langue du client — de quoi combler un résumé absent. */
     getTvSeason: (tmdbTvId: number, seasonNumber: number) =>
       fetchJson<{ episodes?: { episode_number: number; name?: string; overview?: string }[] }>(
-        `${BASE}/tv/${tmdbTvId}/season/${seasonNumber}?api_key=${apiKey}&language=${lang}`
+        `${BASE}/tv/${tmdbTvId}/season/${seasonNumber}?api_key=${cfg.apiKey}&language=${lang}`
       ),
     getTv: (tmdbTvId: number) =>
       fetchJson<TmdbTv>(
-        `${BASE}/tv/${tmdbTvId}?api_key=${apiKey}&language=${lang}&append_to_response=credits,external_ids`
+        `${BASE}/tv/${tmdbTvId}?api_key=${cfg.apiKey}&language=${lang}&append_to_response=credits,external_ids`
       ),
     trendingMovies: () =>
       fetchJson<{ results: TmdbTrendingMovie[] }>(
-        `${BASE}/trending/movie/week?api_key=${apiKey}&language=${lang}`
+        `${BASE}/trending/movie/week?api_key=${cfg.apiKey}&language=${lang}`
       ),
     trendingTv: () =>
       fetchJson<{ results: TmdbTrendingTv[] }>(
-        `${BASE}/trending/tv/week?api_key=${apiKey}&language=${lang}`
+        `${BASE}/trending/tv/week?api_key=${cfg.apiKey}&language=${lang}`
       ),
     movieGenres: () =>
       fetchJson<{ genres: { id: number; name: string }[] }>(
-        `${BASE}/genre/movie/list?api_key=${apiKey}&language=${lang}`
+        `${BASE}/genre/movie/list?api_key=${cfg.apiKey}&language=${lang}`
       ),
     tvGenres: () =>
       fetchJson<{ genres: { id: number; name: string }[] }>(
-        `${BASE}/genre/tv/list?api_key=${apiKey}&language=${lang}`
+        `${BASE}/genre/tv/list?api_key=${cfg.apiKey}&language=${lang}`
       ),
     movieRecommendations: (tmdbId: number) =>
       fetchJson<{ results: TmdbTrendingMovie[] }>(
-        `${BASE}/movie/${tmdbId}/recommendations?api_key=${apiKey}&language=${lang}`
+        `${BASE}/movie/${tmdbId}/recommendations?api_key=${cfg.apiKey}&language=${lang}`
       ),
     tvRecommendations: (tmdbId: number) =>
       fetchJson<{ results: TmdbTrendingTv[] }>(
-        `${BASE}/tv/${tmdbId}/recommendations?api_key=${apiKey}&language=${lang}`
+        `${BASE}/tv/${tmdbId}/recommendations?api_key=${cfg.apiKey}&language=${lang}`
       ),
     searchMovies: (query: string) =>
       fetchJson<{ results: TmdbTrendingMovie[] }>(
-        `${BASE}/search/movie?api_key=${apiKey}&language=${lang}&query=${encodeURIComponent(query)}&include_adult=false`
+        `${BASE}/search/movie?api_key=${cfg.apiKey}&language=${lang}&query=${encodeURIComponent(query)}&include_adult=false`
       ),
     searchTv: (query: string) =>
       fetchJson<{ results: TmdbTrendingTv[] }>(
-        `${BASE}/search/tv?api_key=${apiKey}&language=${lang}&query=${encodeURIComponent(query)}&include_adult=false`
+        `${BASE}/search/tv?api_key=${cfg.apiKey}&language=${lang}&query=${encodeURIComponent(query)}&include_adult=false`
       ),
     getMovieVideos: (tmdbId: number) =>
       fetchJson<{ results: { key: string; site: string; type: string; official: boolean }[] }>(
-        `${BASE}/movie/${tmdbId}/videos?api_key=${apiKey}&language=${lang}&include_video_language=${videoLangs}`
+        `${BASE}/movie/${tmdbId}/videos?api_key=${cfg.apiKey}&language=${lang}&include_video_language=${videoLangs}`
       ),
     getTvVideos: (tmdbTvId: number) =>
       fetchJson<{ results: { key: string; site: string; type: string; official: boolean }[] }>(
-        `${BASE}/tv/${tmdbTvId}/videos?api_key=${apiKey}&language=${lang}&include_video_language=${videoLangs}`
+        `${BASE}/tv/${tmdbTvId}/videos?api_key=${cfg.apiKey}&language=${lang}&include_video_language=${videoLangs}`
       ),
     // "logos" are TMDB's title-treatment images (transparent PNGs with the film/show's actual
     // logo/wordmark) — distinct from posters/backdrops, used for the home hero's Netflix-style
@@ -262,16 +263,16 @@ function createTmdbClient(lang = "fr-FR") {
      */
     /** Le titre dans chaque langue où il a été traduit — voir `titleNames`. */
     getMovieTranslations: (tmdbId: number) =>
-      fetchJson<TmdbTranslations>(`${BASE}/movie/${tmdbId}?api_key=${apiKey}&append_to_response=translations`),
+      fetchJson<TmdbTranslations>(`${BASE}/movie/${tmdbId}?api_key=${cfg.apiKey}&append_to_response=translations`),
     getTvTranslations: (tmdbTvId: number) =>
-      fetchJson<TmdbTranslations>(`${BASE}/tv/${tmdbTvId}?api_key=${apiKey}&append_to_response=translations`),
+      fetchJson<TmdbTranslations>(`${BASE}/tv/${tmdbTvId}?api_key=${cfg.apiKey}&append_to_response=translations`),
     getMovieImages: (tmdbId: number) =>
       fetchJson<TmdbImages>(
-        `${BASE}/movie/${tmdbId}/images?api_key=${apiKey}&include_image_language=${IMAGE_LANGS}`
+        `${BASE}/movie/${tmdbId}/images?api_key=${cfg.apiKey}&include_image_language=${IMAGE_LANGS}`
       ),
     getTvImages: (tmdbTvId: number) =>
       fetchJson<TmdbImages>(
-        `${BASE}/tv/${tmdbTvId}/images?api_key=${apiKey}&include_image_language=${IMAGE_LANGS}`
+        `${BASE}/tv/${tmdbTvId}/images?api_key=${cfg.apiKey}&include_image_language=${IMAGE_LANGS}`
       ),
     getPersonDetails: (personId: number) =>
       fetchJson<{
@@ -284,30 +285,30 @@ function createTmdbClient(lang = "fr-FR") {
         known_for_department: string | null;
         popularity: number;
         profile_path: string | null;
-      }>(`${BASE}/person/${personId}?api_key=${apiKey}&language=${lang}`),
+      }>(`${BASE}/person/${personId}?api_key=${cfg.apiKey}&language=${lang}`),
     getPersonCredits: (personId: number) =>
       fetchJson<{ cast: TmdbPersonCredit[] }>(
-        `${BASE}/person/${personId}/combined_credits?api_key=${apiKey}&language=${lang}`
+        `${BASE}/person/${personId}/combined_credits?api_key=${cfg.apiKey}&language=${lang}`
       ),
     getPersonImages: (personId: number) =>
       fetchJson<{ profiles: { file_path: string; vote_average: number; width: number; height: number }[] }>(
-        `${BASE}/person/${personId}/images?api_key=${apiKey}`
+        `${BASE}/person/${personId}/images?api_key=${cfg.apiKey}`
       ),
     getPersonExternalIds: (personId: number) =>
       fetchJson<{ imdb_id: string | null; instagram_id: string | null; twitter_id: string | null; wikidata_id: string | null }>(
-        `${BASE}/person/${personId}/external_ids?api_key=${apiKey}`
+        `${BASE}/person/${personId}/external_ids?api_key=${cfg.apiKey}`
       ),
     getCollection: (collectionId: number) =>
       fetchJson<TmdbCollection>(
-        `${BASE}/collection/${collectionId}?api_key=${apiKey}&language=${lang}`
+        `${BASE}/collection/${collectionId}?api_key=${cfg.apiKey}&language=${lang}`
       ),
     searchPerson: (query: string) =>
       fetchJson<{ results: TmdbPerson[] }>(
-        `${BASE}/search/person?api_key=${apiKey}&language=${lang}&query=${encodeURIComponent(query)}&include_adult=false`
+        `${BASE}/search/person?api_key=${cfg.apiKey}&language=${lang}&query=${encodeURIComponent(query)}&include_adult=false`
       ),
     searchMulti: (query: string) =>
       fetchJson<{ results: TmdbMultiResult[] }>(
-        `${BASE}/search/multi?api_key=${apiKey}&language=${lang}&query=${encodeURIComponent(query)}&include_adult=false`
+        `${BASE}/search/multi?api_key=${cfg.apiKey}&language=${lang}&query=${encodeURIComponent(query)}&include_adult=false`
       ),
     discover: (params: {
       mediaType: "movie" | "tv";
@@ -317,7 +318,7 @@ function createTmdbClient(lang = "fr-FR") {
       query?: string;
     }) => {
       const qs = new URLSearchParams({
-        api_key: apiKey,
+        api_key: cfg.apiKey,
         language: lang,
         sort_by: "popularity.desc",
         include_adult: "false",
@@ -339,7 +340,7 @@ function createTmdbClient(lang = "fr-FR") {
       const key = mediaType === "movie" ? "with_cast" : "with_people";
       const endpoint = mediaType === "movie" ? "movie" : "tv";
       return fetchJson<{ results: (TmdbTrendingMovie | TmdbTrendingTv)[] }>(
-        `${BASE}/discover/${endpoint}?api_key=${apiKey}&language=${lang}&${key}=${personId}&sort_by=popularity.desc`
+        `${BASE}/discover/${endpoint}?api_key=${cfg.apiKey}&language=${lang}&${key}=${personId}&sort_by=popularity.desc`
       );
     },
   };

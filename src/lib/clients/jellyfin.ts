@@ -12,8 +12,14 @@ import { jellyfinIdSegment as idSegment } from "@/lib/jellyfinPath";
 import type { JellyfinDeviceProfile } from "@/lib/deviceProfile";
 import { APP_VERSION } from "@/lib/appBuild";
 
-const { url, apiKey } = config.jellyfin;
-const headers = jellyfinAuthHeaders(apiKey);
+// Lu à chaque appel, et non recopié au chargement : réglable dans l'application (DECISIONS.md §48).
+const cfg = config.jellyfin;
+// Un accesseur : lu par `fetch` à chaque requête, il suit un réglage changé dans l'application.
+const headers = {
+  get Authorization() {
+    return jellyfinAuthHeaders(cfg.apiKey).Authorization;
+  },
+};
 
 export interface JellyfinItem {
   Id: string;
@@ -226,7 +232,7 @@ export const jellyfin = {
   // the browser. Using the user's scoped, revocable session token there — instead
   // of the eternal admin key — keeps that unavoidable exposure low-stakes.
   getPlaybackInfo: async (userId: string, itemId: string, token: string, opts: PlaybackInfoOptions) =>
-    fetchJson<JellyfinPlaybackInfo>(`${url}/Items/${idSegment(itemId)}/PlaybackInfo?UserId=${idSegment(userId)}`, {
+    fetchJson<JellyfinPlaybackInfo>(`${cfg.url}/Items/${idSegment(itemId)}/PlaybackInfo?UserId=${idSegment(userId)}`, {
       method: "POST",
       headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()), "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -251,7 +257,7 @@ export const jellyfin = {
     client: PlaybackClient = PLAYBACK_CLIENTS.stable,
     device?: PlaybackDevice
   ) =>
-    fetchJson<void>(`${url}/Sessions/Playing`, {
+    fetchJson<void>(`${cfg.url}/Sessions/Playing`, {
       method: "POST",
       headers: await playbackHeaders(token, client, userId, device),
       body: JSON.stringify({
@@ -276,7 +282,7 @@ export const jellyfin = {
     isPaused = false,
     device?: PlaybackDevice
   ) =>
-    fetchJson<void>(`${url}/Sessions/Playing/Progress`, {
+    fetchJson<void>(`${cfg.url}/Sessions/Playing/Progress`, {
       method: "POST",
       headers: await playbackHeaders(token, client, userId, device),
       body: JSON.stringify({
@@ -303,7 +309,7 @@ export const jellyfin = {
     client: PlaybackClient = PLAYBACK_CLIENTS.stable,
     device?: PlaybackDevice
   ) =>
-    fetchJson<void>(`${url}/Sessions/Playing/Stopped`, {
+    fetchJson<void>(`${cfg.url}/Sessions/Playing/Stopped`, {
       method: "POST",
       headers: await playbackHeaders(token, client, userId, device),
       body: JSON.stringify({
@@ -323,7 +329,7 @@ export const jellyfin = {
    * `jellyfinToken.ts`, qui ne conclut que d'un 401, d'un 403, ou de ce que `Policy` dit du compte.
    */
   checkUserToken: async (token: string) =>
-    fetchJson<{ Id?: string; Policy?: { IsAdministrator?: boolean; IsDisabled?: boolean } }>(`${url}/Users/Me`, { headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()) } }, 2500, undefined, 0),
+    fetchJson<{ Id?: string; Policy?: { IsAdministrator?: boolean; IsDisabled?: boolean } }>(`${cfg.url}/Users/Me`, { headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()) } }, 2500, undefined, 0),
 
   /**
    * Écrire la position d'une personne avec la clé d'administration.
@@ -334,7 +340,7 @@ export const jellyfin = {
    * titre à sa place.
    */
   savePositionAsAdmin: async (userId: string, itemId: string, positionTicks: number) =>
-    fetchJson<void>(`${url}/UserItems/${idSegment(itemId)}/UserData?userId=${idSegment(userId)}`, {
+    fetchJson<void>(`${cfg.url}/UserItems/${idSegment(itemId)}/UserData?userId=${idSegment(userId)}`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({ PlaybackPositionTicks: positionTicks, LastPlayedDate: new Date().toISOString() }),
@@ -346,12 +352,12 @@ export const jellyfin = {
    * dont l'administrateur peut être connecté localement, sans compte Jellyfin derrière lui.
    */
   getItemRunTimeTicks: (itemId: string) =>
-    fetchJson<{ Items?: { RunTimeTicks?: number }[] }>(`${url}/Items?ids=${encodeURIComponent(itemId)}`, { headers }).then(
+    fetchJson<{ Items?: { RunTimeTicks?: number }[] }>(`${cfg.url}/Items?ids=${encodeURIComponent(itemId)}`, { headers }).then(
       (r) => r.Items?.[0]?.RunTimeTicks ?? null
     ),
 
   getRunTimeTicks: async (userId: string, itemId: string) =>
-    fetchJson<{ RunTimeTicks?: number }>(`${url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}`, { headers }).then(
+    fetchJson<{ RunTimeTicks?: number }>(`${cfg.url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}`, { headers }).then(
       (item) => item.RunTimeTicks ?? null
     ),
 
@@ -369,7 +375,7 @@ export const jellyfin = {
         SubtitleMode?: string | null;
         PlayDefaultAudioTrack?: boolean;
       };
-    }>(`${url}/Users/${idSegment(userId)}`, { headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()) } }),
+    }>(`${cfg.url}/Users/${idSegment(userId)}`, { headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()) } }),
 
   /**
    * Écrire ces mêmes préférences, avec le jeton de la personne.
@@ -379,7 +385,7 @@ export const jellyfin = {
    * complet — voir la route, qui fait exactement ça.
    */
   updateUserConfiguration: async (userId: string, token: string, configuration: Record<string, unknown>) =>
-    fetchJson<void>(`${url}/Users/${idSegment(userId)}/Configuration`, {
+    fetchJson<void>(`${cfg.url}/Users/${idSegment(userId)}/Configuration`, {
       method: "POST",
       headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()), "Content-Type": "application/json" },
       body: JSON.stringify(configuration),
@@ -393,7 +399,7 @@ export const jellyfin = {
    * une session volée en prise de contrôle du compte.
    */
   changePassword: async (userId: string, token: string, currentPw: string, newPw: string) =>
-    fetchJson<void>(`${url}/Users/${idSegment(userId)}/Password`, {
+    fetchJson<void>(`${cfg.url}/Users/${idSegment(userId)}/Password`, {
       method: "POST",
       headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()), "Content-Type": "application/json" },
       body: JSON.stringify({ CurrentPw: currentPw, NewPw: newPw }),
@@ -407,20 +413,20 @@ export const jellyfin = {
    */
   getItemNaming: async (userId: string, itemId: string) =>
     fetchJson<{ Items?: NamedItem[] }>(
-      `${url}/Items?ids=${idSegment(itemId)}&userId=${idSegment(userId)}&fields=ParentIndexNumber,IndexNumber,ProviderIds`,
+      `${cfg.url}/Items?ids=${idSegment(itemId)}&userId=${idSegment(userId)}&fields=ParentIndexNumber,IndexNumber,ProviderIds`,
       { headers }
     ).then((page) => page.Items?.[0] ?? null),
 
   getSystemInfo: () =>
-    fetchJson<{ ServerName: string; Version: string }>(`${url}/System/Info`, { headers }),
-  getSessions: () => fetchJson<JellyfinSession[]>(`${url}/Sessions`, { headers }),
+    fetchJson<{ ServerName: string; Version: string }>(`${cfg.url}/System/Info`, { headers }),
+  getSessions: () => fetchJson<JellyfinSession[]>(`${cfg.url}/Sessions`, { headers }),
   getLibraryCounts: () =>
     fetchJson<{ MovieCount: number; SeriesCount: number; EpisodeCount: number }>(
-      `${url}/Items/Counts`,
+      `${cfg.url}/Items/Counts`,
       { headers }
     ),
   refreshLibrary: () =>
-    fetchJson<void>(`${url}/Library/Refresh`, { method: "POST", headers }),
+    fetchJson<void>(`${cfg.url}/Library/Refresh`, { method: "POST", headers }),
 
   // AnyProviderIdEquals is broken in Jellyfin 10.11 — fetch all and filter in JS
   /**
@@ -440,35 +446,35 @@ export const jellyfin = {
    */
   getAllMovies: async (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Users/${idSegment(userId)}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,UserData,ProductionYear,RunTimeTicks&Limit=5000`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,UserData,ProductionYear,RunTimeTicks&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 
   /** Même repliement, même correctif — voir `getAllMovies`. */
   getAllMoviesAdmin: () =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path&Limit=5000`,
+      `${cfg.url}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 
   getAllSeries: async (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Users/${idSegment(userId)}/Items?IncludeItemTypes=Series&Recursive=true&Fields=ProviderIds,UserData,ProductionYear,RunTimeTicks&Limit=5000`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items?IncludeItemTypes=Series&Recursive=true&Fields=ProviderIds,UserData,ProductionYear,RunTimeTicks&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 
   getAllSeriesAdmin: () =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Items?IncludeItemTypes=Series&Recursive=true&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path&Limit=5000`,
+      `${cfg.url}/Items?IncludeItemTypes=Series&Recursive=true&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 
 
   markPlayed: async (userId: string, itemId: string) =>
-    fetchJson<void>(`${url}/Users/${idSegment(userId)}/PlayedItems/${idSegment(itemId)}`, { method: "POST", headers }),
+    fetchJson<void>(`${cfg.url}/Users/${idSegment(userId)}/PlayedItems/${idSegment(itemId)}`, { method: "POST", headers }),
 
   markUnplayed: async (userId: string, itemId: string) =>
-    fetchJson<void>(`${url}/Users/${idSegment(userId)}/PlayedItems/${idSegment(itemId)}`, { method: "DELETE", headers }),
+    fetchJson<void>(`${cfg.url}/Users/${idSegment(userId)}/PlayedItems/${idSegment(itemId)}`, { method: "DELETE", headers }),
 
   /**
    * Oublie où l'on en était d'un titre, sans rien toucher d'autre — ce qui le retire de « Reprendre ».
@@ -479,7 +485,7 @@ export const jellyfin = {
    * serveur le 23/09/2026.
    */
   resetPlaybackPosition: async (userId: string, itemId: string) =>
-    fetchJson<unknown>(`${url}/UserItems/${idSegment(itemId)}/UserData?userId=${idSegment(userId)}`, {
+    fetchJson<unknown>(`${cfg.url}/UserItems/${idSegment(itemId)}/UserData?userId=${idSegment(userId)}`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({ PlaybackPositionTicks: 0 }),
@@ -490,10 +496,10 @@ export const jellyfin = {
   // ne concernent donc que des titres présents dans la bibliothèque — sans identifiant Jellyfin,
   // il n'y a rien à marquer.
   markFavorite: async (userId: string, itemId: string) =>
-    fetchJson<void>(`${url}/Users/${idSegment(userId)}/FavoriteItems/${idSegment(itemId)}`, { method: "POST", headers }),
+    fetchJson<void>(`${cfg.url}/Users/${idSegment(userId)}/FavoriteItems/${idSegment(itemId)}`, { method: "POST", headers }),
 
   unmarkFavorite: async (userId: string, itemId: string) =>
-    fetchJson<void>(`${url}/Users/${idSegment(userId)}/FavoriteItems/${idSegment(itemId)}`, { method: "DELETE", headers }),
+    fetchJson<void>(`${cfg.url}/Users/${idSegment(userId)}/FavoriteItems/${idSegment(itemId)}`, { method: "DELETE", headers }),
 
   /**
    * Ce que cette personne a vu, et ce qu'elle a mis en favori.
@@ -506,19 +512,19 @@ export const jellyfin = {
    */
   getPlayedItems: async (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Users/${idSegment(userId)}/Items?Filters=IsPlayed&IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds,UserData,ImageTags,ProductionYear,RunTimeTicks,RecursiveItemCount,ChildCount&Limit=500`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items?Filters=IsPlayed&IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds,UserData,ImageTags,ProductionYear,RunTimeTicks,RecursiveItemCount,ChildCount&Limit=500`,
       { headers }
     ).then((res) => res.Items.filter(hasSomethingWatched)),
 
   getFavorites: async (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Users/${idSegment(userId)}/Items?Filters=IsFavorite&IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds,UserData,ImageTags,ProductionYear,RunTimeTicks&Limit=500`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items?Filters=IsFavorite&IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds,UserData,ImageTags,ProductionYear,RunTimeTicks&Limit=500`,
       { headers }
     ).then((res) => res.Items),
 
   getResumeItems: async (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Users/${idSegment(userId)}/Items/Resume?Limit=10&MediaTypes=Video&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,SeriesName,SeriesId,IndexNumber,ParentIndexNumber&Recursive=true`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items/Resume?Limit=10&MediaTypes=Video&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,SeriesName,SeriesId,IndexNumber,ParentIndexNumber&Recursive=true`,
       { headers }
     ),
 
@@ -527,25 +533,25 @@ export const jellyfin = {
   // episode. Needed to resolve a "series sheet" link from a resume/recent episode.
   getItemProviderIds: async (userId: string, itemId: string) =>
     fetchJson<{ ProviderIds?: JellyfinItem["ProviderIds"] }>(
-      `${url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}?Fields=ProviderIds`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}?Fields=ProviderIds`,
       { headers }
     ),
 
   getRecentlyPlayed: async (userId: string, type: "Movie" | "Episode", limit = 10) =>
     fetchJson<{ Items: JellyfinItem[]; TotalRecordCount: number }>(
-      `${url}/Users/${idSegment(userId)}/Items?Filters=IsPlayed&IncludeItemTypes=${type}&SortBy=DatePlayed&SortOrder=Descending&Limit=${limit}&Recursive=true&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,SeriesName,IndexNumber,ParentIndexNumber`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items?Filters=IsPlayed&IncludeItemTypes=${type}&SortBy=DatePlayed&SortOrder=Descending&Limit=${limit}&Recursive=true&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,SeriesName,IndexNumber,ParentIndexNumber`,
       { headers }
     ),
 
   getPlayedCount: async (userId: string, type: "Movie" | "Episode") =>
     fetchJson<{ TotalRecordCount: number }>(
-      `${url}/Users/${idSegment(userId)}/Items?Filters=IsPlayed&IncludeItemTypes=${type}&Recursive=true&Limit=0`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items?Filters=IsPlayed&IncludeItemTypes=${type}&Recursive=true&Limit=0`,
       { headers }
     ),
 
   getWatchTimeTicks: async (userId: string) =>
     fetchJson<{ Items: { RunTimeTicks?: number }[]; TotalRecordCount: number }>(
-      `${url}/Users/${idSegment(userId)}/Items?Filters=IsPlayed&IncludeItemTypes=Movie,Episode&Recursive=true&Fields=RunTimeTicks&Limit=500`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items?Filters=IsPlayed&IncludeItemTypes=Movie,Episode&Recursive=true&Fields=RunTimeTicks&Limit=500`,
       { headers }
     ),
 
@@ -556,7 +562,7 @@ export const jellyfin = {
   // additive field, no effect on existing callers that don't read it.
   getSeriesEpisodes: async (userId: string, seriesId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Shows/${idSegment(seriesId)}/Episodes?userId=${idSegment(userId)}&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,Overview`,
+      `${cfg.url}/Shows/${idSegment(seriesId)}/Episodes?userId=${idSegment(userId)}&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,Overview`,
       { headers }
     ).then((res) => res.Items),
 
@@ -566,7 +572,7 @@ export const jellyfin = {
   // play button, without reimplementing it ourselves.
   getNextUp: async (userId: string, seriesId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Shows/NextUp?SeriesId=${idSegment(seriesId)}&UserId=${idSegment(userId)}&Limit=1&Fields=UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber`,
+      `${cfg.url}/Shows/NextUp?SeriesId=${idSegment(seriesId)}&UserId=${idSegment(userId)}&Limit=1&Fields=UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber`,
       { headers }
     ).then((res) => res.Items[0] ?? null),
 
@@ -584,7 +590,7 @@ export const jellyfin = {
    * personne. Le nom compte autant que l'identifiant — c'est sous lui que les abonnements aux
    * notifications sont rangés (voir `pushDb`), et sous l'identifiant que Jellyfin répond.
    */
-  getUsers: () => fetchJson<JellyfinUser[]>(`${url}/Users`, { headers }),
+  getUsers: () => fetchJson<JellyfinUser[]>(`${cfg.url}/Users`, { headers }),
 
   /**
    * Les appareils autorisés — un par jeton. Pour la page d'activité : un compte dont l'appareil de
@@ -597,13 +603,13 @@ export const jellyfin = {
    * applications de la personne.
    */
   deleteDevice: (deviceId: string) =>
-    fetchJson<void>(`${url}/Devices?id=${encodeURIComponent(deviceId)}`, { method: "DELETE", headers }, 5000, undefined, 0),
+    fetchJson<void>(`${cfg.url}/Devices?id=${encodeURIComponent(deviceId)}`, { method: "DELETE", headers }, 5000, undefined, 0),
 
   /** Fermer la session d'un jeton, avec ce jeton : il cesse d'être accepté. */
   logoutToken: (token: string) =>
-    fetchJson<void>(`${url}/Sessions/Logout`, { method: "POST", headers: jellyfinAuthHeaders(token) }, 5000, undefined, 0),
+    fetchJson<void>(`${cfg.url}/Sessions/Logout`, { method: "POST", headers: jellyfinAuthHeaders(token) }, 5000, undefined, 0),
 
-  getDevices: () => fetchJson<{ Items: JellyfinDevice[] }>(`${url}/Devices`, { headers }).then((res) => res.Items ?? []),
+  getDevices: () => fetchJson<{ Items: JellyfinDevice[] }>(`${cfg.url}/Devices`, { headers }).then((res) => res.Items ?? []),
 
   /**
    * Quand le compte a lu un épisode de cette série pour la dernière fois — la date d'un épisode
@@ -612,13 +618,13 @@ export const jellyfin = {
    */
   getSeriesLastPlayed: async (userId: string, seriesId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Users/${idSegment(userId)}/Items?ParentId=${idSegment(seriesId)}&IncludeItemTypes=Episode&Recursive=true&SortBy=DatePlayed&SortOrder=Descending&Limit=1&Fields=UserData`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items?ParentId=${idSegment(seriesId)}&IncludeItemTypes=Episode&Recursive=true&SortBy=DatePlayed&SortOrder=Descending&Limit=1&Fields=UserData`,
       { headers }
     ).then((res) => res.Items[0]?.UserData?.LastPlayedDate ?? null),
 
   getNextUpGlobal: async (userId: string, limit = 10) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Shows/NextUp?UserId=${idSegment(userId)}&Limit=${limit}&Fields=UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,SeriesName,SeriesId`,
+      `${cfg.url}/Shows/NextUp?UserId=${idSegment(userId)}&Limit=${limit}&Fields=UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,SeriesName,SeriesId`,
       { headers }
     ).then((res) => res.Items),
 
@@ -642,11 +648,11 @@ export const jellyfin = {
       RunTimeTicks?: number;
       UserData?: JellyfinItem["UserData"];
       MediaSources?: JellyfinMediaSource[];
-    }>(`${url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}?Fields=MediaSources,UserData,RunTimeTicks`, { headers }),
+    }>(`${cfg.url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}?Fields=MediaSources,UserData,RunTimeTicks`, { headers }),
 
   getItemUserData: async (userId: string, itemId: string) =>
     fetchJson<{ UserData?: JellyfinItem["UserData"]; RunTimeTicks?: number }>(
-      `${url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}?Fields=UserData,RunTimeTicks`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}?Fields=UserData,RunTimeTicks`,
       { headers }
     ),
 
@@ -660,11 +666,11 @@ export const jellyfin = {
    * repli, pour un serveur qui n'aurait que l'ancien greffon. Un échec vaut « pas de repères ».
    */
   getEpisodeTimestamps: async (itemId: string): Promise<EpisodeTimestamps | null> => {
-    const segments = await fetchJson<{ Items?: MediaSegment[] }>(`${url}/MediaSegments/${idSegment(itemId)}`, { headers }).catch(
+    const segments = await fetchJson<{ Items?: MediaSegment[] }>(`${cfg.url}/MediaSegments/${idSegment(itemId)}`, { headers }).catch(
       () => null
     );
     if (segments?.Items) return timestampsFromSegments(segments.Items);
-    return fetchJson<EpisodeTimestamps>(`${url}/Episode/${idSegment(itemId)}/Timestamps`, { headers });
+    return fetchJson<EpisodeTimestamps>(`${cfg.url}/Episode/${idSegment(itemId)}/Timestamps`, { headers });
   },
 };
 

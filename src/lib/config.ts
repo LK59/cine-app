@@ -1,3 +1,5 @@
+import { readOverride } from "@/lib/settings/store";
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -6,45 +8,94 @@ function required(name: string): string {
   return value;
 }
 
+/**
+ * Une valeur de configuration : réglée dans l'application d'abord, `.env` ensuite, le défaut enfin
+ * (DECISIONS.md §48). Relue à chaque accès — les champs ci-dessous sont des accesseurs —, si bien
+ * qu'un réglage changé dans la gestion s'applique sans redémarrer, et que le code qui lit
+ * `config.radarr.url` n'a rien à savoir de tout ça.
+ */
 function optional(name: string, fallback = ""): string {
+  return readOverride(name) ?? process.env[name] ?? fallback;
+}
+
+/**
+ * Le secret de session ne se règle jamais dans l'application : il signe les sessions, et le changer
+ * en cours de route les invaliderait toutes. Il vient de `.env`, ou du fichier que le démarrage
+ * génère au premier lancement (`server-boot/firstRunSecrets.mjs`), qui l'a posé dans l'environnement.
+ */
+function envOnly(name: string, fallback = ""): string {
   return process.env[name] ?? fallback;
 }
 
 export const config = {
   app: {
-    adminUser: optional("APP_ADMIN_USER", "admin"),
-    adminPassword: optional("APP_ADMIN_PASSWORD", ""),
-    sessionSecret: optional("SESSION_SECRET", "change-me-in-production"),
-    cookieSecure: optional("COOKIE_SECURE", "false") === "true",
-    language: optional("APP_LANGUAGE", "en"),
+    get adminUser() {
+      return envOnly("APP_ADMIN_USER", "admin");
+    },
+    get adminPassword() {
+      return envOnly("APP_ADMIN_PASSWORD", "");
+    },
+    get sessionSecret() {
+      return envOnly("SESSION_SECRET", "change-me-in-production");
+    },
+    get cookieSecure() {
+      return optional("COOKIE_SECURE", "false") === "true";
+    },
+    get language() {
+      return optional("APP_LANGUAGE", "en");
+    },
   },
   radarr: {
-    url: optional("RADARR_URL", "http://radarr:7878"),
-    apiKey: optional("RADARR_API_KEY"),
+    get url() {
+      return optional("RADARR_URL", "http://radarr:7878");
+    },
+    get apiKey() {
+      return optional("RADARR_API_KEY");
+    },
   },
   sonarr: {
-    url: optional("SONARR_URL", "http://sonarr:8989"),
-    apiKey: optional("SONARR_API_KEY"),
+    get url() {
+      return optional("SONARR_URL", "http://sonarr:8989");
+    },
+    get apiKey() {
+      return optional("SONARR_API_KEY");
+    },
   },
   bazarr: {
-    url: optional("BAZARR_URL", "http://bazarr:6767"),
-    apiKey: optional("BAZARR_API_KEY"),
+    get url() {
+      return optional("BAZARR_URL", "http://bazarr:6767");
+    },
+    get apiKey() {
+      return optional("BAZARR_API_KEY");
+    },
   },
   jackett: {
-    url: optional("JACKETT_URL", "http://jackett:9117"),
-    apiKey: optional("JACKETT_API_KEY"),
+    get url() {
+      return optional("JACKETT_URL", "http://jackett:9117");
+    },
+    get apiKey() {
+      return optional("JACKETT_API_KEY");
+    },
   },
   jellyfin: {
-    url: optional("JELLYFIN_URL", "http://jellyfin:8096"),
-    publicUrl: optional("JELLYFIN_PUBLIC_URL"),
-    apiKey: optional("JELLYFIN_API_KEY"),
+    get url() {
+      return optional("JELLYFIN_URL", "http://jellyfin:8096");
+    },
+    get publicUrl() {
+      return optional("JELLYFIN_PUBLIC_URL");
+    },
+    get apiKey() {
+      return optional("JELLYFIN_API_KEY");
+    },
   },
   player: {
     // In-app playback. On by default since the native player landed: it reads the file over byte
     // ranges and repackages it in the browser, so the ordinary playback costs the server nothing
     // beyond serving bytes. The flag was opt-in while every play meant a Jellyfin transcode, and
     // that is no longer what happens — see DOC-TECH.md.
-    enabled: optional("PLAYER_ENABLED", "true") === "true",
+    get enabled() {
+      return optional("PLAYER_ENABLED", "true") === "true";
+    },
     // Whether the server-side player exists at all on this install.
     //
     // True (default): a file the browser cannot handle is handed to Jellyfin, which negotiates
@@ -56,32 +107,62 @@ export const config = {
     // plain playback error naming the reason, and the per-account option is neither offered nor
     // honoured. For an operator who wants a hard guarantee that no playback can ever start a
     // transcode.
-    serverFallback: optional("PLAYER_SERVER_FALLBACK", "true") === "true",
+    get serverFallback() {
+      return optional("PLAYER_SERVER_FALLBACK", "true") === "true";
+    },
     // Whether the picture is enlarged to hide black bars baked into the file (see pictureFrame.ts).
     // Measured on the server from Jellyfin's trickplay thumbnails — no video is decoded — so it
     // needs trickplay images to exist; without them the picture is simply shown as it is.
-    autoFrame: optional("PLAYER_AUTO_FRAME", "true") === "true",
+    get autoFrame() {
+      return optional("PLAYER_AUTO_FRAME", "true") === "true";
+    },
   },
   gallery: {
     // La galerie Clara Galle, option personnelle de l'installation de référence. Lue au
     // démarrage, fermée par défaut : elle était figée dans l'image au moment du build, par défaut
     // ouverte, si bien que l'image publiée l'avait activée quoi que dise le `.env` (22/09/2026).
-    clara: optional("CLARA_GALLERY_ENABLED", "false") === "true",
+    get clara() {
+      return envOnly("CLARA_GALLERY_ENABLED", "false") === "true";
+    },
   },
   jellyseerr: {
-    url: optional("JELLYSEERR_URL", "http://jellyseerr:5055"),
-    apiKey: optional("JELLYSEERR_API_KEY"),
+    get url() {
+      return optional("JELLYSEERR_URL", "http://jellyseerr:5055");
+    },
+    get apiKey() {
+      return optional("JELLYSEERR_API_KEY");
+    },
   },
   qbittorrent: {
-    url: optional("QBITTORRENT_URL", "http://gluetun:8080"),
-    username: optional("QBITTORRENT_USERNAME", "admin"),
-    password: optional("QBITTORRENT_PASSWORD"),
+    get url() {
+      return optional("QBITTORRENT_URL", "http://gluetun:8080");
+    },
+    get username() {
+      return optional("QBITTORRENT_USERNAME", "admin");
+    },
+    get password() {
+      return optional("QBITTORRENT_PASSWORD");
+    },
   },
   tmdb: {
-    apiKey: optional("TMDB_API_KEY"),
+    get apiKey() {
+      return optional("TMDB_API_KEY");
+    },
   },
   omdb: {
-    apiKey: optional("OMDB_API_KEY"),
+    get apiKey() {
+      return optional("OMDB_API_KEY");
+    },
+  },
+  mdblist: {
+    get apiKey() {
+      return optional("MDBLIST_API_KEY");
+    },
+  },
+  push: {
+    get subject() {
+      return optional("VAPID_SUBJECT", "mailto:admin@example.com");
+    },
   },
 };
 

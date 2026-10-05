@@ -1,8 +1,15 @@
 import { config } from "@/lib/config";
 import { fetchJson, upstreamSignal, UPSTREAM_TIMEOUT_MS } from "@/lib/http";
 
-const { url, apiKey } = config.jellyseerr;
-const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
+// Lu à chaque appel, et non recopié au chargement : réglable dans l'application (DECISIONS.md §48).
+const cfg = config.jellyseerr;
+// Un accesseur : lu par `fetch` à chaque requête, il suit un réglage changé dans l'application.
+const headers = {
+  get "X-Api-Key"() {
+    return cfg.apiKey;
+  },
+  "Content-Type": "application/json",
+};
 
 // `cookie`, when provided, is the raw connect.sid value obtained via login() at cine-app sign-in
 // time (see /api/auth/jellyfin) and takes priority over the API key: Jellyseerr then applies that
@@ -58,7 +65,7 @@ export const jellyseerr = {
   // importer et réessayer, chaque étape attendant à son tour. Le délai est borné (5 s) : sans
   // lui, la connexion à cine-app attendait ce service jusqu'aux 300 s d'undici.
   login: async (username: string, password: string): Promise<string | null> => {
-    const res = await fetch(`${url}/api/v1/auth/jellyfin`, {
+    const res = await fetch(`${cfg.url}/api/v1/auth/jellyfin`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
@@ -83,41 +90,41 @@ export const jellyseerr = {
   // preferred over getUsers() for "what's my own Jellyseerr id" since listing all users is
   // itself admin-gated and would fail for an ordinary user's own cookie.
   getMe: (cookie: string) =>
-    fetchJson<JellyseerrUser>(`${url}/api/v1/auth/me`, { headers: authHeaders(cookie) }),
-  getStatus: () => fetchJson<{ version: string }>(`${url}/api/v1/status`, { headers }),
+    fetchJson<JellyseerrUser>(`${cfg.url}/api/v1/auth/me`, { headers: authHeaders(cookie) }),
+  getStatus: () => fetchJson<{ version: string }>(`${cfg.url}/api/v1/status`, { headers }),
   getRequests: (filter: "pending" | "approved" | "all" = "pending", cookie?: string) =>
     fetchJson<{ results: JellyseerrRequest[]; pageInfo: { results: number } }>(
-      `${url}/api/v1/request?filter=${filter}&take=25&sort=added`,
+      `${cfg.url}/api/v1/request?filter=${filter}&take=25&sort=added`,
       { headers: authHeaders(cookie) }
     ),
   getRequestsByUser: (userId: number, cookie?: string) =>
     fetchJson<{ results: JellyseerrRequest[]; pageInfo: { results: number } }>(
-      `${url}/api/v1/request?filter=all&requestedBy=${userId}&take=50&sort=added`,
+      `${cfg.url}/api/v1/request?filter=all&requestedBy=${userId}&take=50&sort=added`,
       { headers: authHeaders(cookie) }
     ),
   getUsers: (cookie?: string) =>
     fetchJson<{ results: JellyseerrUser[] }>(
-      `${url}/api/v1/user?take=200&skip=0`,
+      `${cfg.url}/api/v1/user?take=200&skip=0`,
       { headers: authHeaders(cookie) }
     ),
   /** Une demande seule — de quoi vérifier à qui elle appartient avant d'y toucher avec la clé. */
   getRequest: (id: number, cookie?: string) =>
-    fetchJson<JellyseerrRequest>(`${url}/api/v1/request/${id}`, { headers: authHeaders(cookie) }),
+    fetchJson<JellyseerrRequest>(`${cfg.url}/api/v1/request/${id}`, { headers: authHeaders(cookie) }),
   /**
    * Le bouton « Importer depuis Jellyfin » de Jellyseerr, pour les comptes nommés seulement.
    * Un compte déjà présent est laissé tel quel ; un nouveau reçoit les permissions par défaut de
    * Jellyseerr, et son nom d'utilisateur en guise d'adresse (voir `jellyseerrIdentity.ts`).
    */
   importFromJellyfin: (jellyfinUserIds: string[]) =>
-    fetchJson<JellyseerrUser[]>(`${url}/api/v1/user/import-from-jellyfin`, {
+    fetchJson<JellyseerrUser[]>(`${cfg.url}/api/v1/user/import-from-jellyfin`, {
       method: "POST",
       headers,
       body: JSON.stringify({ jellyfinUserIds }),
     }),
   approveRequest: (id: number, cookie?: string) =>
-    fetchJson<void>(`${url}/api/v1/request/${id}/approve`, { method: "POST", headers: authHeaders(cookie) }),
+    fetchJson<void>(`${cfg.url}/api/v1/request/${id}/approve`, { method: "POST", headers: authHeaders(cookie) }),
   declineRequest: (id: number, cookie?: string) =>
-    fetchJson<void>(`${url}/api/v1/request/${id}/decline`, { method: "POST", headers: authHeaders(cookie) }),
+    fetchJson<void>(`${cfg.url}/api/v1/request/${id}/decline`, { method: "POST", headers: authHeaders(cookie) }),
   // No `userId` when a cookie is supplied — the session already identifies the requester.
   // Without one, `userId` names the person the key is asking on behalf of; Jellyseerr checks that
   // person's own request permissions, and approves as the key's owner would.
@@ -132,7 +139,7 @@ export const jellyseerr = {
     cookie?: string,
     seasons?: number[]
   ) =>
-    fetchJson<{ id: number }>(`${url}/api/v1/request`, {
+    fetchJson<{ id: number }>(`${cfg.url}/api/v1/request`, {
       method: "POST",
       headers: authHeaders(cookie),
       body: JSON.stringify({
@@ -148,7 +155,7 @@ export const jellyseerr = {
   // temps, ce qui ressemble à une panne.
   getMovieMedia: (tmdbId: number, cookie?: string) =>
     fetchJson<{ title?: string; posterPath?: string | null; releaseDate?: string | null; mediaInfo?: { id: number; status: number } }>(
-      `${url}/api/v1/movie/${tmdbId}`, { headers: authHeaders(cookie) }
+      `${cfg.url}/api/v1/movie/${tmdbId}`, { headers: authHeaders(cookie) }
     ),
   // `seasons` (TMDB-sourced: number/name/episodeCount per season) and `mediaInfo.seasons`
   // (Jellyseerr's own per-season request/availability status, same MediaStatus enum as the
@@ -161,7 +168,7 @@ export const jellyseerr = {
       firstAirDate?: string | null;
       seasons?: { seasonNumber: number; name?: string; episodeCount?: number }[];
       mediaInfo?: { id: number; status: number; seasons?: { seasonNumber: number; status: number }[] };
-    }>(`${url}/api/v1/tv/${tmdbId}`, { headers: authHeaders(cookie) }),
+    }>(`${cfg.url}/api/v1/tv/${tmdbId}`, { headers: authHeaders(cookie) }),
   // Clears Jellyseerr's own tracking for a title (its Media row, cascading its Request rows) —
   // `mediaInfo.id` above, NOT the tmdbId. Deleting a movie/series directly in Radarr/Sonarr (not
   // through Jellyseerr) doesn't tell Jellyseerr anything; without this, its database keeps
@@ -175,7 +182,7 @@ export const jellyseerr = {
   // depuis son propre panneau. Jellyseerr accepte cet appel de la part du compte qui a fait la
   // demande, sans droits d'administration.
   deleteRequest: (requestId: number, cookie?: string) =>
-    fetchJson<void>(`${url}/api/v1/request/${requestId}`, { method: "DELETE", headers: authHeaders(cookie) }),
+    fetchJson<void>(`${cfg.url}/api/v1/request/${requestId}`, { method: "DELETE", headers: authHeaders(cookie) }),
   deleteMedia: (mediaId: number, cookie?: string) =>
-    fetchJson<void>(`${url}/api/v1/media/${mediaId}`, { method: "DELETE", headers: authHeaders(cookie) }),
+    fetchJson<void>(`${cfg.url}/api/v1/media/${mediaId}`, { method: "DELETE", headers: authHeaders(cookie) }),
 };

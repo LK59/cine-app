@@ -1,4 +1,5 @@
 import webpush from "web-push";
+import { config } from "@/lib/config";
 
 type PushSubscriptionInput = {
   endpoint: string;
@@ -14,7 +15,7 @@ function ensureVapidInit(): boolean {
   if (vapidConfigured) return true;
   const publicKey = process.env.VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT ?? "mailto:admin@cine-app.local";
+  const subject = config.push.subject;
   if (!publicKey || !privateKey) return false;
   try {
     webpush.setVapidDetails(subject, publicKey, privateKey);

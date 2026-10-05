@@ -1,12 +1,21 @@
 import { config } from "@/lib/config";
 import { HttpError, upstreamSignal, UPSTREAM_TIMEOUT_MS } from "@/lib/http";
 
-const { url, username, password } = config.qbittorrent;
+// Lu à chaque appel, et non recopié au chargement : réglable dans l'application (DECISIONS.md §48).
+const cfg = config.qbittorrent;
 
 // qBittorrent (>=4.1) rejects requests whose Referer/Origin doesn't match its own
 // Host, as a CSRF protection — without these headers, login fails with 403 even
 // when username/password are correct.
-const originHeaders = { Referer: url, Origin: url };
+// Des accesseurs : lus par `fetch` à chaque requête, ils suivent un réglage changé dans l'application.
+const originHeaders = {
+  get Referer() {
+    return cfg.url;
+  },
+  get Origin() {
+    return cfg.url;
+  },
+};
 
 // qBittorrent >=5.2 names its session cookie "QBT_SID_<port>" and returns 204
 // with an empty body on successful login; older versions return 200 "Ok." and
@@ -22,10 +31,10 @@ function extractSessionCookie(res: Response): string | null {
 }
 
 async function login(): Promise<string> {
-  const res = await fetch(`${url}/api/v2/auth/login`, {
+  const res = await fetch(`${cfg.url}/api/v2/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", ...originHeaders },
-    body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+    body: `username=${encodeURIComponent(cfg.username)}&password=${encodeURIComponent(cfg.password)}`,
     cache: "no-store",
     // Borné : sans délai, un qBittorrent qui accepte la connexion sans répondre tenait l'appel
     // jusqu'aux 300 s d'undici, et le suivi des torrents en empilait un par tick.
@@ -73,7 +82,7 @@ async function getCookie(forceRefresh = false): Promise<string> {
 
 async function request<T>(path: string, init: RequestInit = {}, _retried = false): Promise<T> {
   const cookie = await getCookie();
-  const res = await fetch(`${url}${path}`, {
+  const res = await fetch(`${cfg.url}${path}`, {
     ...init,
     headers: { ...init.headers, ...originHeaders, Cookie: cookie },
     cache: "no-store",

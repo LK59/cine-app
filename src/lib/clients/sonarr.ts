@@ -1,8 +1,15 @@
 import { config } from "@/lib/config";
 import { fetchJson } from "@/lib/http";
 
-const { url, apiKey } = config.sonarr;
-const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
+// Lu à chaque appel, et non recopié au chargement : réglable dans l'application (DECISIONS.md §48).
+const cfg = config.sonarr;
+// Un accesseur : lu par `fetch` à chaque requête, il suit un réglage changé dans l'application.
+const headers = {
+  get "X-Api-Key"() {
+    return cfg.apiKey;
+  },
+  "Content-Type": "application/json",
+};
 
 export interface SonarrSeason {
   seasonNumber: number;
@@ -64,63 +71,63 @@ export interface SonarrRelease {
 }
 
 export const sonarr = {
-  getSystemStatus: () => fetchJson<{ version: string }>(`${url}/api/v3/system/status`, { headers }),
-  getSeries: () => fetchJson<SonarrSeries[]>(`${url}/api/v3/series`, { headers }),
-  getSeriesById: (id: number) => fetchJson<SonarrSeries>(`${url}/api/v3/series/${id}`, { headers }),
+  getSystemStatus: () => fetchJson<{ version: string }>(`${cfg.url}/api/v3/system/status`, { headers }),
+  getSeries: () => fetchJson<SonarrSeries[]>(`${cfg.url}/api/v3/series`, { headers }),
+  getSeriesById: (id: number) => fetchJson<SonarrSeries>(`${cfg.url}/api/v3/series/${id}`, { headers }),
   updateSeries: (id: number, payload: Record<string, unknown>) =>
-    fetchJson<SonarrSeries>(`${url}/api/v3/series/${id}`, {
+    fetchJson<SonarrSeries>(`${cfg.url}/api/v3/series/${id}`, {
       method: "PUT",
       headers,
       body: JSON.stringify(payload),
     }),
   getEpisodes: (seriesId: number) =>
-    fetchJson<SonarrEpisode[]>(`${url}/api/v3/episode?seriesId=${seriesId}`, { headers }),
+    fetchJson<SonarrEpisode[]>(`${cfg.url}/api/v3/episode?seriesId=${seriesId}`, { headers }),
   updateEpisode: (id: number, payload: Record<string, unknown>) =>
-    fetchJson<SonarrEpisode>(`${url}/api/v3/episode/${id}`, {
+    fetchJson<SonarrEpisode>(`${cfg.url}/api/v3/episode/${id}`, {
       method: "PUT",
       headers,
       body: JSON.stringify(payload),
     }),
   getQueue: () =>
     fetchJson<{ records: any[]; totalRecords: number }>(
-      `${url}/api/v3/queue?pageSize=50&includeSeries=true`,
+      `${cfg.url}/api/v3/queue?pageSize=50&includeSeries=true`,
       { headers }
     ),
   getQueueCount: () =>
-    fetchJson<{ totalRecords: number }>(`${url}/api/v3/queue?pageSize=1`, { headers }).then(
+    fetchJson<{ totalRecords: number }>(`${cfg.url}/api/v3/queue?pageSize=1`, { headers }).then(
       (r) => r.totalRecords
     ),
   getMissingCount: () =>
-    fetchJson<{ totalRecords: number }>(`${url}/api/v3/wanted/missing?page=1&pageSize=1`, {
+    fetchJson<{ totalRecords: number }>(`${cfg.url}/api/v3/wanted/missing?page=1&pageSize=1`, {
       headers,
     }).then((r) => r.totalRecords),
   lookupSeries: (term: string) =>
-    fetchJson<any[]>(`${url}/api/v3/series/lookup?term=${encodeURIComponent(term)}`, { headers }),
-  getQualityProfiles: () => fetchJson<any[]>(`${url}/api/v3/qualityprofile`, { headers }),
-  getRootFolders: () => fetchJson<any[]>(`${url}/api/v3/rootfolder`, { headers }),
+    fetchJson<any[]>(`${cfg.url}/api/v3/series/lookup?term=${encodeURIComponent(term)}`, { headers }),
+  getQualityProfiles: () => fetchJson<any[]>(`${cfg.url}/api/v3/qualityprofile`, { headers }),
+  getRootFolders: () => fetchJson<any[]>(`${cfg.url}/api/v3/rootfolder`, { headers }),
   addSeries: (payload: Record<string, unknown>) =>
-    fetchJson<SonarrSeries>(`${url}/api/v3/series`, {
+    fetchJson<SonarrSeries>(`${cfg.url}/api/v3/series`, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
     }),
   deleteSeries: (id: number) =>
-    fetchJson<void>(`${url}/api/v3/series/${id}?deleteFiles=false`, { method: "DELETE", headers }),
+    fetchJson<void>(`${cfg.url}/api/v3/series/${id}?deleteFiles=false`, { method: "DELETE", headers }),
   getHistory: (pageSize = 20) =>
     fetchJson<{ records: any[] }>(
-      `${url}/api/v3/history?pageSize=${pageSize}&sortKey=date&sortDirection=descending&includeSeries=true&includeEpisode=true`,
+      `${cfg.url}/api/v3/history?pageSize=${pageSize}&sortKey=date&sortDirection=descending&includeSeries=true&includeEpisode=true`,
       { headers }
     ),
   getSeriesHistory: (seriesId: number) =>
     fetchJson<any[]>(
-      `${url}/api/v3/history/series?seriesId=${seriesId}&includeSeries=true&includeEpisode=true`,
+      `${cfg.url}/api/v3/history/series?seriesId=${seriesId}&includeSeries=true&includeEpisode=true`,
       { headers }
     ),
   // Encodées : les bornes viennent telles quelles de la requête du navigateur, et un `&` y
   // ajoutait n'importe quel paramètre à un appel fait avec la clé d'API (26/09/2026).
   getCalendar: (start: string, end: string) =>
     fetchJson<SonarrEpisode[]>(
-      `${url}/api/v3/calendar?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&unmonitored=true&includeSeries=true`,
+      `${cfg.url}/api/v3/calendar?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&unmonitored=true&includeSeries=true`,
       { headers }
     ),
   searchReleases: (params: { seriesId?: number; episodeId?: number; seasonNumber?: number }) => {
@@ -130,10 +137,10 @@ export const sonarr = {
       query.set("seriesId", String(params.seriesId));
       query.set("seasonNumber", String(params.seasonNumber));
     } else if (params.seriesId) query.set("seriesId", String(params.seriesId));
-    return fetchJson<SonarrRelease[]>(`${url}/api/v3/release?${query.toString()}`, { headers }, 60000);
+    return fetchJson<SonarrRelease[]>(`${cfg.url}/api/v3/release?${query.toString()}`, { headers }, 60000);
   },
   grabRelease: (guid: string, indexerId: number) =>
-    fetchJson<void>(`${url}/api/v3/release`, {
+    fetchJson<void>(`${cfg.url}/api/v3/release`, {
       method: "POST",
       headers,
       body: JSON.stringify({ guid, indexerId }),
@@ -144,14 +151,14 @@ export const sonarr = {
   // La même recherche automatique, mais sur un épisode précis. C'est la commande que Sonarr
   // déclenche lui-même quand on clique sur la loupe d'une ligne d'épisode dans son interface.
   triggerEpisodeSearch: (episodeIds: number[]) =>
-    fetchJson<void>(`${url}/api/v3/command`, {
+    fetchJson<void>(`${cfg.url}/api/v3/command`, {
       method: "POST",
       headers,
       body: JSON.stringify({ name: "EpisodeSearch", episodeIds }),
     }),
 
   triggerSearch: (seriesId: number, seasonNumber?: number) =>
-    fetchJson<void>(`${url}/api/v3/command`, {
+    fetchJson<void>(`${cfg.url}/api/v3/command`, {
       method: "POST",
       headers,
       body: seasonNumber != null

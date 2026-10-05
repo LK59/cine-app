@@ -1,0 +1,102 @@
+/**
+ * Les réglages de l'installation — la seule liste (DECISIONS.md §48).
+ *
+ * Lue par le serveur (qui résout chaque valeur : réglée dans l'application, sinon `.env`, sinon
+ * défaut) et par l'interface (l'assistant de premier lancement, la page « Connexions » de la
+ * gestion). Rien de secret ici : des noms, des groupes, des règles. Les libellés et les « pourquoi »
+ * vivent dans les dictionnaires, sous `setup.fields.<CLÉ>`.
+ *
+ * - `inApp` : réglable dans l'application. Sinon, c'est une option de déploiement (un chemin monté,
+ *   le fuseau) : l'interface donne la ligne à ajouter au `docker-compose.yml` ou au `.env`.
+ * - `secret` : jamais renvoyée au navigateur, seulement « renseignée » et ses quatre derniers caractères.
+ * - `need` : `required` (le cinéma ne fonctionne pas sans), `library` (au moins Radarr ou Sonarr),
+ *   ou `optional` (enrichit l'interface).
+ */
+
+export type SettingKind = "url" | "secret" | "text" | "boolean" | "select";
+export type SettingNeed = "required" | "library" | "optional";
+export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "app" | "deployment";
+
+export interface SettingDef {
+  key: string;
+  group: SettingGroup;
+  kind: SettingKind;
+  need: SettingNeed;
+  /** La valeur quand ni l'application ni `.env` n'en donnent. */
+  fallback: string;
+  inApp: boolean;
+  /** Les choix d'un `select`. */
+  options?: readonly string[];
+  /** Exemple montré dans le champ. */
+  placeholder?: string;
+}
+
+export const SETTINGS: readonly SettingDef[] = [
+  // ── L'indispensable ──
+  { key: "JELLYFIN_URL", group: "jellyfin", kind: "url", need: "required", fallback: "http://jellyfin:8096", inApp: true, placeholder: "http://jellyfin:8096" },
+  { key: "JELLYFIN_API_KEY", group: "jellyfin", kind: "secret", need: "required", fallback: "", inApp: true },
+  { key: "JELLYFIN_PUBLIC_URL", group: "jellyfin", kind: "url", need: "optional", fallback: "", inApp: true, placeholder: "https://jellyfin.example.com" },
+  { key: "TMDB_API_KEY", group: "tmdb", kind: "secret", need: "required", fallback: "", inApp: true },
+  { key: "RADARR_URL", group: "radarr", kind: "url", need: "library", fallback: "http://radarr:7878", inApp: true, placeholder: "http://radarr:7878" },
+  { key: "RADARR_API_KEY", group: "radarr", kind: "secret", need: "library", fallback: "", inApp: true },
+  { key: "SONARR_URL", group: "sonarr", kind: "url", need: "library", fallback: "http://sonarr:8989", inApp: true, placeholder: "http://sonarr:8989" },
+  { key: "SONARR_API_KEY", group: "sonarr", kind: "secret", need: "library", fallback: "", inApp: true },
+  // ── Ce qui enrichit ──
+  { key: "JELLYSEERR_URL", group: "jellyseerr", kind: "url", need: "optional", fallback: "http://jellyseerr:5055", inApp: true, placeholder: "http://jellyseerr:5055" },
+  { key: "JELLYSEERR_API_KEY", group: "jellyseerr", kind: "secret", need: "optional", fallback: "", inApp: true },
+  { key: "QBITTORRENT_URL", group: "qbittorrent", kind: "url", need: "optional", fallback: "http://gluetun:8080", inApp: true, placeholder: "http://qbittorrent:8080" },
+  { key: "QBITTORRENT_USERNAME", group: "qbittorrent", kind: "text", need: "optional", fallback: "admin", inApp: true },
+  { key: "QBITTORRENT_PASSWORD", group: "qbittorrent", kind: "secret", need: "optional", fallback: "", inApp: true },
+  { key: "BAZARR_URL", group: "bazarr", kind: "url", need: "optional", fallback: "http://bazarr:6767", inApp: true, placeholder: "http://bazarr:6767" },
+  { key: "BAZARR_API_KEY", group: "bazarr", kind: "secret", need: "optional", fallback: "", inApp: true },
+  { key: "JACKETT_URL", group: "jackett", kind: "url", need: "optional", fallback: "http://jackett:9117", inApp: true, placeholder: "http://jackett:9117" },
+  { key: "JACKETT_API_KEY", group: "jackett", kind: "secret", need: "optional", fallback: "", inApp: true },
+  { key: "OMDB_API_KEY", group: "ratings", kind: "secret", need: "optional", fallback: "", inApp: true },
+  { key: "MDBLIST_API_KEY", group: "ratings", kind: "secret", need: "optional", fallback: "", inApp: true },
+  // ── L'application ──
+  { key: "APP_LANGUAGE", group: "app", kind: "select", need: "optional", fallback: "en", inApp: true, options: ["fr", "en", "es", "de"] },
+  { key: "COOKIE_SECURE", group: "app", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  { key: "PLAYER_ENABLED", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  { key: "PLAYER_SERVER_FALLBACK", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  { key: "PLAYER_AUTO_FRAME", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  { key: "VAPID_SUBJECT", group: "app", kind: "text", need: "optional", fallback: "mailto:admin@example.com", inApp: true, placeholder: "mailto:admin@example.com" },
+  // ── Le déploiement : guidé, pas réglable ici ──
+  { key: "TZ", group: "deployment", kind: "text", need: "optional", fallback: "", inApp: false, placeholder: "Europe/Paris" },
+  { key: "MEDIA_ROOT", group: "deployment", kind: "text", need: "optional", fallback: "/mnt/media/video", inApp: false, placeholder: "/mnt/media/video" },
+  { key: "APP_ADMIN_USER", group: "deployment", kind: "text", need: "optional", fallback: "admin", inApp: false },
+];
+
+export const SETTINGS_BY_KEY: ReadonlyMap<string, SettingDef> = new Map(SETTINGS.map((s) => [s.key, s]));
+
+/** Les groupes réglables, dans l'ordre de l'assistant et de la page. */
+export const SETTING_GROUPS: readonly SettingGroup[] = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "app", "deployment"];
+
+/** Les services qu'on peut tester, et les réglages que le test lit. */
+export const TESTABLE_GROUPS = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett"] as const;
+export type TestableGroup = (typeof TESTABLE_GROUPS)[number];
+
+/** D'où vient une valeur. */
+export type SettingSource = "app" | "env" | "default";
+
+/** Ce que le navigateur reçoit d'un réglage — jamais un secret en clair. */
+export interface SettingView {
+  key: string;
+  source: SettingSource;
+  /** La valeur, sauf pour un secret. */
+  value: string | null;
+  /** Un secret : est-il renseigné, et ses quatre derniers caractères. */
+  set: boolean;
+  hint: string | null;
+  /** `.env` en donne une : le bouton « revenir à la valeur du .env » a un sens. */
+  envPresent: boolean;
+}
+
+/**
+ * Ce qui manque pour terminer l'assistant : chaque réglage `required` vide, et — si ni Radarr ni
+ * Sonarr n'a de clé — la paire `library`.
+ */
+export function missingRequired(valueOf: (key: string) => string): string[] {
+  const missing = SETTINGS.filter((s) => s.need === "required" && !valueOf(s.key).trim()).map((s) => s.key);
+  if (!valueOf("RADARR_API_KEY").trim() && !valueOf("SONARR_API_KEY").trim()) missing.push("RADARR_API_KEY|SONARR_API_KEY");
+  return missing;
+}

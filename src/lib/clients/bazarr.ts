@@ -8,8 +8,14 @@ import { fetchJson, upstreamSignal } from "@/lib/http";
  */
 const SUBTITLE_DOWNLOAD_TIMEOUT_MS = 30_000;
 
-const { url, apiKey } = config.bazarr;
-const headers = { "X-API-KEY": apiKey };
+// Lu à chaque appel, et non recopié au chargement : réglable dans l'application (DECISIONS.md §48).
+const cfg = config.bazarr;
+// Un accesseur : lu par `fetch` à chaque requête, il suit un réglage changé dans l'application.
+const headers = {
+  get "X-API-KEY"() {
+    return cfg.apiKey;
+  },
+};
 
 export interface BazarrWantedMovie {
   title: string;
@@ -73,38 +79,38 @@ export interface BazarrSubtitleCandidate {
 }
 
 export const bazarr = {
-  getStatus: () => fetchJson<{ data: any }>(`${url}/api/system/status`, { headers }),
+  getStatus: () => fetchJson<{ data: any }>(`${cfg.url}/api/system/status`, { headers }),
   getWantedMovies: (length = 25) =>
     fetchJson<{ data: BazarrWantedMovie[]; total: number }>(
-      `${url}/api/movies/wanted?start=0&length=${length}`,
+      `${cfg.url}/api/movies/wanted?start=0&length=${length}`,
       { headers }
     ),
   getWantedEpisodes: (length = 25) =>
     fetchJson<{ data: BazarrWantedEpisode[]; total: number }>(
-      `${url}/api/episodes/wanted?start=0&length=${length}`,
+      `${cfg.url}/api/episodes/wanted?start=0&length=${length}`,
       { headers }
     ),
-  getProviders: () => fetchJson<{ data: any[] }>(`${url}/api/providers`, { headers }),
+  getProviders: () => fetchJson<{ data: any[] }>(`${cfg.url}/api/providers`, { headers }),
   getMovieDetails: async (radarrId: number) => {
     const res = await fetchJson<{ data: BazarrMovieDetails[] }>(
-      `${url}/api/movies?radarrid%5B%5D=${radarrId}`,
+      `${cfg.url}/api/movies?radarrid%5B%5D=${radarrId}`,
       { headers }
     );
     return res.data[0] ?? null;
   },
   getEpisodesDetails: (seriesId: number) =>
-    fetchJson<{ data: BazarrEpisodeDetails[] }>(`${url}/api/episodes?seriesid%5B%5D=${seriesId}`, {
+    fetchJson<{ data: BazarrEpisodeDetails[] }>(`${cfg.url}/api/episodes?seriesid%5B%5D=${seriesId}`, {
       headers,
     }).then((res) => res.data),
   searchMovieSubtitles: (radarrId: number) =>
     fetchJson<{ data: BazarrSubtitleCandidate[] }>(
-      `${url}/api/providers/movies?radarrid=${radarrId}`,
+      `${cfg.url}/api/providers/movies?radarrid=${radarrId}`,
       { headers },
       30000
     ),
   searchEpisodeSubtitles: (episodeId: number) =>
     fetchJson<{ data: BazarrSubtitleCandidate[] }>(
-      `${url}/api/providers/episodes?episodeid=${episodeId}`,
+      `${cfg.url}/api/providers/episodes?episodeid=${episodeId}`,
       { headers },
       30000
     ),
@@ -120,7 +126,7 @@ export const bazarr = {
       provider: params.candidate.provider,
       subtitle: params.candidate.subtitle,
     });
-    return fetch(`${url}/api/providers/movies`, {
+    return fetch(`${cfg.url}/api/providers/movies`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
       body,
@@ -141,7 +147,7 @@ export const bazarr = {
       provider: params.candidate.provider,
       subtitle: params.candidate.subtitle,
     });
-    return fetch(`${url}/api/providers/episodes`, {
+    return fetch(`${cfg.url}/api/providers/episodes`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
       body,

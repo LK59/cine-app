@@ -1,8 +1,15 @@
 import { config } from "@/lib/config";
 import { fetchJson } from "@/lib/http";
 
-const { url, apiKey } = config.radarr;
-const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
+// Lu à chaque appel, et non recopié au chargement : réglable dans l'application (DECISIONS.md §48).
+const cfg = config.radarr;
+// Un accesseur : lu par `fetch` à chaque requête, il suit un réglage changé dans l'application.
+const headers = {
+  get "X-Api-Key"() {
+    return cfg.apiKey;
+  },
+  "Content-Type": "application/json",
+};
 
 export interface RadarrMovie {
   id: number;
@@ -94,69 +101,69 @@ export interface RadarrRelease {
 }
 
 export const radarr = {
-  getSystemStatus: () => fetchJson<{ version: string }>(`${url}/api/v3/system/status`, { headers }),
-  getMovies: () => fetchJson<RadarrMovie[]>(`${url}/api/v3/movie`, { headers }),
-  getMovie: (id: number) => fetchJson<RadarrMovie>(`${url}/api/v3/movie/${id}`, { headers }),
+  getSystemStatus: () => fetchJson<{ version: string }>(`${cfg.url}/api/v3/system/status`, { headers }),
+  getMovies: () => fetchJson<RadarrMovie[]>(`${cfg.url}/api/v3/movie`, { headers }),
+  getMovie: (id: number) => fetchJson<RadarrMovie>(`${cfg.url}/api/v3/movie/${id}`, { headers }),
   updateMovie: (id: number, payload: Record<string, unknown>) =>
-    fetchJson<RadarrMovie>(`${url}/api/v3/movie/${id}`, {
+    fetchJson<RadarrMovie>(`${cfg.url}/api/v3/movie/${id}`, {
       method: "PUT",
       headers,
       body: JSON.stringify(payload),
     }),
   getQueue: () =>
     fetchJson<{ records: any[]; totalRecords: number }>(
-      `${url}/api/v3/queue?pageSize=50&includeMovie=true`,
+      `${cfg.url}/api/v3/queue?pageSize=50&includeMovie=true`,
       { headers }
     ),
   getQueueCount: () =>
-    fetchJson<{ totalRecords: number }>(`${url}/api/v3/queue?pageSize=1`, { headers }).then(
+    fetchJson<{ totalRecords: number }>(`${cfg.url}/api/v3/queue?pageSize=1`, { headers }).then(
       (r) => r.totalRecords
     ),
   getMissingCount: () =>
-    fetchJson<{ totalRecords: number }>(`${url}/api/v3/wanted/missing?page=1&pageSize=1`, {
+    fetchJson<{ totalRecords: number }>(`${cfg.url}/api/v3/wanted/missing?page=1&pageSize=1`, {
       headers,
     }).then((r) => r.totalRecords),
   lookupMovie: (term: string) =>
-    fetchJson<any[]>(`${url}/api/v3/movie/lookup?term=${encodeURIComponent(term)}`, { headers }),
-  getQualityProfiles: () => fetchJson<any[]>(`${url}/api/v3/qualityprofile`, { headers }),
-  getRootFolders: () => fetchJson<any[]>(`${url}/api/v3/rootfolder`, { headers }),
+    fetchJson<any[]>(`${cfg.url}/api/v3/movie/lookup?term=${encodeURIComponent(term)}`, { headers }),
+  getQualityProfiles: () => fetchJson<any[]>(`${cfg.url}/api/v3/qualityprofile`, { headers }),
+  getRootFolders: () => fetchJson<any[]>(`${cfg.url}/api/v3/rootfolder`, { headers }),
   addMovie: (payload: Record<string, unknown>) =>
-    fetchJson<RadarrMovie>(`${url}/api/v3/movie`, {
+    fetchJson<RadarrMovie>(`${cfg.url}/api/v3/movie`, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
     }),
   deleteMovie: (id: number) =>
-    fetchJson<void>(`${url}/api/v3/movie/${id}?deleteFiles=false`, { method: "DELETE", headers }),
+    fetchJson<void>(`${cfg.url}/api/v3/movie/${id}?deleteFiles=false`, { method: "DELETE", headers }),
   deleteMovieFile: (fileId: number) =>
-    fetchJson<void>(`${url}/api/v3/moviefile/${fileId}`, { method: "DELETE", headers }),
+    fetchJson<void>(`${cfg.url}/api/v3/moviefile/${fileId}`, { method: "DELETE", headers }),
   getHistory: (pageSize = 20) =>
     fetchJson<{ records: any[] }>(
-      `${url}/api/v3/history?pageSize=${pageSize}&sortKey=date&sortDirection=descending&includeMovie=true`,
+      `${cfg.url}/api/v3/history?pageSize=${pageSize}&sortKey=date&sortDirection=descending&includeMovie=true`,
       { headers }
     ),
   getMovieHistory: (movieId: number) =>
     fetchJson<any[]>(
-      `${url}/api/v3/history/movie?movieId=${movieId}&includeMovie=true`,
+      `${cfg.url}/api/v3/history/movie?movieId=${movieId}&includeMovie=true`,
       { headers }
     ),
   // Encodées : les bornes viennent telles quelles de la requête du navigateur, et un `&` y
   // ajoutait n'importe quel paramètre à un appel fait avec la clé d'API (26/09/2026).
   getCalendar: (start: string, end: string) =>
     fetchJson<RadarrMovie[]>(
-      `${url}/api/v3/calendar?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&unmonitored=true`,
+      `${cfg.url}/api/v3/calendar?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&unmonitored=true`,
       { headers }
     ),
   searchReleases: (movieId: number) =>
-    fetchJson<RadarrRelease[]>(`${url}/api/v3/release?movieId=${movieId}`, { headers }, 60000),
+    fetchJson<RadarrRelease[]>(`${cfg.url}/api/v3/release?movieId=${movieId}`, { headers }, 60000),
   grabRelease: (guid: string, indexerId: number) =>
-    fetchJson<void>(`${url}/api/v3/release`, {
+    fetchJson<void>(`${cfg.url}/api/v3/release`, {
       method: "POST",
       headers,
       body: JSON.stringify({ guid, indexerId }),
     }),
   triggerSearch: (movieId: number) =>
-    fetchJson<void>(`${url}/api/v3/command`, {
+    fetchJson<void>(`${cfg.url}/api/v3/command`, {
       method: "POST",
       headers,
       body: JSON.stringify({ name: "MoviesSearch", movieIds: [movieId] }),

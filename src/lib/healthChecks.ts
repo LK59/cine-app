@@ -141,7 +141,7 @@ const MDBLIST_URL = "https://mdblist.com";
  * sans ces notes, c'est lui.
  */
 export async function pingMdblist(): Promise<ServiceHealth> {
-  if (!process.env.MDBLIST_API_KEY) {
+  if (!config.mdblist.apiKey) {
     return { name: "mdblist", url: MDBLIST_URL, status: "down", latencyMs: 0, version: null, error: "No API key configured" };
   }
   return { name: "mdblist", url: MDBLIST_URL, status: "ok", latencyMs: 0, version: null, error: null };
