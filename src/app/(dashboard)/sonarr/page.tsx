@@ -371,7 +371,7 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
   const toast = useToast();
   const t = useT();
 
-  const { data: meta } = useSWR<{ qualityProfiles: { id: number; name: string }[]; rootFolders: { id: number; path: string }[] }>(
+  const { data: meta } = useSWR<{ qualityProfiles: { id: number; name: string }[]; rootFolders: { id: number; path: string }[]; defaultQualityProfileId?: number | null }>(
     "/api/sonarr/meta",
     fetcher
   );
@@ -395,7 +395,7 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
         method: "POST",
         body: JSON.stringify({
           ...show,
-          qualityProfileId: meta.qualityProfiles[0].id,
+          qualityProfileId: meta.defaultQualityProfileId ?? meta.qualityProfiles[0].id,
           rootFolderPath: meta.rootFolders[0].path,
           monitored: true,
           addOptions: { searchForMissingEpisodes: true },

@@ -9,11 +9,13 @@
  * - `inApp` : réglable dans l'application. Sinon, c'est une option de déploiement (un chemin monté,
  *   le fuseau) : l'interface donne la ligne à ajouter au `docker-compose.yml` ou au `.env`.
  * - `secret` : jamais renvoyée au navigateur, seulement « renseignée » et ses quatre derniers caractères.
+ * - `profile` : un profil de qualité de Radarr ou Sonarr, choisi dans la liste lue chez le service
+ *   (son identifiant ; vide = le premier de la liste).
  * - `need` : `required` (le cinéma ne fonctionne pas sans), `library` (au moins Radarr ou Sonarr),
  *   ou `optional` (enrichit l'interface).
  */
 
-export type SettingKind = "url" | "secret" | "text" | "boolean" | "select";
+export type SettingKind = "url" | "secret" | "text" | "boolean" | "select" | "profile";
 export type SettingNeed = "required" | "library" | "optional";
 export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "playback" | "app" | "deployment";
 
@@ -39,8 +41,10 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "TMDB_API_KEY", group: "tmdb", kind: "secret", need: "required", fallback: "", inApp: true },
   { key: "RADARR_URL", group: "radarr", kind: "url", need: "library", fallback: "http://radarr:7878", inApp: true, placeholder: "http://radarr:7878" },
   { key: "RADARR_API_KEY", group: "radarr", kind: "secret", need: "library", fallback: "", inApp: true },
+  { key: "RADARR_QUALITY_PROFILE", group: "radarr", kind: "profile", need: "optional", fallback: "", inApp: true },
   { key: "SONARR_URL", group: "sonarr", kind: "url", need: "library", fallback: "http://sonarr:8989", inApp: true, placeholder: "http://sonarr:8989" },
   { key: "SONARR_API_KEY", group: "sonarr", kind: "secret", need: "library", fallback: "", inApp: true },
+  { key: "SONARR_QUALITY_PROFILE", group: "sonarr", kind: "profile", need: "optional", fallback: "", inApp: true },
   // ── Ce qui enrichit ──
   { key: "JELLYSEERR_URL", group: "jellyseerr", kind: "url", need: "optional", fallback: "http://jellyseerr:5055", inApp: true, placeholder: "http://jellyseerr:5055" },
   { key: "JELLYSEERR_API_KEY", group: "jellyseerr", kind: "secret", need: "optional", fallback: "", inApp: true },

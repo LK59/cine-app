@@ -128,6 +128,7 @@ export function settingProblem(key: string, value: string): string | null {
   if (value.length > 2000) return "too-long";
   if (def.kind === "boolean" && value !== "true" && value !== "false") return "invalid";
   if (def.kind === "select" && !def.options?.includes(value)) return "invalid";
+  if (def.kind === "profile" && value !== "" && !/^[1-9]\d{0,8}$/.test(value)) return "invalid";
   if (def.kind === "url" && value !== "") {
     try {
       const url = new URL(value);

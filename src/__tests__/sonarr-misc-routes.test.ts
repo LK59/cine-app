@@ -47,7 +47,7 @@ describe("GET /api/sonarr/meta", () => {
     mockSonarr.getRootFolders.mockResolvedValue([{ path: "/tv" }]);
     const { GET } = await import("@/app/api/sonarr/meta/route");
     const res = await GET();
-    expect(await res.json()).toEqual({ qualityProfiles: [{ id: 1, name: "HD" }], rootFolders: [{ path: "/tv" }] });
+    expect(await res.json()).toEqual({ qualityProfiles: [{ id: 1, name: "HD" }], defaultQualityProfileId: 1, rootFolders: [{ path: "/tv" }] });
   });
 });
 

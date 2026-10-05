@@ -1522,5 +1522,12 @@ pouvoir le couper dès l'installation. Les deux accueils (assistant, accueil d'u
 verre mixte de §45 : flou sur les pilules et les boutons, reflet et bord sans flou sur les cartes ;
 la langue s'y choisit par une même pilule à lentille (`LanguageLens`).
 
+Le profil de qualité d'un ajout à Radarr ou Sonarr est une seule règle, `defaultQualityProfile`
+(`src/lib/qualityProfile.ts`) : celui réglé dans « Connexions » s'il existe encore chez le service,
+sinon le premier de sa liste. Elle sert l'ajout depuis la découverte et, par `defaultQualityProfileId`
+des routes `/api/radarr/meta` et `/api/sonarr/meta`, les formulaires d'ajout de la gestion. Avant,
+la découverte cherchait un nom contenant « vf » et la gestion prenait le premier profil. Les
+demandes Jellyseerr n'envoient aucun profil : Jellyseerr applique le sien.
+
 **Décidé le 05/10/2026.**
 

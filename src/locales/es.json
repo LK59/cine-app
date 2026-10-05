@@ -2481,7 +2481,9 @@
       "POSTER_PREWARM": "Preparar los carteles de antemano (en el próximo arranque)",
       "MEDIA_PATHS": "Subcarpetas de la biblioteca",
       "CLARA_GALLERY": "Galería de fotos",
-      "POSTER_PREWARM_TUNING": "Tamaños e idiomas de los carteles preparados"
+      "POSTER_PREWARM_TUNING": "Tamaños e idiomas de los carteles preparados",
+      "RADARR_QUALITY_PROFILE": "Perfil de calidad de las altas",
+      "SONARR_QUALITY_PROFILE": "Perfil de calidad de las altas"
     },
     "deployHint": {
       "TZ": "En docker-compose.yml, bajo «environment»:",
@@ -2506,6 +2508,8 @@
       "subtitle": "Direcciones y claves de los servicios. Un valor ajustado aquí sustituye al del .env.",
       "link": "Conexiones a los servicios",
       "linkHint": "Jellyfin, TMDB, Radarr, Sonarr y complementos."
-    }
+    },
+    "profileFirst": "El primero de la lista",
+    "profileUnavailable": "Lista no disponible: compruebe la dirección y la clave y recargue la página."
   }
 }

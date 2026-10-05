@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import useSWR from "swr";
 import { CircleCheck, CircleAlert, Loader2, RotateCcw } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { DEPLOYMENT_GUIDE, SETTINGS, TESTABLE_GROUPS, type SettingGroup, type SettingView, type TestableGroup } from "@/lib/settings/schema";
@@ -80,6 +81,8 @@ export function SettingsGroupCard({
               </div>
               {def.kind === "boolean" ? (
                 <BooleanChoice id={`setting-${def.key}`} value={value} onChange={(v) => onDraft(def.key, v)} />
+              ) : def.kind === "profile" ? (
+                <ProfileSelect id={`setting-${def.key}`} service={group === "sonarr" ? "sonarr" : "radarr"} value={value} onChange={(v) => onDraft(def.key, v)} />
               ) : def.kind === "select" ? (
                 <select id={`setting-${def.key}`} className="select w-full" value={value} onChange={(e) => onDraft(def.key, e.target.value)}>
                   {def.options?.map((o) => (
@@ -141,6 +144,36 @@ function BooleanChoice({ id, value, onChange }: { id: string; value: string; onC
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * Le profil de qualité des ajouts : la liste lue chez Radarr ou Sonarr (`/api/<service>/meta`).
+ * Service injoignable ou pas encore réglé : le choix courant reste affiché, et on dit pourquoi la
+ * liste manque plutôt que de proposer un menu vide.
+ */
+function ProfileSelect({ id, service, value, onChange }: { id: string; service: "radarr" | "sonarr"; value: string; onChange: (value: string) => void }) {
+  const t = useT();
+  const { data, error } = useSWR<{ qualityProfiles?: { id: number; name: string }[] }>(`/api/${service}/meta`, async (url: string) => {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(String(res.status));
+    return res.json();
+  });
+  const profiles = data?.qualityProfiles ?? [];
+  const known = value === "" || profiles.some((p) => String(p.id) === value);
+  return (
+    <>
+      <select id={id} className="select w-full" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{t("setup.profileFirst")}</option>
+        {profiles.map((p) => (
+          <option key={p.id} value={String(p.id)}>
+            {p.name}
+          </option>
+        ))}
+        {!known && <option value={value}>#{value}</option>}
+      </select>
+      {error && <p className="mt-1 text-xs text-subtle">{t("setup.profileUnavailable")}</p>}
+    </>
   );
 }
 

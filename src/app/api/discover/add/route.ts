@@ -2,12 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { radarr } from "@/lib/clients/radarr";
 import { sonarr } from "@/lib/clients/sonarr";
 import { invalidateLibrary } from "@/lib/server-cache";
+import { defaultQualityProfile } from "@/lib/qualityProfile";
 
-function vfProfile(profiles: { id: number; name: string }[]) {
-  return (
-    profiles.find((p) => p.name.toLowerCase().includes("vf")) ?? profiles[0]
-  );
-}
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -38,7 +34,7 @@ export async function POST(req: NextRequest) {
       // entry instead of one that keeps hitting indexers for nothing.
       const added = await radarr.addMovie({
         ...movie,
-        qualityProfileId: vfProfile(profiles)?.id,
+        qualityProfileId: defaultQualityProfile("radarr", profiles)?.id,
         rootFolderPath: folders[0]?.path,
         monitored: false,
         addOptions: { searchForMovie: false },
@@ -65,7 +61,7 @@ export async function POST(req: NextRequest) {
       // here. Per-season interactive/automatic search happen afterward, on the series' own sheet.
       const added = await sonarr.addSeries({
         ...series,
-        qualityProfileId: vfProfile(profiles)?.id,
+        qualityProfileId: defaultQualityProfile("sonarr", profiles)?.id,
         rootFolderPath: folders[0]?.path,
         monitored: true,
         addOptions: { searchForMissingEpisodes: false },

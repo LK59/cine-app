@@ -2481,7 +2481,9 @@
       "POSTER_PREWARM": "Préparer les affiches à l'avance (au prochain démarrage)",
       "MEDIA_PATHS": "Sous-dossiers de la bibliothèque",
       "CLARA_GALLERY": "Galerie de photos",
-      "POSTER_PREWARM_TUNING": "Tailles et langues des affiches préparées"
+      "POSTER_PREWARM_TUNING": "Tailles et langues des affiches préparées",
+      "RADARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
+      "SONARR_QUALITY_PROFILE": "Profil de qualité des ajouts"
     },
     "deployHint": {
       "TZ": "Dans docker-compose.yml, sous « environment » :",
@@ -2506,6 +2508,8 @@
       "subtitle": "Adresses et clés des services. Une valeur réglée ici remplace celle du .env.",
       "link": "Connexions aux services",
       "linkHint": "Jellyfin, TMDB, Radarr, Sonarr et les compléments."
-    }
+    },
+    "profileFirst": "Le premier de la liste",
+    "profileUnavailable": "Liste indisponible : vérifiez l'adresse et la clé, puis rechargez la page."
   }
 }

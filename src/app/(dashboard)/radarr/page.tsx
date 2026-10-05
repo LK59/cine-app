@@ -362,7 +362,7 @@ function AddMovieModal({ onClose }: { onClose: () => void }) {
   const [added, setAdded] = useState<Set<number>>(new Set());
   const toast = useToast();
 
-  const { data: meta } = useSWR<{ qualityProfiles: { id: number; name: string }[]; rootFolders: { id: number; path: string }[] }>(
+  const { data: meta } = useSWR<{ qualityProfiles: { id: number; name: string }[]; rootFolders: { id: number; path: string }[]; defaultQualityProfileId?: number | null }>(
     "/api/radarr/meta",
     fetcher
   );
@@ -386,7 +386,7 @@ function AddMovieModal({ onClose }: { onClose: () => void }) {
         method: "POST",
         body: JSON.stringify({
           ...movie,
-          qualityProfileId: meta.qualityProfiles[0].id,
+          qualityProfileId: meta.defaultQualityProfileId ?? meta.qualityProfiles[0].id,
           rootFolderPath: meta.rootFolders[0].path,
           monitored: true,
           addOptions: { searchForMovie: true },

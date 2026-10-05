@@ -17,6 +17,9 @@ vi.mock("@/lib/clients/radarr", () => ({ radarr: mockRadarr }));
 vi.mock("@/lib/clients/sonarr", () => ({ sonarr: mockSonarr }));
 const mockInvalidateLibrary = vi.fn();
 vi.mock("@/lib/server-cache", () => ({ invalidateLibrary: () => mockInvalidateLibrary() }));
+// Le profil des ajouts réglé dans « Connexions » (`defaultQualityProfile`, DECISIONS.md §48).
+const settings: Record<string, string> = {};
+vi.mock("@/lib/settings/setup", () => ({ settingValue: (key: string) => settings[key] ?? "" }));
 
 function fakeReq(body: unknown): NextRequest {
   return { json: async () => body } as unknown as NextRequest;
@@ -27,6 +30,7 @@ const folders = [{ path: "/movies" }];
 
 beforeEach(() => {
   vi.clearAllMocks();
+  for (const k of Object.keys(settings)) delete settings[k];
   mockRadarr.getQualityProfiles.mockResolvedValue(profiles);
   mockRadarr.getRootFolders.mockResolvedValue(folders);
   mockSonarr.getQualityProfiles.mockResolvedValue(profiles);
@@ -56,7 +60,8 @@ describe("POST /api/discover/add", () => {
     expect(mockRadarr.addMovie).not.toHaveBeenCalled();
   });
 
-  it("adds a new movie preferring the VF quality profile and the first root folder", async () => {
+  it("adds a new movie with the quality profile set in Connexions and the first root folder", async () => {
+    settings.RADARR_QUALITY_PROFILE = "2";
     mockRadarr.lookupMovie.mockResolvedValue([{ tmdbId: 42, title: "Dune" }]);
     mockRadarr.addMovie.mockResolvedValue({ id: 99 });
     const { POST } = await import("@/app/api/discover/add/route");
@@ -72,8 +77,8 @@ describe("POST /api/discover/add", () => {
     expect(mockInvalidateLibrary).toHaveBeenCalled();
   });
 
-  it("falls back to the first quality profile when none matches 'vf'", async () => {
-    mockRadarr.getQualityProfiles.mockResolvedValue([{ id: 5, name: "HD-1080p" }]);
+  it("takes the first quality profile when none is set — a name containing 'vf' no longer wins on its own", async () => {
+    mockRadarr.getQualityProfiles.mockResolvedValue([{ id: 5, name: "HD-1080p" }, { id: 6, name: "VF-1080p" }]);
     mockRadarr.lookupMovie.mockResolvedValue([{ tmdbId: 42, title: "Dune" }]);
     mockRadarr.addMovie.mockResolvedValue({ id: 99 });
     const { POST } = await import("@/app/api/discover/add/route");
@@ -92,6 +97,7 @@ describe("POST /api/discover/add", () => {
   });
 
   it("adds a new series the same way through Sonarr", async () => {
+    settings.SONARR_QUALITY_PROFILE = "2";
     mockSonarr.lookupSeries.mockResolvedValue([{ tmdbId: 7, title: "Severance" }]);
     mockSonarr.addSeries.mockResolvedValue({ id: 55 });
     const { POST } = await import("@/app/api/discover/add/route");
@@ -108,5 +114,14 @@ describe("POST /api/discover/add", () => {
     const { POST } = await import("@/app/api/discover/add/route");
     const res = await POST(fakeReq({ type: "series", tmdbId: 7 }));
     expect(res.status).toBe(404);
+  });
+
+  it("falls back to the first profile when the one set no longer exists", async () => {
+    settings.SONARR_QUALITY_PROFILE = "42";
+    mockSonarr.lookupSeries.mockResolvedValue([{ tmdbId: 7, title: "Severance" }]);
+    mockSonarr.addSeries.mockResolvedValue({ id: 55 });
+    const { POST } = await import("@/app/api/discover/add/route");
+    await POST(fakeReq({ type: "series", tmdbId: 7 }));
+    expect(mockSonarr.addSeries).toHaveBeenCalledWith(expect.objectContaining({ qualityProfileId: 1 }));
   });
 });

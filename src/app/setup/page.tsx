@@ -33,7 +33,12 @@ type StepCard = { group: SettingGroup; keys?: readonly string[] };
 const STEP_CARDS: Partial<Record<Step, StepCard[]>> = {
   jellyfin: [{ group: "jellyfin" }, { group: "playback", keys: ["PLAYER_SERVER_FALLBACK"] }],
   tmdb: [{ group: "tmdb" }],
-  library: [{ group: "radarr" }, { group: "sonarr" }],
+  // Le profil des ajouts attend « Connexions » : sa liste se lit chez le service, dont la clé
+  // n'est enregistrée qu'à « Suivant » ; sans choix, c'est le premier profil.
+  library: [
+    { group: "radarr", keys: ["RADARR_URL", "RADARR_API_KEY"] },
+    { group: "sonarr", keys: ["SONARR_URL", "SONARR_API_KEY"] },
+  ],
   extras: [
     { group: "jellyseerr" },
     { group: "qbittorrent" },

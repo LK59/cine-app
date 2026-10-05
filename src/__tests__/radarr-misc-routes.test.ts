@@ -39,7 +39,7 @@ describe("GET /api/radarr/meta", () => {
     const { GET } = await import("@/app/api/radarr/meta/route");
     const res = await GET();
     const body = await res.json();
-    expect(body).toEqual({ qualityProfiles: [{ id: 1, name: "HD" }], rootFolders: [{ path: "/movies" }] });
+    expect(body).toEqual({ qualityProfiles: [{ id: 1, name: "HD" }], defaultQualityProfileId: 1, rootFolders: [{ path: "/movies" }] });
   });
 
   it("returns 502 when Radarr is unreachable", async () => {
