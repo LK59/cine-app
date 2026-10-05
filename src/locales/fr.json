@@ -1926,7 +1926,8 @@
     "seriesMarkedWatched": "Série marquée comme vue",
     "seriesMarkedUnwatched": "Série marquée comme non vue",
     "removeFromContinue": "Retirer de « Reprendre »",
-    "removeFromContinueFailed": "Ce titre n'a pas pu être retiré de « Reprendre »."
+    "removeFromContinueFailed": "Ce titre n'a pas pu être retiré de « Reprendre ».",
+    "titleUnavailable": "Ce titre n'est pas encore disponible dans le cinéma."
   },
   "services": {
     "notConfigured": "{name} n'est pas configuré.",

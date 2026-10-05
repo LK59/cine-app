@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { catalogueMembers } from "@/lib/catalogueMembers";
 import { createTmdbClient, tmdb, TMDB_IMAGE_BASE, type TmdbMovie, type TmdbTv, type TmdbMultiResult } from "@/lib/clients/tmdb";
 import { cachedMovies, cachedSeries, withCache, withPersistentCache, TTL } from "@/lib/server-cache";
 import { SESSION_COOKIE } from "@/lib/auth"
@@ -243,9 +244,10 @@ export async function GET(req: NextRequest) {
 
     const personQuery = correctPersonName(q);
 
-    const [movies, series, multiResults, multiResultsEn, personResults] = await Promise.all([
+    const [movies, series, members, multiResults, multiResultsEn, personResults] = await Promise.all([
       cachedMovies().catch(() => []),
       cachedSeries().catch(() => []),
+      catalogueMembers(),
       tmdbPrimary.searchMulti(q).catch(() => ({ results: [] })),
       tmdbEn === tmdbPrimary ? Promise.resolve({ results: [] }) : tmdbEn.searchMulti(q).catch(() => ({ results: [] })),
       tmdbPrimary.searchPerson(personQuery).catch(() => ({ results: [] })),
@@ -254,9 +256,11 @@ export async function GET(req: NextRequest) {
     // Build lookup maps
     const radarrByTmdb = new Map(movies.map((m) => [m.tmdbId, m.id]));
     const sonarrByTmdb = new Map(series.filter((s) => s.tmdbId).map((s) => [s.tmdbId!, s.id]));
+    // Ouvrable = dans le catalogue du cinéma, la même règle que ses routes (`catalogueMembers`) :
+    // un titre que Jellyfin ne rapproche pas s'ouvre sur sa fiche TMDB au lieu de ne rien faire.
     const playable = new Set<string>([
-      ...movies.filter((m) => m.hasFile).map((m) => `movie:${m.id}`),
-      ...series.filter((s) => (s.statistics?.episodeFileCount ?? 0) > 0).map((s) => `series:${s.id}`),
+      ...members.movies.map((m) => `movie:${m.id}`),
+      ...members.series.map((s) => `series:${s.id}`),
     ]);
 
     const library: UnifiedSearchResult[] = [];

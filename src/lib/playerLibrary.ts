@@ -1,4 +1,4 @@
-import { cachedMovies, cachedSeries } from "@/lib/server-cache";
+import { catalogueMembers } from "@/lib/catalogueMembers";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
 
@@ -11,29 +11,19 @@ export interface PlayableLibrary {
  * Ce que la bibliothèque peut réellement ouvrir, indexé par identifiant TMDB.
  *
  * La nuance qui compte : Radarr et Sonarr connaissent aussi des titres qu'ils **surveillent sans
- * les avoir**. Les indexer comme « on l'a » donnait un identifiant de bibliothèque à un film
- * qu'aucun écran ne sait afficher — les écrans cinéma ne montrent que ce qui a un fichier et une
- * correspondance Jellyfin. Résultat à l'usage : une carte sans la pastille « Pas encore là », qui
- * n'ouvrait rien du tout quand on cliquait dessus.
+ * les avoir**, et des titres qu'ils ont mais que Jellyfin ne rapproche pas. Les indexer comme « on
+ * l'a » donnait un identifiant de bibliothèque à un titre qu'aucun écran ne sait afficher : une
+ * carte sans la pastille « Pas encore là », qui n'ouvrait rien du tout quand on cliquait dessus.
  *
- * Le filtre est donc le même que celui des routes du catalogue : un film avec son fichier, une
- * série avec au moins un épisode. C'est une approximation de la correspondance Jellyfin — elle
- * peut encore laisser passer un titre présent chez Radarr mais absent de Jellyfin — mais elle
- * supprime le cas courant, et de loin.
+ * La règle est donc **celle du catalogue**, et non plus une approximation : `catalogueMembers`
+ * (fichier ou épisode, *et* élément Jellyfin retrouvé). Un titre qui n'y est pas s'ouvre sur sa
+ * fiche TMDB (*The Arena*, 05/10/2026 — Jellyfin l'avait pris pour une autre série).
  */
 export async function playableLibrary(): Promise<PlayableLibrary> {
-  const [movies, series] = await Promise.all([
-    cachedMovies().catch(() => [] as RadarrMovie[]),
-    cachedSeries().catch(() => [] as SonarrSeries[]),
-  ]);
-
+  const { movies, series } = await catalogueMembers();
   return {
-    movies: new Map(movies.filter((m) => m.hasFile && m.tmdbId).map((m) => [m.tmdbId, m])),
-    series: new Map(
-      series
-        .filter((s) => s.tmdbId != null && (s.statistics?.episodeFileCount ?? 0) > 0)
-        .map((s) => [s.tmdbId!, s])
-    ),
+    movies: new Map(movies.filter((m) => m.tmdbId).map((m) => [m.tmdbId, m])),
+    series: new Map(series.filter((s) => s.tmdbId != null).map((s) => [s.tmdbId!, s])),
   };
 }
 

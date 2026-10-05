@@ -1926,7 +1926,8 @@
     "seriesMarkedWatched": "Serie marcada como vista",
     "seriesMarkedUnwatched": "Serie marcada como no vista",
     "removeFromContinue": "Quitar de Continuar viendo",
-    "removeFromContinueFailed": "No se pudo quitar este título de Continuar viendo."
+    "removeFromContinueFailed": "No se pudo quitar este título de Continuar viendo.",
+    "titleUnavailable": "Este título aún no está disponible en el cine."
   },
   "services": {
     "notConfigured": "{name} no está configurado.",

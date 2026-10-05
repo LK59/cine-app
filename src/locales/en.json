@@ -1926,7 +1926,8 @@
     "seriesMarkedWatched": "Series marked as watched",
     "seriesMarkedUnwatched": "Series marked as unwatched",
     "removeFromContinue": "Remove from Continue watching",
-    "removeFromContinueFailed": "This title couldn't be removed from Continue watching."
+    "removeFromContinueFailed": "This title couldn't be removed from Continue watching.",
+    "titleUnavailable": "This title isn't available in the cinema yet."
   },
   "services": {
     "notConfigured": "{name} is not configured.",

@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
 import { TapButton } from "@/components/TapButton";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
+import { useMissingTitleNotice } from "@/lib/useMissingTitleNotice";
 import { Clapperboard, Info, Play, Plus, Search, X } from "lucide-react";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/lib/useLongPress";
@@ -184,7 +185,7 @@ export function CinemaMobileClient() {
   // Voir `cinemaOpen` : cette décision était écrite ici *et* sur le bureau, mot pour mot.
   const openDiscovery = useCallback((item: DiscoveryItem) => openDiscoveryItem(item), []);
 
-  const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
+  const { data: movies, error: moviesError, isLoading: moviesLoading, isValidating: moviesValidating } = useSWR<CinemaMoviesPayload>(
     MOVIES_CATALOGUE_KEY,
     cinemaFetcher
   );
@@ -207,7 +208,7 @@ export function CinemaMobileClient() {
   // Les films sont là : on peut préparer les séries sans rien retarder, et la clé ci-dessous
   // s'y abonne dès que c'est prêt — sans quoi le cache serait rempli pour personne.
   const seriesWarmed = useWarmSeriesCatalogue(movies !== undefined);
-  const { data: series, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
+  const { data: series, isLoading: seriesLoading, isValidating: seriesValidating } = useSWR<CinemaSeriesPayload>(
     mediaType === "series" || route.serie !== null || seriesWarmed ? SERIES_CATALOGUE_KEY : null,
     cinemaFetcher
   );
@@ -293,6 +294,13 @@ export function CinemaMobileClient() {
   // genre de travail qui se paie en à-coups sur un téléphone, pour un résultat identique.
   const byIdMovies = useMemo(() => indexByItemId(movies), [movies]);
   const byIdSeries = useMemo(() => indexByItemId(series), [series]);
+  // Une fiche demandée que le catalogue (relu au réseau) n'a pas : un message plutôt que rien.
+  useMissingTitleNotice({
+    film: route.film,
+    serie: route.serie,
+    movies: moviesValidating ? null : byIdMovies,
+    series: seriesValidating ? null : byIdSeries,
+  });
   /** Celui de l'onglet affiché : c'est lui, et lui seul, qui alimente la grille. */
   const byId = isSeries ? byIdSeries : byIdMovies;
 

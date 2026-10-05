@@ -324,13 +324,44 @@ function yearMatches(jfYear: number | undefined, radarrYear: number | null | und
   return Math.abs(jfYear - radarrYear) <= 1;
 }
 
+/**
+ * Le nom d'un dossier, pour rapprocher Radarr/Sonarr et Jellyfin par le disque.
+ *
+ * Les deux voient le même dossier, mais pas forcément par le même chemin (chacun son point de
+ * montage : `/tv/…` chez l'un, `/media/tv/…` chez l'autre) : seul son nom compte — « The Arena
+ * (2026) ». Insensible à la casse et aux barres finales.
+ */
+export function folderKey(path: string | null | undefined): string | null {
+  if (!path) return null;
+  const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1].toLowerCase() : null;
+}
+
+/** Le seul élément Jellyfin rangé dans ce dossier — aucun s'il y en a plusieurs (ambigu). */
+function byFolder(items: JellyfinItem[], folder: string | null | undefined, keyOf: (item: JellyfinItem) => string | null): JellyfinItem | null {
+  const key = folderKey(folder);
+  if (!key) return null;
+  const hits = items.filter((i) => keyOf(i) === key);
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** Le dossier d'un film chez Jellyfin : celui qui contient son fichier. */
+const movieFolderKey = (item: JellyfinItem) => folderKey(item.Path?.replace(/[\\/][^\\/]*$/, ""));
+
 export function findJellyfinMovieByTmdb(
   items: JellyfinItem[],
   tmdbId: number,
   fallbackTitle?: string,
   fallbackYear?: number | null,
   fallbackImdbId?: string | null,
+  folder?: string | null,
 ) {
+  // Pass 0 — Le dossier (05/10/2026). Il ne dépend pas de l'identification de Jellyfin : un film
+  // que Jellyfin a pris pour un autre gardait des identifiants faux, son titre ne ressemblait
+  // plus — et il disparaissait du cinéma alors que son fichier était là.
+  const inFolder = byFolder(items, folder, movieFolderKey);
+  if (inFolder) return inFolder;
+
   // Pass 1 — TMDb ID (most reliable when present)
   if (tmdbId > 0) {
     const byTmdb = items.find((i) => getProviderIdCI(i.ProviderIds, "tmdb") === String(tmdbId));
@@ -369,7 +400,15 @@ export function findJellyfinSeriesByTvdb(
   tvdbId: number,
   fallbackTitle?: string,
   fallbackYear?: number | null,
+  folder?: string | null,
 ) {
+  // Pass 0 — Le dossier (05/10/2026). *The Arena (2026)* : Jellyfin l'avait identifiée comme *The
+  // World's Greatest Arena* — sans identifiant TVDB, et un titre qui ne ressemblait plus. La série
+  // sortait du cinéma, et l'ouvrir depuis la recherche ne faisait rien. Le dossier, lui, est le
+  // même des deux côtés quoi que Jellyfin en ait compris.
+  const inFolder = byFolder(items, folder, (i) => folderKey(i.Path));
+  if (inFolder) return inFolder;
+
   // Pass 1 — TVDb ID
   if (tvdbId > 0) {
     const byId = items.find((i) => getProviderIdCI(i.ProviderIds, "tvdb") === String(tvdbId));

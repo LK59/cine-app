@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
-import { cachedMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from "@/lib/server-cache";
+import { cachedMovies, cachedJellyfinMoviesAdmin } from "@/lib/server-cache";
+import { matchMovies } from "@/lib/catalogueMembers";
 import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt } from "@/lib/title-art";
@@ -189,10 +190,9 @@ export async function GET(req: Request) {
   try {
     const [movies, jellyfinMovies] = await Promise.all([cachedMovies(), cachedJellyfinMoviesAdmin()]);
 
-    const downloaded = movies.filter((m) => m.hasFile);
-    const matched = downloaded
-      .map((m) => ({ m, jfItem: findJellyfinMovieByTmdb(jellyfinMovies, m.tmdbId, m.title, m.year, m.imdbId ?? null) }))
-      .filter((x): x is { m: RadarrMovie; jfItem: NonNullable<typeof x.jfItem> } => x.jfItem !== null);
+    // La règle du catalogue, commune à tout ce qui dit « dans la bibliothèque » (`catalogueMembers`).
+    const matched = matchMovies(movies, jellyfinMovies);
+    const downloaded = matched.map((x) => x.m);
 
     const locale = localeOf(req);
     const cinemaMovies = await Promise.all(matched.map(({ m, jfItem }) => toCinemaMovie(m, jfItem.Id, locale)));

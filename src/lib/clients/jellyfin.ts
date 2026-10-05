@@ -29,6 +29,8 @@ export interface JellyfinItem {
     IsFavorite?: boolean;
   };
   ProviderIds?: { Tmdb?: string; Tvdb?: string; Imdb?: string };
+  /** Le chemin sur disque : un dossier pour une série, un fichier pour un film. Demandé par les listes d'administration (rapprochement par dossier). */
+  Path?: string;
   ImageTags?: { Primary?: string };
   RunTimeTicks?: number;
   /**
@@ -445,7 +447,7 @@ export const jellyfin = {
   /** Même repliement, même correctif — voir `getAllMovies`. */
   getAllMoviesAdmin: () =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,ProductionYear,RunTimeTicks&Limit=5000`,
+      `${url}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 
@@ -457,7 +459,7 @@ export const jellyfin = {
 
   getAllSeriesAdmin: () =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Items?IncludeItemTypes=Series&Recursive=true&Fields=ProviderIds,ProductionYear,RunTimeTicks&Limit=5000`,
+      `${url}/Items?IncludeItemTypes=Series&Recursive=true&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 

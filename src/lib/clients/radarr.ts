@@ -14,6 +14,8 @@ export interface RadarrMovie {
   runtime?: number;
   monitored: boolean;
   hasFile: boolean;
+  /** Le dossier du film, tel que Radarr le voit — rapproché de Jellyfin par son nom (`folderKey`). */
+  path?: string;
   status: string;
   images: { coverType: string; remoteUrl?: string; url?: string }[];
   remotePoster?: string;

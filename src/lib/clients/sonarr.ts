@@ -22,6 +22,8 @@ export interface SonarrSeries {
   remotePoster?: string;
   qualityProfileId: number;
   seasonCount: number;
+  /** Le dossier de la série, tel que Sonarr le voit — rapproché de Jellyfin par son nom (`folderKey`). */
+  path?: string;
   seasons?: SonarrSeason[];
   statistics?: { episodeFileCount: number; episodeCount: number; sizeOnDisk: number };
   /** La durée d'un épisode selon Sonarr, en minutes — 0 quand il ne la connaît pas. */

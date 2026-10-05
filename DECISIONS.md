@@ -1450,3 +1450,31 @@ l'élan d'un défilement tactile).
 
 **Trouvé le 04/10/2026** : premier passage sur « Séries » lent, et « Voir tous les films » qui
 demandait deux appuis au bout de la page.
+
+## 47. Ce que le cinéma montre, et ce qu'il dit « dans la bibliothèque »
+
+**Règle.** Un film avec son fichier, une série avec au moins un épisode, **et** son élément
+Jellyfin retrouvé — par le **dossier** d'abord (le nom du dossier, insensible au point de montage
+de chacun ; ignoré si deux éléments le partagent), puis par les identifiants, puis par le titre.
+Tout ce qui dit « dans la bibliothèque » lit cette même règle : les routes du catalogue, la
+recherche (`available`), les rangées TMDB, les personnes, les demandes et les listes
+(`playableLibrary`). Un titre hors de la règle s'ouvre sur sa fiche TMDB. Une fiche demandée que le
+catalogue, relu au réseau, n'a pas : un message (« pas encore disponible ») et l'adresse nettoyée.
+
+**Porteur.** `matchMovies`, `matchSeries`, `catalogueMembers` (`src/lib/catalogueMembers.ts`) ;
+le rapprochement par dossier dans `findJellyfinMovieByTmdb` / `findJellyfinSeriesByTvdb`
+(`folderKey`, `src/lib/server-cache.ts`) ; `useMissingTitleNotice` côté écran.
+
+**Appelants.** `/api/cinema/movies`, `/api/cinema/series`, `/api/search`, `playableLibrary` (et
+par elle `/api/player/discover`, `/api/player/lists`, `/api/player/title`, `/api/tmdb/person`,
+`playerRequests`), `CinemaMobileClient` et `CinemaClient`.
+
+**Tests.** `catalogue-members.test.ts`, `missing-title-notice.test.tsx`, et les tests des routes.
+
+**Voulu.** Jellyfin injoignable : la première moitié de la règle seule — un titre qui ne s'ouvre
+pas vaut mieux qu'une bibliothèque qui disparaît des recherches. Le message attend la relecture
+du catalogue au réseau : celui gardé sur l'appareil peut dater de quelques jours.
+
+**Trouvé le 05/10/2026** : *The Arena (2026)*, identifiée par Jellyfin comme *The World's Greatest
+Arena* ; la recherche la disait dans la bibliothèque, et l'ouvrir ne faisait rien.
+

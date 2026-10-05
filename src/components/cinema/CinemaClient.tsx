@@ -1,6 +1,7 @@
 "use client";
 
 import { HeroBackdrop } from "@/components/cinema/HeroBackdrop";
+import { useMissingTitleNotice } from "@/lib/useMissingTitleNotice";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
@@ -289,7 +290,7 @@ export function CinemaClient() {
     []
   );
 
-  const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
+  const { data: movies, error: moviesError, isLoading: moviesLoading, isValidating: moviesValidating } = useSWR<CinemaMoviesPayload>(
     MOVIES_CATALOGUE_KEY,
     cinemaFetcher
   );
@@ -304,7 +305,7 @@ export function CinemaClient() {
   // Les films sont là : on peut préparer les séries sans rien retarder, et la clé ci-dessous
   // s'y abonne dès que c'est prêt — sans quoi le cache serait rempli pour personne.
   const seriesWarmed = useWarmSeriesCatalogue(movies !== undefined);
-  const { data: series, error: seriesError, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
+  const { data: series, error: seriesError, isLoading: seriesLoading, isValidating: seriesValidating } = useSWR<CinemaSeriesPayload>(
     mediaType === "series" || route.serie !== null || seriesWarmed ? SERIES_CATALOGUE_KEY : null,
     cinemaFetcher
   );
@@ -336,6 +337,13 @@ export function CinemaClient() {
     );
     return new Map(all.map((x) => [x.sonarrId, x]));
   }, [series]);
+  // Une fiche demandée que le catalogue (relu au réseau) n'a pas : un message plutôt que rien.
+  useMissingTitleNotice({
+    film: route.film,
+    serie: route.serie,
+    movies: movies && !moviesValidating ? moviesById : null,
+    series: series && !seriesValidating ? seriesById : null,
+  });
 
   /**
    * Toute la bibliothèque de l'onglet courant, une fois chacune — voir la grille complète.
