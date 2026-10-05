@@ -513,6 +513,14 @@ Four rules, each of which cost a real failure:
 
 ## Deployment
 
+**Configuration is read app setting → `.env` → default** (DECISIONS.md §48): `config.ts` fields are
+getters, and every client rereads its address and key per call — never copy a `config.*` value into a
+module-level constant. A fresh install needs no `.env`: secrets are generated into
+`data/config/secrets.json`, and a first-launch assistant (`/setup`, gated by the proxy until its flag
+is set) creates the admin account and asks for Jellyfin, TMDB and Radarr/Sonarr. Existing installs
+configured through `.env` are detected and skip it. The minimal compose is `docker-compose.example.yml`;
+the annotated one is `docker-compose.advanced.yml`.
+
 `RUNBOOK.private.md` has the operator's checklist. Push to `main` triggers the GHCR publish, whose
 first job is the same verify workflow. `./data:/app/data` is the only writable volume — SQLite,
 the image cache, and the player log all live there. Never commit `.env`, `data/`, or `*.db*`.

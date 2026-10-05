@@ -60,6 +60,11 @@ COPY --from=builder --chown=cineapp:cineapp /app/server-boot ./server-boot
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/web-push ./node_modules/web-push
 
+# Le dossier de données existe dans l'image, au compte de l'application : un volume nommé neuf
+# en hérite le propriétaire, si bien que le docker-compose minimal démarre du premier coup, sans
+# rien préparer sur l'hôte (DECISIONS.md §48). Un dossier monté depuis l'hôte garde les siens.
+RUN mkdir -p /app/data && chown cineapp:cineapp /app/data
+
 USER cineapp
 EXPOSE 3000
 ENV PORT=3000

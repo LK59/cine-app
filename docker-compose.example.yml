@@ -1,87 +1,22 @@
-# Copy this file to docker-compose.yml, then adapt paths, network name and timezone.
+# CineApp — the minimal deployment.
 #
-#   cp docker-compose.example.yml docker-compose.yml
-#   nano docker-compose.yml
+#   docker compose up -d     then open http://<server>:3000
 #
-# Cine App must be able to reach your media services from inside the container.
-# Recommended: attach it to the same external Docker network as Radarr/Sonarr/etc.
+# A first-launch assistant asks for the rest in the browser: an administrator account, then
+# Jellyfin, TMDB and Radarr/Sonarr (the only required services), and optionally Jellyseerr,
+# qBittorrent, Bazarr, Jackett and ratings. Secrets are generated on first launch and kept in the
+# data volume. No .env is needed.
 #
-# This uses the pre-built image published on GitHub Container Registry — no
-# build step, no source checkout needed. To update later:
-#   docker compose pull && docker compose up -d
-
-networks:
-  media_net:
-    external: true
-    # If your existing Docker network has another name, change both this key
-    # and the service network reference below.
-
+# Optional extras (time zone, a media folder for storage statistics, a shared Docker network,
+# resource limits, a reverse proxy) are described in QUICKSTART.md and DEPLOYMENT.md.
 services:
   cine-app:
     image: ghcr.io/lk59/cine-app:latest
-    container_name: cine-app
-    env_file:
-      - .env
-    environment:
-      # Adapt to your timezone.
-      - TZ=Europe/Paris
+    ports:
+      - "3000:3000"
     volumes:
-      # Persistent app data: SQLite database, watchlist, push subscriptions, etc.
-      - ./data:/app/data
-
-      # Optimized-image cache (posters, backdrops, logos). Without this mount every redeploy
-      # starts from an empty cache and the server re-encodes the whole library again.
-      - ./data/image-cache:/app/.next/cache/images
-
-      # Optional media root, read-only.
-      # Keep this enabled if you want disk/media-size stats based on your host path.
-      # Replace the left side with your own media folder. The right side reads
-      # MEDIA_ROOT from .env (defaults to /mnt/media/video) — if you override
-      # MEDIA_ROOT in .env, it's picked up here automatically, no need to edit
-      # this file too.
-      - /path/to/your/media:${MEDIA_ROOT:-/mnt/media/video}:ro
-
-      # Optional Clara Galle gallery.
-      # Enable only if CLARA_GALLERY_ENABLED=true in .env.
-      # The folder must contain:
-      #   - JPG / PNG / WebP photos
-      #   - clarabanner.jpg, used as the page banner
-      #   - optionally favicon.jpeg, the public slideshow's icon
-      # - /path/to/your/clara/photos:/app/gallery/clara:ro
-
-    # If your media folders aren't world-readable (e.g. mode 770 owned by your own
-    # user/group), the container's default user won't be able to read them — stats
-    # will silently under-report. Set this to "<container-uid>:<your-gid>" (keep the
-    # container's own uid, swap in `id -g youruser` from the host) so it can read
-    # your files without loosening permissions on the host.
-    # user: "1001:1000"
-
-    # Optional direct access without a reverse proxy.
-    # If you use Nginx Proxy Manager, Traefik or Caddy, you can leave this commented.
-    # ports:
-    #   - "3000:3000"
-
-    networks:
-      - media_net
+      - cine-data:/app/data
     restart: unless-stopped
-    # A ceiling, so that a leak restarts this container instead of starving the host. Measured on
-    # the reference deployment after ten hours: about 134 MB of process memory. Nothing heavy runs
-    # here (transcoding is Jellyfin's, remuxing happens in the browser), so 2 GB is roughly 15x
-    # real use; under it Node caps its own heap and a leak ends in a clean exit that `restart`
-    # recovers from.
-    mem_limit: 2g
-    # No privilege to gain along the way and no kernel capability: the process already runs as an
-    # ordinary account, listens on an unprivileged port and writes only its own files. Not
-    # `read_only`: startup rewrites `.next/static` (server-boot).
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    # Alive and able to read its database. Docker does not restart an "unhealthy" container on
-    # its own: the status is read in `docker ps` or by a monitoring tool.
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/ping"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
+
+volumes:
+  cine-data:

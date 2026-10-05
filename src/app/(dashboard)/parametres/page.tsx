@@ -47,6 +47,17 @@ export default function ParametresPage() {
 
       <div className="space-y-8">
 
+        {/* ── Connexions aux services (DECISIONS.md §48) — administrateur seulement ── */}
+        {role === "admin" && (
+          <Link href="/parametres/connexions" className="card flex items-center justify-between gap-4 p-5 transition-colors hover:bg-white/5">
+            <div>
+              <p className="text-sm font-semibold text-white">{t("setup.settings.link")}</p>
+              <p className="mt-0.5 text-xs text-subtle">{t("setup.settings.linkHint")}</p>
+            </div>
+            <span className="text-subtle" aria-hidden>›</span>
+          </Link>
+        )}
+
         {/* ── Langue ── */}
         <LanguageSection />
 

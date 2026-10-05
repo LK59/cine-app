@@ -1478,3 +1478,41 @@ du catalogue au réseau : celui gardé sur l'appareil peut dater de quelques jou
 **Trouvé le 05/10/2026** : *The Arena (2026)*, identifiée par Jellyfin comme *The World's Greatest
 Arena* ; la recherche la disait dans la bibliothèque, et l'ouvrir ne faisait rien.
 
+## 48. Le déploiement simplifié : réglages dans l'application, assistant de premier lancement
+
+**Règle.** Une valeur de configuration se lit dans cet ordre : réglée dans l'application (table
+`app_settings` de `cine.db`), sinon `.env`, sinon défaut. `config.ts` est fait d'accesseurs qui
+relisent à chaque accès (deux secondes de cache) ; les clients des services relisent adresse et
+clé à chaque appel. Une valeur présente dans `.env` remplit son champ dans l'interface ; la
+changer dans l'interface la remplace — l'interface le dit — et « Revenir à la valeur du .env »
+efface le réglage. Restent hors de l'interface : le secret de session, le compte administrateur
+de `.env`, et les options de déploiement (fuseau, dossier des médias), pour lesquelles l'interface
+donne la ligne à ajouter au compose ou au `.env`.
+Les secrets absents de l'environnement (session, clés VAPID) sont générés au premier lancement
+dans `data/config/secrets.json` (0600) et relus ensuite ; `.env` l'emporte toujours.
+Tant que l'assistant n'est pas terminé, toute page y mène. Il commence par « Bonjour » dans les
+langues de l'application et le choix de la langue (qui règle celle de l'installation), puis crée
+le compte administrateur (haché, scrypt) si aucun n'existe, et ne rend obligatoires que Jellyfin,
+TMDB et Radarr ou Sonarr. Son drapeau n'est posé que par « Terminer ». Une installation configurée
+par son `.env` avant lui (Jellyfin, TMDB et Radarr ou Sonarr renseignés) est reconnue et marquée
+terminée une fois pour toutes ; `SETUP_COMPLETE=true` le force.
+
+**Porteur.** `src/lib/settings/schema.ts` (la liste), `store.ts` (la table), `setup.ts` (valeur,
+provenance, vue sans secret, enregistrement tout ou rien, drapeau, compte), `testService.ts`,
+`server-boot/firstRunSecrets.mjs`, `config.ts`.
+
+**Appelants.** `proxy.ts` (renvoi vers l'assistant, gardé), `/api/setup/*`, `/api/settings*`,
+`/api/auth/login` (compte de l'assistant), `boot.mjs` et `instrumentation.ts` (secrets),
+`src/app/setup/page.tsx`, `/parametres/connexions`, `SettingsGroupCard` (commun aux deux).
+
+**Tests.** `settings-setup.test.ts`, `first-run-secrets.test.ts`, `boot-refus-demarrage.test.ts`,
+`setup-ui.test.tsx`.
+
+**Voulu.** Le compose minimal (`docker-compose.example.yml`) n'a qu'un service, un port et un
+volume nommé — l'image prépare `/app/data` au compte de l'application, si bien qu'un volume neuf
+démarre sans rien préparer sur l'hôte ; le modèle annoté devient `docker-compose.advanced.yml`. La
+route publique de création du compte se ferme dès qu'un compte existe ou que l'assistant est
+terminé ; celle de la langue, une fois l'assistant terminé.
+
+**Décidé le 05/10/2026.**
+

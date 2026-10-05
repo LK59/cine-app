@@ -2313,5 +2313,188 @@
   "signature": {
     "by": "by",
     "sourceLink": "Source code on GitHub (new tab)"
+  },
+  "setup": {
+    "title": "Welcome to CineApp",
+    "subtitle": "A few settings and your cinema is ready.",
+    "progress": "Step {n} of {total}",
+    "steps": {
+      "welcome": "Welcome",
+      "admin": "Account",
+      "jellyfin": "Jellyfin",
+      "tmdb": "TMDB",
+      "library": "Library",
+      "extras": "Extras",
+      "deployment": "Deployment",
+      "finish": "Finish"
+    },
+    "welcome": {
+      "text": "This assistant helps you connect CineApp to your services. It stays open until you click “Finish”: you can leave and come back.",
+      "language": "Interface language",
+      "urls": "Addresses are seen from inside the container: on a shared Docker network, use the container name (http://radarr:7878); otherwise the server's IP address. “localhost” means the container itself.",
+      "env": "A value already present in your .env fills its field automatically."
+    },
+    "admin": {
+      "title": "Create the administrator account",
+      "text": "This local account opens the management area and these settings, even when Jellyfin is unreachable.",
+      "username": "Username",
+      "password": "Password",
+      "confirm": "Confirm password",
+      "mismatch": "The two passwords don't match.",
+      "weak": "At least 8 characters.",
+      "invalidUsername": "Letters, digits, dot, dash, at sign or underscore — 64 at most.",
+      "create": "Create account",
+      "signInTitle": "Sign in to continue",
+      "signInText": "An administrator account already exists (the one in your .env, or one created here). Sign in with it to continue the setup.",
+      "signIn": "Sign in"
+    },
+    "need": {
+      "required": "Required",
+      "library": "Radarr or Sonarr",
+      "optional": "Optional"
+    },
+    "libraryRule": "At least one of the two is needed: Radarr for movies, Sonarr for series.",
+    "test": "Test connection",
+    "testing": "Testing…",
+    "testOk": "Connected — {detail}",
+    "testFail": {
+      "unauthorized": "Refused: the key or password is wrong.",
+      "unreachable": "Unreachable: check the address from inside the container.",
+      "timeout": "No answer within 6 seconds.",
+      "other": "Failed ({detail})."
+    },
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Settings saved.",
+    "next": "Next",
+    "back": "Back",
+    "skip": "Skip",
+    "finish": "Finish",
+    "missing": "Still missing: {list}",
+    "source": {
+      "app": "Set here",
+      "env": "From .env",
+      "default": "Default value"
+    },
+    "envOverride": "This value replaces the one in your .env: it is the one in use.",
+    "resetEnv": "Back to the .env value",
+    "secretSet": "Set ({hint})",
+    "secretSetNoHint": "Set",
+    "secretKeep": "Leave empty to keep the current value",
+    "on": "On",
+    "off": "Off",
+    "errors": {
+      "invalid-url": "Invalid address (http:// or https://).",
+      "invalid": "Invalid value.",
+      "too-long": "Too long.",
+      "unknown": "Unknown setting.",
+      "save": "Saving failed."
+    },
+    "groups": {
+      "jellyfin": {
+        "title": "Jellyfin",
+        "why": "Required: Jellyfin plays the films, knows the accounts and keeps playback positions.",
+        "help": "Key: Jellyfin administration → API Keys → “+”."
+      },
+      "tmdb": {
+        "title": "TMDB",
+        "why": "Required: posters, synopses, cast and suggestions come from TMDB.",
+        "help": "Free key: themoviedb.org → Settings → API (“API Key”)."
+      },
+      "radarr": {
+        "title": "Radarr",
+        "why": "The library's films, their files and quality.",
+        "help": "Key: Radarr → Settings → General → API Key."
+      },
+      "sonarr": {
+        "title": "Sonarr",
+        "why": "The library's series, their seasons and episodes.",
+        "help": "Key: Sonarr → Settings → General → API Key."
+      },
+      "jellyseerr": {
+        "title": "Jellyseerr",
+        "why": "Request a film or series that isn't there yet, and follow its arrival.",
+        "help": "Key: Jellyseerr → Settings → General → API Key."
+      },
+      "qbittorrent": {
+        "title": "qBittorrent",
+        "why": "Shows the progress of current downloads.",
+        "help": "The credentials of qBittorrent's web interface."
+      },
+      "bazarr": {
+        "title": "Bazarr",
+        "why": "Searches and manages subtitles from the management area.",
+        "help": "Key: Bazarr → Settings → General → API Key."
+      },
+      "jackett": {
+        "title": "Jackett",
+        "why": "Indexer status, shown in the management area.",
+        "help": "Key: at the top of Jackett's page."
+      },
+      "ratings": {
+        "title": "Ratings",
+        "why": "IMDb, Rotten Tomatoes and Metacritic ratings on title pages.",
+        "help": "Free keys: omdbapi.com and mdblist.com."
+      },
+      "app": {
+        "title": "Application",
+        "why": "Default language, built-in player, secure connection."
+      },
+      "deployment": {
+        "title": "Deployment options",
+        "why": "These options are set when the container starts: add the line shown to your docker-compose.yml (or your .env), then restart the container."
+      }
+    },
+    "fields": {
+      "JELLYFIN_URL": "Jellyfin address",
+      "JELLYFIN_API_KEY": "Jellyfin API key",
+      "JELLYFIN_PUBLIC_URL": "Public Jellyfin address (“Open in Jellyfin” links)",
+      "TMDB_API_KEY": "TMDB API key",
+      "RADARR_URL": "Radarr address",
+      "RADARR_API_KEY": "Radarr API key",
+      "SONARR_URL": "Sonarr address",
+      "SONARR_API_KEY": "Sonarr API key",
+      "JELLYSEERR_URL": "Jellyseerr address",
+      "JELLYSEERR_API_KEY": "Jellyseerr API key",
+      "QBITTORRENT_URL": "qBittorrent address",
+      "QBITTORRENT_USERNAME": "qBittorrent username",
+      "QBITTORRENT_PASSWORD": "qBittorrent password",
+      "BAZARR_URL": "Bazarr address",
+      "BAZARR_API_KEY": "Bazarr API key",
+      "JACKETT_URL": "Jackett address",
+      "JACKETT_API_KEY": "Jackett API key",
+      "OMDB_API_KEY": "OMDb key",
+      "MDBLIST_API_KEY": "MDBList key",
+      "APP_LANGUAGE": "Default language",
+      "COOKIE_SECURE": "Served over HTTPS (secure cookies)",
+      "PLAYER_ENABLED": "Built-in player",
+      "PLAYER_SERVER_FALLBACK": "Hand files the browser can't play over to Jellyfin",
+      "PLAYER_AUTO_FRAME": "Enlarge the picture over black bars",
+      "VAPID_SUBJECT": "Notification contact (mailto:…)",
+      "TZ": "Time zone",
+      "MEDIA_ROOT": "Media folder (storage statistics)",
+      "APP_ADMIN_USER": "Administrator account defined in .env"
+    },
+    "deployHint": {
+      "TZ": "In docker-compose.yml, under “environment”:",
+      "MEDIA_ROOT": "Mount the folder read-only, then point to it:",
+      "APP_ADMIN_USER": "Optional: an administrator account set in .env replaces the one created here."
+    },
+    "copy": "Copy",
+    "copied": "Copied",
+    "secretsNote": "The session secret and notification keys are generated automatically on first launch (data/config/secrets.json). Nothing to do.",
+    "done": {
+      "title": "All set",
+      "text": "Settings can be changed at any time in the management area, “Connections” page.",
+      "manage": "Open management",
+      "cinema": "Sign in with Jellyfin",
+      "finishing": "Finishing…"
+    },
+    "settings": {
+      "title": "Connections",
+      "subtitle": "Service addresses and keys. A value set here replaces the one in .env.",
+      "link": "Service connections",
+      "linkHint": "Jellyfin, TMDB, Radarr, Sonarr and extras."
+    }
   }
 }

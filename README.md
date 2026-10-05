@@ -4,6 +4,8 @@ Self-hosted PWA that turns a Radarr / Sonarr / Bazarr / Jackett / qBittorrent / 
 Jellyseerr stack into **two interfaces on one container**: a Netflix-style front end everyone in
 the household uses, and a management dashboard for whoever runs the box.
 
+> ### 🚀 [**Quick start → QUICKSTART.md**](QUICKSTART.md) — one compose file, a first-launch assistant, no `.env` required
+>
 > ### 📦 [**Deployment guide → DEPLOYMENT.md**](DEPLOYMENT.md)
 >
 > Step-by-step installation from the published Docker image: prerequisites, API keys, `.env`,
@@ -485,20 +487,22 @@ ideally a shared Docker network. You do **not** need to clone this repository or
 the image published on GHCR contains the built app.
 
 ```bash
-mkdir -p ~/cine-app && cd ~/cine-app
-curl -O https://raw.githubusercontent.com/LK59/cine-app/main/.env.example
 curl -O https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
-cp .env.example .env && cp docker-compose.example.yml docker-compose.yml
-# edit both, then:
-mkdir -p data/image-cache && sudo chown -R 1001:1001 data
-docker compose pull && docker compose up -d
+docker compose -f docker-compose.example.yml up -d
+# then open http://<server>:3000 — a first-launch assistant asks for the rest
 ```
+
+No `.env` is required: the assistant asks for an administrator account, then Jellyfin, TMDB and
+Radarr/Sonarr, and generates the secrets — see [QUICKSTART.md](QUICKSTART.md). An existing `.env`
+keeps working. For a shared network, a media folder and hardening, start from
+`docker-compose.advanced.yml` instead.
 
 The app listens on port `3000` inside Docker; put a reverse proxy in front of it. Updating is
 `docker compose pull && docker compose up -d` — migrations run at startup.
 
 `docker-compose.yml` is intentionally git-ignored: keep your production compose local to your
-server, and commit changes to `docker-compose.example.yml` when the public template should change.
+server, and commit changes to `docker-compose.example.yml` (minimal) or `docker-compose.advanced.yml`
+when the public templates should change.
 
 The full guide covers the parts that are easy to get wrong: which URLs the *container* can resolve,
 the uid that has to read your media, the nginx header buffer that closes connections instead of
@@ -693,7 +697,9 @@ because `docker logs` dies with the container, and the container is recreated on
 | **[DECISIONS.md](DECISIONS.md)** | Rules decided in one shared function, their callers and tests |
 | **[`tools/truehd-wasm/`](tools/truehd-wasm/)** | Reproducible build of the committed TrueHD WebAssembly decoder: pinned FFmpeg, checked SHA-256 |
 | **`.env.example`** | Every configuration variable, annotated in place |
-| **`docker-compose.example.yml`** | The deployment template, annotated in place |
+| **`docker-compose.example.yml`** | The minimal deployment: one service, one volume, no `.env` |
+| **`docker-compose.advanced.yml`** | The advanced deployment template, annotated in place |
+| **`QUICKSTART.md`** | The first-launch assistant and what each service is for |
 
 ## Third-party code
 

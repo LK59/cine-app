@@ -87,6 +87,11 @@ a configuration, not as a failure.
 
 ## 3. Create the deployment folder
 
+> **In a hurry?** [QUICKSTART.md](QUICKSTART.md) is a single compose file with no `.env`: a
+> first-launch assistant asks for the account and the service keys in the browser. What follows is
+> the advanced deployment — shared network, media folder, `.env`, hardening — and everything in it
+> is optional.
+
 Pick a folder that will hold the configuration and the persistent data. It is the only state of
 this installation.
 
@@ -94,10 +99,10 @@ this installation.
 mkdir -p ~/cine-app && cd ~/cine-app
 
 curl -O https://raw.githubusercontent.com/LK59/cine-app/main/.env.example
-curl -O https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
+curl -O https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.advanced.yml
 
 cp .env.example .env
-cp docker-compose.example.yml docker-compose.yml
+cp docker-compose.advanced.yml docker-compose.yml
 ```
 
 You now have four files. `.env` and `docker-compose.yml` are yours to edit; the two `.example`
@@ -230,7 +235,7 @@ the VPN container's — `QBITTORRENT_URL=http://gluetun:8080`.
 nano docker-compose.yml
 ```
 
-The template is `docker-compose.example.yml`, reproduced here with what each block is for. Four
+The template is `docker-compose.advanced.yml`, reproduced here with what each block is for. Four
 things need your attention: the **network name**, the **timezone**, the **media path**, and
 whether you need **`ports`**.
 

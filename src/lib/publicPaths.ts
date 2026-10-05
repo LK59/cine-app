@@ -26,6 +26,7 @@ export const PUBLIC_PATHS = [
   "/setup",
   "/api/setup/status",
   "/api/setup/admin",
+  "/api/setup/language",
 ] as const;
 
 /** Vrai pour une de ces adresses, et pour tout ce qu'elle contient. */

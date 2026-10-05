@@ -1604,3 +1604,21 @@
    la fiche défile — le défilement vertical reste au navigateur, qui le reprend dès que le doigt
    part à la verticale. Pas de marge élargie : ce sont de grandes cibles. */
 [data-liquid-pan] { touch-action: pan-y; }
+
+/* « Bonjour » qui défile au premier lancement (`HelloIntro`) : chaque mot entre flou et agrandi,
+   se pose, puis s'efface — sur le mot seul. Le dégradé reprend l'accent de l'application. */
+.hello-word {
+  background-image: linear-gradient(120deg, #fff 10%, var(--color-accent-400) 55%, #fff 95%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: hello-cycle 1700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes hello-cycle {
+  0% { opacity: 0; filter: blur(10px); transform: scale(1.08); }
+  22% { opacity: 1; filter: blur(0); transform: scale(1); }
+  78% { opacity: 1; filter: blur(0); transform: scale(1); }
+  100% { opacity: 0; filter: blur(8px); transform: scale(0.97); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hello-word { animation: none; }
+}
