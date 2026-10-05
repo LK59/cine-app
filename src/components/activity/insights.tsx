@@ -155,10 +155,11 @@ const AUTH_TONE: Record<string, string> = {
   "others-closed": "bg-sky-400",
   "closed-by-admin": "bg-sky-400",
   "devices-pruned": "bg-slate-500",
+  "password-changed": "bg-sky-400",
 };
 
 export function authLabel(e: AuthEvent, t: T): string {
-  const known = ["login", "login-failed", "logout", "others-closed", "closed-by-admin", "token-refused", "expired", "devices-pruned"];
+  const known = ["login", "login-failed", "logout", "others-closed", "closed-by-admin", "token-refused", "expired", "devices-pruned", "password-changed"];
   return known.includes(e.kind) ? t(`activity.auth.kinds.${e.kind}`, { n: Number(e.count) || 0 }) : e.kind;
 }
 

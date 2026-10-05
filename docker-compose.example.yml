@@ -4,6 +4,7 @@
 services:
   cine-app:
     image: ghcr.io/lk59/cine-app:latest
+    container_name: cine-app   # the name the commands in QUICKSTART.md use
     ports:
       - "3000:3000"            # the address you will open: http://<server>:3000
     volumes:
@@ -20,6 +21,7 @@ services:
 
 volumes:
   cine-data:
+    name: cine-app-data      # a fixed name, so the backup commands below work as written
 
 # networks:                  # only if you uncommented `networks` above
 #   media_net:

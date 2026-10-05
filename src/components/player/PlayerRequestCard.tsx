@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, X } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { useT } from "@/components/TranslationProvider";
@@ -46,6 +47,9 @@ export function PlayerRequestCard({
 }) {
   const t = useT();
   const Icon = STATE_ICON[request.state];
+  // La croix demande confirmation sur la carte même (05/10/2026) : un doigt qui frôle la croix en
+  // faisant défiler la grille retirait une demande sans retour possible.
+  const [confirming, setConfirming] = useState(false);
   // Ouvrable dès que le titre est arrivé — vers sa fiche de bibliothèque, ou à défaut vers sa
   // fiche TMDB (voir `openRequest`). Une carte qui annonce « disponible » et ne réagit pas au
   // clic est le pire des deux mondes.
@@ -97,8 +101,8 @@ export function PlayerRequestCard({
       {request.canCancel && (
         <button
           type="button"
-          onClick={onCancel}
-          disabled={busy}
+          onClick={() => setConfirming(true)}
+          disabled={busy || confirming}
           aria-label={t("player.requests.cancel", { title: request.title })}
           title={t("player.requests.cancelHint")}
           // Visible en permanence, pas seulement au survol : sur un téléphone il n'y a pas de
@@ -108,6 +112,37 @@ export function PlayerRequestCard({
         >
           <X size={14} />
         </button>
+      )}
+
+      {confirming && (
+        <div
+          role="alertdialog"
+          aria-label={t("player.requests.confirmTitle", { title: request.title })}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setConfirming(false);
+            }
+          }}
+          className="absolute inset-x-0 top-0 flex aspect-[2/3] animate-fade-in flex-col items-center justify-center gap-2 rounded-lg bg-ink/90 p-2 text-center"
+        >
+          <p className="text-[13px] font-medium leading-snug text-white">{t("player.requests.confirmQuestion")}</p>
+          <button
+            type="button"
+            autoFocus
+            disabled={busy}
+            onClick={() => {
+              setConfirming(false);
+              onCancel();
+            }}
+            className="w-full rounded-full bg-danger px-2 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            {t("player.requests.confirmYes")}
+          </button>
+          <button type="button" onClick={() => setConfirming(false)} className="w-full rounded-full bg-white/10 px-2 py-1.5 text-xs font-medium text-white">
+            {t("player.requests.confirmNo")}
+          </button>
+        </div>
       )}
 
       <p className="mt-2 line-clamp-2 text-[13px] font-medium leading-snug text-white">{request.title}</p>

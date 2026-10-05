@@ -18,6 +18,7 @@ Create a folder, save this as `docker-compose.yml` inside it, and run `docker co
 services:
   cine-app:
     image: ghcr.io/lk59/cine-app:latest
+    container_name: cine-app   # the name the commands in QUICKSTART.md use
     ports:
       - "3000:3000"            # the address you will open: http://<server>:3000
     volumes:
@@ -34,6 +35,7 @@ services:
 
 volumes:
   cine-data:
+    name: cine-app-data      # a fixed name, so the backup commands below work as written
 
 # networks:                  # only if you uncommented `networks` above
 #   media_net:
@@ -41,6 +43,10 @@ volumes:
 ```
 
 Open `http://<server>:3000`. The first-launch assistant opens on its own.
+
+> **Do the assistant right away.** Until its administrator account exists, anyone who can reach
+> port 3000 can create it. Run it straight after `docker compose up -d`, or keep the port on your
+> local network until it is done.
 
 ## 2. Have these at hand
 
@@ -81,6 +87,39 @@ its field in the interface. Changing a value in the interface overrides the `.en
 interface says so — and **Back to the .env value** hands control back to the file. An installation
 already configured through `.env` (Jellyfin, TMDB and Radarr or Sonarr set) skips the assistant;
 `SETUP_COMPLETE=true` skips it explicitly.
+
+## Forgot the administrator password?
+
+Change it any time in **Management → Settings → Service connections**. If it is lost:
+
+```sh
+docker exec -it cine-app node server-boot/reset-admin-password.mjs
+```
+
+It asks for the new password twice, without showing it. An account set by `APP_ADMIN_PASSWORD` in a `.env` is changed there instead.
+
+## Backups
+
+Everything lives in the `cine-app-data` volume. The app also copies its database every night into
+`backups/` inside it, keeping seven days — a safety net, not an off-site backup.
+
+Save the whole volume (stopped, so the copy is consistent; the poster cache rebuilds itself):
+
+```sh
+docker compose stop
+docker run --rm -v cine-app-data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/cineapp-$(date +%F).tgz --exclude=./image-cache -C /data .
+docker compose start
+```
+
+Restore one:
+
+```sh
+docker compose down
+docker run --rm -v cine-app-data:/data -v "$PWD":/backup alpine \
+  sh -c 'rm -rf /data/* && tar xzf /backup/cineapp-YYYY-MM-DD.tgz -C /data'
+docker compose up -d
+```
 
 ## Secrets
 

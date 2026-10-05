@@ -1074,17 +1074,41 @@ describe("MseSource", () => {
     // Banc du 22/09/2026, serveur distant : cinq sauts en 0,6 s arrivaient au dernier en 6,5 s.
     // Le premier attendait la fin de la lecture en cours, puis lisait sa propre position — déjà
     // abandonnée — et le dernier attendait à son tour cette lecture-là.
+    //
+    // La lecture en cours est tenue par le test, et non par une minuterie (05/10/2026) : avec une
+    // lecture de 40 ms et des attentes de 20 et 5 ms, une machine chargée finissait la lecture avant
+    // la rafale, servait deux sauts, et faisait échouer la construction de l'image.
     const video = fakeVideo();
-    const remuxer = fakeRemuxer(500, 0.2, true, 40);
+    const remuxer = fakeRemuxer(500, 0.2, true);
+    const next = remuxer.nextSegment.bind(remuxer);
+    let release: () => void = () => {};
+    // Tenue dès la deuxième lecture : la boucle remplit son tampon en un instant sans attente
+    // réseau, et il n'y aurait plus de lecture en cours au moment de la rafale.
+    let held = true;
+    let reading = false;
+    let reads = 0;
+    remuxer.nextSegment = async () => {
+      reads += 1;
+      if (held && reads > 1) {
+        reading = true;
+        await new Promise<void>((r) => (release = r));
+        reading = false;
+      }
+      return next();
+    };
     const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
-    await flush();
-    await new Promise((r) => setTimeout(r, 20));
+    await until(() => reading, "une lecture réseau en cours");
 
     void mse.seek(300);
-    // Le premier saut est parti, et attend la lecture en cours.
-    await new Promise((r) => setTimeout(r, 5));
+    // Le premier saut est parti, et attend la lecture en cours — qui ne finit pas tant qu'on ne la
+    // libère pas.
+    await flush();
     void mse.seek(900);
-    await mse.seek(1500);
+    const last = mse.seek(1500);
+    await flush();
+    held = false;
+    release();
+    await last;
     await flush();
 
     // Un seul saut servi, le dernier (moins le retard de présentation s'il est déjà connu).

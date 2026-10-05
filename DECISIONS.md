@@ -1529,5 +1529,12 @@ des routes `/api/radarr/meta` et `/api/sonarr/meta`, les formulaires d'ajout de 
 la découverte cherchait un nom contenant « vf » et la gestion prenait le premier profil. Les
 demandes Jellyseerr n'envoient aucun profil : Jellyseerr applique le sien.
 
+Le cache des affiches optimisées suit le volume de données : au démarrage, `.next/cache/images`
+devient un lien vers `data/image-cache` (`server-boot/imageCache.mjs`) — sauf s'il est déjà monté,
+comme dans le modèle avancé, qui monte ce même dossier. Le mot de passe du compte de l'assistant se
+change dans « Connexions » (ancien mot de passe exigé, autres sessions fermées) et se réinitialise
+par `server-boot/reset-admin-password.mjs` ; hachage et vérification vivent dans un seul module,
+`server-boot/adminAccount.mjs`, que lisent l'application et la commande.
+
 **Décidé le 05/10/2026.**
 

@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { carryOverStatic } from "./staticCarryover.mjs";
 import { dataDirProblem, startupRefusal } from "./startupChecks.mjs";
 import { applyFirstRunSecrets } from "./firstRunSecrets.mjs";
+import { linkImageCache } from "./imageCache.mjs";
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = process.env.DATA_DIR || path.join(appDir, "data");
@@ -39,6 +40,15 @@ const refusal = startupRefusal({
 if (refusal) {
   console.error(`[démarrage] refusé : ${refusal}`);
   process.exit(1);
+}
+
+// Le cache des affiches dans le volume de données (voir imageCache.mjs). Un échec ne coûte que des
+// affiches réencodées : jamais un démarrage.
+try {
+  const imageCache = linkImageCache({ appDir, dataDir });
+  if (imageCache !== "déjà lié") console.log(`[démarrage] cache des affiches : ${imageCache === "monté" ? "dossier monté, gardé tel quel" : "lié à data/image-cache"}`);
+} catch (error) {
+  console.error(`[démarrage] cache des affiches hors du volume : ${error instanceof Error ? error.message : error}`);
 }
 
 // La version de package.json (que la sortie `standalone` de Next copie à la racine de l'image),

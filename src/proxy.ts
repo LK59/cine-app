@@ -156,7 +156,7 @@ function isAllowedForEveryone(method: string, pathname: string): boolean {
  */
 const ADMIN_ONLY_READS: RegExp[] = [
   // Les réglages de l'installation (adresses, état des clés) — DECISIONS.md §48.
-  /^\/api\/settings\/?$/,
+  /^\/api\/settings(\/|$)/,
   /^\/api\/activity\/?$/,
   /^\/api\/dashboard\/?$/,
   /^\/api\/timeline\/imports\/?$/,

@@ -63,7 +63,7 @@ COPY --from=deps --chown=cineapp:cineapp /app/node_modules/web-push ./node_modul
 # Le dossier de données existe dans l'image, au compte de l'application : un volume nommé neuf
 # en hérite le propriétaire, si bien que le docker-compose minimal démarre du premier coup, sans
 # rien préparer sur l'hôte (DECISIONS.md §48). Un dossier monté depuis l'hôte garde les siens.
-RUN mkdir -p /app/data && chown cineapp:cineapp /app/data
+RUN mkdir -p /app/data /app/.next/cache && chown cineapp:cineapp /app/data /app/.next/cache
 
 USER cineapp
 EXPOSE 3000

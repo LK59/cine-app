@@ -1,7 +1,8 @@
-import crypto from "node:crypto";
 import { deleteOverride, readOverride, writeOverride } from "./store";
 import { SETTINGS, SETTINGS_BY_KEY, missingRequired, type SettingSource, type SettingView } from "./schema";
-import { timingSafeEquals } from "@/lib/timingSafeEquals";
+import { ADMIN_HASH_KEY, ADMIN_USER_KEY, MIN_ADMIN_PASSWORD, hashAdminPassword, verifyAdminPassword } from "../../../server-boot/adminAccount.mjs";
+
+export { MIN_ADMIN_PASSWORD };
 
 /**
  * Le premier lancement : l'assistant, le compte administrateur créé par lui, et la lecture des
@@ -10,8 +11,6 @@ import { timingSafeEquals } from "@/lib/timingSafeEquals";
 
 /** Le drapeau de l'assistant : posé par « Terminer », il ne se rouvre plus. */
 const SETUP_DONE_KEY = "__SETUP_DONE";
-const ADMIN_USER_KEY = "__ADMIN_USER";
-const ADMIN_HASH_KEY = "__ADMIN_PASSWORD_HASH";
 
 const envValue = (key: string) => process.env[key] ?? "";
 
@@ -96,17 +95,13 @@ export function localAdmin(): { user: string; source: "env" | "setup" } | null {
   return null;
 }
 
-export const MIN_ADMIN_PASSWORD = 8;
-
-function hash(password: string, salt: Buffer): Buffer {
-  return crypto.scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 });
-}
-
-/** Crée le compte de l'assistant : le mot de passe n'est gardé que haché (scrypt, sel aléatoire). */
+/**
+ * Crée le compte de l'assistant, ou change son mot de passe : gardé haché seulement (scrypt, sel
+ * aléatoire), par le module que partage la commande de réinitialisation (`server-boot/adminAccount.mjs`).
+ */
 export function createSetupAdmin(user: string, password: string): void {
-  const salt = crypto.randomBytes(16);
   writeOverride(ADMIN_USER_KEY, user);
-  writeOverride(ADMIN_HASH_KEY, `scrypt$${salt.toString("hex")}$${hash(password, salt).toString("hex")}`);
+  writeOverride(ADMIN_HASH_KEY, hashAdminPassword(password));
 }
 
 /** Le compte de l'assistant accepte-t-il ce nom et ce mot de passe ? */
@@ -114,9 +109,7 @@ export function verifySetupAdmin(user: string, password: string): boolean {
   const stored = readOverride(ADMIN_HASH_KEY);
   const expectedUser = readOverride(ADMIN_USER_KEY) || "admin";
   if (!stored || user !== expectedUser) return false;
-  const [scheme, saltHex, hashHex] = stored.split("$");
-  if (scheme !== "scrypt" || !saltHex || !hashHex) return false;
-  return timingSafeEquals(hash(password, Buffer.from(saltHex, "hex")).toString("hex"), hashHex);
+  return verifyAdminPassword(password, stored);
 }
 
 // ─── L'écriture des réglages ──────────────────────────────────────────────────

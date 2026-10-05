@@ -69,7 +69,9 @@ export type AuthEvent =
   /** Sessions expirées effacées au passage d'une connexion. */
   | "expired"
   /** Appareils « CineApp » inactifs depuis trente jours supprimés chez Jellyfin (`jellyfinDevicePrune.ts`). */
-  | "devices-pruned";
+  | "devices-pruned"
+  /** Mot de passe du compte administrateur de l'assistant changé (les autres sessions fermées). */
+  | "password-changed";
 
 /** Ne lève jamais : un journal qui échoue ne doit pas empêcher quelqu'un de se connecter. */
 export function logAuthEvent(kind: AuthEvent, fields: { user: string; device?: string | null; ip?: string | null } & Record<string, unknown>): void {

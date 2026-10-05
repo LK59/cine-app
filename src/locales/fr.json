@@ -406,7 +406,8 @@
         "closed-by-admin": "Session fermée par l'administrateur",
         "token-refused": "Jeton refusé",
         "expired": "Session expirée",
-        "devices-pruned": "{n} appareil inactif retiré de Jellyfin|{n} appareils inactifs retirés de Jellyfin"
+        "devices-pruned": "{n} appareil inactif retiré de Jellyfin|{n} appareils inactifs retirés de Jellyfin",
+        "password-changed": "Mot de passe administrateur changé"
       }
     },
     "habits": {
@@ -1594,7 +1595,11 @@
         "removed": "Plus disponible"
       },
       "cancel": "Annuler la demande de {title}",
-      "cancelHint": "Retire la demande de votre liste."
+      "cancelHint": "Retire la demande de votre liste.",
+      "confirmTitle": "Annuler la demande « {title} » ?",
+      "confirmQuestion": "Annuler cette demande ?",
+      "confirmYes": "Annuler la demande",
+      "confirmNo": "Garder"
     },
     "actions": {
       "removedFromList": "Retiré de « Ma liste »",
@@ -2510,6 +2515,18 @@
       "linkHint": "Jellyfin, TMDB, Radarr, Sonarr et les compléments."
     },
     "profileFirst": "Le premier de la liste",
-    "profileUnavailable": "Liste indisponible : vérifiez l'adresse et la clé, puis rechargez la page."
+    "profileUnavailable": "Liste indisponible : vérifiez l'adresse et la clé, puis rechargez la page.",
+    "adminPassword": {
+      "title": "Compte administrateur",
+      "text": "Le compte local qui ouvre la gestion. Changer son mot de passe ferme ses autres sessions.",
+      "current": "Mot de passe actuel",
+      "next": "Nouveau mot de passe",
+      "confirm": "Confirmer",
+      "save": "Changer le mot de passe",
+      "done": "Mot de passe changé.",
+      "wrong": "Mot de passe actuel incorrect.",
+      "env": "Ce compte est fixé par APP_ADMIN_PASSWORD dans votre .env : changez-le là, puis relancez le conteneur.",
+      "forgot": "Mot de passe oublié : docker exec -it cine-app node server-boot/reset-admin-password.mjs"
+    }
   }
 }

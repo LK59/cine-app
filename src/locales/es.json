@@ -406,7 +406,8 @@
         "closed-by-admin": "Sesión cerrada por el administrador",
         "token-refused": "Token rechazado",
         "expired": "Sesión caducada",
-        "devices-pruned": "{n} dispositivo inactivo eliminado de Jellyfin|{n} dispositivos inactivos eliminados de Jellyfin"
+        "devices-pruned": "{n} dispositivo inactivo eliminado de Jellyfin|{n} dispositivos inactivos eliminados de Jellyfin",
+        "password-changed": "Contraseña de administrador cambiada"
       }
     },
     "habits": {
@@ -1594,7 +1595,11 @@
         "removed": "Ya no está disponible"
       },
       "cancel": "Cancelar la petición de {title}",
-      "cancelHint": "Quita la petición de tu lista."
+      "cancelHint": "Quita la petición de tu lista.",
+      "confirmTitle": "¿Cancelar la solicitud de «{title}»?",
+      "confirmQuestion": "¿Cancelar esta solicitud?",
+      "confirmYes": "Cancelar la solicitud",
+      "confirmNo": "Mantener"
     },
     "actions": {
       "removedFromList": "Quitado de «Mi lista»",
@@ -2510,6 +2515,18 @@
       "linkHint": "Jellyfin, TMDB, Radarr, Sonarr y complementos."
     },
     "profileFirst": "El primero de la lista",
-    "profileUnavailable": "Lista no disponible: compruebe la dirección y la clave y recargue la página."
+    "profileUnavailable": "Lista no disponible: compruebe la dirección y la clave y recargue la página.",
+    "adminPassword": {
+      "title": "Cuenta de administrador",
+      "text": "La cuenta local que abre la gestión. Cambiar su contraseña cierra sus otras sesiones.",
+      "current": "Contraseña actual",
+      "next": "Nueva contraseña",
+      "confirm": "Confirmar",
+      "save": "Cambiar la contraseña",
+      "done": "Contraseña cambiada.",
+      "wrong": "La contraseña actual no es correcta.",
+      "env": "Esta cuenta la fija APP_ADMIN_PASSWORD en su .env: cámbiela allí y reinicie el contenedor.",
+      "forgot": "Si la olvidó: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
+    }
   }
 }

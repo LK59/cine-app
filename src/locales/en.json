@@ -406,7 +406,8 @@
         "closed-by-admin": "Session closed by the administrator",
         "token-refused": "Token refused",
         "expired": "Session expired",
-        "devices-pruned": "{n} inactive device removed from Jellyfin|{n} inactive devices removed from Jellyfin"
+        "devices-pruned": "{n} inactive device removed from Jellyfin|{n} inactive devices removed from Jellyfin",
+        "password-changed": "Administrator password changed"
       }
     },
     "habits": {
@@ -1594,7 +1595,11 @@
         "removed": "No longer available"
       },
       "cancel": "Cancel the request for {title}",
-      "cancelHint": "Removes the request from your list."
+      "cancelHint": "Removes the request from your list.",
+      "confirmTitle": "Cancel the request for “{title}”?",
+      "confirmQuestion": "Cancel this request?",
+      "confirmYes": "Cancel request",
+      "confirmNo": "Keep"
     },
     "actions": {
       "removedFromList": "Removed from My list",
@@ -2510,6 +2515,18 @@
       "linkHint": "Jellyfin, TMDB, Radarr, Sonarr and extras."
     },
     "profileFirst": "The first in the list",
-    "profileUnavailable": "List unavailable: check the address and key, then reload the page."
+    "profileUnavailable": "List unavailable: check the address and key, then reload the page.",
+    "adminPassword": {
+      "title": "Administrator account",
+      "text": "The local account that opens the management area. Changing its password closes its other sessions.",
+      "current": "Current password",
+      "next": "New password",
+      "confirm": "Confirm",
+      "save": "Change password",
+      "done": "Password changed.",
+      "wrong": "Current password is incorrect.",
+      "env": "This account is set by APP_ADMIN_PASSWORD in your .env: change it there, then restart the container.",
+      "forgot": "Forgot it: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
+    }
   }
 }

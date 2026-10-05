@@ -7,6 +7,7 @@ import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
+import { AdminPasswordCard } from "@/components/settings/AdminPasswordCard";
 import { DeploymentGuide, SettingsGroupCard, type Draft } from "@/components/settings/SettingsGroupCard";
 import { SETTINGS_BY_KEY, SETTING_GROUPS, type SettingGroup, type SettingView } from "@/lib/settings/schema";
 
@@ -88,6 +89,7 @@ export default function ConnexionsPage() {
             );
           })}
           <DeploymentGuide />
+          <AdminPasswordCard />
         </div>
       )}
     </div>
