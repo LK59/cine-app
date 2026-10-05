@@ -1538,3 +1538,24 @@ par `server-boot/reset-admin-password.mjs` ; hachage et vérification vivent dan
 
 **Décidé le 05/10/2026.**
 
+## 49. Annuler une demande
+
+**Règle.** Chacun peut retirer *sa* demande, quel que soit son état ; l'administrateur, n'importe
+laquelle. La propriété est vérifiée par l'application, et le retrait fait avec la clé d'API :
+Jellyseerr ne laisse un compte ordinaire retirer que ses demandes en attente, et avec l'approbation
+automatique il n'y en a jamais — la croix échouait sur toutes (trois refus le 05/10/2026).
+Une demande **restée sans suite** — aucun fichier, rien en téléchargement — sort aussi de Radarr ou
+Sonarr (sans toucher à aucun fichier) et de Jellyseerr, qui pourra la reprendre plus tard. **En
+cours ou déjà là**, seule la demande disparaît. Le titre ne sort de Radarr ou Sonarr que s'il
+n'appartient qu'à cette demande : personne d'autre ne l'a demandé (`mediaInfo.requests`), et il a
+été ajouté par elle (date d'ajout au plus tôt une minute avant la demande) — pas avant, à la main.
+Une vérification qui échoue n'empêche jamais l'annulation ; elle laisse seulement Radarr/Sonarr tels
+quels. Annuler demande confirmation, sur la carte même.
+
+**Porteur.** `cancelRequest` (`src/lib/requestCancel.ts`).
+
+**Appelants.** `DELETE /api/player/requests/[id]`, la croix de `PlayerRequestCard`.
+
+**Tests.** `request-cancel.test.ts`, `PlayerRequestCard-confirm.test.tsx`.
+
+**Décidé le 05/10/2026.**

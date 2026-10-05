@@ -1,28 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
-import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { resolveJellyseerrIdentity } from "@/lib/jellyseerrIdentity";
 import { withErrorHandling } from "@/lib/api-helpers";
 import { config } from "@/lib/config";
+import { cancelRequest } from "@/lib/requestCancel";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Annuler une demande.
+ * Annuler une demande — la règle et ses garde-fous sont dans `cancelRequest` (DECISIONS.md §49) :
+ * chacun retire la sienne, quel que soit son état ; restée sans suite, elle sort aussi de Radarr ou
+ * Sonarr ; en cours ou déjà là, seule la demande disparaît.
  *
- * Ce que ça fait : la demande disparaît de Jellyseerr, donc de la liste de la personne.
- * Ce que ça ne fait pas : toucher à Radarr ou Sonarr. Le titre reste surveillé et un
- * téléchargement déjà lancé continue — c'est un choix, pas un oubli. Le ménage côté gestion se
- * fait depuis le panneau prévu pour ça, où il est visible et réversible ; le faire d'ici
- * retirerait le titre pour tout le monde, y compris pour quelqu'un d'autre qui l'aurait demandé.
- *
- * L'appel part avec le cookie de session de la personne : Jellyseerr applique alors ses propres
- * droits, et refusera de lui-même la demande de quelqu'un d'autre.
- *
- * Sans cookie valable, il part avec la clé d'API — qui, elle, peut tout supprimer. La demande
- * est donc d'abord relue, et refusée si elle n'est pas à cette personne. Avant ce contrôle, une
- * session sans cookie pouvait retirer la demande de n'importe qui en devinant son numéro.
+ * Avant le 05/10/2026, l'appel partait avec le cookie Jellyseerr de la personne, et Jellyseerr ne
+ * laisse un compte ordinaire retirer que ses demandes en attente : avec l'approbation automatique,
+ * la croix échouait partout. La propriété est vérifiée ici, et le retrait fait avec la clé.
  */
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
@@ -37,16 +30,13 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   }
 
   const identity = await resolveJellyseerrIdentity(session);
-  // L'administrateur peut retirer n'importe quelle demande : c'est déjà ce que lui permet la clé.
-  if (!identity.cookie && session.role !== "admin") {
-    const request = await jellyseerr.getRequest(id).catch(() => null);
-    if (!request || identity.userId == null || request.requestedBy?.id !== identity.userId) {
-      return NextResponse.json({ error: "Demande introuvable" }, { status: 404 });
-    }
-  }
-
-  return withErrorHandling(async () => {
-    await jellyseerr.deleteRequest(id, identity.cookie);
-    return { ok: true };
+  // La demande de quelqu'un d'autre, ou inexistante : la même réponse, sans ligne d'erreur — ce n'est
+  // pas une panne, et rien ne doit dire si ce numéro existe.
+  let notFound = false;
+  const response = await withErrorHandling(async () => {
+    const outcome = await cancelRequest(id, { userId: identity.userId ?? null, admin: session.role === "admin" });
+    notFound = !outcome.ok;
+    return outcome;
   }, "player-request-cancel");
+  return notFound ? NextResponse.json({ error: "Demande introuvable" }, { status: 404 }) : response;
 }

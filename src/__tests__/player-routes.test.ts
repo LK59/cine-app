@@ -251,32 +251,7 @@ describe("DELETE /api/player/requests/[id]", () => {
     expect((await DELETE(req(), { params: Promise.resolve({ id: "nope" }) })).status).toBe(400);
   });
 
-  // La garantie centrale de cette action : annuler retire la demande, et rien d'autre. Radarr et
-  // Sonarr ne sont jamais touchés d'ici — le ménage s'y fait depuis le panneau d'administration.
-  it("deletes the request only, never the media", async () => {
-    jellyseerr.deleteRequest.mockResolvedValue(undefined);
-    const { DELETE } = await import("@/app/api/player/requests/[id]/route");
-    const res = await DELETE(req(), { params: Promise.resolve({ id: "328" }) });
-    expect(res.status).toBe(200);
-    expect(jellyseerr.deleteRequest).toHaveBeenCalledWith(328, "s%3Amine");
-    expect(jellyseerr.deleteMedia).not.toHaveBeenCalled();
-  });
-
-  // Sans cookie, l'annulation part avec la clé d'API, qui peut tout supprimer : la demande doit
-  // d'abord être celle de la personne.
-  it("without a cookie, cancels only the person's own request", async () => {
-    mockVerify.mockResolvedValue({ u: "sarah", jfId: "jf-sarah", jfUser: "sarah", role: "user" });
-    jellyseerr.getUsers.mockResolvedValue({ results: [{ id: 23, displayName: "sarah", jellyfinUserId: "jf-sarah" }] });
-    const { DELETE } = await import("@/app/api/player/requests/[id]/route");
-
-    jellyseerr.getRequest.mockResolvedValue({ id: 40, requestedBy: { id: 1 } });
-    expect((await DELETE(req(), { params: Promise.resolve({ id: "40" }) })).status).toBe(404);
-    expect(jellyseerr.deleteRequest).not.toHaveBeenCalled();
-
-    jellyseerr.getRequest.mockResolvedValue({ id: 41, requestedBy: { id: 23 } });
-    expect((await DELETE(req(), { params: Promise.resolve({ id: "41" }) })).status).toBe(200);
-    expect(jellyseerr.deleteRequest).toHaveBeenCalledWith(41, undefined);
-  });
+  // La règle de l'annulation (propriété, ménage dans Radarr/Sonarr) : request-cancel.test.ts.
 });
 
 describe("GET /api/player/lists", () => {

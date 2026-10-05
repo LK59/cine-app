@@ -34,7 +34,16 @@ export interface JellyseerrRequest {
    * `enrichRequests` va rechercher ailleurs. `status` en revanche est bien là (MediaStatus :
    * 1 inconnu, 2 en attente, 3 en traitement, 4 partiellement disponible, 5 disponible).
    */
-  media: { title?: string; tmdbId?: number; mediaType: string; posterPath?: string; status?: number };
+  media: {
+    id?: number;
+    title?: string;
+    tmdbId?: number;
+    mediaType: string;
+    posterPath?: string;
+    status?: number;
+    /** L'identifiant du titre chez Radarr (film) ou Sonarr (série) — vérifié en direct le 05/10/2026. */
+    externalServiceId?: number | null;
+  };
   type: string;
   createdAt: string;
   /** Bougé à chaque changement d'état — c'est donc lui qui date l'arrivée du fichier. */
@@ -154,7 +163,7 @@ export const jellyseerr = {
   // d'autre ne dit : un film demandé six mois avant sa sortie reste sinon « en cours » tout ce
   // temps, ce qui ressemble à une panne.
   getMovieMedia: (tmdbId: number, cookie?: string) =>
-    fetchJson<{ title?: string; posterPath?: string | null; releaseDate?: string | null; mediaInfo?: { id: number; status: number } }>(
+    fetchJson<{ title?: string; posterPath?: string | null; releaseDate?: string | null; mediaInfo?: { id: number; status: number; requests?: { id: number }[] } }>(
       `${cfg.url}/api/v1/movie/${tmdbId}`, { headers: authHeaders(cookie) }
     ),
   // `seasons` (TMDB-sourced: number/name/episodeCount per season) and `mediaInfo.seasons`
@@ -167,7 +176,7 @@ export const jellyseerr = {
       posterPath?: string | null;
       firstAirDate?: string | null;
       seasons?: { seasonNumber: number; name?: string; episodeCount?: number }[];
-      mediaInfo?: { id: number; status: number; seasons?: { seasonNumber: number; status: number }[] };
+      mediaInfo?: { id: number; status: number; seasons?: { seasonNumber: number; status: number }[]; requests?: { id: number }[] };
     }>(`${cfg.url}/api/v1/tv/${tmdbId}`, { headers: authHeaders(cookie) }),
   // Clears Jellyseerr's own tracking for a title (its Media row, cascading its Request rows) —
   // `mediaInfo.id` above, NOT the tmdbId. Deleting a movie/series directly in Radarr/Sonarr (not
@@ -176,11 +185,11 @@ export const jellyseerr = {
   // or gets rejected as a duplicate — reported live, reproduced, confirmed fixed by removing the
   // stale entry from Jellyseerr's own UI. This automates that same cleanup on cine-app's own
   // delete action.
-  // Supprime la *demande* seule — pas le média, pas l'entrée Radarr/Sonarr, pas le
-  // téléchargement en cours. C'est délibéré : côté utilisateur, « annuler » veut dire « retire ça
-  // de mes demandes », et le ménage dans Radarr est un geste d'administration que Louis fait
-  // depuis son propre panneau. Jellyseerr accepte cet appel de la part du compte qui a fait la
-  // demande, sans droits d'administration.
+  // Supprime la *demande* seule — pas le média, pas l'entrée Radarr/Sonarr, pas le téléchargement.
+  // Ce qu'une annulation retire en plus, et quand, est décidé par `cancelRequest`
+  // (src/lib/requestCancel.ts, DECISIONS.md §49). Attention : avec le cookie d'un compte ordinaire,
+  // Jellyseerr ne l'accepte que pour une demande *en attente* — vérifié le 05/10/2026 ; d'où la
+  // clé d'API, après vérification de la propriété.
   deleteRequest: (requestId: number, cookie?: string) =>
     fetchJson<void>(`${cfg.url}/api/v1/request/${requestId}`, { method: "DELETE", headers: authHeaders(cookie) }),
   deleteMedia: (mediaId: number, cookie?: string) =>
