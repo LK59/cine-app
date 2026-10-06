@@ -91,7 +91,7 @@ function HouseholdSection({ h, now }: { h: Overview["household"]; now: number })
       <Panel title={t("activity.quality.title")} icon={MonitorSmartphone}>
         <DeviceQualityList devices={h.devices} />
       </Panel>
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title={t("activity.habits.when")} icon={CalendarClock}>
           <div className="p-4">
             <Heatmap heatmap={h.habits.heatmap} />
@@ -170,7 +170,7 @@ function LiveCard({ a, now }: { a: AccountSummary; now: number }) {
   const playing = a.nowPlaying;
   const pingTitle = a.presence.playing?.title;
   return (
-    <ActivityLink to={{ kind: "account", id: a.id }} className="card flex gap-3 p-3 transition-colors hover:bg-white/[0.04]">
+    <ActivityLink to={{ kind: "account", id: a.id }} className="card flex min-w-0 gap-3 p-3 transition-colors hover:bg-white/[0.04]">
       <Avatar name={a.name} size={40} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center justify-between gap-2">
@@ -279,9 +279,13 @@ export function ActivityOverview() {
       </div>
 
       {/* 1. Maintenant. */}
+      {/* `grid-cols-1` et non une grille sans colonne : sur téléphone, sa colonne implicite prenait la
+          largeur du plus long titre sur une ligne, et toutes les cartes débordaient à droite
+          (« Le Ticket d'or de Willy Wonka — S01E07 · Épisode 7 », 06/10/2026). `grid-cols-1` vaut
+          minmax(0, 1fr) : la colonne suit l'écran, le titre se coupe. */}
       <Panel title={t("activity.live.title")} icon={Radio}>
         {live.length ? (
-          <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
             {live.map((a) => (
               <LiveCard key={a.id} a={a} now={now} />
             ))}
@@ -353,7 +357,7 @@ export function ActivityOverview() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title={t("activity.week.perDay")} icon={Activity} className="lg:col-span-2">
           <div className="p-4">
             <DayBars days={s.perDay} />

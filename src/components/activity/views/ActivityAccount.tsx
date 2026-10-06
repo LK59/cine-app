@@ -299,7 +299,7 @@ export function ActivityAccount({ id }: { id: string }) {
         <Tile icon={UserRound} label={t("activity.account.firstSeen")} value={d.stats.firstSeen ? ago(d.stats.firstSeen, now, t) : "—"} hint={d.stats.devices.join(" · ")} />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         {/* Ce qu'il a fait. */}
         <section className="card min-w-0 self-start overflow-hidden">
           {/* À la ligne plutôt qu'en défilement : sur téléphone, le défilement horizontal ne se
