@@ -50,14 +50,16 @@ async function libraryEntryToRemove(request: JellyseerrRequest): Promise<{ servi
   if (others.length > 0) return null;
 
   if (movie) {
-    const [entry, queue] = await Promise.all([radarr.getMovie(serviceId), radarr.getQueue()]);
+    // La file de ce film seulement, entière : la première page de la file générale ne suffit pas
+    // (voir `getQueueForSeries`).
+    const [entry, queue] = await Promise.all([radarr.getMovie(serviceId), radarr.getQueueForMovie(serviceId)]);
     if (entry.hasFile || !addedByRequest(entry.added, request)) return null;
-    if (queue.records.some((q) => q.movieId === serviceId)) return null;
+    if (queue.length > 0) return null;
     return { service: "radarr", id: serviceId, mediaId };
   }
-  const [entry, queue] = await Promise.all([sonarr.getSeriesById(serviceId), sonarr.getQueue()]);
+  const [entry, queue] = await Promise.all([sonarr.getSeriesById(serviceId), sonarr.getQueueForSeries(serviceId)]);
   if ((entry.statistics?.episodeFileCount ?? 0) > 0 || !addedByRequest(entry.added, request)) return null;
-  if (queue.records.some((q) => q.seriesId === serviceId)) return null;
+  if (queue.length > 0) return null;
   return { service: "sonarr", id: serviceId, mediaId };
 }
 

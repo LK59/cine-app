@@ -115,6 +115,9 @@ export const radarr = {
       `${cfg.url}/api/v3/queue?pageSize=50&includeMovie=true`,
       { headers }
     ),
+  /** La file d'un seul film, entière — voir `sonarr.getQueueForSeries`. */
+  getQueueForMovie: (movieId: number) =>
+    fetchJson<{ movieId?: number }[]>(`${cfg.url}/api/v3/queue/details?movieId=${movieId}`, { headers }),
   getQueueCount: () =>
     fetchJson<{ totalRecords: number }>(`${cfg.url}/api/v3/queue?pageSize=1`, { headers }).then(
       (r) => r.totalRecords

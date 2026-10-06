@@ -13,8 +13,8 @@ const { jellyseerr, radarr, sonarr, invalidateLibrary } = vi.hoisted(() => ({
     getMovieMedia: vi.fn(),
     getTvMedia: vi.fn(),
   },
-  radarr: { getMovie: vi.fn(), getQueue: vi.fn(), deleteMovie: vi.fn(async (_id: number) => undefined) },
-  sonarr: { getSeriesById: vi.fn(), getQueue: vi.fn(), deleteSeries: vi.fn(async (_id: number) => undefined) },
+  radarr: { getMovie: vi.fn(), getQueueForMovie: vi.fn(), deleteMovie: vi.fn(async (_id: number) => undefined) },
+  sonarr: { getSeriesById: vi.fn(), getQueueForSeries: vi.fn(), deleteSeries: vi.fn(async (_id: number) => undefined) },
   invalidateLibrary: vi.fn(),
 }));
 vi.mock("@/lib/clients/jellyseerr", () => ({ jellyseerr }));
@@ -41,9 +41,9 @@ beforeEach(() => {
   jellyseerr.getMovieMedia.mockResolvedValue({ mediaInfo: { id: 90, status: 3, requests: [{ id: 7 }] } });
   jellyseerr.getTvMedia.mockResolvedValue({ mediaInfo: { id: 91, status: 3, requests: [{ id: 8 }] } });
   radarr.getMovie.mockResolvedValue({ id: 55, hasFile: false, added: "2026-10-01T10:00:02.000Z" });
-  radarr.getQueue.mockResolvedValue({ records: [] });
+  radarr.getQueueForMovie.mockResolvedValue([]);
   sonarr.getSeriesById.mockResolvedValue({ id: 66, statistics: { episodeFileCount: 0 }, added: "2026-10-01T10:00:02.000Z" });
-  sonarr.getQueue.mockResolvedValue({ records: [] });
+  sonarr.getQueueForSeries.mockResolvedValue([]);
 });
 
 describe("annuler une demande", () => {
@@ -71,7 +71,7 @@ describe("annuler une demande", () => {
   });
 
   it("en téléchargement : seule la demande disparaît", async () => {
-    radarr.getQueue.mockResolvedValue({ records: [{ movieId: 55 }] });
+    radarr.getQueueForMovie.mockResolvedValue([{ movieId: 55 }]);
     await cancelRequest(7, { userId: 23, admin: false });
     expect(radarr.deleteMovie).not.toHaveBeenCalled();
   });
@@ -97,7 +97,7 @@ describe("annuler une demande", () => {
 
     vi.clearAllMocks();
     sonarr.getSeriesById.mockResolvedValue({ id: 66, statistics: { episodeFileCount: 3 }, added: "2026-10-01T10:00:02.000Z" });
-    sonarr.getQueue.mockResolvedValue({ records: [] });
+    sonarr.getQueueForSeries.mockResolvedValue([]);
     await cancelRequest(8, { userId: 23, admin: false });
     expect(sonarr.deleteSeries).not.toHaveBeenCalled();
   });
@@ -111,5 +111,15 @@ describe("annuler une demande", () => {
 
   it("l'administrateur peut retirer celle d'un autre, avec la même règle", async () => {
     expect(await cancelRequest(7, { userId: 1, admin: true })).toEqual({ ok: true, removedFromLibrary: true });
+  });
+
+  // Le 06/10/2026 : une série en plein téléchargement, mais au-delà des 50 premiers éléments de la
+  // file générale (remplie par une autre série), a été retirée de Sonarr. La file se lit par titre.
+  it("une série en téléchargement reste dans Sonarr, quelle que soit la longueur de la file", async () => {
+    jellyseerr.getRequest.mockResolvedValue(movieRequest({ id: 8, type: "tv", media: { id: 91, tmdbId: 154521, mediaType: "tv", externalServiceId: 66 } }));
+    sonarr.getQueueForSeries.mockResolvedValue([{ seriesId: 66 }]);
+    expect(await cancelRequest(8, { userId: 23, admin: false })).toEqual({ ok: true, removedFromLibrary: false });
+    expect(sonarr.getQueueForSeries).toHaveBeenCalledWith(66);
+    expect(sonarr.deleteSeries).not.toHaveBeenCalled();
   });
 });

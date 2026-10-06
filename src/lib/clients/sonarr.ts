@@ -93,6 +93,13 @@ export const sonarr = {
       `${cfg.url}/api/v3/queue?pageSize=50&includeSeries=true`,
       { headers }
     ),
+  /**
+   * La file d'une seule série, entière. `getQueue` n'en lit que la première page (50) : le
+   * 06/10/2026, les 263 épisodes d'une série remplissaient cette page, et l'annulation d'une autre
+   * série, alors en plein téléchargement, l'a crue inactive et l'a retirée de Sonarr.
+   */
+  getQueueForSeries: (seriesId: number) =>
+    fetchJson<{ seriesId?: number }[]>(`${cfg.url}/api/v3/queue/details?seriesId=${seriesId}`, { headers }),
   getQueueCount: () =>
     fetchJson<{ totalRecords: number }>(`${cfg.url}/api/v3/queue?pageSize=1`, { headers }).then(
       (r) => r.totalRecords
