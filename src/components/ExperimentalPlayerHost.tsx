@@ -2612,11 +2612,13 @@ export function ExperimentalPlayerHost({
         onElement &&
         !error && (
           <div
+            // Effacées aussi sous l'écran de fin (07/10/2026) : la croix, AirPlay, le volume et les sauts
+            // de dix secondes transparaissaient sous ses boutons et sa question, et s'y mêlaient.
             className={`absolute inset-0 z-10 transition-opacity duration-200 ease-out ${
-              ready ? "opacity-100" : "pointer-events-none opacity-0"
+              ready && !endScreen ? "opacity-100" : "pointer-events-none opacity-0"
             }`}
             // Hors d'atteinte tant qu'elles s'effacent : ni toucher, ni focus.
-            inert={!ready}
+            inert={!ready || endScreen}
           >
           <PlayerControls
             // A real media element: seeking, volume and rate are the browser's own.

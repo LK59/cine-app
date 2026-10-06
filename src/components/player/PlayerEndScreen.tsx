@@ -64,6 +64,7 @@ export function PlayerEndScreen({
 
   return (
     <div className="absolute inset-0 z-30 flex flex-col justify-end bg-linear-to-t from-black via-black/85 to-black/40">
+      <FinishedAsk itemId={itemId} />
       <div className="mx-auto w-full max-w-4xl px-6 pb-10 sm:px-10">
         <p className="text-xs uppercase tracking-wide text-subtle">{t("player.end.finished")}</p>
         <h2 className="mt-1 truncate font-display text-2xl font-semibold text-white sm:text-3xl">{title}</h2>
@@ -79,8 +80,6 @@ export function PlayerEndScreen({
             {t("player.end.done")}
           </button>
         </div>
-
-        <FinishedAsk itemId={itemId} />
 
         {subject && onPlayNext && (
           <CollectionSuiteCard parts={collection.all} currentRadarrId={subject.radarrId} watched={{}} resumeTicks={{}} onPlay={onPlayNext} />
@@ -209,19 +208,25 @@ function FinishedAsk({ itemId }: { itemId: string }) {
     }
   }
 
+  // Une petite carte dans le coin, hors du chemin des boutons et des titres proposés (07/10/2026) :
+  // en bloc sous « Revoir », elle prenait la moitié de l'écran d'un téléphone en paysage.
   return (
-    <div role="status" className="mt-5 max-w-xl rounded-2xl bg-white/[0.06] px-4 py-3 text-sm text-white ring-1 ring-white/10">
+    <div
+      role="status"
+      className="absolute right-4 z-10 w-[min(19rem,calc(100%-2rem))] animate-fade-in rounded-2xl bg-black/55 px-3.5 py-3 text-white ring-1 ring-white/10 backdrop-blur-md"
+      style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+    >
       {state === "removed" ? (
-        <p className="text-muted">{t("player.end.finishedRemoved")}</p>
+        <p className="text-xs text-muted">{t("player.end.finishedRemoved")}</p>
       ) : (
         <>
-          <p>{t(series ? "player.end.finishedSeriesAsk" : "player.end.finishedMovieAsk")}</p>
-          <p className="mt-0.5 text-xs text-subtle">{t(series ? "player.end.finishedSeriesNote" : "player.end.finishedMovieNote")}</p>
-          <div className="mt-2.5 flex gap-2">
-            <button type="button" disabled={state === "busy"} onClick={() => void remove()} ref={liquidButtonRef} data-liquid className="btn nav-glass rounded-full px-3.5 py-1.5 text-xs text-white disabled:opacity-60">
+          <p className="text-xs leading-snug">{t(series ? "player.end.finishedSeriesAsk" : "player.end.finishedMovieAsk")}</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-subtle">{t(series ? "player.end.finishedSeriesNote" : "player.end.finishedMovieNote")}</p>
+          <div className="mt-2 flex gap-1.5">
+            <button type="button" disabled={state === "busy"} onClick={() => void remove()} ref={liquidButtonRef} data-liquid className="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink disabled:opacity-60">
               {t("player.end.finishedRemove")}
             </button>
-            <button type="button" onClick={() => setState("kept")} ref={liquidButtonRef} data-liquid className="rounded-full px-3.5 py-1.5 text-xs text-muted hover:text-white">
+            <button type="button" onClick={() => setState("kept")} ref={liquidButtonRef} data-liquid className="rounded-full px-3 py-1 text-xs text-muted hover:text-white">
               {t("player.end.finishedKeep")}
             </button>
           </div>
