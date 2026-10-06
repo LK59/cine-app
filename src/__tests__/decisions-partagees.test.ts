@@ -926,3 +926,22 @@ describe("une seule suite de saga", () => {
     expect(src).not.toMatch(/\/api\/tmdb\/collection/);
   });
 });
+
+describe("un seul défilement guidé (§50)", () => {
+  // Le calage vertical du cinéma est réglable par compte : un `snap-y snap-mandatory` écrit à la
+  // main sur un nouvel écran ignorerait le réglage de la personne.
+  it("aucun écran du cinéma n'écrit le calage à la main", () => {
+    const dir = "src/components/cinema";
+    const offenders = readdirSync(dir, { recursive: true })
+      .map(String)
+      .filter((f) => f.endsWith(".tsx"))
+      .filter((f) => /snap-y snap-mandatory/.test(lire(`${dir}/${f}`)));
+    expect(offenders).toEqual([]);
+  });
+
+  it("les trois volets qui défilent passent par guidedScrollClass", () => {
+    for (const f of ["CinemaClient", "CinemaMovieDetail", "CinemaSeriesDetail"]) {
+      expect(lire(`src/components/cinema/${f}.tsx`), f).toMatch(/guidedScrollClass\(guidedScroll\)/);
+    }
+  });
+});

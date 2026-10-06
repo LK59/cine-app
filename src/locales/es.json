@@ -1736,7 +1736,10 @@
       "storageHint": "El inicio de las películas y series en curso se guarda aquí para que empiecen al instante. Vaciarlo no borra nada más: todo vuelve por sí solo.",
       "storageUsed": "{size} usados",
       "storageClear": "Vaciar la caché",
-      "storageCleared": "Caché vaciada"
+      "storageCleared": "Caché vaciada",
+      "display": "Pantalla",
+      "guidedScroll": "Desplazamiento guiado",
+      "guidedScrollHint": "En el ordenador, el inicio se ajusta a una fila entera y las fichas a una página entera. Desactivado, la página se desplaza libremente."
     },
     "browse": {
       "seeAll": "Ver todo",

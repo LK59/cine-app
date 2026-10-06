@@ -1736,7 +1736,10 @@
       "storageHint": "The beginning of films and series you are watching is kept here so they start instantly. Clearing it removes nothing else: it all comes back on its own.",
       "storageUsed": "{size} used",
       "storageClear": "Clear cache",
-      "storageCleared": "Cache cleared"
+      "storageCleared": "Cache cleared",
+      "display": "Display",
+      "guidedScroll": "Guided scrolling",
+      "guidedScrollHint": "On a computer, the home screen settles on a whole row and title pages on a whole page. Off, pages scroll freely."
     },
     "browse": {
       "seeAll": "See all",

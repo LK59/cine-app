@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, ListChecks, HardDrive } from "lucide-react";
+import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, ListChecks, HardDrive, Rows3 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { hardNavigate, signOut } from "@/lib/signOut";
@@ -20,6 +20,8 @@ import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { BenchSection } from "./BenchSection";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices, NotificationTest } from "./accountControls";
 import { openOnboarding } from "./onboardingEvents";
+import { Toggle } from "@/components/Toggle";
+import { setGuidedScroll, useGuidedScroll } from "@/lib/guidedScroll";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import type { OtherSession } from "@/app/api/auth/sessions/route";
 import { MAINTENANCE_KEY, type MaintenanceState } from "@/lib/useMaintenance";
@@ -124,6 +126,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab, swapIn }: { lea
       <div className="mx-auto w-full max-w-2xl">
         <Group title={t("player.account.groups.preferences")}>
           <LanguageSection />
+          <DisplaySection />
           {hasJellyfin && <PlaybackSection />}
           <Section icon={Bell} title={t("player.account.notifications")}>
             <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -258,6 +261,28 @@ function LanguageSection() {
           </button>
         </div>
       )}
+    </Section>
+  );
+}
+
+/** Le défilement guidé de l'interface ordinateur — une préférence du compte (`guidedScroll.ts`). */
+function DisplaySection() {
+  const t = useT();
+  const toast = useToast();
+  const on = useGuidedScroll();
+  return (
+    <Section icon={Rows3} title={t("player.account.display")}>
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
+        <div>
+          <p className="text-sm text-white">{t("player.account.guidedScroll")}</p>
+          <p className="mt-0.5 text-xs text-subtle">{t("player.account.guidedScrollHint")}</p>
+        </div>
+        <Toggle
+          checked={on}
+          ariaLabel={t("player.account.guidedScroll")}
+          onChange={(next) => void setGuidedScroll(next).catch(() => toast.error(t("common.error")))}
+        />
+      </div>
     </Section>
   );
 }

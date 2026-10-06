@@ -1736,7 +1736,10 @@
       "storageHint": "Le début des films et séries en cours est gardé ici pour qu'ils démarrent instantanément. Le vider ne supprime rien d'autre : tout revient de lui-même.",
       "storageUsed": "{size} utilisés",
       "storageClear": "Vider le cache",
-      "storageCleared": "Cache vidé"
+      "storageCleared": "Cache vidé",
+      "display": "Affichage",
+      "guidedScroll": "Défilement guidé",
+      "guidedScrollHint": "Sur ordinateur, l'accueil se cale sur une rangée entière et les fiches sur une page entière. Coupé, la page défile librement."
     },
     "browse": {
       "seeAll": "Voir tout",

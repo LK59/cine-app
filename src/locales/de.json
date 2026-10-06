@@ -1736,7 +1736,10 @@
       "storageHint": "Der Anfang laufender Filme und Serien wird hier gespeichert, damit sie sofort starten. Leeren löscht nichts anderes: alles kommt von selbst zurück.",
       "storageUsed": "{size} belegt",
       "storageClear": "Cache leeren",
-      "storageCleared": "Cache geleert"
+      "storageCleared": "Cache geleert",
+      "display": "Anzeige",
+      "guidedScroll": "Geführtes Scrollen",
+      "guidedScrollHint": "Am Computer rastet die Startseite auf eine ganze Reihe und die Titelseiten auf eine ganze Seite ein. Aus: Die Seite scrollt frei."
     },
     "browse": {
       "seeAll": "Alle anzeigen",

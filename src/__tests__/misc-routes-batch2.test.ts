@@ -11,6 +11,8 @@ const mockUserPrefsDb = {
   setLang: vi.fn(),
   getLegacyPlayer: vi.fn(() => ({ enabled: false })),
   setLegacyPlayer: vi.fn(),
+  getGuidedScroll: vi.fn(() => true),
+  setGuidedScroll: vi.fn(),
 };
 const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn(), listOthers: vi.fn(() => []) };
 vi.mock("@/lib/db", () => ({
@@ -165,6 +167,17 @@ describe("/api/user/preferences", () => {
 
   // The way back to playing through the server shares this route, for every account and not only
   // for administrators.
+  // Le défilement guidé (DECISIONS.md §50) : une préférence du compte, activée par défaut.
+  it("GET dit le défilement guidé du compte, et PUT le coupe", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "emma", jfId: "jf-3", role: "user" });
+    const { GET, PUT } = await import("@/app/api/user/preferences/route");
+    expect((await (await GET(fakeReq())).json()).guidedScroll).toBe(true);
+    const res = await PUT(fakeReq({ body: { guidedScroll: false } }));
+    expect(res.status).toBe(200);
+    expect(mockUserPrefsDb.setGuidedScroll).toHaveBeenCalledWith("jf-3", false);
+    expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
+  });
+
   it("PUT lets any account ask for the legacy player", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "someone", jfId: "jf-2", role: "user" });
     const { PUT } = await import("@/app/api/user/preferences/route");

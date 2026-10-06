@@ -1559,3 +1559,26 @@ quels. Annuler demande confirmation, sur la carte même.
 **Tests.** `request-cancel.test.ts`, `PlayerRequestCard-confirm.test.tsx`.
 
 **Décidé le 05/10/2026.**
+
+## 50. Le défilement guidé, réglable
+
+**Règle.** L'accueil du cinéma, la fiche film et la fiche série de l'interface ordinateur se calent
+sur une rangée ou une page entière (`snap-y snap-mandatory`) tant que le compte ne l'a pas coupé
+(Compte → Affichage). Une préférence du compte, rangée avec la langue (`user_preferences.guided_scroll`,
+NULL = activé), suivie depuis la clé `/api/user/preferences` déjà chargée au démarrage, avec la
+dernière valeur connue de l'appareil avant la réponse.
+
+**Porteur.** `useGuidedScroll` et `guidedScrollClass` (`src/lib/guidedScroll.ts`) — la seule façon
+d'écrire les classes du conteneur.
+
+**Appelants.** `CinemaClient` (volet des rangées), `CinemaMovieDetail`, `CinemaSeriesDetail` ;
+l'interrupteur dans `PlayerAccountPanel` (`DisplaySection`).
+
+**Voulu.** L'interface téléphone n'a pas de calage vertical et ne lit pas ce réglage. Coupé, la
+navigation au clavier reste juste : elle fait défiler jusqu'au début de la rangée ou de la page.
+
+**Tests.** `guided-scroll.test.tsx`, `decisions-partagees.test.ts` (aucun `snap-y snap-mandatory`
+écrit à la main dans le cinéma).
+
+**Décidé le 06/10/2026.**
+

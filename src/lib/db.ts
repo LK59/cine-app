@@ -225,6 +225,9 @@ function migrate(db: Database.Database): void {
   // whoever was mid-migration. Everybody starts at zero, which is now the new player, which is
   // what everybody gets.
   try { db.exec("ALTER TABLE user_preferences ADD COLUMN legacy_player INTEGER NOT NULL DEFAULT 0"); } catch { /* already exists */ }
+  // Le défilement guidé de l'interface ordinateur (`guidedScroll.ts`, DECISIONS.md §50) : NULL = le
+  // défaut, activé.
+  try { db.exec("ALTER TABLE user_preferences ADD COLUMN guided_scroll INTEGER"); } catch { /* already exists */ }
   // La colonne a existé le temps d'une version qui révoquait le jeton Jellyfin en même temps que
   // la session. Ce n'est plus le cas — se déconnecter de Cine App ne doit pas toucher à Jellyfin —
   // et un secret qu'on ne lit plus n'a rien à faire au repos : elle est vidée à chaque démarrage.
@@ -353,6 +356,24 @@ export const userPrefsDb = {
       .prepare("SELECT legacy_player FROM user_preferences WHERE user_id = ?")
       .get(userId) as { legacy_player: number | null } | undefined;
     return { enabled: row?.legacy_player === 1 };
+  },
+
+  /** Le défilement guidé (calage sur une rangée ou une page) : activé tant que le compte ne l'a pas coupé. */
+  getGuidedScroll(userId: string): boolean {
+    const row = getDb()
+      .prepare("SELECT guided_scroll FROM user_preferences WHERE user_id = ?")
+      .get(userId) as { guided_scroll: number | null } | undefined;
+    return row?.guided_scroll !== 0;
+  },
+
+  setGuidedScroll(userId: string, on: boolean): void {
+    getDb().prepare(`
+      INSERT INTO user_preferences (user_id, lang, guided_scroll, updated_at)
+      VALUES (?, NULL, ?, ?)
+      ON CONFLICT (user_id) DO UPDATE SET
+        guided_scroll = excluded.guided_scroll,
+        updated_at = excluded.updated_at
+    `).run(userId, on ? 1 : 0, Date.now());
   },
 
   setLegacyPlayer(userId: string, enabled: boolean): void {

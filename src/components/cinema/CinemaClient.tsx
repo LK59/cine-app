@@ -78,6 +78,7 @@ import { useFreshPersonalLists } from "@/lib/freshLists";
 import { heroInfoKey, preloadHeroInfo } from "@/lib/useHeroInfo";
 import { ProgressFill } from "@/components/cinema/ProgressFill";
 import { feedResumeAt } from "@/lib/sheetFacts";
+import { guidedScrollClass, useGuidedScroll } from "@/lib/guidedScroll";
 
 // The lightweight resume feed — /api/dashboard also carries these, but only alongside a full
 // sweep of every service, the torrent client and disk stats, which is a lot of upstream work to
@@ -242,6 +243,8 @@ const seriesHeroKey = (s: CinemaSeries) => `s${s.sonarrId}`;
 /** Ce que la bannière du bureau affiche d'un titre : son fond et son logo, décodés d'avance. */
 const heroImagesOf = (item: { backdropUrl: string | null; logoUrl: string | null }) => [item.backdropUrl, item.logoUrl];
 export function CinemaClient() {
+  // Le calage sur une rangée ou une page entière, réglable par appareil (`guidedScroll.ts`).
+  const guidedScroll = useGuidedScroll();
   const t = useT();
 
   // Films/Séries — default left/movies, matching what's asked for. Series data is fetched lazily
@@ -1135,7 +1138,7 @@ export function CinemaClient() {
             itself. Reliability was the explicit priority over that. */}
         <div
           ref={rowsPaneRef}
-          className="scrollbar-thin relative min-h-80 flex-1 snap-y snap-mandatory scroll-smooth overflow-y-auto pb-16 pt-6"
+          className={`scrollbar-thin relative min-h-80 flex-1 ${guidedScrollClass(guidedScroll)} scroll-smooth overflow-y-auto pb-16 pt-6`}
           // L'ancrage du défilement compense l'arrivée de contenu en déplaçant la vue : ici, ce
           // contenu arrive toujours *après* qu'on a décidé où l'on veut être. On le désactive.
           style={{ overflowAnchor: "none" }}

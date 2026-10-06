@@ -37,6 +37,7 @@ import { sheetOverview, useSheetPlayFacts } from "@/lib/sheetFacts";
 import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
+import { guidedScrollClass, useGuidedScroll } from "@/lib/guidedScroll";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -87,6 +88,8 @@ export function CinemaSeriesDetail({
   onSelectSimilar?: (item: CinemaSeries) => void;
   underneath?: boolean;
 }) {
+  // Le calage sur une rangée ou une page entière, réglable par appareil (`guidedScroll.ts`).
+  const guidedScroll = useGuidedScroll();
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   /** Vrai dès que le spectateur a lui-même déplacé le focus — voir l'effet plus bas. */
@@ -303,7 +306,7 @@ export function CinemaSeriesDetail({
           aligned to its end edge clips whatever overflows past its START edge and makes it
           unreachable by scrolling — that's what pushed the logo and title off the top of the
           screen when the similar row first landed here. A section that simply grows can't. */}
-      <div className="scrollbar-thin relative h-full snap-y snap-mandatory overflow-y-auto scroll-smooth">
+      <div className={`scrollbar-thin relative h-full ${guidedScrollClass(guidedScroll)} overflow-y-auto scroll-smooth`}>
         <div data-snap-section className={SECTION_CLASS}>
         <div
           key={item.sonarrId}

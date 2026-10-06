@@ -13,7 +13,8 @@ export async function GET(req: NextRequest) {
   // Reported to every caller, but only ever true for an admin who turned it on: the PUT below
   // refuses to set it for anyone else, so a non-admin can't end up with it enabled.
   const legacyPlayer = userPrefsDb.getLegacyPlayer(userId);
-  return NextResponse.json({ lang, legacyPlayer });
+  const guidedScroll = userPrefsDb.getGuidedScroll(userId);
+  return NextResponse.json({ lang, legacyPlayer, guidedScroll });
 }
 
 export async function PUT(req: NextRequest) {
@@ -32,6 +33,12 @@ export async function PUT(req: NextRequest) {
   if (typeof body?.legacyPlayer === "boolean") {
     userPrefsDb.setLegacyPlayer(userId, body.legacyPlayer);
     return NextResponse.json({ ok: true, legacyPlayer: { enabled: body.legacyPlayer } });
+  }
+
+  // Le défilement guidé (DECISIONS.md §50) : une mise à jour à elle seule, comme la précédente.
+  if (typeof body?.guidedScroll === "boolean") {
+    userPrefsDb.setGuidedScroll(userId, body.guidedScroll);
+    return NextResponse.json({ ok: true, guidedScroll: body.guidedScroll });
   }
 
   const lang = body?.lang as string | undefined;
