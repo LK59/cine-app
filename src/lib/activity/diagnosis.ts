@@ -130,7 +130,9 @@ export function diagnoseTitles(all: Seance[], limit = 12): TitleDiagnosis[] {
     for (const s of failedList) {
       for (const i of s.incidents) {
         // Le début du motif : assez pour regrouper, sans les nombres qui changent d'une fois à l'autre.
-        const reason = `${i.kind}: ${i.reason.replace(/\d+(\.\d+)?/g, "#").slice(0, 70)}`;
+        // Un blocage n'a pour motif que la position où il a eu lieu : une fois les nombres retirés,
+        // il ne restait que « stall: # s » (relu le 06/10/2026). Il se regroupe sous son seul nom.
+        const reason = i.kind === "stall" ? "stall" : `${i.kind}: ${i.reason.replace(/\d+(\.\d+)?/g, "#").slice(0, 70)}`;
         reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
       }
     }

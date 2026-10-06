@@ -197,7 +197,10 @@
       "title": "À regarder",
       "tokenRefused": "Jeton refusé",
       "tokenStale": "Invisible pour le serveur média",
-      "clientErrors": "{n} erreur navigateur|{n} erreurs navigateur"
+      "clientErrors": "{n} erreur navigateur|{n} erreurs navigateur",
+      "tokenStaleSince": "Jellyfin ne le voit plus depuis {when}",
+      "tokenStaleNever": "Jamais vu par Jellyfin",
+      "tokenStaleHint": "Utilise l'application, mais Jellyfin ne voit aucune activité de son compte : soit il ouvre l'application sans rien lancer, soit son jeton Jellyfin ne passe plus — ses positions et ses « vu » ne s'enregistreraient alors pas. Une déconnexion puis une reconnexion règle le second cas."
     },
     "week": {
       "title": "Les sept derniers jours",
@@ -479,8 +482,14 @@
         "everywhere": "Il peine aussi ailleurs : {p} % de ses autres séances ont échoué.",
         "onlyHere": "Sur ses {n} autres séances, il va bien : c'est ce titre sur cet appareil.",
         "mixed": "Il a échoué chez {n} spectateurs, et les {clean} autres l'ont regardé sans souci, sans point commun évident.",
-        "alone": "Seul {who} l'a ouvert : rien à croiser pour l'instant."
-      }
+        "alone": "Seul {who} l'a ouvert : rien à croiser pour l'instant.",
+        "platformOne": "Il a échoué sur {device} chez {n} personnes ; l'autre l'a regardé sans souci ailleurs : ce type d'appareil.",
+        "deviceOne": "Il n'a échoué que chez {who} ({device}) ; l'autre l'a regardé sans souci : cet appareil.",
+        "mixedOne": "Il a échoué chez {n} spectateurs, et l'autre l'a regardé sans souci, sans point commun évident."
+      },
+      "clearAll": "Tout effacer",
+      "clearOne": "Effacer {title}",
+      "clearHint": "Effacer : le titre revient s'il échoue de nouveau."
     },
     "frise": {
       "title": "La séance en un coup d'œil",

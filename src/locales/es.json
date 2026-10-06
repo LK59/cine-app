@@ -197,7 +197,10 @@
       "title": "Para revisar",
       "tokenRefused": "Token rechazado",
       "tokenStale": "Invisible para el servidor multimedia",
-      "clientErrors": "{n} error del navegador|{n} errores del navegador"
+      "clientErrors": "{n} error del navegador|{n} errores del navegador",
+      "tokenStaleSince": "Jellyfin no lo ve desde {when}",
+      "tokenStaleNever": "Nunca visto por Jellyfin",
+      "tokenStaleHint": "Usa la aplicación, pero Jellyfin no ve actividad en su cuenta: o abre la aplicación sin reproducir nada, o su token de Jellyfin ya no funciona — sus posiciones y «visto» no se guardarían. Cerrar sesión y volver a entrar resuelve el segundo caso."
     },
     "week": {
       "title": "Los últimos siete días",
@@ -479,8 +482,14 @@
         "everywhere": "También tiene problemas en otros: el {p} % de sus otras sesiones fallaron.",
         "onlyHere": "Sus otras {n} sesiones fueron bien: es este título en este dispositivo.",
         "mixed": "Ha fallado con {n} espectadores y los otros {clean} lo vieron sin problema, sin nada evidente en común.",
-        "alone": "Solo {who} lo ha abierto: nada que comparar por ahora."
-      }
+        "alone": "Solo {who} lo ha abierto: nada que comparar por ahora.",
+        "platformOne": "Ha fallado en {device} con {n} personas; la otra lo vio sin problema en otro dispositivo: ese tipo de dispositivo.",
+        "deviceOne": "Solo ha fallado con {who} ({device}); la otra persona lo vio sin problema: ese dispositivo.",
+        "mixedOne": "Ha fallado con {n} espectadores y la otra persona lo vio sin problema, sin nada evidente en común."
+      },
+      "clearAll": "Borrar todo",
+      "clearOne": "Borrar {title}",
+      "clearHint": "Borrar: el título vuelve si falla de nuevo."
     },
     "frise": {
       "title": "La sesión de un vistazo",

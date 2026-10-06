@@ -54,9 +54,24 @@ export function clock(seconds: number | null | undefined): string {
   return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 
+/**
+ * La langue de l'interface, et non celle du navigateur : un navigateur réglé en anglais écrivait
+ * « Wed, Thu » et « Sep 17 » au milieu d'une page en français (relu le 06/10/2026). La racine de
+ * la page porte la langue choisie (`<html lang>`, layout).
+ */
+function uiLocale(): string | undefined {
+  return typeof document !== "undefined" ? document.documentElement.lang || undefined : undefined;
+}
+
+/** La plus récente de plusieurs dates, ou `null`. */
+export function latest(...ts: (number | null | undefined)[]): number | null {
+  const known = ts.filter((x): x is number => typeof x === "number" && x > 0);
+  return known.length ? Math.max(...known) : null;
+}
+
 export function fullDate(ts: number | null | undefined): string {
   if (!ts) return "—";
-  return new Date(ts).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+  return new Date(ts).toLocaleString(uiLocale(), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 const STATE_STYLES = {
@@ -66,7 +81,22 @@ const STATE_STYLES = {
 } as const;
 
 /** L'état en une pastille : en lecture, dans l'application, ou absent depuis… */
-export function PresenceBadge({ presence, nowPlaying, now }: { presence: Presence; nowPlaying?: NowPlaying | null; now: number }) {
+export function PresenceBadge({
+  presence,
+  nowPlaying,
+  now,
+  seenAt,
+}: {
+  presence: Presence;
+  nowPlaying?: NowPlaying | null;
+  now: number;
+  /**
+   * La dernière trace connue hors des signaux de présence — l'application ou le serveur média.
+   * Les signaux vivent en mémoire et se perdent à chaque redémarrage : seuls les comptes passés
+   * depuis le dernier avaient « Vu il y a… », tous les autres un « Absent » muet (06/10/2026).
+   */
+  seenAt?: number | null;
+}) {
   const t = useT();
   const state = nowPlaying ? "playing" : presence.state;
   const style = STATE_STYLES[state];
@@ -75,8 +105,8 @@ export function PresenceBadge({ presence, nowPlaying, now }: { presence: Presenc
       ? t("activity.presence.playing")
       : state === "app"
         ? t("activity.presence.app")
-        : presence.lastSeen
-          ? t("activity.presence.awaySince", { when: ago(presence.lastSeen, now, t) })
+        : presence.lastSeen || seenAt
+          ? t("activity.presence.awaySince", { when: ago(Math.max(presence.lastSeen ?? 0, seenAt ?? 0), now, t) })
           : t("activity.presence.away");
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${style.text}`}>
@@ -249,7 +279,7 @@ export function DayBars({ days }: { days: { day: string; seances: number; proble
             )}
           </div>
           <span className="text-[10px] text-slate-500">
-            {new Date(d.day + "T12:00:00").toLocaleDateString([], { weekday: "short" })}
+            {new Date(d.day + "T12:00:00").toLocaleDateString(uiLocale(), { weekday: "short" })}
           </span>
         </div>
       ))}

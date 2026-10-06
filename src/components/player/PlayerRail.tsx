@@ -1,13 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import useSWR from "swr";
-import { fetcher } from "@/lib/swr";
 import { Clapperboard } from "lucide-react";
 import { useCinemaRoute } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
-import { prefetchRoute } from "@/lib/prefetch";
-import { PLAYER_NAV, MANAGE_ITEM, activePanel, openPanel } from "./playerNav";
+import { PLAYER_NAV, activePanel, openPanel } from "./playerNav";
 import { useReportBadge } from "@/lib/useReportBadge";
 import { NavDot } from "./NavDot";
 import { inHiddenTab } from "@/lib/keptTabs";
@@ -36,7 +32,6 @@ import type { PlayerPanel } from "./playerNav";
  */
 export function PlayerRail() {
   const route = useCinemaRoute();
-  const router = useRouter();
   const t = useT();
   const badge = useReportBadge();
   const active = activePanel(route);
@@ -56,10 +51,6 @@ export function PlayerRail() {
       openPanel(key as PlayerPanel, route);
     },
   });
-  // La gestion est à l'administrateur, et le panneau Compte ne la propose qu'à lui : le rail la
-  // montrait à tout le monde, vers des pages où chaque bouton répond 403 (23/09/2026).
-  const { data: me } = useSWR<{ role: string }>("/api/auth/me", fetcher);
-  const isAdmin = me?.role === "admin";
 
   /**
    * Les flèches, dans le rail.
@@ -150,26 +141,8 @@ export function PlayerRail() {
           );
         })}
 
-        {/* La porte vers la gestion : toujours là, jamais mise en avant. Une ligne de séparation,
-            une icône plus petite, une couleur en retrait — celui qui la cherche la trouve,
-            l'autre ne la lit jamais. */}
-        {isAdmin && (
-          <>
-            <div className="mx-2 my-0.5 h-px shrink-0 bg-white/10" />
-            <button
-              type="button"
-              onClick={() => router.push(MANAGE_ITEM.href)}
-              onMouseEnter={() => prefetchRoute(MANAGE_ITEM.href)}
-              onFocus={() => prefetchRoute(MANAGE_ITEM.href)}
-              className="flex h-10 shrink-0 items-center gap-3.5 overflow-hidden rounded-full pl-[0.75rem] pr-3 text-left text-xs text-subtle transition-colors hover:bg-white/5 hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-            >
-              <MANAGE_ITEM.icon size={16} className="shrink-0" />
-              <span className="player-rail-label whitespace-nowrap">
-                {t(MANAGE_ITEM.labelKey)}
-              </span>
-            </button>
-          </>
-        )}
+        {/* Plus de porte vers la gestion ici (06/10/2026) : elle vit dans l'onglet Compte, seul
+            endroit où l'administrateur la cherche ; le rail ne garde que le cinéma. */}
       </div>
     </nav>
   );

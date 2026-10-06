@@ -21,6 +21,7 @@ import { diagnoseTitles } from "@/lib/activity/diagnosis";
 import { readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { buildSeances, type Seance } from "@/lib/activity/seances";
 import { isChunkLoadError } from "@/lib/chunkError";
+import { clearedDiagnosis, withoutCleared } from "@/lib/activity/diagnosisCleared";
 
 /**
  * Une « erreur » de navigateur qui n'en est pas une : la page était ouverte pendant un
@@ -552,7 +553,9 @@ export function household(now = Date.now()) {
     habits: habitsOf(seances),
     // Le titre ou l'appareil : les réussites de la période comptent autant que les échecs, ce sont
     // elles qui innocentent l'un ou l'autre.
-    diagnosis: diagnoseTitles(seances),
+    // Sans les titres effacés par l'administrateur (`diagnosisCleared.ts`) : on en demande davantage
+    // au classement, pour que l'effacement fasse place aux suivants au lieu de raccourcir la liste.
+    diagnosis: withoutCleared(diagnoseTitles(seances, 60), clearedDiagnosis()).slice(0, 12),
     logins: {
       ok: auth.filter((r) => r.kind === "login").length,
       failed: auth.filter((r) => r.kind === "login-failed").length,

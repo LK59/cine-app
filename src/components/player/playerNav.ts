@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Search, Bookmark, User, SlidersHorizontal } from "lucide-react";
+import { Home, Search, Bookmark, User } from "lucide-react";
 import { cinemaNavigate, type CinemaRoute } from "@/lib/cinemaRoute";
 import { requestSearchFocus } from "@/lib/searchFocus";
 
@@ -26,9 +26,6 @@ export const PLAYER_NAV: PlayerNavItem[] = [
   { panel: "list", labelKey: "player.nav.myList", icon: Bookmark },
   { panel: "account", labelKey: "player.nav.account", icon: User },
 ];
-
-/** L'entrée du bas, à part : elle quitte le lecteur au lieu d'ouvrir un panneau. */
-export const MANAGE_ITEM = { href: "/gestion", labelKey: "player.nav.manage", icon: SlidersHorizontal };
 
 /** Quel panneau la route décrit — « home » quand aucun n'est ouvert. */
 export function activePanel(route: CinemaRoute): PlayerPanel {

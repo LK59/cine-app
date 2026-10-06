@@ -2,11 +2,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
-// Le rail montrait « Gestion » à tout le monde, vers des pages où chaque bouton répond 403 ; le
-// panneau Compte, lui, ne la propose qu'à l'administrateur (23/09/2026).
+// La gestion n'est plus dans le rail, pour personne (06/10/2026) : l'administrateur l'ouvre depuis
+// l'onglet Compte, seul endroit où elle vit. Avant, le rail la montrait à l'administrateur (et, plus
+// tôt encore, à tout le monde, vers des pages où chaque bouton répondait 403).
 
-let me: { role: string } | undefined = { role: "user" };
-vi.mock("swr", () => ({ default: () => ({ data: me }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/lib/cinemaRoute", async (importOriginal) => ({
@@ -22,15 +21,9 @@ import { PlayerRail } from "@/components/player/PlayerRail";
 afterEach(cleanup);
 
 describe("PlayerRail — la gestion", () => {
-  it("n'est pas proposée à un compte ordinaire", () => {
-    me = { role: "user" };
+  it("n'est plus proposée dans le rail, même à l'administrateur", () => {
     render(<PlayerRail />);
     expect(screen.queryByText("player.nav.manage")).toBeNull();
-  });
-
-  it("l'est à l'administrateur", () => {
-    me = { role: "admin" };
-    render(<PlayerRail />);
-    expect(screen.getByText("player.nav.manage")).toBeTruthy();
+    expect(document.querySelector('a[href="/gestion"], button[data-href="/gestion"]')).toBeNull();
   });
 });

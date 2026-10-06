@@ -32,7 +32,7 @@ export function PlayerActivityPanel({ raw, leaving, swapIn }: { raw: string; lea
     : view.kind === "animations" ? t("player.account.animLab")
     : t("activity.title");
   return (
-    <PlayerPanelFrame contentWidth="80rem" title={title} back leaving={leaving} swapIn={swapIn}>
+    <PlayerPanelFrame contentWidth="80rem" title={title} back leaving={leaving} swapIn={swapIn} scrollKey={`activite:${raw}`}>
       <div className="mx-auto w-full max-w-7xl space-y-6 pt-2">
         {view.kind === "overview" && <ActivityOverview />}
         {view.kind === "account" && <ActivityAccount id={view.id} />}

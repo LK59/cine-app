@@ -8,6 +8,7 @@ import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useT } from "@/components/TranslationProvider";
 import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
 import { openPanel } from "./playerNav";
+import { usePanelScrollMemory } from "@/lib/panelScrollMemory";
 
 /**
  * L'habillage commun des écrans ouverts depuis le rail — Recherche, Ma liste, Compte.
@@ -42,6 +43,7 @@ export function PlayerPanelFrame({
   fromTab = false,
   back = false,
   swapIn = false,
+  scrollKey,
   contentWidth = "72rem",
   children,
 }: {
@@ -91,6 +93,11 @@ export function PlayerPanelFrame({
    * écrans gardent leur entrée. Lu à chaque entrée, comme `fromTab`.
    */
   swapIn?: boolean;
+  /**
+   * Garder la position de défilement sous cette clé et la rendre en revenant en arrière
+   * (`usePanelScrollMemory`) — l'activité, dont chaque vue est montée à neuf.
+   */
+  scrollKey?: string;
   /**
    * La largeur du contenu du panneau — la même que son `max-w-*`. Sur grand écran, la fenêtre s'y
    * ajuste (plus ses marges intérieures) au lieu de s'étirer jusqu'au bord droit : le compte, une
@@ -156,6 +163,7 @@ export function PlayerPanelFrame({
   // l'écouteur doit le suivre — posé une fois, il restait sur le premier, et les flèches
   // mouraient au premier aller-retour.
   usePanelArrowNav(bodyRef, true, entrance);
+  usePanelScrollMemory(bodyRef, scrollKey, entrance);
 
   // Une fiche ouverte par-dessus ce panneau écoute Échap elle aussi. `stopPropagation` n'y change
   // rien : deux écouteurs posés sur la même cible se déclenchent tous les deux, et une seule

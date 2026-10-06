@@ -197,7 +197,10 @@
       "title": "Needs a look",
       "tokenRefused": "Token refused",
       "tokenStale": "Invisible to the media server",
-      "clientErrors": "{n} browser error|{n} browser errors"
+      "clientErrors": "{n} browser error|{n} browser errors",
+      "tokenStaleSince": "Not seen by Jellyfin for {when}",
+      "tokenStaleNever": "Never seen by Jellyfin",
+      "tokenStaleHint": "Uses the app, but Jellyfin sees no activity on the account: either they open the app without playing anything, or their Jellyfin token no longer works — positions and “watched” would then not be saved. Signing out and back in fixes the second case."
     },
     "week": {
       "title": "The last seven days",
@@ -479,8 +482,14 @@
         "everywhere": "It struggles elsewhere too: {p}% of its other sessions failed.",
         "onlyHere": "Its {n} other sessions went fine: it's this title on this device.",
         "mixed": "It failed for {n} viewers and the {clean} others watched it fine, with nothing obvious in common.",
-        "alone": "Only {who} has opened it: nothing to compare yet."
-      }
+        "alone": "Only {who} has opened it: nothing to compare yet.",
+        "platformOne": "It failed on {device} for {n} people; the other one watched it fine elsewhere: that device type.",
+        "deviceOne": "It only failed for {who} ({device}); the other one watched it fine: that device.",
+        "mixedOne": "It failed for {n} viewers and the other one watched it fine, with nothing obvious in common."
+      },
+      "clearAll": "Clear all",
+      "clearOne": "Clear {title}",
+      "clearHint": "Clear: the title comes back if it fails again."
     },
     "frise": {
       "title": "The session at a glance",

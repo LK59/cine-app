@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Clapperboard, Activity, Eye, EyeOff } from "lucide-react";
@@ -8,6 +8,7 @@ import { useT } from "@/components/TranslationProvider";
 import { hardNavigate, safeNextPath } from "@/lib/signOut";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { AppSignature } from "@/components/AppSignature";
+import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 
 export default function LoginPage() {
   return (
@@ -71,9 +72,15 @@ function LoginForm() {
     }
   }
 
+  // Le verre liquide des accueils (06/10/2026, comme l'assistant de premier lancement) : le geste
+  // sur ce qui porte `data-liquid-pan`, le verre mixte par `setup-liquid` (globals.css).
+  const rootRef = useRef<HTMLElement>(null);
+  useLiquidDelegation(rootRef);
+
   return (
     <main
-      className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink px-5 py-10"
+      ref={rootRef}
+      className="setup-liquid relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink px-5 py-10"
       // La signature est la dernière ligne de la page : quand le formulaire de secours est ouvert
       // sur un petit téléphone, c'est elle qui touche le bas, et l'indicateur d'accueil la couvrait.
       style={{ paddingBottom: "max(2.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))" }}
@@ -107,7 +114,7 @@ function LoginForm() {
           <p className="mt-2 text-sm text-slate-400">{t("auth.tagline")}</p>
         </div>
 
-        <div className="card p-6 sm:p-7">
+        <div className="card settings-card p-6 sm:p-7">
           {reason === "playback" && (
             <p className="mb-5 rounded-lg border border-accent-500/20 bg-accent-500/10 px-3 py-2 text-xs text-accent-200">
               {t("auth.reasonPlayback")}
@@ -186,7 +193,7 @@ function LoginForm() {
               </p>
             )}
 
-            <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-3 text-base">
+            <button type="submit" disabled={loading} data-liquid-pan="wide" className="btn-primary w-full justify-center rounded-full py-3 text-base">
               {loading ? t("auth.jellyfin.submitting") : t("auth.jellyfin.submit")}
             </button>
           </form>
@@ -202,7 +209,8 @@ function LoginForm() {
           {!showLocalForm ? (
             <button
               onClick={() => setShowLocalForm(true)}
-              className="mx-auto block text-xs text-slate-600 transition-colors hover:text-slate-400"
+              data-liquid-pan="wide"
+              className="settings-glass-btn mx-auto block rounded-full px-3.5 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200"
             >
               {t("auth.local.heading")}
             </button>
@@ -212,7 +220,7 @@ function LoginForm() {
                 e.preventDefault();
                 submit("/api/auth/login");
               }}
-              className="card space-y-3 p-5"
+              className="card settings-card space-y-3 p-5"
             >
               <p className="text-xs font-medium text-slate-400">{t("auth.local.heading")}</p>
               <input
@@ -246,7 +254,7 @@ function LoginForm() {
                 </button>
               </div>
               {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
-              <button type="submit" disabled={loading} className="btn-ghost w-full justify-center">
+              <button type="submit" disabled={loading} data-liquid-pan="wide" className="btn settings-glass-btn w-full justify-center rounded-full">
                 {loading ? t("auth.jellyfin.submitting") : t("auth.local.submit")}
               </button>
             </form>
@@ -255,7 +263,8 @@ function LoginForm() {
 
         <Link
           href="/status"
-          className="mx-auto mt-8 flex w-fit items-center gap-1.5 text-xs text-slate-600 transition-colors hover:text-slate-400"
+          data-liquid-pan="wide"
+          className="settings-glass-btn mx-auto mt-8 flex w-fit items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200"
         >
           <Activity size={13} /> {t("auth.statusLink")}
         </Link>

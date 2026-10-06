@@ -192,3 +192,12 @@ describe("relus le 24/09/2026 au soir", () => {
     }
   });
 });
+
+describe("les motifs du diagnostic (06/10/2026)", () => {
+  // Un blocage n'a pour motif que sa position : « stall: # s » ne disait rien.
+  it("regroupe les blocages sous leur seul nom, sans position masquée", () => {
+    const records = [...seance("a", "st", IPHONE, true), ...seance("b", "st", MAC, true)];
+    const d = diagnoseTitles(buildSeances(records)).find((x) => x.itemId === "st");
+    expect(d?.reasons).toEqual([{ reason: "stall", count: 2 }]);
+  });
+});

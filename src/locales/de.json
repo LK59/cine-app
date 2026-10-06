@@ -197,7 +197,10 @@
       "title": "Genauer ansehen",
       "tokenRefused": "Token abgelehnt",
       "tokenStale": "Für den Medienserver unsichtbar",
-      "clientErrors": "{n} Browserfehler|{n} Browserfehler"
+      "clientErrors": "{n} Browserfehler|{n} Browserfehler",
+      "tokenStaleSince": "Seit {when} nicht von Jellyfin gesehen",
+      "tokenStaleNever": "Nie von Jellyfin gesehen",
+      "tokenStaleHint": "Nutzt die App, aber Jellyfin sieht keine Aktivität des Kontos: Entweder wird die App ohne Wiedergabe geöffnet, oder das Jellyfin-Token funktioniert nicht mehr — Positionen und „gesehen“ würden dann nicht gespeichert. Ab- und wieder Anmelden behebt den zweiten Fall."
     },
     "week": {
       "title": "Die letzten sieben Tage",
@@ -479,8 +482,14 @@
         "everywhere": "Es hat auch anderswo Probleme: {p} % seiner anderen Sitzungen sind fehlgeschlagen.",
         "onlyHere": "Seine {n} anderen Sitzungen liefen gut: Es ist dieser Titel auf diesem Gerät.",
         "mixed": "Er ist bei {n} Zuschauern fehlgeschlagen, die {clean} anderen haben ihn problemlos gesehen, ohne erkennbare Gemeinsamkeit.",
-        "alone": "Nur {who} hat ihn geöffnet: noch nichts zu vergleichen."
-      }
+        "alone": "Nur {who} hat ihn geöffnet: noch nichts zu vergleichen.",
+        "platformOne": "Er ist auf {device} bei {n} Personen fehlgeschlagen; die andere Person hat ihn anderswo problemlos gesehen: dieser Gerätetyp.",
+        "deviceOne": "Er ist nur bei {who} ({device}) fehlgeschlagen; die andere Person hat ihn problemlos gesehen: dieses Gerät.",
+        "mixedOne": "Er ist bei {n} Zuschauern fehlgeschlagen, die andere Person hat ihn problemlos gesehen, ohne erkennbare Gemeinsamkeit."
+      },
+      "clearAll": "Alle löschen",
+      "clearOne": "{title} löschen",
+      "clearHint": "Löschen: Der Titel erscheint wieder, wenn er erneut fehlschlägt."
     },
     "frise": {
       "title": "Die Sitzung auf einen Blick",

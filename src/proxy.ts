@@ -150,8 +150,8 @@ function isAllowedForEveryone(method: string, pathname: string): boolean {
  * Mais la même donnée sortait encore par `/api/dashboard` (son champ `activity`) et par
  * `/api/timeline/imports` : la règle ci-dessus ne protégeait rien. Et `/api/stats/storage?refresh=1`
  * laissait n'importe quel compte relancer en boucle le parcours complet des disques. Les trois ne
- * servent que la gestion ; le seul appel venu du cinéma — le préchargement de `/gestion` au survol
- * du bouton du rail — n'existe que pour l'administrateur (`PlayerRail`). Motifs exacts :
+ * servent que la gestion, que le cinéma n'ouvre plus que depuis l'onglet Compte de
+ * l'administrateur (le bouton du rail a été retiré le 06/10/2026). Motifs exacts :
  * `/api/stats/storage-forecast` et les autres `/api/stats/*` ne sont pas attrapés (29/09/2026).
  */
 const ADMIN_ONLY_READS: RegExp[] = [

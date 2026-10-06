@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Stethoscope } from "lucide-react";
+import { ChevronDown, ChevronUp, Stethoscope, X } from "lucide-react";
+import { mutate } from "swr";
+import { apiAction } from "@/lib/apiAction";
+import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
 import { Panel, Poster, ago, type T } from "@/components/activity/parts";
 import { ActivityLink } from "@/components/activity/nav";
@@ -18,21 +21,23 @@ const VERDICT_TONE: Record<Verdict["kind"], string> = {
 function sentence(d: TitleDiagnosis, t: T): string {
   const failing = d.viewers.filter((v) => v.failed > 0);
   const clean = d.viewers.length - failing.length;
+  // « les 1 autres » : une seule personne sans souci a sa propre phrase.
+  const one = clean === 1 ? "One" : "";
   const v = d.verdict;
   switch (v.kind) {
     case "file":
       return t("activity.diagnosis.why.file", { n: failing.length });
     case "platform":
-      return t("activity.diagnosis.why.platform", { device: v.device, n: failing.length, clean });
+      return t(`activity.diagnosis.why.platform${one}`, { device: v.device, n: failing.length, clean });
     case "device": {
       const viewer = failing[0];
-      const base = t("activity.diagnosis.why.device", { who: v.user, device: v.device, clean });
+      const base = t(`activity.diagnosis.why.device${one}`, { who: v.user, device: v.device, clean });
       if (!viewer.elsewhere.seances) return base;
       const share = Math.round((viewer.elsewhere.failed / viewer.elsewhere.seances) * 100);
       return `${base} ${v.everywhere ? t("activity.diagnosis.why.everywhere", { p: share }) : t("activity.diagnosis.why.onlyHere", { n: viewer.elsewhere.seances })}`;
     }
     case "mixed":
-      return t("activity.diagnosis.why.mixed", { n: failing.length, clean });
+      return t(`activity.diagnosis.why.mixed${one}`, { n: failing.length, clean });
     case "alone":
       return t("activity.diagnosis.why.alone", { who: v.user });
   }
@@ -51,7 +56,25 @@ const FOLDED = 2;
  */
 export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; now: number; days: number }) {
   const t = useT();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  /**
+   * Effacer : le titre quitte la liste jusqu'à son prochain échec (`diagnosisCleared.ts`). La vue
+   * d'ensemble est relue aussitôt, plutôt qu'au prochain rafraîchissement de vingt secondes.
+   */
+  async function clear(keys: string[]) {
+    if (busy || keys.length === 0) return;
+    setBusy(true);
+    try {
+      await apiAction("/api/admin/activity/diagnosis", { method: "POST", body: JSON.stringify({ keys }) });
+      await mutate("/api/admin/activity");
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
+    } finally {
+      setBusy(false);
+    }
+  }
   const shown = open ? items : items.slice(0, FOLDED);
   const toggle =
     items.length > FOLDED ? (
@@ -66,7 +89,17 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
       </button>
     ) : null;
   return (
-    <Panel title={t("activity.diagnosis.title", { n: days })} icon={Stethoscope}>
+    <Panel
+      title={t("activity.diagnosis.title", { n: days })}
+      icon={Stethoscope}
+      action={
+        items.length > 0 ? (
+          <button type="button" disabled={busy} onClick={() => void clear(items.map((d) => d.key))} className="text-xs text-slate-400 hover:text-white disabled:opacity-50">
+            {t("activity.diagnosis.clearAll")}
+          </button>
+        ) : undefined
+      }
+    >
       {items.length ? (
         <ul className="divide-y divide-white/5">
           {shown.map((d) => (
@@ -75,6 +108,16 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
               <div className="min-w-0 flex-1 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="min-w-0 truncate font-medium text-white">{d.title}</span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void clear([d.key])}
+                    aria-label={t("activity.diagnosis.clearOne", { title: d.title })}
+                    title={t("activity.diagnosis.clearHint")}
+                    className="order-last ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-white/10 hover:text-white disabled:opacity-50"
+                  >
+                    <X size={14} />
+                  </button>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${VERDICT_TONE[d.verdict.kind]}`}>
                     {t(`activity.diagnosis.verdict.${d.verdict.kind}`)}
                   </span>

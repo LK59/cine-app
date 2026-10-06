@@ -25,7 +25,7 @@ import {
 import { fetcher } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
-import { AlertChip, Avatar, DayBars, Panel, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, secs, type T } from "@/components/activity/parts";
+import { AlertChip, Avatar, DayBars, Panel, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, latest, secs, type T } from "@/components/activity/parts";
 import type { AccountSummary, WeekSignals, household } from "@/lib/activity/accounts";
 import type { ReportSummary } from "@/lib/reports";
 import { NOTIFICATION_CATEGORIES } from "@/lib/notifications";
@@ -156,9 +156,11 @@ function categoryLabel(id: string, t: T): string {
   return known ? t(known.labelKey) : id;
 }
 
-function alertLabel(a: AccountSummary["alerts"][number], t: T): string {
+function alertLabel(a: AccountSummary["alerts"][number], t: T, now: number): string {
   if (a.kind === "tokenRefused") return t("activity.alerts.tokenRefused");
-  if (a.kind === "tokenStale") return t("activity.alerts.tokenStale");
+  // Dit ce qu'on voit, avec depuis quand : l'application l'a vu cette semaine, Jellyfin non. Le
+  // libellé « Invisible pour le serveur média » ne disait ni depuis quand, ni ce que ça change.
+  if (a.kind === "tokenStale") return a.at ? t("activity.alerts.tokenStaleSince", { when: ago(a.at, now, t) }) : t("activity.alerts.tokenStaleNever");
   return t("activity.alerts.clientErrors", { n: a.count ?? 0 });
 }
 
@@ -173,7 +175,7 @@ function LiveCard({ a, now }: { a: AccountSummary; now: number }) {
       <span className="min-w-0 flex-1">
         <span className="flex items-center justify-between gap-2">
           <span className="truncate font-semibold text-white">{a.name}</span>
-          <PresenceBadge presence={a.presence} nowPlaying={playing} now={now} />
+          <PresenceBadge presence={a.presence} nowPlaying={playing} now={now} seenAt={latest(a.app.lastSeen, a.jellyfin.lastActivity)} />
         </span>
         {playing ? (
           <>
@@ -209,10 +211,16 @@ function AccountRow({ a, now }: { a: AccountSummary; now: number }) {
           {a.admin && <span className="rounded bg-accent-500/15 px-1.5 py-0.5 text-[10px] text-accent-300">{t("activity.accounts.admin")}</span>}
           {a.disabled && <span className="rounded bg-slate-500/20 px-1.5 py-0.5 text-[10px] text-slate-300">{t("activity.accounts.disabled")}</span>}
           {a.alerts.map((al) => (
-            <AlertChip key={al.kind} label={alertLabel(al, t)} />
+            <AlertChip key={al.kind} label={alertLabel(al, t, now)} />
           ))}
         </span>
-        <PresenceBadge presence={a.presence} nowPlaying={a.nowPlaying} now={now} />
+        <PresenceBadge presence={a.presence} nowPlaying={a.nowPlaying} now={now} seenAt={latest(a.app.lastSeen, a.jellyfin.lastActivity)} />
+        {/* Sur téléphone, les quatre colonnes ci-dessous sont masquées : l'essentiel en une ligne,
+            pour que la liste dise autre chose qu'une colonne d'« Absent » (06/10/2026). */}
+        <span className="mt-0.5 block truncate text-[11px] text-slate-500 md:hidden">
+          {t("activity.accounts.weekValue", { n: a.week.seances, d: hours(a.week.watchedSeconds) })}
+          {a.week.problems > 0 && <span className="text-amber-300"> · {t("activity.accounts.problems", { n: a.week.problems })}</span>}
+        </span>
       </span>
       <span className="hidden text-xs md:block">
         <span className="block text-slate-500">{t("activity.accounts.appSeen")}</span>
@@ -286,6 +294,9 @@ export function ActivityOverview() {
       {/* 2. Ce qui demande un regard. */}
       {alerts.length > 0 && (
         <Panel title={t("activity.alerts.title")} icon={ShieldAlert}>
+          {alerts.some((a) => a.alerts.some((al) => al.kind === "tokenStale")) && (
+            <p className="border-b border-white/5 px-4 py-2.5 text-xs leading-relaxed text-slate-500">{t("activity.alerts.tokenStaleHint")}</p>
+          )}
           <ul className="divide-y divide-white/5">
             {alerts.map((a) => (
               <li key={a.id}>
@@ -293,7 +304,7 @@ export function ActivityOverview() {
                   <span className="font-medium text-white">{a.name}</span>
                   {a.alerts.map((al) => (
                     <span key={al.kind} className="text-xs text-slate-400">
-                      {alertLabel(al, t)} · {ago(al.at, now, t)}
+                      {al.kind === "tokenStale" ? alertLabel(al, t, now) : `${alertLabel(al, t, now)} · ${ago(al.at, now, t)}`}
                     </span>
                   ))}
                 </ActivityLink>

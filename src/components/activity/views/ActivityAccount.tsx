@@ -44,6 +44,7 @@ import {
   clock,
   fullDate,
   hours,
+  latest,
   type T,
 } from "@/components/activity/parts";
 import { DeviceQualityList, Heatmap, TopTitles, AuthList, NotificationList } from "@/components/activity/insights";
@@ -257,7 +258,7 @@ export function ActivityAccount({ id }: { id: string }) {
             {p.admin && <span className="rounded bg-accent-500/15 px-1.5 py-0.5 text-xs font-medium text-accent-300">{t("activity.accounts.admin")}</span>}
             {p.disabled && <span className="rounded bg-slate-500/20 px-1.5 py-0.5 text-xs text-slate-300">{t("activity.accounts.disabled")}</span>}
           </h1>
-          <PresenceBadge presence={d.presence} nowPlaying={playing} now={now} />
+          <PresenceBadge presence={d.presence} nowPlaying={playing} now={now} seenAt={latest(p.lastActivity, ...d.appSessions.map((s) => s.lastSeenAt))} />
         </div>
         {d.appSessions.length > 0 && (
           <ConfirmButton
@@ -301,7 +302,9 @@ export function ActivityAccount({ id }: { id: string }) {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         {/* Ce qu'il a fait. */}
         <section className="card min-w-0 self-start overflow-hidden">
-          <div className="scrollbar-thin flex gap-1 overflow-x-auto border-b border-white/5 px-2">
+          {/* À la ligne plutôt qu'en défilement : sur téléphone, le défilement horizontal ne se
+              voyait pas, et « Vus récemment », « À voir »… étaient simplement coupés (06/10/2026). */}
+          <div className="flex flex-wrap gap-x-1 border-b border-white/5 px-2">
             {tabs.map(({ key, label, count, icon: Icon }) => (
               <button
                 key={key}
