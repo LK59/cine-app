@@ -213,8 +213,9 @@ function FinishedAsk({ itemId }: { itemId: string }) {
   return (
     <div
       role="status"
-      className="absolute right-4 z-10 w-[min(19rem,calc(100%-2rem))] animate-fade-in rounded-2xl bg-black/55 px-3.5 py-3 text-white ring-1 ring-white/10 backdrop-blur-md"
-      style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+      // Plus bas en portrait (07/10/2026) : sous l'encoche et la barre d'état d'un téléphone tenu
+      // droit, la carte était légèrement coupée en haut. En paysage, elle garde le coin.
+      className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-10 w-[min(19rem,calc(100%-2rem))] animate-fade-in rounded-2xl bg-black/55 px-3.5 py-3 text-white ring-1 ring-white/10 backdrop-blur-md portrait:top-[calc(env(safe-area-inset-top,0px)+3rem)]"
     >
       {state === "removed" ? (
         <p className="text-xs text-muted">{t("player.end.finishedRemoved")}</p>
