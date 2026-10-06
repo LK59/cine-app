@@ -540,6 +540,16 @@ function authEventsFor(userName: string, since: number) {
     .map((r) => ({ at: r._t, kind: String(r.kind ?? "?"), device: r.device ?? null, ip: r.ip ?? null, reason: r.reason ?? null, count: r.count ?? null, by: r.by ?? null }));
 }
 
+/**
+ * Les clés de tous les titres en échec sur trente jours, affichés ou non — « Tout effacer » vide la
+ * liste au lieu de faire monter les suivants (relu le 06/10/2026 : deux titres remontaient).
+ */
+export function failingTitleKeys(now = Date.now()): string[] {
+  const since = now - 30 * DAY;
+  const seances = buildSeances(readRecords("player", since)).filter((s) => s.start >= since);
+  return diagnoseTitles(seances, Number.POSITIVE_INFINITY).map((d) => d.key);
+}
+
 /** Le foyer sur trente jours : appareils, habitudes, connexions et notifications. */
 export function household(now = Date.now()) {
   const since = now - 30 * DAY;

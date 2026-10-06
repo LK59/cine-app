@@ -63,11 +63,11 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
    * Effacer : le titre quitte la liste jusqu'à son prochain échec (`diagnosisCleared.ts`). La vue
    * d'ensemble est relue aussitôt, plutôt qu'au prochain rafraîchissement de vingt secondes.
    */
-  async function clear(keys: string[]) {
+  async function clear(keys: string[] | "all") {
     if (busy || keys.length === 0) return;
     setBusy(true);
     try {
-      await apiAction("/api/admin/activity/diagnosis", { method: "POST", body: JSON.stringify({ keys }) });
+      await apiAction("/api/admin/activity/diagnosis", { method: "POST", body: JSON.stringify(keys === "all" ? { all: true } : { keys }) });
       await mutate("/api/admin/activity");
     } catch (error) {
       toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
@@ -94,7 +94,7 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
       icon={Stethoscope}
       action={
         items.length > 0 ? (
-          <button type="button" disabled={busy} onClick={() => void clear(items.map((d) => d.key))} className="text-xs text-slate-400 hover:text-white disabled:opacity-50">
+          <button type="button" disabled={busy} onClick={() => void clear("all")} className="text-xs text-slate-400 hover:text-white disabled:opacity-50">
             {t("activity.diagnosis.clearAll")}
           </button>
         ) : undefined
