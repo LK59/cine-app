@@ -14,6 +14,8 @@ import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { withErrorHandling } from "@/lib/api-helpers";
 import { config } from "@/lib/config";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
+import { libraryIndex, syncWatched, watchedRows } from "@/lib/watched";
+import type { WatchedRow } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -93,10 +95,16 @@ export async function GET(req: NextRequest) {
     // Une requête ciblée plutôt qu'un balayage de la bibliothèque filtré ensuite : elle répond
     // juste là où l'énumération par compte est incomplète sur cette installation, et elle
     // rapporte quelques dizaines d'éléments au lieu de plusieurs centaines.
-    const [lib, played, requests] = await Promise.all([
+    // « Vus » vient de la copie locale du compte (DECISIONS.md §51), accordée à Jellyfin juste
+    // avant — au plus une fois par minute : ce que Jellyfin a vu y entre, un titre arrivé reçoit
+    // son vu, un titre parti garde le sien. Une synchronisation qui échoue laisse la copie telle quelle.
+    const who = { userId, jfId: session.jfId ?? null };
+    const [lib, requests, index] = await Promise.all([
       playableLibrary(),
-      session.jfId ? cachedJellyfinPlayed(session.jfId).catch(() => []) : Promise.resolve([]),
       config.jellyseerr.apiKey ? getPlayerRequests(session).catch(() => []) : Promise.resolve([]),
+      syncWatched(who)
+        .catch(() => {})
+        .then(() => libraryIndex()),
     ]);
 
     // Les favoris Jellyfin qui n'avaient pas encore de ligne dans la liste locale y entrent ici,
@@ -156,24 +164,26 @@ export async function GET(req: NextRequest) {
           };
         });
 
-    // Le type vient de l'élément lui-même : ces deux listes mélangent films et séries.
-    const fromJellyfin = (items: JellyfinItem[]) =>
-      items.map((item): PlayerListItem => {
-        const type: "movie" | "series" = item.Type === "Series" ? "series" : "movie";
-        const tmdbRaw = getProviderIdCI(item.ProviderIds as Record<string, string> | undefined, "tmdb");
-        const tmdbId = tmdbRaw ? Number.parseInt(tmdbRaw, 10) || null : null;
-        const entry = tmdbId ? (type === "series" ? seriesLibrary.get(tmdbId) : movieLibrary.get(tmdbId)) : undefined;
+    // « Vus » : la copie locale, du plus récent au plus ancien. L'image du titre dans la
+    // bibliothèque quand on l'a, sinon celle de Jellyfin (par notre route : la sienne demande un
+    // jeton), sinon l'affiche TMDB enregistrée au marquage — la seule pour un titre vu ailleurs.
+    const fromWatched = (rows: WatchedRow[]) =>
+      rows.map((row): PlayerListItem => {
+        const type = row.mediaType;
+        const entry = type === "series" ? seriesLibrary.get(row.tmdbId) : movieLibrary.get(row.tmdbId);
+        const jellyfinId = (type === "series" ? index?.series.get(row.tmdbId) : index?.movies.get(row.tmdbId)) ?? null;
         return {
-          tmdbId,
+          tmdbId: row.tmdbId,
           type,
-          title: (tmdbId ? getTitleNames(tmdbId, type)[locale] : undefined) || item.Name,
-          year: item.ProductionYear ?? null,
-          // L'image passe par notre propre route : celle de Jellyfin demande un jeton, et
-          // l'optimiseur de Next ne transmet pas les cookies.
-          poster: item.ImageTags?.Primary ? `/api/jellyfin/image?itemId=${item.Id}&tag=${item.ImageTags.Primary}` : null,
+          title: getTitleNames(row.tmdbId, type)[locale] || row.title,
+          year: row.year,
+          poster:
+            (entry ? libraryPoster(undefined, entry.images, locale) : null) ??
+            (jellyfinId ? `/api/jellyfin/image?itemId=${jellyfinId}` : null) ??
+            watchlistPoster(row.posterPath),
           libraryId: entry?.id ?? null,
-          jellyfinId: item.Id,
-          addedAt: null,
+          jellyfinId,
+          addedAt: row.watchedAt,
         };
       });
 
@@ -185,7 +195,7 @@ export async function GET(req: NextRequest) {
       // ramenés à « À voir » par `migrate()`, où ils apparaissaient déjà ici — mais pas dans la
       // rangée « Ma liste » du cinéma, qui ne lisait que to_watch.
       toWatch: fromWatchlist(["to_watch"]),
-      watched: fromJellyfin(played).sort(byTitle),
+      watched: fromWatched(watchedRows(userId)),
     } satisfies PlayerListsPayload;
   }, "player-lists");
 }

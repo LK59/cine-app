@@ -35,6 +35,8 @@ export interface JellyfinItem {
     IsFavorite?: boolean;
   };
   ProviderIds?: { Tmdb?: string; Tvdb?: string; Imdb?: string };
+  /** Quand l'élément est entré dans la bibliothèque — un épisode arrivé après qu'une série a été marquée vue la fait revenir (§51). */
+  DateCreated?: string;
   /** Le chemin sur disque : un dossier pour une série, un fichier pour un film. Demandé par les listes d'administration (rapprochement par dossier). */
   Path?: string;
   ImageTags?: { Primary?: string };
@@ -524,13 +526,20 @@ export const jellyfin = {
 
   getResumeItems: async (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${cfg.url}/Users/${idSegment(userId)}/Items/Resume?Limit=10&MediaTypes=Video&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,SeriesName,SeriesId,IndexNumber,ParentIndexNumber&Recursive=true`,
+      `${cfg.url}/Users/${idSegment(userId)}/Items/Resume?Limit=10&MediaTypes=Video&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,SeriesName,SeriesId,IndexNumber,ParentIndexNumber,DateCreated&Recursive=true`,
       { headers }
     ),
 
   // Jellyfin only puts ProviderIds (Tvdb/Tmdb) on the Series item itself, never
   // on its Episode children — even when Fields=ProviderIds is requested on the
   // episode. Needed to resolve a "series sheet" link from a resume/recent episode.
+  /** Un élément seul, de quoi le rattacher à son titre : type, série, identifiants, date d'entrée (§51). */
+  getItemBasic: async (userId: string, itemId: string) =>
+    fetchJson<JellyfinItem>(
+      `${cfg.url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}?Fields=ProviderIds,SeriesId,DateCreated,IndexNumber,ParentIndexNumber,ProductionYear,ImageTags,UserData`,
+      { headers }
+    ),
+
   getItemProviderIds: async (userId: string, itemId: string) =>
     fetchJson<{ ProviderIds?: JellyfinItem["ProviderIds"] }>(
       `${cfg.url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}?Fields=ProviderIds`,
@@ -624,7 +633,7 @@ export const jellyfin = {
 
   getNextUpGlobal: async (userId: string, limit = 10) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${cfg.url}/Shows/NextUp?UserId=${idSegment(userId)}&Limit=${limit}&Fields=UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,SeriesName,SeriesId`,
+      `${cfg.url}/Shows/NextUp?UserId=${idSegment(userId)}&Limit=${limit}&Fields=UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,SeriesName,SeriesId,DateCreated`,
       { headers }
     ).then((res) => res.Items),
 

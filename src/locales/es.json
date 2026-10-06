@@ -1568,7 +1568,7 @@
       "watched": "Visto",
       "arrivedBadge": "{n} título disponible|{n} títulos disponibles",
       "requestsHint": "Usa la búsqueda para pedir un título. Se queda aquí hasta que esté disponible.",
-      "watchedHint": "Se rellena solo según lo que ves. Puedes corregirlo desde la ficha de un título.",
+      "watchedHint": "Se llena a medida que ves, y a mano desde la ficha de un título — incluso uno que la biblioteca no tiene. Un título que sale de la biblioteca se queda aquí.",
       "empty": {
         "requests": "Todavía no hay peticiones.",
         "toWatch": "Nada pendiente. Añade un título desde su ficha.",
@@ -1622,7 +1622,9 @@
       "open": "Abrir la ficha",
       "request": "Pedir",
       "addToList": "Añadir a mi lista",
-      "inList": "En mi lista"
+      "inList": "En mi lista",
+      "watched": "Visto",
+      "markWatched": "Marcar como visto"
     },
     "person": {
       "less": "Ver menos",
@@ -1798,7 +1800,14 @@
       "finished": "Terminado",
       "replay": "Volver a ver",
       "done": "Volver",
-      "suite": "Siguiente de la saga"
+      "suite": "Siguiente de la saga",
+      "finishedMovieAsk": "Has terminado esta película. ¿Quieres quitarla de tu lista «Por ver»?",
+      "finishedMovieNote": "(Esta película se ha añadido a tu lista «Visto».)",
+      "finishedSeriesAsk": "Has terminado esta serie. ¿Quieres quitarla de tu lista «Por ver»?",
+      "finishedSeriesNote": "(Esta serie se ha añadido a tu lista «Visto».)",
+      "finishedRemove": "Quitar",
+      "finishedKeep": "Mantener",
+      "finishedRemoved": "Quitada de tu lista «Por ver»."
     },
     "unplayable": "Este archivo no se puede reproducir en este navegador.",
     "handingOver": "Preparando la reproducción…",
@@ -1944,7 +1953,8 @@
     "seriesMarkedUnwatched": "Serie marcada como no vista",
     "removeFromContinue": "Quitar de Continuar viendo",
     "removeFromContinueFailed": "No se pudo quitar este título de Continuar viendo.",
-    "titleUnavailable": "Este título aún no está disponible en el cine."
+    "titleUnavailable": "Este título aún no está disponible en el cine.",
+    "seriesStillWatched": "Todos sus episodios están vistos: la serie sigue en «Visto»."
   },
   "services": {
     "notConfigured": "{name} no está configurado.",

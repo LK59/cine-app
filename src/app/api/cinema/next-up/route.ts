@@ -3,6 +3,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin, type JellyfinItem } from "@/lib/clients/jellyfin";
 import { sonarrIdsBySeriesId } from "@/lib/sonarrLink";
+import { libraryIndex, withoutWatched } from "@/lib/watched";
 
 export interface CinemaNextUpItem {
   jellyfinItemId: string;
@@ -51,7 +52,10 @@ export async function GET(req: NextRequest) {
   const session = await verifySessionFull(token);
   if (!session?.jfId) return NextResponse.json({ items: [] });
 
-  const items = await jellyfin.getNextUpGlobal(session.jfId, 10).catch(() => []);
+  // Sans les séries vues (DECISIONS.md §51), sauf un épisode entré après le marquage : on en demande
+  // davantage pour que le filtre ne raccourcisse pas la rangée.
+  const [raw, index] = await Promise.all([jellyfin.getNextUpGlobal(session.jfId, 20).catch(() => []), libraryIndex()]);
+  const items = withoutWatched(session.jfId, raw, index).slice(0, 10);
 
   // La correspondance vers Sonarr — une carte de reprise doit pouvoir ouvrir sa fiche, et pas
   // seulement lancer la lecture. Le calcul est partagé avec le flux « Reprendre » : voir

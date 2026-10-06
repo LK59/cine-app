@@ -1,8 +1,10 @@
 "use client";
 
-import useSWR from "swr";
+import { useEffect, useState } from "react";
+import useSWR, { mutate as globalMutate } from "swr";
 import { Play, RotateCcw, X } from "lucide-react";
-import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY, playerBootstrapOptions } from "@/lib/swr";
+import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY, playerBootstrapOptions, TO_WATCH_KEY } from "@/lib/swr";
+import { apiAction } from "@/lib/apiAction";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -77,6 +79,8 @@ export function PlayerEndScreen({
             {t("player.end.done")}
           </button>
         </div>
+
+        <FinishedAsk itemId={itemId} />
 
         {subject && onPlayNext && (
           <CollectionSuiteCard parts={collection.all} currentRadarrId={subject.radarrId} watched={{}} resumeTicks={{}} onPlay={onPlayNext} />
@@ -161,5 +165,68 @@ function SuiteAsk({ movie, ...props }: SuiteProps & { movie: CinemaMovie }) {
       watched={{ ...props.watched, [movie.jellyfinItemId]: state.watched }}
       resumeTicks={{ ...props.resumeTicks, [movie.jellyfinItemId]: state.progress?.resumeTicks ?? null }}
     />
+  );
+}
+
+type FinishedAnswer = { finished: boolean; type?: "movie" | "series"; tmdbId?: number; title?: string; inToWatch?: boolean };
+
+/**
+ * « Vous avez terminé ce film » (DECISIONS.md §51, demandé le 06/10/2026).
+ *
+ * Le titre vient de passer dans « Vus » — le film, ou la série dont c'était le dernier épisode à
+ * voir. S'il est encore dans « À voir », on propose de l'en retirer, sans le faire d'office : on
+ * peut vouloir le revoir. Discret, sous les boutons ; rien du tout s'il n'est pas dans la liste.
+ *
+ * Avec `playerBootstrapOptions` : le film occupe encore l'écran, et une requête mise en pause par
+ * SWR serait abandonnée, pas différée (CLAUDE.md).
+ */
+function FinishedAsk({ itemId }: { itemId: string }) {
+  const t = useT();
+  const { data } = useSWR<FinishedAnswer>(`/api/player/watched/finished?itemId=${encodeURIComponent(itemId)}`, fetcher, {
+    ...playerBootstrapOptions,
+    revalidateOnFocus: false,
+    revalidateIfStale: false,
+  });
+  const [state, setState] = useState<"ask" | "busy" | "removed" | "kept">("ask");
+
+  // « Vus » vient de changer : la liste le montre dès qu'on rouvre « Ma liste ».
+  useEffect(() => {
+    if (data?.finished) void globalMutate("/api/player/lists");
+  }, [data?.finished]);
+
+  if (!data?.finished || !data.inToWatch || !data.type || !data.tmdbId || state === "kept") return null;
+  const series = data.type === "series";
+
+  async function remove() {
+    setState("busy");
+    try {
+      await apiAction("/api/watchlist", { method: "DELETE", body: JSON.stringify({ tmdbId: data!.tmdbId, mediaType: data!.type }) });
+      setState("removed");
+      void globalMutate("/api/player/lists");
+      void globalMutate(TO_WATCH_KEY);
+    } catch {
+      setState("ask");
+    }
+  }
+
+  return (
+    <div role="status" className="mt-5 max-w-xl rounded-2xl bg-white/[0.06] px-4 py-3 text-sm text-white ring-1 ring-white/10">
+      {state === "removed" ? (
+        <p className="text-muted">{t("player.end.finishedRemoved")}</p>
+      ) : (
+        <>
+          <p>{t(series ? "player.end.finishedSeriesAsk" : "player.end.finishedMovieAsk")}</p>
+          <p className="mt-0.5 text-xs text-subtle">{t(series ? "player.end.finishedSeriesNote" : "player.end.finishedMovieNote")}</p>
+          <div className="mt-2.5 flex gap-2">
+            <button type="button" disabled={state === "busy"} onClick={() => void remove()} ref={liquidButtonRef} data-liquid className="btn nav-glass rounded-full px-3.5 py-1.5 text-xs text-white disabled:opacity-60">
+              {t("player.end.finishedRemove")}
+            </button>
+            <button type="button" onClick={() => setState("kept")} ref={liquidButtonRef} data-liquid className="rounded-full px-3.5 py-1.5 text-xs text-muted hover:text-white">
+              {t("player.end.finishedKeep")}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

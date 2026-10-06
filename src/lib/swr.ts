@@ -234,6 +234,9 @@ export async function refreshAfterPlayback(reported: Promise<void>, itemId: stri
   forgetPrefetchedPlaybackState();
   if (!(await whenScreenIsFree())) return;
   await revalidateWatchState(itemId);
+  // « Ma liste » aussi : un film fini vient d'entrer dans « Vu » (DECISIONS.md §51), et l'onglet le
+  // montrait seulement au chargement suivant.
+  void globalMutate("/api/player/lists");
 }
 
 /**

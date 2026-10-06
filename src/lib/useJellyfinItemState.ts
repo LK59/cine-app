@@ -61,11 +61,25 @@ export function useJellyfinItemState(
       setBusy(true);
       void mutate({ ...data, [field]: next }, { revalidate: false });
       try {
-        await apiAction(field === "played" ? "/api/jellyfin/played" : "/api/jellyfin/favorite", {
-          method: "POST",
-          body: JSON.stringify(field === "played" ? { itemId, played: next } : { itemId, favorite: next }),
-        });
+        // Une série se marque au niveau de la série seulement (DECISIONS.md §51) : aucun épisode
+        // n'est coché chez Jellyfin, qui garde le détail réel de ce qui a été vu. Un film passe par
+        // Jellyfin, qui fait foi tant qu'il l'a ; la copie locale suit dans la route.
+        const seriesMark = field === "played" && kind === "series";
+        const answer = (await apiAction(
+          seriesMark ? "/api/player/watched" : field === "played" ? "/api/jellyfin/played" : "/api/jellyfin/favorite",
+          {
+            method: "POST",
+            body: JSON.stringify(seriesMark ? { itemId, watched: next } : field === "played" ? { itemId, played: next } : { itemId, favorite: next }),
+          }
+        )) as { stillWatched?: boolean } | null;
         void mutate();
+        // Démarquée, mais tous ses épisodes sont vus dans Jellyfin : elle reste vue, et on le dit.
+        if (seriesMark && answer?.stillWatched) {
+          toast.success(t("cinema.seriesStillWatched"));
+          void globalMutate("/api/player/lists");
+          void revalidateWatchState(itemId);
+          return;
+        }
         // Dit, comme l'ajout à « À voir » : le geste change des rangées ailleurs dans l'app, et
         // sans un mot il ressemblait à un bouton qui n'avait rien fait (22/09/2026).
         if (field === "played") {

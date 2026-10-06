@@ -48,6 +48,29 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_watchlist_user ON watchlist (user_id);
     CREATE INDEX IF NOT EXISTS idx_watchlist_status ON watchlist (user_id, status);
 
+    -- Les titres vus d'un compte (DECISIONS.md §51, 06/10/2026). Une copie tenue à jour de ce que
+    -- Jellyfin sait pour les titres qu'il possède, et la seule trace pour ceux qu'il n'a pas (vus
+    -- ailleurs, ou partis de la bibliothèque) : le « vu » d'un compte ne se perd plus. Ce n'est pas
+    -- la table « watchlist », dont migrate() efface toujours les anciens statuts « watched ».
+    --   manual     : une série marquée vue à la main, sans toucher à ses épisodes ;
+    --   jf_present : au dernier passage, le titre était dans Jellyfin ;
+    --   jf_played  : et Jellyfin le disait vu — c'est ce qui distingue « démarqué dans Jellyfin »
+    --                (on suit) de « arrivé dans Jellyfin » (on y reporte le vu).
+    CREATE TABLE IF NOT EXISTS watched_titles (
+      user_id     TEXT    NOT NULL,
+      media_type  TEXT    NOT NULL CHECK (media_type IN ('movie','series')),
+      tmdb_id     INTEGER NOT NULL,
+      title       TEXT    NOT NULL DEFAULT '',
+      year        INTEGER,
+      poster_path TEXT,
+      watched_at  INTEGER NOT NULL,
+      manual      INTEGER NOT NULL DEFAULT 0,
+      jf_present  INTEGER NOT NULL DEFAULT 0,
+      jf_played   INTEGER NOT NULL DEFAULT 0,
+      updated_at  INTEGER NOT NULL,
+      PRIMARY KEY (user_id, media_type, tmdb_id)
+    );
+
     -- Deux tables que rien n'écrivait plus : timeline_events (lue par la notification
     -- « nouvel épisode », qui n'est donc jamais partie — elle lit l'historique de Sonarr depuis)
     -- et recommendations_hidden (la page Recommandations, supprimée). Vides en production au
@@ -429,6 +452,69 @@ const SELECT_WATCHLIST = `
     updated_at    AS updatedAt
   FROM watchlist
 `;
+
+// ─── Titres vus (DECISIONS.md §51) ────────────────────────────────────────────
+
+export interface WatchedRow {
+  userId: string;
+  mediaType: "movie" | "series";
+  tmdbId: number;
+  title: string;
+  year: number | null;
+  posterPath: string | null;
+  watchedAt: number;
+  manual: boolean;
+  jfPresent: boolean;
+  jfPlayed: boolean;
+  updatedAt: number;
+}
+
+type WatchedRaw = {
+  user_id: string; media_type: "movie" | "series"; tmdb_id: number; title: string; year: number | null;
+  poster_path: string | null; watched_at: number; manual: number; jf_present: number; jf_played: number; updated_at: number;
+};
+const fromWatchedRaw = (r: WatchedRaw): WatchedRow => ({
+  userId: r.user_id, mediaType: r.media_type, tmdbId: r.tmdb_id, title: r.title, year: r.year, posterPath: r.poster_path,
+  watchedAt: r.watched_at, manual: r.manual === 1, jfPresent: r.jf_present === 1, jfPlayed: r.jf_played === 1, updatedAt: r.updated_at,
+});
+
+/** Accès bruts : la règle (Jellyfin d'abord, copie locale toujours) vit dans `src/lib/watched.ts`. */
+export const watchedDb = {
+  all(userId: string): WatchedRow[] {
+    return (getDb().prepare("SELECT * FROM watched_titles WHERE user_id = ? ORDER BY watched_at DESC").all(userId) as WatchedRaw[]).map(fromWatchedRaw);
+  },
+  get(userId: string, mediaType: "movie" | "series", tmdbId: number): WatchedRow | null {
+    const r = getDb().prepare("SELECT * FROM watched_titles WHERE user_id = ? AND media_type = ? AND tmdb_id = ?").get(userId, mediaType, tmdbId) as WatchedRaw | undefined;
+    return r ? fromWatchedRaw(r) : null;
+  },
+  /** Crée ou met à jour ; `watchedAt` n'est remplacé que s'il est donné (un vu ancien garde sa date). */
+  upsert(row: Omit<WatchedRow, "updatedAt" | "watchedAt"> & { watchedAt?: number }, now = Date.now()): void {
+    getDb().prepare(`
+      INSERT INTO watched_titles (user_id, media_type, tmdb_id, title, year, poster_path, watched_at, manual, jf_present, jf_played, updated_at)
+      VALUES (@userId, @mediaType, @tmdbId, @title, @year, @posterPath, @watchedAt, @manual, @jfPresent, @jfPlayed, @now)
+      ON CONFLICT (user_id, media_type, tmdb_id) DO UPDATE SET
+        title = CASE WHEN excluded.title <> '' THEN excluded.title ELSE watched_titles.title END,
+        year = COALESCE(excluded.year, watched_titles.year),
+        poster_path = COALESCE(excluded.poster_path, watched_titles.poster_path),
+        watched_at = CASE WHEN @hasDate THEN excluded.watched_at ELSE watched_titles.watched_at END,
+        manual = excluded.manual,
+        jf_present = excluded.jf_present,
+        jf_played = excluded.jf_played,
+        updated_at = excluded.updated_at
+    `).run({
+      ...row,
+      manual: row.manual ? 1 : 0,
+      jfPresent: row.jfPresent ? 1 : 0,
+      jfPlayed: row.jfPlayed ? 1 : 0,
+      watchedAt: row.watchedAt ?? now,
+      hasDate: row.watchedAt !== undefined ? 1 : 0,
+      now,
+    });
+  },
+  remove(userId: string, mediaType: "movie" | "series", tmdbId: number): void {
+    getDb().prepare("DELETE FROM watched_titles WHERE user_id = ? AND media_type = ? AND tmdb_id = ?").run(userId, mediaType, tmdbId);
+  },
+};
 
 export const watchlistDb = {
   getAll(userId: string, status?: WatchlistStatus): WatchlistItem[] {

@@ -3,6 +3,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { isJellyfinId } from "@/lib/jellyfinPath";
+import { isWatchedLocally, libraryIndex } from "@/lib/watched";
 
 export interface CinemaProgressPayload {
   resumeTicks: number | null;
@@ -33,6 +34,16 @@ export interface CinemaProgressPayload {
 // 0 unless you happened to open it via the Continue Watching row instead (which gets its resume
 // point from a different endpoint entirely — Jellyfin's own resume list). This is the movie-sheet
 // equivalent of what the episodes route already does for series' nextEpisode.
+async function seriesMarkedHere(session: { jfId?: string; u: string }, itemId: string): Promise<boolean> {
+  try {
+    const index = await libraryIndex();
+    const title = index?.byJellyfinId.get(itemId);
+    return title?.type === "series" ? isWatchedLocally(session.jfId ?? session.u, "series", title.tmdbId) : false;
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
   const { itemId } = await props.params;
   // Même raison que les deux autres routes de lecture : `getItemUserData` l'interpole dans
@@ -48,7 +59,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   const payload: CinemaProgressPayload = {
     resumeTicks: item?.UserData?.PlaybackPositionTicks ?? null,
     runtimeTicks: item?.RunTimeTicks ?? null,
-    played: Boolean(item?.UserData?.Played),
+    // Une série marquée vue à la main l'est sans qu'aucun épisode soit coché (DECISIONS.md §51) :
+    // l'état de série vit chez nous. Un film, lui, suit Jellyfin, qui fait foi tant qu'il l'a.
+    played: Boolean(item?.UserData?.Played) || (await seriesMarkedHere(session, itemId)),
     favorite: Boolean(item?.UserData?.IsFavorite),
     known: item !== null,
   };

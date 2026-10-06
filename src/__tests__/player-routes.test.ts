@@ -41,6 +41,15 @@ vi.mock("@/lib/clients/tmdb", () => ({
 
 // `hasFile` / `episodeFileCount` comptent : la bibliothèque n'indexe que ce qui est réellement
 // ouvrable, pas ce que Radarr et Sonarr se contentent de surveiller (voir playerLibrary).
+// Le « vu » (DECISIONS.md §51) : ses propres tests sont dans watched.test.ts ; ici, la copie
+// locale rend ce que le test lui fait rendre.
+const watchedState = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[] }));
+vi.mock("@/lib/watched", () => ({
+  syncWatched: async () => {},
+  libraryIndex: async () => null,
+  watchedRows: () => watchedState.rows,
+  isWatchedLocally: () => false,
+}));
 vi.mock("@/lib/server-cache", () => ({
   cachedMovies: async () => [
     { id: 42, tmdbId: 603, hasFile: true },
@@ -256,6 +265,7 @@ describe("DELETE /api/player/requests/[id]", () => {
 
 describe("GET /api/player/lists", () => {
   it("reads each list from the source that owns it", async () => {
+    watchedState.rows = [{ userId: "u", mediaType: "movie", tmdbId: 550, title: "Vu", year: 1999, posterPath: null, watchedAt: 1, manual: false, jfPresent: true, jfPlayed: true, updatedAt: 1 }];
     watchlistDb.getAll.mockReturnValue([
       { tmdbId: 603, mediaType: "movie", title: "À voir", year: 1999, posterPath: null, status: "to_watch" },
       // Les anciens favoris sont ramenés à « À voir » par `migrate()` — voir
@@ -272,9 +282,9 @@ describe("GET /api/player/lists", () => {
     expect(body.toWatch.map((i: { title: string }) => i.title)).toEqual(["À voir", "Ancien favori"]);
     expect(body.toWatch[0].libraryId).toBe(42);
 
-    // Jellyfin : ce qu'il sait déjà, et qu'on ne recopie donc pas.
+    // « Vu » : la copie locale du compte, accordée à Jellyfin juste avant (DECISIONS.md §51).
     expect(body.watched.map((i: { title: string }) => i.title)).toEqual(["Vu"]);
-    expect(body.watched[0].jellyfinId).toBe("jf1");
+    expect(body.watched[0].tmdbId).toBe(550);
 
     // Trois listes, et rien d'autre.
     expect(Object.keys(body).sort()).toEqual(["requests", "toWatch", "watched"]);

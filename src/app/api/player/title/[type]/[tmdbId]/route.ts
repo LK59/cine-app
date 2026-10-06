@@ -11,6 +11,7 @@ import { resolveRequestState, isReleased, type PlayerRequestState } from "@/lib/
 import { config } from "@/lib/config";
 import { titleDownloadProgress } from "@/lib/downloadProgress";
 import { tvEpisodeRuntime } from "@/lib/tvRuntime";
+import { isWatchedLocally } from "@/lib/watched";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,13 @@ export interface PlayerTitlePayload {
    * un titre absent de la bibliothèque — voir `titleDownloadProgress`.
    */
   downloading: number | null;
+  /**
+   * Vu par ce compte (DECISIONS.md §51) : la copie locale, qui tient aussi les titres absents de
+   * Jellyfin. Le bouton « Vu » de la fiche de découverte la lit et l'écrit.
+   */
+  watched: boolean;
+  /** Le chemin TMDB de l'affiche, gardé avec un titre marqué vu (sa seule image s'il n'est pas chez nous). */
+  posterPath: string | null;
 }
 
 /**
@@ -107,6 +115,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
         mediaStatus: media?.mediaInfo?.status ?? null,
         watchlistStatus: userId ? watchlistDb.get(userId, "movie", tmdbId)?.status ?? null : null,
         downloading,
+        watched: userId ? isWatchedLocally(userId, "movie", tmdbId) : false,
       });
     }
 
@@ -131,6 +140,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       mediaStatus: media?.mediaInfo?.status ?? null,
       watchlistStatus: userId ? watchlistDb.get(userId, "series", tmdbId)?.status ?? null : null,
       downloading,
+      watched: userId ? isWatchedLocally(userId, "series", tmdbId) : false,
     });
   }, "player-title");
 }
@@ -152,6 +162,7 @@ function build(input: {
   mediaStatus: number | null;
   watchlistStatus: WatchlistStatus | null;
   downloading: number | null;
+  watched: boolean;
 }): PlayerTitlePayload {
   return {
     tmdbId: input.tmdbId,
@@ -181,5 +192,7 @@ function build(input: {
         : resolveRequestState({ mediaStatus: input.mediaStatus, released: isReleased(input.releaseDate) }),
     watchlistStatus: input.watchlistStatus,
     downloading: input.downloading,
+    watched: input.watched,
+    posterPath: input.posterPath,
   };
 }

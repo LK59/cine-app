@@ -1568,7 +1568,7 @@
       "watched": "Watched",
       "arrivedBadge": "{n} title arrived|{n} titles arrived",
       "requestsHint": "Use search to request a title. It stays here until it becomes available.",
-      "watchedHint": "Filled in automatically as you watch. You can correct it from a title’s page.",
+      "watchedHint": "Filled in as you watch, and by hand from a title’s page — even a title the library doesn’t have. A title that leaves the library stays here.",
       "empty": {
         "requests": "No requests yet.",
         "toWatch": "Nothing lined up yet. Add a title from its page.",
@@ -1591,7 +1591,7 @@
       "addPlaceholder": "Add a title to the list…",
       "addHint": "Type the name of a film or a series.",
       "addNothing": "Nothing found.",
-      "addToWatch": "Add to “À voir”",
+      "addToWatch": "Add to “To watch”",
       "alreadyInList": "Already in the list",
       "failed": "Your list can’t be loaded right now."
     },
@@ -1622,7 +1622,9 @@
       "open": "Open the page",
       "request": "Request",
       "addToList": "Add to my list",
-      "inList": "In my list"
+      "inList": "In my list",
+      "watched": "Watched",
+      "markWatched": "Mark as watched"
     },
     "person": {
       "less": "Show less",
@@ -1798,7 +1800,14 @@
       "finished": "Finished",
       "replay": "Watch again",
       "done": "Done",
-      "suite": "Next in the collection"
+      "suite": "Next in the collection",
+      "finishedMovieAsk": "You finished this film. Remove it from your “To watch” list?",
+      "finishedMovieNote": "(This film has been added to your “Watched” list.)",
+      "finishedSeriesAsk": "You finished this series. Remove it from your “To watch” list?",
+      "finishedSeriesNote": "(This series has been added to your “Watched” list.)",
+      "finishedRemove": "Remove",
+      "finishedKeep": "Keep",
+      "finishedRemoved": "Removed from your “To watch” list."
     },
     "unplayable": "This file cannot be played in this browser.",
     "handingOver": "Getting playback ready…",
@@ -1944,7 +1953,8 @@
     "seriesMarkedUnwatched": "Series marked as unwatched",
     "removeFromContinue": "Remove from Continue watching",
     "removeFromContinueFailed": "This title couldn't be removed from Continue watching.",
-    "titleUnavailable": "This title isn't available in the cinema yet."
+    "titleUnavailable": "This title isn't available in the cinema yet.",
+    "seriesStillWatched": "All its episodes are watched: the series stays in “Watched”."
   },
   "services": {
     "notConfigured": "{name} is not configured.",

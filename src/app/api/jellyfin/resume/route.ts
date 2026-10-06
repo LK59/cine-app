@@ -5,6 +5,7 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { sonarrIdsBySeriesId } from "@/lib/sonarrLink";
 import { isJellyfinId } from "@/lib/jellyfinPath";
+import { libraryIndex, withoutWatched } from "@/lib/watched";
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -13,11 +14,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ items: [] });
   }
 
-  const [resumeData, movies, series] = await Promise.all([
+  const [rawResume, movies, series, index] = await Promise.all([
     jellyfin.getResumeItems(session.jfId).catch(() => ({ Items: [] })),
     cachedMovies().catch(() => []),
     cachedSeries().catch(() => []),
+    libraryIndex(),
   ]);
+  // Sans ce qui est vu (DECISIONS.md §51) : une série marquée vue, un film marqué vu depuis sa
+  // dernière lecture. Le filtre est commun à « Reprendre » et « À suivre » (`withoutWatched`).
+  const resumeData = { ...rawResume, Items: withoutWatched(session.jfId, rawResume.Items, index) };
 
   // Seulement les films qui ont un fichier : le catalogue du cinéma ne contient qu'eux. Un film en
   // cours dont Radarr n'a plus le fichier (en pleine mise à niveau, par exemple) menait à une fiche

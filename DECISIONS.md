@@ -181,7 +181,8 @@ qui montre le fichier tel qu'il est, pas un choix de lecture ; à aligner le jou
 ## 6. « Vu » et « Favori »
 
 **Règle.** Ils appartiennent à Jellyfin. On n'écrit que si on a pu lire (`known`) : une lecture
-ratée ne doit pas devenir une écriture.
+ratée ne doit pas devenir une écriture. **Pour « Vu », remplacé le 06/10/2026 par §51** : Jellyfin
+fait toujours foi pour les titres qu'il possède, mais une copie locale garde le vu de chaque compte.
 
 **Porteur.** `useJellyfinItemState` — les trois fiches du cinéma.
 
@@ -1579,6 +1580,46 @@ navigation au clavier reste juste : elle fait défiler jusqu'au début de la ran
 
 **Tests.** `guided-scroll.test.tsx`, `decisions-partagees.test.ts` (aucun `snap-y snap-mandatory`
 écrit à la main dans le cinéma).
+
+**Décidé le 06/10/2026.**
+
+## 51. « Vu » : Jellyfin d'abord, une copie locale toujours
+
+Demandé le 06/10/2026 : faire de « Ma liste » le centre — « À voir », manuel ; « Vu », automatique,
+manuel et corrigeable, y compris pour un titre que la bibliothèque n'a pas, et sans jamais perdre le
+vu d'un compte quand un titre quitte la bibliothèque. Remplace la part « vu » de §6 et §6 bis.
+
+**Règle.**
+- *Le titre est dans Jellyfin* : Jellyfin fait foi. Marquer ou démarquer un film écrit chez lui, une
+  lecture complète l'y marque. La table `watched_titles` en garde une copie à jour.
+- *Il n'y est pas* (vu ailleurs, ou parti) : la copie locale est la seule trace, et reste.
+- *Il arrive* : le vu est reporté chez Jellyfin (écriture automatique autorisée par l'administrateur).
+- *Désaccord* tant que le titre est présent : la dernière modification gagne. Un film que Jellyfin
+  disait vu au dernier passage et ne dit plus a été démarqué chez lui : la copie suit.
+- *Une série* est vue quand tous ses épisodes le sont (Jellyfin), ou marquée vue à la main : un état
+  de série, chez nous, **sans cocher aucun épisode** — Jellyfin garde le détail réel. Elle quitte
+  « Reprendre » et « À suivre », sauf un épisode entré dans la bibliothèque après le marquage. Une
+  série entièrement vue qui ne l'est plus (nouvel épisode) reste vue, comme marquée ce jour-là.
+- *Fin de lecture* : le titre entre dans « Vu » ; s'il est dans « À voir », l'écran de fin propose de
+  l'en retirer, sans le faire d'office. Lecteur natif seulement (le lecteur serveur n'a pas d'écran
+  de fin).
+- Jellyfin ou la bibliothèque injoignable : la synchronisation ne décide rien (un index absent ne
+  vaut pas une bibliothèque vide).
+
+**Porteurs.** `src/lib/watched.ts` : `setWatched` (le seul chemin d'écriture), `syncWatched` (au plus
+une fois par minute et par compte, à la lecture de « Ma liste »), `withoutWatched` (le filtre commun
+de « Reprendre » et « À suivre »), `libraryIndex` ; `watchedDb` (`db.ts`).
+
+**Appelants.** `POST /api/player/watched` (fiche de découverte, série depuis sa fiche),
+`POST /api/jellyfin/played` (film depuis sa fiche : Jellyfin, puis la copie), `GET /api/player/lists`,
+`GET /api/jellyfin/resume`, `GET /api/cinema/next-up`, `GET /api/cinema/progress/[itemId]` (série
+marquée ici), `GET /api/player/watched/finished` et `PlayerEndScreen` (`FinishedAsk`),
+`useJellyfinItemState`, `useTitleWatched`.
+
+**Tests.** `watched.test.ts`, `watched-routes.test.ts`, `refreshAfterPlayback.test.ts`.
+
+**Migration.** `watched_titles` est créée au démarrage (`CREATE TABLE IF NOT EXISTS`, rien d'autre
+ne change) ; la première lecture de « Ma liste » d'un compte y copie ce que Jellyfin sait déjà vu.
 
 **Décidé le 06/10/2026.**
 

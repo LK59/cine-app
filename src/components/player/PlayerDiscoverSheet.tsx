@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { liquidButtonRef } from "@/lib/liquidGlass/liquid";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, X } from "lucide-react";
+import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Eye, EyeOff, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
+import { useTitleWatched } from "@/lib/useTitleWatched";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { SHEET_OUT_MS, sheetMotionClass, detailColumnMotion, phoneSheetCorner } from "@/lib/sheetMotion";
@@ -79,6 +80,12 @@ export function PlayerDiscoverSheet({
 
   const { busy, setStatus, request } = usePlayerTitleActions(
     data ? { tmdbId, type: mediaType, title: data.title, year: data.year, poster: data.poster, rating: data.rating } : null
+  );
+
+  // « Vu », même pour un titre que la bibliothèque n'a pas (DECISIONS.md §51).
+  const watchedState = useTitleWatched(
+    data ? { type: mediaType, tmdbId, title: data.title, year: data.year, posterPath: data.posterPath, watched: data.watched } : null,
+    `/api/player/title/${mediaType}/${tmdbId}`
   );
 
   const close = () => cinemaClose({ discover: null, person: null });
@@ -283,6 +290,17 @@ export function PlayerDiscoverSheet({
             {inList ? t("player.discover.inList") : t("player.discover.addToList")}
           </button>
 
+          <button
+            type="button"
+            disabled={watchedState.busy}
+            onClick={() => void watchedState.toggle()}
+            aria-pressed={watchedState.watched}
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-60"
+          >
+            <ToggleGlyph on={watchedState.watched} onIcon={<Eye size={16} />} offIcon={<EyeOff size={16} />} />
+            {watchedState.watched ? t("player.discover.watched") : t("player.discover.markWatched")}
+          </button>
+
 
           <CinemaTagline text={data.tagline} className="mb-1.5" />
           {data.overview && <p className="mb-4 text-sm leading-6 text-white">{data.overview}</p>}
@@ -440,6 +458,21 @@ export function PlayerDiscoverSheet({
                   </span>
                   <span className="text-sm font-medium">
                     {inList ? t("player.discover.inList") : t("player.discover.addToList")}
+                  </span>
+                </button>
+
+                <button
+                  data-detail-menu
+                  disabled={watchedState.busy}
+                  onClick={() => void watchedState.toggle()}
+                  aria-pressed={watchedState.watched}
+                  className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+                >
+                  <span className={watchedState.watched ? MENU_BADGE_ACTIVE : MENU_BADGE}>
+                    <ToggleGlyph on={watchedState.watched} onIcon={<Eye size={14} />} offIcon={<EyeOff size={14} />} />
+                  </span>
+                  <span className="text-sm font-medium">
+                    {watchedState.watched ? t("player.discover.watched") : t("player.discover.markWatched")}
                   </span>
                 </button>
 

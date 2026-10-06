@@ -25,9 +25,10 @@ afterEach(() => setWatchingFullScreen(false));
 describe("refreshAfterPlayback", () => {
   // Le symptôme : quitter un film à trente minutes laissait sa fiche sur « Lecture » et la rangée
   // « Reprendre » inchangée, jusqu'à ce qu'on quitte l'écran et qu'on y revienne.
-  it("relit les trois vues que la fermeture rend fausses", async () => {
+  // Et « Ma liste », où un film fini entre dans « Vu » (DECISIONS.md §51, 06/10/2026).
+  it("relit les vues que la fermeture rend fausses", async () => {
     await refreshAfterPlayback(Promise.resolve(), "item-42");
-    expect(namedKeys().sort()).toEqual([NEXT_UP_KEY, RESUME_KEY, progressKey("item-42")].sort());
+    expect(namedKeys().sort()).toEqual([NEXT_UP_KEY, RESUME_KEY, progressKey("item-42"), "/api/player/lists"].sort());
   });
 
   // Le symptôme : l'accueil se mettait à jour, la fiche de la série non — elle proposait encore
@@ -59,7 +60,7 @@ describe("refreshAfterPlayback", () => {
 
   it("se limite aux vues d'ensemble quand aucun titre n'est nommé", async () => {
     await refreshAfterPlayback(Promise.resolve(), null);
-    expect(namedKeys().sort()).toEqual([NEXT_UP_KEY, RESUME_KEY].sort());
+    expect(namedKeys().sort()).toEqual([NEXT_UP_KEY, RESUME_KEY, "/api/player/lists"].sort());
   });
 
   // Relire avant que Jellyfin ait enregistré l'arrêt redonne exactement la valeur qu'on voulait
@@ -89,7 +90,7 @@ describe("refreshAfterPlayback", () => {
       setWatchingFullScreen(false);
       await vi.advanceTimersByTimeAsync(100);
       await fini;
-      expect(namedKeys()).toHaveLength(3);
+      expect(namedKeys()).toHaveLength(4);
     } finally {
       vi.useRealTimers();
     }

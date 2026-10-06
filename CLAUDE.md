@@ -197,9 +197,12 @@ because Next demands a literal string for its `matcher`; a test compares the two
   **Every query is synchronous and holds the event loop.** Deletes over large tables are batched
   under a time budget for exactly that reason.
 
-**One place per fact.** "Watched" and "favorite" are Jellyfin's (`useJellyfinItemState`); "to
-watch" is local. A second copy always diverges — a film finished on the TV read as unwatched here
-for weeks before that was fixed.
+**One place per fact.** "Favorite" is Jellyfin's (`useJellyfinItemState`); "to watch" is local. A
+second copy always diverges — a film finished on the TV read as unwatched here for weeks before that
+was fixed. **"Watched" is the one deliberate exception** (DECISIONS §51): Jellyfin stays authoritative
+for titles it holds, and `src/lib/watched.ts` keeps a per-account copy so a title watched elsewhere,
+or gone from the library, stays watched — every write goes through `setWatched`, every reconciliation
+through `syncWatched`, never a third path.
 
 **Cinema navigation lives in the URL hash** (`src/lib/cinemaRoute.ts`): open sheet, tab, panels.
 `cinemaClose` goes through `history.back()`, and each entry records what it covers, so a sheet
