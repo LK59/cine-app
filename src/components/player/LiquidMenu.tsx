@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { LIQUID_SPRING, prefersReducedMotion, toSpring } from "@/lib/liquidGlass/liquid";
-import { springKeyframes } from "@/lib/liquidGlass/spring";
+import { simulateSpring, springKeyframes } from "@/lib/liquidGlass/spring";
 
 /**
  * Un menu du lecteur, né de la pilule des réglages (DECISIONS.md §45).
@@ -43,23 +43,49 @@ export const ICON_SPRING = toSpring(0.3, 1);
 /**
  * Pendant qu'elle s'ouvre, la boîte s'allonge dans le sens où elle part — vers le haut — et se
  * resserre un peu en largeur, puis reprend sa forme en se posant : la matière des menus d'iOS
- * récents, plutôt qu'une forme rigide qu'on agrandit (07/10/2026). Lu sur la vitesse du ressort,
- * borné à 4 % ; au retour du dépassement, la vitesse s'inverse et la boîte se tasse à peine.
+ * récents, plutôt qu'une forme rigide qu'on agrandit (07/10/2026). Proportionnel à la vitesse du
+ * ressort rapportée à son pic : une bosse qui monte en trois images jusqu'à 3 % et redescend avec
+ * elle. La première version multipliait la vitesse par une constante et la bornait à 4 % : la
+ * vitesse du ressort dépasse ce plafond dès la première image, si bien que l'étirement sautait
+ * d'un coup à 4 %, y restait 120 ms, puis repartait — une marche, lue comme une saccade.
  */
-const OPEN_STRETCH = 0.008;
-const OPEN_STRETCH_MAX = 0.04;
-const OPEN_SQUASH_MAX = 0.015;
+const OPEN_STRETCH_PEAK = 0.03;
+const OPEN_PEAK_SPEED = Math.max(...simulateSpring(0, 1, OPEN_SPRING).map((s) => s.v));
 /**
  * Les lignes arrivent l'une après l'autre, de haut en bas, 18 ms d'écart : la liste se déplie au
- * lieu de s'allumer d'un bloc. Au-delà de huit lignes, les suivantes partent avec la huitième —
- * une longue liste de pistes ne doit pas rallonger l'ouverture.
+ * lieu de s'allumer d'un bloc. Seules les lignes visibles s'animent, huit au plus : chacune prend
+ * un calque le temps de son entrée, et celles cachées sous le bas de la liste n'ont rien à montrer.
  */
 const ROW_STAGGER_MS = 18;
 const ROW_STAGGER_MAX = 8;
 
 /** L'étirement d'une vitesse d'ouverture `v` (fractions d'ouverture par seconde). */
 export function openStretch(v: number) {
-  return Math.min(OPEN_STRETCH_MAX, Math.max(-OPEN_SQUASH_MAX, v * OPEN_STRETCH));
+  return Math.max(-OPEN_STRETCH_PEAK / 2, Math.min(OPEN_STRETCH_PEAK, (v / OPEN_PEAK_SPEED) * OPEN_STRETCH_PEAK));
+}
+
+/**
+ * La pilule telle qu'on la voit, exprimée depuis le coin bas-droit du menu. Touchée, elle est
+ * encore gonflée par le geste liquide (transformée autour de son centre) quand le menu naît : partir
+ * de sa forme au repos faisait sauter la surface à la première image. `null` si elle est au repos.
+ */
+function pillHandover(anchor: HTMLElement): DOMMatrix | null {
+  if (typeof DOMMatrix === "undefined") return null;
+  const t = getComputedStyle(anchor).transform;
+  if (!t || t === "none") return null;
+  const m = new DOMMatrix(t);
+  if (m.isIdentity) return null;
+  // Autour du centre C de la pilule, devenu autour du coin O : t' = (I − M)(C − O) + t.
+  const cx = -anchor.offsetWidth / 2;
+  const cy = -anchor.offsetHeight / 2;
+  return new DOMMatrix([m.a, m.b, m.c, m.d, cx - (m.a * cx + m.c * cy) + m.e, cy - (m.b * cx + m.d * cy) + m.f]);
+}
+
+/** `from` amené vers l'identité à mesure que `q` va de 0 à 1. */
+function easeOff(from: DOMMatrix | null, q: number) {
+  if (!from) return "";
+  const r = 1 - Math.min(Math.max(q, 0), 1);
+  return `matrix(${1 + (from.a - 1) * r}, ${from.b * r}, ${from.c * r}, ${1 + (from.d - 1) * r}, ${from.e * r}, ${from.f * r}) `;
 }
 /** L'étirement d'une liste tirée au-delà de son bout : au plus 6 % de la hauteur du menu. */
 const OVERSCROLL_STRETCH = 0.35;
@@ -169,6 +195,12 @@ export function LiquidMenu({
     g.pillRadius = anchor.offsetHeight / 2;
     g.height = H;
 
+    // Deux animations et non une : la découpe ne se joue que sur le fil principal, et une
+    // transformation logée dans la même animation y restait avec elle — le lecteur, qui remultiplexe
+    // sur ce fil, la faisait saccader. Seule, la transformation part au compositeur.
+    const handover = pillHandover(anchor);
+    const clip = springKeyframes(0, 1, OPEN_SPRING, ({ x }) => ({ clipPath: clipAt(x, g.top, g.left, g.pillRadius) }));
+    box.animate(clip.keyframes, { duration: clip.duration, easing: "linear" });
     const shape = springKeyframes(0, 1, OPEN_SPRING, ({ x, v }) => {
       // Le dépassement ne peut pas agrandir la découpe au-delà de la boîte : il passe en échelle,
       // depuis le coin d'où le menu naît. Au repos, l'origine revient au centre : c'est d'elle que
@@ -176,8 +208,7 @@ export function LiquidMenu({
       const pop = 1 + Math.max(0, x - 1) * OPEN_BOUNCE;
       const k = openStretch(v);
       return {
-        clipPath: clipAt(x, g.top, g.left, g.pillRadius),
-        transform: `scale(${pop * (1 - k / 2)}, ${pop * (1 + k)})`,
+        transform: `${easeOff(handover, x)}scale(${pop * (1 - k / 2)}, ${pop * (1 + k)})`,
         transformOrigin: "100% 100%",
       };
     });
@@ -196,11 +227,12 @@ export function LiquidMenu({
     }
     titleRef.current?.animate([{ opacity: 0, transform: "translateX(-6px)" }, { opacity: 1, transform: "none" }], { duration: 160, delay: 40, easing: "ease-out", fill: "backwards" });
     // Ligne par ligne : chacune monte de 4 px en apparaissant, la suivante 18 ms plus tard.
-    const rows = listRef.current ? Array.from(listRef.current.children) : [];
+    const listBox = listRef.current;
+    const rows = listBox ? Array.from(listBox.children).filter((row) => (row as HTMLElement).offsetTop - listBox.offsetTop - listBox.scrollTop < listBox.clientHeight).slice(0, ROW_STAGGER_MAX) : [];
     rows.forEach((row, i) =>
       row.animate([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], {
         duration: 180,
-        delay: 50 + Math.min(i, ROW_STAGGER_MAX) * ROW_STAGGER_MS,
+        delay: 50 + i * ROW_STAGGER_MS,
         easing: "ease-out",
         fill: "backwards",
       }),
@@ -228,7 +260,12 @@ export function LiquidMenu({
         return;
       }
       // D'où il en est : la découpe en cours dit l'ouverture atteinte.
-      const clip = getComputedStyle(box).clipPath;
+      const computed = getComputedStyle(box);
+      const clip = computed.clipPath;
+      // Et sa forme en cours : refermé pendant l'ouverture, il est encore étiré (ou gonflé par la
+      // pilule) — repartir d'une échelle 1 le faisait sauter.
+      const shapeNow = computed.transform && computed.transform !== "none" ? computed.transform : "none";
+      const originNow = computed.transformOrigin;
       const m = /inset\(\s*([\d.]+)px/.exec(clip ?? "");
       const p0 = m && g.top > 0 ? 1 - Number(m[1]) / g.top : 1;
       const ghost = box.cloneNode(true) as HTMLDivElement;
@@ -242,17 +279,15 @@ export function LiquidMenu({
         el.removeAttribute("id");
         el.removeAttribute("data-player-nav");
       }
+      ghost.style.transformOrigin = originNow;
       host.insertBefore(ghost, box.nextSibling);
       const list = ghost.querySelector<HTMLElement>(".player-menu-list");
       if (list && listEl) list.scrollTop = listEl.scrollTop;
       const geo = { ...g };
-      ghost.animate(
-        [
-          { clipPath: clipAt(p0, geo.top, geo.left, geo.pillRadius), transform: "scale(1)" },
-          { clipPath: clipAt(0, geo.top, geo.left, geo.pillRadius), transform: "scale(1)" },
-        ],
-        { duration: CLOSE_MS, easing: "cubic-bezier(0.3, 0, 0.2, 1)", fill: "forwards" },
-      );
+      // Découpe et forme séparées, comme à l'ouverture : la forme reste au compositeur.
+      const closing = { duration: CLOSE_MS, easing: "cubic-bezier(0.3, 0, 0.2, 1)", fill: "forwards" } as const;
+      ghost.animate([{ clipPath: clipAt(p0, geo.top, geo.left, geo.pillRadius) }, { clipPath: clipAt(0, geo.top, geo.left, geo.pillRadius) }], closing);
+      if (shapeNow !== "none") ghost.animate([{ transform: shapeNow }, { transform: "none" }], closing);
       for (const part of [ghost.querySelector(".player-menu-list"), ghost.querySelector(".player-menu-title")]) {
         (part as HTMLElement | null)?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 90, fill: "forwards" });
       }
