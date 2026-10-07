@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
 import { cachedMovies, cachedJellyfinMoviesAdmin } from "@/lib/server-cache";
@@ -127,7 +128,8 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string, locale: Loc
     // OMDb/TMDB round trip needed, same field fetchHero() in the dashboard route uses.
     imdbRating: m.ratings?.imdb?.value != null ? m.ratings.imdb.value.toFixed(1) : null,
     quality: videoQualityOf(m),
-    genres: m.genres ?? [],
+    // Sous leur nom commun : « Horreur » et « Horror » ne font qu'un genre — voir `genres.ts`.
+    genres: canonicalGenres(m.genres),
     addedAt: m.added ?? null,
   };
 }

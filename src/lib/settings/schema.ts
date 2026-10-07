@@ -66,9 +66,10 @@ export const SETTINGS: readonly SettingDef[] = [
   // La disposition de l'accueil (07/10/2026, DECISIONS.md §52) — deux variantes d'une installation à
   // l'autre, sans fourche du code : un accès direct à tout le catalogue en tête, et une bannière
   // qui montre ce qu'on regarde plutôt que ce qui vient d'arriver. « Réglages par défaut » : ce que
-  // voit un compte qui n'a rien choisi — chacun peut le changer dans Compte → Interface. Coupées
-  // par défaut : l'accueil d'origine.
-  { key: "HOME_BROWSE_BUTTON", group: "defaults", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  // voit un compte qui n'a rien choisi — chacun peut le changer dans Compte → Interface. Le bouton
+  // est activé par défaut (discret, en haut à droite sur téléphone : retenu le 07/10/2026) ; la
+  // bannière reste celle d'origine.
+  { key: "HOME_BROWSE_BUTTON", group: "defaults", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "HOME_CONTINUE_HERO", group: "defaults", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   // Lu au démarrage seulement : son libellé le dit (« au prochain démarrage »).
   { key: "POSTER_PREWARM", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },

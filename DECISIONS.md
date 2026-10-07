@@ -1642,7 +1642,9 @@ ne change) ; la première lecture de « Ma liste » d'un compte y copie ce que J
 ## 52. La disposition de l'accueil, un réglage et non une fourche
 
 **Règle.** Deux variantes de l'accueil. Le serveur donne la valeur par défaut (gestion → Réglages
-serveur → Réglages par défaut, ou `.env`), coupée tant qu'on n'y touche pas — l'accueil d'origine ; chaque compte peut la
+serveur → Réglages par défaut, ou `.env`) — le bouton activé, la bannière d'origine, tant qu'on n'y
+touche pas (le bouton, discret en haut à droite sur téléphone, a été retenu par défaut le
+07/10/2026) ; chaque compte peut la
 remplacer dans Compte → Interface, à côté du défilement guidé (`user_preferences`, `NULL` = suivre
 le serveur ; revenir à la valeur du serveur la suit de nouveau). L'écran du compte ne montre que
 l'interrupteur, sans rappeler le réglage du serveur — demandé le 07/10/2026 :
@@ -1673,5 +1675,27 @@ rangée « À la une » descendue prend la sélection du bureau (le spotlight) s
 pas répéter « Récemment ajoutés » juste en dessous sur téléphone. Passer d'une sorte de bannière à
 l'autre repart du début de la nouvelle liste (`generation` de `useHeroOrder`) : la règle qui garde
 le titre à l'écran quand la liste change laissait un film jamais commencé en tête de Reprendre.
+
+**Décidé le 07/10/2026.**
+
+## 53. Un genre, un nom
+
+**Règle.** Les genres du catalogue sont ramenés à la clé anglaise des dictionnaires (`genres.*`)
+quand le serveur construit le catalogue : « Horreur », « Terror », « horror » deviennent « Horror »,
+« Sci-Fi & Fantasy » devient « Science Fiction » et « Fantasy ». Un genre inconnu reste tel quel.
+
+**Pourquoi.** Une source dans une autre langue que Radarr/Sonarr faisait deux genres d'un seul :
+deux rangées sur l'accueil, deux entrées dans le filtre de la grille complète, chacune avec la
+moitié des titres.
+
+**Porteur.** `canonicalGenres` (`src/lib/genres.ts`), alias tirés des quatre dictionnaires.
+
+**Appelants.** `/api/cinema/movies` et `/api/cinema/series` ; en aval, les rangées par genre, les
+libellés et le filtre « Genre » de `CinemaBrowseSheet`.
+
+**Tests.** `genres-canonical.test.ts`.
+
+**Voulu.** Plus strict que la recherche en langage naturel (`GENRE_ALIASES`) : « Suspense » et
+« Musical » restent des genres à eux, comme Sonarr les donne.
 
 **Décidé le 07/10/2026.**

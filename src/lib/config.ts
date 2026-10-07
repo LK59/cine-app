@@ -120,7 +120,7 @@ export const config = {
   home: {
     // « Tous les films » / « Toutes les séries » en tête de l'accueil, à côté de la bascule.
     get browseButton() {
-      return optional("HOME_BROWSE_BUTTON", "false") === "true";
+      return optional("HOME_BROWSE_BUTTON", "true") === "true";
     },
     // La bannière du haut montre Reprendre / À suivre, et « À la une » descend à leur place.
     get continueHero() {

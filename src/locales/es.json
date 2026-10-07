@@ -1784,7 +1784,9 @@
         "under105": "Menos de 1 h 45",
         "under120": "Menos de 2 h",
         "over120": "2 h o más"
-      }
+      },
+      "genre": "Género",
+      "allGenres": "Todos los géneros"
     },
     "subtitleStyle": {
       "title": "Aspecto de los subtítulos",

@@ -1784,7 +1784,9 @@
         "under105": "Unter 1:45 Std.",
         "under120": "Unter 2 Std.",
         "over120": "2 Std. oder mehr"
-      }
+      },
+      "genre": "Genre",
+      "allGenres": "Alle Genres"
     },
     "subtitleStyle": {
       "title": "Untertitel-Darstellung",

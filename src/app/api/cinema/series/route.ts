@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
 import { cachedSeries, cachedJellyfinSeriesAdmin } from "@/lib/server-cache";
@@ -81,7 +82,8 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: L
     // Dans la langue de qui regarde quand TMDB la connaît — voir `TitleOverviews`.
     overview: localizedOverview(getTitleOverviews(s.tmdbId, "series"), locale, s.overview ?? null),
     imdbRating,
-    genres: s.genres ?? [],
+    // Sous leur nom commun : « Horreur » et « Horror » ne font qu'un genre — voir `genres.ts`.
+    genres: canonicalGenres(s.genres),
     addedAt: s.added ?? null,
   };
 }

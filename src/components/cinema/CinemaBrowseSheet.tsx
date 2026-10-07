@@ -58,6 +58,14 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
   // dans l'adresse — trier ne change pas d'écran, et remplir l'historique de tris ferait du
   // bouton retour une machine à défaire des réglages.
   const [sort, setSort] = useState<BrowseSort>("added");
+  // Le genre se change ici aussi (07/10/2026), à côté des époques et des durées. Il part de celui
+  // de la rangée d'où l'on vient ; la feuille est re-clée par genre (`browseSheetKey`), donc un
+  // autre « Voir tout » repart du sien. Les genres sont déjà regroupés sous un nom (`genres.ts`).
+  const [pickedGenre, setPickedGenre] = useState(genre);
+  const genreOptions = useMemo(
+    () => [...genres].sort((a, b) => genreLabel(a, t).localeCompare(genreLabel(b, t))),
+    [genres, t]
+  );
   const [decade, setDecade] = useState<number | null>(null);
   const [duration, setDuration] = useState<BrowseDuration>("all");
   // La durée n'est connue que des films — voir `BrowseDuration`.
@@ -66,8 +74,8 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
 
   const decades = useMemo(() => decadesOf(items), [items]);
   const shown = useMemo(
-    () => browseTitles(items, { genre, decade, sort, query, duration }),
-    [items, genre, decade, sort, query, duration]
+    () => browseTitles(items, { genre: pickedGenre, decade, sort, query, duration }),
+    [items, pickedGenre, decade, sort, query, duration]
   );
 
   /**
@@ -90,7 +98,7 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
 
   // Le genre traduit, comme la rangée d'où l'on vient : « Comédie » sur l'accueil puis « Comedy »
   // ici, c'étaient deux noms pour la même chose à un appui d'intervalle.
-  const title = genre === BROWSE_ALL ? t(`player.browse.all.${mediaType}`) : genreLabel(genre, t);
+  const title = pickedGenre === BROWSE_ALL ? t(`player.browse.all.${mediaType}`) : genreLabel(pickedGenre, t);
 
   return (
     <PlayerPanelFrame
@@ -126,6 +134,21 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
                 </option>
               ))}
             </select>
+            {genreOptions.length > 1 && (
+              <select
+                value={pickedGenre}
+                onChange={(e) => setPickedGenre(e.target.value)}
+                aria-label={t("player.browse.genre")}
+                className="select h-9 shrink-0 text-sm"
+              >
+                <option value={BROWSE_ALL}>{t("player.browse.allGenres")}</option>
+                {genreOptions.map((g) => (
+                  <option key={g} value={g}>
+                    {genreLabel(g, t)}
+                  </option>
+                ))}
+              </select>
+            )}
             {/* Les décennies proposées sont celles que la bibliothèque contient — voir decadesOf. */}
             {decades.length > 1 && (
               <select

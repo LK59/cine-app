@@ -79,10 +79,10 @@ export function useClaraGalleryEnabled(): boolean {
 
 /**
  * La disposition de l'accueil que le **serveur** donne par défaut (DECISIONS.md §52). Un compte
- * peut la remplacer : l'accueil lit `useHomeLayout`, qui tient compte des deux. Coupées tant qu'on
- * ne sait pas — l'accueil d'origine.
+ * peut la remplacer : l'accueil lit `useHomeLayout`, qui tient compte des deux. Tant qu'on ne sait
+ * pas, les valeurs par défaut de l'image : le bouton, et la bannière d'origine.
  */
 export function useServerHomeLayout(): { browseButton: boolean; continueHero: boolean } {
   const { data } = usePublicPlayerConfig();
-  return { browseButton: data?.homeBrowseButton ?? false, continueHero: data?.homeContinueHero ?? false };
+  return { browseButton: data?.homeBrowseButton ?? true, continueHero: data?.homeContinueHero ?? false };
 }
