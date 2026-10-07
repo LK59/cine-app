@@ -1756,10 +1756,7 @@
         "browseButton": "Schaltfläche „Alle Filme / Serien“",
         "browseButtonHint": "Oben auf der Startseite, der ganze Katalog mit einem Tipp.",
         "continueHero": "Banner: Weiterschauen und Als Nächstes",
-        "continueHeroHint": "Das Banner der Startseite zeigt, was du gerade schaust; „Im Fokus“ rückt direkt darunter.",
-        "serverOn": "Auf diesem Server standardmäßig an",
-        "serverOff": "Auf diesem Server standardmäßig aus",
-        "reset": "Server-Einstellung verwenden"
+        "continueHeroHint": "Das Banner der Startseite zeigt, was du gerade schaust; „Im Fokus“ rückt direkt darunter."
       }
     },
     "browse": {

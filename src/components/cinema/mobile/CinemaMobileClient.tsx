@@ -14,7 +14,7 @@ import { prefetchLibraryItem } from "@/lib/prefetch";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { continueOrder } from "@/lib/continueOrder";
-import { continueHeroTitles, heroSource } from "@/lib/homeLayout";
+import { continueHeroTitles, continueTargets, heroSource } from "@/lib/homeLayout";
 import { useHomeLayout } from "@/lib/useHomeLayout";
 import { CinemaBrowseAllButton } from "@/components/cinema/CinemaBrowseAllButton";
 import { heroOffscreen } from "@/lib/heroCarousel";
@@ -455,9 +455,20 @@ export function CinemaMobileClient() {
 
   // Stable : écrite en ligne, elle était neuve à chaque rendu et défaisait le `memo` des deux
   // bannières — redessinées à chaque changement d'adresse et à chaque réponse (23/09/2026).
+  // Sur la bannière À suivre (DECISIONS.md §52), une série annonce l'épisode qui attend — « À suivre
+  // S1 · É3 », ou ce qui en reste s'il est commencé — comme la carte de la rangée qu'elle remplace.
+  // Sur la bannière d'origine, une série garde « Lire ».
+  const nextEpisodes = useMemo(() => continueTargets(continueOrder([], nextUp?.items ?? [])).series, [nextUp]);
+  const seriesContinuing = seriesHero.continuing;
   const resumeFor = useCallback(
-    (item: CinemaMovie | CinemaSeries) => ("sonarrId" in item ? null : resumeByItemId.get(item.jellyfinItemId) ?? null),
-    [resumeByItemId]
+    (item: CinemaMovie | CinemaSeries) => {
+      if (!("sonarrId" in item)) return resumeByItemId.get(item.jellyfinItemId) ?? null;
+      const episode = seriesContinuing ? nextEpisodes.get(item.sonarrId) : undefined;
+      return episode
+        ? { positionTicks: episode.resumeTicks ?? 0, runtimeTicks: episode.runtimeTicks ?? null, seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber }
+        : null;
+    },
+    [resumeByItemId, seriesContinuing, nextEpisodes]
   );
 
   const openDetail = useCallback((item: CinemaMovie | CinemaSeries, type: "movies" | "series") => {
@@ -653,9 +664,9 @@ export function CinemaMobileClient() {
             `hidden` plutôt qu'un démontage : les affiches déjà chargées le restent, le retour est
             instantané, et rien n'est peint pendant ce temps. */}
         {([
-          ["movies", heroMovies],
-          ["series", heroSeries],
-        ] as const).map(([tab, items]) => (
+          ["movies", heroMovies, movieHero.continuing],
+          ["series", heroSeries, seriesHero.continuing],
+        ] as const).map(([tab, items, continuing]) => (
           <div key={tab} hidden={shownTab !== tab}>
             <CinemaMobileHero
               items={items}
@@ -687,6 +698,7 @@ export function CinemaMobileClient() {
               // Pour que le bouton annonce « Reprendre — 40 min restantes » plutôt qu'un « Lire »
               // qui ne dit pas où il emmène.
               resumeFor={resumeFor}
+              generation={continuing ? "continue" : "spotlight"}
             />
           </div>
         ))}

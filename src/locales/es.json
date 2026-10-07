@@ -1756,10 +1756,7 @@
         "browseButton": "Botón «Todas las películas / series»",
         "browseButtonHint": "Arriba del inicio, todo el catálogo a un toque.",
         "continueHero": "Banner: Continuar y A continuación",
-        "continueHeroHint": "El banner del inicio muestra lo que estás viendo; «Destacados» pasa justo debajo.",
-        "serverOn": "Activado por defecto en este servidor",
-        "serverOff": "Desactivado por defecto en este servidor",
-        "reset": "Volver al ajuste del servidor"
+        "continueHeroHint": "El banner del inicio muestra lo que estás viendo; «Destacados» pasa justo debajo."
       }
     },
     "browse": {

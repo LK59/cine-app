@@ -1756,10 +1756,7 @@
         "browseButton": "Bouton « Tous les films / séries »",
         "browseButtonHint": "En haut de l'accueil, le catalogue entier à un geste.",
         "continueHero": "Bannière : Reprendre et À suivre",
-        "continueHeroHint": "La bannière de l'accueil montre ce que vous regardez ; « À la une » passe juste en dessous.",
-        "serverOn": "Activé par défaut sur ce serveur",
-        "serverOff": "Désactivé par défaut sur ce serveur",
-        "reset": "Revenir au réglage du serveur"
+        "continueHeroHint": "La bannière de l'accueil montre ce que vous regardez ; « À la une » passe juste en dessous."
       }
     },
     "browse": {

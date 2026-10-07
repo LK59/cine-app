@@ -296,17 +296,6 @@ function DisplaySection() {
               <div className="min-w-0">
                 <p className="text-sm text-white">{t(`player.account.home.${key}`)}</p>
                 <p className="mt-0.5 text-xs text-subtle">{t(`player.account.home.${key}Hint`)}</p>
-                {/* Le choix du serveur reste lisible, et rétablissable : sans cela, un compte qui
-                    a changé la valeur ne saurait plus qu'il s'écarte de celle de l'installation. */}
-                {own !== null && own !== fallback && (
-                  <p className="mt-1 text-xs text-subtle">
-                    {t(fallback ? "player.account.home.serverOn" : "player.account.home.serverOff")}
-                    {" · "}
-                    <button type="button" onClick={() => void setHomeLayoutChoice(key, null).catch(fail)} className="font-medium text-accent-400 hover:underline">
-                      {t("player.account.home.reset")}
-                    </button>
-                  </p>
-                )}
               </div>
               <Toggle
                 checked={checked}

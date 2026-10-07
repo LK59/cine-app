@@ -6,13 +6,13 @@ import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
-import { HeroOverview, HeroCastLine } from "@/components/cinema/CinemaHero";
+import { HeroOverview, HeroCastLine, HeroContinueButton, type HeroContinueAction } from "@/components/cinema/CinemaHero";
 import { useHeroInfo } from "@/lib/useHeroInfo";
 
 // Series-typed mirror of CinemaHero — see its own doc comment (text-only passive preview, the
 // backdrop lives in CinemaClient's shared background). Its synopsis and cast come from the same
 // light hero route as the movie banner (`useHeroInfo`).
-export function CinemaSeriesHero({ item }: { item: CinemaSeries }) {
+export function CinemaSeriesHero({ item, action }: { item: CinemaSeries; action?: HeroContinueAction | null }) {
   const t = useT();
   // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
   const info = useHeroInfo("series", item.tmdbId);
@@ -42,6 +42,8 @@ export function CinemaSeriesHero({ item }: { item: CinemaSeries }) {
       <HeroOverview info={info} fallback={item.overview} />
 
       <HeroCastLine info={info} />
+
+      {action && <HeroContinueButton action={action} />}
     </div>
   );
 }

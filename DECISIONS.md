@@ -1644,13 +1644,15 @@ ne change) ; la première lecture de « Ma liste » d'un compte y copie ce que J
 **Règle.** Deux variantes de l'accueil. Le serveur donne la valeur par défaut (gestion → Réglages
 serveur → Réglages par défaut, ou `.env`), coupée tant qu'on n'y touche pas — l'accueil d'origine ; chaque compte peut la
 remplacer dans Compte → Interface, à côté du défilement guidé (`user_preferences`, `NULL` = suivre
-le serveur ; revenir à la valeur du serveur la suit de nouveau, « Revenir au réglage du serveur »
-l'efface) :
+le serveur ; revenir à la valeur du serveur la suit de nouveau). L'écran du compte ne montre que
+l'interrupteur, sans rappeler le réglage du serveur — demandé le 07/10/2026 :
 - `HOME_BROWSE_BUTTON` : « Tous les films » / « Toutes les séries » en tête de l'accueil, à droite
   de la bascule Films / Séries au bureau, en rond à côté de la loupe sur téléphone ;
 - `HOME_CONTINUE_HERO` : la bannière montre Reprendre (onglet Films) et À suivre (onglet Séries),
   chaque titre retrouvé dans le catalogue, dans l'ordre de la rangée (§33) ; « À la une » descend
-  à la place de la rangée Reprendre. Un onglet où rien n'est en cours garde la bannière d'origine.
+  à la place de la rangée Reprendre. La bannière porte alors un bouton (`continueTargets`) : « Reprendre ·
+  40 min restantes » pour un film, « À suivre S1 · É3 » pour une série — au bureau, où la bannière
+  d'origine n'en a aucun, et sur téléphone, où une série y disait seulement « Lire ». Un onglet où rien n'est en cours garde la bannière d'origine.
 
 **Pourquoi.** Une installation voulait le catalogue entier à un geste et ce qu'on regarde en tête.
 Une copie du dépôt (une image `:alt`) aurait fait deux applications à maintenir pour deux rangées
@@ -1668,6 +1670,8 @@ et `resolveHomeLayout` (`src/lib/useHomeLayout.ts` : le choix du compte, lu dans
 
 **Voulu.** La source d'origine de la bannière reste différente d'un écran à l'autre (§25) ; la
 rangée « À la une » descendue prend la sélection du bureau (le spotlight) sur les deux, pour ne
-pas répéter « Récemment ajoutés » juste en dessous sur téléphone.
+pas répéter « Récemment ajoutés » juste en dessous sur téléphone. Passer d'une sorte de bannière à
+l'autre repart du début de la nouvelle liste (`generation` de `useHeroOrder`) : la règle qui garde
+le titre à l'écran quand la liste change laissait un film jamais commencé en tête de Reprendre.
 
 **Décidé le 07/10/2026.**

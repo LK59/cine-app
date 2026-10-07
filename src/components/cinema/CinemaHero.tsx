@@ -1,6 +1,7 @@
 "use client";
 
 import { formatMinutes } from "@/lib/format";
+import { Play } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
@@ -142,7 +143,28 @@ export function HeroCastLine({ info }: { info: { tmdb: { cast?: { name: string }
 // what surfaces Lecture/Bande-annonce/Vu/À voir. Cast still fetched here (not just in the detail
 // overlay) since this pane already shows it, same lazy/debounced approach so fast arrow-key
 // scrubbing across a row doesn't fire a request per card it passes through.
-export function CinemaHero({ item }: { item: CinemaMovie }) {
+/**
+ * Le bouton de la bannière Reprendre / À suivre (DECISIONS.md §52) — la seule action qu'elle porte.
+ * La bannière d'origine n'en a aucune, et c'est voulu (voir plus haut) ; celle-ci montre ce qu'on
+ * était en train de regarder, et le geste attendu est d'y retourner, avec ce qui reste à voir.
+ */
+export type HeroContinueAction = { label: string; onPlay: () => void };
+export function HeroContinueButton({ action }: { action: HeroContinueAction }) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={action.onPlay}
+        className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-ink shadow-lg transition-transform hover:scale-[1.03] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+      >
+        <Play size={16} fill="currentColor" aria-hidden />
+        {action.label}
+      </button>
+    </div>
+  );
+}
+
+export function CinemaHero({ item, action }: { item: CinemaMovie; action?: HeroContinueAction | null }) {
   const t = useT();
   // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
   // (La bande-annonce que la bannière remontait autrefois au fond vidéo n'a plus d'écouteur : le
@@ -188,6 +210,8 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
       <HeroOverview info={info} fallback={item.overview} />
 
       <HeroCastLine info={info} />
+
+      {action && <HeroContinueButton action={action} />}
     </div>
   );
 }

@@ -144,6 +144,8 @@ function sameKeys(a: readonly string[], b: readonly string[]): boolean {
 interface OrderState extends HeroOrder {
   /** La signature officielle d'où cet ordre a été tiré. */
   source: string;
+  /** La sorte de liste que la bannière montre — voir `generation` dans `useHeroOrder`. */
+  generation: string;
 }
 
 /**
@@ -164,22 +166,33 @@ interface OrderState extends HeroOrder {
 export function useHeroOrder(
   officialSignature: string,
   paused: boolean,
-  offscreen: boolean
+  offscreen: boolean,
+  /**
+   * La sorte de liste montrée (« À la une », ou Reprendre / À suivre — DECISIONS.md §52). Garder le
+   * titre à l'écran quand la liste change est fait pour une nouveauté qui arrive ; quand c'est la
+   * *sorte* qui change, l'ancien titre n'a plus rien à faire dans la nouvelle liste : un film jamais
+   * commencé restait en tête de « Reprendre » (07/10/2026). Une autre sorte repart du début.
+   */
+  generation = ""
 ): [number, (next: number) => void, string[]] {
   const [state, setState] = useState<OrderState>(() => ({
     source: officialSignature,
+    generation,
     keys: splitSignature(officialSignature),
     index: 0,
   }));
   let current = state;
-  if (offscreen) {
+  if (state.generation !== generation) {
+    current = { source: officialSignature, generation, keys: splitSignature(officialSignature), index: 0 };
+    setState(current);
+  } else if (offscreen) {
     // Hors de l'écran : l'ordre officiel, depuis le début.
     if (state.index !== 0 || state.source !== officialSignature || !sameKeys(state.keys, splitSignature(officialSignature))) {
-      current = { source: officialSignature, keys: splitSignature(officialSignature), index: 0 };
+      current = { source: officialSignature, generation, keys: splitSignature(officialSignature), index: 0 };
       setState(current);
     }
   } else if (state.source !== officialSignature) {
-    current = { source: officialSignature, ...reconcileHeroOrder(state.keys, state.index, splitSignature(officialSignature)) };
+    current = { source: officialSignature, generation, ...reconcileHeroOrder(state.keys, state.index, splitSignature(officialSignature)) };
     setState(current);
   }
 

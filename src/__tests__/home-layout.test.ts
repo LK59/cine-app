@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { continueHeroTitles, heroSource } from "@/lib/homeLayout";
+import { continueHeroTitles, continueTargets, heroSource } from "@/lib/homeLayout";
 import { continueOrder } from "@/lib/continueOrder";
 import { resolveHomeLayout } from "@/lib/useHomeLayout";
 
@@ -54,5 +54,18 @@ describe("resolveHomeLayout — le compte d'abord, le serveur à défaut", () =>
   it("prend le choix du compte, variante par variante", () => {
     expect(resolveHomeLayout({ browseButton: false, continueHero: null }, server)).toEqual({ browseButton: false, continueHero: false });
     expect(resolveHomeLayout({ browseButton: null, continueHero: true }, server)).toEqual({ browseButton: true, continueHero: true });
+  });
+});
+
+describe("continueTargets — ce que le bouton de la bannière lance", () => {
+  it("la reprise de chaque film, l'épisode le plus récent de chaque série", () => {
+    const entries = continueOrder(
+      [resume("a", "/radarr/2", "2026-10-07T10:00:00Z"), resume("b", null, "2026-10-07T11:00:00Z")],
+      [next("e-old", 7, "2026-10-06T11:00:00Z"), next("e-new", 7, "2026-10-07T12:00:00Z")]
+    );
+    const out = continueTargets(entries);
+    expect([...out.movies.keys()]).toEqual([2]);
+    expect(out.movies.get(2)?.id).toBe("a");
+    expect(out.series.get(7)?.jellyfinItemId).toBe("e-new");
   });
 });

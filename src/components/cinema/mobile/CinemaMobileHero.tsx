@@ -53,6 +53,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   onPlay,
   onOpen,
   resumeFor,
+  generation,
 }: {
   items: Item[];
   /** La rotation s'arrête quand une fiche ou la recherche est ouverte par-dessus. */
@@ -73,14 +74,22 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
    * de reprise, pour sa propre rangée. La bannière annonçait « Lire » sur un film vu à moitié —
    * le plus gros bouton de l'écran était le seul à ne pas savoir où il emmenait.
    */
-  resumeFor?: (item: Item) => { positionTicks: number; runtimeTicks: number | null } | null;
+  resumeFor?: (item: Item) => {
+    positionTicks: number;
+    runtimeTicks: number | null;
+    /** Une série dont un épisode attend (bannière À suivre, DECISIONS.md §52) : « À suivre S1 · É3 ». */
+    seasonNumber?: number | null;
+    episodeNumber?: number | null;
+  } | null;
+  /** La sorte de liste montrée — « À la une » ou Reprendre / À suivre (DECISIONS.md §52) ; voir `useHeroOrder`. */
+  generation?: string;
 }) {
   const t = useT();
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   // L'ordre de cette session, réconcilié avec les données fraîches : le titre à l'écran y reste,
   // une nouveauté vient au passage suivant — la même règle que le bureau (`useHeroOrder`).
-  const [orderIndex, setIndex, order] = useHeroOrder(heroSignature(official.map(heroKey)), paused || dragging, offscreen);
+  const [orderIndex, setIndex, order] = useHeroOrder(heroSignature(official.map(heroKey)), paused || dragging, offscreen, generation);
   // Les titres déjà montrés, pour retrouver celui à l'écran s'il vient de sortir de la liste : le
   // bureau a le catalogue entier sous la main, pas cette bannière. Tenu pendant le rendu, comme
   // l'état dérivé plus bas.
@@ -160,7 +169,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
         {/* La même formule que les fiches et les rangées : « Reprendre — 40 min restantes ». Un
             libellé propre à la bannière aurait été un troisième vocabulaire pour un même geste. */}
         <span className="truncate">
-          {resume ? formatContinueLabel(t, resume.positionTicks, resume.runtimeTicks) : t("common.play")}
+          {resume ? formatContinueLabel(t, resume.positionTicks, resume.runtimeTicks, resume.seasonNumber, resume.episodeNumber) : t("common.play")}
         </span>
       </button>
       <button

@@ -7,7 +7,7 @@ import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { continueOrder } from "@/lib/continueOrder";
-import { continueHeroTitles, heroSource } from "@/lib/homeLayout";
+import { continueHeroTitles, continueTargets, heroSource } from "@/lib/homeLayout";
 import { useHomeLayout } from "@/lib/useHomeLayout";
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -23,7 +23,7 @@ import { useCinemaRoute, useRouteBehind, sheetIsBehind, readCinemaRoute, cinemaN
 import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
 import { closeUncoversGrid, coversGrid, gridCardInFocus, gridIsTop } from "@/lib/cinemaGridTop";
 import { uniqueById } from "@/lib/cinemaRails";
-import { formatContinueCaption } from "@/lib/cinemaContinueLabel";
+import { formatContinueCaption, formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
 import { useWarmSeriesCatalogue } from "@/lib/useWarmSeriesCatalogue";
 import { errorMessage } from "@/lib/upstreamError";
@@ -492,7 +492,8 @@ export function CinemaClient() {
   const [movieOrderIndex, setMovieCarouselIndex, movieOrder] = useHeroOrder(
     heroSignature(movieCarouselOfficial.map(movieHeroKey)),
     focusedItem !== null || !gridOnTop,
-    heroOffscreen("movies", route, playback.mode)
+    heroOffscreen("movies", route, playback.mode),
+    movieHero.continuing ? "continue" : "spotlight"
   );
   // Un titre à l'écran qui vient de sortir de la liste reste à l'écran : retrouvé dans le catalogue.
   const { items: movieCarousel, index: movieCarouselIndex } = resolveHeroCarousel(
@@ -545,7 +546,8 @@ export function CinemaClient() {
   const [seriesOrderIndex, setSeriesCarouselIndex, seriesOrder] = useHeroOrder(
     heroSignature(seriesCarouselOfficial.map(seriesHeroKey)),
     seriesFocusedItem !== null || !gridOnTop,
-    heroOffscreen("series", route, playback.mode)
+    heroOffscreen("series", route, playback.mode),
+    seriesHero.continuing ? "continue" : "spotlight"
   );
   const { items: seriesCarousel, index: seriesCarouselIndex } = resolveHeroCarousel(
     seriesOrder,
@@ -556,6 +558,26 @@ export function CinemaClient() {
   );
   useDecodeAhead(upcomingImages(seriesCarousel, seriesCarouselIndex, heroImagesOf));
   const seriesHeroItem = seriesFocusedItem ?? seriesCarousel[seriesCarouselIndex] ?? null;
+  /**
+   * Le bouton de la bannière Reprendre / À suivre (DECISIONS.md §52) : la reprise du film montré,
+   * ou l'épisode qui attend la série montrée, avec ce qui reste — les mêmes lectures que les cartes
+   * de la rangée qu'elle remplace. Rien sur la bannière d'origine, qui n'est qu'un aperçu.
+   */
+  const heroTargets = continueTargets(continueEntries);
+  const heroResume = movieHero.continuing && heroItem ? heroTargets.movies.get(heroItem.radarrId) : undefined;
+  const movieHeroAction = heroResume
+    ? {
+        label: formatContinueLabel(t, heroResume.positionTicks, heroResume.runtimeTicks),
+        onPlay: () => playback.play({ itemId: heroResume.id, title: heroResume.name, resumeAt: feedResumeAt(heroResume.positionTicks, RESUME_KEY) }),
+      }
+    : null;
+  const heroEpisode = seriesHero.continuing && seriesHeroItem ? heroTargets.series.get(seriesHeroItem.sonarrId) : undefined;
+  const seriesHeroAction = heroEpisode
+    ? {
+        label: formatContinueLabel(t, heroEpisode.resumeTicks, heroEpisode.runtimeTicks, heroEpisode.seasonNumber, heroEpisode.episodeNumber),
+        onPlay: () => playback.play({ itemId: heroEpisode.jellyfinItemId, title: heroEpisode.title, resumeAt: feedResumeAt(heroEpisode.resumeTicks, NEXT_UP_KEY) }),
+      }
+    : null;
   const seriesSpotlightIndex = seriesHeroItem
     ? seriesCarousel.findIndex((sh) => sh.sonarrId === seriesHeroItem.sonarrId)
     : -1;
@@ -1135,8 +1157,8 @@ export function CinemaClient() {
         {/* La hauteur de la bannière : voir `HERO_BASIS`. */}
         <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: HERO_BASIS }}>
           {heroKind === "movies"
-            ? heroItem && <CinemaHero item={heroItem} />
-            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} />}
+            ? heroItem && <CinemaHero item={heroItem} action={movieHeroAction} />
+            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} action={seriesHeroAction} />}
         </div>
 
         {/* min-h-80 (320px): comfortably fits one full row — label, a card at its largest

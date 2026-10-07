@@ -66,3 +66,25 @@ export function continueHeroTitles<M, S, RM extends HeroResumeMovie, NE extends 
 export function heroSource<T>(continueHero: boolean, official: T[], continuing: T[]): { items: T[]; continuing: boolean } {
   return continueHero && continuing.length > 0 ? { items: continuing, continuing: true } : { items: official, continuing: false };
 }
+
+/**
+ * Ce que la bannière Reprendre / À suivre propose de lancer, titre par titre : la reprise du film,
+ * ou l'épisode qui attend la série — la plus récente quand une série en a deux. Le bouton dit
+ * alors « Reprendre · 40 min restantes » ou « À suivre S1 · É3 » (`formatContinueLabel`), comme
+ * les cartes de la rangée qu'elle remplace (demandé le 07/10/2026).
+ */
+export function continueTargets<RM extends HeroResumeMovie, NE extends HeroNextEpisode>(
+  entries: ContinueEntry<RM, NE>[],
+): { movies: Map<number, RM>; series: Map<number, NE> } {
+  const movies = new Map<number, RM>();
+  const series = new Map<number, NE>();
+  for (const entry of entries) {
+    if (entry.kind === "movie") {
+      const id = Number(entry.item.cinemaHref?.match(/^\/radarr\/(\d+)$/)?.[1] ?? NaN);
+      if (Number.isFinite(id) && !movies.has(id)) movies.set(id, entry.item);
+    } else if (entry.item.sonarrId !== null && !series.has(entry.item.sonarrId)) {
+      series.set(entry.item.sonarrId, entry.item);
+    }
+  }
+  return { movies, series };
+}
