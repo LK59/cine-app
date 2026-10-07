@@ -2477,6 +2477,10 @@
         "title": "Aplicación",
         "why": "Idioma por defecto, conexión segura, preparación de carteles."
       },
+      "defaults": {
+        "title": "Ajustes por defecto",
+        "why": "Lo que ve una cuenta mientras no elija otra cosa. Cada uno puede cambiarlo para sí en Cuenta → Interfaz."
+      },
       "deployment": {
         "title": "Opciones de despliegue",
         "why": "Estas opciones se ajustan al arrancar el contenedor: añade la línea indicada a tu docker-compose.yml (o a tu .env) y reinicia el contenedor."
@@ -2511,8 +2515,8 @@
       "PLAYER_ENABLED": "Reproductor integrado",
       "PLAYER_SERVER_FALLBACK": "Pasar a Jellyfin los archivos que el navegador no reproduce",
       "PLAYER_AUTO_FRAME": "Ampliar la imagen sobre las bandas negras",
-      "HOME_BROWSE_BUTTON": "Botón «Todas las películas / series» arriba del inicio — por defecto",
-      "HOME_CONTINUE_HERO": "Banner del inicio: Continuar y A continuación — por defecto",
+      "HOME_BROWSE_BUTTON": "Botón «Todas las películas / series» arriba del inicio",
+      "HOME_CONTINUE_HERO": "Banner del inicio: Continuar y A continuación",
       "VAPID_SUBJECT": "Contacto de las notificaciones (mailto:…)",
       "TZ": "Zona horaria",
       "MEDIA_ROOT": "Carpeta de medios (estadísticas de almacenamiento)",
@@ -2537,16 +2541,16 @@
     "secretsNote": "El secreto de sesión y las claves de notificaciones se generan automáticamente en el primer arranque (data/config/secrets.json). No hay nada que hacer.",
     "done": {
       "title": "Todo listo",
-      "text": "Los ajustes se pueden cambiar en cualquier momento en la gestión, página «Conexiones».",
+      "text": "Los ajustes se pueden cambiar en cualquier momento en la gestión, página «Ajustes del servidor».",
       "manage": "Abrir la gestión",
       "cinema": "Iniciar sesión con Jellyfin",
       "finishing": "Finalizando…"
     },
     "settings": {
-      "title": "Conexiones",
-      "subtitle": "Direcciones y claves de los servicios. Un valor ajustado aquí sustituye al del .env.",
-      "link": "Conexiones a los servicios",
-      "linkHint": "Jellyfin, TMDB, Radarr, Sonarr y complementos."
+      "title": "Ajustes del servidor",
+      "subtitle": "Direcciones y claves de los servicios, y ajustes por defecto de las cuentas. Un valor fijado aquí sustituye al del .env.",
+      "link": "Ajustes del servidor",
+      "linkHint": "Jellyfin, TMDB, Radarr, Sonarr, los complementos y los ajustes por defecto."
     },
     "profileFirst": "El primero de la lista",
     "profileUnavailable": "Lista no disponible: compruebe la dirección y la clave y recargue la página.",

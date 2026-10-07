@@ -17,7 +17,7 @@
 
 export type SettingKind = "url" | "secret" | "text" | "boolean" | "select" | "profile";
 export type SettingNeed = "required" | "library" | "optional";
-export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "playback" | "app" | "deployment";
+export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "playback" | "app" | "defaults" | "deployment";
 
 export interface SettingDef {
   key: string;
@@ -63,11 +63,13 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "PLAYER_ENABLED", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "PLAYER_SERVER_FALLBACK", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
-  // La disposition de l'accueil (07/10/2026) — deux variantes d'une installation à l'autre, sans
-  // fourche du code : un accès direct à tout le catalogue en tête, et une bannière qui montre ce
-  // qu'on regarde plutôt que ce qui vient d'arriver. Coupées par défaut : l'accueil d'origine.
-  { key: "HOME_BROWSE_BUTTON", group: "app", kind: "boolean", need: "optional", fallback: "false", inApp: true },
-  { key: "HOME_CONTINUE_HERO", group: "app", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  // La disposition de l'accueil (07/10/2026, DECISIONS.md §52) — deux variantes d'une installation à
+  // l'autre, sans fourche du code : un accès direct à tout le catalogue en tête, et une bannière
+  // qui montre ce qu'on regarde plutôt que ce qui vient d'arriver. « Réglages par défaut » : ce que
+  // voit un compte qui n'a rien choisi — chacun peut le changer dans Compte → Interface. Coupées
+  // par défaut : l'accueil d'origine.
+  { key: "HOME_BROWSE_BUTTON", group: "defaults", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  { key: "HOME_CONTINUE_HERO", group: "defaults", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   // Lu au démarrage seulement : son libellé le dit (« au prochain démarrage »).
   { key: "POSTER_PREWARM", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "VAPID_SUBJECT", group: "app", kind: "text", need: "optional", fallback: "mailto:admin@example.com", inApp: true, placeholder: "mailto:admin@example.com" },
@@ -80,7 +82,7 @@ export const SETTINGS: readonly SettingDef[] = [
 export const SETTINGS_BY_KEY: ReadonlyMap<string, SettingDef> = new Map(SETTINGS.map((s) => [s.key, s]));
 
 /** Les groupes réglables, dans l'ordre de l'assistant et de la page. */
-export const SETTING_GROUPS: readonly SettingGroup[] = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "playback", "app", "deployment"];
+export const SETTING_GROUPS: readonly SettingGroup[] = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "playback", "app", "defaults", "deployment"];
 
 /**
  * Le guide de déploiement : ce qui ne se règle pas dans l'application — un dossier à monter, le

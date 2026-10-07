@@ -58,7 +58,7 @@ export function SettingsGroupCard({
     <section className="settings-card rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
       <header className="mb-3 flex flex-wrap items-center gap-2">
         <h3 className="text-base font-semibold text-white">{t(`setup.groups.${group}.title`)}</h3>
-        {group !== "app" && group !== "playback" && group !== "deployment" && (
+        {group !== "app" && group !== "playback" && group !== "defaults" && group !== "deployment" && (
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${NEED_TONE[need]}`}>{t(`setup.need.${need}`)}</span>
         )}
       </header>

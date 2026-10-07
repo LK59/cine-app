@@ -1536,7 +1536,7 @@ verre mixte de §45 : flou sur les pilules et les boutons, reflet et bord sans f
 la langue s'y choisit par une même pilule à lentille (`LanguageLens`).
 
 Le profil de qualité d'un ajout à Radarr ou Sonarr est une seule règle, `defaultQualityProfile`
-(`src/lib/qualityProfile.ts`) : celui réglé dans « Connexions » s'il existe encore chez le service,
+(`src/lib/qualityProfile.ts`) : celui réglé dans « Réglages serveur » s'il existe encore chez le service,
 sinon le premier de sa liste. Elle sert l'ajout depuis la découverte et, par `defaultQualityProfileId`
 des routes `/api/radarr/meta` et `/api/sonarr/meta`, les formulaires d'ajout de la gestion. Avant,
 la découverte cherchait un nom contenant « vf » et la gestion prenait le premier profil. Les
@@ -1545,7 +1545,7 @@ demandes Jellyseerr n'envoient aucun profil : Jellyseerr applique le sien.
 Le cache des affiches optimisées suit le volume de données : au démarrage, `.next/cache/images`
 devient un lien vers `data/image-cache` (`server-boot/imageCache.mjs`) — sauf s'il est déjà monté,
 comme dans le modèle avancé, qui monte ce même dossier. Le mot de passe du compte de l'assistant se
-change dans « Connexions » (ancien mot de passe exigé, autres sessions fermées) et se réinitialise
+change dans « Réglages serveur » (ancien mot de passe exigé, autres sessions fermées) et se réinitialise
 par `server-boot/reset-admin-password.mjs` ; hachage et vérification vivent dans un seul module,
 `server-boot/adminAccount.mjs`, que lisent l'application et la commande.
 
@@ -1641,8 +1641,8 @@ ne change) ; la première lecture de « Ma liste » d'un compte y copie ce que J
 
 ## 52. La disposition de l'accueil, un réglage et non une fourche
 
-**Règle.** Deux variantes de l'accueil. Le serveur donne la valeur par défaut (Réglages de l'app,
-ou `.env`), coupée tant qu'on n'y touche pas — l'accueil d'origine ; chaque compte peut la
+**Règle.** Deux variantes de l'accueil. Le serveur donne la valeur par défaut (gestion → Réglages
+serveur → Réglages par défaut, ou `.env`), coupée tant qu'on n'y touche pas — l'accueil d'origine ; chaque compte peut la
 remplacer dans Compte → Interface, à côté du défilement guidé (`user_preferences`, `NULL` = suivre
 le serveur ; revenir à la valeur du serveur la suit de nouveau, « Revenir au réglage du serveur »
 l'efface) :

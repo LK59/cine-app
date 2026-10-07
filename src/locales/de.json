@@ -2477,6 +2477,10 @@
         "title": "Anwendung",
         "why": "Standardsprache, sichere Verbindung, Vorbereitung der Poster."
       },
+      "defaults": {
+        "title": "Standardeinstellungen",
+        "why": "Was ein Konto sieht, solange es nichts anderes wählt. Jeder kann es für sich unter Konto → Oberfläche ändern."
+      },
       "deployment": {
         "title": "Bereitstellungsoptionen",
         "why": "Diese Optionen werden beim Start des Containers gesetzt: Füge die angezeigte Zeile in deine docker-compose.yml (oder deine .env) ein und starte den Container neu."
@@ -2511,8 +2515,8 @@
       "PLAYER_ENABLED": "Integrierter Player",
       "PLAYER_SERVER_FALLBACK": "Dateien, die der Browser nicht abspielt, an Jellyfin übergeben",
       "PLAYER_AUTO_FRAME": "Bild über schwarze Balken vergrößern",
-      "HOME_BROWSE_BUTTON": "Schaltfläche „Alle Filme / Serien“ oben auf der Startseite – Standard",
-      "HOME_CONTINUE_HERO": "Banner der Startseite: Weiterschauen und Als Nächstes – Standard",
+      "HOME_BROWSE_BUTTON": "Schaltfläche „Alle Filme / Serien“ oben auf der Startseite",
+      "HOME_CONTINUE_HERO": "Banner der Startseite: Weiterschauen und Als Nächstes",
       "VAPID_SUBJECT": "Kontakt für Benachrichtigungen (mailto:…)",
       "TZ": "Zeitzone",
       "MEDIA_ROOT": "Medienordner (Speicherstatistik)",
@@ -2537,16 +2541,16 @@
     "secretsNote": "Das Sitzungsgeheimnis und die Benachrichtigungsschlüssel werden beim ersten Start automatisch erzeugt (data/config/secrets.json). Nichts zu tun.",
     "done": {
       "title": "Alles bereit",
-      "text": "Die Einstellungen lassen sich jederzeit in der Verwaltung ändern, Seite „Verbindungen“.",
+      "text": "Die Einstellungen lassen sich jederzeit in der Verwaltung ändern, Seite „Server-Einstellungen“.",
       "manage": "Verwaltung öffnen",
       "cinema": "Mit Jellyfin anmelden",
       "finishing": "Wird abgeschlossen…"
     },
     "settings": {
-      "title": "Verbindungen",
-      "subtitle": "Adressen und Schlüssel der Dienste. Ein hier eingestellter Wert ersetzt den aus der .env.",
-      "link": "Verbindungen zu den Diensten",
-      "linkHint": "Jellyfin, TMDB, Radarr, Sonarr und Ergänzungen."
+      "title": "Server-Einstellungen",
+      "subtitle": "Adressen und Schlüssel der Dienste sowie die Standardeinstellungen der Konten. Ein hier gesetzter Wert ersetzt den aus der .env.",
+      "link": "Server-Einstellungen",
+      "linkHint": "Jellyfin, TMDB, Radarr, Sonarr, die Ergänzungen und die Standardeinstellungen."
     },
     "profileFirst": "Das erste der Liste",
     "profileUnavailable": "Liste nicht verfügbar: Adresse und Schlüssel prüfen, dann Seite neu laden.",

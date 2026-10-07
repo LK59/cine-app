@@ -12,8 +12,9 @@ import { DeploymentGuide, SettingsGroupCard, type Draft } from "@/components/set
 import { SETTINGS_BY_KEY, SETTING_GROUPS, type SettingGroup, type SettingView } from "@/lib/settings/schema";
 
 /**
- * « Connexions » — les adresses et les clés des services, réglables à tout moment
- * (DECISIONS.md §48). Les mêmes cartes que l'assistant de premier lancement ; une valeur réglée ici
+ * « Réglages serveur » (« Connexions » jusqu'au 07/10/2026, l'adresse est restée) — les adresses et
+ * les clés des services, et les réglages par défaut des comptes, réglables à tout moment
+ * (DECISIONS.md §48, §52). Les mêmes cartes que l'assistant de premier lancement ; une valeur réglée ici
  * remplace celle du .env, et « Revenir à la valeur du .env » rend la main au fichier.
  */
 type SettingsPayload = { settings: SettingView[]; missing: string[] };

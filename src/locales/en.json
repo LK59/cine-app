@@ -2477,6 +2477,10 @@
         "title": "Application",
         "why": "Default language, secure connection, poster preparation."
       },
+      "defaults": {
+        "title": "Default settings",
+        "why": "What an account sees until it chooses otherwise. Everyone can change it for themselves in Account → Interface."
+      },
       "deployment": {
         "title": "Deployment options",
         "why": "These options are set when the container starts: add the line shown to your docker-compose.yml (or your .env), then restart the container."
@@ -2511,8 +2515,8 @@
       "PLAYER_ENABLED": "Built-in player",
       "PLAYER_SERVER_FALLBACK": "Hand files the browser can't play over to Jellyfin",
       "PLAYER_AUTO_FRAME": "Enlarge the picture over black bars",
-      "HOME_BROWSE_BUTTON": "“All movies / series” button at the top of home — default",
-      "HOME_CONTINUE_HERO": "Home banner: Continue watching and Up next — default",
+      "HOME_BROWSE_BUTTON": "“All movies / series” button at the top of home",
+      "HOME_CONTINUE_HERO": "Home banner: Continue watching and Up next",
       "VAPID_SUBJECT": "Notification contact (mailto:…)",
       "TZ": "Time zone",
       "MEDIA_ROOT": "Media folder (storage statistics)",
@@ -2537,16 +2541,16 @@
     "secretsNote": "The session secret and notification keys are generated automatically on first launch (data/config/secrets.json). Nothing to do.",
     "done": {
       "title": "All set",
-      "text": "Settings can be changed at any time in the management area, “Connections” page.",
+      "text": "Settings can be changed at any time in management, under “Server settings”.",
       "manage": "Open management",
       "cinema": "Sign in with Jellyfin",
       "finishing": "Finishing…"
     },
     "settings": {
-      "title": "Connections",
-      "subtitle": "Service addresses and keys. A value set here replaces the one in .env.",
-      "link": "Service connections",
-      "linkHint": "Jellyfin, TMDB, Radarr, Sonarr and extras."
+      "title": "Server settings",
+      "subtitle": "Service addresses and keys, and the default settings for accounts. A value set here overrides the one in .env.",
+      "link": "Server settings",
+      "linkHint": "Jellyfin, TMDB, Radarr, Sonarr, the extras and default settings."
     },
     "profileFirst": "The first in the list",
     "profileUnavailable": "List unavailable: check the address and key, then reload the page.",
