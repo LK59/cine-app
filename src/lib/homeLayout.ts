@@ -120,3 +120,27 @@ export function continueTargets<RM extends HeroResumeMovie, NE extends HeroNextE
   }
   return { movies, series };
 }
+
+/** Ce que tient la rangée « À la une » sous la bannière des reprises, au plus. */
+const SPOTLIGHT_ROW_MAX = 10;
+
+/**
+ * La rangée « À la une » sous la bannière des reprises (DECISIONS.md §52) : la sélection « À la
+ * une », puis les derniers ajouts pour la compléter, sans ce que la bannière montre déjà. Puisée
+ * dans la seule sélection, elle tombait à deux ou trois titres dès que la bannière en avait pris
+ * quatre pour se compléter (08/10/2026) ; avec les ajouts derrière, elle en garde au moins cinq.
+ */
+export function spotlightRowItems<T>(pools: readonly (readonly T[])[], shown: ReadonlySet<string>, keyOf: (item: T) => string): T[] {
+  const out: T[] = [];
+  const seen = new Set(shown);
+  for (const pool of pools) {
+    for (const item of pool) {
+      if (out.length >= SPOTLIGHT_ROW_MAX) return out;
+      const key = keyOf(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+  }
+  return out;
+}

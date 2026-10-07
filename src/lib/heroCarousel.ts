@@ -68,19 +68,20 @@ export function reconcileHeroOrder(shown: readonly string[], index: number, offi
 /**
  * La bannière est-elle hors de l'écran — le moment de la remettre dans l'ordre officiel ?
  *
- * L'autre onglet (Séries, Films), le lecteur en plein écran, un panneau du rail (Ma liste, Compte,
- * la recherche, la grille complète, l'activité). **Pas** une fiche, ni une fiche TMDB ou
+ * Le lecteur en plein écran, un panneau du rail (Ma liste, Compte, la recherche, la grille
+ * complète, l'activité). **Pas** l'autre onglet : basculer de Films à Séries et revenir retrouve le
+ * titre qu'on avait laissé (08/10/2026) — la bannière cachée est seulement en pause. **Pas** une
+ * fiche, ni une fiche TMDB ou
  * personne : ouvertes depuis la bannière, la refermer doit retrouver le titre d'où l'on vient —
  * c'est une interaction, et la rotation y est déjà en pause. **Pas** le retour d'arrière-plan :
  * la bannière est alors à l'écran, la remettre au début la ferait sauter sous les yeux.
  */
 export function heroOffscreen(
-  heroTab: "movies" | "series",
+  _heroTab: "movies" | "series",
   route: Pick<CinemaRoute, "tab" | "list" | "account" | "search" | "browse" | "activity" | "report">,
   playerMode: string
 ): boolean {
   return (
-    route.tab !== heroTab ||
     playerMode === "full" ||
     route.list ||
     route.account ||

@@ -14,7 +14,7 @@ import { prefetchLibraryItem } from "@/lib/prefetch";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { continueOrder } from "@/lib/continueOrder";
-import { continueHeroTitles, continueTargets, heroSource } from "@/lib/homeLayout";
+import { continueHeroTitles, continueTargets, heroSource, spotlightRowItems } from "@/lib/homeLayout";
 import { useHomeLayout } from "@/lib/useHomeLayout";
 import { CinemaBrowseAllButton } from "@/components/cinema/CinemaBrowseAllButton";
 import { heroOffscreen } from "@/lib/heroCarousel";
@@ -449,13 +449,13 @@ export function CinemaMobileClient() {
   const heroSeries = seriesHero.items;
   /** La bannière de l'onglet affiché montre Reprendre / À suivre : « À la une » prend la place de la rangée. */
   const heroContinuing = isSeries ? seriesHero.continuing : movieHero.continuing;
-  /** La rangée Reprendre : entière, ou réduite à ce que la bannière n'a pas pu montrer (DECISIONS.md §52). */
-  const rowEntries = heroContinuing ? continueEntries.filter((entry) => !continuingTitles.placed.has(entry.key)) : continueEntries;
-  // Sans ce que la bannière montre déjà en complément : pas deux fois le même titre.
+  /** La rangée Reprendre / À suivre reste entière, bannière des reprises ou non (08/10/2026). */
+  const rowEntries = continueEntries;
+  // La sélection, complétée par les ajouts, sans ce que la bannière montre déjà — au moins cinq
+  // titres (`spotlightRowItems`).
   const spotlightRow = useMemo<(CinemaMovie | CinemaSeries)[]>(() => {
     const p = isSeries ? series : movies;
-    const shown = (isSeries ? seriesHero : movieHero).shown;
-    return (p?.spotlight?.length ? p.spotlight : p?.recentlyAdded ?? []).slice(0, 8).filter((item) => !shown.has(heroItemKey(item)));
+    return spotlightRowItems<CinemaMovie | CinemaSeries>([p?.spotlight ?? [], p?.recentlyAdded ?? []], (isSeries ? seriesHero : movieHero).shown, heroItemKey);
   }, [isSeries, series, movies, movieHero, seriesHero]);
   const myList = isSeries ? myListSeries : myListMovies;
   const myListPending = useCinemaMyListPending();
@@ -714,9 +714,31 @@ export function CinemaMobileClient() {
           </div>
         ))}
 
-        {/* Continue watching — landscape stills with a progress bar and the same resume wording
-            the desktop cards use. */}
-        {!heroContinuing && continuePending && (
+        {/* La bannière montre les reprises (DECISIONS.md §52) : « À la une » juste dessous — la
+            sélection complétée par les ajouts, sans ce que la bannière montre déjà. */}
+        {heroContinuing && (
+          <PosterRow label={t("cinema.spotlight")} items={spotlightRow} itemId={itemId} onSelect={openHero} showNewBadge={false} />
+        )}
+
+        {/* Le classement du jour, propre à chaque onglet — avant Reprendre (08/10/2026). */}
+        {keptTabs.map((tab) => (
+          <div key={tab} {...tabPaneProps(tab, shownTab)}>
+            <MobileTabRows
+              part="top"
+              tab={tab}
+              payload={tab === "series" ? series : movies}
+              myList={tab === "series" ? myListSeries : myListMovies}
+              myListPending={myListPending}
+              discoveryRows={discovery?.rows}
+              onSelect={openHero}
+              onDiscover={openDiscovery}
+            />
+          </div>
+        ))}
+
+        {/* Reprendre / À suivre, commun aux onglets : films et épisodes mêlés, le dernier lu d'abord.
+            Landscape stills with a progress bar and the same resume wording the desktop cards use. */}
+        {continuePending && (
           <MobileRow label={t("cinema.continueWatching")}>
             <CinemaSkeletonCards cardClassName={CONTINUE_WIDTH} shape="still" count={3} />
           </MobileRow>
@@ -811,11 +833,6 @@ export function CinemaMobileClient() {
             })}
           </MobileRow>
         )}
-        {/* La bannière montre les reprises (DECISIONS.md §52) : « À la une » descend ici, après celles
-            qu'elle n'a pas pu montrer (sans fiche, au-delà de huit — voir `rowEntries`). */}
-        {heroContinuing && (
-          <PosterRow label={t("cinema.spotlight")} items={spotlightRow} itemId={itemId} onSelect={openHero} showNewBadge={false} />
-        )}
 
         {/* Un volet par onglet visité, gardé monté et caché quand on regarde l'autre : au retour,
             rien n'est reconstruit et aucune affiche ne se recharge — voir `keptTabs.ts`. La
@@ -823,6 +840,7 @@ export function CinemaMobileClient() {
         {keptTabs.map((tab) => (
           <div key={tab} {...tabPaneProps(tab, shownTab)}>
             <MobileTabRows
+              part="rest"
               tab={tab}
               payload={tab === "series" ? series : movies}
               myList={tab === "series" ? myListSeries : myListMovies}
@@ -1049,6 +1067,7 @@ const DiscoveryRow = memo(function DiscoveryRow({
  * sienne.
  */
 const MobileTabRows = memo(function MobileTabRows({
+  part,
   tab,
   payload,
   myList,
@@ -1057,6 +1076,12 @@ const MobileTabRows = memo(function MobileTabRows({
   onSelect,
   onDiscover,
 }: {
+  /**
+   * Le haut — le classement du jour — ou le reste : Reprendre / À suivre s'intercale entre les deux,
+   * commun aux onglets (08/10/2026, DECISIONS.md §52). Deux volets par onglet plutôt qu'une rangée
+   * passée en propriété : un nœud neuf à chaque rendu aurait défait le `memo` de ces rangées.
+   */
+  part: "top" | "rest";
   tab: "movies" | "series";
   payload: CinemaMoviesPayload | CinemaSeriesPayload | undefined;
   myList: (CinemaMovie | CinemaSeries)[];
@@ -1072,11 +1097,8 @@ const MobileTabRows = memo(function MobileTabRows({
   useFlipGrid(top10Track, top10.map((item) => String(itemId(item))), CATALOGUE_FLIP);
   const recentlyAdded: (CinemaMovie | CinemaSeries)[] = payload?.recentlyAdded ?? [];
   const rows = payload?.rows as Record<string, (CinemaMovie | CinemaSeries)[]> | undefined;
-  return (
-    <>
-      {/* The curated rails, ahead of the genre rows — same three as desktop, same definitions
-          (see lib/cinemaRails). Each hides itself when it has nothing to show. */}
-      {top10.length > 0 && (
+  if (part === "top") {
+    return top10.length > 0 ? (
         <MobileRow label={top10Label(payload?.top10Theme ?? null, t)} trackRef={top10Track}>
           {top10.map((item, i) => (
             <CinemaTop10Card
@@ -1092,9 +1114,13 @@ const MobileTabRows = memo(function MobileTabRows({
             />
           ))}
         </MobileRow>
-      )}
+    ) : null;
+  }
+  return (
+    <>
+      {/* Après le classement et Reprendre : Ma liste, les derniers ajouts, la découverte, puis les
+          genres — le même ordre que le bureau (08/10/2026, DECISIONS.md §52). */}
 
-      <PosterRow label={t("cinema.recentlyAdded")} items={recentlyAdded} itemId={itemId} onSelect={onSelect} showNewBadge={false} />
       {myListPending && (
         <MobileRow label={t("cinema.myList")}>
           <CinemaSkeletonCards cardClassName={POSTER_WIDTH} shape="poster" count={4} />
@@ -1109,6 +1135,7 @@ const MobileTabRows = memo(function MobileTabRows({
         // d'un écran qui existe déjà, avec ses onglets, sa recherche et ses demandes.
         onSeeAll={() => cinemaNavigate({ list: true })}
       />
+      <PosterRow label={t("cinema.recentlyAdded")} items={recentlyAdded} itemId={itemId} onSelect={onSelect} showNewBadge={false} />
 
       {(discoveryRows ?? [])
         .filter((row) => (tab === "movies" ? row.key !== "trendingSeries" : row.key === "trendingSeries"))

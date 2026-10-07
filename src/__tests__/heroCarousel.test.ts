@@ -54,7 +54,6 @@ describe("heroOffscreen — le moment de la remise à plat", () => {
   });
 
   it.each([
-    ["l'autre onglet", { ...route, tab: "series" as const }, "none"],
     ["Ma liste", { ...route, list: true }, "none"],
     ["le compte", { ...route, account: true }, "none"],
     ["la recherche", { ...route, search: true }, "none"],
@@ -64,6 +63,12 @@ describe("heroOffscreen — le moment de la remise à plat", () => {
     ["un film en plein écran", route, "full"],
   ])("est hors de l'écran : %s", (_name, r, mode) => {
     expect(heroOffscreen("movies", r, mode)).toBe(true);
+  });
+
+  // Basculer de Films à Séries et revenir retrouve le titre laissé (08/10/2026) : la bannière cachée
+  // est en pause, pas remise au début.
+  it("n'est pas hors de l'écran sur l'autre onglet : elle y garde sa place", () => {
+    expect(heroOffscreen("movies", { ...route, tab: "series" as const }, "none")).toBe(false);
   });
 
   it("n'est pas hors de l'écran sous un film réduit : on la voit encore", () => {

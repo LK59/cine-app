@@ -1665,9 +1665,19 @@ que l'interrupteur, sans rappeler le réglage du serveur.
   `carouselTransform`, à peu près 38 % de la hauteur de l'écran), centrée, et ses voisines
   dépassent de part et d'autre, plus petites et atténuées — une voisine se choisit d'un toucher.
   « Plus d'infos » y devient un rond.
-- Les reprises que la bannière ne peut pas montrer (un titre hors de Radarr/Sonarr, sans fiche ;
-  au-delà de huit) gardent une rangée Reprendre juste sous elle (`placed`) : sans elle, elles
-  disparaissaient de l'accueil.
+- **L'ordre des rangées (08/10/2026)**, au bureau comme sur téléphone : la bannière (et au bureau
+  sa rangée), « À la une » quand la bannière montre les reprises — la sélection complétée par les
+  derniers ajouts, sans ce que la bannière montre, au moins cinq titres (`spotlightRowItems`) —, le
+  classement du jour, **Reprendre / À suivre** (la même rangée sur les deux onglets, films et épisodes
+  mêlés, le dernier lu d'abord, entière même quand la bannière montre les reprises), Ma liste, les
+  derniers ajouts, puis les genres. Sur téléphone, les rangées d'un onglet sont rendues en deux
+  volets (`MobileTabRows`, `part`) pour que Reprendre, commun, s'intercale après le classement.
+- Toucher l'affiche de la bannière (téléphone) ou son logo (bureau) ouvre la fiche ; un balayage
+  qui se relâche ne compte pas comme un toucher.
+- Basculer de Films à Séries garde la position de chaque bannière : l'onglet caché n'est plus
+  « hors de l'écran » (`heroOffscreen`), sa rotation est seulement en pause.
+- Les vignettes glissent à leur nouvelle place quand l'ordre change (`useFlipGrid`), comme les
+  rangées du bureau.
 - Au bureau, le bouton et sa barre tiennent sur une ligne, et la distribution cède la sienne : la
   bannière a une hauteur fixe, et le logo sortait de l'écran par le haut.
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { Info, Play } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
@@ -153,12 +154,31 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
    * d'œil qu'il y a d'autres titres à côté.
    */
   const peek = continueStyle && !short;
+  /**
+   * Toucher l'affiche ouvre la fiche (08/10/2026), comme « Plus d'infos » — mais pas le relâchement
+   * d'un balayage, que le navigateur livre aussi comme un clic : un geste qui vient de glisser ne
+   * compte pas comme un toucher.
+   */
+  const draggedAt = useRef(0);
+  const onDragState = useCallback((moving: boolean) => {
+    setDragging(moving);
+    draggedAt.current = performance.now();
+  }, []);
+  const openFromPoster = (e: React.MouseEvent, item: Item) => {
+    if ((e.target as Element).closest("button")) return;
+    if (performance.now() - draggedAt.current < 400) return;
+    onOpen(item);
+  };
+  // Les vignettes glissent à leur nouvelle place quand l'ordre change — une reprise avancée sur un
+  // autre écran remonte en tête sous les yeux plutôt que d'y sauter (`useFlipGrid`).
+  const stripRef = useRef<HTMLDivElement>(null);
+  useFlipGrid(stripRef, continueStyle ? items.map(heroKey) : [], CATALOGUE_FLIP);
   const drag = useCarouselDrag({
     trackRef,
     count: items.length,
     index,
     onIndexChange: setIndex,
-    onDragStateChange: setDragging,
+    onDragStateChange: onDragState,
     peek,
   });
 
@@ -262,7 +282,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   mémoire, plus huit logos. Trois suffisent — celle qu'on voit, celle d'où l'on
                   vient, celle où l'on va. */}
               {Math.abs(i - index) > 1 ? null : short ? (
-                <div className="flex gap-4 rounded-2xl bg-surface/70 p-3 shadow-xl shadow-black/50">
+                <div className="flex cursor-pointer gap-4 rounded-2xl bg-surface/70 p-3 shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
                   <div className="w-24 shrink-0 overflow-hidden rounded-lg">
                     <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === index} sizes="120px" />
                   </div>
@@ -295,7 +315,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   </div>
                 </div>
               ) : (
-                <div className="relative overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50">
+                <div className="relative cursor-pointer overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
                   <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === index} sizes="100vw" />
                   <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                     {item.logoUrl ? (
@@ -330,7 +350,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
           fil sous la vignette active compte jusqu'au passage suivant, comme les tirets. */}
       {continueStyle && items.length > 1 && (
         <div className="scrollbar-none -mx-4 mt-2 overflow-x-auto px-4 py-1.5">
-          <div className="mx-auto flex w-max gap-2">
+          <div ref={stripRef} className="mx-auto flex w-max gap-2">
             {items.map((item, i) => {
               const resume = resumeFor?.(item) ?? null;
               const watched = resume?.runtimeTicks && resume.positionTicks > 0 ? Math.min(1, resume.positionTicks / resume.runtimeTicks) : null;

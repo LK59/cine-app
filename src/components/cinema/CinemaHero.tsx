@@ -149,6 +149,19 @@ export function HeroCastLine({ info }: { info: { tmdb: { cast?: { name: string }
  * La bannière d'origine n'en a aucune, et c'est voulu (voir plus haut) ; celle-ci montre ce qu'on
  * était en train de regarder, et le geste attendu est d'y retourner, avec ce qui reste à voir.
  */
+/**
+ * Le logo de la bannière ouvre la fiche (08/10/2026) — la bannière reste un aperçu, mais son titre
+ * mène quelque part, comme l'affiche de la bannière du téléphone. Sans `onOpen`, rien ne change.
+ */
+export function HeroTitleLink({ onOpen, title, children }: { onOpen?: () => void; title: string; children: React.ReactNode }) {
+  if (!onOpen) return <>{children}</>;
+  return (
+    <button type="button" onClick={onOpen} aria-label={title} className="self-start rounded-lg text-left transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500">
+      {children}
+    </button>
+  );
+}
+
 export type HeroContinueAction = { label: string; caption: string | null; progress: number | null; onPlay: () => void };
 export function HeroContinueButton({ action }: { action: HeroContinueAction }) {
   return (
@@ -168,7 +181,7 @@ export function HeroContinueButton({ action }: { action: HeroContinueAction }) {
   );
 }
 
-export function CinemaHero({ item, action }: { item: CinemaMovie; action?: HeroContinueAction | null }) {
+export function CinemaHero({ item, action, onOpen }: { item: CinemaMovie; action?: HeroContinueAction | null; onOpen?: () => void }) {
   const t = useT();
   // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
   // (La bande-annonce que la bannière remontait autrefois au fond vidéo n'a plus d'écouteur : le
@@ -193,11 +206,13 @@ export function CinemaHero({ item, action }: { item: CinemaMovie; action?: HeroC
 
   return (
     <div key={item.radarrId} className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
-      {item.logoUrl && !logoErrored ? (
-        <CinemaLogo src={item.logoUrl} alt={item.title} surface="hero" onError={() => setLogoErrored(true)} />
-      ) : (
-        <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl font-display">{item.title}</h1>
-      )}
+      <HeroTitleLink onOpen={onOpen} title={item.title}>
+        {item.logoUrl && !logoErrored ? (
+          <CinemaLogo src={item.logoUrl} alt={item.title} surface="hero" onError={() => setLogoErrored(true)} />
+        ) : (
+          <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl font-display">{item.title}</h1>
+        )}
+      </HeroTitleLink>
 
       <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
         <span>{item.year}</span>

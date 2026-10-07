@@ -7,7 +7,7 @@ import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { continueOrder } from "@/lib/continueOrder";
-import { continueHeroTitles, continueTargets, heroSource } from "@/lib/homeLayout";
+import { continueHeroTitles, continueTargets, heroSource, spotlightRowItems } from "@/lib/homeLayout";
 import { useHomeLayout } from "@/lib/useHomeLayout";
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -491,7 +491,9 @@ export function CinemaClient() {
   // Le hook ne reçoit que des valeurs primitives — voir `useHeroOrder`.
   const [movieOrderIndex, setMovieCarouselIndex, movieOrder] = useHeroOrder(
     heroSignature(movieCarouselOfficial.map(movieHeroKey)),
-    focusedItem !== null || !gridOnTop,
+    // L'onglet caché garde sa place, en pause : revenir sur Films retrouve le titre qu'on y avait
+    // laissé (08/10/2026) — voir `heroOffscreen`.
+    focusedItem !== null || !gridOnTop || mediaType !== "movies",
     heroOffscreen("movies", route, playback.mode),
     movieHero.continuing ? "continue" : "spotlight"
   );
@@ -545,7 +547,7 @@ export function CinemaClient() {
   const seriesCarouselOfficial = seriesHero.items;
   const [seriesOrderIndex, setSeriesCarouselIndex, seriesOrder] = useHeroOrder(
     heroSignature(seriesCarouselOfficial.map(seriesHeroKey)),
-    seriesFocusedItem !== null || !gridOnTop,
+    seriesFocusedItem !== null || !gridOnTop || mediaType !== "series",
     heroOffscreen("series", route, playback.mode),
     seriesHero.continuing ? "continue" : "spotlight"
   );
@@ -984,11 +986,10 @@ export function CinemaClient() {
     </div>
   );
 
-  // La bannière de l'onglet montre les reprises (DECISIONS.md §52) : la rangée ne garde que celles
-  // qu'elle n'a pas pu montrer — un titre sans fiche (hors de Radarr/Sonarr), au-delà de huit. Sans
-  // elle, ces reprises disparaissaient de l'accueil.
-  const heroContinuingHere = mediaType === "series" ? seriesHero.continuing : movieHero.continuing;
-  const rowEntries = heroContinuingHere ? continueEntries.filter((entry) => !continuingTitles.placed.has(entry.key)) : continueEntries;
+  // La rangée Reprendre / À suivre reste entière, même quand la bannière montre les reprises
+  // (08/10/2026) : la bannière les présente une à une, par onglet ; la rangée les donne toutes d'un
+  // coup, films et épisodes mêlés, le dernier lu d'abord — et c'est d'elle qu'on reprend vite.
+  const rowEntries = continueEntries;
   const continueRow = rowEntries.length > 0 && (
     <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
       <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{t("cinema.continueWatching")}</h2>
@@ -1162,8 +1163,8 @@ export function CinemaClient() {
         {/* La hauteur de la bannière : voir `HERO_BASIS`. */}
         <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: HERO_BASIS }}>
           {heroKind === "movies"
-            ? heroItem && <CinemaHero item={heroItem} action={movieHeroAction} />
-            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} action={seriesHeroAction} />}
+            ? heroItem && <CinemaHero item={heroItem} action={movieHeroAction} onOpen={() => openDetail(heroItem)} />
+            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} action={seriesHeroAction} onOpen={() => openSeriesDetail(seriesHeroItem)} />}
         </div>
 
         {/* min-h-80 (320px): comfortably fits one full row — label, a card at its largest
@@ -1229,44 +1230,32 @@ export function CinemaClient() {
                 ))}
               </CinemaSpotlight>
 
-              {/* « Reprendre » n'existe qu'une fois, dans l'onglet affiché : c'est la même rangée
-                  des deux côtés, et sa piste porte l'unique `continueTrack`. */}
-              {/* La bannière montre déjà Reprendre (DECISIONS.md §52) : « À la une » prend sa place, après
-                  les reprises qu'elle n'a pas pu montrer. */}
-              {movieHero.continuing ? (
-                <>
-                {mediaType === "movies" && continueRow}
+              {/* L'ordre des rangées (08/10/2026, DECISIONS.md §52) : la bannière et sa rangée, « À la une »
+                  quand la bannière montre les reprises, le classement du jour, Reprendre / À suivre,
+                  Ma liste, les derniers ajouts, puis les genres. */}
+              {movieHero.continuing && (
                 <CinemaRow
                   label={t("cinema.spotlight")}
                   rowKey="spotlight-row-movies"
                   showNewBadge={false}
                   rowIndex={1}
-                  // Sans ce que la bannière montre déjà en complément : pas deux fois le même titre.
-                  items={movieSpotlightOfficial.filter((m) => !movieHero.shown.has(movieHeroKey(m)))}
+                  // La sélection, complétée par les ajouts, sans ce que la bannière montre déjà.
+                  items={spotlightRowItems([movies?.spotlight ?? [], movies?.recentlyAdded ?? []], movieHero.shown, movieHeroKey)}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusMovie}
                   onSelectItem={openDetail}
                 />
-                </>
-              ) : (
-                <>
-                  {mediaType === "movies" && continueSkeleton}
-                  {mediaType === "movies" && continueRow}
-                </>
               )}
 
               {catalogueErrorView(moviesError, movies) === "ligne" && (
                 <p className="px-8 text-sm text-danger sm:px-12">{errorMessage(moviesError, t, t("common.unknown"))}</p>
               )}
 
-              {/* The curated rails, ahead of the alphabetical genre rows: what's best, what just
-                  arrived, what you saved. A library sorted A→Z is a catalogue; these three are
-                  what make it read as a home screen. Each one hides itself when empty. */}
               {movies && (
                 <CinemaTop10Row
                   label={top10Label(movies?.top10Theme ?? null, t)}
                   rowKey="top10-movies"
-                  rowIndex={hasContinue ? 2 : 1}
+                  rowIndex={2}
                   items={movies.top10}
                   idOf={(m) => m.radarrId}
                   cardWidthClassName={CARD_WIDTH}
@@ -1275,18 +1264,11 @@ export function CinemaClient() {
                 />
               )}
 
-              {movies && (
-                <CinemaRow
-                  label={t("cinema.recentlyAdded")}
-                  rowKey="recent-movies"
-                  showNewBadge={false}
-                  rowIndex={RAIL_COUNT}
-                  items={movies.recentlyAdded}
-                  cardWidthClassName={CARD_WIDTH}
-                  onFocusItem={focusMovie}
-                  onSelectItem={openDetail}
-                />
-              )}
+              {/* « Reprendre » n'existe qu'une fois, dans l'onglet affiché : c'est la même rangée
+                  des deux côtés — films et épisodes mêlés, le dernier lu d'abord —, et sa piste porte
+                  l'unique `continueTrack`. */}
+              {mediaType === "movies" && continueSkeleton}
+              {mediaType === "movies" && continueRow}
 
               {myListSkeleton}
               <CinemaRow
@@ -1300,6 +1282,19 @@ export function CinemaClient() {
                 onFocusItem={focusMovie}
                 onSelectItem={openDetail}
               />
+
+              {movies && (
+                <CinemaRow
+                  label={t("cinema.recentlyAdded")}
+                  rowKey="recent-movies"
+                  showNewBadge={false}
+                  rowIndex={RAIL_COUNT}
+                  items={movies.recentlyAdded}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={focusMovie}
+                  onSelectItem={openDetail}
+                />
+              )}
 
               {movies?.genres.map((genre, i) => (
                 <CinemaRow
@@ -1373,26 +1368,18 @@ export function CinemaClient() {
                 ))}
               </CinemaSpotlight>
 
-              {/* La bannière montre déjà À suivre (DECISIONS.md §52) : « À la une » prend sa place. */}
-              {seriesHero.continuing ? (
-                <>
-                {mediaType === "series" && continueRow}
+              {/* Le même ordre que l'onglet Films — voir sa note. */}
+              {seriesHero.continuing && (
                 <CinemaSeriesRow
                   label={t("cinema.spotlight")}
                   rowKey="spotlight-row-series"
                   showNewBadge={false}
                   rowIndex={1}
-                  items={seriesSpotlightOfficial.filter((x) => !seriesHero.shown.has(seriesHeroKey(x)))}
+                  items={spotlightRowItems([series?.spotlight ?? [], series?.recentlyAdded ?? []], seriesHero.shown, seriesHeroKey)}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusSeries}
                   onSelectItem={openSeriesDetail}
                 />
-                </>
-              ) : (
-                <>
-                  {mediaType === "series" && continueSkeleton}
-                  {mediaType === "series" && continueRow}
-                </>
               )}
 
               {nothingToShowYet(seriesLoading, series) && (
@@ -1407,12 +1394,11 @@ export function CinemaClient() {
               {series && series.spotlight.length === 0 && (
                 <p className="px-8 text-sm text-muted sm:px-12">{t("cinema.empty")}</p>
               )}
-              {/* Same three rails as the movies tab — see its own note above. */}
               {series && (
                 <CinemaTop10Row
                   label={top10Label(series?.top10Theme ?? null, t)}
                   rowKey="top10-series"
-                  rowIndex={hasContinue ? 1 : 0}
+                  rowIndex={2}
                   items={series.top10}
                   idOf={(x) => x.sonarrId}
                   cardWidthClassName={CARD_WIDTH}
@@ -1421,18 +1407,8 @@ export function CinemaClient() {
                 />
               )}
 
-              {series && (
-                <CinemaSeriesRow
-                  label={t("cinema.recentlyAdded")}
-                  rowKey="recent-series"
-                  showNewBadge={false}
-                  rowIndex={RAIL_COUNT}
-                  items={series.recentlyAdded}
-                  cardWidthClassName={CARD_WIDTH}
-                  onFocusItem={focusSeries}
-                  onSelectItem={openSeriesDetail}
-                />
-              )}
+              {mediaType === "series" && continueSkeleton}
+              {mediaType === "series" && continueRow}
 
               {myListSkeleton}
               <CinemaSeriesRow
@@ -1446,6 +1422,19 @@ export function CinemaClient() {
                 onFocusItem={focusSeries}
                 onSelectItem={openSeriesDetail}
               />
+
+              {series && (
+                <CinemaSeriesRow
+                  label={t("cinema.recentlyAdded")}
+                  rowKey="recent-series"
+                  showNewBadge={false}
+                  rowIndex={RAIL_COUNT}
+                  items={series.recentlyAdded}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={focusSeries}
+                  onSelectItem={openSeriesDetail}
+                />
+              )}
 
               {series?.genres.map((genre, i) => (
                 <CinemaSeriesRow
