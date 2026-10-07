@@ -180,8 +180,10 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
         {/* Chercher, trier, ajouter — sur une ligne. Cette recherche-ci ne fouille que la liste ;
             le « + » en ouvre une autre, qui cherche partout pour y ajouter. La ligne s'efface
             pendant ce temps : deux champs à l'écran, on ne saurait plus lequel filtre quoi. */}
+        {/* Bornée comme le champ de la recherche : l'onglet s'étale avec l'écran pour ses
+            affiches, et un champ de 1 700 px ne se lit plus comme un champ (07/10/2026). */}
         {!adding && (
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-4 flex max-w-3xl items-center gap-2">
           <div className="relative min-w-0 flex-1">
             {/* z-10 : `.input` porte un `backdrop-blur`, qui crée un contexte d'empilement et
                 fait peindre le champ *par-dessus* une icône absolue sans plan. La loupe était

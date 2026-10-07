@@ -53,7 +53,9 @@ export function PlayerListAdd({ existing, onClose }: { existing: Set<string>; on
   const results: UnifiedSearchResult[] = [...(data?.library ?? []), ...(data?.tmdb ?? [])];
 
   return (
-    <div className="mt-1">
+    // Une liste de lignes, pas une grille : bornée comme le champ de la recherche, ses lignes ne
+    // traversent pas un grand écran d'un bord à l'autre (07/10/2026).
+    <div className="mt-1 max-w-3xl">
       <div className="flex items-center gap-2">
         <input
           type="search"
