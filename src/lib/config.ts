@@ -117,6 +117,16 @@ export const config = {
       return optional("PLAYER_AUTO_FRAME", "true") === "true";
     },
   },
+  home: {
+    // « Tous les films » / « Toutes les séries » en tête de l'accueil, à côté de la bascule.
+    get browseButton() {
+      return optional("HOME_BROWSE_BUTTON", "false") === "true";
+    },
+    // La bannière du haut montre Reprendre / À suivre, et « À la une » descend à leur place.
+    get continueHero() {
+      return optional("HOME_CONTINUE_HERO", "false") === "true";
+    },
+  },
   gallery: {
     // La galerie Clara Galle, option personnelle de l'installation de référence. Lue au
     // démarrage, fermée par défaut : elle était figée dans l'image au moment du build, par défaut

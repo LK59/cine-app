@@ -251,6 +251,9 @@ function migrate(db: Database.Database): void {
   // Le défilement guidé de l'interface ordinateur (`guidedScroll.ts`, DECISIONS.md §50) : NULL = le
   // défaut, activé.
   try { db.exec("ALTER TABLE user_preferences ADD COLUMN guided_scroll INTEGER"); } catch { /* already exists */ }
+  // La disposition de l'accueil choisie par le compte (DECISIONS.md §52) : NULL = celle du serveur.
+  try { db.exec("ALTER TABLE user_preferences ADD COLUMN home_browse_button INTEGER"); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE user_preferences ADD COLUMN home_continue_hero INTEGER"); } catch { /* already exists */ }
   // La colonne a existé le temps d'une version qui révoquait le jeton Jellyfin en même temps que
   // la session. Ce n'est plus le cas — se déconnecter de Cine App ne doit pas toucher à Jellyfin —
   // et un secret qu'on ne lit plus n'a rien à faire au repos : elle est vidée à chaque démarrage.
@@ -387,6 +390,28 @@ export const userPrefsDb = {
       .prepare("SELECT guided_scroll FROM user_preferences WHERE user_id = ?")
       .get(userId) as { guided_scroll: number | null } | undefined;
     return row?.guided_scroll !== 0;
+  },
+
+  /** La disposition de l'accueil choisie par le compte ; `null` = celle du serveur (DECISIONS.md §52). */
+  getHomeLayout(userId: string): { browseButton: boolean | null; continueHero: boolean | null } {
+    const row = getDb()
+      .prepare("SELECT home_browse_button, home_continue_hero FROM user_preferences WHERE user_id = ?")
+      .get(userId) as { home_browse_button: number | null; home_continue_hero: number | null } | undefined;
+    const read = (v: number | null | undefined) => (v === 1 ? true : v === 0 ? false : null);
+    return { browseButton: read(row?.home_browse_button), continueHero: read(row?.home_continue_hero) };
+  },
+
+  /** Choisit une variante pour ce compte, ou rend la main au serveur (`null`). */
+  setHomeLayout(userId: string, key: "browseButton" | "continueHero", value: boolean | null): void {
+    // Le nom de colonne vient d'ici, jamais de la requête.
+    const column = key === "browseButton" ? "home_browse_button" : "home_continue_hero";
+    getDb().prepare(`
+      INSERT INTO user_preferences (user_id, lang, ${column}, updated_at)
+      VALUES (?, NULL, ?, ?)
+      ON CONFLICT (user_id) DO UPDATE SET
+        ${column} = excluded.${column},
+        updated_at = excluded.updated_at
+    `).run(userId, value === null ? null : value ? 1 : 0, Date.now());
   },
 
   setGuidedScroll(userId: string, on: boolean): void {

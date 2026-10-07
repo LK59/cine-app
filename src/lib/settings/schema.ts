@@ -63,6 +63,11 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "PLAYER_ENABLED", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "PLAYER_SERVER_FALLBACK", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  // La disposition de l'accueil (07/10/2026) — deux variantes d'une installation à l'autre, sans
+  // fourche du code : un accès direct à tout le catalogue en tête, et une bannière qui montre ce
+  // qu'on regarde plutôt que ce qui vient d'arriver. Coupées par défaut : l'accueil d'origine.
+  { key: "HOME_BROWSE_BUTTON", group: "app", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  { key: "HOME_CONTINUE_HERO", group: "app", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   // Lu au démarrage seulement : son libellé le dit (« au prochain démarrage »).
   { key: "POSTER_PREWARM", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "VAPID_SUBJECT", group: "app", kind: "text", need: "optional", fallback: "mailto:admin@example.com", inApp: true, placeholder: "mailto:admin@example.com" },

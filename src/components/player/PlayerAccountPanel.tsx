@@ -22,6 +22,7 @@ import { LanguageSelect, SubtitleModeSelect, NotificationChoices, NotificationTe
 import { openOnboarding } from "./onboardingEvents";
 import { Toggle } from "@/components/Toggle";
 import { setGuidedScroll, useGuidedScroll } from "@/lib/guidedScroll";
+import { setHomeLayoutChoice, useHomeLayoutChoice } from "@/lib/useHomeLayout";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import type { OtherSession } from "@/app/api/auth/sessions/route";
 import { MAINTENANCE_KEY, type MaintenanceState } from "@/lib/useMaintenance";
@@ -264,23 +265,59 @@ function LanguageSection() {
   );
 }
 
-/** Le défilement guidé de l'interface ordinateur — une préférence du compte (`guidedScroll.ts`). */
+/**
+ * L'interface du compte : le défilement guidé (`guidedScroll.ts`) et la disposition de l'accueil
+ * (`useHomeLayout.ts`, DECISIONS.md §52). La section s'appelait « Affichage » tant qu'elle ne
+ * portait que le défilement ; la disposition y a sa place, puisqu'elle change la même chose — la
+ * façon dont on parcourt l'accueil.
+ */
 function DisplaySection() {
   const t = useT();
   const toast = useToast();
   const on = useGuidedScroll();
+  const home = useHomeLayoutChoice();
+  const fail = () => toast.error(t("common.error"));
   return (
     <Section icon={Rows3} title={t("player.account.display")}>
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
-        <div>
-          <p className="text-sm text-white">{t("player.account.guidedScroll")}</p>
-          <p className="mt-0.5 text-xs text-subtle">{t("player.account.guidedScrollHint")}</p>
+      <div className="divide-y divide-white/10 rounded-xl border border-white/10 bg-white/5">
+        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+          <div>
+            <p className="text-sm text-white">{t("player.account.guidedScroll")}</p>
+            <p className="mt-0.5 text-xs text-subtle">{t("player.account.guidedScrollHint")}</p>
+          </div>
+          <Toggle checked={on} ariaLabel={t("player.account.guidedScroll")} onChange={(next) => void setGuidedScroll(next).catch(fail)} />
         </div>
-        <Toggle
-          checked={on}
-          ariaLabel={t("player.account.guidedScroll")}
-          onChange={(next) => void setGuidedScroll(next).catch(() => toast.error(t("common.error")))}
-        />
+        {(["browseButton", "continueHero"] as const).map((key) => {
+          const own = home.own[key];
+          const fallback = home.defaults[key];
+          const checked = own ?? fallback;
+          return (
+            <div key={key} className="flex items-center justify-between gap-4 px-4 py-3.5">
+              <div className="min-w-0">
+                <p className="text-sm text-white">{t(`player.account.home.${key}`)}</p>
+                <p className="mt-0.5 text-xs text-subtle">{t(`player.account.home.${key}Hint`)}</p>
+                {/* Le choix du serveur reste lisible, et rétablissable : sans cela, un compte qui
+                    a changé la valeur ne saurait plus qu'il s'écarte de celle de l'installation. */}
+                {own !== null && own !== fallback && (
+                  <p className="mt-1 text-xs text-subtle">
+                    {t(fallback ? "player.account.home.serverOn" : "player.account.home.serverOff")}
+                    {" · "}
+                    <button type="button" onClick={() => void setHomeLayoutChoice(key, null).catch(fail)} className="font-medium text-accent-400 hover:underline">
+                      {t("player.account.home.reset")}
+                    </button>
+                  </p>
+                )}
+              </div>
+              <Toggle
+                checked={checked}
+                ariaLabel={t(`player.account.home.${key}`)}
+                // Revenir sur la valeur du serveur, c'est la suivre à nouveau : un compte n'a pas à
+                // figer un choix qu'il n'a jamais voulu différent.
+                onChange={(next) => void setHomeLayoutChoice(key, next === fallback ? null : next).catch(fail)}
+              />
+            </div>
+          );
+        })}
       </div>
     </Section>
   );

@@ -13,6 +13,8 @@ const mockUserPrefsDb = {
   setLegacyPlayer: vi.fn(),
   getGuidedScroll: vi.fn(() => true),
   setGuidedScroll: vi.fn(),
+  getHomeLayout: vi.fn(() => ({ browseButton: null, continueHero: true })),
+  setHomeLayout: vi.fn(),
 };
 const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn(), listOthers: vi.fn(() => []) };
 vi.mock("@/lib/db", () => ({
@@ -33,7 +35,7 @@ vi.mock("@/lib/webPush", () => ({
   sendWebPush: (...a: unknown[]) => mockSendWebPush(...a),
   shouldRemovePushSubscription: (...a: unknown[]) => mockShouldRemovePushSubscription(...a),
 }));
-vi.mock("@/lib/config", () => ({ config: { app: { language: "fr", cookieSecure: false } } }));
+vi.mock("@/lib/config", () => ({ config: { app: { language: "fr", cookieSecure: false }, home: { browseButton: true, continueHero: false } } }));
 vi.mock("@/lib/i18n", () => ({ LOCALE_COOKIE: "cine-lang", LOCALES: ["fr", "en", "es", "de"] }));
 const mockTmdb = { getMovie: vi.fn(), getTv: vi.fn() };
 const mockOmdb = { isEnabled: vi.fn(() => true), getRating: vi.fn() };
@@ -175,6 +177,21 @@ describe("/api/user/preferences", () => {
     const res = await PUT(fakeReq({ body: { guidedScroll: false } }));
     expect(res.status).toBe(200);
     expect(mockUserPrefsDb.setGuidedScroll).toHaveBeenCalledWith("jf-3", false);
+    expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
+  });
+
+  // La disposition de l'accueil (DECISIONS.md §52) : le choix du compte et le défaut du serveur,
+  // et un `null` qui rend la main au serveur.
+  it("GET dit le choix du compte et le défaut du serveur ; PUT choisit ou rend la main", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "emma", jfId: "jf-4", role: "user" });
+    const { GET, PUT } = await import("@/app/api/user/preferences/route");
+    const body = await (await GET(fakeReq())).json();
+    expect(body.homeOwn).toEqual({ browseButton: null, continueHero: true });
+    expect(body.homeDefaults).toEqual({ browseButton: true, continueHero: false });
+    expect((await PUT(fakeReq({ body: { home: { continueHero: null, browseButton: false } } }))).status).toBe(200);
+    expect(mockUserPrefsDb.setHomeLayout).toHaveBeenCalledWith("jf-4", "continueHero", null);
+    expect(mockUserPrefsDb.setHomeLayout).toHaveBeenCalledWith("jf-4", "browseButton", false);
+    expect((await PUT(fakeReq({ body: { home: { continueHero: "oui" } } }))).status).toBe(400);
     expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
   });
 

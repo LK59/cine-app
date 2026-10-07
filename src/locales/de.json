@@ -1749,9 +1749,18 @@
       "storageUsed": "{size} belegt",
       "storageClear": "Cache leeren",
       "storageCleared": "Cache geleert",
-      "display": "Anzeige",
+      "display": "Oberfläche",
       "guidedScroll": "Geführtes Scrollen",
-      "guidedScrollHint": "Am Computer rastet die Startseite auf eine ganze Reihe und die Titelseiten auf eine ganze Seite ein. Aus: Die Seite scrollt frei."
+      "guidedScrollHint": "Am Computer rastet die Startseite auf eine ganze Reihe und die Titelseiten auf eine ganze Seite ein. Aus: Die Seite scrollt frei.",
+      "home": {
+        "browseButton": "Schaltfläche „Alle Filme / Serien“",
+        "browseButtonHint": "Oben auf der Startseite, der ganze Katalog mit einem Tipp.",
+        "continueHero": "Banner: Weiterschauen und Als Nächstes",
+        "continueHeroHint": "Das Banner der Startseite zeigt, was du gerade schaust; „Im Fokus“ rückt direkt darunter.",
+        "serverOn": "Auf diesem Server standardmäßig an",
+        "serverOff": "Auf diesem Server standardmäßig aus",
+        "reset": "Server-Einstellung verwenden"
+      }
     },
     "browse": {
       "seeAll": "Alle anzeigen",
@@ -2502,6 +2511,8 @@
       "PLAYER_ENABLED": "Integrierter Player",
       "PLAYER_SERVER_FALLBACK": "Dateien, die der Browser nicht abspielt, an Jellyfin übergeben",
       "PLAYER_AUTO_FRAME": "Bild über schwarze Balken vergrößern",
+      "HOME_BROWSE_BUTTON": "Schaltfläche „Alle Filme / Serien“ oben auf der Startseite – Standard",
+      "HOME_CONTINUE_HERO": "Banner der Startseite: Weiterschauen und Als Nächstes – Standard",
       "VAPID_SUBJECT": "Kontakt für Benachrichtigungen (mailto:…)",
       "TZ": "Zeitzone",
       "MEDIA_ROOT": "Medienordner (Speicherstatistik)",

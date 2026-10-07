@@ -1749,9 +1749,18 @@
       "storageUsed": "{size} usados",
       "storageClear": "Vaciar la caché",
       "storageCleared": "Caché vaciada",
-      "display": "Pantalla",
+      "display": "Interfaz",
       "guidedScroll": "Desplazamiento guiado",
-      "guidedScrollHint": "En el ordenador, el inicio se ajusta a una fila entera y las fichas a una página entera. Desactivado, la página se desplaza libremente."
+      "guidedScrollHint": "En el ordenador, el inicio se ajusta a una fila entera y las fichas a una página entera. Desactivado, la página se desplaza libremente.",
+      "home": {
+        "browseButton": "Botón «Todas las películas / series»",
+        "browseButtonHint": "Arriba del inicio, todo el catálogo a un toque.",
+        "continueHero": "Banner: Continuar y A continuación",
+        "continueHeroHint": "El banner del inicio muestra lo que estás viendo; «Destacados» pasa justo debajo.",
+        "serverOn": "Activado por defecto en este servidor",
+        "serverOff": "Desactivado por defecto en este servidor",
+        "reset": "Volver al ajuste del servidor"
+      }
     },
     "browse": {
       "seeAll": "Ver todo",
@@ -2502,6 +2511,8 @@
       "PLAYER_ENABLED": "Reproductor integrado",
       "PLAYER_SERVER_FALLBACK": "Pasar a Jellyfin los archivos que el navegador no reproduce",
       "PLAYER_AUTO_FRAME": "Ampliar la imagen sobre las bandas negras",
+      "HOME_BROWSE_BUTTON": "Botón «Todas las películas / series» arriba del inicio — por defecto",
+      "HOME_CONTINUE_HERO": "Banner del inicio: Continuar y A continuación — por defecto",
       "VAPID_SUBJECT": "Contacto de las notificaciones (mailto:…)",
       "TZ": "Zona horaria",
       "MEDIA_ROOT": "Carpeta de medios (estadísticas de almacenamiento)",

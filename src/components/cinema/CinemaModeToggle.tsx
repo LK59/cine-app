@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type CSSProperties } from "react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
 import { useT } from "@/components/TranslationProvider";
 import { useLiquidLens } from "@/lib/liquidGlass/useLiquidLens";
 import { TOGGLE_SETTLE } from "@/lib/liquidGlass/liquid";
@@ -23,11 +23,18 @@ export function CinemaModeToggle({
   mode,
   onChange,
   placement = "floating",
+  trailing,
 }: {
   mode: "movies" | "series";
   onChange: (mode: "movies" | "series") => void;
   /** `floating` : posée en haut au centre (bureau) ; `inline` : dans une barre (téléphone). */
   placement?: "floating" | "inline";
+  /**
+   * Posé à droite de la bascule, dans le même ensemble centré — le bouton « Tous les films » quand
+   * l'installation le veut (DECISIONS.md §52). Seulement en `floating` : en ligne, la barre du
+   * téléphone place elle-même ses voisins.
+   */
+  trailing?: ReactNode;
 }) {
   const t = useT();
   const moviesRef = useRef<HTMLButtonElement>(null);
@@ -53,17 +60,20 @@ export function CinemaModeToggle({
   }
 
   const floating = placement === "floating";
-  const style: CSSProperties | undefined = floating
+  // Un voisin : c'est l'ensemble qui est posé et centré, la bascule y devient un élément parmi
+  // d'autres.
+  const grouped = floating && trailing !== undefined && trailing !== null && trailing !== false;
+  const style: CSSProperties | undefined = floating && !grouped
     ? // Centré sur le contenu, pas sur la fenêtre : le rail du lecteur occupe la bande de gauche,
       // et un `left-1/2` nu laissait la bascule décalée d'une demi-largeur de rail vers la gauche.
       // La variable vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
       { top: "max(1rem, env(safe-area-inset-top))", left: "calc(50% + var(--player-rail, 0px) / 2)", touchAction: "pan-y" }
     : { touchAction: "pan-y" };
-  return (
+  const bar = (
     <div
       ref={barRef}
-      className={`${floating ? "fixed top-4 z-10 -translate-x-1/2 gap-1 p-1" : "relative justify-self-center gap-0.5 p-0.5"} nav-glass flex items-center rounded-full`}
-      style={style}
+      className={`${floating ? (grouped ? "relative gap-1 p-1" : "fixed top-4 z-10 -translate-x-1/2 gap-1 p-1") : "relative justify-self-center gap-0.5 p-0.5"} nav-glass flex items-center rounded-full`}
+      style={grouped ? { touchAction: "pan-y" } : style}
     >
       {/* La pastille de verre de la barre du bas, et non un fond blanc plein : sous un fond blanc, le
           libellé changeait de couleur d'un coup, si bien qu'un glisser lent montrait du noir sur noir
@@ -94,6 +104,16 @@ export function CinemaModeToggle({
       >
         {t("cinema.seriesTab")}
       </button>
+    </div>
+  );
+  if (!grouped) return bar;
+  return (
+    <div
+      className="fixed top-4 z-10 flex -translate-x-1/2 items-center gap-2"
+      style={{ top: "max(1rem, env(safe-area-inset-top))", left: "calc(50% + var(--player-rail, 0px) / 2)" }}
+    >
+      {bar}
+      {trailing}
     </div>
   );
 }

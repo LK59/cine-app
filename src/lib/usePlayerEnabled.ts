@@ -8,6 +8,8 @@ export interface PublicPlayerConfig {
   playerEnabled: boolean;
   playerServerFallback: boolean;
   claraGallery?: boolean;
+  homeBrowseButton?: boolean;
+  homeContinueHero?: boolean;
 }
 
 /**
@@ -73,4 +75,14 @@ export function usePlayerServerFallback(): boolean | undefined {
 export function useClaraGalleryEnabled(): boolean {
   const { data } = usePublicPlayerConfig();
   return data?.claraGallery ?? false;
+}
+
+/**
+ * La disposition de l'accueil que le **serveur** donne par défaut (DECISIONS.md §52). Un compte
+ * peut la remplacer : l'accueil lit `useHomeLayout`, qui tient compte des deux. Coupées tant qu'on
+ * ne sait pas — l'accueil d'origine.
+ */
+export function useServerHomeLayout(): { browseButton: boolean; continueHero: boolean } {
+  const { data } = usePublicPlayerConfig();
+  return { browseButton: data?.homeBrowseButton ?? false, continueHero: data?.homeContinueHero ?? false };
 }

@@ -1638,3 +1638,36 @@ ne change) ; la première lecture de « Ma liste » d'un compte y copie ce que J
 
 **Décidé le 06/10/2026.**
 
+
+## 52. La disposition de l'accueil, un réglage et non une fourche
+
+**Règle.** Deux variantes de l'accueil. Le serveur donne la valeur par défaut (Réglages de l'app,
+ou `.env`), coupée tant qu'on n'y touche pas — l'accueil d'origine ; chaque compte peut la
+remplacer dans Compte → Interface, à côté du défilement guidé (`user_preferences`, `NULL` = suivre
+le serveur ; revenir à la valeur du serveur la suit de nouveau, « Revenir au réglage du serveur »
+l'efface) :
+- `HOME_BROWSE_BUTTON` : « Tous les films » / « Toutes les séries » en tête de l'accueil, à droite
+  de la bascule Films / Séries au bureau, en rond à côté de la loupe sur téléphone ;
+- `HOME_CONTINUE_HERO` : la bannière montre Reprendre (onglet Films) et À suivre (onglet Séries),
+  chaque titre retrouvé dans le catalogue, dans l'ordre de la rangée (§33) ; « À la une » descend
+  à la place de la rangée Reprendre. Un onglet où rien n'est en cours garde la bannière d'origine.
+
+**Pourquoi.** Une installation voulait le catalogue entier à un geste et ce qu'on regarde en tête.
+Une copie du dépôt (une image `:alt`) aurait fait deux applications à maintenir pour deux rangées
+échangées ; un réglage garde une seule image, et toute correction profite aux deux.
+
+**Porteurs.** `continueHeroTitles` et `heroSource` (`src/lib/homeLayout.ts`) ; `useHomeLayout`
+et `resolveHomeLayout` (`src/lib/useHomeLayout.ts` : le choix du compte, lu dans
+`/api/user/preferences`, sinon le défaut du serveur, lu dans `/api/config/public`) ;
+`CinemaBrowseAllButton`.
+
+**Appelants.** `CinemaClient` (bureau) et `CinemaMobileClient` (téléphone).
+
+**Tests.** `home-layout.test.ts`, `misc-simple-routes.test.ts`, `misc-routes-batch2.test.ts`, `persistentCache-schema.test.ts`
+(version 4 du cache : la configuration publique a changé de forme).
+
+**Voulu.** La source d'origine de la bannière reste différente d'un écran à l'autre (§25) ; la
+rangée « À la une » descendue prend la sélection du bureau (le spotlight) sur les deux, pour ne
+pas répéter « Récemment ajoutés » juste en dessous sur téléphone.
+
+**Décidé le 07/10/2026.**

@@ -27,6 +27,8 @@ const FINGERPRINTS: Record<number, string> = {
   2: "8faaa82aa564ea57",
   // 28/09/2026 : `lastPlayedAt` sur « Reprendre » et « À suivre » — l'ordre de la rangée (`continueOrder`).
   3: "0fbf8c19ee223a94",
+  // 07/10/2026 : la disposition de l'accueil dans la configuration publique (DECISIONS.md §52).
+  4: "5ccf0a8883058f26",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

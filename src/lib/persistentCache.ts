@@ -33,7 +33,7 @@ import { budgetFor } from "@/lib/resumeCache/budget";
  */
 
 /** À changer avec les types des réponses gardées — le test de format le rappelle. */
-export const PERSISTED_CACHE_SCHEMA = 3;
+export const PERSISTED_CACHE_SCHEMA = 4;
 
 /**
  * Ce qui se garde. Rien d'autre : ce sont les flux de l'écran d'accueil, et eux seuls — plus la

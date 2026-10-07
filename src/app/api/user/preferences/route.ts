@@ -14,7 +14,11 @@ export async function GET(req: NextRequest) {
   // refuses to set it for anyone else, so a non-admin can't end up with it enabled.
   const legacyPlayer = userPrefsDb.getLegacyPlayer(userId);
   const guidedScroll = userPrefsDb.getGuidedScroll(userId);
-  return NextResponse.json({ lang, legacyPlayer, guidedScroll });
+  // La disposition de l'accueil (DECISIONS.md §52) : ce que le compte a choisi (`null` = rien),
+  // et ce que le serveur donne par défaut — l'écran du Compte montre les deux.
+  const own = userPrefsDb.getHomeLayout(userId);
+  const homeDefaults = { browseButton: config.home.browseButton, continueHero: config.home.continueHero };
+  return NextResponse.json({ lang, legacyPlayer, guidedScroll, homeOwn: own, homeDefaults });
 }
 
 export async function PUT(req: NextRequest) {
@@ -39,6 +43,20 @@ export async function PUT(req: NextRequest) {
   if (typeof body?.guidedScroll === "boolean") {
     userPrefsDb.setGuidedScroll(userId, body.guidedScroll);
     return NextResponse.json({ ok: true, guidedScroll: body.guidedScroll });
+  }
+
+  // La disposition de l'accueil : un booléen choisit, `null` rend la main au serveur.
+  if (body?.home && typeof body.home === "object") {
+    const changed: Record<string, boolean | null> = {};
+    for (const key of ["browseButton", "continueHero"] as const) {
+      const value = body.home[key];
+      if (value === null || typeof value === "boolean") {
+        userPrefsDb.setHomeLayout(userId, key, value);
+        changed[key] = value;
+      }
+    }
+    if (Object.keys(changed).length === 0) return NextResponse.json({ error: "invalid home" }, { status: 400 });
+    return NextResponse.json({ ok: true, home: changed });
   }
 
   const lang = body?.lang as string | undefined;

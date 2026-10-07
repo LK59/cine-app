@@ -14,6 +14,9 @@ import { prefetchLibraryItem } from "@/lib/prefetch";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { continueOrder } from "@/lib/continueOrder";
+import { continueHeroTitles, heroSource } from "@/lib/homeLayout";
+import { useHomeLayout } from "@/lib/useHomeLayout";
+import { CinemaBrowseAllButton } from "@/components/cinema/CinemaBrowseAllButton";
 import { heroOffscreen } from "@/lib/heroCarousel";
 import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
 import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
@@ -415,14 +418,38 @@ export function CinemaMobileClient() {
   // `useMemo` : sans lui, une nouvelle référence de tableau à chaque rendu de cet écran défaisait
   // la mémoïsation de la bannière, qu'on avait justement extraite pour qu'elle ne se redessine
   // pas au moindre battement.
-  const heroMovies = useMemo(
+  const heroMoviesOfficial = useMemo(
     () => (movies?.recentlyAdded?.length ? movies.recentlyAdded : movies?.spotlight ?? []).slice(0, 8),
     [movies]
   );
-  const heroSeries = useMemo(
+  const heroSeriesOfficial = useMemo(
     () => (series?.recentlyAdded?.length ? series.recentlyAdded : series?.spotlight ?? []).slice(0, 8),
     [series]
   );
+  // La disposition choisie par l'exploitant (DECISIONS.md §52) : la bannière peut montrer
+  // Reprendre / À suivre, et « À la une » descend alors à la place de Reprendre. Même décision que
+  // le bureau, dans `homeLayout.ts`. Mémoïsé sur les réponses elles-mêmes, pour la même raison que
+  // les listes ci-dessus : la bannière est mémoïsée.
+  const homeLayout = useHomeLayout();
+  const continuingTitles = useMemo(
+    () =>
+      continueHeroTitles(
+        continueOrder((resume?.items ?? []).filter((r) => r.type === "Movie"), nextUp?.items ?? []),
+        (id) => byIdMovies?.get(id) as CinemaMovie | undefined,
+        (id) => byIdSeries?.get(id) as CinemaSeries | undefined
+      ),
+    [resume, nextUp, byIdMovies, byIdSeries]
+  );
+  const movieHero = useMemo(() => heroSource(homeLayout.continueHero, heroMoviesOfficial, continuingTitles.movies), [homeLayout.continueHero, heroMoviesOfficial, continuingTitles]);
+  const seriesHero = useMemo(() => heroSource(homeLayout.continueHero, heroSeriesOfficial, continuingTitles.series), [homeLayout.continueHero, heroSeriesOfficial, continuingTitles]);
+  const heroMovies = movieHero.items;
+  const heroSeries = seriesHero.items;
+  /** La bannière de l'onglet affiché montre Reprendre / À suivre : « À la une » prend la place de la rangée. */
+  const heroContinuing = isSeries ? seriesHero.continuing : movieHero.continuing;
+  const spotlightRow = useMemo<(CinemaMovie | CinemaSeries)[]>(() => {
+    const p = isSeries ? series : movies;
+    return (p?.spotlight?.length ? p.spotlight : p?.recentlyAdded ?? []).slice(0, 8);
+  }, [isSeries, series, movies]);
   const myList = isSeries ? myListSeries : myListMovies;
   const myListPending = useCinemaMyListPending();
 
@@ -537,16 +564,20 @@ export function CinemaMobileClient() {
             seul sélecteur de l'app à avoir cette forme. 36 px de haut, comme la loupe : la barre
             garde sa hauteur. */}
         <CinemaModeToggle placement="inline" mode={mediaType} onChange={setMediaType} />
-        <button
-          type="button"
-          onClick={() => setSearchOpen(true)}
-          aria-label={t("cinema.search")}
-          // Le verre et le geste de la bascule voisine (DECISIONS.md §45).
-          data-liquid
-          className="nav-glass ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
-        >
-          <Search size={18} />
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {/* Le catalogue entier à un geste, si l'installation le veut (DECISIONS.md §52). */}
+          {homeLayout.browseButton && <CinemaBrowseAllButton mediaType={mediaType} compact />}
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            aria-label={t("cinema.search")}
+            // Le verre et le geste de la bascule voisine (DECISIONS.md §45).
+            data-liquid
+            className="nav-glass flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
+          >
+            <Search size={18} />
+          </button>
+        </div>
         {/* Le nouvel onglet se construit : un fil fin sous la barre, le temps que ses rangées
             arrivent (`shownTab`). Rien ne clignote si c'est immédiat — il n'apparaît qu'après
             un instant. */}
@@ -662,12 +693,15 @@ export function CinemaMobileClient() {
 
         {/* Continue watching — landscape stills with a progress bar and the same resume wording
             the desktop cards use. */}
-        {continuePending && (
+        {heroContinuing && (
+          <PosterRow label={t("cinema.spotlight")} items={spotlightRow} itemId={itemId} onSelect={openHero} showNewBadge={false} />
+        )}
+        {!heroContinuing && continuePending && (
           <MobileRow label={t("cinema.continueWatching")}>
             <CinemaSkeletonCards cardClassName={CONTINUE_WIDTH} shape="still" count={3} />
           </MobileRow>
         )}
-        {hasContinue && (
+        {!heroContinuing && hasContinue && (
           <MobileRow label={t("cinema.continueWatching")} trackRef={continueTrack}>
             {continueEntries.map((row) => {
               if (row.kind === "movie") {

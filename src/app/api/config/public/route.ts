@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
     playerServerFallback: config.player.serverFallback,
     // L'option galerie : lue au démarrage du serveur, et non plus figée dans l'image.
     claraGallery: config.gallery.clara,
+    // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).
+    homeBrowseButton: config.home.browseButton,
+    homeContinueHero: config.home.continueHero,
     ...(session ? { configured: configuredServices(config) } : {}),
   });
 }

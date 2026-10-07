@@ -7,6 +7,8 @@ import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { continueOrder } from "@/lib/continueOrder";
+import { continueHeroTitles, heroSource } from "@/lib/homeLayout";
+import { useHomeLayout } from "@/lib/useHomeLayout";
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -60,6 +62,7 @@ import { CinemaSeriesHero } from "@/components/cinema/CinemaSeriesHero";
 import { CinemaSeriesRow } from "@/components/cinema/CinemaSeriesRow";
 import { CinemaSeriesDetail } from "@/components/cinema/CinemaSeriesDetail";
 import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
+import { CinemaBrowseAllButton } from "@/components/cinema/CinemaBrowseAllButton";
 import { CinemaTop10Row } from "@/components/cinema/CinemaTop10Row";
 import { CinemaDiscoveryRow } from "@/components/cinema/CinemaDiscoveryRow";
 import { useCinemaMyList, useCinemaMyListPending } from "@/lib/useCinemaMyList";
@@ -385,6 +388,7 @@ export function CinemaClient() {
   // La place tenue tant que l'une des deux réponses n'est pas arrivée — voir `CinemaSkeletonCards`.
   const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
   const myListPending = useCinemaMyListPending();
+  const homeLayout = useHomeLayout();
 
   // Warms the browser's own image cache for the backdrops/logos reachable within a few keypresses
   // (see warmUpUrls/prefetchImages above for the budget and why it's capped) — without it, the
@@ -470,7 +474,13 @@ export function CinemaClient() {
   // is to preview whatever you're pointing at.
   // Le « spotlight » plutôt que « récemment ajouté » : ce dernier a sa propre rangée plus bas, et
   // les mêmes huit titres deux fois de suite ne font pas deux sections.
-  const movieCarouselOfficial = (movies?.spotlight?.length ? movies.spotlight : movies?.recentlyAdded ?? []).slice(0, 8);
+  const movieSpotlightOfficial = (movies?.spotlight?.length ? movies.spotlight : movies?.recentlyAdded ?? []).slice(0, 8);
+  // La disposition choisie par l'exploitant (DECISIONS.md §52) : la bannière peut montrer
+  // Reprendre / À suivre, et « À la une » descend alors à la place de Reprendre. Même décision que
+  // le téléphone, dans `homeLayout.ts`.
+  const continuingTitles = continueHeroTitles(continueEntries, (id) => moviesById.get(id), (id) => seriesById.get(id));
+  const movieHero = heroSource(homeLayout.continueHero, movieSpotlightOfficial, continuingTitles.movies);
+  const movieCarouselOfficial = movieHero.items;
   // Arrêtée aussi tant que la grille est recouverte. La bannière tournait sous les fiches et les
   // panneaux, invisible, et chaque tour redessinait tout cet écran — fiches ouvertes comprises,
   // dont la fenêtre du synopsis reprenait alors le focus toutes les huit secondes (voir
@@ -529,7 +539,9 @@ export function CinemaClient() {
     route.film !== null ? moviesById.size > 0 : seriesById.size > 0,
     route.film !== null ? MOVIES_CATALOGUE_KEY : SERIES_CATALOGUE_KEY
   );
-  const seriesCarouselOfficial = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
+  const seriesSpotlightOfficial = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
+  const seriesHero = heroSource(homeLayout.continueHero, seriesSpotlightOfficial, continuingTitles.series);
+  const seriesCarouselOfficial = seriesHero.items;
   const [seriesOrderIndex, setSeriesCarouselIndex, seriesOrder] = useHeroOrder(
     heroSignature(seriesCarouselOfficial.map(seriesHeroKey)),
     seriesFocusedItem !== null || !gridOnTop,
@@ -1035,7 +1047,11 @@ export function CinemaClient() {
           gauche, avec le reste de la navigation. Deux boutons flottants de moins par-dessus les
           affiches, et un seul endroit où l'on va chercher où aller. */}
 
-      <CinemaModeToggle mode={mediaType} onChange={setMediaType} />
+      <CinemaModeToggle
+        mode={mediaType}
+        onChange={setMediaType}
+        trailing={homeLayout.browseButton ? <CinemaBrowseAllButton mediaType={mediaType} /> : undefined}
+      />
       <CinemaShortcutsGuide />
 
       {/* La recherche est rendue par la coquille du lecteur (PlayerShell), pas ici : c'est le
@@ -1160,7 +1176,7 @@ export function CinemaClient() {
             <div {...tabPane("movies")}>
               {/* Première rangée, et celle que la bannière suit — voir CinemaSpotlight. */}
               <CinemaSpotlight
-                label={t("cinema.spotlight")}
+                label={movieHero.continuing ? t("cinema.continueWatching") : t("cinema.spotlight")}
                 count={movieCarousel.length}
                 itemKeys={movieCarousel.map(movieHeroKey)}
                 activeIndex={movieSpotlightIndex}
@@ -1188,8 +1204,24 @@ export function CinemaClient() {
 
               {/* « Reprendre » n'existe qu'une fois, dans l'onglet affiché : c'est la même rangée
                   des deux côtés, et sa piste porte l'unique `continueTrack`. */}
-              {mediaType === "movies" && continueSkeleton}
-              {mediaType === "movies" && continueRow}
+              {/* La bannière montre déjà Reprendre (DECISIONS.md §52) : « À la une » prend sa place. */}
+              {movieHero.continuing ? (
+                <CinemaRow
+                  label={t("cinema.spotlight")}
+                  rowKey="spotlight-row-movies"
+                  showNewBadge={false}
+                  rowIndex={1}
+                  items={movieSpotlightOfficial}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={focusMovie}
+                  onSelectItem={openDetail}
+                />
+              ) : (
+                <>
+                  {mediaType === "movies" && continueSkeleton}
+                  {mediaType === "movies" && continueRow}
+                </>
+              )}
 
               {catalogueErrorView(moviesError, movies) === "ligne" && (
                 <p className="px-8 text-sm text-danger sm:px-12">{errorMessage(moviesError, t, t("common.unknown"))}</p>
@@ -1285,7 +1317,7 @@ export function CinemaClient() {
                   the toggle is already up, so its own states have to render inside the same
                   chrome instead of hiding the toggle that got you here. */}
               <CinemaSpotlight
-                label={t("cinema.spotlight")}
+                label={seriesHero.continuing ? t("cinema.continueWatching") : t("cinema.spotlight")}
                 count={seriesCarousel.length}
                 itemKeys={seriesCarousel.map(seriesHeroKey)}
                 activeIndex={seriesSpotlightIndex}
@@ -1309,8 +1341,24 @@ export function CinemaClient() {
                 ))}
               </CinemaSpotlight>
 
-              {mediaType === "series" && continueSkeleton}
-              {mediaType === "series" && continueRow}
+              {/* La bannière montre déjà À suivre (DECISIONS.md §52) : « À la une » prend sa place. */}
+              {seriesHero.continuing ? (
+                <CinemaSeriesRow
+                  label={t("cinema.spotlight")}
+                  rowKey="spotlight-row-series"
+                  showNewBadge={false}
+                  rowIndex={1}
+                  items={seriesSpotlightOfficial}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={focusSeries}
+                  onSelectItem={openSeriesDetail}
+                />
+              ) : (
+                <>
+                  {mediaType === "series" && continueSkeleton}
+                  {mediaType === "series" && continueRow}
+                </>
+              )}
 
               {nothingToShowYet(seriesLoading, series) && (
                 <div className="flex justify-center pt-12">

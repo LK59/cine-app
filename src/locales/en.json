@@ -1749,9 +1749,18 @@
       "storageUsed": "{size} used",
       "storageClear": "Clear cache",
       "storageCleared": "Cache cleared",
-      "display": "Display",
+      "display": "Interface",
       "guidedScroll": "Guided scrolling",
-      "guidedScrollHint": "On a computer, the home screen settles on a whole row and title pages on a whole page. Off, pages scroll freely."
+      "guidedScrollHint": "On a computer, the home screen settles on a whole row and title pages on a whole page. Off, pages scroll freely.",
+      "home": {
+        "browseButton": "“All movies / series” button",
+        "browseButtonHint": "At the top of home, the whole catalogue one tap away.",
+        "continueHero": "Banner: Continue watching and Up next",
+        "continueHeroHint": "The home banner shows what you're watching; “Spotlight” moves just below.",
+        "serverOn": "On by default on this server",
+        "serverOff": "Off by default on this server",
+        "reset": "Use the server setting"
+      }
     },
     "browse": {
       "seeAll": "See all",
@@ -2502,6 +2511,8 @@
       "PLAYER_ENABLED": "Built-in player",
       "PLAYER_SERVER_FALLBACK": "Hand files the browser can't play over to Jellyfin",
       "PLAYER_AUTO_FRAME": "Enlarge the picture over black bars",
+      "HOME_BROWSE_BUTTON": "“All movies / series” button at the top of home — default",
+      "HOME_CONTINUE_HERO": "Home banner: Continue watching and Up next — default",
       "VAPID_SUBJECT": "Notification contact (mailto:…)",
       "TZ": "Time zone",
       "MEDIA_ROOT": "Media folder (storage statistics)",

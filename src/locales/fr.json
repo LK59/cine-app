@@ -1749,9 +1749,18 @@
       "storageUsed": "{size} utilisés",
       "storageClear": "Vider le cache",
       "storageCleared": "Cache vidé",
-      "display": "Affichage",
+      "display": "Interface",
       "guidedScroll": "Défilement guidé",
-      "guidedScrollHint": "Sur ordinateur, l'accueil se cale sur une rangée entière et les fiches sur une page entière. Coupé, la page défile librement."
+      "guidedScrollHint": "Sur ordinateur, l'accueil se cale sur une rangée entière et les fiches sur une page entière. Coupé, la page défile librement.",
+      "home": {
+        "browseButton": "Bouton « Tous les films / séries »",
+        "browseButtonHint": "En haut de l'accueil, le catalogue entier à un geste.",
+        "continueHero": "Bannière : Reprendre et À suivre",
+        "continueHeroHint": "La bannière de l'accueil montre ce que vous regardez ; « À la une » passe juste en dessous.",
+        "serverOn": "Activé par défaut sur ce serveur",
+        "serverOff": "Désactivé par défaut sur ce serveur",
+        "reset": "Revenir au réglage du serveur"
+      }
     },
     "browse": {
       "seeAll": "Voir tout",
@@ -2502,6 +2511,8 @@
       "PLAYER_ENABLED": "Lecteur intégré",
       "PLAYER_SERVER_FALLBACK": "Relais vers Jellyfin pour les fichiers que le navigateur ne lit pas",
       "PLAYER_AUTO_FRAME": "Agrandir l'image au-dessus des bandes noires",
+      "HOME_BROWSE_BUTTON": "Bouton « Tous les films / séries » en haut de l'accueil — par défaut",
+      "HOME_CONTINUE_HERO": "Bannière de l'accueil : Reprendre et À suivre — par défaut",
       "VAPID_SUBJECT": "Contact des notifications (mailto:…)",
       "TZ": "Fuseau horaire",
       "MEDIA_ROOT": "Dossier des médias (statistiques de stockage)",
