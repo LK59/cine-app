@@ -27,11 +27,13 @@ interface Props {
   subtitle?: string;
   poster?: string | null;
   actions: SheetAction[];
+  /** `alertdialog` pour une confirmation : une question qui attend une réponse, pas un menu. */
+  role?: "dialog" | "alertdialog";
 }
 
 const CLOSE_THRESHOLD = 80; // px dragged down to trigger close
 
-export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSubtitle, poster: livePoster, actions }: Props) {
+export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSubtitle, poster: livePoster, actions, role = "dialog" }: Props) {
   /**
    * L'en-tête reste celui de l'ouverture pendant la sortie.
    *
@@ -155,7 +157,7 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
       {/* Sheet */}
       <div
         ref={sheetRef}
-        role="dialog"
+        role={role}
         aria-modal="true"
         aria-label={title}
         // Le verre liquide (DECISIONS.md §45), et une carte qui flotte au lieu d'une bande collée au

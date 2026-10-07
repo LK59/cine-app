@@ -1553,7 +1553,7 @@ cours ou déjà là**, seule la demande disparaît. Le titre ne sort de Radarr o
 n'appartient qu'à cette demande : personne d'autre ne l'a demandé (`mediaInfo.requests`), et il a
 été ajouté par elle (date d'ajout au plus tôt une minute avant la demande) — pas avant, à la main.
 Une vérification qui échoue n'empêche jamais l'annulation ; elle laisse seulement Radarr/Sonarr tels
-quels. Annuler demande confirmation, sur la carte même. « Rien en téléchargement » se lit dans la file **du titre**
+quels. Annuler demande confirmation, dans la feuille d'actions de verre (`ActionSheet`, affiche et titre en tête) — dessinée sur l'affiche, elle était trop petite. « Rien en téléchargement » se lit dans la file **du titre**
 (`getQueueForSeries` / `getQueueForMovie`), jamais sur la première page de la file générale : le
 06/10/2026, une série de 263 épisodes remplissait cette page, et l'annulation de *The Kardashians*,
 alors en plein téléchargement, l'a retirée de Sonarr en laissant ses torrents orphelins.

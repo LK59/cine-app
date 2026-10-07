@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, X } from "lucide-react";
+import { Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Trash2, X } from "lucide-react";
+import { ActionSheet } from "@/components/ActionSheet";
 import { PosterImage } from "@/components/PosterImage";
 import { useT } from "@/components/TranslationProvider";
 import type { PlayerRequest } from "@/lib/playerRequests";
@@ -47,8 +48,8 @@ export function PlayerRequestCard({
 }) {
   const t = useT();
   const Icon = STATE_ICON[request.state];
-  // La croix demande confirmation sur la carte même (05/10/2026) : un doigt qui frôle la croix en
-  // faisant défiler la grille retirait une demande sans retour possible.
+  // La croix demande confirmation (05/10/2026) : un doigt qui frôle la croix en faisant défiler la
+  // grille retirait une demande sans retour possible.
   const [confirming, setConfirming] = useState(false);
   // Ouvrable dès que le titre est arrivé — vers sa fiche de bibliothèque, ou à défaut vers sa
   // fiche TMDB (voir `openRequest`). Une carte qui annonce « disponible » et ne réagit pas au
@@ -114,36 +115,21 @@ export function PlayerRequestCard({
         </button>
       )}
 
-      {confirming && (
-        <div
-          role="alertdialog"
-          aria-label={t("player.requests.confirmTitle", { title: request.title })}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.stopPropagation();
-              setConfirming(false);
-            }
-          }}
-          className="absolute inset-x-0 top-0 flex aspect-[2/3] animate-fade-in flex-col items-center justify-center gap-2 rounded-lg bg-ink/90 p-2 text-center"
-        >
-          <p className="text-[13px] font-medium leading-snug text-white">{t("player.requests.confirmQuestion")}</p>
-          <button
-            type="button"
-            autoFocus
-            disabled={busy}
-            onClick={() => {
-              setConfirming(false);
-              onCancel();
-            }}
-            className="w-full rounded-full bg-danger px-2 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-          >
-            {t("player.requests.confirmYes")}
-          </button>
-          <button type="button" onClick={() => setConfirming(false)} className="w-full rounded-full bg-white/10 px-2 py-1.5 text-xs font-medium text-white">
-            {t("player.requests.confirmNo")}
-          </button>
-        </div>
-      )}
+      {/* La confirmation, dans la carte de verre des menus d'actions (`ActionSheet`) : l'affiche et
+          le titre en tête, deux actions à la taille d'un doigt. Elle était dessinée sur l'affiche
+          même, en lettres de 12 px — trop petite sur téléphone comme au bureau (07/10/2026). */}
+      <ActionSheet
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        role="alertdialog"
+        title={request.title}
+        subtitle={t("player.requests.confirmQuestion")}
+        poster={request.poster}
+        actions={[
+          { label: t("player.requests.confirmYes"), icon: <Trash2 size={18} />, variant: "danger", disabled: busy, onClick: onCancel },
+          { label: t("player.requests.confirmNo"), icon: <X size={18} />, onClick: () => {} },
+        ]}
+      />
 
       <p className="mt-2 line-clamp-2 text-[13px] font-medium leading-snug text-white">{request.title}</p>
       {request.year && <p className="mt-0.5 text-[11px] text-subtle">{request.year}</p>}
