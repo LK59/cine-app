@@ -233,16 +233,14 @@ export function PlayerShell() {
           leaving={account.leaving}
           replaced={account.leaving && (route.search || route.list)}
           fromTab={search.leaving || list.leaving}
-          // Revenu de l'activité ou d'un signalement, qui s'efface encore — voir `swapIn`.
-          swapIn={activity.leaving || report.leaving}
         />
       )}
       {/* L'activité : une clé par vue — une autre vue est un autre écran (voir la règle des fiches
           dans CLAUDE.md), avec son entrée, son défilement et son focus à elle. */}
       {activity.render && lastActivity !== null && (
-        <PlayerActivityPanel key={lastActivity} raw={lastActivity} leaving={activity.leaving} swapIn={account.leaving || report.leaving} />
+        <PlayerActivityPanel key={lastActivity} raw={lastActivity} leaving={activity.leaving} />
       )}
-      {report.render && lastReport !== null && <PlayerReportPanel key={lastReport} raw={lastReport} leaving={report.leaving} swapIn={account.leaving || activity.leaving} />}
+      {report.render && lastReport !== null && <PlayerReportPanel key={lastReport} raw={lastReport} leaving={report.leaving} />}
       {/* Une seule fiche du dessus à la fois. Deux rendues ensemble se recouvraient dans l'ordre
           de montage, et surtout écoutaient Échap toutes les deux — une touche remontait alors de
           deux crans. L'historique garde la précédente, et le retour la rouvre.

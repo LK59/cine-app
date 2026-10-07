@@ -3,6 +3,7 @@
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useT } from "@/components/TranslationProvider";
 import { PlayerPanelFrame } from "@/components/player/PlayerPanelFrame";
+import { PANEL_WIDE } from "@/components/player/panelWidth";
 import { PlayerResultCard } from "@/components/player/PlayerResultCard";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { useDecodeAhead } from "@/lib/useDecodeAhead";
@@ -99,8 +100,9 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
       back
       title={title}
       subtitle={t("player.browse.count", { n: shown.length })}
+      contentWidth={PANEL_WIDE}
     >
-      <div className="mx-auto w-full max-w-6xl">
+      <div className="w-full">
         {/* Les réglages tiennent sur une ligne qui défile plutôt que sur trois rangs empilés :
             debout, l'en-tête mangeait sinon la moitié de l'écran avant la première affiche. */}
         <div className="relative -mx-1 mb-5">
@@ -175,7 +177,7 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
           // `player-grid` : c'est lui qui porte `content-visibility`, et sans lui le navigateur
           // met en page et dessine les six cent soixante-dix cartes d'un coup — la grille
           // complète est justement le seul écran où ce nombre est atteint.
-          <div ref={gridRef} className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+          <div ref={gridRef} className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 player-grid-fluid">
             {grid.map((item) => (
               <PlayerResultCard
                 key={idOf(item)}

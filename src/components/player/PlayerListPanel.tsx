@@ -12,6 +12,7 @@ import { PlayerListAdd } from "./PlayerListAdd";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
+import { PANEL_WIDE } from "./panelWidth";
 import { PlayerResultCard } from "./PlayerResultCard";
 import { PlayerRequestCard } from "./PlayerRequestCard";
 import { useFlipGrid } from "@/lib/useFlipGrid";
@@ -169,8 +170,9 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
       fromTab={fromTab}
       title={t("player.nav.myList")}
       subtitle={t("player.lists.subtitle")}
+      contentWidth={PANEL_WIDE}
     >
-      <div className="mx-auto w-full max-w-6xl">
+      <div className="w-full">
         {/* Il y avait trois cartes de chiffres ici — en liste, disponibles, vus — qui répétaient les
             compteurs des onglets juste en dessous : deux fois 9 et deux fois 12 sur le même écran
             (23/09/2026). Les onglets gardent les leurs ; ce qui manque se lit sur les cartes, qui
@@ -306,7 +308,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
         )}
 
         {segment === "requests" && counts.requests > 0 && (
-          <div ref={requestsGrid} className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+          <div ref={requestsGrid} className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 player-grid-fluid">
             {shownRequests.map((r) => (
               <PlayerRequestCard
                 key={r.id}
@@ -320,7 +322,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
         )}
 
         {segment !== "requests" && items.length > 0 && (
-          <div ref={itemsGrid} className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+          <div ref={itemsGrid} className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 player-grid-fluid">
             {items.map((item) => (
               <PlayerResultCard
                 key={`${item.type}-${item.tmdbId ?? item.jellyfinId}`}

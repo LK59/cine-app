@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { CLOSE_PANELS, cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
-import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
+import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useT } from "@/components/TranslationProvider";
 import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
 import { openPanel } from "./playerNav";
@@ -31,8 +31,8 @@ import { usePanelScrollMemory } from "@/lib/panelScrollMemory";
  * qui fait qu'un retour depuis un film ouvert en cherchant ramène sur la recherche, avec la
  * requête intacte, au lieu de sauter à l'accueil.
  */
-/** Sur grand écran, l'écart entre la fenêtre du panneau et les bords — celui de la pilule du rail. */
-const WINDOW_GAP = "0.75rem";
+/** Les marges latérales, qui grandissent avec l'écran — l'en-tête et le corps les partagent. */
+const GUTTER = "px-5 sm:px-10 2xl:px-16";
 
 export function PlayerPanelFrame({
   title,
@@ -42,7 +42,6 @@ export function PlayerPanelFrame({
   replaced = false,
   fromTab = false,
   back = false,
-  swapIn = false,
   scrollKey,
   contentWidth = "72rem",
   children,
@@ -86,23 +85,14 @@ export function PlayerPanelFrame({
    */
   back?: boolean;
   /**
-   * Il prend la place d'une autre fenêtre encore en train de partir, sans être un onglet : le
-   * Compte et l'activité ou les signalements qu'il ouvre, dans un sens comme dans l'autre. Sur
-   * grand écran il entre comme un onglet qui en remplace un autre (`panel-swap-in`) — sinon deux
-   * fenêtres de largeurs différentes se croisaient en même temps. Sans effet sur téléphone, où ces
-   * écrans gardent leur entrée. Lu à chaque entrée, comme `fromTab`.
-   */
-  swapIn?: boolean;
-  /**
    * Garder la position de défilement sous cette clé et la rendre en revenant en arrière
    * (`usePanelScrollMemory`) — l'activité, dont chaque vue est montée à neuf.
    */
   scrollKey?: string;
   /**
-   * La largeur du contenu du panneau — la même que son `max-w-*`. Sur grand écran, la fenêtre s'y
-   * ajuste (plus ses marges intérieures) au lieu de s'étirer jusqu'au bord droit : le compte, une
-   * colonne de 42 rem, flottait au milieu d'une fenêtre de toute la largeur de l'écran
-   * (26/09/2026).
+   * La largeur de la colonne du panneau, centrée dans l'écran : l'en-tête et le contenu s'y
+   * alignent, pour que le titre parte de la même ligne que ce qu'il annonce. Étroite pour ce qui
+   * se lit ou se remplit (le Compte, 42 rem), `PANEL_WIDE` pour les grilles d'affiches.
    */
   contentWidth?: string;
   children: React.ReactNode;
@@ -122,13 +112,11 @@ export function PlayerPanelFrame({
   const [entrance, setEntrance] = useState(0);
   const [wasLeaving, setWasLeaving] = useState(leaving);
   const [instantEntry, setInstantEntry] = useState(fromTab);
-  const [swapEntry, setSwapEntry] = useState(swapIn);
   if (wasLeaving !== leaving) {
     setWasLeaving(leaving);
     if (!leaving) {
       setEntrance((n) => n + 1);
       setInstantEntry(fromTab);
-      setSwapEntry(swapIn);
     }
   }
 
@@ -138,22 +126,18 @@ export function PlayerPanelFrame({
    *
    * Tout passait par `cinemaClose`, c'est-à-dire un retour dans l'historique : Accueil → Ma
    * liste → Compte, puis fermer, rouvrait Ma liste — un « fermer » qui ouvre une autre fenêtre.
-   * La croix, Échap et un clic à côté ramènent donc à l'accueil, comme « Accueil » dans le rail.
+   * Échap ramène donc à l'accueil, comme « Accueil » dans le rail.
    *
    * Sauf sur un écran poussé (`back` : Parcourir, l'activité, les signalements), où la flèche et
-   * Échap reviennent d'un cran — c'est ce que dit la flèche. Le clic à côté, lui, sort de la
-   * fenêtre quelle qu'elle soit : il appelle `openPanel` directement.
+   * Échap reviennent d'un cran — c'est ce que dit la flèche.
    */
   const closeWindow = useCallback(() => {
     if (back) cinemaClose(CLOSE_PANELS);
     else openPanel("home", route);
   }, [back, route]);
-  const isMobile = useIsMobile();
   const short = useIsShortViewport();
   const bodyRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  /** L'appui a commencé hors de la fenêtre — voir `closeOnOutsideClick`. */
-  const pressedOutside = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   // Les flèches parcourent le contenu du panneau, comme elles parcourent déjà les rangées de
   // l'accueil. Sur le corps et non sur la fenêtre : un panneau ne prend les flèches que de ce
@@ -222,29 +206,12 @@ export function PlayerPanelFrame({
     <div
       ref={rootRef}
       data-panel-root
-      /**
-       * Sur grand écran, un clic à côté de la fenêtre la ferme, comme on ferme n'importe quelle
-       * fenêtre posée sur une page (demandé le 26/09/2026). Seulement si l'appui *et* le
-       * relâchement tombent hors de la fenêtre : une sélection de texte commencée dedans et
-       * relâchée dehors produit un clic sur leur ancêtre commun — cette racine —, et fermait le
-       * panneau sous la souris de qui voulait copier un titre. Sur téléphone, la racine est l'écran
-       * entier : il n'y a pas de « dehors ».
-       */
-      onPointerDown={isMobile ? undefined : (e) => (pressedOutside.current = e.target === e.currentTarget)}
-      onClick={
-        isMobile
-          ? undefined
-          : (e) => {
-              if (e.target !== e.currentTarget || !pressedOutside.current) return;
-              pressedOutside.current = false;
-              // L'accueil, toujours — même depuis un écran poussé : on sort de la fenêtre, pas
-              // d'un cran. Voir `closeWindow`.
-              openPanel("home", route);
-            }
-      }
-      // Sur téléphone, il monte comme les fiches ; sur grand écran, il apparaît. Deux idiomes, chacun
-      // celui de sa plateforme — et surtout le même que les autres écrans de la même famille.
-      className={`fixed inset-0 flex flex-col overflow-hidden ${isMobile ? "bg-ink" : ""} ${
+      // Plein écran à toutes les tailles, sur le noir de l'app (07/10/2026). Sur grand écran, ces
+      // onglets étaient des fenêtres posées sur l'accueil, décollées des bords : l'accueil restait
+      // visible autour — sa grande image, ses affiches —, deux écrans à la fois, et des spectateurs
+      // l'ont dit perturbant. Un onglet remplace l'écran ; seules les fiches de titre passent
+      // par-dessus. Plus de « dehors », donc plus de clic à côté qui ferme.
+      className={`fixed inset-0 flex flex-col overflow-hidden bg-ink ${
         /* Un onglet, pas une feuille.
          *
          * Ces panneaux montaient depuis le bas — le vocabulaire de la modale, alors que le modèle
@@ -264,113 +231,62 @@ export function PlayerPanelFrame({
          * après —, si bien que la dérive animait une boîte sans contenu et passait inaperçue. La
          * racine, elle, existe et se voit toujours : son fond porte le mouvement quoi qu'il arrive
          * au reste. Une seule transformation composée par bascule au lieu de deux, aussi. */
-        /* D'un onglet à l'autre, deux gestes selon la plateforme.
-         *
-         * Sur téléphone, un changement sec (23/09/2026) : les deux écrans sont pleins et au même
-         * endroit — celui qui arrive recouvre exactement celui qui part, et un fondu croisé ne
-         * faisait que superposer deux pages, leurs titres presque au même endroit.
-         *
-         * Sur grand écran, les fenêtres n'ont pas la même largeur (Compte 42 rem, Ma liste 72) :
-         * la nouvelle apparaissait d'un coup au milieu de l'ancienne, qui dépassait autour puis
-         * s'effaçait sèchement 200 ms plus tard (26/09/2026). L'ancienne part donc comme une
-         * fenêtre qu'on ferme, et la nouvelle entre juste après elle (`panel-swap-in`, décalée
-         * de 80 ms) : elles ne se superposent presque pas, et leurs titres ne se croisent pas. */
-        leaving
-          ? replaced && isMobile
-            ? ""
-            : "animate-fade-out-scale"
-          : instantEntry
-            ? isMobile
-              ? ""
-              : "panel-swap-in"
-            : swapEntry && !isMobile
-              ? "panel-swap-in"
-              : "animate-fade-in-side"
+        /* D'un onglet à l'autre, un changement sec (23/09/2026) : les deux écrans sont pleins et au
+         * même endroit — celui qui arrive recouvre exactement celui qui part, et un fondu croisé ne
+         * faisait que superposer deux pages, leurs titres presque au même endroit. Le grand écran
+         * avait son propre geste du temps des fenêtres, qui n'avaient pas la même largeur
+         * (`panel-swap-in`, 26/09/2026) ; pleins écrans eux aussi, ils prennent celui du téléphone. */
+        leaving ? (replaced ? "" : "animate-fade-out-scale") : instantEntry ? "" : "animate-fade-in-side"
       }`}
       style={{
         // Celui qui part passe dessous : celui qui arrive doit le recouvrir, quel que soit leur
         // ordre dans la page (la recherche précède « Ma liste », qui précède le compte).
         zIndex: leaving ? 45 : 46,
-        // Le fond sur lequel le contenu est posé, pour les fondus qui s'y raccordent (sous
-        // l'en-tête, au bout des rangées de filtres) : le noir de l'app sur téléphone, la surface
-        // de la fenêtre sur grand écran. Des dégradés peints, et non des masques : ils ne coûtent
+        // Le fond sur lequel le contenu est posé, pour les fondus qui s'y raccordent (sous l'en-tête,
+        // au bout des rangées de filtres). Des dégradés peints, et non des masques : ils ne coûtent
         // rien au défilement.
-        ["--panel-bg" as string]: isMobile ? "var(--color-ink)" : "var(--panel-surface)",
-        // Inerte pendant qu'il s'en va. Sa croix reste sous le doigt le temps de l'animation, et
+        ["--panel-bg" as string]: "var(--color-ink)",
+        // Inerte pendant qu'il s'en va. Son bouton retour reste sous le doigt le temps de l'animation, et
         // un second appui fermerait l'écran d'en dessous — celui qu'on vient d'ouvrir.
         pointerEvents: leaving ? "none" : undefined,
         // Le retrait du rail et la marge de l'encoche s'additionnent : le premier vaut zéro sur
         // téléphone, la seconde vaut zéro partout ailleurs.
-        //
-        // Sur grand écran, une marge de plus tout autour : le panneau y est une fenêtre posée sur
-        // l'accueil, décollée des bords comme la pilule du rail (26/09/2026) — et non plus un fond
-        // noir d'un bord à l'autre, la seule surface « boîte » qui restait à côté d'elle.
-        ...(isMobile
-          ? {
-              paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
-              paddingRight: "env(safe-area-inset-right, 0px)",
-            }
-          : {
-              padding: `${WINDOW_GAP} calc(${WINDOW_GAP} + env(safe-area-inset-right, 0px)) ${WINDOW_GAP} calc(var(--player-rail, 0px) + ${WINDOW_GAP} + env(safe-area-inset-left, 0px))`,
-            }),
+        paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
+        paddingRight: "env(safe-area-inset-right, 0px)",
       }}
     >
-      {/* La fenêtre. Sur téléphone elle n'a ni bord ni fond : c'est l'écran entier, comme avant.
-          Les animations restent sur la racine — la fenêtre entre et sort avec elle, au même
-          rythme.
-
-          Sans `overflow-hidden` : un parent qui découpe en arrondi la zone qui défile oblige
-          Chrome à refaire ce découpage à chaque image du défilement — c'est ce qui ramait sur
-          PC. Le fond seul est arrondi ; la zone qui défile est retirée des coins (voir plus bas),
-          et rien ne dépasse. */}
-      <div
-        className={`flex min-h-0 w-full flex-1 flex-col ${isMobile ? "" : "panel-window mx-auto rounded-2xl"}`}
-        // Le contenu, plus les marges intérieures de l'en-tête et du corps (`sm:px-10`).
-        style={isMobile ? undefined : { maxWidth: `calc(${contentWidth} + 5rem)` }}
-      >
       <header
-        className="flex shrink-0 items-start gap-3 px-5 sm:gap-4 sm:px-10"
+        className={`flex shrink-0 ${GUTTER}`}
         // Un téléphone couché n'a que ~400 px de haut : un titre de trois rem et deux rems de
         // marge en mangeaient le quart avant la première affiche.
         style={{ paddingTop: `calc(${short ? "0.75rem" : "1.5rem"} + env(safe-area-inset-top))` }}
       >
-        {back && (
-          <button
-            type="button"
-            onClick={() => cinemaClose(CLOSE_PANELS)}
-            className="btn btn-ghost -ml-1 mt-0.5 shrink-0 rounded-full px-3 py-2"
-          >
-            <ArrowLeft size={16} /> {t("cinema.back")}
-          </button>
-        )}
-        <div className="min-w-0 flex-1">
-          <h1
-            ref={headingRef}
-            tabIndex={-1}
-            className={`truncate font-display font-semibold text-white outline-none ${short ? "text-xl" : "text-2xl sm:text-3xl"}`}
-          >
-            {title}
-          </h1>
-          {subtitle && !short && <div className="mt-1 text-sm text-muted">{subtitle}</div>}
-        </div>
-        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-          {actions}
-          {/* La croix ne survit que sur grand écran.
-              Sur téléphone, ces écrans sont devenus des onglets : on n'en « sort » plus, on va
-              ailleurs, et la barre du bas dit où. Une croix y proposait de fermer quelque chose
-              qui n'a plus de derrière — et laissait deux façons de faire la même chose, dont une
-              dans le coin le plus hors de portée du pouce. Le rail, lui, est un compagnon et non
-              une destination : la croix y garde son sens. */}
-          {!isMobile && !back && (
+        <div className="mx-auto flex w-full items-start gap-3 sm:gap-4" style={{ maxWidth: contentWidth }}>
+          {back && (
             <button
               type="button"
-              onClick={closeWindow}
-              aria-label={t("common.close")}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+              onClick={() => cinemaClose(CLOSE_PANELS)}
+              className="btn btn-ghost -ml-1 mt-0.5 shrink-0 rounded-full px-3 py-2"
             >
-              <X size={20} />
+              <ArrowLeft size={16} /> {t("cinema.back")}
             </button>
           )}
+          <div className="min-w-0 flex-1">
+            <h1
+              ref={headingRef}
+              tabIndex={-1}
+              className={`truncate font-display font-semibold text-white outline-none ${short ? "text-xl" : "text-2xl sm:text-3xl"}`}
+            >
+              {title}
+            </h1>
+            {subtitle && !short && <div className="mt-1 text-sm text-muted">{subtitle}</div>}
+          </div>
+          {/* Pas de croix, à aucune taille : ces écrans sont des onglets, on n'en « sort » pas, on
+              va ailleurs — la barre du bas ou le rail disent où, et Échap ramène à l'accueil. Sur
+              grand écran, elle a survécu tant qu'ils étaient des fenêtres posées sur l'accueil ;
+              plein écran, elle aurait proposé de fermer quelque chose qui n'a plus de derrière. Un
+              écran poussé garde son retour, en tête. */}
+          {actions && <div className="flex shrink-0 items-center gap-1 sm:gap-2">{actions}</div>}
         </div>
       </header>
 
@@ -379,14 +295,12 @@ export function PlayerPanelFrame({
       <div
         ref={bodyRef}
         key={entrance}
-        // Sur grand écran, décollée de 6 px du bas et de la droite : la barre de défilement reste
-        // dans l'arrondi de la fenêtre (16 px), qui ne découpe plus rien.
-        className={`scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10 ${isMobile ? "" : "mb-1.5 mr-1.5"}`}
+        className={`scrollbar-thin flex-1 overflow-y-auto overscroll-contain pb-16 ${GUTTER}`}
         // La barre du bas flotte par-dessus sur téléphone : sans cette réserve, la dernière rangée
         // d'un panneau finissait dessous. Nulle sur grand écran, où c'est le rail qui navigue.
         style={{
           // Au moins deux rems et demi : sur le bureau, la réserve de la barre du bas vaut zéro, et
-          // le dernier élément — « Se déconnecter » — touchait le bord de la fenêtre (23/09/2026).
+          // le dernier élément — « Se déconnecter » — touchait le bord de l'écran (23/09/2026).
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + max(var(--player-bar-space, 4rem), 2.5rem))",
           // Le fondu collé en haut recouvre ce qu'on y fait défiler : une carte atteinte aux flèches
           // s'arrêtait dessous, son haut estompé. La réserve l'arrête juste après.
@@ -396,16 +310,15 @@ export function PlayerPanelFrame({
         {/* Un fondu sous l'en-tête, collé en haut de la zone qui défile.
             Le contenu disparaissait net sous le titre, coupé à la ligne près (23/09/2026). Le
             fondu occupe la marge qui séparait l'en-tête du contenu : au repos il ne recouvre que
-            du vide, et rien ne bouge ; au défilement, ce qui monte s'y efface. */}
-        {/* Depuis la couleur de ce qu'il recouvre : le noir de l'app sur téléphone, la surface de
-            la fenêtre sur grand écran. Un masque sur la zone qui défile a fait ce travail le temps
-            d'une fenêtre translucide ; peint, il ne coûte rien au défilement. */}
+            du vide, et rien ne bouge ; au défilement, ce qui monte s'y efface. Peint depuis la
+            couleur de ce qu'il recouvre, il ne coûte rien au défilement. */}
         <div
           aria-hidden
           className={`pointer-events-none sticky top-0 z-10 bg-gradient-to-b from-(--panel-bg) to-transparent ${short ? "h-2" : "h-4"}`}
         />
-        {children}
-      </div>
+        <div className="mx-auto w-full" style={{ maxWidth: contentWidth }}>
+          {children}
+        </div>
       </div>
     </div>,
     document.body

@@ -1018,11 +1018,21 @@ par `.phone-sheet-frame`.
 
 **Décidé le 26/09/2026.**
 
-## 32. Fermer une fenêtre du cinéma ramène à l'accueil
+## 32. Quitter un onglet du cinéma ramène à l'accueil
 
-**Règle.** La croix, Échap et un clic à côté de la fenêtre (grand écran) ramènent à l'accueil,
-comme « Accueil » dans le rail. Sur un écran poussé (Parcourir, l'activité, les signalements), la
-flèche et Échap reviennent d'un cran ; le clic à côté ramène à l'accueil là aussi.
+**Règle.** Échap ramène à l'accueil, comme « Accueil » dans le rail. Sur un écran poussé
+(Parcourir, l'activité, les signalements), la flèche et Échap reviennent d'un cran.
+
+**Plein écran à toutes les tailles (07/10/2026).** Sur grand écran, ces écrans étaient des
+fenêtres posées sur l'accueil, décollées des bords, qu'une croix ou un clic à côté refermait.
+L'accueil restait visible autour — deux écrans à la fois —, et des spectateurs l'ont dit
+perturbant ; un flou derrière a été écarté (coûteux sur une grande surface, et il gardait l'accueil
+présent). Ce sont des onglets : ils remplacent l'écran sur le noir de l'app, comme sur téléphone,
+sans croix ni « dehors ». Leur colonne est centrée et l'en-tête s'y aligne (`contentWidth`) :
+étroite pour ce qui se lit ou se remplit (Compte), `PANEL_WIDE` (`panelWidth.ts`) pour les grilles
+d'affiches (Recherche, Ma liste, Parcourir), dont les colonnes se multiplient avec l'écran au lieu
+d'agrandir les affiches (`player-grid-fluid`) ; le champ de recherche garde une largeur de champ.
+Les fiches de titre restent par-dessus, plein écran elles aussi.
 
 **Pourquoi.** Tout passait par `cinemaClose`, un retour dans l'historique : Accueil → Ma liste →
 Compte, puis fermer, rouvrait Ma liste — un « fermer » qui ouvre une autre fenêtre.
@@ -1033,7 +1043,7 @@ Compte, puis fermer, rouvrait Ma liste — un « fermer » qui ouvre une autre f
 **Appelants.** Tous les panneaux montés dans `PlayerPanelFrame` : Recherche, Ma liste, Compte,
 Parcourir, Activité, Signalements.
 
-**Tests.** `player-panel-frame.test.tsx` (« Échap », « clic à côté de la fenêtre »).
+**Tests.** `player-panel-frame.test.tsx` (« Échap », « un onglet plein écran »).
 
 **Voulu.** Les fiches (film, série, personne, découverte) gardent `cinemaClose` : elles s'empilent
 les unes sur les autres, et en sortir revient bien à celle d'en dessous. Aller à l'accueil ajoute une

@@ -15,6 +15,7 @@ import { uniqueById } from "@/lib/cinemaRails";
 import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload } from "@/app/api/cinema/series/route";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
+import { PANEL_WIDE } from "./panelWidth";
 import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonResult } from "@/app/api/search/route";
 import { libraryTargetOf } from "@/lib/searchResultTarget";
@@ -332,9 +333,10 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   ];
 
   return (
-    <PlayerPanelFrame contentWidth="64rem" title={t("player.nav.search")} leaving={leaving} replaced={replaced} fromTab={fromTab}>
-      <div className="mx-auto w-full max-w-5xl">
-        <div className="relative">
+    <PlayerPanelFrame contentWidth={PANEL_WIDE} title={t("player.nav.search")} leaving={leaving} replaced={replaced} fromTab={fromTab}>
+      <div className="w-full">
+        {/* Le champ garde une largeur de champ ; seule la grille s'étale avec l'écran. */}
+        <div className="relative max-w-3xl">
           <SearchIcon size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-subtle" />
           <input
             ref={inputRef}
@@ -424,7 +426,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
         )}
 
         {(shownTitles.length > 0 || shownPersons.length > 0) && (
-          <div ref={gridRef} className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+          <div ref={gridRef} className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 player-grid-fluid">
             {shownTitles.map((r) => (
               <PlayerResultCard
                 key={r.key}
@@ -521,7 +523,7 @@ function SearchStart({ onPick }: { onPick: (query: string) => void }) {
       {fresh.length > 0 && (
         <section>
           <h2 className="mb-3 text-sm font-semibold text-white">{t("cinema.recentlyAdded")}</h2>
-          <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+          <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 player-grid-fluid">
             {fresh.map((movie) => (
               <PlayerResultCard
                 key={movie.radarrId}

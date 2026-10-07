@@ -68,20 +68,15 @@ describe("PlayerPanelFrame — d'un onglet à l'autre", () => {
     return container.ownerDocument.querySelector<HTMLElement>("[data-panel-root]")!;
   };
 
-  it("remplacé, il reste plein et passe dessous — sur téléphone", () => {
-    mobile = true;
-    const el = root(true, true);
-    expect(el.className).not.toContain("animate-fade-out");
-    expect(el.style.zIndex).toBe("45");
-  });
-
-  // Sur grand écran les fenêtres n'ont pas la même largeur : restée pleine, l'ancienne dépassait
-  // autour de la nouvelle puis disparaissait d'un coup (26/09/2026).
-  it("remplacé, il s'efface dessous — sur grand écran", () => {
-    const el = root(true, true);
-    expect(el.className).toContain("animate-fade-out-scale");
-    expect(el.style.zIndex).toBe("45");
-  });
+  // Plein écran à toutes les tailles depuis le 07/10/2026 : le grand écran n'a plus de geste à lui.
+  for (const isPhone of [true, false]) {
+    it(`remplacé, il reste plein et passe dessous — ${isPhone ? "sur téléphone" : "sur grand écran"}`, () => {
+      mobile = isPhone;
+      const el = root(true, true);
+      expect(el.className).not.toContain("animate-fade-out");
+      expect(el.style.zIndex).toBe("45");
+    });
+  }
 
   it("celui qui arrive est au-dessus", () => {
     const el = root(false, false);
@@ -115,10 +110,10 @@ describe("PlayerPanelFrame — arrivée depuis un autre onglet", () => {
     expect(root().className).not.toContain("panel-swap-in");
   });
 
-  it("entre après l'autre fenêtre quand il arrive d'un autre onglet — sur grand écran", () => {
+  it("apparaît d'un coup aussi sur grand écran", () => {
     render(frame({ fromTab: true }));
-    expect(root().className).toContain("panel-swap-in");
     expect(root().className).not.toContain("animate-fade-in-side");
+    expect(root().className).not.toContain("panel-swap-in");
   });
 
   it("n'ajoute pas l'animation en retard quand l'onglet d'avant a fini de partir", () => {
@@ -204,88 +199,57 @@ describe("PlayerPanelFrame — Échap", () => {
 describe("PlayerPanelFrame — le bas", () => {
   it("garde toujours un peu d'air sous le dernier élément", () => {
     render(panel(false));
-    const body = screen.getByText("un").parentElement!;
+    // Le corps qui défile — le contenu y est posé dans sa colonne centrée.
+    const body = screen.getByText("un").closest<HTMLElement>(".overflow-y-auto")!;
     expect(body.style.paddingBottom).toContain("max(var(--player-bar-space, 4rem), 2.5rem)");
   });
 });
 
-// Sur grand écran, un clic à côté de la fenêtre la ferme (26/09/2026) — mais pas une sélection de
-// texte commencée dedans et relâchée dehors, que le navigateur livre comme un clic sur la racine.
-describe("PlayerPanelFrame — clic à côté de la fenêtre", () => {
+// Plein écran à toutes les tailles (07/10/2026) : plus de fenêtre posée sur l'accueil, donc plus de
+// « dehors » — un clic sur le fond ne ferme rien —, et plus de croix : on va ailleurs par le rail.
+describe("PlayerPanelFrame — un onglet plein écran", () => {
   const root = () => document.querySelector<HTMLElement>("[data-panel-root]")!;
-  const reset = async () => {
+
+  it("couvre l'écran sur le noir de l'app, sur grand écran comme sur téléphone", () => {
+    render(panel(false));
+    expect(root().className).toContain("fixed inset-0");
+    expect(root().className).toContain("bg-ink");
+    expect(document.querySelector(".panel-window")).toBeNull();
+  });
+
+  it("un clic sur le fond ne ferme rien", async () => {
     const m = await import("@/lib/cinemaRoute");
     vi.mocked(m.cinemaClose).mockClear();
     vi.mocked(m.cinemaNavigate).mockClear();
-    return m;
-  };
-
-  // Accueil → Ma liste → Compte, puis un clic à côté : l'accueil, pas Ma liste (26/09/2026).
-  it("ramène à l'accueil, pas à l'écran d'avant", async () => {
-    const { cinemaClose, cinemaNavigate } = await reset();
     render(panel(false));
     fireEvent.pointerDown(root());
     fireEvent.click(root());
-    expect(cinemaNavigate).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(cinemaNavigate).mock.calls[0][0]).toMatchObject({ search: false, list: false, account: false });
-    expect(cinemaClose).not.toHaveBeenCalled();
+    expect(m.cinemaClose).not.toHaveBeenCalled();
+    expect(m.cinemaNavigate).not.toHaveBeenCalled();
   });
 
-  it("ramène à l'accueil même depuis un écran poussé", async () => {
-    const { cinemaClose, cinemaNavigate } = await reset();
+  it("n'a pas de croix ; un écran poussé garde son retour", () => {
+    render(panel(false));
+    expect(screen.queryByLabelText("common.close")).toBeNull();
+    cleanup();
     render(
       <PlayerPanelFrame title="Titre" back>
         <p>contenu</p>
       </PlayerPanelFrame>
     );
-    fireEvent.pointerDown(root());
-    fireEvent.click(root());
-    expect(cinemaNavigate).toHaveBeenCalledTimes(1);
-    expect(cinemaClose).not.toHaveBeenCalled();
+    expect(screen.getByText("cinema.back")).toBeTruthy();
   });
 
-  it("ne ferme pas sur un clic dans la fenêtre", async () => {
-    const { cinemaClose, cinemaNavigate } = await reset();
-    render(panel(false));
-    fireEvent.pointerDown(screen.getByText("un"));
-    fireEvent.click(screen.getByText("un"));
-    expect(cinemaClose).not.toHaveBeenCalled();
-    expect(cinemaNavigate).not.toHaveBeenCalled();
-  });
-
-  it("ne ferme pas sur un geste commencé dans la fenêtre et relâché dehors", async () => {
-    const { cinemaClose, cinemaNavigate } = await reset();
-    render(panel(false));
-    fireEvent.pointerDown(screen.getByText("un"));
-    fireEvent.click(root());
-    expect(cinemaClose).not.toHaveBeenCalled();
-    expect(cinemaNavigate).not.toHaveBeenCalled();
-  });
-});
-
-// Le Compte et l'activité ou les signalements qu'il ouvre : deux fenêtres de largeurs différentes
-// se croisaient en même temps sur grand écran (26/09/2026). Le téléphone garde son entrée.
-describe("PlayerPanelFrame — une fenêtre qui en remplace une autre sans être un onglet", () => {
-  const root = () => document.querySelector<HTMLElement>("[data-panel-root]")!;
-  const frame = (swapIn: boolean) => (
-    <PlayerPanelFrame title="Titre" back swapIn={swapIn}>
-      <p>contenu</p>
-    </PlayerPanelFrame>
-  );
-
-  it("entre après l'autre sur grand écran", () => {
-    render(frame(true));
-    expect(root().className).toContain("panel-swap-in");
-  });
-
-  it("garde son entrée sur téléphone", () => {
-    mobile = true;
-    render(frame(true));
-    expect(root().className).toContain("animate-fade-in-side");
-  });
-
-  it("entre normalement quand rien ne part", () => {
-    render(frame(false));
-    expect(root().className).toContain("animate-fade-in-side");
+  it("aligne l'en-tête et le contenu sur la même colonne", () => {
+    render(
+      <PlayerPanelFrame title="Titre" contentWidth="42rem">
+        <p>contenu</p>
+      </PlayerPanelFrame>
+    );
+    const heading = screen.getByRole("heading", { name: "Titre" });
+    const headCol = heading.closest<HTMLElement>("[style*='max-width']")!;
+    const bodyCol = screen.getByText("contenu").parentElement!;
+    expect(headCol.style.maxWidth).toBe("42rem");
+    expect(bodyCol.style.maxWidth).toBe("42rem");
   });
 });
