@@ -1667,11 +1667,11 @@ que l'interrupteur, sans rappeler le réglage du serveur.
   « Plus d'infos » y devient un rond.
 - **L'ordre des rangées (08/10/2026)**, au bureau comme sur téléphone : la bannière (et au bureau
   sa rangée), « À la une » quand la bannière montre les reprises — la sélection complétée par les
-  derniers ajouts, sans ce que la bannière montre, au moins cinq titres (`spotlightRowItems`) —, le
-  classement du jour, **Reprendre / À suivre** (la même rangée sur les deux onglets, films et épisodes
-  mêlés, le dernier lu d'abord, entière même quand la bannière montre les reprises), Ma liste, les
-  derniers ajouts, puis les genres. Sur téléphone, les rangées d'un onglet sont rendues en deux
-  volets (`MobileTabRows`, `part`) pour que Reprendre, commun, s'intercale après le classement.
+  derniers ajouts, sans ce que la bannière montre, au moins cinq titres (`spotlightRowItems`) —,
+  **Reprendre / À suivre** (la même rangée sur les deux onglets, films et épisodes mêlés, le dernier
+  lu d'abord, entière même quand la bannière montre les reprises), Ma liste, le classement du jour,
+  les derniers ajouts, puis les genres. Sur téléphone, Reprendre, commun aux onglets, précède le
+  volet de chaque onglet (`MobileTabRows`).
 - Toucher l'affiche de la bannière (téléphone) ou son logo (bureau) ouvre la fiche ; un balayage
   qui se relâche ne compte pas comme un toucher.
 - Basculer de Films à Séries garde la position de chaque bannière : l'onglet caché n'est plus

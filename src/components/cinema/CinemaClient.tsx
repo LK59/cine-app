@@ -1231,8 +1231,8 @@ export function CinemaClient() {
               </CinemaSpotlight>
 
               {/* L'ordre des rangées (08/10/2026, DECISIONS.md §52) : la bannière et sa rangée, « À la une »
-                  quand la bannière montre les reprises, le classement du jour, Reprendre / À suivre,
-                  Ma liste, les derniers ajouts, puis les genres. */}
+                  quand la bannière montre les reprises, Reprendre / À suivre, Ma liste, le classement
+                  du jour, les derniers ajouts, puis les genres. */}
               {movieHero.continuing && (
                 <CinemaRow
                   label={t("cinema.spotlight")}
@@ -1249,19 +1249,6 @@ export function CinemaClient() {
 
               {catalogueErrorView(moviesError, movies) === "ligne" && (
                 <p className="px-8 text-sm text-danger sm:px-12">{errorMessage(moviesError, t, t("common.unknown"))}</p>
-              )}
-
-              {movies && (
-                <CinemaTop10Row
-                  label={top10Label(movies?.top10Theme ?? null, t)}
-                  rowKey="top10-movies"
-                  rowIndex={2}
-                  items={movies.top10}
-                  idOf={(m) => m.radarrId}
-                  cardWidthClassName={CARD_WIDTH}
-                  onFocusItem={focusMovie}
-                  onSelectItem={openDetail}
-                />
               )}
 
               {/* « Reprendre » n'existe qu'une fois, dans l'onglet affiché : c'est la même rangée
@@ -1282,6 +1269,19 @@ export function CinemaClient() {
                 onFocusItem={focusMovie}
                 onSelectItem={openDetail}
               />
+
+              {movies && (
+                <CinemaTop10Row
+                  label={top10Label(movies?.top10Theme ?? null, t)}
+                  rowKey="top10-movies"
+                  rowIndex={2}
+                  items={movies.top10}
+                  idOf={(m) => m.radarrId}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={focusMovie}
+                  onSelectItem={openDetail}
+                />
+              )}
 
               {movies && (
                 <CinemaRow
@@ -1394,18 +1394,6 @@ export function CinemaClient() {
               {series && series.spotlight.length === 0 && (
                 <p className="px-8 text-sm text-muted sm:px-12">{t("cinema.empty")}</p>
               )}
-              {series && (
-                <CinemaTop10Row
-                  label={top10Label(series?.top10Theme ?? null, t)}
-                  rowKey="top10-series"
-                  rowIndex={2}
-                  items={series.top10}
-                  idOf={(x) => x.sonarrId}
-                  cardWidthClassName={CARD_WIDTH}
-                  onFocusItem={focusSeries}
-                  onSelectItem={openSeriesDetail}
-                />
-              )}
 
               {mediaType === "series" && continueSkeleton}
               {mediaType === "series" && continueRow}
@@ -1422,6 +1410,19 @@ export function CinemaClient() {
                 onFocusItem={focusSeries}
                 onSelectItem={openSeriesDetail}
               />
+
+              {series && (
+                <CinemaTop10Row
+                  label={top10Label(series?.top10Theme ?? null, t)}
+                  rowKey="top10-series"
+                  rowIndex={2}
+                  items={series.top10}
+                  idOf={(x) => x.sonarrId}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={focusSeries}
+                  onSelectItem={openSeriesDetail}
+                />
+              )}
 
               {series && (
                 <CinemaSeriesRow

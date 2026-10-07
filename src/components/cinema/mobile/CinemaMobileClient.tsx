@@ -720,22 +720,6 @@ export function CinemaMobileClient() {
           <PosterRow label={t("cinema.spotlight")} items={spotlightRow} itemId={itemId} onSelect={openHero} showNewBadge={false} />
         )}
 
-        {/* Le classement du jour, propre à chaque onglet — avant Reprendre (08/10/2026). */}
-        {keptTabs.map((tab) => (
-          <div key={tab} {...tabPaneProps(tab, shownTab)}>
-            <MobileTabRows
-              part="top"
-              tab={tab}
-              payload={tab === "series" ? series : movies}
-              myList={tab === "series" ? myListSeries : myListMovies}
-              myListPending={myListPending}
-              discoveryRows={discovery?.rows}
-              onSelect={openHero}
-              onDiscover={openDiscovery}
-            />
-          </div>
-        ))}
-
         {/* Reprendre / À suivre, commun aux onglets : films et épisodes mêlés, le dernier lu d'abord.
             Landscape stills with a progress bar and the same resume wording the desktop cards use. */}
         {continuePending && (
@@ -840,7 +824,6 @@ export function CinemaMobileClient() {
         {keptTabs.map((tab) => (
           <div key={tab} {...tabPaneProps(tab, shownTab)}>
             <MobileTabRows
-              part="rest"
               tab={tab}
               payload={tab === "series" ? series : movies}
               myList={tab === "series" ? myListSeries : myListMovies}
@@ -1067,7 +1050,6 @@ const DiscoveryRow = memo(function DiscoveryRow({
  * sienne.
  */
 const MobileTabRows = memo(function MobileTabRows({
-  part,
   tab,
   payload,
   myList,
@@ -1076,12 +1058,6 @@ const MobileTabRows = memo(function MobileTabRows({
   onSelect,
   onDiscover,
 }: {
-  /**
-   * Le haut — le classement du jour — ou le reste : Reprendre / À suivre s'intercale entre les deux,
-   * commun aux onglets (08/10/2026, DECISIONS.md §52). Deux volets par onglet plutôt qu'une rangée
-   * passée en propriété : un nœud neuf à chaque rendu aurait défait le `memo` de ces rangées.
-   */
-  part: "top" | "rest";
   tab: "movies" | "series";
   payload: CinemaMoviesPayload | CinemaSeriesPayload | undefined;
   myList: (CinemaMovie | CinemaSeries)[];
@@ -1097,8 +1073,25 @@ const MobileTabRows = memo(function MobileTabRows({
   useFlipGrid(top10Track, top10.map((item) => String(itemId(item))), CATALOGUE_FLIP);
   const recentlyAdded: (CinemaMovie | CinemaSeries)[] = payload?.recentlyAdded ?? [];
   const rows = payload?.rows as Record<string, (CinemaMovie | CinemaSeries)[]> | undefined;
-  if (part === "top") {
-    return top10.length > 0 ? (
+  return (
+    <>
+      {/* Sous Reprendre, commun aux onglets : Ma liste, le classement du jour, les derniers ajouts, la
+          découverte, puis les genres — le même ordre que le bureau (08/10/2026, DECISIONS.md §52). */}
+      {myListPending && (
+        <MobileRow label={t("cinema.myList")}>
+          <CinemaSkeletonCards cardClassName={POSTER_WIDTH} shape="poster" count={4} />
+        </MobileRow>
+      )}
+      <PosterRow
+        label={t("cinema.myList")}
+        items={myList}
+        itemId={itemId}
+        onSelect={onSelect}
+        // Vers « Ma liste » et non vers une grille de genre : la rangée est un extrait
+        // d'un écran qui existe déjà, avec ses onglets, sa recherche et ses demandes.
+        onSeeAll={() => cinemaNavigate({ list: true })}
+      />
+      {top10.length > 0 && (
         <MobileRow label={top10Label(payload?.top10Theme ?? null, t)} trackRef={top10Track}>
           {top10.map((item, i) => (
             <CinemaTop10Card
@@ -1114,27 +1107,7 @@ const MobileTabRows = memo(function MobileTabRows({
             />
           ))}
         </MobileRow>
-    ) : null;
-  }
-  return (
-    <>
-      {/* Après le classement et Reprendre : Ma liste, les derniers ajouts, la découverte, puis les
-          genres — le même ordre que le bureau (08/10/2026, DECISIONS.md §52). */}
-
-      {myListPending && (
-        <MobileRow label={t("cinema.myList")}>
-          <CinemaSkeletonCards cardClassName={POSTER_WIDTH} shape="poster" count={4} />
-        </MobileRow>
       )}
-      <PosterRow
-        label={t("cinema.myList")}
-        items={myList}
-        itemId={itemId}
-        onSelect={onSelect}
-        // Vers « Ma liste » et non vers une grille de genre : la rangée est un extrait
-        // d'un écran qui existe déjà, avec ses onglets, sa recherche et ses demandes.
-        onSeeAll={() => cinemaNavigate({ list: true })}
-      />
       <PosterRow label={t("cinema.recentlyAdded")} items={recentlyAdded} itemId={itemId} onSelect={onSelect} showNewBadge={false} />
 
       {(discoveryRows ?? [])
