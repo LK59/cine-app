@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { continueHeroTitles, continueTargets, heroSource } from "@/lib/homeLayout";
+import { continueHeroTitles, continueTargets, heroSource, HERO_LIMIT_PHONE } from "@/lib/homeLayout";
 import { continueOrder } from "@/lib/continueOrder";
 import { heroContinueFacts } from "@/lib/cinemaContinueLabel";
 import { resolveHomeLayout } from "@/lib/useHomeLayout";
@@ -28,7 +28,13 @@ describe("continueHeroTitles", () => {
     expect(out.placed.size).toBe(0);
   });
 
-  it("s'arrête à huit, comme la bannière d'origine", () => {
+  it("s'arrête à cinq sur téléphone — le reste est dans la rangée Reprendre", () => {
+    const many = new Map(Array.from({ length: 12 }, (_, i) => [i + 1, { radarrId: i + 1 }]));
+    const entries = continueOrder(Array.from({ length: 12 }, (_, i) => resume(`m${i}`, `/radarr/${i + 1}`, "2026-10-07T10:00:00Z")), []);
+    expect(continueHeroTitles(entries, (id) => many.get(id), () => undefined, HERO_LIMIT_PHONE).movies).toHaveLength(5);
+  });
+
+  it("s'arrête à huit au bureau, comme la bannière d'origine", () => {
     const many = new Map(Array.from({ length: 12 }, (_, i) => [i + 1, { radarrId: i + 1 }]));
     const entries = continueOrder(Array.from({ length: 12 }, (_, i) => resume(`m${i}`, `/radarr/${i + 1}`, "2026-10-07T10:00:00Z")), []);
     expect(continueHeroTitles(entries, (id) => many.get(id), () => undefined).movies).toHaveLength(8);

@@ -1650,7 +1650,8 @@ que l'interrupteur, sans rappeler le réglage du serveur.
   de la bascule Films / Séries au bureau, en rond à côté de la loupe sur téléphone.
 - `HOME_CONTINUE_HERO` (« Afficher les reprises dans la bannière d'accueil ») : la bannière montre
   d'abord Reprendre (onglet Films) et À suivre (onglet Séries), chaque titre retrouvé dans le
-  catalogue, le dernier lu en tête (§33) ; **s'il y en a moins de cinq, « À la une » complète**
+  catalogue, le dernier lu en tête (§33) — huit au plus au bureau, **cinq sur téléphone**
+  (`HERO_LIMIT_PHONE` : des vignettes courtes, et « À la une » encore visible) ; **s'il y en a moins de cinq, « À la une » complète**
   (`HERO_MIN`) — une seule reprise laissait une bannière figée. La rangée sous la bannière du
   bureau s'appelle alors « Pour vous » (« Reprendre » si elle ne tient que des reprises) ; la rangée
   « À la une » descend à la place de Reprendre, sans les titres déjà montrés. Sans aucune reprise, la

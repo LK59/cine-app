@@ -14,7 +14,7 @@ import { prefetchLibraryItem } from "@/lib/prefetch";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { continueOrder } from "@/lib/continueOrder";
-import { continueHeroTitles, continueTargets, heroSource, spotlightRowItems } from "@/lib/homeLayout";
+import { continueHeroTitles, continueTargets, heroSource, spotlightRowItems, HERO_LIMIT_PHONE } from "@/lib/homeLayout";
 import { useHomeLayout } from "@/lib/useHomeLayout";
 import { CinemaBrowseAllButton } from "@/components/cinema/CinemaBrowseAllButton";
 import { heroOffscreen } from "@/lib/heroCarousel";
@@ -439,7 +439,8 @@ export function CinemaMobileClient() {
       continueHeroTitles(
         continueOrder((resume?.items ?? []).filter((r) => r.type === "Movie"), nextUp?.items ?? []),
         (id) => byIdMovies?.get(id) as CinemaMovie | undefined,
-        (id) => byIdSeries?.get(id) as CinemaSeries | undefined
+        (id) => byIdSeries?.get(id) as CinemaSeries | undefined,
+        HERO_LIMIT_PHONE
       ),
     [resume, nextUp, byIdMovies, byIdSeries]
   );

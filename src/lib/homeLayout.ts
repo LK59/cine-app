@@ -19,8 +19,15 @@ export interface HeroNextEpisode extends ContinueEpisode {
   sonarrId: number | null;
 }
 
-/** Une bannière tient huit titres, comme celle d'origine. */
+/** Une bannière tient huit titres, comme celle d'origine — au bureau, où sa rangée les montre tous. */
 const HERO_LIMIT = 8;
+/**
+ * Sur téléphone, cinq reprises au plus dans la bannière (08/10/2026) : ses vignettes restent un
+ * sommaire court, et quelqu'un qui a beaucoup en cours y voit encore « À la une ». Le reste est
+ * dans la rangée Reprendre, juste dessous, entière. Au bureau la rangée sous la bannière montre tout
+ * d'un coup et « À la une » suit avec dix titres : la limite n'y servirait à rien.
+ */
+export const HERO_LIMIT_PHONE = 5;
 
 /**
  * Les titres de la bannière quand elle montre Reprendre / À suivre, dans l'ordre de la rangée (le
@@ -33,6 +40,7 @@ export function continueHeroTitles<M, S, RM extends HeroResumeMovie, NE extends 
   entries: ContinueEntry<RM, NE>[],
   movieById: (radarrId: number) => M | undefined,
   seriesById: (sonarrId: number) => S | undefined,
+  limit: number = HERO_LIMIT,
 ): { movies: M[]; series: S[]; placed: Set<string> } {
   const movies: M[] = [];
   const series: S[] = [];
@@ -45,7 +53,7 @@ export function continueHeroTitles<M, S, RM extends HeroResumeMovie, NE extends 
     if (entry.kind === "movie") {
       const id = Number(entry.item.cinemaHref?.match(/^\/radarr\/(\d+)$/)?.[1] ?? NaN);
       const movie = Number.isFinite(id) && !seenMovies.has(id) ? movieById(id) : undefined;
-      if (movie && movies.length < HERO_LIMIT) {
+      if (movie && movies.length < limit) {
         seenMovies.add(id);
         movies.push(movie);
       }
@@ -53,7 +61,7 @@ export function continueHeroTitles<M, S, RM extends HeroResumeMovie, NE extends 
     } else {
       const id = entry.item.sonarrId;
       const show = id !== null && !seenSeries.has(id) ? seriesById(id) : undefined;
-      if (show && id !== null && series.length < HERO_LIMIT) {
+      if (show && id !== null && series.length < limit) {
         seenSeries.add(id);
         series.push(show);
       }
