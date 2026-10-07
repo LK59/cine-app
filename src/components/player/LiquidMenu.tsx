@@ -24,13 +24,22 @@ import { springKeyframes } from "@/lib/liquidGlass/spring";
 
 const CLOSE_MS = 200;
 /**
- * L'ouverture rebondit : un ressort moins amorti que celui des gestes (dépassement ≈ 7 %), dont le
- * dépassement se lit en échelle — environ 3,5 %, le petit « pop » des menus d'iOS. Avec le ressort
- * des gestes (amortissement 0,8), le dépassement restait sous le demi-pour-cent : rien ne se voyait
- * (04/10/2026).
+ * L'ouverture rebondit : un ressort moins amorti que celui des gestes, dont le dépassement se lit
+ * en échelle — le petit « pop » des menus d'iOS. Avec le ressort des gestes (amortissement 0,8),
+ * le dépassement restait sous le demi-pour-cent : rien ne se voyait (04/10/2026). Le premier
+ * réglage (0,42 s / 0,62 : ≈ 8 % de dépassement, posé en 0,75 s) paraissait lent et rebondissait
+ * deux fois (07/10/2026) : plus vif et un peu plus amorti, le pop reste (≈ 2 % d'échelle) et se
+ * pose en un seul aller-retour.
  */
-const OPEN_SPRING = toSpring(0.42, 0.62);
+export const OPEN_SPRING = toSpring(0.34, 0.72);
 const OPEN_BOUNCE = 0.5;
+/**
+ * L'icône ne rebondit pas. Elle voyageait sur le ressort de la boîte, et son dépassement, pris
+ * sur tout le trajet du bouton à l'en-tête (deux cents pixels et plus), la portait au-delà du
+ * coin du menu, presque hors de lui (07/10/2026). Seul le contenant rebondit ; ce qui voyage à
+ * l'intérieur arrive, amorti au critique, en même temps que lui.
+ */
+export const ICON_SPRING = toSpring(0.3, 1);
 /** L'étirement d'une liste tirée au-delà de son bout : au plus 6 % de la hauteur du menu. */
 const OVERSCROLL_STRETCH = 0.35;
 const OVERSCROLL_MAX = 0.06;
@@ -157,11 +166,11 @@ export function LiquidMenu({
       const i = layoutBox(icon, parent);
       const dx = o.x + o.w / 2 - (i.x + i.w / 2);
       const dy = o.y + o.h / 2 - (i.y + i.h / 2);
-      const path = springKeyframes(0, 1, OPEN_SPRING, ({ x }) => ({ transform: `translate(${dx * (1 - x)}px, ${dy * (1 - x)}px)` }));
+      const path = springKeyframes(0, 1, ICON_SPRING, ({ x }) => ({ transform: `translate(${dx * (1 - x)}px, ${dy * (1 - x)}px)` }));
       icon.animate(path.keyframes, { duration: path.duration, easing: "linear" });
     }
-    titleRef.current?.animate([{ opacity: 0, transform: "translateX(-6px)" }, { opacity: 1, transform: "none" }], { duration: 200, delay: 60, easing: "ease-out", fill: "backwards" });
-    listRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: 90, easing: "ease-out", fill: "backwards" });
+    titleRef.current?.animate([{ opacity: 0, transform: "translateX(-6px)" }, { opacity: 1, transform: "none" }], { duration: 160, delay: 40, easing: "ease-out", fill: "backwards" });
+    listRef.current?.animate([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { duration: 180, delay: 60, easing: "ease-out", fill: "backwards" });
 
     // La pilule s'efface sous le menu qui naît d'elle.
     anchor.dataset.menuCover = "1";
