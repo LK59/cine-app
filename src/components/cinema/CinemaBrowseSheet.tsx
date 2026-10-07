@@ -177,7 +177,8 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
           // `player-grid` : c'est lui qui porte `content-visibility`, et sans lui le navigateur
           // met en page et dessine les six cent soixante-dix cartes d'un coup — la grille
           // complète est justement le seul écran où ce nombre est atteint.
-          <div ref={gridRef} className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 player-grid-fluid">
+          // `grid-hover-zoom` : l'affiche grossit au survol, au pointeur fin seulement (globals.css).
+          <div ref={gridRef} className="player-grid grid-hover-zoom grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 player-grid-fluid">
             {grid.map((item) => (
               <PlayerResultCard
                 key={idOf(item)}

@@ -1312,6 +1312,28 @@
   .player-grid-fluid > * { contain-intrinsic-size: auto 295px; }
 }
 
+/* « Tous les films », « Toutes les séries » : l'affiche grossit doucement sous le pointeur
+   (07/10/2026). Au pointeur fin seulement — un doigt n'a pas de survol, et la carte garde alors
+   son seul enfoncement (`pressable`). Chaque carte porte `content-visibility`, donc une
+   containment de dessin qui découpe tout ce qui dépasse d'elle : l'affiche agrandie y aurait été
+   rognée sur les bords. Une marge intérieure de 6 px, rendue par une marge négative, lui laisse
+   la place sans rien déplacer dans la grille (4 % d'une affiche de 240 px : 5 px de chaque côté). */
+@media (hover: hover) and (pointer: fine) {
+  .grid-hover-zoom > * {
+    padding: 6px;
+    margin: -6px;
+  }
+  .grid-hover-zoom > * > :first-child {
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease-out;
+  }
+  .grid-hover-zoom > *:hover > :first-child {
+    transform: scale(1.04);
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: reduce) {
+  .grid-hover-zoom > *:hover > :first-child { transform: none; }
+}
+
 /* Les marges latérales sûres.
    `viewport-fit=cover` laisse le contenu s'étendre sous l'encoche et la Dynamic Island. Debout
    elles ne mordent que sur le haut, déjà traité partout ; couché, elles prennent une soixantaine
