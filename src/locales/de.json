@@ -1665,6 +1665,7 @@
       "confirmPassword": "Bestätigen",
       "changePassword": "Passwort ändern",
       "passwordRule": "Mindestens 8 Zeichen.",
+      "passwordOtherDevices": "Deine anderen Geräte müssen sich mit dem neuen Passwort erneut anmelden – auch der Fernseher und die Jellyfin-Apps. Dieses Gerät bleibt angemeldet.",
       "passwordMismatch": "Die beiden Passwörter stimmen nicht überein.",
       "passwordChanged": "Passwort geändert",
       "saving": "Wird gespeichert…",

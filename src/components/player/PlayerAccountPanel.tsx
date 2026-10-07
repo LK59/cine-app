@@ -404,6 +404,10 @@ function PasswordSection() {
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
         />
+        {/* Dit avant d'agir : Jellyfin fait tomber tous les autres appareils du compte au changement
+            de mot de passe. Sans cet avertissement, le téléphone renvoyé à la connexion deux heures
+            plus tard se lisait comme une panne (07/10/2026). */}
+        <p className="text-xs text-muted sm:col-span-2">{t("player.account.passwordOtherDevices")}</p>
         <div className="flex items-center gap-3 sm:col-span-2">
           <button type="submit" disabled={!canSubmit} className="btn btn-primary btn-sm">
             {saving ? t("player.account.saving") : t("player.account.changePassword")}

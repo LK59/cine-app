@@ -1665,6 +1665,7 @@
       "confirmPassword": "Confirmer",
       "changePassword": "Changer le mot de passe",
       "passwordRule": "Au moins 8 caractères.",
+      "passwordOtherDevices": "Vos autres appareils devront se reconnecter avec le nouveau mot de passe — la télévision et les applications Jellyfin comprises. Celui-ci reste connecté.",
       "passwordMismatch": "Les deux mots de passe ne correspondent pas.",
       "passwordChanged": "Mot de passe modifié",
       "saving": "Enregistrement…",

@@ -22,6 +22,25 @@ describe("revokeJellyfinDevices", () => {
     await expect(revokeJellyfinDevices(["cine-app-abc"], "essai")).resolves.toBeUndefined();
     expect(mockLog).toHaveBeenCalledTimes(1);
   });
+
+  // Un changement de mot de passe fait tomber tous les appareils du compte ; le jeton refusé
+  // ensuite demande la suppression d'un appareil déjà parti, et Jellyfin répond 400 (07/10/2026).
+  it("un appareil déjà parti n'est pas une erreur", async () => {
+    const { HttpError } = await import("@/lib/http");
+    mockJellyfin.deleteDevice.mockRejectedValueOnce(new HttpError("400 Bad Request", 400));
+    mockJellyfin.deleteDevice.mockRejectedValueOnce(new HttpError("404 Not Found", 404));
+    const { revokeJellyfinDevices } = await import("@/lib/jellyfinRevoke");
+    await revokeJellyfinDevices(["cine-app-a", "cine-app-b"], "jeton refusé");
+    expect(mockLog).not.toHaveBeenCalled();
+  });
+
+  it("une vraie panne de Jellyfin reste notée", async () => {
+    const { HttpError } = await import("@/lib/http");
+    mockJellyfin.deleteDevice.mockRejectedValueOnce(new HttpError("500 Internal Server Error", 500));
+    const { revokeJellyfinDevices } = await import("@/lib/jellyfinRevoke");
+    await revokeJellyfinDevices(["cine-app-a"], "essai");
+    expect(mockLog).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("DELETE /api/auth/sessions — « déconnecter tous les autres »", () => {

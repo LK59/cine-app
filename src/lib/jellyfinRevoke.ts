@@ -15,6 +15,7 @@
 // Toujours au mieux : un Jellyfin absent ne doit jamais empêcher quelqu'un de se déconnecter.
 
 import { jellyfin } from "@/lib/clients/jellyfin";
+import { HttpError } from "@/lib/http";
 import { logError } from "@/lib/logger";
 
 /** Supprime ces appareils chez Jellyfin. Ne lève jamais. */
@@ -26,6 +27,11 @@ export async function revokeJellyfinDevices(devices: (string | null | undefined)
     try {
       await jellyfin.deleteDevice(device);
     } catch (error) {
+      // Déjà parti : c'est le but. Jellyfin répond 400 (404 avant la 12) pour un appareil qu'il ne
+      // connaît plus — le cas d'un jeton refusé après un changement de mot de passe, qui a déjà
+      // fait tomber tous les appareils du compte. Cette erreur-là remontait dans l'activité comme
+      // un incident (07/10/2026).
+      if (error instanceof HttpError && (error.status === 400 || error.status === 404)) continue;
       logError("jellyfin-revoke", error, { where: why, device });
     }
   }

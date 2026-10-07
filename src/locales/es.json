@@ -1665,6 +1665,7 @@
       "confirmPassword": "Confirmar",
       "changePassword": "Cambiar la contraseña",
       "passwordRule": "Al menos 8 caracteres.",
+      "passwordOtherDevices": "Tus otros dispositivos tendrán que volver a iniciar sesión con la nueva contraseña, incluidos la televisión y las aplicaciones de Jellyfin. Este seguirá conectado.",
       "passwordMismatch": "Las dos contraseñas no coinciden.",
       "passwordChanged": "Contraseña cambiada",
       "saving": "Guardando…",
