@@ -1360,7 +1360,7 @@ doigt le tient, revient sur le ressort au relâchement, et le clic qui suivrait 
 dehors est retenu (il refermait le menu). Le doigt reste au geste partout dans le menu, sauf sur une
 liste qui a de quoi défiler (`data-scrolls`) — avec `pan-y` sur tout le menu, le premier mouvement
 vertical rendait le doigt au navigateur et la boîte étirée revenait d'un coup. L'ouverture rebondit (ressort
-0,34 s / 0,72, dépassement lu en échelle, ≈ 2 % ; l'icône qui glisse jusqu'à l'en-tête est amortie au critique, sans rebond — sur le ressort de la boîte elle sortait presque du menu) ; une liste tirée au-delà de son bout étire la
+0,34 s / 0,72, dépassement lu en échelle, ≈ 2 % ; l'icône qui glisse jusqu'à l'en-tête est amortie au critique, sans rebond — sur le ressort de la boîte elle sortait presque du menu) ; pendant l'ouverture la boîte s'allonge vers le haut selon la vitesse du ressort (≤ 4 %, `openStretch`) et ses lignes arrivent l'une après l'autre (18 ms d'écart, huit au plus) ; une liste tirée au-delà de son bout étire la
 boîte verticalement (`scale`, lu sur la position de défilement que le rebond du système porte
 hors des bornes — iOS et Safari au pavé tactile ; rien sous Chrome Windows, qui ne rebondit pas). Le fondu des commandes est porté par chaque
 élément (`player-fade`), jamais par leur conteneur : un parent à opacité < 1 isole le fond, et le

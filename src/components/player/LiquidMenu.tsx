@@ -40,6 +40,27 @@ const OPEN_BOUNCE = 0.5;
  * l'intérieur arrive, amorti au critique, en même temps que lui.
  */
 export const ICON_SPRING = toSpring(0.3, 1);
+/**
+ * Pendant qu'elle s'ouvre, la boîte s'allonge dans le sens où elle part — vers le haut — et se
+ * resserre un peu en largeur, puis reprend sa forme en se posant : la matière des menus d'iOS
+ * récents, plutôt qu'une forme rigide qu'on agrandit (07/10/2026). Lu sur la vitesse du ressort,
+ * borné à 4 % ; au retour du dépassement, la vitesse s'inverse et la boîte se tasse à peine.
+ */
+const OPEN_STRETCH = 0.008;
+const OPEN_STRETCH_MAX = 0.04;
+const OPEN_SQUASH_MAX = 0.015;
+/**
+ * Les lignes arrivent l'une après l'autre, de haut en bas, 18 ms d'écart : la liste se déplie au
+ * lieu de s'allumer d'un bloc. Au-delà de huit lignes, les suivantes partent avec la huitième —
+ * une longue liste de pistes ne doit pas rallonger l'ouverture.
+ */
+const ROW_STAGGER_MS = 18;
+const ROW_STAGGER_MAX = 8;
+
+/** L'étirement d'une vitesse d'ouverture `v` (fractions d'ouverture par seconde). */
+export function openStretch(v: number) {
+  return Math.min(OPEN_STRETCH_MAX, Math.max(-OPEN_SQUASH_MAX, v * OPEN_STRETCH));
+}
 /** L'étirement d'une liste tirée au-delà de son bout : au plus 6 % de la hauteur du menu. */
 const OVERSCROLL_STRETCH = 0.35;
 const OVERSCROLL_MAX = 0.06;
@@ -148,14 +169,18 @@ export function LiquidMenu({
     g.pillRadius = anchor.offsetHeight / 2;
     g.height = H;
 
-    const shape = springKeyframes(0, 1, OPEN_SPRING, ({ x }) => ({
-      clipPath: clipAt(x, g.top, g.left, g.pillRadius),
+    const shape = springKeyframes(0, 1, OPEN_SPRING, ({ x, v }) => {
       // Le dépassement ne peut pas agrandir la découpe au-delà de la boîte : il passe en échelle,
       // depuis le coin d'où le menu naît. Au repos, l'origine revient au centre : c'est d'elle que
       // le geste liquide gonfle et étire la surface.
-      transform: `scale(${1 + Math.max(0, x - 1) * OPEN_BOUNCE})`,
-      transformOrigin: "100% 100%",
-    }));
+      const pop = 1 + Math.max(0, x - 1) * OPEN_BOUNCE;
+      const k = openStretch(v);
+      return {
+        clipPath: clipAt(x, g.top, g.left, g.pillRadius),
+        transform: `scale(${pop * (1 - k / 2)}, ${pop * (1 + k)})`,
+        transformOrigin: "100% 100%",
+      };
+    });
     box.animate(shape.keyframes, { duration: shape.duration, easing: "linear" });
 
     // L'icône part de celle du bouton touché.
@@ -170,7 +195,16 @@ export function LiquidMenu({
       icon.animate(path.keyframes, { duration: path.duration, easing: "linear" });
     }
     titleRef.current?.animate([{ opacity: 0, transform: "translateX(-6px)" }, { opacity: 1, transform: "none" }], { duration: 160, delay: 40, easing: "ease-out", fill: "backwards" });
-    listRef.current?.animate([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { duration: 180, delay: 60, easing: "ease-out", fill: "backwards" });
+    // Ligne par ligne : chacune monte de 4 px en apparaissant, la suivante 18 ms plus tard.
+    const rows = listRef.current ? Array.from(listRef.current.children) : [];
+    rows.forEach((row, i) =>
+      row.animate([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], {
+        duration: 180,
+        delay: 50 + Math.min(i, ROW_STAGGER_MAX) * ROW_STAGGER_MS,
+        easing: "ease-out",
+        fill: "backwards",
+      }),
+    );
 
     // La pilule s'efface sous le menu qui naît d'elle.
     anchor.dataset.menuCover = "1";
