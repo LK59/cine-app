@@ -41,9 +41,8 @@ export function CinemaSeriesHero({ item, action }: { item: CinemaSeries; action?
       {/* Le même synopsis que la bannière des films, par le même composant — voir HeroOverview. */}
       <HeroOverview info={info} fallback={item.overview} />
 
-      <HeroCastLine info={info} />
-
-      {action && <HeroContinueButton action={action} />}
+      {/* La distribution cède sa ligne au bouton — voir CinemaHero. */}
+      {action ? <HeroContinueButton action={action} /> : <HeroCastLine info={info} />}
     </div>
   );
 }

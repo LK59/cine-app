@@ -33,9 +33,12 @@ export function continueHeroTitles<M, S, RM extends HeroResumeMovie, NE extends 
   entries: ContinueEntry<RM, NE>[],
   movieById: (radarrId: number) => M | undefined,
   seriesById: (sonarrId: number) => S | undefined,
-): { movies: M[]; series: S[] } {
+): { movies: M[]; series: S[]; placed: Set<string> } {
   const movies: M[] = [];
   const series: S[] = [];
+  // Les entrées que la bannière montre — les autres (sans fiche, ou au-delà de huit) gardent une
+  // rangée Reprendre à elles : sans quoi une reprise hors de Radarr/Sonarr disparaissait de l'accueil.
+  const placed = new Set<string>();
   const seenMovies = new Set<number>();
   const seenSeries = new Set<number>();
   for (const entry of entries) {
@@ -46,6 +49,7 @@ export function continueHeroTitles<M, S, RM extends HeroResumeMovie, NE extends 
         seenMovies.add(id);
         movies.push(movie);
       }
+      if (Number.isFinite(id) && seenMovies.has(id)) placed.add(entry.key);
     } else {
       const id = entry.item.sonarrId;
       const show = id !== null && !seenSeries.has(id) ? seriesById(id) : undefined;
@@ -53,9 +57,10 @@ export function continueHeroTitles<M, S, RM extends HeroResumeMovie, NE extends 
         seenSeries.add(id);
         series.push(show);
       }
+      if (id !== null && seenSeries.has(id)) placed.add(entry.key);
     }
   }
-  return { movies, series };
+  return { movies, series, placed };
 }
 
 /** Le moins de titres que montre la bannière Reprendre / À suivre : en dessous, « À la une » complète. */

@@ -984,11 +984,16 @@ export function CinemaClient() {
     </div>
   );
 
-  const continueRow = hasContinue && (
+  // La bannière de l'onglet montre les reprises (DECISIONS.md §52) : la rangée ne garde que celles
+  // qu'elle n'a pas pu montrer — un titre sans fiche (hors de Radarr/Sonarr), au-delà de huit. Sans
+  // elle, ces reprises disparaissaient de l'accueil.
+  const heroContinuingHere = mediaType === "series" ? seriesHero.continuing : movieHero.continuing;
+  const rowEntries = heroContinuingHere ? continueEntries.filter((entry) => !continuingTitles.placed.has(entry.key)) : continueEntries;
+  const continueRow = rowEntries.length > 0 && (
     <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
       <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{t("cinema.continueWatching")}</h2>
       <div ref={continueTrack} className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
-        {continueEntries.map((entry, i) => {
+        {rowEntries.map((entry, i) => {
           if (entry.kind === "movie") {
             const item = entry.item;
             return (
@@ -1226,8 +1231,11 @@ export function CinemaClient() {
 
               {/* « Reprendre » n'existe qu'une fois, dans l'onglet affiché : c'est la même rangée
                   des deux côtés, et sa piste porte l'unique `continueTrack`. */}
-              {/* La bannière montre déjà Reprendre (DECISIONS.md §52) : « À la une » prend sa place. */}
+              {/* La bannière montre déjà Reprendre (DECISIONS.md §52) : « À la une » prend sa place, après
+                  les reprises qu'elle n'a pas pu montrer. */}
               {movieHero.continuing ? (
+                <>
+                {mediaType === "movies" && continueRow}
                 <CinemaRow
                   label={t("cinema.spotlight")}
                   rowKey="spotlight-row-movies"
@@ -1239,6 +1247,7 @@ export function CinemaClient() {
                   onFocusItem={focusMovie}
                   onSelectItem={openDetail}
                 />
+                </>
               ) : (
                 <>
                   {mediaType === "movies" && continueSkeleton}
@@ -1366,6 +1375,8 @@ export function CinemaClient() {
 
               {/* La bannière montre déjà À suivre (DECISIONS.md §52) : « À la une » prend sa place. */}
               {seriesHero.continuing ? (
+                <>
+                {mediaType === "series" && continueRow}
                 <CinemaSeriesRow
                   label={t("cinema.spotlight")}
                   rowKey="spotlight-row-series"
@@ -1376,6 +1387,7 @@ export function CinemaClient() {
                   onFocusItem={focusSeries}
                   onSelectItem={openSeriesDetail}
                 />
+                </>
               ) : (
                 <>
                   {mediaType === "series" && continueSkeleton}

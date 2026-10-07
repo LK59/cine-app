@@ -24,7 +24,8 @@ describe("continueHeroTitles", () => {
   it("laisse de côté ce qui n'a pas de fiche : pas d'adresse, ou absent du catalogue", () => {
     const entries = continueOrder([resume("a", null, "2026-10-07T10:00:00Z"), resume("b", "/radarr/99", "2026-10-07T10:00:00Z")], [next("e", null, "2026-10-07T10:00:00Z")]);
     const out = continueHeroTitles(entries, (id) => movies.get(id), (id) => series.get(id));
-    expect(out).toEqual({ movies: [], series: [] });
+    expect(out).toMatchObject({ movies: [], series: [] });
+    expect(out.placed.size).toBe(0);
   });
 
   it("s'arrête à huit, comme la bannière d'origine", () => {

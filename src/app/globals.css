@@ -1667,3 +1667,20 @@
   .hero-thumb { transition: none; }
   .hero-thumb-on { transform: none; }
 }
+
+/* La bannière des reprises sur téléphone (`CinemaMobileHero`, `peek`) : l'affiche active entière,
+   ses voisines qui dépassent, un peu plus petites et atténuées — elles appellent le geste sans
+   disputer le regard. Même courbe que la piste, pour que tout arrive ensemble. */
+.hero-peek-slide {
+  width: var(--carousel-slide);
+  transform: scale(0.92);
+  opacity: 0.45;
+  transition: transform 380ms cubic-bezier(0.32, 0.72, 0, 1), opacity 380ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.hero-peek-on {
+  transform: none;
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-peek-slide { transition: none; }
+}

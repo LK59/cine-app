@@ -449,6 +449,8 @@ export function CinemaMobileClient() {
   const heroSeries = seriesHero.items;
   /** La bannière de l'onglet affiché montre Reprendre / À suivre : « À la une » prend la place de la rangée. */
   const heroContinuing = isSeries ? seriesHero.continuing : movieHero.continuing;
+  /** La rangée Reprendre : entière, ou réduite à ce que la bannière n'a pas pu montrer (DECISIONS.md §52). */
+  const rowEntries = heroContinuing ? continueEntries.filter((entry) => !continuingTitles.placed.has(entry.key)) : continueEntries;
   // Sans ce que la bannière montre déjà en complément : pas deux fois le même titre.
   const spotlightRow = useMemo<(CinemaMovie | CinemaSeries)[]>(() => {
     const p = isSeries ? series : movies;
@@ -570,7 +572,9 @@ export function CinemaMobileClient() {
           className="flex min-w-0 items-center gap-1.5 rounded-full py-1 pr-2 text-white transition-opacity active:opacity-60"
         >
           <Clapperboard size={16} className="shrink-0 text-accent-400" />
-          <span className="truncate font-display text-sm font-semibold tracking-tight">Cine App</span>
+          {/* Le nom cède la place sur un petit téléphone : avec le bouton « Tout voir » à droite, il
+              y était coupé en « C. » (iPhone SE, 07/10/2026). Le logo seul suffit à le dire. */}
+          <span className="truncate font-display text-sm font-semibold tracking-tight max-[380px]:hidden">Cine App</span>
         </button>
 
         {/* Au centre, et non plus poussés à gauche : ce sont les deux onglets de la bibliothèque,
@@ -712,17 +716,14 @@ export function CinemaMobileClient() {
 
         {/* Continue watching — landscape stills with a progress bar and the same resume wording
             the desktop cards use. */}
-        {heroContinuing && (
-          <PosterRow label={t("cinema.spotlight")} items={spotlightRow} itemId={itemId} onSelect={openHero} showNewBadge={false} />
-        )}
         {!heroContinuing && continuePending && (
           <MobileRow label={t("cinema.continueWatching")}>
             <CinemaSkeletonCards cardClassName={CONTINUE_WIDTH} shape="still" count={3} />
           </MobileRow>
         )}
-        {!heroContinuing && hasContinue && (
+        {rowEntries.length > 0 && (
           <MobileRow label={t("cinema.continueWatching")} trackRef={continueTrack}>
-            {continueEntries.map((row) => {
+            {rowEntries.map((row) => {
               if (row.kind === "movie") {
                 const entry = row.item;
                 return (
@@ -809,6 +810,11 @@ export function CinemaMobileClient() {
               );
             })}
           </MobileRow>
+        )}
+        {/* La bannière montre les reprises (DECISIONS.md §52) : « À la une » descend ici, après celles
+            qu'elle n'a pas pu montrer (sans fiche, au-delà de huit — voir `rowEntries`). */}
+        {heroContinuing && (
+          <PosterRow label={t("cinema.spotlight")} items={spotlightRow} itemId={itemId} onSelect={openHero} showNewBadge={false} />
         )}
 
         {/* Un volet par onglet visité, gardé monté et caché quand on regarde l'autre : au retour,

@@ -1660,8 +1660,16 @@ que l'interrupteur, sans rappeler le réglage du serveur.
   `HeroContinueProgress`) : le bouton long repoussait « Plus d'infos » hors de la carte sur
   téléphone. Un complément « À la une » n'a ni barre ni légende, et son bouton dit « Lire ».
 - Sur téléphone, des **vignettes** remplacent les tirets sous la bannière : le sommaire que la
-  rangée est au bureau, sans doublon ; la vignette d'une reprise porte sa progression ; l'affiche
-  est moins haute (56 % de l'écran au plus) pour leur laisser la place.
+  rangée est au bureau, sans doublon ; la vignette d'une reprise porte sa progression ; un toucher
+  y affiche le titre aussitôt. **L'affiche n'est jamais rognée** : elle est moins large (`peek` de
+  `carouselTransform`, à peu près 38 % de la hauteur de l'écran), centrée, et ses voisines
+  dépassent de part et d'autre, plus petites et atténuées — une voisine se choisit d'un toucher.
+  « Plus d'infos » y devient un rond.
+- Les reprises que la bannière ne peut pas montrer (un titre hors de Radarr/Sonarr, sans fiche ;
+  au-delà de huit) gardent une rangée Reprendre juste sous elle (`placed`) : sans elle, elles
+  disparaissaient de l'accueil.
+- Au bureau, le bouton et sa barre tiennent sur une ligne, et la distribution cède la sienne : la
+  bannière a une hauteur fixe, et le logo sortait de l'écran par le haut.
 
 **Pourquoi.** Une installation voulait le catalogue entier à un geste et ce qu'on regarde en tête.
 Une copie du dépôt (une image `:alt`) aurait fait deux applications à maintenir ; un réglage garde

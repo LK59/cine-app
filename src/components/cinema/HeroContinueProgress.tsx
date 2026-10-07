@@ -13,18 +13,22 @@ export function HeroContinueProgress({
 }: {
   caption: string | null;
   progress: number | null;
-  /** Centré sous un logo centré (téléphone) ; aligné à gauche sinon (bureau). */
+  /**
+   * Centré sous un logo centré (téléphone) : la légende au-dessus de la barre, pour qu'une carte
+   * étroite ne la coupe pas. Aligné à gauche sinon (bureau), barre et légende sur une ligne.
+   */
   centered?: boolean;
 }) {
   if (!caption && progress === null) return null;
   return (
-    <div className={`flex items-center gap-2.5 ${centered ? "justify-center" : ""}`}>
+    <div className={centered ? "flex flex-col items-center gap-1.5" : "flex items-center gap-2.5"}>
+      {centered && caption && <span className="max-w-full truncate text-xs font-medium tabular-nums text-muted">{caption}</span>}
       {progress !== null && (
-        <div className="h-1 w-16 shrink-0 overflow-hidden rounded-full bg-white/25" aria-hidden>
+        <div className={`h-1 shrink-0 overflow-hidden rounded-full bg-white/25 ${centered ? "w-24" : "w-16"}`} aria-hidden>
           <ProgressFill percent={Math.round(progress * 100)} />
         </div>
       )}
-      {caption && <span className="truncate text-xs font-medium tabular-nums text-muted">{caption}</span>}
+      {!centered && caption && <span className="truncate text-xs font-medium tabular-nums text-muted">{caption}</span>}
     </div>
   );
 }

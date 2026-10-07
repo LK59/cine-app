@@ -146,12 +146,20 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
     setWasRunning(running);
     if (running) setRuns((n) => n + 1);
   }
+  /**
+   * La bannière des reprises, debout : l'affiche entière mais moins large, centrée, et les voisines
+   * qui dépassent de part et d'autre (07/10/2026). Rogner l'affiche pour la raccourcir en perdait le
+   * haut ou le bas ; la rétrécir la garde entière, laisse la place aux vignettes, et dit d'un coup
+   * d'œil qu'il y a d'autres titres à côté.
+   */
+  const peek = continueStyle && !short;
   const drag = useCarouselDrag({
     trackRef,
     count: items.length,
     index,
     onIndexChange: setIndex,
     onDragStateChange: setDragging,
+    peek,
   });
 
   // Le geste liquide des deux boutons (DECISIONS.md §45) : posés dans un carrousel qu'on fait glisser
@@ -196,11 +204,14 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
         type="button"
         onClick={() => onOpen(item)}
         data-liquid-pan="press"
-        // Le verre liquide : posé sur l'affiche, il a quelque chose à flouter.
-        className="nav-glass flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-white"
+        aria-label={t("cinema.moreInfo")}
+        // Le verre liquide : posé sur l'affiche, il a quelque chose à flouter. Sur l'affiche
+        // rétrécie des reprises, un rond : « Plus d'infos » en toutes lettres y passait sur deux
+        // lignes à côté du bouton de lecture.
+        className={`nav-glass flex items-center justify-center gap-2 text-sm font-medium text-white ${peek ? "w-11 shrink-0 rounded-full" : "flex-1 rounded-lg px-3 py-2.5"}`}
       >
-        <Info size={16} />
-        {t("cinema.moreInfo")}
+        <Info size={peek ? 18 : 16} />
+        {!peek && t("cinema.moreInfo")}
       </button>
     </div>
     </>
@@ -214,12 +225,16 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
           piste est décalée d'une largeur par titre. Pendant le geste elle porte en plus le
           décalage du doigt, sans transition — elle n'anime pas vers une cible, elle est là où le
           doigt l'a mise. Voir useCarouselDrag pour le relâchement. */}
-      <div className="overflow-hidden rounded-2xl" {...drag.handlers} style={drag.style}>
+      <div className={peek ? "-mx-4 overflow-hidden py-1" : "overflow-hidden rounded-2xl"} {...drag.handlers} style={drag.style}>
         <div
           ref={trackRef}
-          className="flex"
+          className={peek ? "flex gap-3" : "flex"}
           style={{
-            transform: carouselTransform(index),
+            // La largeur d'une affiche quand les voisines se montrent : à peu près 38 % de la hauteur
+            // de l'écran — l'affiche, en 2/3, en fait alors 57 % —, bornée pour qu'un petit
+            // téléphone garde une affiche lisible et qu'un grand laisse dépasser les voisines.
+            ...(peek ? { ["--carousel-slide" as string]: "clamp(64%, 38svh, 80%)" } : {}),
+            transform: carouselTransform(index, 0, peek),
             transition: jumped ? "none" : CAROUSEL_TRANSITION,
             // Promue une fois pour toutes, plutôt qu'à chaque geste : sans cela le navigateur
             // décide de promouvoir la piste au premier déplacement, ce qui veut dire re-tramer
@@ -228,7 +243,20 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
           }}
         >
           {items.map((item, i) => (
-            <div key={"radarrId" in item ? `f${item.radarrId}` : `s${item.sonarrId}`} className="w-full shrink-0">
+            <div
+              key={"radarrId" in item ? `f${item.radarrId}` : `s${item.sonarrId}`}
+              className={peek ? `hero-peek-slide shrink-0 ${i === index ? "hero-peek-on" : ""}` : "w-full shrink-0"}
+              // Une voisine qui dépasse se choisit d'un toucher, sans actionner ses boutons.
+              onClickCapture={
+                peek && i !== index
+                  ? (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIndex(i);
+                    }
+                  : undefined
+              }
+            >
               {/* Seules l'affiche courante et ses deux voisines existent : les huit rendues
                   ensemble font une piste de huit écrans de large à tramer et à garder en
                   mémoire, plus huit logos. Trois suffisent — celle qu'on voit, celle d'où l'on
@@ -267,13 +295,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   </div>
                 </div>
               ) : (
-                <div
-                  className="relative overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50"
-                  // Moins haute sous les vignettes : une affiche entière fait une fois et demie la
-                  // largeur de l'écran, et la bande ajoutée dessous repoussait « À la une » hors de
-                  // la vue sur un petit téléphone. Rognée par le bas, sous le dégradé du logo.
-                  style={continueStyle ? { maxHeight: "56svh" } : undefined}
-                >
+                <div className="relative overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50">
                   <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === index} sizes="100vw" />
                   <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                     {item.logoUrl ? (
@@ -307,7 +329,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
           d'une reprise porte sa progression ; celle d'un complément « À la une » n'en a pas. Le
           fil sous la vignette active compte jusqu'au passage suivant, comme les tirets. */}
       {continueStyle && items.length > 1 && (
-        <div className="scrollbar-none -mx-4 mt-3 overflow-x-auto px-4">
+        <div className="scrollbar-none -mx-4 mt-2 overflow-x-auto px-4 py-1.5">
           <div className="mx-auto flex w-max gap-2">
             {items.map((item, i) => {
               const resume = resumeFor?.(item) ?? null;

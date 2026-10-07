@@ -152,8 +152,9 @@ export function HeroCastLine({ info }: { info: { tmdb: { cast?: { name: string }
 export type HeroContinueAction = { label: string; caption: string | null; progress: number | null; onPlay: () => void };
 export function HeroContinueButton({ action }: { action: HeroContinueAction }) {
   return (
-    <div className="flex flex-col items-start gap-2.5">
-      <HeroContinueProgress caption={action.caption} progress={action.progress} />
+    // Sur une ligne : la bannière du bureau a une hauteur fixe, et la barre posée au-dessus du bouton
+    // repoussait le logo hors de l'écran par le haut.
+    <div className="flex items-center gap-4">
       <button
         type="button"
         onClick={action.onPlay}
@@ -162,6 +163,7 @@ export function HeroContinueButton({ action }: { action: HeroContinueAction }) {
         <Play size={16} fill="currentColor" aria-hidden />
         {action.label}
       </button>
+      <HeroContinueProgress caption={action.caption} progress={action.progress} />
     </div>
   );
 }
@@ -211,9 +213,9 @@ export function CinemaHero({ item, action }: { item: CinemaMovie; action?: HeroC
 
       <HeroOverview info={info} fallback={item.overview} />
 
-      <HeroCastLine info={info} />
-
-      {action && <HeroContinueButton action={action} />}
+      {/* La distribution cède sa ligne au bouton : elle reste dans la fiche, et la bannière n'a pas
+          la hauteur des deux. */}
+      {action ? <HeroContinueButton action={action} /> : <HeroCastLine info={info} />}
     </div>
   );
 }

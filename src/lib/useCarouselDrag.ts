@@ -32,8 +32,18 @@ const FLICK_MIN_PX = 24;
 
 export const CAROUSEL_TRANSITION = "transform 380ms cubic-bezier(0.32, 0.72, 0, 1)";
 
+/**
+ * Une piste où l'affiche ne prend pas toute la largeur (`peek`) : centrée, ses voisines dépassent de
+ * part et d'autre. Sa largeur est `--carousel-slide` (posée sur la piste, relative à elle comme les
+ * pourcentages d'une translation) et l'écart entre deux affiches `PEEK_GAP_PX`.
+ */
+export const PEEK_GAP_PX = 12;
+
 /** La position au repos d'une piste, pour un index donné. La même chaîne des deux côtés. */
-export function carouselTransform(index: number, dx = 0): string {
+export function carouselTransform(index: number, dx = 0, peek = false): string {
+  if (peek) {
+    return `translate3d(calc((100% - var(--carousel-slide)) / 2 - ${index} * (var(--carousel-slide) + ${PEEK_GAP_PX}px) + ${dx}px), 0, 0)`;
+  }
   return `translate3d(calc(${-index * 100}% + ${dx}px), 0, 0)`;
 }
 
@@ -64,6 +74,7 @@ export function useCarouselDrag({
   index,
   onIndexChange,
   onDragStateChange,
+  peek = false,
 }: {
   trackRef: RefObject<HTMLDivElement | null>;
   count: number;
@@ -76,6 +87,8 @@ export function useCarouselDrag({
    * au milieu d'un geste, ce qui redessinait tout l'écran *et* remplaçait la transformation
    * écrite à la main par celle du nouvel index — la piste sautait sous le doigt.
    */
+  /** La piste montre les voisines (`carouselTransform`, `peek`). */
+  peek?: boolean;
   onDragStateChange?: (dragging: boolean) => void;
 }): CarouselDrag {
   const from = useRef<{ x: number; y: number; at: number } | null>(null);
@@ -97,10 +110,10 @@ export function useCarouselDrag({
         const track = trackRef.current;
         if (!track) return;
         track.style.transition = "none";
-        track.style.transform = carouselTransform(index, pending.current);
+        track.style.transform = carouselTransform(index, pending.current, peek);
       });
     },
-    [index, trackRef]
+    [index, trackRef, peek]
   );
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
@@ -187,11 +200,11 @@ export function useCarouselDrag({
       const track = trackRef.current;
       if (track) track.style.transition = CAROUSEL_TRANSITION;
       requestAnimationFrame(() => {
-        if (track) track.style.transform = carouselTransform(next);
+        if (track) track.style.transform = carouselTransform(next, 0, peek);
         if (next !== index) requestAnimationFrame(() => onIndexChange(next));
       });
     },
-    [count, index, onIndexChange, trackRef, onDragStateChange, releaseCapture]
+    [count, index, onIndexChange, trackRef, onDragStateChange, releaseCapture, peek]
   );
 
   return {
