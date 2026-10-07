@@ -117,11 +117,32 @@ function serverRecordsSince(since: number): LogRecord[] {
   return readRecords("server", since).filter((r) => r._t >= since);
 }
 
+/**
+ * La dernière fois que Jellyfin a vu ce compte : sa propre « dernière activité », ou le dernier usage
+ * de l'un de ses appareils, la plus récente des deux (07/10/2026).
+ *
+ * Jellyfin ne remet `LastActivityDate` à jour qu'à une connexion ou une lecture. Un compte qui ouvre
+ * CineApp chaque jour sans rien lancer gardait la date de son dernier film, et l'alerte « Jellyfin ne
+ * le voit plus » le désignait à tort : Charlotte et Raphaël, dont l'appareil CineApp était passé chez
+ * Jellyfin le matin même. Le dernier usage d'un appareil, lui, bouge à chaque requête signée par son
+ * jeton — c'est la preuve que ce jeton vit.
+ */
+export function serverSeenAt(user: JellyfinUser, devices: JellyfinDevice[] | null): number | null {
+  const lower = user.Name.toLowerCase();
+  const own = (devices ?? []).filter((d) => d.LastUserId === user.Id || d.LastUserName?.toLowerCase() === lower);
+  const stamps = [time(user.LastActivityDate), ...own.map((d) => time(d.DateLastActivity))].filter((t): t is number => t !== null);
+  return stamps.length ? Math.max(...stamps) : null;
+}
+
 /** Qui est dans l'application, qui regarde quoi, et les comptes d'un coup d'œil. */
 export async function listAccounts(now = Date.now()): Promise<AccountSummary[]> {
-  const [users, sessions] = await Promise.all([
+  const [users, sessions, devices] = await Promise.all([
     jellyfin.getUsers().catch(() => [] as JellyfinUser[]),
     jellyfin.getSessions().catch(() => [] as JellyfinSession[]),
+    // Sans les appareils, on retombe sur la seule date du compte — l'alerte d'hier, rien de pire.
+    Promise.resolve()
+      .then(() => jellyfin.getDevices())
+      .catch(() => null),
   ]);
   const appSessions = sessionDb.summaryByUser();
   const weekStart = now - 7 * DAY;
@@ -133,7 +154,7 @@ export async function listAccounts(now = Date.now()): Promise<AccountSummary[]> 
       const name = user.Name;
       const lower = name.toLowerCase();
       const app = appSessions.get(user.Id);
-      const lastActivity = time(user.LastActivityDate);
+      const lastActivity = serverSeenAt(user, devices);
       const mine = seances.filter((s) => s.user.toLowerCase() === lower);
       const refused = server.filter((r) => r.scope === "jellyfin-token" && String(r.user ?? "").toLowerCase() === lower);
       const clientErrors = server.filter((r) => r.scope === "client" && !isStaleClientChunk(r) && String(r.user ?? "").toLowerCase() === lower);
@@ -350,7 +371,7 @@ export async function accountDetail(id: string, now = Date.now()) {
       invalidLogins: user.Policy?.InvalidLoginAttemptCount ?? 0,
       hasPassword: user.HasPassword !== false,
       lastLogin: time(user.LastLoginDate),
-      lastActivity: time(user.LastActivityDate),
+      lastActivity: serverSeenAt(user, devices.ok ? devices.value : null),
       lang: userPrefsDb.getLang(id, ""),
       onboardingPending: onboardingDb.isPending(name),
       notifications: notificationPrefsDb.getForUser(name),
