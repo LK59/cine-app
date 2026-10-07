@@ -4,9 +4,10 @@ import { render, cleanup } from "@testing-library/react";
 import { createRef } from "react";
 import { LiquidMenu } from "@/components/player/LiquidMenu";
 
-// Ce que l'ouverture demande au navigateur. Une animation qui mêle la découpe (jouée sur le fil
-// principal) et la transformation retient celle-ci sur le fil principal avec elle : pendant un film,
-// le remultiplexage la faisait saccader (07/10/2026).
+// Ce que l'ouverture demande au navigateur. La découpe ne se joue que sur le fil principal (60 i/s
+// au plus sous Safari) : séparée d'elle, la transformation partait au compositeur à 120 i/s, et les
+// bords de la boîte et son contenu n'avançaient plus au même rythme (8.15.7, 07/10/2026). Tout ce
+// qui bouge le fait donc dans une seule animation ; le contenu, lui, ne fait que des fondus.
 type Call = { el: Element; keyframes: Keyframe[] };
 let calls: Call[] = [];
 
@@ -18,6 +19,8 @@ beforeEach(() => {
     return fake() as unknown as Animation;
   }) as unknown as typeof HTMLElement.prototype.animate;
   HTMLElement.prototype.getAnimations = () => [];
+  // La liste a de la hauteur : ses lignes visibles s'animent (jsdom ne met rien en page).
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 280 });
   for (const k of ["offsetWidth", "offsetHeight"]) {
     Object.defineProperty(HTMLElement.prototype, k, { configurable: true, get: () => (k === "offsetWidth" ? 150 : 44) });
   }
@@ -25,19 +28,19 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientHeight;
   for (const k of ["offsetWidth", "offsetHeight"]) delete (HTMLElement.prototype as unknown as Record<string, unknown>)[k];
 });
 
 function Menu() {
   const menuRef = createRef<HTMLDivElement>();
   const anchorRef = createRef<HTMLDivElement>();
-  const originRef = createRef<HTMLButtonElement>();
   return (
     <div style={{ position: "relative" }}>
       <div ref={anchorRef}>
-        <button ref={originRef}>a</button>
+        <button>a</button>
       </div>
-      <LiquidMenu menuRef={menuRef} anchorRef={anchorRef} originRef={originRef} view="audio" title="Audio" icon={<span />} className="player-menu" style={{}} onClick={() => {}} onClickCapture={() => {}}>
+      <LiquidMenu menuRef={menuRef} anchorRef={anchorRef} view="audio" title="Audio" icon={<span />} className="player-menu" style={{}} onClick={() => {}} onClickCapture={() => {}}>
         <button>Français</button>
         <button>English</button>
       </LiquidMenu>
@@ -45,27 +48,31 @@ function Menu() {
   );
 }
 
+const moves = (k: Keyframe) => "clipPath" in k || "transform" in k;
+
 describe("LiquidMenu — ouverture", () => {
-  it("joue la découpe et la transformation de la boîte dans deux animations distinctes", () => {
+  it("anime la découpe et la forme de la boîte dans une seule animation, d'un même pas", () => {
     render(<Menu />);
     const box = document.querySelector(".player-menu")!;
     const onBox = calls.filter((c) => c.el === box);
-    expect(onBox.some((c) => c.keyframes.some((k) => "clipPath" in k))).toBe(true);
-    expect(onBox.some((c) => c.keyframes.some((k) => "transform" in k))).toBe(true);
-    for (const c of onBox) {
-      const mixes = c.keyframes.some((k) => "clipPath" in k) && c.keyframes.some((k) => "transform" in k);
-      expect(mixes).toBe(false);
-    }
+    expect(onBox).toHaveLength(1);
+    expect(onBox[0].keyframes.every((k) => "clipPath" in k && "transform" in k)).toBe(true);
   });
 
-  it("la fermeture (copie qui se referme) sépare elle aussi découpe et forme", () => {
+  it("ne déplace rien à l'intérieur de la boîte : icône, titre et lignes apparaissent en fondu", () => {
+    render(<Menu />);
+    const box = document.querySelector(".player-menu")!;
+    const inside = calls.filter((c) => c.el !== box && box.contains(c.el));
+    expect(inside.length).toBeGreaterThanOrEqual(4); // icône, titre, deux lignes
+    for (const c of inside) expect(c.keyframes.some(moves)).toBe(false);
+  });
+
+  it("la fermeture (copie qui se referme) anime découpe et forme ensemble", () => {
     const { unmount } = render(<Menu />);
     calls = [];
     unmount();
-    for (const c of calls) {
-      const mixes = c.keyframes.some((k) => "clipPath" in k) && c.keyframes.some((k) => "transform" in k);
-      expect(mixes).toBe(false);
-    }
-    expect(calls.some((c) => c.keyframes.some((k) => "clipPath" in k))).toBe(true);
+    const shaped = calls.filter((c) => c.keyframes.some((k) => "clipPath" in k));
+    expect(shaped).toHaveLength(1);
+    expect(shaped[0].keyframes.every((k) => "transform" in k)).toBe(true);
   });
 });

@@ -319,6 +319,35 @@ describe("PlayerControls — le menu", () => {
     expect(menu).not.toBeNull();
     expect(menu!.className).toContain("overflow-x-hidden");
   });
+
+  it("se referme dès qu'un doigt se pose ailleurs, et le clic qui suit ne cache pas les commandes", async () => {
+    // Fermé au clic seulement, le menu attendait le relâchement ; et ce clic, arrivant sur la
+    // racine, aurait caché les commandes une fois le menu fermé.
+    stubMediaFetches();
+    const { container } = render(<Harness />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));
+    expect(container.querySelector(".player-menu")).not.toBeNull();
+
+    const root = container.querySelector(".player-liquid")!;
+    await act(async () => void fireEvent.pointerDown(root, { button: 0 }));
+    expect(container.querySelector(".player-menu")).toBeNull();
+
+    await act(async () => void fireEvent.click(root));
+    // Les commandes sont toujours là : le clic n'a fait que refermer.
+    expect(container.querySelector('[data-player-nav="more"]')).not.toBeNull();
+    expect(root.className).not.toContain("cursor-none");
+  });
+
+  it("un appui dans le menu ne le referme pas", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));
+    const menu = container.querySelector(".player-menu")!;
+    await act(async () => void fireEvent.pointerDown(menu.querySelector("button")!, { button: 0 }));
+    expect(container.querySelector(".player-menu")).not.toBeNull();
+  });
 });
 
 describe("PlayerControls — la sortie de diffusion", () => {

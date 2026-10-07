@@ -354,10 +354,8 @@ export function PlayerControls({
    */
   const [castConfirm, setCastConfirm] = useState(false);
   const castPillRef = useRef<HTMLDivElement>(null);
-  // Le verre liquide (DECISIONS.md §45) : la pilule des réglages, d'où naissent les menus, et le
-  // bouton qui a ouvert le dernier — son icône glisse jusqu'au titre du menu.
+  // Le verre liquide (DECISIONS.md §45) : la pilule des réglages, d'où naissent les menus.
   const settingsPillRef = useRef<HTMLDivElement>(null);
-  const menuOriginRef = useRef<HTMLElement | null>(null);
   const liquidRootRef = useRef<HTMLDivElement>(null);
   // Le geste liquide, branché une fois par délégation sur tout ce qui porte `data-liquid` : les
   // pilules, le rond seul, les boutons du centre. Il ne remplace pas le clic natif — voir
@@ -406,6 +404,38 @@ export function PlayerControls({
       document.removeEventListener("pointerdown", onPointerDown, true);
     };
   }, [castConfirm]);
+  // Un menu ouvert se referme dès qu'un doigt se pose ailleurs, et non au clic qui suit le
+  // relâchement : le retour part tout de suite, d'où en est l'ouverture (demandé le 07/10/2026).
+  // Le clic qui suit est retenu — il ne fait que refermer, comme les menus du système : sans cela,
+  // il cachait les commandes (`toggleControls`, le menu étant déjà fermé) ou actionnait le bouton
+  // dessous. La pilule des réglages est laissée à ses propres clics, qui basculent d'un menu à
+  // l'autre ou referment celui-ci.
+  useEffect(() => {
+    if (menu === null) return;
+    const outside = (target: EventTarget | null) =>
+      target instanceof Node && !menuRef.current?.contains(target) && !settingsPillRef.current?.contains(target);
+    let swallowTimer: ReturnType<typeof setTimeout> | null = null;
+    const swallow = (e: MouseEvent) => {
+      document.removeEventListener("click", swallow, true);
+      if (swallowTimer) clearTimeout(swallowTimer);
+      if (outside(e.target)) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0 || !outside(e.target)) return;
+      document.addEventListener("click", swallow, true);
+      swallowTimer = setTimeout(() => document.removeEventListener("click", swallow, true), 600);
+      setMenu(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      // Le clic retenu doit survivre à la fermeture qu'il suit : on ne le débranche pas ici, sa
+      // minuterie s'en charge.
+    };
+  }, [menu]);
   const [speed, setSpeed] = useState(1);
   const [chapters, setChapters] = useState<{ start: number; name: string | null }[]>([]);
   const [bufferedEnd, setBufferedEnd] = useState(0);
@@ -1619,7 +1649,6 @@ export function PlayerControls({
           <LiquidMenu
             menuRef={menuRef}
             anchorRef={settingsPillRef}
-            originRef={menuOriginRef}
             view={menu}
             title={MENU_TITLES[menu] ? t(MENU_TITLES[menu]) : ""}
             icon={MENU_ICONS[menu] ?? null}
@@ -2010,10 +2039,7 @@ export function PlayerControls({
             <div ref={settingsPillRef} data-player-navgroup="bottombar" data-settings-pill data-liquid className="player-fade player-pill flex shrink-0 items-center gap-1 p-1 max-[379px]:gap-0.5">
               <button
                 data-player-nav="speed"
-                onClick={(e) => {
-                  menuOriginRef.current = e.currentTarget;
-                  setMenu(menu === "speed" ? null : "speed");
-                }}
+                onClick={() => setMenu(menu === "speed" ? null : "speed")}
                 aria-label={t("player.speed")}
                 data-on={menu === "speed" ? "" : undefined}
                 className="player-pill-btn"
@@ -2023,10 +2049,7 @@ export function PlayerControls({
               {audioTracks.length > 1 && (
                 <button
                   data-player-nav="audio"
-                  onClick={(e) => {
-                  menuOriginRef.current = e.currentTarget;
-                  setMenu(menu === "audio" ? null : "audio");
-                }}
+                  onClick={() => setMenu(menu === "audio" ? null : "audio")}
                   aria-label={t("player.audio")}
                   data-on={menu === "audio" ? "" : undefined}
                   className="player-pill-btn"
@@ -2037,10 +2060,7 @@ export function PlayerControls({
               {subtitleTracks.length > 0 && (
                 <button
                   data-player-nav="captions"
-                  onClick={(e) => {
-                  menuOriginRef.current = e.currentTarget;
-                  setMenu(menu === "subtitles" ? null : "subtitles");
-                }}
+                  onClick={() => setMenu(menu === "subtitles" ? null : "subtitles")}
                   aria-label={t("player.subtitles")}
                   data-on={menu === "subtitles" ? "" : undefined}
                   data-active={currentSubtitleId !== null ? "" : undefined}
@@ -2051,10 +2071,7 @@ export function PlayerControls({
               )}
               <button
                 data-player-nav="more"
-                onClick={(e) => {
-                  menuOriginRef.current = e.currentTarget;
-                  setMenu(menu === "more" ? null : "more");
-                }}
+                onClick={() => setMenu(menu === "more" ? null : "more")}
                 title={t('player.moreOptions')}
                 aria-label={t('player.moreOptions')}
                 data-on={menu === "more" ? "" : undefined}

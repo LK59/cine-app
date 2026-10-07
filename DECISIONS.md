@@ -1350,9 +1350,11 @@ tient jusqu'à 24 px hors du verre. **Le clic natif n'est jamais remplacé** : i
 le doigt est relâché sur le bouton ; il n'est redirigé vers le bouton visé que s'il tombe à côté
 (marge, glissé), et cela depuis le clic natif lui-même, donc dans le geste utilisateur. Un clic du
 clavier ou d'un programme n'est pas touché. Les menus du lecteur naissent de la pilule des réglages
-(une surface découpée à sa forme qui s'ouvre sur le ressort, l'icône du bouton glisse jusqu'au
-titre), hauts de 280 px au plus ; ils se démontent à l'instant où ils se ferment, et une copie inerte
-joue la fermeture (200 ms, depuis l'état atteint). Les menus bougent eux aussi au doigt
+(une surface découpée à sa forme qui s'ouvre sur le ressort ; icône, titre et lignes apparaissent
+en fondu à leur place — l'icône glissait du bouton jusqu'au titre et bougeait encore dans la boîte
+posée), hauts de 280 px au plus ; ils se démontent à l'instant où ils se ferment, et une copie inerte
+joue la fermeture (180 ms, depuis l'état atteint). Un doigt posé hors du menu le referme à l'appui,
+non au clic, et le clic qui suit est retenu (il cachait les commandes). Les menus bougent eux aussi au doigt
 (gonflement, étirement, rebond) sans viser ni arrêter aucun clic (`redirect: false`) : leurs lignes
 gardent le leur. Un menu ne gonfle pas (deux réglages de gonflement essayés, jugés étranges) :
 il ne s'étire que lorsque le doigt sort de ses bords (`pull: "outside"`), reste étiré tant que le
@@ -1360,7 +1362,7 @@ doigt le tient, revient sur le ressort au relâchement, et le clic qui suivrait 
 dehors est retenu (il refermait le menu). Le doigt reste au geste partout dans le menu, sauf sur une
 liste qui a de quoi défiler (`data-scrolls`) — avec `pan-y` sur tout le menu, le premier mouvement
 vertical rendait le doigt au navigateur et la boîte étirée revenait d'un coup. L'ouverture rebondit (ressort
-0,34 s / 0,72, dépassement lu en échelle, ≈ 2 % ; l'icône qui glisse jusqu'à l'en-tête est amortie au critique, sans rebond — sur le ressort de la boîte elle sortait presque du menu) ; pendant l'ouverture la boîte s'allonge vers le haut selon la vitesse du ressort rapportée à son pic (une bosse de 3 %, `openStretch` — bornée à 4 % sur la vitesse brute, elle sautait au plafond dès la première image et s'y bloquait) et ses lignes visibles arrivent l'une après l'autre (18 ms d'écart, huit au plus) ; la découpe et la transformation sont deux animations distinctes, à l'ouverture comme à la fermeture, pour que la transformation reste au compositeur pendant que le lecteur occupe le fil principal ; le menu part de la pilule telle qu'on la voit, encore gonflée par le toucher (`pillHandover`) ; une liste tirée au-delà de son bout étire la
+0,34 s / 0,72, dépassement lu en échelle, ≈ 2 %) ; pendant l'ouverture la boîte s'allonge vers le haut selon la vitesse du ressort rapportée à son pic (une bosse de 3 %, `openStretch` — bornée à 4 % sur la vitesse brute, elle sautait au plafond dès la première image et s'y bloquait) et ses lignes visibles apparaissent l'une après l'autre (18 ms d'écart, huit au plus) ; la découpe et la transformation sont **une seule** animation, à l'ouverture comme à la fermeture : la découpe ne se joue que sur le fil principal (60 i/s au plus sous Safari), et séparée d'elle la transformation passait au compositeur à 120 i/s — bords et contenu à deux rythmes, lus comme des images manquantes (8.15.7) ; une découpe au compositeur par fenêtres imbriquées a été essayée au banc et écartée (sous Chromium, le flou du verre ignore les coins arrondis des ancêtres) ; le contenu ne fait que des fondus, pour la même raison ; le menu part de la pilule telle qu'on la voit, encore gonflée par le toucher (`pillHandover`) ; une liste tirée au-delà de son bout étire la
 boîte verticalement (`scale`, lu sur la position de défilement que le rebond du système porte
 hors des bornes — iOS et Safari au pavé tactile ; rien sous Chrome Windows, qui ne rebondit pas). Le fondu des commandes est porté par chaque
 élément (`player-fade`), jamais par leur conteneur : un parent à opacité < 1 isole le fond, et le

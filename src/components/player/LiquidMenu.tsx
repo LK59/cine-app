@@ -9,20 +9,20 @@ import { simulateSpring, springKeyframes } from "@/lib/liquidGlass/spring";
  *
  * Une seule surface qui change de forme : découpée au départ exactement à la pilule (même verre,
  * même place — la pilule s'efface dessous), elle s'ouvre vers le haut et la gauche sur le ressort.
- * L'icône du bouton touché glisse jusqu'à l'en-tête et devient le titre ; la liste apparaît en
- * fondu — porté par le contenu, jamais par la surface floutée.
+ * L'icône, le titre et les lignes apparaissent en fondu à leur place — portés par le contenu,
+ * jamais par la surface floutée, et sans bouger dans la boîte.
  *
  * **La fermeture ne retarde rien.** Le menu se démonte à l'instant où il se ferme, comme avant :
  * le focus, le clavier, ce que les tests lisent, rien ne change. Ce qui se referme à l'écran est
  * une copie inerte, posée à sa place au démontage et retirée une fois le geste fini — rapide
- * (200 ms), depuis l'état où il était : un toucher à côté *pendant* l'ouverture le referme d'où il
+ * (180 ms), depuis l'état où il était : un toucher à côté *pendant* l'ouverture le referme d'où il
  * en est, sans attendre la fin du ressort (demandé le 04/10/2026). La pilule revient quand le
  * menu a retrouvé sa forme, en fondu croisé.
  *
  * Changer de vue (⋮ → minuterie) garde la surface : si elle grandit, elle se déroule vers le haut.
  */
 
-const CLOSE_MS = 200;
+const CLOSE_MS = 180;
 /**
  * L'ouverture rebondit : un ressort moins amorti que celui des gestes, dont le dépassement se lit
  * en échelle — le petit « pop » des menus d'iOS. Avec le ressort des gestes (amortissement 0,8),
@@ -33,13 +33,6 @@ const CLOSE_MS = 200;
  */
 export const OPEN_SPRING = toSpring(0.34, 0.72);
 const OPEN_BOUNCE = 0.5;
-/**
- * L'icône ne rebondit pas. Elle voyageait sur le ressort de la boîte, et son dépassement, pris
- * sur tout le trajet du bouton à l'en-tête (deux cents pixels et plus), la portait au-delà du
- * coin du menu, presque hors de lui (07/10/2026). Seul le contenant rebondit ; ce qui voyage à
- * l'intérieur arrive, amorti au critique, en même temps que lui.
- */
-export const ICON_SPRING = toSpring(0.3, 1);
 /**
  * Pendant qu'elle s'ouvre, la boîte s'allonge dans le sens où elle part — vers le haut — et se
  * resserre un peu en largeur, puis reprend sa forme en se posant : la matière des menus d'iOS
@@ -117,7 +110,6 @@ function clipAt(p: number, top: number, left: number, pillRadius: number) {
 export function LiquidMenu({
   menuRef,
   anchorRef,
-  originRef,
   view,
   title,
   icon,
@@ -130,8 +122,6 @@ export function LiquidMenu({
   menuRef: RefObject<HTMLDivElement | null>;
   /** La pilule d'où le menu naît. */
   anchorRef: RefObject<HTMLElement | null>;
-  /** Le bouton touché, dont l'icône glisse jusqu'à l'en-tête. */
-  originRef: RefObject<HTMLElement | null>;
   /** La vue affichée : en changer garde la surface. */
   view: string;
   title: string;
@@ -169,7 +159,7 @@ export function LiquidMenu({
     // L'animation n'est qu'un habillage : quoi qu'il arrive en elle, le menu reste un menu. Une
     // exception levée ici, dans un effet, emporterait le lecteur entier avec elle.
     try {
-      openMorph(box, anchor, parent);
+      openMorph(box, anchor);
     } catch {
       box.removeAttribute("data-morph");
       for (const a of anchor.getAnimations?.() ?? []) if (a.id === "menu-cover") a.cancel();
@@ -185,7 +175,7 @@ export function LiquidMenu({
       }
     };
 
-    function openMorph(box: HTMLDivElement, anchor: HTMLElement, parent: Element | null) {
+    function openMorph(box: HTMLDivElement, anchor: HTMLElement) {
     box.setAttribute("data-morph", "");
     const W = box.offsetWidth;
     const H = box.offsetHeight;
@@ -195,12 +185,14 @@ export function LiquidMenu({
     g.pillRadius = anchor.offsetHeight / 2;
     g.height = H;
 
-    // Deux animations et non une : la découpe ne se joue que sur le fil principal, et une
-    // transformation logée dans la même animation y restait avec elle — le lecteur, qui remultiplexe
-    // sur ce fil, la faisait saccader. Seule, la transformation part au compositeur.
+    // Une seule animation pour la découpe et la forme, et c'est voulu. La découpe ne se joue que
+    // sur le fil principal — à 60 images par seconde au plus sous Safari, même sur un écran à
+    // 120 Hz — et une transformation à part partait au compositeur, à 120 : les bords de la boîte
+    // et ce qu'elle contient n'avançaient plus au même rythme, ce qui se lisait comme des images
+    // manquantes (8.15.7, 07/10/2026). Ensemble, elles avancent d'un même pas. Une découpe jouée
+    // par le compositeur a été essayée (fenêtres imbriquées, translations opposées) : sous Chromium,
+    // le flou du verre ne suit pas les coins arrondis des ancêtres, deux coins restaient carrés.
     const handover = pillHandover(anchor);
-    const clip = springKeyframes(0, 1, OPEN_SPRING, ({ x }) => ({ clipPath: clipAt(x, g.top, g.left, g.pillRadius) }));
-    box.animate(clip.keyframes, { duration: clip.duration, easing: "linear" });
     const shape = springKeyframes(0, 1, OPEN_SPRING, ({ x, v }) => {
       // Le dépassement ne peut pas agrandir la découpe au-delà de la boîte : il passe en échelle,
       // depuis le coin d'où le menu naît. Au repos, l'origine revient au centre : c'est d'elle que
@@ -208,35 +200,25 @@ export function LiquidMenu({
       const pop = 1 + Math.max(0, x - 1) * OPEN_BOUNCE;
       const k = openStretch(v);
       return {
+        clipPath: clipAt(x, g.top, g.left, g.pillRadius),
         transform: `${easeOff(handover, x)}scale(${pop * (1 - k / 2)}, ${pop * (1 + k)})`,
         transformOrigin: "100% 100%",
       };
     });
     box.animate(shape.keyframes, { duration: shape.duration, easing: "linear" });
 
-    // L'icône part de celle du bouton touché.
-    const origin = originRef.current;
-    const icon = iconRef.current;
-    if (origin && icon && origin.offsetWidth > 0) {
-      const o = layoutBox(origin, parent);
-      const i = layoutBox(icon, parent);
-      const dx = o.x + o.w / 2 - (i.x + i.w / 2);
-      const dy = o.y + o.h / 2 - (i.y + i.h / 2);
-      const path = springKeyframes(0, 1, ICON_SPRING, ({ x }) => ({ transform: `translate(${dx * (1 - x)}px, ${dy * (1 - x)}px)` }));
-      icon.animate(path.keyframes, { duration: path.duration, easing: "linear" });
-    }
-    titleRef.current?.animate([{ opacity: 0, transform: "translateX(-6px)" }, { opacity: 1, transform: "none" }], { duration: 160, delay: 40, easing: "ease-out", fill: "backwards" });
-    // Ligne par ligne : chacune monte de 4 px en apparaissant, la suivante 18 ms plus tard.
+    // Le contenu ne bouge pas dans la boîte : il apparaît en fondu, à sa place. L'icône glissait du
+    // bouton touché jusqu'à l'en-tête et arrivait après que la boîte s'était posée — elle bougeait
+    // encore dedans (07/10/2026). Des fondus et rien d'autre : un déplacement, joué au compositeur,
+    // n'avancerait pas au rythme de la découpe.
+    const fadeIn = (el: Element | null, delay: number, duration = 160) =>
+      el?.animate([{ opacity: 0 }, { opacity: 1 }], { duration, delay, easing: "ease-out", fill: "backwards" });
+    fadeIn(iconRef.current, 30);
+    fadeIn(titleRef.current, 30);
+    // Ligne par ligne, de haut en bas, 18 ms d'écart.
     const listBox = listRef.current;
     const rows = listBox ? Array.from(listBox.children).filter((row) => (row as HTMLElement).offsetTop - listBox.offsetTop - listBox.scrollTop < listBox.clientHeight).slice(0, ROW_STAGGER_MAX) : [];
-    rows.forEach((row, i) =>
-      row.animate([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], {
-        duration: 180,
-        delay: 50 + i * ROW_STAGGER_MS,
-        easing: "ease-out",
-        fill: "backwards",
-      }),
-    );
+    rows.forEach((row, i) => fadeIn(row, 50 + i * ROW_STAGGER_MS, 180));
 
     // La pilule s'efface sous le menu qui naît d'elle.
     anchor.dataset.menuCover = "1";
@@ -284,10 +266,14 @@ export function LiquidMenu({
       const list = ghost.querySelector<HTMLElement>(".player-menu-list");
       if (list && listEl) list.scrollTop = listEl.scrollTop;
       const geo = { ...g };
-      // Découpe et forme séparées, comme à l'ouverture : la forme reste au compositeur.
-      const closing = { duration: CLOSE_MS, easing: "cubic-bezier(0.3, 0, 0.2, 1)", fill: "forwards" } as const;
-      ghost.animate([{ clipPath: clipAt(p0, geo.top, geo.left, geo.pillRadius) }, { clipPath: clipAt(0, geo.top, geo.left, geo.pillRadius) }], closing);
-      if (shapeNow !== "none") ghost.animate([{ transform: shapeNow }, { transform: "none" }], closing);
+      // Découpe et forme ensemble, comme à l'ouverture : d'un même pas.
+      ghost.animate(
+        [
+          { clipPath: clipAt(p0, geo.top, geo.left, geo.pillRadius), transform: shapeNow },
+          { clipPath: clipAt(0, geo.top, geo.left, geo.pillRadius), transform: "none" },
+        ],
+        { duration: CLOSE_MS, easing: "cubic-bezier(0.3, 0, 0.2, 1)", fill: "forwards" },
+      );
       for (const part of [ghost.querySelector(".player-menu-list"), ghost.querySelector(".player-menu-title")]) {
         (part as HTMLElement | null)?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 90, fill: "forwards" });
       }
