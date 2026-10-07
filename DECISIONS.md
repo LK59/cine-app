@@ -1641,40 +1641,47 @@ ne change) ; la première lecture de « Ma liste » d'un compte y copie ce que J
 
 ## 52. La disposition de l'accueil, un réglage et non une fourche
 
-**Règle.** Deux variantes de l'accueil. Le serveur donne la valeur par défaut (gestion → Réglages
-serveur → Réglages par défaut, ou `.env`) — le bouton activé, la bannière d'origine, tant qu'on n'y
-touche pas (le bouton, discret en haut à droite sur téléphone, a été retenu par défaut le
-07/10/2026) ; chaque compte peut la
-remplacer dans Compte → Interface, à côté du défilement guidé (`user_preferences`, `NULL` = suivre
-le serveur ; revenir à la valeur du serveur la suit de nouveau). L'écran du compte ne montre que
-l'interrupteur, sans rappeler le réglage du serveur — demandé le 07/10/2026 :
+**Règle.** Deux options de l'accueil. Le serveur donne la valeur par défaut (gestion → Réglages
+serveur → Réglages par défaut, ou `.env`) — **toutes deux activées** depuis le 07/10/2026 ; chaque
+compte la remplace dans Compte → Interface, à côté du défilement guidé (`user_preferences`, `NULL` =
+suivre le serveur ; revenir à la valeur du serveur la suit de nouveau). L'écran du compte ne montre
+que l'interrupteur, sans rappeler le réglage du serveur.
 - `HOME_BROWSE_BUTTON` : « Tous les films » / « Toutes les séries » en tête de l'accueil, à droite
-  de la bascule Films / Séries au bureau, en rond à côté de la loupe sur téléphone ;
-- `HOME_CONTINUE_HERO` : la bannière montre Reprendre (onglet Films) et À suivre (onglet Séries),
-  chaque titre retrouvé dans le catalogue, dans l'ordre de la rangée (§33) ; « À la une » descend
-  à la place de la rangée Reprendre. La bannière porte alors un bouton (`continueTargets`) : « Reprendre ·
-  40 min restantes » pour un film, « À suivre S1 · É3 » pour une série — au bureau, où la bannière
-  d'origine n'en a aucun, et sur téléphone, où une série y disait seulement « Lire ». Un onglet où rien n'est en cours garde la bannière d'origine.
+  de la bascule Films / Séries au bureau, en rond à côté de la loupe sur téléphone.
+- `HOME_CONTINUE_HERO` (« Afficher les reprises dans la bannière d'accueil ») : la bannière montre
+  d'abord Reprendre (onglet Films) et À suivre (onglet Séries), chaque titre retrouvé dans le
+  catalogue, le dernier lu en tête (§33) ; **s'il y en a moins de cinq, « À la une » complète**
+  (`HERO_MIN`) — une seule reprise laissait une bannière figée. La rangée sous la bannière du
+  bureau s'appelle alors « Pour vous » (« Reprendre » si elle ne tient que des reprises) ; la rangée
+  « À la une » descend à la place de Reprendre, sans les titres déjà montrés. Sans aucune reprise, la
+  bannière d'origine.
+- Une reprise de la bannière porte un bouton court — « Reprendre », « À suivre » — avec, au-dessus,
+  la barre de progression des cartes et « S1 · É3 · 20 min restantes » (`heroContinueFacts`,
+  `HeroContinueProgress`) : le bouton long repoussait « Plus d'infos » hors de la carte sur
+  téléphone. Un complément « À la une » n'a ni barre ni légende, et son bouton dit « Lire ».
+- Sur téléphone, des **vignettes** remplacent les tirets sous la bannière : le sommaire que la
+  rangée est au bureau, sans doublon ; la vignette d'une reprise porte sa progression ; l'affiche
+  est moins haute (56 % de l'écran au plus) pour leur laisser la place.
 
 **Pourquoi.** Une installation voulait le catalogue entier à un geste et ce qu'on regarde en tête.
-Une copie du dépôt (une image `:alt`) aurait fait deux applications à maintenir pour deux rangées
-échangées ; un réglage garde une seule image, et toute correction profite aux deux.
+Une copie du dépôt (une image `:alt`) aurait fait deux applications à maintenir ; un réglage garde
+une seule image, et toute correction profite aux deux.
 
-**Porteurs.** `continueHeroTitles` et `heroSource` (`src/lib/homeLayout.ts`) ; `useHomeLayout`
-et `resolveHomeLayout` (`src/lib/useHomeLayout.ts` : le choix du compte, lu dans
-`/api/user/preferences`, sinon le défaut du serveur, lu dans `/api/config/public`) ;
-`CinemaBrowseAllButton`.
+**Porteurs.** `continueHeroTitles`, `heroSource`, `continueTargets` (`src/lib/homeLayout.ts`) ;
+`useHomeLayout` et `resolveHomeLayout` (`src/lib/useHomeLayout.ts`) ; `heroContinueFacts`
+(`cinemaContinueLabel.ts`) ; `CinemaBrowseAllButton`, `HeroContinueProgress`.
 
-**Appelants.** `CinemaClient` (bureau) et `CinemaMobileClient` (téléphone).
+**Appelants.** `CinemaClient` (bureau) et `CinemaMobileClient` / `CinemaMobileHero` (téléphone).
 
-**Tests.** `home-layout.test.ts`, `misc-simple-routes.test.ts`, `misc-routes-batch2.test.ts`, `persistentCache-schema.test.ts`
-(version 4 du cache : la configuration publique a changé de forme).
+**Tests.** `home-layout.test.ts`, `misc-simple-routes.test.ts`, `misc-routes-batch2.test.ts`,
+`persistentCache-schema.test.ts` (version 4 du cache).
 
-**Voulu.** La source d'origine de la bannière reste différente d'un écran à l'autre (§25) ; la
-rangée « À la une » descendue prend la sélection du bureau (le spotlight) sur les deux, pour ne
-pas répéter « Récemment ajoutés » juste en dessous sur téléphone. Passer d'une sorte de bannière à
-l'autre repart du début de la nouvelle liste (`generation` de `useHeroOrder`) : la règle qui garde
-le titre à l'écran quand la liste change laissait un film jamais commencé en tête de Reprendre.
+**Voulu.** La source d'origine de la bannière reste différente d'un écran à l'autre (§25). Passer
+d'une sorte de bannière à l'autre repart du début de la nouvelle liste (`generation` de
+`useHeroOrder`) : la règle qui garde le titre à l'écran laissait un film jamais commencé en tête de
+Reprendre. **« À suivre » ne propose pas une série sur S1 · É1 jamais commencé**
+(`untouchedPilot`, route `/api/cinema/next-up`) : Jellyfin en ajoute une à chaque série qui arrive,
+et elles s'accumulaient devant ce qu'on regardait — avec ou sans l'option.
 
 **Décidé le 07/10/2026.**
 

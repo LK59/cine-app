@@ -1753,10 +1753,10 @@
       "guidedScroll": "Défilement guidé",
       "guidedScrollHint": "Sur ordinateur, l'accueil se cale sur une rangée entière et les fiches sur une page entière. Coupé, la page défile librement.",
       "home": {
-        "browseButton": "Bouton « Tous les films / séries »",
+        "browseButton": "Afficher le bouton « Tous les films / séries »",
         "browseButtonHint": "En haut de l'accueil, le catalogue entier à un geste.",
-        "continueHero": "Bannière : Reprendre et À suivre",
-        "continueHeroHint": "La bannière de l'accueil montre ce que vous regardez ; « À la une » passe juste en dessous."
+        "continueHero": "Afficher mes reprises dans la bannière d'accueil",
+        "continueHeroHint": "Ce que vous regardez passe en tête de l'accueil ; s'il y en a peu, les titres « À la une » complètent."
       }
     },
     "browse": {
@@ -1963,7 +1963,8 @@
     "removeFromContinue": "Retirer de « Reprendre »",
     "removeFromContinueFailed": "Ce titre n'a pas pu être retiré de « Reprendre ».",
     "titleUnavailable": "Ce titre n'est pas encore disponible dans le cinéma.",
-    "seriesStillWatched": "Tous ses épisodes sont vus : la série reste dans « Vu »."
+    "seriesStillWatched": "Tous ses épisodes sont vus : la série reste dans « Vu ».",
+    "forYou": "Pour vous"
   },
   "services": {
     "notConfigured": "{name} n'est pas configuré.",
@@ -2515,7 +2516,7 @@
       "PLAYER_SERVER_FALLBACK": "Relais vers Jellyfin pour les fichiers que le navigateur ne lit pas",
       "PLAYER_AUTO_FRAME": "Agrandir l'image au-dessus des bandes noires",
       "HOME_BROWSE_BUTTON": "Bouton « Tous les films / séries » en haut de l'accueil",
-      "HOME_CONTINUE_HERO": "Bannière de l'accueil : Reprendre et À suivre",
+      "HOME_CONTINUE_HERO": "Afficher les reprises dans la bannière d'accueil",
       "VAPID_SUBJECT": "Contact des notifications (mailto:…)",
       "TZ": "Fuseau horaire",
       "MEDIA_ROOT": "Dossier des médias (statistiques de stockage)",

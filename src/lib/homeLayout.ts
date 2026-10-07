@@ -58,13 +58,40 @@ export function continueHeroTitles<M, S, RM extends HeroResumeMovie, NE extends 
   return { movies, series };
 }
 
+/** Le moins de titres que montre la bannière Reprendre / À suivre : en dessous, « À la une » complète. */
+export const HERO_MIN = 5;
+
 /**
- * Ce que la bannière montre : Reprendre / À suivre si l'installation le veut **et** s'il y a de
- * quoi — un compte neuf, ou un onglet où rien n'est en cours, garde « À la une » plutôt qu'une
- * bannière vide.
+ * Ce que la bannière montre (DECISIONS.md §52).
+ *
+ * Sans l'option, ou sans rien en cours : « À la une », comme toujours. Avec : ce qu'on regarde
+ * d'abord, le dernier lu en tête — et s'il y en a moins de cinq, « À la une » complète la suite.
+ * Une seule reprise laissait une bannière figée, qui ne tournait plus et faisait paraître l'accueil
+ * mort (07/10/2026) ; les compléments disent eux-mêmes ce qu'ils sont, par leur bouton (« Lire »
+ * et non « Reprendre ») et l'absence de barre de progression.
+ *
+ * `mixed` : la bannière mêle les deux — la rangée du bureau qui la suit s'appelle alors « Pour
+ * vous » plutôt que « Reprendre ». `shown` : les clés montrées, que la rangée « À la une »
+ * descendue n'affiche pas une seconde fois.
  */
-export function heroSource<T>(continueHero: boolean, official: T[], continuing: T[]): { items: T[]; continuing: boolean } {
-  return continueHero && continuing.length > 0 ? { items: continuing, continuing: true } : { items: official, continuing: false };
+export function heroSource<T>(
+  continueHero: boolean,
+  official: T[],
+  continuing: T[],
+  keyOf: (item: T) => string,
+): { items: T[]; continuing: boolean; mixed: boolean; shown: Set<string> } {
+  if (!continueHero || continuing.length === 0) {
+    return { items: official, continuing: false, mixed: false, shown: new Set(official.map(keyOf)) };
+  }
+  const items = [...continuing];
+  const shown = new Set(items.map(keyOf));
+  for (const item of official) {
+    if (items.length >= HERO_MIN) break;
+    if (shown.has(keyOf(item))) continue;
+    items.push(item);
+    shown.add(keyOf(item));
+  }
+  return { items, continuing: true, mixed: items.length > continuing.length, shown };
 }
 
 /**

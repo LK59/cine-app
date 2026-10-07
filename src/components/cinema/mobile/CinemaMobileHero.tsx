@@ -9,7 +9,8 @@ import { useCarouselDrag, carouselTransform, CAROUSEL_TRANSITION } from "@/lib/u
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
-import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
+import { formatContinueLabel, heroContinueFacts } from "@/lib/cinemaContinueLabel";
+import { HeroContinueProgress } from "@/components/cinema/HeroContinueProgress";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -54,6 +55,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   onOpen,
   resumeFor,
   generation,
+  continueStyle = false,
 }: {
   items: Item[];
   /** La rotation s'arrête quand une fiche ou la recherche est ouverte par-dessus. */
@@ -83,6 +85,11 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   } | null;
   /** La sorte de liste montrée — « À la une » ou Reprendre / À suivre (DECISIONS.md §52) ; voir `useHeroOrder`. */
   generation?: string;
+  /**
+   * La bannière Reprendre / À suivre (DECISIONS.md §52) : un bouton court avec la barre et ce qui
+   * reste au-dessus, une affiche moins haute, et des vignettes à la place des tirets.
+   */
+  continueStyle?: boolean;
 }) {
   const t = useT();
   const trackRef = useRef<HTMLDivElement>(null);
@@ -157,7 +164,20 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
 
   const actions = (item: Item) => {
     const resume = resumeFor?.(item) ?? null;
+    // Bannière Reprendre / À suivre : le geste seul sur le bouton, le reste au-dessus — le bouton
+    // long repoussait « Plus d'infos » hors de la carte (07/10/2026). Ailleurs, la formule d'origine.
+    const facts = continueStyle
+      ? resume
+        ? heroContinueFacts(t, resume.positionTicks, resume.runtimeTicks, resume.seasonNumber, resume.episodeNumber)
+        : { label: t("common.play"), caption: null, progress: null }
+      : null;
     return (
+    <>
+    {facts && (facts.caption || facts.progress !== null) && (
+      <div className="mb-3">
+        <HeroContinueProgress caption={facts.caption} progress={facts.progress} centered={!short} />
+      </div>
+    )}
     <div className="flex gap-2">
       <button
         type="button"
@@ -169,7 +189,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
         {/* La même formule que les fiches et les rangées : « Reprendre — 40 min restantes ». Un
             libellé propre à la bannière aurait été un troisième vocabulaire pour un même geste. */}
         <span className="truncate">
-          {resume ? formatContinueLabel(t, resume.positionTicks, resume.runtimeTicks, resume.seasonNumber, resume.episodeNumber) : t("common.play")}
+          {facts ? facts.label : resume ? formatContinueLabel(t, resume.positionTicks, resume.runtimeTicks, resume.seasonNumber, resume.episodeNumber) : t("common.play")}
         </span>
       </button>
       <button
@@ -183,6 +203,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
         {t("cinema.moreInfo")}
       </button>
     </div>
+    </>
     );
   };
 
@@ -246,7 +267,13 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   </div>
                 </div>
               ) : (
-                <div className="relative overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50">
+                <div
+                  className="relative overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50"
+                  // Moins haute sous les vignettes : une affiche entière fait une fois et demie la
+                  // largeur de l'écran, et la bande ajoutée dessous repoussait « À la une » hors de
+                  // la vue sur un petit téléphone. Rognée par le bas, sous le dégradé du logo.
+                  style={continueStyle ? { maxHeight: "56svh" } : undefined}
+                >
                   <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === index} sizes="100vw" />
                   <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                     {item.logoUrl ? (
@@ -274,8 +301,53 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
         </div>
       </div>
 
+      {/* La bannière Reprendre / À suivre : des vignettes plutôt que des tirets. On y voit tout ce
+          qu'elle tient d'un coup, et un toucher y mène — le sommaire que la rangée sous la
+          bannière est au bureau, sans montrer deux fois les mêmes titres (07/10/2026). La vignette
+          d'une reprise porte sa progression ; celle d'un complément « À la une » n'en a pas. Le
+          fil sous la vignette active compte jusqu'au passage suivant, comme les tirets. */}
+      {continueStyle && items.length > 1 && (
+        <div className="scrollbar-none -mx-4 mt-3 overflow-x-auto px-4">
+          <div className="mx-auto flex w-max gap-2">
+            {items.map((item, i) => {
+              const resume = resumeFor?.(item) ?? null;
+              const watched = resume?.runtimeTicks && resume.positionTicks > 0 ? Math.min(1, resume.positionTicks / resume.runtimeTicks) : null;
+              const active = i === index;
+              return (
+                <button
+                  key={heroKey(item)}
+                  type="button"
+                  onClick={() => setIndex(i)}
+                  aria-label={item.title}
+                  aria-current={active}
+                  className={`hero-thumb flex w-11 shrink-0 flex-col gap-1 ${active ? "hero-thumb-on" : ""}`}
+                >
+                  <span className="relative block overflow-hidden rounded-lg ring-1 ring-white/15">
+                    <PosterImage src={item.posterUrl} alt="" subtle unoptimized sizes="48px" />
+                    {watched !== null && (
+                      <span className="absolute inset-x-0 bottom-0 h-0.5 bg-black/60">
+                        <span className="block h-full bg-accent-500" style={{ width: `${Math.round(watched * 100)}%` }} />
+                      </span>
+                    )}
+                  </span>
+                  <span className="block h-0.5 overflow-hidden rounded-full bg-white/15">
+                    {active && (
+                      <span
+                        key={`${index}:${runs}`}
+                        className="block h-full animate-hero-fill bg-white"
+                        style={{ animationPlayState: running ? "running" : "paused" }}
+                      />
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Hors de la piste : les barres disent où l'on en est, elles ne défilent pas avec. */}
-      {items.length > 1 && (
+      {!continueStyle && items.length > 1 && (
         <div className="mx-auto mt-3 flex max-w-xs gap-1">
           {items.map((item, i) => (
             <button

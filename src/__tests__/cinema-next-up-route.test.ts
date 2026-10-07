@@ -85,7 +85,7 @@ describe("GET /api/cinema/next-up", () => {
         Type: "Episode",
         SeriesName: "Another Show",
         ParentIndexNumber: 1,
-        IndexNumber: 1,
+        IndexNumber: 2,
         RunTimeTicks: 1_200_000_000,
         ImageTags: {},
       },
@@ -96,6 +96,20 @@ describe("GET /api/cinema/next-up", () => {
 
     expect(body.items[0].resumeTicks).toBeNull();
     expect(body.items[0].thumbnailUrl).toBeNull();
+  });
+
+  // Jellyfin propose chaque série qui arrive sur son premier épisode : elles s'accumulaient devant
+  // ce qu'on regardait vraiment (07/10/2026). Un premier épisode entamé reste une reprise.
+  it("écarte une série proposée sur S1 · É1 jamais commencé, garde un premier épisode entamé", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
+    mockGetNextUpGlobal.mockResolvedValue([
+      { Id: "pilot-new", Name: "Pilote", Type: "Episode", ParentIndexNumber: 1, IndexNumber: 1, UserData: { PlaybackPositionTicks: 0 } },
+      { Id: "pilot-started", Name: "Pilote", Type: "Episode", ParentIndexNumber: 1, IndexNumber: 1, UserData: { PlaybackPositionTicks: 600_000_000 } },
+      { Id: "s2e1", Name: "Saison 2", Type: "Episode", ParentIndexNumber: 2, IndexNumber: 1 },
+    ]);
+    const { GET } = await import("@/app/api/cinema/next-up/route");
+    const body = await (await GET(fakeReq())).json();
+    expect(body.items.map((i: { jellyfinItemId: string }) => i.jellyfinItemId)).toEqual(["pilot-started", "s2e1"]);
   });
 
   it("date chaque épisode par sa dernière lecture, ou par celle de sa série s'il n'a jamais été ouvert", async () => {
@@ -137,7 +151,7 @@ describe("GET /api/cinema/next-up", () => {
   it("resolves an episode to its Sonarr series through the series' TVDB id", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
     mockGetNextUpGlobal.mockResolvedValue([
-      { Id: "ep-1", Name: "Pilote", Type: "Episode", SeriesName: "Une Série", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 1 },
+      { Id: "ep-1", Name: "Pilote", Type: "Episode", SeriesName: "Une Série", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 3 },
     ]);
     mockGetItemProviderIds.mockResolvedValue({ ProviderIds: { Tvdb: "424242" } });
     mockGetSeries.mockResolvedValue([{ id: 77, tvdbId: 424242 }]);
@@ -152,7 +166,7 @@ describe("GET /api/cinema/next-up", () => {
   it("leaves the link empty for a series Sonarr does not have", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
     mockGetNextUpGlobal.mockResolvedValue([
-      { Id: "ep-1", Name: "Pilote", Type: "Episode", SeriesName: "Une Série", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 1 },
+      { Id: "ep-1", Name: "Pilote", Type: "Episode", SeriesName: "Une Série", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 3 },
     ]);
     mockGetItemProviderIds.mockResolvedValue({ ProviderIds: { Tvdb: "424242" } });
     mockGetSeries.mockResolvedValue([{ id: 77, tvdbId: 999 }]);
@@ -166,8 +180,8 @@ describe("GET /api/cinema/next-up", () => {
   it("asks for each series once, however many of its episodes are up next", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
     mockGetNextUpGlobal.mockResolvedValue([
-      { Id: "ep-1", Name: "A", Type: "Episode", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 1 },
-      { Id: "ep-2", Name: "B", Type: "Episode", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 2 },
+      { Id: "ep-1", Name: "A", Type: "Episode", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 3 },
+      { Id: "ep-2", Name: "B", Type: "Episode", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 4 },
     ]);
     mockGetItemProviderIds.mockResolvedValue({ ProviderIds: { Tvdb: "1" } });
     mockGetSeries.mockResolvedValue([{ id: 5, tvdbId: 1 }]);

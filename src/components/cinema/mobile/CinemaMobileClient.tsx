@@ -94,6 +94,9 @@ const BROWSE_EXIT_MS = 200;
  * Hors du composant : c'est une fonction pure, et la recréer à chaque rendu suffisait à défaire
  * la mémoïsation de toutes les rangées auxquelles elle est passée.
  */
+/** La clé d'un titre dans la bannière — la même que `CinemaMobileHero`. */
+const heroItemKey = (item: CinemaMovie | CinemaSeries) => ("radarrId" in item ? `f${item.radarrId}` : `s${item.sonarrId}`);
+
 function itemId(item: CinemaMovie | CinemaSeries): number {
   return "radarrId" in item ? item.radarrId : item.sonarrId;
 }
@@ -440,16 +443,18 @@ export function CinemaMobileClient() {
       ),
     [resume, nextUp, byIdMovies, byIdSeries]
   );
-  const movieHero = useMemo(() => heroSource(homeLayout.continueHero, heroMoviesOfficial, continuingTitles.movies), [homeLayout.continueHero, heroMoviesOfficial, continuingTitles]);
-  const seriesHero = useMemo(() => heroSource(homeLayout.continueHero, heroSeriesOfficial, continuingTitles.series), [homeLayout.continueHero, heroSeriesOfficial, continuingTitles]);
+  const movieHero = useMemo(() => heroSource<CinemaMovie | CinemaSeries>(homeLayout.continueHero, heroMoviesOfficial, continuingTitles.movies, heroItemKey), [homeLayout.continueHero, heroMoviesOfficial, continuingTitles]);
+  const seriesHero = useMemo(() => heroSource<CinemaMovie | CinemaSeries>(homeLayout.continueHero, heroSeriesOfficial, continuingTitles.series, heroItemKey), [homeLayout.continueHero, heroSeriesOfficial, continuingTitles]);
   const heroMovies = movieHero.items;
   const heroSeries = seriesHero.items;
   /** La bannière de l'onglet affiché montre Reprendre / À suivre : « À la une » prend la place de la rangée. */
   const heroContinuing = isSeries ? seriesHero.continuing : movieHero.continuing;
+  // Sans ce que la bannière montre déjà en complément : pas deux fois le même titre.
   const spotlightRow = useMemo<(CinemaMovie | CinemaSeries)[]>(() => {
     const p = isSeries ? series : movies;
-    return (p?.spotlight?.length ? p.spotlight : p?.recentlyAdded ?? []).slice(0, 8);
-  }, [isSeries, series, movies]);
+    const shown = (isSeries ? seriesHero : movieHero).shown;
+    return (p?.spotlight?.length ? p.spotlight : p?.recentlyAdded ?? []).slice(0, 8).filter((item) => !shown.has(heroItemKey(item)));
+  }, [isSeries, series, movies, movieHero, seriesHero]);
   const myList = isSeries ? myListSeries : myListMovies;
   const myListPending = useCinemaMyListPending();
 
@@ -699,6 +704,8 @@ export function CinemaMobileClient() {
               // qui ne dit pas où il emmène.
               resumeFor={resumeFor}
               generation={continuing ? "continue" : "spotlight"}
+              // Bouton court, barre et légende au-dessus, vignettes à la place des tirets.
+              continueStyle={continuing}
             />
           </div>
         ))}

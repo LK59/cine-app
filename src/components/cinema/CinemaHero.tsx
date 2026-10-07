@@ -1,6 +1,7 @@
 "use client";
 
 import { formatMinutes } from "@/lib/format";
+import { HeroContinueProgress } from "@/components/cinema/HeroContinueProgress";
 import { Play } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ImdbBadge } from "@/components/ImdbBadge";
@@ -148,10 +149,11 @@ export function HeroCastLine({ info }: { info: { tmdb: { cast?: { name: string }
  * La bannière d'origine n'en a aucune, et c'est voulu (voir plus haut) ; celle-ci montre ce qu'on
  * était en train de regarder, et le geste attendu est d'y retourner, avec ce qui reste à voir.
  */
-export type HeroContinueAction = { label: string; onPlay: () => void };
+export type HeroContinueAction = { label: string; caption: string | null; progress: number | null; onPlay: () => void };
 export function HeroContinueButton({ action }: { action: HeroContinueAction }) {
   return (
-    <div>
+    <div className="flex flex-col items-start gap-2.5">
+      <HeroContinueProgress caption={action.caption} progress={action.progress} />
       <button
         type="button"
         onClick={action.onPlay}

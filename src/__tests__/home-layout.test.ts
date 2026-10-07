@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { continueHeroTitles, continueTargets, heroSource } from "@/lib/homeLayout";
 import { continueOrder } from "@/lib/continueOrder";
+import { heroContinueFacts } from "@/lib/cinemaContinueLabel";
 import { resolveHomeLayout } from "@/lib/useHomeLayout";
 
 // La disposition de l'accueil (DECISIONS.md §52) : une décision, pour le bureau et le téléphone.
@@ -33,15 +34,43 @@ describe("continueHeroTitles", () => {
   });
 });
 
-describe("heroSource", () => {
-  it("garde « À la une » quand l'installation ne le demande pas", () => {
-    expect(heroSource(false, ["officiel"], ["en cours"])).toEqual({ items: ["officiel"], continuing: false });
+describe("heroSource — les reprises d'abord, « À la une » complète jusqu'à cinq", () => {
+  const id = (x: string) => x;
+  const official = ["n1", "n2", "n3", "n4", "n5", "n6"];
+  it("garde « À la une » quand l'option est coupée", () => {
+    expect(heroSource(false, official, ["r1"], id)).toMatchObject({ items: official, continuing: false, mixed: false });
   });
-  it("montre Reprendre / À suivre quand elle le demande et qu'il y a de quoi", () => {
-    expect(heroSource(true, ["officiel"], ["en cours"])).toEqual({ items: ["en cours"], continuing: true });
+  it("garde « À la une » quand rien n'est en cours : compte neuf, bannière jamais vide", () => {
+    expect(heroSource(true, official, [], id)).toMatchObject({ items: official, continuing: false });
   });
-  it("garde « À la une » plutôt qu'une bannière vide : compte neuf, rien en cours", () => {
-    expect(heroSource(true, ["officiel"], [])).toEqual({ items: ["officiel"], continuing: false });
+  it("une seule reprise : elle en tête, puis « À la une » jusqu'à cinq — la bannière tourne encore", () => {
+    const out = heroSource(true, official, ["r1"], id);
+    expect(out.items).toEqual(["r1", "n1", "n2", "n3", "n4"]);
+    expect(out.mixed).toBe(true);
+    expect([...out.shown]).toEqual(["r1", "n1", "n2", "n3", "n4"]);
+  });
+  it("ne répète pas un titre à la fois repris et à la une", () => {
+    expect(heroSource(true, official, ["n2", "r1"], id).items).toEqual(["n2", "r1", "n1", "n3", "n4"]);
+  });
+  it("cinq reprises ou plus : rien qu'elles, sans complément", () => {
+    const many = ["r1", "r2", "r3", "r4", "r5", "r6"];
+    expect(heroSource(true, official, many, id)).toMatchObject({ items: many, continuing: true, mixed: false });
+  });
+});
+
+describe("heroContinueFacts — le bouton court et ce qu'il reste au-dessus", () => {
+  const t = (k: string, v?: Record<string, string | number>) => (v ? `${k}(${Object.values(v).join(",")})` : k);
+  it("un épisode commencé : « Reprendre », l'épisode et le temps restant, la progression", () => {
+    const f = heroContinueFacts(t, 3_000_000_000, 12_000_000_000, 1, 3);
+    expect(f.label).toBe("common.resume");
+    expect(f.caption).toBe("cinema.episodeShort(3,1) · cinema.timeRemaining(15 min)");
+    expect(f.progress).toBe(0.25);
+  });
+  it("un épisode jamais ouvert : « À suivre » et l'épisode, sans barre", () => {
+    expect(heroContinueFacts(t, null, 12_000_000_000, 2, 1)).toEqual({ label: "cinema.upNext", caption: "cinema.episodeShort(1,2)", progress: null });
+  });
+  it("un film commencé : « Reprendre » et le temps restant", () => {
+    expect(heroContinueFacts(t, 6_000_000_000, 72_000_000_000).caption).toBe("cinema.timeRemaining(1h50)");
   });
 });
 

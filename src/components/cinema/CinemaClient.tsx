@@ -23,7 +23,7 @@ import { useCinemaRoute, useRouteBehind, sheetIsBehind, readCinemaRoute, cinemaN
 import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
 import { closeUncoversGrid, coversGrid, gridCardInFocus, gridIsTop } from "@/lib/cinemaGridTop";
 import { uniqueById } from "@/lib/cinemaRails";
-import { formatContinueCaption, formatContinueLabel } from "@/lib/cinemaContinueLabel";
+import { formatContinueCaption, heroContinueFacts } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
 import { useWarmSeriesCatalogue } from "@/lib/useWarmSeriesCatalogue";
 import { errorMessage } from "@/lib/upstreamError";
@@ -479,7 +479,7 @@ export function CinemaClient() {
   // Reprendre / À suivre, et « À la une » descend alors à la place de Reprendre. Même décision que
   // le téléphone, dans `homeLayout.ts`.
   const continuingTitles = continueHeroTitles(continueEntries, (id) => moviesById.get(id), (id) => seriesById.get(id));
-  const movieHero = heroSource(homeLayout.continueHero, movieSpotlightOfficial, continuingTitles.movies);
+  const movieHero = heroSource(homeLayout.continueHero, movieSpotlightOfficial, continuingTitles.movies, movieHeroKey);
   const movieCarouselOfficial = movieHero.items;
   // Arrêtée aussi tant que la grille est recouverte. La bannière tournait sous les fiches et les
   // panneaux, invisible, et chaque tour redessinait tout cet écran — fiches ouvertes comprises,
@@ -541,7 +541,7 @@ export function CinemaClient() {
     route.film !== null ? MOVIES_CATALOGUE_KEY : SERIES_CATALOGUE_KEY
   );
   const seriesSpotlightOfficial = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
-  const seriesHero = heroSource(homeLayout.continueHero, seriesSpotlightOfficial, continuingTitles.series);
+  const seriesHero = heroSource(homeLayout.continueHero, seriesSpotlightOfficial, continuingTitles.series, seriesHeroKey);
   const seriesCarouselOfficial = seriesHero.items;
   const [seriesOrderIndex, setSeriesCarouselIndex, seriesOrder] = useHeroOrder(
     heroSignature(seriesCarouselOfficial.map(seriesHeroKey)),
@@ -567,14 +567,14 @@ export function CinemaClient() {
   const heroResume = movieHero.continuing && heroItem ? heroTargets.movies.get(heroItem.radarrId) : undefined;
   const movieHeroAction = heroResume
     ? {
-        label: formatContinueLabel(t, heroResume.positionTicks, heroResume.runtimeTicks),
+        ...heroContinueFacts(t, heroResume.positionTicks, heroResume.runtimeTicks),
         onPlay: () => playback.play({ itemId: heroResume.id, title: heroResume.name, resumeAt: feedResumeAt(heroResume.positionTicks, RESUME_KEY) }),
       }
     : null;
   const heroEpisode = seriesHero.continuing && seriesHeroItem ? heroTargets.series.get(seriesHeroItem.sonarrId) : undefined;
   const seriesHeroAction = heroEpisode
     ? {
-        label: formatContinueLabel(t, heroEpisode.resumeTicks, heroEpisode.runtimeTicks, heroEpisode.seasonNumber, heroEpisode.episodeNumber),
+        ...heroContinueFacts(t, heroEpisode.resumeTicks, heroEpisode.runtimeTicks, heroEpisode.seasonNumber, heroEpisode.episodeNumber),
         onPlay: () => playback.play({ itemId: heroEpisode.jellyfinItemId, title: heroEpisode.title, resumeAt: feedResumeAt(heroEpisode.resumeTicks, NEXT_UP_KEY) }),
       }
     : null;
@@ -1198,7 +1198,7 @@ export function CinemaClient() {
             <div {...tabPane("movies")}>
               {/* Première rangée, et celle que la bannière suit — voir CinemaSpotlight. */}
               <CinemaSpotlight
-                label={movieHero.continuing ? t("cinema.continueWatching") : t("cinema.spotlight")}
+                label={movieHero.continuing ? t(movieHero.mixed ? "cinema.forYou" : "cinema.continueWatching") : t("cinema.spotlight")}
                 count={movieCarousel.length}
                 itemKeys={movieCarousel.map(movieHeroKey)}
                 activeIndex={movieSpotlightIndex}
@@ -1233,7 +1233,8 @@ export function CinemaClient() {
                   rowKey="spotlight-row-movies"
                   showNewBadge={false}
                   rowIndex={1}
-                  items={movieSpotlightOfficial}
+                  // Sans ce que la bannière montre déjà en complément : pas deux fois le même titre.
+                  items={movieSpotlightOfficial.filter((m) => !movieHero.shown.has(movieHeroKey(m)))}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusMovie}
                   onSelectItem={openDetail}
@@ -1339,7 +1340,7 @@ export function CinemaClient() {
                   the toggle is already up, so its own states have to render inside the same
                   chrome instead of hiding the toggle that got you here. */}
               <CinemaSpotlight
-                label={seriesHero.continuing ? t("cinema.continueWatching") : t("cinema.spotlight")}
+                label={seriesHero.continuing ? t(seriesHero.mixed ? "cinema.forYou" : "cinema.continueWatching") : t("cinema.spotlight")}
                 count={seriesCarousel.length}
                 itemKeys={seriesCarousel.map(seriesHeroKey)}
                 activeIndex={seriesSpotlightIndex}
@@ -1370,7 +1371,7 @@ export function CinemaClient() {
                   rowKey="spotlight-row-series"
                   showNewBadge={false}
                   rowIndex={1}
-                  items={seriesSpotlightOfficial}
+                  items={seriesSpotlightOfficial.filter((x) => !seriesHero.shown.has(seriesHeroKey(x)))}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusSeries}
                   onSelectItem={openSeriesDetail}

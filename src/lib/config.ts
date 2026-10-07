@@ -122,9 +122,10 @@ export const config = {
     get browseButton() {
       return optional("HOME_BROWSE_BUTTON", "true") === "true";
     },
-    // La bannière du haut montre Reprendre / À suivre, et « À la une » descend à leur place.
+    // La bannière du haut montre d'abord Reprendre / À suivre, complétée par « À la une » s'il y en a
+    // peu ; « À la une » descend à la place de la rangée Reprendre.
     get continueHero() {
-      return optional("HOME_CONTINUE_HERO", "false") === "true";
+      return optional("HOME_CONTINUE_HERO", "true") === "true";
     },
   },
   gallery: {

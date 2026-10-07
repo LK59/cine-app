@@ -1753,10 +1753,10 @@
       "guidedScroll": "Guided scrolling",
       "guidedScrollHint": "On a computer, the home screen settles on a whole row and title pages on a whole page. Off, pages scroll freely.",
       "home": {
-        "browseButton": "“All movies / series” button",
+        "browseButton": "Show the “All movies / series” button",
         "browseButtonHint": "At the top of home, the whole catalogue one tap away.",
-        "continueHero": "Banner: Continue watching and Up next",
-        "continueHeroHint": "The home banner shows what you're watching; “Spotlight” moves just below."
+        "continueHero": "Show what I'm watching in the home banner",
+        "continueHeroHint": "What you're watching leads the home screen; when there's little, Spotlight titles fill in."
       }
     },
     "browse": {
@@ -1963,7 +1963,8 @@
     "removeFromContinue": "Remove from Continue watching",
     "removeFromContinueFailed": "This title couldn't be removed from Continue watching.",
     "titleUnavailable": "This title isn't available in the cinema yet.",
-    "seriesStillWatched": "All its episodes are watched: the series stays in “Watched”."
+    "seriesStillWatched": "All its episodes are watched: the series stays in “Watched”.",
+    "forYou": "For you"
   },
   "services": {
     "notConfigured": "{name} is not configured.",
@@ -2515,7 +2516,7 @@
       "PLAYER_SERVER_FALLBACK": "Hand files the browser can't play over to Jellyfin",
       "PLAYER_AUTO_FRAME": "Enlarge the picture over black bars",
       "HOME_BROWSE_BUTTON": "“All movies / series” button at the top of home",
-      "HOME_CONTINUE_HERO": "Home banner: Continue watching and Up next",
+      "HOME_CONTINUE_HERO": "Show what people are watching in the home banner",
       "VAPID_SUBJECT": "Notification contact (mailto:…)",
       "TZ": "Time zone",
       "MEDIA_ROOT": "Media folder (storage statistics)",

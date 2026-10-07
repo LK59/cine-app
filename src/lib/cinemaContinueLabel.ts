@@ -70,3 +70,28 @@ export function formatContinueCaption(
   if (episodeCode) return time ? `${episodeCode} · ${time}` : `${t("cinema.upNext")} · ${episodeCode}`;
   return time ?? t("common.resume");
 }
+
+/**
+ * La bannière Reprendre / À suivre (DECISIONS.md §52) : un bouton court, et ce qu'il reste à voir
+ * écrit au-dessus, avec la barre de progression des cartes de la rangée.
+ *
+ * Le bouton portait tout — « Reprendre S1 · É3 · 20min restantes » — et sur un téléphone il
+ * repoussait « Plus d'infos » hors de la carte (07/10/2026). Il dit maintenant le geste seul :
+ * « Reprendre » (déjà commencé) ou « À suivre » (épisode suivant, jamais ouvert) ; la légende dit
+ * l'épisode et le temps restant, la barre où l'on en est.
+ */
+export function heroContinueFacts(
+  t: TFn,
+  resumeTicks: number | null | undefined,
+  runtimeTicks: number | null | undefined,
+  seasonNumber?: number | null,
+  episodeNumber?: number | null
+): { label: string; caption: string | null; progress: number | null } {
+  const hasResume = !!resumeTicks && resumeTicks > 0;
+  const episodeCode =
+    seasonNumber != null && episodeNumber != null ? t("cinema.episodeShort", { episode: episodeNumber, season: seasonNumber }) : null;
+  const time = hasResume && runtimeTicks ? t("cinema.timeRemaining", { time: remainingText(Math.max(runtimeTicks - resumeTicks!, 0)) }) : null;
+  const caption = [episodeCode, time].filter(Boolean).join(" · ") || null;
+  const progress = hasResume && runtimeTicks ? Math.min(1, Math.max(0, resumeTicks! / runtimeTicks)) : null;
+  return { label: hasResume ? t("common.resume") : episodeCode ? t("cinema.upNext") : t("common.play"), caption, progress };
+}

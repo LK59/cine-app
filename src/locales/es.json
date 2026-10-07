@@ -1753,10 +1753,10 @@
       "guidedScroll": "Desplazamiento guiado",
       "guidedScrollHint": "En el ordenador, el inicio se ajusta a una fila entera y las fichas a una página entera. Desactivado, la página se desplaza libremente.",
       "home": {
-        "browseButton": "Botón «Todas las películas / series»",
+        "browseButton": "Mostrar el botón «Todas las películas / series»",
         "browseButtonHint": "Arriba del inicio, todo el catálogo a un toque.",
-        "continueHero": "Banner: Continuar y A continuación",
-        "continueHeroHint": "El banner del inicio muestra lo que estás viendo; «Destacados» pasa justo debajo."
+        "continueHero": "Mostrar lo que estoy viendo en el banner del inicio",
+        "continueHeroHint": "Lo que estás viendo encabeza el inicio; si hay poco, los títulos destacados completan."
       }
     },
     "browse": {
@@ -1963,7 +1963,8 @@
     "removeFromContinue": "Quitar de Continuar viendo",
     "removeFromContinueFailed": "No se pudo quitar este título de Continuar viendo.",
     "titleUnavailable": "Este título aún no está disponible en el cine.",
-    "seriesStillWatched": "Todos sus episodios están vistos: la serie sigue en «Visto»."
+    "seriesStillWatched": "Todos sus episodios están vistos: la serie sigue en «Visto».",
+    "forYou": "Para ti"
   },
   "services": {
     "notConfigured": "{name} no está configurado.",
@@ -2515,7 +2516,7 @@
       "PLAYER_SERVER_FALLBACK": "Pasar a Jellyfin los archivos que el navegador no reproduce",
       "PLAYER_AUTO_FRAME": "Ampliar la imagen sobre las bandas negras",
       "HOME_BROWSE_BUTTON": "Botón «Todas las películas / series» arriba del inicio",
-      "HOME_CONTINUE_HERO": "Banner del inicio: Continuar y A continuación",
+      "HOME_CONTINUE_HERO": "Mostrar lo que se está viendo en el banner del inicio",
       "VAPID_SUBJECT": "Contacto de las notificaciones (mailto:…)",
       "TZ": "Zona horaria",
       "MEDIA_ROOT": "Carpeta de medios (estadísticas de almacenamiento)",
