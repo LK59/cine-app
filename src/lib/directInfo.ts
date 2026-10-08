@@ -33,6 +33,21 @@ function fresh(itemId: string): Promise<DirectPlayInfo> | null {
 }
 
 /**
+ * Une description qui n'a pas pu arriver faute de réseau le dit (`network`, lu par
+ * `isNetworkFailure`). `fetch` ne rejette que pour cela, et toujours d'un `TypeError` ; une réponse
+ * du serveur, même en erreur, passe par `fetcher` et porte son propre message.
+ *
+ * 07/10/2026, Mac de kab : la connexion tombe une vingtaine de secondes, la description préchargée
+ * par la fiche n'arrive jamais — et le lecteur, la croyant refusée, passait la main au lecteur
+ * serveur, qui avait besoin du même réseau et n'a rien chargé. Une coupure *pendant* le film menait
+ * déjà à l'écran « connexion perdue » ; une coupure à l'ouverture y mène aussi.
+ */
+function asNetworkFailure(error: unknown): unknown {
+  if (error instanceof TypeError) return Object.assign(error, { network: true as const });
+  return error;
+}
+
+/**
  * La description, reprise si elle est fraîche — en vol comprise —, demandée sinon. Peut rejeter
  * (l'erreur du `fetcher`, avec son code : `file_missing` grise le bouton Lire). Un échec n'est
  * jamais gardé : la demande suivante repart au serveur.
@@ -40,7 +55,9 @@ function fresh(itemId: string): Promise<DirectPlayInfo> | null {
 export function fetchDirectInfo(itemId: string): Promise<DirectPlayInfo> {
   const current = fresh(itemId);
   if (current) return current;
-  const info = fetcher(directInfoKey(itemId)) as Promise<DirectPlayInfo>;
+  const info = (fetcher(directInfoKey(itemId)) as Promise<DirectPlayInfo>).catch((error: unknown) => {
+    throw asNetworkFailure(error);
+  });
   const entry = { at: Date.now(), info };
   kept.set(itemId, entry);
   info.catch(() => {

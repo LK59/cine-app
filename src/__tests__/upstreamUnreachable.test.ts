@@ -98,7 +98,7 @@ describe("la même phrase des deux côtés", () => {
     // Le lecteur stable a besoin du même Jellyfin : lui céder la place refait la même attente
     // avant d'afficher le même échec.
     expect(readFileSync("src/components/ExperimentalPlayerHost.tsx", "utf8")).toMatch(
-      /if \(!isUpstreamUnreachable\(infoError\)\) \{\s*\n\s*fallToStable\(/
+      /if \(!isUpstreamUnreachable\(infoError\) && !isNetworkFailure\(infoError\)\) \{\s*\n\s*fallToStable\(/
     );
   });
 });

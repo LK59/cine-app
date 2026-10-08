@@ -166,6 +166,26 @@ export class PlayerLifecycle {
     return true;
   }
 
+  /**
+   * Un nouvel essai d'*ouverture* — la description du fichier n'est jamais arrivée, faute de réseau.
+   *
+   * Les mêmes portes que `restart`, sans sa position : rien n'a encore joué, et l'ouverture qui
+   * reprend doit garder la sienne (`session.resumeAt`, ou la question au serveur). Passer par
+   * `restart` aurait posé `rebuildAt` à la position du composant — zéro quand l'appelant ne la
+   * connaît pas — et effacé la reprise que le serveur allait donner (08/10/2026).
+   */
+  retryOpening(byViewer: boolean): boolean {
+    if (this.closing) return false;
+    if (byViewer) {
+      this.steppedAside = false;
+      this.rebuilds = 0;
+    } else if (this.isOver()) {
+      return false;
+    }
+    this.networkDown = false;
+    return true;
+  }
+
   /** Le fichier est-il allé au bout, sans rien qui l'ait relancé depuis ? */
   isEnded(): boolean {
     return this.ended;

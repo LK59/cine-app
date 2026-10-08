@@ -262,3 +262,14 @@ describe("l'arrêt de la séance", () => {
     expect(lifecycle.claimStop()).toBe(true);
   });
 });
+
+describe("un nouvel essai d'ouverture", () => {
+  it("lève la coupure sans poser de position de reconstruction", () => {
+    const lifecycle = new PlayerLifecycle();
+    lifecycle.noteNetworkLost();
+    expect(lifecycle.retryOpening(false)).toBe(true);
+    expect(lifecycle.isNetworkLost()).toBe(false);
+    // `rebuildAt` reste vide : l'ouverture garde sa propre reprise.
+    expect(lifecycle.rebuildAt).toBeNull();
+  });
+});

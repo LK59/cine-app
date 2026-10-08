@@ -71,3 +71,27 @@ describe("la description d'un fichier", () => {
     expect(calls()).toBe(2);
   });
 });
+
+/**
+ * Pas de réseau à l'ouverture : une coupure, pas un fichier refusé.
+ *
+ * 07/10/2026, Mac de kab : la description préchargée n'est jamais arrivée, et le lecteur, la
+ * croyant refusée, passait la main au lecteur serveur — qui avait besoin du même réseau.
+ */
+describe("une description perdue faute de réseau", () => {
+  it("se dit coupure réseau, et n'est pas gardée pour l'essai suivant", async () => {
+    const { isNetworkFailure } = await import("@/lib/webcodecs/byteSource");
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const failure = await directInfoForOpening("peaky").catch((e: unknown) => e);
+    expect(isNetworkFailure(failure)).toBe(true);
+    // Le réseau revenu, la question repart au serveur.
+    expect((await directInfoForOpening("peaky")).streamUrl).toBe("/s.mkv");
+  });
+
+  it("une réponse du serveur en erreur reste une erreur du serveur", async () => {
+    const { isNetworkFailure } = await import("@/lib/webcodecs/byteSource");
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ error: "absent" }) } as never);
+    const failure = await fetchDirectInfo("absent").catch((e: unknown) => e);
+    expect(isNetworkFailure(failure)).toBe(false);
+  });
+});

@@ -954,14 +954,49 @@ export function ExperimentalPlayerHost({
   // What the sheet asked for in advance is still taken, through `directInfoForOpening`, as long
   // as it is under five minutes old (`directInfo.ts`).
   const openingId = useId();
-  const { data: info, error: infoError } = useSWR<DirectPlayInfo>([directInfoKey(itemId), openingId], () => directInfoForOpening(itemId), {
+  // Le numéro de l'essai : une description perdue faute de réseau est redemandée sous une clé
+  // neuve, la seule façon de faire reposer la question à SWR sans revalidation (voir plus bas).
+  const [infoAttempt, setInfoAttempt] = useState(0);
+  const { data: info, error: infoError } = useSWR<DirectPlayInfo>([directInfoKey(itemId), openingId, infoAttempt], () => directInfoForOpening(itemId), {
     // La description du fichier est ce qui décide du chemin de lecture : la mettre en pause parce
     // qu'un film occupe l'écran, c'est attendre que le film commence pour savoir comment le lire.
     ...playerBootstrapOptions,
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     revalidateIfStale: false,
+    // Pas de réseau à l'ouverture : l'écran « connexion perdue », comme une coupure en plein film,
+    // et non le lecteur serveur — qui a besoin du même réseau (Mac de kab, 07/10/2026 ; voir
+    // `asNetworkFailure`). Posé ici, dans le rappel de SWR, plutôt que par un effet qui lirait
+    // l'erreur après coup.
+    onError: (cause: unknown) => {
+      if (!isNetworkFailure(cause) || lifecycle.isOver()) return;
+      const message = cause instanceof Error ? cause.message : "réseau indisponible";
+      trace(`réseau : description du fichier impossible à obtenir — ${message}`);
+      lifecycle.noteNetworkLost();
+      setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
+      setPlaying(false);
+    },
   });
+
+  /**
+   * Le nouvel essai après une coupure : une reconstruction si le fichier était ouvert, sinon une
+   * nouvelle demande de sa description — `restart` relancerait un pipeline qui attend une
+   * description qu'il n'aura jamais, et sa position effacerait celle de l'ouverture.
+   */
+  const retryAfterNetwork = useCallback(
+    (at: number, why: string, byViewer = false) => {
+      if (info) {
+        restart(at, why, byViewer);
+        return;
+      }
+      if (!lifecycle.retryOpening(byViewer)) return;
+      trace(`reprise : ${why} — nouvelle demande de la description du fichier`);
+      setOpenedAt(Date.now());
+      setNetworkLost(null);
+      setInfoAttempt((attempt) => attempt + 1);
+    },
+    [info, restart, lifecycle]
+  );
 
   /**
    * Les étiquettes des pistes audio, calculées une fois pour les deux menus qui les montrent.
@@ -1062,7 +1097,7 @@ export function ExperimentalPlayerHost({
   const error =
     runtimeError ??
     info?.refusedReason ??
-    (infoError ? errorMessage(infoError, t, "Impossible de récupérer les informations du fichier.") : null);
+    (infoError && !isNetworkFailure(infoError) ? errorMessage(infoError, t, "Impossible de récupérer les informations du fichier.") : null);
   // The server's own name for it, which is the only one that knows an episode is an episode.
   // Whatever the caller passed stands until it arrives, so the title never blinks in empty.
   const title = info?.title ?? openedAs;
@@ -1459,7 +1494,8 @@ export function ExperimentalPlayerHost({
        * refaire la même attente une seconde fois avant d'afficher le même échec — l'erreur met
        * alors deux fois plus longtemps à apparaître qu'à se produire.
        */
-      if (!isUpstreamUnreachable(infoError)) {
+      // Une coupure réseau a son propre écran, posé par `onError` ci-dessus.
+      if (!isUpstreamUnreachable(infoError) && !isNetworkFailure(infoError)) {
         fallToStable("les informations du fichier n'ont pas pu être récupérées");
       }
       return;
@@ -2103,10 +2139,10 @@ export function ExperimentalPlayerHost({
     const id = setTimeout(() => {
       if (!lifecycle.mayRebuild()) return;
       lifecycle.noteNetworkRetry();
-      restart(at, "le réseau est revenu");
+      retryAfterNetwork(at, "le réseau est revenu");
     }, delay);
     return () => clearTimeout(id);
-  }, [networkLost, online, restart, lifecycle]);
+  }, [networkLost, online, retryAfterNetwork, lifecycle]);
 
   /**
    * A notice withdraws itself.
@@ -2471,7 +2507,7 @@ export function ExperimentalPlayerHost({
           <div className="mt-1 flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
-              onClick={() => restart(networkLost.at, "réessai demandé", true)}
+              onClick={() => retryAfterNetwork(networkLost.at, "réessai demandé", true)}
               className="btn-primary inline-flex items-center gap-2"
             >
               <RotateCw size={16} />
