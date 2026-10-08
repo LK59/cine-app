@@ -1,9 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { fetcher, playerBootstrapOptions } from "@/lib/swr";
 import { isPublicPath } from "@/lib/publicPaths";
+import { isWatchingFullScreen } from "@/lib/playbackBusy";
 
 export const MAINTENANCE_KEY = "/api/maintenance";
 
@@ -17,6 +18,19 @@ export const MAINTENANCE_KEY = "/api/maintenance";
  * synchrone et tient la boucle d'événements, donc la question mérite d'être posée.
  */
 const POLL_MS = 15_000;
+/**
+ * Pendant un film, une fois la minute seulement (08/10/2026) : le battement de lecture, qui part
+ * toutes les dix secondes, rapporte déjà l'état (`noteMaintenanceState`). Le sondage n'est plus
+ * qu'un filet — pour le lecteur serveur arrêté sur une erreur, ou un battement qui ne passe pas.
+ */
+const POLL_DURING_FILM_MS = 60_000;
+
+/** L'état d'exploitation rapporté par une autre réponse — le battement de lecture. */
+export function noteMaintenanceState(state: unknown): void {
+  const s = state as Partial<MaintenanceState> | null;
+  if (!s || typeof s.active !== "boolean") return;
+  void mutate(MAINTENANCE_KEY, { active: s.active, noticeAt: s.noticeAt ?? null, expiresAt: s.expiresAt ?? null }, { revalidate: false });
+}
 
 export interface MaintenanceState {
   active: boolean;
@@ -58,7 +72,7 @@ export function useMaintenance(): MaintenanceState {
    */
   const pathname = usePathname();
   const { data } = useSWR<MaintenanceState>(isPublicPath(pathname ?? "") ? null : MAINTENANCE_KEY, fetcher, {
-    refreshInterval: POLL_MS,
+    refreshInterval: () => (isWatchingFullScreen() ? POLL_DURING_FILM_MS : POLL_MS),
     ...playerBootstrapOptions,
   });
   // Un état inconnu n'est pas une maintenance : tant que la réponse n'est pas là, rien ne s'affiche.

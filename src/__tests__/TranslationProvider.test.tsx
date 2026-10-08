@@ -91,7 +91,11 @@ describe("TranslationProvider", () => {
   });
 
   it("setLocale switches the active dict, persists the cookie, and syncs the server preference", async () => {
-    mockUnsetPreferences();
+    // Les lectures de l'amorçage sans réponse ; l'écriture de la préférence, acceptée.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => (init?.method === "PUT" ? { ok: true, json: async () => ({}) } : { ok: false, json: async () => null }))
+    );
     const user = userEvent.setup();
     render(
       <TranslationProvider>
@@ -112,5 +116,22 @@ describe("TranslationProvider", () => {
       "/api/user/preferences",
       expect.objectContaining({ method: "PUT" })
     );
+  });
+
+  it("un refus du serveur fait rejeter setLocale, sans toucher au cookie (08/10/2026)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => null }));
+    let outcome: Promise<void> | null = null;
+    function Probe() {
+      const { setLocale } = useLocale();
+      return <button onClick={() => (outcome = setLocale("de").catch(() => undefined).then(() => undefined))}>refuse</button>;
+    }
+    render(
+      <TranslationProvider initialLocale="fr">
+        <Probe />
+      </TranslationProvider>
+    );
+    await act(async () => screen.getByText("refuse").click());
+    await outcome;
+    expect(document.cookie).not.toContain("cine-lang=de");
   });
 });

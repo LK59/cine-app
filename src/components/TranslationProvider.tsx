@@ -17,6 +17,7 @@ import {
   type Locale,
 } from "@/lib/i18n";
 import frDict from "@/locales/fr.json";
+import { preloadQuietly } from "@/lib/prefetch";
 
 type TFn = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -24,6 +25,33 @@ interface TranslationContextValue {
   t: TFn;
   locale: Locale;
   setLocale: (l: Locale) => Promise<void>;
+}
+
+/**
+ * Les deux réponses dont la langue dépend, demandées par le cache de SWR et non à côté
+ * (08/10/2026).
+ *
+ * Elles partaient par un `fetch` nu, pendant que les écrans demandaient les mêmes adresses par
+ * SWR : 105 réponses sur 328 de `/api/config/public` et 208 sur 388 de `/api/user/preferences`
+ * étaient des doublons à moins de deux secondes, trois demandes de préférences par lancement.
+ * `preload` range la requête là où le premier `useSWR` de la même clé la reprend.
+ *
+ * Un récupérateur sans `noteUnauthorized` : la page de connexion monte ce fournisseur, et un 401
+ * y est la réponse attendue, pas une session perdue.
+ */
+function bootJson(url: string): Promise<unknown> {
+  return fetch(url).then((res) => {
+    if (!res.ok) throw new Error(`Erreur ${res.status}`);
+    return res.json();
+  });
+}
+
+function startBoot(): { pub: Promise<unknown>; prefs: Promise<unknown> } | null {
+  if (typeof window === "undefined") return null;
+  // `preloadQuietly` : une requête qu'aucun écran ne reprend (la page de connexion) ne finit pas en
+  // rejet non géré. Un échec vaut « rien », comme avant.
+  const settle = (key: string) => preloadQuietly(key, bootJson).then((data) => data ?? null);
+  return { pub: settle("/api/config/public"), prefs: settle("/api/user/preferences") };
 }
 
 const fr = frDict as Record<string, unknown>;
@@ -52,6 +80,9 @@ export function TranslationProvider({
     initialDict ? createT(initialDict, fr, initialLocale ?? DEFAULT_LOCALE) : defaultT
   );
 
+  // Au premier rendu, avant les effets des écrans : leurs `useSWR` reprennent ces requêtes.
+  const [boot] = useState(startBoot);
+
   useEffect(() => {
     const cookieLang = getLocaleFromCookie(document.cookie);
 
@@ -74,10 +105,10 @@ export function TranslationProvider({
     }
 
     // Fetch runtime config + user prefs in parallel — both work without baked-in env vars
-    Promise.all([
-      fetch("/api/config/public").then((r) => r.ok ? r.json() : null).catch(() => null),
-      fetch("/api/user/preferences").then((r) => r.ok ? r.json() : null).catch(() => null),
-    ]).then(([pub, prefs]) => {
+    if (!boot) return;
+    Promise.all([boot.pub, boot.prefs]).then(([pubRaw, prefsRaw]) => {
+      const pub = pubRaw as { defaultLang?: string } | null;
+      const prefs = prefsRaw as { lang?: string } | null;
       const instanceDefault: Locale =
         pub?.defaultLang && LOCALES.includes(pub.defaultLang as Locale)
           ? pub.defaultLang as Locale
@@ -109,13 +140,21 @@ export function TranslationProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Rejette si la préférence n'a pas été enregistrée (08/10/2026) : le cookie était écrit d'abord
+   * et la réponse jamais lue. Un refus laissait la page se recharger dans la nouvelle langue, puis
+   * l'amorçage voyait la préférence du serveur différer du cookie, le réécrivait et rechargeait
+   * encore — l'ancienne langue revenait sans un mot. Le cookie suit maintenant le succès, et
+   * l'appelant dit l'échec au lieu de recharger.
+   */
   const setLocale = useCallback(async (l: Locale) => {
-    document.cookie = `${LOCALE_COOKIE}=${l};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
-    await fetch("/api/user/preferences", {
+    const res = await fetch("/api/user/preferences", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lang: l }),
-    }).catch(() => null);
+    });
+    if (!res.ok) throw new Error(`Erreur ${res.status}`);
+    document.cookie = `${LOCALE_COOKIE}=${l};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
     setLocaleState(l);
     if (l === "fr") {
       setT(() => createT(fr, fr));

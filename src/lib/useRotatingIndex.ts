@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePrefersReducedMotion } from "@/lib/reducedMotion";
+import { usePageVisible } from "@/lib/usePageVisible";
 
 // Auto-advancing index for a hero carousel — the same 8-second cadence DashboardHero uses on the
 // main screen, so both parts of the app rotate at the same rhythm.
@@ -22,12 +23,14 @@ export function useRotatingIndex(length: number, paused = false): [number, (next
   // Pas de rotation automatique pour qui a demandé moins de mouvement : un contenu qui change seul
   // est exactement ce que ce réglage refuse. Les gestes et les barres, eux, restent.
   const reducedMotion = usePrefersReducedMotion();
+  // Onglet caché : la rotation attend son retour — voir `usePageVisible`.
+  const visible = usePageVisible();
 
   useEffect(() => {
-    if (paused || reducedMotion || length <= 1) return;
+    if (paused || reducedMotion || !visible || length <= 1) return;
     const id = setTimeout(() => setIndex((i) => (i + 1) % length), ROTATE_MS);
     return () => clearTimeout(id);
-  }, [length, index, paused, reducedMotion]);
+  }, [length, index, paused, reducedMotion, visible]);
 
   return [length > 0 ? index % length : 0, setIndex];
 }

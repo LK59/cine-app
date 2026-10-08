@@ -220,13 +220,20 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
 
 function LanguageSection() {
   const t = useT();
+  const toast = useToast();
   const { locale, setLocale } = useLocale();
   const [pending, setPending] = useState<Locale | null>(null);
   const active = pending ?? locale;
 
   async function apply() {
     if (!pending) return;
-    await setLocale(pending);
+    // Pas de rechargement sur un refus : il ramènerait l'ancienne langue sans rien dire.
+    try {
+      await setLocale(pending);
+    } catch {
+      toast.error(t("common.error"));
+      return;
+    }
     // Le dictionnaire est rendu côté serveur : seul un rechargement le remplace vraiment.
     setTimeout(() => window.location.reload(), 80);
   }

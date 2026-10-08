@@ -201,6 +201,7 @@ export default function ParametresPage() {
 function LanguageSection() {
   const { locale, setLocale } = useLocale();
   const t = useT();
+  const toast = useToast();
   const [pending, setPending] = useState<Locale | null>(null);
   const [saving, setSavingLang] = useState(false);
 
@@ -212,7 +213,14 @@ function LanguageSection() {
   async function apply() {
     if (!pending) return;
     setSavingLang(true);
-    await setLocale(pending);
+    // Pas de rechargement sur un refus : il ramènerait l'ancienne langue sans rien dire.
+    try {
+      await setLocale(pending);
+    } catch {
+      toast.error(t("common.error"));
+      setSavingLang(false);
+      return;
+    }
     setTimeout(() => window.location.reload(), 80);
   }
 

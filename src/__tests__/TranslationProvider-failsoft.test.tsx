@@ -25,7 +25,10 @@ afterEach(() => {
  */
 describe("TranslationProvider — un dictionnaire introuvable", () => {
   it("laisse setLocale aboutir, et les textes dans la langue d'avant", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => null }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => (init?.method === "PUT" ? { ok: true, json: async () => ({}) } : { ok: false, json: async () => null }))
+    );
     let outcome: Promise<void> | null = null;
     function Probe() {
       const t = useT();

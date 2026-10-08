@@ -219,8 +219,14 @@ export function PlayerOnboarding({
       // Le dictionnaire vient du serveur : seul un rechargement le remplace. On reprend ensuite
       // à l'étape suivante, dans la nouvelle langue.
       setBusy(true);
+      try {
+        await setLocale(lang);
+      } catch {
+        toast.error(t("common.error"));
+        setBusy(false);
+        return;
+      }
       writeSession(RESUME_KEY, String(index + 1));
-      await setLocale(lang);
       setTimeout(() => window.location.reload(), 80);
       return;
     }

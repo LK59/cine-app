@@ -7,6 +7,7 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { reportPlayback } from "@/lib/playbackReport";
 import { playbackDevice } from "@/lib/playbackDevice";
+import { maintenanceDb } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   if (!config.player.enabled) {
@@ -38,7 +39,24 @@ export async function POST(req: NextRequest) {
   const { jfId, jfToken } = session;
   // L'appareil de la connexion et son vrai nom, plus un appareil fantôme par compte — `playbackDevice.ts`.
   const device = playbackDevice(req, session.jti);
-  return reportPlayback({ ...session, jfId }, "progress", itemId, positionTicks, () =>
+  const res = await reportPlayback({ ...session, jfId }, "progress", itemId, positionTicks, () =>
     jellyfin.reportPlaybackProgress(jfId, itemId, jfToken, playSessionId, mediaSourceId, positionTicks, playMethod, client, isPaused, device)
   );
+  if (!res.ok) return res;
+  /**
+   * L'état d'exploitation, avec la réponse (08/10/2026).
+   *
+   * Un film en cours redemandait `/api/maintenance` toutes les quinze secondes — 231 requêtes par
+   * heure de film, 14 % de tout le trafic de l'application, qui réveillaient la radio d'un
+   * téléphone entre deux remplissages de la réserve. Le battement de lecture part de toute façon :
+   * il rapporte l'avis de redémarrage au passage (`noteMaintenanceState`), et le sondage ralentit
+   * pendant le film. Une ligne lue par clé primaire.
+   */
+  let maintenance: unknown = null;
+  try {
+    maintenance = maintenanceDb.get();
+  } catch {
+    maintenance = null;
+  }
+  return NextResponse.json({ ...(await res.json()), maintenance }, { status: res.status });
 }

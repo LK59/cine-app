@@ -66,8 +66,20 @@ export function SSENotifier() {
     }
 
     loadTitles();
-    const id = setInterval(loadTitles, 60_000);
-    return () => { cancelled = true; clearInterval(id); };
+    // Pas pendant que l'onglet est caché (08/10/2026) : la liste ne sert qu'à nommer un
+    // téléchargement, elle est relue au retour.
+    const id = setInterval(() => {
+      if (document.visibilityState !== "hidden") void loadTitles();
+    }, 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadTitles();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -78,6 +90,7 @@ export function SSENotifier() {
     let es: EventSource | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let stopped = false;
+    let failures = 0;
 
     function matchedTitle(torrentName: string): string | null {
       for (const { title } of pendingTitles.current) {
@@ -110,9 +123,17 @@ export function SSENotifier() {
         } catch {}
       });
 
+      // Une connexion qui tient remet l'attente à zéro.
+      es.onopen = () => {
+        failures = 0;
+      };
+      // La connexion reste ouverte onglet caché — c'est là que la notification du système sert.
+      // Mais une route qui refuse ne se redemande plus toutes les quinze secondes pour toujours :
+      // 15 s, puis le double à chaque échec, jusqu'à cinq minutes (08/10/2026).
       es.onerror = () => {
         es?.close();
-        if (!stopped) retryTimer = setTimeout(connect, 15000);
+        failures += 1;
+        if (!stopped) retryTimer = setTimeout(connect, Math.min(15_000 * 2 ** (failures - 1), 300_000));
       };
     }
 

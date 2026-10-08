@@ -25,6 +25,27 @@ async function getVapidKey(): Promise<string | null> {
 }
 
 /** `onSubscribed` : l'abonnement vient d'être accepté par le serveur — voir `PushResumePrompt`. */
+/** Ce que ce navigateur a dit au serveur de son abonnement, et quand — voir `detect`. */
+const SENT_KEY = "cine-push-sent";
+const RESEND_AFTER_MS = 24 * 3600_000;
+
+function shouldResendSubscription(endpoint: string): boolean {
+  try {
+    const sent = JSON.parse(localStorage.getItem(SENT_KEY) ?? "null") as { endpoint?: string; at?: number } | null;
+    return !sent || sent.endpoint !== endpoint || typeof sent.at !== "number" || Date.now() - sent.at > RESEND_AFTER_MS;
+  } catch {
+    return true;
+  }
+}
+
+function noteSubscriptionSent(endpoint: string): void {
+  try {
+    localStorage.setItem(SENT_KEY, JSON.stringify({ endpoint, at: Date.now() }));
+  } catch {
+    // Stockage indisponible : on renverra la prochaine fois, comme avant.
+  }
+}
+
 export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {}) {
   const [state, setState] = useState<State>("loading");
   const [sub, setSub] = useState<PushSubscription | null>(null);
@@ -61,11 +82,19 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
         // l'interrupteur affiche. Sans ça, un abonnement que le navigateur décrit autrement que
         // prévu faisait tomber la détection dans son `catch` — et un abonnement bien vivant
         // s'affichait « désactivé ».
+        //
+        // Une fois par jour au plus, ou quand le point de terminaison a changé (08/10/2026) : le
+        // panneau se rouvre souvent, et chaque ouverture renvoyait le même abonnement — 64 envois
+        // au journal du proxy pour quelques appareils.
         try {
-          void apiAction("/api/push/subscribe", {
-            method: "POST",
-            body: JSON.stringify(existing.toJSON()),
-          }).catch(() => {});
+          if (shouldResendSubscription(existing.endpoint)) {
+            void apiAction("/api/push/subscribe", {
+              method: "POST",
+              body: JSON.stringify(existing.toJSON()),
+            })
+              .then(() => noteSubscriptionSent(existing.endpoint))
+              .catch(() => {});
+          }
         } catch {
           // Best effort, et rien de plus.
         }
@@ -86,7 +115,9 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
       if (!vapidKey) throw new Error("VAPID key unavailable");
 
       const permission = await Notification.requestPermission();
-      if (permission !== "granted") { setState("denied"); return; }
+      // « default » : l'invite a été fermée sans réponse — rien n'est bloqué, et l'interrupteur
+      // doit rester activable. Seul un vrai refus montre « Bloquées » (08/10/2026).
+      if (permission !== "granted") { setState(permission === "denied" ? "denied" : "unsubscribed"); return; }
 
       const reg = swReg.current ?? await navigator.serviceWorker.ready;
       swReg.current = reg;
@@ -107,6 +138,7 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
         throw error;
       }
 
+      noteSubscriptionSent(subscription.endpoint);
       setSub(subscription);
       setState("subscribed");
       onSubscribed?.();

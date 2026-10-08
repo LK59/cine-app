@@ -154,6 +154,26 @@ describe("usePlaybackSession", () => {
     expect(bodies("progress")[1].isPaused).toBe(true);
   });
 
+  it("en pause, ne bat plus qu'une fois la minute, et reprend dès la reprise (08/10/2026)", () => {
+    let paused = false;
+    renderHook(() => usePlaybackSession(() => 10, session, () => paused));
+    act(() => void vi.advanceTimersByTime(10_000));
+    paused = true;
+    // Le passage en pause part au battement suivant…
+    act(() => void vi.advanceTimersByTime(10_000));
+    expect(bodies("progress")).toHaveLength(2);
+    // … puis plus rien pendant la minute qui suit.
+    act(() => void vi.advanceTimersByTime(50_000));
+    expect(bodies("progress")).toHaveLength(2);
+    act(() => void vi.advanceTimersByTime(10_000));
+    expect(bodies("progress")).toHaveLength(3);
+    // La reprise, au battement suivant.
+    paused = false;
+    act(() => void vi.advanceTimersByTime(10_000));
+    expect(bodies("progress")).toHaveLength(4);
+    expect(bodies("progress")[3].isPaused).toBe(false);
+  });
+
   it("porte le nom du lecteur qui joue vraiment", () => {
     renderHook(() => usePlaybackSession(() => 0, { ...session, client: PLAYBACK_CLIENTS.engine }));
     act(() => void vi.advanceTimersByTime(10_000));

@@ -5,7 +5,6 @@ import { detectCodecSupport } from "@/lib/codecSupport";
 import { useSWRConfig } from "swr";
 import { isAwaitingFresh } from "@/lib/persistentCache";
 import { setWatchingFullScreen } from "@/lib/playbackBusy";
-import { NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import { flushOrphanStops } from "@/lib/unsentStop";
 import { flushUnsentLines } from "@/lib/unsentLines";
 import { sleepTimerStore } from "@/lib/sleepTimer";
@@ -148,27 +147,10 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     return () => setWatchingFullScreen(false);
   }, [mode]);
 
-  /**
-   * Rouvrir « Reprendre » sur ce qu'on vient de faire, et non sur ce qu'on avait fait avant.
-   *
-   * La page reste montée derrière le lecteur : rien ne la remonte à la fermeture, et ses deux
-   * flux vivants sont justement ceux que la lecture vient de périmer — la position du film, et
-   * l'épisode suivant qui a peut-être changé d'épisode. On revenait donc sur une rangée qui
-   * décrivait la séance précédente.
-   *
-   * L'effet est placé après celui du dessus à dessein : il en dépend. `isPaused` bloque toute
-   * revalidation tant que le film tient l'écran, et les deux effets tournent dans le même commit,
-   * dans l'ordre où ils sont écrits — le drapeau est donc déjà retombé quand on demande ceci.
-   */
-  const wasPlaying = useRef(false);
-  useEffect(() => {
-    const playing = session !== null;
-    if (wasPlaying.current && !playing) {
-      void mutate(RESUME_KEY);
-      void mutate(NEXT_UP_KEY);
-    }
-    wasPlaying.current = playing;
-  }, [session, mutate]);
+  // « Reprendre » et « À suivre » sont relus à la fermeture par `refreshAfterPlayback`, appelé par
+  // les deux lecteurs une fois le bilan de séance envoyé. Ils l'étaient aussi ici, dès la fin de la
+  // séance : avant que Jellyfin ait noté l'arrêt — une seconde requête qui relisait l'ancienne
+  // position (50 paires mesurées au journal du proxy, 08/10/2026).
 
   /**
    * Redemander ce que la pause a avalé.
@@ -192,10 +174,20 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
    * Placé après l'effet du dessus, dont il dépend : la pause doit être retombée pour que ces
    * revalidations partent au lieu d'être avalées à leur tour.
    */
+  //
+  // Seulement au moment où le film *libère* l'écran (08/10/2026). L'effet tournait aussi au
+  // montage : SWR a déjà inscrit dans le cache, sans donnée ni erreur, chaque clé dont la requête
+  // est en vol, et `mutate` la redemandait — sans déduplication. Chaque clé du premier rendu partait
+  // deux fois à chaque lancement (`/api/maintenance`, `/api/reports/unread`, les préférences…).
+  // Une clé déjà en cours de validation n'est pas avalée : elle n'est pas redemandée non plus.
+  const prevMode = useRef(mode);
   useEffect(() => {
-    if (mode === "full") return;
+    const leftFullScreen = prevMode.current === "full" && mode !== "full";
+    prevMode.current = mode;
+    if (!leftFullScreen) return;
     for (const key of cache.keys()) {
-      const entry = cache.get(key) as { data?: unknown; error?: unknown } | undefined;
+      const entry = cache.get(key) as { data?: unknown; error?: unknown; isValidating?: boolean } | undefined;
+      if (entry?.isValidating) continue;
       if (entry && entry.data === undefined && entry.error === undefined) void mutate(key);
       // Montrée depuis le cache de l'appareil et pas encore rafraîchie : sa requête a pu être
       // sautée de la même façon, et une clé pourvue n'aurait plus jamais été redemandée

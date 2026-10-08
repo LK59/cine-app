@@ -84,7 +84,10 @@ export function BuildRefresh() {
     document.addEventListener("visibilitychange", onVisibility);
     // En capture : un champ qui arrête la propagation de ses événements compte quand même.
     document.addEventListener("input", onInput, true);
-    const interval = setInterval(() => void check(false), CHECK_INTERVAL_MS);
+    // Onglet caché : rien à vérifier — le retour au premier plan vérifie aussitôt (08/10/2026).
+    const interval = setInterval(() => {
+      if (document.visibilityState !== "hidden") void check(false);
+    }, CHECK_INTERVAL_MS);
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisibility);

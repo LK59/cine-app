@@ -85,6 +85,12 @@ export function findOrphanStops(now = Date.now(), account: string | null = persi
         continue;
       }
       if (now - saved.savedAt < ORPHAN_AFTER_MS) continue;
+      // Trop vieux, même pour ce compte (08/10/2026) : un bilan refusé chaque minute depuis une
+      // semaine ne passera plus — il repartait pourtant à chaque tour, sans fin.
+      if (now - saved.savedAt > OTHER_ACCOUNT_KEEP_MS) {
+        localStorage.removeItem(key);
+        continue;
+      }
       // Le bilan d'un autre compte n'est pas le nôtre : il attend que ce compte revienne.
       if (saved.account && saved.account !== account) {
         if (now - saved.savedAt > OTHER_ACCOUNT_KEEP_MS) localStorage.removeItem(key);
@@ -129,8 +135,12 @@ async function sendOrphans(now: number): Promise<void> {
       if (res.ok) localStorage.removeItem(key);
       // 400 : le serveur ne veut pas de cette ligne, et ne la voudra jamais.
       else if (res.status === 400) localStorage.removeItem(key);
+      // Tout autre refus (session absente, trop de lignes, serveur qui redémarre) vaut pour les
+      // suivantes aussi : le tour s'arrête là, comme celui de `unsentLines` (08/10/2026).
+      else return;
     } catch {
-      // Hors ligne : ce sera pour la prochaine fois.
+      // Hors ligne : ce sera pour la prochaine fois — les suivantes aussi.
+      return;
     }
   }
 }

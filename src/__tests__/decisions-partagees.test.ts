@@ -217,6 +217,8 @@ describe("l'amorce du catalogue et la requête qui la consomme", () => {
   it("l'amorce déclare le régime qui correspond à un fetch nu", () => {
     const src = lire("src/app/(player)/layout.tsx");
     expect(src).toMatch(/rel="preload" as="fetch" crossOrigin="anonymous" href=\{MOVIES_CATALOGUE_KEY\}/);
+    // Et seulement hors de WebKit, qui ne la reprenait qu'une fois sur deux (08/10/2026).
+    expect(src).toMatch(/\{!webkit && <link rel="preload"/);
   });
 
   it("le récupérateur du catalogue reste un fetch nu", () => {

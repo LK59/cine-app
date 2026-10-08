@@ -9,6 +9,7 @@ import { useT } from "@/components/TranslationProvider";
 // La même cadence que les bannières du cinéma, par la même constante : une copie ici dérivait.
 import { ROTATE_MS } from "@/lib/useRotatingIndex";
 import { usePrefersReducedMotion } from "@/lib/reducedMotion";
+import { usePageVisible } from "@/lib/usePageVisible";
 
 // Matches the fiche pages' own hero (radarr/[id], sonarr/[id]) — same full-bleed negative
 // margins, same mask-fade + left-vignette treatment on the backdrop, same height formula — so
@@ -76,11 +77,13 @@ export function DashboardHero({ items }: { items: HeroItem[] }) {
   // of inheriting whatever was left on a timer that started at the previous item.
   // Pas de rotation automatique pour qui a demandé moins de mouvement — voir `useRotatingIndex`.
   const reducedMotion = usePrefersReducedMotion();
+  // Onglet caché : la rotation attend son retour — voir `usePageVisible`.
+  const visible = usePageVisible();
   useEffect(() => {
-    if (reducedMotion || items.length <= 1) return;
+    if (reducedMotion || !visible || items.length <= 1) return;
     const id = setTimeout(() => setIndex((i) => (i + 1) % items.length), ROTATE_MS);
     return () => clearTimeout(id);
-  }, [items.length, index, reducedMotion]);
+  }, [items.length, index, reducedMotion, visible]);
 
   if (items.length === 0) return null;
   const item = items[index];

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useMemo } from "react";
 import { PLAYBACK_CLIENTS, type PlaybackClient } from "@/lib/playbackClients";
 import { touchHintHeaders } from "@/lib/deviceLabel";
+import { noteMaintenanceState } from "@/lib/useMaintenance";
 
 interface PlaybackSessionInfo {
   itemId: string;
@@ -25,6 +26,7 @@ interface PlaybackSessionInfo {
 
 const TICKS_PER_SECOND = 10_000_000;
 const HEARTBEAT_MS = 10_000;
+const PAUSED_HEARTBEAT_MS = 60_000;
 
 function report(
   path: "playing" | "progress" | "stop",
@@ -46,7 +48,10 @@ function report(
     body: JSON.stringify({ client: PLAYBACK_CLIENTS.stable, ...info, positionTicks, isPaused }),
     keepalive: true,
   })
-    .then(() => undefined)
+    .then(async (res) => {
+      // Le battement rapporte l'état d'exploitation : le sondage ralentit pendant un film.
+      if (path === "progress" && res.ok) noteMaintenanceState(((await res.json().catch(() => null)) as { maintenance?: unknown } | null)?.maintenance);
+    })
     .catch(() => undefined);
 }
 
@@ -119,9 +124,20 @@ export function usePlaybackSession(
 
     // Rien après l'arrêt : le lecteur reste monté le temps de son animation de sortie, et un
     // battement tombé dans cette fenêtre rouvrait chez Jellyfin la séance qu'on venait de clore.
+    //
+    // En pause, une fois la minute (08/10/2026) : la position ne bouge pas, et 117 battements du
+    // journal tombaient plus de dix minutes après la dernière image d'un film arrêté. Le passage
+    // en pause, et la reprise, partent au battement suivant — dix secondes au plus.
+    let lastSentAt = 0;
+    let lastPaused: boolean | null = null;
     const interval = setInterval(() => {
       if (stoppedRef.current) return;
-      report("progress", session, ticks(), paused());
+      const isPaused = paused();
+      const now = Date.now();
+      if (isPaused && lastPaused === true && now - lastSentAt < PAUSED_HEARTBEAT_MS) return;
+      lastSentAt = now;
+      lastPaused = isPaused;
+      report("progress", session, ticks(), isPaused);
     }, HEARTBEAT_MS);
 
     /**

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePrefersReducedMotion } from "@/lib/reducedMotion";
+import { usePageVisible } from "@/lib/usePageVisible";
 import { ROTATE_MS } from "@/lib/useRotatingIndex";
 import type { CinemaRoute } from "@/lib/cinemaRoute";
 
@@ -198,14 +199,16 @@ export function useHeroOrder(
   }
 
   const reducedMotion = usePrefersReducedMotion();
+  // Onglet caché : la rotation attend son retour — voir `usePageVisible`.
+  const visible = usePageVisible();
   const length = current.keys.length;
   const index = length > 0 ? Math.min(Math.max(0, current.index), length - 1) : 0;
 
   useEffect(() => {
-    if (paused || offscreen || reducedMotion || length <= 1) return;
+    if (paused || offscreen || reducedMotion || !visible || length <= 1) return;
     const id = setTimeout(() => setState((s) => ({ ...s, index: (s.index + 1) % Math.max(1, s.keys.length) })), ROTATE_MS);
     return () => clearTimeout(id);
-  }, [length, index, paused, offscreen, reducedMotion]);
+  }, [length, index, paused, offscreen, reducedMotion, visible]);
 
   // Le titre à l'écran a changé : les rangées qui se réorganisent au même moment l'attendront.
   const shownKey = length > 0 ? current.keys[index] : null;

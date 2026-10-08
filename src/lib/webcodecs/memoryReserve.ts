@@ -76,6 +76,8 @@ const PLAYER_READAHEAD_CHUNKS = 6;
 const TICK_MS = 1000;
 /** Tous les combien une ligne `point` résume la réserve, au journal et dans la trace. */
 const REPORT_EVERY_MS = 30_000;
+/** Au journal, une ligne `point` sans changement de phase au plus toutes les cinq minutes. */
+const LOG_POINT_EVERY_MS = 5 * 60_000;
 
 /** Le débit que la réserve s'autorise, en bits par seconde. */
 export function reserveSpeedBps(): number {
@@ -179,6 +181,10 @@ export class MemoryReserve {
   private burstCounted = false;
   private failures = 0;
   private pausedUntil = 0;
+  /** La dernière ligne `point` écrite au journal — voir `point`. */
+  private loggedPhase: string | null = null;
+  private loggedAt = 0;
+  private loggedPosition: number | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private netChunks = 0;
   /** Vidée en arrière-plan : combien de fois, combien de Mo. */
@@ -517,8 +523,25 @@ export class MemoryReserve {
         `, lecteur : ${facts.reserveMB} Mo lus de la réserve, ${facts.networkMB} du réseau` +
         (this.idle ? ` — en attente : ${this.idle}` : "")
     );
+    // Au journal, une ligne seulement quand elle dit du neuf (08/10/2026) : un changement de phase
+    // (rafale ↔ repos), ou cinq minutes écoulées — jamais page cachée ni position immobile (une
+    // pause). Les lignes `point` faisaient 84 % des envois du journal du lecteur, dont 1 347 en
+    // phase de repos, celle qui existe pour laisser dormir la radio. La trace, locale, garde son
+    // résumé toutes les trente secondes ; les totaux de `stop` et de `stall` (`diag.*`) sont
+    // inchangés.
+    const position = Math.round(this.seconds() * 10) / 10;
+    const phase = this.refilling ? "rafale" : "repos";
+    const now = this.deps.now();
+    const news = phase !== this.loggedPhase || now - this.loggedAt >= LOG_POINT_EVERY_MS;
+    if (this.deps.hidden() || position === this.loggedPosition || !news) {
+      diagReserve(facts);
+      return;
+    }
+    this.loggedPhase = phase;
+    this.loggedAt = now;
+    this.loggedPosition = position;
     this.emit("point", {
-      position: Math.round(this.seconds() * 10) / 10,
+      position,
       aheadMB: ahead.chunks,
       aheadS: Math.round(ahead.seconds),
       allowedMB: this.allowed,
@@ -530,7 +553,7 @@ export class MemoryReserve {
       deviceMB: facts.deviceMB,
       networkMB: facts.networkMB,
       emptiedMB: this.emptiedChunks,
-      phase: this.refilling ? "rafale" : "repos",
+      phase,
       bursts: this.bursts,
       ...(this.idle ? { idle: this.idle } : {}),
     });
