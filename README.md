@@ -74,6 +74,10 @@ On desktop it is a vertical rail on the left, collapsed to icons and expanding o
 phone it is a bottom bar with the same four entries. One list describes both, so they cannot
 drift apart.
 
+On a large screen, Search, My list, the full grids and Account open full screen rather than as
+floating windows, with their content in a centred column sized for what it holds; a poster grid
+uses the whole width.
+
 **Every screen is in the address.** Which sheet is open, which tab, which panel — all of it lives
 in the URL hash, so the browser's Back button and the phone's edge-swipe step back through the
 screens instead of leaving Cinema entirely, and a sheet stays drawn underneath the one above it.
@@ -93,16 +97,22 @@ bottom:
 
 | Row | What it is |
 |---|---|
-| **Spotlight** | A full-bleed hero over a rotating carousel of picks, with the TMDB title logo when there is one, a muted backdrop trailer, and segmented progress bars to jump back to a previous pick. Moving focus over any card takes the hero over. |
-| **Continue watching** | Jellyfin resume progress, per user, with the time left and the episode it stopped on. |
-| **Top 10 in your library** | Ranked by the IMDb rating the app already caches — no extra integration. |
-| **Recently added** | What Radarr and Sonarr actually landed, with a **New** badge for the last 30 days. |
-| **My list** | What you saved, with a link through to the full list. |
+| **Spotlight** | A full-bleed banner rotating through the latest additions, with the TMDB title logo when there is one. On desktop it carries **Play** and **More info** and a row of dashes to move between titles, all reachable with the arrow keys; moving over a card turns it into a preview of that card, and a « Spotlight » pill brings the rotation back. On a phone it is a carousel of whole posters with their neighbours peeking at the edges, looping from the last to the first; touching the poster opens its page. |
+| **Continue watching** | Films in progress and the next episode of each series, the most recently played first, with the time left. A series whose first episode was never started is left out. |
+| **My list** | What you saved. With fewer than two titles it moves further down, just above the genres. |
+| **Top 10 of the day** | A daily ranked selection from the library — a genre, a decade, a pairing — by the IMDb rating the app already caches. |
+| **Recently added** | What Radarr and Sonarr actually landed, with a **New** badge for the last 30 days, and a *see all*. |
 | **One row per genre** | Alphabetical, each with a *see all* that opens the genre as a full grid. |
 | **Recommended for you / Trending** | TMDB rows of titles that are **not** in the library — a card here opens a request, not a player. |
-| **Browse everything** | The end of the rows: the whole library as one sortable, filterable grid. For someone who has scrolled past everything and found nothing. |
 
 A row with nothing in it hides itself rather than showing an empty shelf.
+
+A **Browse all** button (top right) opens the whole library as one grid — sortable, and filtered by
+genre, decade and duration, with genres that only differ by language (« Horror », « Horreur »)
+grouped under one name. Two layout choices are server settings with a per-account override in
+*Account → Interface*: the Browse all button (on by default, `HOME_BROWSE_BUTTON`) and a banner
+that shows what you are watching first, completed by the latest additions (off by default,
+`HOME_CONTINUE_HERO`).
 
 <!-- CAPTURE : cinema-rows.png
      Mid-scroll on the home screen: three or four complete rows stacked, including the Top 10
@@ -128,6 +138,14 @@ closing it animates back to exactly the row you left.
 
 Sheets stack: a person opened from a film's cast sits above the film, and closing it puts the film
 back rather than dropping you home.
+
+A sheet opens complete. The tagline, the trailer button, a series' episode length and season count,
+the cast shown in the desktop banner and the play button of a series never started all travel with
+the catalogue the device already keeps, instead of arriving a moment after the rest. Whatever the
+server then says for your account — the episode you are actually up to, a position — replaces it
+as soon as it arrives, and a press made before that waits for the answer rather than starting the
+wrong episode. On desktop the synopsis takes up to five lines when the page has room above the
+logo.
 
 <!-- CAPTURE : cinema-movie-sheet.png
      A film's sheet open over the home screen, showing the backdrop, the logo, the action row
@@ -186,8 +204,9 @@ something Jellyfin already knows: a film finished on the TV reads as watched her
 ## Account
 
 Interface language (French, English, Spanish, German), preferred audio and subtitle languages,
-subtitle display mode, notifications, password, and the list of signed-in devices with a
-one-press sign-out for the others.
+subtitle display mode, notifications, password, the home layout and guided scrolling (*Interface*),
+and the list of signed-in devices with a one-press sign-out for the others. Changing the password
+signs the other devices out of Jellyfin, and the form says so before you confirm.
 
 The playback preferences are **Jellyfin's own**, not a local copy: setting a preferred audio
 language here applies in the Jellyfin apps too.
@@ -526,10 +545,20 @@ leaving `APP_ADMIN_PASSWORD` empty disables it.
 
 Permissions are never enforced by the interface. `src/proxy.ts` refuses every write a `user`
 should not make, whatever the screen happens to show; hiding a button is presentation, not
-security. A handful of reads are refused too (`ADMIN_ONLY_READS`): the interactive release and
+security. A number of reads are refused too (`ADMIN_ONLY_READS`): the interactive release and
 subtitle searches, which start work at the indexers and subtitle providers although they are
-`GET`s, and `/api/activity`, the Radarr/Sonarr download history shown only by the management
-status page.
+`GET`s, and every read only the management screens use — the Radarr/Sonarr library lists and
+items, the calendar, queues, download client, indexers, statistics, service status and activity.
+Cinema reads its own routes, which apply the account's restrictions.
+
+**Jellyfin's parental control is honoured everywhere.** A tag blocked in an account's Jellyfin policy
+(*Blocked tags*) hides the tagged titles in Cine App as it does in Jellyfin: from the catalogue, the
+search, the discovery rows, filmographies, sagas and similar titles, and the title's own routes
+answer as if it did not exist. New Jellyfin accounts can receive a set of blocked tags
+automatically: list them in *Server settings → Default settings* (`NEW_ACCOUNT_BLOCKED_TAGS`). Within five
+minutes, any account the server has not seen before gets them in its Jellyfin policy, once —
+existing accounts are left untouched, administrators always, and removing the tag by hand later is
+final.
 
 ---
 
@@ -579,9 +608,22 @@ can be revoked immediately rather than only on expiry. A few things are worth kn
   previous one's notifications. If they were on, the question is asked again at the next sign-in.
 - **Abuse is bounded where one account could cost everyone.** Sign-in fields are typed and
   length-capped before any work; problem reports are capped per account (30 a day, 20 open
-  drafts; the administrator is exempt) and their screenshots decoded under a pixel limit; push
-  subscriptions are accepted only for known push services, ten per account; lists of ratings and
-  person searches are bounded against the TMDB/OMDb quotas.
+  drafts; the administrator is exempt), refused without a declared size, and their screenshots
+  decoded under a pixel limit; push subscriptions are accepted only for known push services, ten
+  per account; searches (120 a minute), ratings lookups (30 a minute, 50 new titles each) and
+  player-log detail lines (400 an hour) are limited per account; the server's in-memory cache is
+  bounded, so no stream of distinct queries can fill it.
+- **Requests are always someone's.** When Jellyseerr cannot tell which account is asking, a request
+  is refused with a message rather than filed under the API key, which Jellyseerr would treat as
+  its administrator (approved, outside quotas).
+- **The image optimizer needs a session.** `/_next/image` downloads and keeps resized artwork for a
+  year; open to anyone, walking TMDB addresses could fill the data volume. Only the server's own
+  poster prewarm, on the loopback, passes without one.
+- **Client addresses come from the connection.** Sign-in limits and logs are keyed by address. The
+  server records the address of each connection itself and believes `X-Forwarded-For` only when the
+  connection comes from a proxy listed in `TRUSTED_PROXIES` (a container name, an address or a
+  network). Without it, any container on the same Docker network could claim a different address
+  on every attempt. See [DEPLOYMENT.md](DEPLOYMENT.md).
 - **Signing your other devices out affects Cine App only.** The Jellyfin sessions those logins
   opened are left alone — deliberately: nobody clicking that button expects to lose Jellyfin
   with it.

@@ -162,16 +162,29 @@ runtime — so it can call `verifySessionFull`, whose SQLite revocation check is
 Edge. It owns the public-path list (shared with the client through `src/lib/publicPaths.ts`), the
 guest write whitelist, `308` redirects for addresses that moved (`/player`, `/cinema` → `/`),
 sliding session refresh, the reads a `user` may not make although they are `GET`s
-(`ADMIN_ONLY_READS`: interactive release/subtitle searches, `/api/activity`), the refusal of any
+(`ADMIN_ONLY_READS`: interactive release/subtitle searches, `/api/activity`, and since 2026-10-08
+every read only `(dashboard)` uses — Radarr/Sonarr lists and items, calendar, queues, qBittorrent,
+Jackett, stats, `/api/status`, `/api/jellyfin/items`; they leaked titles hidden by blocked tags.
+Grep the cinema's callers before gating a route), the refusal of any
 `/api/` write sent from another page (`crossSiteWrite`: `Sec-Fetch-Site`, else `Origin` — the
 `Lax` cookie rides along with sibling subdomains' POSTs), and the
 `x-session-expired: 1` header. **It is that header's only
 emitter** (with the one exception below): a bare 401 may come from an upstream service whose key
 is wrong, and only this header means the viewer's own session is gone.
 
+**Client addresses come from the connection** (DECISIONS §57). `server-boot/boot.mjs` wraps
+`http.createServer` and writes the socket's address into `x-cine-peer` on every request (overwriting
+whatever the client sent) and sets `CINE_PEER_HEADER=1`; `clientAddressOf` (`src/lib/trustedProxy.ts`)
+believes `X-Forwarded-For` only when that peer is in `TRUSTED_PROXIES` (address, IPv4 CIDR or a
+container name resolved every 5 min; until the name first resolves, the old last-entry rule).
+`getClientIp`, `forwardedFor` and the proxy all read it. Under `next dev` there is no boot script, so
+`x-cine-peer` is ignored and the old rule applies. `/_next/image` needs a session since 2026-10-08
+(anyone could fill `data/image-cache`); only the loopback (`posterPrewarm`) passes without one.
+
 **`/api/reports*` is outside the proxy's matcher** (`HORS_PROXY`) and carries its checks itself, in
 `reportCaller` (`src/lib/reportRequest.ts`), before any body is read: `crossSiteWrite` (the same
-function, `src/lib/crossSite.ts`), the session with `x-session-expired`, and a declared-size cap.
+function, `src/lib/crossSite.ts`), the session with `x-session-expired`, and a declared-size cap
+(a chunked body with no `Content-Length` answers 411).
 Next buffers every body the proxy covers up to `proxyClientMaxBodySize` before the proxy decides
 anything; raised to 100 MB for report screenshots, it let anonymous POSTs fill the container's
 memory, so that setting stays at Next's default.
@@ -192,10 +205,31 @@ because Next demands a literal string for its `matcher`; a test compares the two
   `X-Emby-Token` header is refused by default from Jellyfin 12 onwards, and a test forbids it
   reappearing anywhere in `src/`.
 - `src/lib/server-cache.ts` — TTL-keyed caching in front of them. Prefer `cachedMovies` /
-  `cachedSeries` over hitting a client directly from a route.
+  `cachedSeries` over hitting a client directly from a route. **Bounded** since 2026-10-08 (LRU of
+  4 000 entries, 1 500 stale, swept every 10 min): it used to keep every key ever produced — one per
+  search query, per calendar range — until a restart. `withPersistentCache` values are not copied into
+  the stale store; the disk is their fallback. Cache *projections* of TMDB answers (versioned keys:
+  `search:person-credits:v2:`, `credits:v2:`), never whole responses — 75 MB of `kv_cache` was
+  filmographies and credits nobody read past five fields. Consultation caches are pruned after 14
+  days, the rest after 30 (`tmdb:titles` lives 14 days, spread).
 - `src/lib/db.ts` — SQLite through better-sqlite3, `migrate()` creating tables idempotently.
   **Every query is synchronous and holds the event loop.** Deletes over large tables are batched
-  under a time budget for exactly that reason.
+  under a time budget for exactly that reason. The daily backup skips its startup run when today's
+  file exists (its `VACUUM` blocked the loop ~630 ms after every deploy) and leaves regenerable
+  caches out of the copy.
+
+**Per-account limits where one account could cost everyone:** search 120/min, watchlist ratings
+30/min and 50 uncached titles per request (OMDb's daily quota is shared), player-log detail lines
+400/hour (`start`/`stop`/`error`/`fallback`/`cast` always written). A Jellyseerr request from a
+non-admin whose Jellyseerr identity cannot be resolved answers 503 — filed under the API key it
+would be Jellyseerr's administrator's, auto-approved and outside quotas. `/api/jellyfin/image` with a
+`tag` is `immutable` with `ETag: "<tag>"` and answers 304 before calling Jellyfin.
+
+**Blocked tags** (DECISIONS §54) are Jellyfin's parental control, applied to every catalogue-shaped
+answer; the title's own routes (`radarr|sonarr/.../info`, `/api/player/title`) answer as if it did not
+exist. New Jellyfin accounts receive `NEW_ACCOUNT_BLOCKED_TAGS` once (`src/lib/newAccountTags.ts`,
+every 5 min, §56): the first pass only records existing accounts in `known_accounts`; administrators
+are never touched; a recorded account is never modified again.
 
 **One place per fact.** "Favorite" is Jellyfin's (`useJellyfinItemState`); "to watch" is local. A
 second copy always diverges — a film finished on the TV read as unwatched here for weeks before that
@@ -397,6 +431,14 @@ dictionaries' values.
 
 ## Known pitfalls
 
+- **Background traffic during a film was measured and trimmed (2026-10-08)** — about 780 small
+  requests an hour, one every 4.6 s, kept the radio awake between `MemoryReserve` bursts. The
+  progress heartbeat now beats every 60 s while paused, and its response carries the maintenance
+  state (`noteMaintenanceState`), so `useMaintenance` polls at 60 s instead of 15 s while a film
+  fills the screen (outside a film it stays at 15 s, so the restart notice arrives before a deploy).
+  **Trickplay tiles stay prewarmed at the player's mount** (`PlayerControls`): fetching them on the
+  first touch of the seek bar saved ~2.4 MB per opening and left one to two seconds without a
+  preview — it was reverted the same day; do not try it again without a better idea.
 - **SWR is paused while a film fills the screen** (`isPaused: isWatchingFullScreen`). Two
   consequences, each of which has caused an outage: a query the player needs *in order to exist*
   must carry `playerBootstrapOptions`, or the film taking the screen prevents learning how to play
@@ -416,6 +458,14 @@ dictionaries' values.
   "1.4 MB" and that raw figure made the payload look like a bottleneck it is not. It is half the
   JavaScript bundle. The freeze is about not re-asking a question whose answer changes daily, not
   about bytes — and splitting the catalogue into a "first screen" payload would buy nothing.
+  Since 2026-10-08 the catalogue also carries what a sheet and the desktop banner used to fetch
+  per title (DECISIONS §55): `tagline`, `trailerKey`, `castNames` (from the same TMDB call as the
+  translations, `append_to_response=translations,videos,credits`), and for series `episodeRuntime`,
+  `firstEpisode`, `seasonCount` (one Jellyfin call each for the whole library). An absent field means
+  "not known yet" (the sheet falls back to its description, with the late fade); `""`/`null` means
+  "none". Any change to these types bumps `PERSISTED_CACHE_SCHEMA` — `persistentCache-schema.test.ts`
+  prints the fingerprint to record. A guessed target (`firstEpisode`) is never launched as-is: a press
+  before the server's answer waits for it (`useQueuedPlay`, `waitForServer` on `PlayButton`).
 - **Closing the player leaves four views stale, and it revalidates all four**
   (`refreshAfterPlayback`): the resume feed, next-up, the title's own progress, and — through a key
   filter, since a close only knows the *episode* id — every series episode list. It waits for two
@@ -527,6 +577,8 @@ the annotated one is `docker-compose.advanced.yml`.
 `RUNBOOK.private.md` has the operator's checklist. Push to `main` triggers the GHCR publish, whose
 first job is the same verify workflow. `./data:/app/data` is the only writable volume — SQLite,
 the image cache, and the player log all live there. Never commit `.env`, `data/`, or `*.db*`.
+Behind a reverse proxy, set `TRUSTED_PROXIES` (deployment option, `.env`) to the proxy's container
+name.
 
 **Before each deployment, the version in `package.json` is chosen by the weight of what ships** —
 major for a redesign, minor for new features or a batch of behaviour changes, patch for fixes

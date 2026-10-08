@@ -2530,6 +2530,7 @@
       "MEDIA_PATHS": "Library sub-folders",
       "CLARA_GALLERY": "Photo gallery",
       "POSTER_PREWARM_TUNING": "Sizes and languages of prepared posters",
+      "TRUSTED_PROXIES": "Trusted reverse proxy",
       "RADARR_QUALITY_PROFILE": "Quality profile for additions",
       "SONARR_QUALITY_PROFILE": "Quality profile for additions"
     },
@@ -2539,7 +2540,8 @@
       "APP_ADMIN_USER": "Optional: an administrator account set in .env replaces the one created here.",
       "MEDIA_PATHS": "Only if your folders differ from the usual Radarr, Sonarr and qBittorrent layout under the media folder — for storage statistics:",
       "CLARA_GALLERY": "An optional photo page: mount the folder (JPG, PNG or WebP photos, plus clarabanner.jpg for the banner), then turn it on:",
-      "POSTER_PREWARM_TUNING": "Optional: the widths prepared (384 and 750 by default) and the poster languages (French and the default language):"
+      "POSTER_PREWARM_TUNING": "Optional: the widths prepared (384 and 750 by default) and the poster languages (French and the default language):",
+      "TRUSTED_PROXIES": "Behind a reverse proxy: its container name (or address), so that only it can supply visitors' addresses:"
     },
     "copy": "Copy",
     "copied": "Copied",

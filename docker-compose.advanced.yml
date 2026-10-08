@@ -28,6 +28,9 @@ services:
     environment:
       # Adapt to your timezone.
       - TZ=Europe/Paris
+      # Behind a reverse proxy on the same network, name it here (or in .env) so its X-Forwarded-For
+      # is the only one believed — see DEPLOYMENT.md, step 10.
+      # - TRUSTED_PROXIES=nginx-proxy-manager
     volumes:
       # Persistent app data: SQLite database, watchlist, push subscriptions, etc.
       - ./data:/app/data

@@ -129,10 +129,12 @@ The session secret and the push-notification keys are generated on first launch 
 ## Optional additions
 
 Every optional line is already in the compose file above, commented. The assistant's last step,
-and **Management → Settings → Service connections**, list the others (photo gallery, library
-sub-folders, poster preparation) with the exact lines to add.
+and **Management → Settings → Server settings**, list the others (photo gallery, library
+sub-folders, poster preparation, trusted reverse proxy) with the exact lines to add. The same page
+holds the defaults for accounts: home layout, and tags blocked on new Jellyfin accounts.
 
 Updating: `docker compose pull && docker compose up -d`.
 
-Reverse proxy, HTTPS, resource limits and hardening: [DEPLOYMENT.md](DEPLOYMENT.md), with the
+Reverse proxy (declare it in `TRUSTED_PROXIES`), HTTPS, resource limits and hardening:
+[DEPLOYMENT.md](DEPLOYMENT.md), with the
 annotated `docker-compose.advanced.yml`.

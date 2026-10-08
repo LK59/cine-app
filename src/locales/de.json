@@ -2530,6 +2530,7 @@
       "MEDIA_PATHS": "Unterordner der Bibliothek",
       "CLARA_GALLERY": "Fotogalerie",
       "POSTER_PREWARM_TUNING": "Größen und Sprachen der vorbereiteten Poster",
+      "TRUSTED_PROXIES": "Vertrauenswürdiger Reverse-Proxy",
       "RADARR_QUALITY_PROFILE": "Qualitätsprofil für Hinzufügungen",
       "SONARR_QUALITY_PROFILE": "Qualitätsprofil für Hinzufügungen"
     },
@@ -2539,7 +2540,8 @@
       "APP_ADMIN_USER": "Optional: Ein in der .env festgelegtes Administratorkonto ersetzt das hier angelegte.",
       "MEDIA_PATHS": "Nur wenn Ihre Ordner von der üblichen Struktur von Radarr, Sonarr und qBittorrent unter dem Medienordner abweichen — für die Speicherstatistik:",
       "CLARA_GALLERY": "Eine optionale Fotoseite: Ordner einbinden (JPG-, PNG- oder WebP-Fotos und clarabanner.jpg für das Banner), dann aktivieren:",
-      "POSTER_PREWARM_TUNING": "Optional: die vorbereiteten Breiten (standardmäßig 384 und 750) und die Postersprachen (Französisch und Standardsprache):"
+      "POSTER_PREWARM_TUNING": "Optional: die vorbereiteten Breiten (standardmäßig 384 und 750) und die Postersprachen (Französisch und Standardsprache):",
+      "TRUSTED_PROXIES": "Hinter einem Reverse-Proxy: sein Containername (oder seine Adresse), damit nur er die Adressen der Besucher angeben darf:"
     },
     "copy": "Kopieren",
     "copied": "Kopiert",

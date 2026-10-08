@@ -123,6 +123,7 @@ export const DEPLOYMENT_GUIDE: readonly DeploymentGuideEntry[] = [
     snippet: "    environment:\n      - POSTER_PREWARM_WIDTHS=384,750\n      - POSTER_PREWARM_LOCALES=fr,en",
   },
   { id: "APP_ADMIN_USER", keys: ["APP_ADMIN_USER", "APP_ADMIN_PASSWORD"], snippet: "APP_ADMIN_USER=admin\nAPP_ADMIN_PASSWORD=…" },
+  { id: "TRUSTED_PROXIES", keys: ["TRUSTED_PROXIES"], snippet: "    environment:\n      - TRUSTED_PROXIES=nginx-proxy-manager" },
 ];
 
 /** Générés au premier lancement (`server-boot/firstRunSecrets.mjs`) : ni affichés, ni à fournir. */

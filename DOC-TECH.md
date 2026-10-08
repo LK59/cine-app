@@ -727,9 +727,12 @@ being correct for this player alone.
 - **Start is announced** (`/api/jellyfin/playback/playing`). The stable player does not need it:
   negotiating its stream says as much. This one negotiates nothing, and without the announcement it
   reported progress for a session the server had never heard of.
-- **A heartbeat every ten seconds**, at the position the player itself provides — never
-  `video.currentTime`, which drops to zero during a track reload and would overwrite the resume
-  point with 0.
+- **A heartbeat every ten seconds while playing, every minute while paused** (08/10/2026: a film
+  left paused kept sending one every ten seconds; a pause or a resume is reported by the next beat,
+  ten seconds at most), at the position the player itself provides — never `video.currentTime`,
+  which drops to zero during a track reload and would overwrite the resume point with 0. The
+  heartbeat's response also carries the maintenance state, so the separate maintenance poll slows
+  to once a minute while a film fills the screen (`noteMaintenanceState`).
 - **The end is reported** on unmount, on `beforeunload` **and on `pagehide`** — iOS never sends the
   first. Going to the background records a **progress** report, not a stop: putting an app away is
   not closing a film.
@@ -773,6 +776,14 @@ Shown:
 | `This file has no seek index: seeking is not possible.` | Matroska without Cues |
 | `This file has no seek index: the audio track cannot be changed during playback.` | Track change past the first second of a file without Cues — both ways of changing track reposition through the index (`RemuxPlayback.switchNeedsIndex`); the previous track keeps playing |
 | `Part of this file could not be decoded: playback resumes just after.` | Second source loss at the same place — a piece of film was skipped |
+
+**No network at the opening is a network cut, not a refusal** (08/10/2026). The file's description
+(`/api/jellyfin/direct/…`) that could not be fetched because the connection was down used to hand the
+file to the server player — which needed the same network and loaded nothing. A `fetch` rejection is
+now marked `network` (`asNetworkFailure`, `directInfo.ts`): the player shows the « connection lost »
+screen with its automatic retry, and the retry asks for the description again under a new key
+(`infoAttempt`) without touching the opening position (`PlayerLifecycle.retryOpening`). A server
+answer, even an error, still goes through the usual refusal path.
 
 Sent to the trace instead, because the viewer saw nothing and has nothing to do: refused segment
 retried, refused seek retried, recovery abandoned after N attempts (the remuxer's index back-off
@@ -894,7 +905,10 @@ has in flight, and the player's readahead skips what the reserve has in flight (
 `PARALLEL` (2) at most, paced at `reserveSpeedBps` (50 Mb/s); never more than `MAX_AHEAD_SECONDS`
 (five minutes) ahead; what the head passes is dropped. It fills **in bursts**: up to capacity, then
 nothing until it has fallen to `REFILL_BELOW` (half) — a radio stays awake seconds after each
-transfer, so wake-ups, not bytes, cost energy (`bursts` on the `arrêt` line, `phase` on `point`). Its size is
+transfer, so wake-ups, not bytes, cost energy (`bursts` on the `arrêt` line, `phase` on `point`). A `point` line goes to the log at each change of
+phase and every five minutes at most, never while paused, hidden or with the position unchanged —
+sent every 30 s, it was 84 % of all player-log posts (08/10/2026); the local trace and the totals on
+`stall`/`stop` are unchanged. Its size is
 `reserveBudgetBytes`: 150 MB on iPhone and iPad — Safari does not expose device memory and kills a page
 that takes too much, the threshold unpublished — and by `navigator.deviceMemory` elsewhere (100 MB at
 ≤ 2 GB, 200 at 4, 500 at 8, 300 unknown). Chunks are copied, not viewed: a `subarray` would keep its

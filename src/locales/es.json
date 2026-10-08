@@ -2530,6 +2530,7 @@
       "MEDIA_PATHS": "Subcarpetas de la biblioteca",
       "CLARA_GALLERY": "Galería de fotos",
       "POSTER_PREWARM_TUNING": "Tamaños e idiomas de los carteles preparados",
+      "TRUSTED_PROXIES": "Proxy inverso de confianza",
       "RADARR_QUALITY_PROFILE": "Perfil de calidad de las altas",
       "SONARR_QUALITY_PROFILE": "Perfil de calidad de las altas"
     },
@@ -2539,7 +2540,8 @@
       "APP_ADMIN_USER": "Opcional: una cuenta de administrador fijada en el .env sustituye a la creada aquí.",
       "MEDIA_PATHS": "Solo si sus carpetas difieren de la estructura habitual de Radarr, Sonarr y qBittorrent bajo la carpeta de medios — para las estadísticas de almacenamiento:",
       "CLARA_GALLERY": "Una página de fotos opcional: monte la carpeta (fotos JPG, PNG o WebP, y clarabanner.jpg para el banner) y actívela:",
-      "POSTER_PREWARM_TUNING": "Opcional: los anchos preparados (384 y 750 por defecto) y los idiomas de los carteles (francés e idioma por defecto):"
+      "POSTER_PREWARM_TUNING": "Opcional: los anchos preparados (384 y 750 por defecto) y los idiomas de los carteles (francés e idioma por defecto):",
+      "TRUSTED_PROXIES": "Detrás de un proxy inverso: el nombre de su contenedor (o su dirección), para que solo él pueda indicar la dirección de los visitantes:"
     },
     "copy": "Copiar",
     "copied": "Copiado",

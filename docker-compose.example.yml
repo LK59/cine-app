@@ -14,6 +14,7 @@ services:
     # environment:
     #   - TZ=Europe/Paris                # time zone for logs and schedules
     #   - MEDIA_ROOT=/mnt/media/video    # storage statistics in the management area
+    #   - TRUSTED_PROXIES=nginx-proxy-manager   # your reverse proxy's container name (DEPLOYMENT.md)
     # volumes:                           # (add to the list above, not a second key)
     #   - /path/to/media:/mnt/media/video:ro
     # networks:

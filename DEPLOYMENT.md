@@ -196,6 +196,9 @@ leave empty simply disables the feature that needed it.
 | `PLAYER_ENABLED` | In-app playback. Default `true` — see [step 12](#12-optional-features). |
 | `PLAYER_SERVER_FALLBACK` | Whether a file the browser cannot play is handed to Jellyfin. Default `true`; `false` guarantees no playback can start a transcode. |
 | `CLARA_GALLERY_ENABLED` | An optional enriched person page, with a public slideshow. Needs a photo folder mounted; off by default — see [step 12](#12-optional-features). |
+| `TRUSTED_PROXIES` | The reverse proxy whose `X-Forwarded-For` the app may believe — see [step 10](#10-put-it-behind-a-reverse-proxy). Empty keeps the older behaviour. |
+| `NEW_ACCOUNT_BLOCKED_TAGS` | Jellyfin tags blocked automatically on every account created after the first start, e.g. a tag reserving some titles to a few accounts. Also settable in *Server settings → Default settings*. |
+| `HOME_BROWSE_BUTTON` / `HOME_CONTINUE_HERO` | Default home layout: the *Browse all* button (default `true`) and a banner showing what an account is watching first (default `false`). Each account can override both in *Account → Interface*. |
 
 ### Storage paths
 
@@ -462,6 +465,24 @@ No WebSockets are used. The live download messages arrive as server-sent events 
 which must not be buffered: the app sends `X-Accel-Buffering: no`, which nginx (and so NPM)
 honours; any other proxy needs buffering disabled for that path.
 
+**Declare the proxy in `TRUSTED_PROXIES`.** Sign-in limits and logs are keyed by the client's
+address. The app records the address of each connection itself and believes `X-Forwarded-For`
+only when the connection comes from a proxy listed there — otherwise any container sharing the
+Docker network could reach port 3000 directly and claim a new address on every attempt. Give the
+proxy's container name (resolved every five minutes, so a recreated container with a new address
+keeps working), an address, or an IPv4 network, separated by commas:
+
+```dotenv
+TRUSTED_PROXIES=nginx-proxy-manager
+```
+
+Restart after changing it. Left empty, the last `X-Forwarded-For` entry is used as before.
+
+**Cap the request body.** Problem reports accept screenshots up to 100 MB in total, and the app
+refuses larger bodies — but only once the proxy has received them. A proxy with no limit
+(`client_max_body_size 0` in nginx) will accept and spool anything first; something like
+`client_max_body_size 110m;` on the Cine App host keeps that bounded.
+
 ---
 
 ## 11. First login
@@ -487,9 +508,10 @@ it — starting a film, chapters, scrub previews, playback preferences. It there
 
 Nothing to create, invite or provision: every Jellyfin account on your server can already log in.
 
-**With Jellyseerr, one exception:** each Jellyfin user must be imported into Jellyseerr
-(**Users → Import Jellyfin Users**), including accounts created later. Otherwise that user's
-requests are made with the API key and attributed to its owner — silently, with no error anywhere.
+**With Jellyseerr:** a Jellyfin account Jellyseerr does not know yet is imported the first time it
+signs in or makes a request — creating the account in Jellyfin is enough. If Jellyseerr still
+cannot tell who is asking (unreachable, import refused), the request is refused with a message
+rather than filed under the API key, which Jellyseerr would treat as its administrator.
 
 ---
 
@@ -625,7 +647,9 @@ Everything that matters is in the `data` folder. Backing up the folder backs up 
 
 The app keeps its own rolling safety net on top of that: once a day it dumps `data/cine.db` into
 `data/backups/cine-YYYY-MM-DD.db` using SQLite's online backup API — no downtime, no locking —
-keeping the last 7 days. That protects against a corrupted or truncated database file. **It does
+keeping the last 7 days. The copy leaves out the caches the app rebuilds on its own (searches,
+cast lists), and a restart on a day that already has its backup does not make another one. That
+protects against a corrupted or truncated database file. **It does
 not protect against losing the disk**, since it sits on the same one. Copy the folder somewhere
 else for that:
 

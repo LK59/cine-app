@@ -2530,6 +2530,7 @@
       "MEDIA_PATHS": "Sous-dossiers de la bibliothèque",
       "CLARA_GALLERY": "Galerie de photos",
       "POSTER_PREWARM_TUNING": "Tailles et langues des affiches préparées",
+      "TRUSTED_PROXIES": "Relais de confiance",
       "RADARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
       "SONARR_QUALITY_PROFILE": "Profil de qualité des ajouts"
     },
@@ -2539,7 +2540,8 @@
       "APP_ADMIN_USER": "Facultatif : un compte administrateur fixé par le .env remplace celui créé ici.",
       "MEDIA_PATHS": "Seulement si votre arborescence diffère de celle de Radarr, Sonarr et qBittorrent sous le dossier des médias — pour les statistiques de stockage :",
       "CLARA_GALLERY": "Une page de photos facultative : montez le dossier (photos JPG, PNG ou WebP, et clarabanner.jpg pour la bannière), puis activez-la :",
-      "POSTER_PREWARM_TUNING": "Facultatif : les largeurs préparées (384 et 750 par défaut) et les langues des affiches (français et langue par défaut) :"
+      "POSTER_PREWARM_TUNING": "Facultatif : les largeurs préparées (384 et 750 par défaut) et les langues des affiches (français et langue par défaut) :",
+      "TRUSTED_PROXIES": "Derrière un relais inverse : son nom de conteneur (ou son adresse), pour que lui seul puisse fournir l'adresse des visiteurs :"
     },
     "copy": "Copier",
     "copied": "Copié",
