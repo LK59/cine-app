@@ -135,3 +135,13 @@ describe("prefetchTitleSheet — l'appui sur une affiche", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("le « Lire » d'une bannière", () => {
+  it("n'affirme pas « du début » pour un film absent de la liste de reprise", async () => {
+    const { bannerResumeAt } = await import("@/lib/sheetFacts");
+    // La liste s'arrête à dix titres : un onzième film commencé n'y est pas, le serveur sait.
+    expect(bannerResumeAt(true, undefined, false, "/api/jellyfin/resume")).toBeUndefined();
+    expect(bannerResumeAt(false, 600_000_000, true, "/api/jellyfin/resume")).toBeUndefined();
+    expect(bannerResumeAt(true, 600_000_000, true, "/api/jellyfin/resume")).toBe(60);
+  });
+});

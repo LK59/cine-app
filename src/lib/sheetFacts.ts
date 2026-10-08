@@ -202,3 +202,17 @@ export function feedResumeAt(ticks: number | null | undefined, feedKey: string):
   return ticks && ticks > 0 ? ticks / 10_000_000 : 0;
 }
 
+
+/**
+ * La position du « Lire » d'une bannière, pour un titre qui n'est peut-être pas dans « Reprendre ».
+ *
+ * La liste de reprise ne fait foi que pour ce qu'elle contient : elle s'arrête à dix titres, films
+ * et épisodes mêlés. Un onzième film commencé, absent de la liste, recevait `0` — « du début » —
+ * et sa position chez le serveur était écrasée (audit du 08/10/2026). Absent de la liste, le
+ * champ reste absent : le serveur sait. Une seule règle pour la bannière du bureau et celle du
+ * téléphone.
+ */
+export function bannerResumeAt(feedLoaded: boolean, ticks: number | null | undefined, inFeed: boolean, feedKey: string): number | undefined {
+  if (!feedLoaded || !inFeed) return undefined;
+  return feedResumeAt(ticks, feedKey);
+}

@@ -51,7 +51,7 @@ import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/disc
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { ProgressFill } from "@/components/cinema/ProgressFill";
-import { feedResumeAt } from "@/lib/sheetFacts";
+import { bannerResumeAt, feedResumeAt } from "@/lib/sheetFacts";
 import { useArrivalFade } from "@/lib/useArrivalFade";
 import type { ContinueEntry } from "@/lib/continueOrder";
 
@@ -541,13 +541,13 @@ export function CinemaMobileClient() {
         return;
       }
       // La position vient de la liste de reprise, pas d'une supposition. Tant qu'elle n'est pas
-      // arrivée on ne prétend rien : le champ reste absent, ce qui veut dire « prends ce dont le
-      // serveur se souvient » — voir PlaybackSession.
+      // arrivée, ou pour un titre qu'elle ne contient pas, on ne prétend rien : le champ reste
+      // absent, ce qui veut dire « prends ce dont le serveur se souvient » — voir `bannerResumeAt`.
       const entry = resumeByItemId.get(item.jellyfinItemId);
       playback.play({
         itemId: item.jellyfinItemId,
         title: item.title,
-        resumeAt: resume === undefined ? undefined : feedResumeAt(entry?.positionTicks, RESUME_KEY),
+        resumeAt: bannerResumeAt(resume !== undefined, entry?.positionTicks, entry !== undefined, RESUME_KEY),
       });
     },
     [playback, playSeries, resume, resumeByItemId]
