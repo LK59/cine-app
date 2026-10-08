@@ -2522,6 +2522,7 @@
       "HOME_CONTINUE_HERO": "Afficher les reprises dans la bannière d'accueil",
       "NEW_ACCOUNT_BLOCKED_TAGS": "Tags bloqués des nouveaux comptes (séparés par des virgules)",
       "VAPID_SUBJECT": "Contact des notifications (mailto:…)",
+      "TRUSTED_PROXIES": "Relais de confiance (noms de conteneur ou adresses)",
       "TZ": "Fuseau horaire",
       "MEDIA_ROOT": "Dossier des médias (statistiques de stockage)",
       "APP_ADMIN_USER": "Compte administrateur défini dans le .env",

@@ -2522,6 +2522,7 @@
       "HOME_CONTINUE_HERO": "Show what people are watching in the home banner",
       "NEW_ACCOUNT_BLOCKED_TAGS": "Blocked tags for new accounts (comma-separated)",
       "VAPID_SUBJECT": "Notification contact (mailto:…)",
+      "TRUSTED_PROXIES": "Trusted proxies (container names or addresses)",
       "TZ": "Time zone",
       "MEDIA_ROOT": "Media folder (storage statistics)",
       "APP_ADMIN_USER": "Administrator account defined in .env",

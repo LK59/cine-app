@@ -42,7 +42,7 @@ export function useLegacyPlayer(): { legacy: boolean | undefined } {
   const pathname = usePathname();
   const onPublicPath = !!pathname && isPublicPath(pathname);
 
-  const { data, error, mutate } = useSWR<PreferencesPayload>("/api/user/preferences", fetcher, {
+  const { data, error, isValidating, mutate } = useSWR<PreferencesPayload>("/api/user/preferences", fetcher, {
     // Sans quoi le lecteur attend une réponse que sa propre ouverture empêche d'arriver.
     ...playerBootstrapOptions,
     // La seule pause légitime pour cette requête-là, et elle remplace celle qu'on vient d'étaler :
@@ -71,9 +71,14 @@ export function useLegacyPlayer(): { legacy: boolean | undefined } {
    * se ferme dès qu'une réponse ou une erreur existe, et les réessais après erreur restent ceux
    * de SWR (`errorRetryInterval` ci-dessus).
    */
+  //
+  // Ni pendant qu'une demande est déjà en route (08/10/2026) : au lancement, celle que l'amorçage de
+  // la langue a lancée (`preloadQuietly`) n'avait pas encore répondu quand ce hook montait, et ce
+  // `mutate` en lançait une seconde, sans déduplication — les préférences partaient deux fois à
+  // chaque ouverture.
   useEffect(() => {
-    if (!onPublicPath && data === undefined && error === undefined) void mutate();
-  }, [onPublicPath, data, error, mutate]);
+    if (!onPublicPath && data === undefined && error === undefined && !isValidating) void mutate();
+  }, [onPublicPath, data, error, isValidating, mutate]);
 
   // Une réponse en échec vaut « pas d'ancien lecteur », et surtout pas « je ne sais pas ».
   //

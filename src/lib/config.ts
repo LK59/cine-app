@@ -128,6 +128,13 @@ export const config = {
       return optional("HOME_CONTINUE_HERO", "false") === "true";
     },
   },
+  network: {
+    // Les relais dont on croit `X-Forwarded-For` : adresses, réseaux ou noms de conteneur, séparés
+    // par des virgules. Vide : le dernier maillon de l'en-tête, comme avant — voir `trustedProxy.ts`.
+    get trustedProxies() {
+      return optional("TRUSTED_PROXIES", "");
+    },
+  },
   accounts: {
     // Les tags bloqués d'office sur un compte Jellyfin que l'installation découvre (`newAccountTags.ts`),
     // séparés par des virgules. Vide : rien n'est posé.

@@ -1825,3 +1825,29 @@ pose est inscrite dans `auth.log` (`new-account-tags`).
 **Tests.** `newAccountTags.test.ts`.
 
 **Décidé le 08/10/2026.**
+
+## 57. `X-Forwarded-For` n'est cru que d'un relais déclaré
+
+**Règle.** L'adresse d'un client, utilisée par les limites de tentatives et les journaux, est celle de la
+connexion elle-même, sauf si cette connexion vient d'un relais déclaré dans `TRUSTED_PROXIES`.
+Dans ce cas seulement, `X-Forwarded-For` est lu de droite à gauche jusqu'à la première adresse qui
+n'est pas un relais. `TRUSTED_PROXIES` accepte des adresses, des réseaux IPv4 (`a.b.c.d/n`) et des noms
+de conteneur, résolus toutes les cinq minutes.
+
+**Pourquoi.** Les gestionnaires de route de Next ne donnent pas l'adresse de la connexion : on lisait le
+dernier maillon de `X-Forwarded-For`. Or le serveur est aussi joignable sans le relais, par tout
+conteneur du même réseau Docker. Un tel voisin pouvait écrire l'en-tête qu'il voulait à chaque essai, et
+la limite des tentatives de connexion, comptée par adresse, ne le freinait plus.
+
+**Comment.** Le démarrage (`server-boot/boot.mjs`) pose l'adresse de la connexion dans `x-cine-peer`
+sur chaque requête, en écrasant toute valeur envoyée par le client. Il le signale par
+`CINE_PEER_HEADER=1` : sous `next dev`, cet en-tête pourrait venir du client et il est ignoré. Sans
+`TRUSTED_PROXIES`, la règle ne change pas : on lit le dernier maillon. L'optimiseur d'images laisse
+passer sans session la seule boucle locale, celle du préchauffage des affiches.
+
+**Porteurs.** `clientAddressOf`, `fromLoopback`, `addressMatches` (`src/lib/trustedProxy.ts`), lus par
+`getClientIp`, `forwardedFor` et `src/proxy.ts`.
+
+**Tests.** `trustedProxy.test.ts`.
+
+**Décidé le 08/10/2026.**

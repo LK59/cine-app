@@ -2,6 +2,7 @@
 // statiques des builds précédents ensuite (voir staticCarryover.mjs), le serveur de Next enfin.
 
 import { readFileSync } from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { carryOverStatic } from "./staticCarryover.mjs";
@@ -72,5 +73,22 @@ try {
 } catch (error) {
   console.error(`[démarrage] fichiers des builds précédents non repris : ${error instanceof Error ? error.message : error}`);
 }
+
+/**
+ * L'adresse de la connexion, notée sur chaque requête avant que Next ne la voie (08/10/2026).
+ *
+ * Les gestionnaires de route de Next n'y ont pas accès ; sans elle, `X-Forwarded-For` — que n'importe
+ * quel voisin du réseau Docker peut écrire — était la seule adresse connue. `x-cine-peer` est écrasé à
+ * chaque requête : un client ne peut pas le fournir. Voir `src/lib/trustedProxy.ts`.
+ */
+const createServer = http.createServer;
+http.createServer = function (...args) {
+  const server = createServer.apply(this, args);
+  server.prependListener("request", (req) => {
+    req.headers["x-cine-peer"] = req.socket?.remoteAddress ?? "";
+  });
+  return server;
+};
+process.env.CINE_PEER_HEADER = "1";
 
 await import(pathToFileURL(path.join(appDir, "server.js")).href);

@@ -76,6 +76,7 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "POSTER_PREWARM", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "VAPID_SUBJECT", group: "app", kind: "text", need: "optional", fallback: "mailto:admin@example.com", inApp: true, placeholder: "mailto:admin@example.com" },
   // ── Le déploiement : guidé, pas réglable ici ──
+  { key: "TRUSTED_PROXIES", group: "deployment", kind: "text", need: "optional", fallback: "", inApp: false, placeholder: "nginx-proxy-manager" },
   { key: "TZ", group: "deployment", kind: "text", need: "optional", fallback: "", inApp: false, placeholder: "Europe/Paris" },
   { key: "MEDIA_ROOT", group: "deployment", kind: "text", need: "optional", fallback: "/mnt/media/video", inApp: false, placeholder: "/mnt/media/video" },
   { key: "APP_ADMIN_USER", group: "deployment", kind: "text", need: "optional", fallback: "admin", inApp: false },

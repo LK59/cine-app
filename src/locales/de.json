@@ -2522,6 +2522,7 @@
       "HOME_CONTINUE_HERO": "Laufende Titel im Startseiten-Banner zeigen",
       "NEW_ACCOUNT_BLOCKED_TAGS": "Gesperrte Tags für neue Konten (durch Kommas getrennt)",
       "VAPID_SUBJECT": "Kontakt für Benachrichtigungen (mailto:…)",
+      "TRUSTED_PROXIES": "Vertrauenswürdige Proxys (Containernamen oder Adressen)",
       "TZ": "Zeitzone",
       "MEDIA_ROOT": "Medienordner (Speicherstatistik)",
       "APP_ADMIN_USER": "In der .env festgelegtes Administratorkonto",

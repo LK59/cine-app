@@ -1,3 +1,4 @@
+import { clientAddressOf } from "@/lib/trustedProxy";
 import { NextRequest, NextResponse } from "next/server";
 import { HttpError, UpstreamUnreachableError, UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { logError } from "@/lib/logger";
@@ -10,10 +11,8 @@ import { logError } from "@/lib/logger";
 // the one appended by the proxy actually connecting to us, which is the one worth trusting for a
 // single-hop deployment.
 export function getClientIp(req: NextRequest): string {
-  const header = req.headers.get("x-forwarded-for");
-  if (!header) return "unknown";
-  const parts = header.split(",").map((p) => p.trim()).filter(Boolean);
-  return parts.at(-1) ?? "unknown";
+  // L'adresse de la connexion quand elle ne vient pas d'un relais de confiance — voir `trustedProxy.ts`.
+  return clientAddressOf(req.headers) ?? "unknown";
 }
 
 export async function withErrorHandling<T>(fn: () => Promise<T>, scope = "api"): Promise<NextResponse> {

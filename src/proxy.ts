@@ -8,6 +8,7 @@ import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { isPublicPath } from "@/lib/publicPaths";
 import { verifySessionFull } from "@/lib/session";
 import { castPassFor } from "@/lib/castToken";
+import { fromLoopback } from "@/lib/trustedProxy";
 import { sessionDb } from "@/lib/db";
 import { forgetJellyfinToken, jellyfinTokenAlive } from "@/lib/jellyfinToken";
 import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
@@ -272,7 +273,12 @@ function setupDoneSafe(): boolean {
  * tout ce qui vient de l'extérieur passe par le relais, qui en pose toujours un.
  */
 async function imageOptimizerAllowed(req: NextRequest): Promise<boolean> {
-  if (!req.headers.get("x-forwarded-for") && !req.headers.get("x-real-ip")) return true;
+  // La connexion elle-même quand le démarrage l'a notée (`trustedProxy.ts`) : seule la boucle locale
+  // passe sans session. Sinon, l'ancienne règle : pas d'en-tête de relais, pas d'extérieur.
+  const loopback = fromLoopback(req.headers);
+  if (loopback !== null) {
+    if (loopback) return true;
+  } else if (!req.headers.get("x-forwarded-for") && !req.headers.get("x-real-ip")) return true;
   try {
     return (await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value)) !== null;
   } catch {

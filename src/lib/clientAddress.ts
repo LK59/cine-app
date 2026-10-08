@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { clientAddressOf } from "@/lib/trustedProxy";
 
 /**
  * L'adresse de la personne derrière une requête, telle que le relais l'a vue.
@@ -32,7 +33,8 @@ export function lastForwardedAddress(header: string | null): string | null {
  */
 export async function forwardedFor(): Promise<Record<string, string>> {
   try {
-    const address = lastForwardedAddress((await headers()).get("x-forwarded-for"));
+    // La même adresse que les limites de connexion (`trustedProxy.ts`), vérifiée comme avant.
+    const address = lastForwardedAddress(clientAddressOf(await headers()));
     return address ? { "X-Forwarded-For": address } : {};
   } catch {
     return {};
