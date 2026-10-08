@@ -3,7 +3,7 @@
 import { memo, useMemo } from "react";
 import useSWR from "swr";
 import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
-import { cinemaFetcher } from "@/lib/cinemaPayload";
+import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { similarInLibrary } from "@/lib/cinemaSimilar";
 import { uniqueById } from "@/lib/cinemaRails";
 import { PosterImage } from "@/components/PosterImage";
@@ -58,7 +58,7 @@ export function useCinemaSimilar(
     const payload = mediaType === "movies" ? movies : series;
     if (!payload) return [];
     const all: (CinemaMovie | CinemaSeries)[] = uniqueById(
-      [...payload.spotlight, ...Object.values(payload.rows).flat()],
+      catalogueTitles<CinemaMovie | CinemaSeries>(payload),
       idOf
     );
     const found = all.find((candidate) => idOf(candidate) === subjectId);

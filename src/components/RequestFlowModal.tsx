@@ -149,7 +149,7 @@ export function RequestFlowModal({
                   className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-sm text-slate-500"
                 >
                   <span>
-                    {s.name} <span className="text-xs text-slate-600">({s.episodeCount} ép.)</span>
+                    {s.name} <span className="text-xs text-slate-600">({t("modals.request.episodeCount", { n: s.episodeCount })})</span>
                   </span>
                   <span className="text-xs">
                     {s.status === 5 ? t("common.available") : t("modals.request.alreadyRequested")}
@@ -166,7 +166,7 @@ export function RequestFlowModal({
                     onChange={() => toggleSeason(s.seasonNumber)}
                     className="accent-accent-500"
                   />
-                  {s.name} <span className="text-xs text-slate-500">({s.episodeCount} ép.)</span>
+                  {s.name} <span className="text-xs text-slate-500">({t("modals.request.episodeCount", { n: s.episodeCount })})</span>
                 </label>
               );
             })}

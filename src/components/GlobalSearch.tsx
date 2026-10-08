@@ -16,10 +16,11 @@ import type { SonarrSeries } from "@/lib/clients/sonarr";
 import type { UnifiedSearchResult, PersonResult } from "@/app/api/search/route";
 import { useSearchResults } from "@/lib/useSearchResults";
 import { posterUrl } from "@/lib/images";
-import { useSWRConfig } from "swr";
 import { useRole } from "@/lib/useRole";
 import { useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
+import { RequestFlowModal } from "@/components/RequestFlowModal";
+import { noteWatchlistChange } from "@/lib/watchlistCache";
 import { apiAction } from "@/lib/apiAction";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 
@@ -171,10 +172,10 @@ export function GlobalSearch() {
   const [cursor, setCursor] = useState(0);
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [requesting, setRequesting] = useState<number | null>(null);
+  const [seasonPick, setSeasonPick] = useState<{ tmdbId: number; title: string } | null>(null);
   const [watchlisted, setWatchlisted] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-  const { mutate } = useSWRConfig();
   const { role } = useRole();
   const t = useT();
   const claraGallery = useClaraGalleryEnabled();
@@ -317,11 +318,17 @@ export function GlobalSearch() {
 
   async function requestMedia(result: UnifiedSearchResult) {
     if (requesting) return;
+    // Une série demande ses saisons : la route refuse une demande sans elles, et ce bouton échouait
+    // à chaque fois sur une série (08/10/2026). Le choix des saisons, comme partout ailleurs.
+    if (result.type === "series") {
+      setSeasonPick({ tmdbId: result.tmdbId, title: result.title });
+      return;
+    }
     setRequesting(result.tmdbId);
     try {
       await apiAction("/api/jellyseerr/requests", {
         method: "POST",
-        body: JSON.stringify({ mediaType: result.type === "movie" ? "movie" : "tv", mediaId: result.tmdbId }),
+        body: JSON.stringify({ mediaType: "movie", mediaId: result.tmdbId }),
       });
       toast.success(t('common.requestSent'));
     } catch (error) {
@@ -351,6 +358,10 @@ export function GlobalSearch() {
       } else {
         await apiAction("/api/watchlist", { method: "POST", body: JSON.stringify({ mediaType: result.type, tmdbId: result.tmdbId, title, year, posterPath: poster }) });
       }
+      // Toutes les vues de la liste, comme depuis une fiche (`useAddToWatchlist`) : la clé nue
+      // « /api/watchlist » revalidée ici n'est lue par personne, et « Ma liste » restait sans le
+      // titre jusqu'au rechargement (08/10/2026).
+      noteWatchlistChange({ tmdbId: result.tmdbId, mediaType: result.type, title, year, posterPath: poster }, inList ? null : "to_watch");
     } catch (error) {
       setWatchlisted((s) => {
         const n = new Set(s);
@@ -358,8 +369,6 @@ export function GlobalSearch() {
         return n;
       });
       toast.error(error instanceof Error ? error.message : t('common.error'));
-    } finally {
-      mutate("/api/watchlist");
     }
   }
 
@@ -579,6 +588,16 @@ export function GlobalSearch() {
           )}
         </div>
       </div>
+      {seasonPick && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <RequestFlowModal
+            mediaType="series"
+            tmdbId={seasonPick.tmdbId}
+            title={seasonPick.title}
+            onClose={() => setSeasonPick(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }

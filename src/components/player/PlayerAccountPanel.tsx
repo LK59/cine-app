@@ -8,7 +8,7 @@ import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBu
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { hardNavigate, signOut } from "@/lib/signOut";
-import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
+import { LOCALES, LOCALE_LABELS, getDateLocale, type Locale } from "@/lib/i18n";
 import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
@@ -498,6 +498,7 @@ function StorageSection() {
 
 function SessionsSection() {
   const t = useT();
+  const { locale } = useLocale();
   const toast = useToast();
   const [sessions, setSessions] = useState<OtherSession[] | null>(null);
   const [revoking, setRevoking] = useState(false);
@@ -561,9 +562,9 @@ function SessionsSection() {
                     ouvertes avant qu'on le retienne (23/09/2026) n'en ont pas. */}
                 <span className="min-w-0">
                   <span className="block truncate text-sm text-muted">{s.device ?? t("player.account.unknownDevice")}</span>
-                  <span className="block text-xs text-subtle">{t("player.account.sessionOpened", { date: formatDay(s.createdAt) })}</span>
+                  <span className="block text-xs text-subtle">{t("player.account.sessionOpened", { date: formatDay(s.createdAt, locale) })}</span>
                 </span>
-                <span className="shrink-0 text-xs text-subtle">{t("player.account.sessionSeen", { date: formatDay(s.lastSeenAt) })}</span>
+                <span className="shrink-0 text-xs text-subtle">{t("player.account.sessionSeen", { date: formatDay(s.lastSeenAt, locale) })}</span>
               </li>
             ))}
           </ul>
@@ -694,9 +695,13 @@ function HelpSection() {
 const FIREFOX_HDR_PREF = "gfx.color_management.hdr";
 
 
-/** Une date lisible, dans la langue de la page. L'heure ne dit rien d'utile ici, le jour si. */
-function formatDay(ms: number): string {
-  return new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+/**
+ * Une date lisible, dans la langue de l'application. L'heure ne dit rien d'utile ici, le jour si.
+ * Celle du navigateur s'y glissait (`undefined`) : un compte réglé en anglais lisait « 8 oct. »
+ * sur un Mac français (audit du 08/10/2026).
+ */
+function formatDay(ms: number, locale: string): string {
+  return new Date(ms).toLocaleDateString(getDateLocale(locale), { day: "numeric", month: "short" });
 }
 
 /**
@@ -712,6 +717,7 @@ function formatDay(ms: number): string {
  */
 function MaintenanceSection() {
   const t = useT();
+  const { locale } = useLocale();
   const toast = useToast();
   const { data, mutate } = useSWR<MaintenanceState>(MAINTENANCE_KEY, fetcher);
   const [busy, setBusy] = useState<"toggle" | "notice" | null>(null);
@@ -768,7 +774,7 @@ function MaintenanceSection() {
             // qu'on a sous les yeux.
             t("player.account.maintenanceHintOn", {
               time: data?.expiresAt
-                ? new Date(data.expiresAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+                ? new Date(data.expiresAt).toLocaleTimeString(getDateLocale(locale), { hour: "2-digit", minute: "2-digit" })
                 : "—",
             })
           : t("player.account.maintenanceHint")}

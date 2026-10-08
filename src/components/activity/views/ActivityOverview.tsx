@@ -250,10 +250,12 @@ function AccountRow({ a, now }: { a: AccountSummary; now: number }) {
 /** La vue d'ensemble : en direct, à regarder, la semaine, les comptes, le fil des séances. */
 export function ActivityOverview() {
   const t = useT();
-  const { data, error, isLoading, mutate } = useSWR<Overview>("/api/admin/activity", fetcher, { refreshInterval: 20_000 });
+  const { data, isLoading, mutate } = useSWR<Overview>("/api/admin/activity", fetcher, { refreshInterval: 20_000 });
 
   if (isLoading && !data) return <LoadingState />;
-  if (error || !data) return <ErrorState message={t("activity.loadError")} onRetry={() => mutate()} />;
+  // Une relecture de fond qui échoue (un redéploiement) garde les données en main : seul un
+  // écran qui n'a encore rien reçu devient un écran d'erreur (08/10/2026).
+  if (!data) return <ErrorState message={t("activity.loadError")} onRetry={() => mutate()} />;
 
   const { now, accounts, signals: s, recent } = data;
   const live = accounts.filter((a) => a.nowPlaying || a.presence.state !== "away");

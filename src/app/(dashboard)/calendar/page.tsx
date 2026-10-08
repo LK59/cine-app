@@ -97,6 +97,7 @@ function EventActions({ ev, compact = false }: { ev: CalendarEvent; compact?: bo
 
 function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => void }) {
   const t = useT();
+  const { locale } = useLocale();
   const style = SOURCE_STYLE[ev.source];
   const isLibrary = ev.source === "library-movie" || ev.source === "library-series";
   const detail = calendarEventDetail(ev, t);
@@ -112,7 +113,7 @@ function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => v
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center gap-2">
           <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
-          <span className="text-xs text-slate-500">{new Date(ev.date + "T12:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long" })}</span>
+          <span className="text-xs text-slate-500">{new Date(ev.date + "T12:00:00").toLocaleDateString(getDateLocale(locale), { day: "numeric", month: "long" })}</span>
         </div>
         <p className="font-semibold text-white">{calendarEventTitle(ev, t)}</p>
         {detail && <p className="mt-0.5 text-xs text-slate-400">{detail}</p>}

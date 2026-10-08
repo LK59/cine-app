@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { WatchlistButton } from "@/components/WatchlistButton";
+import { RequestFlowModal } from "@/components/RequestFlowModal";
 import { TMDB_IMAGE_BASE } from "@/lib/tmdbImageBase";
 import {
   ArrowLeft, Star, Film, Tv, BookCheck, User, Calendar, MapPin, Briefcase,
@@ -66,14 +67,22 @@ function CreditCard({ c }: { c: PersonCredit }) {
   const poster = c.posterPath ? `${TMDB_IMAGE_BASE}/w342${c.posterPath}` : null;
 
   // Même règle que partout : c'est la réponse du serveur qui fait passer le bouton en « demandé ».
+  // Une série demande ses saisons : la route refuse une demande sans elles (« Sélectionne au moins
+  // une saison »), et le bouton échouait à chaque fois (08/10/2026). Le même choix de saisons que
+  // partout ailleurs (`RequestFlowModal`).
+  const [pickSeasons, setPickSeasons] = useState(false);
   async function doRequest(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    if (c.mediaType === "tv") {
+      setPickSeasons(true);
+      return;
+    }
     setRequesting(true);
     try {
       await apiAction("/api/jellyseerr/requests", {
         method: "POST",
-        body: JSON.stringify({ mediaType: c.mediaType === "movie" ? "movie" : "tv", mediaId: c.tmdbId }),
+        body: JSON.stringify({ mediaType: "movie", mediaId: c.tmdbId }),
       });
       setRequested(true);
     } catch (error) {
@@ -97,7 +106,7 @@ function CreditCard({ c }: { c: PersonCredit }) {
         )}
         <RatingBadge value={c.voteAverage} className="absolute bottom-1.5 left-1.5" />
         {!c.inLibrary && (
-          <div className="absolute inset-0 flex flex-col justify-end bg-linear-to-t from-slate-900/95 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2 gap-1.5">
+          <div className="absolute inset-0 flex flex-col justify-end bg-linear-to-t from-slate-900/95 via-transparent to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 transition-opacity p-2 gap-1.5">
             <WatchlistButton
               mediaType={c.mediaType === "movie" ? "movie" : "series"}
               tmdbId={c.tmdbId}
@@ -129,7 +138,20 @@ function CreditCard({ c }: { c: PersonCredit }) {
   );
 
   if (c.libraryHref) return <Link href={c.libraryHref}>{content}</Link>;
-  return content;
+  return (
+    <>
+      {content}
+      {pickSeasons && (
+        <RequestFlowModal
+          mediaType="series"
+          tmdbId={c.tmdbId}
+          title={c.title}
+          onClose={() => setPickSeasons(false)}
+          onSuccess={() => setRequested(true)}
+        />
+      )}
+    </>
+  );
 }
 
 // ─── Gallery lightbox ─────────────────────────────────────────────────────────
@@ -319,6 +341,7 @@ function VideoCard({ videoId, title }: { videoId: string; title: string }) {
 
 function NewsSection() {
   const t = useT();
+  const { locale } = useLocale();
   const { data } = useSWR<{ articles: NewsArticle[] }>(
     "/api/news/clara",
     fetcher,
@@ -335,7 +358,7 @@ function NewsSection() {
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {articles.map((a, i) => {
-          const date = a.pubDate ? new Date(a.pubDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : null;
+          const date = a.pubDate ? new Date(a.pubDate).toLocaleDateString(getDateLocale(locale), { day: "numeric", month: "short", year: "numeric" }) : null;
           return (
             <a
               key={i}
@@ -800,7 +823,10 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
 
   function formatDate(d: string | null) {
     if (!d) return null;
-    return new Date(d).toLocaleDateString(getDateLocale(locale), { year: "numeric", month: "long", day: "numeric" });
+    // Une date seule (« 1962-07-03 ») se lit à minuit UTC : à l'ouest de Greenwich elle tombait la
+    // veille. Prise à midi, aucun fuseau ne la fait changer de jour.
+    const at = /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(`${d}T12:00:00`) : new Date(d);
+    return at.toLocaleDateString(getDateLocale(locale), { year: "numeric", month: "long", day: "numeric" });
   }
 
   return (

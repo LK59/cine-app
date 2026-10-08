@@ -1,5 +1,6 @@
 "use client";
 
+import { catalogueTitles } from "@/lib/cinemaPayload";
 import { useMemo } from "react";
 import useSWR from "swr";
 import { fetcher, TO_WATCH_KEY } from "@/lib/swr";
@@ -12,6 +13,8 @@ interface CinemaLibraryItem {
 }
 
 interface CinemaLibraryPayload<T> {
+  /** Chaque titre une fois — voir `catalogueTitles`. */
+  items?: T[];
   rows: Record<string, T[]>;
   spotlight: T[];
 }
@@ -32,7 +35,7 @@ export function useCinemaMyList<T extends CinemaLibraryItem>(
     if (!payload || !data?.items?.length) return [];
     const wanted = new Set(data.items.filter((w) => w.mediaType === mediaType).map((w) => w.tmdbId));
     if (wanted.size === 0) return [];
-    const all = uniqueById([...payload.spotlight, ...Object.values(payload.rows).flat()], (item) => item.tmdbId ?? 0);
+    const all = uniqueById(catalogueTitles(payload), (item) => item.tmdbId ?? 0);
     return all.filter((item) => item.tmdbId !== null && wanted.has(item.tmdbId));
   }, [payload, data, mediaType]);
 }

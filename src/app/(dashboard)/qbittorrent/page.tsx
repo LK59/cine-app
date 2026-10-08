@@ -122,12 +122,15 @@ export default function QbittorrentPage() {
    * C'est ainsi que le bouton pause est resté mort à travers une montée de version de
    * qBittorrent sans que personne puisse savoir pourquoi.
    */
-  async function run(work: Promise<unknown>, done?: string) {
+  /** Vrai si l'action a réussi — ce que l'appelant doit savoir avant de fermer quoi que ce soit. */
+  async function run(work: Promise<unknown>, done?: string): Promise<boolean> {
     try {
       await work;
       if (done) toast.success(done);
+      return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('common.error'));
+      return false;
     } finally {
       mutate("/api/qbittorrent/torrents");
     }
@@ -172,8 +175,9 @@ export default function QbittorrentPage() {
   }
 
   async function removeWithFiles(hash: string, deleteFiles: boolean) {
-    await run(apiAction(`/api/qbittorrent/torrents/${hash}?deleteFiles=${deleteFiles}`, { method: "DELETE" }));
-    setSelectedHash(null);
+    // Le détail ne se ferme que si qBittorrent a supprimé : il se fermait aussi sur un refus, le
+    // torrent toujours dans la liste (08/10/2026).
+    if (await run(apiAction(`/api/qbittorrent/torrents/${hash}?deleteFiles=${deleteFiles}`, { method: "DELETE" }))) setSelectedHash(null);
   }
 
   if (notConfigured) return <ServiceNotConfigured service="qbittorrent" />;

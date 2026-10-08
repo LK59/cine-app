@@ -31,6 +31,15 @@ export function resolveHomeLayout(own: HomeLayoutChoice | undefined, defaults: H
   };
 }
 
+/** À la déconnexion : le miroir est rangé par appareil, et le compte suivant l'aurait lu. */
+export function forgetHomeLayoutMirror(): void {
+  try {
+    window.localStorage.removeItem(MIRROR);
+  } catch {
+    // Stockage refusé : il n'y a rien à oublier.
+  }
+}
+
 function lastKnown(): HomeLayout | null {
   try {
     const raw = window.localStorage.getItem(MIRROR);

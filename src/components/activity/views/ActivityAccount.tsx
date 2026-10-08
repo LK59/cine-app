@@ -212,10 +212,12 @@ export function ActivityAccount({ id }: { id: string }) {
   const t = useT();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("seances");
-  const { data, error, isLoading, mutate } = useSWR<Detail>(`/api/admin/activity/accounts/${id}`, fetcher, { refreshInterval: 30_000 });
+  const { data, isLoading, mutate } = useSWR<Detail>(`/api/admin/activity/accounts/${id}`, fetcher, { refreshInterval: 30_000 });
 
   if (isLoading && !data) return <LoadingState />;
-  if (error || !data) return <ErrorState message={t("activity.loadError")} onRetry={() => mutate()} />;
+  // Une relecture de fond qui échoue (un redéploiement) garde les données en main : seul un
+  // écran qui n'a encore rien reçu devient un écran d'erreur (08/10/2026).
+  if (!data) return <ErrorState message={t("activity.loadError")} onRetry={() => mutate()} />;
 
   const d = data;
   const now = d.now;

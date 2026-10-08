@@ -33,6 +33,11 @@ export interface WirePayload<T> {
 /** Ce qui se lit : des titres, partout, comme avant. */
 export interface HydratedPayload<T> {
   genres: string[];
+  /**
+   * Chaque titre une fois — y compris celui qui n'a aucun genre, donc aucune rangée. Absent d'une
+   * charge utile d'avant la déduplication. Voir `catalogueTitles`.
+   */
+  items?: T[];
   rows: Record<string, T[]>;
   spotlight: T[];
   recentlyAdded: T[];
@@ -62,6 +67,7 @@ export function hydrate<T>(payload: WirePayload<T> | undefined, idOf: (item: T) 
 
   return {
     genres: payload.genres,
+    ...(payload.items ? { items: payload.items } : {}),
     rows: Object.fromEntries(Object.entries(payload.rows).map(([genre, list]) => [genre, resolve(list)])),
     spotlight: resolve(payload.spotlight),
     recentlyAdded: resolve(payload.recentlyAdded),
@@ -92,3 +98,16 @@ export async function cinemaFetcher<T>(url: string): Promise<T> {
   return { ...raw, ...hydrate(raw, idOf) } as T;
 }
 
+
+/**
+ * Tous les titres d'un catalogue, une fois chacun.
+ *
+ * Les écrans les reconstruisaient depuis la sélection et les rangées de genre : un titre sans
+ * genre n'est dans aucune rangée, et une fois sorti de la sélection il disparaissait de la grille
+ * complète, de « Ma liste », des titres similaires — sa fiche ne s'ouvrait plus (audit du
+ * 08/10/2026 ; aucun titre de cette bibliothèque n'est dans ce cas aujourd'hui). `items` les porte
+ * tous ; l'union d'avant ne sert plus qu'à une charge utile qui n'en a pas.
+ */
+export function catalogueTitles<T>(payload: Pick<HydratedPayload<T>, "items" | "spotlight" | "rows">): T[] {
+  return payload.items ?? [...payload.spotlight, ...Object.values(payload.rows).flat()];
+}

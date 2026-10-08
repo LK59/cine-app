@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import useSWR from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
 import { Check } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
@@ -233,6 +233,10 @@ export function PlayerOnboarding({
         setBusy(true);
         try {
           await apiAction("/api/player/account/preferences", { method: "POST", body: JSON.stringify(playback) });
+          // Relue tout de suite : Compte → Lecture montrait les langues d'avant jusqu'à sa propre
+          // relecture (audit du 08/10/2026). `mutate` repose la question même dans la fenêtre de
+          // dédoublonnage.
+          void globalMutate("/api/player/account/preferences");
         } catch (error) {
           toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
           setBusy(false);

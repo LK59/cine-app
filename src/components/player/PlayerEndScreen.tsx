@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 import { Play, RotateCcw, X } from "lucide-react";
-import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY, playerBootstrapOptions, TO_WATCH_KEY } from "@/lib/swr";
+import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY, playerBootstrapOptions } from "@/lib/swr";
+import { noteWatchlistChange } from "@/lib/watchlistCache";
 import { apiAction } from "@/lib/apiAction";
-import { cinemaFetcher } from "@/lib/cinemaPayload";
+import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { similarInLibrary } from "@/lib/cinemaSimilar";
@@ -55,7 +56,7 @@ export function PlayerEndScreen({
   // à jour, et la revalider ici coûterait un mégaoctet et demi pour une rangée de fin.
   const { data } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
 
-  const all = data ? uniqueById([...data.spotlight, ...Object.values(data.rows).flat()], (m) => m.radarrId) : [];
+  const all = data ? uniqueById(catalogueTitles(data), (m) => m.radarrId) : [];
   const subject = all.find((m) => m.jellyfinItemId === itemId) ?? null;
   const similar = subject ? similarInLibrary(subject, all, (m) => m.radarrId === subject.radarrId).slice(0, 8) : [];
   // La saga de ce film, par le même chemin que sa rangée sur la fiche — les mêmes clés, souvent déjà
@@ -201,8 +202,10 @@ function FinishedAsk({ itemId }: { itemId: string }) {
     try {
       await apiAction("/api/watchlist", { method: "DELETE", body: JSON.stringify({ tmdbId: data!.tmdbId, mediaType: data!.type }) });
       setState("removed");
-      void globalMutate("/api/player/lists");
-      void globalMutate(TO_WATCH_KEY);
+      // Écrit sur place, sans revalidation (`noteWatchlistChange`) : pendant le film, SWR est en
+      // pause et une revalidation demandée est perdue, pas remise — « Ma liste » montrait encore le
+      // film retiré au retour sur l'accueil (08/10/2026).
+      noteWatchlistChange({ tmdbId: data!.tmdbId!, mediaType: data!.type! }, null);
     } catch {
       setState("ask");
     }

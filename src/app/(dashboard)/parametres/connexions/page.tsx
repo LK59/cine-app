@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ErrorState } from "@/components/StateViews";
 import useSWR from "swr";
 import { Loader2 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
@@ -22,7 +23,7 @@ type SettingsPayload = { settings: SettingView[]; missing: string[] };
 export default function ConnexionsPage() {
   const t = useT();
   const toast = useToast();
-  const { data, mutate } = useSWR<SettingsPayload>("/api/settings", fetcher);
+  const { data, error, mutate } = useSWR<SettingsPayload>("/api/settings", fetcher);
   const [draft, setDraft] = useState<Draft>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<SettingGroup | null>(null);
@@ -44,13 +45,21 @@ export default function ConnexionsPage() {
       setDraft((d) => Object.fromEntries(Object.entries(d).filter(([k]) => !(k in values))));
       await mutate();
       toast.success(t("setup.saved"));
+    } catch {
+      // Le réseau, et non un refus : sans ce `catch`, une rejection non gérée et aucun message.
+      toast.error(t("setup.errors.save"));
     } finally {
       setSaving(null);
     }
   }
 
   async function reset(key: string) {
-    await fetch(`/api/settings?key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => null);
+    // Un refus ou une coupure se disent : la remise à zéro échouait sans un mot (08/10/2026).
+    const res = await fetch(`/api/settings?key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => null);
+    if (!res?.ok) {
+      toast.error(t("setup.errors.save"));
+      return;
+    }
     setDraft((d) => Object.fromEntries(Object.entries(d).filter(([k]) => k !== key)));
     await mutate();
   }
@@ -58,7 +67,10 @@ export default function ConnexionsPage() {
   return (
     <div>
       <PageHeader title={t("setup.settings.title")} subtitle={t("setup.settings.subtitle")} />
-      {!data ? (
+      {!data && error ? (
+        // Une erreur n'est pas un chargement : le cercle tournait pour toujours.
+        <ErrorState message={t("common.error")} onRetry={() => void mutate()} />
+      ) : !data ? (
         <Loader2 className="animate-spin text-subtle" />
       ) : (
         <div className="max-w-3xl space-y-4">

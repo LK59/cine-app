@@ -7,6 +7,8 @@ import { Bookmark, BookmarkCheck } from "lucide-react";
 import type { WatchlistItem, WatchlistStatus } from "@/lib/db";
 import { useT } from "@/components/TranslationProvider";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
+import { useToast } from "@/components/Toast";
+import { noteWatchlistChange } from "@/lib/watchlistCache";
 
 interface Props {
   mediaType: "movie" | "series";
@@ -24,6 +26,7 @@ export function WatchlistButton({
 }: Props) {
   const { mutate } = useSWRConfig();
   const t = useT();
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
 
   const itemKey = `/api/watchlist/item?mediaType=${mediaType}&tmdbId=${tmdbId}`;
@@ -55,9 +58,13 @@ export function WatchlistButton({
       // Fire-and-forget: a revalidation failure here shouldn't surface as an unhandled promise
       // rejection (the optimistic UI is already correct either way).
       mutate(itemKey).catch(() => {});
-      mutate("/api/watchlist").catch(() => {});
+      // Toutes les vues de la liste — la rangée « Ma liste », le panneau, la fiche ouverte : la clé
+      // nue « /api/watchlist » revalidée ici n'est lue par personne (08/10/2026).
+      noteWatchlistChange({ tmdbId, mediaType, title, year, posterPath }, wasInList ? null : defaultStatus);
     } catch {
       mutate(itemKey); // rollback on error
+      // Le retour en arrière se disait seul : le bouton reprenait son état sans un mot.
+      toast.error(t("common.error"));
     } finally {
       setBusy(false);
     }
