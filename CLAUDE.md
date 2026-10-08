@@ -39,8 +39,15 @@ docker run --rm -v "$PWD":/app -w /app node:24-alpine npx vitest run src/__tests
 
 # Deploy (the Dockerfile runs the tests before building). BUILD_REF names the build in the logs'
 # `build` field: the short commit, `-dirty` if tracked files differ; without it, a timestamp.
-BUILD_REF=$(tools/build-ref.sh) docker compose build && docker compose up -d
+# The prune keeps BuildKit's cache bounded: each build still adds ~0.5 GB (compile, test, final
+# layers), and nothing else ever removes it.
+BUILD_REF=$(tools/build-ref.sh) docker compose build && docker compose up -d && docker builder prune -f --max-used-space 15GB
 ```
+
+The dependency install is cached across deploys because the `manifest` stage feeds `npm install`
+with `package.json` / `package-lock.json` whose `version` is reset to 0.0.0. Copied as-is, the
+version bump that precedes every deploy invalidated the whole layer: ~2 GB of build cache per
+deploy, 138 GB after two weeks (cleared 08/10/2026).
 
 The suite writes into a throwaway `DATA_DIR` (`vitest.config.ts`): the gate mounts the whole
 repository, `data/` included, and tests calling `logError` used to append Vitest mock errors to
