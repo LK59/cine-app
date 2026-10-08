@@ -54,6 +54,12 @@ export async function reportCaller(req: NextRequest): Promise<Who | NextResponse
     return refused;
   }
   if (Number(req.headers?.get("content-length")) > REPORT_BODY_LIMIT) return reportError("requestTooLarge", 413, "Envoi trop lourd");
+  // Un corps sans longueur annoncée (`Transfer-Encoding: chunked`) passait sous la limite ci-dessus,
+  // et `formData()` le gardait entier en mémoire (audit du 08/10/2026). Un navigateur annonce
+  // toujours la longueur d'un formulaire ou d'un JSON : un corps qui ne le fait pas est refusé.
+  if (req.headers?.get("transfer-encoding") && !req.headers.get("content-length")) {
+    return reportError("requestTooLarge", 411, "Longueur requise");
+  }
   return whoIs(session);
 }
 

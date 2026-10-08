@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { HttpError } from "@/lib/http";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
@@ -50,6 +51,11 @@ export async function POST(req: NextRequest) {
     // Au nom de qui : le cookie s'il tient encore, sinon le compte de la personne nommé à la clé
     // d'API. Sans les deux, la demande part au nom du propriétaire de la clé — voir le module.
     const identity = await resolveJellyseerrIdentity(session);
+    // Jamais au nom de l'administrateur de Jellyseerr pour un compte ordinaire — voir la route
+    // jumelle `/api/jellyseerr/requests` (audit du 08/10/2026).
+    if (session.role !== "admin" && !identity.cookie && identity.userId == null) {
+      throw new HttpError("Jellyseerr ne reconnaît pas encore ce compte. Réessaie dans un instant.", 503);
+    }
     let seasons: number[] | undefined;
     if (type === "series") {
       const media = await jellyseerr.getTvMedia(tmdbId, identity.cookie).catch(() => null);

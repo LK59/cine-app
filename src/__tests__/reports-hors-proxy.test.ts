@@ -121,4 +121,13 @@ describe("signalements hors du proxy — A2", () => {
     expect(res.status).toBe(413);
     expect(read.count).toBe(0);
   });
+
+  // Sans longueur annoncée, la limite ci-dessus ne voyait rien et le corps était lu en entier.
+  it("un corps sans longueur annoncée est refusé avant d'être lu", async () => {
+    const { POST } = await import("@/app/api/reports/route");
+    const { r, read } = req("POST", "/api/reports", { who: "lucas", headers: { "transfer-encoding": "chunked" } });
+    const res = await POST(r);
+    expect(res.status).toBe(411);
+    expect(read.count).toBe(0);
+  });
 });

@@ -116,8 +116,9 @@ describe("proxy — what a plain user may write", () => {
     ]) {
       expect((await proxy(req("GET", path))).status).toBe(403);
     }
-    // Le reste des lectures reste ouvert.
-    expect((await proxy(req("GET", "/api/radarr/movies/12"))).status).toBe(200);
+    // Ce que le cinéma lit reste ouvert. La fiche de gestion d'un film (`/api/radarr/movies/12`),
+    // elle, est réservée depuis le 08/10/2026 — voir proxy-admin-reads.test.ts.
+    expect((await proxy(req("GET", "/api/radarr/movies/12/info"))).status).toBe(200);
   });
 
   // Même jour : l'historique de Radarr et Sonarr, que seule la page d'état de la gestion affiche.

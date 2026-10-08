@@ -12,6 +12,7 @@ import { config } from "@/lib/config";
 import { titleDownloadProgress } from "@/lib/downloadProgress";
 import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 import { isWatchedLocally } from "@/lib/watched";
+import { hiddenTmdbKeysFor } from "@/lib/blockedTags";
 
 export const dynamic = "force-dynamic";
 
@@ -88,16 +89,23 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
     // session cine-app, elle, glisse — Jellyseerr répondait alors 403, avalé en silence, et un titre
     // déjà demandé s'affichait « à demander » (23/09/2026). Sans Jellyseerr configuré, la fiche
     // s'affiche quand même : elle perd la demande, pas le reste.
-    const media = config.jellyseerr.apiKey
-      ? await (type === "movie" ? jellyseerr.getMovieMedia(tmdbId) : jellyseerr.getTvMedia(tmdbId)).catch(() => null)
-      : null;
+    /**
+     * Un titre que les tags bloqués du compte lui cachent n'existe pas pour lui (DECISIONS.md §54) :
+     * ni « dans la bibliothèque », ni en cours de téléchargement, ni « disponible » chez Jellyseerr.
+     * La fiche TMDB l'annonçait possédé — le seul écran qui le disait encore (08/10/2026).
+     */
+    const hidden = (await hiddenTmdbKeysFor(session.jfId).catch(() => new Set<string>())).has(`${type}:${tmdbId}`);
+    const media =
+      config.jellyseerr.apiKey && !hidden
+        ? await (type === "movie" ? jellyseerr.getMovieMedia(tmdbId) : jellyseerr.getTvMedia(tmdbId)).catch(() => null)
+        : null;
 
     if (type === "movie") {
       const [detail, lib] = await Promise.all([tmdb.getMovie(tmdbId), playableLibrary()]);
       // Ouvrable, pas seulement connu de Radarr : un film surveillé sans fichier n'a pas de fiche
       // à ouvrir, et lui donner un identifiant menait à un clic qui ne faisait rien.
-      const libraryId = playableId(lib, "movie", tmdbId);
-      const downloading = libraryId === null ? await titleDownloadProgress("movie", tmdbId) : null;
+      const libraryId = hidden ? null : playableId(lib, "movie", tmdbId);
+      const downloading = libraryId === null && !hidden ? await titleDownloadProgress("movie", tmdbId) : null;
       return build({
         tmdbId,
         type,
@@ -120,8 +128,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
     }
 
     const [detail, lib] = await Promise.all([tmdb.getTv(tmdbId), playableLibrary()]);
-    const libraryId = playableId(lib, "series", tmdbId);
-    const downloading = libraryId === null ? await titleDownloadProgress("series", tmdbId) : null;
+    const libraryId = hidden ? null : playableId(lib, "series", tmdbId);
+    const downloading = libraryId === null && !hidden ? await titleDownloadProgress("series", tmdbId) : null;
     return build({
       tmdbId,
       type,
