@@ -23,6 +23,14 @@ export async function GET(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
   const userId = session?.jfId;
+  /**
+   * La liste serveur voit toute la bibliothèque, y compris ce que les tags bloqués d'un compte lui
+   * cachent (DECISIONS.md §54). Pour un compte ordinaire, un titre absent de sa propre liste n'est
+   * rendu que si Jellyfin accepte de lui en donner l'état — c'est lui qui applique le contrôle
+   * parental. Sinon rien : la copie serveur portait le titre entier, chemin du fichier compris
+   * (08/10/2026). La route est en outre réservée à la gestion par le proxy.
+   */
+  const isAdmin = session?.role === "admin";
 
   return withErrorHandling(async () => {
     let item = null;
@@ -43,6 +51,7 @@ export async function GET(req: NextRequest) {
         } else {
           const direct = await jellyfin.getItemUserData(userId, item.Id).catch(() => null);
           if (direct?.UserData) item = { ...item, UserData: direct.UserData };
+          else if (!isAdmin) item = null;
         }
       }
     } else if (type === "Series") {
@@ -59,10 +68,12 @@ export async function GET(req: NextRequest) {
         } else {
           const direct = await jellyfin.getItemUserData(userId, item.Id).catch(() => null);
           if (direct?.UserData) item = { ...item, UserData: direct.UserData };
+          else if (!isAdmin) item = null;
         }
       }
     }
 
-    return { item };
+    // Sans identité Jellyfin, un compte ordinaire n'a aucune liste à lui : rien.
+    return { item: !isAdmin && !userId ? null : item };
   });
 }

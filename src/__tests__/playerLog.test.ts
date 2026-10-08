@@ -361,3 +361,19 @@ describe("l'événement d'un blocage de lecture", () => {
     expect(line.steps.length).toBeGreaterThan(500);
   });
 });
+
+// 08/10/2026 : un seul compte pouvait écrire 7 200 lignes par heure et sortir du journal
+// l'historique des autres spectateurs.
+describe("le plafond horaire d'un compte", () => {
+  it("lâche les lignes de détail au-delà du plafond, jamais celles qui racontent une séance", async () => {
+    const { logPlaybackEvent, HOURLY_DETAIL_LINES } = await import("@/lib/playerLog");
+    for (let i = 0; i < HOURLY_DETAIL_LINES + 20; i++) logPlaybackEvent("bavard", "reserve", { event: "point" });
+    logPlaybackEvent("bavard", "stop", { why: "close" });
+    logPlaybackEvent("bavard", "error", { message: "x" });
+    logPlaybackEvent("autre", "reserve", { event: "point" });
+    const written = lines();
+    expect(written.filter((l) => l.user === "bavard" && l.kind === "reserve")).toHaveLength(HOURLY_DETAIL_LINES);
+    expect(written.filter((l) => l.user === "bavard" && (l.kind === "stop" || l.kind === "error"))).toHaveLength(2);
+    expect(written.filter((l) => l.user === "autre")).toHaveLength(1);
+  });
+});

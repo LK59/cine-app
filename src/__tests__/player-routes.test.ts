@@ -74,6 +74,8 @@ vi.mock("@/lib/server-cache", () => ({
 
 const watchlistDb = { get: vi.fn(), getAll: vi.fn() };
 vi.mock("@/lib/db", () => ({ watchlistDb, pendingRequestDb: { add: vi.fn() } }));
+const mockHidden = vi.fn(async (_jfId?: string | null) => new Set<string>());
+vi.mock("@/lib/blockedTags", () => ({ hiddenTmdbKeysFor: (jfId?: string | null) => mockHidden(jfId) }));
 
 function req(cookie: string | null = "t"): NextRequest {
   return {
@@ -105,6 +107,18 @@ describe("GET /api/player/title", () => {
     const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
     await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "603" }) });
     expect(jellyseerr.getMovieMedia).toHaveBeenCalledWith(603);
+  });
+
+  // DECISIONS.md §54 : la fiche TMDB disait possédé un titre que les tags bloqués cachent au compte.
+  it("does not report a title the account's blocked tags hide as in the library", async () => {
+    mockHidden.mockResolvedValueOnce(new Set(["movie:603"]));
+    tmdbClient.getMovie.mockResolvedValue({ title: "Privé", release_date: "2012-10-24", overview: "", genres: [], runtime: 90, credits: { cast: [] } });
+    jellyseerr.getMovieMedia.mockResolvedValue({ mediaInfo: { status: 5 } });
+    const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "603" }) })).json();
+    expect(body.libraryId).toBeNull();
+    expect(body.downloading).toBeNull();
+    expect(jellyseerr.getMovieMedia).not.toHaveBeenCalled();
   });
 
   it("refuses an anonymous caller", async () => {
@@ -239,16 +253,28 @@ describe("POST /api/player/requests", () => {
     expect(jellyseerr.createRequest).toHaveBeenCalledWith("movie", 603, 5, undefined, undefined);
   });
 
-  // Dernier recours, choisi : la demande part quand même, au nom du propriétaire de la clé.
-  it("still requests, under the key's owner, when nobody can be named", async () => {
+  // Le dernier recours d'avant — la demande au nom du propriétaire de la clé — la faisait passer
+  // pour celle de l'administrateur de Jellyseerr : approuvée d'office, hors quota (08/10/2026).
+  // Un compte ordinaire que personne ne peut nommer réessaie plus tard.
+  it("refuses, rather than requesting as the key's owner, when nobody can be named", async () => {
     mockVerify.mockResolvedValue({ u: "sarah", jfId: "jf-sarah", jfUser: "sarah", role: "user" });
     jellyseerr.getUsers.mockResolvedValue({ results: [] });
     jellyseerr.importFromJellyfin.mockRejectedValue(new Error("500"));
     jellyseerr.createRequest.mockResolvedValue({ id: 14 });
     const { POST } = await import("@/app/api/player/requests/route");
     const res = await POST(jsonReq({ type: "movie", tmdbId: 603 }));
+    expect(res.status).toBe(503);
+    expect(jellyseerr.createRequest).not.toHaveBeenCalled();
+  });
+
+  it("still lets the administrator request under the key, which is theirs", async () => {
+    mockVerify.mockResolvedValue({ u: "admin", role: "admin" });
+    jellyseerr.getUsers.mockResolvedValue({ results: [] });
+    jellyseerr.importFromJellyfin.mockRejectedValue(new Error("500"));
+    jellyseerr.createRequest.mockResolvedValue({ id: 15 });
+    const { POST } = await import("@/app/api/player/requests/route");
+    const res = await POST(jsonReq({ type: "movie", tmdbId: 603 }));
     expect(res.status).toBe(200);
-    expect(jellyseerr.createRequest).toHaveBeenCalledWith("movie", 603, undefined, undefined, undefined);
   });
 });
 

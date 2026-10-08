@@ -22,6 +22,7 @@ vi.mock("@/lib/db", () => ({
   pushDb: mockPushDb,
   userPrefsDb: mockUserPrefsDb,
   sessionDb: mockSessionDb,
+  kvCacheDb: { get: vi.fn(() => null) },
 }));
 vi.mock("@/lib/notifications", () => ({
   isNotificationCategory: (c: string) => ["push-torrent", "watchlist-available"].includes(c),
@@ -287,6 +288,18 @@ describe("GET /api/watchlist/ratings", () => {
     expect(Object.keys(body)).toHaveLength(500);
     expect(body).toHaveProperty("movie:900000");
     expect(mockTmdb.getMovie.mock.calls.length).toBeLessThanOrEqual(500);
+  });
+
+  // 08/10/2026 : cinq cents identifiants jamais vus brûlaient la moitié du quota OMDb du jour.
+  it("ne va chercher que cinquante notes inconnues par demande", async () => {
+    mockOmdb.isEnabled.mockReturnValue(true);
+    mockTmdb.getMovie.mockClear();
+    mockTmdb.getMovie.mockResolvedValue({ imdb_id: null });
+    const ids = Array.from({ length: 200 }, (_, i) => `movie:${800_000 + i}`);
+    const { GET } = await import("@/app/api/watchlist/ratings/route");
+    const res = await GET(fakeReq({ params: { items: ids.join(",") } }));
+    expect(Object.keys(await res.json())).toHaveLength(200);
+    expect(mockTmdb.getMovie.mock.calls.length).toBe(50);
   });
 
   it("returns null for a title with no OMDb rating (N/A), not the string 'N/A'", async () => {

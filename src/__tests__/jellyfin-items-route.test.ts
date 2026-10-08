@@ -74,6 +74,28 @@ describe("GET /api/jellyfin/items", () => {
     expect(body.item.UserData).toEqual({ Played: true });
   });
 
+  // 08/10/2026 : la copie serveur d'un titre que les tags bloqués cachent au compte portait le
+  // titre entier, chemin du fichier compris.
+  it("returns nothing to a plain user when Jellyfin refuses the item to them", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", role: "user" });
+    mockFindJellyfinMovieByTmdb.mockReturnValueOnce({ Id: "abc", Name: "Privé", Path: "/media/x.mkv" }).mockReturnValueOnce(null);
+    mockCachedJellyfinMovies.mockResolvedValue([]);
+    mockJellyfin.getItemUserData.mockRejectedValue(new Error("404"));
+    const { GET } = await import("@/app/api/jellyfin/items/route");
+    const body = await (await GET(fakeReq({ type: "Movie", tmdbId: "42" }))).json();
+    expect(body.item).toBeNull();
+  });
+
+  it("still returns the server copy to an administrator", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", role: "admin" });
+    mockFindJellyfinMovieByTmdb.mockReturnValueOnce({ Id: "abc", Name: "Dune" }).mockReturnValueOnce(null);
+    mockCachedJellyfinMovies.mockResolvedValue([]);
+    mockJellyfin.getItemUserData.mockRejectedValue(new Error("404"));
+    const { GET } = await import("@/app/api/jellyfin/items/route");
+    const body = await (await GET(fakeReq({ type: "Movie", tmdbId: "42" }))).json();
+    expect(body.item).toEqual({ Id: "abc", Name: "Dune" });
+  });
+
   it("looks up series by TVDB id, not TMDB, for type=Series", async () => {
     mockVerifySessionFull.mockResolvedValue(null);
     mockFindJellyfinSeriesByTvdb.mockReturnValue({ Id: "s1" });

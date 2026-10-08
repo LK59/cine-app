@@ -180,6 +180,38 @@ const MAX_LATE_MS = 365 * 24 * 3600_000;
  * `user` comes from the session on the server, never from the request body — otherwise the one
  * field that says who this was about would be the one field anybody could forge.
  */
+/**
+ * Ce qu'un compte peut écrire en une heure, hors lignes essentielles (08/10/2026).
+ *
+ * La limite par minute de la route (120 lignes) laissait un seul compte écrire 7 200 lignes par
+ * heure : de quoi faire tourner les cinq archives de 5 Mo en un jour ou deux, et sortir du journal
+ * l'historique des autres spectateurs — celui que le panneau d'activité et les signalements lisent.
+ * Une séance ordinaire en écrit une centaine par heure (dont les points de la réserve). Au-delà de
+ * ce plafond, les lignes de détail sont lâchées ; celles qui racontent une séance — son début, son
+ * bilan, ses pannes et ses passages de main — passent toujours.
+ */
+export const HOURLY_DETAIL_LINES = 400;
+const ESSENTIAL_KINDS = new Set<PlayerEventKind>(["start", "stop", "error", "fallback", "cast"]);
+const detailBudget = new Map<string, { count: number; resetAt: number }>();
+
+/** Pour les tests. */
+export function resetPlayerLogBudget(): void {
+  detailBudget.clear();
+}
+
+function withinDetailBudget(user: string, now = Date.now()): boolean {
+  // Le ménage au passage : quelques dizaines de comptes au plus, et une entrée par heure.
+  if (detailBudget.size > 1000) for (const [key, entry] of detailBudget) if (now > entry.resetAt) detailBudget.delete(key);
+  const entry = detailBudget.get(user);
+  if (!entry || now > entry.resetAt) {
+    detailBudget.set(user, { count: 1, resetAt: now + 3600_000 });
+    return true;
+  }
+  if (entry.count >= HOURLY_DETAIL_LINES) return false;
+  entry.count++;
+  return true;
+}
+
 export function logPlaybackEvent(
   user: string,
   kind: PlayerEventKind,
@@ -189,6 +221,8 @@ export function logPlaybackEvent(
   // seulement « est-ce un banc », et une ligne de banc égarée chez les spectateurs coûte plus
   // cher que l'inverse.
   const bench = Boolean(fields.bench);
+  // Le banc écrit dans son propre journal, et bien plus vite : il n'est pas compté.
+  if (!bench && !ESSENTIAL_KINDS.has(kind) && !withinDetailBudget(user)) return;
   // Les valeurs du serveur en tête, pour l'ordre de lecture de la ligne, et encore après les
   // champs, pour qu'elles l'emportent. Étalés en dernier, les champs du navigateur remplaçaient
   // `user`, `kind` et `timestamp` : un compte connecté pouvait écrire au nom d'un autre, ou dater

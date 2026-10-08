@@ -141,7 +141,7 @@ function isAllowedForEveryone(method: string, pathname: string): boolean {
 /**
  * Les lectures réservées à l'administrateur.
  *
- * La règle générale laisse tout GET à un compte ordinaire. Ces quatre-là ne *lisent* pas : elles
+ * La règle générale laisse tout GET à un compte ordinaire. Les quatre premières ne *lisent* pas : elles
  * déclenchent chez Radarr, Sonarr ou Bazarr une recherche interactive auprès des indexeurs et des
  * fournisseurs de sous-titres — des minutes de travail, des quotas consommés, et des noms de
  * sorties que seule la gestion affiche. Aucun écran du cinéma ne les appelle (25/09/2026).
@@ -167,6 +167,27 @@ const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/radarr\/movies\/[^/]+\/releases\/?$/,
   /^\/api\/sonarr\/series\/[^/]+\/releases\/?$/,
   /^\/api\/bazarr\/(movies|episodes)\/[^/]+\/subtitles\/?$/,
+  // La bibliothèque telle que la gestion la voit (08/10/2026) : Radarr et Sonarr entiers, chaque
+  // fiche de gestion, le calendrier, les files, les torrents, les indexeurs, les dossiers et l'espace
+  // disque, l'état des services. Aucun écran du cinéma ne les lit — vérifié appelant par appelant ce
+  // jour-là (`GlobalSearch`, `SimilarMedia`, `SSENotifier` ne vivent que dans la gestion) — et ils
+  // portaient en entier un titre que les tags bloqués d'un compte lui cachent (DECISIONS.md §54) :
+  // titre, synopsis, chemin, nom du torrent. Les descriptions de fiche (`/info`) restent ouvertes :
+  // le cinéma les lit, et elles retirent elles-mêmes ce que le compte ne doit pas voir.
+  /^\/api\/radarr\/movies\/?$/,
+  /^\/api\/sonarr\/series\/?$/,
+  /^\/api\/radarr\/movies\/[^/]+(\/(similar|file))?\/?$/,
+  /^\/api\/sonarr\/series\/[^/]+(\/(similar|episodes))?\/?$/,
+  /^\/api\/(radarr|sonarr)\/(calendar|queue|meta)\/?$/,
+  /^\/api\/calendar\/?$/,
+  /^\/api\/library\/map\/?$/,
+  /^\/api\/stats(\/|$)/,
+  /^\/api\/qbittorrent(\/|$)/,
+  /^\/api\/jackett(\/|$)/,
+  /^\/api\/bazarr\/wanted\/?$/,
+  /^\/api\/sse\/?$/,
+  /^\/api\/status\/?$/,
+  /^\/api\/jellyfin\/items\/?$/,
 ];
 
 function isAdminOnlyRead(pathname: string): boolean {
@@ -238,6 +259,27 @@ function setupDoneSafe(): boolean {
   }
 }
 
+/**
+ * L'optimiseur d'images (`/_next/image`) ne sert qu'aux sessions — et au serveur lui-même.
+ *
+ * Il était public (audit F-009, puis du 08/10/2026) : sans cookie, n'importe qui lui faisait
+ * télécharger et réduire n'importe quelle affiche de TMDB, rangée un an dans `data/image-cache`.
+ * Parcourir les adresses de TMDB faisait grossir `./data` sans limite. Aucune page publique ne s'en
+ * sert (connexion, assistant, état des services n'affichent pas d'affiche optimisée).
+ *
+ * Le serveur, lui, prépare ses propres affiches d'avance (`posterPrewarm`) en appelant son
+ * optimiseur sur la boucle locale, sans cookie. Une telle demande ne porte pas d'`X-Forwarded-For` :
+ * tout ce qui vient de l'extérieur passe par le relais, qui en pose toujours un.
+ */
+async function imageOptimizerAllowed(req: NextRequest): Promise<boolean> {
+  if (!req.headers.get("x-forwarded-for") && !req.headers.get("x-real-ip")) return true;
+  try {
+    return (await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value)) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -258,6 +300,11 @@ export async function proxy(req: NextRequest) {
 
   if (pathname === "/login") {
     return (await signedInElsewhere(req)) ?? NextResponse.next();
+  }
+
+  // L'optimiseur d'images, avant la règle générale de `/_next` — voir `imageOptimizerAllowed`.
+  if (pathname.startsWith("/_next/image")) {
+    return (await imageOptimizerAllowed(req)) ? NextResponse.next() : NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   if (
@@ -396,7 +443,6 @@ export async function proxy(req: NextRequest) {
  */
 const ACTIFS_PUBLICS = [
   "_next/static",
-  "_next/image",
   "favicon.ico",
   "favicon.svg",
   "favicon-32.png",
@@ -443,6 +489,6 @@ export const HORS_PROXY = ["api/reports"];
  */
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|favicon.svg|favicon-32.png|manifest.json|sw.js|offline.html|icon-192.png|icon-512.png|icon.svg|apple-touch-icon.png|splash/|api/reports).*)",
+    "/((?!_next/static|favicon.ico|favicon.svg|favicon-32.png|manifest.json|sw.js|offline.html|icon-192.png|icon-512.png|icon.svg|apple-touch-icon.png|splash/|api/reports).*)",
   ],
 };

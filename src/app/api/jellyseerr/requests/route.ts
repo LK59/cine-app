@@ -58,6 +58,15 @@ export async function POST(req: NextRequest) {
   // Au nom de qui — see `jellyseerrIdentity.ts`. The local-admin login has no identity at all,
   // and its requests go out under the key's owner, which is that same administrator.
   const identity = session ? await resolveJellyseerrIdentity(session) : { userId: null };
+  /**
+   * Sans identité, la demande partait sous la clé d'API — au nom de l'administrateur de Jellyseerr :
+   * approuvée d'office, hors quota, attribuée à lui (audit du 08/10/2026). Cela n'arrive que si
+   * Jellyseerr ne répond pas sur ses comptes ou n'a pas pu importer celui-ci : un compte ordinaire
+   * réessaie plus tard. L'administrateur, lui, *est* le propriétaire de la clé.
+   */
+  if (session?.role !== "admin" && !identity.cookie && identity.userId == null) {
+    return NextResponse.json({ error: "Jellyseerr ne reconnaît pas encore ce compte. Réessaie dans un instant." }, { status: 503 });
+  }
 
   return withErrorHandling(async () => {
     const result = await jellyseerr.createRequest(
