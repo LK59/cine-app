@@ -6,6 +6,8 @@
  * vérifient ligne à ligne.
  */
 
+import { normalize } from "./search-natural-query";
+
 export interface SortableListItem {
   title: string;
   year: number | null;
@@ -20,15 +22,20 @@ export const LIST_SORTS: ListSort[] = ["added", "title", "year"];
 /**
  * Ne garder que ce dont le titre contient ce qui est tapé.
  *
- * Insensible à la casse et aux espaces de bord. Volontairement sans tolérance à la faute : ici on
- * cherche dans une liste qu'on a soi-même remplie, donc dans des titres qu'on connaît — c'est la
- * recherche générale qui a besoin d'être indulgente, pas celle-ci.
+ * Insensible à la casse, aux accents et à la ponctuation — la même `normalize` que la grille
+ * complète (08/10/2026) : « eleve » trouvait « Élève » dans « Tous les films » et rien dans Ma
+ * liste, deux copies d'une même décision qui avaient divergé. Volontairement sans tolérance à la
+ * faute : ici on cherche dans une liste qu'on a soi-même remplie, donc dans des titres qu'on
+ * connaît — c'est la recherche générale qui a besoin d'être indulgente, pas celle-ci.
  */
 export function filterByTitle<T extends { title: string }>(items: T[], query: string): T[] {
-  const needle = query.trim().toLowerCase();
+  const needle = normalize(query);
   if (!needle) return items;
-  return items.filter((item) => item.title.toLowerCase().includes(needle));
+  return items.filter((item) => normalize(item.title).includes(needle));
 }
+
+/** Un seul comparateur : `localeCompare` avec options en reconstruit un à chaque appel. */
+const TITLE_COLLATOR = new Intl.Collator("fr", { numeric: true, sensitivity: "base" });
 
 /**
  * Trier.
@@ -42,7 +49,7 @@ export function filterByTitle<T extends { title: string }>(items: T[], query: st
  * deux sens.
  */
 export function sortList<T extends SortableListItem>(items: T[], sort: ListSort): T[] {
-  const byTitle = (a: T, b: T) => a.title.localeCompare(b.title, "fr", { numeric: true, sensitivity: "base" });
+  const byTitle = (a: T, b: T) => TITLE_COLLATOR.compare(a.title, b.title);
   const sorted = [...items];
   switch (sort) {
     case "title":

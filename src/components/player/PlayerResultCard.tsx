@@ -27,6 +27,8 @@ export const PlayerResultCard = memo(function PlayerResultCard({
   poster,
   missing,
   onOpen,
+  openId,
+  onOpenId,
   showKind = true,
 }: {
   kind: ResultKind;
@@ -35,7 +37,15 @@ export const PlayerResultCard = memo(function PlayerResultCard({
   poster: string | null;
   /** Absent de la bibliothèque — la carte le dit, discrètement, plutôt que de mentir. */
   missing?: boolean;
-  onOpen: () => void;
+  onOpen?: () => void;
+  /**
+   * L'autre façon d'ouvrir : une fonction commune à toute la grille, appelée avec `openId`
+   * (08/10/2026). Une fonction écrite en ligne par carte (`onOpen={() => …}`) est neuve à chaque
+   * rendu et défait le `memo` — la grille complète redessinait ses six cent soixante-dix cartes à
+   * chaque frappe dans son filtre.
+   */
+  openId?: number;
+  onOpenId?: (id: number) => void;
   /**
    * L'étiquette « Film » / « Série » / « Personne », à couper quand la grille n'en montre qu'une.
    *
@@ -53,7 +63,7 @@ export const PlayerResultCard = memo(function PlayerResultCard({
   return (
     <button
       type="button"
-      onClick={onOpen}
+      onClick={() => (onOpen ? onOpen() : openId !== undefined && onOpenId?.(openId))}
       data-nav-item
       className="pressable group flex flex-col text-left focus-visible:outline-none"
     >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { Search as SearchIcon, X } from "lucide-react";
 import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
@@ -19,6 +19,7 @@ import { PANEL_WIDE } from "./panelWidth";
 import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonResult } from "@/app/api/search/route";
 import { libraryTargetOf } from "@/lib/searchResultTarget";
+import { escapeClears } from "@/lib/escapeClears";
 
 type Filter = "all" | "movie" | "series" | "person";
 
@@ -225,16 +226,19 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   const typed = query.trim();
   const searching = typed.length >= MIN_QUERY;
 
+  // La bibliothèque est parcourue sur la frappe différée (08/10/2026) : la touche s'affiche
+  // d'abord, la comparaison à chaque titre suit, interruptible — elle pesait sur chaque appui.
+  const localQuery = useDeferredValue(typed);
   const local: Entry[] = useMemo(() => {
-    if (!searching) return [];
-    return searchCinemaLibrary(typed, allMovies, allSeries, locale)
+    if (localQuery.length < MIN_QUERY) return [];
+    return searchCinemaLibrary(localQuery, allMovies, allSeries, locale)
       .slice(0, MAX_LOCAL)
       .map((r) =>
         r.kind === "movie"
           ? { key: `movie-${r.item.radarrId}`, kind: "movie" as const, title: r.item.title, year: r.item.year, poster: r.item.posterUrl, libraryId: r.item.radarrId, tmdbId: r.item.tmdbId }
           : { key: `series-${r.item.sonarrId}`, kind: "series" as const, title: r.item.title, year: r.item.year, poster: r.item.posterUrl, libraryId: r.item.sonarrId, tmdbId: r.item.tmdbId }
       );
-  }, [searching, typed, allMovies, allSeries, locale]);
+  }, [localQuery, allMovies, allSeries, locale]);
 
   /**
    * Les deux moteurs mis bout à bout, sans jamais montrer deux fois le même titre.
@@ -352,6 +356,8 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
                d'ordinateur, et il manquait — voir `enterResults`. Rien à relancer dans les deux
                cas, les résultats sont déjà là. */
             onKeyDown={(e) => {
+              // Échap vide le champ avant de quitter la recherche — voir `escapeClears`.
+              escapeClears(query, () => setQuery(""))(e);
               if (e.key !== "Enter" && e.key !== "ArrowDown") return;
               e.preventDefault();
               if (e.key === "Enter") rememberSearch(typed);

@@ -14,6 +14,23 @@ function actions(overrides: Partial<SheetAction> = {}): SheetAction[] {
 }
 
 describe("ActionSheet", () => {
+  // Une confirmation ne s'ouvre pas sur son geste destructeur : Entrée pressée juste après
+  // l'ouverture supprimait la demande (08/10/2026).
+  it("une confirmation donne le focus à l'action sans danger", async () => {
+    render(
+      <ActionSheet
+        open
+        role="alertdialog"
+        onClose={vi.fn()}
+        actions={[
+          { label: "Oui, annuler", variant: "danger", onClick: vi.fn() },
+          { label: "Non, garder", onClick: vi.fn() },
+        ]}
+      />
+    );
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("Non, garder"));
+  });
+
   it("renders nothing when closed", () => {
     render(<ActionSheet open={false} onClose={vi.fn()} actions={actions()} />);
     expect(screen.queryByText("Do thing")).not.toBeInTheDocument();

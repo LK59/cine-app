@@ -191,6 +191,10 @@ export function PlayerPanelFrame({
       // faut s'effacer, un enfant n'a aucun moyen de passer devant.
       if (document.querySelector('[aria-modal="true"]')) return;
       if ((e.target as Element | null)?.closest?.("[data-owns-escape]")) return;
+      // Un champ de saisie encore rempli (08/10/2026) : Échap le vide d'abord (`escapeClears`),
+      // la touche suivante ferme. Dans le filtre de la grille complète, un Échap pour effacer ce
+      // qu'on venait de taper quittait la grille — et perdait tri, époque et durée avec elle.
+      if (e.target instanceof HTMLInputElement && e.target.value !== "" && /^(search|text)$/.test(e.target.type)) return;
       e.stopPropagation();
       closeWindow();
     };
