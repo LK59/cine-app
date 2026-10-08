@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hiddenForRequest, withoutHidden } from "@/lib/blockedTags";
+import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
@@ -8,7 +9,7 @@ import { matchSeries } from "@/lib/catalogueMembers";
 import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt } from "@/lib/title-art";
-import { catalogueExtras, getTitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
+import { catalogueExtras, getTitleExtras, type TitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import { dailyTop10Db } from "@/lib/db";
@@ -37,6 +38,8 @@ export interface CinemaSeries {
    */
   tagline?: string;
   trailerKey?: string | null;
+  /** La durée d'un épisode, en minutes — absente tant qu'elle n'est pas sue, comme les deux autres. */
+  episodeRuntime?: number | null;
   imdbRating: string | null;
   genres: string[];
   // Same role as the movie payload's own field — the "Nouveau" badge and the recently-added rail.
@@ -65,6 +68,16 @@ export interface CinemaSeriesWire {
 // (Skyhook, free), but Sonarr doesn't for series, hence the extra getImdbRating() call here
 // (OMDb-backed, 24h persistently cached — same helper the dashboard route already uses for its
 // own "recently added series" rail).
+/**
+ * L'accroche, la bande-annonce et la durée d'un épisode (« 43min/ép. ») : la même règle que la
+ * fiche (`tvEpisodeRuntime`), la durée de Sonarr comprise. Absentes ensemble tant que TMDB n'a pas
+ * répondu pour ce titre.
+ */
+function seriesExtras(extras: TitleExtras | null, locale: Locale, sonarrRuntime: number | null | undefined) {
+  if (!extras) return {};
+  return { ...catalogueExtras(extras, locale), episodeRuntime: tvEpisodeRuntime(extras.tvRuntime ?? null, sonarrRuntime) };
+}
+
 async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: Locale): Promise<CinemaSeries> {
   // Independent lookups (different upstreams, different cache keys) — run concurrently rather
   // than one after the other, halving the cold-cache latency per series that hasn't been seen
@@ -90,7 +103,7 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: L
     // Dans la langue de qui regarde quand TMDB la connaît — voir `TitleOverviews`.
     overview: localizedOverview(getTitleOverviews(s.tmdbId, "series"), locale, s.overview ?? null),
     // L'accroche et la bande-annonce, là dès l'ouverture de la fiche — voir `TitleExtras`.
-    ...catalogueExtras(getTitleExtras(s.tmdbId, "series"), locale),
+    ...seriesExtras(getTitleExtras(s.tmdbId, "series"), locale, s.runtime),
     imdbRating,
     // Sous leur nom commun : « Horreur » et « Horror » ne font qu'un genre — voir `genres.ts`.
     genres: canonicalGenres(s.genres),

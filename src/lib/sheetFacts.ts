@@ -244,3 +244,16 @@ export function sheetLeadFacts(
     trailerLate,
   };
 }
+
+/**
+ * La durée d'un épisode sur la fiche d'une série (« 43min/ép. ») : celle du catalogue, là dès
+ * l'ouverture, sinon celle de la description (`late` : elle garde alors son fondu). Elle était la
+ * dernière à arriver en décalé (08/10/2026). Une règle pour les deux fiches de série.
+ */
+export function sheetEpisodeRuntime(
+  catalogue: number | null | undefined,
+  info: number | null | undefined,
+): { minutes: number | null; late: boolean } {
+  if (catalogue !== undefined) return { minutes: catalogue ?? info ?? null, late: catalogue === null && info != null };
+  return { minutes: info ?? null, late: true };
+}

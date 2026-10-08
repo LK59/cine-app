@@ -127,9 +127,16 @@ const overviewKey = (namesKey: string) => namesKey.replace("tmdb:titles:v2:", "t
 export interface TitleExtras {
   taglines: Partial<Record<Locale, string>>;
   trailers: Partial<Record<Locale, string | null>>;
+  /**
+   * Séries : ce que TMDB dit de la durée d'un épisode, gardé tel quel pour que le catalogue la
+   * calcule par la même règle que la fiche (`tvEpisodeRuntime`, avec la durée de Sonarr). Elle
+   * arrivait elle aussi en décalé, après le reste de la fiche (08/10/2026).
+   */
+  tvRuntime?: Pick<TmdbTranslations, "episode_run_time" | "last_episode_to_air" | "next_episode_to_air">;
 }
 const extrasMemory = new Map<string, TitleExtras>();
-const extrasKey = (namesKey: string) => namesKey.replace("tmdb:titles:v2:", "tmdb:extras:v1:");
+// `v2` : la durée des épisodes s'y ajoute (08/10/2026) — une entrée `v1` relue laisserait les séries sans.
+const extrasKey = (namesKey: string) => namesKey.replace("tmdb:titles:v2:", "tmdb:extras:v2:");
 
 export function extrasFromTranslations(data: TmdbTranslations): TitleExtras {
   const taglines: Partial<Record<Locale, string>> = {};
@@ -151,7 +158,15 @@ export function extrasFromTranslations(data: TmdbTranslations): TitleExtras {
   // Demandés sans langue, les détails sont en anglais : pour un titre tourné en anglais, c'est son
   // accroche d'origine, absente des traductions.
   if (!taglines.en && data.original_language === "en" && data.tagline?.trim()) taglines.en = data.tagline.trim();
-  return { taglines, trailers };
+  const tvRuntime =
+    data.episode_run_time || data.last_episode_to_air || data.next_episode_to_air
+      ? {
+          episode_run_time: data.episode_run_time,
+          last_episode_to_air: data.last_episode_to_air ? { runtime: data.last_episode_to_air.runtime ?? null } : null,
+          next_episode_to_air: data.next_episode_to_air ? { runtime: data.next_episode_to_air.runtime ?? null } : null,
+        }
+      : undefined;
+  return { taglines, trailers, ...(tvRuntime ? { tvRuntime } : {}) };
 }
 
 function refresh(key: string, tmdbId: number, mediaType: "movie" | "series"): void {

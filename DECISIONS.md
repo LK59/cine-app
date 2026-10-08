@@ -1771,6 +1771,11 @@ une chaîne vide ou `null` veut dire que le titre n'en a pas.
 (`src/lib/titleNames.ts`), plus `pickTrailer` et `videoLanguages` (`src/lib/clients/tmdb.ts`), communs
 au catalogue et aux deux routes de description. Côté fiches : `sheetLeadFacts` (`src/lib/sheetFacts.ts`).
 
+**La durée d'un épisode** (« 43min/ép. ») suit la même voie depuis le 08/10/2026, parce qu'elle
+était le dernier élément à arriver en décalé. Le catalogue des séries porte `episodeRuntime`, calculé
+par `tvEpisodeRuntime`, la règle de la fiche, avec la durée de Sonarr. La fiche la lit par
+`sheetEpisodeRuntime`.
+
 **Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`.
 
 **Tests.** `titleExtras.test.ts`.

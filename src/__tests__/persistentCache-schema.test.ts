@@ -31,6 +31,8 @@ const FINGERPRINTS: Record<number, string> = {
   4: "5ccf0a8883058f26",
   // 08/10/2026 : l'accroche et la bande-annonce dans le catalogue (`TitleExtras`).
   5: "8b4228990995d5b3",
+  // 08/10/2026 : la durée d'un épisode dans le catalogue des séries.
+  6: "dc22a31a6f9256e9",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

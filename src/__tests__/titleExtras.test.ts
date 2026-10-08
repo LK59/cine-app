@@ -60,3 +60,20 @@ describe("la fiche", () => {
     expect(lead).toMatchObject({ tagline: "Tard", taglineLate: true, trailerKey: "xyz", trailerLate: true });
   });
 });
+
+describe("la durée d'un épisode", () => {
+  it("vient avec le catalogue, par la même règle que la fiche", async () => {
+    const { tvEpisodeRuntime } = await import("@/lib/tvRuntime");
+    const extras = extrasFromTranslations({ episode_run_time: [], last_episode_to_air: { runtime: 43 } });
+    // Sonarr d'abord quand TMDB ne donne pas de durée type, puis le dernier épisode diffusé.
+    expect(tvEpisodeRuntime(extras.tvRuntime ?? null, null)).toBe(43);
+    expect(tvEpisodeRuntime(extras.tvRuntime ?? null, 50)).toBe(50);
+  });
+
+  it("s'affiche dès l'ouverture quand le catalogue la sait, en fondu sinon", async () => {
+    const { sheetEpisodeRuntime } = await import("@/lib/sheetFacts");
+    expect(sheetEpisodeRuntime(43, undefined)).toEqual({ minutes: 43, late: false });
+    expect(sheetEpisodeRuntime(undefined, 45)).toEqual({ minutes: 45, late: true });
+    expect(sheetEpisodeRuntime(undefined, undefined)).toEqual({ minutes: null, late: true });
+  });
+});

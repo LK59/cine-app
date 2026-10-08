@@ -33,7 +33,7 @@ import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, useSheetPlayFacts, sheetLeadFacts } from "@/lib/sheetFacts";
+import { sheetOverview, useSheetPlayFacts, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
 import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
@@ -110,6 +110,7 @@ export function CinemaSeriesDetail({
   // L'accroche et la bande-annonce viennent du catalogue quand il les sait : là dès l'ouverture,
   // sans fondu. La description ne sert qu'à défaut — voir `sheetLeadFacts`.
   const lead = sheetLeadFacts(item, info, info !== undefined || infoError !== undefined);
+  const episodeRuntime = sheetEpisodeRuntime(item.episodeRuntime, info?.tmdb?.runtime);
   const { data: episodesData, error: episodesError } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
   // L'épisode que Lire lancerait : celui du serveur quand la liste est là, sinon celui que « À
   // suivre » ou « Reprendre », gardés sur l'appareil, connaissent déjà — voir `sheetFacts.ts`.
@@ -331,8 +332,8 @@ export function CinemaSeriesDetail({
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
-            {/* Le catalogue des séries n'a pas de durée : elle vient de TMDB, et s'insère en fondu. */}
-            {runtimeLabel(info?.tmdb?.runtime, true) && <span className={late.fade}>{runtimeLabel(info?.tmdb?.runtime, true)}</span>}
+            {/* Celle du catalogue, là dès l'ouverture ; celle de TMDB en fondu sinon — voir `sheetEpisodeRuntime`. */}
+            {runtimeLabel(episodeRuntime.minutes, true) && <span className={episodeRuntime.late ? late.fade : ""}>{runtimeLabel(episodeRuntime.minutes, true)}</span>}
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
 

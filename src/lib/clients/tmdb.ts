@@ -208,6 +208,10 @@ export interface TmdbTranslations {
   original_name?: string;
   /** En anglais : les détails sont demandés sans langue. */
   tagline?: string | null;
+  /** Séries seulement : de quoi dire la durée d'un épisode (`tvEpisodeRuntime`). */
+  episode_run_time?: number[];
+  last_episode_to_air?: { runtime?: number | null } | null;
+  next_episode_to_air?: { runtime?: number | null } | null;
   translations?: { translations?: TmdbTranslation[] };
   /** Les vidéos du titre, dans les langues des quatre interfaces — voir `TitleExtras`. */
   videos?: { results?: TmdbVideo[] };

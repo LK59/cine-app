@@ -41,7 +41,7 @@ import { resumeAtFor } from "@/lib/resumePosition";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts } from "@/lib/sheetFacts";
+import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
 import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
@@ -160,6 +160,9 @@ export function CinemaMobileDetail({
   // L'accroche et la bande-annonce viennent du catalogue quand il les sait : là dès l'ouverture,
   // sans fondu. La description ne sert qu'à défaut — voir `sheetLeadFacts`.
   const lead = sheetLeadFacts(item, info, info !== undefined || infoError !== undefined);
+  const seriesRuntime = sheetEpisodeRuntime("sonarrId" in item ? (item as CinemaSeries).episodeRuntime : undefined, info?.tmdb?.runtime);
+  const runtimeMinutes = isSeries ? seriesRuntime.minutes : sheetRuntimeMinutes((item as CinemaMovie).runtimeMinutes, info?.tmdb?.runtime);
+  const runtimeLate = isSeries && seriesRuntime.late;
 
   // Movies carry their resume point on a per-user endpoint (the library payload is shared across
   // viewers); a series' equivalent is whichever episode Jellyfin says is next up.
@@ -453,13 +456,9 @@ export function CinemaMobileDetail({
           {/* La durée, à côté de l'année et du genre : c'est la troisième chose qu'on veut savoir
               avant de lancer un film. Pour une série, celle d'un épisode (« 45min/ép. ») — ce
               qu'engage le premier, avant d'en avoir ouvert aucun (21/09/2026). */}
-          {/* Celle du catalogue d'abord, là dès l'ouverture — celui des séries n'en a pas, et la
-              leur s'insère en fondu. */}
-          {runtimeLabel(isSeries ? info?.tmdb?.runtime : sheetRuntimeMinutes((item as CinemaMovie).runtimeMinutes, info?.tmdb?.runtime), isSeries) && (
-            <span className={isSeries ? late.fade : ""}>
-              {runtimeLabel(isSeries ? info?.tmdb?.runtime : sheetRuntimeMinutes((item as CinemaMovie).runtimeMinutes, info?.tmdb?.runtime), isSeries)}
-            </span>
-          )}
+          {/* Celle du catalogue d'abord, là dès l'ouverture — pour une série aussi, depuis le
+              08/10/2026 (`sheetEpisodeRuntime`) ; celle de TMDB s'insère en fondu à défaut. */}
+          {runtimeLabel(runtimeMinutes, isSeries) && <span className={runtimeLate ? late.fade : ""}>{runtimeLabel(runtimeMinutes, isSeries)}</span>}
           <QualityBadges quality={"quality" in item ? item.quality : undefined} />
           {item.genres.length > 0 && <span className="truncate">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
         </div>
