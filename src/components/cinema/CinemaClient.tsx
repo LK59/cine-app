@@ -80,7 +80,7 @@ import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
 import { useFreshPersonalLists } from "@/lib/freshLists";
 import { heroInfoKey, preloadHeroInfo } from "@/lib/useHeroInfo";
 import { ProgressFill } from "@/components/cinema/ProgressFill";
-import { feedResumeAt } from "@/lib/sheetFacts";
+import { bannerResumeAt, feedResumeAt } from "@/lib/sheetFacts";
 import { usePlaySeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { guidedScrollClass, useGuidedScroll } from "@/lib/guidedScroll";
 
@@ -699,7 +699,7 @@ export function CinemaClient() {
   const playSeries = usePlaySeriesNextEpisode(playback);
   const playMovieFromBanner = (item: CinemaMovie) => {
     const entry = (resume?.items ?? []).find((r) => r.id === item.jellyfinItemId);
-    playback.play({ itemId: item.jellyfinItemId, title: item.title, resumeAt: resume === undefined ? undefined : feedResumeAt(entry?.positionTicks, RESUME_KEY) });
+    playback.play({ itemId: item.jellyfinItemId, title: item.title, resumeAt: bannerResumeAt(resume !== undefined, entry?.positionTicks, entry !== undefined, RESUME_KEY) });
   };
   /**
    * « ‹ À la une » : l'aperçu d'une affiche cède la place aux nouveautés, en fondu (le titre se
