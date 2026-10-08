@@ -68,8 +68,13 @@ function trustedEntries(raw: string): string[] {
         resolving = false;
       });
   }
-  // Un nom pas encore résolu ne fait confiance à personne : l'adresse de la connexion fait foi.
   return [...literal, ...(resolved && resolved.raw === raw ? resolved.entries : [])];
+}
+
+/** Des noms déclarés, pas encore résolus une première fois (les premières millisecondes après le démarrage). */
+function namesPending(raw: string): boolean {
+  const hasNames = raw.split(",").some((s) => s.trim() && isIP(s.trim().split("/")[0]) === 0);
+  return hasNames && !(resolved && resolved.raw === raw);
 }
 
 /** Pour les tests : oublier les noms résolus. */
@@ -95,6 +100,10 @@ export function clientAddressOf(headers: { get(name: string): string | null }, r
   if (!raw.trim() || !peerRaw) return lastForwarded(forwarded);
   const peer = normalizeAddress(peerRaw);
   const trusted = trustedEntries(raw);
+  // Le nom du relais n'est pas encore résolu (juste après un démarrage) : l'ancienne règle le temps
+  // de la résolution, plutôt que de compter tous les visiteurs sous l'adresse du relais — ils
+  // partageraient alors une seule limite de tentatives.
+  if (namesPending(raw)) return lastForwarded(forwarded);
   const isTrusted = (address: string) => trusted.some((entry) => addressMatches(address, entry));
   if (!isTrusted(peer)) return peer;
   const chain = (forwarded ?? "").split(",").map((p) => p.trim()).filter(Boolean);

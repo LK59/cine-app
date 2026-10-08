@@ -43,3 +43,9 @@ describe("l'adresse du client", () => {
     expect(normalizeAddress("::ffff:10.0.0.1")).toBe("10.0.0.1");
   });
 });
+
+describe("un relais déclaré par son nom", () => {
+  it("garde l'ancienne règle tant que le nom n'est pas résolu", () => {
+    expect(clientAddressOf(h({ "x-cine-peer": "172.20.0.16", "x-forwarded-for": "213.44.247.148" }), "nom-pas-encore-resolu.invalid")).toBe("213.44.247.148");
+  });
+});
