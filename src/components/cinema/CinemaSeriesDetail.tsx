@@ -338,6 +338,8 @@ export function CinemaSeriesDetail({
           <CinemaOverview
             text={sheetOverview(item.overview, info?.tmdb?.overview)}
             readMore={t("cinema.readMore")}
+            // Jusqu'à cinq lignes quand la page a de la place au-dessus du logo — voir CinemaOverview.
+            maxLines={5}
             alwaysOpenable={!!info?.imdbId}
             onOpen={() => setShowSynopsis(true)}
           />

@@ -376,6 +376,16 @@
   mask-image: linear-gradient(to bottom, #000 calc(100% - 0.5lh), transparent 100%);
 }
 
+/* Le même fondu, sur un nombre de lignes choisi à l'exécution (`--clamp-lines`) : le synopsis des
+   fiches du bureau prend jusqu'à cinq lignes quand la page a de la place au-dessus du logo
+   (`CinemaOverview`, 08/10/2026). */
+@utility clamp-fade-n {
+  max-height: calc(var(--clamp-lines, 2) * 1lh);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 0.5lh), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 0.5lh), transparent 100%);
+}
+
 /* Deux lignes, et la fin de la seconde s'efface vers la droite — le repli de la bannière du
    bureau, quand même sa première phrase dépasse deux lignes (voir HeroOverview). Le fondu vertical
    de `clamp-fade-2` se lisait, là, comme une ombre sous le texte : ici la première ligne reste

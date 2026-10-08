@@ -107,6 +107,7 @@ export function CinemaOverview({
   readMore,
   onOpen,
   alwaysOpenable = false,
+  maxLines = 2,
 }: {
   text: string;
   readMore: string;
@@ -116,21 +117,51 @@ export function CinemaOverview({
    * s'ouvrait que sur un texte coupé : un synopsis court aurait caché les notes pour de bon.
    */
   alwaysOpenable?: boolean;
+  /**
+   * Jusqu'à combien de lignes le synopsis peut s'allonger quand la page a de la place au-dessus du
+   * logo (08/10/2026). Deux par défaut ; les fiches du bureau passent cinq : sur un grand écran, la
+   * colonne posée en bas laissait la moitié de la hauteur vide pendant que le synopsis s'arrêtait
+   * à deux lignes. Le fondu et « Voir plus » restent pour ce qui ne tient pas.
+   */
+  maxLines?: number;
 }) {
   const [clamped, setClamped] = useState(false);
+  const [lines, setLines] = useState(2);
   const bodyRef = useRef<HTMLParagraphElement>(null);
 
   // Mesuré plutôt que deviné : la longueur qui tient en deux lignes dépend de la largeur de la
   // colonne, donc de la fenêtre. Relu à chaque redimensionnement, pour la même raison.
   useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    // La page de la fiche (sa première section) : c'est d'elle que se mesure la place libre.
+    const page = maxLines > 2 ? el.closest<HTMLElement>("[data-snap-section]") : null;
     const measure = () => {
-      const el = bodyRef.current;
-      if (el) setClamped(el.scrollHeight - el.clientHeight > 2);
+      if (page) {
+        const lineHeight = Number.parseFloat(getComputedStyle(el).lineHeight) || 24;
+        // Le haut de la colonne, sous la page : ce qu'il reste au-dessus du logo, moins la place du
+        // bouton Retour et une respiration. Les lignes déjà ajoutées comptent comme de la place —
+        // sans quoi chaque ligne gagnée réduirait la mesure suivante et le synopsis oscillerait.
+        const column = el.closest<HTMLElement>(".flex.flex-col") ?? el;
+        const free = column.getBoundingClientRect().top - page.getBoundingClientRect().top - TOP_RESERVE_PX;
+        const current = Math.max(2, Math.round(el.clientHeight / lineHeight));
+        const room = 2 + Math.floor((free + (current - 2) * lineHeight) / lineHeight);
+        // Pas plus de lignes que le texte n'en demande.
+        const natural = Math.max(2, Math.ceil(el.scrollHeight / lineHeight));
+        const next = Math.max(2, Math.min(maxLines, room, natural));
+        setLines((prev) => (prev === next ? prev : next));
+      }
+      setClamped(el.scrollHeight - el.clientHeight > 2);
     };
     measure();
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [text]);
+    const observer = page && typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    if (observer && page) observer.observe(page);
+    return () => {
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, [text, maxLines, lines]);
 
   return (
     <button
@@ -144,7 +175,8 @@ export function CinemaOverview({
       <p
         ref={bodyRef}
         // Sélectionnable : c'est du texte, on doit pouvoir le copier même s'il est dans un bouton.
-        className="clamp-fade-2 select-text text-sm text-white drop-shadow-sm sm:text-base"
+        className="clamp-fade-n select-text text-sm text-white drop-shadow-sm sm:text-base"
+        style={{ ["--clamp-lines" as string]: String(lines) }}
       >
         {text}
       </p>
@@ -156,6 +188,9 @@ export function CinemaOverview({
     </button>
   );
 }
+
+/** La place gardée en haut de la fiche, au-dessus du logo : le bouton Retour et une respiration. */
+const TOP_RESERVE_PX = 120;
 
 /** `animate-fade-out` (200 ms) et `animate-fade-out-scale` (180 ms), globals.css. */
 const DETAIL_MODAL_EXIT_MS = 200;
