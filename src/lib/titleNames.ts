@@ -1,7 +1,7 @@
-import { tmdb, type TmdbTranslations } from "@/lib/clients/tmdb";
+import { createTmdbClient, pickTrailer, tmdb, videoLanguages, type TmdbTranslations } from "@/lib/clients/tmdb";
 import { kvCacheDb } from "@/lib/db";
 import { logError } from "@/lib/logger";
-import { LOCALES, type Locale } from "@/lib/i18n";
+import { LOCALES, getTmdbLocale, type Locale } from "@/lib/i18n";
 import { withSlot } from "@/lib/title-art";
 import { spreadTtl } from "@/lib/cacheSpread";
 
@@ -56,6 +56,7 @@ const failedAt = new Map<string, number>();
 export function resetTitleNames(): void {
   memory.clear();
   overviewMemory.clear();
+  extrasMemory.clear();
   refreshing.clear();
   failedAt.clear();
 }
@@ -111,6 +112,48 @@ export function overviewsFromTranslations(data: TmdbTranslations): TitleOverview
 const overviewMemory = new Map<string, TitleOverviews>();
 const overviewKey = (namesKey: string) => namesKey.replace("tmdb:titles:v2:", "tmdb:overviews:v1:");
 
+/**
+ * L'accroche et la bande-annonce d'un titre, pour chacune des quatre langues (08/10/2026).
+ *
+ * Elles n'arrivaient qu'avec la description complète d'une fiche (Radarr, Bazarr, OMDb, TMDB) et
+ * s'y posaient en décalé, une demi-seconde après tout le reste. Rangées avec le catalogue — et donc
+ * dans le cache qu'il a sur l'appareil —, elles sont là dès l'ouverture. Elles viennent du même appel
+ * que les titres et les synopsis (`append_to_response=translations,videos`) : rien de plus à TMDB,
+ * sauf une accroche dans la langue d'origine, que TMDB ne range pas parmi les traductions.
+ *
+ * Une langue sans accroche est une chaîne vide, et un titre sans bande-annonce `null` : c'est ce qui
+ * distingue « rien à montrer » de « pas encore su » (l'entrée absente).
+ */
+export interface TitleExtras {
+  taglines: Partial<Record<Locale, string>>;
+  trailers: Partial<Record<Locale, string | null>>;
+}
+const extrasMemory = new Map<string, TitleExtras>();
+const extrasKey = (namesKey: string) => namesKey.replace("tmdb:titles:v2:", "tmdb:extras:v1:");
+
+export function extrasFromTranslations(data: TmdbTranslations): TitleExtras {
+  const taglines: Partial<Record<Locale, string>> = {};
+  const trailers: Partial<Record<Locale, string | null>> = {};
+  const translations = data.translations?.translations ?? [];
+  const videos = data.videos?.results ?? [];
+  for (const locale of LOCALES) {
+    const candidates = translations.filter((t) => t.iso_639_1 === locale);
+    const ordered = [
+      ...candidates.filter((t) => t.iso_3166_1 === HOME_COUNTRY[locale]),
+      ...candidates.filter((t) => t.iso_3166_1 !== HOME_COUNTRY[locale]),
+    ];
+    taglines[locale] = ordered.map((t) => (t.data?.tagline || "").trim()).find(Boolean) ?? "";
+    // Les mêmes langues de vidéo que la fiche (`videoLanguages`) : la bande-annonce retenue
+    // d'avance est celle que la fiche aurait choisie.
+    const accepted = videoLanguages(getTmdbLocale(locale)).split(",");
+    trailers[locale] = pickTrailer(videos.filter((v) => accepted.includes(v.iso_639_1 ?? "null")))?.key ?? null;
+  }
+  // Demandés sans langue, les détails sont en anglais : pour un titre tourné en anglais, c'est son
+  // accroche d'origine, absente des traductions.
+  if (!taglines.en && data.original_language === "en" && data.tagline?.trim()) taglines.en = data.tagline.trim();
+  return { taglines, trailers };
+}
+
 function refresh(key: string, tmdbId: number, mediaType: "movie" | "series"): void {
   if (refreshing.has(key)) return;
   refreshing.add(key);
@@ -123,6 +166,10 @@ function refresh(key: string, tmdbId: number, mediaType: "movie" | "series"): vo
       const overviews = overviewsFromTranslations(data);
       overviewMemory.set(overviewKey(key), overviews);
       kvCacheDb.set(overviewKey(key), overviews, entry.fetchedAt);
+      return completeOriginalTagline(extrasFromTranslations(data), data.original_language, tmdbId, mediaType).then((extras) => {
+        extrasMemory.set(extrasKey(key), extras);
+        kvCacheDb.set(extrasKey(key), extras, entry.fetchedAt);
+      });
     })
     .catch((err) => {
       failedAt.set(key, Date.now());
@@ -132,6 +179,60 @@ function refresh(key: string, tmdbId: number, mediaType: "movie" | "series"): vo
 }
 
 /** Ce qu'on sait déjà de ce titre, tout de suite — et une recherche lancée s'il le faut. */
+/**
+ * L'accroche d'un titre dans sa langue d'origine, quand c'est une des quatre : TMDB ne la range pas
+ * parmi les traductions (comme le titre, voir `namesFromTranslations`), et un film français n'avait
+ * donc pas d'accroche française. Un appel de plus, pour ces titres-là seulement ; son échec laisse
+ * l'accroche vide — la fiche la retrouve dans sa propre description.
+ */
+async function completeOriginalTagline(extras: TitleExtras, original: string | undefined, tmdbId: number, mediaType: "movie" | "series"): Promise<TitleExtras> {
+  const locale = LOCALES.find((l) => l === original);
+  // L'anglais est déjà là (les détails sont en anglais, voir `extrasFromTranslations`).
+  if (!locale || locale === "en" || extras.taglines[locale]) return extras;
+  try {
+    const { tagline } = await withSlot(() => createTmdbClient(getTmdbLocale(locale)).getTagline(mediaType, tmdbId));
+    return { ...extras, taglines: { ...extras.taglines, [locale]: (tagline ?? "").trim() } };
+  } catch {
+    return extras;
+  }
+}
+
+/**
+ * L'accroche et la bande-annonce connues pour ce titre, ou `null` si elles ne le sont pas encore —
+ * la demande part alors en arrière-plan, comme pour les titres traduits. Une entrée d'avant le
+ * 08/10/2026 n'en a pas : la première lecture du catalogue la complète.
+ */
+export function getTitleExtras(tmdbId: number | null | undefined, mediaType: "movie" | "series"): TitleExtras | null {
+  try {
+    if (!tmdbId || !tmdb.isEnabled()) return null;
+    const key = `tmdb:titles:v2:${mediaType}:${tmdbId}`;
+    const ekey = extrasKey(key);
+    let extras = extrasMemory.get(ekey);
+    if (!extras) {
+      const disk = kvCacheDb.get(ekey);
+      if (disk) {
+        extras = disk.value as TitleExtras;
+        extrasMemory.set(ekey, extras);
+      }
+    }
+    if (!extras) {
+      const recentlyFailed = Date.now() - (failedAt.get(key) ?? 0) < RETRY_AFTER_FAILURE_MS;
+      if (!recentlyFailed) refresh(key, tmdbId, mediaType);
+      return null;
+    }
+    return extras;
+  } catch (err) {
+    logError("title-names", err, { tmdbId, mediaType });
+    return null;
+  }
+}
+
+/** Les deux champs du catalogue : absents tant que rien n'est su, vides quand il n'y a rien. */
+export function catalogueExtras(extras: TitleExtras | null, locale: Locale): { tagline?: string; trailerKey?: string | null } {
+  if (!extras) return {};
+  return { tagline: extras.taglines[locale] ?? "", trailerKey: extras.trailers[locale] ?? null };
+}
+
 export function getTitleNames(tmdbId: number | null | undefined, mediaType: "movie" | "series"): TitleNames {
   // Un ornement du catalogue ne doit jamais pouvoir l'emporter : une base qui refuse de lire, un
   // client TMDB absent, et c'est le titre d'avant qui s'affiche — pas un catalogue en erreur.

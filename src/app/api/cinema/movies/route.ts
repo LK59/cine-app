@@ -8,7 +8,7 @@ import { matchMovies } from "@/lib/catalogueMembers";
 import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt } from "@/lib/title-art";
-import { getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
+import { catalogueExtras, getTitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import { dailyTop10Db } from "@/lib/db";
 import type { HydratedPayload } from "@/lib/cinemaPayload";
@@ -51,6 +51,13 @@ export interface CinemaMovie {
    */
   posterTextlessUrl: string | null;
   overview: string | null;
+  /**
+   * L'accroche et la bande-annonce, pour que la fiche les montre dès l'ouverture (08/10/2026) :
+   * absentes tant que le serveur ne les sait pas — la fiche attend alors sa description —, chaîne
+   * vide ou `null` quand le titre n'en a pas. Voir `TitleExtras`.
+   */
+  tagline?: string;
+  trailerKey?: string | null;
   imdbRating: string | null;
   /**
    * La durée, en minutes.
@@ -125,6 +132,8 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string, locale: Loc
     posterTextlessUrl: art.posterTextlessUrl,
     // Dans la langue de qui regarde quand TMDB la connaît — voir `TitleOverviews`.
     overview: localizedOverview(getTitleOverviews(m.tmdbId, "movie"), locale, m.overview ?? null),
+    // L'accroche et la bande-annonce, là dès l'ouverture de la fiche — voir `TitleExtras`.
+    ...catalogueExtras(getTitleExtras(m.tmdbId, "movie"), locale),
     // Radarr already resolves this itself at add/refresh time (Skyhook) — free, no
     // OMDb/TMDB round trip needed, same field fetchHero() in the dashboard route uses.
     imdbRating: m.ratings?.imdb?.value != null ? m.ratings.imdb.value.toFixed(1) : null,

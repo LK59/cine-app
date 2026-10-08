@@ -8,7 +8,7 @@ import { matchSeries } from "@/lib/catalogueMembers";
 import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt } from "@/lib/title-art";
-import { getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
+import { catalogueExtras, getTitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import { dailyTop10Db } from "@/lib/db";
@@ -30,6 +30,13 @@ export interface CinemaSeries {
   /** Voir la note jumelle dans la route des films. */
   posterTextlessUrl: string | null;
   overview: string | null;
+  /**
+   * L'accroche et la bande-annonce, pour que la fiche les montre dès l'ouverture (08/10/2026) :
+   * absentes tant que le serveur ne les sait pas — la fiche attend alors sa description —, chaîne
+   * vide ou `null` quand le titre n'en a pas. Voir `TitleExtras`.
+   */
+  tagline?: string;
+  trailerKey?: string | null;
   imdbRating: string | null;
   genres: string[];
   // Same role as the movie payload's own field — the "Nouveau" badge and the recently-added rail.
@@ -82,6 +89,8 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: L
     posterTextlessUrl: art.posterTextlessUrl,
     // Dans la langue de qui regarde quand TMDB la connaît — voir `TitleOverviews`.
     overview: localizedOverview(getTitleOverviews(s.tmdbId, "series"), locale, s.overview ?? null),
+    // L'accroche et la bande-annonce, là dès l'ouverture de la fiche — voir `TitleExtras`.
+    ...catalogueExtras(getTitleExtras(s.tmdbId, "series"), locale),
     imdbRating,
     // Sous leur nom commun : « Horreur » et « Horror » ne font qu'un genre — voir `genres.ts`.
     genres: canonicalGenres(s.genres),

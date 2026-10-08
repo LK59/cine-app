@@ -1749,3 +1749,30 @@ métadonnées ne l'efface pas. La lecture reste gardée par `assertVisible`.
 
 **Décidé le 08/10/2026.**
 
+
+## 55. L'accroche et la bande-annonce viennent avec le catalogue
+
+**Règle.** Une fiche montre l'accroche et le bouton « Bande-annonce » dès l'ouverture, sans fondu,
+quand le catalogue les connaît. Elle n'attend la description de la fiche (Radarr, Bazarr, OMDb, TMDB)
+que pour un titre que le serveur ne connaît pas encore, et dans ce cas elle garde la place réservée et
+le fondu. Quand le catalogue connaît la valeur, c'est elle qui s'affiche : voir l'accroche changer sous
+les yeux serait pire que d'attendre.
+
+**Pourquoi.** Les deux n'arrivaient qu'avec la description, une demi-seconde après le reste de la fiche,
+alors que tout le reste venait du catalogue déjà gardé sur l'appareil.
+
+**D'où elles viennent.** Elles arrivent dans le même appel TMDB que les titres et les synopsis traduits
+(`append_to_response=translations,videos`), sans requête de plus par titre. Seule exception : l'accroche
+dans la langue d'origine quand ce n'est pas l'anglais, que TMDB ne range pas parmi les traductions. Le
+catalogue porte deux champs, `tagline` et `trailerKey`. Un champ absent veut dire « pas encore su » ;
+une chaîne vide ou `null` veut dire que le titre n'en a pas.
+
+**Porteurs.** Côté serveur : `extrasFromTranslations`, `getTitleExtras` et `catalogueExtras`
+(`src/lib/titleNames.ts`), plus `pickTrailer` et `videoLanguages` (`src/lib/clients/tmdb.ts`), communs
+au catalogue et aux deux routes de description. Côté fiches : `sheetLeadFacts` (`src/lib/sheetFacts.ts`).
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`.
+
+**Tests.** `titleExtras.test.ts`.
+
+**Décidé le 08/10/2026.**

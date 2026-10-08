@@ -29,6 +29,8 @@ const FINGERPRINTS: Record<number, string> = {
   3: "0fbf8c19ee223a94",
   // 07/10/2026 : la disposition de l'accueil dans la configuration publique (DECISIONS.md §52).
   4: "5ccf0a8883058f26",
+  // 08/10/2026 : l'accroche et la bande-annonce dans le catalogue (`TitleExtras`).
+  5: "8b4228990995d5b3",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

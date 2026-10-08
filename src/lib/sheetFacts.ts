@@ -216,3 +216,31 @@ export function bannerResumeAt(feedLoaded: boolean, ticks: number | null | undef
   if (!feedLoaded || !inFeed) return undefined;
   return feedResumeAt(ticks, feedKey);
 }
+
+/**
+ * L'accroche et la bande-annonce d'une fiche (08/10/2026).
+ *
+ * Elles n'arrivaient qu'avec la description complète de la fiche, et se posaient en décalé une
+ * demi-seconde après le reste. Le catalogue les porte désormais (`TitleExtras`), et le catalogue
+ * est déjà sur l'appareil à l'ouverture : elles sont là d'emblée, sans fondu. La description ne
+ * sert plus que pour un titre que le serveur ne connaissait pas encore (`taglineLate`,
+ * `trailerLate` : celles-là gardent leur place tenue et leur fondu). Le catalogue fait foi quand il
+ * sait : passer d'une accroche à une autre sous les yeux serait pire que l'attente. Une règle pour
+ * les trois fiches.
+ */
+export function sheetLeadFacts(
+  catalogue: { tagline?: string; trailerKey?: string | null },
+  info: { tmdb?: { tagline?: string | null } | null; trailerKey?: string | null } | undefined,
+  infoSettled: boolean,
+): { taglineKnown: boolean; tagline: string | null; taglineLate: boolean; trailerKnown: boolean; trailerKey: string | null; trailerLate: boolean } {
+  const taglineLate = catalogue.tagline === undefined;
+  const trailerLate = catalogue.trailerKey === undefined;
+  return {
+    taglineKnown: !taglineLate || infoSettled,
+    tagline: catalogue.tagline || (infoSettled ? info?.tmdb?.tagline || null : null),
+    taglineLate,
+    trailerKnown: !trailerLate || infoSettled,
+    trailerKey: catalogue.trailerKey || (infoSettled ? info?.trailerKey || null : null),
+    trailerLate,
+  };
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Info, Play } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
@@ -171,13 +171,36 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
     setWrapping(null);
     setJumped(true);
   }, []);
+  /**
+   * Le raccord de fin de glissement attend que les affiches d'arrivée soient décodées.
+   *
+   * La copie et le vrai titre sont deux éléments distincts : au raccord, le vrai — et ses deux
+   * voisines qui dépassent — prennent la place de la copie. Une image chargée mais pas encore
+   * décodée s'y peignait noire une image ou deux : le clignotement relevé du dernier titre au
+   * premier (08/10/2026). La copie restant identique à l'écran, attendre ne se voit pas ; un quart
+   * de seconde au plus, pour qu'une image qui ne vient pas ne retienne pas la piste.
+   */
+  const wrappingRef = useRef(wrapping);
+  useLayoutEffect(() => {
+    wrappingRef.current = wrapping;
+  }, [wrapping]);
+  const settleWhenReady = useCallback(() => {
+    const rest = trackRef.current ? [...trackRef.current.children].slice(Math.max(0, index + pad - 1), index + pad + 2) : [];
+    const images = rest.flatMap((slot) => [...slot.querySelectorAll("img")]);
+    const decoded = Promise.all(images.map((img) => (typeof img.decode === "function" ? img.decode().catch(() => undefined) : undefined)));
+    const cap = new Promise((resolve) => setTimeout(resolve, 250));
+    void Promise.race([decoded, cap]).then(() => {
+      // Un geste a pu raccorder entre-temps (`onDragState`) : rien à refaire.
+      if (wrappingRef.current) settleWrap();
+    });
+  }, [index, pad, settleWrap]);
   useEffect(() => {
     if (!wrapping) return;
     // Filet : `transitionend` raccorde d'habitude (voir la piste), mais une transition coupée en
     // route n'en émet pas.
-    const id = setTimeout(settleWrap, CAROUSEL_MS + 30);
+    const id = setTimeout(settleWhenReady, CAROUSEL_MS + 30);
     return () => clearTimeout(id);
-  }, [wrapping, settleWrap]);
+  }, [wrapping, settleWhenReady]);
   /** La position de la piste : décalée de `pad` crans par les copies posées avant le premier. */
   const trackPos = !loop ? index : wrapping === "toFirst" ? count + pad : wrapping === "toLast" ? pad - 1 : index + pad;
   /**
@@ -342,7 +365,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
             willChange: "transform",
           }}
           onTransitionEnd={(e) => {
-            if (wrapping && e.target === e.currentTarget && e.propertyName === "transform") settleWrap();
+            if (wrapping && e.target === e.currentTarget && e.propertyName === "transform") settleWhenReady();
           }}
         >
           {slides.map(({ item, real, key }, i) => (
@@ -374,7 +397,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
               {Math.abs(i - trackPos) > 1 && Math.abs(i - (index + pad)) > 1 ? null : short ? (
                 <div className="flex cursor-pointer gap-4 rounded-2xl bg-surface/70 p-3 shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
                   <div className="w-24 shrink-0 overflow-hidden rounded-lg">
-                    <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === trackPos} sizes="120px" />
+                    <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === trackPos} eager sizes="120px" />
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col justify-center">
                     {item.logoUrl ? (
@@ -406,7 +429,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                 </div>
               ) : (
                 <div className="relative cursor-pointer overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
-                  <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === trackPos} sizes="100vw" />
+                  <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === trackPos} eager sizes="100vw" />
                   <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                     {item.logoUrl ? (
                       <CinemaLogo

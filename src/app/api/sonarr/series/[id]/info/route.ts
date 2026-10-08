@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sonarr } from "@/lib/clients/sonarr";
 import { bazarr } from "@/lib/clients/bazarr";
-import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { createTmdbClient, pickTrailer, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { omdb } from "@/lib/clients/omdb";
 import { getTitleLogo } from "@/lib/title-logo";
@@ -31,9 +31,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
   const activeDownloads = queue.records.filter((r: any) => r.seriesId === id);
 
-  const trailer = tmdbVideos.results.find(
-    (v) => v.type === "Trailer" && v.site === "YouTube" && v.official
-  ) ?? tmdbVideos.results.find((v) => v.type === "Trailer" && v.site === "YouTube") ?? null;
+  const trailer = pickTrailer(tmdbVideos.results);
 
   return NextResponse.json({
     logoUrl,

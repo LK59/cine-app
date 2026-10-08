@@ -45,7 +45,7 @@ const slides = () => [...document.querySelectorAll<HTMLElement>(".hero-peek-slid
 const bar = (title: string) => screen.getByRole("button", { name: title });
 
 describe("CinemaMobileHero — la boucle", () => {
-  it("à deux titres, la voisine de gauche du premier glisse vers la gauche, puis se raccorde sans transition", () => {
+  it("à deux titres, la voisine de gauche du premier glisse vers la gauche, puis se raccorde sans transition", async () => {
     render(hero([film(1), film(2)]));
     // Deux copies de chaque côté : le premier titre est à la case 2.
     expect(position()).toBe(2);
@@ -53,7 +53,11 @@ describe("CinemaMobileHero — la boucle", () => {
     expect(position()).toBe(1);
     expect(track().style.transition).toBe(CAROUSEL_TRANSITION);
 
-    act(() => void fireEvent.transitionEnd(track(), { propertyName: "transform" }));
+    // Le raccord attend le décodage des affiches d'arrivée (une promesse) : on la laisse finir.
+    await act(async () => {
+      fireEvent.transitionEnd(track(), { propertyName: "transform" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(position()).toBe(3);
     expect(track().style.transition).toBe("none");
     // L'affiche posée sur place ne refait pas son agrandissement.

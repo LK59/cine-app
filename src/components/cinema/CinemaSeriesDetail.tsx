@@ -33,7 +33,7 @@ import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, useSheetPlayFacts } from "@/lib/sheetFacts";
+import { sheetOverview, useSheetPlayFacts, sheetLeadFacts } from "@/lib/sheetFacts";
 import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
@@ -107,6 +107,9 @@ export function CinemaSeriesDetail({
   // L'accroche, la distribution et la bande-annonce n'arrivent que par cette réponse : leur place
   // est tenue dès l'ouverture, et elles s'y posent en fondu — voir `useLateArrival`.
   const late = useLateArrival(info !== undefined || infoError !== undefined);
+  // L'accroche et la bande-annonce viennent du catalogue quand il les sait : là dès l'ouverture,
+  // sans fondu. La description ne sert qu'à défaut — voir `sheetLeadFacts`.
+  const lead = sheetLeadFacts(item, info, info !== undefined || infoError !== undefined);
   const { data: episodesData, error: episodesError } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
   // L'épisode que Lire lancerait : celui du serveur quand la liste est là, sinon celui que « À
   // suivre » ou « Reprendre », gardés sur l'appareil, connaissent déjà — voir `sheetFacts.ts`.
@@ -179,7 +182,7 @@ export function CinemaSeriesDetail({
       focusFirstAction(containerRef.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playerEnabled, info?.trailerKey, episodesData?.nextEpisode, facts.targetId, item.sonarrId, underneath]);
+  }, [playerEnabled, lead.trailerKey, episodesData?.nextEpisode, facts.targetId, item.sonarrId, underneath]);
 
   // Same as CinemaMovieDetail — see its own note. The sheet stays open under the player so
   // closing the player comes back here, and stands down from the keyboard while it's up there.
@@ -333,7 +336,7 @@ export function CinemaSeriesDetail({
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
 
-          {late.pending ? <ReservedLine className="h-[1.1rem]" /> : <CinemaTagline text={info?.tmdb?.tagline} className={late.fade} />}
+          {!lead.taglineKnown ? <ReservedLine className="h-[1.1rem]" /> : <CinemaTagline text={lead.tagline} className={lead.taglineLate ? late.fade : ""} />}
 
           <CinemaOverview
             text={sheetOverview(item.overview, info?.tmdb?.overview)}
@@ -453,7 +456,7 @@ export function CinemaSeriesDetail({
             )}
 
             {/* Sa place est tenue, invisible et hors du clavier, tant que la description n'est pas là. */}
-            {late.pending && (
+            {!lead.trailerKnown && (
               <div aria-hidden="true" data-sheet-reserved="" className={`${MENU_ROW} ${MENU_ROW_INACTIVE} invisible`}>
                 <span className={MENU_BADGE}>
                   <Video size={14} />
@@ -461,8 +464,8 @@ export function CinemaSeriesDetail({
                 <span className="text-sm font-medium">{t("cinema.trailer")}</span>
               </div>
             )}
-            {info?.trailerKey && (
-              <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${late.fade}`}>
+            {lead.trailerKey && (
+              <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${lead.trailerLate ? late.fade : ""}`}>
                 <span className={MENU_BADGE}>
                   <Video size={14} />
                 </span>
@@ -535,9 +538,9 @@ export function CinemaSeriesDetail({
         )}
       </div>
 
-      {showTrailer && info?.trailerKey && (
+      {showTrailer && lead.trailerKey && (
         <TrailerModal
-          youtubeKey={info.trailerKey}
+          youtubeKey={lead.trailerKey}
           title={item.title}
           onClose={() => {
             setShowTrailer(false);

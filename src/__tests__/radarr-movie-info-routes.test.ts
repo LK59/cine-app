@@ -13,7 +13,9 @@ const mockTmdb = { isEnabled: vi.fn(() => true), getMovie: vi.fn(), getMovieVide
 const mockTitleLogo = vi.fn(async (_tmdbId: number, _kind: string) => "https://image.tmdb.org/logo.png");
 vi.mock("@/lib/title-logo", () => ({ getTitleLogo: (id: number, kind: string) => mockTitleLogo(id, kind) }));
 
-vi.mock("@/lib/clients/tmdb", () => ({
+vi.mock("@/lib/clients/tmdb", async (importOriginal) => ({
+  // La règle de choix de la bande-annonce reste la vraie (`pickTrailer`), commune au catalogue.
+  pickTrailer: (await importOriginal<typeof import("@/lib/clients/tmdb")>()).pickTrailer,
   createTmdbClient: () => mockTmdb,
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",
 }));

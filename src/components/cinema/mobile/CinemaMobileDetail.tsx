@@ -41,7 +41,7 @@ import { resumeAtFor } from "@/lib/resumePosition";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts } from "@/lib/sheetFacts";
+import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts } from "@/lib/sheetFacts";
 import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
@@ -157,6 +157,9 @@ export function CinemaMobileDetail({
   // L'accroche, la bande-annonce et la distribution n'arrivent que par cette réponse : leur place
   // est tenue dès l'ouverture, et elles s'y posent en fondu — voir `useLateArrival`.
   const late = useLateArrival(info !== undefined || infoError !== undefined);
+  // L'accroche et la bande-annonce viennent du catalogue quand il les sait : là dès l'ouverture,
+  // sans fondu. La description ne sert qu'à défaut — voir `sheetLeadFacts`.
+  const lead = sheetLeadFacts(item, info, info !== undefined || infoError !== undefined);
 
   // Movies carry their resume point on a per-user endpoint (the library payload is shared across
   // viewers); a series' equivalent is whichever episode Jellyfin says is next up.
@@ -501,13 +504,13 @@ export function CinemaMobileDetail({
           </button>
         )}
 
-        {late.pending && <ReservedLine className="mb-4 h-[2.75rem]" />}
-        {info?.trailerKey && (
+        {!lead.trailerKnown && <ReservedLine className="mb-4 h-[2.75rem]" />}
+        {lead.trailerKey && (
           <button
             type="button"
             onClick={() => setShowTrailer(true)}
             data-liquid-pan="wide"
-            className={`mb-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white ${late.fade}`}
+            className={`mb-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white ${lead.trailerLate ? late.fade : ""}`}
           >
             <Video size={16} />
             {t("cinema.trailer")}
@@ -515,10 +518,10 @@ export function CinemaMobileDetail({
         )}
 
         {/* Avec le synopsis plutôt qu'avec l'année : placée plus haut, elle repoussait « Lire ». */}
-        {late.pending ? (
+        {!lead.taglineKnown ? (
           <ReservedLine className="mb-1.5 h-[1.1rem]" />
         ) : (
-          <CinemaTagline text={info?.tmdb?.tagline} className={`mb-1.5 ${late.fade}`} />
+          <CinemaTagline text={lead.tagline} className={`mb-1.5 ${lead.taglineLate ? late.fade : ""}`} />
         )}
         {/* Le synopsis du catalogue ne change pas de texte à l'arrivée de TMDB — voir `sheetOverview`. */}
         <p className="mb-3 text-sm leading-6 text-white">{sheetOverview(item.overview, info?.tmdb?.overview)}</p>
@@ -684,8 +687,8 @@ export function CinemaMobileDetail({
         {onSelectSimilar && <CinemaSimilarRow items={similar} onSelect={onSelectSimilar} className="mt-8" />}
       </div>
 
-      {showTrailer && info?.trailerKey && (
-        <TrailerModal youtubeKey={info.trailerKey} title={item.title} onClose={() => setShowTrailer(false)} />
+      {showTrailer && lead.trailerKey && (
+        <TrailerModal youtubeKey={lead.trailerKey} title={item.title} onClose={() => setShowTrailer(false)} />
       )}
     </div>,
     document.body

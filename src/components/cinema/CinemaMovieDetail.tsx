@@ -33,7 +33,7 @@ import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts } from "@/lib/sheetFacts";
+import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts } from "@/lib/sheetFacts";
 import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
@@ -101,6 +101,9 @@ export function CinemaMovieDetail({
   // L'accroche, la distribution et la bande-annonce n'arrivent que par cette réponse : leur place
   // est tenue dès l'ouverture, et elles s'y posent en fondu — voir `useLateArrival`.
   const late = useLateArrival(info !== undefined || infoError !== undefined);
+  // L'accroche et la bande-annonce viennent du catalogue quand il les sait : là dès l'ouverture,
+  // sans fondu. La description ne sert qu'à défaut — voir `sheetLeadFacts`.
+  const lead = sheetLeadFacts(item, info, info !== undefined || infoError !== undefined);
   // CinemaMovie (the /api/cinema/movies payload) carries no per-user watch progress at all
   // (Radarr/TMDB fields only, shared across every viewer) — without this, Lecture always started
   // a partly-watched movie over from 0 unless the movie happened to be opened via the Continue
@@ -197,7 +200,7 @@ export function CinemaMovieDetail({
       focusFirstAction(containerRef.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playerEnabled, info?.trailerKey, item.radarrId, underneath]);
+  }, [playerEnabled, lead.trailerKey, item.radarrId, underneath]);
 
   // Stays open underneath the player instead of closing when Lecture starts, so dismissing the
   // player lands you back on the sheet you started from rather than on the browse grid. What
@@ -358,7 +361,7 @@ export function CinemaMovieDetail({
           {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
 
-          {late.pending ? <ReservedLine className="h-[1.1rem]" /> : <CinemaTagline text={info?.tmdb?.tagline} className={late.fade} />}
+          {!lead.taglineKnown ? <ReservedLine className="h-[1.1rem]" /> : <CinemaTagline text={lead.tagline} className={lead.taglineLate ? late.fade : ""} />}
 
           <CinemaOverview
             text={sheetOverview(item.overview, info?.tmdb?.overview)}
@@ -461,7 +464,7 @@ export function CinemaMovieDetail({
             />
 
             {/* Sa place est tenue, invisible et hors du clavier, tant que la description n'est pas là. */}
-            {late.pending && (
+            {!lead.trailerKnown && (
               <div aria-hidden="true" data-sheet-reserved="" className={`${MENU_ROW} ${MENU_ROW_INACTIVE} invisible`}>
                 <span className={MENU_BADGE}>
                   <Video size={14} />
@@ -469,8 +472,8 @@ export function CinemaMovieDetail({
                 <span className="text-sm font-medium">{t("cinema.trailer")}</span>
               </div>
             )}
-            {info?.trailerKey && (
-              <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${late.fade}`}>
+            {lead.trailerKey && (
+              <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${lead.trailerLate ? late.fade : ""}`}>
                 <span className={MENU_BADGE}>
                   <Video size={14} />
                 </span>
@@ -541,9 +544,9 @@ export function CinemaMovieDetail({
         )}
       </div>
 
-      {showTrailer && info?.trailerKey && (
+      {showTrailer && lead.trailerKey && (
         <TrailerModal
-          youtubeKey={info.trailerKey}
+          youtubeKey={lead.trailerKey}
           title={item.title}
           onClose={() => {
             setShowTrailer(false);

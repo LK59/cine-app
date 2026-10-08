@@ -31,6 +31,13 @@ interface PosterImageProps {
   // Opts a specific image out of lazy-loading — for the one image that's the point of the screen
   // (a hero), where waiting for the intersection observer is a visible delay.
   priority?: boolean;
+  /**
+   * Chargée tout de suite, même hors de l'écran — sans la priorité ni le préchargement. Pour une
+   * affiche montée d'avance hors du champ et qui doit être prête à l'instant où elle y entre (le
+   * raccord de la bannière en boucle) : différée, elle n'était demandée qu'une fois visible, et
+   * paraissait noire le temps d'arriver.
+   */
+  eager?: boolean;
 }
 
 /**
@@ -80,6 +87,7 @@ export function PosterImage({
   subtle = false,
   sizes = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw",
   priority = false,
+  eager = false,
 }: PosterImageProps) {
   const [errored, setErrored] = useState(false);
   const skipOptimizer = unoptimized || (typeof src === "string" && src.startsWith("/api/"));
@@ -108,6 +116,7 @@ export function PosterImage({
         unoptimized={skipOptimizer}
         sizes={sizes}
         priority={priority}
+        loading={eager && !priority ? "eager" : undefined}
         className="object-cover opacity-0 transition-opacity duration-500"
         // Déjà en mémoire : elle est là, pas en train d'arriver — voir `showIfAlreadyLoaded`. Next
         // déclenche `onLoad` dans les deux cas, d'où la lecture à l'insertion.

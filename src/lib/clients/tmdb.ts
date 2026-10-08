@@ -164,7 +164,36 @@ function enabled(): boolean {
 export interface TmdbTranslation {
   iso_639_1: string;
   iso_3166_1: string;
-  data?: { title?: string; name?: string; overview?: string };
+  data?: { title?: string; name?: string; overview?: string; tagline?: string };
+}
+
+/** Une vidéo d'un titre, telle que TMDB la décrit. */
+export interface TmdbVideo {
+  key: string;
+  site: string;
+  type: string;
+  official: boolean;
+  iso_639_1?: string | null;
+}
+
+/**
+ * Les langues de vidéo acceptées pour une langue d'interface — les mêmes pour la fiche et pour le
+ * catalogue, qui retient la bande-annonce d'avance (08/10/2026).
+ */
+export function videoLanguages(lang: string): string {
+  return lang.startsWith("en") ? "en,null" : lang.startsWith("es") ? "es,en,null" : "fr,en,null";
+}
+
+/**
+ * La bande-annonce d'une liste de vidéos : la YouTube officielle d'abord, n'importe quelle
+ * bande-annonce YouTube sinon. Une règle pour les deux fiches et pour le catalogue.
+ */
+export function pickTrailer(videos: readonly TmdbVideo[]): TmdbVideo | null {
+  return (
+    videos.find((v) => v.type === "Trailer" && v.site === "YouTube" && v.official) ??
+    videos.find((v) => v.type === "Trailer" && v.site === "YouTube") ??
+    null
+  );
 }
 
 /**
@@ -177,14 +206,21 @@ export interface TmdbTranslations {
   original_language?: string;
   original_title?: string;
   original_name?: string;
+  /** En anglais : les détails sont demandés sans langue. */
+  tagline?: string | null;
   translations?: { translations?: TmdbTranslation[] };
+  /** Les vidéos du titre, dans les langues des quatre interfaces — voir `TitleExtras`. */
+  videos?: { results?: TmdbVideo[] };
 }
+
+/** Les vidéos demandées avec les traductions : celles des quatre interfaces, et les muettes. */
+const VIDEO_LANGS_ALL = "fr,en,es,de,null";
 
 /** Les quatre langues de l'interface, plus les visuels sans texte. Voir `getMovieImages`. */
 const IMAGE_LANGS = "fr,en,es,de,null";
 
 function createTmdbClient(lang = "fr-FR") {
-  const videoLangs = lang.startsWith("en") ? "en,null" : lang.startsWith("es") ? "es,en,null" : "fr,en,null";
+  const videoLangs = videoLanguages(lang);
   return {
     isEnabled: enabled,
     checkAuth: () =>
@@ -239,11 +275,11 @@ function createTmdbClient(lang = "fr-FR") {
         `${BASE}/search/tv?api_key=${cfg.apiKey}&language=${lang}&query=${encodeURIComponent(query)}&include_adult=false`
       ),
     getMovieVideos: (tmdbId: number) =>
-      fetchJson<{ results: { key: string; site: string; type: string; official: boolean }[] }>(
+      fetchJson<{ results: TmdbVideo[] }>(
         `${BASE}/movie/${tmdbId}/videos?api_key=${cfg.apiKey}&language=${lang}&include_video_language=${videoLangs}`
       ),
     getTvVideos: (tmdbTvId: number) =>
-      fetchJson<{ results: { key: string; site: string; type: string; official: boolean }[] }>(
+      fetchJson<{ results: TmdbVideo[] }>(
         `${BASE}/tv/${tmdbTvId}/videos?api_key=${cfg.apiKey}&language=${lang}&include_video_language=${videoLangs}`
       ),
     // "logos" are TMDB's title-treatment images (transparent PNGs with the film/show's actual
@@ -262,10 +298,21 @@ function createTmdbClient(lang = "fr-FR") {
      * demander. Une seule liste, mise en cache une semaine, et chacun y lit la sienne.
      */
     /** Le titre dans chaque langue où il a été traduit — voir `titleNames`. */
+    // Les vidéos viennent dans le même appel (08/10/2026) : la bande-annonce du catalogue ne coûte
+    // pas une requête de plus par titre.
     getMovieTranslations: (tmdbId: number) =>
-      fetchJson<TmdbTranslations>(`${BASE}/movie/${tmdbId}?api_key=${cfg.apiKey}&append_to_response=translations`),
+      fetchJson<TmdbTranslations>(
+        `${BASE}/movie/${tmdbId}?api_key=${cfg.apiKey}&append_to_response=translations,videos&include_video_language=${VIDEO_LANGS_ALL}`
+      ),
     getTvTranslations: (tmdbTvId: number) =>
-      fetchJson<TmdbTranslations>(`${BASE}/tv/${tmdbTvId}?api_key=${cfg.apiKey}&append_to_response=translations`),
+      fetchJson<TmdbTranslations>(
+        `${BASE}/tv/${tmdbTvId}?api_key=${cfg.apiKey}&append_to_response=translations,videos&include_video_language=${VIDEO_LANGS_ALL}`
+      ),
+    /** L'accroche dans la langue du client — pour un titre dont c'est la langue d'origine. */
+    getTagline: (mediaType: "movie" | "series", tmdbId: number) =>
+      fetchJson<{ tagline?: string | null }>(
+        `${BASE}/${mediaType === "movie" ? "movie" : "tv"}/${tmdbId}?api_key=${cfg.apiKey}&language=${lang}`
+      ),
     getMovieImages: (tmdbId: number) =>
       fetchJson<TmdbImages>(
         `${BASE}/movie/${tmdbId}/images?api_key=${cfg.apiKey}&include_image_language=${IMAGE_LANGS}`
