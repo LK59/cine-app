@@ -52,14 +52,22 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
   // it when nothing has been set locally yet, so it can't clobber an in-progress optimistic
   // update. Applied during render (rather than in an effect) per React's guidance for
   // adjusting state from a prop change, to avoid an extra render pass.
+  //
+  // Une valeur qui change vraiment est adoptée telle quelle, nulle comprise, hors d'une écriture
+  // en cours (08/10/2026) : la version précédente ne prenait qu'une valeur non nulle sur un état
+  // vide, et une fiche restée montée gardait « Dans ma liste » pour toute sa vie après un retrait
+  // fait ailleurs. Une réponse périmée ne peut pas défaire un geste local : elle répète la valeur
+  // déjà rapprochée, qui ne déclenche rien.
+  const [writing, setWriting] = useState(false);
   if (initialStatus !== reconciledStatus) {
     setReconciledStatus(initialStatus);
-    if (initialStatus !== null) setAddedStatus((prev) => prev ?? initialStatus);
+    if (!writing) setAddedStatus(initialStatus);
   }
 
   async function addToWatchlist(payload: WatchlistPayload, status: WatchlistStatus) {
     const previous = addedStatus;
     setAddedStatus(status);
+    setWriting(true);
     try {
       await apiAction("/api/watchlist", { method: "POST", body: JSON.stringify({ ...payload, status }) });
       // Les vues qui montrent une liste l'apprennent tout de suite — la rangée de l'accueil
@@ -73,6 +81,8 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
     } catch (error) {
       setAddedStatus(previous);
       toast.error(error instanceof Error ? error.message : t("watchlist.addFailed"));
+    } finally {
+      setWriting(false);
     }
   }
 
@@ -83,6 +93,7 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
   async function removeFromWatchlist(payload: { tmdbId: number; mediaType: "movie" | "series" }) {
     const previous = addedStatus;
     setAddedStatus(null);
+    setWriting(true);
     try {
       await apiAction("/api/watchlist", { method: "DELETE", body: JSON.stringify(payload) });
       noteWatchlistChange(payload, null);
@@ -90,6 +101,8 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
     } catch (error) {
       setAddedStatus(previous);
       toast.error(error instanceof Error ? error.message : t("watchlist.addFailed"));
+    } finally {
+      setWriting(false);
     }
   }
 

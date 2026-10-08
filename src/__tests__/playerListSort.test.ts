@@ -21,6 +21,12 @@ describe("filterByTitle", () => {
     expect(filterByTitle(LIST, "lien").map((i) => i.title)).toEqual(["Alien"]);
   });
 
+  // La même règle que la grille complète (08/10/2026) : sans accents ni ponctuation.
+  it("ignore les accents, comme la grille complète", () => {
+    expect(filterByTitle(LIST, "eleve").map((i) => i.title)).toEqual(["Élève libre"]);
+    expect(filterByTitle(LIST, "ÉLÈVE").map((i) => i.title)).toEqual(["Élève libre"]);
+  });
+
   it("returns nothing rather than everything when there is no match", () => {
     expect(filterByTitle(LIST, "vaisseau")).toEqual([]);
   });

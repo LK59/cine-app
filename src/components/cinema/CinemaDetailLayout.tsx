@@ -1,7 +1,7 @@
 "use client";
 
 import { useDelayedClose } from "@/lib/useDelayedClose";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
@@ -131,18 +131,20 @@ export function CinemaOverview({
 
   // Mesuré plutôt que deviné : la longueur qui tient en deux lignes dépend de la largeur de la
   // colonne, donc de la fenêtre. Relu à chaque redimensionnement, pour la même raison.
-  useEffect(() => {
+  // Avant la peinture (08/10/2026) : mesuré après, le premier écran de chaque fiche montrait deux
+  // lignes, puis le texte s'allongeait et repoussait le logo pendant l'animation d'entrée.
+  useLayoutEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
     // La page de la fiche (sa première section) : c'est d'elle que se mesure la place libre.
     const page = maxLines > 2 ? el.closest<HTMLElement>("[data-snap-section]") : null;
+    const column = el.closest<HTMLElement>(".flex.flex-col") ?? el;
     const measure = () => {
       if (page) {
         const lineHeight = Number.parseFloat(getComputedStyle(el).lineHeight) || 24;
         // Le haut de la colonne, sous la page : ce qu'il reste au-dessus du logo, moins la place du
         // bouton Retour et une respiration. Les lignes déjà ajoutées comptent comme de la place —
         // sans quoi chaque ligne gagnée réduirait la mesure suivante et le synopsis oscillerait.
-        const column = el.closest<HTMLElement>(".flex.flex-col") ?? el;
         const free = column.getBoundingClientRect().top - page.getBoundingClientRect().top - TOP_RESERVE_PX;
         const current = Math.max(2, Math.round(el.clientHeight / lineHeight));
         const room = 2 + Math.floor((free + (current - 2) * lineHeight) / lineHeight);
@@ -156,9 +158,22 @@ export function CinemaOverview({
     measure();
     window.addEventListener("resize", measure);
     const observer = page && typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
-    if (observer && page) observer.observe(page);
+    // La colonne aussi, et pas seulement la page (08/10/2026) : la page ne change jamais de taille,
+    // mais la colonne grandit quand le logo arrive (une image sans dimensions, nulle jusqu'à son
+    // chargement), puis l'accroche et la distribution. Mesurée contre un logo encore vide, la
+    // première ouverture accordait cinq lignes, et la colonne posée en bas remontait ensuite sous
+    // le bouton Retour. Pas de boucle : une ligne gagnée remonte la colonne d'autant, ce que
+    // `current` rend aussitôt à la mesure.
+    if (observer && page) {
+      observer.observe(page);
+      observer.observe(column);
+    }
+    // L'entrée de la colonne la décale de quelques pixels (`animate-fade-in-up`), que la mesure
+    // lit : on la refait une fois l'animation finie.
+    page?.addEventListener("animationend", measure);
     return () => {
       window.removeEventListener("resize", measure);
+      page?.removeEventListener("animationend", measure);
       observer?.disconnect();
     };
   }, [text, maxLines, lines]);

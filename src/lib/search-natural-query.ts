@@ -1,6 +1,24 @@
 import type { Locale } from "@/lib/i18n";
 
+/**
+ * Les formes déjà calculées (08/10/2026). La recherche du cinéma compare la frappe à chaque titre de
+ * la bibliothèque, et normalisait les deux à chaque appel : environ cinq mille passes de cinq
+ * expressions régulières par touche, sur des titres qui ne changent pas. Bornée : vidée d'un coup
+ * quand elle déborde, ce qui ne coûte qu'un recalcul.
+ */
+const NORMALIZED = new Map<string, string>();
+const NORMALIZED_MAX = 10_000;
+
 export function normalize(s: string): string {
+  const known = NORMALIZED.get(s);
+  if (known !== undefined) return known;
+  const out = normalizeUncached(s);
+  if (NORMALIZED.size >= NORMALIZED_MAX) NORMALIZED.clear();
+  NORMALIZED.set(s, out);
+  return out;
+}
+
+function normalizeUncached(s: string): string {
   return s
     .toLowerCase()
     .normalize("NFD")

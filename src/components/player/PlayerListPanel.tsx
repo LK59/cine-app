@@ -18,6 +18,7 @@ import { PlayerRequestCard } from "./PlayerRequestCard";
 import { useFlipGrid } from "@/lib/useFlipGrid";
 import type { PlayerListsPayload, PlayerListItem } from "@/app/api/player/lists/route";
 import { AnimatedNumber } from "@/lib/useTweenedNumber";
+import { escapeClears } from "@/lib/escapeClears";
 
 type Segment = "toWatch" | "requests" | "watched";
 
@@ -98,14 +99,17 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
 
   // Les comptes suivent la recherche : un onglet qui annonce huit titres et n'en montre aucun,
   // parce qu'on filtre, dit quelque chose de faux au moment où on a le plus besoin d'y croire.
-  const counts = useMemo(
+  // Filtré une fois par frappe et par onglet : les compteurs, la grille et les demandes en
+  // dérivent, là où chacun refiltrait de son côté — cinq passes par touche (08/10/2026).
+  const filtered = useMemo(
     () => ({
-      requests: filterByTitle(data?.requests ?? [], query).length,
-      toWatch: filterByTitle(data?.toWatch ?? [], query).length,
-      watched: filterByTitle(data?.watched ?? [], query).length,
+      requests: filterByTitle(data?.requests ?? [], query),
+      toWatch: filterByTitle(data?.toWatch ?? [], query),
+      watched: filterByTitle(data?.watched ?? [], query),
     }),
     [data, query]
   );
+  const counts = { requests: filtered.requests.length, toWatch: filtered.toWatch.length, watched: filtered.watched.length };
 
   // Ce qui vient d'arriver, et rien d'autre.
   //
@@ -136,9 +140,8 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
   }
 
   const items: PlayerListItem[] = useMemo(() => {
-    const source = segment === "requests" ? [] : (data?.[segment] ?? []);
-    return sortList(filterByTitle(source, query), sort);
-  }, [data, segment, query, sort]);
+    return segment === "requests" ? [] : sortList(filtered[segment], sort);
+  }, [filtered, segment, sort]);
 
   /**
    * Les demandes suivent la même recherche **et** le même tri.
@@ -150,18 +153,23 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
   const shownRequests = useMemo(
     () =>
       sortList(
-        filterByTitle(data?.requests ?? [], query).map((r) => ({ ...r, addedAt: Date.parse(r.requestedAt) || null })),
+        filtered.requests.map((r) => ({ ...r, addedAt: Date.parse(r.requestedAt) || null })),
         sort
       ),
-    [data, query, sort]
+    [filtered, sort]
   );
 
   // Retirer un titre, annuler une demande : les voisines glissent jusqu'à leur place au lieu de
   // sauter d'un coup — voir `useFlipGrid`.
   const requestsGrid = useRef<HTMLDivElement>(null);
   const itemsGrid = useRef<HTMLDivElement>(null);
-  useFlipGrid(requestsGrid, segment === "requests" ? shownRequests.map((r) => String(r.id)) : []);
-  useFlipGrid(itemsGrid, segment !== "requests" ? items.map((item) => `${item.type}-${item.tmdbId ?? item.jellyfinId}`) : []);
+  // Pas pendant qu'on filtre (08/10/2026) : chaque frappe change la liste des clés, et le
+  // glissement relisait la position de chaque carte — une mise en page complète par touche sur une
+  // liste « Vu » de plusieurs centaines, pour une animation qui ne joue de toute façon pas quand
+  // tant de cartes bougent.
+  const flipping = query.trim() === "";
+  useFlipGrid(requestsGrid, flipping && segment === "requests" ? shownRequests.map((r) => String(r.id)) : []);
+  useFlipGrid(itemsGrid, flipping && segment !== "requests" ? items.map((item) => `${item.type}-${item.tmdbId ?? item.jellyfinId}`) : []);
 
   return (
     <PlayerPanelFrame
@@ -194,6 +202,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={escapeClears(query, () => setQuery(""))}
               placeholder={t("player.lists.searchInList")}
               className="input h-10 w-full pl-9 text-sm"
             />

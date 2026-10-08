@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { noteWarmed } from "@/lib/imageReveal";
 
 /**
@@ -184,31 +184,80 @@ export function useDecodeRowsAhead(container: RefObject<HTMLElement | null>, ena
   }, [container, enabled]);
 }
 
+/** Ce que le décodage anticipé de la grille garde d'une liste à l'autre — voir `useDecodeAhead`. */
+interface GridWarmer {
+  root: HTMLElement;
+  observer: IntersectionObserver;
+  /** Adresse → image de chauffe, dans l'ordre d'usage : la plus ancienne est la première lâchée. */
+  kept: Map<string, HTMLImageElement>;
+  followed: Set<Element>;
+  /** Les cartes dans la marge en ce moment. */
+  near: Set<Element>;
+}
+
 export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unknown): void {
+  const warmer = useRef<GridWarmer | null>(null);
+
+  /**
+   * **Un seul observateur pour la vie de la grille, et ses images tenues avec lui** (08/10/2026).
+   *
+   * L'effet repartait de zéro à chaque liste — chaque frappe dans le filtre, chaque tri : il lâchait
+   * jusqu'à quatre-vingt-dix affiches déjà décodées et refaisait suivre les six cent soixante-dix
+   * cartes. Il garde maintenant tout ce qui vaut encore : seules les cartes nouvelles sont suivies,
+   * celles qui ont quitté la grille cessent de l'être.
+   *
+   * Ce que le premier défaut avait appris reste vrai (voir plus bas) : après un tri, les cartes
+   * proches doivent être chauffées. Une carte que le tri amène près de l'écran change d'état
+   * d'intersection, et l'observateur la signale de lui-même ; une carte restée dans la marge, dont
+   * l'affiche a pu changer (des cartes clées par position), est rechauffée ici — ce qui est déjà
+   * tenu ne coûte rien.
+   */
   useEffect(() => {
     const root = grid.current;
-    if (!root || typeof IntersectionObserver === "undefined") return;
-
-    // Adresse → image de chauffe, dans l'ordre d'usage : la plus ancienne est la première lâchée.
-    const kept = new Map<string, HTMLImageElement>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const img = entry.target.querySelector("img");
-          if (img) warmLike(img, kept, KEPT);
-        }
-      },
-      // Chaque carte reste suivie : elle se rechauffe à chaque fois qu'elle rentre dans la marge,
-      // en descendant comme en remontant.
-      { root: scrollingAncestor(root), rootMargin: `${AHEAD_PX}px 0px` }
-    );
-
-    for (const card of root.children) observer.observe(card);
-    return () => {
-      observer.disconnect();
-      kept.clear();
-    };
+    if (typeof IntersectionObserver === "undefined") return;
+    let state = warmer.current;
+    if (state && state.root !== root) {
+      // La grille a été remplacée (vide puis pleine à nouveau) : on repart avec elle.
+      state.observer.disconnect();
+      state = warmer.current = null;
+    }
+    if (!root) return;
+    if (!state) {
+      const kept = new Map<string, HTMLImageElement>();
+      const near = new Set<Element>();
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) {
+              near.delete(entry.target);
+              continue;
+            }
+            near.add(entry.target);
+            const img = entry.target.querySelector("img");
+            if (img) warmLike(img, kept, KEPT);
+          }
+        },
+        // Chaque carte reste suivie : elle se rechauffe à chaque fois qu'elle rentre dans la marge,
+        // en descendant comme en remontant.
+        { root: scrollingAncestor(root), rootMargin: `${AHEAD_PX}px 0px` }
+      );
+      state = warmer.current = { root, observer, kept, followed: new Set(), near };
+    }
+    for (const card of state.followed) {
+      if (card.parentElement === root) continue;
+      state.observer.unobserve(card);
+      state.followed.delete(card);
+      state.near.delete(card);
+    }
+    for (const card of root.children) {
+      if (state.followed.has(card)) continue;
+      state.followed.add(card);
+      state.observer.observe(card);
+    }
+    for (const card of state.near) {
+      const img = card.querySelector("img");
+      if (img) warmLike(img, state.kept, KEPT);
+    }
     /**
      * **La liste elle-même, et non son nombre d'éléments.**
      *
@@ -222,4 +271,14 @@ export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unkno
      * lorsque son contenu change : c'est exactement la dépendance qu'il fallait.
      */
   }, [grid, items]);
+
+  // Tout est lâché au démontage, et seulement là.
+  useEffect(
+    () => () => {
+      warmer.current?.observer.disconnect();
+      warmer.current?.kept.clear();
+      warmer.current = null;
+    },
+    []
+  );
 }

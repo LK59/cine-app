@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { browseTitles, sortTitles, decadesOf, BROWSE_ALL, DEFAULT_FILTERS } from "@/lib/cinemaBrowse";
+import { browseTitles, filterTitles, sortTitles, decadesOf, BROWSE_ALL, DEFAULT_FILTERS } from "@/lib/cinemaBrowse";
 
 const make = (title: string, year: number, genres: string[], addedAt: string | null, imdbRating: string | null) => ({
   title, year, genres, addedAt, imdbRating,
@@ -12,6 +12,17 @@ const LIBRARY = [
   make("Rocky 10", 2019, ["Drame"], null, "5.0"),
   make("Zodiac", 2007, ["Thriller", "Drame"], "2026-01-20T00:00:00Z", "7.7"),
 ];
+
+// La grille trie une fois puis filtre à chaque frappe (08/10/2026) : les deux ordres doivent
+// donner exactement la même liste, sinon une frappe réordonnerait la grille.
+describe("filterTitles sur une liste triée", () => {
+  it("donne la même grille que browseTitles, pour chaque tri", () => {
+    for (const sort of ["added", "title", "year", "rating"] as const) {
+      const filters = { ...DEFAULT_FILTERS, genre: "Drame", query: "o", sort };
+      expect(filterTitles(sortTitles(LIBRARY, sort), filters)).toEqual(browseTitles(LIBRARY, filters));
+    }
+  });
+});
 
 describe("sortTitles", () => {
   it("puts the newest arrivals first", () => {

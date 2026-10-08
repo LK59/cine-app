@@ -92,8 +92,23 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
    */
   useEffect(() => {
     if (!show) return;
-    sheetRef.current?.querySelector<HTMLButtonElement>("button[data-sheet-action]:not(:disabled)")?.focus();
-  }, [show]);
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const sheet = sheetRef.current;
+    // Une confirmation (`alertdialog`) ne s'ouvre pas sur son geste destructeur (08/10/2026) : le
+    // focus tombait sur « Oui, annuler », et Entrée pressée juste après la croix supprimait la
+    // demande. Elle s'ouvre sur la première action sans danger — « Non, garder ».
+    const enabled = "button[data-sheet-action]:not(:disabled)";
+    const first =
+      (role === "alertdialog" ? sheet?.querySelector<HTMLButtonElement>(`${enabled}:not([data-variant="danger"])`) : null) ??
+      sheet?.querySelector<HTMLButtonElement>(enabled);
+    first?.focus();
+    // Et le focus revient à ce qui l'a ouverte quand elle se ferme : il tombait sur la page, et la
+    // flèche suivante repartait du début de l'écran.
+    return () => {
+      const active = document.activeElement;
+      if (opener?.isConnected && (!active || active === document.body || sheet?.contains(active))) opener.focus({ preventScroll: true });
+    };
+  }, [show, role]);
 
   useEffect(() => {
     if (!open) return;
@@ -211,6 +226,7 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
             )}
             <button
               data-sheet-action
+              data-variant={action.variant}
               disabled={action.disabled}
               onClick={() => { action.onClick(); onClose(); }}
               className={`flex w-full items-center gap-4 px-5 py-3.5 text-sm font-medium transition-colors active:bg-white/5 disabled:opacity-40 ${

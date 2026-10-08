@@ -8,6 +8,9 @@ export const NAV_ITEM_ATTR = "data-nav-item";
 
 const ARROWS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 
+/** Les éléments mesurés de part et d'autre du courant : six rangées d'une grille de dix colonnes. */
+const NAV_WINDOW = 60;
+
 /**
  * Est-on en train d'écrire ?
  *
@@ -75,13 +78,20 @@ export function usePanelArrowNav(
       if (items.length === 0) return;
 
       const current = items.indexOf(document.activeElement as HTMLElement);
-      const rects: NavRect[] = items.map((item) => {
+      // Une fenêtre autour de l'élément courant, plutôt que tous (08/10/2026) : sur la grille
+      // complète, chaque flèche — et chaque répétition d'une flèche tenue — mesurait six cent
+      // soixante-dix cartes. Les voisins d'une carte sont à une rangée près, dans l'ordre du
+      // document ; `NAV_WINDOW` couvre plusieurs rangées des grilles les plus larges.
+      const from = current < 0 ? 0 : Math.max(0, current - NAV_WINDOW);
+      const to = current < 0 ? items.length : Math.min(items.length, current + NAV_WINDOW + 1);
+      const rects: NavRect[] = items.slice(from, to).map((item) => {
         const box = item.getBoundingClientRect();
         return { top: box.top, left: box.left, width: box.width, height: box.height };
       });
 
-      const next = chooseNext(rects, current, e.key as ArrowKey);
-      if (next === null) return;
+      const picked = chooseNext(rects, current < 0 ? current : current - from, e.key as ArrowKey);
+      if (picked === null) return;
+      const next = picked + from;
 
       e.preventDefault();
       items[next].focus({ preventScroll: true });

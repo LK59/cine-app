@@ -133,14 +133,50 @@ describe("useDecodeAhead, quand la liste change sans changer de taille", () => {
   }
 
   it("reprend les cartes après un changement de tri", () => {
+    const decodes: string[] = [];
+    Object.defineProperty(window.Image.prototype, "decode", {
+      configurable: true,
+      value: function (this: HTMLImageElement) {
+        decodes.push(this.getAttribute("src") ?? "");
+        return Promise.resolve();
+      },
+    });
     const r = render(<Triable liste={["/a.png", "/b.png"]} />);
     dernier.cb([{ isIntersecting: true, target: r.getByTestId("c0") }]);
     const premier = dernier;
 
-    // Même nombre de cartes, contenu différent : l'observateur doit repartir de zéro.
+    // Même nombre de cartes, contenu différent : la carte restée dans la marge chauffe sa nouvelle
+    // affiche aussitôt — sans attendre un changement d'intersection qui ne viendra pas.
     r.rerender(<Triable liste={["/c.png", "/d.png"]} />);
-    expect(dernier).not.toBe(premier);
-    expect(premier.disconnected).toBe(true);
+    expect(decodes).toEqual(["/a.png", "/c.png"]);
+    // Et l'observateur est le même (08/10/2026) : le relancer lâchait les affiches déjà décodées.
+    expect(dernier).toBe(premier);
+    expect(premier.disconnected).toBe(false);
+    expect(dernier.observes).toHaveLength(2);
+  });
+
+  it("suit les cartes nouvelles et lâche celles qui partent, sans relancer l'observateur", () => {
+    function Clee({ liste }: { liste: string[] }) {
+      const grid = useRef<HTMLDivElement>(null);
+      useDecodeAhead(grid, liste);
+      return (
+        <div ref={grid}>
+          {liste.map((s) => (
+            <div key={s} data-testid={s}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- voir le banc ci-dessus. */}
+              <img src={s} alt="" />
+            </div>
+          ))}
+        </div>
+      );
+    }
+    const r = render(<Clee liste={["/a.png", "/b.png"]} />);
+    const premier = dernier;
+    const b = r.getByTestId("/b.png");
+    r.rerender(<Clee liste={["/a.png", "/c.png"]} />);
+    expect(dernier).toBe(premier);
+    expect(dernier.observes).not.toContain(b);
+    expect(dernier.observes).toContain(r.getByTestId("/c.png"));
     expect(dernier.observes).toHaveLength(2);
   });
 });

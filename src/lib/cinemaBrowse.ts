@@ -50,6 +50,13 @@ export function browseSheetKey(mediaType: "movies" | "series", genre: string): s
  * Elle arrive en texte — « 7.8 », parfois vide, parfois absente. Un titre sans note se range
  * après tous les autres plutôt qu'avec les zéros : ne pas être noté n'est pas être mauvais.
  */
+/**
+ * Un seul comparateur pour toute la vie de la page (08/10/2026). `localeCompare` appelé avec une
+ * langue et des options reconstruit un collateur ICU à chaque appel : c'était l'essentiel du coût
+ * d'un tri de la grille complète, refait à chaque frappe dans son filtre.
+ */
+const TITLE_COLLATOR = new Intl.Collator("fr", { numeric: true, sensitivity: "base" });
+
 function ratingOf(item: BrowsableTitle): number {
   const value = Number.parseFloat(item.imdbRating ?? "");
   return Number.isFinite(value) ? value : -1;
@@ -71,19 +78,14 @@ function addedAtOf(item: BrowsableTitle): number {
  * aux accents pour que « Élève » se range à sa place et non après « Zéro ».
  */
 export function sortTitles<T extends BrowsableTitle>(items: T[], sort: BrowseSort): T[] {
-  const byTitle = (a: T, b: T) => a.title.localeCompare(b.title, "fr", { numeric: true, sensitivity: "base" });
-  const sorted = [...items];
-  switch (sort) {
-    case "title":
-      return sorted.sort(byTitle);
-    case "year":
-      return sorted.sort((a, b) => b.year - a.year || byTitle(a, b));
-    case "rating":
-      return sorted.sort((a, b) => ratingOf(b) - ratingOf(a) || byTitle(a, b));
-    case "added":
-    default:
-      return sorted.sort((a, b) => addedAtOf(b) - addedAtOf(a) || byTitle(a, b));
-  }
+  // Une clé par titre, calculée une fois avant le tri plutôt qu'à chaque comparaison : six cent
+  // soixante-dix titres, c'est quelque sept mille comparaisons, et chacune relisait la date
+  // d'ajout deux fois (`Date.parse`) — voir aussi `TITLE_COLLATOR`.
+  const keyOf: (item: T) => number =
+    sort === "title" ? () => 0 : sort === "year" ? (item) => item.year : sort === "rating" ? ratingOf : addedAtOf;
+  const keyed = items.map((item) => ({ item, key: keyOf(item) }));
+  keyed.sort((a, b) => b.key - a.key || TITLE_COLLATOR.compare(a.item.title, b.item.title));
+  return keyed.map((entry) => entry.item);
 }
 
 /**
@@ -140,18 +142,39 @@ export interface BrowseFilters {
 
 export const DEFAULT_FILTERS: BrowseFilters = { genre: BROWSE_ALL, decade: null, sort: "added", query: "" };
 
-/** Ce que la grille montre : filtrée puis triée, dans cet ordre. */
-export function browseTitles<T extends BrowsableTitle>(items: T[], filters: BrowseFilters): T[] {
+/**
+ * Les trois titres d'un élément, sans accents ni casse — calculés une fois par élément du
+ * catalogue (08/10/2026). Le filtre les renormalisait tous à chaque frappe : jusqu'à deux mille
+ * passes de `normalize` (cinq expressions régulières chacune) avant que React ne puisse différer
+ * quoi que ce soit. Le catalogue ne change pas entre deux réponses : l'élément suffit comme clé.
+ */
+const searchTexts = new WeakMap<object, string[]>();
+export function searchTextsOf(item: BrowsableTitle): string[] {
+  let texts = searchTexts.get(item);
+  if (!texts) {
+    texts = [item.title, item.aka, item.originalTitle].filter((t): t is string => !!t).map(normalize);
+    searchTexts.set(item, texts);
+  }
+  return texts;
+}
+
+/** Filtrer sans trier : l'ordre reçu est gardé — la grille filtre une liste qu'elle a déjà triée. */
+export function filterTitles<T extends BrowsableTitle>(items: T[], filters: Omit<BrowseFilters, "sort">): T[] {
   // Sans accents ni casse, et sur les trois titres : « eleve » trouvait pas « Élève », et le titre
   // anglais qu'on n'affiche plus depuis les titres traduits n'était plus cherchable ici, alors
   // qu'il l'est dans la recherche (23/09/2026).
   const needle = normalize(filters.query.trim());
-  const kept = items.filter((item) => {
+  const duration = filters.duration ?? "all";
+  return items.filter((item) => {
     if (filters.genre !== BROWSE_ALL && !item.genres.includes(filters.genre)) return false;
     if (filters.decade !== null && Math.floor(item.year / 10) * 10 !== filters.decade) return false;
-    if (needle && ![item.title, item.aka, item.originalTitle].some((t) => t && normalize(t).includes(needle))) return false;
-    if (!matchesDuration(item, filters.duration ?? "all")) return false;
+    if (needle && !searchTextsOf(item).some((t) => t.includes(needle))) return false;
+    if (!matchesDuration(item, duration)) return false;
     return true;
   });
-  return sortTitles(kept, filters.sort);
+}
+
+/** Ce que la grille montre : filtrée puis triée — le même résultat que triée puis filtrée. */
+export function browseTitles<T extends BrowsableTitle>(items: T[], filters: BrowseFilters): T[] {
+  return sortTitles(filterTitles(items, filters), filters.sort);
 }
