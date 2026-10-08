@@ -3,28 +3,35 @@ import { radarr } from "@/lib/clients/radarr";
 import { bazarr } from "@/lib/clients/bazarr";
 import { createTmdbClient, pickTrailer, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
-import { omdb } from "@/lib/clients/omdb";
+import { cachedOmdbRating, cachedRadarrQueue, cachedTmdbMovieInfo, hiddenFromCaller } from "@/lib/titleInfoCache";
 import { getTitleLogo } from "@/lib/title-logo";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
+  const lang = getTmdbLocale(req.cookies.get("cine-lang")?.value);
+  const tmdb = createTmdbClient(lang);
   const id = Number(params.id);
   const movie = await radarr.getMovie(id).catch(() => null);
   if (!movie) return NextResponse.json({ error: "Film introuvable" }, { status: 404 });
+  // Caché par les tags bloqués du compte : il n'existe pas pour lui (DECISIONS.md §54).
+  if (movie.tmdbId && (await hiddenFromCaller(req, `movie:${movie.tmdbId}`))) {
+    return NextResponse.json({ error: "Film introuvable" }, { status: 404 });
+  }
 
-  const [tmdbInfo, tmdbVideos, rating, subtitles, queue, logoUrl] = await Promise.all([
-    tmdb.isEnabled() ? tmdb.getMovie(movie.tmdbId).catch(() => null) : Promise.resolve(null),
-    tmdb.isEnabled() ? tmdb.getMovieVideos(movie.tmdbId).catch(() => ({ results: [] })) : Promise.resolve({ results: [] }),
-    omdb.isEnabled() && movie.imdbId ? omdb.getRating(movie.imdbId).catch(() => null) : Promise.resolve(null),
+  // Les parties stables passent par le cache — voir `titleInfoCache.ts`.
+  const [tmdbPart, rating, subtitles, queue, logoUrl] = await Promise.all([
+    tmdb.isEnabled() && movie.tmdbId ? cachedTmdbMovieInfo(tmdb, lang, movie.tmdbId).catch(() => null) : Promise.resolve(null),
+    movie.imdbId ? cachedOmdbRating(movie.imdbId).catch(() => null) : Promise.resolve(null),
     bazarr.getMovieDetails(id).catch(() => null),
-    radarr.getQueue().catch(() => ({ records: [] as any[] })),
+    cachedRadarrQueue().catch(() => ({ records: [] as any[] })),
     // Le logo du film — la même image que le mode cinéma affiche déjà, mise en cache une
     // semaine. Fetché avec le reste plutôt qu'après : il est en tête de page, c'est la première
     // chose qu'on voit, et il n'a aucune raison d'arriver en dernier.
     movie.tmdbId ? getTitleLogo(movie.tmdbId, "movie") : Promise.resolve(null),
   ]);
 
+  const tmdbInfo = tmdbPart?.details ?? null;
+  const tmdbVideos = tmdbPart?.videos ?? { results: [] };
   const activeDownload = queue.records.find((r: any) => r.movieId === id || r.movie?.id === id) ?? null;
 
   const trailer = pickTrailer(tmdbVideos.results);

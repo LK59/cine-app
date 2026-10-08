@@ -294,9 +294,24 @@ export async function checkRequestAvailability(): Promise<void> {
 // eviction of its own — withPersistentCache only re-fetches past an entry's TTL, it never deletes
 // the stale row. Without this, kv_cache grows forever (one row per movie/series/person ever looked
 // up). 30 days comfortably outlives every TTL currently used against it (longest is 7 days).
+//
+// Trois âges depuis le 08/10/2026 :
+//  - les anciennes formes de clés, que plus rien ne lit (les filmographies et les crédits entiers,
+//    remplacés par des projections `v2` dix fois plus légères — 74 Mo à eux seuls) : effacées tout
+//    de suite ;
+//  - les caches de consultation (recherche, crédits, bannière, personnes, vignettes), aux durées de
+//    sept jours au plus : effacés après quatorze, au lieu de rester trois semaines de trop ;
+//  - le reste à trente jours, en particulier les titres traduits (`tmdb:titles`, quatorze jours
+//    étalés) : effacé trop tôt, un titre retomberait sur son nom d'origine le temps d'être redemandé.
+const DAY_MS = 24 * 3600_000;
+const OBSOLETE_KEYS = ["search:person-credits:[0-9]*", "credits:movie:*", "credits:tv:*"];
+const SHORT_LIVED_KEYS = ["search:*", "credits:*", "hero:*", "tmdb:person:*", "person:*", "enriched:*", "frame:*", "info:*"];
+
 function cleanupDiskCache(): void {
   try {
-    kvCacheDb.cleanup(30 * 24 * 3600_000);
+    for (const pattern of OBSOLETE_KEYS) kvCacheDb.cleanupGlob(pattern, 0);
+    for (const pattern of SHORT_LIVED_KEYS) kvCacheDb.cleanupGlob(pattern, 14 * DAY_MS);
+    kvCacheDb.cleanup(30 * DAY_MS);
   } catch (err) {
     logError("notifications.kv-cache-cleanup", err);
   }

@@ -51,9 +51,18 @@ export interface StatusPayload {
  */
 let historyCache: { key: string; byCapability: Map<string, { uptimePct: number; incidents: Incident[] }> } | null = null;
 
+/**
+ * Mais le relevé passe chaque minute, et la page ouverte repayait donc les trois cents millisecondes
+ * chaque minute (mesuré le 08/10/2026 : 313 782 lignes, 283 ms de boucle arrêtée). Sur sept jours,
+ * dix minutes de plus ne changent ni la disponibilité au dixième près ni la liste des incidents
+ * passés ; l'état présent, lui, vient du relevé et n'attend pas. L'analyse est gardée dix minutes.
+ */
+const HISTORY_REFRESH_MS = 10 * 60_000;
+
 function capabilityHistory(ids: string[]) {
   const snapshotAt = getLastStatusSnapshot()?.checkedAt ?? 0;
-  const key = snapshotAt > 0 ? `s${snapshotAt}` : `t${Math.floor(Date.now() / POLL_INTERVAL_MS)}`;
+  const slice = Math.floor(Date.now() / Math.max(HISTORY_REFRESH_MS, POLL_INTERVAL_MS));
+  const key = snapshotAt > 0 ? `s${slice}` : `t${Math.floor(Date.now() / POLL_INTERVAL_MS)}`;
   if (historyCache?.key === key) return historyCache.byCapability;
 
   const since = Date.now() - SEVEN_DAYS_MS;

@@ -42,6 +42,15 @@ function backupFileName(date = new Date()): string {
 const DISPOSABLE_TABLES = ["service_checks", "capability_checks"] as const;
 
 /**
+ * Les caches de consultation du disque, retirés de la copie eux aussi (08/10/2026) : filmographies,
+ * crédits, bannière, recherche. Ils se redemandent seuls à TMDB et pesaient l'essentiel de `kv_cache`
+ * — 90 % des 91 Mo de chaque fichier. Les titres traduits, les logos et les affiches restent : sans
+ * eux, une restauration rouvrirait un catalogue aux titres d'origine et sans logos le temps de tout
+ * redemander.
+ */
+const DISPOSABLE_KV = ["search:*", "credits:*", "hero:*", "tmdb:person:*", "person:*", "enriched:*", "info:*"] as const;
+
+/**
  * Allège la copie qu'on vient d'écrire.
  *
  * Le `VACUUM` est ce qui rend la place, une suppression seule laissant les pages libres dans le
@@ -55,6 +64,8 @@ function trimBackup(file: string): void {
   try {
     copy = new Database(file);
     for (const table of DISPOSABLE_TABLES) copy.exec(`DELETE FROM ${table}`);
+    const dropKv = copy.prepare("DELETE FROM kv_cache WHERE key GLOB ?");
+    for (const pattern of DISPOSABLE_KV) dropKv.run(pattern);
     copy.exec("VACUUM");
   } catch (err) {
     logError("db.backup.trim", err);
@@ -67,10 +78,14 @@ function trimBackup(file: string): void {
   }
 }
 
-export async function runDbBackup(): Promise<void> {
+export async function runDbBackup(options: { skipIfDone?: boolean } = {}): Promise<void> {
   try {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
     const file = path.join(BACKUP_DIR, backupFileName());
+    // Au démarrage, la sauvegarde du jour est souvent déjà là : le conteneur est recréé à chaque
+    // déploiement, plusieurs fois par jour, et chaque passage coûtait un compactage synchrone de
+    // 630 ms (mesuré le 08/10/2026) — la boucle d'événements arrêtée, pour un fichier identique.
+    if (options.skipIfDone && fs.existsSync(file)) return;
     await getDb().backup(file);
     trimBackup(file);
 
@@ -91,7 +106,7 @@ const BACKUP_INTERVAL_MS = 24 * 3600_000;
 export function startDbBackupCron(): void {
   // 5 minutes after startup, not immediately — avoids competing with the app's own
   // startup work (cache warmup, notification checks) for DB access.
-  const startupDelay = setTimeout(runDbBackup, 5 * 60_000);
+  const startupDelay = setTimeout(() => void runDbBackup({ skipIfDone: true }), 5 * 60_000);
   startupDelay.unref?.();
 
   const interval = setInterval(runDbBackup, BACKUP_INTERVAL_MS);

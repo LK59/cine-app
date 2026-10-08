@@ -12,6 +12,7 @@ import { omdb } from "@/lib/clients/omdb";
 import { getJellyseerrPendingCount } from "@/lib/jellyseerr-scope";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
+import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 
 interface ServiceStatus {
   name: string;
@@ -35,7 +36,8 @@ export async function GET(req: NextRequest) {
     probe("radarr", async () => {
       const [status, movies, missing, queue] = await Promise.all([
         radarr.getSystemStatus(),
-        radarr.getMovies(),
+        // La liste en cache (4,9 Mo chez Radarr) : seule sa longueur sert ici (08/10/2026).
+        cachedMovies(),
         radarr.getMissingCount().catch(() => 0),
         radarr.getQueueCount().catch(() => 0),
       ]);
@@ -47,7 +49,7 @@ export async function GET(req: NextRequest) {
     probe("sonarr", async () => {
       const [status, series, missing, queue] = await Promise.all([
         sonarr.getSystemStatus(),
-        sonarr.getSeries(),
+        cachedSeries(),
         sonarr.getMissingCount().catch(() => 0),
         sonarr.getQueueCount().catch(() => 0),
       ]);

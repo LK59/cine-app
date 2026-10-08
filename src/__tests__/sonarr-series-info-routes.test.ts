@@ -30,6 +30,8 @@ const mockCachedSeries = vi.fn();
 vi.mock("@/lib/server-cache", () => ({
   cachedSeries: (...args: unknown[]) => mockCachedSeries(...args),
   withCache: async (_key: string, _ttl: number, fn: () => unknown) => fn(),
+  withPersistentCache: async (_key: string, _ttl: number, fn: () => unknown) => fn(),
+  TTL: { VERY_SHORT: 5_000 },
 }));
 
 function fakeReq(): NextRequest {

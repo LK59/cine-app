@@ -1,4 +1,4 @@
-import { qbittorrent } from "@/lib/clients/qbittorrent";
+import { cachedTorrents } from "@/lib/server-cache";
 import { sendPushToAdmins } from "@/lib/push";
 import { logError } from "@/lib/logger";
 import { kvCacheDb } from "@/lib/db";
@@ -189,7 +189,7 @@ export function startTorrentWatch(): void {
   }
   timer = setInterval(async () => {
     try {
-      addToDigest(digest, diffTorrents(state, await qbittorrent.getTorrents()), Date.now());
+      addToDigest(digest, diffTorrents(state, await cachedTorrents()), Date.now());
     } catch (err) {
       logError("notifications.torrents", err);
     }
