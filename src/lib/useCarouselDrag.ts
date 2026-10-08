@@ -30,7 +30,15 @@ const FLICK_VELOCITY = 0.4;
  */
 const FLICK_MIN_PX = 24;
 
-export const CAROUSEL_TRANSITION = "transform 380ms cubic-bezier(0.32, 0.72, 0, 1)";
+/**
+ * Le passage d'une affiche à l'autre : 500 ms, une longue décélération (08/10/2026). À 380 ms et sur
+ * une courbe plus raide, le changement de bannière paraissait sec sur téléphone ; plus longue et plus
+ * douce à l'arrivée, l'affiche glisse et se pose. Les voisines (`.hero-peek-slide`, globals.css) et le
+ * raccord de la boucle (`CinemaMobileHero`) suivent la même durée.
+ */
+export const CAROUSEL_MS = 500;
+export const CAROUSEL_EASE = "cubic-bezier(0.25, 0.8, 0.25, 1)";
+export const CAROUSEL_TRANSITION = `transform ${CAROUSEL_MS}ms ${CAROUSEL_EASE}`;
 
 /**
  * Une piste où l'affiche ne prend pas toute la largeur (`peek`) : centrée, ses voisines dépassent de

@@ -7,7 +7,7 @@ import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { continueOrder } from "@/lib/continueOrder";
-import { continueHeroTitles, continueTargets, heroSource, spotlightRowItems } from "@/lib/homeLayout";
+import { continueHeroTitles, continueTargets, heroSource, myListGoesLate, spotlightRowItems } from "@/lib/homeLayout";
 import { useHomeLayout } from "@/lib/useHomeLayout";
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1288,17 +1288,21 @@ export function CinemaClient() {
               {mediaType === "movies" && continueRow}
 
               {myListSkeleton}
-              <CinemaRow
-                label={t("cinema.myList")}
-                rowKey="mylist-movies"
-                rowIndex={RAIL_COUNT}
-                items={myListMovies}
-                cardWidthClassName={CARD_WIDTH}
-                onSeeAll={openSeeAll}
-                seeAllKey={SEE_ALL_LIST}
-                onFocusItem={focusMovie}
-                onSelectItem={openDetail}
-              />
+              {/* Deux titres au moins : à la deuxième place ; sinon sous les derniers ajouts —
+                  `myListGoesLate`. */}
+              {!myListGoesLate(myListMovies.length) && (
+                <CinemaRow
+                  label={t("cinema.myList")}
+                  rowKey="mylist-movies"
+                  rowIndex={RAIL_COUNT}
+                  items={myListMovies}
+                  cardWidthClassName={CARD_WIDTH}
+                  onSeeAll={openSeeAll}
+                  seeAllKey={SEE_ALL_LIST}
+                  onFocusItem={focusMovie}
+                  onSelectItem={openDetail}
+                />
+              )}
 
               {movies && (
                 <CinemaTop10Row
@@ -1324,6 +1328,20 @@ export function CinemaClient() {
                   onSeeAll={openSeeAll}
                   seeAllKey={BROWSE_ALL}
                   cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={focusMovie}
+                  onSelectItem={openDetail}
+                />
+              )}
+
+              {myListGoesLate(myListMovies.length) && (
+                <CinemaRow
+                  label={t("cinema.myList")}
+                  rowKey="mylist-movies"
+                  rowIndex={RAIL_COUNT}
+                  items={myListMovies}
+                  cardWidthClassName={CARD_WIDTH}
+                  onSeeAll={openSeeAll}
+                  seeAllKey={SEE_ALL_LIST}
                   onFocusItem={focusMovie}
                   onSelectItem={openDetail}
                 />
@@ -1408,17 +1426,21 @@ export function CinemaClient() {
               {mediaType === "series" && continueRow}
 
               {myListSkeleton}
-              <CinemaSeriesRow
-                label={t("cinema.myList")}
-                rowKey="mylist-series"
-                rowIndex={RAIL_COUNT}
-                items={myListSeries}
-                cardWidthClassName={CARD_WIDTH}
-                onSeeAll={openSeeAll}
-                seeAllKey={SEE_ALL_LIST}
-                onFocusItem={focusSeries}
-                onSelectItem={openSeriesDetail}
-              />
+              {/* Deux titres au moins : à la deuxième place ; sinon sous les derniers ajouts —
+                  `myListGoesLate`. */}
+              {!myListGoesLate(myListSeries.length) && (
+                <CinemaSeriesRow
+                  label={t("cinema.myList")}
+                  rowKey="mylist-series"
+                  rowIndex={RAIL_COUNT}
+                  items={myListSeries}
+                  cardWidthClassName={CARD_WIDTH}
+                  onSeeAll={openSeeAll}
+                  seeAllKey={SEE_ALL_LIST}
+                  onFocusItem={focusSeries}
+                  onSelectItem={openSeriesDetail}
+                />
+              )}
 
               {series && (
                 <CinemaTop10Row
@@ -1443,6 +1465,20 @@ export function CinemaClient() {
                   onSeeAll={openSeeAll}
                   seeAllKey={BROWSE_ALL}
                   cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={focusSeries}
+                  onSelectItem={openSeriesDetail}
+                />
+              )}
+
+              {myListGoesLate(myListSeries.length) && (
+                <CinemaSeriesRow
+                  label={t("cinema.myList")}
+                  rowKey="mylist-series"
+                  rowIndex={RAIL_COUNT}
+                  items={myListSeries}
+                  cardWidthClassName={CARD_WIDTH}
+                  onSeeAll={openSeeAll}
+                  seeAllKey={SEE_ALL_LIST}
                   onFocusItem={focusSeries}
                   onSelectItem={openSeriesDetail}
                 />

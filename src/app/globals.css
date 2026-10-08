@@ -1675,7 +1675,8 @@
   width: var(--carousel-slide);
   transform: scale(0.92);
   opacity: 0.45;
-  transition: transform 380ms cubic-bezier(0.32, 0.72, 0, 1), opacity 380ms cubic-bezier(0.32, 0.72, 0, 1);
+  /* La durée et la courbe de la piste (`CAROUSEL_MS`, `CAROUSEL_EASE`, useCarouselDrag). */
+  transition: transform 500ms cubic-bezier(0.25, 0.8, 0.25, 1), opacity 500ms cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 .hero-peek-on {
   transform: none;

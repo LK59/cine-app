@@ -1646,8 +1646,9 @@ serveur → Réglages par défaut, ou `.env`) ; chaque compte la remplace dans C
 côté du défilement guidé (`user_preferences`, `NULL` = suivre le serveur ; revenir à la valeur du
 serveur la suit de nouveau). L'écran du compte ne montre que l'interrupteur.
 - `HOME_BROWSE_BUTTON` (activé par défaut) : « Tous les films » / « Toutes les séries », en rond en
-  haut à droite — à côté de la loupe sur téléphone, dans le coin au bureau (l'aide du clavier se
-  range à sa gauche).
+  haut à droite (l'aide du clavier se range à sa gauche au bureau). Sur téléphone, la barre du haut
+  porte le logo (et le nom s'il y a la place), la bascule au centre, ce bouton à droite — la loupe
+  qui y était doublait l'onglet « Recherche » de la barre du bas (retirée le 08/10/2026).
 - `HOME_CONTINUE_HERO` (**coupé par défaut** depuis le 08/10/2026) : la bannière montre d'abord les
   reprises (huit au plus au bureau, cinq sur téléphone — `HERO_LIMIT_PHONE`), complétées par
   « À la une » jusqu'à cinq (`HERO_MIN`) ; une rangée « À la une » au moins de cinq titres la suit
@@ -1659,11 +1660,13 @@ première rangée sert à reprendre. L'essai des reprises dans la bannière, ave
 mêmes titres trois fois et mêlait deux intentions ; il reste une option.
 - **Rangées**, bureau et téléphone : Reprendre / À suivre (mêlés, le dernier lu d'abord, la même
   rangée sur les deux onglets), Ma liste, le classement du jour, les derniers ajouts (« Voir tout » →
-  la grille complète, triée par date d'ajout), puis les genres. Pas de « Voir tout » sur Reprendre ni
+  la grille complète, triée par date d'ajout), puis les genres. **Ma liste descend juste avant les
+  genres quand elle tient moins de deux titres** (`myListGoesLate`). Pas de « Voir tout » sur Reprendre ni
   sur le classement : ils sont déjà entiers.
 - **Téléphone** : l'affiche entière à 86 % de la largeur, les voisines qui dépassent (`peek` de
-  `carouselTransform`), les tirets dessous ; toucher l'affiche ouvre la fiche (pas le relâchement d'un
-  balayage) ; la piste **boucle** — après le dernier, le premier, en continuant dans le même sens, sur
+  `carouselTransform`), les tirets dessous, un passage de 500 ms en longue décélération
+  (`CAROUSEL_MS`) ; toucher l'affiche ouvre la fiche (pas le relâchement d'un balayage) ; la piste
+  **boucle** — après le dernier, le premier, en continuant dans le même sens, sur
   une copie raccordée sans transition (`loop` de `useCarouselDrag`).
 - **Bureau** : la rangée d'affiches qui pilotait la bannière a disparu. La bannière des nouveautés
   porte « Lire » et « Plus d'infos » et `‹ ——— ›` (`HeroBannerControls`) ; ← → y changent de titre, ↓

@@ -5,7 +5,7 @@ import { Info, Play } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { heroSignature, resolveHeroCarousel, upcomingImages, useDecodeAhead, useHeroOrder } from "@/lib/heroCarousel";
-import { useCarouselDrag, carouselTransform, CAROUSEL_TRANSITION } from "@/lib/useCarouselDrag";
+import { useCarouselDrag, carouselTransform, CAROUSEL_MS, CAROUSEL_TRANSITION } from "@/lib/useCarouselDrag";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
@@ -147,7 +147,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
     const id = setTimeout(() => {
       setWrapping(null);
       setJumped(true);
-    }, 400);
+    }, CAROUSEL_MS + 30);
     return () => clearTimeout(id);
   }, [wrapping]);
   /** La position de la piste : décalée d'un cran par la copie du dernier, posée avant le premier. */
@@ -255,7 +255,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
         type="button"
         onClick={() => onPlay(item)}
         data-liquid-pan="press"
-        className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-ink"
+        className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-ink"
       >
         <Play size={16} fill="currentColor" />
         {/* La même formule que les fiches et les rangées : « Reprendre — 40 min restantes ». Un
@@ -270,7 +270,8 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
         data-liquid-pan="press"
         aria-label={t("cinema.moreInfo")}
         // Le verre liquide : posé sur l'affiche, il a quelque chose à flouter.
-        className="nav-glass flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-white"
+        // Sur une ligne : l'affiche à 86 % le faisait passer sur deux sur un petit téléphone.
+        className="nav-glass flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2.5 text-sm font-medium text-white"
       >
         <Info size={16} />
         {t("cinema.moreInfo")}

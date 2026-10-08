@@ -7,14 +7,14 @@ import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
 import { TapButton } from "@/components/TapButton";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import { useMissingTitleNotice } from "@/lib/useMissingTitleNotice";
-import { Clapperboard, Info, Play, Plus, Search, X } from "lucide-react";
+import { Clapperboard, Info, Play, Plus, X } from "lucide-react";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/lib/useLongPress";
 import { prefetchLibraryItem } from "@/lib/prefetch";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { continueOrder } from "@/lib/continueOrder";
-import { continueHeroTitles, continueTargets, heroSource, spotlightRowItems, HERO_LIMIT_PHONE } from "@/lib/homeLayout";
+import { continueHeroTitles, continueTargets, heroSource, myListGoesLate, spotlightRowItems, HERO_LIMIT_PHONE } from "@/lib/homeLayout";
 import { useHomeLayout } from "@/lib/useHomeLayout";
 import { CinemaBrowseAllButton } from "@/components/cinema/CinemaBrowseAllButton";
 import { heroOffscreen } from "@/lib/heroCarousel";
@@ -180,8 +180,6 @@ export function CinemaMobileClient() {
   const setMediaType = (tab: "movies" | "series") =>
     cinemaNavigate({ tab, film: null, serie: null }, "replace");
   const searchOpen = route.search;
-  const setSearchOpen = (open: boolean) =>
-    open ? cinemaNavigate({ search: true }) : cinemaClose({ search: false });
   const short = useIsShortViewport();
   // Les mêmes rangées de découverte que sur grand écran, en bas de page — voir la route.
   const { data: discovery } = useSWR<PlayerDiscoverPayload>("/api/player/discover", fetcher, {
@@ -573,9 +571,9 @@ export function CinemaMobileClient() {
           className="flex min-w-0 items-center gap-1.5 rounded-full py-1 pr-2 text-white transition-opacity active:opacity-60"
         >
           <Clapperboard size={16} className="shrink-0 text-accent-400" />
-          {/* Le nom cède la place sur un petit téléphone : avec le bouton « Tout voir » à droite, il
-              y était coupé en « C. » (iPhone SE, 07/10/2026). Le logo seul suffit à le dire. */}
-          <span className="truncate font-display text-sm font-semibold tracking-tight max-[380px]:hidden">Cine App</span>
+          {/* Le nom cède la place quand il n'y en a pas : il était coupé en « C. » sur un iPhone SE
+              tant que deux ronds tenaient la droite (07/10/2026). Le logo seul suffit à le dire. */}
+          <span className="truncate font-display text-sm font-semibold tracking-tight max-[340px]:hidden">Cine App</span>
         </button>
 
         {/* Au centre, et non plus poussés à gauche : ce sont les deux onglets de la bibliothèque,
@@ -585,19 +583,12 @@ export function CinemaMobileClient() {
             seul sélecteur de l'app à avoir cette forme. 36 px de haut, comme la loupe : la barre
             garde sa hauteur. */}
         <CinemaModeToggle placement="inline" mode={mediaType} onChange={setMediaType} />
-        <div className="ml-auto flex items-center gap-2">
-          {/* Le catalogue entier à un geste, si l'installation le veut (DECISIONS.md §52). */}
+        {/* À droite, le catalogue entier à un geste (DECISIONS.md §52). La loupe qui était là
+            ouvrait la même recherche que l'onglet « Recherche » de la barre du bas, toujours à
+            portée de pouce : retirée le 08/10/2026. Une case vide si l'option est coupée — la
+            bascule reste au centre. */}
+        <div className="ml-auto flex items-center">
           {homeLayout.browseButton && <CinemaBrowseAllButton mediaType={mediaType} compact />}
-          <button
-            type="button"
-            onClick={() => setSearchOpen(true)}
-            aria-label={t("cinema.search")}
-            // Le verre et le geste de la bascule voisine (DECISIONS.md §45).
-            data-liquid
-            className="nav-glass flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
-          >
-            <Search size={18} />
-          </button>
         </div>
         {/* Le nouvel onglet se construit : un fil fin sous la barre, le temps que ses rangées
             arrivent (`shownTab`). Rien ne clignote si c'est immédiat — il n'apparaît qu'après
@@ -1074,6 +1065,17 @@ const MobileTabRows = memo(function MobileTabRows({
   useFlipGrid(top10Track, top10.map((item) => String(itemId(item))), CATALOGUE_FLIP);
   const recentlyAdded: (CinemaMovie | CinemaSeries)[] = payload?.recentlyAdded ?? [];
   const rows = payload?.rows as Record<string, (CinemaMovie | CinemaSeries)[]> | undefined;
+  const myListRow = (
+    <PosterRow
+      label={t("cinema.myList")}
+      items={myList}
+      itemId={itemId}
+      onSelect={onSelect}
+      // Vers « Ma liste » et non vers une grille de genre : la rangée est un extrait
+      // d'un écran qui existe déjà, avec ses onglets, sa recherche et ses demandes.
+      onSeeAll={() => cinemaNavigate({ list: true })}
+    />
+  );
   return (
     <>
       {/* Sous Reprendre, commun aux onglets : Ma liste, le classement du jour, les derniers ajouts, la
@@ -1083,15 +1085,8 @@ const MobileTabRows = memo(function MobileTabRows({
           <CinemaSkeletonCards cardClassName={POSTER_WIDTH} shape="poster" count={4} />
         </MobileRow>
       )}
-      <PosterRow
-        label={t("cinema.myList")}
-        items={myList}
-        itemId={itemId}
-        onSelect={onSelect}
-        // Vers « Ma liste » et non vers une grille de genre : la rangée est un extrait
-        // d'un écran qui existe déjà, avec ses onglets, sa recherche et ses demandes.
-        onSeeAll={() => cinemaNavigate({ list: true })}
-      />
+      {/* Deux titres au moins : sous Reprendre ; sinon sous les derniers ajouts — `myListGoesLate`. */}
+      {!myListGoesLate(myList.length) && myListRow}
       {top10.length > 0 && (
         <MobileRow label={top10Label(payload?.top10Theme ?? null, t)} trackRef={top10Track}>
           {top10.map((item, i) => (
@@ -1131,6 +1126,9 @@ const MobileTabRows = memo(function MobileTabRows({
             onSelect={onDiscover}
           />
         ))}
+
+      {/* Moins de deux titres : juste avant les genres — `myListGoesLate`. */}
+      {myListGoesLate(myList.length) && myListRow}
 
       {payload?.genres.map((genre) => {
         const all = rows?.[genre] ?? [];

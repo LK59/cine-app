@@ -152,3 +152,12 @@ export function spotlightRowItems<T>(pools: readonly (readonly T[])[], shown: Re
   }
   return out;
 }
+
+/**
+ * « Ma liste » descend sous les derniers ajouts, juste avant les genres, quand elle tient moins de
+ * deux titres (08/10/2026) : une rangée vide ou d'une seule affiche, à la deuxième place, repoussait
+ * le classement et les ajouts pour presque rien. Bureau et téléphone.
+ */
+export function myListGoesLate(count: number): boolean {
+  return count < 2;
+}

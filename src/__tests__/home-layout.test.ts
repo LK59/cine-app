@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { continueHeroTitles, continueTargets, heroSource, HERO_LIMIT_PHONE } from "@/lib/homeLayout";
+import { continueHeroTitles, continueTargets, heroSource, myListGoesLate, HERO_LIMIT_PHONE } from "@/lib/homeLayout";
 import { continueOrder } from "@/lib/continueOrder";
 import { heroContinueFacts } from "@/lib/cinemaContinueLabel";
 import { resolveHomeLayout } from "@/lib/useHomeLayout";
@@ -103,5 +103,13 @@ describe("continueTargets — ce que le bouton de la bannière lance", () => {
     expect([...out.movies.keys()]).toEqual([2]);
     expect(out.movies.get(2)?.id).toBe("a");
     expect(out.series.get(7)?.jellyfinItemId).toBe("e-new");
+  });
+});
+
+describe("myListGoesLate — « Ma liste » descend quand elle est presque vide", () => {
+  it("sous les derniers ajouts avec zéro ou un titre, à sa place à partir de deux", () => {
+    expect(myListGoesLate(0)).toBe(true);
+    expect(myListGoesLate(1)).toBe(true);
+    expect(myListGoesLate(2)).toBe(false);
   });
 });
