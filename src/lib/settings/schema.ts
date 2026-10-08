@@ -71,6 +71,7 @@ export const SETTINGS: readonly SettingDef[] = [
   // 08/10/2026 : la bannière fait découvrir, la première rangée sert à reprendre.
   { key: "HOME_BROWSE_BUTTON", group: "defaults", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "HOME_CONTINUE_HERO", group: "defaults", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  { key: "NEW_ACCOUNT_BLOCKED_TAGS", group: "defaults", kind: "text", need: "optional", fallback: "", inApp: true, placeholder: "prive" },
   // Lu au démarrage seulement : son libellé le dit (« au prochain démarrage »).
   { key: "POSTER_PREWARM", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "VAPID_SUBJECT", group: "app", kind: "text", need: "optional", fallback: "mailto:admin@example.com", inApp: true, placeholder: "mailto:admin@example.com" },

@@ -128,6 +128,13 @@ export const config = {
       return optional("HOME_CONTINUE_HERO", "false") === "true";
     },
   },
+  accounts: {
+    // Les tags bloqués d'office sur un compte Jellyfin que l'installation découvre (`newAccountTags.ts`),
+    // séparés par des virgules. Vide : rien n'est posé.
+    get newBlockedTags() {
+      return optional("NEW_ACCOUNT_BLOCKED_TAGS", "");
+    },
+  },
   gallery: {
     // La galerie Clara Galle, option personnelle de l'installation de référence. Lue au
     // démarrage, fermée par défaut : elle était figée dans l'image au moment du build, par défaut

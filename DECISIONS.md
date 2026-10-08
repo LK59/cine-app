@@ -1803,3 +1803,25 @@ argument).
 **Tests.** `titleExtras.test.ts`, `sheetFacts.test.ts`, `useQueuedPlay.test.tsx`.
 
 **Décidé le 08/10/2026.**
+
+## 56. Les nouveaux comptes reçoivent d'office les tags bloqués
+
+**Règle.** Chaque compte Jellyfin que l'installation découvre reçoit, une seule fois, les tags de
+`NEW_ACCOUNT_BLOCKED_TAGS` dans sa politique Jellyfin. Les administrateurs ne sont jamais concernés. Le
+réglage se trouve dans « Réglages serveur », groupe « Réglages par défaut » ; vide, il ne pose rien.
+
+**Pourquoi.** Le tag « prive » (§54) n'était bloqué que sur les comptes qui existaient le 08/10/2026. Un
+compte créé ensuite naissait sans ce blocage et voyait ces titres, dans Jellyfin comme dans le cinéma.
+
+**Comment.** Toutes les cinq minutes, la liste des comptes Jellyfin est comparée à `known_accounts`. Au
+tout premier passage, les comptes présents sont seulement notés, sans rien modifier : ceux qui ont accès
+à « prive » le gardent. Ensuite, un compte inconnu reçoit les tags, puis il est noté. Un compte noté
+n'est plus jamais modifié : retirer le blocage à la main dans Jellyfin le retire pour de bon. Chaque
+pose est inscrite dans `auth.log` (`new-account-tags`).
+
+**Porteurs.** `applyNewAccountTags`, `withTags` et `newAccountTags` (`src/lib/newAccountTags.ts`),
+`knownAccountsDb` (`src/lib/db.ts`).
+
+**Tests.** `newAccountTags.test.ts`.
+
+**Décidé le 08/10/2026.**

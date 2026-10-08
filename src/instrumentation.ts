@@ -49,6 +49,11 @@ export async function register() {
     const { startJellyfinDevicePruneCron } = await import("./lib/jellyfinDevicePrune");
     startJellyfinDevicePruneCron();
 
+    // Les tags bloqués d'office (« prive ») posés sur chaque compte Jellyfin créé ensuite, dans les
+    // cinq minutes — voir `newAccountTags.ts`.
+    const { startNewAccountTagsCron } = await import("./lib/newAccountTags");
+    startNewAccountTagsCron();
+
     // Les affiches du catalogue préparées d'avance dans les tailles que les écrans demandent : sans
     // cela, la première personne à voir un titre payait 60 à 350 ms par affiche (25/09/2026). En
     // arrière-plan, une minute après le démarrage — voir `posterPrewarm.ts`.

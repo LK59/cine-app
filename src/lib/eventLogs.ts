@@ -71,7 +71,9 @@ export type AuthEvent =
   /** Appareils « CineApp » inactifs depuis trente jours supprimés chez Jellyfin (`jellyfinDevicePrune.ts`). */
   | "devices-pruned"
   /** Mot de passe du compte administrateur de l'assistant changé (les autres sessions fermées). */
-  | "password-changed";
+  | "password-changed"
+  /** Tags bloqués posés d'office sur un compte Jellyfin découvert (`newAccountTags.ts`). */
+  | "new-account-tags";
 
 /** Ne lève jamais : un journal qui échoue ne doit pas empêcher quelqu'un de se connecter. */
 export function logAuthEvent(kind: AuthEvent, fields: { user: string; device?: string | null; ip?: string | null } & Record<string, unknown>): void {

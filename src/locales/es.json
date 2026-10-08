@@ -2520,6 +2520,7 @@
       "PLAYER_AUTO_FRAME": "Ampliar la imagen sobre las bandas negras",
       "HOME_BROWSE_BUTTON": "Botón «Todas las películas / series» arriba del inicio",
       "HOME_CONTINUE_HERO": "Mostrar lo que se está viendo en el banner del inicio",
+      "NEW_ACCOUNT_BLOCKED_TAGS": "Etiquetas bloqueadas para cuentas nuevas (separadas por comas)",
       "VAPID_SUBJECT": "Contacto de las notificaciones (mailto:…)",
       "TZ": "Zona horaria",
       "MEDIA_ROOT": "Carpeta de medios (estadísticas de almacenamiento)",

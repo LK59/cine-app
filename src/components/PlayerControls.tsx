@@ -228,12 +228,6 @@ function formatTime(seconds: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-/** Le navigateur dit-il de ménager le réseau : économie de données, ou réseau mobile ? */
-function sparingNetwork(): boolean {
-  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; type?: string } }).connection;
-  return connection?.saveData === true || connection?.type === "cellular";
-}
-
 export function PlayerControls({
   videoRef,
   containerRef,
@@ -1050,6 +1044,25 @@ export function PlayerControls({
     };
   }, [itemId]);
 
+  // Pre-warms the browser's own HTTP cache with every trickplay sprite tile as soon as the
+  // metadata is known, instead of only fetching a tile the first time the seek bar is actually
+  // hovered — trades a bit of upfront bandwidth (a handful of small JPEGs — Jellyfin packs
+  // hundreds of thumbnails per tile) for the preview never showing a blank/loading frame on
+  // the first scrub. Fire-and-forget: nothing reads the Image objects, only their side effect
+  // of populating the cache under the same URL updatePreview will request later.
+  //
+  // Essayé le 08/10/2026 : chauffer au premier survol seulement (2,4 Mo de moins par ouverture).
+  // Rendu le jour même — une à deux secondes sans aperçu au premier contact, exactement ce que
+  // ce préchargement existe pour éviter.
+  useEffect(() => {
+    if (!trickplay) return;
+    const perTile = trickplay.tileWidth * trickplay.tileHeight;
+    const tileCount = Math.ceil(trickplay.thumbnailCount / perTile);
+    for (let i = 0; i < tileCount; i++) {
+      const img = new Image();
+      img.src = `/api/jellyfin/trickplay/tile?itemId=${itemId}&width=${trickplay.width}&index=${i}`;
+    }
+  }, [trickplay, itemId]);
 
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth));
   useEffect(() => {
@@ -1063,36 +1076,6 @@ export function PlayerControls({
   /** The bar is under a finger or a pointer — the one state that thickens it. */
   const scrubbing = previewTime !== null;
 
-  /**
-   * Les vignettes de la barre, chauffées au premier survol plutôt qu'à l'ouverture (08/10/2026).
-   *
-   * Toutes les planches partaient dès que leur description était connue — 2,4 Mo par ouverture
-   * en moyenne (164 planches, 101 Mo pour 43 films au journal du proxy), dans la même seconde que
-   * les premiers octets du film, et pour un spectateur qui, le plus souvent, ne touche jamais à la
-   * barre. Elles partent maintenant quand le doigt ou le pointeur la trouve : celle sous lui
-   * d'abord (`updatePreview` la demande), ses voisines, puis le reste — sauf en mode économie de
-   * données ou sur réseau mobile, où l'on s'en tient aux voisines. Le premier aperçu peut donc
-   * arriver un instant après le premier contact, le temps d'une planche.
-   */
-  const warmedTiles = useRef<string | null>(null);
-  useEffect(() => {
-    if (!trickplay || previewTime === null) return;
-    const perTile = trickplay.tileWidth * trickplay.tileHeight;
-    const tileCount = Math.ceil(trickplay.thumbnailCount / perTile);
-    const at = Math.min(tileCount - 1, Math.max(0, Math.floor(Math.floor((previewTime * 1000) / trickplay.intervalMs) / perTile)));
-    const warmKey = `${itemId}:${trickplay.width}`;
-    const sparing = sparingNetwork();
-    if (warmedTiles.current === warmKey && !sparing) return;
-    if (!sparing) warmedTiles.current = warmKey;
-    const order = sparing
-      ? [at - 1, at + 1]
-      : Array.from({ length: tileCount }, (_, i) => i).sort((a, b) => Math.abs(a - at) - Math.abs(b - at));
-    for (const i of order) {
-      if (i < 0 || i >= tileCount || i === at) continue;
-      const img = new Image();
-      img.src = `/api/jellyfin/trickplay/tile?itemId=${itemId}&width=${trickplay.width}&index=${i}`;
-    }
-  }, [trickplay, itemId, previewTime]);
 
   /**
    * What the lock screen, the Dynamic Island and a pair of headphones are told.

@@ -2520,6 +2520,7 @@
       "PLAYER_AUTO_FRAME": "Agrandir l'image au-dessus des bandes noires",
       "HOME_BROWSE_BUTTON": "Bouton « Tous les films / séries » en haut de l'accueil",
       "HOME_CONTINUE_HERO": "Afficher les reprises dans la bannière d'accueil",
+      "NEW_ACCOUNT_BLOCKED_TAGS": "Tags bloqués des nouveaux comptes (séparés par des virgules)",
       "VAPID_SUBJECT": "Contact des notifications (mailto:…)",
       "TZ": "Fuseau horaire",
       "MEDIA_ROOT": "Dossier des médias (statistiques de stockage)",

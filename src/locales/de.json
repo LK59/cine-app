@@ -2520,6 +2520,7 @@
       "PLAYER_AUTO_FRAME": "Bild über schwarze Balken vergrößern",
       "HOME_BROWSE_BUTTON": "Schaltfläche „Alle Filme / Serien“ oben auf der Startseite",
       "HOME_CONTINUE_HERO": "Laufende Titel im Startseiten-Banner zeigen",
+      "NEW_ACCOUNT_BLOCKED_TAGS": "Gesperrte Tags für neue Konten (durch Kommas getrennt)",
       "VAPID_SUBJECT": "Kontakt für Benachrichtigungen (mailto:…)",
       "TZ": "Zeitzone",
       "MEDIA_ROOT": "Medienordner (Speicherstatistik)",

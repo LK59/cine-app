@@ -48,6 +48,13 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_watchlist_user ON watchlist (user_id);
     CREATE INDEX IF NOT EXISTS idx_watchlist_status ON watchlist (user_id, status);
 
+    -- Les comptes Jellyfin que l'installation a déjà vus (DECISIONS.md §56, 08/10/2026) : un compte
+    -- absent d'ici est nouveau, et reçoit les tags bloqués d'office (newAccountTags.ts).
+    CREATE TABLE IF NOT EXISTS known_accounts (
+      jf_id    TEXT    PRIMARY KEY,
+      seen_at  INTEGER NOT NULL
+    );
+
     -- Les titres vus d'un compte (DECISIONS.md §51, 06/10/2026). Une copie tenue à jour de ce que
     -- Jellyfin sait pour les titres qu'il possède, et la seule trace pour ceux qu'il n'a pas (vus
     -- ailleurs, ou partis de la bibliothèque) : le « vu » d'un compte ne se perd plus. Ce n'est pas
@@ -760,6 +767,23 @@ export const notificationPrefsDb = {
 // Backs the long-lived in-memory caches (TMDB credits, ratings, ...) with disk storage so a
 // container restart (a frequent event around here — every redeploy) doesn't force a full
 // cold-start refetch storm of hundreds of TMDB requests. See withPersistentCache in server-cache.ts.
+
+/** Les comptes Jellyfin déjà vus — voir `newAccountTags.ts`. */
+export const knownAccountsDb = {
+  isEmpty(): boolean {
+    return !getDb().prepare("SELECT 1 FROM known_accounts LIMIT 1").get();
+  },
+  has(jfId: string): boolean {
+    return !!getDb().prepare("SELECT 1 FROM known_accounts WHERE jf_id = ?").get(jfId);
+  },
+  addAll(ids: readonly string[]): void {
+    const insert = getDb().prepare("INSERT OR IGNORE INTO known_accounts (jf_id, seen_at) VALUES (?, ?)");
+    const now = Date.now();
+    getDb().transaction(() => {
+      for (const id of ids) insert.run(id, now);
+    })();
+  },
+};
 
 export const kvCacheDb = {
   get(key: string): { value: unknown; fetchedAt: number } | null {

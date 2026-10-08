@@ -2520,6 +2520,7 @@
       "PLAYER_AUTO_FRAME": "Enlarge the picture over black bars",
       "HOME_BROWSE_BUTTON": "“All movies / series” button at the top of home",
       "HOME_CONTINUE_HERO": "Show what people are watching in the home banner",
+      "NEW_ACCOUNT_BLOCKED_TAGS": "Blocked tags for new accounts (comma-separated)",
       "VAPID_SUBJECT": "Notification contact (mailto:…)",
       "TZ": "Time zone",
       "MEDIA_ROOT": "Media folder (storage statistics)",
