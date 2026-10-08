@@ -84,6 +84,7 @@ export function useCarouselDrag({
   onDragStateChange,
   peek = false,
   loop = false,
+  position = index + (loop ? 1 : 0),
 }: {
   trackRef: RefObject<HTMLDivElement | null>;
   count: number;
@@ -104,6 +105,14 @@ export function useCarouselDrag({
    * `onIndexChange` — à l'appelant de raccorder ensuite sur le vrai titre, sans que rien ne se voie.
    */
   loop?: boolean;
+  /**
+   * La case de la piste où se trouve le titre courant, quand elle n'est pas `index` (+1 en boucle).
+   *
+   * L'appelant le sait, pas le hook : pendant le raccord d'une boucle la piste est posée sur une
+   * copie, et le geste la recalculait depuis l'index — un second balayage juste après être passé du
+   * dernier au premier partait d'une case vide, la bannière disparaissait sous le doigt (08/10/2026).
+   */
+  position?: number;
   onDragStateChange?: (dragging: boolean) => void;
 }): CarouselDrag {
   const from = useRef<{ x: number; y: number; at: number } | null>(null);
@@ -125,16 +134,17 @@ export function useCarouselDrag({
         const track = trackRef.current;
         if (!track) return;
         track.style.transition = "none";
-        track.style.transform = carouselTransform(index + (loop ? 1 : 0), pending.current, peek);
+        track.style.transform = carouselTransform(position, pending.current, peek);
       });
     },
-    [index, trackRef, peek, loop]
+    [position, trackRef, peek]
   );
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     from.current = { x: e.clientX, y: e.clientY, at: performance.now() };
     axis.current = "undecided";
+    pending.current = 0;
     width.current = (e.currentTarget as HTMLElement).clientWidth || 1;
   }, []);
 
@@ -187,7 +197,10 @@ export function useCarouselDrag({
       axis.current = "undecided";
       onDragStateChange?.(false);
 
-      const moved = e.clientX - start.x;
+      // Une annulation (le système reprend le geste) ne porte pas toujours de coordonnées fiables —
+      // un `clientX` à zéro passait pour un grand balayage et changeait de titre. On s'en tient au
+      // dernier décalage suivi.
+      const moved = e.type === "pointercancel" ? pending.current : e.clientX - start.x;
       const elapsed = Math.max(performance.now() - start.at, 1);
       const far = Math.abs(moved) > width.current * COMMIT_RATIO;
       const thrown = Math.abs(moved) >= FLICK_MIN_PX && Math.abs(moved) / elapsed > FLICK_VELOCITY;
@@ -216,11 +229,11 @@ export function useCarouselDrag({
       const track = trackRef.current;
       if (track) track.style.transition = CAROUSEL_TRANSITION;
       requestAnimationFrame(() => {
-        if (track) track.style.transform = carouselTransform(next + (loop ? 1 : 0), 0, peek);
+        if (track) track.style.transform = carouselTransform(position + (next - index), 0, peek);
         if (next !== index) requestAnimationFrame(() => onIndexChange(next));
       });
     },
-    [count, index, onIndexChange, trackRef, onDragStateChange, releaseCapture, peek, loop]
+    [count, index, position, onIndexChange, trackRef, onDragStateChange, releaseCapture, peek, loop]
   );
 
   return {

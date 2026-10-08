@@ -12,6 +12,7 @@ import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { formatContinueLabel, heroContinueFacts } from "@/lib/cinemaContinueLabel";
 import { HeroContinueProgress } from "@/components/cinema/HeroContinueProgress";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
+import { useArrivalFade } from "@/lib/useArrivalFade";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 
@@ -43,6 +44,9 @@ function heroPoster(item: { posterUrl: string | null; posterTextlessUrl?: string
 
 // Hors du composant : stables, pour que la bannière ne relance rien à chaque rendu.
 const heroKey = (item: Item) => ("radarrId" in item ? `f${item.radarrId}` : `s${item.sonarrId}`);
+/** Les copies posées de chaque côté de la piste quand elle boucle. */
+const LOOP_COPIES = 2;
+const NO_TRANSITION = { transition: "none" } as const;
 /** Ce que cette bannière affiche d'un titre : son affiche et son logo, décodés d'avance. */
 const heroImages = (item: Item) => [heroPoster(item), item.logoUrl];
 
@@ -110,55 +114,81 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   /**
    * Un saut de plus d'un cran se fait sans glisser.
    *
-   * Seules l'affiche courante et ses deux voisines sont rendues. Du dernier titre au premier, ou
-   * d'un toucher sur une barre éloignée, la piste glissait donc sur toute sa largeur en traversant
-   * des cases vides, l'affiche visible démontée d'emblée (relevé le 23/09/2026). Le glissement
-   * reste pour un cran — le geste, la rotation — ; au-delà, l'affiche est remplacée sur place.
+   * Seules l'affiche courante et ses voisines sont rendues. Du dernier titre au premier, ou d'un
+   * toucher sur une barre éloignée, la piste glissait donc sur toute sa largeur en traversant des
+   * cases vides, l'affiche visible démontée d'emblée (relevé le 23/09/2026). Le glissement reste
+   * pour un cran — le geste, la rotation — ; au-delà, l'affiche est remplacée sur place.
    * Retenu pendant le rendu, et non dans un effet : c'est ce rendu-là qui pose la transformation.
+   *
+   * Un changement que personne n'a demandé ne glisse pas non plus (08/10/2026) : la liste qui
+   * passe d'un titre à deux (la boucle apparaît, toutes les cases se décalent), ou un titre retiré
+   * avant celui qu'on regarde (son index baisse, mais c'est toujours lui). La piste glissait d'un
+   * cran alors que le titre à l'écran n'avait pas changé. On retient donc le titre, pas seulement
+   * sa place.
    */
-  const [shownIndex, setShownIndex] = useState(index);
+  const count = items.length;
+  const currentKey = count > 0 ? heroKey(items[index]) : null;
+  const [shown, setShown] = useState({ index, key: currentKey, count });
   const [jumped, setJumped] = useState(false);
   /**
    * La piste boucle (08/10/2026) : après le dernier titre vient le premier, en continuant dans le
    * même sens — elle glisse sur une copie du premier posée après le dernier, puis se raccorde sans
    * transition sur le vrai, ce que l'œil ne voit pas. Pareil à l'envers sur une copie du dernier.
-   * `dragWrap` : le doigt est parti vers la gauche depuis le premier ; la rotation, elle, ne va que
-   * vers l'avant, si bien que dernier → premier se reconnaît tout seul.
+   *
+   * Le sens est dit par le geste (`intent`), pas deviné : à deux titres, passer du second au
+   * premier est aussi bien un pas en arrière qu'un tour complet vers l'avant, et la supposition
+   * faisait courir la piste deux cases à droite sur un simple balayage vers la droite. Seule la
+   * rotation, qui ne va que vers l'avant, laisse le sens au défaut.
    */
-  const loop = items.length > 1;
+  const loop = count > 1;
+  const pad = loop ? LOOP_COPIES : 0;
   const [wrapping, setWrapping] = useState<null | "toFirst" | "toLast">(null);
-  const [dragWrap, setDragWrap] = useState(false);
-  if (index !== shownIndex) {
-    const last = items.length - 1;
-    const toFirst = loop && shownIndex === last && index === 0;
-    const toLast = loop && dragWrap && index === last;
-    setShownIndex(index);
-    if (dragWrap) setDragWrap(false);
-    if (toFirst || toLast) {
-      setWrapping(toFirst ? "toFirst" : "toLast");
-      setJumped(false);
+  const [intent, setIntent] = useState<null | "forward" | "backward">(null);
+  if (index !== shown.index || currentKey !== shown.key || count !== shown.count) {
+    const last = count - 1;
+    // Même titre ailleurs, ou une piste d'une autre longueur : rien n'a été demandé, on se pose.
+    const reshaped = count !== shown.count || currentKey === shown.key;
+    setShown({ index, key: currentKey, count });
+    if (intent) setIntent(null);
+    if (reshaped || wrapping) {
+      // Pendant un raccord, la piste est sur une copie : un nouveau choix (une barre touchée) part
+      // du vrai titre, posé sans glisser.
+      if (wrapping) setWrapping(null);
+      setJumped(true);
     } else {
-      setJumped(Math.abs(index - shownIndex) > 1);
+      const toFirst = loop && shown.index === last && index === 0 && intent !== "backward";
+      const toLast = loop && shown.index === 0 && index === last && intent === "backward";
+      if (toFirst || toLast) {
+        setWrapping(toFirst ? "toFirst" : "toLast");
+        setJumped(false);
+      } else {
+        setJumped(Math.abs(index - shown.index) > 1);
+      }
     }
   }
+  /** Le raccord : sans transition, sur le vrai titre — la copie et lui sont identiques. */
+  const settleWrap = useCallback(() => {
+    setWrapping(null);
+    setJumped(true);
+  }, []);
   useEffect(() => {
     if (!wrapping) return;
-    // Le raccord, une fois le glissement fini : sans transition, sur le vrai titre.
-    const id = setTimeout(() => {
-      setWrapping(null);
-      setJumped(true);
-    }, CAROUSEL_MS + 30);
+    // Filet : `transitionend` raccorde d'habitude (voir la piste), mais une transition coupée en
+    // route n'en émet pas.
+    const id = setTimeout(settleWrap, CAROUSEL_MS + 30);
     return () => clearTimeout(id);
-  }, [wrapping]);
-  /** La position de la piste : décalée d'un cran par la copie du dernier, posée avant le premier. */
-  const trackPos = !loop ? index : wrapping === "toFirst" ? items.length + 1 : wrapping === "toLast" ? 0 : index + 1;
-  const slides = loop
-    ? [
-        { item: items[items.length - 1], real: items.length - 1, key: "copie-dernier" },
-        ...items.map((item, i) => ({ item, real: i, key: heroKey(item) })),
-        { item: items[0], real: 0, key: "copie-premier" },
-      ]
-    : items.map((item, i) => ({ item, real: i, key: heroKey(item) }));
+  }, [wrapping, settleWrap]);
+  /** La position de la piste : décalée de `pad` crans par les copies posées avant le premier. */
+  const trackPos = !loop ? index : wrapping === "toFirst" ? count + pad : wrapping === "toLast" ? pad - 1 : index + pad;
+  /**
+   * Deux copies de chaque côté, et non une : posée sur la copie du premier, la piste montrait un
+   * bord vide là où la voisine de droite aurait dû dépasser — rien n'existait au-delà.
+   */
+  const slides = Array.from({ length: count + 2 * pad }, (_, i) => {
+    const k = i - pad;
+    const real = ((k % count) + count) % count;
+    return { item: items[real], real, key: k < 0 || k >= count ? `copie${k}` : heroKey(items[real]) };
+  });
   // La transition revient une image après le saut, et non au cran suivant : rendue dans le même
   // rendu que la nouvelle position, elle n'aurait rien à interpoler et ce cran se ferait d'un coup
   // lui aussi (voir la note sur les deux images dans useCarouselDrag).
@@ -196,30 +226,35 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
    * compte pas comme un toucher.
    */
   const draggedAt = useRef(0);
-  const onDragState = useCallback((moving: boolean) => {
-    setDragging(moving);
-    draggedAt.current = performance.now();
-  }, []);
+  const onDragState = useCallback(
+    (moving: boolean) => {
+      setDragging(moving);
+      draggedAt.current = performance.now();
+      // Un geste qui commence pendant le raccord d'une boucle : on se pose d'abord sur le vrai
+      // titre. Sinon le minuteur du raccord tombait sous le doigt et remettait la piste à sa place
+      // de repos — l'affiche sautait loin du doigt (08/10/2026).
+      if (moving && wrapping) settleWrap();
+    },
+    [wrapping, settleWrap]
+  );
   const openFromPoster = (e: React.MouseEvent, item: Item) => {
     if ((e.target as Element).closest("button")) return;
     if (performance.now() - draggedAt.current < 400) return;
     onOpen(item);
   };
   // Au-delà d'un bout, le geste rend -1 ou le nombre de titres (`loop`) : on revient sur le vrai.
-  const count = items.length;
   const onDragIndex = useCallback(
     (next: number) => {
-      if (next < 0) {
-        setDragWrap(true);
-        setIndex(count - 1);
-      } else setIndex(next >= count ? 0 : next);
+      setIntent(next < index ? "backward" : "forward");
+      setIndex(next < 0 ? count - 1 : next >= count ? 0 : next);
     },
-    [count, setIndex]
+    [count, index, setIndex]
   );
   const drag = useCarouselDrag({
     trackRef,
     count,
     index,
+    position: trackPos,
     onIndexChange: onDragIndex,
     onDragStateChange: onDragState,
     peek,
@@ -231,6 +266,9 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   // doigt bouge (`data-liquid-pan="press"`).
   const sectionRef = useRef<HTMLElement>(null);
   useLiquidDelegation(sectionRef);
+  // Le fondu d'arrivée, une fois : la bannière de l'autre onglet est cachée par `hidden`, et le
+  // fondu rejouait à chaque retour — voir `useArrivalFade`.
+  const fade = useArrivalFade();
 
   if (items.length === 0) return null;
 
@@ -283,7 +321,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
 
   return (
     // Fond en remplaçant son squelette, au lieu de surgir (23/09/2026) — au montage seulement.
-    <section ref={sectionRef} className="animate-fade-in px-4 pt-2">
+    <section ref={sectionRef} className={`${fade.arrived ? "" : "animate-fade-in "}px-4 pt-2`} onAnimationEnd={fade.onAnimationEnd}>
       {/* Une piste, et non une affiche remplacée : toutes les affiches sont côte à côte et la
           piste est décalée d'une largeur par titre. Pendant le geste elle porte en plus le
           décalage du doigt, sans transition — elle n'anime pas vers une cible, elle est là où le
@@ -303,17 +341,25 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
             // une surface de plusieurs écrans de large au moment où le doigt attend une réponse.
             willChange: "transform",
           }}
+          onTransitionEnd={(e) => {
+            if (wrapping && e.target === e.currentTarget && e.propertyName === "transform") settleWrap();
+          }}
         >
           {slides.map(({ item, real, key }, i) => (
             <div
               key={key}
               className={peek ? `hero-peek-slide shrink-0 ${i === trackPos ? "hero-peek-on" : ""}` : "w-full shrink-0"}
-              // Une voisine qui dépasse se choisit d'un toucher, sans actionner ses boutons.
+              // Les affiches ont leur propre transition (agrandie, éclaircie) : sans la couper pendant
+              // un saut, l'affiche posée sur place repoussait de 45 % d'opacité à chaque raccord.
+              style={jumped ? NO_TRANSITION : undefined}
+              // Une voisine qui dépasse se choisit d'un toucher, sans actionner ses boutons — et
+              // dans son sens : celle de gauche est un pas en arrière, même quand c'est la boucle.
               onClickCapture={
                 peek && i !== trackPos
                   ? (e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      setIntent(i < trackPos ? "backward" : "forward");
                       setIndex(real);
                     }
                   : undefined
@@ -323,7 +369,9 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   ensemble font une piste de huit écrans de large à tramer et à garder en
                   mémoire, plus huit logos. Trois suffisent — celle qu'on voit, celle d'où l'on
                   vient, celle où l'on va. */}
-              {Math.abs(i - trackPos) > 1 ? null : short ? (
+              {/* Celles de la position de repos aussi, pendant un raccord : la case d'arrivée était vide
+                  jusqu'au raccord, et son affiche et son logo montaient à neuf à cet instant. */}
+              {Math.abs(i - trackPos) > 1 && Math.abs(i - (index + pad)) > 1 ? null : short ? (
                 <div className="flex cursor-pointer gap-4 rounded-2xl bg-surface/70 p-3 shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
                   <div className="w-24 shrink-0 overflow-hidden rounded-lg">
                     <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === trackPos} sizes="120px" />

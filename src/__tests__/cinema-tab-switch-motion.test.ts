@@ -51,9 +51,11 @@ describe("du squelette au contenu, sur téléphone", () => {
   // d'un coup (23/09/2026). Le contenu fond, pas le titre de la rangée — identique des deux côtés.
   it("le contenu d'une rangée et la bannière fondent à leur arrivée", () => {
     const rows = lire("src/components/cinema/mobile/CinemaMobileClient.tsx");
-    expect(rows).toMatch(/className="scrollbar-thin flex animate-fade-in gap-3 overflow-x-auto/);
+    // Une fois seulement : retiré à la fin de sa première lecture, il ne rejoue pas au retour sur un
+    // onglet gardé (`useArrivalFade`, 08/10/2026).
+    expect(rows).toMatch(/className=\{`scrollbar-thin flex \$\{fade\.arrived \? "" : "animate-fade-in "\}gap-3 overflow-x-auto/);
     // D'autres attributs peuvent s'y ajouter (la référence du geste liquide, 04/10/2026) : c'est le
     // fondu qu'on vérifie.
-    expect(lire("src/components/cinema/mobile/CinemaMobileHero.tsx")).toMatch(/<section[^>]*className="animate-fade-in px-4 pt-2"[^>]*>/);
+    expect(lire("src/components/cinema/mobile/CinemaMobileHero.tsx")).toMatch(/<section[^>]*className=\{`\$\{fade\.arrived \? "" : "animate-fade-in "\}px-4 pt-2`\}[^>]*>/);
   });
 });

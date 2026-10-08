@@ -63,6 +63,18 @@ function up(x: number, y = 200) {
   fireEvent.pointerUp(frame(), { clientX: x, clientY: y, pointerType: "touch", pointerId: 1 });
 }
 
+describe("annulation du geste (08/10/2026)", () => {
+  /** Une annulation sans coordonnées fiables (`clientX` à zéro) passait pour un grand balayage. */
+  it("une annulation sans coordonnées ne change pas de titre", () => {
+    const onIndexChange = vi.fn();
+    render(<Harness index={1} count={5} onIndexChange={onIndexChange} />);
+    down();
+    move(180);
+    fireEvent.pointerCancel(frame(), { clientX: 0, clientY: 0, pointerType: "touch", pointerId: 1 });
+    expect(onIndexChange).not.toHaveBeenCalled();
+  });
+});
+
 describe("la traînée du carrousel", () => {
   it("suit le doigt sans transition, en écrivant sur la piste", () => {
     render(<Harness index={1} count={5} onIndexChange={vi.fn()} />);
