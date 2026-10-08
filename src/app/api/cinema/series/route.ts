@@ -4,7 +4,7 @@ import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
-import { cachedSeries, cachedJellyfinSeriesAdmin, cachedJellyfinFirstEpisodes } from "@/lib/server-cache";
+import { cachedSeries, cachedJellyfinSeriesAdmin, cachedJellyfinFirstEpisodes, cachedJellyfinSeasons } from "@/lib/server-cache";
 import { matchSeries } from "@/lib/catalogueMembers";
 import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
@@ -47,6 +47,8 @@ export interface CinemaSeries {
    * un appui qui la précède attend cette réponse (`waitForServer` sur `PlayButton`).
    */
   firstEpisode?: { itemId: string; runtimeTicks: number | null };
+  /** Le nombre de saisons qui ont des épisodes, spéciaux compris — comme la liste de la fiche. */
+  seasonCount?: number;
   imdbRating: string | null;
   genres: string[];
   // Same role as the movie payload's own field — the "Nouveau" badge and the recently-added rail.
@@ -85,7 +87,13 @@ function seriesExtras(extras: TitleExtras | null, locale: Locale, sonarrRuntime:
   return { ...catalogueExtras(extras, locale), episodeRuntime: tvEpisodeRuntime(extras.tvRuntime ?? null, sonarrRuntime) };
 }
 
-async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: Locale, firstEpisode: CinemaSeries["firstEpisode"]): Promise<CinemaSeries> {
+async function toCinemaSeries(
+  s: SonarrSeries,
+  jellyfinItemId: string,
+  locale: Locale,
+  firstEpisode: CinemaSeries["firstEpisode"],
+  seasonCount: number | undefined
+): Promise<CinemaSeries> {
   // Independent lookups (different upstreams, different cache keys) — run concurrently rather
   // than one after the other, halving the cold-cache latency per series that hasn't been seen
   // by either cache before (steady state is unaffected either way, both are cache reads then).
@@ -116,6 +124,7 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: L
     genres: canonicalGenres(s.genres),
     addedAt: s.added ?? null,
     ...(firstEpisode ? { firstEpisode } : {}),
+    ...(seasonCount ? { seasonCount } : {}),
   };
 }
 
@@ -131,12 +140,22 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: L
  */
 export async function GET(req: Request) {
   try {
-    const [series, jellyfinSeries, firstEpisodes] = await Promise.all([
+    const [series, jellyfinSeries, firstEpisodes, seasons] = await Promise.all([
       cachedSeries(),
       cachedJellyfinSeriesAdmin(),
-      // Un ornement : sans lui, la fiche attend sa liste d'épisodes comme avant.
+      // Deux ornements : sans eux, la fiche attend sa liste d'épisodes comme avant.
       cachedJellyfinFirstEpisodes().catch(() => []),
+      cachedJellyfinSeasons().catch(() => []),
     ]);
+    // Les saisons non vides de chaque série, par numéro : une saison sans épisode n'est pas une
+    // saison qu'on peut regarder, et la liste de la fiche ne la montre pas.
+    const seasonsBySeries = new Map<string, Set<number>>();
+    for (const season of seasons) {
+      if (!season.SeriesId || (season.ChildCount ?? 1) <= 0) continue;
+      const numbers = seasonsBySeries.get(season.SeriesId) ?? new Set<number>();
+      numbers.add(season.IndexNumber ?? -1);
+      seasonsBySeries.set(season.SeriesId, numbers);
+    }
     const firstBySeries = new Map<string, NonNullable<CinemaSeries["firstEpisode"]>>();
     for (const ep of firstEpisodes) {
       if (ep.SeriesId && !firstBySeries.has(ep.SeriesId)) firstBySeries.set(ep.SeriesId, { itemId: ep.Id, runtimeTicks: ep.RunTimeTicks ?? null });
@@ -147,7 +166,7 @@ export async function GET(req: Request) {
     const downloaded = matched.map((x) => x.s);
 
     const locale = localeOf(req);
-    const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem.Id, locale, firstBySeries.get(jfItem.Id))));
+    const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem.Id, locale, firstBySeries.get(jfItem.Id), seasonsBySeries.get(jfItem.Id)?.size)));
 
     const bySonarrId = new Map<number, CinemaSeries>();
     // Des identifiants, pas des titres : un film à trois genres n'a pas à être écrit trois

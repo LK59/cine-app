@@ -200,6 +200,7 @@ export function CinemaMobileDetail({
   const [logoErrored, setLogoErrored] = useState(false);
   const [backdropFailed, setBackdropFailed] = useState(false);
   const seasons = useMemo(() => episodesData?.seasons ?? [], [episodesData]);
+  const seasonCount = isSeries ? seasons.length || ((item as CinemaSeries).seasonCount ?? 0) : 0;
   // Ce qui manque à la série — pour Sonarr, pas pour Jellyseerr : la série est là, ce sont des
   // fichiers qui manquent. Voir CinemaMissingEpisodes.
   const missing = usePlayerSeriesRequests(isSeries ? (item as { sonarrId?: number }).sonarrId : null);
@@ -458,9 +459,9 @@ export function CinemaMobileDetail({
         <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
           <span>{item.year}</span>
           {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
-          {isSeries && seasons.length > 0 && (
-            <span>{t("cinema.seasonCount", { n: seasons.length })}</span>
-          )}
+          {/* Celui du catalogue, là dès l'ouverture ; la liste des épisodes le remplace à son arrivée
+              (toujours la plus fraîche) — d'ordinaire par le même nombre (08/10/2026). */}
+          {seasonCount > 0 && <span>{t("cinema.seasonCount", { n: seasonCount })}</span>}
           {/* La durée, à côté de l'année et du genre : c'est la troisième chose qu'on veut savoir
               avant de lancer un film. Pour une série, celle d'un épisode (« 45min/ép. ») — ce
               qu'engage le premier, avant d'en avoir ouvert aucun (21/09/2026). */}

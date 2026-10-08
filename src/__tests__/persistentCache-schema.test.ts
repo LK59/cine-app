@@ -35,6 +35,8 @@ const FINGERPRINTS: Record<number, string> = {
   6: "dc22a31a6f9256e9",
   // 08/10/2026 : le premier épisode de chaque série, pour « Lire S1·É1 » dès l'ouverture.
   7: "7f2fd27c2ed097ba",
+  // 08/10/2026 : le nombre de saisons de chaque série.
+  8: "b71a3922b4b37155",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

@@ -1785,6 +1785,11 @@ bibliothèque (`cachedJellyfinFirstEpisodes`). `localPlayTarget` en fait une sup
 arrive, et un appui qui la précède est retenu, puis lance la cible de cette réponse
 (`useQueuedPlay`, `waitForServer` sur `PlayButton`). Une supposition n'est jamais lancée telle quelle.
 
+**Le nombre de saisons** (« 3 saisons », fiche du téléphone) suit la même voie. Le catalogue porte
+`seasonCount` : les saisons non vides de chaque série, spéciaux compris, comptées en un seul appel
+Jellyfin (`cachedJellyfinSeasons`). Mesuré le 08/10/2026 sur les 151 séries, ce compte est identique
+à celui de la liste d'épisodes de la fiche. Quand cette liste arrive, son nombre fait foi.
+
 **Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`.
 
 **Tests.** `titleExtras.test.ts`, `sheetFacts.test.ts`, `useQueuedPlay.test.tsx`.

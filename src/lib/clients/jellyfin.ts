@@ -483,6 +483,17 @@ export const jellyfin = {
       { headers }
     ).then((res) => res.Items),
 
+  /**
+   * Les saisons de toute la bibliothèque, en un appel, avec leur nombre d'épisodes : de quoi dire
+   * « 3 saisons » sur la fiche dès l'ouverture (08/10/2026). Mesuré le même jour : le compte des
+   * saisons non vides est identique, série par série, à celui de la liste d'épisodes de la fiche.
+   */
+  getSeasonsAdmin: () =>
+    fetchJson<{ Items: JellyfinItem[] }>(
+      `${cfg.url}/Items?IncludeItemTypes=Season&Recursive=true&Fields=ChildCount&EnableImages=false&Limit=10000`,
+      { headers }
+    ).then((res) => res.Items),
+
   markPlayed: async (userId: string, itemId: string) =>
     fetchJson<void>(`${cfg.url}/Users/${idSegment(userId)}/PlayedItems/${idSegment(itemId)}`, { method: "POST", headers }),
 
