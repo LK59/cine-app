@@ -6,6 +6,7 @@ import { useT } from "@/components/TranslationProvider";
 import { usePlayerEnabledState } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { resumeAtFor } from "@/lib/resumePosition";
+import { useQueuedPlay } from "@/lib/useQueuedPlay";
 import { MENU_BADGE } from "@/components/cinema/detailMenu";
 
 interface PlayButtonProps {
@@ -64,6 +65,13 @@ interface PlayButtonProps {
    * le bouton est l'action principale ; une carte ou une rangée n'a pas de place à tenir.
    */
   reserve?: boolean;
+  /**
+   * La cible est supposée et pas encore confirmée par le serveur (le S1·É1 du catalogue, voir
+   * `sheetPlayFacts`) : un appui est retenu, et part dès que la réponse arrive — avec ce qu'elle
+   * dit, qui peut être un autre épisode. Le bouton s'affiche d'emblée, mais ne lance jamais une
+   * supposition (08/10/2026).
+   */
+  waitForServer?: boolean;
 }
 
 // Single source of truth for the Lire/Reprendre label + resume behavior, used
@@ -83,8 +91,15 @@ export function PlayButton({
   resumeKnown = true,
   unavailable = false,
   reserve = false,
+  waitForServer = false,
 }: PlayButtonProps) {
   const playback = usePlayback();
+  // Un appui retenu tant que la cible n'est qu'une supposition — voir `waitForServer`. La position :
+  // un nombre dès qu'on sait, et rien du tout quand on ne sait pas. Zéro veut dire « depuis le
+  // début » et ne doit être dit que par quelqu'un qui en est sûr — voir `resumeKnown`.
+  const play = useQueuedPlay(waitForServer, () =>
+    playback.play({ itemId, title, resumeAt: resumeAtFor({ fromStart: restart, known: resumeKnown, resumeTicks }), getNextEpisode })
+  );
   const t = useT();
   const playerEnabled = usePlayerEnabledState();
 
@@ -102,9 +117,6 @@ export function PlayButton({
   const label = unavailable ? t('cinema.fileMissing') : labelOverride ?? (
     restart ? t('common.restart') : hasResume ? `${t('common.resume')} - ${formatResumeTicks(resumeTicks!)}` : t('common.play')
   );
-  // Un nombre dès qu'on sait, et rien du tout quand on ne sait pas. Zéro veut dire « depuis le
-  // début » et ne doit être dit que par quelqu'un qui en est sûr — voir `resumeKnown`.
-  const initialResumeAt = resumeAtFor({ fromStart: restart, known: resumeKnown, resumeTicks });
   const progressPct =
     !restart && !unavailable && hasResume && runtimeTicks && runtimeTicks > 0 ? Math.min(100, (resumeTicks! / runtimeTicks) * 100) : null;
   const Icon = restart ? RotateCcw : PlayCircle;
@@ -135,7 +147,7 @@ export function PlayButton({
         e.stopPropagation();
         e.preventDefault();
         if (inert) return;
-        playback.play({ itemId, title, resumeAt: initialResumeAt, getNextEpisode });
+        play();
       }}
       className={`${className ?? defaultClass}${pending ? " invisible" : unavailable ? " cursor-not-allowed opacity-45" : ""}`}
       title={label}

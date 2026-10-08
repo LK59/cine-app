@@ -4,7 +4,7 @@ import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
-import { cachedSeries, cachedJellyfinSeriesAdmin } from "@/lib/server-cache";
+import { cachedSeries, cachedJellyfinSeriesAdmin, cachedJellyfinFirstEpisodes } from "@/lib/server-cache";
 import { matchSeries } from "@/lib/catalogueMembers";
 import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
@@ -40,6 +40,13 @@ export interface CinemaSeries {
   trailerKey?: string | null;
   /** La durée d'un épisode, en minutes — absente tant qu'elle n'est pas sue, comme les deux autres. */
   episodeRuntime?: number | null;
+  /**
+   * Le premier épisode (S1·É1), pour que « Lire » paraisse dès l'ouverture d'une série jamais
+   * commencée — la seule que ni « Reprendre » ni « À suivre » ne connaissent (08/10/2026). Une
+   * supposition, la même pour tous : la fiche la remplace par ce que le serveur dit de ce compte, et
+   * un appui qui la précède attend cette réponse (`waitForServer` sur `PlayButton`).
+   */
+  firstEpisode?: { itemId: string; runtimeTicks: number | null };
   imdbRating: string | null;
   genres: string[];
   // Same role as the movie payload's own field — the "Nouveau" badge and the recently-added rail.
@@ -78,7 +85,7 @@ function seriesExtras(extras: TitleExtras | null, locale: Locale, sonarrRuntime:
   return { ...catalogueExtras(extras, locale), episodeRuntime: tvEpisodeRuntime(extras.tvRuntime ?? null, sonarrRuntime) };
 }
 
-async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: Locale): Promise<CinemaSeries> {
+async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: Locale, firstEpisode: CinemaSeries["firstEpisode"]): Promise<CinemaSeries> {
   // Independent lookups (different upstreams, different cache keys) — run concurrently rather
   // than one after the other, halving the cold-cache latency per series that hasn't been seen
   // by either cache before (steady state is unaffected either way, both are cache reads then).
@@ -108,6 +115,7 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: L
     // Sous leur nom commun : « Horreur » et « Horror » ne font qu'un genre — voir `genres.ts`.
     genres: canonicalGenres(s.genres),
     addedAt: s.added ?? null,
+    ...(firstEpisode ? { firstEpisode } : {}),
   };
 }
 
@@ -123,14 +131,23 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: L
  */
 export async function GET(req: Request) {
   try {
-    const [series, jellyfinSeries] = await Promise.all([cachedSeries(), cachedJellyfinSeriesAdmin()]);
+    const [series, jellyfinSeries, firstEpisodes] = await Promise.all([
+      cachedSeries(),
+      cachedJellyfinSeriesAdmin(),
+      // Un ornement : sans lui, la fiche attend sa liste d'épisodes comme avant.
+      cachedJellyfinFirstEpisodes().catch(() => []),
+    ]);
+    const firstBySeries = new Map<string, NonNullable<CinemaSeries["firstEpisode"]>>();
+    for (const ep of firstEpisodes) {
+      if (ep.SeriesId && !firstBySeries.has(ep.SeriesId)) firstBySeries.set(ep.SeriesId, { itemId: ep.Id, runtimeTicks: ep.RunTimeTicks ?? null });
+    }
 
     // La règle du catalogue, commune à tout ce qui dit « dans la bibliothèque » (`catalogueMembers`).
     const matched = matchSeries(series, jellyfinSeries);
     const downloaded = matched.map((x) => x.s);
 
     const locale = localeOf(req);
-    const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem.Id, locale)));
+    const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem.Id, locale, firstBySeries.get(jfItem.Id))));
 
     const bySonarrId = new Map<number, CinemaSeries>();
     // Des identifiants, pas des titres : un film à trois genres n'a pas à être écrit trois

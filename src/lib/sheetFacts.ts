@@ -38,6 +38,8 @@ export interface LocalPlayTarget {
   runtimeTicks: number | null;
   seasonNumber: number | null;
   episodeNumber: number | null;
+  /** Le premier épisode du catalogue, supposé faute de mieux — voir `firstEpisode`. */
+  guess?: boolean;
 }
 
 /** Ce que porte une ligne du flux « Reprendre » — seuls les champs lus ici. */
@@ -51,7 +53,13 @@ export interface ResumeFeedItem {
 
 export type SheetTitle =
   | { kind: "movie"; jellyfinItemId: string }
-  | { kind: "series"; jellyfinItemId: string; sonarrId: number | null | undefined };
+  | {
+      kind: "series";
+      jellyfinItemId: string;
+      sonarrId: number | null | undefined;
+      /** Le S1·É1 du catalogue : ce que Lire suppose d'une série qu'aucun flux ne connaît. */
+      firstEpisode?: { itemId: string; runtimeTicks: number | null } | null;
+    };
 
 /**
  * Ce que les flux gardés sur l'appareil savent de ce titre.
@@ -82,9 +90,17 @@ export function localPlayTarget(
     };
   }
   const entry = resume?.find((r) => r.cinemaHref === `/sonarr/${title.sonarrId}`);
-  return entry
-    ? { itemId: entry.id, resumeTicks: entry.positionTicks || null, runtimeTicks: entry.runtimeTicks || null, seasonNumber: null, episodeNumber: null }
-    : null;
+  if (entry) {
+    return { itemId: entry.id, resumeTicks: entry.positionTicks || null, runtimeTicks: entry.runtimeTicks || null, seasonNumber: null, episodeNumber: null };
+  }
+  // Ni reprise ni épisode qui attend : la série n'a sans doute jamais été commencée — « À suivre »
+  // écarte justement les S1·É1 jamais lancés. Le premier épisode, supposé, et dit comme tel
+  // (`guess`) : le serveur peut répondre autre chose (une série vue il y a longtemps, sortie
+  // d'« À suivre »), et c'est alors sa réponse qui s'affiche, et qui se lance.
+  if (title.firstEpisode) {
+    return { itemId: title.firstEpisode.itemId, resumeTicks: null, runtimeTicks: title.firstEpisode.runtimeTicks, seasonNumber: 1, episodeNumber: 1, guess: true };
+  }
+  return null;
 }
 
 /** Ce que le serveur a dit de la reprise : la position d'un film chez Jellyfin, ou l'épisode d'une série. */
@@ -121,6 +137,11 @@ export interface SheetPlayFacts {
   seasonNumber: number | null;
   episodeNumber: number | null;
   rewatch: boolean;
+  /**
+   * La cible est une supposition (le S1·É1 du catalogue) que le serveur n'a pas encore confirmée :
+   * un appui attend sa réponse plutôt que de lancer peut-être le mauvais épisode.
+   */
+  guessed: boolean;
 }
 
 export function sheetPlayFacts(fallbackTitle: string, server: ServerPlayFacts | undefined, local: LocalPlayTarget | null): SheetPlayFacts {
@@ -132,7 +153,8 @@ export function sheetPlayFacts(fallbackTitle: string, server: ServerPlayFacts | 
     resumeKnown: boolean,
     seasonNumber: number | null = null,
     episodeNumber: number | null = null,
-    rewatch = false
+    rewatch = false,
+    guessed = false
   ): SheetPlayFacts => ({
     targetId,
     title,
@@ -143,6 +165,7 @@ export function sheetPlayFacts(fallbackTitle: string, server: ServerPlayFacts | 
     seasonNumber,
     episodeNumber,
     rewatch,
+    guessed,
   });
 
   if (server?.kind === "movie") {
@@ -153,7 +176,7 @@ export function sheetPlayFacts(fallbackTitle: string, server: ServerPlayFacts | 
     return make(ep.itemId, ep.title, ep.resumeTicks, ep.runtimeTicks, true, ep.seasonNumber, ep.episodeNumber, ep.rewatch ?? false);
   }
   // Le serveur n'a pas encore répondu : ce que l'appareil sait, affiché sans être affirmé.
-  if (local) return make(local.itemId, fallbackTitle, local.resumeTicks, local.runtimeTicks, false, local.seasonNumber, local.episodeNumber);
+  if (local) return make(local.itemId, fallbackTitle, local.resumeTicks, local.runtimeTicks, false, local.seasonNumber, local.episodeNumber, false, local.guess === true);
   return make(null, fallbackTitle, null, null, false);
 }
 

@@ -115,7 +115,7 @@ export function CinemaSeriesDetail({
   // L'épisode que Lire lancerait : celui du serveur quand la liste est là, sinon celui que « À
   // suivre » ou « Reprendre », gardés sur l'appareil, connaissent déjà — voir `sheetFacts.ts`.
   const facts = useSheetPlayFacts(
-    { kind: "series", jellyfinItemId: item.jellyfinItemId, sonarrId: item.sonarrId },
+    { kind: "series", jellyfinItemId: item.jellyfinItemId, sonarrId: item.sonarrId, firstEpisode: item.firstEpisode },
     item.title,
     episodesData ? { kind: "series", known: true, episode: episodesData.nextEpisode } : undefined
   );
@@ -411,6 +411,8 @@ export function CinemaSeriesDetail({
                 resumeKnown={facts.resumeKnown}
                 unavailable={fileMissing}
                 reserve
+                // « Lire S1·É1 » supposé d'après le catalogue : un appui attend la réponse du serveur.
+                waitForServer={facts.guessed && episodesError === undefined}
                 getNextEpisode={getNextEpisode}
                 variant="row"
                 // PlayButton's own default label (elapsed time, no episode code) is meant for

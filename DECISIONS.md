@@ -1776,8 +1776,17 @@ au catalogue et aux deux routes de description. Côté fiches : `sheetLeadFacts`
 par `tvEpisodeRuntime`, la règle de la fiche, avec la durée de Sonarr. La fiche la lit par
 `sheetEpisodeRuntime`.
 
+**Le bouton « Lire » d'une série jamais commencée** est là dès l'ouverture, lui aussi, depuis le
+08/10/2026. Ni « Reprendre » ni « À suivre » ne connaissent une telle série : « À suivre » écarte les
+S1·É1 jamais lancés. La fiche attendait donc sa liste d'épisodes, qui elle-même attend les résumés
+TMDB. Le catalogue porte désormais `firstEpisode`, obtenu en un seul appel Jellyfin pour toute la
+bibliothèque (`cachedJellyfinFirstEpisodes`). `localPlayTarget` en fait une supposition
+(`guessed`). Le bouton reste à jour : la réponse du serveur remplace la supposition dès qu'elle
+arrive, et un appui qui la précède est retenu, puis lance la cible de cette réponse
+(`useQueuedPlay`, `waitForServer` sur `PlayButton`). Une supposition n'est jamais lancée telle quelle.
+
 **Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`.
 
-**Tests.** `titleExtras.test.ts`.
+**Tests.** `titleExtras.test.ts`, `sheetFacts.test.ts`, `useQueuedPlay.test.tsx`.
 
 **Décidé le 08/10/2026.**

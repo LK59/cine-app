@@ -473,6 +473,15 @@ export const jellyfin = {
       { headers }
     ).then((res) => res.Items),
 
+  /**
+   * Le premier épisode (S1·É1) de chaque série, en un appel pour toute la bibliothèque — de quoi
+   * montrer « Lire S1·É1 » dès l'ouverture d'une fiche de série jamais commencée (08/10/2026).
+   */
+  getFirstEpisodesAdmin: () =>
+    fetchJson<{ Items: JellyfinItem[] }>(
+      `${cfg.url}/Items?IncludeItemTypes=Episode&Recursive=true&ParentIndexNumber=1&IndexNumber=1&Fields=RunTimeTicks&Limit=5000`,
+      { headers }
+    ).then((res) => res.Items),
 
   markPlayed: async (userId: string, itemId: string) =>
     fetchJson<void>(`${cfg.url}/Users/${idSegment(userId)}/PlayedItems/${idSegment(itemId)}`, { method: "POST", headers }),

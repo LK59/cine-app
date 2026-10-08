@@ -145,3 +145,23 @@ describe("le « Lire » d'une bannière", () => {
     expect(bannerResumeAt(true, 600_000_000, true, "/api/jellyfin/resume")).toBe(60);
   });
 });
+
+describe("une série jamais commencée", () => {
+  const title = { kind: "series" as const, jellyfinItemId: "serie", sonarrId: 7, firstEpisode: { itemId: "s1e1", runtimeTicks: 30_000_000_000 } };
+
+  it("propose son premier épisode dès l'ouverture, comme une supposition", () => {
+    const facts = sheetPlayFacts("Série", undefined, localPlayTarget(title, [], []));
+    expect(facts).toMatchObject({ targetId: "s1e1", seasonNumber: 1, episodeNumber: 1, guessed: true, resumeKnown: false });
+  });
+
+  it("cède la place à ce que le serveur dit pour ce compte", () => {
+    const server = { kind: "series" as const, known: true, episode: { itemId: "s2e3", title: "É3", resumeTicks: 600_000_000, runtimeTicks: 30_000_000_000, seasonNumber: 2, episodeNumber: 3 } };
+    const facts = sheetPlayFacts("Série", server, localPlayTarget(title, [], []));
+    expect(facts).toMatchObject({ targetId: "s2e3", guessed: false, resumeKnown: true });
+  });
+
+  it("préfère « À suivre » au premier épisode", () => {
+    const next = [{ sonarrId: 7, jellyfinItemId: "s1e4", resumeTicks: null, runtimeTicks: null, seasonNumber: 1, episodeNumber: 4 }] as never;
+    expect(localPlayTarget(title, [], next)).toMatchObject({ itemId: "s1e4" });
+  });
+});

@@ -254,6 +254,10 @@ export const cachedJellyfinSeries = (userId: string, opts?: { forceRefresh?: boo
 export const cachedJellyfinSeriesAdmin = (opts?: { forceRefresh?: boolean }) =>
   withCache("jf:series:admin", TTL.LONG, () => jellyfin.getAllSeriesAdmin(), opts);
 
+// Les S1·É1 de la bibliothèque, au rythme des séries elles-mêmes — voir `getFirstEpisodesAdmin`.
+export const cachedJellyfinFirstEpisodes = (opts?: { forceRefresh?: boolean }) =>
+  withCache("jf:first-episodes:admin", TTL.LONG, () => jellyfin.getFirstEpisodesAdmin(), opts);
+
 // « Vu » et « Favoris » : deux requêtes ciblées par personne, courtes et exactes — voir la note
 // du client Jellyfin sur pourquoi elles ne passent pas par un balayage de la bibliothèque.
 export const cachedJellyfinPlayed = (userId: string, opts?: { forceRefresh?: boolean }) =>

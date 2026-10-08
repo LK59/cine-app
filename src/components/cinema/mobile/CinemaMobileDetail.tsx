@@ -38,6 +38,7 @@ import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/r
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { resumeAtFor } from "@/lib/resumePosition";
+import { useQueuedPlay } from "@/lib/useQueuedPlay";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
@@ -257,7 +258,7 @@ export function CinemaMobileDetail({
    */
   const facts = useSheetPlayFacts(
     isSeries
-      ? { kind: "series", jellyfinItemId: item.jellyfinItemId, sonarrId: (item as CinemaSeries).sonarrId }
+      ? { kind: "series", jellyfinItemId: item.jellyfinItemId, sonarrId: (item as CinemaSeries).sonarrId, firstEpisode: (item as CinemaSeries).firstEpisode }
       : { kind: "movie", jellyfinItemId: item.jellyfinItemId },
     item.title,
     isSeries
@@ -300,7 +301,7 @@ export function CinemaMobileDetail({
   // Relu à l'appel, pas figé au rendu : voir `useNextEpisodeFromCache`.
   const getNextEpisode = useNextEpisodeFromCache(`/api/cinema/series/${item.jellyfinItemId}/episodes`);
 
-  function play(fromStart = false) {
+  function launch(fromStart: boolean) {
     if (!playTargetId || fileMissing) return;
     playback.play({
       itemId: playTargetId,
@@ -311,6 +312,13 @@ export function CinemaMobileDetail({
       resumeAt: resumeAtFor({ fromStart, known: resumeKnown, resumeTicks }),
       ...(isSeries ? { getNextEpisode } : {}),
     });
+  }
+  // « Lire S1·É1 » supposé d'après le catalogue : un appui attend la réponse du serveur, et lance
+  // ce qu'elle dit — voir `useQueuedPlay`. « Recommencer » n'existe que pour une reprise connue.
+  const playQueued = useQueuedPlay(facts.guessed && episodesError === undefined, () => launch(false));
+  function play(fromStart = false) {
+    if (fromStart) launch(true);
+    else playQueued();
   }
 
   function playEpisode(episode: CinemaEpisode) {
