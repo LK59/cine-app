@@ -1,8 +1,20 @@
+# Les manifestes sans leur numéro de version (08/10/2026). La version change à chaque déploiement
+# (« version 8.x.y », un commit à part) : copiés tels quels, ils invalidaient l'étape des
+# dépendances à chaque build — `npm install` refait de zéro, 742 Mo de cache par build plus autant
+# pour leur copie dans l'étape suivante, 138 Go de cache de build en deux semaines. Ici la version
+# est remise à 0.0.0 : deux manifestes qui ne diffèrent que par elle donnent les mêmes octets, et
+# BuildKit réutilise l'installation. La vraie version reste dans le `package.json` copié avec le
+# reste du code (`COPY . .`), où l'application la lit.
+FROM node:24-alpine AS manifest
+WORKDIR /m
+COPY package.json package-lock.json* ./
+RUN node -e 'const fs=require("fs");for(const f of ["package.json","package-lock.json"]){if(!fs.existsSync(f))continue;const j=JSON.parse(fs.readFileSync(f,"utf8"));j.version="0.0.0";if(j.packages&&j.packages[""])j.packages[""].version="0.0.0";fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n")}'
+
 FROM node:24-alpine AS deps
 WORKDIR /app
 # Build tools required for native modules (better-sqlite3)
 RUN apk add --no-cache python3 make g++
-COPY package.json package-lock.json* ./
+COPY --from=manifest /m/ ./
 # Cache mount rather than a layer: npm's download cache is reused across builds and updated in
 # place, so a dependency change re-downloads only what actually changed.
 RUN --mount=type=cache,target=/root/.npm npm install
