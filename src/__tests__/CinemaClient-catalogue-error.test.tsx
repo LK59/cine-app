@@ -63,6 +63,7 @@ vi.mock("@/lib/cinemaWarmup", () => ({ prefetchImages: () => () => {}, prefetchI
 vi.mock("@/components/PosterImage", () => ({ PosterImage: () => <span /> }));
 vi.mock("@/components/cinema/CinemaHero", () => ({
   CinemaHero: ({ item }: { item: { title: string } }) => <p data-testid="hero">{item.title}</p>,
+  HeroBannerControls: () => null,
 }));
 vi.mock("@/components/cinema/CinemaSeriesHero", () => ({ CinemaSeriesHero: () => null }));
 vi.mock("@/components/cinema/CinemaMovieDetail", () => ({ CinemaMovieDetail: () => null }));

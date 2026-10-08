@@ -138,7 +138,9 @@
     "offline": "Fuera de línea",
     "downloaded": "Descargado",
     "restart": "Empezar de nuevo",
-    "clear": "Borrar"
+    "clear": "Borrar",
+    "previous": "Anterior",
+    "next": "Siguiente"
   },
   "dashboard": {
     "resumeWatching": "Continuar viendo",

@@ -1109,7 +1109,15 @@ const MobileTabRows = memo(function MobileTabRows({
           ))}
         </MobileRow>
       )}
-      <PosterRow label={t("cinema.recentlyAdded")} items={recentlyAdded} itemId={itemId} onSelect={onSelect} showNewBadge={false} />
+      {/* « Voir tout » : la grille complète, triée par date d'ajout — son ordre par défaut. */}
+      <PosterRow
+        label={t("cinema.recentlyAdded")}
+        items={recentlyAdded}
+        itemId={itemId}
+        onSelect={onSelect}
+        showNewBadge={false}
+        onSeeAll={() => cinemaNavigate({ browse: BROWSE_ALL })}
+      />
 
       {(discoveryRows ?? [])
         .filter((row) => (tab === "movies" ? row.key !== "trendingSeries" : row.key === "trendingSeries"))

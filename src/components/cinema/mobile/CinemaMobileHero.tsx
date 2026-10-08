@@ -1,7 +1,6 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { Info, Play } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
@@ -119,10 +118,47 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
    */
   const [shownIndex, setShownIndex] = useState(index);
   const [jumped, setJumped] = useState(false);
+  /**
+   * La piste boucle (08/10/2026) : après le dernier titre vient le premier, en continuant dans le
+   * même sens — elle glisse sur une copie du premier posée après le dernier, puis se raccorde sans
+   * transition sur le vrai, ce que l'œil ne voit pas. Pareil à l'envers sur une copie du dernier.
+   * `dragWrap` : le doigt est parti vers la gauche depuis le premier ; la rotation, elle, ne va que
+   * vers l'avant, si bien que dernier → premier se reconnaît tout seul.
+   */
+  const loop = items.length > 1;
+  const [wrapping, setWrapping] = useState<null | "toFirst" | "toLast">(null);
+  const [dragWrap, setDragWrap] = useState(false);
   if (index !== shownIndex) {
+    const last = items.length - 1;
+    const toFirst = loop && shownIndex === last && index === 0;
+    const toLast = loop && dragWrap && index === last;
     setShownIndex(index);
-    setJumped(Math.abs(index - shownIndex) > 1);
+    if (dragWrap) setDragWrap(false);
+    if (toFirst || toLast) {
+      setWrapping(toFirst ? "toFirst" : "toLast");
+      setJumped(false);
+    } else {
+      setJumped(Math.abs(index - shownIndex) > 1);
+    }
   }
+  useEffect(() => {
+    if (!wrapping) return;
+    // Le raccord, une fois le glissement fini : sans transition, sur le vrai titre.
+    const id = setTimeout(() => {
+      setWrapping(null);
+      setJumped(true);
+    }, 400);
+    return () => clearTimeout(id);
+  }, [wrapping]);
+  /** La position de la piste : décalée d'un cran par la copie du dernier, posée avant le premier. */
+  const trackPos = !loop ? index : wrapping === "toFirst" ? items.length + 1 : wrapping === "toLast" ? 0 : index + 1;
+  const slides = loop
+    ? [
+        { item: items[items.length - 1], real: items.length - 1, key: "copie-dernier" },
+        ...items.map((item, i) => ({ item, real: i, key: heroKey(item) })),
+        { item: items[0], real: 0, key: "copie-premier" },
+      ]
+    : items.map((item, i) => ({ item, real: i, key: heroKey(item) }));
   // La transition revient une image après le saut, et non au cran suivant : rendue dans le même
   // rendu que la nouvelle position, elle n'aurait rien à interpoler et ce cran se ferait d'un coup
   // lui aussi (voir la note sur les deux images dans useCarouselDrag).
@@ -148,12 +184,12 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
     if (running) setRuns((n) => n + 1);
   }
   /**
-   * La bannière des reprises, debout : l'affiche entière mais moins large, centrée, et les voisines
-   * qui dépassent de part et d'autre (07/10/2026). Rogner l'affiche pour la raccourcir en perdait le
-   * haut ou le bas ; la rétrécir la garde entière, laisse la place aux vignettes, et dit d'un coup
-   * d'œil qu'il y a d'autres titres à côté.
+   * Debout, l'affiche ne prend pas toute la largeur : entière, à peu près 86 % de l'écran, et ses
+   * voisines dépassent sur les bords (08/10/2026) — elles disent d'un coup d'œil qu'il y a d'autres
+   * titres à côté. Rogner l'affiche pour la raccourcir en perdait le haut ou le bas (refusé le
+   * 07/10/2026). Couché, l'affiche est déjà à côté du texte : rien à montrer de plus.
    */
-  const peek = continueStyle && !short;
+  const peek = !short;
   /**
    * Toucher l'affiche ouvre la fiche (08/10/2026), comme « Plus d'infos » — mais pas le relâchement
    * d'un balayage, que le navigateur livre aussi comme un clic : un geste qui vient de glisser ne
@@ -169,17 +205,25 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
     if (performance.now() - draggedAt.current < 400) return;
     onOpen(item);
   };
-  // Les vignettes glissent à leur nouvelle place quand l'ordre change — une reprise avancée sur un
-  // autre écran remonte en tête sous les yeux plutôt que d'y sauter (`useFlipGrid`).
-  const stripRef = useRef<HTMLDivElement>(null);
-  useFlipGrid(stripRef, continueStyle ? items.map(heroKey) : [], CATALOGUE_FLIP);
+  // Au-delà d'un bout, le geste rend -1 ou le nombre de titres (`loop`) : on revient sur le vrai.
+  const count = items.length;
+  const onDragIndex = useCallback(
+    (next: number) => {
+      if (next < 0) {
+        setDragWrap(true);
+        setIndex(count - 1);
+      } else setIndex(next >= count ? 0 : next);
+    },
+    [count, setIndex]
+  );
   const drag = useCarouselDrag({
     trackRef,
-    count: items.length,
+    count,
     index,
-    onIndexChange: setIndex,
+    onIndexChange: onDragIndex,
     onDragStateChange: onDragState,
     peek,
+    loop,
   });
 
   // Le geste liquide des deux boutons (DECISIONS.md §45) : posés dans un carrousel qu'on fait glisser
@@ -225,13 +269,11 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
         onClick={() => onOpen(item)}
         data-liquid-pan="press"
         aria-label={t("cinema.moreInfo")}
-        // Le verre liquide : posé sur l'affiche, il a quelque chose à flouter. Sur l'affiche
-        // rétrécie des reprises, un rond : « Plus d'infos » en toutes lettres y passait sur deux
-        // lignes à côté du bouton de lecture.
-        className={`nav-glass flex items-center justify-center gap-2 text-sm font-medium text-white ${peek ? "w-11 shrink-0 rounded-full" : "flex-1 rounded-lg px-3 py-2.5"}`}
+        // Le verre liquide : posé sur l'affiche, il a quelque chose à flouter.
+        className="nav-glass flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-white"
       >
-        <Info size={peek ? 18 : 16} />
-        {!peek && t("cinema.moreInfo")}
+        <Info size={16} />
+        {t("cinema.moreInfo")}
       </button>
     </div>
     </>
@@ -250,11 +292,10 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
           ref={trackRef}
           className={peek ? "flex gap-3" : "flex"}
           style={{
-            // La largeur d'une affiche quand les voisines se montrent : à peu près 38 % de la hauteur
-            // de l'écran — l'affiche, en 2/3, en fait alors 57 % —, bornée pour qu'un petit
-            // téléphone garde une affiche lisible et qu'un grand laisse dépasser les voisines.
-            ...(peek ? { ["--carousel-slide" as string]: "clamp(64%, 38svh, 80%)" } : {}),
-            transform: carouselTransform(index, 0, peek),
+            // La largeur d'une affiche quand les voisines se montrent : 86 %, de quoi les voir
+            // dépasser de chaque côté sans rétrécir l'affiche.
+            ...(peek ? { ["--carousel-slide" as string]: "86%" } : {}),
+            transform: carouselTransform(trackPos, 0, peek),
             transition: jumped ? "none" : CAROUSEL_TRANSITION,
             // Promue une fois pour toutes, plutôt qu'à chaque geste : sans cela le navigateur
             // décide de promouvoir la piste au premier déplacement, ce qui veut dire re-tramer
@@ -262,17 +303,17 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
             willChange: "transform",
           }}
         >
-          {items.map((item, i) => (
+          {slides.map(({ item, real, key }, i) => (
             <div
-              key={"radarrId" in item ? `f${item.radarrId}` : `s${item.sonarrId}`}
-              className={peek ? `hero-peek-slide shrink-0 ${i === index ? "hero-peek-on" : ""}` : "w-full shrink-0"}
+              key={key}
+              className={peek ? `hero-peek-slide shrink-0 ${i === trackPos ? "hero-peek-on" : ""}` : "w-full shrink-0"}
               // Une voisine qui dépasse se choisit d'un toucher, sans actionner ses boutons.
               onClickCapture={
-                peek && i !== index
+                peek && i !== trackPos
                   ? (e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      setIndex(i);
+                      setIndex(real);
                     }
                   : undefined
               }
@@ -281,10 +322,10 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   ensemble font une piste de huit écrans de large à tramer et à garder en
                   mémoire, plus huit logos. Trois suffisent — celle qu'on voit, celle d'où l'on
                   vient, celle où l'on va. */}
-              {Math.abs(i - index) > 1 ? null : short ? (
+              {Math.abs(i - trackPos) > 1 ? null : short ? (
                 <div className="flex cursor-pointer gap-4 rounded-2xl bg-surface/70 p-3 shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
                   <div className="w-24 shrink-0 overflow-hidden rounded-lg">
-                    <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === index} sizes="120px" />
+                    <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === trackPos} sizes="120px" />
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col justify-center">
                     {item.logoUrl ? (
@@ -316,7 +357,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                 </div>
               ) : (
                 <div className="relative cursor-pointer overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
-                  <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === index} sizes="100vw" />
+                  <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === trackPos} sizes="100vw" />
                   <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                     {item.logoUrl ? (
                       <CinemaLogo
@@ -343,53 +384,8 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
         </div>
       </div>
 
-      {/* La bannière Reprendre / À suivre : des vignettes plutôt que des tirets. On y voit tout ce
-          qu'elle tient d'un coup, et un toucher y mène — le sommaire que la rangée sous la
-          bannière est au bureau, sans montrer deux fois les mêmes titres (07/10/2026). La vignette
-          d'une reprise porte sa progression ; celle d'un complément « À la une » n'en a pas. Le
-          fil sous la vignette active compte jusqu'au passage suivant, comme les tirets. */}
-      {continueStyle && items.length > 1 && (
-        <div className="scrollbar-none -mx-4 mt-2 overflow-x-auto px-4 py-1.5">
-          <div ref={stripRef} className="mx-auto flex w-max gap-2">
-            {items.map((item, i) => {
-              const resume = resumeFor?.(item) ?? null;
-              const watched = resume?.runtimeTicks && resume.positionTicks > 0 ? Math.min(1, resume.positionTicks / resume.runtimeTicks) : null;
-              const active = i === index;
-              return (
-                <button
-                  key={heroKey(item)}
-                  type="button"
-                  onClick={() => setIndex(i)}
-                  aria-label={item.title}
-                  aria-current={active}
-                  className={`hero-thumb flex w-11 shrink-0 flex-col gap-1 ${active ? "hero-thumb-on" : ""}`}
-                >
-                  <span className="relative block overflow-hidden rounded-lg ring-1 ring-white/15">
-                    <PosterImage src={item.posterUrl} alt="" subtle unoptimized sizes="48px" />
-                    {watched !== null && (
-                      <span className="absolute inset-x-0 bottom-0 h-0.5 bg-black/60">
-                        <span className="block h-full bg-accent-500" style={{ width: `${Math.round(watched * 100)}%` }} />
-                      </span>
-                    )}
-                  </span>
-                  <span className="block h-0.5 overflow-hidden rounded-full bg-white/15">
-                    {active && (
-                      <span
-                        key={`${index}:${runs}`}
-                        className="block h-full animate-hero-fill bg-white"
-                        style={{ animationPlayState: running ? "running" : "paused" }}
-                      />
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Hors de la piste : les barres disent où l'on en est, elles ne défilent pas avec. */}
-      {!continueStyle && items.length > 1 && (
+      {items.length > 1 && (
         <div className="mx-auto mt-3 flex max-w-xs gap-1">
           {items.map((item, i) => (
             <button

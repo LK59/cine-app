@@ -135,8 +135,10 @@ export function useTvGridNav(enabled = true) {
         focusCard(target[Math.min(colIdx, target.length - 1)], true);
       } else if (e.key === "ArrowUp" && activeRowIdx === 0) {
         // Top row: nowhere left to go within the grid — hand off to whatever wants to sit
-        // above it (Cinema Mode's Films/Séries toggle marks itself with this attribute).
-        const escapeTarget = document.querySelector<HTMLElement>("[data-tv-escape-up]");
+        // above it. La bannière d'abord (`data-tv-escape-up="hero"` : ses commandes, ou la pastille
+        // « ‹ À la une » sur un aperçu — 08/10/2026), puis la bascule Films / Séries.
+        const escapeTarget =
+          document.querySelector<HTMLElement>('[data-tv-escape-up="hero"]') ?? document.querySelector<HTMLElement>("[data-tv-escape-up]");
         if (escapeTarget) {
           e.preventDefault();
           escapeTarget.focus();

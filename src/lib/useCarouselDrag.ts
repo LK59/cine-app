@@ -75,6 +75,7 @@ export function useCarouselDrag({
   onIndexChange,
   onDragStateChange,
   peek = false,
+  loop = false,
 }: {
   trackRef: RefObject<HTMLDivElement | null>;
   count: number;
@@ -89,6 +90,12 @@ export function useCarouselDrag({
    */
   /** La piste montre les voisines (`carouselTransform`, `peek`). */
   peek?: boolean;
+  /**
+   * La piste boucle : elle porte une copie du dernier titre avant le premier et du premier après le
+   * dernier (positions décalées d'un cran), et glisser au-delà d'un bout rend `-1` ou `count` à
+   * `onIndexChange` — à l'appelant de raccorder ensuite sur le vrai titre, sans que rien ne se voie.
+   */
+  loop?: boolean;
   onDragStateChange?: (dragging: boolean) => void;
 }): CarouselDrag {
   const from = useRef<{ x: number; y: number; at: number } | null>(null);
@@ -110,10 +117,10 @@ export function useCarouselDrag({
         const track = trackRef.current;
         if (!track) return;
         track.style.transition = "none";
-        track.style.transform = carouselTransform(index, pending.current, peek);
+        track.style.transform = carouselTransform(index + (loop ? 1 : 0), pending.current, peek);
       });
     },
-    [index, trackRef, peek]
+    [index, trackRef, peek, loop]
   );
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
@@ -149,10 +156,10 @@ export function useCarouselDrag({
 
       // Aux extrémités, la piste résiste au lieu de partir dans le vide : la résistance dit
       // « il n'y a rien de ce côté » mieux qu'un blocage net.
-      const atEdge = (moveX > 0 && index === 0) || (moveX < 0 && index === count - 1);
+      const atEdge = !loop && ((moveX > 0 && index === 0) || (moveX < 0 && index === count - 1));
       paint(atEdge ? moveX * 0.35 : moveX);
     },
-    [count, index, paint, onDragStateChange, takeCapture]
+    [count, index, paint, onDragStateChange, takeCapture, loop]
   );
 
   const finish = useCallback(
@@ -177,7 +184,8 @@ export function useCarouselDrag({
       const far = Math.abs(moved) > width.current * COMMIT_RATIO;
       const thrown = Math.abs(moved) >= FLICK_MIN_PX && Math.abs(moved) / elapsed > FLICK_VELOCITY;
       const wanted = index + (moved < 0 ? 1 : -1);
-      const next = (far || thrown) && wanted >= 0 && wanted < count ? wanted : index;
+      const inRange = loop ? wanted >= -1 && wanted <= count : wanted >= 0 && wanted < count;
+      const next = (far || thrown) && inRange && count > 1 ? wanted : index;
 
       /**
        * Le relâchement se joue en deux images, et rien de plus n'est demandé au fil principal.
@@ -200,11 +208,11 @@ export function useCarouselDrag({
       const track = trackRef.current;
       if (track) track.style.transition = CAROUSEL_TRANSITION;
       requestAnimationFrame(() => {
-        if (track) track.style.transform = carouselTransform(next, 0, peek);
+        if (track) track.style.transform = carouselTransform(next + (loop ? 1 : 0), 0, peek);
         if (next !== index) requestAnimationFrame(() => onIndexChange(next));
       });
     },
-    [count, index, onIndexChange, trackRef, onDragStateChange, releaseCapture, peek]
+    [count, index, onIndexChange, trackRef, onDragStateChange, releaseCapture, peek, loop]
   );
 
   return {

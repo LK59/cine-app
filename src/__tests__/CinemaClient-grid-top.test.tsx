@@ -76,6 +76,7 @@ vi.mock("@/components/PosterImage", () => ({ PosterImage: () => <span /> }));
 /** La bannière : ce qu'elle montre, pour voir si la rotation tourne. */
 vi.mock("@/components/cinema/CinemaHero", () => ({
   CinemaHero: ({ item }: { item: { title: string } }) => <p data-testid="hero">{item.title}</p>,
+  HeroBannerControls: () => null,
 }));
 vi.mock("@/components/cinema/CinemaSeriesHero", () => ({ CinemaSeriesHero: () => null }));
 

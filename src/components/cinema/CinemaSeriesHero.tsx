@@ -6,13 +6,24 @@ import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
-import { HeroOverview, HeroCastLine, HeroContinueButton, HeroTitleLink, type HeroContinueAction } from "@/components/cinema/CinemaHero";
+import { HeroOverview, HeroCastLine, HeroTitleLink, HeroBackToSpotlight } from "@/components/cinema/CinemaHero";
 import { useHeroInfo } from "@/lib/useHeroInfo";
 
 // Series-typed mirror of CinemaHero — see its own doc comment (text-only passive preview, the
 // backdrop lives in CinemaClient's shared background). Its synopsis and cast come from the same
 // light hero route as the movie banner (`useHeroInfo`).
-export function CinemaSeriesHero({ item, action, onOpen }: { item: CinemaSeries; action?: HeroContinueAction | null; onOpen?: () => void }) {
+export function CinemaSeriesHero({
+  item,
+  banner,
+  onBack,
+  onOpen,
+}: {
+  item: CinemaSeries;
+  /** Les commandes de la bannière des nouveautés — voir CinemaHero. */
+  banner?: React.ReactNode;
+  onBack?: () => void;
+  onOpen?: () => void;
+}) {
   const t = useT();
   // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
   const info = useHeroInfo("series", item.tmdbId);
@@ -26,6 +37,7 @@ export function CinemaSeriesHero({ item, action, onOpen }: { item: CinemaSeries;
 
   return (
     <div key={item.sonarrId} className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
+      {onBack && <HeroBackToSpotlight onBack={onBack} />}
       <HeroTitleLink onOpen={onOpen} title={item.title}>
         {item.logoUrl && !logoErrored ? (
           <CinemaLogo src={item.logoUrl} alt={item.title} surface="hero" onError={() => setLogoErrored(true)} />
@@ -43,8 +55,8 @@ export function CinemaSeriesHero({ item, action, onOpen }: { item: CinemaSeries;
       {/* Le même synopsis que la bannière des films, par le même composant — voir HeroOverview. */}
       <HeroOverview info={info} fallback={item.overview} />
 
-      {/* La distribution cède sa ligne au bouton — voir CinemaHero. */}
-      {action ? <HeroContinueButton action={action} /> : <HeroCastLine info={info} />}
+      {/* La distribution cède sa ligne aux commandes — voir CinemaHero. */}
+      {banner ?? <HeroCastLine info={info} />}
     </div>
   );
 }

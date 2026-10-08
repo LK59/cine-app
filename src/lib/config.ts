@@ -125,7 +125,7 @@ export const config = {
     // La bannière du haut montre d'abord Reprendre / À suivre, complétée par « À la une » s'il y en a
     // peu ; « À la une » descend à la place de la rangée Reprendre.
     get continueHero() {
-      return optional("HOME_CONTINUE_HERO", "true") === "true";
+      return optional("HOME_CONTINUE_HERO", "false") === "true";
     },
   },
   gallery: {

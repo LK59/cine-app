@@ -31,7 +31,7 @@ import { heroKindFor, type HeroFocus } from "@/lib/cinemaHeroKind";
 import { useTvGridNav } from "@/lib/useTvGridNav";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
-import { CinemaHero } from "@/components/cinema/CinemaHero";
+import { CinemaHero, HeroBannerControls } from "@/components/cinema/CinemaHero";
 import { CinemaRow } from "@/components/cinema/CinemaRow";
 import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
 import { BROWSE_ALL, browseSheetKey } from "@/lib/cinemaBrowse";
@@ -54,7 +54,6 @@ import { useCentredCard } from "@/lib/useCentredCard";
 const HERO_BASIS = "44%";
 
 const BROWSE_EXIT_MS = 200;
-import { CinemaSpotlight } from "@/components/cinema/CinemaSpotlight";
 import { CinemaCard } from "@/components/cinema/CinemaCard";
 import { CinemaSeriesCard } from "@/components/cinema/CinemaSeriesCard";
 import { CinemaMovieDetail } from "@/components/cinema/CinemaMovieDetail";
@@ -81,6 +80,7 @@ import { useFreshPersonalLists } from "@/lib/freshLists";
 import { heroInfoKey, preloadHeroInfo } from "@/lib/useHeroInfo";
 import { ProgressFill } from "@/components/cinema/ProgressFill";
 import { feedResumeAt } from "@/lib/sheetFacts";
+import { usePlaySeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { guidedScrollClass, useGuidedScroll } from "@/lib/guidedScroll";
 
 // The lightweight resume feed — /api/dashboard also carries these, but only alongside a full
@@ -507,16 +507,6 @@ export function CinemaClient() {
   );
   useDecodeAhead(upcomingImages(movieCarousel, movieCarouselIndex, heroImagesOf));
   const heroItem = focusedItem ?? movieCarousel[movieCarouselIndex] ?? null;
-  /**
-   * La barre allumée est celle du titre que la bannière montre — pas celle de la rotation.
-   *
-   * Les deux se séparent dès qu'une carte est désignée ailleurs : la bannière suit le survol, la
-   * rotation continue de compter dans son coin, et les barres annonçaient alors un titre que
-   * personne n'avait sous les yeux. Aucune barre n'est allumée quand la bannière montre un titre
-   * qui n'est pas dans cette rangée — dire « le quatrième » d'une rangée où il ne figure pas
-   * serait pire que ne rien dire.
-   */
-  const movieSpotlightIndex = heroItem ? movieCarousel.findIndex((m) => m.radarrId === heroItem.radarrId) : -1;
 
   // Series' own parallel focus/selection state — kept entirely separate from the movie state
   // above (not touched) so each tab remembers its own position independently when you switch
@@ -580,9 +570,31 @@ export function CinemaClient() {
         onPlay: () => playback.play({ itemId: heroEpisode.jellyfinItemId, title: heroEpisode.title, resumeAt: feedResumeAt(heroEpisode.resumeTicks, NEXT_UP_KEY) }),
       }
     : null;
-  const seriesSpotlightIndex = seriesHeroItem
-    ? seriesCarousel.findIndex((sh) => sh.sonarrId === seriesHeroItem.sonarrId)
-    : -1;
+  /**
+   * Lire depuis la bannière des nouveautés (08/10/2026) : un film à la position dont le serveur se
+   * souvient — lue dans Reprendre quand elle y est, sinon absente, ce qui laisse le serveur décider
+   * (`resumeAt`, CLAUDE.md) ; une série, son prochain épisode (`usePlaySeriesNextEpisode`, comme
+   * la bannière du téléphone).
+   */
+  const playSeries = usePlaySeriesNextEpisode(playback);
+  const playMovieFromBanner = (item: CinemaMovie) => {
+    const entry = (resume?.items ?? []).find((r) => r.id === item.jellyfinItemId);
+    playback.play({ itemId: item.jellyfinItemId, title: item.title, resumeAt: resume === undefined ? undefined : feedResumeAt(entry?.positionTicks, RESUME_KEY) });
+  };
+  /**
+   * « ‹ À la une » : l'aperçu d'une affiche cède la place aux nouveautés, en fondu (le titre se
+   * remonte, l'image de fond se fond). Atteinte au clavier, la pastille laisse le focus sur « Lire »,
+   * qui prend sa place.
+   */
+  // Les deux aperçus s'effacent : sur l'onglet Films, survoler un épisode de Reprendre prête la
+  // bannière à une série — le retour va aux nouveautés de l'onglet affiché, quelle que soit la sorte.
+  const backToSpotlight = () => {
+    const fromKeyboard = document.activeElement?.getAttribute("data-tv-escape-up") === "hero";
+    setFocusedItem(null);
+    setSeriesFocusedItem(null);
+    setHeroFocus({ tab: mediaType, kind: mediaType });
+    if (fromKeyboard) requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-tv-escape-up="hero"]')?.focus());
+  };
 
   /**
    * Désigner un titre, et dire du même geste ce que la bannière doit montrer.
@@ -1075,12 +1087,15 @@ export function CinemaClient() {
           gauche, avec le reste de la navigation. Deux boutons flottants de moins par-dessus les
           affiches, et un seul endroit où l'on va chercher où aller. */}
 
-      <CinemaModeToggle
-        mode={mediaType}
-        onChange={setMediaType}
-        trailing={homeLayout.browseButton ? <CinemaBrowseAllButton mediaType={mediaType} /> : undefined}
-      />
-      <CinemaShortcutsGuide />
+      <CinemaModeToggle mode={mediaType} onChange={setMediaType} />
+      {/* « Tous les films / séries » en haut à droite, en rond comme sur téléphone (08/10/2026) ;
+          l'aide du clavier se range à sa gauche. */}
+      {homeLayout.browseButton && (
+        <div className="fixed right-4 z-10" style={{ top: "max(1rem, env(safe-area-inset-top))" }}>
+          <CinemaBrowseAllButton mediaType={mediaType} compact />
+        </div>
+      )}
+      <CinemaShortcutsGuide besideButton={homeLayout.browseButton} />
 
       {/* La recherche est rendue par la coquille du lecteur (PlayerShell), pas ici : c'est le
           même moteur que la recherche globale, elle trouve aussi les personnes et les titres
@@ -1163,8 +1178,50 @@ export function CinemaClient() {
         {/* La hauteur de la bannière : voir `HERO_BASIS`. */}
         <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: HERO_BASIS }}>
           {heroKind === "movies"
-            ? heroItem && <CinemaHero item={heroItem} action={movieHeroAction} onOpen={() => openDetail(heroItem)} />
-            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} action={seriesHeroAction} onOpen={() => openSeriesDetail(seriesHeroItem)} />}
+            ? heroItem && (
+                <CinemaHero
+                  item={heroItem}
+                  onOpen={() => openDetail(heroItem)}
+                  // La bannière des nouveautés porte ses commandes ; l'aperçu d'une affiche, la
+                  // pastille qui y ramène (DECISIONS.md §52).
+                  onBack={focusedItem !== null ? backToSpotlight : undefined}
+                  banner={
+                    focusedItem === null ? (
+                      <HeroBannerControls
+                        action={movieHeroAction}
+                        onPlay={() => playMovieFromBanner(heroItem)}
+                        onInfo={() => openDetail(heroItem)}
+                        count={movieCarousel.length}
+                        index={movieCarouselIndex}
+                        running={gridOnTop && mediaType === "movies"}
+                        runKey={String(movieCarouselIndex)}
+                        onPick={setMovieCarouselIndex}
+                      />
+                    ) : undefined
+                  }
+                />
+              )
+            : seriesHeroItem && (
+                <CinemaSeriesHero
+                  item={seriesHeroItem}
+                  onOpen={() => openSeriesDetail(seriesHeroItem)}
+                  onBack={seriesFocusedItem !== null || mediaType !== "series" ? backToSpotlight : undefined}
+                  banner={
+                    seriesFocusedItem === null ? (
+                      <HeroBannerControls
+                        action={seriesHeroAction}
+                        onPlay={() => void playSeries(seriesHeroItem)}
+                        onInfo={() => openSeriesDetail(seriesHeroItem)}
+                        count={seriesCarousel.length}
+                        index={seriesCarouselIndex}
+                        running={gridOnTop && mediaType === "series"}
+                        runKey={String(seriesCarouselIndex)}
+                        onPick={setSeriesCarouselIndex}
+                      />
+                    ) : undefined
+                  }
+                />
+              )}
         </div>
 
         {/* min-h-80 (320px): comfortably fits one full row — label, a card at its largest
@@ -1202,33 +1259,6 @@ export function CinemaClient() {
           {/* Un volet par onglet, gardé monté une fois visité : voir `tabPane`. */}
           {keptTabs.includes("movies") && (
             <div {...tabPane("movies")}>
-              {/* Première rangée, et celle que la bannière suit — voir CinemaSpotlight. */}
-              <CinemaSpotlight
-                label={movieHero.continuing ? t(movieHero.mixed ? "cinema.forYou" : "cinema.continueWatching") : t("cinema.spotlight")}
-                count={movieCarousel.length}
-                itemKeys={movieCarousel.map(movieHeroKey)}
-                activeIndex={movieSpotlightIndex}
-                onPick={(i) => {
-                  // La bannière doit repartir sur la rotation : tant qu'une carte est retenue,
-                  // c'est elle qui commande, et les barres ne changeraient rien à l'écran.
-                  setFocusedItem(null);
-                  setHeroFocus({ tab: "movies", kind: "movies" });
-                  setMovieCarouselIndex(i);
-                }}
-              >
-                {movieCarousel.map((item, i) => (
-                  <CinemaCard
-                    key={item.radarrId}
-                    item={item}
-                    index={i}
-                    rowKey="spotlight-movies"
-                    widthClassName={CARD_WIDTH}
-                    onFocusItem={focusMovie}
-                    onSelectItem={openDetail}
-                    showNewBadge={false}
-                  />
-                ))}
-              </CinemaSpotlight>
 
               {/* L'ordre des rangées (08/10/2026, DECISIONS.md §52) : la bannière et sa rangée, « À la une »
                   quand la bannière montre les reprises, Reprendre / À suivre, Ma liste, le classement
@@ -1290,6 +1320,9 @@ export function CinemaClient() {
                   showNewBadge={false}
                   rowIndex={RAIL_COUNT}
                   items={movies.recentlyAdded}
+                  // La grille complète, triée par date d'ajout — son ordre par défaut.
+                  onSeeAll={openSeeAll}
+                  seeAllKey={BROWSE_ALL}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusMovie}
                   onSelectItem={openDetail}
@@ -1343,30 +1376,6 @@ export function CinemaClient() {
                   exists yet (fine, since movies always load first); series loads lazily after
                   the toggle is already up, so its own states have to render inside the same
                   chrome instead of hiding the toggle that got you here. */}
-              <CinemaSpotlight
-                label={seriesHero.continuing ? t(seriesHero.mixed ? "cinema.forYou" : "cinema.continueWatching") : t("cinema.spotlight")}
-                count={seriesCarousel.length}
-                itemKeys={seriesCarousel.map(seriesHeroKey)}
-                activeIndex={seriesSpotlightIndex}
-                onPick={(i) => {
-                  setSeriesFocusedItem(null);
-                  setHeroFocus({ tab: "series", kind: "series" });
-                  setSeriesCarouselIndex(i);
-                }}
-              >
-                {seriesCarousel.map((item, i) => (
-                  <CinemaSeriesCard
-                    key={item.sonarrId}
-                    item={item}
-                    index={i}
-                    rowKey="spotlight-series"
-                    widthClassName={CARD_WIDTH}
-                    onFocusItem={focusSeries}
-                    onSelectItem={openSeriesDetail}
-                    showNewBadge={false}
-                  />
-                ))}
-              </CinemaSpotlight>
 
               {/* Le même ordre que l'onglet Films — voir sa note. */}
               {seriesHero.continuing && (
@@ -1431,6 +1440,8 @@ export function CinemaClient() {
                   showNewBadge={false}
                   rowIndex={RAIL_COUNT}
                   items={series.recentlyAdded}
+                  onSeeAll={openSeeAll}
+                  seeAllKey={BROWSE_ALL}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusSeries}
                   onSelectItem={openSeriesDetail}

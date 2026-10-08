@@ -2,7 +2,7 @@
 
 import { formatMinutes } from "@/lib/format";
 import { HeroContinueProgress } from "@/components/cinema/HeroContinueProgress";
-import { Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Info, Play } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
@@ -134,21 +134,9 @@ export function HeroCastLine({ info }: { info: { tmdb: { cast?: { name: string }
   );
 }
 
-// Text only — the backdrop image/gradients (and, once focus dwells long enough, the trailer
-// video that takes over from them — see CinemaTrailerBackdrop) live in CinemaClient now, as one
-// continuous full-screen background layer shared with the rows pane beneath (see its own doc
-// comment for why: keeping the image scoped to just this component's box was exactly what
-// produced a hard seam where the hero "ended"). This is purely a passive preview pane — no
-// buttons here on purpose (Netflix TV home: the top pane is just a live preview of whatever's
-// focused, never actionable on its own). Opening CinemaMovieDetail (click/Enter on a card) is
-// what surfaces Lecture/Bande-annonce/Vu/À voir. Cast still fetched here (not just in the detail
-// overlay) since this pane already shows it, same lazy/debounced approach so fast arrow-key
-// scrubbing across a row doesn't fire a request per card it passes through.
-/**
- * Le bouton de la bannière Reprendre / À suivre (DECISIONS.md §52) — la seule action qu'elle porte.
- * La bannière d'origine n'en a aucune, et c'est voulu (voir plus haut) ; celle-ci montre ce qu'on
- * était en train de regarder, et le geste attendu est d'y retourner, avec ce qui reste à voir.
- */
+/** Ce que la bannière des reprises propose de lancer — voir `HeroBannerControls`. */
+export type HeroContinueAction = { label: string; caption: string | null; progress: number | null; onPlay: () => void };
+
 /**
  * Le logo de la bannière ouvre la fiche (08/10/2026) — la bannière reste un aperçu, mais son titre
  * mène quelque part, comme l'affiche de la bannière du téléphone. Sans `onOpen`, rien ne change.
@@ -162,26 +150,162 @@ export function HeroTitleLink({ onOpen, title, children }: { onOpen?: () => void
   );
 }
 
-export type HeroContinueAction = { label: string; caption: string | null; progress: number | null; onPlay: () => void };
-export function HeroContinueButton({ action }: { action: HeroContinueAction }) {
+/**
+ * Les commandes de la bannière des nouveautés au bureau (08/10/2026, DECISIONS.md §52) : « Lire » et
+ * « Plus d'infos », puis `‹ ——— ›` pour la faire tourner à la main. La rangée d'affiches qui la
+ * pilotait a disparu : la bannière se pilote elle-même, à la souris et aux flèches — ← → changent de
+ * titre, ↓ redescend dans les rangées, ↑ remonte à la bascule Films / Séries. Rien de tout cela sur
+ * l'aperçu d'une affiche survolée : on y va pour lire, et un clic sur l'affiche ouvre sa fiche.
+ *
+ * `data-tv-escape-up="hero"` : la flèche du haut, depuis la première rangée, arrive ici avant la
+ * bascule (`useTvGridNav`).
+ */
+export function HeroBannerControls({
+  action,
+  onPlay,
+  onInfo,
+  count,
+  index,
+  running,
+  runKey,
+  onPick,
+}: {
+  /** Une reprise (bannière des reprises) : son bouton court et ce qu'il reste ; sinon « Lire ». */
+  action?: HeroContinueAction | null;
+  onPlay: () => void;
+  onInfo: () => void;
+  count: number;
+  index: number;
+  /** La rotation compte : le trait actif se remplit au rythme du minuteur. */
+  running: boolean;
+  /** Change à chaque nouveau départ du minuteur, pour rejouer le remplissage depuis zéro. */
+  runKey: string;
+  onPick: (index: number) => void;
+}) {
+  const t = useT();
+  const step = (delta: number) => onPick((index + delta + count) % count);
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (count > 1) step(e.key === "ArrowRight" ? 1 : -1);
+    } else if (e.key === "ArrowDown") {
+      // Vers la première affiche de l'onglet affiché.
+      const card = [...document.querySelectorAll<HTMLElement>("[data-tv-card]")].find((el) => el.offsetParent !== null);
+      if (card) {
+        e.preventDefault();
+        e.stopPropagation();
+        card.focus({ preventScroll: true });
+        card.closest<HTMLElement>("[data-tv-rowroot]")?.scrollIntoView({ block: "start" });
+      }
+    } else if (e.key === "ArrowUp") {
+      const toggle = document.querySelector<HTMLElement>('[data-tv-escape-up]:not([data-tv-escape-up="hero"])');
+      if (toggle) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggle.focus();
+      }
+    }
+  };
+  const ring = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40";
   return (
-    // Sur une ligne : la bannière du bureau a une hauteur fixe, et la barre posée au-dessus du bouton
-    // repoussait le logo hors de l'écran par le haut.
-    <div className="flex items-center gap-4">
-      <button
-        type="button"
-        onClick={action.onPlay}
-        className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-ink shadow-lg transition-transform hover:scale-[1.03] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-      >
-        <Play size={16} fill="currentColor" aria-hidden />
-        {action.label}
-      </button>
-      <HeroContinueProgress caption={action.caption} progress={action.progress} />
+    <div className="flex flex-col items-start gap-4" onKeyDown={onKeyDown}>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          data-tv-escape-up="hero"
+          onClick={action ? action.onPlay : onPlay}
+          className={`inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-ink shadow-lg transition-transform hover:scale-[1.03] active:scale-[0.97] ${ring}`}
+        >
+          <Play size={16} fill="currentColor" aria-hidden />
+          {action ? action.label : t("common.play")}
+        </button>
+        <button
+          type="button"
+          onClick={onInfo}
+          className={`nav-glass inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-white transition-transform hover:scale-[1.03] active:scale-[0.97] ${ring}`}
+        >
+          <Info size={16} aria-hidden />
+          {t("cinema.moreInfo")}
+        </button>
+        {action && <HeroContinueProgress caption={action.caption} progress={action.progress} />}
+      </div>
+      {count > 1 && (
+        <div className="flex items-center gap-2">
+          <button type="button" tabIndex={-1} onClick={() => step(-1)} aria-label={t("common.previous")} className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/10 hover:text-white">
+            <ChevronLeft size={16} />
+          </button>
+          <div className="flex gap-1">
+            {Array.from({ length: count }, (_, i) => (
+              <button
+                key={i}
+                type="button"
+                tabIndex={-1}
+                onClick={() => onPick(i)}
+                aria-label={String(i + 1)}
+                aria-current={i === index}
+                className="h-1 w-6 overflow-hidden rounded-full bg-white/25"
+              >
+                {i < index && <span className="block h-full w-full bg-white" />}
+                {i === index && <span key={runKey} className="block h-full animate-hero-fill bg-white" style={{ animationPlayState: running ? "running" : "paused" }} />}
+              </button>
+            ))}
+          </div>
+          <button type="button" tabIndex={-1} onClick={() => step(1)} aria-label={t("common.next")} className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/10 hover:text-white">
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-export function CinemaHero({ item, action, onOpen }: { item: CinemaMovie; action?: HeroContinueAction | null; onOpen?: () => void }) {
+/**
+ * « ‹ À la une » : l'aperçu d'une affiche survolée a pris la place de la bannière des nouveautés,
+ * et on y revient d'un clic (08/10/2026). Atteinte par la flèche du haut depuis la première rangée,
+ * elle les ramène aussi, et rend le focus à « Lire ».
+ */
+export function HeroBackToSpotlight({ onBack }: { onBack: () => void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      data-tv-escape-up="hero"
+      onClick={onBack}
+      // Arrivée au clavier (↑ depuis la première rangée) : les nouveautés reviennent aussitôt, et le
+      // focus passe sur « Lire » — un seul geste pour entrer dans la bannière.
+      onFocus={onBack}
+      className="nav-glass inline-flex items-center gap-1.5 self-start rounded-full py-1.5 pl-2.5 pr-3.5 text-xs font-medium text-white transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+    >
+      <ChevronLeft size={14} aria-hidden />
+      {t("cinema.spotlight")}
+    </button>
+  );
+}
+
+// Text only — the backdrop image/gradients (and, once focus dwells long enough, the trailer
+// video that takes over from them — see CinemaTrailerBackdrop) live in CinemaClient now, as one
+// continuous full-screen background layer shared with the rows pane beneath (see its own doc
+// comment for why: keeping the image scoped to just this component's box was exactly what
+// produced a hard seam where the hero "ended"). On a hovered or focused card it is a passive
+// preview — no buttons (Netflix TV home): opening CinemaMovieDetail (click/Enter on the card) is
+// what surfaces Lecture/Bande-annonce/Vu/À voir. The spotlight banner itself carries its own
+// controls since 08/10/2026 (`HeroBannerControls`), and its logo opens the sheet. Cast still fetched here (not just in the detail
+// overlay) since this pane already shows it, same lazy/debounced approach so fast arrow-key
+// scrubbing across a row doesn't fire a request per card it passes through.
+export function CinemaHero({
+  item,
+  banner,
+  onBack,
+  onOpen,
+}: {
+  item: CinemaMovie;
+  /** La bannière des nouveautés : ses commandes (`HeroBannerControls`). Absent sur un aperçu. */
+  banner?: React.ReactNode;
+  /** L'aperçu d'une affiche : revenir aux nouveautés (`HeroBackToSpotlight`). */
+  onBack?: () => void;
+  onOpen?: () => void;
+}) {
   const t = useT();
   // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
   // (La bande-annonce que la bannière remontait autrefois au fond vidéo n'a plus d'écouteur : le
@@ -206,6 +330,7 @@ export function CinemaHero({ item, action, onOpen }: { item: CinemaMovie; action
 
   return (
     <div key={item.radarrId} className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
+      {onBack && <HeroBackToSpotlight onBack={onBack} />}
       <HeroTitleLink onOpen={onOpen} title={item.title}>
         {item.logoUrl && !logoErrored ? (
           <CinemaLogo src={item.logoUrl} alt={item.title} surface="hero" onError={() => setLogoErrored(true)} />
@@ -228,9 +353,9 @@ export function CinemaHero({ item, action, onOpen }: { item: CinemaMovie; action
 
       <HeroOverview info={info} fallback={item.overview} />
 
-      {/* La distribution cède sa ligne au bouton : elle reste dans la fiche, et la bannière n'a pas
-          la hauteur des deux. */}
-      {action ? <HeroContinueButton action={action} /> : <HeroCastLine info={info} />}
+      {/* La distribution cède sa ligne aux commandes : elle reste dans la fiche, et la bannière n'a
+          pas la hauteur des deux. */}
+      {banner ?? <HeroCastLine info={info} />}
     </div>
   );
 }
