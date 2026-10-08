@@ -1716,3 +1716,30 @@ libellés et le filtre « Genre » de `CinemaBrowseSheet`.
 « Musical » restent des genres à eux, comme Sonarr les donne.
 
 **Décidé le 07/10/2026.**
+
+## 54. Les tags bloqués d'un compte s'appliquent au catalogue
+
+**Règle.** Chaque réponse du catalogue (`/api/cinema/movies`, `/api/cinema/series`) retire les titres
+dont l'élément Jellyfin porte un des `BlockedTags` du compte qui demande — partout : titres,
+rangées, sélection, derniers ajouts, classement, genres vidés. La règle est celle de Jellyfin et elle
+seule (comparaison sans la casse, rien d'autre de retouché) ; les tags bloqués sont relus toutes les
+deux minutes.
+
+**Pourquoi.** Le catalogue est construit une fois pour tout le monde depuis la vue serveur de Jellyfin
+(voir la note de `/api/cinema/movies`) : un titre caché à un compte y figurait quand même, et seule
+sa lecture était refusée (`assertVisible`). Pour réserver des titres à certains comptes — le tag
+« prive », posé le 08/10/2026 sur les programmes de Dieudonné et bloqué sur tous les comptes sauf
+deux —, ils ne doivent pas exister pour les autres.
+
+**Porteurs.** `blockedTagsOf`, `carriesBlockedTag`, `withoutHidden`, `hiddenForRequest`
+(`src/lib/blockedTags.ts`) ; les tags viennent des listes serveur (`Fields=…,Tags`).
+
+**Voulu.** Le catalogue entier est construit d'abord, puis filtré : le classement du jour est gardé par
+sorte, pas par compte, et un compte bloqué en voit un titre de moins. Un tag posé à la main sur un
+élément est verrouillé dans Jellyfin (`LockedFields: Tags`), pour qu'une actualisation des
+métadonnées ne l'efface pas. La lecture reste gardée par `assertVisible`.
+
+**Tests.** `blocked-tags.test.ts`.
+
+**Décidé le 08/10/2026.**
+

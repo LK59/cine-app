@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { hiddenForRequest, withoutHidden } from "@/lib/blockedTags";
 import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
@@ -236,7 +237,10 @@ export async function GET(req: Request) {
     // entier, il demande seulement s'il a changé. Voir `cachedJson`.
     // Une entrée par langue : les titres et les affiches en dépendent, et deux spectateurs de
     // langues différentes s'évinçaient l'un l'autre — une recompression complète à chaque fois.
-    return cachedJson(req, `cinema-movies:${locale}`, payload);
+    // Sans ce que les tags bloqués du compte lui cachent (DECISIONS.md §54) : construit une fois en
+    // entier — le classement du jour est gardé par sorte, pas par compte —, puis retiré.
+    const { hidden, signature } = await hiddenForRequest(req, matched, (x) => x.jfItem.Tags, (x) => x.m.id);
+    return cachedJson(req, `cinema-movies:${locale}:${signature}`, withoutHidden(payload, hidden, (item) => item.radarrId));
   } catch (err) {
     // Une panne amont se nomme, elle ne sort pas en 500 nu — voir `upstreamFailure`.
     return upstreamFailure(err, "cinema-movies");

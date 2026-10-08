@@ -24,6 +24,8 @@ const headers = {
 export interface JellyfinItem {
   Id: string;
   Name: string;
+  /** Lus par le catalogue pour cacher à chaque compte ce que ses tags bloqués lui cachent (`blockedTags.ts`). */
+  Tags?: string[];
   Type?: string;
   ProductionYear?: number;
   UserData?: {
@@ -455,7 +457,7 @@ export const jellyfin = {
   /** Même repliement, même correctif — voir `getAllMovies`. */
   getAllMoviesAdmin: () =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${cfg.url}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path&Limit=5000`,
+      `${cfg.url}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path,Tags&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 
@@ -467,7 +469,7 @@ export const jellyfin = {
 
   getAllSeriesAdmin: () =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${cfg.url}/Items?IncludeItemTypes=Series&Recursive=true&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path&Limit=5000`,
+      `${cfg.url}/Items?IncludeItemTypes=Series&Recursive=true&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path,Tags&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 
