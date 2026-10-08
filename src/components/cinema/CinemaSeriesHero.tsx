@@ -26,7 +26,7 @@ export function CinemaSeriesHero({
 }) {
   const t = useT();
   // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
-  const info = useHeroInfo("series", item.tmdbId);
+  const info = useHeroInfo("series", item.tmdbId, item);
 
   const [logoErrored, setLogoErrored] = useState(false);
   const [resetForId, setResetForId] = useState(item.sonarrId);

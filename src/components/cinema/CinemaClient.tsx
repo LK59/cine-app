@@ -503,18 +503,22 @@ export function CinemaClient() {
    * d'abord, puis ce qu'on atteint en quelques appuis. Le logo et le visuel arrivaient avec le
    * catalogue, le synopsis une seconde après ; demandé d'avance, il arrive avec eux (23/09/2026).
    * Voir `useHeroInfo`, qui le rend sans attendre quand il est déjà là.
+   *
+   * Seulement pour les titres que le catalogue ne couvre pas encore (08/10/2026) : il porte le
+   * synopsis et les noms de la distribution (`castNames`), et la bannière les y lit. D'ordinaire,
+   * plus aucune requête ne part d'ici.
    */
   useEffect(() => {
     if (!movies) return;
     return prefetchInChunks(
-      warmUpUrls(movies.spotlight, movies.rows, (m) => m.radarrId, (m) => [m.tmdbId ? heroInfoKey("movie", m.tmdbId) : null]),
+      warmUpUrls(movies.spotlight, movies.rows, (m) => m.radarrId, (m) => [m.tmdbId && m.castNames === undefined ? heroInfoKey("movie", m.tmdbId) : null]),
       preloadHeroInfo
     );
   }, [movies]);
   useEffect(() => {
     if (!series) return;
     return prefetchInChunks(
-      warmUpUrls(series.spotlight, series.rows, (s) => s.sonarrId, (s) => [s.tmdbId ? heroInfoKey("series", s.tmdbId) : null]),
+      warmUpUrls(series.spotlight, series.rows, (s) => s.sonarrId, (s) => [s.tmdbId && s.castNames === undefined ? heroInfoKey("series", s.tmdbId) : null]),
       preloadHeroInfo
     );
   }, [series]);

@@ -321,7 +321,7 @@ export function CinemaHero({
   // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
   // (La bande-annonce que la bannière remontait autrefois au fond vidéo n'a plus d'écouteur : le
   // fond vidéo a été retiré du grand écran.)
-  const info = useHeroInfo("movie", item.tmdbId);
+  const info = useHeroInfo("movie", item.tmdbId, item);
 
   // item.logoUrl now comes bulk-included in the /api/cinema/movies payload (same as
   // poster/backdrop already were) instead of a separate per-item fetch — known synchronously

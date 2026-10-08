@@ -58,6 +58,8 @@ export interface CinemaMovie {
    */
   tagline?: string;
   trailerKey?: string | null;
+  /** Les premiers noms de la distribution, pour la bannière du bureau — absents tant qu'ils ne sont pas sus. */
+  castNames?: string[];
   imdbRating: string | null;
   /**
    * La durée, en minutes.

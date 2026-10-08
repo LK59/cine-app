@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+// @vitest-environment jsdom
+import { describe, it, expect, vi } from "vitest";
 import { catalogueExtras, extrasFromTranslations } from "@/lib/titleNames";
 import { sheetLeadFacts } from "@/lib/sheetFacts";
 
@@ -44,7 +45,7 @@ describe("l'accroche et la bande-annonce du catalogue", () => {
 
   it("dit « pas encore su » par l'absence, et « rien » par une chaîne vide ou null", () => {
     expect(catalogueExtras(null, "fr")).toEqual({});
-    expect(catalogueExtras({ taglines: {}, trailers: {} }, "fr")).toEqual({ tagline: "", trailerKey: null });
+    expect(catalogueExtras({ taglines: {}, trailers: {} }, "fr")).toEqual({ tagline: "", trailerKey: null, castNames: [] });
   });
 });
 
@@ -58,6 +59,15 @@ describe("la fiche", () => {
     expect(sheetLeadFacts({}, undefined, false)).toMatchObject({ taglineKnown: false, trailerKnown: false });
     const lead = sheetLeadFacts({}, { tmdb: { tagline: "Tard" }, trailerKey: "xyz" }, true);
     expect(lead).toMatchObject({ tagline: "Tard", taglineLate: true, trailerKey: "xyz", trailerLate: true });
+  });
+});
+
+describe("les noms de la bannière", () => {
+  it("viennent du même appel, cinq au plus, les mêmes dans toutes les langues", () => {
+    const cast = Array.from({ length: 8 }, (_, i) => ({ name: `Acteur ${i}` }));
+    const extras = extrasFromTranslations({ credits: { cast } });
+    expect(extras.cast).toEqual(["Acteur 0", "Acteur 1", "Acteur 2", "Acteur 3", "Acteur 4"]);
+    expect(catalogueExtras(extras, "de").castNames).toEqual(extras.cast);
   });
 });
 
@@ -75,5 +85,19 @@ describe("la durée d'un épisode", () => {
     expect(sheetEpisodeRuntime(43, undefined)).toEqual({ minutes: 43, late: false });
     expect(sheetEpisodeRuntime(undefined, 45)).toEqual({ minutes: 45, late: true });
     expect(sheetEpisodeRuntime(undefined, undefined)).toEqual({ minutes: null, late: true });
+  });
+});
+
+describe("la bannière du bureau", () => {
+  it("lit le synopsis et les noms dans le catalogue, sans rien demander", async () => {
+    const { renderHook } = await import("@testing-library/react");
+    const { useHeroInfo } = await import("@/lib/useHeroInfo");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useHeroInfo("movie", 603, { overview: "Néo découvre la Matrice.", castNames: ["Keanu Reeves"] }));
+    expect(result.current).toEqual({ tmdb: { overview: "Néo découvre la Matrice.", cast: [{ name: "Keanu Reeves" }] } });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

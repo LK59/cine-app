@@ -38,6 +38,8 @@ export interface CinemaSeries {
    */
   tagline?: string;
   trailerKey?: string | null;
+  /** Les premiers noms de la distribution, pour la bannière du bureau — absents tant qu'ils ne sont pas sus. */
+  castNames?: string[];
   /** La durée d'un épisode, en minutes — absente tant qu'elle n'est pas sue, comme les deux autres. */
   episodeRuntime?: number | null;
   /**

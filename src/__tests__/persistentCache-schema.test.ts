@@ -37,6 +37,8 @@ const FINGERPRINTS: Record<number, string> = {
   7: "7f2fd27c2ed097ba",
   // 08/10/2026 : le nombre de saisons de chaque série.
   8: "b71a3922b4b37155",
+  // 08/10/2026 : les noms de la distribution, pour la bannière du bureau.
+  9: "2b85279160c0cf39",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

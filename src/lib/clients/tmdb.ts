@@ -215,6 +215,8 @@ export interface TmdbTranslations {
   translations?: { translations?: TmdbTranslation[] };
   /** Les vidéos du titre, dans les langues des quatre interfaces — voir `TitleExtras`. */
   videos?: { results?: TmdbVideo[] };
+  /** La distribution, pour les noms de la bannière — voir `TitleExtras`. */
+  credits?: { cast?: { name: string }[] };
 }
 
 /** Les vidéos demandées avec les traductions : celles des quatre interfaces, et les muettes. */
@@ -302,15 +304,15 @@ function createTmdbClient(lang = "fr-FR") {
      * demander. Une seule liste, mise en cache une semaine, et chacun y lit la sienne.
      */
     /** Le titre dans chaque langue où il a été traduit — voir `titleNames`. */
-    // Les vidéos viennent dans le même appel (08/10/2026) : la bande-annonce du catalogue ne coûte
-    // pas une requête de plus par titre.
+    // Les vidéos et la distribution viennent dans le même appel (08/10/2026) : la bande-annonce et
+    // les noms de la bannière ne coûtent pas une requête de plus par titre.
     getMovieTranslations: (tmdbId: number) =>
       fetchJson<TmdbTranslations>(
-        `${BASE}/movie/${tmdbId}?api_key=${cfg.apiKey}&append_to_response=translations,videos&include_video_language=${VIDEO_LANGS_ALL}`
+        `${BASE}/movie/${tmdbId}?api_key=${cfg.apiKey}&append_to_response=translations,videos,credits&include_video_language=${VIDEO_LANGS_ALL}`
       ),
     getTvTranslations: (tmdbTvId: number) =>
       fetchJson<TmdbTranslations>(
-        `${BASE}/tv/${tmdbTvId}?api_key=${cfg.apiKey}&append_to_response=translations,videos&include_video_language=${VIDEO_LANGS_ALL}`
+        `${BASE}/tv/${tmdbTvId}?api_key=${cfg.apiKey}&append_to_response=translations,videos,credits&include_video_language=${VIDEO_LANGS_ALL}`
       ),
     /** L'accroche dans la langue du client — pour un titre dont c'est la langue d'origine. */
     getTagline: (mediaType: "movie" | "series", tmdbId: number) =>

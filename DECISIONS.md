@@ -1790,7 +1790,15 @@ arrive, et un appui qui la précède est retenu, puis lance la cible de cette r�
 Jellyfin (`cachedJellyfinSeasons`). Mesuré le 08/10/2026 sur les 151 séries, ce compte est identique
 à celui de la liste d'épisodes de la fiche. Quand cette liste arrive, son nombre fait foi.
 
-**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`.
+**La bannière du bureau** lit dans le catalogue son synopsis et les noms de sa distribution
+(`castNames`, dans le même appel TMDB). Avant, elle les demandait titre par titre
+(`/api/cinema/hero/…`) et les préchargeait : jusqu'à cent vingt requêtes à chaque ouverture de
+l'accueil, et un léger décalage au survol des affiches restées hors du préchargement. Cette route ne
+sert plus qu'aux titres que le serveur ne connaît pas encore (`useHeroInfo`, avec son troisième
+argument).
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`, `CinemaHero`,
+`CinemaSeriesHero`.
 
 **Tests.** `titleExtras.test.ts`, `sheetFacts.test.ts`, `useQueuedPlay.test.tsx`.
 

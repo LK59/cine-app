@@ -133,10 +133,17 @@ export interface TitleExtras {
    * arrivait elle aussi en décalé, après le reste de la fiche (08/10/2026).
    */
   tvRuntime?: Pick<TmdbTranslations, "episode_run_time" | "last_episode_to_air" | "next_episode_to_air">;
+  /**
+   * Les premiers noms de la distribution, pour la bannière du bureau : elle les demandait titre par
+   * titre (`/api/cinema/hero/…`), jusqu'à cent vingt requêtes à chaque ouverture de l'accueil
+   * (08/10/2026). Les mêmes dans toutes les langues.
+   */
+  cast?: string[];
 }
 const extrasMemory = new Map<string, TitleExtras>();
-// `v2` : la durée des épisodes s'y ajoute (08/10/2026) — une entrée `v1` relue laisserait les séries sans.
-const extrasKey = (namesKey: string) => namesKey.replace("tmdb:titles:v2:", "tmdb:extras:v2:");
+// `v3` : la durée des épisodes (v2) puis la distribution s'y ajoutent (08/10/2026) — une entrée plus
+// ancienne relue laisserait les titres sans.
+const extrasKey = (namesKey: string) => namesKey.replace("tmdb:titles:v2:", "tmdb:extras:v3:");
 
 export function extrasFromTranslations(data: TmdbTranslations): TitleExtras {
   const taglines: Partial<Record<Locale, string>> = {};
@@ -166,7 +173,9 @@ export function extrasFromTranslations(data: TmdbTranslations): TitleExtras {
           next_episode_to_air: data.next_episode_to_air ? { runtime: data.next_episode_to_air.runtime ?? null } : null,
         }
       : undefined;
-  return { taglines, trailers, ...(tvRuntime ? { tvRuntime } : {}) };
+  // Autant de noms que la bannière en montre (`CAST_SHOWN` de la route qu'elle appelait).
+  const cast = (data.credits?.cast ?? []).slice(0, 5).map((c) => c.name).filter(Boolean);
+  return { taglines, trailers, cast, ...(tvRuntime ? { tvRuntime } : {}) };
 }
 
 function refresh(key: string, tmdbId: number, mediaType: "movie" | "series"): void {
@@ -243,9 +252,9 @@ export function getTitleExtras(tmdbId: number | null | undefined, mediaType: "mo
 }
 
 /** Les deux champs du catalogue : absents tant que rien n'est su, vides quand il n'y a rien. */
-export function catalogueExtras(extras: TitleExtras | null, locale: Locale): { tagline?: string; trailerKey?: string | null } {
+export function catalogueExtras(extras: TitleExtras | null, locale: Locale): { tagline?: string; trailerKey?: string | null; castNames?: string[] } {
   if (!extras) return {};
-  return { tagline: extras.taglines[locale] ?? "", trailerKey: extras.trailers[locale] ?? null };
+  return { tagline: extras.taglines[locale] ?? "", trailerKey: extras.trailers[locale] ?? null, castNames: extras.cast ?? [] };
 }
 
 export function getTitleNames(tmdbId: number | null | undefined, mediaType: "movie" | "series"): TitleNames {

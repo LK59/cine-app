@@ -35,7 +35,22 @@ export function preloadHeroInfo(key: string): void {
     .catch(() => {});
 }
 
-export function useHeroInfo(type: HeroMediaType, tmdbId: number | null | undefined): HeroInfo | undefined {
+/**
+ * Ce que le catalogue sait déjà du titre (08/10/2026) : son synopsis traduit et, depuis ce jour, les
+ * noms de sa distribution (`castNames`, voir `TitleExtras`). Quand ils y sont, la bannière n'a rien à
+ * demander — ni attente au survol, ni préchargement : c'était jusqu'à cent vingt requêtes à chaque
+ * ouverture de l'accueil. La requête ne sert plus qu'à un titre que le serveur ne connaît pas encore.
+ */
+export interface HeroCatalogueFacts {
+  overview: string | null;
+  castNames?: string[];
+}
+
+export function useHeroInfo(type: HeroMediaType, tmdbId: number | null | undefined, catalogue?: HeroCatalogueFacts): HeroInfo | undefined {
+  const fromCatalogue: HeroInfo | null =
+    catalogue?.castNames !== undefined
+      ? { tmdb: { overview: catalogue.overview ?? "", cast: catalogue.castNames.map((name) => ({ name })) } }
+      : null;
   // Déjà là — préchargé par la rotation, ou vu plus tôt — : aucune raison d'attendre. C'est ce qui
   // fait arriver le synopsis avec le logo pendant la rotation, et non deux cents millisecondes après.
   const { cache } = useSWRConfig();
@@ -45,8 +60,9 @@ export function useHeroInfo(type: HeroMediaType, tmdbId: number | null | undefin
     const timer = setTimeout(() => setSettled(tmdbId ?? null), DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [tmdbId]);
-  const key = settled ? heroInfoKey(type, settled) : null;
+  const key = settled && !fromCatalogue ? heroInfoKey(type, settled) : null;
   const { data } = useSWR<HeroInfo>(key, fetcher, { keepPreviousData: false });
+  if (fromCatalogue) return fromCatalogue;
   if (!tmdbId) return NO_TRANSLATION;
   if (ready) return ready;
   // Tant que l'attente court, la réponse en main est celle d'un autre titre.
