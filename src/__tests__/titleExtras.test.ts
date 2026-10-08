@@ -101,3 +101,22 @@ describe("la bannière du bureau", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("une accroche que seule la description connaît", () => {
+  it("se pose en fondu, comme une arrivée tardive", () => {
+    const lead = sheetLeadFacts({ tagline: "", trailerKey: null }, { tmdb: { tagline: "Tard" }, trailerKey: "xyz" }, true);
+    expect(lead).toMatchObject({ tagline: "Tard", taglineLate: true, trailerKey: "xyz", trailerLate: true });
+    // Rien à montrer : rien n'arrive en retard.
+    expect(sheetLeadFacts({ tagline: "", trailerKey: null }, { tmdb: { tagline: "" }, trailerKey: null }, true)).toMatchObject({ taglineLate: false, trailerLate: false });
+  });
+});
+
+describe("tous les titres du catalogue", () => {
+  it("comprennent ceux qui n'ont aucun genre", async () => {
+    const { catalogueTitles } = await import("@/lib/cinemaPayload");
+    const sansGenre = { id: 3 };
+    expect(catalogueTitles({ items: [{ id: 1 }, sansGenre], spotlight: [], rows: { Action: [{ id: 1 }] } })).toContain(sansGenre);
+    // Une charge utile d'avant `items` : l'union d'avant.
+    expect(catalogueTitles({ spotlight: [{ id: 2 }], rows: { Action: [{ id: 1 }] } })).toEqual([{ id: 2 }, { id: 1 }]);
+  });
+});

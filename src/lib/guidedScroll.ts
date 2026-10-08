@@ -21,6 +21,15 @@ import { fetcher, followOnlyOptions } from "@/lib/swr";
 const KEY = "/api/user/preferences";
 const LOCAL_MIRROR = "cine:guided-scroll";
 
+/** À la déconnexion : le miroir est rangé par appareil, et le compte suivant l'aurait lu. */
+export function forgetGuidedScrollMirror(): void {
+  try {
+    window.localStorage.removeItem(LOCAL_MIRROR);
+  } catch {
+    // Stockage refusé : il n'y a rien à oublier.
+  }
+}
+
 function lastKnown(): boolean {
   try {
     return window.localStorage.getItem(LOCAL_MIRROR) !== "off";

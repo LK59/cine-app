@@ -3,7 +3,7 @@
 import { memo, useMemo } from "react";
 import useSWR from "swr";
 import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY, playerBootstrapOptions } from "@/lib/swr";
-import { cinemaFetcher } from "@/lib/cinemaPayload";
+import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { PosterImage } from "@/components/PosterImage";
 import type { CinemaMovie, CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { useT } from "@/components/TranslationProvider";
@@ -120,7 +120,7 @@ export function useCinemaCollection(
   const openableByTmdb = useMemo(() => {
     const map = new Map<number, CinemaMovie>();
     if (!catalogue) return map;
-    for (const movie of [...catalogue.spotlight, ...Object.values(catalogue.rows).flat()]) {
+    for (const movie of catalogueTitles(catalogue)) {
       if (movie.tmdbId) map.set(movie.tmdbId, movie);
     }
     return map;

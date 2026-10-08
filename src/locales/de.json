@@ -1349,6 +1349,7 @@
       "allCovered": "Bereits angefragt oder vollständig verfügbar.",
       "pickSeasons": "Wähle die anzufragenden Staffeln:",
       "alreadyRequested": "Bereits angefragt",
+      "episodeCount": "{n} Folgen",
       "requestMore": "Mehr anfragen",
       "sentToast": "Anfrage gesendet"
     }

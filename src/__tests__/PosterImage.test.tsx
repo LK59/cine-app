@@ -54,7 +54,7 @@ describe("PosterImage", () => {
 
   it("affiche un substitut plutôt qu'une image vide quand il n'y a pas de source", () => {
     render(<PosterImage src={null} alt="Sans affiche" />);
-    expect(screen.getByText("No image")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Sans affiche" })).toBeInTheDocument();
   });
 });
 
@@ -78,7 +78,7 @@ describe("PosterImage, quand une image distante échoue", () => {
     expect(message).toContain("remotePatterns");
     expect(url).toBe("https://cdn.exemple-inconnu.test/p/x.jpg");
     // L'écran, lui, ne change pas.
-    expect(screen.getByText("No image")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Hôte inconnu" })).toBeInTheDocument();
   });
 
   // Une grille de Cinéma en porte des centaines : un avertissement par affiche serait du bruit,

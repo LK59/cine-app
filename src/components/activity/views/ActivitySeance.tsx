@@ -121,10 +121,12 @@ function Step({ line, start }: { line: Record<string, unknown>; start: number })
 /** Une séance, étape par étape. */
 export function ActivitySeance({ id }: { id: string }) {
   const t = useT();
-  const { data, error, isLoading, mutate } = useSWR<SeanceData>(`/api/admin/activity/seances/${encodeURIComponent(id)}`, fetcher);
+  const { data, isLoading, mutate } = useSWR<SeanceData>(`/api/admin/activity/seances/${encodeURIComponent(id)}`, fetcher);
 
   if (isLoading && !data) return <LoadingState />;
-  if (error || !data) return <ErrorState message={t("activity.loadError")} onRetry={() => mutate()} />;
+  // Une relecture de fond qui échoue (un redéploiement) garde les données en main : seul un
+  // écran qui n'a encore rien reçu devient un écran d'erreur (08/10/2026).
+  if (!data) return <ErrorState message={t("activity.loadError")} onRetry={() => mutate()} />;
 
   const { seance: s, lines, runtime, reports } = data;
   const stop = s.stop;

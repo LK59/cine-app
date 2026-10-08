@@ -50,6 +50,7 @@ import { useRole } from "@/lib/useRole";
 import { canAutoSearchMovie } from "@/lib/mediaPermissions";
 import { useT } from "@/components/TranslationProvider";
 import { apiAction } from "@/lib/apiAction";
+import { RequestRefused, refusalMessage } from "@/lib/requestRefusal";
 import { TitleLogo } from "@/components/TitleLogo";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { Rail } from "@/components/Rail";
@@ -243,6 +244,10 @@ export default function RadarrMovieDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mediaType: "movie", mediaId: movie.tmdbId }),
       });
+      // Un refus de Jellyseerr (déjà demandé, quota, droits) se dit tel quel : il était caché
+      // derrière une recherche Radarr et un « demandé » (08/10/2026). Seule une panne — 5xx ou
+      // réseau — retombe sur la recherche directe.
+      if (jsRes.status >= 400 && jsRes.status < 500) throw new RequestRefused(await refusalMessage(jsRes));
       if (!jsRes.ok) {
         // Fallback: trigger Radarr search directly if Jellyseerr unavailable
         const searchRes = await fetch(`/api/radarr/movies/${id}/search`, { method: "POST" });
@@ -253,8 +258,8 @@ export default function RadarrMovieDetailPage() {
       await fetch("/api/cache/invalidate", { method: "POST" });
       haptic();
       toast.success(t('radarr.requestSuccess', { title: movie.title }));
-    } catch {
-      toast.error(t('radarr.requestError'));
+    } catch (error) {
+      toast.error(error instanceof RequestRefused && error.message ? error.message : t('radarr.requestError'));
     } finally {
       setRequesting(false);
     }

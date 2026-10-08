@@ -388,12 +388,18 @@ function LegacyPlayerSection() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ legacyPlayer: next }),
         });
-        if (res.ok) return { legacyPlayer: (await res.json()).legacyPlayer };
+        // Le reste des préférences gardé tel quel : cette clé est partagée (disposition de
+        // l'accueil, défilement guidé), et la remplacer par le seul `legacyPlayer` effaçait les
+        // choix de la page Compte → Interface jusqu'au rechargement (08/10/2026).
+        if (res.ok) {
+          const legacyPlayer = (await res.json()).legacyPlayer;
+          return { ...(data ?? {}), legacyPlayer };
+        }
         // Revenir en arrière, et le dire : l'interrupteur retombait sans un mot.
         toast.error(t("common.error"));
-        return { legacyPlayer: { enabled } };
+        return { ...(data ?? {}), legacyPlayer: { enabled } };
       },
-      { optimisticData: { legacyPlayer: { enabled: next } }, revalidate: false }
+      { optimisticData: (current) => ({ ...(current ?? {}), legacyPlayer: { enabled: next } }), revalidate: false }
     );
   }
 

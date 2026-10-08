@@ -256,15 +256,19 @@ export function sheetLeadFacts(
   info: { tmdb?: { tagline?: string | null } | null; trailerKey?: string | null } | undefined,
   infoSettled: boolean,
 ): { taglineKnown: boolean; tagline: string | null; taglineLate: boolean; trailerKnown: boolean; trailerKey: string | null; trailerLate: boolean } {
-  const taglineLate = catalogue.tagline === undefined;
-  const trailerLate = catalogue.trailerKey === undefined;
+  // « Arrivée en retard » veut dire : venue de la description et non du catalogue. Ce n'est pas
+  // seulement le cas d'un catalogue qui ne sait pas encore — un catalogue qui dit « rien » peut être
+  // contredit par la description (une accroche que TMDB ne donne que dans la langue demandée), et
+  // celle-là se posait d'un coup, sans fondu, en décalant le menu (audit du 08/10/2026).
+  const tagline = catalogue.tagline || (infoSettled ? info?.tmdb?.tagline || null : null);
+  const trailerKey = catalogue.trailerKey || (infoSettled ? info?.trailerKey || null : null);
   return {
-    taglineKnown: !taglineLate || infoSettled,
-    tagline: catalogue.tagline || (infoSettled ? info?.tmdb?.tagline || null : null),
-    taglineLate,
-    trailerKnown: !trailerLate || infoSettled,
-    trailerKey: catalogue.trailerKey || (infoSettled ? info?.trailerKey || null : null),
-    trailerLate,
+    taglineKnown: catalogue.tagline !== undefined || infoSettled,
+    tagline,
+    taglineLate: catalogue.tagline === undefined || (!catalogue.tagline && tagline !== null),
+    trailerKnown: catalogue.trailerKey !== undefined || infoSettled,
+    trailerKey,
+    trailerLate: catalogue.trailerKey === undefined || (!catalogue.trailerKey && trailerKey !== null),
   };
 }
 

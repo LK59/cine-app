@@ -39,6 +39,8 @@ const FINGERPRINTS: Record<number, string> = {
   8: "b71a3922b4b37155",
   // 08/10/2026 : les noms de la distribution, pour la bannière du bureau.
   9: "2b85279160c0cf39",
+  // 08/10/2026 : `items` dans la forme lue du catalogue (un titre sans genre reste trouvable).
+  10: "acde65cfde61b089",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

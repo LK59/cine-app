@@ -16,7 +16,7 @@ import { createPortal } from "react-dom";
 import { Play, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet, catalogueErrorView } from "@/lib/swr";
-import { cinemaFetcher } from "@/lib/cinemaPayload";
+import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
@@ -415,17 +415,17 @@ export function CinemaClient() {
   const resumeMovies = useMemo(() => (resume?.items ?? []).filter((r) => r.type === "Movie"), [resume]);
 
   // Id -> item, so a URL carrying a title id can be resolved back to the item the sheet needs.
-  // Every list in the payload is unioned: the rows map alone omits anything with no genre.
+  // Every title, from `items` (`catalogueTitles`): the rows alone omit anything with no genre.
   const moviesById = useMemo(() => {
     const all = uniqueById(
-      [...(movies?.spotlight ?? []), ...Object.values(movies?.rows ?? {}).flat()],
+      movies ? catalogueTitles(movies) : [],
       (m) => m.radarrId
     );
     return new Map(all.map((m) => [m.radarrId, m]));
   }, [movies]);
   const seriesById = useMemo(() => {
     const all = uniqueById(
-      [...(series?.spotlight ?? []), ...Object.values(series?.rows ?? {}).flat()],
+      series ? catalogueTitles(series) : [],
       (x) => x.sonarrId
     );
     return new Map(all.map((x) => [x.sonarrId, x]));

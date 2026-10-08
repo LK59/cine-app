@@ -22,7 +22,7 @@ import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
 import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
 import { useFreshPersonalLists } from "@/lib/freshLists";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet, catalogueErrorView } from "@/lib/swr";
-import { cinemaFetcher } from "@/lib/cinemaPayload";
+import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
@@ -119,7 +119,7 @@ function indexByItemId(
 ): Map<number, CinemaMovie | CinemaSeries> | null {
   if (!data) return null;
   const all = uniqueById(
-    [...data.spotlight, ...Object.values(data.rows).flat()],
+    catalogueTitles<CinemaMovie | CinemaSeries>(data),
     (item: CinemaMovie | CinemaSeries) => ("radarrId" in item ? item.radarrId : item.sonarrId)
   );
   return new Map(all.map((item) => [itemId(item), item] as const));

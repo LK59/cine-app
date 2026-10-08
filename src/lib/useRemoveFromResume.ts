@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useSWRConfig } from "swr";
-import { RESUME_KEY } from "@/lib/swr";
+import { RESUME_KEY, revalidateWatchState } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
@@ -32,7 +32,10 @@ export function useRemoveFromResume(): (itemId: string) => Promise<void> {
       } catch {
         toast.error(t("cinema.removeFromContinueFailed"));
       } finally {
-        void mutate(RESUME_KEY);
+        // Tout ce qui décrit où en est ce titre, et pas seulement la rangée : la fiche gardait sa
+        // progression (« Reprendre ») et l'état de lecture préchargé portait l'ancienne position —
+        // « Lire » repartait de l'endroit qu'on venait d'effacer (08/10/2026).
+        void revalidateWatchState(itemId);
       }
     },
     [mutate, toast, t]

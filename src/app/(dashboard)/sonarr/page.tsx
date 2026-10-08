@@ -3,7 +3,7 @@
 import { ServiceNotConfigured } from "@/components/ServiceNotConfigured";
 import { useConfiguredServices } from "@/lib/useConfiguredServices";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocalState } from "@/hooks/useLocalState";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
@@ -144,7 +144,6 @@ export default function SonarrPage() {
 
   const navCursor = useListKeyNav(filtered.length, (i) => `/sonarr/${filtered[i]?.id}`);
 
-  const sentinelRef = useRef<HTMLDivElement>(null);
   // Reset pagination when filters change — applied during render (not in an effect) per
   // React's guidance for adjusting state from a computed value change.
   const [resetForFiltered, setResetForFiltered] = useState(filtered);
@@ -152,8 +151,11 @@ export default function SonarrPage() {
     setResetForFiltered(filtered);
     setVisibleCount(PAGE);
   }
-  useEffect(() => {
-    const el = sentinelRef.current;
+  // Défilement sans fin : la sentinelle est suivie par une référence de rappel, et non par un
+  // effet lu au montage. La sentinelle n'existe qu'une fois la liste chargée, et une autre la
+  // remplace à chaque bascule grille / liste : l'effet ne voyait rien sur un premier chargement,
+  // et la page s'arrêtait à soixante titres (08/10/2026).
+  const sentinelRef = useCallback((el: HTMLDivElement | null) => {
     if (!el) return;
     const obs = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) setVisibleCount((n) => n + PAGE); },

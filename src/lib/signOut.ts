@@ -6,6 +6,8 @@ import { touchHintHeaders } from "@/lib/deviceLabel";
 import { clearPersistedCache } from "@/lib/persistentCache";
 import { clearResumeStore } from "@/lib/resumeCache/store";
 import { forgetSearches } from "@/lib/recentSearches";
+import { forgetHomeLayoutMirror } from "@/lib/useHomeLayout";
+import { forgetGuidedScrollMirror } from "@/lib/guidedScroll";
 import { dropPushOnSignOut } from "@/lib/pushOnSignOut";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 
@@ -28,6 +30,11 @@ export async function signOut(go: (path: string) => void): Promise<void> {
   // Les recherches récentes ne sont rangées sous aucun compte : le suivant voyait ce que le
   // précédent avait tapé et ouvert (audit du 26/09/2026).
   forgetSearches();
+  // Les choix d'accueil gardés sur l'appareil (disposition, défilement guidé) : le compte suivant
+  // voyait un instant l'accueil du précédent, le temps que ses propres préférences arrivent
+  // (audit du 08/10/2026).
+  forgetHomeLayoutMirror();
+  forgetGuidedScrollMirror();
   // Le catalogue gardé sur l'appareil part avec la session : un iPad partagé ne doit rien garder
   // de la bibliothèque ni de la reprise de qui que ce soit. Borné : un stockage lent ne retient
   // pas la personne sur la page qu'elle quitte.

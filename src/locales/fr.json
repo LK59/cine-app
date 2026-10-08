@@ -1349,6 +1349,7 @@
       "allCovered": "Déjà demandée ou disponible en entier.",
       "pickSeasons": "Choisis les saisons à demander :",
       "alreadyRequested": "Déjà demandée",
+      "episodeCount": "{n} ép.",
       "requestMore": "Demander plus",
       "sentToast": "Demande envoyée"
     }

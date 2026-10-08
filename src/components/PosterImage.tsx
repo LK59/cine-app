@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { ImageOff } from "lucide-react";
 import { revealLoaded, showIfAlreadyLoaded } from "@/lib/imageReveal";
 
 interface PosterImageProps {
@@ -43,7 +44,7 @@ interface PosterImageProps {
 /**
  * Dire quel hôte vient d'échouer, une fois par hôte.
  *
- * L'échec d'une image distante est muet ici par construction : `onError` bascule sur « No image »
+ * L'échec d'une image distante est muet ici par construction : `onError` bascule sur le substitut (une icône)
  * et c'est tout ce que quiconque en voit — pas d'URL, pas de raison, rien dans la console. Or
  * `next.config.js` (`images.remotePatterns`, et la directive `img-src` de la CSP juste en dessous)
  * n'autorise que deux hôtes, tandis que `tmdbResize` (`src/lib/images.ts`) rend telle quelle
@@ -94,8 +95,10 @@ export function PosterImage({
 
   if (!src || errored) {
     return (
-      <div className={`${aspectRatio} ${className} flex items-center justify-center bg-slate-800/60`}>
-        <div className="text-slate-600 text-xs text-center px-2">No image</div>
+      // Une icône plutôt que « No image », écrit en anglais pour toutes les langues (audit du
+      // 08/10/2026) : le titre est dit par `alt`, comme pour une image.
+      <div role="img" aria-label={alt} className={`${aspectRatio} ${className} flex items-center justify-center bg-slate-800/60`}>
+        <ImageOff size={20} className="text-slate-600" aria-hidden="true" />
       </div>
     );
   }

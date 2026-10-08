@@ -178,15 +178,22 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
 
       {isLoading && !data ? (
         <LoadingState />
-      ) : error ? (
+      ) : error && !data ? (
         <ErrorState message={t("activity.loadError")} onRetry={() => mutate()} />
-      ) : items.length ? (
+      ) : items.length || more ? (
+        // Une page vide n'est pas la fin : les archives plus anciennes peuvent encore porter des
+        // lignes du filtre (`nextCursor`). « Aucune ligne » et la disparition de « Plus » cachaient
+        // celles-là (08/10/2026).
         <section className="card overflow-hidden">
-          <ul>
-            {items.map((item) => (
-              <LogLine key={`${item._file}:${item._line}`} item={item} source={source} />
-            ))}
-          </ul>
+          {items.length ? (
+            <ul>
+              {items.map((item) => (
+                <LogLine key={`${item._file}:${item._line}`} item={item} source={source} />
+              ))}
+            </ul>
+          ) : (
+            <p className="px-4 py-6 text-center text-sm text-slate-500">{t("activity.logs.empty")}</p>
+          )}
           {more && (
             <div className="p-3 text-center">
               <button type="button" onClick={() => setSize(size + 1)} className="btn-ghost px-4 py-1.5 text-xs">

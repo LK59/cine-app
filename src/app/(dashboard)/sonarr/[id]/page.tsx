@@ -2,7 +2,7 @@
 
 import { useClaraGalleryEnabled } from "@/lib/usePlayerEnabled";
 import { isVip as isVipPerson } from "@/lib/vip-persons";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
@@ -48,6 +48,7 @@ import { MoreMenu } from "@/components/MoreMenu";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
 import { apiAction } from "@/lib/apiAction";
+import { RequestRefused, refusalMessage } from "@/lib/requestRefusal";
 import { TitleLogo } from "@/components/TitleLogo";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { Rail } from "@/components/Rail";
@@ -310,12 +311,24 @@ export default function SonarrSeriesDetailPage() {
     }
   }
 
-  async function toggleSeasonMonitored(seasonNumber: number, value: boolean) {
-    if (!series?.seasons) return;
-    const seasons = series.seasons.map((s) =>
-      s.seasonNumber === seasonNumber ? { ...s, monitored: value } : s
-    );
-    await saveSeries({ seasons });
+  /**
+   * Deux bascules de saison rapprochées s'annulaient : chaque envoi partait de la série telle
+   * qu'au rendu, et le second remettait la première saison comme avant — deux « enregistré »
+   * pour un seul changement (08/10/2026). Les saisons en cours d'envoi servent de base au suivant,
+   * et les envois partent l'un après l'autre.
+   */
+  const pendingSeasons = useRef<SonarrSeries["seasons"] | null>(null);
+  const seasonSaves = useRef<Promise<void>>(Promise.resolve());
+  function toggleSeasonMonitored(seasonNumber: number, value: boolean) {
+    const base = pendingSeasons.current ?? series?.seasons;
+    if (!base) return;
+    const seasons = base.map((s) => (s.seasonNumber === seasonNumber ? { ...s, monitored: value } : s));
+    pendingSeasons.current = seasons;
+    seasonSaves.current = seasonSaves.current
+      .then(() => saveSeries({ seasons }))
+      .finally(() => {
+        if (pendingSeasons.current === seasons) pendingSeasons.current = null;
+      });
   }
 
   /**
@@ -354,11 +367,18 @@ export default function SonarrSeriesDetailPage() {
     if (!series?.tmdbId) return;
     setRequesting(true);
     try {
+      // Les saisons, que la route exige pour une série : sans elles, chaque demande était refusée
+      // (400), le repli lançait une recherche Sonarr et le message disait « demandé » sans
+      // qu'aucune demande n'existe (08/10/2026). Toutes les saisons régulières, spéciaux exclus.
+      const seasons = (series.seasons ?? []).map((season) => season.seasonNumber).filter((n) => n > 0);
       const jsRes = await fetch("/api/jellyseerr/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mediaType: "tv", mediaId: series.tmdbId }),
+        body: JSON.stringify({ mediaType: "tv", mediaId: series.tmdbId, seasons }),
       });
+      // Un refus de Jellyseerr (déjà demandé, quota, droits) se dit tel quel. Seule une panne —
+      // 5xx ou réseau — retombe sur la recherche directe dans Sonarr.
+      if (jsRes.status >= 400 && jsRes.status < 500) throw new RequestRefused(await refusalMessage(jsRes));
       if (!jsRes.ok) {
         const searchRes = await fetch(`/api/sonarr/series/${id}/search`, { method: "POST" });
         if (!searchRes.ok) throw new Error();
@@ -367,8 +387,8 @@ export default function SonarrSeriesDetailPage() {
       await fetch("/api/cache/invalidate", { method: "POST" });
       haptic();
       toast.success(t('sonarr.requestSuccess', { title: series.title }));
-    } catch {
-      toast.error(t('sonarr.requestError'));
+    } catch (error) {
+      toast.error(error instanceof RequestRefused && error.message ? error.message : t('sonarr.requestError'));
     } finally {
       setRequesting(false);
     }
