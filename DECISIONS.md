@@ -1731,8 +1731,14 @@ sa lecture était refusée (`assertVisible`). Pour réserver des titres à certa
 « prive », posé le 08/10/2026 sur les programmes de Dieudonné et bloqué sur tous les comptes sauf
 deux —, ils ne doivent pas exister pour les autres.
 
-**Porteurs.** `blockedTagsOf`, `carriesBlockedTag`, `withoutHidden`, `hiddenForRequest`
-(`src/lib/blockedTags.ts`) ; les tags viennent des listes serveur (`Fields=…,Tags`).
+**Partout, pas seulement dans le catalogue.** Les écrans qui parlent en identifiants TMDB — la
+recherche, les rangées de découverte, la filmographie d'une personne, les titres similaires, une saga —
+marquaient ce titre « dans la bibliothèque » : ils retirent les mêmes titres (`hiddenTmdbKeysFor`,
+`movie:603` / `series:1399`). Une personne reste trouvable ; ses titres cachés, non.
+
+**Porteurs.** `blockedTagsOf`, `carriesBlockedTag`, `withoutHidden`, `hiddenForRequest`,
+`hiddenTmdbKeysFor` (`src/lib/blockedTags.ts`) ; les tags viennent des listes serveur
+(`Fields=…,Tags`).
 
 **Voulu.** Le catalogue entier est construit d'abord, puis filtré : le classement du jour est gardé par
 sorte, pas par compte, et un compte bloqué en voit un titre de moins. Un tag posé à la main sur un

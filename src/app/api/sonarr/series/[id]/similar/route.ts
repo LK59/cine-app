@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hiddenTmdbKeysFor } from "@/lib/blockedTags";
+import { verifySessionFull } from "@/lib/session";
+import { SESSION_COOKIE } from "@/lib/auth";
 import { sonarr } from "@/lib/clients/sonarr";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
@@ -52,5 +55,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       });
   });
 
-  return NextResponse.json({ items });
+  // Ce que les tags bloqués du compte lui cachent n'apparaît pas parmi les titres similaires (DECISIONS.md §54).
+  const hidden = await hiddenTmdbKeysFor((await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value))?.jfId);
+  return NextResponse.json({ items: items.filter((i) => !hidden.has(`series:${i.tmdbId}`)) });
 }

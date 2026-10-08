@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hiddenTmdbKeysFor } from "@/lib/blockedTags";
+import { verifySessionFull } from "@/lib/session";
+import { SESSION_COOKIE } from "@/lib/auth";
 import { createTmdbClient } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { cachedMovies } from "@/lib/server-cache";
@@ -38,6 +41,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         };
       });
 
-    return { name: collection.name, overview: collection.overview, parts };
+    // Ce que les tags bloqués du compte lui cachent n'apparaît pas dans une saga (DECISIONS.md §54).
+    const hidden = await hiddenTmdbKeysFor((await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value))?.jfId);
+    return { name: collection.name, overview: collection.overview, parts: parts.filter((p) => !hidden.has(`movie:${p.tmdbId}`)) };
   });
 }

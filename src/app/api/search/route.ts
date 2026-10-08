@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hiddenTmdbKeysFor } from "@/lib/blockedTags";
 import { catalogueMembers } from "@/lib/catalogueMembers";
 import { createTmdbClient, tmdb, TMDB_IMAGE_BASE, type TmdbMovie, type TmdbTv, type TmdbMultiResult } from "@/lib/clients/tmdb";
 import { cachedMovies, cachedSeries, withCache, withPersistentCache, TTL } from "@/lib/server-cache";
@@ -479,7 +480,10 @@ export async function GET(req: NextRequest) {
         }
       : undefined;
 
-    return { library, tmdb: tmdbNotInLib, persons, debug };
+    // Ce que les tags bloqués du compte lui cachent n'apparaît pas non plus ici (DECISIONS.md §54).
+    const hidden = await hiddenTmdbKeysFor((await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value))?.jfId);
+    const visible = (entry: UnifiedSearchResult) => !hidden.has(`${entry.type}:${entry.tmdbId}`);
+    return { library: library.filter(visible), tmdb: tmdbNotInLib.filter(visible), persons, debug };
   });
 
   return NextResponse.json(result);

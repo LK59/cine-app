@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hiddenTmdbKeysFor } from "@/lib/blockedTags";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { withCache, TTL, getProviderIdCI } from "@/lib/server-cache";
 import { playableLibrary } from "@/lib/playerLibrary";
@@ -122,6 +123,7 @@ export async function GET(req: NextRequest) {
   if (!tmdb.isEnabled()) return NextResponse.json({ rows: [] } satisfies PlayerDiscoverPayload);
 
   return withErrorHandling(async () => {
+    const hidden = await hiddenTmdbKeysFor(session.jfId);
     // Les tendances sont les mêmes pour tout le monde et changent une fois par semaine : un cache
     // partagé évite de refaire l'appel pour chaque personne qui ouvre l'accueil.
     const [movies, tv, lib, recommended] = await Promise.all([
@@ -171,7 +173,10 @@ export async function GET(req: NextRequest) {
           libraryId: tvLibrary.get(s.id) ?? null,
         })),
       },
-    ].filter((row) => row.items.length > 0);
+    ]
+      // Ce que les tags bloqués du compte lui cachent n'apparaît pas non plus ici (DECISIONS.md §54).
+      .map((row) => ({ ...row, items: row.items.filter((item) => !hidden.has(`${item.type}:${item.tmdbId}`)) }))
+      .filter((row) => row.items.length > 0);
 
     return { rows } satisfies PlayerDiscoverPayload;
   }, "player-discover");

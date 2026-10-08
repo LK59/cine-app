@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hiddenTmdbKeysFor } from "@/lib/blockedTags";
+import { verifySessionFull } from "@/lib/session";
+import { SESSION_COOKIE } from "@/lib/auth";
 import { createTmdbClient } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { playableLibrary } from "@/lib/playerLibrary";
@@ -79,8 +82,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         return b.voteAverage - a.voteAverage;
       });
 
+    // Ce que les tags bloqués du compte lui cachent n'apparaît pas dans une filmographie (DECISIONS.md §54).
+    const hidden = await hiddenTmdbKeysFor((await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value))?.jfId);
     return {
-      credits,
+      credits: credits.filter((c) => !hidden.has(`${c.mediaType === "tv" ? "series" : "movie"}:${c.tmdbId}`)),
       name: personFr?.name ?? null,
       profilePath: personFr?.profile_path ?? null,
       biography: person?.biography ?? null,

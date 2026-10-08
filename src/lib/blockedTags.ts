@@ -14,6 +14,7 @@ import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
+import { cachedJellyfinMoviesAdmin, cachedJellyfinSeriesAdmin } from "@/lib/server-cache";
 
 /** Relue toutes les deux minutes : un tag ajouté ou retiré par l'administrateur s'applique vite. */
 const TTL_MS = 2 * 60 * 1000;
@@ -115,4 +116,26 @@ export async function hiddenForRequest<M>(
   if (blocked.length === 0) return { hidden: new Set(), signature: "" };
   const hidden = new Set(matched.filter((entry) => carriesBlockedTag(tagsOf(entry), blocked)).map(idOf));
   return { hidden, signature: [...blocked].sort().join(",") };
+}
+
+/**
+ * Les mêmes titres, désignés par TMDB (`movie:603`, `series:1399`) : la recherche et les rangées de
+ * découverte parlent en identifiants TMDB et marquaient ce titre « dans la bibliothèque ». Un compte
+ * qui ne le voit pas dans le catalogue ne le voit nulle part (08/10/2026).
+ */
+export async function hiddenTmdbKeysFor(jfId: string | null | undefined): Promise<Set<string>> {
+  const blocked = jfId ? await blockedTagsOf(jfId) : [];
+  if (blocked.length === 0) return new Set();
+  const [movies, series] = await Promise.all([
+    cachedJellyfinMoviesAdmin().catch(() => []),
+    cachedJellyfinSeriesAdmin().catch(() => []),
+  ]);
+  const keys = new Set<string>();
+  for (const [type, items] of [["movie", movies], ["series", series]] as const) {
+    for (const item of items) {
+      const tmdb = item.ProviderIds?.Tmdb;
+      if (tmdb && carriesBlockedTag(item.Tags, blocked)) keys.add(`${type}:${tmdb}`);
+    }
+  }
+  return keys;
 }
