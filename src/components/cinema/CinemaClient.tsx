@@ -6,11 +6,12 @@ import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
-import { continueOrder } from "@/lib/continueOrder";
+import { continueOrder, type ContinueEntry } from "@/lib/continueOrder";
+import { ROW_CONTAINMENT } from "@/lib/rowContainment";
 import { continueHeroTitles, continueTargets, heroSource, myListGoesLate, spotlightRowItems } from "@/lib/homeLayout";
 import { useHomeLayout } from "@/lib/useHomeLayout";
 import useSWR from "swr";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Play, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -71,7 +72,7 @@ import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
-import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
+import type { CinemaNextUpPayload, CinemaNextUpItem } from "@/app/api/cinema/next-up/route";
 import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/discover/route";
 import { prefetchImages, prefetchInChunks, warmUpUrls } from "@/lib/cinemaWarmup";
 import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
@@ -134,29 +135,52 @@ const CONTINUE_CARD_WIDTH = "w-32 sm:w-40 md:w-48 lg:w-56";
 // wired into the same data-tv-* grid so keyboard/arrow navigation covers it seamlessly with the
 // genre rows below. Shared between the Films and Séries tabs (each with its own data source and
 // row key) — the card itself doesn't care which.
-function ContinueCard({
-  itemId,
-  title,
-  thumbnailUrl,
-  progress,
-  resumeTicks,
-  runtimeTicks,
-  seasonNumber,
-  episodeNumber,
+/** Une carte de « Reprendre » : un film du flux de reprise, ou l'épisode qui attend une série. */
+type ResumeEntry = ContinueEntry<CinemaResumeItem, CinemaNextUpItem>;
+
+/** La vignette d'un film en cours — derrière la session, d'où `unoptimized` plus bas. */
+function resumeThumbnail(item: CinemaResumeItem): string | null {
+  return item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null;
+}
+
+/** Ce qu'une carte de « Reprendre » affiche, film ou épisode. */
+function continueCardFacts(entry: ResumeEntry) {
+  if (entry.kind === "movie") {
+    const item = entry.item;
+    return {
+      title: item.name,
+      thumbnailUrl: resumeThumbnail(item),
+      progress: item.progress,
+      resumeTicks: item.positionTicks,
+      runtimeTicks: item.runtimeTicks,
+      seasonNumber: null,
+      episodeNumber: null,
+    };
+  }
+  const item = entry.item;
+  return {
+    title: item.title,
+    thumbnailUrl: item.thumbnailUrl,
+    progress: item.resumeTicks && item.runtimeTicks ? Math.min((item.resumeTicks / item.runtimeTicks) * 100, 99) : 0,
+    resumeTicks: item.resumeTicks,
+    runtimeTicks: item.runtimeTicks,
+    seasonNumber: item.seasonNumber,
+    episodeNumber: item.episodeNumber,
+  };
+}
+
+// memo'd, et ses rappels reçoivent l'entrée plutôt que d'être écrits en ligne par carte
+// (08/10/2026) : c'était la seule rangée de l'accueil sans `memo`, et chaque survol, chaque tour
+// de la bannière redessinaient toutes ses cartes et leur appui long — elle est pourtant la première.
+const ContinueCard = memo(function ContinueCard({
+  entry,
   rowKey,
   index,
   onOpen,
   onFocus,
   onMenu,
 }: {
-  itemId: string;
-  title: string;
-  thumbnailUrl: string | null;
-  progress: number;
-  resumeTicks: number | null;
-  runtimeTicks: number | null;
-  seasonNumber?: number | null;
-  episodeNumber?: number | null;
+  entry: ResumeEntry;
   rowKey: string;
   index: number;
   /**
@@ -164,7 +188,7 @@ function ContinueCard({
    * démarrait — sans moyen de regarder d'abord de quoi il s'agissait, ni de repartir du début.
    * La fiche porte les deux, et « Reprendre » y est la première ligne.
    */
-  onOpen: () => void;
+  onOpen: (entry: ResumeEntry) => void;
   /**
    * Ce que la bannière doit montrer quand cette carte est désignée.
    *
@@ -174,16 +198,18 @@ function ContinueCard({
    * bannière garde le titre précédent pendant qu'on parcourt la rangée, et annonce autre chose
    * que ce qu'on désigne.
    */
-  onFocus: () => void;
+  onFocus: (entry: ResumeEntry) => void;
   /**
    * Le menu de la carte — « Retirer de Reprendre » —, au clic droit, à la touche menu du clavier
    * ou à l'appui long d'un doigt (tablette). Absent pour un épisode : « À suivre » ne se retire pas
    * d'une série sans la marquer vue.
    */
-  onMenu?: () => void;
+  onMenu?: (entry: ResumeEntry) => void;
 }) {
   const t = useT();
-  const menu = useLongPress(onMenu);
+  const menu = useLongPress(onMenu ? () => onMenu(entry) : undefined);
+  const { title, thumbnailUrl, progress, resumeTicks, runtimeTicks, seasonNumber, episodeNumber } = continueCardFacts(entry);
+  const focus = () => onFocus(entry);
   return (
     <button
       type="button"
@@ -191,9 +217,9 @@ function ContinueCard({
       data-tv-row={rowKey}
       data-tv-col={index}
       {...menu}
-      onClick={onOpen}
-      onFocus={onFocus}
-      onMouseEnter={onFocus}
+      onClick={() => onOpen(entry)}
+      onFocus={focus}
+      onMouseEnter={focus}
       // Ni loupe ni sélection sous un doigt qui appuie longuement : c'est le geste du menu.
       className={`group relative ${CONTINUE_CARD_WIDTH} shrink-0 select-none overflow-visible rounded-lg text-left transition-transform duration-200 [-webkit-touch-callout:none] hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >
@@ -227,7 +253,7 @@ function ContinueCard({
       </span>
     </button>
   );
-}
+});
 
 // Loaded via next/dynamic({ssr:false}) from page.tsx — same escape hatch this codebase already
 // uses for PlayerHostLazy/GlobalSearchLazy. This page is 100% client-fetched (SWR, no data
@@ -243,6 +269,64 @@ const SEE_ALL_LIST = "__ma-liste__";
 // Hors du composant : stables, pour que la bannière ne relance rien à chaque rendu.
 const movieHeroKey = (m: CinemaMovie) => `f${m.radarrId}`;
 const seriesHeroKey = (s: CinemaSeries) => `s${s.sonarrId}`;
+// De même pour les rangées mémoïsées et la grille complète : une flèche écrite en ligne est neuve à
+// chaque rendu, et défaisait leur `memo` à chaque survol (08/10/2026).
+const movieId = (m: CinemaMovie) => m.radarrId;
+const seriesId = (s: CinemaSeries) => s.sonarrId;
+const titleId = (item: CinemaMovie | CinemaSeries) => ("radarrId" in item ? item.radarrId : item.sonarrId);
+const titlePoster = (item: CinemaMovie | CinemaSeries) => item.posterUrl;
+/**
+ * La sorte de la bannière, notée sans rendu inutile : la même valeur rend l'état précédent, et React
+ * n'a rien à redessiner. Un objet neuf à chaque survol redessinait tout l'écran pour rien.
+ */
+const heroFocusAt =
+  (tab: HeroFocus["tab"], kind: HeroFocus["kind"]) =>
+  (previous: HeroFocus | null): HeroFocus =>
+    previous?.tab === tab && previous.kind === kind ? previous : { tab, kind };
+/**
+ * The backdrop specifically (not the hero's own title/synopsis text, which still updates
+ * instantly) is debounced before it's allowed to (re)trigger its crossfade — animating a fresh
+ * <img> on every single focus event during fast arrow-key scrubbing across a row is exactly
+ * what produced the backdrop "ghosting"/persisting-into-each-other bug (rapid, overlapping
+ * restarts of the same opacity keyframe). Settling briefly before committing to a new backdrop
+ * keeps the nice crossfade for a deliberate selection without resurrecting that. The key travels
+ * WITH the src (not read from the live key at render time) — otherwise the <img>'s key would jump
+ * ahead of its own (still-debouncing) src, remounting/restarting the crossfade before the new
+ * backdrop was even the one committed, which is exactly the same bug again.
+ *
+ * Un composant à lui (08/10/2026) : l'attente vivait dans l'état de `CinemaClient`, si bien que
+ * chaque survol et chaque tour de la bannière redessinaient tout l'écran une seconde fois, 150 ms
+ * plus tard, pour une seule image. Et rien n'est écrit quand le titre retenu n'a pas changé.
+ */
+function DebouncedHeroBackdrop({ src, heroKey }: { src: string | null; heroKey: string | null }) {
+  const [shown, setShown] = useState({ src, heroKey });
+  useEffect(() => {
+    // Never commit an empty hero: switching to a tab whose data is still loading momentarily has
+    // nothing to show, and blanking the backdrop for it drops the whole screen to flat slate for
+    // as long as the fetch takes. Holding the previous image until a real replacement exists
+    // makes the switch read as a crossfade rather than a blackout.
+    if (heroKey === null) return;
+    const timer = setTimeout(
+      () => setShown((previous) => (previous.heroKey === heroKey && previous.src === src ? previous : { src, heroKey })),
+      150
+    );
+    return () => clearTimeout(timer);
+  }, [src, heroKey]);
+  return <HeroBackdrop src={shown.heroKey !== null ? shown.src : null} id={shown.heroKey} mask={BACKDROP_MASK} />;
+}
+
+/** Le focus vient-il du clavier ? Un navigateur qui ne connaît pas `:focus-visible` répond oui. */
+function focusFromKeyboard(target: EventTarget): boolean {
+  if (!(target instanceof Element)) return false;
+  try {
+    return target.matches(":focus-visible");
+  } catch {
+    return true;
+  }
+}
+
+/** La même, sur l'onglet affiché à l'instant du geste — lu dans l'adresse. */
+const heroFocusOn = (kind: HeroFocus["kind"]) => heroFocusAt(readCinemaRoute().tab, kind);
 /** Ce que la bannière du bureau affiche d'un titre : son fond et son logo, décodés d'avance. */
 const heroImagesOf = (item: { backdropUrl: string | null; logoUrl: string | null }) => [item.backdropUrl, item.logoUrl];
 export function CinemaClient() {
@@ -325,7 +409,10 @@ export function CinemaClient() {
   // rail is playable (see the hook).
   const myListMovies = useCinemaMyList("movie", movies);
   const myListSeries = useCinemaMyList("series", series);
-  const resumeMovies = (resume?.items ?? []).filter((r) => r.type === "Movie");
+  // Mémoïsé, comme toute la chaîne qui en part (Reprendre, la bannière des reprises, « À la une ») :
+  // recalculée à chaque rendu, elle rendait des tableaux neufs à chaque survol et à chaque tour de la
+  // bannière, et défaisait le `memo` des rangées qu'elle nourrit (08/10/2026).
+  const resumeMovies = useMemo(() => (resume?.items ?? []).filter((r) => r.type === "Movie"), [resume]);
 
   // Id -> item, so a URL carrying a title id can be resolved back to the item the sheet needs.
   // Every list in the payload is unioned: the rows map alone omits anything with no genre.
@@ -366,7 +453,7 @@ export function CinemaClient() {
    * « À suivre » ne dépend plus de l'onglet : sa rangée est commune aux deux (voir `continueRow`).
    */
   const { data: nextUp, error: nextUpError } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, fetcher, liveFeedOptions);
-  const continueSeries = nextUp?.items ?? [];
+  const continueSeries = useMemo(() => nextUp?.items ?? [], [nextUp]);
   // « Voir tout », une seule fonction stable pour toutes les rangées — voir `onSeeAll` dans CinemaRow.
   const openSeeAll = useCallback(
     (key: string) => cinemaNavigate(key === SEE_ALL_LIST ? { list: true } : { browse: key }),
@@ -383,7 +470,7 @@ export function CinemaClient() {
   // quitte la rangée et celui qu'on reprend remonte en tête, en glissant — voir `CATALOGUE_FLIP`.
   // Le dernier lu d'abord, films et épisodes mêlés — la même fonction que le téléphone (DECISIONS § 33).
   // Un titre qui remonte glisse à sa place (`useFlipGrid`).
-  const continueEntries = continueOrder(resumeMovies, continueSeries);
+  const continueEntries = useMemo(() => continueOrder(resumeMovies, continueSeries), [resumeMovies, continueSeries]);
   useFlipGrid(continueTrack, continueEntries.map((entry) => entry.key), CATALOGUE_FLIP);
   // La place tenue tant que l'une des deux réponses n'est pas arrivée — voir `CinemaSkeletonCards`.
   const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
@@ -446,6 +533,13 @@ export function CinemaClient() {
    */
   const [heroFocus, setHeroFocus] = useState<HeroFocus | null>(null);
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
+  /**
+   * Le clavier est dans la bannière (« Lire », « Plus d'infos ») : elle ne tourne plus (08/10/2026).
+   * Elle tournait sous le focus — on visait « Lire », et le minuteur changeait le titre juste avant
+   * Entrée. Le clavier seulement (`:focus-visible`) : un clic de souris qui laisse le focus sur un
+   * bouton n'a pas à figer la bannière jusqu'au clic suivant.
+   */
+  const [bannerEngaged, setBannerEngaged] = useState(false);
 
   // Les rangées de découverte, tout en bas : chargées comme le reste, mais elles ne bloquent
   // rien — la page est déjà utilisable sans elles, et TMDB est le seul appel de cet écran qui
@@ -459,7 +553,7 @@ export function CinemaClient() {
   // Le focus d'une rangée de découverte rend la main au carrousel : voir CinemaDiscoveryRow.
   const clearFocus = useCallback(() => {
     setFocusedItem(null);
-    setHeroFocus({ tab: "movies", kind: "movies" });
+    setHeroFocus(heroFocusAt("movies", "movies"));
   }, []);
 
   // Voir `cinemaOpen` : cette décision était écrite ici *et* sur le téléphone, mot pour mot.
@@ -474,12 +568,28 @@ export function CinemaClient() {
   // is to preview whatever you're pointing at.
   // Le « spotlight » plutôt que « récemment ajouté » : ce dernier a sa propre rangée plus bas, et
   // les mêmes huit titres deux fois de suite ne font pas deux sections.
-  const movieSpotlightOfficial = (movies?.spotlight?.length ? movies.spotlight : movies?.recentlyAdded ?? []).slice(0, 8);
+  const movieSpotlightOfficial = useMemo(
+    () => (movies?.spotlight?.length ? movies.spotlight : movies?.recentlyAdded ?? []).slice(0, 8),
+    [movies]
+  );
   // La disposition choisie par l'exploitant (DECISIONS.md §52) : la bannière peut montrer
   // Reprendre / À suivre, et « À la une » descend alors à la place de Reprendre. Même décision que
   // le téléphone, dans `homeLayout.ts`.
-  const continuingTitles = continueHeroTitles(continueEntries, (id) => moviesById.get(id), (id) => seriesById.get(id));
-  const movieHero = heroSource(homeLayout.continueHero, movieSpotlightOfficial, continuingTitles.movies, movieHeroKey);
+  const continuingTitles = useMemo(
+    () => continueHeroTitles(continueEntries, (id) => moviesById.get(id), (id) => seriesById.get(id)),
+    [continueEntries, moviesById, seriesById]
+  );
+  const continueHero = homeLayout.continueHero;
+  const movieHero = useMemo(
+    () => heroSource(continueHero, movieSpotlightOfficial, continuingTitles.movies, movieHeroKey),
+    [continueHero, movieSpotlightOfficial, continuingTitles]
+  );
+  // « À la une » descendue sous la bannière des reprises — mémoïsée : neuve à chaque rendu, elle
+  // redessinait sa rangée et ses cartes à chaque survol.
+  const movieSpotlightRow = useMemo(
+    () => spotlightRowItems([movies?.spotlight ?? [], movies?.recentlyAdded ?? []], movieHero.shown, movieHeroKey),
+    [movies, movieHero]
+  );
   const movieCarouselOfficial = movieHero.items;
   // Arrêtée aussi tant que la grille est recouverte. La bannière tournait sous les fiches et les
   // panneaux, invisible, et chaque tour redessinait tout cet écran — fiches ouvertes comprises,
@@ -493,7 +603,7 @@ export function CinemaClient() {
     heroSignature(movieCarouselOfficial.map(movieHeroKey)),
     // L'onglet caché garde sa place, en pause : revenir sur Films retrouve le titre qu'on y avait
     // laissé (08/10/2026) — voir `heroOffscreen`.
-    focusedItem !== null || !gridOnTop || mediaType !== "movies",
+    focusedItem !== null || !gridOnTop || mediaType !== "movies" || bannerEngaged,
     heroOffscreen("movies", route, playback.mode),
     movieHero.continuing ? "continue" : "spotlight"
   );
@@ -514,7 +624,7 @@ export function CinemaClient() {
   const [seriesFocusedItem, setSeriesFocusedItem] = useState<CinemaSeries | null>(null);
   const clearSeriesFocus = useCallback(() => {
     setSeriesFocusedItem(null);
-    setHeroFocus({ tab: "series", kind: "series" });
+    setHeroFocus(heroFocusAt("series", "series"));
   }, []);
   const heroKind = heroKindFor(heroFocus, mediaType);
   const seriesSelectedItem = route.serie !== null ? seriesById.get(route.serie) ?? null : null;
@@ -532,12 +642,22 @@ export function CinemaClient() {
     route.film !== null ? moviesById.size > 0 : seriesById.size > 0,
     route.film !== null ? MOVIES_CATALOGUE_KEY : SERIES_CATALOGUE_KEY
   );
-  const seriesSpotlightOfficial = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
-  const seriesHero = heroSource(homeLayout.continueHero, seriesSpotlightOfficial, continuingTitles.series, seriesHeroKey);
+  const seriesSpotlightOfficial = useMemo(
+    () => (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8),
+    [series]
+  );
+  const seriesHero = useMemo(
+    () => heroSource(continueHero, seriesSpotlightOfficial, continuingTitles.series, seriesHeroKey),
+    [continueHero, seriesSpotlightOfficial, continuingTitles]
+  );
+  const seriesSpotlightRow = useMemo(
+    () => spotlightRowItems([series?.spotlight ?? [], series?.recentlyAdded ?? []], seriesHero.shown, seriesHeroKey),
+    [series, seriesHero]
+  );
   const seriesCarouselOfficial = seriesHero.items;
   const [seriesOrderIndex, setSeriesCarouselIndex, seriesOrder] = useHeroOrder(
     heroSignature(seriesCarouselOfficial.map(seriesHeroKey)),
-    seriesFocusedItem !== null || !gridOnTop || mediaType !== "series",
+    seriesFocusedItem !== null || !gridOnTop || mediaType !== "series" || bannerEngaged,
     heroOffscreen("series", route, playback.mode),
     seriesHero.continuing ? "continue" : "spotlight"
   );
@@ -555,7 +675,7 @@ export function CinemaClient() {
    * ou l'épisode qui attend la série montrée, avec ce qui reste — les mêmes lectures que les cartes
    * de la rangée qu'elle remplace. Rien sur la bannière d'origine, qui n'est qu'un aperçu.
    */
-  const heroTargets = continueTargets(continueEntries);
+  const heroTargets = useMemo(() => continueTargets(continueEntries), [continueEntries]);
   const heroResume = movieHero.continuing && heroItem ? heroTargets.movies.get(heroItem.radarrId) : undefined;
   const movieHeroAction = heroResume
     ? {
@@ -604,20 +724,30 @@ export function CinemaClient() {
    * une rangée qui efface la sélection ne doit pas faire basculer la bannière vers une sorte dont
    * le catalogue n'est peut-être pas encore arrivé, ce qui la laisserait vide.
    */
-  const focusMovie = useCallback(
-    (item: CinemaMovie | null) => {
-      setFocusedItem(item);
-      if (item) setHeroFocus({ tab: mediaType, kind: "movies" });
-    },
-    [mediaType]
-  );
-  const focusSeries = useCallback(
-    (item: CinemaSeries | null) => {
-      setSeriesFocusedItem(item);
-      if (item) setHeroFocus({ tab: mediaType, kind: "series" });
-    },
-    [mediaType]
-  );
+  /**
+   * L'onglet est lu au moment du geste, dans l'adresse, et non pris dans la portée (08/10/2026) :
+   * dépendre de `mediaType` changeait ces deux rappels à chaque bascule Films / Séries, et défaisait
+   * le `memo` de toutes les rangées des deux onglets gardés — tout ce que `keptTabs` existe pour
+   * laisser intact. `setFocus` rend l'état inchangé quand rien ne change, ce qui épargne un rendu
+   * de tout l'écran à chaque survol d'une carte déjà désignée.
+   */
+  // Une affiche désignée remplace les commandes de la bannière par l'aperçu : retirées alors qu'elles
+  // avaient le focus, elles ne reçoivent pas toujours de `blur`, et la bannière serait restée figée
+  // au retour sur les nouveautés.
+  const focusMovie = useCallback((item: CinemaMovie | null) => {
+    setFocusedItem(item);
+    if (item) {
+      setHeroFocus(heroFocusOn("movies"));
+      setBannerEngaged(false);
+    }
+  }, []);
+  const focusSeries = useCallback((item: CinemaSeries | null) => {
+    setSeriesFocusedItem(item);
+    if (item) {
+      setHeroFocus(heroFocusOn("series"));
+      setBannerEngaged(false);
+    }
+  }, []);
 
   // Vrai dès le premier changement d'onglet, et pour de bon : voir le panneau des rangées.
   // Retenu pendant le rendu, comme ailleurs dans ce fichier, et non dans un effet.
@@ -636,32 +766,14 @@ export function CinemaClient() {
   // Whichever tab is actually showing drives the shared background wash below — a plain union,
   // not a new abstraction, since all it needs is backdropUrl + a stable id to key the crossfade.
   const activeHeroItem = heroKind === "movies" ? heroItem : seriesHeroItem;
-  const activeHeroKey = activeHeroItem ? (heroKind === "movies" ? (activeHeroItem as CinemaMovie).radarrId : (activeHeroItem as CinemaSeries).sonarrId) : null;
-
-  // The backdrop specifically (not the hero's own title/synopsis text, which still updates
-  // instantly) is debounced before it's allowed to (re)trigger its crossfade — animating a fresh
-  // <img> on every single focus event during fast arrow-key scrubbing across a row is exactly
-  // what produced the backdrop "ghosting"/persisting-into-each-other bug (rapid, overlapping
-  // restarts of the same opacity keyframe). Settling briefly before committing to a new backdrop
-  // keeps the nice crossfade for a deliberate selection without resurrecting that. The key travels
-  // WITH the item (not read from the live activeHeroKey at render time) — otherwise the <img>'s
-  // key would jump ahead of its own (still-debouncing) src, remounting/restarting the crossfade
-  // before the new backdrop was even the one committed, which is exactly the same bug again.
-  const [debouncedHero, setDebouncedHero] = useState<{ item: typeof activeHeroItem; key: number | null }>({
-    item: activeHeroItem,
-    key: activeHeroKey,
-  });
-  useEffect(() => {
-    // Never commit an empty hero: switching to a tab whose data is still loading momentarily has
-    // nothing to show, and blanking the backdrop for it drops the whole screen to flat slate for
-    // as long as the fetch takes. Holding the previous image until a real replacement exists
-    // makes the switch read as a crossfade rather than a blackout.
-    if (!activeHeroItem) return;
-    const timer = setTimeout(() => setDebouncedHero({ item: activeHeroItem, key: activeHeroKey }), 150);
-    return () => clearTimeout(timer);
-  }, [activeHeroItem, activeHeroKey]);
-  const debouncedHeroItem = debouncedHero.item;
-  const debouncedHeroKey = debouncedHero.key;
+  // Le trait de la bannière se remplit quand son minuteur compte — les mêmes conditions que la
+  // pause passée à `useHeroOrder` (l'aperçu d'une affiche n'a pas de trait).
+  const movieBannerRunning = gridOnTop && mediaType === "movies" && !bannerEngaged;
+  const seriesBannerRunning = gridOnTop && mediaType === "series" && !bannerEngaged;
+  // La clé avec sa sorte (`f12`, `s12`) : le film 12 et la série 12 ne sont pas le même titre, et
+  // une clé nue gardait l'image du premier en passant au second (08/10/2026).
+  const activeHeroKey =
+    heroKind === "movies" ? (heroItem ? movieHeroKey(heroItem) : null) : seriesHeroItem ? seriesHeroKey(seriesHeroItem) : null;
 
   // Whatever card was focused (mouse click also focuses a <button> natively) right before
   // CinemaMovieDetail opened — restored on close so arrow-nav resumes exactly where the user
@@ -669,6 +781,7 @@ export function CinemaClient() {
   // as "start over").
   const lastFocusedCard = useRef<HTMLElement | null>(null);
   const rowsPaneRef = useRef<HTMLDivElement>(null);
+  const heroPaneRef = useRef<HTMLDivElement>(null);
 
   const router = useRouter();
   const setSearchOpen = useCallback(
@@ -728,7 +841,14 @@ export function CinemaClient() {
     // Seulement une carte de la grille — voir `gridCardInFocus`. Et rien plutôt qu'une ancienne :
     // Safari ne donne pas le focus à un bouton cliqué, et garder la carte d'un parcours au clavier
     // précédent ferait sauter la grille vers elle au retour.
-    lastFocusedCard.current = gridCardInFocus(rowsPaneRef.current);
+    // Ou un bouton de la bannière (« Plus d'infos », le logo) : sans lui, fermer la fiche renvoyait
+    // le focus sur la première carte de « Reprendre », qui faisait défiler les rangées et changeait
+    // la bannière en aperçu d'un autre titre (08/10/2026). La rotation est arrêtée sous la fiche,
+    // donc le bouton est encore là au retour.
+    const active = document.activeElement;
+    lastFocusedCard.current =
+      gridCardInFocus(rowsPaneRef.current) ??
+      (active instanceof HTMLElement && heroPaneRef.current?.contains(active) ? active : null);
   }, []);
 
   const openDetail = useCallback(
@@ -796,6 +916,42 @@ export function CinemaClient() {
     [rememberGridCard]
   );
 
+  // Les trois gestes d'une carte de « Reprendre », une fonction stable chacun pour toute la rangée —
+  // voir `ContinueCard`.
+  const play = playback.play;
+  const focusContinue = useCallback(
+    (entry: ResumeEntry) => {
+      if (entry.kind === "movie") {
+        const inLibrary = matchRadarr(entry.item.cinemaHref);
+        if (inLibrary) focusMovie(inLibrary);
+      } else {
+        const inLibrary = entry.item.sonarrId ? seriesById.get(entry.item.sonarrId) : undefined;
+        if (inLibrary) focusSeries(inLibrary);
+      }
+    },
+    [matchRadarr, focusMovie, seriesById, focusSeries]
+  );
+  const openContinue = useCallback(
+    (entry: ResumeEntry) => {
+      if (entry.kind === "movie") {
+        const item = entry.item;
+        openResume(item.cinemaHref, () =>
+          play({ itemId: item.id, title: item.name, resumeAt: feedResumeAt(item.positionTicks, RESUME_KEY) })
+        );
+      } else {
+        const item = entry.item;
+        openResume(item.sonarrId ? `/sonarr/${item.sonarrId}` : null, () =>
+          play({ itemId: item.jellyfinItemId, title: item.title, resumeAt: feedResumeAt(item.resumeTicks, NEXT_UP_KEY) })
+        );
+      }
+    },
+    [openResume, play]
+  );
+  const openContinueMenu = useCallback((entry: ResumeEntry) => {
+    if (entry.kind !== "movie") return;
+    setResumeMenu({ id: entry.item.id, title: entry.item.name, poster: resumeThumbnail(entry.item) });
+  }, []);
+
   /**
    * Le focus ne revient à la grille que si l'on y revient — et seulement *une fois* revenu.
    *
@@ -810,19 +966,28 @@ export function CinemaClient() {
    * `focus()` y est ignoré sans bruit.
    */
   const restoreFocusOnReturn = useRef(false);
+  /** Le retour vient du menu de « Reprendre » : la carte qui l'a ouvert a pu en être retirée. */
+  const returnFromResumeMenu = useRef(false);
   // Le menu de « Reprendre » recouvre la grille comme une fiche : le focus y revient à sa fermeture.
   useEffect(() => {
-    if (resumeMenu) restoreFocusOnReturn.current = true;
+    if (resumeMenu) {
+      restoreFocusOnReturn.current = true;
+      returnFromResumeMenu.current = true;
+    }
   }, [resumeMenu]);
   useEffect(() => {
     if (!gridOnTop || !restoreFocusOnReturn.current) return;
     restoreFocusOnReturn.current = false;
+    const fromMenu = returnFromResumeMenu.current;
+    returnFromResumeMenu.current = false;
     const card = lastFocusedCard.current;
     if (card?.isConnected) card.focus();
     // La carte n'est plus là — retirée de « Reprendre » depuis son menu : le focus tombait sur la
     // page, et la flèche suivante repartait de la première carte de l'accueil. Il revient sur la
-    // rangée.
-    else continueTrack.current?.querySelector<HTMLElement>("button")?.focus();
+    // rangée. Seulement là : sans carte retenue (un clic sous Safari, qui ne donne pas le focus
+    // au bouton cliqué), ce repli défilait jusqu'à « Reprendre » et changeait la bannière pour
+    // un titre qu'on n'avait pas désigné (08/10/2026).
+    else if (card?.hasAttribute("data-tv-card") || fromMenu) continueTrack.current?.querySelector<HTMLElement>("button")?.focus();
   }, [gridOnTop]);
 
   const closeDetail = useCallback(() => {
@@ -1003,78 +1168,21 @@ export function CinemaClient() {
   // coup, films et épisodes mêlés, le dernier lu d'abord — et c'est d'elle qu'on reprend vite.
   const rowEntries = continueEntries;
   const continueRow = rowEntries.length > 0 && (
-    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
+    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={ROW_CONTAINMENT}>
       <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{t("cinema.continueWatching")}</h2>
       <div ref={continueTrack} className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
-        {rowEntries.map((entry, i) => {
-          if (entry.kind === "movie") {
-            const item = entry.item;
-            return (
-              <ContinueCard
-                key={entry.key}
-                itemId={item.id}
-                title={item.name}
-                thumbnailUrl={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
-                progress={item.progress}
-                resumeTicks={item.positionTicks}
-                runtimeTicks={item.runtimeTicks}
-                rowKey="continue"
-                index={i}
-                onMenu={() =>
-                  setResumeMenu({
-                    id: item.id,
-                    title: item.name,
-                    poster: item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null,
-                  })
-                }
-                onFocus={() => {
-                  const inLibrary = matchRadarr(item.cinemaHref);
-                  if (inLibrary) focusMovie(inLibrary);
-                }}
-                onOpen={() =>
-                  openResume(item.cinemaHref, () =>
-                    playback.play({
-                      itemId: item.id,
-                      title: item.name,
-                      resumeAt: feedResumeAt(item.positionTicks, RESUME_KEY),
-                    })
-                  )
-                }
-              />
-            );
-          }
-          const item = entry.item;
-          return (
-            <ContinueCard
-              key={entry.key}
-              itemId={item.jellyfinItemId}
-              title={item.title}
-              thumbnailUrl={item.thumbnailUrl}
-              progress={
-                item.resumeTicks && item.runtimeTicks ? Math.min((item.resumeTicks / item.runtimeTicks) * 100, 99) : 0
-              }
-              resumeTicks={item.resumeTicks}
-              runtimeTicks={item.runtimeTicks}
-              seasonNumber={item.seasonNumber}
-              episodeNumber={item.episodeNumber}
-              rowKey="continue"
-              index={i}
-              onFocus={() => {
-                const inLibrary = item.sonarrId ? seriesById.get(item.sonarrId) : undefined;
-                if (inLibrary) focusSeries(inLibrary);
-              }}
-              onOpen={() =>
-                openResume(item.sonarrId ? `/sonarr/${item.sonarrId}` : null, () =>
-                  playback.play({
-                    itemId: item.jellyfinItemId,
-                    title: item.title,
-                    resumeAt: feedResumeAt(item.resumeTicks, NEXT_UP_KEY),
-                  })
-                )
-              }
-            />
-          );
-        })}
+        {rowEntries.map((entry, i) => (
+          <ContinueCard
+            key={entry.key}
+            entry={entry}
+            rowKey="continue"
+            index={i}
+            // Un épisode n'a pas de menu : « À suivre » ne se retire pas sans marquer la série vue.
+            onMenu={entry.kind === "movie" ? openContinueMenu : undefined}
+            onFocus={focusContinue}
+            onOpen={openContinue}
+          />
+        ))}
       </div>
     </div>
   );
@@ -1116,7 +1224,7 @@ export function CinemaClient() {
             de fond qui prenait le relais ici est désactivée sur grand écran, à la demande :
             retirée plutôt que mise en pause, ce qui garantit que l'API YouTube n'est jamais
             chargée ; il faudra refaire ce qui l'alimentait pour la rallumer. */}
-        <HeroBackdrop src={debouncedHeroItem?.backdropUrl ?? null} id={debouncedHeroItem ? debouncedHeroKey : null} mask={BACKDROP_MASK} />
+        <DebouncedHeroBackdrop src={activeHeroItem?.backdropUrl ?? null} heroKey={activeHeroKey} />
         <div className="absolute inset-0 bg-linear-to-r from-ink/85 via-ink/35 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-1/4 bg-linear-to-b from-transparent to-ink" />
       </div>
@@ -1176,7 +1284,17 @@ export function CinemaClient() {
             changes on an actual Films/Séries switch, so the crossfade plays once per tab flip,
             not on every arrow-key scrub. */}
         {/* La hauteur de la bannière : voir `HERO_BASIS`. */}
-        <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: HERO_BASIS }}>
+        <div
+          key={mediaType}
+          ref={heroPaneRef}
+          className="relative min-h-0 shrink grow-0 animate-fade-in"
+          style={{ flexBasis: HERO_BASIS }}
+          // La bannière ne tourne plus sous le clavier — voir `bannerEngaged`.
+          onFocusCapture={(e) => setBannerEngaged(focusFromKeyboard(e.target))}
+          onBlurCapture={(e) => {
+            if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) setBannerEngaged(false);
+          }}
+        >
           {heroKind === "movies"
             ? heroItem && (
                 <CinemaHero
@@ -1193,8 +1311,10 @@ export function CinemaClient() {
                         onInfo={() => openDetail(heroItem)}
                         count={movieCarousel.length}
                         index={movieCarouselIndex}
-                        running={gridOnTop && mediaType === "movies"}
-                        runKey={String(movieCarouselIndex)}
+                        running={movieBannerRunning}
+                        // Le minuteur repart de zéro après chaque pause : le trait aussi, sinon il
+                        // reprenait où il s'était arrêté et restait plein des secondes avant le tour.
+                        runKey={`${movieCarouselIndex}:${movieBannerRunning}`}
                         onPick={setMovieCarouselIndex}
                       />
                     ) : undefined
@@ -1214,8 +1334,8 @@ export function CinemaClient() {
                         onInfo={() => openSeriesDetail(seriesHeroItem)}
                         count={seriesCarousel.length}
                         index={seriesCarouselIndex}
-                        running={gridOnTop && mediaType === "series"}
-                        runKey={String(seriesCarouselIndex)}
+                        running={seriesBannerRunning}
+                        runKey={`${seriesCarouselIndex}:${seriesBannerRunning}`}
                         onPick={setSeriesCarouselIndex}
                       />
                     ) : undefined
@@ -1270,7 +1390,7 @@ export function CinemaClient() {
                   showNewBadge={false}
                   rowIndex={1}
                   // La sélection, complétée par les ajouts, sans ce que la bannière montre déjà.
-                  items={spotlightRowItems([movies?.spotlight ?? [], movies?.recentlyAdded ?? []], movieHero.shown, movieHeroKey)}
+                  items={movieSpotlightRow}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusMovie}
                   onSelectItem={openDetail}
@@ -1287,7 +1407,6 @@ export function CinemaClient() {
               {mediaType === "movies" && continueSkeleton}
               {mediaType === "movies" && continueRow}
 
-              {myListSkeleton}
               {/* Deux titres au moins : à la deuxième place ; sinon sous les derniers ajouts —
                   `myListGoesLate`. */}
               {!myListGoesLate(myListMovies.length) && (
@@ -1310,7 +1429,7 @@ export function CinemaClient() {
                   rowKey="top10-movies"
                   rowIndex={2}
                   items={movies.top10}
-                  idOf={(m) => m.radarrId}
+                  idOf={movieId}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusMovie}
                   onSelectItem={openDetail}
@@ -1333,6 +1452,9 @@ export function CinemaClient() {
                 />
               )}
 
+              {/* Sa place pendant qu'elle arrive, en bas : une liste courte y descend, et le squelette
+                  tenu en haut disparaissait en faisant remonter toutes les rangées (08/10/2026). */}
+              {myListSkeleton}
               {myListGoesLate(myListMovies.length) && (
                 <CinemaRow
                   label={t("cinema.myList")}
@@ -1402,7 +1524,7 @@ export function CinemaClient() {
                   rowKey="spotlight-row-series"
                   showNewBadge={false}
                   rowIndex={1}
-                  items={spotlightRowItems([series?.spotlight ?? [], series?.recentlyAdded ?? []], seriesHero.shown, seriesHeroKey)}
+                  items={seriesSpotlightRow}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusSeries}
                   onSelectItem={openSeriesDetail}
@@ -1425,7 +1547,6 @@ export function CinemaClient() {
               {mediaType === "series" && continueSkeleton}
               {mediaType === "series" && continueRow}
 
-              {myListSkeleton}
               {/* Deux titres au moins : à la deuxième place ; sinon sous les derniers ajouts —
                   `myListGoesLate`. */}
               {!myListGoesLate(myListSeries.length) && (
@@ -1448,7 +1569,7 @@ export function CinemaClient() {
                   rowKey="top10-series"
                   rowIndex={2}
                   items={series.top10}
-                  idOf={(x) => x.sonarrId}
+                  idOf={seriesId}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusSeries}
                   onSelectItem={openSeriesDetail}
@@ -1470,6 +1591,8 @@ export function CinemaClient() {
                 />
               )}
 
+              {/* Voir la note jumelle côté films. */}
+              {myListSkeleton}
               {myListGoesLate(myListSeries.length) && (
                 <CinemaSeriesRow
                   label={t("cinema.myList")}
@@ -1542,9 +1665,9 @@ export function CinemaClient() {
           mediaType={mediaType}
           items={catalogue}
           genres={(mediaType === "series" ? series?.genres : movies?.genres) ?? []}
-          idOf={(item) => ("radarrId" in item ? item.radarrId : item.sonarrId)}
-          posterOf={(item) => item.posterUrl}
-          libraryIdOf={(item) => ("radarrId" in item ? item.radarrId : item.sonarrId)}
+          idOf={titleId}
+          posterOf={titlePoster}
+          libraryIdOf={titleId}
         />
       )}
 

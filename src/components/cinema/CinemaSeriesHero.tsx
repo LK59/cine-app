@@ -36,7 +36,9 @@ export function CinemaSeriesHero({
   }
 
   return (
-    <div key={item.sonarrId} className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
+    <div className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
+      {/* La clé sur le titre seul, pas sur les commandes — voir CinemaHero. */}
+      <div key={item.sonarrId} className="contents">
       {onBack && <HeroBackToSpotlight onBack={onBack} />}
       <HeroTitleLink onOpen={onOpen} title={item.title}>
         {item.logoUrl && !logoErrored ? (
@@ -54,9 +56,10 @@ export function CinemaSeriesHero({
 
       {/* Le même synopsis que la bannière des films, par le même composant — voir HeroOverview. */}
       <HeroOverview info={info} fallback={item.overview} />
+      </div>
 
       {/* La distribution cède sa ligne aux commandes — voir CinemaHero. */}
-      {banner ?? <HeroCastLine info={info} />}
+      {banner ?? <HeroCastLine key={`cast-${item.sonarrId}`} info={info} />}
     </div>
   );
 }

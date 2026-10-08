@@ -4,6 +4,7 @@ import { memo, useRef } from "react";
 import { useT } from "@/components/TranslationProvider";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { CinemaCard } from "@/components/cinema/CinemaCard";
+import { ROW_CONTAINMENT } from "@/lib/rowContainment";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
 // Fades the scroller's own left/right edges to transparent — a plain CSS mask on the row itself,
@@ -65,7 +66,8 @@ export const CinemaRow = memo(function CinemaRow({
   return (
     // snap-start: the scroll pane above (CinemaClient) is snap-y/snap-mandatory — this makes
     // THIS row's top edge (the label) one of the valid rest positions.
-    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
+    // Mise en page sautée loin de l'écran — voir `ROW_CONTAINMENT`.
+    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ ...ROW_CONTAINMENT, animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
       {/* Thin, small, muted — a section label, not a heading competing with the poster row
           beneath it. */}
       {/* « Voir tout » vit à côté du titre : sur une rangée, tout ce qui est au bout du

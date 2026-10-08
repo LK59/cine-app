@@ -4,6 +4,7 @@ import { memo, useRef } from "react";
 import { useT } from "@/components/TranslationProvider";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { CinemaSeriesCard } from "@/components/cinema/CinemaSeriesCard";
+import { ROW_CONTAINMENT } from "@/lib/rowContainment";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 
 // Series-typed mirror of CinemaRow — see its own doc comment (edge fade mask, staggered entrance
@@ -50,7 +51,8 @@ export const CinemaSeriesRow = memo(function CinemaSeriesRow({
   if (items.length === 0) return null;
 
   return (
-    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
+    // Mise en page sautée loin de l'écran — voir `ROW_CONTAINMENT`.
+    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ ...ROW_CONTAINMENT, animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
       {/* « Voir tout » vit à côté du titre : sur une rangée, tout ce qui est au bout du
           défilement demande de faire défiler pour être découvert. */}
       <div className="mb-2 flex items-baseline justify-between gap-4 px-8 sm:px-12">

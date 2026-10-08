@@ -585,7 +585,9 @@ describe("« Retirer de Reprendre », sur les deux écrans et pour les films seu
   // « À suivre » ne se retire pas d'une série sans la marquer vue : pas de menu sur un épisode.
   it("le bureau : sur les films de la rangée", () => {
     const src = lire("src/components/cinema/CinemaClient.tsx");
-    expect(src.match(/onMenu=\{\(\) =>\s*setResumeMenu\(/g)?.length).toBe(1);
+    // Un seul menu, posé sur les films seulement (la carte reçoit un rappel stable — 08/10/2026).
+    expect(src.match(/onMenu=\{entry\.kind === "movie" \? openContinueMenu : undefined\}/g)?.length).toBe(1);
+    expect(src.match(/setResumeMenu\(\{/g)?.length).toBe(1);
     expect(src).toContain("useRemoveFromResume()");
   });
   it("le téléphone : sur les films de la rangée", () => {

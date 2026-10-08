@@ -183,12 +183,21 @@ export function HeroBannerControls({
   onPick: (index: number) => void;
 }) {
   const t = useT();
+  const playRef = useRef<HTMLButtonElement>(null);
+  const infoRef = useRef<HTMLButtonElement>(null);
   const step = (delta: number) => onPick((index + delta + count) % count);
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
       e.stopPropagation();
-      if (count > 1) step(e.key === "ArrowRight" ? 1 : -1);
+      // D'un bouton à l'autre d'abord, la rotation depuis les bords (08/10/2026) : ← → faisaient
+      // toujours tourner la bannière, si bien qu'aux seules flèches — une télécommande — « Plus
+      // d'infos » n'était jamais atteignable. → sur « Lire » passe à « Plus d'infos », → encore
+      // fait tourner ; ← sur « Plus d'infos » revient à « Lire », ← encore tourne à rebours.
+      const forward = e.key === "ArrowRight";
+      if (forward && e.target === playRef.current) infoRef.current?.focus();
+      else if (!forward && e.target === infoRef.current) playRef.current?.focus();
+      else if (count > 1) step(forward ? 1 : -1);
     } else if (e.key === "ArrowDown") {
       // Vers la première affiche de l'onglet affiché.
       const card = [...document.querySelectorAll<HTMLElement>("[data-tv-card]")].find((el) => el.offsetParent !== null);
@@ -212,6 +221,7 @@ export function HeroBannerControls({
     <div className="flex flex-col items-start gap-4" onKeyDown={onKeyDown}>
       <div className="flex items-center gap-3">
         <button
+          ref={playRef}
           type="button"
           data-tv-escape-up="hero"
           onClick={action ? action.onPlay : onPlay}
@@ -221,6 +231,7 @@ export function HeroBannerControls({
           {action ? action.label : t("common.play")}
         </button>
         <button
+          ref={infoRef}
           type="button"
           onClick={onInfo}
           className={`nav-glass inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-white transition-transform hover:scale-[1.03] active:scale-[0.97] ${ring}`}
@@ -329,7 +340,12 @@ export function CinemaHero({
   }
 
   return (
-    <div key={item.radarrId} className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
+    <div className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
+      {/* La clé sur le titre et ce qui le décrit, pas sur la colonne entière : posée sur la colonne,
+          elle remontait aussi les commandes à chaque changement de titre, et « Lire » perdait le
+          focus — au clavier, → ne marchait qu'une fois, et Entrée après un tour ne faisait rien
+          (08/10/2026). `contents` : la colonne garde ses enfants directs pour son espacement. */}
+      <div key={item.radarrId} className="contents">
       {onBack && <HeroBackToSpotlight onBack={onBack} />}
       <HeroTitleLink onOpen={onOpen} title={item.title}>
         {item.logoUrl && !logoErrored ? (
@@ -352,10 +368,11 @@ export function CinemaHero({
       </div>
 
       <HeroOverview info={info} fallback={item.overview} />
+      </div>
 
       {/* La distribution cède sa ligne aux commandes : elle reste dans la fiche, et la bannière n'a
           pas la hauteur des deux. */}
-      {banner ?? <HeroCastLine info={info} />}
+      {banner ?? <HeroCastLine key={`cast-${item.radarrId}`} info={info} />}
     </div>
   );
 }
