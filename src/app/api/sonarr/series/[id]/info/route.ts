@@ -3,32 +3,37 @@ import { sonarr } from "@/lib/clients/sonarr";
 import { bazarr } from "@/lib/clients/bazarr";
 import { createTmdbClient, pickTrailer, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
-import { omdb } from "@/lib/clients/omdb";
+import { cachedOmdbRating, cachedSonarrQueue, cachedTmdbIdForTvdb, cachedTmdbTvInfo, hiddenFromCaller } from "@/lib/titleInfoCache";
 import { getTitleLogo } from "@/lib/title-logo";
 import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
+  const lang = getTmdbLocale(req.cookies.get("cine-lang")?.value);
+  const tmdb = createTmdbClient(lang);
   const id = Number(params.id);
   const series = await sonarr.getSeriesById(id).catch(() => null);
   if (!series) return NextResponse.json({ error: "Série introuvable" }, { status: 404 });
+  // Cachée par les tags bloqués du compte : elle n'existe pas pour lui (DECISIONS.md §54).
+  if (series.tmdbId && (await hiddenFromCaller(req, `series:${series.tmdbId}`))) {
+    return NextResponse.json({ error: "Série introuvable" }, { status: 404 });
+  }
 
-  // Resolve TMDB TV id from TVDB first (needed for videos too)
-  const tmdbTvId = tmdb.isEnabled()
-    ? await tmdb.findTvByTvdbId(series.tvdbId).then((r) => r.tv_results[0]?.id ?? null).catch(() => null)
-    : null;
+  // Resolve TMDB TV id from TVDB first (needed for videos too) — une correspondance gardée, voir
+  // `titleInfoCache.ts`, comme les détails, les vidéos, la note et la file.
+  const tmdbTvId = tmdb.isEnabled() ? await cachedTmdbIdForTvdb(tmdb, series.tvdbId).catch(() => null) : null;
 
-  const [tmdbInfo, tmdbVideos, rating, episodeSubtitles, queue, logoUrl] = await Promise.all([
-    tmdbTvId ? tmdb.getTv(tmdbTvId).catch(() => null) : Promise.resolve(null),
-    tmdbTvId ? tmdb.getTvVideos(tmdbTvId).catch(() => ({ results: [] })) : Promise.resolve({ results: [] }),
-    omdb.isEnabled() && series.imdbId ? omdb.getRating(series.imdbId).catch(() => null) : Promise.resolve(null),
+  const [tmdbPart, rating, episodeSubtitles, queue, logoUrl] = await Promise.all([
+    tmdbTvId ? cachedTmdbTvInfo(tmdb, lang, tmdbTvId).catch(() => null) : Promise.resolve(null),
+    series.imdbId ? cachedOmdbRating(series.imdbId).catch(() => null) : Promise.resolve(null),
     bazarr.getEpisodesDetails(id).catch(() => []),
-    sonarr.getQueue().catch(() => ({ records: [] as any[] })),
+    cachedSonarrQueue().catch(() => ({ records: [] as any[] })),
     // Voir la route des films : le même logo, la même mise en cache, la même raison.
     tmdbTvId ? getTitleLogo(tmdbTvId, "series") : Promise.resolve(null),
   ]);
 
+  const tmdbInfo = tmdbPart?.details ?? null;
+  const tmdbVideos = tmdbPart?.videos ?? { results: [] };
   const activeDownloads = queue.records.filter((r: any) => r.seriesId === id);
 
   const trailer = pickTrailer(tmdbVideos.results);

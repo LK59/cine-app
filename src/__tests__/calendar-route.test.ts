@@ -110,3 +110,22 @@ describe("GET /api/calendar", () => {
     expect(body.events.map((e: { id: string }) => e.id)).toEqual(["radarr-2-digital", "radarr-1-digital"]);
   });
 });
+
+/**
+ * Les bornes forment la clé du cache (08/10/2026) : n'importe quel texte en faisait une entrée de
+ * plus, et une plage sans limite était demandée telle quelle à Radarr et Sonarr.
+ */
+describe("GET /api/calendar — bornes", () => {
+  it("refuse une date qui n'en est pas une, sans rien demander en amont", async () => {
+    const { GET } = await import("@/app/api/calendar/route");
+    const res = await GET(fakeReq({ start: "n'importe-quoi", end: "2024-03-31" }));
+    expect(res.status).toBe(400);
+    expect(mockRadarr.getCalendar).not.toHaveBeenCalled();
+  });
+
+  it("refuse une plage de plus de quatre cents jours", async () => {
+    const { GET } = await import("@/app/api/calendar/route");
+    const res = await GET(fakeReq({ start: "2020-01-01", end: "2026-01-01" }));
+    expect(res.status).toBe(400);
+  });
+});

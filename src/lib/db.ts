@@ -783,9 +783,34 @@ export const kvCacheDb = {
 
   // Opportunistic cleanup — avoids unbounded growth from stale entries (removed movies, etc.)
   cleanup(maxAgeMs: number): void {
-    getDb().prepare("DELETE FROM kv_cache WHERE fetched_at < ?").run(Date.now() - maxAgeMs);
+    deleteKvInBatches("fetched_at < ?", [Date.now() - maxAgeMs]);
+  },
+
+  /**
+   * Les entrées dont la clé suit un motif `GLOB`, plus vieilles que `maxAgeMs` (toutes avec 0).
+   * Par tranches, sous un budget de temps : chaque requête SQLite tient la boucle d'événements, et
+   * ces entrées-là pesaient jusqu'à 640 Ko chacune (08/10/2026).
+   */
+  cleanupGlob(pattern: string, maxAgeMs: number): number {
+    return deleteKvInBatches("key GLOB ? AND fetched_at < ?", [pattern, Date.now() - maxAgeMs]);
   },
 };
+
+const KV_DELETE_BATCH = 500;
+const KV_DELETE_BUDGET_MS = 200;
+
+/** Efface par tranches de cinq cents, et s'arrête au-delà de deux cents millisecondes : le reste attend le passage suivant. */
+function deleteKvInBatches(where: string, params: (string | number)[]): number {
+  const db = getDb();
+  const statement = db.prepare(`DELETE FROM kv_cache WHERE rowid IN (SELECT rowid FROM kv_cache WHERE ${where} LIMIT ${KV_DELETE_BATCH})`);
+  const started = Date.now();
+  let removed = 0;
+  for (;;) {
+    const { changes } = statement.run(...params);
+    removed += changes;
+    if (changes < KV_DELETE_BATCH || Date.now() - started > KV_DELETE_BUDGET_MS) return removed;
+  }
+}
 
 // ─── Status/health history (see src/lib/healthChecks.ts + statusCron.ts) ──────
 

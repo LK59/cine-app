@@ -33,10 +33,26 @@ async function fetchWithRetry(target: string, headers: Record<string, string>, s
     // after a seek, a stale PlaySessionId — and retrying it just spends 1.7s of sleeps before
     // telling the browser something it could have known immediately.
     if (res.ok || res.status < 500) return res;
+    // Le corps de la réponse écartée est lâché : sans cela, la connexion restait tenue jusqu'au
+    // ramasse-miettes, une par nouvel essai (08/10/2026).
+    await res.body?.cancel().catch(() => {});
     await new Promise((resolve) => setTimeout(resolve, delay));
     res = await fetch(target, { signal, headers });
   }
   return res;
+}
+
+/**
+ * Le laissez-passer d'un téléviseur ne repart pas vers Jellyfin (08/10/2026) : il ne lui sert à rien
+ * et finissait dans ses journaux, en clair. La chaîne n'est réécrite que s'il est là — sinon elle part
+ * telle quelle, octet pour octet.
+ */
+function withoutCastToken(search: string): string {
+  const params = new URLSearchParams(search);
+  if (!params.has(CAST_TOKEN_PARAM)) return search;
+  params.delete(CAST_TOKEN_PARAM);
+  const rest = params.toString();
+  return rest ? `?${rest}` : "";
 }
 
 export async function GET(
@@ -70,7 +86,7 @@ export async function GET(
   const restPath = path.join("/");
   // Le jeton d'une adresse ancienne ou recopiée ne repart pas : l'en-tête ci-dessous authentifie
   // la requête, et Jellyfin le lit avant la requête — voir `stripAccessToken`.
-  const target = `${config.jellyfin.url}/videos/${itemId}/${restPath}${stripAccessToken(req.nextUrl.search)}`;
+  const target = `${config.jellyfin.url}/videos/${itemId}/${restPath}${stripAccessToken(withoutCastToken(req.nextUrl.search))}`;
   // Ceinture et bretelles : la question est reposée sur l'URL assemblée, celle que `fetch`
   // normalisera, et non sur les morceaux dont elle sort.
   if (!isUnderJellyfinPrefix(target, `${config.jellyfin.url}/videos/${itemId}/`)) {

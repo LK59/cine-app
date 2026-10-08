@@ -26,6 +26,24 @@ interface CreditsResult {
   };
 }
 
+/**
+ * Seul ce que le décompte lit est gardé (08/10/2026) : les cinquante premiers rôles, les
+ * réalisateurs, les créateurs. Le titre TMDB entier était rangé sur disque et en mémoire — 768
+ * films, 37 Mo, 262 Ko pour le plus gros —, relu et analysé à chaque recalcul (130 ms de lectures
+ * SQLite et 180 ms d'analyse synchrones). Nouvelle clé `credits:v2:` : les anciennes entrées ne
+ * sont plus lues, et le ménage du cache les efface.
+ */
+function projectCredits(details: CreditsResult): CreditsResult {
+  const person = (p: { id: number; name: string; profile_path?: string | null }) => ({ id: p.id, name: p.name, profile_path: p.profile_path ?? null });
+  return {
+    created_by: (details.created_by ?? []).map(person),
+    credits: {
+      cast: (details.credits?.cast ?? []).slice(0, 50).map(person),
+      crew: (details.credits?.crew ?? []).filter((c) => c.job === "Director").map((c) => ({ ...person(c), job: c.job })),
+    },
+  };
+}
+
 /** Runs `fn` over `items` with at most `limit` in flight at once, settling like Promise.allSettled.
  *  TMDB rate-limits bursty traffic — firing 700+ requests at once (one per movie/series) reliably
  *  triggered 429s, and those failures used to get cached as "no credits" for 7 days (see below),
@@ -66,10 +84,10 @@ async function computePeopleStats(): Promise<Omit<PeopleStats, "computing">> {
   // on the next computation instead of poisoning the cache for a week.
   const [movieResults, seriesResults] = await Promise.all([
     mapWithConcurrency(eligibleMovies, 8, (m) =>
-      withPersistentCache(`credits:movie:${m.tmdbId}`, 7 * 24 * 3600_000, () => tmdb.getMovie(m.tmdbId))
+      withPersistentCache(`credits:v2:movie:${m.tmdbId}`, 7 * 24 * 3600_000, async () => projectCredits(await tmdb.getMovie(m.tmdbId)))
     ),
     mapWithConcurrency(eligibleSeries, 8, (s) =>
-      withPersistentCache(`credits:tv:${s.tmdbId}`, 7 * 24 * 3600_000, () => tmdb.getTv(s.tmdbId!))
+      withPersistentCache(`credits:v2:tv:${s.tmdbId}`, 7 * 24 * 3600_000, async () => projectCredits(await tmdb.getTv(s.tmdbId!)))
     ),
   ]);
 

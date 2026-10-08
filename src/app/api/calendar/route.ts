@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { upstreamSignal } from "@/lib/http";
 import { radarr } from "@/lib/clients/radarr";
 import { sonarr } from "@/lib/clients/sonarr";
 import { withCache, TTL } from "@/lib/server-cache";
@@ -40,7 +41,9 @@ async function fetchTmdbPage(path: string): Promise<{ results: any[] }> {
   const key = config.tmdb.apiKey;
   if (!key) return { results: [] };
   const url = `${TMDB_BASE}${path}&api_key=${key}&language=fr-FR&region=FR`;
-  const res = await fetch(url, { next: { revalidate: 3600 } });
+  // Borné (08/10/2026) : sans délai, un appel TMDB pendu tenait 300 s — et, la requête en vol étant
+  // partagée (`withCache`), tous les calendriers ouverts avec lui.
+  const res = await fetch(url, { next: { revalidate: 3600 }, signal: upstreamSignal(8000) });
   if (!res.ok) return { results: [] };
   return res.json();
 }
@@ -67,9 +70,20 @@ async function getTmdbMovies(type: "now_playing" | "upcoming"): Promise<Calendar
     }));
 }
 
+/** Une date AAAA-MM-JJ, et rien d'autre. */
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** Plus large que ce que l'écran demande (trois mois), assez étroit pour ne pas faire lister des années à Radarr. */
+const MAX_SPAN_DAYS = 400;
+
 export async function GET(req: NextRequest) {
   const start = req.nextUrl.searchParams.get("start") ?? new Date().toISOString().slice(0, 10);
   const end   = req.nextUrl.searchParams.get("end")   ?? new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+  // Les bornes forment la clé du cache : n'importe quel texte en faisait une entrée de plus, gardée
+  // en mémoire, et une plage sans limite était demandée telle quelle à Radarr et Sonarr (08/10/2026).
+  const span = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000;
+  if (!DAY.test(start) || !DAY.test(end) || !Number.isFinite(span) || span < 0 || span > MAX_SPAN_DAYS) {
+    return NextResponse.json({ error: "Plage de dates invalide" }, { status: 400 });
+  }
 
   const cacheKey = `calendar:${start}:${end}`;
 

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { qbittorrent } from "@/lib/clients/qbittorrent";
+import { cachedTorrents } from "@/lib/server-cache";
 import { logError } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ function startSharedPolling() {
   if (intervalId !== null) return;
   intervalId = setInterval(async () => {
     try {
-      const torrents = await qbittorrent.getTorrents();
+      const torrents = await cachedTorrents();
       const currentHashes = new Set(torrents.map((t) => t.hash));
       const completed: string[] = [];
 

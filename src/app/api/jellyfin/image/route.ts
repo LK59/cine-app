@@ -16,6 +16,23 @@ export async function GET(req: NextRequest) {
   const refused = await assertVisible(await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value), itemId);
   if (refused) return refused;
 
+  /**
+   * Une adresse avec `tag` désigne une image précise : le `tag` est l'empreinte de son contenu chez
+   * Jellyfin, et une nouvelle image en change (08/10/2026). Elle peut donc être gardée un an, et
+   * une revalidation — l'iPhone en refaisait jusqu'à plusieurs par minute pour la même affiche —
+   * reçoit un 304 sans repasser par Jellyfin. Après `assertVisible` : un titre caché au compte ne
+   * se confirme pas plus qu'il ne se sert.
+   */
+  const etag = tag && /^[A-Za-z0-9_-]{1,128}$/.test(tag) ? `"${tag}"` : null;
+  const cacheControl = etag
+    ? "private, max-age=31536000, immutable"
+    : // `private` : la réponse dépend du compte qui la demande — un cache partagé ne doit pas
+      // resservir à un autre l'image d'un titre qui lui est caché.
+      "private, max-age=86400, stale-while-revalidate=604800";
+  if (etag && req.headers.get("if-none-match")?.split(",").some((v) => v.trim().replace(/^W\//, "") === etag)) {
+    return new NextResponse(null, { status: 304, headers: { ETag: etag, "Cache-Control": cacheControl } });
+  }
+
   const params = new URLSearchParams({ quality: "90", maxWidth: "300" });
   if (tag) params.set("tag", tag);
   const url = `${config.jellyfin.url}/Items/${itemId}/Images/Primary?${params}`;
@@ -25,15 +42,17 @@ export async function GET(req: NextRequest) {
       signal: AbortSignal.any([req.signal, AbortSignal.timeout(8000)]),
       headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
     });
-    if (!res.ok) return new NextResponse(null, { status: 404 });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      return new NextResponse(null, { status: 404 });
+    }
 
     const blob = await res.blob();
     return new NextResponse(blob, {
       headers: {
         "Content-Type": res.headers.get("Content-Type") ?? "image/jpeg",
-        // `private` : la réponse dépend désormais du compte qui la demande — un cache partagé ne
-        // doit pas resservir à un autre l'image d'un titre qui lui est caché.
-        "Cache-Control": "private, max-age=86400, stale-while-revalidate=604800",
+        "Cache-Control": cacheControl,
+        ...(etag ? { ETag: etag } : {}),
       },
     });
   } catch {

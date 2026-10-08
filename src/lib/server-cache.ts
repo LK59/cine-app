@@ -2,6 +2,7 @@ import { spreadTtl } from "@/lib/cacheSpread";
 import { radarr } from "@/lib/clients/radarr";
 import { sonarr } from "@/lib/clients/sonarr";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
+import { qbittorrent } from "@/lib/clients/qbittorrent";
 import { jellyfin, JellyfinItem } from "@/lib/clients/jellyfin";
 import { kvCacheDb } from "@/lib/db";
 
@@ -44,6 +45,56 @@ const inFlight   = new Map<string, Promise<unknown>>();
 const generation = new Map<string, number>();
 const generationOf = (key: string) => generation.get(key) ?? 0;
 
+/**
+ * Bornes du cache en mémoire (08/10/2026).
+ *
+ * `store` et `staleStore` gardaient chaque clé jamais produite jusqu'au redémarrage : une recherche
+ * par texte tapé, une plage du calendrier, chaque valeur lue sur disque par `withPersistentCache`.
+ * Les déploiements fréquents le cachaient ici ; une installation de l'image publiée qui tourne des
+ * semaines grossissait sans fin, et un compte qui bouclait sur `/api/search?q=<aléatoire>` pouvait
+ * mener le conteneur à sa limite mémoire. Deux bornes : un nombre d'entrées (la plus anciennement
+ * servie part la première), et un balayage régulier des entrées périmées.
+ */
+const STORE_MAX = 4000;
+const STALE_MAX = 1500;
+/** Une valeur de secours plus vieille qu'un jour ne sert plus à grand-chose. */
+const STALE_MAX_AGE_MS = 24 * 3600_000;
+const SWEEP_EVERY_MS = 10 * 60_000;
+
+/** Écrire en tête de l'ordre d'usage, et lâcher la plus ancienne au-delà de la borne. */
+function remember<V>(map: Map<string, V>, key: string, value: V, max: number): void {
+  map.delete(key);
+  map.set(key, value);
+  while (map.size > max) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
+  }
+}
+
+/** Une entrée servie remonte dans l'ordre d'usage : c'est la moins servie qui part. */
+function touch(key: string, entry: Entry<unknown>): void {
+  store.delete(key);
+  store.set(key, entry);
+}
+
+/** Retire ce qui a expiré (et les secours trop vieux). Exportée pour les tests. */
+export function sweepServerCache(now = Date.now()): void {
+  for (const [key, entry] of store) if (entry.exp <= now) store.delete(key);
+  for (const [key, entry] of staleStore) if (now - entry.fetchedAt > STALE_MAX_AGE_MS) staleStore.delete(key);
+}
+
+// `unref` : le balayage ne retient pas le processus (tests, arrêt du serveur).
+if (typeof setInterval === "function") {
+  const sweeper = setInterval(() => sweepServerCache(), SWEEP_EVERY_MS);
+  (sweeper as { unref?: () => void }).unref?.();
+}
+
+/** Pour les tests : la taille des deux réserves. */
+export function serverCacheSizes(): { store: number; stale: number } {
+  return { store: store.size, stale: staleStore.size };
+}
+
 /** Retirer la requête en vol de cette clé — seulement si c'est encore elle. */
 function settle(key: string, p: Promise<unknown>) {
   if (inFlight.get(key) === p) inFlight.delete(key);
@@ -75,7 +126,10 @@ export async function withCache<T>(
 ): Promise<T> {
   if (!options.forceRefresh) {
     const hit = store.get(key) as Entry<T> | undefined;
-    if (hit && Date.now() < hit.exp) return hit.v;
+    if (hit && Date.now() < hit.exp) {
+      touch(key, hit);
+      return hit.v;
+    }
   }
 
   // Anti-stampede
@@ -87,8 +141,8 @@ export async function withCache<T>(
     .then((v) => {
       // Invalidée pendant le trajet : la réponse sert à qui l'attendait, pas au cache.
       if (generationOf(key) === gen) {
-        store.set(key, { v, exp: Date.now() + ttlMs });
-        staleStore.set(key, { v, fetchedAt: Date.now() });
+        remember(store, key, { v, exp: Date.now() + ttlMs }, STORE_MAX);
+        remember(staleStore, key, { v, fetchedAt: Date.now() }, STALE_MAX);
       }
       return v;
     })
@@ -96,7 +150,7 @@ export async function withCache<T>(
       // Try stale fallback — serve last known value with a reduced TTL so we retry soon
       const stale = staleStore.get(key) as StaleEntry<T> | undefined;
       if (stale) {
-        if (generationOf(key) === gen) store.set(key, { v: stale.v, exp: Date.now() + Math.min(ttlMs * 0.5, 30_000) });
+        if (generationOf(key) === gen) remember(store, key, { v: stale.v, exp: Date.now() + Math.min(ttlMs * 0.5, 30_000) }, STORE_MAX);
         return stale.v;
       }
       throw err;
@@ -150,7 +204,10 @@ export { spreadTtl };
 export async function withPersistentCache<T>(key: string, requestedTtlMs: number, fn: () => Promise<T>): Promise<T> {
   const ttlMs = spreadTtl(key, requestedTtlMs);
   const memHit = store.get(key) as Entry<T> | undefined;
-  if (memHit && Date.now() < memHit.exp) return memHit.v;
+  if (memHit && Date.now() < memHit.exp) {
+    touch(key, memHit);
+    return memHit.v;
+  }
 
   const existing = inFlight.get(key) as Promise<T> | undefined;
   if (existing) return existing;
@@ -160,7 +217,7 @@ export async function withPersistentCache<T>(key: string, requestedTtlMs: number
     const disk = kvCacheDb.get(key);
     if (disk && Date.now() - disk.fetchedAt < ttlMs) {
       const v = disk.value as T;
-      store.set(key, { v, exp: disk.fetchedAt + ttlMs });
+      remember(store, key, { v, exp: disk.fetchedAt + ttlMs }, STORE_MAX);
       return v;
     }
     let v: T;
@@ -177,15 +234,15 @@ export async function withPersistentCache<T>(key: string, requestedTtlMs: number
        */
       if (disk) {
         const stale = disk.value as T;
-        if (generationOf(key) === gen) store.set(key, { v: stale, exp: Date.now() + 5 * 60_000 });
+        if (generationOf(key) === gen) remember(store, key, { v: stale, exp: Date.now() + 5 * 60_000 }, STORE_MAX);
         return stale;
       }
       throw err;
     }
     // Même règle que `withCache` : une réponse partie avant une invalidation n'est pas gardée.
     if (generationOf(key) !== gen) return v;
-    store.set(key, { v, exp: Date.now() + ttlMs });
-    staleStore.set(key, { v, fetchedAt: Date.now() });
+    remember(store, key, { v, exp: Date.now() + ttlMs }, STORE_MAX);
+    // Pas de copie dans `staleStore` : le disque garde déjà la valeur de secours (voir le `catch`).
     kvCacheDb.set(key, v, Date.now());
     return v;
   })().finally(() => settle(key, p));
@@ -222,8 +279,19 @@ export function invalidateJellyfinLibrary() {
 
 // ─── Named cache entries ───────────────────────────────────────────────────────
 
+// Deux minutes, et non trente secondes (08/10/2026) : la liste Radarr pèse 4,9 Mo, 340 ms côté
+// Radarr et 33 ms d'analyse synchrone ici — redemandée environ deux cents fois par jour. Les
+// écritures de l'application l'invalident déjà (`invalidateLibrary`) ; seul un ajout fait
+// directement dans Radarr attend un peu plus.
 export const cachedMovies = (opts?: { forceRefresh?: boolean }) =>
-  withCache("radarr:movies", TTL.MEDIUM, () => radarr.getMovies(), opts);
+  withCache("radarr:movies", TTL.LONG, () => radarr.getMovies(), opts);
+
+/**
+ * La liste des torrents, partagée par ses deux lecteurs en arrière-plan (08/10/2026) : les messages
+ * de la gestion (`/api/sse`, toutes les 6 s) et les notifications (`torrentWatch`, toutes les 15 s)
+ * demandaient chacun la liste entière à qBittorrent, de leur côté.
+ */
+export const cachedTorrents = () => withCache("qbit:torrents", TTL.VERY_SHORT, () => qbittorrent.getTorrents());
 
 export const cachedSeries = (opts?: { forceRefresh?: boolean }) =>
   withCache("sonarr:series", TTL.MEDIUM, () => sonarr.getSeries(), opts);

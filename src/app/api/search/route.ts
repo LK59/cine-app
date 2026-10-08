@@ -5,6 +5,7 @@ import { createTmdbClient, tmdb, TMDB_IMAGE_BASE, type TmdbMovie, type TmdbTv, t
 import { cachedMovies, cachedSeries, withCache, withPersistentCache, TTL } from "@/lib/server-cache";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
+import { createRateLimiter } from "@/lib/rateLimiter";
 import { LOCALE_COOKIE, getTmdbLocale, type Locale } from "@/lib/i18n";
 import {
   normalize,
@@ -182,6 +183,29 @@ async function matchesNaturalPeople(mediaType: "movie" | "series", tmdbId: numbe
   return hasAll(directorsAndCreators, directorIds);
 }
 
+/**
+ * La filmographie d'une personne, réduite à ce que la recherche lit (08/10/2026).
+ *
+ * La réponse `combined_credits` entière était gardée — 4 021 entrées, 41 Mo sur disque, 640 Ko pour
+ * la plus grosse —, relue et analysée de façon synchrone, puis tenue en mémoire. Seuls l'identifiant,
+ * la sorte, le titre et la popularité de chaque rôle servent. Nouvelle clé `v2` : les anciennes
+ * entrées ne sont plus lues, et le ménage du cache les efface.
+ */
+interface PersonCreditsLite {
+  cast: { id: number; media_type: string; title?: string; name?: string; popularity: number }[];
+}
+function personCredits(id: number): Promise<PersonCreditsLite> {
+  return withPersistentCache<PersonCreditsLite>(`search:person-credits:v2:${id}`, 7 * 24 * 3600_000, async () => {
+    const full = await tmdb.getPersonCredits(id);
+    return {
+      cast: (full.cast ?? []).map((c) => {
+        const named = c as { title?: string; name?: string };
+        return { id: c.id, media_type: c.media_type, ...(named.title ? { title: named.title } : {}), ...(named.name ? { name: named.name } : {}), popularity: c.popularity ?? 0 };
+      }),
+    };
+  });
+}
+
 async function findSharedSeriesByCast(castIds: number[]) {
   if (castIds.length === 0) return [];
 
@@ -190,9 +214,7 @@ async function findSharedSeriesByCast(castIds: number[]) {
   // too, so it survives a redeploy instead of refetching every actor again from scratch.
   const creditLists = await Promise.all(
     castIds.map((id) =>
-      withPersistentCache(`search:person-credits:${id}`, 7 * 24 * 3600_000, () => tmdb.getPersonCredits(id)).catch(
-        () => ({ cast: [] })
-      )
+      personCredits(id).catch((): PersonCreditsLite => ({ cast: [] }))
     )
   );
 
@@ -213,12 +235,19 @@ async function findSharedSeriesByCast(castIds: number[]) {
   return [...candidates.values()].sort((a, b) => b.popularity - a.popularity);
 }
 
+const searchAllowed = createRateLimiter(120, 60_000);
+
 export async function GET(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get("q") ?? "").slice(0, MAX_QUERY_LENGTH).trim();
   const type = req.nextUrl.searchParams.get("type") as "movie" | "series" | "all" | null ?? "all";
   const wantsDebug = req.nextUrl.searchParams.get("debug") === "1";
-  const session = wantsDebug ? await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value) : null;
-  const includeDebug = session?.role === "admin";
+  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
+  const includeDebug = wantsDebug && session?.role === "admin";
+  // Une borne par compte (08/10/2026) : chaque texte distinct coûte trois appels TMDB et une entrée
+  // de cache. Large pour qui tape — la saisie est déjà espacée côté écran —, elle arrête une boucle.
+  if (q.length >= 2 && !searchAllowed(session?.jfId ?? session?.u ?? "anonyme")) {
+    return NextResponse.json({ library: [], tmdb: [], persons: [], error: "Trop de recherches, réessayez dans une minute." }, { status: 429 });
+  }
   const rawLang = req.cookies.get(LOCALE_COOKIE)?.value ?? "";
   const locale: Locale = (rawLang === "en" || rawLang === "es" || rawLang === "de") ? rawLang : "fr";
   // The module-level `tmdb` singleton is fixed to fr-FR; build a client that
@@ -426,11 +455,12 @@ export async function GET(req: NextRequest) {
      * cache : une panne passagère ne doit pas se figer en « cette personne n'a rien ici ».
      */
     const candidates = personResults.results.slice(0, 8);
+    // Deux ou trois lettres (« Me », « Bat ») ne valent pas huit filmographies : sous quatre
+    // lettres, seules les trois premières personnes sont enrichies (08/10/2026) — les autres
+    // gardent le décompte de repli ci-dessous.
+    const enriched = q.length >= 4 ? candidates.length : 3;
     const credits = await Promise.all(
-      candidates.map((p) =>
-        withPersistentCache(`search:person-credits:${p.id}`, 7 * 24 * 3600_000, () => tmdb.getPersonCredits(p.id))
-          .catch(() => null)
-      )
+      candidates.map((p, i) => (i < enriched ? personCredits(p.id).catch(() => null) : Promise.resolve(null)))
     );
 
     const scored = candidates.map((p, i) => {
