@@ -32,7 +32,8 @@ const HANNIBAL = {
   radarrId: 7, tmdbId: 1000, title: "Hannibal", year: 2001, posterUrl: null,
   genres: ["Thriller"], imdbRating: "6.8", addedAt: null,
 };
-vi.mock("@/lib/cinemaPayload", () => ({
+vi.mock("@/lib/cinemaPayload", async (importOriginal) => ({
+  catalogueTitles: (await importOriginal<typeof import("@/lib/cinemaPayload")>()).catalogueTitles,
   cinemaFetcher: async (url: string) =>
     url.includes("/series")
       ? { items: [], rows: {}, spotlight: [], recentlyAdded: [], top10: [] }

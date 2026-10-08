@@ -2,6 +2,7 @@
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
+import { catalogueTitles } from "@/lib/cinemaPayload";
 import { Search as SearchIcon, X } from "lucide-react";
 import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { useSearchResults } from "@/lib/useSearchResults";
@@ -213,11 +214,12 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   const { data: moviesPayload } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
   const { data: seriesPayload } = useSWR<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
   const allMovies = useMemo(
-    () => uniqueById([...(moviesPayload?.spotlight ?? []), ...Object.values(moviesPayload?.rows ?? {}).flat()], (m) => m.radarrId),
+    // Tout le catalogue (`catalogueTitles`), et non les seules rangées : un titre sans genre n'y figure pas.
+    () => (moviesPayload ? uniqueById(catalogueTitles(moviesPayload), (m) => m.radarrId) : []),
     [moviesPayload]
   );
   const allSeries = useMemo(
-    () => uniqueById([...(seriesPayload?.spotlight ?? []), ...Object.values(seriesPayload?.rows ?? {}).flat()], (s) => s.sonarrId),
+    () => (seriesPayload ? uniqueById(catalogueTitles(seriesPayload), (s) => s.sonarrId) : []),
     [seriesPayload]
   );
 

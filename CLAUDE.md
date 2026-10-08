@@ -245,7 +245,7 @@ removed for the devices' sake. **A view is never written as-is** (`exactBytes`):
 to `cine-reprise-2`, wiping the old folder. A chunk read back at the wrong size is deleted, and
 `overQuota` stops adding titles once the browser's *measured* usage passes the ceiling. The next
 episode's 16 MiB opening is written a minute before the end. `player.log` gets `reserve` lines
-(`départ`, `point` every 30 s — MB and seconds held ahead, MB the player read from the reserve, the
+(`départ`, `point` at each burst/rest change or every 5 min at most, never paused or hidden (08/10/2026; it was every 30 s, 84 % of all player-log posts) — MB and seconds held ahead, MB the player read from the reserve, the
 device and the network, what was fetched and at what rate, `idle` —, `erreur`, `arrêt`), and `diag.*`
 on `stall`/`stop` carries the same totals. None of it is load-bearing: any chunk may vanish (system
 eviction, « Vider le cache » in the Account panel) and is read from the network instead.

@@ -25,7 +25,10 @@ const catalogueFetcher = vi.fn(async (url: string) =>
     ? { items: [], rows: {}, spotlight: [], recentlyAdded: [], top10: [] }
     : { items: [], rows: {}, spotlight: [], recentlyAdded: [], top10: [] }
 );
-vi.mock("@/lib/cinemaPayload", () => ({ cinemaFetcher: (url: string) => catalogueFetcher(url) }));
+vi.mock("@/lib/cinemaPayload", async (importOriginal) => ({
+  catalogueTitles: (await importOriginal<typeof import("@/lib/cinemaPayload")>()).catalogueTitles,
+  cinemaFetcher: (url: string) => catalogueFetcher(url),
+}));
 vi.mock("@/components/PosterImage", () => ({
   // eslint-disable-next-line @next/next/no-img-element
   PosterImage: ({ alt }: { alt: string }) => <img alt={alt} />,
