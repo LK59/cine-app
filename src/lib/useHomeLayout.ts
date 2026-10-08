@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 import { fetcher, followOnlyOptions } from "@/lib/swr";
 import { useServerHomeLayout } from "@/lib/usePlayerEnabled";
@@ -56,8 +56,12 @@ export function useHomeLayout(): HomeLayout {
       /* navigation privée : la réponse du compte suffit */
     }
   }, [browseButton, continueHero]);
+  // Le miroir lu une fois, au montage : relu à chaque rendu, il coûtait un `localStorage` et un
+  // `JSON.parse` à chaque survol et à chaque tour de la bannière, tant que la réponse du compte
+  // n'était pas arrivée — et pour toujours si elle n'arrivait jamais (08/10/2026).
+  const [mirror] = useState(() => (typeof window === "undefined" ? null : lastKnown()));
   if (layout) return layout;
-  return (typeof window === "undefined" ? null : lastKnown()) ?? server;
+  return mirror ?? server;
 }
 
 /** Pour l'écran du Compte : ce que le compte a choisi, et ce que le serveur donne par défaut. */

@@ -4,6 +4,7 @@ import { memo, useRef } from "react";
 import { Plus } from "lucide-react";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { PosterImage } from "@/components/PosterImage";
+import { ROW_CONTAINMENT } from "@/lib/rowContainment";
 import type { DiscoveryItem } from "@/app/api/player/discover/route";
 
 const TV_NAV_RING =
@@ -54,7 +55,8 @@ export const CinemaDiscoveryRow = memo(function CinemaDiscoveryRow({
     <div
       data-tv-rowroot
       className="mb-6 animate-fade-in-up snap-start"
-      style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}
+      // Mise en page sautée loin de l'écran — voir `ROW_CONTAINMENT`.
+      style={{ ...ROW_CONTAINMENT, animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}
     >
       <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{label}</h2>
       <div

@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import { CinemaTop10Card } from "@/components/cinema/CinemaTop10Card";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
+import { ROW_CONTAINMENT } from "@/lib/rowContainment";
 
 // Same edge fade as CinemaRow/CinemaSeriesRow — see the doc comment there for why it's a static
 // mask rather than a scroll-position check.
@@ -23,7 +24,11 @@ interface Top10Item {
 //
 // Taller than a normal row on purpose: the rank digit needs the room, and Netflix's own Top 10
 // row is likewise the one row that breaks the grid's rhythm.
-export function CinemaTop10Row<T extends Top10Item>({
+//
+// memo'd comme les autres rangées (08/10/2026) : sans lui, chaque survol et chaque tour de la
+// bannière redessinaient ses dix cartes, dans les deux onglets gardés. `idOf` doit donc être
+// stable — une fonction du module chez l'appelant, pas une flèche écrite en ligne.
+function Top10Row<T extends Top10Item>({
   label,
   rowKey,
   rowIndex = 0,
@@ -48,7 +53,8 @@ export function CinemaTop10Row<T extends Top10Item>({
   if (items.length === 0) return null;
 
   return (
-    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
+    // Mise en page sautée loin de l'écran — voir `ROW_CONTAINMENT`.
+    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ ...ROW_CONTAINMENT, animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
       <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{label}</h2>
       <div ref={track} className="scrollbar-thin flex scroll-smooth items-end gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
         {items.map((item, i) => (
@@ -71,3 +77,6 @@ export function CinemaTop10Row<T extends Top10Item>({
     </div>
   );
 }
+
+// `memo` efface le paramètre de type : la rangée est rendue avec des films et des séries.
+export const CinemaTop10Row = memo(Top10Row) as typeof Top10Row;
