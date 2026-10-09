@@ -16,7 +16,17 @@ vi.mock("@/lib/server-cache", () => ({
   withPersistentCache: (_k: string, _ttl: number, fn: () => Promise<unknown>) => fn(),
 }));
 
-beforeEach(() => vi.clearAllMocks());
+// Aucune mesure réelle de logo : tout est lisible, sauf ce qu'un test déclare sombre.
+const mockIsDark = vi.fn(async (_filePath: string): Promise<boolean | null> => false);
+vi.mock("@/lib/logoLuminance", () => ({ logoIsDark: (filePath: string) => mockIsDark(filePath) }));
+const mockKvGet = vi.fn((_key: string): { value: unknown; fetchedAt: number } | null => null);
+vi.mock("@/lib/db", () => ({ kvCacheDb: { get: (key: string) => mockKvGet(key) } }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockIsDark.mockImplementation(async () => false);
+  mockKvGet.mockImplementation(() => null);
+});
 
 describe("getTitleArt", () => {
   // Le bug visible à l'écran : l'affiche de « Shameless » porte le titre peint dedans, et on
@@ -128,5 +138,18 @@ describe("l'affiche selon la langue", () => {
     const { getTitleArt } = await import("@/lib/title-art");
     const art = await getTitleArt(700002, "movie");
     expect(art.posterByLang.fr).toContain("/w342/");
+  });
+});
+
+describe("le passage au choix qui écarte les logos sombres", () => {
+  // Le catalogue attend le visuel de ses mille titres : la clé neuve ne doit pas le faire attendre
+  // mille appels à TMDB le jour du déploiement.
+  it("sert la valeur v2 tout de suite et calcule la v3 en arrière-plan", async () => {
+    const old = { logoUrl: "https://image.tmdb.org/t/p/w500/ancien.png", posterTextlessUrl: null, posterByLang: {} };
+    mockKvGet.mockImplementation((key: string) => (key.startsWith("tmdb:art:v2:") ? { value: old, fetchedAt: Date.now() } : null));
+    mockGetTvImages.mockResolvedValue({ posters: [], logos: [{ file_path: "/nouveau.png", iso_639_1: "fr", vote_average: 1 }] });
+    const { getTitleArt } = await import("@/lib/title-art");
+    expect(await getTitleArt(74577, "series")).toEqual(old);
+    await vi.waitFor(() => expect(mockGetTvImages).toHaveBeenCalledWith(74577));
   });
 });
