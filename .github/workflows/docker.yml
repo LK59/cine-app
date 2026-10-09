@@ -26,8 +26,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Through Google's public Docker Hub mirror (09/10/2026): GitHub's runners could no longer reach
+      # auth.docker.io (« context deadline exceeded » four runs in a row) while the registry answered
+      # everywhere else. The builder image comes from the mirror, and every Docker Hub pull of the
+      # build (node:24-alpine…) tries the mirror first, Docker Hub second. The Dockerfile and local
+      # builds are unchanged.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
