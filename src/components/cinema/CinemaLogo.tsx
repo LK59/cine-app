@@ -70,6 +70,7 @@ export function CinemaLogo({
   className = "",
   onError,
   fallback = null,
+  shadow = true,
 }: {
   src: string;
   alt: string;
@@ -85,6 +86,14 @@ export function CinemaLogo({
    * 21/09/2026) — d'autant plus visible que la proportion déjà connue rendait l'image opaque.
    */
   fallback?: ReactNode;
+  /**
+   * Le contour sombre (deux ombres plates). Faux sur la fiche du téléphone (09/10/2026) : un filtre
+   * fait dessiner l'image sur un calque à part, et Safari, quand ce calque était sorti de l'écran
+   * d'une fiche ensuite recouverte (acteur, film, saga), ne le redessinait plus au retour — le logo
+   * restait invisible jusqu'au premier mouvement de la fiche. Là, le logo est posé sous l'image, sur
+   * la partie sombre : le contour n'y servait presque à rien.
+   */
+  shadow?: boolean;
 }) {
   const [ratio, setRatio] = useState<number | null>(() => KNOWN_RATIOS.get(src) ?? null);
   // L'adresse refusée, et non un simple drapeau : un autre logo passé à la même instance a droit
@@ -139,7 +148,7 @@ export function CinemaLogo({
          * déplace avec la texture ; deux passes décalées suffisent à détacher un logo blanc d'un
          * fond clair, ce à quoi cette ombre sert.
          */
-        filter: "drop-shadow(0 2px 0 rgb(0 0 0 / 0.55)) drop-shadow(0 -1px 0 rgb(0 0 0 / 0.35))",
+        filter: shadow ? "drop-shadow(0 2px 0 rgb(0 0 0 / 0.55)) drop-shadow(0 -1px 0 rgb(0 0 0 / 0.35))" : undefined,
         // Rien n'est montré avant que la forme soit connue : le logo apparaissait à la hauteur
         // par défaut puis se corrigeait sous les yeux, ce qui se voyait comme un sursaut. Il
         // paraît maintenant déjà à sa taille — la mesure prend une image, l'apparition en prend

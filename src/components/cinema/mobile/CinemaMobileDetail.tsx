@@ -150,39 +150,6 @@ export function CinemaMobileDetail({
   // Une fiche du dessous ne se ferme pas : elle attend qu'on la découvre.
   const inert = underneath;
 
-  /**
-   * Repeindre la fiche quand celle du dessus est partie (09/10/2026).
-   *
-   * Sous Safari, une fiche recouverte par une fiche TMDB (un film de la saga absent de la
-   * bibliothèque) n'était pas repeinte au départ de celle-ci : son logo restait invisible, sa place
-   * tenue, dix secondes et plus — et réapparaissait au moindre début de glissement de la fiche,
-   * c'est-à-dire au premier changement de sa transformation. Recréer le logo ne suffisait pas : il
-   * était peint sous la fiche encore en train de partir. On fait donc, une fois celle-ci partie, ce
-   * que fait le doigt — un changement de transformation, sans aucun mouvement : la fiche passe un
-   * instant sur son propre calque, puis en revient.
-   */
-  const wasInert = useRef(inert);
-  useEffect(() => {
-    const was = wasInert.current;
-    wasInert.current = inert;
-    const el = sheetRef.current;
-    if (!was || inert || !el) return;
-    const nudge = () => {
-      // Un geste en cours a déjà la main sur la transformation : il repeint tout seul.
-      if (el.style.transform) return;
-      el.style.transform = "translateZ(0)";
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          // Relue normalisée par le navigateur (`translateZ(0px)` sous WebKit) : comparée telle
-          // qu'écrite, elle ne se retirait jamais.
-          if (el.style.transform.startsWith("translateZ(0")) el.style.transform = "";
-        })
-      );
-    };
-    // Après la sortie de la fiche du dessus, puis une seconde fois au cas où elle aurait traîné.
-    const timers = [SHEET_OUT_MS + 120, SHEET_OUT_MS + 600].map((ms) => window.setTimeout(nudge, ms));
-    return () => timers.forEach((id) => window.clearTimeout(id));
-  }, [inert]);
 
   const isSeries = mediaType === "series";
   const infoUrl = isSeries
@@ -489,6 +456,7 @@ export function CinemaMobileDetail({
             src={item.logoUrl}
             alt={item.title}
             surface="phone"
+            shadow={false}
             onError={() => setLogoErrored(true)}
             className="mb-3 object-left"
           />
