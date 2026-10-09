@@ -20,7 +20,7 @@ const originHeaders = {
 // qBittorrent >=5.2 names its session cookie "QBT_SID_<port>" and returns 204
 // with an empty body on successful login; older versions return 200 "Ok." and
 // name the cookie plain "SID". Handle both.
-function extractSessionCookie(res: Response): string | null {
+export function extractSessionCookie(res: Response): string | null {
   const getSetCookie = (res.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
   const rawCookies = getSetCookie ? getSetCookie.call(res.headers) : [res.headers.get("set-cookie") ?? ""];
   for (const raw of rawCookies) {

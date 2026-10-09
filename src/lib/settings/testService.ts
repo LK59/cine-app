@@ -1,3 +1,4 @@
+import { extractSessionCookie } from "@/lib/clients/qbittorrent";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import type { TestableGroup } from "./schema";
 
@@ -80,6 +81,11 @@ export async function testService(group: TestableGroup, valueOf: (key: string) =
         });
         const bad = status(res);
         if (bad) return bad;
+        // Réussie, une connexion pose un cookie de session — la règle du client (`extractSessionCookie`).
+        // Le test attendait le corps « Ok. » : qBittorrent 5.2 et suivants répondent 204 sans corps,
+        // et le test disait « identifiants refusés » à une installation dont les téléchargements
+        // fonctionnaient (09/10/2026).
+        if (extractSessionCookie(res)) return { ok: true, detail: "qBittorrent" };
         const text = (await res.text()).trim();
         return text === "Ok." ? { ok: true, detail: "qBittorrent" } : { ok: false, detail: "unauthorized" };
       }
