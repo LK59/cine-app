@@ -144,8 +144,13 @@ export function CinemaLogo({
         // par défaut puis se corrigeait sous les yeux, ce qui se voyait comme un sursaut. Il
         // paraît maintenant déjà à sa taille — la mesure prend une image, l'apparition en prend
         // trois, et l'une couvre l'autre.
+        //
+        // Sans fondu (09/10/2026) : la transition d'opacité restait parfois figée à son départ sous
+        // WebKit — reproduit, `CSSTransition` « running » à 0 ms plusieurs secondes après —, et le
+        // logo demeurait invisible, sa place tenue, jusqu'à ce qu'on rouvre la fiche (Casino
+        // Royale après une fiche de la saga, sur iPhone). Un logo déjà vu est de toute façon montré
+        // d'emblée (`KNOWN_RATIOS`) ; un nouveau apparaît d'un coup, à sa taille.
         opacity: ratio === null ? 0 : 1,
-        transition: "opacity 180ms ease-out",
       }}
       /**
        * `self-start` : sans lui, l'image s'étirait à la largeur de sa colonne.

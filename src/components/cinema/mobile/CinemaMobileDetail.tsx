@@ -451,7 +451,18 @@ export function CinemaMobileDetail({
           fondu de l'image. */}
       <div className={`relative -mt-6 px-4 pb-16 ${short ? "mx-auto w-full max-w-xl" : ""}`}>
         {item.logoUrl && !logoErrored ? (
-          <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" onError={() => setLogoErrored(true)} className="mb-3 object-left" />
+          <CinemaLogo
+            // Recréé quand la fiche redevient celle du dessus (09/10/2026) : sous Safari, une image ombrée
+            // (`drop-shadow`) d'une fiche recouverte pouvait ne plus être repeinte après le départ de la
+            // fiche du dessus — le logo restait invisible jusqu'à la réouverture. Sa forme est connue
+            // (`KNOWN_RATIOS`) : la nouvelle image paraît aussitôt, sans rien qu'on voie.
+            key={inert ? "dessous" : "dessus"}
+            src={item.logoUrl}
+            alt={item.title}
+            surface="phone"
+            onError={() => setLogoErrored(true)}
+            className="mb-3 object-left"
+          />
         ) : (
           <h1 className="mb-3 text-2xl font-bold leading-tight text-white font-display">{item.title}</h1>
         )}

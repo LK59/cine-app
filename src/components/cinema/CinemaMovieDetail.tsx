@@ -338,6 +338,11 @@ export function CinemaMovieDetail({
         >
           {item.logoUrl && !logoErrored ? (
             <CinemaLogo
+              // Recréé quand la fiche redevient celle du dessus (09/10/2026) : sous Safari, une image ombrée
+              // (`drop-shadow`) d'une fiche recouverte pouvait ne plus être repeinte après le départ de la
+              // fiche du dessus — le logo restait invisible jusqu'à la réouverture. Sa forme est connue
+              // (`KNOWN_RATIOS`) : la nouvelle image paraît aussitôt, sans rien qu'on voie.
+              key={underneath ? "dessous" : "dessus"}
               src={item.logoUrl}
               alt={item.title}
               surface="sheet"
