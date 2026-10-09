@@ -41,7 +41,7 @@ vi.mock("@/lib/server-cache", () => ({ cachedMovies: () => mockFilms() }));
 
 /** Le logo du lecteur (09/10/2026) : doublé, comme le catalogue — le vrai module appellerait TMDB. */
 const mockLogo = vi.fn(async (_id: number, _type: string): Promise<string | null> => null);
-vi.mock("@/lib/title-logo", () => ({ getTitleLogo: (id: number, type: string) => mockLogo(id, type) }));
+vi.mock("@/lib/title-logo", () => ({ getTitleLogoFor: (id: number, type: string) => mockLogo(id, type) }));
 
 const validId = "c".repeat(32);
 

@@ -1,4 +1,4 @@
-import { createTmdbClient, pickTrailer, tmdb, videoLanguages, type TmdbTranslations } from "@/lib/clients/tmdb";
+import { createTmdbClient, pickTrailer, tmdb, videoLanguages, type TmdbTranslation, type TmdbTranslations } from "@/lib/clients/tmdb";
 import { kvCacheDb } from "@/lib/db";
 import { logError } from "@/lib/logger";
 import { LOCALES, getTmdbLocale, type Locale } from "@/lib/i18n";
@@ -21,7 +21,15 @@ import { spreadTtl } from "@/lib/cacheSpread";
  * et chaque expiration aurait recommencé. Une traduction connue est resservie même périmée,
  * pendant qu'on la rafraîchit : un titre ne change pratiquement jamais.
  */
-export type TitleNames = Partial<Record<Locale, string>>;
+export type TitleNames = Partial<Record<Locale, string>> & {
+  /**
+   * Le titre original et sa langue (09/10/2026) : de quoi savoir si le titre montré dans une langue
+   * est l'original — le logo suit alors la langue d'origine (`logoForLocale`). Absents d'une entrée
+   * d'avant cette date.
+   */
+  original?: string;
+  originalLanguage?: string;
+};
 
 /**
  * Le synopsis dans chaque langue, tiré de la même réponse de TMDB que les titres.
@@ -37,10 +45,29 @@ export type TitleOverviews = Partial<Record<Locale, string>>;
 // Sous les trente jours après lesquels le ménage du cache disque efface une entrée : rafraîchie
 // avant d'être effacée, une traduction ne redevient jamais inconnue.
 const TTL_MS = 14 * 24 * 3600_000;
-// `v2` : la forme lue a changé (la langue d'origine s'y ajoute). Une entrée `v1` relue telle quelle
-// laisserait les films français sous leur titre anglais pendant deux semaines.
-/** Le pays qu'on préfère quand une langue a plusieurs traductions : fr-FR plutôt que fr-CA. */
-const HOME_COUNTRY: Record<Locale, string> = { fr: "FR", en: "US", es: "ES", de: "DE" };
+// `v3` (09/10/2026) : le titre de référence vide vaut le titre original, et l'entrée porte l'original et
+// sa langue. `v2` y avait ajouté la langue d'origine ; une entrée `v1` relue telle quelle laissait les
+// films français sous leur titre anglais. Une entrée `v2` sert d'intérim le temps du recalcul.
+const NAMES_PREFIX = "tmdb:titles:v3:";
+const PREVIOUS_NAMES_PREFIX = "tmdb:titles:v2:";
+const namesKeyOf = (mediaType: "movie" | "series", tmdbId: number) => `${NAMES_PREFIX}${mediaType}:${tmdbId}`;
+
+/**
+ * Les pays de référence de chaque langue, dans l'ordre (09/10/2026) : ceux dont le public est celui
+ * de l'application. Le français est celui de France, pas du Québec ; l'anglais, celui des États-Unis,
+ * puis du Royaume-Uni s'il n'y a pas de fiche américaine.
+ */
+const REFERENCE_COUNTRIES: Record<Locale, readonly string[]> = { fr: ["FR"], en: ["US", "GB"], es: ["ES"], de: ["DE"] };
+
+/** Les traductions d'une langue, celles des pays de référence d'abord, dans leur ordre. */
+function byReferenceCountry(candidates: readonly TmdbTranslation[], locale: Locale): TmdbTranslation[] {
+  const ref = REFERENCE_COUNTRIES[locale];
+  const rank = (t: TmdbTranslation) => {
+    const i = ref.indexOf(t.iso_3166_1);
+    return i === -1 ? ref.length : i;
+  };
+  return [...candidates].sort((a, b) => rank(a) - rank(b));
+}
 
 const memory = new Map<string, { names: TitleNames; fetchedAt: number }>();
 const refreshing = new Set<string>();
@@ -64,27 +91,37 @@ export function resetTitleNames(): void {
 export function namesFromTranslations(data: TmdbTranslations): TitleNames {
   const out: TitleNames = {};
   const translations = data.translations?.translations ?? [];
+  const original = (data.original_title || data.original_name || "").trim();
+  if (original) out.original = original;
+  if (data.original_language) out.originalLanguage = data.original_language;
+  const nameOf = (t: TmdbTranslation) => (t.data?.title || t.data?.name || "").trim();
   for (const locale of LOCALES) {
     // La langue d'origine n'est pas une traduction : TMDB ne la liste pas. Constaté sur *Le
     // Retour de Martin Guerre*, qui avait un titre en anglais, en espagnol, en allemand — et
     // aucun en français.
-    const original = data.original_title || data.original_name;
     if (data.original_language === locale && original) {
-      out[locale] = original.trim();
+      out[locale] = original;
       continue;
     }
     const candidates = translations.filter((t) => t.iso_639_1 === locale);
-    const ordered = [
-      ...candidates.filter((t) => t.iso_3166_1 === HOME_COUNTRY[locale]),
-      ...candidates.filter((t) => t.iso_3166_1 !== HOME_COUNTRY[locale]),
-    ];
-    for (const t of ordered) {
-      const name = (t.data?.title || t.data?.name || "").trim();
-      if (name) {
-        out[locale] = name;
-        break;
-      }
+    /**
+     * Le pays de référence décide, quand TMDB en a une fiche (09/10/2026) — même vide : un titre de
+     * France vide veut dire « en France, on garde le titre original ». On allait alors chercher le
+     * titre d'un autre pays de la même langue, presque toujours le Québec : « Fiction pulpeuse »,
+     * « Le pouilleux millionnaire », « Décadence » pour *Saw* — 182 titres sur 916 de la bibliothèque,
+     * que personne ne connaît sous ce nom en France. Sans fiche du pays de référence, l'ancienne
+     * règle : le premier titre non vide de la langue.
+     */
+    const reference = REFERENCE_COUNTRIES[locale]
+      .map((country) => candidates.find((t) => t.iso_3166_1 === country))
+      .find((t): t is TmdbTranslation => t !== undefined);
+    if (reference) {
+      const name = nameOf(reference) || original;
+      if (name) out[locale] = name;
+      continue;
     }
+    const name = byReferenceCountry(candidates, locale).map(nameOf).find(Boolean);
+    if (name) out[locale] = name;
   }
   return out;
 }
@@ -93,11 +130,7 @@ export function overviewsFromTranslations(data: TmdbTranslations): TitleOverview
   const out: TitleOverviews = {};
   const translations = data.translations?.translations ?? [];
   for (const locale of LOCALES) {
-    const candidates = translations.filter((t) => t.iso_639_1 === locale);
-    const ordered = [
-      ...candidates.filter((t) => t.iso_3166_1 === HOME_COUNTRY[locale]),
-      ...candidates.filter((t) => t.iso_3166_1 !== HOME_COUNTRY[locale]),
-    ];
+    const ordered = byReferenceCountry(translations.filter((t) => t.iso_639_1 === locale), locale);
     for (const t of ordered) {
       const text = (t.data?.overview || "").trim();
       if (text) {
@@ -110,7 +143,7 @@ export function overviewsFromTranslations(data: TmdbTranslations): TitleOverview
 }
 
 const overviewMemory = new Map<string, TitleOverviews>();
-const overviewKey = (namesKey: string) => namesKey.replace("tmdb:titles:v2:", "tmdb:overviews:v1:");
+const overviewKey = (namesKey: string) => namesKey.replace(NAMES_PREFIX, "tmdb:overviews:v1:");
 
 /**
  * L'accroche et la bande-annonce d'un titre, pour chacune des quatre langues (08/10/2026).
@@ -143,7 +176,7 @@ export interface TitleExtras {
 const extrasMemory = new Map<string, TitleExtras>();
 // `v3` : la durée des épisodes (v2) puis la distribution s'y ajoutent (08/10/2026) — une entrée plus
 // ancienne relue laisserait les titres sans.
-const extrasKey = (namesKey: string) => namesKey.replace("tmdb:titles:v2:", "tmdb:extras:v3:");
+const extrasKey = (namesKey: string) => namesKey.replace(NAMES_PREFIX, "tmdb:extras:v3:");
 
 export function extrasFromTranslations(data: TmdbTranslations): TitleExtras {
   const taglines: Partial<Record<Locale, string>> = {};
@@ -151,11 +184,7 @@ export function extrasFromTranslations(data: TmdbTranslations): TitleExtras {
   const translations = data.translations?.translations ?? [];
   const videos = data.videos?.results ?? [];
   for (const locale of LOCALES) {
-    const candidates = translations.filter((t) => t.iso_639_1 === locale);
-    const ordered = [
-      ...candidates.filter((t) => t.iso_3166_1 === HOME_COUNTRY[locale]),
-      ...candidates.filter((t) => t.iso_3166_1 !== HOME_COUNTRY[locale]),
-    ];
+    const ordered = byReferenceCountry(translations.filter((t) => t.iso_639_1 === locale), locale);
     taglines[locale] = ordered.map((t) => (t.data?.tagline || "").trim()).find(Boolean) ?? "";
     // Les mêmes langues de vidéo que la fiche (`videoLanguages`) : la bande-annonce retenue
     // d'avance est celle que la fiche aurait choisie.
@@ -229,7 +258,7 @@ async function completeOriginalTagline(extras: TitleExtras, original: string | u
 export function getTitleExtras(tmdbId: number | null | undefined, mediaType: "movie" | "series"): TitleExtras | null {
   try {
     if (!tmdbId || !tmdb.isEnabled()) return null;
-    const key = `tmdb:titles:v2:${mediaType}:${tmdbId}`;
+    const key = namesKeyOf(mediaType, tmdbId);
     const ekey = extrasKey(key);
     let extras = extrasMemory.get(ekey);
     if (!extras) {
@@ -270,7 +299,7 @@ export function getTitleNames(tmdbId: number | null | undefined, mediaType: "mov
 
 function readTitleNames(tmdbId: number | null | undefined, mediaType: "movie" | "series"): TitleNames {
   if (!tmdbId || !tmdb.isEnabled()) return {};
-  const key = `tmdb:titles:v2:${mediaType}:${tmdbId}`;
+  const key = namesKeyOf(mediaType, tmdbId);
   let entry = memory.get(key);
   if (!entry) {
     const disk = kvCacheDb.get(key);
@@ -279,12 +308,20 @@ function readTitleNames(tmdbId: number | null | undefined, mediaType: "movie" | 
       memory.set(key, entry);
     }
   }
+  // Pas encore de `v3` (juste après le déploiement de la règle du 09/10/2026) : l'entrée `v2` sert
+  // d'intérim pendant le recalcul — un titre déjà connu ne retombe jamais sur celui de Radarr ou
+  // Sonarr. Pas gardée en mémoire : la réponse fraîche la remplace dès qu'elle arrive.
+  let interim: TitleNames | null = null;
+  if (!entry) {
+    const previous = kvCacheDb.get(`${PREVIOUS_NAMES_PREFIX}${mediaType}:${tmdbId}`);
+    if (previous) interim = previous.value as TitleNames;
+  }
   // Étalée comme le reste (voir `spreadTtl`) : les 860 titres remplis le même jour ne
   // reviennent pas tous le même jour.
   const expired = !entry || Date.now() - entry.fetchedAt >= spreadTtl(key, TTL_MS);
   const recentlyFailed = Date.now() - (failedAt.get(key) ?? 0) < RETRY_AFTER_FAILURE_MS;
   if (expired && !recentlyFailed) refresh(key, tmdbId, mediaType);
-  return entry?.names ?? {};
+  return entry?.names ?? interim ?? {};
 }
 
 /**
@@ -295,7 +332,7 @@ function readTitleNames(tmdbId: number | null | undefined, mediaType: "movie" | 
 export function getTitleOverviews(tmdbId: number | null | undefined, mediaType: "movie" | "series"): TitleOverviews {
   try {
     if (!tmdbId || !tmdb.isEnabled()) return {};
-    const key = `tmdb:titles:v2:${mediaType}:${tmdbId}`;
+    const key = namesKeyOf(mediaType, tmdbId);
     const okey = overviewKey(key);
     let overviews = overviewMemory.get(okey);
     if (!overviews) {

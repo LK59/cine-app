@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { radarr } from "@/lib/clients/radarr";
 import { bazarr } from "@/lib/clients/bazarr";
 import { createTmdbClient, pickTrailer, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
-import { getTmdbLocale } from "@/lib/i18n";
+import { getTmdbLocale, localeOf } from "@/lib/i18n";
 import { cachedOmdbRating, cachedRadarrQueue, cachedTmdbMovieInfo, hiddenFromCaller } from "@/lib/titleInfoCache";
-import { getTitleLogo } from "@/lib/title-logo";
+import { getTitleLogoFor } from "@/lib/title-logo";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     // Le logo du film — la même image que le mode cinéma affiche déjà, mise en cache une
     // semaine. Fetché avec le reste plutôt qu'après : il est en tête de page, c'est la première
     // chose qu'on voit, et il n'a aucune raison d'arriver en dernier.
-    movie.tmdbId ? getTitleLogo(movie.tmdbId, "movie") : Promise.resolve(null),
+    movie.tmdbId ? getTitleLogoFor(movie.tmdbId, "movie", localeOf(req)) : Promise.resolve(null),
   ]);
 
   const tmdbInfo = tmdbPart?.details ?? null;

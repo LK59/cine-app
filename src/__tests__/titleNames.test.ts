@@ -41,8 +41,15 @@ beforeEach(() => {
 });
 
 describe("namesFromTranslations", () => {
-  it("prend la traduction du pays de la langue, et ignore une traduction vide", () => {
-    expect(namesFromTranslations(PRENOM)).toEqual({ en: "What's in a Name", fr: "Le Prénom" });
+  // Une fiche du pays de référence vide (ici l'Allemagne) vaut le titre original (09/10/2026, §58).
+  it("prend la traduction du pays de la langue ; une fiche vide de ce pays vaut le titre original", () => {
+    expect(namesFromTranslations(PRENOM)).toEqual({
+      en: "What's in a Name",
+      fr: "Le Prénom",
+      de: "What's in a Name",
+      original: "What's in a Name",
+      originalLanguage: "en",
+    });
   });
 
   it("lit `name` pour une série", () => {
@@ -59,7 +66,7 @@ describe("namesFromTranslations", () => {
         original_title: "Le Retour de Martin Guerre",
         translations: { translations: [{ iso_639_1: "en", iso_3166_1: "US", data: { title: "The Return of Martin Guerre" } }] },
       })
-    ).toEqual({ fr: "Le Retour de Martin Guerre", en: "The Return of Martin Guerre" });
+    ).toEqual({ fr: "Le Retour de Martin Guerre", en: "The Return of Martin Guerre", original: "Le Retour de Martin Guerre", originalLanguage: "fr" });
   });
 });
 
@@ -69,19 +76,19 @@ describe("getTitleNames", () => {
   it("ne bloque jamais : rien d'abord, la traduction à la requête suivante", async () => {
     tmdb.getMovieTranslations.mockResolvedValue(PRENOM);
     expect(getTitleNames(77338, "movie")).toEqual({});
-    await vi.waitFor(() => expect(getTitleNames(77338, "movie")).toEqual({ en: "What's in a Name", fr: "Le Prénom" }));
+    await vi.waitFor(() => expect(getTitleNames(77338, "movie")).toMatchObject({ en: "What's in a Name", fr: "Le Prénom" }));
     expect(tmdb.getMovieTranslations).toHaveBeenCalledTimes(1);
   });
 
   it("relit le cache disque sans rappeler TMDB", () => {
-    kv.set("tmdb:titles:v2:movie:77338", { value: { fr: "Le Prénom" }, fetchedAt: Date.now() });
+    kv.set("tmdb:titles:v3:movie:77338", { value: { fr: "Le Prénom" }, fetchedAt: Date.now() });
     expect(getTitleNames(77338, "movie")).toEqual({ fr: "Le Prénom" });
     expect(tmdb.getMovieTranslations).not.toHaveBeenCalled();
   });
 
   it("ressert une traduction périmée pendant qu'il la rafraîchit", () => {
     tmdb.getMovieTranslations.mockResolvedValue(PRENOM);
-    kv.set("tmdb:titles:v2:movie:77338", { value: { fr: "Le Prénom" }, fetchedAt: 0 });
+    kv.set("tmdb:titles:v3:movie:77338", { value: { fr: "Le Prénom" }, fetchedAt: 0 });
     expect(getTitleNames(77338, "movie")).toEqual({ fr: "Le Prénom" });
     expect(tmdb.getMovieTranslations).toHaveBeenCalledTimes(1);
   });

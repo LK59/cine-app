@@ -18,7 +18,11 @@ vi.mock("@/lib/server-cache", () => ({
 
 // Aucune mesure réelle de logo : tout est lisible, sauf ce qu'un test déclare sombre.
 const mockIsDark = vi.fn(async (_filePath: string): Promise<boolean | null> => false);
-vi.mock("@/lib/logoLuminance", () => ({ logoIsDark: (filePath: string) => mockIsDark(filePath) }));
+vi.mock("@/lib/logoLuminance", () => ({
+  logoIsDark: (filePath: string) => mockIsDark(filePath),
+  // Le choix par langue (09/10/2026) lit aussi la saturation ; ici tous les logos sont aussi colorés.
+  logoLook: async (filePath: string) => ({ dark: await mockIsDark(filePath), saturation: 0 }),
+}));
 const mockKvGet = vi.fn((_key: string): { value: unknown; fetchedAt: number } | null => null);
 vi.mock("@/lib/db", () => ({ kvCacheDb: { get: (key: string) => mockKvGet(key) } }));
 

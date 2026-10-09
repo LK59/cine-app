@@ -1851,3 +1851,46 @@ passer sans session la seule boucle locale, celle du préchauffage des affiches.
 **Tests.** `trustedProxy.test.ts`.
 
 **Décidé le 08/10/2026.**
+
+## 58. Le titre de chaque langue suit son pays de référence, et le logo suit le titre
+
+**Règle 1 — le titre.** Chaque langue a ses pays de référence, dans l'ordre : France pour le français,
+Espagne pour l'espagnol, Allemagne pour l'allemand, États-Unis puis Royaume-Uni pour l'anglais. Quand
+TMDB a une fiche pour l'un de ces pays, c'est la première d'entre elles qui décide. Remplie, on prend son
+titre. Vide, on prend le titre original, parce que c'est ce qu'une fiche vide veut dire : « dans ce pays,
+on garde le titre original ». S'il n'y a aucune fiche d'un pays de référence, la règle d'avant
+s'applique : le premier titre non vide de la langue. Les accroches et les synopsis suivent le même ordre
+des pays.
+
+**Pourquoi.** Une fiche de France vide envoyait chercher le titre d'un autre pays francophone, presque
+toujours le Québec : « Fiction pulpeuse » pour *Pulp Fiction*, « Le pouilleux millionnaire »,
+« Décadence » pour *Saw*, « La fin du p***in de monde ». Mesuré le 09/10/2026 : 182 titres sur 916 de la
+bibliothèque, connus en France sous leur nom original.
+
+**Règle 2 — le logo.** Un titre affiché sous son nom original prend un logo de sa langue d'origine ; un
+titre traduit prend un logo de la langue de qui regarde. À défaut, un logo sans texte, puis anglais,
+puis n'importe lequel. Dans chaque langue, on retient le logo le mieux noté qui se lit sur nos fonds.
+Quand plusieurs logos sont à égalité de votes, on retient le plus coloré : la version de marque
+plutôt que sa déclinaison blanche. Un logo trop sombre n'est jamais retenu (voir l'écart des logos
+sombres du 09/10/2026).
+
+**Pourquoi.** Les logos de TMDB portent une langue, pas un pays. Le logo « français » de *The End of the
+F***ing World* était celui du Québec, et noir : invisible, et il disait autre chose que le titre.
+
+**Porteurs.** `namesFromTranslations` et `REFERENCE_COUNTRIES` (`src/lib/titleNames.ts`) ;
+`pickLogosByLang`, `logoForLocale` (`src/lib/title-art.ts`) ; `logoLook` (`src/lib/logoLuminance.ts`) ;
+`getTitleLogoFor` (`src/lib/title-logo.ts`).
+
+**Appelants.** `/api/cinema/movies`, `/api/cinema/series`, `/api/jellyfin/direct/[itemId]` (le logo du
+lecteur), `/api/radarr/movies/[id]/info`, `/api/sonarr/series/[id]/info`. Ils se règlent tous sur la
+langue de la requête (`localeOf`), c'est-à-dire celle de qui regarde.
+
+**Voulu.** Le tableau de bord de la gestion et `posterPrewarm` gardent `logoUrl`, l'ancien ordre
+(français, anglais, sans texte), puisqu'ils n'ont pas de langue d'affichage. Les entrées de cache des
+titres passent en `v3`, et celles des visuels en `v4`. Pendant le recalcul, l'entrée précédente reste
+servie : aucun titre déjà connu ne retombe sur celui de Radarr ou Sonarr.
+
+**Tests.** `titleLanguageRules.test.ts`, `titleNames-transition.test.ts`, `titleNames.test.ts`,
+`title-art.test.ts`.
+
+**Décidé le 09/10/2026.**

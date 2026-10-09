@@ -6,7 +6,8 @@ import { config } from "@/lib/config";
 import { cachedMovies } from "@/lib/server-cache";
 import { originalLanguageCode } from "@/lib/originalLanguage";
 import { displayTitle, type NamedItem } from "@/lib/displayTitle";
-import { getTitleLogo } from "@/lib/title-logo";
+import { getTitleLogoFor } from "@/lib/title-logo";
+import { localeOf, type Locale } from "@/lib/i18n";
 import { userPrefsDb } from "@/lib/db";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { FILE_MISSING, HttpError } from "@/lib/http";
@@ -140,17 +141,17 @@ const LOGO_BUDGET_MS = 500;
  * par le catalogue pour chaque titre de la bibliothèque) ; ce qui n'arrive pas dans le budget, ou
  * échoue, vaut `null`, et le lecteur garde le titre écrit.
  */
-async function playerLogo(userId: string, naming: NamedItem | null): Promise<string | null> {
+async function playerLogo(userId: string, naming: NamedItem | null, locale: Locale): Promise<string | null> {
   if (!naming) return null;
   const find = async (): Promise<string | null> => {
     if (naming.Type === "Episode" && naming.SeriesId) {
       const series = await jellyfin.getItemNaming(userId, naming.SeriesId);
       const id = Number(series?.ProviderIds?.Tmdb ?? "");
-      return Number.isFinite(id) && id > 0 ? getTitleLogo(id, "series") : null;
+      return Number.isFinite(id) && id > 0 ? getTitleLogoFor(id, "series", locale) : null;
     }
     if (naming.Type === "Movie") {
       const id = Number(naming.ProviderIds?.Tmdb ?? "");
-      return Number.isFinite(id) && id > 0 ? getTitleLogo(id, "movie") : null;
+      return Number.isFinite(id) && id > 0 ? getTitleLogoFor(id, "movie", locale) : null;
     }
     return null;
   };
@@ -275,7 +276,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
           .then((films) => originalLanguageCode(films.find((f) => f.tmdbId === tmdbId)?.originalLanguage?.name))
           .catch(() => null)
       : Promise.resolve(null),
-    playerLogo(session.jfId, naming),
+    // Dans la langue de qui regarde, comme le catalogue — le même logo que sur la fiche.
+    playerLogo(session.jfId, naming, localeOf(req)),
   ]);
 
   // Text only, and external only: an image subtitle has nothing to read, and an embedded text

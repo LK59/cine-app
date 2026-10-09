@@ -8,7 +8,7 @@ import { cachedSeries, cachedJellyfinSeriesAdmin, cachedJellyfinFirstEpisodes, c
 import { matchSeries } from "@/lib/catalogueMembers";
 import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
-import { getTitleArt } from "@/lib/title-art";
+import { getTitleArt, logoForLocale } from "@/lib/title-art";
 import { catalogueExtras, getTitleExtras, type TitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
@@ -103,7 +103,8 @@ async function toCinemaSeries(
     getTitleArt(s.tmdbId ?? 0, "series"),
     s.tmdbId ? getImdbRating(s.tmdbId, "series") : Promise.resolve(null),
   ]);
-  const { title, aka } = localizedTitle(getTitleNames(s.tmdbId, "series"), locale, s.title);
+  const names = getTitleNames(s.tmdbId, "series");
+  const { title, aka } = localizedTitle(names, locale, s.title);
   return {
     sonarrId: s.id,
     jellyfinItemId,
@@ -115,7 +116,8 @@ async function toCinemaSeries(
     // Voir `libraryPoster` : la langue de qui regarde, l'affiche de Sonarr sinon.
     posterUrl: libraryPoster(art.posterByLang, s.images, locale),
     backdropUrl: tmdbResize(backdropUrl(s.images, "full"), "w1280"),
-    logoUrl: art.logoUrl,
+    // Le logo de la langue du titre affiché — voir `logoForLocale` (DECISIONS.md §58).
+    logoUrl: logoForLocale(art, names, locale),
     posterTextlessUrl: art.posterTextlessUrl,
     // Dans la langue de qui regarde quand TMDB la connaît — voir `TitleOverviews`.
     overview: localizedOverview(getTitleOverviews(s.tmdbId, "series"), locale, s.overview ?? null),

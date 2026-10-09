@@ -1,12 +1,19 @@
 import { tmdb, TMDB_IMAGE_BASE, type TmdbImage } from "@/lib/clients/tmdb";
 import { withPersistentCache } from "@/lib/server-cache";
 import { kvCacheDb } from "@/lib/db";
-import { logoIsDark } from "@/lib/logoLuminance";
+import { logoIsDark, logoLook, type LogoLook } from "@/lib/logoLuminance";
+import type { TitleNames } from "@/lib/titleNames";
 import { LOCALES, type Locale } from "@/lib/i18n";
 
 export interface TitleArt {
   /** Le logo du titre — une image transparente, pas une affiche. `null` s'il n'y en a pas. */
   logoUrl: string | null;
+  /**
+   * Le meilleur logo lisible de chaque langue (`"null"` : sans texte), pour que le logo suive la
+   * langue du titre affiché (`logoForLocale`, 09/10/2026). Absent d'une entrée plus ancienne : on
+   * retombe alors sur `logoUrl`.
+   */
+  logosByLang?: Record<string, string>;
   /**
    * Une affiche **sans texte**.
    *
@@ -102,6 +109,77 @@ export async function pickLogo(
   return null;
 }
 
+/** Au plus tant de logos à égalité de votes mesurés par langue : de quoi départager sans tout lire. */
+const MAX_TIED = 6;
+
+/**
+ * Le meilleur logo lisible de chaque langue (09/10/2026, DECISIONS.md §58).
+ *
+ * Par votes, comme `pickLogo` ; à égalité au sommet — le cas courant, tant de logos n'ont aucun vote —,
+ * le plus coloré : la version de marque plutôt que sa déclinaison blanche, quand les deux se lisent
+ * (*The End of the F***ing World* : un blanc et trois rouges en anglais, sans vote, et c'est le blanc,
+ * premier de la liste, qui gagnait). Un logo trop sombre pour nos fonds n'est jamais retenu ; une
+ * mesure qui échoue compte comme lisible.
+ */
+export async function pickLogosByLang(
+  logos: readonly TmdbImage[],
+  look: (filePath: string) => Promise<LogoLook> = (filePath) => withSlot(() => logoLook(filePath)),
+): Promise<Record<string, string>> {
+  const groups = new Map<string, TmdbImage[]>();
+  for (const logo of logos) {
+    const lang = logo.iso_639_1 ?? "null";
+    groups.set(lang, [...(groups.get(lang) ?? []), logo]);
+  }
+  const out: Record<string, string> = {};
+  for (const [lang, group] of groups) {
+    const sorted = [...group].sort((a, b) => b.vote_average - a.vote_average);
+    const tied = sorted.filter((l) => l.vote_average === sorted[0].vote_average).slice(0, MAX_TIED);
+    const looks = await Promise.all(tied.map(async (logo) => ({ logo, look: await look(logo.file_path) })));
+    const readable = looks.filter((x) => x.look.dark !== true);
+    let chosen: TmdbImage | null = null;
+    if (readable.length > 0) {
+      // À saturation égale, le premier de la liste (l'ordre de TMDB) reste devant.
+      chosen = readable.reduce((best, x) => ((x.look.saturation ?? 0) > (best.look.saturation ?? 0) ? x : best)).logo;
+    } else {
+      for (const logo of sorted.slice(tied.length)) {
+        if ((await look(logo.file_path)).dark !== true) {
+          chosen = logo;
+          break;
+        }
+      }
+    }
+    if (chosen) out[lang] = `${TMDB_IMAGE_BASE}/w500${chosen.file_path}`;
+  }
+  return out;
+}
+
+/** L'ancienne préférence, pour qui n'a pas de langue sous la main : français, anglais, sans texte, puis n'importe lequel. */
+function defaultLogo(byLang: Record<string, string>): string | null {
+  for (const lang of ["fr", "en", "null"]) if (byLang[lang]) return byLang[lang];
+  return Object.values(byLang)[0] ?? null;
+}
+
+/**
+ * Le logo qui va avec le titre affiché dans cette langue (09/10/2026, DECISIONS.md §58).
+ *
+ * Un titre montré sous son nom original prend un logo de sa langue d'origine : *The End of the
+ * F***ing World*, connue en France sous ce nom, avait le logo québécois « La fin du p***in de monde »
+ * — un logo qui disait autre chose que le titre. Un titre traduit prend un logo de la langue de qui
+ * regarde. Puis sans texte, puis anglais, puis n'importe lequel. Sans logos par langue (entrée
+ * d'avant le 09/10/2026), l'ancien logo.
+ */
+export function logoForLocale(art: TitleArt, names: TitleNames, locale: Locale): string | null {
+  const byLang = art.logosByLang;
+  if (!byLang) return art.logoUrl;
+  const shown = names[locale];
+  const showsOriginal = !shown || (names.original !== undefined && shown === names.original);
+  const titleLang = showsOriginal ? names.originalLanguage : locale;
+  for (const lang of [titleLang, locale, "null", "en"]) {
+    if (lang && byLang[lang]) return byLang[lang];
+  }
+  return Object.values(byLang)[0] ?? null;
+}
+
 function pickTextlessPoster(posters: TmdbImage[]): string | null {
   const textless = posters.filter((p) => p.iso_639_1 === null);
   if (textless.length === 0) return null;
@@ -138,16 +216,19 @@ function postersByLang(posters: TmdbImage[]): Partial<Record<Locale, string>> {
  */
 export async function getTitleArt(tmdbId: number, mediaType: "movie" | "series"): Promise<TitleArt> {
   if (!tmdb.isEnabled() || !tmdbId) return EMPTY;
-  // `v3` (09/10/2026) : le logo choisi écarte désormais les logos trop sombres. `v2` avait changé la
+  // `v4` (09/10/2026) : le meilleur logo de chaque langue s'y ajoute (`logosByLang`), pour que le logo
+  // suive la langue du titre affiché. `v3` écartait déjà les logos trop sombres ; `v2` avait changé la
   // forme (les affiches par langue s'y ajoutaient).
-  const key = `tmdb:art:v3:${mediaType}:${tmdbId}`;
+  const key = `tmdb:art:v4:${mediaType}:${tmdbId}`;
   const compute = () =>
     withPersistentCache<TitleArt>(key, 7 * 24 * 3600_000, async () => {
       const images = await withSlot(() =>
         mediaType === "movie" ? tmdb.getMovieImages(tmdbId) : tmdb.getTvImages(tmdbId)
       );
+      const logosByLang = await pickLogosByLang(images.logos ?? []);
       return {
-        logoUrl: await pickLogo(images.logos ?? []),
+        logoUrl: defaultLogo(logosByLang),
+        logosByLang,
         posterTextlessUrl: pickTextlessPoster(images.posters ?? []),
         posterByLang: postersByLang(images.posters ?? []),
       };
@@ -166,7 +247,9 @@ export async function getTitleArt(tmdbId: number, mediaType: "movie" | "series")
     upgraded.add(key);
     try {
       if (!kvCacheDb.get(key)) {
-        const previous = kvCacheDb.get(`tmdb:art:v2:${mediaType}:${tmdbId}`);
+        // La valeur précédente la plus récente : `v3`, sinon `v2`.
+        const previous =
+          kvCacheDb.get(`tmdb:art:v3:${mediaType}:${tmdbId}`) ?? kvCacheDb.get(`tmdb:art:v2:${mediaType}:${tmdbId}`);
         if (previous) {
           void compute().catch(() => upgraded.delete(key));
           return previous.value as TitleArt;

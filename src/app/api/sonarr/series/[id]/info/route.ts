@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { sonarr } from "@/lib/clients/sonarr";
 import { bazarr } from "@/lib/clients/bazarr";
 import { createTmdbClient, pickTrailer, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
-import { getTmdbLocale } from "@/lib/i18n";
+import { getTmdbLocale, localeOf } from "@/lib/i18n";
 import { cachedOmdbRating, cachedSonarrQueue, cachedTmdbIdForTvdb, cachedTmdbTvInfo, hiddenFromCaller } from "@/lib/titleInfoCache";
-import { getTitleLogo } from "@/lib/title-logo";
+import { getTitleLogoFor } from "@/lib/title-logo";
 import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     bazarr.getEpisodesDetails(id).catch(() => []),
     cachedSonarrQueue().catch(() => ({ records: [] as any[] })),
     // Voir la route des films : le même logo, la même mise en cache, la même raison.
-    tmdbTvId ? getTitleLogo(tmdbTvId, "series") : Promise.resolve(null),
+    tmdbTvId ? getTitleLogoFor(tmdbTvId, "series", localeOf(req)) : Promise.resolve(null),
   ]);
 
   const tmdbInfo = tmdbPart?.details ?? null;

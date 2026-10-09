@@ -11,7 +11,7 @@ const mockTmdb = { isEnabled: vi.fn(() => true), getMovie: vi.fn(), getMovieVide
 // Le logo du titre est résolu par son propre module, qui a son cache et son client TMDB à
 // lui — ces tests portent sur la bande-annonce, la note et la file d'attente.
 const mockTitleLogo = vi.fn(async (_tmdbId: number, _kind: string) => "https://image.tmdb.org/logo.png");
-vi.mock("@/lib/title-logo", () => ({ getTitleLogo: (id: number, kind: string) => mockTitleLogo(id, kind) }));
+vi.mock("@/lib/title-logo", () => ({ getTitleLogoFor: (id: number, kind: string) => mockTitleLogo(id, kind) }));
 
 vi.mock("@/lib/clients/tmdb", async (importOriginal) => ({
   // La règle de choix de la bande-annonce reste la vraie (`pickTrailer`), commune au catalogue.
@@ -19,7 +19,7 @@ vi.mock("@/lib/clients/tmdb", async (importOriginal) => ({
   createTmdbClient: () => mockTmdb,
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",
 }));
-vi.mock("@/lib/i18n", () => ({ getTmdbLocale: () => "fr-FR" }));
+vi.mock("@/lib/i18n", () => ({ getTmdbLocale: () => "fr-FR", localeOf: () => "fr" }));
 const mockCachedMovies = vi.fn();
 vi.mock("@/lib/server-cache", () => ({
   cachedMovies: (...args: unknown[]) => mockCachedMovies(...args),

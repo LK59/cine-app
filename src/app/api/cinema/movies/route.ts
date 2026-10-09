@@ -7,7 +7,7 @@ import { cachedMovies, cachedJellyfinMoviesAdmin } from "@/lib/server-cache";
 import { matchMovies } from "@/lib/catalogueMembers";
 import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
-import { getTitleArt } from "@/lib/title-art";
+import { getTitleArt, logoForLocale } from "@/lib/title-art";
 import { catalogueExtras, getTitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import { dailyTop10Db } from "@/lib/db";
@@ -117,7 +117,8 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string, locale: Loc
   // Le logo et l'affiche sans texte viennent de la même réponse TMDB et de la même entrée de
   // cache : la seconde ne coûte donc pas un appel de plus.
   const art = await getTitleArt(m.tmdbId, "movie");
-  const { title, aka } = localizedTitle(getTitleNames(m.tmdbId, "movie"), locale, m.title);
+  const names = getTitleNames(m.tmdbId, "movie");
+  const { title, aka } = localizedTitle(names, locale, m.title);
   return {
     radarrId: m.id,
     runtimeMinutes: m.runtime && m.runtime > 0 ? m.runtime : null,
@@ -130,7 +131,8 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string, locale: Loc
     // L'affiche dans la langue de qui regarde, celle de Radarr sinon. Voir `libraryPoster`.
     posterUrl: libraryPoster(art.posterByLang, m.images, locale),
     backdropUrl: tmdbResize(backdropUrl(m.images, "full"), "w1280"),
-    logoUrl: art.logoUrl,
+    // Le logo de la langue du titre affiché — voir `logoForLocale` (DECISIONS.md §58).
+    logoUrl: logoForLocale(art, names, locale),
     posterTextlessUrl: art.posterTextlessUrl,
     // Dans la langue de qui regarde quand TMDB la connaît — voir `TitleOverviews`.
     overview: localizedOverview(getTitleOverviews(m.tmdbId, "movie"), locale, m.overview ?? null),

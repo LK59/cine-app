@@ -49,13 +49,58 @@ export function brightLuminance(rgba: Uint8Array | Buffer): number | null {
   return values[Math.min(values.length - 1, Math.floor(values.length * 0.9))];
 }
 
-async function measure(filePath: string): Promise<number | null> {
-  // `w92` : une vignette suffit pour une couleur, et ce sont quelques kilo-octets.
+/**
+ * La saturation moyenne des pixels opaques (0 : blanc, gris ou noir ; 1 : couleur pure), au sens
+ * HSV. Sert à départager des logos à égalité de votes (09/10/2026) : la version colorée d'une
+ * marque — le rouge de *The End of the F***ing World* — plutôt que sa déclinaison blanche, quand
+ * les deux se lisent sur nos fonds.
+ */
+export function meanSaturation(rgba: Uint8Array | Buffer): number | null {
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i + 3 < rgba.length; i += 4) {
+    if (rgba[i + 3] < 128) continue;
+    const max = Math.max(rgba[i], rgba[i + 1], rgba[i + 2]);
+    const min = Math.min(rgba[i], rgba[i + 1], rgba[i + 2]);
+    sum += max === 0 ? 0 : (max - min) / max;
+    n++;
+  }
+  return n === 0 ? null : sum / n;
+}
+
+async function pixelsOf(filePath: string): Promise<Buffer> {
   const res = await fetch(`${TMDB_IMAGE_BASE}/w92${filePath}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`logo ${filePath} : HTTP ${res.status}`);
   const { default: sharp } = await import("sharp");
   const { data } = await sharp(Buffer.from(await res.arrayBuffer()), { failOn: "none" }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  return brightLuminance(data);
+  return data;
+}
+
+/** Ce qu'on sait de l'allure d'un logo : trop sombre pour nos fonds, et sa saturation. */
+export interface LogoLook {
+  /** `null` : la mesure a échoué — le logo compte alors comme lisible. */
+  dark: boolean | null;
+  saturation: number | null;
+}
+
+/**
+ * Luminosité et saturation, d'une seule lecture de l'image, gardées 28 jours par image (`v2` : la
+ * saturation s'y ajoute). Ne lève jamais : un TMDB injoignable ne retire aucun logo.
+ */
+export async function logoLook(filePath: string): Promise<LogoLook> {
+  try {
+    const { luminance, saturation } = await withPersistentCache(`tmdb:logo-look:v2:${filePath}`, MEASURE_TTL_MS, async () => {
+      const data = await pixelsOf(filePath);
+      return { luminance: brightLuminance(data), saturation: meanSaturation(data) };
+    });
+    return { dark: luminance === null ? null : luminance < DARK_LUMINANCE, saturation };
+  } catch {
+    return { dark: null, saturation: null };
+  }
+}
+
+async function measure(filePath: string): Promise<number | null> {
+  return brightLuminance(await pixelsOf(filePath));
 }
 
 /**
