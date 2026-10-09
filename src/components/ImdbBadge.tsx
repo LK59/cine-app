@@ -48,7 +48,9 @@ export function ImdbBadge({
       } ${className ?? ""}`}
     >
       <ImdbMark height={size === "xs" ? 9 : 12} />
-      <span className="tabular-nums">{value}</span>
+      {/* Descendu d'un rien : les chiffres n'ont pas de jambage, ils occupent le haut de leur ligne
+          et paraissaient plus hauts que le logo, même lignes centrées au centième de pixel. */}
+      <span className="relative top-[0.08em] tabular-nums">{value}</span>
     </span>
   );
 }
