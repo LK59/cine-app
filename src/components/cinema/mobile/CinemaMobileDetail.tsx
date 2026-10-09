@@ -173,7 +173,9 @@ export function CinemaMobileDetail({
       el.style.transform = "translateZ(0)";
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
-          if (el.style.transform === "translateZ(0)") el.style.transform = "";
+          // Relue normalisée par le navigateur (`translateZ(0px)` sous WebKit) : comparée telle
+          // qu'écrite, elle ne se retirait jamais.
+          if (el.style.transform.startsWith("translateZ(0")) el.style.transform = "";
         })
       );
     };
