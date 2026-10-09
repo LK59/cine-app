@@ -12,17 +12,35 @@
 
 import { NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
+import { withCache } from "@/lib/server-cache";
 import { HttpError } from "@/lib/http";
 import { logError } from "@/lib/logger";
 import { markJellyfinTokenDead } from "@/lib/jellyfinToken";
 import type { SessionPayload } from "@/lib/auth";
 
 /**
- * Les seuils de Jellyfin (réglages par défaut du serveur, « Reprise ») : sous 5 % de la durée, un
- * arrêt ne garde pas de position ; au-delà de 90 %, le titre est vu et la position repart à zéro.
+ * Les seuils de reprise de Jellyfin (Tableau de bord → Lecture → Reprise) : sous le minimum, un
+ * arrêt ne garde pas de position ; au-delà du maximum, le titre est vu et la position repart à zéro.
+ *
+ * Lus chez Jellyfin, et non écrits ici (09/10/2026) : ils étaient recopiés à leurs valeurs par défaut
+ * (5 % et 90 %), et le serveur est passé à 2 % et 95 % — ce filet aurait appliqué une autre règle que
+ * Jellyfin, la seule qui compte. Les valeurs par défaut ne servent que si Jellyfin ne répond pas.
  */
-const MIN_RESUME_PCT = 5;
-const MAX_RESUME_PCT = 90;
+const DEFAULT_THRESHOLDS = { min: 5, max: 90 };
+const THRESHOLDS_TTL_MS = 10 * 60_000;
+
+async function resumeThresholds(): Promise<{ min: number; max: number }> {
+  try {
+    return await withCache("jf:resume-thresholds", THRESHOLDS_TTL_MS, async () => {
+      const c = await jellyfin.getServerConfiguration();
+      const min = typeof c.MinResumePct === "number" ? c.MinResumePct : DEFAULT_THRESHOLDS.min;
+      const max = typeof c.MaxResumePct === "number" ? c.MaxResumePct : DEFAULT_THRESHOLDS.max;
+      return { min, max };
+    });
+  } catch {
+    return DEFAULT_THRESHOLDS;
+  }
+}
 
 type Kind = "playing" | "progress" | "stop";
 
@@ -34,13 +52,13 @@ async function saveAsAdmin(userId: string, itemId: string, kind: Kind, positionT
     await jellyfin.savePositionAsAdmin(userId, itemId, positionTicks);
     return "position";
   }
-  const runtime = await jellyfin.getRunTimeTicks(userId, itemId);
+  const [runtime, thresholds] = await Promise.all([jellyfin.getRunTimeTicks(userId, itemId), resumeThresholds()]);
   const pct = runtime ? (positionTicks / runtime) * 100 : null;
-  if (pct !== null && pct >= MAX_RESUME_PCT) {
+  if (pct !== null && pct >= thresholds.max) {
     await jellyfin.markPlayed(userId, itemId);
     return "vu";
   }
-  if (pct !== null && pct < MIN_RESUME_PCT) {
+  if (pct !== null && pct < thresholds.min) {
     await jellyfin.savePositionAsAdmin(userId, itemId, 0);
     return "position effacée";
   }

@@ -13,6 +13,8 @@ const mockJellyfin = {
   savePositionAsAdmin: vi.fn(),
   markPlayed: vi.fn(),
   getRunTimeTicks: vi.fn(),
+  // Les seuils réglés sur le serveur (09/10/2026) : 2 % et 95 %, et non les valeurs par défaut.
+  getServerConfiguration: vi.fn(async () => ({ MinResumePct: 2, MaxResumePct: 95 })),
 };
 vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: mockJellyfin }));
 const mockLog = vi.fn();
@@ -122,6 +124,16 @@ describe("reportPlayback — un rapport refusé garde la position autrement", ()
     await reportPlayback(SESSION, "stop", "film", 7233e7, send);
     expect(mockJellyfin.markPlayed).toHaveBeenCalledWith("jf-1", "film");
     expect(mockJellyfin.savePositionAsAdmin).not.toHaveBeenCalled();
+  });
+
+  it("suit les seuils de Jellyfin, pas ceux par défaut : 93 % reste une reprise, 3 % aussi", async () => {
+    mockJellyfin.getRunTimeTicks.mockResolvedValue(10000e7);
+    const { reportPlayback } = await import("@/lib/playbackReport");
+    await reportPlayback(SESSION, "stop", "film", 9300e7, send);
+    expect(mockJellyfin.markPlayed).not.toHaveBeenCalled();
+    expect(mockJellyfin.savePositionAsAdmin).toHaveBeenCalledWith("jf-1", "film", 9300e7);
+    await reportPlayback(SESSION, "stop", "film", 300e7, send);
+    expect(mockJellyfin.savePositionAsAdmin).toHaveBeenLastCalledWith("jf-1", "film", 300e7);
   });
 
   it("garde la position d'un arrêt en cours de film", async () => {

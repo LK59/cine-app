@@ -676,7 +676,7 @@ jumelle mobile. On compte les endroits qui décident, pas les mises en page.
 **Règle.** Changer ou réinitialiser un mot de passe révoque, côté Jellyfin, tous les jetons du
 compte, alors que la session de l'application continue de se prolonger. Un refus du jeton (401)
 n'est donc jamais silencieux : pendant un film, la position est écrite avec la clé
-d'administration (mêmes seuils que Jellyfin : sous 5 %, rien ; au-delà de 90 %, vu) et le film
+d'administration (les seuils de reprise lus chez Jellyfin — sous le minimum, rien ; au-delà du maximum, vu) et le film
 continue ; au chargement suivant d'une page, la session est fermée et la connexion redemandée
 (`/login?reason=jellyfin`). Seul un 401 conclut : un Jellyfin absent ou lent ne dit rien du jeton.
 
