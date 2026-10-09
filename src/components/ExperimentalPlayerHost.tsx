@@ -2663,6 +2663,8 @@ export function ExperimentalPlayerHost({
             containerRef={containerRef}
             itemId={itemId}
             title={title}
+            // Le logo du titre, à la place du titre écrit — voir `PlayerTitle` (09/10/2026).
+            logoUrl={info?.logoUrl ?? null}
             onClose={handleClose}
             onMinimize={() => playback.minimize()}
             // Straight from the container the player is reading, not from Jellyfin's view of the

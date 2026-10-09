@@ -1,5 +1,6 @@
 "use client";
 
+import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight } from "lucide-react";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
@@ -47,6 +48,11 @@ interface PlayerControlsProps {
   containerRef: RefObject<HTMLDivElement | null>;
   itemId: string;
   title: string;
+  /**
+   * Le logo du titre (celui de la série pour un épisode), montré à la place du titre écrit quand
+   * il existe et qu'il est chargé — voir `PlayerTitle`. Absent : le titre écrit, comme avant.
+   */
+  logoUrl?: string | null;
   onClose: () => void;
   onMinimize: () => void;
   onTogglePlaybackInfo: () => void;
@@ -233,6 +239,7 @@ export function PlayerControls({
   containerRef,
   itemId,
   title,
+  logoUrl = null,
   onClose,
   onMinimize,
   onTogglePlaybackInfo,
@@ -2025,18 +2032,7 @@ export function PlayerControls({
                 douce sous le texte et le palier du voile du bas : lisible sur une image claire, sans
                 flou. "Série — S02E05 · Le pilote" arrive d'une seule pièce du serveur. */}
             <div className="player-fade player-title min-w-0 flex-1 pb-0.5">
-              {(() => {
-                const cut = title.indexOf(" — ");
-                const main = cut === -1 ? title : title.slice(0, cut);
-                return (
-                  <>
-                    <p data-player-title className="player-title-main truncate text-white">{main}</p>
-                    {cut !== -1 && (
-                      <p className="truncate text-[13px] font-medium text-white/70 sm:text-sm">{title.slice(cut + 3)}</p>
-                    )}
-                  </>
-                );
-              })()}
+              <PlayerTitle title={title} logoUrl={logoUrl} />
             </div>
             {/* Vitesse · audio · sous-titres · ⋮ — et le plein écran au bout, là où il existe : à
                 côté du temps restant, il aurait cassé la symétrie de la ligne du temps. Les menus
@@ -2393,5 +2389,49 @@ function SubtitleStyleGroup<T extends string | number>({
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Le titre du lecteur : le logo du film ou de la série quand il existe, le titre écrit sinon
+ * (09/10/2026). La ligne de l'épisode (« S02E05 · Le pilote ») reste écrite dessous.
+ *
+ * Le logo ne remplace le texte qu'une fois l'image chargée : jusque-là, et si elle échoue, c'est le
+ * titre écrit — jamais une case vide qui se remplit sous les yeux. Le titre reste lisible par un
+ * lecteur d'écran (`data-player-title`, masqué à l'œil quand le logo est là).
+ */
+function PlayerTitle({ title, logoUrl }: { title: string; logoUrl: string | null }) {
+  const cut = title.indexOf(" — ");
+  const main = cut === -1 ? title : title.slice(0, cut);
+  const [loaded, setLoaded] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!logoUrl) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setLoaded(logoUrl);
+    };
+    img.onerror = () => {
+      if (!cancelled) setFailed(logoUrl);
+    };
+    img.src = logoUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [logoUrl]);
+  const showLogo = !!logoUrl && loaded === logoUrl && failed !== logoUrl;
+  return (
+    <>
+      {showLogo ? (
+        <>
+          <p data-player-title className="sr-only">{main}</p>
+          <CinemaLogo src={logoUrl} alt="" surface="player" className="mb-1" onError={() => setFailed(logoUrl)} />
+        </>
+      ) : (
+        <p data-player-title className="player-title-main truncate text-white">{main}</p>
+      )}
+      {cut !== -1 && <p className="truncate text-[13px] font-medium text-white/70 sm:text-sm">{title.slice(cut + 3)}</p>}
+    </>
   );
 }

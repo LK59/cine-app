@@ -5,7 +5,8 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { cachedMovies } from "@/lib/server-cache";
 import { originalLanguageCode } from "@/lib/originalLanguage";
-import { displayTitle } from "@/lib/displayTitle";
+import { displayTitle, type NamedItem } from "@/lib/displayTitle";
+import { getTitleLogo } from "@/lib/title-logo";
 import { userPrefsDb } from "@/lib/db";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { FILE_MISSING, HttpError } from "@/lib/http";
@@ -116,10 +117,52 @@ export interface DirectPlayInfo {
 
   /** How to name this on screen — "Série — S02E05 · Titre" for an episode. Null if unknown. */
   title: string | null;
+  /**
+   * Le logo du titre — celui de la série pour un épisode —, montré par le lecteur à la place du
+   * titre écrit (09/10/2026). Nul quand il n'y en a pas, ou s'il n'a pas pu être trouvé à temps :
+   * le lecteur garde alors le titre écrit.
+   */
+  logoUrl: string | null;
   /** Where the opening titles run, when Jellyfin has analysed the episode. Null otherwise. */
   introSkip: { start: number; end: number } | null;
   /** Where the closing credits begin, which is when the next episode is offered. */
   creditsStart: number | null;
+}
+
+/** Le temps qu'on accorde au logo : cette réponse est sur le chemin de l'ouverture du film. */
+const LOGO_BUDGET_MS = 500;
+
+/**
+ * Le logo à montrer dans le lecteur : celui du film, ou celui de la série d'un épisode.
+ *
+ * Ne fait jamais échouer ni attendre la description du fichier : elle décide comment lire le film,
+ * un ornement n'a pas à la retarder. Le logo vient du cache de `getTitleArt` (sept jours, rempli
+ * par le catalogue pour chaque titre de la bibliothèque) ; ce qui n'arrive pas dans le budget, ou
+ * échoue, vaut `null`, et le lecteur garde le titre écrit.
+ */
+async function playerLogo(userId: string, naming: NamedItem | null): Promise<string | null> {
+  if (!naming) return null;
+  const find = async (): Promise<string | null> => {
+    if (naming.Type === "Episode" && naming.SeriesId) {
+      const series = await jellyfin.getItemNaming(userId, naming.SeriesId);
+      const id = Number(series?.ProviderIds?.Tmdb ?? "");
+      return Number.isFinite(id) && id > 0 ? getTitleLogo(id, "series") : null;
+    }
+    if (naming.Type === "Movie") {
+      const id = Number(naming.ProviderIds?.Tmdb ?? "");
+      return Number.isFinite(id) && id > 0 ? getTitleLogo(id, "movie") : null;
+    }
+    return null;
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budget = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), LOGO_BUDGET_MS);
+  });
+  try {
+    return await Promise.race([find().catch(() => null), budget]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function GET(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
@@ -226,11 +269,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
    * « (VO) » disparaît simplement.
    */
   const tmdbId = Number(naming?.ProviderIds?.Tmdb ?? "");
-  const originalLanguage = Number.isFinite(tmdbId) && tmdbId > 0
-    ? await cachedMovies()
-        .then((films) => originalLanguageCode(films.find((f) => f.tmdbId === tmdbId)?.originalLanguage?.name))
-        .catch(() => null)
-    : null;
+  const [originalLanguage, logoUrl] = await Promise.all([
+    Number.isFinite(tmdbId) && tmdbId > 0
+      ? cachedMovies()
+          .then((films) => originalLanguageCode(films.find((f) => f.tmdbId === tmdbId)?.originalLanguage?.name))
+          .catch(() => null)
+      : Promise.resolve(null),
+    playerLogo(session.jfId, naming),
+  ]);
 
   // Text only, and external only: an image subtitle has nothing to read, and an embedded text
   // track is already found by whichever pipeline opens the file.
@@ -279,6 +325,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     refusedReason,
     externalSubtitles,
     title: naming ? displayTitle(naming, "") || null : null,
+    logoUrl,
     introSkip: timestamps?.Introduction?.Valid
       ? { start: timestamps.Introduction.Start, end: timestamps.Introduction.End }
       : null,

@@ -1291,6 +1291,53 @@ describe("PlayerControls — la disposition", () => {
     expect(nav(container, "captions")!.hasAttribute("data-on")).toBe(true);
   });
 
+  /**
+   * Le logo à la place du titre écrit (09/10/2026) — une fois chargé seulement, et le titre écrit
+   * sinon : jamais une case vide. Le titre reste lisible par un lecteur d'écran.
+   */
+  it("montre le logo une fois chargé, garde le titre pour les lecteurs d'écran, et l'épisode écrit", async () => {
+    stubMediaFetches();
+    const loads: (() => void)[] = [];
+    class FakeImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_value: string) {
+        loads.push(() => this.onload?.());
+      }
+    }
+    vi.stubGlobal("Image", FakeImage);
+    const { container } = render(<Harness title="Ted Lasso — S02E01 · Richmond" logoUrl="https://image.tmdb.org/t/p/w500/ted.png" />);
+    await act(async () => {});
+    // Pas encore chargé : le titre écrit, pas d'image.
+    expect(container.querySelector(".player-title img")).toBeNull();
+    expect(container.querySelector("[data-player-title]")!.className).toContain("player-title-main");
+    await act(async () => loads.forEach((load) => load()));
+    const logo = container.querySelector(".player-title img");
+    expect(logo?.getAttribute("src")).toBe("https://image.tmdb.org/t/p/w500/ted.png");
+    expect(container.querySelector("[data-player-title]")!.textContent).toBe("Ted Lasso");
+    expect(container.querySelector("[data-player-title]")!.className).toContain("sr-only");
+    expect(screen.getByText("S02E01 · Richmond")).toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
+  it("garde le titre écrit quand le logo ne se charge pas", async () => {
+    stubMediaFetches();
+    const fails: (() => void)[] = [];
+    class FakeImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_value: string) {
+        fails.push(() => this.onerror?.());
+      }
+    }
+    vi.stubGlobal("Image", FakeImage);
+    const { container } = render(<Harness title="Film" logoUrl="https://image.tmdb.org/t/p/w500/casse.png" />);
+    await act(async () => fails.forEach((fail) => fail()));
+    expect(container.querySelector(".player-title img")).toBeNull();
+    expect(container.querySelector("[data-player-title]")!.textContent).toBe("Film");
+    vi.unstubAllGlobals();
+  });
+
   it("cache le curseur avec les commandes pendant la lecture, et le rend au mouvement", async () => {
     vi.useFakeTimers();
     try {

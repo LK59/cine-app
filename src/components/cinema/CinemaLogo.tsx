@@ -43,6 +43,11 @@ const SURFACES = {
   sheet: { compact: 68, roomy: 120, maxWidth: "min(100%, 32rem)" },
   /** Le téléphone, où la place est comptée dans les deux sens. */
   phone: { compact: 52, roomy: 76, maxWidth: "min(100%, 21rem)" },
+  /**
+   * Le titre du lecteur, en bas à gauche (09/10/2026) : la hauteur du titre écrit qu'il remplace,
+   * pas plus — un logo haut ou carré n'a pas à manger l'image du film.
+   */
+  player: { compact: 28, roomy: 40, maxWidth: "min(100%, 22rem)" },
 } as const;
 
 /** En dessous, la fenêtre est trop courte pour la hauteur généreuse. */

@@ -39,6 +39,10 @@ vi.mock("@/lib/db", () => ({ userPrefsDb: { getLegacyPlayer: (...a: unknown[]) =
 const mockFilms = vi.fn(async () => [] as { tmdbId: number; originalLanguage?: { id: number; name: string } }[]);
 vi.mock("@/lib/server-cache", () => ({ cachedMovies: () => mockFilms() }));
 
+/** Le logo du lecteur (09/10/2026) : doublé, comme le catalogue — le vrai module appellerait TMDB. */
+const mockLogo = vi.fn(async (_id: number, _type: string): Promise<string | null> => null);
+vi.mock("@/lib/title-logo", () => ({ getTitleLogo: (id: number, type: string) => mockLogo(id, type) }));
+
 const validId = "c".repeat(32);
 
 function fakeReq(): NextRequest {
@@ -87,6 +91,45 @@ beforeEach(() => {
   mockGetSources.mockResolvedValue(mediaSource());
   mockTimestamps.mockResolvedValue(null);
   mockNaming.mockResolvedValue(null);
+});
+
+describe("le logo du lecteur", () => {
+  it("donne le logo d'un film, par son identifiant TMDB", async () => {
+    mockNaming.mockResolvedValue({ Name: "Matrix", Type: "Movie", ProviderIds: { Tmdb: "603" } });
+    mockLogo.mockResolvedValue("https://image.tmdb.org/t/p/w500/matrix.png");
+    const body = await (await get()).json();
+    expect(mockLogo).toHaveBeenCalledWith(603, "movie");
+    expect(body.logoUrl).toBe("https://image.tmdb.org/t/p/w500/matrix.png");
+  });
+
+  it("donne celui de la série pour un épisode", async () => {
+    mockNaming.mockImplementation(async (_u: string, id: string) =>
+      id === "serie-1"
+        ? { Name: "Peaky Blinders", Type: "Series", ProviderIds: { Tmdb: "60574" } }
+        : { Name: "Épisode 1", Type: "Episode", SeriesName: "Peaky Blinders", SeriesId: "serie-1", ParentIndexNumber: 1, IndexNumber: 1 }
+    );
+    mockLogo.mockResolvedValue("https://image.tmdb.org/t/p/w500/peaky.png");
+    const body = await (await get()).json();
+    expect(mockLogo).toHaveBeenCalledWith(60574, "series");
+    expect(body.logoUrl).toBe("https://image.tmdb.org/t/p/w500/peaky.png");
+  });
+
+  it("ne fait jamais échouer la description : un logo en échec vaut null", async () => {
+    mockNaming.mockResolvedValue({ Name: "Matrix", Type: "Movie", ProviderIds: { Tmdb: "603" } });
+    mockLogo.mockRejectedValue(new Error("TMDB injoignable"));
+    const res = await get();
+    expect(res.status).toBe(200);
+    expect((await res.json()).logoUrl).toBeNull();
+  });
+
+  it("n'attend pas un logo lent au-delà de son budget", async () => {
+    mockNaming.mockResolvedValue({ Name: "Matrix", Type: "Movie", ProviderIds: { Tmdb: "603" } });
+    mockLogo.mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve("trop tard"), 5_000)));
+    const started = Date.now();
+    const body = await (await get()).json();
+    expect(body.logoUrl).toBeNull();
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
 });
 
 describe("GET /api/jellyfin/direct/[itemId]", () => {

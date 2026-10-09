@@ -17,6 +17,8 @@ export interface NamedItem {
   IndexNumber?: number | null;
   /** Demandé avec le reste pour relier l'item au film de Radarr — voir la route « direct ». */
   ProviderIds?: { Tmdb?: string } | null;
+  /** La série d'un épisode — pour en retrouver le logo (route « direct »). */
+  SeriesId?: string | null;
 }
 
 const pad = (value: number) => String(value).padStart(2, "0");
