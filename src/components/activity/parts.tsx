@@ -7,7 +7,7 @@
 // affichages des mêmes données doivent dire la même chose.
 
 import { useState } from "react";
-import { AlertTriangle, ChevronRight, Film, MonitorSmartphone, Tv } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Film, MonitorSmartphone, Tv, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import type { Seance } from "@/lib/activity/seances";
 import type { Presence } from "@/lib/activity/presence";
@@ -427,4 +427,38 @@ export function kindDot(kind: string): string {
     default:
       return "bg-violet-400";
   }
+}
+
+/** Un « oui / non » sans fenêtre : le bouton demande confirmation à lui-même, le temps d'un clic. */
+export function ConfirmButton({ label, confirm, onConfirm, danger = false }: { label: string; confirm: string; onConfirm: () => Promise<void>; danger?: boolean }) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return armed ? (
+    <span className="inline-flex gap-1">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            await onConfirm();
+          } finally {
+            setBusy(false);
+            setArmed(false);
+          }
+        }}
+        className={`${danger ? "btn-danger" : "btn-primary"} px-2.5 py-1 text-xs`}
+      >
+        <Check size={13} />
+        {confirm}
+      </button>
+      <button type="button" onClick={() => setArmed(false)} className="btn-ghost px-2 py-1 text-xs">
+        <X size={13} />
+      </button>
+    </span>
+  ) : (
+    <button type="button" onClick={() => setArmed(true)} className={`btn-ghost px-2.5 py-1 text-xs ${danger ? "text-rose-300" : ""}`}>
+      {label}
+    </button>
+  );
 }

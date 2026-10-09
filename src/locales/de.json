@@ -196,6 +196,12 @@
       "nowWatching": "Schaut gerade"
     },
     "alerts": {
+      "clear": "Warnungen löschen",
+      "clearConfirm": "Alle löschen",
+      "cleared": "Warnungen gelöscht",
+      "restored": "Warnungen wieder sichtbar",
+      "clearedOn": "Warnungen gelöscht {when}",
+      "restore": "Wieder anzeigen",
       "title": "Genauer ansehen",
       "tokenRefused": "Token abgelehnt",
       "tokenStale": "Für den Medienserver unsichtbar",

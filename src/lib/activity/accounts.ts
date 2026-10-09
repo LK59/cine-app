@@ -22,6 +22,7 @@ import { readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { buildSeances, type Seance } from "@/lib/activity/seances";
 import { isChunkLoadError } from "@/lib/chunkError";
 import { clearedDiagnosis, withoutCleared } from "@/lib/activity/diagnosisCleared";
+import { acknowledgeSeances, afterClear, alertsClearedAt } from "@/lib/activity/alertsCleared";
 
 /**
  * Une « erreur » de navigateur qui n'en est pas une : la page était ouverte pendant un
@@ -135,7 +136,7 @@ export function serverSeenAt(user: JellyfinUser, devices: JellyfinDevice[] | nul
 }
 
 /** Qui est dans l'application, qui regarde quoi, et les comptes d'un coup d'œil. */
-export async function listAccounts(now = Date.now()): Promise<AccountSummary[]> {
+export async function listAccounts(now = Date.now(), clearedAt = alertsClearedAt()): Promise<AccountSummary[]> {
   const [users, sessions, devices] = await Promise.all([
     jellyfin.getUsers().catch(() => [] as JellyfinUser[]),
     jellyfin.getSessions().catch(() => [] as JellyfinSession[]),
@@ -146,8 +147,10 @@ export async function listAccounts(now = Date.now()): Promise<AccountSummary[]> 
   ]);
   const appSessions = sessionDb.summaryByUser();
   const weekStart = now - 7 * DAY;
-  const seances = buildSeances(readRecords("player", weekStart)).filter((s) => s.start >= weekStart);
-  const server = serverRecordsSince(weekStart);
+  // Les alertes effacées ne se recomptent pas : incidents des séances finies avant, lignes du
+  // journal d'avant — voir `alertsCleared.ts`.
+  const seances = acknowledgeSeances(buildSeances(readRecords("player", weekStart)).filter((s) => s.start >= weekStart), clearedAt);
+  const server = serverRecordsSince(weekStart).filter(afterClear(clearedAt));
 
   return users
     .map((user): AccountSummary => {
@@ -160,7 +163,14 @@ export async function listAccounts(now = Date.now()): Promise<AccountSummary[]> 
       const clientErrors = server.filter((r) => r.scope === "client" && !isStaleClientChunk(r) && String(r.user ?? "").toLowerCase() === lower);
       const alerts: AccountSummary["alerts"] = [];
       if (refused.length) alerts.push({ kind: "tokenRefused", at: refused[refused.length - 1]._t });
-      else if (app && app.lastSeenAt > weekStart && (lastActivity === null || app.lastSeenAt - lastActivity > TOKEN_GAP_MS)) {
+      // Un état, pas un événement : effacé, il ne revient que si Jellyfin revoit le compte puis le
+      // perd de nouveau — un `at` postérieur à l'effacement.
+      else if (
+        app &&
+        app.lastSeenAt > weekStart &&
+        (lastActivity === null || app.lastSeenAt - lastActivity > TOKEN_GAP_MS) &&
+        !(clearedAt && (lastActivity ?? 0) <= clearedAt)
+      ) {
         alerts.push({ kind: "tokenStale", at: lastActivity });
       }
       if (clientErrors.length) alerts.push({ kind: "clientErrors", at: clientErrors[clientErrors.length - 1]._t, count: clientErrors.length });
@@ -219,10 +229,13 @@ export interface WeekSignals {
 }
 
 /** Le bilan de la semaine : ce que le journal du lecteur et celui du serveur en disent. */
-export function weekSignals(now = Date.now()): WeekSignals {
+export function weekSignals(now = Date.now(), clearedAt = alertsClearedAt()): WeekSignals {
   const since = now - 7 * DAY;
-  const seances = buildSeances(readRecords("player", since)).filter((s) => s.start >= since);
-  const server = serverRecordsSince(since);
+  // Les séances et le temps regardé restent ceux de la semaine ; seuls les incidents et les erreurs
+  // effacés ne se comptent plus (`alertsCleared.ts`).
+  const seances = acknowledgeSeances(buildSeances(readRecords("player", since)).filter((s) => s.start >= since), clearedAt);
+  const allServer = serverRecordsSince(since);
+  const server = allServer.filter(afterClear(clearedAt));
   const sum = (f: (s: Seance) => number) => seances.reduce((n, s) => n + f(s), 0);
 
   const reasons = new Map<string, number>();
@@ -273,7 +286,7 @@ export function weekSignals(now = Date.now()): WeekSignals {
     lost: seances.filter((s) => s.stop?.why === "lost").length,
     audioSwitches: sum((s) => s.audioSwitches),
     clientErrors: server.filter((r) => r.scope === "client" && !isStaleClientChunk(r)).length,
-    staleReloads: server.filter(isStaleClientChunk).length,
+    staleReloads: allServer.filter(isStaleClientChunk).length,
     tokenRefusals: server.filter((r) => r.scope === "jellyfin-token").length,
     serverErrors: [...scopes].map(([scope, count]) => ({ scope, count })).sort((a, b) => b.count - a.count).slice(0, 8),
     rebuildReasons: [...reasons].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count).slice(0, 6),
@@ -329,7 +342,7 @@ function mediaEntry(item: JellyfinItemLike): MediaEntry {
 type Part<T> = { ok: true; value: T } | { ok: false };
 const part = async <T>(p: Promise<T>): Promise<Part<T>> => p.then((value) => ({ ok: true as const, value }), () => ({ ok: false as const }));
 
-export async function accountDetail(id: string, now = Date.now()) {
+export async function accountDetail(id: string, now = Date.now(), clearedAt = alertsClearedAt()) {
   const users = await jellyfin.getUsers().catch(() => [] as JellyfinUser[]);
   const user = users.find((u) => u.Id === id);
   if (!user) return null;
@@ -350,7 +363,11 @@ export async function accountDetail(id: string, now = Date.now()) {
   const nextUp = await part(jellyfin.getNextUpGlobal(id, 12).then((items) => (items as unknown as JellyfinItemLike[]).map(mediaEntry)));
 
   const historyStart = now - ACCOUNT_HISTORY_DAYS * DAY;
-  const seances = buildSeances(readRecords("player", historyStart)).filter((s) => s.user.toLowerCase() === lower && s.start >= historyStart);
+  // Ses séances restent toutes listées ; celles d'avant l'effacement ne colorent plus rien.
+  const seances = acknowledgeSeances(
+    buildSeances(readRecords("player", historyStart)).filter((s) => s.user.toLowerCase() === lower && s.start >= historyStart),
+    clearedAt
+  );
   const errors = readRecords("server", historyStart)
     .filter((r) => isError(r) && String(r.user ?? "").toLowerCase() === lower)
     .slice(-100)
@@ -443,8 +460,8 @@ async function requestsOf(jellyfinId: string) {
 }
 
 /** Les dernières séances, tous comptes confondus — le fil de ce qui s'est regardé. */
-export function recentSeances(limit = 20, now = Date.now()): Seance[] {
-  return buildSeances(readRecords("player", now - 30 * DAY)).slice(0, limit);
+export function recentSeances(limit = 20, now = Date.now(), clearedAt = alertsClearedAt()): Seance[] {
+  return acknowledgeSeances(buildSeances(readRecords("player", now - 30 * DAY)).slice(0, limit), clearedAt);
 }
 
 
@@ -572,26 +589,31 @@ export function failingTitleKeys(now = Date.now()): string[] {
 }
 
 /** Le foyer sur trente jours : appareils, habitudes, connexions et notifications. */
-export function household(now = Date.now()) {
+export function household(now = Date.now(), clearedAt = alertsClearedAt()) {
   const since = now - 30 * DAY;
   const seances = buildSeances(readRecords("player", since)).filter((s) => s.start >= since);
+  const fresh = afterClear(clearedAt);
   const auth = readRecords("auth", since).filter((r) => r._t >= since);
   const notifications = readRecords("notifications", since).filter((r) => r._t >= since);
   const recipients = notifications.flatMap((r) => (Array.isArray(r.recipients) ? (r.recipients as Record<string, number>[]) : []));
   return {
     days: 30,
-    devices: qualityByDevice(seances),
+    devices: qualityByDevice(acknowledgeSeances(seances, clearedAt)),
     habits: habitsOf(seances),
     // Le titre ou l'appareil : les réussites de la période comptent autant que les échecs, ce sont
     // elles qui innocentent l'un ou l'autre.
     // Sans les titres effacés par l'administrateur (`diagnosisCleared.ts`) : on en demande davantage
     // au classement, pour que l'effacement fasse place aux suivants au lieu de raccourcir la liste.
-    diagnosis: withoutCleared(diagnoseTitles(seances, 60), clearedDiagnosis()).slice(0, 12),
+    // Le diagnostic garde toutes les séances — une réussite innocente un titre ou un appareil —, mais
+    // un titre dont le dernier échec précède l'effacement général sort de la liste.
+    diagnosis: withoutCleared(diagnoseTitles(seances, 60), clearedDiagnosis())
+      .filter((d) => d.lastFailure > clearedAt)
+      .slice(0, 12),
     logins: {
       ok: auth.filter((r) => r.kind === "login").length,
-      failed: auth.filter((r) => r.kind === "login-failed").length,
+      failed: auth.filter((r) => r.kind === "login-failed" && fresh(r)).length,
       recentFailures: auth
-        .filter((r) => r.kind === "login-failed")
+        .filter((r) => r.kind === "login-failed" && fresh(r))
         .slice(-10)
         .reverse()
         .map((r) => ({ at: r._t, user: String(r.user ?? "?"), reason: r.reason ?? null, device: r.device ?? null, ip: r.ip ?? null })),
@@ -599,7 +621,10 @@ export function household(now = Date.now()) {
     notifications: {
       sent: notifications.length,
       delivered: recipients.reduce((n, x) => n + (Number(x.sent) || 0), 0),
-      failed: recipients.reduce((n, x) => n + (Number(x.failed) || 0) + (Number(x.removed) || 0), 0),
+      failed: notifications
+        .filter(fresh)
+        .flatMap((r) => (Array.isArray(r.recipients) ? (r.recipients as Record<string, number>[]) : []))
+        .reduce((n, x) => n + (Number(x.failed) || 0) + (Number(x.removed) || 0), 0),
       byCategory: [...notifications.reduce((m, r) => m.set(String(r.category ?? "?"), (m.get(String(r.category ?? "?")) ?? 0) + 1), new Map<string, number>())]
         .map(([category, count]) => ({ category, count }))
         .sort((a, b) => b.count - a.count),

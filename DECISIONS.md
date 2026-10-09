@@ -1894,3 +1894,38 @@ servie : aucun titre déjà connu ne retombe sur celui de Radarr ou Sonarr.
 `title-art.test.ts`.
 
 **Décidé le 09/10/2026.**
+
+## 59. Effacer les alertes du panneau Activités : une date, jamais une suppression
+
+**Règle.** « Effacer les alertes » pose une date. Ce qui colore le panneau en rouge, orange ou jaune
+ne se compte plus qu'*après* elle :
+- les incidents des séances terminées avant (blocages, reconstructions, replis, erreurs, sauts lents,
+  attentes) ;
+- les jetons refusés, les erreurs du navigateur et les erreurs serveur ;
+- les connexions refusées et les notifications en échec ;
+- les titres du diagnostic dont le dernier échec précède la date.
+
+Un nouvel incident se voit aussitôt. « Réafficher » remet la date à zéro, et tout revient.
+
+**Pourquoi.** Une alerte traitée restait affichée jusqu'à sortir de la fenêtre de sept ou trente jours,
+et le panneau restait coloré pour des pannes déjà réglées.
+
+**Ce qui ne change pas.**
+- **Les journaux ne sont jamais touchés.** Le diagnostic, les signalements et les vues brutes en
+  dépendent : la page Journaux, le détail d'une séance, les connexions et les erreurs d'un compte.
+- **Les séances restent listées et ouvrables :** une séance acquittée garde son temps regardé, et
+  seuls ses incidents sont mis à zéro (`acknowledgeSeance`).
+- **« Jeton plus vu » est un état :** effacé, il ne revient que si Jellyfin revoit le compte puis le
+  perd de nouveau.
+
+**Une date pour tout le panneau, pas une par compte.** « Tout est vu » est un seul geste, et les tuiles
+de la semaine mêlent tous les comptes.
+
+**Porteurs.** `alertsClearedAt`, `setAlertsClearedAt`, `acknowledgeSeances` et `afterClear`
+(`src/lib/activity/alertsCleared.ts`), lus par `listAccounts`, `weekSignals`, `recentSeances`,
+`accountDetail` et `household` (`src/lib/activity/accounts.ts`). La route est
+`POST /api/admin/activity/alerts` (`clear` / `restore`).
+
+**Tests.** `activity-alerts-cleared.test.ts`.
+
+**Décidé le 09/10/2026.**

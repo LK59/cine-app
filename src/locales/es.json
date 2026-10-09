@@ -196,6 +196,12 @@
       "nowWatching": "Viendo ahora"
     },
     "alerts": {
+      "clear": "Borrar las alertas",
+      "clearConfirm": "Borrar todo",
+      "cleared": "Alertas borradas",
+      "restored": "Alertas visibles de nuevo",
+      "clearedOn": "Alertas borradas {when}",
+      "restore": "Volver a mostrar",
       "title": "Para revisar",
       "tokenRefused": "Token rechazado",
       "tokenStale": "Invisible para el servidor multimedia",

@@ -196,6 +196,12 @@
       "nowWatching": "En train de regarder"
     },
     "alerts": {
+      "clear": "Effacer les alertes",
+      "clearConfirm": "Tout effacer",
+      "cleared": "Alertes effacées",
+      "restored": "Alertes réaffichées",
+      "clearedOn": "Alertes effacées {when}",
+      "restore": "Réafficher",
       "title": "À regarder",
       "tokenRefused": "Jeton refusé",
       "tokenStale": "Invisible pour le serveur média",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import {
   Activity,
   AlertTriangle,
@@ -23,9 +23,11 @@ import {
   Wrench,
 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
+import { apiAction } from "@/lib/apiAction";
+import { useToast } from "@/components/Toast";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
-import { AlertChip, Avatar, DayBars, Panel, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, latest, secs, type T } from "@/components/activity/parts";
+import { AlertChip, Avatar, ConfirmButton, DayBars, Panel, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, latest, secs, type T } from "@/components/activity/parts";
 import type { AccountSummary, WeekSignals, household } from "@/lib/activity/accounts";
 import type { ReportSummary } from "@/lib/reports";
 import { NOTIFICATION_CATEGORIES } from "@/lib/notifications";
@@ -42,6 +44,43 @@ interface Overview {
   signals: WeekSignals;
   recent: Seance[];
   household: ReturnType<typeof household>;
+  /** La date d'effacement des alertes, 0 si rien n'est effacé — voir `alertsCleared.ts`. */
+  alertsClearedAt: number;
+}
+
+/**
+ * « Effacer les alertes » : tout ce qui est rouge, orange ou jaune dans le panneau ne se compte
+ * plus qu'à partir de maintenant (09/10/2026, DECISIONS.md §59). Les journaux restent intacts, et
+ * « Réafficher » remet tout comme avant. Confirmé d'un second appui, comme les gestes du compte.
+ */
+function AlertsClearControl({ clearedAt, now }: { clearedAt: number; now: number }) {
+  const t = useT();
+  const toast = useToast();
+  const { mutate } = useSWRConfig();
+  const send = async (action: "clear" | "restore") => {
+    try {
+      await apiAction("/api/admin/activity/alerts", { method: "POST", body: JSON.stringify({ action }) });
+      // Toutes les vues du panneau en dépendent : la vue d'ensemble, et chaque fiche de compte.
+      await mutate((key) => typeof key === "string" && key.startsWith("/api/admin/activity"));
+      toast.success(action === "clear" ? t("activity.alerts.cleared") : t("activity.alerts.restored"));
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {clearedAt > 0 && (
+        <span className="text-xs text-slate-500">
+          {t("activity.alerts.clearedOn", { when: ago(clearedAt, now, t) })}
+          {" · "}
+          <button type="button" onClick={() => void send("restore")} className="text-accent-300 hover:underline">
+            {t("activity.alerts.restore")}
+          </button>
+        </span>
+      )}
+      <ConfirmButton label={t("activity.alerts.clear")} confirm={t("activity.alerts.clearConfirm")} onConfirm={() => send("clear")} />
+    </div>
+  );
 }
 
 /**
@@ -268,7 +307,8 @@ export function ActivityOverview() {
         <p className="text-sm text-slate-400">
           {t("activity.subtitle", { playing: playingCount, app: live.length - playingCount, total: accounts.length })}
         </p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <AlertsClearControl clearedAt={data.alertsClearedAt ?? 0} now={now} />
           <button type="button" onClick={() => mutate()} className="btn-ghost px-3 py-1.5 text-xs">
             <RefreshCw size={14} />
             <span className="hidden sm:inline">{t("activity.refresh")}</span>

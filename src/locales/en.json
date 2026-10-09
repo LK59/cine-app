@@ -196,6 +196,12 @@
       "nowWatching": "Now watching"
     },
     "alerts": {
+      "clear": "Clear alerts",
+      "clearConfirm": "Clear all",
+      "cleared": "Alerts cleared",
+      "restored": "Alerts shown again",
+      "clearedOn": "Alerts cleared {when}",
+      "restore": "Show again",
       "title": "Needs a look",
       "tokenRefused": "Token refused",
       "tokenStale": "Invisible to the media server",

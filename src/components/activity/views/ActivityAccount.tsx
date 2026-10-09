@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Bell,
   CalendarClock,
-  Check,
   Clapperboard,
   Clock,
   Eye,
@@ -45,6 +44,7 @@ import {
   fullDate,
   hours,
   latest,
+  ConfirmButton,
   type T,
 } from "@/components/activity/parts";
 import { DeviceQualityList, Heatmap, TopTitles, AuthList, NotificationList } from "@/components/activity/insights";
@@ -56,39 +56,6 @@ import { NOTIFICATION_CATEGORIES } from "@/lib/notifications";
 type Detail = AccountDetail & { now: number };
 type Tab = "seances" | "resume" | "recent" | "watchlist" | "requests" | "devices" | "habits" | "auth" | "notifications" | "reports" | "errors";
 
-/** Un « oui / non » sans fenêtre : le bouton demande confirmation à lui-même, le temps d'un clic. */
-function ConfirmButton({ label, confirm, onConfirm, danger = false }: { label: string; confirm: string; onConfirm: () => Promise<void>; danger?: boolean }) {
-  const [armed, setArmed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  return armed ? (
-    <span className="inline-flex gap-1">
-      <button
-        type="button"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          try {
-            await onConfirm();
-          } finally {
-            setBusy(false);
-            setArmed(false);
-          }
-        }}
-        className={`${danger ? "btn-danger" : "btn-primary"} px-2.5 py-1 text-xs`}
-      >
-        <Check size={13} />
-        {confirm}
-      </button>
-      <button type="button" onClick={() => setArmed(false)} className="btn-ghost px-2 py-1 text-xs">
-        <X size={13} />
-      </button>
-    </span>
-  ) : (
-    <button type="button" onClick={() => setArmed(true)} className={`btn-ghost px-2.5 py-1 text-xs ${danger ? "text-rose-300" : ""}`}>
-      {label}
-    </button>
-  );
-}
 
 function requestStatus(status: number, t: T): { label: string; tone: string } {
   switch (status) {
