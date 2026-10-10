@@ -1938,9 +1938,8 @@ de la semaine mêlent tous les comptes.
 - une légende pour un épisode ou une reprise ;
 - une ligne de chargement.
 
-Puis un fondu enchaîné vers le film. Sous 300 ms, rien ne paraît : la première image arrive avant
-qu'une ouverture ait un sens. Les réglages sont ceux validés dans « Tests animations » (lot G) le
-10/10/2026 :
+Puis un fondu enchaîné vers le film. Les réglages sont ceux validés dans « Tests animations » (lot G)
+le 10/10/2026 :
 
 | Réglage | Valeur |
 |---|---|
@@ -1953,6 +1952,28 @@ qu'une ouverture ait un sens. Les réglages sont ceux validés dans « Tests ani
 **Pourquoi.** L'attente d'ouverture était une roue sur fond noir. Le premier essai avait un fond
 flou : une image de 300 px agrandie, et « le flou basse résolution se voit ». Le fond net en
 1 280 px, sous un voile, fait lire le logo sans rien abîmer.
+
+**La couverture, dès l'appui, et le seuil de 300 ms.** Dès le montage du lecteur, le visuel sous
+son voile couvre l'écran, immobile — à l'échelle de départ du zoom —, sans logo, légende ni ligne :
+le lecteur vide ne se montre jamais. Ensuite :
+- **la première image arrive avant 300 ms** (`imageShown` : `announced` au natif, même figée,
+  l'horloge pas encore partie ; l'image du lecteur serveur) : la couverture s'efface sur elle en
+  280 ms, en décélérant, et l'ouverture animée ne paraît jamais. La lecture est alors close
+  (`finishIntro`) ;
+- **rien à 300 ms** : l'ouverture animée part de la couverture — même image, même voile, même
+  échelle — et s'efface selon les règles plus bas ;
+- **une image à l'écran n'est jamais recouverte** : passé `imageShown`, l'ouverture animée ne peut
+  plus partir, et un lecteur monté sur une image déjà là (mini-lecteur rendu au plein écran, relais)
+  ne pose rien.
+
+Pourquoi (relu le 10/10/2026) : les reprises lues depuis l'appareil s'ouvrent en 34 à 115 ms. La
+première image arrivait figée vers 50 ms, Safari mettait quelques centaines de ms à faire partir
+l'horloge, et l'ouverture animée — partie à 300 ms parce que sa fin était l'horloge qui avance —
+se posait *sur* l'image déjà là, puis s'effaçait un instant plus tard. Avant elle, le lecteur vide
+se voyait un instant. Une couverture qui s'efface sur l'image règle les deux.
+
+Sur une couverture effacée sans ouverture animée, la roue de l'attente du natif reprend ses droits
+si l'horloge tarde : il n'y a plus rien pour en tenir lieu.
 
 **Ce qu'elle ne fait jamais.**
 - **Retarder la lecture.** C'est un calque posé sur l'élément vidéo : le fichier s'ouvre dessous
@@ -1975,8 +1996,8 @@ retour d'une diffusion.
 
 | Cas | Ouverture |
 |---|---|
-| Lecteur natif et lecteur serveur, ouverture d'un titre | oui, si l'attente dépasse le seuil |
-| Épisode suivant (enchaînement automatique ou bouton) | oui, sa propre ouverture avec la légende de l'épisode, si son chargement se fait attendre |
+| Lecteur natif et lecteur serveur, ouverture d'un titre | la couverture toujours ; l'ouverture animée si l'attente dépasse le seuil |
+| Épisode suivant (enchaînement automatique ou bouton) | la couverture (visuel de la série) à la place de l'écran noir du lecteur neuf ; sa propre ouverture animée avec la légende de l'épisode, si son chargement se fait attendre |
 | Séance qui existe pour diffuser | non |
 | Retour d'une diffusion, page rechargée pour une piste WebKit | non : reprises en plein film |
 | Banc d'essai | non |
@@ -1992,8 +2013,8 @@ Un épisode prend le visuel et le logo de sa série. Le visuel et le logo sont d
 (`preloadIntroArt`). Rien de trouvé : le titre écrit sur fond noir. Le logo de la description du
 fichier n'est pas attendu : il a 500 ms de budget côté serveur et arriverait après le seuil.
 
-**Quand elle laisse la place au film** (`src/lib/introEnd.ts`) — à la lecture partie, pas au
-lecteur prêt :
+**Quand l'ouverture animée laisse la place au film** (`src/lib/introEnd.ts`) — à la lecture partie,
+pas au lecteur prêt (la couverture seule, elle, s'efface à la première image) :
 - **lecteur natif** : l'horloge qui avance vraiment, mesurée depuis le dernier placement de la tête
   (l'atterrissage de l'ouverture et la poussée d'une horloge figée sont des sauts) ;
 - **lecteur serveur** : plus de saut en cours et `readyState` ≥ 3 (`loadeddata` précède le saut de
@@ -2022,6 +2043,7 @@ Ses appelants :
 
 `PlaybackProvider` pose `introArt` et l'horloge.
 
-**Tests.** `playbackIntro.test.ts`, `PlaybackIntro.test.tsx`, `introEnd.test.tsx`.
+**Tests.** `playbackIntro.test.ts`, `PlaybackIntro.test.tsx`, `introEnd.test.tsx`, et la couverture
+dans `ExperimentalPlayerHost.test.tsx`.
 
 **Décidé le 10/10/2026.**

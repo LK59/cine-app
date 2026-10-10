@@ -1161,9 +1161,15 @@ export function ExperimentalPlayerHost({
         : error || networkLost || stuck || (startingFor !== null && startingFor >= STUCK_AFTER_MS)
           ? "gone"
           : "waiting";
+  // L'ouverture animée a-t-elle paru ? Sans elle, la couverture posée à l'appui s'efface dès la première
+  // image (`announced`, même figée) : une reprise lue depuis l'appareil s'ouvre en 34 à 115 ms
+  // (10/10/2026), bien avant le seuil, et ne voit jamais le logo — voir `PlaybackIntro`.
+  const [introShown, setIntroShown] = useState(false);
+  const onIntroShown = useCallback(() => setIntroShown(true), []);
   // Elle tient lieu de roue : les deux ne se montrent jamais ensemble — seuil compris, la roue
-  // paraissant à 120 ms et l'ouverture à 300.
-  const introCovers = introPhase === "waiting";
+  // paraissant à 120 ms et l'ouverture à 300. Une couverture déjà effacée sur la première image ne
+  // couvre plus rien : la roue de l'attente reprend ses droits si l'horloge tarde à partir.
+  const introCovers = introPhase === "waiting" && (introShown || !announced);
 
   /**
    * Comment la séance s'est terminée — la ligne `stop` du journal.
@@ -2503,6 +2509,8 @@ export function ExperimentalPlayerHost({
           startedAt={introStartedAt}
           clockKey={thisIntro}
           art={session.introArt ?? null}
+          imageShown={announced}
+          onShow={onIntroShown}
           fallbackName={openedAs}
           caption={introCaption(
             { ...session.introArt, resumeSeconds: session.resumeAt ?? playbackState?.resumeSeconds ?? null },

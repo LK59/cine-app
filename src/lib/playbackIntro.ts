@@ -18,7 +18,10 @@ import { tmdbResize } from "@/lib/images";
 export type IntroBackground = "net" | "light" | "strong" | "old";
 
 export interface PlaybackIntroSettings {
-  /** Sous ce délai entre l'appui et la première image, rien ne paraît : l'ouverture n'aurait pas de sens. */
+  /**
+   * Sous ce délai entre l'appui et la première image, seule la couverture (le visuel sous son voile,
+   * immobile) aura paru, effacée sur l'image : l'ouverture animée n'aurait pas de sens.
+   */
   thresholdMs: number;
   /** Le fond part de cette échelle et revient à 1 en six secondes. */
   zoom: number;

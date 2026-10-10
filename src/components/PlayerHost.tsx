@@ -330,6 +330,9 @@ function ServerPlayerIntro({
       startedAt={startedAt}
       clockKey={key}
       art={session.introArt ?? null}
+      // Ici l'image et la fin ne font qu'un (`useServerIntroPicture`) : la couverture posée au montage
+      // s'efface sur elle, ou l'ouverture animée si elle avait paru — même règle que chez le natif.
+      imageShown={pictured}
       fallbackName={session.title}
       caption={introCaption({ ...session.introArt, resumeSeconds }, t)}
       onClose={onClose}

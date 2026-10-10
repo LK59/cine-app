@@ -218,6 +218,7 @@ vi.mock("@/lib/webcodecs/remuxPlayback", () => ({
 }));
 
 import { noteWatching } from "@/lib/resumeRewind";
+import { resetIntroClocks } from "@/lib/playbackIntro";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 
 const onFallback = vi.fn();
@@ -2269,5 +2270,31 @@ describe("cycle de vie — comportement figé", () => {
 
     await act(async () => open());
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+  });
+});
+
+describe("l'ouverture de la lecture : la couverture posée à l'appui (DECISIONS §60)", () => {
+  const layer = () => document.querySelector("[data-playback-intro]");
+  // L'horloge vit hors de React, par `${openId}:${itemId}` — la même clé pour tous les tests de ce
+  // fichier, que les précédents ont close.
+  beforeEach(() => resetIntroClocks());
+
+  it("couvre le lecteur dès le premier rendu : le lecteur vide ne se montre jamais", () => {
+    // Vu par Louis le 10/10/2026 : « un micro instant le player » avant l'ouverture.
+    mount();
+    expect(layer()?.getAttribute("data-playback-intro")).toBe("cover");
+  });
+
+  it("une première image avant le seuil : la couverture s'efface sur elle, sans ouverture animée", async () => {
+    // Le cas des reprises lues depuis l'appareil (34 à 115 ms) : la première image est là, figée, bien
+    // avant 300 ms ; l'ouverture animée, partie au seuil, se posait sur elle.
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    expect(layer()?.getAttribute("data-playback-intro") ?? "retirée").not.toBe("intro");
+    await waitFor(() => expect(layer()).toBeNull(), { timeout: 1500 });
+    // Et elle ne reparaît pas au seuil, l'horloge n'ayant toujours pas bougé (jsdom ne joue rien) :
+    // avant, c'est exactement là que l'ouverture animée se posait sur l'image.
+    await act(async () => void (await new Promise((r) => setTimeout(r, 400))));
+    expect(layer()).toBeNull();
   });
 });
