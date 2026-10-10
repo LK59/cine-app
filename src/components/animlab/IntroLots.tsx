@@ -24,6 +24,7 @@ import { PlaybackIntro } from "@/components/player/PlaybackIntro";
 import { INTRO_BACKGROUNDS, PLAYBACK_INTRO, introBackdropSrc, type IntroBackground } from "@/lib/playbackIntro";
 import { phoneSheetCorner } from "@/lib/sheetMotion";
 import { NOT_THE_HANDLE, useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
+import { useTap } from "@/lib/useTap";
 
 /**
  * Deux prototypes de la page « Tests animations » (10/10/2026), à juger sur l'iPhone et le Mac avant
@@ -641,6 +642,68 @@ function promote(els: (HTMLElement | null | undefined)[]): () => void {
   };
 }
 
+/**
+ * Le style d'une affiche d'où une fiche part et où elle revient : cachée par l'opacité, et sans
+ * transition sur l'opacité (neuvième passe).
+ *
+ * La règle de base `button:not(:disabled)` (globals.css) fait passer l'opacité de tout bouton en
+ * 150 ms. Rendue au relais, l'affiche du téléphone remontait donc de 0 à 1 pendant que le calque du
+ * retour s'effaçait par-dessus en 120 ms : un instant, deux images à moitié transparentes sur le fond
+ * d'encre — le « mini clignotement » plus foncé vu par Louis sur iPhone (mesuré sous WebKit : carte à
+ * 0,92, calque déjà à 0). Et une affiche qui s'allume par une transition au moment d'un appui, c'est
+ * ce que WebKit lit comme un contenu révélé au survol : il garde alors le `click`. Seules la
+ * transformation (l'enfoncement au doigt) et l'ombre restent animées.
+ */
+function posterStyle(hidden: boolean): CSSProperties {
+  return { opacity: hidden ? 0 : undefined, transitionProperty: "transform, box-shadow" };
+}
+
+/**
+ * Une affiche de la maquette, servie au relâchement du doigt comme les cartes de la vraie appli
+ * (`useTap`, neuvième passe).
+ *
+ * Servie au `click`, une affiche retouchée juste après une fermeture demandait parfois deux appuis
+ * sur iPhone, et une affiche d'une fiche déjà ouverte puis refermée semblait « en recharge » une
+ * seconde ou deux : iOS garde le premier `click` quand il croit que l'appui a révélé du contenu ou
+ * qu'il arrête un élan de défilement — deux choses qu'une fermeture en vol provoque. Le relâchement,
+ * lui, arrive toujours. Le `click` reste là pour le clavier et la souris.
+ */
+function MockPoster({ k, register, hidden, onOpen, className, children }: {
+  k: string;
+  register: Register;
+  hidden: boolean;
+  onOpen: () => void;
+  className: string;
+  children: ReactNode;
+}) {
+  const tap = useTap(onOpen);
+  return (
+    <button ref={register(k)} type="button" {...tap} className={className} style={posterStyle(hidden)}>
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Le `click` qui suit une fermeture servie au relâchement du doigt (le geste de la bannière) est
+ * avalé : la fiche, déjà sans pointeur, le laissait tomber sur ce qu'il y a dessous — une affiche,
+ * un bouton de la maquette. Un seul, et seulement dans la fenêtre où il arrive.
+ */
+function swallowStrayClick(ms = 500): void {
+  let timer = 0;
+  const done = () => {
+    document.removeEventListener("click", stop, true);
+    window.clearTimeout(timer);
+  };
+  const stop = (e: MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    done();
+  };
+  document.addEventListener("click", stop, true);
+  timer = window.setTimeout(done, ms);
+}
+
 /** Démarre ensemble des animations créées en pause : un même `startTime`, une même première image. */
 function startTogether(anims: Animation[]): number {
   const t0 = clockNow();
@@ -1089,8 +1152,12 @@ function SheetStage({
     </>
   );
 
+  // Une fenêtre modale, déclarée comme telle (neuvième passe) : le panneau qui porte la page Tests
+  // animations écoute Échap en capture sur la fenêtre, avant tout le monde, et ne s'efface que devant
+  // un `aria-modal` (`PlayerPanelFrame`). Sans lui, Échap fermait la fiche *et* quittait la page —
+  // deux écoutes pour une touche, la règle 2 du cycle de vie des fiches.
   return (
-    <div className="fixed inset-0 z-[100] bg-black">
+    <div role="dialog" aria-modal="true" aria-label="Maquette de l'ouverture des fiches" className="fixed inset-0 z-[100] bg-black">
       {framed ? (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6">
           <div
@@ -1149,17 +1216,17 @@ function DesktopHome({ titles, hiddenKey, register, onOpen }: HomeProps) {
             {row.items.map((m) => {
               const key = `bureau-${r}-${m.radarrId}`;
               return (
-                <button
+                <MockPoster
                   key={key}
-                  ref={register(key)}
-                  type="button"
-                  onClick={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8 })}
+                  k={key}
+                  register={register}
+                  hidden={hiddenKey === key}
+                  onOpen={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8 })}
                   // La carte de CinemaCard, survol compris.
                   className={`${CARD_WIDTH} relative shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition-[transform,box-shadow] duration-200 hover:z-10 hover:scale-105 hover:shadow-xl hover:shadow-black/60`}
-                  style={{ opacity: hiddenKey === key ? 0 : undefined }}
                 >
                   <img src={m.posterUrl ?? ""} alt={m.title} className="block aspect-[2/3] w-full object-cover" />
-                </button>
+                </MockPoster>
               );
             })}
           </div>
@@ -1192,23 +1259,28 @@ function PhoneHome({ titles, framed, hiddenKey, register, onOpen }: HomeProps & 
               const key = `banniere-${m.radarrId}`;
               const on = i === 1;
               const poster = m.posterTextlessUrl ?? m.posterUrl ?? "";
+              const face = (
+                <>
+                  <img src={poster} alt="" className="block aspect-[2/3] w-full object-cover" />
+                  {m.logoUrl && (
+                    <div className="absolute inset-x-0 bottom-0 flex justify-center bg-linear-to-t from-black/70 to-transparent px-6 pb-6 pt-20">
+                      <CinemaLogo src={m.logoUrl} alt={m.title} surface="phone" className="object-center" />
+                    </div>
+                  )}
+                </>
+              );
+              const faceClass = "relative block w-full overflow-hidden rounded-2xl bg-surface text-left shadow-xl shadow-black/50";
               return (
                 <div key={key} className={`hero-peek-slide shrink-0 px-1.5 ${on ? "hero-peek-on" : ""}`}>
-                  <button
-                    ref={on ? register(key) : undefined}
-                    type="button"
-                    tabIndex={on ? 0 : -1}
-                    onClick={on ? () => onOpen({ title: m, key, poster, radius: 16 }) : undefined}
-                    className="relative block w-full overflow-hidden rounded-2xl bg-surface text-left shadow-xl shadow-black/50"
-                    style={{ opacity: hiddenKey === key ? 0 : undefined }}
-                  >
-                    <img src={poster} alt="" className="block aspect-[2/3] w-full object-cover" />
-                    {m.logoUrl && (
-                      <div className="absolute inset-x-0 bottom-0 flex justify-center bg-linear-to-t from-black/70 to-transparent px-6 pb-6 pt-20">
-                        <CinemaLogo src={m.logoUrl} alt={m.title} surface="phone" className="object-center" />
-                      </div>
-                    )}
-                  </button>
+                  {on ? (
+                    <MockPoster k={key} register={register} hidden={hiddenKey === key} onOpen={() => onOpen({ title: m, key, poster, radius: 16 })} className={faceClass}>
+                      {face}
+                    </MockPoster>
+                  ) : (
+                    <button type="button" tabIndex={-1} className={faceClass}>
+                      {face}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -1222,16 +1294,16 @@ function PhoneHome({ titles, framed, hiddenKey, register, onOpen }: HomeProps & 
             {row.items.map((m) => {
               const key = `rangee-${r}-${m.radarrId}`;
               return (
-                <button
+                <MockPoster
                   key={key}
-                  ref={register(key)}
-                  type="button"
-                  onClick={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8 })}
+                  k={key}
+                  register={register}
+                  hidden={hiddenKey === key}
+                  onOpen={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8 })}
                   className={`${PHONE_POSTER_WIDTH} relative shrink-0 overflow-hidden rounded-lg bg-surface`}
-                  style={{ opacity: hiddenKey === key ? 0 : undefined }}
                 >
                   <img src={m.posterUrl ?? ""} alt={m.title} className="block aspect-[2/3] w-full object-cover" />
-                </button>
+                </MockPoster>
               );
             })}
           </div>
@@ -1269,13 +1341,13 @@ function SheetPosterRow({
           // Unique dans toute la pile : l'entrée, le titre, et la variante.
           const key = `fiche-${entryId}-${m.radarrId}${outside ? "-hors" : ""}`;
           return (
-            <button
+            <MockPoster
               key={key}
-              ref={register(key)}
-              type="button"
-              onClick={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8, outside })}
+              k={key}
+              register={register}
+              hidden={hiddenKey === key}
+              onOpen={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8, outside })}
               className={`${phone ? PHONE_POSTER_WIDTH : SHEET_POSTER_WIDTH} relative shrink-0 overflow-hidden rounded-lg bg-surface shadow-lg shadow-black/40`}
-              style={{ opacity: hiddenKey === key ? 0 : undefined }}
             >
               <img src={m.posterUrl ?? ""} alt={m.title} className="block aspect-[2/3] w-full object-cover" />
               {outside && (
@@ -1283,7 +1355,7 @@ function SheetPosterRow({
                   {t("player.notInLibrary")}
                 </span>
               )}
-            </button>
+            </MockPoster>
           );
         })}
       </div>
@@ -1970,7 +2042,11 @@ function MockSheet({
     },
     onPointerUp: (e: ReactPointerEvent) => {
       note(e);
+      const wasClosing = closingRef.current;
       swipe.handlers.onPointerUp(e);
+      // Fermée par ce relâchement : la fiche n'a déjà plus de pointeur, le `click` qui le suit irait à
+      // ce qu'il y a dessous (neuvième passe).
+      if (!wasClosing && closingRef.current) swallowStrayClick();
     },
     onPointerCancel: swipe.handlers.onPointerCancel,
   };
@@ -2439,7 +2515,21 @@ function MockPersonSheet({
         }}
       >
         {/* La poignée : le haut de la carte, comme la bannière d'une fiche de titre. */}
-        <div className="relative h-14 w-full" {...(covered ? {} : swipe.handlers)} style={{ touchAction: "none" }}>
+        <div
+          className="relative h-14 w-full"
+          {...(covered
+            ? {}
+            : {
+                ...swipe.handlers,
+                // Même garde que la fiche d'un titre : le `click` d'un relâchement qui ferme est avalé.
+                onPointerUp: (e: ReactPointerEvent) => {
+                  const wasClosing = closingRef.current;
+                  swipe.handlers.onPointerUp(e);
+                  if (!wasClosing && closingRef.current) swallowStrayClick();
+                },
+              })}
+          style={{ touchAction: "none" }}
+        >
           <div className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-white/25" />
           <button
             type="button"

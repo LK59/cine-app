@@ -436,6 +436,90 @@ describe("la page Tests animations", () => {
         expect(sheet.style.pointerEvents).toBe("none");
       });
 
+      describe("neuvième passe : le relais sans assombrissement, chaque appui servi", () => {
+        const openPhoneMock = () => {
+          render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
+          fireEvent.click(screen.getByRole("button", { name: "Téléphone" }));
+          fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
+        };
+        // Un appui au doigt dont iOS garde le `click` : seuls le posé et le relâché arrivent.
+        const touchTap = (el: Element) => {
+          fireEvent.pointerDown(el, { pointerId: 7, pointerType: "touch", button: 0, clientX: 10, clientY: 10 });
+          fireEvent.pointerUp(el, { pointerId: 7, pointerType: "touch", button: 0, clientX: 10, clientY: 10 });
+        };
+        const live = () => sheets().filter((s) => s.style.pointerEvents !== "none");
+
+        it("rend l'affiche d'un coup au relais : son opacité n'a pas de transition", () => {
+          // La règle de base `button:not(:disabled)` passe l'opacité en 150 ms : l'affiche remontait
+          // de 0 à 1 pendant que le calque du retour s'effaçait au-dessus — un instant plus foncé.
+          openDesktopMock();
+          openFromHome(3);
+          expect(homeCard(3).style.opacity).toBe("0");
+          expect(homeCard(3).style.transitionProperty).toBe("transform, box-shadow");
+          cleanup();
+          openPhoneMock();
+          const phoneCard = document.querySelector('[data-alab-home] section img[alt="Film 2"]')!.closest("button")!;
+          expect(phoneCard.style.transitionProperty).toBe("transform, box-shadow");
+        });
+
+        it("sert l'appui au relâchement du doigt, même quand iOS garde le click — la même affiche ou une déjà refermée", async () => {
+          openDesktopMock();
+          openFromHome(3);
+          const first = sheets()[0];
+          fireEvent.keyDown(window, { key: "Escape" });
+          // La même affiche, retouchée pendant le retour, sans `click` : la fiche se retourne.
+          touchTap(homeCard(3));
+          expect(live()).toEqual([first]);
+          // Fiche 1, 2, 3 puis 1 : chacune refermée, puis rouverte du premier appui.
+          fireEvent.keyDown(window, { key: "Escape" });
+          touchTap(homeCard(4));
+          expect(within(live()[0]).getAllByAltText("Film 4").length).toBeGreaterThan(0);
+          fireEvent.keyDown(window, { key: "Escape" });
+          touchTap(homeCard(5));
+          expect(within(live()[0]).getAllByAltText("Film 5").length).toBeGreaterThan(0);
+          fireEvent.keyDown(window, { key: "Escape" });
+          touchTap(homeCard(3));
+          expect(live()).toHaveLength(1);
+          expect(within(live()[0]).getAllByAltText("Film 3").length).toBeGreaterThan(0);
+          // Le `click` qui suit malgré tout le relâchement ne rouvre pas une seconde fois.
+          fireEvent.click(homeCard(3));
+          expect(live()).toHaveLength(1);
+        });
+
+        it("avale le click qui suit une fermeture au geste : il n'atteint pas l'affiche dessous", () => {
+          openPhoneMock();
+          fireEvent.click(screen.getAllByRole("img", { name: "Film 4" }).filter((i) => !i.closest("[data-alab-sheet]"))[0].closest("button")!);
+          const handle = document.querySelector<HTMLElement>('[data-alab-sheet] [style*="touch-action: none"]')!;
+          fireEvent.pointerDown(handle, { clientY: 100, pointerId: 1, button: 0, pointerType: "touch" });
+          fireEvent.pointerMove(handle, { clientY: 400, pointerId: 1, pointerType: "touch" });
+          fireEvent.pointerUp(handle, { clientY: 400, pointerId: 1, pointerType: "touch" });
+          expect(live()).toHaveLength(0);
+          // Le `click` du relâchement, tombé sur une affiche de l'accueil : rien ne s'ouvre.
+          fireEvent.click(document.querySelector('[data-alab-home] section img[alt="Film 2"]')!.closest("button")!);
+          expect(live()).toHaveLength(0);
+        });
+
+        it("Échap ferme la fiche sans quitter la page Tests animations", () => {
+          // Le panneau qui porte la page écoute Échap en capture et ne s'efface que devant un
+          // `aria-modal` — la même garde que `PlayerPanelFrame`.
+          const leave = vi.fn();
+          const panel = (e: KeyboardEvent) => {
+            if (e.key !== "Escape" || document.querySelector('[aria-modal="true"]')) return;
+            leave();
+          };
+          window.addEventListener("keydown", panel, true);
+          try {
+            openDesktopMock();
+            openFromHome(3);
+            fireEvent.keyDown(window, { key: "Escape" });
+            expect(live()).toHaveLength(0);
+            expect(leave).not.toHaveBeenCalled();
+          } finally {
+            window.removeEventListener("keydown", panel, true);
+          }
+        });
+      });
+
       it("dans une pile, ouvre une autre affiche de la fiche du dessous pendant que celle du dessus revient", async () => {
         openDesktopMock();
         openFromHome(3);
