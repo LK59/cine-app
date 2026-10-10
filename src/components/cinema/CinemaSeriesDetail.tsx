@@ -11,7 +11,7 @@ import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/componen
 import { CinemaCastRow } from "@/components/cinema/CinemaCastRow";
 import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
 import { detailColumnMotion } from "@/lib/sheetMotion";
-import { useSheetMorph } from "@/lib/sheetMorph/useSheetMorph";
+import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
 import { useCinemaRoute, cinemaNavigate, cinemaClose, useSheetBehind, useRouteBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -149,14 +149,16 @@ export function CinemaSeriesDetail({
   const [revealed] = useState(() => arrivedByBack());
   const sheetBehind = useSheetBehind();
   /**
-   * La carte touchée devient le visuel plein écran, et la fiche y retourne (DECISIONS.md §61) — la
-   * même décision que la fiche du téléphone et la fiche TMDB. La fermeture rend l'adresse aussitôt :
+   * Sur un ordinateur, la fiche relaie l'aperçu sans rien déplacer : le fond reste, le logo glisse
+   * à sa place, le contenu change (`useDesktopContinuity`). Sur l'iPad, la carte touchée devient le
+   * visuel plein écran, et la fiche y retourne (DECISIONS.md §61) — la même décision que la fiche du
+   * téléphone et la fiche TMDB. La fermeture rend l'adresse aussitôt :
    * c'est une copie de la fiche qui s'efface pendant que l'image revole vers l'affiche. Sans fiche
    * dessinée derrière (une fiche TMDB, une personne), l'échange se fait d'un coup, comme avant.
    */
   const behindIsDrawn = useRouteBehind() !== null;
   const { closing, requestClose } = useDelayedClose(onClose, 0);
-  const morph = useSheetMorph({
+  const morph = useSheetTransition({
     layout: "desktop",
     rootRef: containerRef,
     imageRef: containerRef,

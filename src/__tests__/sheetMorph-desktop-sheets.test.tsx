@@ -103,8 +103,23 @@ const sheets = [
   ["la série", () => <CinemaSeriesDetail item={SERIES} onClose={vi.fn()} />, SERIES.backdropUrl],
 ] as const;
 
+/**
+ * Un iPad : pas de survol, un écran large. La fiche du bureau y garde l'affiche qui devient le
+ * visuel ; sur un ordinateur (jsdom sans `matchMedia` en est un), c'est la continuité du fond —
+ * voir `sheetMorph-continuity.test.tsx`.
+ */
+function asIpad(): () => void {
+  const before = window.matchMedia;
+  window.matchMedia = ((media: string) =>
+    ({ matches: false, media, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false }) as MediaQueryList) as typeof window.matchMedia;
+  return () => {
+    window.matchMedia = before;
+  };
+}
+
 describe.each(sheets)("la fiche du bureau : %s", (_name, sheet, backdrop) => {
-  it("part de l'affiche touchée : pas de fondu d'entrée, la fiche transparente le temps du trajet", () => {
+  it("sur l'iPad, part de l'affiche touchée : pas de fondu d'entrée, la fiche transparente le temps du trajet", () => {
+    const undo = asIpad();
     const card = pressCard();
     render(withSwr(sheet()));
     const root = document.body.querySelector<HTMLElement>("[data-sheet-morph-root]")!;
@@ -119,6 +134,7 @@ describe.each(sheets)("la fiche du bureau : %s", (_name, sheet, backdrop) => {
     // Les voiles voyagent avec le visuel, et le flou localisé attend que tout soit posé.
     expect(root.querySelectorAll("[data-sheet-veil]").length).toBe(2);
     expect(root.querySelector<HTMLElement>("[data-sheet-settle]")!.style.visibility).toBe("hidden");
+    undo();
   });
 
   it("se ferme par Échap en rendant l'adresse : une copie s'efface, la vraie fiche se cache", () => {

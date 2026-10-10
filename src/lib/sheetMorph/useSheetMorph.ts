@@ -103,6 +103,11 @@ export type SheetMorphOptions = {
   ready?: boolean;
   /** La sortie découvre un écran qui n'est pas dessiné : aucune animation, l'échange en un rendu. */
   instantExit?: boolean;
+  /**
+   * Vrai quand une autre transition mène cette fiche — la continuité du fond au bureau
+   * (`desktopContinuity.ts`) : ce crochet ne fait alors rien du tout. Décidé au montage.
+   */
+  off?: boolean;
 };
 
 export type SheetMorph = {
@@ -147,6 +152,7 @@ function canAnimate(): boolean {
 }
 
 function decideEntry(o: SheetMorphOptions): Entry {
+  if (o.off) return "none";
   if (typeof window === "undefined" || !canAnimate() || !o.active || o.revealed || !peekPress()) return "none";
   if (prefersReducedMotion()) return "fade";
   return o.ready === false ? "none" : "morph";
@@ -365,7 +371,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
   // L'ouverture, une fois, au montage.
   useLayoutEffect(() => {
     const root = opts.rootRef.current;
-    if (!root) return;
+    if (!root || optsRef.current.off) return;
     const s = st.current;
     root.setAttribute("data-sheet-morph-root", "");
     const o = optsRef.current;
@@ -415,7 +421,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
 
   // La fermeture : au premier rendu où la fiche sort.
   useLayoutEffect(() => {
-    if (!opts.leaving || st.current.closing) return;
+    if (!opts.leaving || st.current.closing || optsRef.current.off) return;
     const root = opts.rootRef.current;
     if (root) beginClose(root);
     // `beginClose` ne lit que des refs.

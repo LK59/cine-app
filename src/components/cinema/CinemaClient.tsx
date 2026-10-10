@@ -1292,6 +1292,9 @@ export function CinemaClient() {
         <div
           key={mediaType}
           ref={heroPaneRef}
+          // L'aperçu que la fiche du bureau relaie sans rien déplacer (DECISIONS.md §61) : son texte
+          // s'efface, son logo glisse jusqu'à sa place dans la fiche.
+          data-sheet-hero=""
           className="relative min-h-0 shrink grow-0 animate-fade-in"
           style={{ flexBasis: HERO_BASIS }}
           // La bannière ne tourne plus sous le clavier — voir `bannerEngaged`.
@@ -1364,6 +1367,8 @@ export function CinemaClient() {
             itself. Reliability was the explicit priority over that. */}
         <div
           ref={rowsPaneRef}
+          // Les rangées descendent un peu en s'effaçant sous la fiche du bureau (DECISIONS.md §61).
+          data-sheet-rows=""
           className={`scrollbar-thin relative min-h-80 flex-1 ${guidedScrollClass(guidedScroll)} scroll-smooth overflow-y-auto pb-16 pt-6`}
           // L'ancrage du défilement compense l'arrivée de contenu en déplaçant la vue : ici, ce
           // contenu arrive toujours *après* qu'on a décidé où l'on veut être. On le désactive.
