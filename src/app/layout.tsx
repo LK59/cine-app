@@ -32,6 +32,7 @@ import { BenchGate } from "@/components/player/BenchRunner";
 import { MaintenanceNotices } from "@/components/MaintenanceNotices";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ClientErrorListener } from "@/components/ClientErrorListener";
+import { RemoteControlSupport } from "@/components/RemoteControlSupport";
 import { PresencePinger } from "@/components/PresencePinger";
 
 // Portrait iOS splash screens, keyed by CSS width/height/DPR so Safari picks
@@ -217,6 +218,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </TranslationProvider>
         <ServiceWorkerRegistration />
         <ClientErrorListener />
+        <RemoteControlSupport />
       </body>
     </html>
   );

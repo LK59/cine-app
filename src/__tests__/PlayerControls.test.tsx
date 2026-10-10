@@ -550,6 +550,37 @@ describe("PlayerControls", () => {
     expect(playPause.getAttribute("aria-label")).toBe("player.pause");
   });
 
+  it("télécommande : lecture/pause, centre du pavé sans focus, et flèches sans `code` (Fire TV)", async () => {
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    const play = vi.fn(() => Promise.resolve());
+    render(
+      <Harness
+        onVideoRef={(v) => {
+          video = v;
+          video.play = play;
+          video.pause = vi.fn();
+        }}
+      />
+    );
+    Object.defineProperty(video, "paused", { value: true, configurable: true });
+    Object.defineProperty(video, "duration", { value: 100, configurable: true });
+    Object.defineProperty(video, "currentTime", { value: 50, writable: true, configurable: true });
+    (document.activeElement as HTMLElement | null)?.blur();
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "MediaPlayPause" }));
+    });
+    expect(play).toHaveBeenCalledTimes(1);
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    });
+    expect(play).toHaveBeenCalledTimes(2);
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    });
+    expect(video.currentTime).toBe(60);
+  });
+
   it("revient à la vérité si la lecture est refusée", async () => {
     stubMediaFetches();
     let video!: HTMLVideoElement;

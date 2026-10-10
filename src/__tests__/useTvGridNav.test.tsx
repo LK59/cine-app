@@ -48,6 +48,21 @@ describe("useTvGridNav", () => {
     expect(document.activeElement).not.toBe(second);
   });
 
+  it("rien de focalisé : ↑ et ← vont sur « Lire » de la bannière (télécommande, 10/10/2026)", () => {
+    makeCard("row-a", 0, 0);
+    const hero = document.createElement("button");
+    hero.dataset.tvEscapeUp = "hero";
+    document.body.prepend(hero);
+    renderHook(() => useTvGridNav());
+
+    press("ArrowUp");
+    expect(document.activeElement).toBe(hero);
+
+    hero.blur();
+    press("ArrowLeft");
+    expect(document.activeElement).toBe(hero);
+  });
+
   it("ArrowRight moves focus to the next card in the same row, without wrapping past the end", () => {
     const c0 = makeCard("row-a", 0, 0);
     const c1 = makeCard("row-a", 1, 0);

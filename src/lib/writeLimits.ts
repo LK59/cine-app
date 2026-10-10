@@ -31,6 +31,8 @@ export const WRITE_LIMITS = {
   clientError: { max: 30, windowMs: 60_000 },
   /** Une mesure par ouverture du cinéma : dix ouvertures en une minute, c'est déjà une boucle. */
   startupTiming: { max: 10, windowMs: 60_000 },
+  /** Le relevé de télécommande d'une Fire TV (`installRemoteDiag`) : un par onglet. */
+  remoteDiag: { max: 3, windowMs: 60_000 },
   /** Un commentaire se tape à la main : vingt en une minute n'en est plus un. */
   reportMessages: { max: 20, windowMs: 60_000 },
 } as const;
@@ -42,3 +44,4 @@ export const playerLogAllowed = limiter("playerLog");
 export const clientErrorAllowed = limiter("clientError");
 export const startupTimingAllowed = limiter("startupTiming");
 export const reportMessageAllowed = limiter("reportMessages");
+export const remoteDiagAllowed = limiter("remoteDiag");

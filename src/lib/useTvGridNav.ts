@@ -104,6 +104,17 @@ export function useTvGridNav(enabled = true) {
         if (e.key === "ArrowDown" || e.key === "ArrowRight") {
           e.preventDefault();
           focusCard(rows[0][0], true);
+          return;
+        }
+        // Rien de focalisé du tout — la page vient de s'ouvrir, ou un clic sur un fond a rendu le
+        // focus au document : ↑ et ← vont sur « Lire » de la bannière, d'où ses propres flèches
+        // prennent la suite. Sans quoi, à la télécommande (Fire TV, 10/10/2026), ces deux touches
+        // ne faisaient rien tant qu'on n'avait pas d'abord appuyé vers le bas.
+        const nowhere = !active || active === document.body || active === document.documentElement;
+        const hero = nowhere ? document.querySelector<HTMLElement>('[data-tv-escape-up="hero"]') : null;
+        if (hero && (e.key === "ArrowUp" || e.key === "ArrowLeft")) {
+          e.preventDefault();
+          hero.focus();
         }
         return;
       }

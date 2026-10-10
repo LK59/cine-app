@@ -153,7 +153,11 @@ launch used to ask for the whole catalogue again — one to two seconds of loadi
 roaming abroad; the log says what it actually saves. Since 2026-09-28 the same line carries the
 device's storage (`storageFacts`): the answer to `persist()` and whether storage is persistent,
 `quotaMB` / `usageMB` (and `idbMB` / `cacheMB` / `opfsMB` where Chromium details them), and what the
-resume cache holds for the account — measured before keeping more on the device. Its format is versioned
+resume cache holds for the account — measured before keeping more on the device. On a Fire TV (Silk), the same
+log also receives one `kind: "télécommande"` line per tab (`installRemoteDiag`, `src/lib/fireTv.ts`, since
+2026-10-10): the first 30 keydowns as they arrived (key, code, keyCode, target, handled) and cursor/wheel counts —
+Silk navigates by an on-screen cursor by default and then sends the page no arrow keys, which is why it exists.
+Its format is versioned
 (`PERSISTED_CACHE_SCHEMA`), and `persistentCache-schema.test.ts` fails when the kept responses'
 types change without the version moving.
 **Reports** (« Signaler un problème », `src/lib/reports.ts`) freeze a snapshot of the author's logs

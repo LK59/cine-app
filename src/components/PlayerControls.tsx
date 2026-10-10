@@ -17,6 +17,7 @@ import {
 } from "@/lib/subtitleStyle";
 import { useMediaSession } from "@/lib/useMediaSession";
 import { VOLUME_STORAGE_KEY } from "@/lib/rememberedVolume";
+import { normalizeKey } from "@/lib/remoteKeys";
 import {
   SLEEP_DURATIONS,
   sleepBlocksAdvanceSnapshot,
@@ -1366,13 +1367,36 @@ export function PlayerControls({
         showControls();
         return;
       }
-      if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+      // Une télécommande (Fire TV, 10/10/2026) ne remplit pas toujours `code` : le nom de la touche,
+      // ramené à sa forme moderne (`remoteKeys.ts`), fait foi à côté.
+      const key = normalizeKey(e);
+      if (key === "MediaPlayPause") {
+        e.preventDefault();
+        keyActionsRef.current.togglePlay();
+        showControls();
+        return;
+      }
+      // Le centre du pavé, quand aucun bouton n'a le focus : lecture / pause, comme l'espace. Sur un
+      // bouton focalisé, il garde son rôle — l'activer.
+      if (key === "Enter" && (!active || active === document.body || active === document.documentElement)) {
+        e.preventDefault();
+        if (e.repeat) return;
+        keyActionsRef.current.togglePlay();
+        showControls();
+        return;
+      }
+      const left = e.code === "ArrowLeft" || key === "ArrowLeft" || key === "MediaRewind";
+      const right = e.code === "ArrowRight" || key === "ArrowRight" || key === "MediaFastForward";
+      if (left || right) {
         // Y compris sur la barre de progression focalisée : sa propre flèche la décalait d'un pas
         // d'input, sans passer par le saut du lecteur.
         e.preventDefault();
-        keyActionsRef.current.skip(e.code === "ArrowRight" ? 10 : -10);
+        keyActionsRef.current.skip(right ? 10 : -10);
         showControls();
+        return;
       }
+      // ↑ ↓ d'une télécommande : faire paraître les commandes, sans rien déplacer d'autre.
+      if (key === "ArrowUp" || key === "ArrowDown") showControls();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

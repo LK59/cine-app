@@ -74,6 +74,9 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // Ce que l'ouverture du cinéma a coûté (cache de l'appareil ou réseau) : la route n'écrit que
   // sur l'appelant, dans un journal, et ne renvoie rien.
   "POST /api/startup-timing",
+  // Le relevé de télécommande d'une Fire TV (fireTv.ts) : la route n'écrit que sur l'appelant,
+  // dans le journal des ouvertures, et ne renvoie rien.
+  "POST /api/remote-diag",
   // « Signaler un problème » : créer le sien. Les routes vérifient que c'est bien le sien pour tout
   // le reste (modifier un brouillon, commenter, fermer, retirer une image).
   "POST /api/reports",
