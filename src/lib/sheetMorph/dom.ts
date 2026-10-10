@@ -13,20 +13,37 @@ export function clockNow(): number {
   return typeof c === "number" ? c : performance.now();
 }
 
+/**
+ * Au plus tard ceci, quoi que fasse `requestAnimationFrame` : trois images à 60 Hz, de quoi peindre
+ * le montage sans jamais faire attendre le départ.
+ *
+ * Le moteur n'est pas tenu de donner des images à une page où rien ne bouge — et ici rien ne bouge
+ * encore : les animations sont créées en pause, posées à leur point de départ. WebKit (relevé sur le
+ * moteur de Safari le 10/10/2026, émulation iPhone) n'a alors rendu une image qu'au bout de ~900 ms
+ * pendant que les minuteries tournaient toutes les 50 ms : la fiche restait figée à son départ, la
+ * carte encore basse — et la croix, pas encore à sa place, ne recevait pas l'appui qu'on lui
+ * destinait. Borné, le départ ne dépend plus de la cadence que le navigateur choisit.
+ */
+const FRAMES_AT_MOST_MS = 50;
+
 /** Deux images plus tard : le montage de React et sa mise en page sont peints, le départ ne perd pas sa première image. */
-export function afterTwoFrames(fn: () => void): () => void {
-  let cancelled = false;
+export function afterTwoFrames(fn: () => void, atMostMs = FRAMES_AT_MOST_MS): () => void {
+  let done = false;
   const raf =
     typeof window.requestAnimationFrame === "function"
       ? window.requestAnimationFrame.bind(window)
       : (cb: FrameRequestCallback) => window.setTimeout(() => cb(performance.now()), 16);
-  raf(() =>
-    raf(() => {
-      if (!cancelled) fn();
-    }),
-  );
+  const fire = () => {
+    if (done) return;
+    done = true;
+    window.clearTimeout(timer);
+    fn();
+  };
+  const timer = window.setTimeout(fire, atMostMs);
+  raf(() => raf(fire));
   return () => {
-    cancelled = true;
+    done = true;
+    window.clearTimeout(timer);
   };
 }
 

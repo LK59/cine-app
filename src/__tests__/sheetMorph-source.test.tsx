@@ -38,6 +38,20 @@ describe("le traqueur d'appuis", () => {
     expect(takePress()).toBeNull();
   });
 
+  it("retient l'appui dans l'ordre que donne WebKit au toucher : pointeur tactile, touchend, puis un click « souris »", () => {
+    // Relevé sur le moteur de Safari (10/10/2026) : pointerdown/pointerup en `touch`, puis touchend,
+    // puis un click synthétisé dont le pointerType est `mouse` et l'identifiant différent.
+    const c = card();
+    const img = c.querySelector("img")!;
+    fireEvent.pointerDown(img, { pointerId: 2, pointerType: "touch", clientX: 251, clientY: 552 });
+    fireEvent.touchStart(img);
+    fireEvent.pointerUp(img, { pointerId: 2, pointerType: "touch", clientX: 251, clientY: 552 });
+    fireEvent.touchEnd(img);
+    fireEvent.click(img, { clientX: 251, clientY: 552 });
+    expect(takePress()?.control).toBe(c);
+    expect(takePress()).toBeNull();
+  });
+
   it("oublie un doigt qui a glissé — on faisait défiler la rangée", () => {
     const c = card();
     fireEvent.pointerDown(c, { pointerId: 1, clientX: 10, clientY: 10 });
