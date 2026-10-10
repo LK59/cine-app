@@ -1164,10 +1164,9 @@ export function ExperimentalPlayerHost({
         : error || networkLost || stuck || (startingFor !== null && startingFor >= STUCK_AFTER_MS)
           ? "gone"
           : "waiting";
-  // Le calque couvre-t-il le lecteur ? Couverture dès l'appui, puis ouverture animée passé 300 ms si
-  // aucune image n'est décodée ; dans les deux cas jusqu'au film qui bouge (`introPlaying`), ou
-  // `COVER_HOLD_MS` sur une image décodée qui ne part pas — voir `PlaybackIntro`. Il tient lieu de
-  // roue : les deux ne se montrent jamais ensemble.
+  // Le calque couvre-t-il le lecteur ? L'ouverture entière dès l'appui, jusqu'au film qui bouge
+  // (`introPlaying`), ou `COVER_HOLD_MS` sur une image décodée qui ne part pas — voir `PlaybackIntro`.
+  // Il tient lieu de roue : les deux ne se montrent jamais ensemble.
   const [introCovering, setIntroCovering] = useState(() => introEligible && !isMini);
   const introCovers = introPhase === "waiting" && introCovering;
 
@@ -2227,7 +2226,7 @@ export function ExperimentalPlayerHost({
   // flag stacked one spinner on top of the other.
   const openingSpinner = openingFor !== null && openingFor >= SPINNER_AFTER_MS && !introCovers;
   // Sous l'ouverture, la roue de l'attente ne se montre pas non plus : l'une tient lieu de l'autre.
-  // Et au tout premier départ, sur une image déjà montrée (la couverture partie au bout de
+  // Et au tout premier départ, sur une image déjà montrée (l'ouverture partie au bout de
   // `COVER_HOLD_MS`, ou une séance sans ouverture), pas avant une vraie attente : la roue revenait par-
   // dessus à 120 ms — le « chargement classique après la première image » signalé par Louis
   // (10/10/2026).

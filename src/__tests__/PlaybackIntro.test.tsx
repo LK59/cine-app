@@ -4,15 +4,30 @@ import { render, cleanup, screen, act, fireEvent } from "@testing-library/react"
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { resetIntroClocks, startIntroClock, keepIntroSnapshot, introFinished, finishIntro } from "@/lib/playbackIntro";
 
-// jsdom n'a pas Web Animations : une doublure qui rend une animation finie.
+// jsdom n'a pas Web Animations : une doublure qui rend une animation finie, et note chaque appel
+// (cible, images clés, options) pour qu'un test puisse retrouver la lueur et savoir si elle a été annulée.
+interface Played {
+  target: Element;
+  keyframes: Keyframe[];
+  options: KeyframeAnimationOptions;
+  cancel: ReturnType<typeof vi.fn>;
+}
+const played: Played[] = [];
 beforeAll(() => {
-  const finished = () => ({ id: "", playState: "finished", finished: Promise.resolve(), cancel() {} });
-  Object.assign(Element.prototype, { animate: finished, getAnimations: () => [] });
+  Object.assign(Element.prototype, {
+    animate(this: Element, keyframes: Keyframe[], options: KeyframeAnimationOptions) {
+      const cancel = vi.fn();
+      played.push({ target: this, keyframes, options, cancel });
+      return { id: "", playState: "finished", finished: Promise.resolve(), currentTime: 0, cancel };
+    },
+    getAnimations: () => [],
+  });
 });
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(10_000);
   resetIntroClocks();
+  played.length = 0;
 });
 afterEach(() => {
   cleanup();
@@ -28,6 +43,7 @@ function Intro({
   onClose,
   onShow,
   clockKey,
+  caption = ["S1 · É3 · Le pari"],
 }: {
   phase: IntroPhase;
   imageShown?: boolean;
@@ -35,6 +51,7 @@ function Intro({
   onClose?: () => void;
   onShow?: () => void;
   clockKey?: string;
+  caption?: string[];
 }) {
   return (
     <PlaybackIntro
@@ -44,7 +61,7 @@ function Intro({
       clockKey={clockKey}
       art={art}
       fallbackName="Alien"
-      caption={["S1 · É3 · Le pari"]}
+      caption={caption}
       onClose={onClose}
       onShow={onShow}
       closeLabel="Fermer"
@@ -54,48 +71,87 @@ function Intro({
 }
 
 const layer = () => document.querySelector("[data-playback-intro]");
-const state = () => layer()?.getAttribute("data-playback-intro") ?? null;
+const sweepAnim = () => played.find((p) => JSON.stringify(p.keyframes).includes("translateX(-120%)"));
+const logoAnim = () => played.find((p) => p.target.contains(screen.queryByAltText("Alien")) && JSON.stringify(p.keyframes).includes("scale(0.96)"));
 
 describe("PlaybackIntro", () => {
-  it("couvre le lecteur dès le premier rendu : le visuel sous son voile, sans logo ni légende", () => {
-    // Le lecteur vide se voyait un instant à l'appui (10/10/2026) : la couverture est là d'emblée.
-    render(<Intro phase="waiting" />);
-    expect(state()).toBe("cover");
+  it("entière dès le premier rendu : le visuel, le logo, la ligne de chargement et la légende", () => {
+    // Sous 300 ms, une couverture immobile sans logo se lisait comme une image figée sur les départs
+    // les plus rapides (Louis, iPhone, 8.31.2) : plus de seuil, tout paraît à l'appui.
+    const onShow = vi.fn();
+    render(<Intro phase="waiting" onShow={onShow} />);
+    expect(layer()?.getAttribute("data-playback-intro")).toBe("intro");
+    expect(onShow).toHaveBeenCalledOnce();
     expect(document.querySelector("[data-playback-intro] img")?.getAttribute("src")).toBe("https://image.tmdb.org/t/p/w1280/fond.jpg");
-    expect(screen.queryByAltText("Alien")).not.toBeNull(); // le logo est monté, mais à l'opacité 0
-    expect(screen.queryByText("S1 · É3 · Le pari")).toBeNull();
+    expect(screen.getByAltText("Alien").getAttribute("src")).toBe(art.logoUrl);
+    expect(screen.getByText("S1 · É3 · Le pari")).toBeTruthy();
+    expect(document.querySelector("[data-playback-intro-line]")).not.toBeNull();
   });
 
-  it("une première image avant le seuil : pas d'ouverture animée, et la couverture tient jusqu'au film qui bouge", () => {
-    // Le cas des reprises lues depuis l'appareil — ouvertes en 25 à 115 ms le 10/10/2026. Effacée sur
-    // l'image figée (8.30.9), la couverture laissait voir l'image arrêtée et la roue de l'attente.
-    const onShow = vi.fn();
-    const { rerender } = render(<Intro phase="waiting" clockKey="k" onShow={onShow} />);
-    act(() => vi.advanceTimersByTime(60));
-    // Image décodée, horloge pas encore partie : la couverture reste, même passé le seuil.
-    rerender(<Intro phase="waiting" imageShown clockKey="k" onShow={onShow} />);
-    act(() => vi.advanceTimersByTime(500));
-    expect(state()).toBe("cover");
-    expect(onShow).not.toHaveBeenCalled();
+  it("le logo paraît dès l'appui, en 250 ms et sans délai ; la ligne avec lui ; le fond déjà en mouvement", () => {
+    render(<Intro phase="waiting" />);
+    const logo = logoAnim();
+    expect(logo?.options.duration).toBe(250);
+    expect(logo?.options.delay ?? 0).toBe(0);
+    const details = played.find((p) => p.target.hasAttribute("data-playback-intro-details"));
+    expect(details?.options.duration).toBe(250);
+    expect(details?.options.delay ?? 0).toBe(0);
+    expect(played.some((p) => JSON.stringify(p.keyframes).includes("scale(1.08)"))).toBe(true);
+    // La lueur attend que le logo soit posé.
+    expect(sweepAnim()?.options.delay).toBe(250);
+  });
+
+  it("un départ rapide : pas de couverture immobile, un seul fondu de 280 ms quand le film bouge", () => {
+    // Une reprise lue depuis l'appareil : image décodée vers 50 ms, horloge partie vers 350 ms.
+    const { rerender } = render(<Intro phase="waiting" clockKey="k" />);
+    act(() => vi.advanceTimersByTime(50));
+    rerender(<Intro phase="waiting" imageShown clockKey="k" />);
+    act(() => vi.advanceTimersByTime(300));
+    // L'image décodée ne retire rien : l'ouverture reste, logo et ligne compris.
+    expect(layer()?.getAttribute("data-playback-intro")).toBe("intro");
     expect(introFinished("k")).toBe(false);
-    // L'horloge part : un seul fondu de 280 ms, sur une image qui joue déjà.
-    rerender(<Intro phase="picture" imageShown clockKey="k" onShow={onShow} />);
+    rerender(<Intro phase="picture" imageShown clockKey="k" />);
+    const fade = played.find((p) => p.target === layer() && JSON.stringify(p.keyframes).includes('"opacity":0'));
+    expect(fade?.options.duration).toBe(280);
+    act(() => vi.advanceTimersByTime(279));
     expect(layer()).not.toBeNull();
-    act(() => vi.advanceTimersByTime(280));
+    act(() => vi.advanceTimersByTime(1));
     expect(layer()).toBeNull();
-    expect(onShow).not.toHaveBeenCalled();
     // Close pour cette lecture : un lecteur qui prendrait la relève ne recouvrirait pas l'image.
     expect(introFinished("k")).toBe(true);
   });
 
-  it("une image décodée qui ne part pas en 1,2 s : la couverture s'efface quand même, l'attente doit se voir", () => {
+  it("le film part avant que le logo soit posé : la lueur ne passe pas", () => {
+    const { rerender } = render(<Intro phase="waiting" />);
+    act(() => vi.advanceTimersByTime(120));
+    rerender(<Intro phase="picture" imageShown />);
+    expect(sweepAnim()?.cancel).toHaveBeenCalled();
+  });
+
+  it("le film part une fois le logo posé : la lueur continue, emportée par le fondu", () => {
+    const { rerender } = render(<Intro phase="waiting" />);
+    act(() => vi.advanceTimersByTime(600));
+    rerender(<Intro phase="picture" imageShown />);
+    expect(sweepAnim()?.cancel).not.toHaveBeenCalled();
+  });
+
+  it("une image décodée qui ne part pas en 1,2 s : l'ouverture s'efface quand même, l'attente doit se voir", () => {
     const { rerender } = render(<Intro phase="waiting" clockKey="k" />);
     act(() => vi.advanceTimersByTime(50));
     rerender(<Intro phase="waiting" imageShown clockKey="k" />);
     act(() => vi.advanceTimersByTime(1199));
-    expect(state()).toBe("cover");
+    expect(introFinished("k")).toBe(false);
     act(() => vi.advanceTimersByTime(1));
     expect(introFinished("k")).toBe(true);
+    act(() => vi.advanceTimersByTime(280));
+    expect(layer()).toBeNull();
+  });
+
+  it("sans image, une attente longue garde l'ouverture : la fin reste celle de l'hôte", () => {
+    const { rerender } = render(<Intro phase="waiting" />);
+    act(() => vi.advanceTimersByTime(4000));
+    expect(layer()).not.toBeNull();
+    rerender(<Intro phase="picture" imageShown />);
     act(() => vi.advanceTimersByTime(280));
     expect(layer()).toBeNull();
   });
@@ -108,41 +164,6 @@ describe("PlaybackIntro", () => {
     rerender(<PlaybackIntro phase="picture" imageShown startedAt={10_000} art={art} fallbackName="Alien" caption={[]} onCoverChange={onCoverChange} reduced={false} />);
     // Dès le fondu de sortie : le film bouge, les vraies attentes reprennent leurs droits.
     expect(covers.at(-1)).toBe(false);
-  });
-
-  it("une image arrivée avant le seuil annule l'ouverture même si l'hôte tarde à la retirer", () => {
-    const { rerender } = render(<Intro phase="waiting" />);
-    act(() => vi.advanceTimersByTime(200));
-    rerender(<Intro phase="waiting" imageShown />);
-    act(() => vi.advanceTimersByTime(150)); // passé 300 ms, pendant le fondu
-    expect(state()).toBe("cover");
-    expect(screen.queryByText("S1 · É3 · Le pari")).toBeNull();
-  });
-
-  it("rien à 300 ms : l'ouverture animée part de la couverture, logo et légende", () => {
-    const onShow = vi.fn();
-    render(<Intro phase="waiting" onShow={onShow} />);
-    act(() => vi.advanceTimersByTime(299));
-    expect(state()).toBe("cover");
-    act(() => vi.advanceTimersByTime(1));
-    expect(state()).toBe("intro");
-    expect(onShow).toHaveBeenCalledOnce();
-    expect(screen.getByAltText("Alien").getAttribute("src")).toBe(art.logoUrl);
-    expect(screen.getByText("S1 · É3 · Le pari")).toBeTruthy();
-    // Même image : la couverture ne change pas de fond en devenant l'ouverture.
-    expect(document.querySelector("[data-playback-intro] img")?.getAttribute("src")).toBe("https://image.tmdb.org/t/p/w1280/fond.jpg");
-  });
-
-  it("l'ouverture animée parue : une image figée ne la retire pas, la fin reste celle de l'hôte", () => {
-    const { rerender } = render(<Intro phase="waiting" />);
-    act(() => vi.advanceTimersByTime(1500));
-    rerender(<Intro phase="waiting" imageShown />);
-    act(() => vi.advanceTimersByTime(1000));
-    expect(state()).toBe("intro");
-    rerender(<Intro phase="picture" imageShown />);
-    expect(layer()).not.toBeNull();
-    act(() => vi.advanceTimersByTime(400));
-    expect(layer()).toBeNull();
   });
 
   it("une image déjà à l'écran n'est jamais recouverte : monté avec elle, rien du tout", () => {
@@ -160,14 +181,6 @@ describe("PlaybackIntro", () => {
     expect(layer()).toBeNull();
   });
 
-  it("un passage direct du banc (`picture` avant le seuil) efface aussi la couverture", () => {
-    const { rerender } = render(<Intro phase="waiting" />);
-    act(() => vi.advanceTimersByTime(100));
-    rerender(<Intro phase="picture" />);
-    act(() => vi.advanceTimersByTime(280));
-    expect(layer()).toBeNull();
-  });
-
   it("une erreur : disparue à l'instant, sans fondu", () => {
     const { rerender } = render(<Intro phase="waiting" />);
     act(() => vi.advanceTimersByTime(1500));
@@ -175,23 +188,22 @@ describe("PlaybackIntro", () => {
     expect(layer()).toBeNull();
   });
 
-  it("un relais après le seuil : l'ouverture est là d'emblée, avec ce que l'autre lecteur montrait", () => {
+  it("un relais : l'ouverture continue avec ce que l'autre lecteur montrait, au point où il en était", () => {
     startIntroClock("k", 8_000);
     keepIntroSnapshot("k", { art, name: "Alien", caption: ["Reprise à 1 h 12"] });
-    render(<Intro phase="waiting" startedAt={8_000} clockKey="k" />);
-    expect(state()).toBe("intro");
+    render(<Intro phase="waiting" startedAt={8_000} clockKey="k" caption={["autre légende"]} />);
+    expect(layer()?.getAttribute("data-playback-intro")).toBe("intro");
     expect(screen.getByText("Reprise à 1 h 12")).toBeTruthy();
+    expect(screen.queryByText("autre légende")).toBeNull();
   });
 
-  it("un relais avant le seuil : la couverture continue, et l'ouverture part à l'heure de l'appui", () => {
-    startIntroClock("k", 9_850);
-    render(<Intro phase="waiting" startedAt={9_850} clockKey="k" />);
-    expect(state()).toBe("cover");
-    act(() => vi.advanceTimersByTime(150));
-    expect(state()).toBe("intro");
+  it("l'épisode suivant : son ouverture, avec la légende de l'épisode, dès l'appui", () => {
+    // Un lecteur neuf par épisode : sans seuil, la légende est là à la première image dessinée.
+    render(<Intro phase="waiting" clockKey="open-2:ep-4" caption={["S1 · É4 · La suite"]} />);
+    expect(screen.getByText("S1 · É4 · La suite")).toBeTruthy();
   });
 
-  it("ne prend aucun appui hors de sa croix, joignable dès la couverture", () => {
+  it("ne prend aucun appui hors de sa croix, joignable dès l'appui", () => {
     const onClose = vi.fn();
     render(<Intro phase="waiting" onClose={onClose} />);
     expect((layer() as HTMLElement).style.pointerEvents).toBe("none");
@@ -201,9 +213,15 @@ describe("PlaybackIntro", () => {
 
   it("un logo qui ne se charge pas laisse la place au titre écrit, pas à une image cassée", () => {
     render(<Intro phase="waiting" />);
-    act(() => vi.advanceTimersByTime(300));
     fireEvent.error(screen.getByAltText("Alien"));
     expect(screen.queryByAltText("Alien")).toBeNull();
     expect(screen.getByRole("heading", { name: "Alien" })).toBeTruthy();
+  });
+
+  it("« Réduire les animations » : logo et ligne posés en fondu simple, sans zoom ni lueur", () => {
+    render(<PlaybackIntro phase="waiting" startedAt={10_000} art={art} fallbackName="Alien" caption={[]} reduced />);
+    expect(played.some((p) => JSON.stringify(p.keyframes).includes("scale(1.08)"))).toBe(false);
+    expect(sweepAnim()).toBeUndefined();
+    expect(document.querySelector(".playback-intro-line")).toBeNull();
   });
 });

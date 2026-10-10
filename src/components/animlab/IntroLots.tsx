@@ -147,7 +147,6 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
   const choices = useMemo(() => (withoutLogo ? [...withLogo.slice(0, 6), withoutLogo] : withLogo.slice(0, 6)), [withLogo, withoutLogo]);
   const [pick, setPick] = useState(0);
   const [delay, setDelay] = useState(2000);
-  const [threshold, setThreshold] = useState(PLAYBACK_INTRO.thresholdMs);
   const [zoom, setZoom] = useState(PLAYBACK_INTRO.zoom);
   const [logoMs, setLogoMs] = useState(PLAYBACK_INTRO.logoMs);
   const [sweep, setSweep] = useState(PLAYBACK_INTRO.sweep);
@@ -168,7 +167,7 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
   return (
     <section className="space-y-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
       <p className="text-sm text-muted">
-        {"Ce qu'on verrait entre l'appui sur « Lire » et la première image : le visuel du film qui avance lentement, son logo qui apparaît avec une lueur, une ligne de chargement, puis un fondu enchaîné vers la « vidéo » (ici le visuel net). « Fond » compare la qualité du visuel : 1 280 px (l'original sur un grand écran dense), net ou adouci, et l'ancien 300 px agrandi. « Délai simulé » joue le temps que met le vrai lecteur ; sous le seuil de passage direct, il n'y a pas d'ouverture du tout."}
+        {"Ce qu'on verrait entre l'appui sur « Lire » et la première image : le visuel du film qui avance lentement, son logo qui apparaît avec une lueur, une ligne de chargement, puis un fondu enchaîné vers la « vidéo » (ici le visuel net). « Fond » compare la qualité du visuel : 1 280 px (l'original sur un grand écran dense), net ou adouci, et l'ancien 300 px agrandi. « Délai simulé » joue le temps que met le vrai lecteur : l'ouverture paraît dès l'appui, même pour un départ de 200 ms, et s'efface quand le film part."}
       </p>
       <Row label="Titre">
         {choices.length === 0 && <span className="text-sm text-subtle">Chargement du catalogue…</span>}
@@ -195,7 +194,6 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
       </Row>
       <div className="grid gap-3 sm:grid-cols-2">
         <Slider label={`Délai sur mesure ${(delay / 1000).toFixed(1)} s`} min={0} max={8000} step={100} value={delay} set={setDelay} />
-        <Slider label={`Seuil de passage direct ${threshold} ms`} min={0} max={1000} step={50} value={threshold} set={setThreshold} />
         <Slider label={`Zoom du fond ${zoom.toFixed(2)} → 1,00`} min={1} max={1.2} step={0.01} value={zoom} set={setZoom} />
         <Slider label={`Apparition du logo ${logoMs} ms`} min={200} max={1500} step={50} value={logoMs} set={setLogoMs} />
         <Slider
@@ -222,7 +220,6 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
             key={run}
             title={title}
             delay={delay}
-            threshold={threshold}
             zoom={zoom}
             logoMs={logoMs}
             sweep={sweep}
@@ -246,11 +243,10 @@ function captionLines(caption: Caption): string[] {
 }
 
 function IntroStage({
-  title, delay, threshold, zoom, logoMs, sweep, caption, reduced, bg, brightness, onReplay, onClose,
+  title, delay, zoom, logoMs, sweep, caption, reduced, bg, brightness, onReplay, onClose,
 }: {
   title: CinemaMovie;
   delay: number;
-  threshold: number;
   zoom: number;
   logoMs: number;
   sweep: boolean;
@@ -264,7 +260,6 @@ function IntroStage({
   // Le « délai simulé » tient lieu du vrai lecteur : la première image arrive au bout de lui.
   const [startedAt] = useState(() => Date.now());
   const [pictured, setPictured] = useState(false);
-  const direct = delay < threshold;
   const videoRef = useRef<HTMLDivElement>(null);
   const full = tmdbResize(title.backdropUrl, "w1280") ?? title.backdropUrl ?? "";
 
@@ -276,14 +271,14 @@ function IntroStage({
   // La « vidéo » paraît comme celle du lecteur natif : en fondu, sous l'ouverture qui s'efface.
   useLayoutEffect(() => {
     if (!pictured) return;
-    videoRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: direct ? 160 : reduced ? 200 : 400, easing: "ease-out", fill: "both" });
-  }, [pictured, direct, reduced]);
+    videoRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: reduced ? 200 : 280, easing: "ease-out", fill: "both" });
+  }, [pictured, reduced]);
 
   return (
     <div className="fixed inset-0 z-[100] overflow-hidden bg-black" style={{ pointerEvents: "none" }}>
       <div ref={videoRef} className="absolute inset-0" style={{ opacity: 0 }}>
         <img src={full} alt="" className="h-full w-full object-cover" />
-        <div className="absolute bottom-4 left-5 text-xs font-medium text-white/70">{direct ? "Passage direct (sous le seuil)" : "Première image"}</div>
+        <div className="absolute bottom-4 left-5 text-xs font-medium text-white/70">Le film</div>
       </div>
 
       <PlaybackIntro
@@ -292,7 +287,7 @@ function IntroStage({
         art={{ name: title.title, backdropUrl: title.backdropUrl, logoUrl: title.logoUrl }}
         fallbackName={title.title}
         caption={captionLines(caption)}
-        settings={{ thresholdMs: threshold, zoom, logoMs, sweep, background: bg, brightness }}
+        settings={{ zoom, logoMs, sweep, background: bg, brightness }}
         reduced={reduced}
       />
 

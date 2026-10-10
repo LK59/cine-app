@@ -333,8 +333,8 @@ function ServerPlayerIntro({
       startedAt={startedAt}
       clockKey={key}
       art={session.introArt ?? null}
-      // Ici l'image et la fin ne font qu'un (`useServerIntroPicture`) : la couverture posée au montage
-      // s'efface sur elle, ou l'ouverture animée si elle avait paru — même règle que chez le natif.
+      // Ici l'image et la fin ne font qu'un (`useServerIntroPicture`) : l'ouverture posée au montage
+      // s'efface sur elle — même règle que chez le natif.
       imageShown={pictured}
       onCoverChange={onCoverChange}
       fallbackName={session.title}
