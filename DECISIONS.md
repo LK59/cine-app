@@ -2350,3 +2350,36 @@ l'échelle (`forceAudioTranscode`).
 ffmpeg, segments de la sonde à envoyer à un vrai MediaSource).
 
 **Décidé le 10/10/2026.**
+
+## 63. Une image qui échoue réessaie, au lieu d'abandonner jusqu'au redémarrage
+
+**Règle.** Toute image du cinéma qui échoue montre son repli (carré gris, titre écrit, fond uni) et
+réessaie : à ~2 s, ~6 s, ~15 s (±20 %), puis plus rien jusqu'au retour du réseau (`online`) ou de
+l'appli (`visibilitychange`), où toutes les images en échec réessaient aussitôt et leur échelle
+repart. Au plus six essais à la fois, les images à l'écran d'abord ; rien hors ligne ; pendant un
+film en plein écran, seulement les images du lecteur. Revenue, l'image remplace son repli en fondu.
+Un essai redemande la même adresse (une erreur n'est pas gardée en cache, et la clé de cache des
+chargements réussis ne change pas). Avant (relevé le 10/10/2026, itinérance) : un échec passager
+laissait affiches grises, logos en texte et bannières sombres jusqu'au redémarrage.
+
+**Une seule fonction.** Le registre `src/lib/imageRetry.ts` et le hook `useImageRetry`
+(`src/lib/useImageRetry.ts`) — deux façons de réessayer : `element` (l'élément reste, remonté par
+`retryKey`, son repli dessous) et `probe` (le repli remplace l'élément, l'adresse est rechargée hors
+du document, l'élément revient une fois l'image en cache).
+
+**Appelants.** `PosterImage` (element) ; `CinemaLogo` (probe — le repli passe par sa prop
+`fallback`, que `CinemaHero`, `CinemaSeriesHero`, `CinemaMovieDetail`, `CinemaSeriesDetail` et
+`CinemaMobileDetail` lui donnent au lieu de démonter le logo) ; la bannière de `CinemaMobileDetail`
+(probe — revenue, elle reparaît par le fondu de la doublure de `useSheetMorph`) ; les couches de
+`HeroBackdrop` (element) ; `TitleLogo` (probe) ; le logo de `PlaybackIntro` (probe, `player`).
+
+**Volontairement à part.** `ImagePicker` (les captures d'un signalement : une image locale, pas un
+réseau) et les vignettes de la barre de lecture (leur propre préchargement).
+
+**Avec.** Une image servie par le cache du navigateur paraît sans fondu (`imageReveal.ts`,
+`servedFromCache` : `deliveryType` ou un transfert nul) — après un redémarrage, une grille relue du
+disque refaisait tous ses fondus comme si tout se rechargeait. Et l'affiche d'une série sans affiche
+TMDB dans la langue vient de Jellyfin redimensionnée (`jellyfinPoster` via `libraryPoster`, `kind=poster`) plutôt que de
+l'original de TheTVDB, servi sans consigne de cache.
+
+Tests : `imageRetry.test.ts`, `imageRetry-components.test.tsx`, `jellyfin-image-etag.test.ts`.

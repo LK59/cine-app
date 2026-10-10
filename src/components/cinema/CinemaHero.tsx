@@ -327,17 +327,8 @@ export function CinemaHero({
   // poster/backdrop already were) instead of a separate per-item fetch — known synchronously
   // the instant this renders, no debounce/timing dance needed at all, and CinemaClient's own
   // warm-up effect prefetches every logo image alongside the backdrops, so by the time focus
-  // actually lands here the browser has usually already cached it. Just a plain onError
-  // fallback to text, same pattern as any other image in this app.
-  const [logoErrored, setLogoErrored] = useState(false);
-  // Reset adjusted during render (not an effect), synchronously in the same render item.radarrId
-  // changes — this is a single persistent component instance across focus changes, not
-  // remounted per item, so stale error state would otherwise survive into the next title.
-  const [resetForId, setResetForId] = useState(item.radarrId);
-  if (item.radarrId !== resetForId) {
-    setResetForId(item.radarrId);
-    setLogoErrored(false);
-  }
+  // actually lands here the browser has usually already cached it. A failed logo falls back to
+  // the written title and retries on its own (`useImageRetry`, keyed on its address).
 
   return (
     <div className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
@@ -348,8 +339,14 @@ export function CinemaHero({
       <div key={item.radarrId} className="contents">
       {onBack && <HeroBackToSpotlight onBack={onBack} />}
       <HeroTitleLink onOpen={onOpen} title={item.title}>
-        {item.logoUrl && !logoErrored ? (
-          <CinemaLogo src={item.logoUrl} alt={item.title} surface="hero" onError={() => setLogoErrored(true)} />
+        {/* Le titre écrit tient la place d'un logo en échec, le temps qu'il réessaie (`useImageRetry`). */}
+        {item.logoUrl ? (
+          <CinemaLogo
+            src={item.logoUrl}
+            alt={item.title}
+            surface="hero"
+            fallback={<h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl font-display">{item.title}</h1>}
+          />
         ) : (
           <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl font-display">{item.title}</h1>
         )}

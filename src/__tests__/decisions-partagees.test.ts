@@ -64,7 +64,7 @@ describe("une seule source d'affiche", () => {
     const src = lire("src/lib/images.ts");
     expect(src).toMatch(/export function libraryPoster\(/);
     // La règle elle-même : la langue si on l'a, l'affiche d'origine sinon.
-    expect(src).toMatch(/posterByLang\?\.\[locale\] \?\? posterUrl\(/);
+    expect(src).toMatch(/posterByLang\?\.\[locale\] \?\? (orElse \?\? )?posterUrl\(/);
   });
 });
 

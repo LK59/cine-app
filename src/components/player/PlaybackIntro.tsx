@@ -6,6 +6,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { X } from "lucide-react";
+import { useImageRetry } from "@/lib/useImageRetry";
 import {
   PLAYBACK_INTRO,
   finishIntro,
@@ -157,8 +158,9 @@ export function PlaybackIntro({
   const display = shown;
   // Un logo qui ne se charge pas (hors ligne, adresse périmée) laissait l'icône d'image cassée au
   // milieu de l'écran, avec son texte de remplacement : le titre écrit prend sa place.
-  const [logoFailed, setLogoFailed] = useState(false);
-  const logo = logoFailed ? null : (display.art?.logoUrl ?? null);
+  // Il réessaie, même pendant le film qu'il annonce (`player`) — voir `useImageRetry`.
+  const logoRetry = useImageRetry(display.art?.logoUrl ?? null, { mode: "probe", player: true });
+  const logo = logoRetry.failed ? null : (display.art?.logoUrl ?? null);
   const bgSrc = introBackdropSrc(display.art?.backdropUrl, background);
   const blur = introBlur(background);
 
@@ -310,7 +312,13 @@ export function PlaybackIntro({
         <div ref={logoRef} className="relative" style={{ opacity: 0 }}>
           {logo ? (
             <>
-              <img src={logo} alt={name} onError={() => setLogoFailed(true)} className="block max-h-[22vh] max-w-[min(60vw,32rem)] object-contain" />
+              <img
+                src={logo}
+                alt={name}
+                onError={logoRetry.onError}
+                onLoad={logoRetry.onLoad}
+                className={`block max-h-[22vh] max-w-[min(60vw,32rem)] object-contain ${logoRetry.recovered ? "animate-fade-in" : ""}`}
+              />
               {/* La lueur : une bande claire découpée à la forme du logo par un masque — pas un filtre. */}
               {sweep && !reduced && (
                 <div

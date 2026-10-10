@@ -35,8 +35,15 @@ export async function GET(req: NextRequest) {
 
   // `kind=backdrop` : le grand visuel d'une série, que Sonarr ne connaît qu'en original de
   // TheTVDB (jusqu'à 2 Mo) — Jellyfin le rend à la largeur d'une bannière. Voir `seriesBackdrop`.
-  const backdrop = req.nextUrl.searchParams.get("kind") === "backdrop";
-  const params = new URLSearchParams(backdrop ? { quality: "80", maxWidth: "1280" } : { quality: "90", maxWidth: "300" });
+  const kind = req.nextUrl.searchParams.get("kind");
+  const backdrop = kind === "backdrop";
+  // `kind=poster` : l'affiche d'une série que TMDB n'a pas dans la langue de qui regarde — au lieu
+  // de l'original de TheTVDB, sans consigne de cache (10/10/2026). 500 px : la largeur rendue d'une
+  // carte (112–200 px) sur un écran ×2–×3. Voir `jellyfinPoster`.
+  const poster = kind === "poster";
+  const params = new URLSearchParams(
+    backdrop ? { quality: "80", maxWidth: "1280" } : poster ? { quality: "85", maxWidth: "500" } : { quality: "90", maxWidth: "300" }
+  );
   if (tag) params.set("tag", tag);
   const url = `${config.jellyfin.url}/Items/${itemId}/Images/${backdrop ? "Backdrop/0" : "Primary"}?${params}`;
 

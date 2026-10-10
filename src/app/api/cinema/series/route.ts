@@ -6,7 +6,7 @@ import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
 import { cachedSeries, cachedJellyfinSeriesAdmin, cachedJellyfinFirstEpisodes, cachedJellyfinSeasons } from "@/lib/server-cache";
 import { matchSeries } from "@/lib/catalogueMembers";
-import { libraryPoster, seriesBackdrop } from "@/lib/images";
+import { jellyfinPoster, libraryPoster, seriesBackdrop } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt, logoForLocale } from "@/lib/title-art";
 import { catalogueExtras, getTitleExtras, type TitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
@@ -91,7 +91,7 @@ function seriesExtras(extras: TitleExtras | null, locale: Locale, sonarrRuntime:
 
 async function toCinemaSeries(
   s: SonarrSeries,
-  jellyfinItem: { Id: string; BackdropImageTags?: string[] },
+  jellyfinItem: { Id: string; BackdropImageTags?: string[]; ImageTags?: { Primary?: string } },
   locale: Locale,
   firstEpisode: CinemaSeries["firstEpisode"],
   seasonCount: number | undefined
@@ -113,8 +113,8 @@ async function toCinemaSeries(
     title,
     ...(aka ? { aka } : {}),
     year: s.year,
-    // Voir `libraryPoster` : la langue de qui regarde, l'affiche de Sonarr sinon.
-    posterUrl: libraryPoster(art.posterByLang, s.images, locale),
+    // La langue de qui regarde, celle de Jellyfin sinon, celle de Sonarr en dernier — voir `jellyfinPoster`.
+    posterUrl: libraryPoster(art.posterByLang, s.images, locale, jellyfinPoster(jellyfinItem)),
     // Redimensionné par Jellyfin plutôt que l'original de TheTVDB — voir `seriesBackdrop`.
     backdropUrl: seriesBackdrop(jellyfinItem, s.images),
     // Le logo de la langue du titre affiché — voir `logoForLocale` (DECISIONS.md §58).

@@ -134,9 +134,7 @@ export function CinemaMovieDetail({
   const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist(statusMap[`movie:${item.tmdbId}`] ?? null);
   // item.logoUrl comes bulk-included in the /api/cinema/movies payload now (see CinemaHero's own
   // note) — known synchronously, prefetched alongside backdrops by CinemaClient's warm-up
-  // effect. This component remounts fresh per item (a new instance each time selectedItem
-  // changes), so no reset-on-change needed the way CinemaHero requires.
-  const [logoErrored, setLogoErrored] = useState(false);
+  // effect. A failed logo shows the written title and retries on its own (`useImageRetry`).
 
   // Keeps this overlay mounted for one exit animation's worth of time after a close is
   // requested, instead of vanishing the instant onClose fires — see the hook's own doc comment.
@@ -358,13 +356,13 @@ export function CinemaMovieDetail({
           // La sortie est celle de la copie (`useSheetMorph`), plus celle de la colonne.
           className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: false, revealed: revealed || morph.handlesEntry })}`}
         >
-          {item.logoUrl && !logoErrored ? (
+          {item.logoUrl ? (
             <CinemaLogo
               src={item.logoUrl}
               alt={item.title}
               surface="sheet"
-              onError={() => setLogoErrored(true)}
               className="mb-1"
+              fallback={<h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>}
             />
           ) : (
             <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>

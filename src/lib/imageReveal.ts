@@ -76,6 +76,30 @@ function fetchDuration(url: string): number | null {
 }
 
 /**
+ * Servie par le cache du navigateur (mémoire ou disque), et non par le réseau.
+ *
+ * La durée seule ne suffisait pas : après un redémarrage de l'appli, une grille relue depuis le
+ * cache disque met souvent plus de 100 ms à arriver — des dizaines d'affiches lues ensemble —, et
+ * chacune refaisait son fondu de 500 ms, comme si tout se rechargeait (« côté série ça doit se
+ * recharger constamment au restart », 10/10/2026 ; mesuré le même soir : 141 des 149 images TMDB et
+ * toutes celles de Jellyfin venaient du disque au second lancement). `deliveryType` le dit
+ * directement là où il existe ; sinon, un transfert nul pour un corps décodé non nul, qui n'est
+ * exposé que pour une adresse de même origine (ou servie avec `Timing-Allow-Origin`) — ailleurs,
+ * les deux valent zéro et l'on retombe sur la durée.
+ */
+function servedFromCache(url: string): boolean {
+  try {
+    const entries = performance.getEntriesByName(url);
+    const last = entries[entries.length - 1] as (PerformanceResourceTiming & { deliveryType?: string }) | undefined;
+    if (!last) return false;
+    if (last.deliveryType === "cache") return true;
+    return last.transferSize === 0 && last.decodedBodySize > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Une image qui vient de finir de charger : prête d'emblée, ou vraiment arrivée ?
  *
  * Prête si le décodage anticipé l'a chauffée, si le navigateur l'a obtenue en moins de
@@ -86,6 +110,7 @@ function fetchDuration(url: string): number | null {
 export function arrivedReady(img: HTMLImageElement): boolean {
   const url = img.currentSrc || img.src;
   if (url && wasWarmed(url)) return true;
+  if (url && servedFromCache(url)) return true;
   const duration = url ? fetchDuration(url) : null;
   if (duration !== null) return duration < FAST_REVEAL_MS;
   const mountedAt = Number(img.dataset.mountedAt);

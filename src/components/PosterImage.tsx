@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
 import { ImageOff } from "lucide-react";
 import { revealLoaded, showIfAlreadyLoaded } from "@/lib/imageReveal";
+import { useImageRetry } from "@/lib/useImageRetry";
 
 interface PosterImageProps {
   src: string | null | undefined;
@@ -90,10 +90,12 @@ export function PosterImage({
   priority = false,
   eager = false,
 }: PosterImageProps) {
-  const [errored, setErrored] = useState(false);
+  // Un échec n'est plus définitif (`useImageRetry`, DECISIONS.md) : le carré gris s'affiche, l'image
+  // reste montée par-dessus, transparente, et réessaie ; arrivée, elle paraît en fondu comme d'habitude.
+  const { track, failed, retryKey, onLoad: retried, onError: retryFailed } = useImageRetry(src);
   const skipOptimizer = unoptimized || (typeof src === "string" && src.startsWith("/api/"));
 
-  if (!src || errored) {
+  if (!src) {
     return (
       // Une icône plutôt que « No image », écrit en anglais pour toutes les langues (audit du
       // 08/10/2026) : le titre est dit par `alt`, comme pour une image.
@@ -104,7 +106,12 @@ export function PosterImage({
   }
 
   return (
-    <div className={`${aspectRatio} ${className} relative overflow-hidden`}>
+    <div ref={track} className={`${aspectRatio} ${className} relative overflow-hidden`}>
+      {failed && (
+        <div role="img" aria-label={alt} className="absolute inset-0 flex items-center justify-center bg-slate-800/60">
+          <ImageOff size={20} className="text-slate-600" aria-hidden="true" />
+        </div>
+      )}
       {/* Retiré quand l'image arrive **s'il s'anime**, et par le nœud plutôt que par un rendu.
           Le laisser en place quand il miroite était une erreur de ma part : `skeleton` porte une
           animation infinie, qui repeint son dégradé seize fois par seconde. Invisible sous une
@@ -113,8 +120,10 @@ export function PosterImage({
           et coûtait une recherche dans le parent par affiche chargée. Voir `onLoad`. */}
       <div data-poster-placeholder className={`absolute inset-0 ${subtle ? "bg-slate-800/50" : "skeleton"}`} />
       <Image
+        key={retryKey}
         src={src}
-        alt={alt}
+        // En échec, c'est le repli qui porte le titre : l'image qui réessaie dessous ne le redit pas.
+        alt={failed ? "" : alt}
         fill
         unoptimized={skipOptimizer}
         sizes={sizes}
@@ -141,6 +150,7 @@ export function PosterImage({
         onLoad={(event) => {
           // En fondu seulement si elle vient vraiment d'arriver — voir `revealLoaded`.
           revealLoaded(event.currentTarget);
+          retried();
           /**
            * Le voile ne s'efface que s'il s'anime, et c'est ce qui reste de plus cher ici.
            *
@@ -160,8 +170,9 @@ export function PosterImage({
             ?.style.setProperty("display", "none");
         }}
         onError={() => {
+          // Une fois par hôte, pas par essai (dédupliqué dans `reportRemoteImageFailure`).
           reportRemoteImageFailure(src);
-          setErrored(true);
+          retryFailed();
         }}
       />
     </div>

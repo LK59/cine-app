@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useImageRetry } from "@/lib/useImageRetry";
 
 /**
  * The film's own title treatment, with the typography as a fallback.
@@ -25,17 +25,19 @@ export function TitleLogo({
   className?: string;
   logoClassName?: string;
 }) {
-  const [failed, setFailed] = useState(false);
+  // En échec, le titre écrit, et le logo réessaie hors du document (`useImageRetry`).
+  const retry = useImageRetry(logoUrl, { mode: "probe" });
 
-  if (logoUrl && !failed) {
+  if (logoUrl && !retry.failed) {
     return (
       <div className={className}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={logoUrl}
           alt={title}
-          onError={() => setFailed(true)}
-          className={`w-auto max-w-full object-contain object-left drop-shadow-lg ${logoClassName}`}
+          onError={retry.onError}
+          onLoad={retry.onLoad}
+          className={`w-auto max-w-full object-contain object-left drop-shadow-lg ${retry.recovered ? "animate-fade-in" : ""} ${logoClassName}`}
         />
         {year != null && <span className="sr-only">{` (${year})`}</span>}
       </div>

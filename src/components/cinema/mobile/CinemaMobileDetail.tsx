@@ -46,6 +46,7 @@ import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/
 import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
 import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
+import { useImageRetry } from "@/lib/useImageRetry";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
 
 /** Un visage sans personne : ce qui donne sa hauteur à la place tenue de la distribution. */
@@ -239,8 +240,6 @@ export function CinemaMobileDetail({
   const { watched, known: watchedKnown, busy: watchedBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId, isSeries ? "series" : "movie");
   const inList = addedStatus === "to_watch";
 
-  const [logoErrored, setLogoErrored] = useState(false);
-  const [backdropFailed, setBackdropFailed] = useState(false);
   /**
    * Le visuel de la bannière, gardé tel qu'il était à l'ouverture : des données fraîches qui en
    * changent l'adresse (le catalogue du réseau après celui de l'appareil) remplaçaient l'image
@@ -250,6 +249,9 @@ export function CinemaMobileDetail({
    */
   const [openedBackdrop] = useState(item.backdropUrl);
   const backdropSrc = openedBackdrop || item.backdropUrl;
+  // Un visuel en échec laisse le fond uni et réessaie hors du document (`useImageRetry`) ; revenu, il
+  // reparaît par le même chemin qu'un visuel arrivé tard — le fondu de la doublure (`useSheetMorph`).
+  const backdrop = useImageRetry(backdropSrc, { mode: "probe" });
   const seasons = useMemo(() => episodesData?.seasons ?? [], [episodesData]);
   const seasonCount = isSeries ? seasons.length || ((item as CinemaSeries).seasonCount ?? 0) : 0;
   // Ce qui manque à la série — pour Sonarr, pas pour Jellyseerr : la série est là, ce sont des
@@ -468,11 +470,12 @@ export function CinemaMobileDetail({
             Sans cela le navigateur dessinait sa propre vignette d'image cassée — un « ? » en
             plein milieu de la bannière, ce qu'on voyait sur les fiches de séries dont le visuel
             manque. */}
-        {backdropSrc && !backdropFailed ? (
+        {backdropSrc && !backdrop.failed ? (
           <FadeInImg
             src={backdropSrc}
             alt=""
-            onError={() => setBackdropFailed(true)}
+            onError={backdrop.onError}
+            onLoad={backdrop.onLoad}
             data-sheet-photo=""
             className="absolute inset-0 h-full w-full object-cover"
           />
@@ -505,14 +508,14 @@ export function CinemaMobileDetail({
           à sa place — le chevauchement lui-même est voulu, c'est ce qui pose le titre dans le
           fondu de l'image. */}
       <div data-sheet-content="" className={`relative -mt-6 px-4 pb-16 ${short ? "mx-auto w-full max-w-xl" : ""}`}>
-        {item.logoUrl && !logoErrored ? (
+        {item.logoUrl ? (
           <CinemaLogo
             src={item.logoUrl}
             alt={item.title}
             surface="phone"
             shadow={false}
-            onError={() => setLogoErrored(true)}
             className="mb-3 object-left"
+            fallback={<h1 className="mb-3 text-2xl font-bold leading-tight text-white font-display">{item.title}</h1>}
           />
         ) : (
           <h1 className="mb-3 text-2xl font-bold leading-tight text-white font-display">{item.title}</h1>

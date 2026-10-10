@@ -28,21 +28,20 @@ export function CinemaSeriesHero({
   // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
   const info = useHeroInfo("series", item.tmdbId, item);
 
-  const [logoErrored, setLogoErrored] = useState(false);
-  const [resetForId, setResetForId] = useState(item.sonarrId);
-  if (item.sonarrId !== resetForId) {
-    setResetForId(item.sonarrId);
-    setLogoErrored(false);
-  }
-
   return (
     <div className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
       {/* La clé sur le titre seul, pas sur les commandes — voir CinemaHero. */}
       <div key={item.sonarrId} className="contents">
       {onBack && <HeroBackToSpotlight onBack={onBack} />}
       <HeroTitleLink onOpen={onOpen} title={item.title}>
-        {item.logoUrl && !logoErrored ? (
-          <CinemaLogo src={item.logoUrl} alt={item.title} surface="hero" onError={() => setLogoErrored(true)} />
+        {/* Le titre écrit tient la place d'un logo en échec, le temps qu'il réessaie (`useImageRetry`). */}
+        {item.logoUrl ? (
+          <CinemaLogo
+            src={item.logoUrl}
+            alt={item.title}
+            surface="hero"
+            fallback={<h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl font-display">{item.title}</h1>}
+          />
         ) : (
           <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl font-display">{item.title}</h1>
         )}
