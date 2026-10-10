@@ -41,6 +41,7 @@ vi.mock("@/components/cinema/CinemaCollectionRow", () => ({ CinemaMovieCollectio
 vi.mock("@/components/PosterImage", () => ({ PosterImage: () => null }));
 
 import { CinemaMobileDetail } from "@/components/cinema/mobile/CinemaMobileDetail";
+import { clearMorphLayers, installFakeAnimations } from "./helpers/fakeAnimations";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { RESUME_KEY } from "@/lib/swr";
 
@@ -94,15 +95,64 @@ describe("CinemaMobileDetail — le clavier", () => {
 });
 
 describe("CinemaMobileDetail — la sortie", () => {
-  // Même règle que les fiches du lecteur, par la même fonction (`sheetMotionClass`) : un appui sur
-  // la bannière n'éteint pas l'animation de sortie des fermetures suivantes.
-  it("glisse encore après un appui sur la bannière", () => {
-    draw(vi.fn());
-    const banner = document.body.querySelector<HTMLElement>(".aspect-video")!;
-    fireEvent.pointerDown(banner, { clientY: 100, pointerId: 1, pointerType: "touch", button: 0 });
-    fireEvent.pointerUp(banner, { clientY: 100, pointerId: 1, pointerType: "touch", button: 0 });
-    fireEvent.click(document.body.querySelector('[aria-label="cinema.back"]')!);
-    expect(root().className).toContain("sheet-out");
+  // Un appui sur la bannière n'éteint pas l'animation de sortie des fermetures suivantes. Depuis le
+  // 10/10/2026, cette sortie est la copie de la fiche que pose `useSheetMorph` (DECISIONS.md §61) :
+  // elle doit toujours partir en mouvement, la vraie fiche cachée et l'adresse rendue.
+  it("sort encore en mouvement après un appui sur la bannière", () => {
+    const fake = installFakeAnimations();
+    try {
+      draw(vi.fn());
+      const banner = document.body.querySelector<HTMLElement>(".aspect-video")!;
+      fireEvent.pointerDown(banner, { clientY: 100, pointerId: 1, pointerType: "touch", button: 0 });
+      fireEvent.pointerUp(banner, { clientY: 100, pointerId: 1, pointerType: "touch", button: 0 });
+      fireEvent.click(document.body.querySelector('[aria-label="cinema.back"]')!);
+      const copy = document.body.querySelector<HTMLElement>("[data-sheet-morph-layer] .sheet-morph-clone");
+      expect(copy).not.toBeNull();
+      expect(fake.created.some((a) => a.target === copy && !a.cancelled)).toBe(true);
+      expect(document.body.querySelector<HTMLElement>("[data-sheet-morph-root]")!.style.visibility).toBe("hidden");
+    } finally {
+      fake.restore();
+      clearMorphLayers();
+    }
+  });
+});
+
+// DECISIONS.md §61 : l'affiche touchée devient la bannière pendant que la carte monte, et la fiche y
+// retourne. Ici à travers la vraie fiche : ses marques sont celles que `useSheetMorph` lit.
+describe("CinemaMobileDetail — l'ouverture depuis une affiche", () => {
+  it("part de l'affiche touchée sans sa propre entrée, et y revient à la croix", () => {
+    const fake = installFakeAnimations();
+    try {
+      const card = document.createElement("button");
+      const img = document.createElement("img");
+      img.src = "https://img.test/matrix.jpg";
+      card.appendChild(img);
+      document.body.appendChild(card);
+      fireEvent.pointerDown(img, { pointerId: 1, clientX: 5, clientY: 5 });
+      fireEvent.pointerUp(img, { pointerId: 1, clientX: 5, clientY: 5 });
+
+      render(
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <CinemaMobileDetail item={{ ...MOVIE, backdropUrl: "https://img.test/matrix-bd.jpg" } as CinemaMovie} mediaType="movies" onClose={vi.fn()} />
+        </SWRConfig>
+      );
+      const sheet = document.body.querySelector<HTMLElement>("[data-sheet-morph-root]")!;
+      // Le trajet mène l'entrée : plus de `sheet-in`, la bannière cachée sous la fenêtre qui vole.
+      expect(sheet.className).not.toContain("sheet-in");
+      expect(card.style.opacity).toBe("0");
+      const layer = document.body.querySelector<HTMLElement>("[data-sheet-morph-layer]")!;
+      expect(layer.nextElementSibling).toBe(sheet);
+      expect(Array.from(layer.querySelectorAll("img")).map((i) => i.getAttribute("src"))).toEqual(
+        expect.arrayContaining(["https://img.test/matrix.jpg", "https://img.test/matrix-bd.jpg"])
+      );
+
+      fireEvent.click(sheet.querySelector('[aria-label="cinema.back"]')!);
+      expect(sheet.style.visibility).toBe("hidden");
+      expect(layer.querySelector(".sheet-morph-clone")).not.toBeNull();
+    } finally {
+      fake.restore();
+      clearMorphLayers();
+    }
   });
 });
 

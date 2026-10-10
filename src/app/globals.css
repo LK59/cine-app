@@ -1404,6 +1404,18 @@
   will-change: transform;
 }
 
+/* La copie d'une fiche qui sort (DECISIONS.md §61, `useSheetMorph`) : elle descend et s'efface par
+   ses propres images clés pendant que l'image revole vers l'affiche. Ses classes d'entrée (`sheet-in`,
+   le fondu de sa colonne) ne doivent pas se rejouer à son insertion, aucune transition ne doit partir
+   des styles qu'on lui pose, et son verre ne se recalcule pas sur un calque qui bouge. */
+.sheet-morph-clone,
+.sheet-morph-clone * {
+  animation: none !important;
+  transition: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 
 
 /* ─── Le verre liquide (DECISIONS.md §45) ─────────────────────────────────────

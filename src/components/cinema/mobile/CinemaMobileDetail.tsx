@@ -13,7 +13,8 @@ import { arrivedByBack, markSheetLeaving, useSheetBehind, useRouteBehind } from 
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
-import { SHEET_OUT_MS, sheetMotionClass, phoneSheetCorner } from "@/lib/sheetMotion";
+import { sheetMotionClass, phoneSheetCorner } from "@/lib/sheetMotion";
+import { useSheetMorph } from "@/lib/sheetMorph/useSheetMorph";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { usePlayerEnabledState } from "@/lib/usePlayerEnabled";
@@ -125,7 +126,13 @@ export function CinemaMobileDetail({
    */
   const behindIsDrawn = useRouteBehind() !== null;
   const swapsInPlace = useSheetBehind() && !behindIsDrawn;
-  const { closing, requestClose } = useDelayedClose(onClose, swapsInPlace ? 0 : SHEET_OUT_MS);
+  /**
+   * La fermeture rend l'adresse aussitôt (DECISIONS.md §61) : c'est une copie de la fiche, posée par
+   * `useSheetMorph`, qui redescend et revole vers l'affiche. Retenue le temps de `sheet-out`,
+   * l'adresse gardait le titre : une affiche touchée pendant la sortie empilait une entrée que la
+   * fermeture différée défaisait ensuite.
+   */
+  const { closing, requestClose } = useDelayedClose(onClose, 0);
   // La barre du bas attendait que l'adresse change, donc la fin de cette sortie, pour revenir.
   useEffect(() => {
     if (closing) markSheetLeaving();
@@ -149,6 +156,20 @@ export function CinemaMobileDetail({
   useLiquidDelegation(sheetRef);
   // Une fiche du dessous ne se ferme pas : elle attend qu'on la découvre.
   const inert = underneath;
+  /**
+   * L'affiche touchée devient la bannière pendant que la carte monte, et la fiche y retourne
+   * (DECISIONS.md §61) — la même décision que les fiches du bureau et la fiche TMDB.
+   */
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const morph = useSheetMorph({
+    layout: "phone",
+    rootRef: sheetRef,
+    imageRef: bannerRef,
+    active: !inert,
+    leaving: closing,
+    revealed,
+    instantExit: swapsInPlace,
+  });
 
 
   const isSeries = mediaType === "series";
@@ -365,7 +386,8 @@ export function CinemaMobileDetail({
       // Une fiche recouverte ne peut de toute façon être ni tirée ni fermée — ses gestes sont
       // débranchés —, donc les deux autres branches restent fausses pour elle.
       className={`phone-sheet-frame safe-x fixed inset-x-0 overflow-y-auto overscroll-contain bg-ink ring-1 ring-white/10 ${
-        sheetMotionClass({ swipe, leaving: closing, revealed, out: swapsInPlace ? "" : "sheet-out" })
+        // Ni sortie CSS (la copie de `useSheetMorph` sort à sa place), ni entrée quand le trajet la mène.
+        sheetMotionClass({ swipe, leaving: closing, revealed: revealed || morph.handlesEntry, out: "" })
       }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
       // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close
@@ -401,6 +423,7 @@ export function CinemaMobileDetail({
       {/* 16:9 header image, bleeding into the page under a gradient rather than ending on a hard
           edge — the same treatment the desktop sheet uses, scaled to a phone. */}
       <div
+        ref={bannerRef}
         className="relative aspect-video w-full"
         {...(inert ? {} : swipe.handlers)}
         // touch-action none: the browser must not claim this gesture for its own scrolling, or
@@ -421,17 +444,19 @@ export function CinemaMobileDetail({
             src={item.backdropUrl}
             alt=""
             onError={() => setBackdropFailed(true)}
+            data-sheet-photo=""
             className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
           <div className="absolute inset-0 bg-surface" />
         )}
-        <div className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
+        <div data-sheet-veil="" className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
         <button
           type="button"
           {...NOT_THE_HANDLE}
           onClick={requestClose}
           aria-label={t("cinema.back")}
+          data-sheet-glass=""
           // Le verre liquide et le geste des commandes du lecteur : la croix est posée sur l'image,
           // seul endroit de la fiche où le verre a quelque chose à flouter.
           data-liquid
@@ -450,7 +475,7 @@ export function CinemaMobileDetail({
           restait qu'un liseré de six pixels. Positionner ce bloc à son tour le remet au-dessus,
           à sa place — le chevauchement lui-même est voulu, c'est ce qui pose le titre dans le
           fondu de l'image. */}
-      <div className={`relative -mt-6 px-4 pb-16 ${short ? "mx-auto w-full max-w-xl" : ""}`}>
+      <div data-sheet-content="" className={`relative -mt-6 px-4 pb-16 ${short ? "mx-auto w-full max-w-xl" : ""}`}>
         {item.logoUrl && !logoErrored ? (
           <CinemaLogo
             src={item.logoUrl}

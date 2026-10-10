@@ -38,6 +38,7 @@ vi.mock("@/lib/cinemaRoute", async (importOriginal) => ({
 
 import { PlayerPersonSheet } from "@/components/player/PlayerPersonSheet";
 import { PlayerDiscoverSheet } from "@/components/player/PlayerDiscoverSheet";
+import { clearMorphLayers, installFakeAnimations } from "./helpers/fakeAnimations";
 
 const wrap = (node: React.ReactNode) => (
   <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>{node}</SWRConfig>
@@ -116,13 +117,24 @@ describe("la croix de la bannière n'est pas la poignée", () => {
 describe("un appui sur la poignée n'éteint pas la sortie", () => {
   // `touched` ne retombe jamais : les fiches s'en servaient pour taire `sheet-out`, si bien qu'après
   // un simple appui sur la bannière, chaque fermeture suivante disparaissait d'un coup.
-  it("fiche découverte : la sortie glisse encore après un appui sur la bannière", () => {
-    const { rerender } = render(discover(false));
-    tap(discoverHandle());
-    // Le geste a bien eu lieu : l'entrée est éteinte, comme elle doit l'être.
-    expect(discoverRoot().className).not.toContain("sheet-in");
-    rerender(discover(true));
-    expect(discoverRoot().className).toContain("sheet-out");
+  // Depuis le 10/10/2026, la sortie de la fiche découverte est la copie que pose `useSheetMorph`
+  // (DECISIONS.md §61) : elle doit toujours partir en mouvement, et la vraie fiche se cacher.
+  it("fiche découverte : la sortie part encore en mouvement après un appui sur la bannière", () => {
+    const fake = installFakeAnimations();
+    try {
+      const { rerender } = render(discover(false));
+      tap(discoverHandle());
+      // Le geste a bien eu lieu : l'entrée est éteinte, comme elle doit l'être.
+      expect(discoverRoot().className).not.toContain("sheet-in");
+      rerender(discover(true));
+      const copy = document.body.querySelector<HTMLElement>("[data-sheet-morph-layer] .sheet-morph-clone");
+      expect(copy).not.toBeNull();
+      expect(fake.created.some((a) => a.target === copy && !a.cancelled)).toBe(true);
+      expect(document.body.querySelector<HTMLElement>("[data-sheet-morph-root]")!.style.visibility).toBe("hidden");
+    } finally {
+      fake.restore();
+      clearMorphLayers();
+    }
   });
 
   it("fiche personne : pareil", () => {
