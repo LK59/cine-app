@@ -9,7 +9,7 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { stripAccessToken } from "@/lib/stripAccessToken";
-import { buildDeviceProfile, castRefusalFor } from "@/lib/deviceProfile";
+import { audioNeedsStereoReencode, buildDeviceProfile, castRefusalFor, chosenAudioStream } from "@/lib/deviceProfile";
 import type { CodecSupport } from "@/lib/codecSupport";
 import { cachedMovies } from "@/lib/server-cache";
 import { originalLanguageCode } from "@/lib/originalLanguage";
@@ -128,6 +128,13 @@ export async function POST(req: NextRequest) {
    * `PlaybackSession.bench`, que le lecteur natif tenait et que ce chemin ignorait (27/09/2026).
    */
   const bench = body?.bench === true;
+  /**
+   * Le dernier échelon de l'échelle de repli du client : le son ré-encodé, quel qu'il soit.
+   *
+   * L'échelon « AAC seul » supposait l'AAC toujours lisible ; il ne l'est pas quand sa disposition
+   * est un PCE, et les quatre essais finissaient sur le même refus. Celui-ci ne copie plus rien.
+   */
+  const forceAudioTranscode = body?.forceAudioTranscode === true;
   const disableAudioCodecs = Array.isArray(body?.disableAudioCodecs)
     ? (body.disableAudioCodecs as unknown[]).filter((c): c is string => typeof c === "string" && /^[a-z0-9]{1,16}$/.test(c))
     : [];
@@ -143,15 +150,25 @@ export async function POST(req: NextRequest) {
         Object.entries(codecSupport.audio ?? {}).map(([codec, ok]) => [codec, disableAudioCodecs.includes(codec) ? false : ok])
       ),
     };
-    const deviceProfile = buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast });
-    const info = await jellyfin.getPlaybackInfo(session.jfId, itemId, session.jfToken, {
-      maxBitrate,
-      mediaSourceId: itemId,
-      audioStreamIndex,
-      subtitleStreamIndex,
-      startTicks,
-      deviceProfile,
-    });
+    const { jfId, jfToken } = session;
+    const item = itemId;
+    const negotiate = (reencodeAudioStereo: boolean) =>
+      jellyfin.getPlaybackInfo(jfId, item, jfToken, {
+        maxBitrate,
+        mediaSourceId: item,
+        audioStreamIndex,
+        subtitleStreamIndex,
+        startTicks,
+        deviceProfile: buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast, reencodeAudioStereo }),
+      });
+    let info = await negotiate(forceAudioTranscode);
+    // Un son que Jellyfin copierait et que le navigateur refuserait — l'AAC à PCE, voir
+    // `audioNeedsStereoReencode` : renégocié aussitôt, ré-encodé en stéréo. Une seconde demande à
+    // Jellyfin pour ces fichiers-là seulement, plutôt que quatre essais perdus et une erreur au bout
+    // de vingt secondes (« Elle s'appelle Ruby », Fire TV, 10/10/2026).
+    if (!forceAudioTranscode && audioNeedsStereoReencode(chosenAudioStream(info.MediaSources?.[0], audioStreamIndex))) {
+      info = await negotiate(true);
+    }
     const source = info.MediaSources?.[0];
     if (!source) {
       return NextResponse.json({ error: "Jellyfin n'a renvoyé aucun flux" }, { status: 502 });

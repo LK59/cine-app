@@ -15,7 +15,15 @@
 export function deviceLabel(userAgent: string | null | undefined, hints: { touch?: boolean } = {}): string | null {
   if (!userAgent) return null;
   const ua = userAgent;
-  const named = /iPhone/.test(ua)
+  // Une Fire TV se déclare « Linux; Android 11; AFTT » : avant la règle Android, qui la nommait
+  // téléphone (« Android · Chrome » dans l'activité pour la clé de Timothé, 10/10/2026). Le
+  // modèle n'est nommé que là où il est sûr — AFTT, la Fire TV Stick —, sinon « Fire TV ».
+  const fireTv = /\bAFT([A-Z0-9]+)\b/.exec(ua);
+  const named = fireTv
+    ? fireTv[1] === "T"
+      ? "Fire TV Stick"
+      : "Fire TV"
+    : /iPhone/.test(ua)
     ? "iPhone"
     : /iPad/.test(ua)
       ? "iPad"
@@ -31,7 +39,10 @@ export function deviceLabel(userAgent: string | null | undefined, hints: { touch
                 ? "Linux"
                 : null;
   const device = named === "Mac" && hints.touch === true ? "iPad" : named;
-  const browser = /Edg(e|A|iOS)?\//.test(ua)
+  // Silk (le navigateur d'Amazon) se dit aussi « like Chrome » : nommé avant Chrome.
+  const browser = /Silk\//.test(ua)
+    ? "Silk"
+    : /Edg(e|A|iOS)?\//.test(ua)
     ? "Edge"
     : /OPR\/|Opera/.test(ua)
       ? "Opera"

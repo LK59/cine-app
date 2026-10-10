@@ -12,6 +12,7 @@
 // it reads through the same 1 MiB chunk cache, so the bytes cross the network once and the
 // second demux costs CPU only.
 
+import { aacCopyable, aacKnownPceChannels } from "./aacConfig";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaFile } from "./matroska";
 
@@ -100,9 +101,9 @@ export class SoftwareAudioTrack {
         (await import("@mediabunny/dts")).registerDtsDecoder();
       } else if (codecId === "A_FLAC") {
         (await import("./flacDecoder")).registerFlacDecoder();
-      } else if (codecId === "A_OPUS") {
-        // Rien à charger : mediabunny décode l'Opus par l'AudioDecoder du navigateur. Charger ici
-        // le décodeur AC-3, c'était un mégaoctet pour rien.
+      } else if (codecId === "A_OPUS" || codecId === "A_AAC") {
+        // Rien à charger : mediabunny décode l'Opus — et l'AAC à PCE (voir aacConfig.ts) — par
+        // l'AudioDecoder du navigateur. Charger ici le décodeur AC-3, c'était un mégaoctet pour rien.
       } else {
         (await import("@mediabunny/ac3")).registerAc3Decoder();
       }
@@ -118,9 +119,15 @@ export class SoftwareAudioTrack {
     if (!(await track.canDecode())) throw new Error(`le décodeur logiciel refuse ${track.codec ?? "cette piste"}`);
 
     const sink = new AudioSampleSink(track) as unknown as { samples(from: number): AsyncIterable<SoftwareSample> };
+    // Un AAC dont le PCE décrit une disposition hors des connues : le décodeur n'en rend que le
+    // compte, et six canaux sans caisson seraient lus comme un 5.1. On garde L R C, la règle de
+    // toute disposition inconnue (voir `frontOnly`, audioTranscode.ts, et aacConfig.ts).
+    const keep = codecId === "A_AAC" ? keptAacChannels(file, trackNumber, track.numberOfChannels) : track.numberOfChannels;
     return new SoftwareAudioTrack(
-      (fromSeconds) => planesFrom(sink, fromSeconds),
-      { sampleRate: track.sampleRate, numberOfChannels: track.numberOfChannels },
+      keep < track.numberOfChannels
+        ? (fromSeconds) => firstPlanes(planesFrom(sink, fromSeconds), keep)
+        : (fromSeconds) => planesFrom(sink, fromSeconds),
+      { sampleRate: track.sampleRate, numberOfChannels: keep },
       // Rien à libérer ici : le lecteur de conteneur est partagé par les pistes du fichier, et
       // part avec la source quand la lecture s'arrête (voir sharedInput).
       () => {}
@@ -162,6 +169,21 @@ async function* planesFrom(
     sample.close();
     yield decoded;
   }
+}
+
+/**
+ * Les canaux à garder d'un AAC à PCE : tous si le PCE décrit une disposition connue, sinon les
+ * trois premiers (L R C). Sans la description de la piste, ou pour un AAC ordinaire, tous.
+ */
+export function keptAacChannels(file: MatroskaFile | undefined, trackNumber: number, decoded: number): number {
+  const asc = file?.tracks.find((t) => t.number === trackNumber)?.codecPrivate;
+  if (!asc || aacCopyable(asc)) return decoded;
+  return aacKnownPceChannels(asc) === decoded ? decoded : Math.min(3, decoded);
+}
+
+/** Le décodé, réduit à ses `count` premiers canaux. */
+async function* firstPlanes(source: AsyncGenerator<DecodedAudio>, count: number): AsyncGenerator<DecodedAudio> {
+  for await (const decoded of source) yield { ...decoded, planes: decoded.planes.slice(0, count) };
 }
 
 /** Decoded audio in the one representation both decoder paths agree on. */

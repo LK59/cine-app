@@ -51,6 +51,28 @@ describe("deviceLabel et l'indice tactile", () => {
   });
 });
 
+describe("deviceLabel — la Fire TV et Silk", () => {
+  // La clé de Timothé, nommée « Android · Chrome » dans l'activité (10/10/2026).
+  const FIRE_TV_STICK =
+    "Mozilla/5.0 (Linux; Android 11; AFTT) AppleWebKit/537.36 (KHTML, like Gecko) Silk/152.4.7 like Chrome/152.0.7977.140 Safari/537.36";
+
+  it("nomme la Fire TV Stick et son navigateur", () => {
+    expect(deviceLabel(FIRE_TV_STICK)).toBe("Fire TV Stick · Silk");
+  });
+
+  it("nomme « Fire TV » un autre modèle, sans deviner son nom", () => {
+    expect(deviceLabel(FIRE_TV_STICK.replace("AFTT", "AFTKA"))).toBe("Fire TV · Silk");
+  });
+
+  it("ne change rien aux téléphones Android, à Chrome ni à Samsung Internet", () => {
+    expect(deviceLabel(ANDROID_UA)).toBe("Android · Chrome");
+    const samsung =
+      "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0.0.0 Mobile Safari/537.36";
+    expect(deviceLabel(samsung)).toBe("Android · Chrome");
+    expect(deviceLabel(IPHONE_UA)).toBe("iPhone · Safari");
+  });
+});
+
 describe("le champ Device de l'en-tête MediaBrowser", () => {
   const identity = (device: string) => ({ client: "CineApp", device, deviceId: "cine-app-x", version: "8.1.0" });
 

@@ -10,6 +10,7 @@
 // An MP4 comes through here too, described in the same shape (mp4Demux.ts) and read through the
 // same factory (mediaFile.ts): the remuxer never learns which container it is reading.
 
+import { aacCopyable, aacKnownPceChannels } from "./aacConfig";
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./subtitleMarkup";
 import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, isRaslPicture, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
@@ -229,7 +230,10 @@ export type AudioDelivery = "copy" | "transcode" | "none";
 
 function naturalDelivery(track: MatroskaTrack): AudioDelivery {
   const natural = audioCodecString(track);
-  if (natural && containerAccepts(`audio/mp4; codecs="${natural}"`)) return "copy";
+  // Un AAC dont la disposition est un PCE passe `isTypeSupported` et se fait refuser à l'envoi
+  // (« Elle s'appelle Ruby » sur une Fire TV, 10/10/2026) : ré-encodé, jamais copié — voir aacConfig.ts.
+  const copyable = track.codecId !== "A_AAC" || aacCopyable(track.codecPrivate);
+  if (natural && copyable && containerAccepts(`audio/mp4; codecs="${natural}"`)) return "copy";
   return transcodableAudio(track) ? "transcode" : "none";
 }
 
@@ -436,7 +440,13 @@ export interface DeliveredAudio {
 
 export function deliveredAudio(track: MatroskaTrack): DeliveredAudio {
   const delivery = audioDelivery(track);
-  const source = track.audio?.channels ?? 1;
+  // Un AAC à PCE hors disposition connue sort en L R C (voir `keptAacChannels`) : c'est ce
+  // qu'il apporte au classement, pas les six canaux de la source.
+  const pceKept =
+    track.codecId === "A_AAC" && !aacCopyable(track.codecPrivate) && aacKnownPceChannels(track.codecPrivate) !== track.audio?.channels
+      ? 3
+      : Infinity;
+  const source = Math.min(track.audio?.channels ?? 1, pceKept);
   if (delivery !== "transcode") return { copied: delivery === "copy", channels: source };
   const plan = knownTranscodePlan(track.audio?.sampleRate ?? 48000, source);
   return { copied: false, channels: plan ? Math.min(source, plan.channels) : source };
