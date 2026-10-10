@@ -95,7 +95,16 @@ AirPlay stall was diagnosed from the reverse proxy's access log instead. Since 2
 also carry a `session` id and the `agent`: without them they were rebuilt "the old way", each
 `retry` a separate session with no device — a clean witness that exonerated failing titles in the
 activity page's file-or-device diagnosis. A handover to it *to cast* is logged as `fallback` with
-`cast: true`, and is not counted as a failure.
+`cast: true`, and is not counted as a failure. Since 2026-10-10 every server-player `start` says
+**why** it (re)negotiated (`why`: `open`, `handover`, `audio`, `audio-reload`, `retry`,
+`cast-relaunch`, `ladder` with `rung` and `trigger`, `retry-reload`) — four identical « transcodé
+par le serveur » lines used to hide whether a Fire TV was climbing the audio ladder or a viewer
+was changing tracks — and its `stop` is a summary like the native one (`waits`/`waitedMs`/
+`longestWaitMs`, `seeks`/`seekWaitMs`, `audioSwitches`, `subtitleSwitches`, `backgrounds`,
+`duration`, `ended`, `restarts` + `restartWhy`, `gaveUpAfterMs`), with `why` `close` / `next` /
+`page` / `unmount`, and a copy kept on the device for iOS-killed pages (`why: "lost"`, same
+`unsentStop` mechanism). An HLS seek does not renegotiate, so it has no `start`; the activity page
+counts the stop's `seeks`, marks ladder rungs as incidents and viewer restarts apart.
 `data/logs/server.log` is its counterpart for the server's own errors, with the stack the console
 line omits: `docker logs` dies with the container, which is recreated on every deploy — several a
 day — so an error a viewer hit in the evening was gone before anyone went looking. Since

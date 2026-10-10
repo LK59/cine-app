@@ -254,6 +254,8 @@
       "rebuild": "{n} rebuild|{n} rebuilds",
       "stall": "{n} stall|{n} stalls",
       "slowSeek": "{n} slow seek|{n} slow seeks",
+      "ladder": "{n} restart after an error|{n} restarts after errors",
+      "restart": "{n} restart|{n} restarts",
       "lost": "end lost",
       "server": "server player",
       "tv": "on a TV"
@@ -283,6 +285,18 @@
     "line": {
       "start": "Opened at {at} · {path} · ready in {opened} {rebuild}",
       "rebuildN": "· rebuild #{n}",
+      "serverStart": "{why} at {at} · server {extra}",
+      "serverWhy": {
+        "open": "Opening",
+        "handover": "Handover from the native player",
+        "audio-reload": "Audio track (page reloaded)",
+        "retry-reload": "Page reloaded after a failure",
+        "audio": "Audio track change",
+        "retry": "Retry",
+        "cast-relaunch": "Cast relaunched",
+        "ladder": "Restart after an error (attempt {n})"
+      },
+      "restarts": "· {n} restart|· {n} restarts",
       "seek": "Seek from {from} to {to} · {took} {buffered}",
       "buffered": "· already loaded",
       "audio": "Audio track: {from} → {to} · {took} · {how}",

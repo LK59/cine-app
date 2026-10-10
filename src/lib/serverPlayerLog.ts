@@ -13,6 +13,75 @@
  */
 
 import type { SleepMode } from "@/lib/sleepTimer";
+import type { TallySummary } from "@/lib/playerSessionTally";
+
+/**
+ * Pourquoi le lecteur serveur (re)négocie son flux — le `why` de sa ligne `start`.
+ *
+ * Chaque négociation écrivait la même ligne « transcodé par le serveur » : les quatre essais de
+ * « Ruby » sur une Fire TV et trois départs d'Augustine sur Edge (10/10/2026) se lisaient pareil,
+ * sans qu'on puisse distinguer une échelle de repli qui échoue d'un changement de piste. Un saut,
+ * lui, ne renégocie pas : le HLS se déplace dans le même flux (hls.js, ou Safari), il n'a pas de
+ * ligne `start`.
+ */
+export type ServerStartWhy =
+  /** La première négociation de la séance. */
+  | "open"
+  /** La première aussi, mais le lecteur natif vient de passer la main (`fallback` juste avant). */
+  | "handover"
+  /** Page rechargée pour changer de piste audio (WebKit, voir `changeAudio`). */
+  | "audio-reload"
+  /** Page rechargée en dernier recours après une échelle de repli épuisée (WebKit). */
+  | "retry-reload"
+  /** Changement de piste audio sur place. */
+  | "audio"
+  /** « Réessayer », pressé par le spectateur sur l'écran d'erreur. */
+  | "retry"
+  /** La diffusion relancée après une route perdue. */
+  | "cast-relaunch"
+  /** Un échelon de l'échelle de repli audio, après une erreur de l'élément. */
+  | "ladder";
+
+export const SERVER_START_WHY_LABELS: Record<ServerStartWhy, string> = {
+  open: "ouverture",
+  handover: "relais du lecteur natif",
+  "audio-reload": "piste audio (page rechargée)",
+  "retry-reload": "page rechargée après échec",
+  audio: "changement de piste audio",
+  retry: "réessayer",
+  "cast-relaunch": "relance de la diffusion",
+  ladder: "relance après erreur",
+};
+
+export function isStartWhy(why: unknown): why is ServerStartWhy {
+  return typeof why === "string" && Object.prototype.hasOwnProperty.call(SERVER_START_WHY_LABELS, why);
+}
+
+/** Une ouverture n'est pas une relance : la séance commence. */
+export function isServerRestart(why: unknown): boolean {
+  return isStartWhy(why) && why !== "open" && why !== "handover";
+}
+
+/** Une relance qui suit une panne, et non un geste du spectateur. */
+export function isServerFailureRestart(why: unknown): boolean {
+  return why === "ladder" || why === "retry-reload";
+}
+
+/** Le libellé d'un `why` de départ, ou `null` pour une ligne d'avant le 10/10/2026. */
+export function serverStartWhyLabel(why: unknown, rung?: unknown): string | null {
+  if (!isStartWhy(why)) return null;
+  const label = SERVER_START_WHY_LABELS[why];
+  return why === "ladder" && typeof rung === "number" ? `${label} (essai ${rung})` : label;
+}
+
+/** Ce qui a provoqué une négociation, porté par sa ligne `start`. */
+export interface ServerStartCause {
+  why: ServerStartWhy;
+  /** L'échelon de l'échelle de repli (1 = la requête rejouée à l'identique). */
+  rung?: number;
+  /** L'erreur qui l'a déclenché, en quelques mots (« élément : code 4 »). */
+  trigger?: string;
+}
 
 /** Ce que toute ligne du lecteur serveur porte, pour se distinguer de celles du lecteur natif. */
 export interface ServerPlayerContext {
@@ -39,10 +108,14 @@ export interface ServerPlayerContext {
 /** Le lecteur serveur a obtenu son flux et le pose sur l'élément. */
 export function serverStartFields(
   ctx: ServerPlayerContext,
-  stream: { directPlay: boolean; nativeHls: boolean; resumeAt: number | undefined; audioStreamIndex: number | undefined }
+  stream: { directPlay: boolean; nativeHls: boolean; resumeAt: number | undefined; audioStreamIndex: number | undefined },
+  cause?: ServerStartCause
 ): Record<string, unknown> {
   return {
     ...base(ctx),
+    ...(cause ? { why: cause.why } : {}),
+    ...(cause?.rung !== undefined ? { rung: cause.rung } : {}),
+    ...(cause?.trigger ? { trigger: cause.trigger } : {}),
     // Le même nom de champ que le lecteur natif (`remux`, `webcodecs`) : une seule question,
     // « par où cette séance est-elle passée », une seule colonne pour y répondre.
     path: "serveur",
@@ -90,25 +163,83 @@ export function castEndedFields(ctx: ServerPlayerContext, source: string, at: nu
   return { ...base(ctx), cast: true, path: "serveur", reason: `fin de diffusion (${source})`, at: Math.round(at), ...(watched !== undefined ? { watched } : {}) };
 }
 
+/** Pourquoi la séance du lecteur serveur se termine — le `why` de sa ligne `stop`. */
+export type ServerStopWhy =
+  /** La croix, la fin du film sans épisode suivant, Échap. */
+  | "close"
+  /** L'épisode suivant prend la place, dans le même lecteur. */
+  | "next"
+  /** La page se ferme ou se recharge (`pagehide`). */
+  | "page"
+  /** Le lecteur disparaît sans avoir été fermé (un autre lecteur prend l'écran). */
+  | "unmount"
+  /** Bilan resté sur l'appareil (page tuée par iOS), renvoyé au lancement suivant — `unsentStop`. */
+  | "lost";
+
+/** Ce que le bilan ajoute à la position et au temps regardé. */
+export interface ServerStopFacts {
+  /** La minuterie de veille choisie ou déclenchée (`sleepTimerLogFields`). */
+  sleepTimer?: SleepMode;
+  /** La durée du titre, quand l'élément la connaît. */
+  duration?: number | null;
+  ended?: boolean;
+  /** Attentes, sauts, pistes, arrière-plan — le décompte partagé avec le lecteur natif. */
+  tally?: TallySummary;
+  subtitleSwitches?: number;
+  /** Les relances de la séance (hors ouverture), par motif. */
+  restarts?: Partial<Record<ServerStartWhy, number>>;
+  /** L'erreur affichée au moment de l'arrêt, s'il y en avait une. */
+  error?: string | null;
+  /** Fermé avant la première image : depuis combien de temps le spectateur attendait. */
+  gaveUpAfterMs?: number;
+}
+
+/** « ladder×3, audio×1 » — les motifs dans l'ordre de leur nombre, lisibles d'un coup d'œil. */
+export function formatRestarts(restarts: Partial<Record<ServerStartWhy, number>>): string {
+  return Object.entries(restarts)
+    .filter((entry): entry is [string, number] => typeof entry[1] === "number" && entry[1] > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([why, n]) => `${why}×${n}`)
+    .join(", ");
+}
+
 /**
- * Le lecteur serveur s'arrête — fermé, ou passé à l'épisode suivant.
+ * Le lecteur serveur s'arrête — son bilan, comme celui du lecteur natif.
  *
  * Il notait son démarrage et jamais sa fin : chacune de ses séances se lisait « commencée, jamais
- * finie » dans le journal, comme un lecteur disparu (relevé le 23/09/2026).
+ * finie » dans le journal, comme un lecteur disparu (relevé le 23/09/2026). Puis seulement la
+ * position et le temps regardé : rien ne disait si la séance avait attendu, sauté, changé de piste
+ * ou relancé quatre fois sa négociation (10/10/2026, Augustine sur Edge). Les mêmes champs que le
+ * `stop` natif (`waits`, `waitedMs`, `longestWaitMs`, `seeks`, `seekWaitMs`, `audioSwitches`,
+ * `backgrounds`…), pour que la page Activité les lise sans distinguer les deux lecteurs.
  */
 export function serverStopFields(
   ctx: ServerPlayerContext,
-  why: "close" | "next",
+  why: ServerStopWhy,
   at: number,
   watched: number,
-  sleep: { sleepTimer?: SleepMode } = {}
+  facts: ServerStopFacts = {}
 ): Record<string, unknown> {
   // `watched` : le temps joué par ce lecteur-ci depuis sa dernière ligne qui en rendait compte, et
   // non la position — un film repris à une heure n'a pas été regardé une heure. Sans lui, une
   // séance passée par le serveur se lisait à zéro seconde regardée (24/09/2026).
-  // `sleep` : la minuterie de veille choisie ou déclenchée, comme le bilan du lecteur natif
-  // (`sleepTimerLogFields`).
-  return { ...base(ctx), path: "serveur", why, at: Math.round(at), watched, ...sleep };
+  const restarts = facts.restarts ? Object.values(facts.restarts).reduce<number>((n, v) => n + (v ?? 0), 0) : 0;
+  const duration = facts.duration;
+  return {
+    ...base(ctx),
+    path: "serveur",
+    why,
+    at: Math.round(at),
+    watched,
+    ...(duration != null && Number.isFinite(duration) && duration > 0 ? { duration: Math.round(duration) } : {}),
+    ...(facts.ended !== undefined ? { ended: facts.ended } : {}),
+    ...(facts.tally ?? {}),
+    ...(facts.subtitleSwitches !== undefined ? { subtitleSwitches: facts.subtitleSwitches } : {}),
+    ...(facts.restarts ? { restarts, ...(restarts > 0 ? { restartWhy: formatRestarts(facts.restarts) } : {}) } : {}),
+    ...(facts.error ? { error: facts.error } : {}),
+    ...(facts.gaveUpAfterMs !== undefined ? { gaveUpAfterMs: Math.round(facts.gaveUpAfterMs) } : {}),
+    ...(facts.sleepTimer !== undefined ? { sleepTimer: facts.sleepTimer } : {}),
+  };
 }
 
 /**

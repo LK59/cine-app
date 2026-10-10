@@ -254,6 +254,8 @@
       "rebuild": "{n} reconstrucción|{n} reconstrucciones",
       "stall": "{n} bloqueo|{n} bloqueos",
       "slowSeek": "{n} salto lento|{n} saltos lentos",
+      "ladder": "{n} reinicio tras un error|{n} reinicios tras errores",
+      "restart": "{n} reinicio|{n} reinicios",
       "lost": "final perdido",
       "server": "reproductor del servidor",
       "tv": "en un televisor"
@@ -283,6 +285,18 @@
     "line": {
       "start": "Apertura en {at} · {path} · listo en {opened} {rebuild}",
       "rebuildN": "· reconstrucción n.º {n}",
+      "serverStart": "{why} en {at} · servidor {extra}",
+      "serverWhy": {
+        "open": "Apertura",
+        "handover": "Relevo del reproductor nativo",
+        "audio-reload": "Pista de audio (página recargada)",
+        "retry-reload": "Página recargada tras un fallo",
+        "audio": "Cambio de pista de audio",
+        "retry": "Reintentar",
+        "cast-relaunch": "Transmisión relanzada",
+        "ladder": "Reinicio tras un error (intento {n})"
+      },
+      "restarts": "· {n} reinicio|· {n} reinicios",
       "seek": "Salto de {from} a {to} · {took} {buffered}",
       "buffered": "· ya cargado",
       "audio": "Pista de audio: {from} → {to} · {took} · {how}",

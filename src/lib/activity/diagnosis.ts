@@ -13,7 +13,11 @@
 import type { Seance } from "@/lib/activity/seances";
 
 export function failuresOf(s: Seance): number {
-  return s.errors + s.fallbacks + s.stalls + s.rebuilds;
+  // Les relances du lecteur serveur qui suivent une panne (échelon de l'échelle de repli, page
+  // rechargée après échec) comptent : chacune est une erreur de l'élément, même quand l'échelon
+  // suivant réussit. Un changement de piste ou un « Réessayer » n'en est pas une (10/10/2026).
+  // `?? []` : une séance gardée avant ce champ (alertes acquittées, signalements figés).
+  return s.errors + s.fallbacks + s.stalls + s.rebuilds + (s.restarts ?? []).filter((r) => r.failure).length;
 }
 
 export interface Viewer {

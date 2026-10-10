@@ -30,7 +30,7 @@ vi.mock("@/components/PlayerControls", () => ({
 vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy: false }) }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
 vi.mock("@/lib/reportPlayback", () => ({ reportPlayback: () => {} }));
-vi.mock("@/lib/unsentStop", () => ({ flushOrphanStops: () => {} }));
+vi.mock("@/lib/unsentStop", () => ({ flushOrphanStops: () => {}, saveUnsentStop: () => {}, clearUnsentStop: () => {} }));
 vi.mock("@/lib/codecSupport", () => ({ detectCodecSupport: async () => ({}) }));
 vi.mock("@/lib/webkitEngine", () => ({ playsHlsNatively: () => true }));
 vi.mock("@/lib/resumePosition", () => ({ resolveResumeAt: async (_id: string, at: number | undefined) => at ?? 0 }));

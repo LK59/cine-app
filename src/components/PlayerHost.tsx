@@ -26,12 +26,26 @@ import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { reportPlayback } from "@/lib/reportPlayback";
-import { serverStartFields, serverFailureFields, castEstablishedFields, castEndedFields, castResumeFields, serverStopFields, serverSleepFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
+import {
+  serverStartFields,
+  serverFailureFields,
+  castEstablishedFields,
+  castEndedFields,
+  castResumeFields,
+  serverStopFields,
+  serverSleepFields,
+  isServerRestart,
+  type ServerPlayerContext,
+  type ServerStartCause,
+  type ServerStartWhy,
+  type ServerStopWhy,
+} from "@/lib/serverPlayerLog";
+import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
 import { useSleepTimer } from "@/lib/useSleepTimer";
 import { sleepTimerLogFields, sleepTimerStore, type SleepMode } from "@/lib/sleepTimer";
 import { CastResume } from "@/lib/castResume";
 import { castRouteActive } from "@/lib/castRoute";
-import { WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
+import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
@@ -360,6 +374,16 @@ interface CastCapableVideo extends HTMLVideoElement {
   webkitCurrentPlaybackTargetIsWireless?: boolean;
 }
 
+/** Ce que reçoit `startPlayback` — et ce que rejoue une relance. */
+interface StartOpts {
+  audioStreamIndex?: number;
+  resumeAt?: number;
+  disableAudioCodecs?: string[];
+  forceAudioTranscode?: boolean;
+  /** Pourquoi cette négociation — le `why` de la ligne `start` (`ServerStartWhy`). */
+  cause?: ServerStartCause;
+}
+
 function ActivePlayer({
   session,
   mode,
@@ -451,7 +475,7 @@ function ActivePlayer({
   // The opts of the most recent startPlayback call, so an automatic retry replays the SAME
   // request (audio track included) — state like currentAudioId would be stale inside the
   // error listener's closure.
-  const lastPlaybackOpts = useRef<{ audioStreamIndex?: number; resumeAt?: number; disableAudioCodecs?: string[]; forceAudioTranscode?: boolean } | undefined>(undefined);
+  const lastPlaybackOpts = useRef<StartOpts | undefined>(undefined);
   // La séance Jellyfin a été close par la fin de l'épisode, lecteur resté ouvert (voir l'effet
   // `ended`) : le prochain `play` doit la rouvrir. Une ref et non une variable de l'effet : celui-ci
   // se réinstalle quand le lecteur passe en mini-lecteur ou revient en plein écran, et l'état remis
@@ -539,8 +563,34 @@ function ActivePlayer({
   const closingRef = useRef(false);
   // Déclaré avant le contexte du journal, qui le lit.
   const logContext = useRef<ServerPlayerContext>({ itemId, title, cast: castSession, bench: session.bench, session: firstSession, agent });
+  /**
+   * Le décompte de la séance pour son bilan (`stop`) — le même que celui du lecteur natif
+   * (`SessionTally`) : attentes d'au moins 250 ms, sauts et leur attente, pistes, arrière-plan. Plus
+   * les relances par motif et les changements de sous-titres. Une séance par titre : l'épisode
+   * suivant repart de zéro (voir l'effet du contexte du journal, juste en dessous).
+   */
+  const tallyRef = useRef(new SessionTally());
+  const restartsRef = useRef<Partial<Record<ServerStartWhy, number>>>({});
+  const subtitleSwitchesRef = useRef(0);
+  /** Une image a joué dans cette séance — sinon le bilan dit combien de temps on a attendu. */
+  const sessionPlayedRef = useRef(false);
+  const [mountedAt] = useState(() => Date.now());
+  const sessionStartedAtRef = useRef(mountedAt);
+  /**
+   * La séance s'est terminée autrement que par un `stop` d'ici : la main rendue au lecteur natif à
+   * la fin d'une diffusion (sa ligne `fallback` le dit). Ni bilan perdu gardé, ni `stop` au démontage.
+   */
+  const handedOverRef = useRef(false);
   useEffect(() => {
-    if (logSession.current.itemId !== itemId) logSession.current = { itemId, id: newPlayerSessionId() };
+    if (logSession.current.itemId !== itemId) {
+      logSession.current = { itemId, id: newPlayerSessionId() };
+      tallyRef.current = new SessionTally();
+      restartsRef.current = {};
+      subtitleSwitchesRef.current = 0;
+      sessionPlayedRef.current = false;
+      sessionStartedAtRef.current = Date.now();
+      handedOverRef.current = false;
+    }
     // `cast` ne se lit plus « séance ouverte pour diffuser » seulement : une route établie depuis
     // les commandes de la vidéo compte aussi, pour les lignes qui suivent (arrêt compris).
     logContext.current = { itemId, title, cast: castSession || castActive, bench: session.bench, session: logSession.current.id, agent };
@@ -603,6 +653,48 @@ function ActivePlayer({
    */
   const closedRef = useRef(false);
 
+  // L'erreur affichée, lue par le bilan sans le recréer à chaque rendu.
+  const errorRef = useRef<string | null>(null);
+  useEffect(() => {
+    errorRef.current = error;
+  }, [error]);
+
+  /**
+   * Le bilan de la séance à cet instant — la ligne `stop`, et la copie gardée sur l'appareil au cas
+   * où elle ne pourrait pas partir (`unsentStop`, `why: "lost"`). `consume` : le temps regardé est
+   * pris (il ne comptera pas deux fois) ; la copie gardée le lit seulement.
+   */
+  const stopFields = useCallback(
+    (why: ServerStopWhy, consume: boolean) => {
+      const now = Date.now();
+      const video = videoRef.current;
+      return serverStopFields(logContext.current, why, lastKnownTime.current, consume ? watched.take(now) : watched.seconds(now), {
+        ...sleepTimerLogFields(sleepTimerStore.get()),
+        duration: video?.duration,
+        ended: video?.ended ?? false,
+        tally: tallyRef.current.summary(now),
+        subtitleSwitches: subtitleSwitchesRef.current,
+        restarts: restartsRef.current,
+        error: errorRef.current,
+        ...(sessionPlayedRef.current ? {} : { gaveUpAfterMs: now - sessionStartedAtRef.current }),
+      });
+    },
+    [watched]
+  );
+  /** La main est rendue au lecteur natif (fin de diffusion) : la copie gardée n'a plus lieu d'être. */
+  const markHandedOver = useCallback(() => {
+    handedOverRef.current = true;
+    if (logContext.current.session) clearUnsentStop(logContext.current.session);
+  }, []);
+  /** Envoie le bilan et efface sa copie gardée sur l'appareil — une seule fois par séance. */
+  const reportStop = useCallback(
+    (why: ServerStopWhy) => {
+      reportPlayback("stop", stopFields(why, true));
+      if (logContext.current.session) clearUnsentStop(logContext.current.session);
+    },
+    [stopFields]
+  );
+
   // Swaps to the next episode in place — reports the current one's final
   // position first, same as a manual close, but never triggers the
   // close/unmount fade since the player stays open for the new episode.
@@ -610,10 +702,10 @@ function ActivePlayer({
     // Rien à enchaîner sur une séance qu'on vient de fermer : le compte à rebours de l'épisode
     // suivant peut arriver à zéro pendant le fondu.
     if (!nextEpisode || closedRef.current) return;
-    reportPlayback("stop", serverStopFields(logContext.current, "next", lastKnownTime.current, watched.take(Date.now()), sleepTimerLogFields(sleepTimerStore.get())));
+    reportStop("next");
     stopPlaybackNow();
     playback.advance(nextEpisode);
-  }, [nextEpisode, playback, stopPlaybackNow, watched]);
+  }, [nextEpisode, playback, stopPlaybackNow, reportStop]);
 
   // Fades out instead of vanishing instantly — an abrupt unmount back to the
   // underlying page reads as a glitch, especially mid-transcode. Reports the
@@ -625,7 +717,7 @@ function ActivePlayer({
     if (closedRef.current) return;
     closedRef.current = true;
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    reportPlayback("stop", serverStopFields(logContext.current, "close", lastKnownTime.current, watched.take(Date.now()), sleepTimerLogFields(sleepTimerStore.get())));
+    reportStop("close");
     const reported = stopPlaybackNow();
     /**
      * En diffusion, fermer le lecteur arrête aussi le téléviseur.
@@ -655,7 +747,67 @@ function ActivePlayer({
     // où on le quitte, et rien ne les relisait. Volontairement hors du chemin de la fermeture —
     // l'écran doit partir tout de suite, la relecture peut attendre son tour.
     void refreshAfterPlayback(reported, itemId);
-  }, [playback, stopPlaybackNow, itemId, session.openId, watched]);
+  }, [playback, stopPlaybackNow, itemId, session.openId, reportStop]);
+
+  /**
+   * Le bilan gardé sur l'appareil, réécrit tant que la séance vit — comme le lecteur natif.
+   *
+   * Toutes les 30 s, et à chaque passage en arrière-plan : le dernier instant où une page qu'iOS va
+   * tuer peut encore écrire. Renvoyé au lancement suivant en `why: "lost"` (`flushOrphanStops`).
+   * Jamais après l'arrêt, ni une fois la main rendue au lecteur natif. Rien pour un banc d'essai.
+   * L'arrière-plan nourrit aussi le décompte (`backgrounds`, `backgroundMs`) : une attente en cours
+   * au départ n'en est plus une, c'est l'absence.
+   */
+  useEffect(() => {
+    const save = () => {
+      const id = logContext.current.session;
+      if (!id || bench || closedRef.current || handedOverRef.current) return;
+      saveUnsentStop(id, stopFields("lost", false));
+    };
+    save();
+    const timer = setInterval(save, 30_000);
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        tallyRef.current.hidden(Date.now());
+        save();
+      } else {
+        tallyRef.current.shown(Date.now());
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [bench, stopFields]);
+
+  /**
+   * La page qui se ferme, et le lecteur qui disparaît sans avoir été fermé : un bilan quand même.
+   *
+   * Sans eux, la séance finissait sur son dernier `start` — « commencée, jamais finie » — dès que la
+   * page partait (onglet fermé, rechargement) ou qu'un autre écran remplaçait ce lecteur. `pagehide`
+   * part avec `keepalive` (`reportPlayback`) ; le démontage seulement s'il n'y a pas eu de fermeture,
+   * ni de main rendue au lecteur natif (sa ligne `fallback` raconte déjà la fin).
+   */
+  const reportStopRef = useRef(reportStop);
+  useEffect(() => {
+    reportStopRef.current = reportStop;
+  }, [reportStop]);
+  useEffect(() => {
+    const onPageHide = (e: PageTransitionEvent) => {
+      // Mise en cache (bfcache) : la page peut revenir, la séance avec. Le bilan gardé suffit.
+      if (e.persisted || closedRef.current || handedOverRef.current) return;
+      closedRef.current = true;
+      reportStopRef.current("page");
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      if (closedRef.current || handedOverRef.current) return;
+      closedRef.current = true;
+      reportStopRef.current("unmount");
+    };
+  }, []);
 
   // (Re)starts playback, optionally at a specific audio track / resume point.
   // Jellyfin only ever transcodes ONE audio stream into the HLS output (unlike
@@ -666,7 +818,7 @@ function ActivePlayer({
   // Jellyfin to start the new stream at the right offset, we seek the video
   // to resumeAt ourselves once the new manifest's metadata is ready.
   const startPlayback = useCallback(
-    async (opts?: { audioStreamIndex?: number; resumeAt?: number; disableAudioCodecs?: string[]; forceAudioTranscode?: boolean }) => {
+    async (opts?: StartOpts) => {
       let video = videoRef.current;
       if (!video) return;
 
@@ -829,13 +981,21 @@ function ActivePlayer({
         closeOrphan(data);
         return;
       }
+      // Pourquoi cette négociation : chaque appelant le dit (`StartOpts.cause`). Une relance — tout
+      // ce qui n'ouvre pas la séance — compte au bilan, par motif.
+      const cause = opts?.cause;
+      if (cause && isServerRestart(cause.why)) restartsRef.current[cause.why] = (restartsRef.current[cause.why] ?? 0) + 1;
       reportPlayback("start", {
-        ...serverStartFields(logContext.current, {
-          directPlay: !!data.isDirectPlay,
-          nativeHls,
-          resumeAt: opts?.resumeAt,
-          audioStreamIndex: opts?.audioStreamIndex,
-        }),
+        ...serverStartFields(
+          logContext.current,
+          {
+            directPlay: !!data.isDirectPlay,
+            nativeHls,
+            resumeAt: opts?.resumeAt,
+            audioStreamIndex: opts?.audioStreamIndex,
+          },
+          cause
+        ),
         // Une reprise de l'échelle audio rejoue la négociation : la ligne dit laquelle.
         ...(nativeErrorRetryCount.current > 0 ? { retry: nativeErrorRetryCount.current } : {}),
       });
@@ -1128,6 +1288,9 @@ function ActivePlayer({
       // La position connue, pas celle de l'élément : pendant un chargement, il est encore à 0, et
       // changer de piste à ce moment relançait le film depuis le début (23/09/2026).
       const resumeAt = video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA ? video.currentTime : lastKnownTime.current;
+      // Au bilan, comme le lecteur natif — rechargement de page compris (la page suivante ouvre
+      // sa propre séance, qui le dira dans son `start`, `why: "audio-reload"`).
+      tallyRef.current.audioSwitched();
       // WebKit only: switching audio in-place reliably fails there with MediaError
       // SRC_NOT_SUPPORTED — a genuine, reproducible WebKit limitation on loading a second HLS
       // session within the same page. Verified this isn't about DOM element reuse (fails
@@ -1161,7 +1324,7 @@ function ActivePlayer({
         window.location.reload();
         return;
       }
-      startPlayback({ audioStreamIndex: id, resumeAt });
+      startPlayback({ audioStreamIndex: id, resumeAt, cause: { why: "audio" } });
     },
     [startPlayback, itemId, title]
   );
@@ -1208,6 +1371,7 @@ function ActivePlayer({
     startPlayback({
       ...lastPlaybackOpts.current,
       resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
+      cause: { why: "retry" },
     });
   }, [startPlayback]);
 
@@ -1220,6 +1384,7 @@ function ActivePlayer({
     const video = videoRef.current;
     if (!video) return;
     const position = id === null ? -1 : externalSubtitleTracks.findIndex((t) => t.index === id);
+    subtitleSwitchesRef.current += 1;
     for (let i = 0; i < video.textTracks.length; i++) {
       video.textTracks[i].mode = i === position ? "showing" : "disabled";
     }
@@ -1261,7 +1426,17 @@ function ActivePlayer({
          * pas retenu, ce qui ne coûte que cinq secondes rejouées.
          */
         const at = !mine && !fromReload && !bench ? openingPosition(itemId, resumeAt, null) : resumeAt;
-        startPlayback({ resumeAt: at, audioStreamIndex: initialAudioStreamIndex });
+        // Pourquoi cette première négociation : une page rechargée (piste WebKit, ou dernier
+        // recours de l'échelle audio), le relais du lecteur natif — la séance qu'il passe, pas
+        // l'épisode suivant que ce lecteur enchaîne ensuite —, ou une ouverture.
+        const why: ServerStartWhy = fromReload
+          ? (reloadAttempt ?? 0) > 0
+            ? "retry-reload"
+            : "audio-reload"
+          : continuesSession && logSession.current.id === continuesSession
+            ? "handover"
+            : "open";
+        startPlayback({ resumeAt: at, audioStreamIndex: initialAudioStreamIndex, cause: { why } });
       });
     }, graceMs);
     return () => {
@@ -1339,8 +1514,10 @@ function ActivePlayer({
         // Déjà démonté : il n'y a plus rien à arrêter.
       }
     }
+    // La main passe au lecteur natif : sa séance continue là-bas, ni bilan perdu ni `stop` ici.
+    markHandedOver();
     onCastEnded?.(at);
-  }, [onCastEnded, watched]);
+  }, [onCastEnded, watched, markHandedOver]);
 
   const castAttempted = useRef(false);
   /**
@@ -1378,6 +1555,7 @@ function ActivePlayer({
     startPlaybackRef.current({
       ...lastPlaybackOpts.current,
       resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
+      cause: { why: "cast-relaunch" },
     });
   }
   useEffect(() => {
@@ -1425,7 +1603,10 @@ function ActivePlayer({
       // avait été ouvert pour diffuser, et sinon son `stop` ne comptera que la suite.
       reportPlayback("fallback", castEndedFields(logContext.current, source, video.currentTime || 0, watched.take(Date.now())));
       // En pause : la route est tombée sans que personne ne demande à continuer sur le téléphone.
-      if (castSession) onCastEnded?.(castHandBackPosition(video.currentTime, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt), true);
+      if (castSession) {
+        markHandedOver();
+        onCastEnded?.(castHandBackPosition(video.currentTime, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt), true);
+      }
     };
     // La reprise que la route vient peut-être d'emporter à 0, reposée quand la télé joue — voir
     // `CastResume`. Une fois par établissement, et retirée avec les autres écouteurs.
@@ -1490,7 +1671,7 @@ function ActivePlayer({
     // Les lignes du journal se nomment par `logContext`, lu au moment d'écrire : ni le titre ni
     // l'épisode ne sont des dépendances, et un changement d'épisode ne réarme pas les écouteurs —
     // ce qui perdrait la route en cours.
-  }, [castSession, onCastEnded, videoKey, watched, castResume]);
+  }, [castSession, onCastEnded, videoKey, watched, castResume, markHandedOver]);
 
   // Ends playback entirely (not just minimize) when the video finishes — same in both modes.
   //
@@ -1591,6 +1772,56 @@ function ActivePlayer({
     };
   }, [videoKey, itemId, bench, castResume]);
 
+  /**
+   * Les attentes et les sauts de la séance, pour son bilan — les règles du lecteur natif
+   * (`SessionTally`) : une attente compte à partir de 250 ms, en pleine lecture seulement (ni
+   * l'ouverture ni un saut) ; un saut compte du geste à la reprise de l'image, ou au `seeked` s'il
+   * arrive en pause. Les sauts de l'ouverture (la position de reprise posée par `startPlayback`)
+   * précèdent la première lecture et ne comptent pas.
+   */
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    let playedOnce = false;
+    let seekSince: number | null = null;
+    const onPlaying = () => {
+      const now = Date.now();
+      playedOnce = true;
+      sessionPlayedRef.current = true;
+      tallyRef.current.waitEnded(now);
+      if (seekSince !== null) {
+        tallyRef.current.seekArrived(now - seekSince);
+        seekSince = null;
+      }
+    };
+    const onWaiting = () => {
+      if (playedOnce && !video.seeking && seekSince === null) tallyRef.current.waitStarted(Date.now());
+    };
+    const onSeeking = () => {
+      if (!playedOnce) return;
+      tallyRef.current.waitAbandoned();
+      seekSince ??= Date.now();
+    };
+    const onSeeked = () => {
+      if (seekSince === null || !video.paused) return;
+      tallyRef.current.seekArrived(Date.now() - seekSince);
+      seekSince = null;
+    };
+    const onPause = () => tallyRef.current.waitEnded(Date.now());
+    video.addEventListener("playing", onPlaying);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("seeking", onSeeking);
+    video.addEventListener("seeked", onSeeked);
+    video.addEventListener("pause", onPause);
+    return () => {
+      video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("seeking", onSeeking);
+      video.removeEventListener("seeked", onSeeked);
+      video.removeEventListener("pause", onPause);
+    };
+  }, [videoKey]);
+
   // Bad-connection badge: a real stall mid-playback ('waiting' firing after the video has
   // already played at least once — excludes ordinary startup buffering) is logged with a
   // timestamp; a periodic check then looks at how many landed in the last 60s, combined with
@@ -1684,7 +1915,8 @@ function ActivePlayer({
         const rung = AUDIO_FALLBACK_RUNGS[nativeErrorRetryCount.current];
         const lastRung = isLastAudioRung(nativeErrorRetryCount.current);
         nativeErrorRetryCount.current += 1;
-        const delay = 1200 * nativeErrorRetryCount.current;
+        const attempt = nativeErrorRetryCount.current;
+        const delay = 1200 * attempt;
         setReconnecting(true);
         if (nativeErrorRetryTimer.current) clearTimeout(nativeErrorRetryTimer.current);
         nativeErrorRetryTimer.current = setTimeout(() => {
@@ -1711,6 +1943,9 @@ function ActivePlayer({
             // les quatre essais finissaient sur le même refus). Jamais retenu pour la suite : c'est
             // ce fichier-là qui le demande, pas l'appareil (voir `persistAudioBlocklist`).
             ...(lastRung ? { forceAudioTranscode: true } : {}),
+            // L'échelon et l'erreur qui l'a provoqué : une échelle qui échoue se distingue ainsi,
+            // au journal, d'un changement de piste ou d'un « Réessayer ».
+            cause: { why: "ladder", rung: attempt, trigger: `élément : code ${code ?? "?"}` },
           });
         }, delay);
         return;

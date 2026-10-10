@@ -8,6 +8,7 @@
 
 import { deviceLabel } from "@/lib/deviceLabel";
 import type { LogRecord } from "@/lib/activity/logReader";
+import { isServerFailureRestart, isServerRestart, serverStartWhyLabel } from "@/lib/serverPlayerLog";
 
 export interface Seance {
   id: string;
@@ -83,6 +84,13 @@ export interface Seance {
   errors: number;
   /** Les motifs des incidents, dans l'ordre — de quoi dire « pourquoi » sans ouvrir la séance. */
   incidents: { kind: string; t: number; reason: string }[];
+  /**
+   * Les relances du lecteur serveur (hors ouverture), dans l'ordre, chacune avec son motif — depuis
+   * le 10/10/2026 (`why` sur sa ligne `start`). `failure` : un échelon de l'échelle de repli ou une
+   * page rechargée après échec, et non un geste du spectateur (piste, « Réessayer »). Les lignes
+   * d'avant, qui ne portent que `retry`, comptent comme échelons.
+   */
+  restarts: { why: string; label: string; t: number; failure: boolean }[];
 }
 
 /** Un saut qui prend plus que ça se remarque : c'est le seuil du banc d'essai. */
@@ -134,6 +142,7 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     onTv: false,
     errors: 0,
     incidents: [],
+    restarts: [],
   };
 }
 
@@ -174,6 +183,15 @@ function absorb(s: Seance, r: LogRecord): void {
       s.range ??= str(r.range);
       s.container ??= str(r.container);
       if (s.title === "?") s.title = str(r.title) ?? "?";
+      if (r.player === "serveur") {
+        if (isServerRestart(r.why)) {
+          const why = r.why as string;
+          s.restarts.push({ why, label: serverStartWhyLabel(why, r.rung) ?? why, t: r._t, failure: isServerFailureRestart(why) });
+        } else if (r.why === undefined && (num(r.retry) ?? 0) > 0) {
+          // Ligne d'avant le 10/10/2026 : seul l'échelon était dit.
+          s.restarts.push({ why: "ladder", label: serverStartWhyLabel("ladder", num(r.retry)) ?? "ladder", t: r._t, failure: true });
+        }
+      }
       break;
     case "seek": {
       s.seeks += 1;
@@ -233,12 +251,18 @@ function absorb(s: Seance, r: LogRecord): void {
         backgroundMs: num(r.backgroundMs) ?? 0,
         lateByMs: num(r.lateByMs),
       };
+      // Le lecteur serveur n'écrit pas de ligne par saut ni par piste : son bilan les compte
+      // (depuis le 10/10/2026). Gardé à part — le dernier bilan l'emporte, comme `watched` — et
+      // ajouté à la fin à ce que le lecteur natif a écrit avant de passer la main.
+      if (r.player === "serveur") serverCounts.set(s, { seeks: num(r.seeks) ?? 0, audioSwitches: num(r.audioSwitches) ?? 0 });
       break;
   }
 }
 
 /** Le temps joué avant un relais, cumulé à part jusqu'à `finish`. */
 const handedWatched = new WeakMap<Seance, number>();
+/** Les sauts et pistes du dernier bilan du lecteur serveur, ajoutés à `finish`. */
+const serverCounts = new WeakMap<Seance, { seeks: number; audioSwitches: number }>();
 
 function addWatched(s: Seance, seconds: number | null): void {
   if (seconds === null || seconds < 0) return;
@@ -251,6 +275,11 @@ function finish(s: Seance): Seance {
   const own = s.stop?.watched ?? null;
   s.watched = handed === null && own === null ? null : (handed ?? 0) + (own ?? 0);
   if (s.stop) s.stop.watched = s.watched;
+  const server = serverCounts.get(s);
+  if (server) {
+    s.seeks += server.seeks;
+    s.audioSwitches += server.audioSwitches;
+  }
   return s;
 }
 
@@ -271,7 +300,7 @@ export function buildSeances(records: LogRecord[]): Seance[] {
     const key = `${str(r.user) ?? "?"}|${str(r.itemId) ?? str(r.title) ?? "?"}`;
     let s = legacyOpen.get(key);
     // Une relance (`retry`, lecteur serveur) n'ouvre pas une séance, pas plus qu'une reconstruction.
-    const opens = r.kind === "start" && !(num(r.rebuild) ?? 0) && !(num(r.retry) ?? 0);
+    const opens = r.kind === "start" && !(num(r.rebuild) ?? 0) && !(num(r.retry) ?? 0) && !isServerRestart(r.why);
     if (!s || opens) {
       s = blank(`ancienne:${key}:${r._t}`, true, r);
       byId.set(s.id, s);

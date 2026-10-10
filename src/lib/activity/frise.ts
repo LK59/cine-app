@@ -9,6 +9,7 @@
 // Écrit une fois ici, pour les deux écrans qui la montrent : la séance, et le signalement qui la cite.
 
 import { lineLateByMs } from "@/lib/activity/seances";
+import { isServerFailureRestart, isServerRestart, serverStartWhyLabel } from "@/lib/serverPlayerLog";
 
 export interface FrisePoint {
   /** Millisecondes depuis l'ouverture. */
@@ -81,7 +82,21 @@ export function friseModel(lines: Record<string, unknown>[], start: number, runt
         // Une reconstruction réécrit `start` : ce n'est pas une nouvelle ouverture. Une relance du
         // lecteur serveur (`retry`) non plus — les quatre essais de « Ruby » sur la Fire TV
         // (10/10/2026) se lisaient comme quatre ouvertures sur la frise.
-        if (num(line.rebuild) || num(line.retry)) push({ t, pos });
+        // Le lecteur serveur dit pourquoi il renégocie depuis le 10/10/2026 : un échelon de
+        // l'échelle de repli est marqué comme un incident, un changement de piste comme tel, le
+        // reste (« Réessayer », relance de diffusion) comme une ouverture nommée.
+        const restartLabel = isServerRestart(line.why) ? serverStartWhyLabel(line.why, line.rung) : null;
+        if (restartLabel) {
+          push({ t, pos });
+          const failure = isServerFailureRestart(line.why);
+          const trigger = text(line.trigger);
+          marks.push({
+            t,
+            pos,
+            kind: failure ? "rebuild" : line.why === "audio" ? "audio" : "start",
+            label: trigger ? `${restartLabel} — ${trigger}` : restartLabel,
+          });
+        } else if (num(line.rebuild) || num(line.retry)) push({ t, pos });
         else {
           push({ t, pos });
           marks.push({ t, pos, kind: "start", label: reason });

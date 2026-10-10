@@ -254,6 +254,8 @@
       "rebuild": "{n} Neuaufbau|{n} Neuaufbauten",
       "stall": "{n} Hänger|{n} Hänger",
       "slowSeek": "{n} langsamer Sprung|{n} langsame Sprünge",
+      "ladder": "{n} Neustart nach einem Fehler|{n} Neustarts nach Fehlern",
+      "restart": "{n} Neustart|{n} Neustarts",
       "lost": "Ende verloren",
       "server": "Server-Player",
       "tv": "auf einem Fernseher"
@@ -283,6 +285,18 @@
     "line": {
       "start": "Geöffnet bei {at} · {path} · bereit in {opened} {rebuild}",
       "rebuildN": "· Neuaufbau Nr. {n}",
+      "serverStart": "{why} bei {at} · Server {extra}",
+      "serverWhy": {
+        "open": "Öffnen",
+        "handover": "Übergabe vom nativen Player",
+        "audio-reload": "Tonspur (Seite neu geladen)",
+        "retry-reload": "Seite nach einem Fehler neu geladen",
+        "audio": "Tonspurwechsel",
+        "retry": "Erneut versuchen",
+        "cast-relaunch": "Übertragung neu gestartet",
+        "ladder": "Neustart nach einem Fehler (Versuch {n})"
+      },
+      "restarts": "· {n} Neustart|· {n} Neustarts",
       "seek": "Sprung von {from} zu {to} · {took} {buffered}",
       "buffered": "· bereits geladen",
       "audio": "Tonspur: {from} → {to} · {took} · {how}",

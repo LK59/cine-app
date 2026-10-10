@@ -10,6 +10,7 @@ import { useState } from "react";
 import { AlertTriangle, Check, ChevronRight, Film, MonitorSmartphone, Tv, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import type { Seance } from "@/lib/activity/seances";
+import { isStartWhy } from "@/lib/serverPlayerLog";
 import type { Presence } from "@/lib/activity/presence";
 import type { NowPlaying } from "@/lib/activity/accounts";
 import { ActivityLink } from "@/components/activity/nav";
@@ -217,6 +218,12 @@ export function SeanceFlags({ s }: { s: Seance }) {
   if (s.rebuilds) flags.push({ label: t("activity.flags.rebuild", { n: s.rebuilds }), tone: "bg-amber-500/15 text-amber-300" });
   if (s.stalls) flags.push({ label: t("activity.flags.stall", { n: s.stalls }), tone: "bg-amber-500/15 text-amber-300" });
   if (s.slowSeeks) flags.push({ label: t("activity.flags.slowSeek", { n: s.slowSeeks }), tone: "bg-amber-500/15 text-amber-300" });
+  // Les relances du lecteur serveur : celles qui suivent une panne (échelle de repli) en ambre, les
+  // gestes du spectateur (piste, « Réessayer ») en gris — l'une n'est pas l'autre (10/10/2026).
+  const restarts = s.restarts ?? [];
+  const failed = restarts.filter((r) => r.failure).length;
+  if (failed) flags.push({ label: t("activity.flags.ladder", { n: failed }), tone: "bg-amber-500/15 text-amber-300" });
+  if (restarts.length > failed) flags.push({ label: t("activity.flags.restart", { n: restarts.length - failed }), tone: "bg-slate-500/20 text-slate-300" });
   if (s.stop?.why === "lost") flags.push({ label: t("activity.flags.lost"), tone: "bg-slate-500/20 text-slate-300" });
   if (s.player === "serveur") flags.push({ label: t("activity.flags.server"), tone: "bg-violet-500/15 text-violet-300" });
   if (s.onTv) flags.push({ label: t("activity.flags.tv"), tone: "bg-violet-500/15 text-violet-300" });
@@ -364,6 +371,15 @@ const strOf = (v: unknown) => (typeof v === "string" && v ? v : null);
 export function describeLine(line: Record<string, unknown>, t: T): string {
   switch (line.kind) {
     case "start":
+      // Le lecteur serveur dit pourquoi il (re)négocie depuis le 10/10/2026 — ouverture, piste,
+      // échelon de l'échelle de repli et l'erreur qui l'a provoqué.
+      if (line.player === "serveur" && isStartWhy(line.why)) {
+        return t("activity.line.serverStart", {
+          why: t(`activity.line.serverWhy.${line.why}`, { n: numOf(line.rung) ?? 0 }),
+          at: clock(numOf(line.at)),
+          extra: strOf(line.trigger) ? `· ${strOf(line.trigger)}` : "",
+        }).trim();
+      }
       return t("activity.line.start", {
         at: clock(numOf(line.at)),
         path: strOf(line.path) ?? "?",
@@ -390,12 +406,15 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
       return t("activity.line.rebuild", { at: clock(numOf(line.at)), reason: strOf(line.reason) ?? "?" });
     case "fallback":
       return t("activity.line.fallback", { reason: strOf(line.reason) ?? "?" });
-    case "stop":
-      return t("activity.line.stop", {
+    case "stop": {
+      const restarts = numOf(line.restarts) ?? 0;
+      const base = t("activity.line.stop", {
         why: strOf(line.why) ?? "?",
         watched: hours(numOf(line.watched)),
         at: clock(numOf(line.at)),
       });
+      return restarts > 0 ? `${base} ${t("activity.line.restarts", { n: restarts })}` : base;
+    }
     case "error":
       return strOf(line.reason) ?? strOf(line.message) ?? t("activity.line.error");
     case "cast":
