@@ -22,6 +22,8 @@ import {
   appleCloseMotion,
   appleOpenMotion,
   cardRiseTrack,
+  contentRideOpacity,
+  contentRideTrack,
   clamp,
   closePoses,
   closeStartVelocity,
@@ -386,7 +388,18 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     /** Le fond de la carte du téléphone pendant l'aller (`createShell`). */
     shell: HTMLElement | null;
     /** L'aller en cours ou fini : de quoi reprendre son point et sa vitesse si une fermeture l'interrompt. */
-    run: { motion: Motion; poseAt: (q: number) => Pose; startedAt: number | null; span: number; target: Box; stage: Stage } | null;
+    run: {
+      motion: Motion;
+      poseAt: (q: number) => Pose;
+      startedAt: number | null;
+      span: number;
+      target: Box;
+      stage: Stage;
+      /** L'animation qui règle l'horloge du trajet : son `currentTime` dit où il en est vraiment. */
+      clock: Animation | null;
+      /** Au téléphone, d'où montent le fond de la carte et le contenu qu'elle porte (vers 0). */
+      cardFromY: number | null;
+    } | null;
     openAnims: Animation[];
     cancelStart: (() => void) | null;
     timers: number[];
@@ -645,25 +658,30 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     };
     anims.push(...playTracks(w, poseAt, motion, target, stage, true));
     go(dim, samples.map(({ offset, q }) => ({ offset, opacity: lerp(dimFrom, DIM, clamp(q, 0, 1)) })), LINEAR(d));
-    if (shell) {
+    const cardFromY = shell ? (reversed?.cardY ?? stage.H - rootTop) : null;
+    if (shell && cardFromY !== null) {
       // Le fond de la carte monte du bas de l'écran sous l'image (`cardRiseTrack`), sur le même
-      // ressort ; repris d'un retour, il repart d'où celui-ci l'avait laissé. La croix (son verre)
-      // paraît de 30 à 95 % du trajet, comme dans la maquette.
-      const cardDrop = stage.H - rootTop;
-      go(shell, cardRiseTrack(samples, reversed?.cardY ?? cardDrop, 0), LINEAR(d));
+      // ressort ; repris d'un retour, il repart d'où celui-ci l'avait laissé. Le contenu monte
+      // avec lui, sur la même piste (`contentRideTrack`) — une seule fiche qui arrive sous la
+      // bannière, pas un texte posé d'avance sur une carte encore en route. `backwards` : fini, il
+      // ne garde aucune transformation (un `fixed` dedans retrouverait la page pour repère).
+      // La croix (son verre) paraît de 30 à 95 % du trajet, comme dans la maquette.
+      go(shell, cardRiseTrack(samples, cardFromY, 0), LINEAR(d));
+      for (const el of content) go(el, contentRideTrack(samples, cardFromY, 0), LINEAR(d, "backwards"));
       const glassAt = timeAt(samples, d, GLASS_IN.from);
       const glassMs = Math.max(GLASS_IN.minMs, timeAt(samples, d, GLASS_IN.to) - glassAt);
       for (const el of glass) go(el, [{ opacity: 0 }, { opacity: 1 }], { duration: glassMs, delay: glassAt, easing: "ease-out", fill: "backwards" });
+    } else {
+      // Au bureau, le contenu part quand l'image est en place pour l'œil, d'un seul bloc.
+      const revealAt = timeAt(samples, d, REVEAL_AT);
+      for (const el of content)
+        go(el, [{ opacity: 0, transform: `translateY(${REVEAL_RISE_PX}px)` }, { opacity: 1, transform: "none" }], {
+          duration: REVEAL_MS,
+          delay: revealAt,
+          easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+          fill: "backwards",
+        });
     }
-    // Le contenu part quand l'image est en place pour l'œil, d'un seul bloc, et se pose avec elle.
-    const revealAt = timeAt(samples, d, REVEAL_AT);
-    for (const el of content)
-      go(el, [{ opacity: 0, transform: `translateY(${REVEAL_RISE_PX}px)` }, { opacity: 1, transform: "none" }], {
-        duration: REVEAL_MS,
-        delay: revealAt,
-        easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-        fill: "backwards",
-      });
     if (h) {
       homeMotion.anim?.cancel();
       const a = h.animate(
@@ -676,7 +694,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
       s.ownsHome = true;
     }
     s.unpromote = promote([w.win, w.inner, w.bd, w.poster, dim, shell, h, ...content]);
-    const run = { motion, poseAt, startedAt: null as number | null, span: travelOf(startBox, target), target, stage };
+    const run = { motion, poseAt, startedAt: null as number | null, span: travelOf(startBox, target), target, stage, clock: anims[0] ?? null, cardFromY };
     s.run = run;
 
     // 6. Le départ : les deux images décodées, deux images de plus, et tout part sur la même.
@@ -743,18 +761,27 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     //    le point et la vitesse de l'aller (calculés, pas relus dans les styles), chaque opacité.
     const run = s.run;
     const midOpen = !!s.win && !!run;
-    const elapsed = run?.startedAt != null ? clockNow() - run.startedAt : 0;
+    // Le temps du trajet lu sur l'animation elle-même (son `currentTime`) plutôt que recalculé à
+    // l'horloge : une fermeture pendant l'aller part ainsi de la pose réellement peinte, pas de celle
+    // qu'on croit — la bannière ne se décale plus du cadre pour s'y recaler d'un coup (Louis, iPhone,
+    // 10/10/2026).
+    const clockTime = run?.clock?.currentTime;
+    const elapsed =
+      typeof clockTime === "number" && run?.startedAt != null ? clockTime : run?.startedAt != null ? clockNow() - run.startedAt : 0;
     const qNow = run && midOpen ? (run.startedAt == null ? 0 : run.motion.q(elapsed)) : 1;
     const vNow = run && midOpen && run.startedAt != null ? run.motion.v(elapsed) : 0;
     // La carte du téléphone (sa montée, ou le doigt), la fiche du bureau tirée par sa poignée.
     const cardFrom = translateYOf(getComputedStyle(root).transform);
     const rootOpacity = opacityNow(root);
     const contentSel = "[data-sheet-content]";
-    const contentNow = Array.from(root.querySelectorAll<HTMLElement>(contentSel)).map((el) => opacityNow(el));
+    // Au téléphone, pendant l'aller, le contenu est porté par la carte : sa place et son opacité se
+    // lisent sur leur piste au point où en est le trajet — les mêmes que le fond de la carte.
+    const ride = layout === "phone" && midOpen && run?.cardFromY != null ? { y: lerp(run.cardFromY, 0, qNow), opacity: contentRideOpacity(qNow) } : null;
+    const contentNow = Array.from(root.querySelectorAll<HTMLElement>(contentSel)).map((el) => (ride ? ride.opacity : opacityNow(el)));
     // La croix du téléphone s'efface deux fois moins vite que le contenu, comme dans la maquette.
     const glassNow = layout === "phone" ? Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-glass]")).map((el) => opacityNow(el)) : [];
     // Le fond de la carte du téléphone, s'il montait encore (un aller interrompu) : le retour repart de là.
-    const shellNow = s.shell ? translateYOf(getComputedStyle(s.shell).transform) : null;
+    const shellNow = ride ? ride.y : s.shell ? translateYOf(getComputedStyle(s.shell).transform) : null;
     const dimNow = s.dim ? opacityNow(s.dim) : 0;
     const h = s.ownsHome ? homeElement() : null;
     const homeNow = h ? scaleOf(h) : null;
@@ -793,7 +820,8 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     // 3. La copie prend la place de la fiche, qui se cache et rend l'adresse. Au téléphone, seulement
     //    ce qui est à l'écran (`cloneVisible`) : la copie entière coûtait une longue image au départ.
     const copy = layout === "phone" ? cloneVisible(root, layer, stage.H) : cloneSheet(root, layer);
-    copy.style.transform = cardFrom ? `translateY(${cardFrom}px)` : "";
+    const copyFrom = ride ? ride.y + cardFrom : cardFrom;
+    copy.style.transform = copyFrom ? `translateY(${copyFrom.toFixed(2)}px)` : "";
     copy.style.transition = "none";
     copy.style.opacity = String(rootOpacity);
     const copyContent = Array.from(copy.querySelectorAll<HTMLElement>(contentSel));
@@ -822,8 +850,8 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
       others.push(
         copy.animate(
           [
-            { opacity: rootOpacity, transform: `translateY(${cardFrom}px)` },
-            { opacity: 0, transform: `translateY(${cardFrom + drop}px)` },
+            { opacity: rootOpacity, transform: `translateY(${copyFrom}px)` },
+            { opacity: 0, transform: `translateY(${copyFrom + drop}px)` },
           ],
           { duration: ms, easing: reduced ? "ease-in" : "cubic-bezier(0.4, 0, 1, 1)", fill: "both" },
         ),
@@ -891,12 +919,17 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
       for (const el of Array.from(copy.querySelectorAll<HTMLElement>(sel))) el.style.visibility = "hidden";
 
     const ghost = playTracks(w, poseAt, motion, base, stage, false);
+    // Au téléphone, d'où part et où finit la descente de la carte — relue par une reprise (`takeOver`).
+    const shellFrom = midOpen && shellNow !== null ? shellNow + cardFrom : cardFrom;
+    const shellTo = Math.max(0, cardFrom) + (stage.H - restingTop);
     if (shell) {
       // Le fond de la carte part d'où il en est (le doigt, ou sa montée interrompue) et finit sous
-      // l'écran, sur le même ressort ; le contenu, lui, ne bouge pas : il s'efface sur place (100 ms),
-      // la croix deux fois moins vite — la maquette, telle que validée.
-      const shellFrom = midOpen && shellNow !== null ? shellNow : cardFrom;
-      others.push(shell.animate(cardRiseTrack(samples, shellFrom, Math.max(0, cardFrom) + (stage.H - restingTop)), LINEAR(d)));
+      // l'écran, sur le même ressort. La copie (le contenu, la croix, le cadre) descend avec lui, sur
+      // la même piste : fermée pendant l'aller, elle part d'où le contenu porté en était, et non de sa
+      // place au repos — le cadre ne se décale plus de la carte (Louis, iPhone, 10/10/2026). Le contenu
+      // s'efface en 100 ms, la croix deux fois moins vite, comme dans la maquette.
+      const down = cardRiseTrack(samples, shellFrom, shellTo);
+      others.push(shell.animate(down, LINEAR(d)), copy.animate(down, LINEAR(d)));
       copyContent.forEach((el, i) => {
         const from = contentNow[i] ?? 1;
         others.push(el.animate([{ opacity: from }, { opacity: 0 }], { duration: from > 0 ? CONTENT_OUT_MS : 1, easing: "ease-in", fill: "both" }));
@@ -913,7 +946,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     if (dim) others.push(dim.animate(samples.map(({ offset, q }) => ({ offset, opacity: dimNow * (1 - clamp(q, 0, 1)) })), LINEAR(d)));
     if (h && homeNow !== null && homeNow !== 1)
       others.push(h.animate(samples.map(({ offset, q }) => ({ offset, transform: `scale(${lerp(homeNow, 1, clamp(q, 0, 1)).toFixed(5)})` })), LINEAR(d, "none")));
-    const unpromote = promote([w.win, w.inner, w.bd, w.poster, shell ?? copy, dim, h]);
+    const unpromote = promote([w.win, w.inner, w.bd, w.poster, shell, copy, dim, h]);
     const startedAt = startTogether([...ghost, ...others]);
 
     const timers: number[] = [];
@@ -926,7 +959,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
         const r = motion.q(t);
         const vr = motion.v(t);
         const pose = poseAt(r);
-        const left = { pose, dim: dim ? opacityNow(dim) : 0, home: h ? scaleOf(h) : null, cardY: shell ? translateYOf(getComputedStyle(shell).transform) : null };
+        const left = { pose, dim: dim ? opacityNow(dim) : 0, home: h ? scaleOf(h) : null, cardY: shell ? lerp(shellFrom, shellTo, r) : null };
         end(false);
         // Le retour avançait de `vr·longueur` pixels par seconde vers la carte ; l'aller repart à
         // contre-sens, à −vr·longueur / (point → fiche).

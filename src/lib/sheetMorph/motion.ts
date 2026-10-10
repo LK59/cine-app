@@ -265,6 +265,29 @@ export function cardRiseTrack(samples: Sample[], fromY: number, toY: number): Ke
 }
 
 /**
+ * Le contenu du téléphone (logo, infos, Lire, résumé) porté par la carte : la même piste que son fond
+ * (`cardRiseTrack`), et une opacité qui monte de 55 à 95 % du trajet, en espace parcouru — lisible en
+ * se posant, entière au repos. Posé à sa place pendant que le fond montait encore, puis révélé à 90 %,
+ * il arrivait détaché de sa carte et de la bannière (« le décalage de l'arrivée du contenu, c'est
+ * bizarre », Louis sur iPhone, 10/10/2026).
+ */
+export const CONTENT_RIDE = { from: 0.55, to: 0.95 } as const;
+
+/** L'opacité du contenu porté à ce point du trajet — voir `CONTENT_RIDE`. */
+export function contentRideOpacity(q: number): number {
+  return smooth(CONTENT_RIDE.from, CONTENT_RIDE.to, q);
+}
+
+/** La piste du contenu porté : celle du fond de la carte, avec son opacité. */
+export function contentRideTrack(samples: Sample[], fromY: number, toY: number): Keyframe[] {
+  return samples.map(({ offset, q }) => ({
+    offset,
+    transform: `translateY(${lerp(fromY, toY, q).toFixed(2)}px)`,
+    opacity: Number(contentRideOpacity(clamp(q, 0, 1)).toFixed(4)),
+  }));
+}
+
+/**
  * La croix posée sur la bannière (son verre) : elle paraît de 30 à 95 % du trajet, en espace parcouru
  * — comme dans la maquette, où elle ne surgissait pas, pleine, sur une image encore en vol.
  */
