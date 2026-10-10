@@ -76,16 +76,24 @@ export interface DeviceProfileOptions {
   /** Les sous-titres doivent voyager dans le flux, pas à côté. */
   subtitlesInStream?: boolean;
   /**
-   * Le son doit être ré-encodé, en AAC stéréo — jamais copié.
+   * Le son doit être ré-encodé en AAC — jamais copié : en stéréo (`"stereo"`), ou en gardant
+   * l'ambiance (`"surround"`).
    *
    * Pour un son que le navigateur refuse alors qu'il en dit le codec lisible : l'AAC dont la
    * disposition est un PCE (« Elle s'appelle Ruby », Fire TV, 10/10/2026). Jellyfin le copiait
    * (`-codec:a copy`) puisque l'AAC est déclaré, hls.js le refusait, et le lecteur serveur échouait
-   * comme le lecteur natif. Stéréo, et pas six canaux : l'encodeur AAC de FFmpeg réécrit un PCE pour
-   * une disposition hors norme, et le même refus reviendrait. Une condition sur les canaux de l'AAC
-   * interdit la copie ; la cible ramenée à l'AAC seul fixe le codec du ré-encodage.
+   * comme le lecteur natif. Seul un plafond de canaux sous ceux de la source interdit la copie à
+   * Jellyfin — une condition de profil sur le codec ne l'empêche pas de copier (mesuré le
+   * 10/10/2026 : l'esds rendue portait encore le PCE d'origine).
+   *
+   * `"surround"` plafonne à 5 : Jellyfin ré-encode alors par `libfdk_aac -ac 6` (relu dans son journal
+   * FFmpeg), et la sortie est un 5.1 en configuration standard (`11 b0`, sans PCE) que hls.js prend
+   * — tous les canaux de Ruby à leur place. Sans PCE parce qu'à la sortie du décodeur FFmpeg la
+   * disposition est nommée (5.1) ; c'était l'encodeur AAC natif de FFmpeg sans `-ac`, sur une
+   * entrée « 6 canaux » sans nom, qui réécrivait un PCE ou refusait. `"stereo"` reste le dernier
+   * recours de l'échelle (`forceAudioTranscode`), pour un son dont on ne sait rien.
    */
-  reencodeAudioStereo?: boolean;
+  reencodeAudio?: "stereo" | "surround";
 }
 
 export function buildDeviceProfile(
@@ -130,10 +138,10 @@ export function buildDeviceProfile(
         // Jellyfin re-encode already-browser-compatible AC3/EAC3 audio for no reason on every
         // container-only remux.
         VideoCodec: (videoCodecs.length ? videoCodecs : ["h264"]).join(","),
-        AudioCodec: options.reencodeAudioStereo ? "aac" : (audioCodecs.length ? audioCodecs : ["aac"]).join(","),
+        AudioCodec: options.reencodeAudio ? "aac" : (audioCodecs.length ? audioCodecs : ["aac"]).join(","),
         Protocol: "hls",
         Context: "Streaming",
-        MaxAudioChannels: options.reencodeAudioStereo ? "2" : "6",
+        MaxAudioChannels: options.reencodeAudio === "stereo" ? "2" : options.reencodeAudio === "surround" ? "5" : "6",
       },
     ],
     CodecProfiles: [
@@ -147,13 +155,20 @@ export function buildDeviceProfile(
             : []),
         ],
       })),
-      // Voir `reencodeAudioStereo` : une source qui ne passe pas cette condition ne peut être ni
-      // lue directement ni copiée — Jellyfin la ré-encode vers la cible du profil de transcodage.
-      ...(options.reencodeAudioStereo
+      // Voir `reencodeAudio` : une source qui ne passe pas cette condition ne peut être ni lue
+      // directement ni copiée — Jellyfin la ré-encode vers la cible du profil de transcodage.
+      ...(options.reencodeAudio
         ? audioCodecs.map((codec) => ({
             Type: "VideoAudio" as const,
             Codec: codec,
-            Conditions: [{ Condition: "LessThanEqual", Property: "AudioChannels", Value: "2", IsRequired: true }],
+            Conditions: [
+              {
+                Condition: "LessThanEqual",
+                Property: "AudioChannels",
+                Value: options.reencodeAudio === "stereo" ? "2" : "5",
+                IsRequired: true,
+              },
+            ],
           }))
         : []),
     ],
@@ -181,7 +196,7 @@ export function buildDeviceProfile(
  * « 7.1 » —, celle-là non. Les deux pistes de « Elle s'appelle Ruby » : `Codec` aac, `Channels` 6,
  * pas de `ChannelLayout`.
  */
-export function audioNeedsStereoReencode(stream: { Codec?: string; Channels?: number; ChannelLayout?: string } | null | undefined): boolean {
+export function audioNeedsReencode(stream: { Codec?: string; Channels?: number; ChannelLayout?: string } | null | undefined): boolean {
   return !!stream && stream.Codec?.toLowerCase() === "aac" && (stream.Channels ?? 0) > 2 && !stream.ChannelLayout;
 }
 

@@ -510,6 +510,14 @@ may mirror its encoder's convention and hide it.
 form — a Dolby track the browser takes is copied untouched, TrueHD, DTS and anything else it
 refuses is re-encoded.
 
+**AAC whose layout is a PCE** (`channelConfiguration` 0) goes through `aacPlan`
+(`aacConfig.ts`, DECISIONS §62): rewritten to the standard configuration and copied losslessly when
+the PCE's elements match one in order; copied as-is where a real MediaSource append proved the
+browser takes a PCE (`aacPceProbe.ts` — Chromium refuses, Firefox accepts); otherwise decoded and
+put in standard order — every channel when the decoder's output order for that PCE shape was
+measured, L R C when it was not. `isTypeSupported('mp4a.40.2')` says nothing about a PCE: Chromium
+answers yes and then refuses the init segment.
+
 **Changing track has one path: the player is rebuilt** at the same position, opening directly on
 the new track (`RemuxPlayback.requestAudioTrack`, `openingAudio`, `ExperimentalPlayerHost`) — same
 format or not, on every engine, since 2026-09-22. It is the machinery that already brings the

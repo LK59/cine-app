@@ -2297,3 +2297,56 @@ trois règles :
 depuis l'audit du 10/10/2026 ; l'élan porté à part (`fingerCarry`) qui le précédait est retiré.
 Tests : `sheetMorph-motion.test.ts`, `uiQuiet.test.ts`, `resumeCache-uiQuiet.test.ts`,
 `top10-card-tap.test.tsx`, `cinema-mobile-detail-belowfold.test.tsx`.
+
+## 62. Un AAC à PCE : relu, réécrit sans perte quand il le peut, décodé dans le bon ordre sinon
+
+**Règle.** Une piste AAC dont la disposition est un PCE (`channelConfiguration` à 0) passe par une
+seule décision, `aacPlan` :
+1. **Réécrite et copiée sans perte** quand le PCE décrit exactement une configuration standard —
+   mêmes éléments, dans le même ordre, étiquettes canoniques. Seule la configuration change ; les
+   trames sont copiées, et ce qui suit le PCE (l'extension 0x2b7) est recopié bit pour bit.
+2. **Copiée telle quelle** sur un navigateur qui a prouvé prendre un PCE dans MediaSource : un vrai
+   envoi (segment d'initialisation + trame silencieuse), une fois, la réponse gardée par navigateur.
+   Mesuré : Chromium refuse, Firefox et WebKitGTK acceptent ; Safari est demandé à son premier PCE.
+3. **Décodée puis ré-encodée** sinon, ses canaux rangés dans l'ordre standard : tous, quand l'ordre
+   de sortie du décodeur pour cette forme de PCE a été **mesuré** (`MEASURED_DECODED_ORDERS`), par la
+   matrice de `standardMatrix` (ITU-R BS.775 : un centre arrière dans les deux ambiances à −3 dB,
+   une paire arrière repliée dans les ambiances) ; sinon L R C, la règle de toute disposition
+   inconnue.
+
+**Pourquoi.** « Elle s'appelle Ruby » (Fire TV, 10/10/2026) : Chromium dit oui à `mp4a.40.2` et
+refuse l'initialisation qui porte un PCE. Le premier correctif décodait et ne gardait que L R C. La
+mesure a montré mieux : le PCE de Ruby est octet pour octet celui que l'encodeur de FFmpeg écrit
+pour un **5.1** passé par un PCE (`-aac_pce 1`), le « mono de côté » y porte le caisson (canal 4 de
+Ruby entièrement sous 200 Hz), et FFmpeg, l'AudioDecoder de Chromium, de Firefox et de WebKitGTK le
+rendent tous en L R C LFE Ls Rs. Ruby se livre donc en 5.1 entier.
+
+**Côté lecteur serveur.** Jellyfin copie un AAC déclaré lisible quelles que soient les conditions de
+profil sur le codec (mesuré : l'esds rendue portait encore le PCE d'origine) ; seul un plafond de
+canaux sous la source l'en empêche. Pour un AAC multicanal sans disposition nommée, le profil
+plafonne à 5 (`reencodeAudio: "surround"`) : Jellyfin ré-encode par `libfdk_aac -ac 6` (son journal
+FFmpeg) et sort un 5.1 en configuration standard (`11 b0`). La stéréo reste le dernier recours de
+l'échelle (`forceAudioTranscode`).
+
+**Ce qui diffère exprès.**
+- **Safari ne décode pas Ruby dans l'ordre mesuré :** AudioToolbox n'a jamais été mesuré pour un
+  PCE (`decodedOrderMeasuredHere`). S'il refuse le PCE à la sonde, il garde L R C ; s'il l'accepte,
+  il copie, tous canaux.
+- **La première ouverture d'un PCE sur un navigateur sans réponse** prend le chemin sûr (décodé) ; la
+  question part en tâche de fond, jamais sur le chemin de l'ouverture.
+- **Une forme de PCE jamais mesurée** n'est pas devinée : L R C. Mesurer une nouvelle forme, c'est
+  l'ajouter à `MEASURED_DECODED_ORDERS` avec sa preuve (le banc ci-dessous).
+
+**Porteurs.** `aacPlan`, `parseAacConfig`, `standardConfigOf`, `rewriteToStandard`, `standardMatrix`,
+`remapPlanes`, `decodedOrderMeasuredHere` (`src/lib/webcodecs/aacConfig.ts`) ; la sonde
+`pceCopyAccepted` / `primePceProbe` / `probePceCopy` (`src/lib/webcodecs/aacPceProbe.ts`). Lus par
+`trackAacPlan`, `naturalDelivery`, `deliveredAudio` et la description de piste (`remuxer.ts`),
+`transcodableAudio` (`audioTranscode.ts`), `aacShaping` (`softwareAudio.ts`). Serveur :
+`buildDeviceProfile` (`reencodeAudio`) et `audioNeedsReencode` (`src/lib/deviceProfile.ts`), route
+`playback/start`.
+
+**Tests.** `webcodecs-aacConfig.test.ts`, `aacPceProbe.test.ts`, `deviceProfile.test.ts`,
+`jellyfin-playback-start-route.test.ts`. Banc : `aac-pce-bench.spec.ts` (réécriture vérifiée par
+ffmpeg, segments de la sonde à envoyer à un vrai MediaSource).
+
+**Décidé le 10/10/2026.**

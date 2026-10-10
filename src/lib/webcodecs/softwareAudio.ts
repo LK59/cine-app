@@ -12,7 +12,8 @@
 // it reads through the same 1 MiB chunk cache, so the bytes cross the network once and the
 // second demux costs CPU only.
 
-import { aacCopyable, aacKnownPceChannels } from "./aacConfig";
+import { aacPlan, remapPlanes } from "./aacConfig";
+import { pceCopyAccepted } from "./aacPceProbe";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaFile } from "./matroska";
 
@@ -119,15 +120,18 @@ export class SoftwareAudioTrack {
     if (!(await track.canDecode())) throw new Error(`le décodeur logiciel refuse ${track.codec ?? "cette piste"}`);
 
     const sink = new AudioSampleSink(track) as unknown as { samples(from: number): AsyncIterable<SoftwareSample> };
-    // Un AAC dont le PCE décrit une disposition hors des connues : le décodeur n'en rend que le
-    // compte, et six canaux sans caisson seraient lus comme un 5.1. On garde L R C, la règle de
-    // toute disposition inconnue (voir `frontOnly`, audioTranscode.ts, et aacConfig.ts).
-    const keep = codecId === "A_AAC" ? keptAacChannels(file, trackNumber, track.numberOfChannels) : track.numberOfChannels;
+    // Un AAC à PCE : le décodeur n'en rend que le compte, jamais la disposition. `aacPlan` dit
+    // comment le ranger (DECISIONS.md §62) — tel quel pour une forme dont l'ordre de sortie a été
+    // mesuré (« Ruby » : un 5.1), par une matrice pour une disposition à replier, L R C sinon.
+    const shape = codecId === "A_AAC" ? aacShaping(file, trackNumber, track.numberOfChannels) : null;
+    const produce = shape?.rows
+      ? (fromSeconds: number) => remapped(planesFrom(sink, fromSeconds), shape.rows!)
+      : shape && shape.channels < track.numberOfChannels
+        ? (fromSeconds: number) => firstPlanes(planesFrom(sink, fromSeconds), shape.channels)
+        : (fromSeconds: number) => planesFrom(sink, fromSeconds);
     return new SoftwareAudioTrack(
-      keep < track.numberOfChannels
-        ? (fromSeconds) => firstPlanes(planesFrom(sink, fromSeconds), keep)
-        : (fromSeconds) => planesFrom(sink, fromSeconds),
-      { sampleRate: track.sampleRate, numberOfChannels: keep },
+      produce,
+      { sampleRate: track.sampleRate, numberOfChannels: shape ? shape.channels : track.numberOfChannels },
       // Rien à libérer ici : le lecteur de conteneur est partagé par les pistes du fichier, et
       // part avec la source quand la lecture s'arrête (voir sharedInput).
       () => {}
@@ -172,13 +176,26 @@ async function* planesFrom(
 }
 
 /**
- * Les canaux à garder d'un AAC à PCE : tous si le PCE décrit une disposition connue, sinon les
- * trois premiers (L R C). Sans la description de la piste, ou pour un AAC ordinaire, tous.
+ * Comment ranger le décodé d'un AAC : `channels` livrés dans l'ordre standard, et la matrice à
+ * appliquer quand il y en a une. Sans la description de la piste, pour un AAC ordinaire, ou quand
+ * le décodeur ne rend pas le compte attendu, `null` : le décodé tel quel, comme avant.
  */
-export function keptAacChannels(file: MatroskaFile | undefined, trackNumber: number, decoded: number): number {
+export function aacShaping(
+  file: MatroskaFile | undefined,
+  trackNumber: number,
+  decoded: number
+): { channels: number; rows: number[][] | null } | null {
   const asc = file?.tracks.find((t) => t.number === trackNumber)?.codecPrivate;
-  if (!asc || aacCopyable(asc)) return decoded;
-  return aacKnownPceChannels(asc) === decoded ? decoded : Math.min(3, decoded);
+  if (!asc) return null;
+  const plan = aacPlan(asc, { pceAccepted: pceCopyAccepted() });
+  if (plan.action !== "decode") return null;
+  if (plan.rows) return plan.rows[0]?.length === decoded ? { channels: plan.channels, rows: plan.rows } : { channels: Math.min(3, decoded), rows: null };
+  return { channels: Math.min(plan.channels, decoded), rows: null };
+}
+
+/** Le décodé, rangé par `remapPlanes`. */
+async function* remapped(source: AsyncGenerator<DecodedAudio>, rows: number[][]): AsyncGenerator<DecodedAudio> {
+  for await (const decoded of source) yield { ...decoded, planes: remapPlanes(decoded.planes, rows) };
 }
 
 /** Le décodé, réduit à ses `count` premiers canaux. */

@@ -10,7 +10,8 @@
 // An MP4 comes through here too, described in the same shape (mp4Demux.ts) and read through the
 // same factory (mediaFile.ts): the remuxer never learns which container it is reading.
 
-import { aacCopyable, aacKnownPceChannels } from "./aacConfig";
+import { aacPlan, type AacPlan } from "./aacConfig";
+import { pceCopyAccepted, primePceProbe } from "./aacPceProbe";
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./subtitleMarkup";
 import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, isRaslPicture, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
@@ -228,11 +229,31 @@ export function remuxableAudio(track: MatroskaTrack): boolean {
 /** What has to happen to a track's sound for this player to carry it. */
 export type AudioDelivery = "copy" | "transcode" | "none";
 
+/**
+ * La décision AAC d'une piste (DECISIONS.md §62), avec la réponse gardée de ce navigateur sur un PCE
+ * copié tel quel. Une piste à PCE sans réponse connue lance la question en tâche de fond — cette
+ * ouverture prend le chemin sûr, les suivantes la réponse (voir aacPceProbe.ts).
+ */
+export function trackAacPlan(track: MatroskaTrack): AacPlan {
+  if (track.codecId !== "A_AAC") return { action: "copy" };
+  const pceAccepted = pceCopyAccepted();
+  const plan = aacPlan(track.codecPrivate, { pceAccepted });
+  if (plan.action === "decode" && pceAccepted === null) primePceProbe();
+  return plan;
+}
+
+/** La configuration AAC réécrite sans son PCE, quand `aacPlan` le permet — sinon `null`. */
+function rewrittenAsc(track: MatroskaTrack): Uint8Array | null {
+  const plan = trackAacPlan(track);
+  return plan.action === "rewrite" ? plan.asc : null;
+}
+
 function naturalDelivery(track: MatroskaTrack): AudioDelivery {
   const natural = audioCodecString(track);
   // Un AAC dont la disposition est un PCE passe `isTypeSupported` et se fait refuser à l'envoi
-  // (« Elle s'appelle Ruby » sur une Fire TV, 10/10/2026) : ré-encodé, jamais copié — voir aacConfig.ts.
-  const copyable = track.codecId !== "A_AAC" || aacCopyable(track.codecPrivate);
+  // (« Elle s'appelle Ruby » sur une Fire TV, 10/10/2026) : copié tel quel, réécrit sans perte, ou
+  // décodé, selon `aacPlan` (DECISIONS.md §62).
+  const copyable = track.codecId !== "A_AAC" || trackAacPlan(track).action !== "decode";
   if (natural && copyable && containerAccepts(`audio/mp4; codecs="${natural}"`)) return "copy";
   return transcodableAudio(track) ? "transcode" : "none";
 }
@@ -440,12 +461,11 @@ export interface DeliveredAudio {
 
 export function deliveredAudio(track: MatroskaTrack): DeliveredAudio {
   const delivery = audioDelivery(track);
-  // Un AAC à PCE hors disposition connue sort en L R C (voir `keptAacChannels`) : c'est ce
-  // qu'il apporte au classement, pas les six canaux de la source.
-  const pceKept =
-    track.codecId === "A_AAC" && !aacCopyable(track.codecPrivate) && aacKnownPceChannels(track.codecPrivate) !== track.audio?.channels
-      ? 3
-      : Infinity;
+  // Un AAC à PCE décodé livre ce que `aacPlan` en dit — un 5.1 entier pour une forme dont l'ordre
+  // de sortie a été mesuré, L R C sinon : c'est ce qu'il apporte au classement, pas les canaux de la
+  // source.
+  const aac = trackAacPlan(track);
+  const pceKept = aac.action === "decode" ? aac.channels : Infinity;
   const source = Math.min(track.audio?.channels ?? 1, pceKept);
   if (delivery !== "transcode") return { copied: delivery === "copy", channels: source };
   const plan = knownTranscodePlan(track.audio?.sampleRate ?? 48000, source);
@@ -519,7 +539,9 @@ async function describeAudio(
     timescale: TIMESCALE,
     sampleEntry: audioSampleEntryFor({
       codecId: track.codecId,
-      codecPrivate: track.codecPrivate,
+      // Un PCE équivalent à une configuration standard part réécrit ; les trames, elles, sont
+      // copiées telles quelles (DECISIONS.md §62, couche 2).
+      codecPrivate: rewrittenAsc(track) ?? track.codecPrivate,
       channels: track.audio?.channels ?? 2,
       sampleRate: track.audio?.sampleRate ?? 48000,
       firstFrame,

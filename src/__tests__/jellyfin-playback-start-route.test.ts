@@ -93,7 +93,7 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(body.manifestUrl).toBe(`/api/jellyfin/stream/${validId}/master.m3u8?DeviceId=x`);
   });
 
-  it("renégocie aussitôt un AAC à PCE, ré-encodé en stéréo — « Elle s'appelle Ruby », Fire TV", async () => {
+  it("renégocie aussitôt un AAC à PCE, ré-encodé en 5.1 standard — « Elle s'appelle Ruby », Fire TV", async () => {
     // Jellyfin copiait le son (`-codec:a copy`), hls.js le refusait, et quatre essais finissaient
     // en « pas de première image en 20 s » (10/10/2026).
     mockVerifySessionFull.mockResolvedValue({ u: "timothe", jfId: "jf-1", jfToken: "tok" });
@@ -116,7 +116,7 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(mockJellyfin.getPlaybackInfo).toHaveBeenCalledTimes(2);
     const profiles = mockJellyfin.getPlaybackInfo.mock.calls.map((c) => (c[3] as { deviceProfile: { TranscodingProfiles: { MaxAudioChannels: string }[] } }).deviceProfile);
     expect(profiles[0].TranscodingProfiles[0].MaxAudioChannels).toBe("6");
-    expect(profiles[1].TranscodingProfiles[0].MaxAudioChannels).toBe("2");
+    expect(profiles[1].TranscodingProfiles[0].MaxAudioChannels).toBe("5");
   });
 
   it("ne renégocie pas un AAC 5.1 ordinaire", async () => {

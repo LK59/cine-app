@@ -9,7 +9,7 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { stripAccessToken } from "@/lib/stripAccessToken";
-import { audioNeedsStereoReencode, buildDeviceProfile, castRefusalFor, chosenAudioStream } from "@/lib/deviceProfile";
+import { audioNeedsReencode, buildDeviceProfile, castRefusalFor, chosenAudioStream } from "@/lib/deviceProfile";
 import type { CodecSupport } from "@/lib/codecSupport";
 import { cachedMovies } from "@/lib/server-cache";
 import { originalLanguageCode } from "@/lib/originalLanguage";
@@ -152,22 +152,23 @@ export async function POST(req: NextRequest) {
     };
     const { jfId, jfToken } = session;
     const item = itemId;
-    const negotiate = (reencodeAudioStereo: boolean) =>
+    const negotiate = (reencodeAudio: "stereo" | "surround" | undefined) =>
       jellyfin.getPlaybackInfo(jfId, item, jfToken, {
         maxBitrate,
         mediaSourceId: item,
         audioStreamIndex,
         subtitleStreamIndex,
         startTicks,
-        deviceProfile: buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast, reencodeAudioStereo }),
+        deviceProfile: buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast, reencodeAudio }),
       });
-    let info = await negotiate(forceAudioTranscode);
+    let info = await negotiate(forceAudioTranscode ? "stereo" : undefined);
     // Un son que Jellyfin copierait et que le navigateur refuserait — l'AAC à PCE, voir
-    // `audioNeedsStereoReencode` : renégocié aussitôt, ré-encodé en stéréo. Une seconde demande à
-    // Jellyfin pour ces fichiers-là seulement, plutôt que quatre essais perdus et une erreur au bout
-    // de vingt secondes (« Elle s'appelle Ruby », Fire TV, 10/10/2026).
-    if (!forceAudioTranscode && audioNeedsStereoReencode(chosenAudioStream(info.MediaSources?.[0], audioStreamIndex))) {
-      info = await negotiate(true);
+    // `audioNeedsReencode` : renégocié aussitôt, ré-encodé en 5.1 standard (`"surround"`, voir
+    // `reencodeAudio`). Une seconde demande à Jellyfin pour ces fichiers-là seulement, plutôt que
+    // quatre essais perdus et une erreur au bout de vingt secondes (« Elle s'appelle Ruby », Fire TV,
+    // 10/10/2026).
+    if (!forceAudioTranscode && audioNeedsReencode(chosenAudioStream(info.MediaSources?.[0], audioStreamIndex))) {
+      info = await negotiate("surround");
     }
     const source = info.MediaSources?.[0];
     if (!source) {
