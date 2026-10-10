@@ -547,8 +547,12 @@ On a computer (hover + fine pointer) the desktop sheets do not grow the poster: 
 shows that title's backdrop, so `useSheetTransition` picks `useDesktopContinuity` at mount — the
 backdrop stays (the sheet's fades over the hero's), the hero logo glides to the sheet's logo, the
 hero text fades, the rows (`data-sheet-hero` / `data-sheet-rows` in CinemaClient) slide down and
-fade; iPad and phone keep the poster morph. Every timer the sheet motion schedules goes through
-`sheetTimeout` / `sheetFrame` (`sheetMorph/dom.ts`) so tests can cancel them all.
+fade; iPad and phone keep the poster morph. On the phone the whole card is the morphing window
+(`cardOpenPoses`): it grows out of the poster and shrinks back into it as one piece — a banner flying
+on its own over a separately rising card dived and came apart (audit of 10/10/2026). Only transform
+and opacity animate (no animated radius); the close is built paused and starts on the next frame; what
+sits below the fold mounts once the morph has settled (`settled`). Every timer the sheet motion
+schedules goes through `sheetTimeout` / `sheetFrame` (`sheetMorph/dom.ts`) so tests can cancel them all.
 
 Four rules, each of which cost a real failure:
 

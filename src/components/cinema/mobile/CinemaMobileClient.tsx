@@ -560,6 +560,28 @@ export function CinemaMobileClient() {
   );
 
 
+  /**
+   * Un écran recouvre la bannière — une fiche, la recherche, un panneau, la grille complète, une fiche
+   * TMDB ou personne, Activité et Signalement (chasse aux défauts du 25/09/2026).
+   *
+   * Différé (`useDeferredValue`) : la mise en pause de la bannière se rend après le rendu urgent de
+   * l'ouverture ou de la fermeture d'une fiche, et React peut l'interrompre. Rendue dans la même tâche,
+   * elle alourdissait le départ du trajet de la fiche (audit du 10/10/2026 : ~150 ms de travail React
+   * au départ d'une fermeture, processeur ×4). Une bande-annonce qui tourne un instant de plus derrière
+   * une fiche ne se voit pas.
+   */
+  const heroCovered = useDeferredValue(
+    selected !== null ||
+      searchOpen ||
+      route.list ||
+      route.account ||
+      route.browse !== null ||
+      route.discover !== null ||
+      route.person !== null ||
+      route.activity !== null ||
+      route.report !== null
+  );
+
   if (typeof document === "undefined") return null;
 
   const loading = nothingToShowYet(moviesLoading, movies) || (isSeries && nothingToShowYet(seriesLoading, series));
@@ -707,19 +729,7 @@ export function CinemaMobileClient() {
               // pour une image que personne ne voit.
               // La grille complète et les fiches TMDB ou personne comptent aussi : elles la recouvrent
               // entièrement, et la bannière continuait d'y tourner (23/09/2026).
-              paused={
-                mediaType !== tab ||
-                selected !== null ||
-                searchOpen ||
-                route.list ||
-                route.account ||
-                route.browse !== null ||
-                route.discover !== null ||
-                route.person !== null ||
-                // Activité et Signalement recouvrent l'écran eux aussi (chasse aux défauts du 25/09/2026).
-                route.activity !== null ||
-                route.report !== null
-              }
+              paused={mediaType !== tab || heroCovered}
               // Hors de l'écran — l'autre onglet, un panneau, le lecteur plein écran : l'ordre
               // officiel et le début. Pas une fiche, pas le retour d'arrière-plan : voir
               // `heroOffscreen`, la même règle que le bureau.
@@ -892,7 +902,7 @@ const CONTINUE_CONTAINMENT = {
  * (`items` vient de la charge utile SWR, `itemId` est hors composant, les rappels sont
  * `useCallback`), donc React saute simplement le sous-arbre.
  */
-function PosterRowInner<T extends { title: string; posterUrl: string | null; addedAt: string | null }>({
+function PosterRowInner<T extends { title: string; posterUrl: string | null; addedAt: string | null; backdropUrl?: string | null }>({
   label,
   items,
   itemId,
@@ -928,6 +938,8 @@ function PosterRowInner<T extends { title: string; posterUrl: string | null; add
           // Ce que la fiche va demander part dès que le doigt se pose — voir `prefetchTitleSheet`.
           onPress={() => prefetchLibraryItem(item)}
           onTap={() => onSelect(item)}
+          // Le visuel de la fiche part à l'appui, avec la description (DECISIONS.md §61).
+          data-sheet-backdrop={item.backdropUrl || undefined}
           className={`${POSTER_WIDTH} pressable relative shrink-0 overflow-hidden rounded-lg`}
         >
           <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized sizes="(max-width: 640px) 112px, 128px" />
@@ -1055,6 +1067,7 @@ const MobileTabRows = memo(function MobileTabRows({
               widthClassName={POSTER_WIDTH}
               showNewBadge={false}
               numberFontSize="4.5rem"
+              backdropUrl={item.backdropUrl}
               onSelectItem={() => onSelect(item)}
             />
           ))}

@@ -2070,7 +2070,9 @@ dans `ExperimentalPlayerHost.test.tsx`.
 
 **Règle.** L'affiche qu'on touche devient le visuel de la fiche, et la fiche y revient en se
 fermant :
-- **téléphone** : l'affiche devient la bannière 16:9 pendant que la carte monte du bas ;
+- **téléphone** : la carte entière grandit depuis l'affiche — la bannière 16:9 en haut, l'encre de
+  la carte dessous —, et rétrécit d'une pièce dans l'affiche à la fermeture (le modèle des cartes
+  d'iOS) ;
 - **iPad** (mise en page large, tactile) : l'affiche grandit jusqu'au visuel plein écran,
   l'accueil recule de 2 % derrière la première fiche ;
 - **ordinateur** (survol et pointeur fin) : **pas d'affiche qui grandit** — la fiche relaie
@@ -2105,25 +2107,46 @@ trajet. La maquette « Bureau » du lot H joue le crochet de production lui-mêm
 deux volets : `data-sheet-hero`, `data-sheet-rows` (CinemaClient). Tests :
 `sheetMorph-continuity.test.tsx`, `decisions-partagees.test.ts`.
 
-**Au téléphone, la bannière se loge dans la carte qui monte** (`slotRide`, `shiftPose`, motion.ts,
-10/10/2026). Depuis que le contenu monte avec la carte, une image qui filait seule vers sa place au
-repos flottait au-dessus d'une carte encore basse — « la bannière apparaît brièvement en dehors de la
-fiche et ses bordures » sur une ouverture refermée vite. Sa cible glisse avec la carte, et elle la
-rejoint à partir de 35 % du trajet ; au départ, elle reste l'affiche touchée. Une fiche dont l'image
-vole porte `data-sheet-flying` : tout visuel ou voile monté pendant le trajet reste caché
-(globals.css). Test : `sheetMorph-hook.test.tsx` (« se loge dans la carte »).
+**Au téléphone, la carte entière est la fenêtre** (`cardOpenPoses`, `cardRestPose`, motion.ts ;
+`useSheetMorph`, audit du 10/10/2026). Jusqu'à la 8.32.8, la bannière volait seule au-dessus d'un fond
+de carte qui montait à part du bas de l'écran ; pour l'y loger, sa cible glissait avec la carte
+(`slotRide`), et l'image plongeait vers le bas avant de remonter (y 282 → 626 → 8 px mesurés) ; à la
+fermeture, la carte tombait vers le bas de l'écran sur le ressort de l'image — 21 000 px/s, bien plus
+vite que le doigt — et laissait l'image au-dessus d'elle (le « décrochement » d'une redescente
+rapide). Désormais une seule pièce : la fenêtre a la boîte de la carte (du haut de la fiche au bas
+de l'écran), porte l'encre de la carte, et le visuel posé sur la bannière ; elle grandit depuis
+l'affiche et y rétrécit. Rien ne peut se décoller. Le contenu arrive d'un bloc à 90 % ; à la
+fermeture, la copie (le contenu, la croix) ne bouge pas et s'efface sur le premier quart du trajet.
+Lâchée au doigt, la carte repart de là où le doigt l'a mise, lancée à la vitesse du doigt projetée sur
+son chemin. Une fiche dont l'image vole porte `data-sheet-flying` : tout visuel ou voile monté pendant
+le trajet reste caché (globals.css). Tests : `sheetMorph-hook.test.tsx` (« ne plonge jamais », « d'un
+bloc »), `sheetMorph-motion.test.ts`.
+
+**Tout ce qui bouge passe par le compositeur.** Pas de rayon animé (il se peignait sur le fil
+principal à chaque image, ses coins en retard sur la transformation) : un rayon fixe en unités de la
+fenêtre. La fermeture est créée en pause et part à l'image suivante, une fois la copie mise en page —
+lancée dans la tâche même de la fermeture, sa première image peinte tombait déjà à 12–40 % du
+trajet. L'arrivée ne fait que l'échange ; les calques rendus au navigateur et le verre de la croix
+suivent deux images plus tard. Ce qui est sous la ligne de flottaison de la fiche (saga, titres
+similaires, épisodes au-delà des trois premiers) se monte au repos (`settled`, à l'arrivée puis au
+premier moment calme), plus sur une minuterie qui tombait en plein vol. La mise en pause de la
+bannière d'accueil est différée (`useDeferredValue`) : rendue dans la même tâche, elle alourdissait le
+départ du trajet.
 
 **Rien n'est attendu, rien n'est téléchargé pour animer.** Si le visuel de la fiche n'est pas encore
-chargé (une reprise dont la bannière n'a jamais été demandée), la vignette touchée vole jusqu'au bout
-(`posterOnly`) et reste par-dessus la bannière, dans un calque à elle (`data-sheet-standin`), jusqu'à
-l'arrivée du visuel, qui apparaît alors dessous en fondu de 300 ms — jamais d'un coup (posée en fond de
-l'`<img>`, elle était recouverte net à l'arrivée du visuel : « changement brutal » depuis la bannière du
-téléphone, 10/10/2026). Pour que ce relais soit rare, la bannière du téléphone demande d'avance, au
-repos, hors film et hors économie de données, le visuel du titre affiché et de ses deux voisins
-(`prefetchSheetBanners`, à l'adresse même que la fiche demande). Le départ n'attend que le
-décodage de la vignette. Les cartes de « Reprendre » sont servies au relâchement du doigt
-(`LongPressButton` avec `useTap`, comme les autres rangées) : servies au `click`, elles attendaient
-celui qu'iOS retient après un défilement ou pendant un retour. Tests : `sheetMorph-hook.test.tsx`,
+chargé, la vignette touchée vole pleine, le visuel tenu éteint par son propre fondu (`bdFade`) — et
+s'il est décodé en plein vol, il paraît sur l'affiche en fondu pendant le trajet, fini à 70 %. À
+l'arrivée, si le visuel de la fiche n'est pas *entièrement* chargé, ce que la fenêtre montrait reste
+posé sur la bannière (`data-sheet-standin`) jusqu'à lui, puis s'efface en 300 ms : la garde suit
+l'image présente (une adresse qui change, un visuel monté plus tard) et ne la rend jamais opaque avant
+son chargement — un grand visuel de série rendu opaque trop tôt se peignait par bandes sur une
+bannière noire, au premier lancement (Louis, iPhone, 10/10/2026). La fiche garde aussi le visuel
+qu'elle avait à l'ouverture (`CinemaMobileDetail`). Pour que ce relais soit rare : la bannière
+d'accueil du téléphone garde décodés les visuels de **tous** ses titres dès que sa liste est connue
+(`keepSheetBanners`), suspendue hors de l'écran (un film) et en économie de données ; et le visuel
+d'une carte part dès que le doigt s'y pose (`data-sheet-backdrop`, `prefetchSheetBannerNow`). Les
+cartes de « Reprendre » et du Top 10 sont servies au relâchement du doigt (`useTap`). Tests :
+`sheetMorph-hook.test.tsx`, `prefetchBanners.test.ts`, `CinemaMobileHero-prefetch.test.tsx`,
 `resume-row-tap.test.tsx`.
 
 **Les minuteurs du mouvement.** Tous passent par `sheetTimeout` / `sheetFrame` (`dom.ts`) :
@@ -2200,25 +2223,19 @@ image.
 **Le calque.** Le trajet et l'assombrissement vivent dans un calque inséré juste avant la fiche
 dans `body`, au même plan. La colonne de la fiche passe donc au-dessus de l'image qui vole, et la
 fiche du dessous d'une cascade passe dessous. Au bureau, le fond de la fiche est transparent pendant
-le trajet. Au téléphone, c'est la structure de la maquette : la fiche est transparente et immobile,
-et le **fond de la carte** (son encre, ses coins, son liseré) est un élément à part du calque, *sous*
-la fenêtre, qui monte du bas de l'écran sur le même ressort (`cardRiseTrack`) et redescend de même
-à la fermeture. Le contenu est **porté par la carte** : la même piste que son fond
-(`contentRideTrack`), et une opacité de 55 à 95 % du trajet (`CONTENT_RIDE`) — posé d'avance et
-révélé à 90 % pendant que le fond montait encore, il arrivait détaché de sa carte (« le décalage de
-l'arrivée du contenu, c'est bizarre », 8.32.3). À la fermeture, la copie (contenu, croix, cadre)
-redescend sur la piste du fond, le contenu s'effaçant en 100 ms ; la croix paraît de 30 à 95 %
-(`GLASS_IN`). **Fermée pendant l'aller**, chaque pièce part de la pose peinte à cet instant : le temps
-du trajet lu sur son animation (`currentTime`), la carte et le contenu à leur point de la piste —
-partie de la place au repos, la copie décalait le cadre de la bannière, qui s'y recalait d'un coup
-(8.32.3). Une reprise par l'ouverture relit la carte sur cette même piste.
+le trajet. Au téléphone aussi : la fiche est transparente et immobile, et la **fenêtre est la carte
+entière** (voir plus haut) — son encre est dans la fenêtre, sous le visuel. **Fermée pendant l'aller**,
+la carte part de la pose peinte à cet instant (le temps du trajet lu sur son animation, `currentTime`,
+plus le doigt s'il l'a tirée), avec les opacités peintes du visuel et de l'affiche.
 
-Ce que les deux premiers portages en avaient fait, et pourquoi c'est revenu à la maquette :
-- 8.31.0 : la fiche entière montait, l'image *sous* elle — la bande d'encre entre la bannière et la
-  carte qui monte se voyait, « le reste de la fiche vient du bas et se colle » ;
-- 8.31.3 : la fiche entière collée au bas de l'image, image clé par image clé — plus d'écart, mais
-  un bloc rigide, « ça arrive sèchement en un bloc ».
-L'image au-dessus du fond qui monte ne laisse voir aucun écart, et chacun garde son mouvement.
+Ce que les portages précédents en avaient fait :
+- 8.31.0 : la fiche entière montait, l'image *sous* elle — « le reste de la fiche vient du bas et se
+  colle » ;
+- 8.31.3 : la fiche entière collée au bas de l'image — « ça arrive sèchement en un bloc » ;
+- 8.32.2–8.32.8 : le fond de la carte montait à part sous l'image, le contenu porté par lui
+  (`cardRiseTrack`, `contentRideTrack`), la bannière logée dedans (`slotRide`) — l'image plongeait
+  avant de remonter, et la carte redescendait plus vite que le doigt (audit du 10/10/2026).
+La carte entière qui grandit est une seule pièce : il n'y a plus rien à coller.
 
 **Ce que la fiche marque dans son DOM** :
 - `data-sheet-photo` : son visuel ;
@@ -2231,8 +2248,9 @@ L'image au-dessus du fond qui monte ne laisse voir aucun écart, et chacun garde
 L'accueil du bureau porte `data-sheet-home`.
 
 **Ce qui diffère exprès.**
-- **Téléphone / bureau** : la bannière et la carte qui monte d'un côté, le visuel plein écran et
-  l'accueil qui recule de l'autre.
+- **Téléphone / iPad** : la carte entière qui grandit d'un côté, le visuel plein écran et l'accueil
+  qui recule de l'autre ; la fermeture au doigt moins vive qu'au bureau (`closeResponse` : 0,85 fois
+  l'ouverture, au moins 0,26 s, jamais plus lente que l'ouverture) et posée à un pixel près.
 - **La fiche TMDB** n'a son visuel qu'avec la réponse du serveur. Sans elle au montage, elle entre
   comme avant, et seule sa fermeture revole vers l'affiche.
 - **La fiche personne** garde sa montée simple : il n'y a pas d'affiche à faire devenir une bannière.
@@ -2262,7 +2280,7 @@ trois règles :
 - **Le Top 10 s'ouvre au relâchement du doigt** (`useTap` dans `CinemaTop10Card`), comme les autres
   affiches : au `click`, iOS retenait le premier appui après un défilement de la rangée.
 - **Le bas de la fiche attend que l'ouverture soit posée** (`belowFold` dans `CinemaMobileDetail`,
-  450 ms) : saga, titres similaires, épisodes au-delà des trois premiers. Montés dans la même image
+  depuis `settled` de `useSheetMorph`) : saga, titres similaires, épisodes au-delà des trois premiers. Montés dans la même image
   que l'appui, ils étaient mis en page par la mesure de départ du trajet. Sans trajet (retour, lien,
   mouvement réduit), tout est là d'emblée.
 - **Le travail d'arrière-plan attend l'interface au repos** (`src/lib/uiQuiet.ts`, 1,5 s sans geste) :
@@ -2270,9 +2288,7 @@ trois règles :
   et l'index Matroska d'un tenant, et le réchauffage du catalogue des séries. La plus longue tâche
   pendant l'ouverture d'une fiche du Top 10 était cette lecture, pas la fiche.
 
-**La fermeture au doigt porte l'élan à part** (`fingerCarry`, `motion.ts`). Le retour part à vitesse
-nulle ; un déplacement vertical commun, lancé à la vitesse du doigt et éteint sur le même ressort,
-s'ajoute à l'image *et* à la carte. Projetée sur le seul chemin de l'image, la vitesse du doigt jetait
-la carte vers le haut au lâcher quand l'affiche était au-dessus — « un mini décrochement dans une
-redescente rapide ». Tests : `sheetMorph-carry.test.ts`, `uiQuiet.test.ts`,
-`resumeCache-uiQuiet.test.ts`, `top10-card-tap.test.tsx`, `cinema-mobile-detail-belowfold.test.tsx`.
+**La fermeture au doigt part de la carte où le doigt l'a mise, à sa vitesse** — une seule pièce
+depuis l'audit du 10/10/2026 ; l'élan porté à part (`fingerCarry`) qui le précédait est retiré.
+Tests : `sheetMorph-motion.test.ts`, `uiQuiet.test.ts`, `resumeCache-uiQuiet.test.ts`,
+`top10-card-tap.test.tsx`, `cinema-mobile-detail-belowfold.test.tsx`.

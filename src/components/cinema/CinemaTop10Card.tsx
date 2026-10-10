@@ -29,6 +29,7 @@ export function CinemaTop10Card({
   showNewBadge = true,
   onFocusItem,
   onSelectItem,
+  backdropUrl,
 }: {
   rank: number;
   title: string;
@@ -44,6 +45,8 @@ export function CinemaTop10Card({
   showNewBadge?: boolean;
   onFocusItem?: () => void;
   onSelectItem: () => void;
+  /** Le visuel de la fiche, demandé dès l'appui (`data-sheet-backdrop`, DECISIONS.md §61). */
+  backdropUrl?: string | null;
 }) {
   // Servi au relâchement du doigt, comme les autres affiches (`useTap`) : au `click`, iOS gardait le
   // premier appui juste après un défilement de la rangée, et la fiche du Top 10 semblait lente à
@@ -57,6 +60,7 @@ export function CinemaTop10Card({
       onFocus={onFocusItem}
       onMouseEnter={onFocusItem}
       {...tap}
+      data-sheet-backdrop={backdropUrl || undefined}
       aria-label={`${rank}. ${title}`}
       className={`flex shrink-0 items-end transition duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 active:scale-[0.96] active:delay-75 ${TV_NAV_RING}`}
     >
