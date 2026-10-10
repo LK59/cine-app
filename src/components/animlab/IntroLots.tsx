@@ -62,6 +62,7 @@ import { INTRO_BACKGROUNDS, PLAYBACK_INTRO, introBackdropSrc, type IntroBackgrou
 import { phoneSheetCorner } from "@/lib/sheetMotion";
 import { NOT_THE_HANDLE, useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { useTap } from "@/lib/useTap";
+import { ContinuityStage } from "@/components/animlab/ContinuityLot";
 
 /**
  * Deux prototypes de la page « Tests animations » (10/10/2026), à juger sur l'iPhone et le Mac avant
@@ -486,8 +487,13 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
   // D'un seul bloc par défaut (cinquième passe) ; la cascade, resserrée, reste à comparer.
   const [stagger, setStagger] = useState(false);
   const [layout, setLayout] = useState<Layout>("auto");
+  // Au bureau, la fiche relaie l'aperçu (validé par Louis le 10/10/2026, DECISIONS.md §61) ;
+  // l'affiche qui grandit reste à comparer.
+  const [desktopMode, setDesktopMode] = useState<"continuity" | "morph">("continuity");
   const [reduced, setReduced] = useState(prefersReduced);
   const [staged, setStaged] = useState(false);
+  const [wide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 768);
+  const desktopStage = layout === "desktop" || (layout === "auto" && wide);
   const profile = profileChoice === "auto" ? detected : profileChoice;
   const pace = useMemo<Pace>(() => ({ mode: paceMode, ease, openMs, closeMs, engine, profile }), [paceMode, ease, openMs, closeMs, engine, profile]);
 
@@ -539,6 +545,13 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
         <Chip on={layout === "desktop"} onClick={() => setLayout("desktop")}>Bureau</Chip>
         <Chip on={layout === "phone"} onClick={() => setLayout("phone")}>Téléphone</Chip>
       </Row>
+      <Row label="Bureau">
+        <Chip on={desktopMode === "continuity"} onClick={() => setDesktopMode("continuity")}>Continuité du fond (prod)</Chip>
+        <Chip on={desktopMode === "morph"} onClick={() => setDesktopMode("morph")}>Affiche qui grandit (avant)</Chip>
+      </Row>
+      <p className="text-xs leading-5 text-subtle">
+        {"Au bureau, l'aperçu montre déjà le visuel du titre survolé : la fiche le relaie au lieu de le reconstruire depuis l'affiche. Le fond reste (celui de la fiche fond par-dessus), le logo glisse jusqu'à sa place dans la fiche, le texte de l'aperçu s'efface, les rangées descendent en s'effaçant et le contenu arrive d'un bloc ; la fermeture fait l'inverse. Le téléphone et l'iPad gardent l'affiche qui devient la fiche. Cette maquette joue le crochet de production lui-même."}
+      </p>
       <Row label="Options">
         <Chip on={stagger} onClick={() => setStagger(!stagger)}>Cascade du contenu</Chip>
         <Chip on={reduced} onClick={() => setReduced(!reduced)}>« Réduire les animations »</Chip>
@@ -547,6 +560,11 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
         <Play size={16} /> {withLogo.length === 0 ? "Chargement du catalogue…" : "Ouvrir la maquette"}
       </button>
       {staged &&
+        desktopStage &&
+        desktopMode === "continuity" &&
+        createPortal(<ContinuityStage titles={withLogo} onExit={() => setStaged(false)} />, document.body)}
+      {staged &&
+        !(desktopStage && desktopMode === "continuity") &&
         createPortal(
           <SheetStage
             titles={withLogo}

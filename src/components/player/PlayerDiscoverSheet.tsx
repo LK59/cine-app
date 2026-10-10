@@ -7,7 +7,7 @@ import useSWR from "swr";
 import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Eye, EyeOff, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack, useRouteBehind, useSheetBehind } from "@/lib/cinemaRoute";
-import { useSheetMorph } from "@/lib/sheetMorph/useSheetMorph";
+import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { useTitleWatched } from "@/lib/useTitleWatched";
@@ -128,7 +128,7 @@ export function PlayerDiscoverSheet({
   const bannerRef = useRef<HTMLDivElement>(null);
   const behind = useRouteBehind();
   const swapsInPlace = useSheetBehind() && !(behind !== null && (behind.film !== null || behind.serie !== null));
-  const morph = useSheetMorph({
+  const morph = useSheetTransition({
     layout: isMobile ? "phone" : "desktop",
     rootRef: containerRef,
     imageRef: isMobile ? bannerRef : containerRef,

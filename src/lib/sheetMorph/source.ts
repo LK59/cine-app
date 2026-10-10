@@ -1,4 +1,4 @@
-import { visibleFraction } from "./dom";
+import { sheetFrame, visibleFraction } from "./dom";
 
 /**
  * D'où part une fiche (DECISIONS.md §61) : la carte qu'on vient de toucher, retenue au geste.
@@ -183,9 +183,9 @@ export function hideSource(source: SheetSource): void {
 export function showSource(source: SheetSource): void {
   const el = source.frame;
   el.style.opacity = "";
-  const raf = typeof window.requestAnimationFrame === "function" ? window.requestAnimationFrame.bind(window) : (cb: () => void) => window.setTimeout(cb, 16);
-  raf(() =>
-    raf(() => {
+  // Par le planificateur commun : annulable, et muet si la page n'existe plus (`sheetFrame`).
+  sheetFrame(() =>
+    sheetFrame(() => {
       if (el.style.opacity === "") el.style.transitionProperty = "";
     }),
   );

@@ -172,6 +172,7 @@ describe("la page Tests animations", () => {
       }) as unknown as CinemaMovie;
     render(<SheetOpenLot movies={[movie(1), movie(2), movie(3), movie(4)]} />);
     fireEvent.click(screen.getByRole("button", { name: "Téléphone" }));
+    fireEvent.click(screen.getByRole("button", { name: /Affiche qui grandit/ }));
     fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
     fireEvent.click(screen.getAllByRole("img", { name: "Film 4" })[0].closest("button")!);
     // La poignée : la bannière, rendue au geste (`touch-action: none`), la croix tenue à part.
@@ -193,6 +194,28 @@ describe("la page Tests animations", () => {
     expect(sheet.style.pointerEvents).toBe("none");
   });
 
+  it("au bureau, la maquette relaie l'aperçu par le crochet de production, par défaut", () => {
+    const movie = (id: number): CinemaMovie =>
+      ({
+        radarrId: id, title: `Film ${id}`, year: 2020, genres: [], quality: null, runtimeMinutes: 100, overview: `Résumé ${id}`,
+        posterUrl: `/p${id}.jpg`, backdropUrl: `/b${id}.jpg`, logoUrl: `/l${id}.png`,
+      }) as unknown as CinemaMovie;
+    render(<SheetOpenLot movies={[1, 2, 3].map(movie)} />);
+    expect(screen.getByRole("button", { name: /Continuité du fond/ }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Bureau" }));
+    fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
+    expect(screen.getByText(/continuité du fond \(moteur de production\)/)).toBeTruthy();
+    expect(document.querySelector("[data-sheet-hero]")).toBeTruthy();
+    // Survolée, l'affiche devient l'aperçu ; touchée, elle ouvre la fiche — celle du crochet de production.
+    const card = screen.getAllByRole("button", { name: "Film 2" })[0];
+    fireEvent.mouseEnter(card);
+    fireEvent.click(card);
+    expect(document.querySelector("[data-sheet-morph-root]")).toBeTruthy();
+    // Échap ferme la fiche, pas la maquette.
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByText(/continuité du fond \(moteur de production\)/)).toBeTruthy();
+  });
+
   describe("cinquième passe : contenu d'un bloc, fermeture sans clignotement, fiches en cascade", () => {
     type Recorded = { el: Element; frames: Keyframe[]; opts: KeyframeAnimationOptions; cancel: ReturnType<typeof vi.fn> };
     let recorded: Recorded[] = [];
@@ -204,6 +227,7 @@ describe("la page Tests animations", () => {
     const openDesktopMock = () => {
       render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
       fireEvent.click(screen.getByRole("button", { name: "Bureau" }));
+      fireEvent.click(screen.getByRole("button", { name: /Affiche qui grandit/ }));
       fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
     };
     const sheets = () => Array.from(document.querySelectorAll<HTMLElement>("[data-alab-sheet]"));
@@ -293,6 +317,7 @@ describe("la page Tests animations", () => {
       render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
       fireEvent.click(screen.getByRole("button", { name: /clip-path \(ancien\)/ }));
       fireEvent.click(screen.getByRole("button", { name: "Bureau" }));
+      fireEvent.click(screen.getByRole("button", { name: /Affiche qui grandit/ }));
       fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
       openFromHome(3);
       expect(recorded.some((r) => r.frames.some((f) => "clipPath" in f))).toBe(true);
@@ -325,6 +350,7 @@ describe("la page Tests animations", () => {
       render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
       fireEvent.click(screen.getByRole("button", { name: "iPad" }));
       fireEvent.click(screen.getByRole("button", { name: "Bureau" }));
+      fireEvent.click(screen.getByRole("button", { name: /Affiche qui grandit/ }));
       fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
       openFromHome(3);
       const sheet = sheets()[0];
@@ -337,6 +363,7 @@ describe("la page Tests animations", () => {
       render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
       fireEvent.click(screen.getByRole("button", { name: "Ordinateur" }));
       fireEvent.click(screen.getByRole("button", { name: "Bureau" }));
+      fireEvent.click(screen.getByRole("button", { name: /Affiche qui grandit/ }));
       fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
       openFromHome(3);
       expect(sheets()[0].querySelector('[style*="touch-action: none"]')).toBeNull();
@@ -375,6 +402,7 @@ describe("la page Tests animations", () => {
     it("septième passe : au téléphone, la ligne des mesures loge dans la pilule « Quitter », jamais sur la fiche", () => {
       render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
       fireEvent.click(screen.getByRole("button", { name: "Téléphone" }));
+      fireEvent.click(screen.getByRole("button", { name: /Affiche qui grandit/ }));
       fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
       const readouts = document.querySelectorAll("[data-alab-readout]");
       expect(readouts).toHaveLength(1);
@@ -440,6 +468,7 @@ describe("la page Tests animations", () => {
         const openPhoneMock = () => {
           render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
           fireEvent.click(screen.getByRole("button", { name: "Téléphone" }));
+          fireEvent.click(screen.getByRole("button", { name: /Affiche qui grandit/ }));
           fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
         };
         // Un appui au doigt dont iOS garde le `click` : seuls le posé et le relâché arrivent.

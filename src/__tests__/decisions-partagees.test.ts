@@ -964,9 +964,18 @@ describe("une seule ouverture de fiche (§61)", () => {
 
   it.each(SHEETS)("%s passe par useSheetMorph, sans sortie CSS à elle", (f) => {
     const src = lire(f);
-    expect(src).toMatch(/useSheetMorph\(\{/);
+    // Directement, ou par `useSheetTransition` — qui choisit au montage entre lui et la continuité
+    // du fond au bureau, et l'appelle toujours.
+    expect(src).toMatch(/useSheetMorph\(\{|useSheetTransition\(\{/);
     expect(src).not.toMatch(/"sheet-out"/);
     expect(src).not.toMatch(/\? "animate-fade-out"/);
+  });
+
+  it("le choix entre trajet et continuité est fait en un seul endroit, qui appelle les deux crochets", () => {
+    const src = lire("src/lib/sheetMorph/desktopContinuity.ts");
+    expect(src).toMatch(/export function useSheetTransition\(/);
+    expect(src).toMatch(/useSheetMorph\(\{ \.\.\.opts, off: continuity \}\)/);
+    expect(src).toMatch(/useDesktopContinuity\(\{ \.\.\.opts, off: !continuity \}\)/);
   });
 
   it("la maquette du banc joue le moteur des vraies fiches, sans copie à elle", () => {

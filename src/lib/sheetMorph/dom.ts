@@ -7,6 +7,62 @@ import type { Box, MotionProfile } from "./motion";
  * rien ici ne doit s'exécuter pendant un trajet.
  */
 
+/**
+ * Les minuteurs et les images demandés par le mouvement des fiches, tous suivis ici.
+ *
+ * Une fermeture vit au-delà de sa fiche (sa copie finit de sortir après le démontage), et l'affiche
+ * rendue attend deux images avant de retrouver sa transition : autant de rappels qui pouvaient
+ * tomber après la fin d'une page — sous la charge de la vérification complète, après que jsdom avait
+ * démonté `window` (« window is not defined », deux erreurs non gérées qui faisaient échouer la
+ * suite). Chacun passe par ici : annulable un par un, annulable tous ensemble
+ * (`cancelSheetSchedules`, en fin de test), et muet s'il arrive sans `window`.
+ */
+const pendingTimers = new Set<number>();
+const pendingFrames = new Set<number>();
+const hasWindow = () => typeof window !== "undefined";
+
+export function sheetTimeout(fn: () => void, ms: number): number {
+  if (!hasWindow()) return 0;
+  const id = window.setTimeout(() => {
+    pendingTimers.delete(id);
+    if (hasWindow()) fn();
+  }, ms);
+  pendingTimers.add(id);
+  return id;
+}
+
+export function clearSheetTimeout(id: number): void {
+  pendingTimers.delete(id);
+  if (hasWindow()) window.clearTimeout(id);
+}
+
+/** Une image plus tard (un minuteur de 16 ms sans `requestAnimationFrame`) ; rend de quoi l'annuler. */
+export function sheetFrame(fn: () => void): () => void {
+  if (!hasWindow()) return () => {};
+  if (typeof window.requestAnimationFrame !== "function") {
+    const id = sheetTimeout(fn, 16);
+    return () => clearSheetTimeout(id);
+  }
+  const id = window.requestAnimationFrame(() => {
+    pendingFrames.delete(id);
+    if (hasWindow()) fn();
+  });
+  pendingFrames.add(id);
+  return () => {
+    pendingFrames.delete(id);
+    if (hasWindow()) window.cancelAnimationFrame?.(id);
+  };
+}
+
+/** Tout ce qui attend encore, annulé — la fin d'un test, une page qu'on quitte. */
+export function cancelSheetSchedules(): void {
+  for (const id of Array.from(pendingTimers)) clearSheetTimeout(id);
+  for (const id of Array.from(pendingFrames)) {
+    pendingFrames.delete(id);
+    if (hasWindow()) window.cancelAnimationFrame?.(id);
+  }
+}
+
 /** L'horloge des animations — celle que `startTime` attend. */
 export function clockNow(): number {
   const c = typeof document !== "undefined" ? document.timeline?.currentTime : null;
@@ -29,21 +85,22 @@ const FRAMES_AT_MOST_MS = 50;
 /** Deux images plus tard : le montage de React et sa mise en page sont peints, le départ ne perd pas sa première image. */
 export function afterTwoFrames(fn: () => void, atMostMs = FRAMES_AT_MOST_MS): () => void {
   let done = false;
-  const raf =
-    typeof window.requestAnimationFrame === "function"
-      ? window.requestAnimationFrame.bind(window)
-      : (cb: FrameRequestCallback) => window.setTimeout(() => cb(performance.now()), 16);
+  let cancelFrame = () => {};
   const fire = () => {
     if (done) return;
     done = true;
-    window.clearTimeout(timer);
+    clearSheetTimeout(timer);
+    cancelFrame();
     fn();
   };
-  const timer = window.setTimeout(fire, atMostMs);
-  raf(() => raf(fire));
+  const timer = sheetTimeout(fire, atMostMs);
+  cancelFrame = sheetFrame(() => {
+    if (!done) cancelFrame = sheetFrame(fire);
+  });
   return () => {
     done = true;
-    window.clearTimeout(timer);
+    clearSheetTimeout(timer);
+    cancelFrame();
   };
 }
 
@@ -74,8 +131,8 @@ export function startTogether(anims: Animation[]): number {
 export function swallowStrayClick(ms = 500): void {
   let timer = 0;
   const done = () => {
-    document.removeEventListener("click", stop, true);
-    window.clearTimeout(timer);
+    if (typeof document !== "undefined") document.removeEventListener("click", stop, true);
+    clearSheetTimeout(timer);
   };
   const stop = (e: MouseEvent) => {
     e.stopPropagation();
@@ -83,7 +140,7 @@ export function swallowStrayClick(ms = 500): void {
     done();
   };
   document.addEventListener("click", stop, true);
-  timer = window.setTimeout(done, ms);
+  timer = sheetTimeout(done, ms);
 }
 
 /** L'opacité où en est un élément, animations comprises — 1 quand le navigateur n'en dit rien (jsdom). */
