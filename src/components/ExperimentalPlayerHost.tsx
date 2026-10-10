@@ -100,6 +100,9 @@ import { useIntroPlaybackStarted } from "@/lib/introEnd";
 /** How long a threshold has to be crossed before anything is shown at all. */
 const SPINNER_AFTER_MS = 120;
 
+/** Patience de la roue au tout premier départ, sur une image déjà montrée — voir `openingGrace`. */
+const OPENING_SPINNER_GRACE_MS = 1200;
+
 /**
  * And before the wait is worth a sentence, then before it is worth admitting it is long.
  *
@@ -2227,7 +2230,12 @@ export function ExperimentalPlayerHost({
   // flag stacked one spinner on top of the other.
   const openingSpinner = openingFor !== null && openingFor >= SPINNER_AFTER_MS && !introCovers;
   // Sous l'ouverture, la roue de l'attente ne se montre pas non plus : l'une tient lieu de l'autre.
-  const resumeSpinner = startingFor !== null && startingFor >= SPINNER_AFTER_MS && !introCovers;
+  // À l'ouverture, une fois la couverture effacée sur la première image (reprise depuis l'appareil :
+  // image à ~50 ms), Safari met encore quelques centaines de millisecondes à faire partir l'horloge.
+  // L'image figée y suffit ; la roue revenait par-dessus à 120 ms — le « chargement classique après
+  // la première image » signalé par Louis (10/10/2026). Elle attend donc une vraie attente.
+  const openingGrace = introEligible && !introPlaying && startingFor !== null && startingFor < OPENING_SPINNER_GRACE_MS;
+  const resumeSpinner = startingFor !== null && startingFor >= SPINNER_AFTER_MS && !introCovers && !openingGrace;
   const waitingWord =
     waitingFor === null || waitingFor < WORD_AFTER_MS
       ? null
