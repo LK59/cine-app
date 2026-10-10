@@ -2249,3 +2249,25 @@ Ses appelants : `CinemaMobileDetail`, `CinemaMovieDetail`, `CinemaSeriesDetail`,
 et `decisions-partagees.test.ts` (un seul crochet, aucune sortie CSS propre).
 
 **Décidé le 10/10/2026.**
+
+**Ce qui ralentissait encore l'ouverture au téléphone (10/10/2026, soir).** Mesuré sur la prod
+(Chromium, iPhone 13, processeur ×4, `scratchpad/ui/latency.mjs`) : entre l'appui et la fiche
+montée, une tâche de 80 à 220 ms, puis une seconde jusqu'à 270 ms pendant le trajet. Trois causes,
+trois règles :
+- **Le Top 10 s'ouvre au relâchement du doigt** (`useTap` dans `CinemaTop10Card`), comme les autres
+  affiches : au `click`, iOS retenait le premier appui après un défilement de la rangée.
+- **Le bas de la fiche attend que l'ouverture soit posée** (`belowFold` dans `CinemaMobileDetail`,
+  450 ms) : saga, titres similaires, épisodes au-delà des trois premiers. Montés dans la même image
+  que l'appui, ils étaient mis en page par la mesure de départ du trajet. Sans trajet (retour, lien,
+  mouvement réduit), tout est là d'emblée.
+- **Le travail d'arrière-plan attend l'interface au repos** (`src/lib/uiQuiet.ts`, 1,5 s sans geste) :
+  l'enregistrement des ouvertures sur l'appareil (`recordTitle`, `useResumeCache`), qui lit l'en-tête
+  et l'index Matroska d'un tenant, et le réchauffage du catalogue des séries. La plus longue tâche
+  pendant l'ouverture d'une fiche du Top 10 était cette lecture, pas la fiche.
+
+**La fermeture au doigt porte l'élan à part** (`fingerCarry`, `motion.ts`). Le retour part à vitesse
+nulle ; un déplacement vertical commun, lancé à la vitesse du doigt et éteint sur le même ressort,
+s'ajoute à l'image *et* à la carte. Projetée sur le seul chemin de l'image, la vitesse du doigt jetait
+la carte vers le haut au lâcher quand l'affiche était au-dessus — « un mini décrochement dans une
+redescente rapide ». Tests : `sheetMorph-carry.test.ts`, `uiQuiet.test.ts`,
+`resumeCache-uiQuiet.test.ts`, `top10-card-tap.test.tsx`, `cinema-mobile-detail-belowfold.test.tsx`.

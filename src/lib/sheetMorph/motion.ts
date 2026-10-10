@@ -237,13 +237,55 @@ export function appleCloseMotion(from: Box, to: Box, stage: Stage, profile: Moti
   );
 }
 
-export type Sample = { offset: number; q: number };
+/**
+ * Un instant échantillonné : `q`, le point du trajet ; `dy`, l'élan du doigt encore porté à cet
+ * instant (voir `fingerCarry`) — le même pour l'image et pour la carte.
+ */
+export type Sample = { offset: number; q: number; dy?: number };
 
 /** Les instants échantillonnés d'un mouvement : au moins 60, une par image à 120 Hz au-delà, la dernière à l'arrivée exacte. */
-export function sampleMotion(m: Motion): Sample[] {
+export function sampleMotion(m: Motion, carry?: (ms: number) => number): Sample[] {
   const n = Math.min(120, Math.max(60, Math.ceil(m.duration / (1000 / 120))));
-  return Array.from({ length: n + 1 }, (_, i) => ({ offset: i / n, q: i === n ? 1 : m.q((i / n) * m.duration) }));
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const ms = (i / n) * m.duration;
+    const sample: Sample = { offset: i / n, q: i === n ? 1 : m.q(ms) };
+    if (carry) sample.dy = i === n ? 0 : carry(ms);
+    return sample;
+  });
 }
+
+/** La réponse du ressort d'une fermeture — celle d'`appleCloseMotion`. */
+export function closeResponse(from: Box, to: Box, stage: Stage, profile: MotionProfile): number {
+  return CLOSE_RESPONSE_RATIO * appleResponse(from, to, stage, profile);
+}
+
+/**
+ * L'élan du doigt lâché, porté à l'identique par l'image qui vole et par la carte qui redescend.
+ *
+ * La fermeture au doigt lançait tout le retour sur un seul ressort, avec la vitesse du doigt projetée
+ * sur le chemin de l'*image* (bannière → affiche). Or la carte redescend vers le bas de l'écran pendant
+ * que l'image remonte souvent vers son affiche : sur un geste rapide, la projection donnait une
+ * vitesse de départ négative, la carte partait un instant *vers le haut* à l'instant même où le doigt
+ * la jetait vers le bas, et l'image ne gardait qu'une part de l'élan — « un mini décrochement de
+ * l'image bannière par rapport à la fiche dans une redescente rapide » (Louis, iPhone, 10/10/2026).
+ *
+ * Ici, le retour part à vitesse nulle, et un déplacement vertical commun s'y ajoute : il part
+ * exactement à la vitesse du doigt et s'éteint sur le même ressort amorti critique (x(t) = v·t·e^(−ωt),
+ * le ressort lancé depuis zéro). Image et carte quittent le doigt ensemble, à sa vitesse, et ne peuvent
+ * plus se séparer à cet instant ; le retour reprend ensuite la main en douceur.
+ */
+export function fingerCarry(vy: number, response: number): ((ms: number) => number) | undefined {
+  if (!vy || !Number.isFinite(vy)) return undefined;
+  const w = (2 * Math.PI) / Math.max(0.05, response);
+  const v = clamp(vy, -MAX_CARRY_VELOCITY, MAX_CARRY_VELOCITY);
+  return (ms) => {
+    const t = Math.max(0, ms) / 1000;
+    return v * t * Math.exp(-w * t);
+  };
+}
+
+/** Un doigt plus rapide que ça n'a plus de sens à l'écran : l'élan porté reste visible sans s'envoler. */
+export const MAX_CARRY_VELOCITY = 6000;
 
 /**
  * Le fond de la carte du téléphone, à part : il monte du bas *sous* l'image qui vole, sur le même
@@ -261,7 +303,7 @@ export function sampleMotion(m: Motion): Sample[] {
  * sous l'écran).
  */
 export function cardRiseTrack(samples: Sample[], fromY: number, toY: number): Keyframe[] {
-  return samples.map(({ offset, q }) => ({ offset, transform: `translateY(${lerp(fromY, toY, q).toFixed(2)}px)` }));
+  return samples.map(({ offset, q, dy }) => ({ offset, transform: `translateY(${(lerp(fromY, toY, q) + (dy ?? 0)).toFixed(2)}px)` }));
 }
 
 /**
@@ -430,8 +472,9 @@ export function morphTracks(poseAt: (q: number) => Pose, samples: Sample[], base
   const inner: Keyframe[] = [];
   const bd: Keyframe[] = [];
   const poster: Keyframe[] = [];
-  for (const { offset, q } of samples) {
-    const p = poseAt(q);
+  for (const { offset, q, dy } of samples) {
+    // L'élan du doigt (`fingerCarry`), porté par la fenêtre et les deux images d'un bloc.
+    const p = dy ? shiftPose(poseAt(q), dy) : poseAt(q);
     const b = p.box;
     if (engine === "transform") {
       const sx = Math.max(1e-3, b.w / Math.max(1, base.w));

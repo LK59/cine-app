@@ -26,8 +26,10 @@ import {
   contentRideTrack,
   clamp,
   closePoses,
+  closeResponse,
   closeStartVelocity,
   coverTf,
+  fingerCarry,
   lerp,
   lerpBox,
   lerpCorners,
@@ -48,6 +50,7 @@ import {
   type Corners,
   type Motion,
   type Pose,
+  type Sample,
   type Stage,
 } from "./motion";
 import { afterTwoFrames, clearSheetTimeout, sheetTimeout, boxOf, clockNow, detectProfile, opacityNow, place, prefersReducedMotion, promote, scaleOf, startTogether, swallowStrayClick, translateYOf } from "./dom";
@@ -234,8 +237,15 @@ function buildWindow(layer: HTMLElement, before: Node | null, stage: Stage, targ
 }
 
 /** Joue les pistes du trajet sur la fenêtre ; rend les animations (créées en pause si demandé). */
-function playTracks(w: MorphWindow, poseAt: (q: number) => Pose, motion: Motion, target: Box, stage: Stage, paused: boolean): Animation[] {
-  const samples = sampleMotion(motion);
+function playTracks(
+  w: MorphWindow,
+  poseAt: (q: number) => Pose,
+  motion: Motion,
+  target: Box,
+  stage: Stage,
+  paused: boolean,
+  samples: Sample[] = sampleMotion(motion)
+): Animation[] {
   const tracks = morphTracks(poseAt, samples, target, stage, "transform");
   const opts = LINEAR(motion.duration);
   const anims = [
@@ -935,10 +945,14 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
         ? run.poseAt(qNow)
         : { box: imageNow, corners: targetCorners, bd: IDENTITY, poster: coverTf(srcBox, imageNow), bdOpacity: 1, posterOpacity: 0 };
     const toPose = sourcePose(srcBox, uniformCorners(source.radius), run && midOpen ? run.target : imageNow);
-    const v0 = closeStartVelocity(cur.box, toPose.box, run && midOpen ? { v: vNow, span: run.span } : null, fingerVy);
+    // Lâchée au doigt (et non pendant un aller), le retour part à vitesse nulle et l'élan du doigt est
+    // porté à part, à l'identique par l'image et par la carte (`fingerCarry`) : projetée sur le seul
+    // chemin de l'image, la vitesse du doigt jetait la carte un instant vers le haut.
+    const carry = run && midOpen ? undefined : fingerCarry(fingerVy, closeResponse(cur.box, toPose.box, stage, detectProfile()));
+    const v0 = carry ? 0 : closeStartVelocity(cur.box, toPose.box, run && midOpen ? { v: vNow, span: run.span } : null, fingerVy);
     const motion = appleCloseMotion(cur.box, toPose.box, stage, detectProfile(), v0);
     const d = motion.duration;
-    const samples = sampleMotion(motion);
+    const samples = sampleMotion(motion, carry);
     const poseAt = closePoses(cur, toPose);
     // Le visuel de la fenêtre se pose sur la boîte de la bannière à sa place — celle qu'avait l'aller.
     const base = run && midOpen ? run.target : imageNow;
@@ -953,7 +967,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     for (const sel of ["[data-sheet-photo]", "[data-sheet-veil]", "[data-sheet-settle]"])
       for (const el of Array.from(copy.querySelectorAll<HTMLElement>(sel))) el.style.visibility = "hidden";
 
-    const ghost = playTracks(w, poseAt, motion, base, stage, false);
+    const ghost = playTracks(w, poseAt, motion, base, stage, false, samples);
     // Au téléphone, d'où part et où finit la descente de la carte — relue par une reprise (`takeOver`).
     const shellFrom = midOpen && shellNow !== null ? shellNow + cardFrom : cardFrom;
     const shellTo = Math.max(0, cardFrom) + (stage.H - restingTop);
@@ -993,8 +1007,10 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
         const t = clockNow() - startedAt;
         const r = motion.q(t);
         const vr = motion.v(t);
-        const pose = poseAt(r);
-        const left = { pose, dim: dim ? opacityNow(dim) : 0, home: h ? scaleOf(h) : null, cardY: shell ? lerp(shellFrom, shellTo, r) : null };
+        // L'élan du doigt encore porté à cet instant : l'aller repart de la pose réellement peinte.
+        const dy = carry && t < d ? carry(t) : 0;
+        const pose = shiftPose(poseAt(r), dy);
+        const left = { pose, dim: dim ? opacityNow(dim) : 0, home: h ? scaleOf(h) : null, cardY: shell ? lerp(shellFrom, shellTo, r) + dy : null };
         end(false);
         // Le retour avançait de `vr·longueur` pixels par seconde vers la carte ; l'aller repart à
         // contre-sens, à −vr·longueur / (point → fiche).
