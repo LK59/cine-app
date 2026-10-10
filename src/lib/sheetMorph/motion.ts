@@ -19,7 +19,9 @@ import { simulateSpring } from "@/lib/liquidGlass/spring";
  *    L'ancien moteur ne survit que dans le banc, pour comparer.
  * 2. Le rythme d'UIKit : un ressort amorti critique (aucun rebond) dont la réponse suit la distance
  *    parcourue rapportée à la diagonale de l'écran, 20 % plus vif sur un ordinateur, la fermeture
- *    0,7 fois plus vive. La durée n'est pas une consigne : c'est le temps qu'il met à se poser.
+ *    plus vive (`closeResponse`). La durée n'est pas une consigne : c'est le temps qu'il met à se poser.
+ * 3. Au téléphone, la carte entière est la fenêtre (`cardOpenPoses`) : une seule pièce qui grandit
+ *    depuis l'affiche et y rétrécit, comme les cartes d'iOS.
  */
 
 /** Une place à l'écran, en pixels depuis son coin haut gauche. */
@@ -52,10 +54,25 @@ export const IDENTITY: Tf = { tx: 0, ty: 0, s: 1 };
 export const APPLE_RESPONSE = { min: 0.22, max: 0.34 };
 /** L'ordinateur : le même ressort, 20 % plus vif à distance égale — macOS l'est plus qu'iOS. */
 export const DESKTOP_RESPONSE_RATIO = 0.8;
-/** La fermeture : le même ressort, plus vif (0,75 jusqu'à la huitième passe). */
+/** La fermeture : le même ressort, plus vif (0,75 jusqu'à la huitième passe) — au bureau. */
 export const CLOSE_RESPONSE_RATIO = 0.7;
+/**
+ * La fermeture au doigt (téléphone, iPad), moins vive, et jamais sous 0,26 s.
+ *
+ * À 0,7 fois une réponse de 0,22–0,34 s, une fiche tirée d'une rangée se refermait sur ~0,19 s : la
+ * carte couvrait 320 px en 50 ms, et la première image peinte tombait déjà à 12–40 % du trajet (audit
+ * du 10/10/2026). Une fermeture de fiche iOS prend 0,3–0,4 s.
+ */
+export const PHONE_CLOSE_RESPONSE_RATIO = 0.85;
+export const PHONE_CLOSE_MIN_RESPONSE = 0.26;
+export const PHONE_CLOSE_CAP_RATIO = 0.95;
 /** « Posé » : à moins d'un demi-pixel de l'arrivée, pour de bon. */
 export const SETTLE_PX = 0.5;
+/**
+ * Au doigt, un pixel suffit : la queue sous-pixel du ressort gardait tous les calques promus ~280 ms
+ * de plus, et repoussait d'autant le relais vers la vraie fiche (audit du 10/10/2026).
+ */
+export const PHONE_SETTLE_PX = 1;
 /** Les vitesses de départ prises au doigt ou à un trajet interrompu, bornées (progression par seconde). */
 export const MAX_START_VELOCITY = 25;
 /**
@@ -131,7 +148,7 @@ export function travelOf(a: Box, b: Box): number {
  * Forme exacte, pas d'intégration : x(t) = 1 + (−1 + (v0 − ω)t)·e^(−ωt), ω = 2π / réponse. Sa durée
  * est le temps qu'il met à rester à moins de `SETTLE_PX` de l'arrivée sur un trajet de `travelPx`.
  */
-export function criticalSpring(response: number, v0: number, travelPx: number): Motion {
+export function criticalSpring(response: number, v0: number, travelPx: number, settlePx = SETTLE_PX): Motion {
   const w = (2 * Math.PI) / response;
   const at = (ms: number) => {
     const t = ms / 1000;
@@ -143,7 +160,7 @@ export function criticalSpring(response: number, v0: number, travelPx: number): 
   };
   const px = Math.max(1, travelPx);
   let last = 0;
-  for (let ms = 0; ms <= 3000; ms += 1) if (Math.abs(1 - at(ms)) * px >= SETTLE_PX) last = ms;
+  for (let ms = 0; ms <= 3000; ms += 1) if (Math.abs(1 - at(ms)) * px >= settlePx) last = ms;
   const duration = Math.max(17, last + 1);
   return {
     duration,
@@ -223,110 +240,48 @@ export function appleResponse(from: Box, to: Box, stage: Stage, profile: MotionP
   return lerp(APPLE_RESPONSE.min, APPLE_RESPONSE.max, n) * (profile === "desktop" ? DESKTOP_RESPONSE_RATIO : 1);
 }
 
-/** L'ouverture : `v0` garde la vitesse d'une fermeture retournée (négative : elle allait encore vers l'affiche). */
-export function appleOpenMotion(from: Box, to: Box, stage: Stage, profile: MotionProfile, v0 = 0): Motion {
-  return criticalSpring(appleResponse(from, to, stage, profile), clamp(v0, -MAX_START_VELOCITY, MAX_START_VELOCITY), travelOf(from, to));
+/** Le seuil de « posé » d'un appareil : un pixel au doigt, un demi-pixel au bureau. */
+export function settlePxFor(profile: MotionProfile): number {
+  return profile === "desktop" ? SETTLE_PX : PHONE_SETTLE_PX;
 }
 
-/** La fermeture : le même ressort, `CLOSE_RESPONSE_RATIO` fois plus vif, lancé à `v0`. */
+/** L'ouverture : `v0` garde la vitesse d'une fermeture retournée (négative : elle allait encore vers l'affiche). */
+export function appleOpenMotion(from: Box, to: Box, stage: Stage, profile: MotionProfile, v0 = 0): Motion {
+  return criticalSpring(appleResponse(from, to, stage, profile), clamp(v0, -MAX_START_VELOCITY, MAX_START_VELOCITY), travelOf(from, to), settlePxFor(profile));
+}
+
+/** La fermeture : le même ressort, plus vif, lancé à `v0` — voir `closeResponse`. */
 export function appleCloseMotion(from: Box, to: Box, stage: Stage, profile: MotionProfile, v0 = 0): Motion {
   return criticalSpring(
-    CLOSE_RESPONSE_RATIO * appleResponse(from, to, stage, profile),
+    closeResponse(from, to, stage, profile),
     clamp(v0, -MAX_START_VELOCITY, MAX_START_VELOCITY),
     travelOf(from, to),
+    settlePxFor(profile),
   );
 }
 
-/**
- * Un instant échantillonné : `q`, le point du trajet ; `dy`, l'élan du doigt encore porté à cet
- * instant (voir `fingerCarry`) — le même pour l'image et pour la carte.
- */
-export type Sample = { offset: number; q: number; dy?: number };
+/** Un instant échantillonné : `q`, le point du trajet. */
+export type Sample = { offset: number; q: number };
 
 /** Les instants échantillonnés d'un mouvement : au moins 60, une par image à 120 Hz au-delà, la dernière à l'arrivée exacte. */
-export function sampleMotion(m: Motion, carry?: (ms: number) => number): Sample[] {
+export function sampleMotion(m: Motion): Sample[] {
   const n = Math.min(120, Math.max(60, Math.ceil(m.duration / (1000 / 120))));
   return Array.from({ length: n + 1 }, (_, i) => {
     const ms = (i / n) * m.duration;
-    const sample: Sample = { offset: i / n, q: i === n ? 1 : m.q(ms) };
-    if (carry) sample.dy = i === n ? 0 : carry(ms);
-    return sample;
+    return { offset: i / n, q: i === n ? 1 : m.q(ms) };
   });
 }
 
-/** La réponse du ressort d'une fermeture — celle d'`appleCloseMotion`. */
+/**
+ * La réponse du ressort d'une fermeture — celle d'`appleCloseMotion`. Au doigt (téléphone, iPad),
+ * `PHONE_CLOSE_RESPONSE_RATIO` avec un plancher ; au bureau, `CLOSE_RESPONSE_RATIO`.
+ */
 export function closeResponse(from: Box, to: Box, stage: Stage, profile: MotionProfile): number {
-  return CLOSE_RESPONSE_RATIO * appleResponse(from, to, stage, profile);
-}
-
-/**
- * L'élan du doigt lâché, porté à l'identique par l'image qui vole et par la carte qui redescend.
- *
- * La fermeture au doigt lançait tout le retour sur un seul ressort, avec la vitesse du doigt projetée
- * sur le chemin de l'*image* (bannière → affiche). Or la carte redescend vers le bas de l'écran pendant
- * que l'image remonte souvent vers son affiche : sur un geste rapide, la projection donnait une
- * vitesse de départ négative, la carte partait un instant *vers le haut* à l'instant même où le doigt
- * la jetait vers le bas, et l'image ne gardait qu'une part de l'élan — « un mini décrochement de
- * l'image bannière par rapport à la fiche dans une redescente rapide » (Louis, iPhone, 10/10/2026).
- *
- * Ici, le retour part à vitesse nulle, et un déplacement vertical commun s'y ajoute : il part
- * exactement à la vitesse du doigt et s'éteint sur le même ressort amorti critique (x(t) = v·t·e^(−ωt),
- * le ressort lancé depuis zéro). Image et carte quittent le doigt ensemble, à sa vitesse, et ne peuvent
- * plus se séparer à cet instant ; le retour reprend ensuite la main en douceur.
- */
-export function fingerCarry(vy: number, response: number): ((ms: number) => number) | undefined {
-  if (!vy || !Number.isFinite(vy)) return undefined;
-  const w = (2 * Math.PI) / Math.max(0.05, response);
-  const v = clamp(vy, -MAX_CARRY_VELOCITY, MAX_CARRY_VELOCITY);
-  return (ms) => {
-    const t = Math.max(0, ms) / 1000;
-    return v * t * Math.exp(-w * t);
-  };
-}
-
-/** Un doigt plus rapide que ça n'a plus de sens à l'écran : l'élan porté reste visible sans s'envoler. */
-export const MAX_CARRY_VELOCITY = 6000;
-
-/**
- * Le fond de la carte du téléphone, à part : il monte du bas *sous* l'image qui vole, sur le même
- * ressort, pendant que le contenu de la fiche reste à sa place et paraît à 90 % du trajet — la
- * structure de la maquette validée (lot H, neuvième passe), où rien n'avait à se coller.
- *
- * Deux portages l'avaient perdue. Le premier (8.31.0) mettait l'image *sous* toute la fiche et
- * faisait monter la fiche entière : la bande d'encre entre la bannière qui grandit et la carte qui
- * monte se voyait — « le reste de la fiche vient du bas et se colle » (Louis, iPhone, 8.31.2). Le
- * second (8.31.3) collait la fiche entière au bas de l'image, image clé par image clé : plus d'écart,
- * mais un bloc rigide qui « arrive sèchement » (Louis, 8.31.4). Avec l'image au-dessus du fond qui
- * monte, l'écart ne peut plus se voir, et la carte retrouve son propre mouvement.
- *
- * `fromY` / `toY` : le décalage vertical du fond (0 posé ; la hauteur de la carte : tout entier
- * sous l'écran).
- */
-export function cardRiseTrack(samples: Sample[], fromY: number, toY: number): Keyframe[] {
-  return samples.map(({ offset, q, dy }) => ({ offset, transform: `translateY(${(lerp(fromY, toY, q) + (dy ?? 0)).toFixed(2)}px)` }));
-}
-
-/**
- * Le contenu du téléphone (logo, infos, Lire, résumé) porté par la carte : la même piste que son fond
- * (`cardRiseTrack`), et une opacité qui monte de 55 à 95 % du trajet, en espace parcouru — lisible en
- * se posant, entière au repos. Posé à sa place pendant que le fond montait encore, puis révélé à 90 %,
- * il arrivait détaché de sa carte et de la bannière (« le décalage de l'arrivée du contenu, c'est
- * bizarre », Louis sur iPhone, 10/10/2026).
- */
-export const CONTENT_RIDE = { from: 0.55, to: 0.95 } as const;
-
-/** L'opacité du contenu porté à ce point du trajet — voir `CONTENT_RIDE`. */
-export function contentRideOpacity(q: number): number {
-  return smooth(CONTENT_RIDE.from, CONTENT_RIDE.to, q);
-}
-
-/** La piste du contenu porté : celle du fond de la carte, avec son opacité. */
-export function contentRideTrack(samples: Sample[], fromY: number, toY: number): Keyframe[] {
-  return samples.map(({ offset, q }) => ({
-    offset,
-    transform: `translateY(${lerp(fromY, toY, q).toFixed(2)}px)`,
-    opacity: Number(contentRideOpacity(clamp(q, 0, 1)).toFixed(4)),
-  }));
+  const open = appleResponse(from, to, stage, profile);
+  if (profile === "desktop") return CLOSE_RESPONSE_RATIO * open;
+  // Jamais plus lente que l'ouverture du même trajet : Louis veut la fermeture « plus courte »
+  // (10/10/2026) — le plancher ne joue que sur les trajets assez longs pour le permettre.
+  return Math.min(PHONE_CLOSE_CAP_RATIO * open, Math.max(PHONE_CLOSE_MIN_RESPONSE, PHONE_CLOSE_RESPONSE_RATIO * open));
 }
 
 /**
@@ -334,25 +289,6 @@ export function contentRideTrack(samples: Sample[], fromY: number, toY: number):
  * — comme dans la maquette, où elle ne surgissait pas, pleine, sur une image encore en vol.
  */
 export const GLASS_IN = { from: 0.3, to: 0.95, minMs: 160 } as const;
-
-/**
- * La place de la bannière, portée par la carte du téléphone : l'image qui vole ne vise pas sa place
- * au repos mais celle qu'elle a *dans la carte qui monte* — la cible glisse avec la carte, et l'image
- * la rejoint à partir de 35 % du trajet (`SLOT_RIDE_IN`, en espace parcouru).
- *
- * Depuis que le contenu monte avec la carte (`contentRideTrack`), la bannière, elle, filait seule
- * vers sa place au repos : au milieu du trajet elle flottait au-dessus d'une carte encore basse, hors
- * de ses bords — « la bannière apparaît brièvement en dehors de la fiche » sur une ouverture refermée
- * vite (Louis, iPhone, 10/10/2026). Portée par la carte, elle y est logée dès qu'elle l'a rejointe ;
- * au tout début elle reste l'affiche touchée, là où elle est (la carte, elle, est encore sous l'écran).
- */
-export const SLOT_RIDE_IN = 0.35;
-
-/** Le décalage de la place de la bannière à ce point du trajet : la montée de la carte, prise peu à peu. */
-export function slotRide(q: number, cardFromY: number): number {
-  const p = clamp(q, 0, 1);
-  return lerp(cardFromY, 0, p) * smooth(0, SLOT_RIDE_IN, p);
-}
 
 /** La même pose, déplacée verticalement d'un bloc : la fenêtre et les deux images qu'elle porte. */
 export function shiftPose(p: Pose, dy: number): Pose {
@@ -363,15 +299,6 @@ export function shiftPose(p: Pose, dy: number): Pose {
     bd: { ...p.bd, ty: p.bd.ty + dy },
     poster: { ...p.poster, ty: p.poster.ty + dy },
   };
-}
-
-/**
- * L'affiche gardée de bout en bout : le visuel de la fiche n'est pas encore chargé (une reprise dont
- * la bannière n'a jamais été demandée), et l'image qui vole ne l'attend pas — elle arrive avec la
- * vignette touchée, déjà là, mise à l'échelle de la bannière. Rien n'est téléchargé pour animer.
- */
-export function posterOnly(p: Pose): Pose {
-  return { ...p, bdOpacity: 0, posterOpacity: 1 };
 }
 
 /** Le premier instant (en ms) où le trajet atteint `q`. */
@@ -411,6 +338,44 @@ export function sourcePose(source: Box, sourceCorners: Corners, target: Box): Po
 /** La pose du visuel posé à sa place, l'affiche agrandie à lui et éteinte : le point de départ d'un retour. */
 export function settledPose(target: Box, corners: Corners, source: Box): Pose {
   return { box: target, corners, bd: IDENTITY, poster: coverTf(source, target), bdOpacity: 1, posterOpacity: 0 };
+}
+
+/**
+ * Le téléphone : la carte entière est la fenêtre qui se transforme (le modèle des cartes d'iOS).
+ *
+ * L'affiche touchée grandit jusqu'à la carte — `card`, du haut de la fiche au bas de l'écran —, la
+ * bannière (`banner`) en occupant le haut, l'encre de la carte le reste ; à la fermeture, la carte
+ * entière rétrécit dans l'affiche. Une seule pièce : rien ne peut se décoller.
+ *
+ * Avant (8.31.x–8.32.8), la bannière volait seule et le fond de la carte montait à part du bas de
+ * l'écran. Pour loger l'une dans l'autre, la cible de l'image glissait avec la carte (`slotRide`), et
+ * l'image plongeait vers le bas avant de remonter (y 282 → 626 → 8 px, audit du 10/10/2026) ; à la
+ * fermeture, la carte tombait vers le bas de l'écran sur le ressort de l'image, bien plus vite que
+ * le doigt, et laissait l'image au-dessus d'elle — le « décrochement » vu sur une redescente rapide.
+ *
+ * `bd` et `poster` restent posées sur la bannière et sur l'affiche, comme pour le bureau : seules les
+ * boîtes de la fenêtre changent de sens.
+ */
+export function cardOpenPoses(from: Box, fromCorners: Corners, card: Box, banner: Box, cardCorners: Corners): { start: Pose; end: Pose; at: (q: number) => Pose } {
+  const start: Pose = { box: from, corners: fromCorners, bd: coverTf(banner, from), poster: IDENTITY, bdOpacity: 0, posterOpacity: 1 };
+  const end: Pose = { box: card, corners: cardCorners, bd: IDENTITY, poster: coverTf(from, banner), bdOpacity: 1, posterOpacity: 0 };
+  return {
+    start,
+    end,
+    at: (q) => ({
+      box: lerpBox(start.box, end.box, q),
+      corners: lerpCorners(start.corners, end.corners, q),
+      bd: lerpTf(start.bd, end.bd, q),
+      poster: lerpTf(start.poster, end.poster, q),
+      bdOpacity: smooth(0.1, 0.7, q),
+      posterOpacity: 1 - smooth(0, 0.6, q),
+    }),
+  };
+}
+
+/** La carte du téléphone à sa place (tirée de `dy` au doigt) : le point de départ d'un retour. */
+export function cardRestPose(card: Box, corners: Corners, banner: Box, source: Box, dy: number): Pose {
+  return shiftPose({ box: card, corners, bd: IDENTITY, poster: coverTf(source, banner), bdOpacity: 1, posterOpacity: 0 }, dy);
 }
 
 /**
@@ -472,9 +437,8 @@ export function morphTracks(poseAt: (q: number) => Pose, samples: Sample[], base
   const inner: Keyframe[] = [];
   const bd: Keyframe[] = [];
   const poster: Keyframe[] = [];
-  for (const { offset, q, dy } of samples) {
-    // L'élan du doigt (`fingerCarry`), porté par la fenêtre et les deux images d'un bloc.
-    const p = dy ? shiftPose(poseAt(q), dy) : poseAt(q);
+  for (const { offset, q } of samples) {
+    const p = poseAt(q);
     const b = p.box;
     if (engine === "transform") {
       const sx = Math.max(1e-3, b.w / Math.max(1, base.w));

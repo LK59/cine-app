@@ -49,7 +49,7 @@ function Sheet({
   const bannerRef = useRef<HTMLDivElement>(null);
   const morph = useSheetMorph({ layout, rootRef, imageRef: layout === "phone" ? bannerRef : rootRef, active, leaving, revealed, instantExit });
   return createPortal(
-    <div ref={rootRef} data-box="sheet" data-handles={String(morph.handlesEntry)} className="phone-sheet-frame" style={{ zIndex: 48, backgroundColor: "rgb(10, 10, 15)" }}>
+    <div ref={rootRef} data-box="sheet" data-handles={String(morph.handlesEntry)} data-settled={String(morph.settled)} className="phone-sheet-frame" style={{ zIndex: 48, backgroundColor: "rgb(10, 10, 15)" }}>
       <div ref={bannerRef} data-box="banner">
         {/* eslint-disable-next-line @next/next/no-img-element -- la fiche de test n'a qu'une <img> nue, comme FadeInImg */}
         <img data-sheet-photo="" src="https://img.test/backdrop.jpg" alt="" />
@@ -85,6 +85,10 @@ function press(el: Element) {
 const layer = () => document.body.querySelector<HTMLElement>("[data-sheet-morph-layer]");
 const root = () => document.body.querySelector<HTMLElement>("[data-sheet-morph-root]");
 const live = (el: Element | null) => fake.created.filter((a) => a.target === el && !a.cancelled);
+/** La fenêtre du trajet : l'enfant du calque qui n'est ni l'assombrissement (le premier) ni la copie. */
+const windowOf = () => Array.from(layer()!.children).find((c, i) => i > 0 && !c.classList.contains("sheet-morph-clone")) as HTMLElement;
+/** Le haut de la fenêtre à une image clé : sa place de base (la carte, en haut de la fiche) plus sa translation. */
+const topAt = (f: Keyframe, baseY = BOXES.sheet.y) => baseY + numbers(f.transform)[1];
 
 /** Le départ (décodage, deux images) puis tout le trajet. */
 async function runOpen() {
@@ -112,7 +116,29 @@ function sampleAt(frames: Keyframe[], at: number, prop: string): number[] {
   return a.map((v, k) => v + (b[k] - v) * t);
 }
 
+/** Les images dont l'adresse est dans `loaded` passent pour chargées (jsdom n'en charge aucune). */
+let loaded = new Set<string>();
+const naturalDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "naturalWidth");
+const completeDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "complete");
+function markLoaded(img: HTMLImageElement) {
+  loaded.add(img.getAttribute("src") ?? "");
+  fireEvent.load(img);
+}
+
 beforeEach(() => {
+  loaded = new Set();
+  Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", {
+    configurable: true,
+    get(this: HTMLImageElement) {
+      return loaded.has(this.getAttribute("src") ?? "") ? 1280 : 0;
+    },
+  });
+  Object.defineProperty(HTMLImageElement.prototype, "complete", {
+    configurable: true,
+    get(this: HTMLImageElement) {
+      return loaded.has(this.getAttribute("src") ?? "");
+    },
+  });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame", "performance", "Date"] });
   Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
   Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
@@ -127,6 +153,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (naturalDesc) Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", naturalDesc);
+  if (completeDesc) Object.defineProperty(HTMLImageElement.prototype, "complete", completeDesc);
   cleanup();
   clearMorphLayers();
   fake.restore();
@@ -136,27 +164,29 @@ afterEach(() => {
 });
 
 describe("l'ouverture", () => {
-  it("part de l'affiche touchée : le calque sous la fiche, l'affiche cachée, la fiche transparente, le contenu à venir", async () => {
+  it("part de l'affiche touchée : la carte entière grandit depuis elle, la fiche transparente, le contenu à venir", async () => {
     const poster = addPoster();
     press(poster.querySelector("img")!);
     render(<Sheet />);
 
     expect(root()!.dataset.handles).toBe("true");
-    // Le calque est juste avant la fiche, au même plan : la colonne passe au-dessus de l'image qui vole.
+    // Le calque est juste avant la fiche, au même plan : la colonne passe au-dessus de ce qui vole.
     expect(layer()!.nextElementSibling).toBe(root());
     expect(layer()!.style.zIndex).toBe("48");
     expect(poster.style.opacity).toBe("0");
-    // La maquette validée : la fiche transparente et immobile, son fond (l'encre, les coins) monte à
-    // part, sous l'image qui vole — l'image au-dessus de la carte, jamais l'inverse.
+    // La fiche transparente et immobile : la carte (son encre) est dans la fenêtre.
     expect(root()!.style.backgroundColor).toBe("transparent");
-    expect(live(root()).some((a) => a.frames.some((f) => /translateY/.test(String(f.transform))))).toBe(false);
-    const win = layer()!.lastElementChild as HTMLElement;
-    const shell = win.previousElementSibling as HTMLElement;
-    expect(shell.style.background).toContain("rgb(10, 10, 15)");
-    const rise = live(shell).find((a) => /translateY/.test(String(a.frames[0].transform)))!;
-    expect(rise.frames[0].transform).toBe("translateY(804.00px)");
-    expect(rise.frames.at(-1)!.transform).toBe("translateY(0.00px)");
-    expect(rise.frames.length).toBeGreaterThanOrEqual(61);
+    expect(live(root()).some((a) => a.frames.some((f) => /translate/.test(String(f.transform))))).toBe(false);
+    const win = windowOf();
+    const inner = win.firstElementChild as HTMLElement;
+    expect((inner.firstElementChild as HTMLElement).style.background).toContain("rgb(10, 10, 15)");
+    // Un rayon fixe : rien d'animé qui se peigne sur le fil principal.
+    expect(win.style.borderRadius).not.toBe("");
+    const track = live(win)[0] as FakeAnimation;
+    expect(track.frames.length).toBeGreaterThanOrEqual(61);
+    // Au départ, la fenêtre (posée sur la carte) est réduite à l'affiche ; à l'arrivée, sans transformation.
+    expect(topAt(track.frames[0])).toBeCloseTo(BOXES.poster.y, 0);
+    expect(track.frames.at(-1)!.transform).toBe("translate(0.00px, 0.00px) scale(1.00000, 1.00000)");
     // La croix ne surgit pas pleine : elle paraît pendant le trajet.
     const glass = live(root()!.querySelector("[data-sheet-glass]"))[0] as FakeAnimation;
     expect(glass.frames[0].opacity).toBe(0);
@@ -165,26 +195,59 @@ describe("l'ouverture", () => {
     // La fenêtre porte l'affiche déjà chargée — rien n'est téléchargé pour animer.
     const posters = Array.from(layer()!.querySelectorAll("img")).map((i) => i.getAttribute("src"));
     expect(posters).toContain("https://img.test/poster.jpg");
-    // Créées en pause, démarrées ensemble ; le contenu est porté par la carte — la même piste que son
-    // fond —, et paraît de 55 à 95 % du trajet (« le décalage de l'arrivée du contenu, c'est bizarre »).
+    // Créées en pause ; le contenu arrive d'un bloc quand la carte est presque entière.
     const content = root()!.querySelector("[data-sheet-content]")!;
-    const ride = live(content)[0] as FakeAnimation;
-    expect(ride.paused).toBe(true);
-    expect(ride.frames.map((f) => f.transform)).toEqual(rise.frames.map((f) => f.transform));
-    expect(ride.frames[0].opacity).toBe(0);
-    expect(ride.frames.at(-1)!.opacity).toBe(1);
-    expect(ride.options.duration).toBe(rise.options.duration);
-    // Fini, le contenu ne garde aucune transformation.
-    expect(ride.options.fill).toBe("backwards");
+    const reveal = live(content)[0] as FakeAnimation;
+    expect(reveal.paused).toBe(true);
+    expect(reveal.frames[0].opacity).toBe(0);
+    expect(reveal.options.delay).toBeGreaterThan(0);
+    expect(reveal.options.fill).toBe("backwards");
 
     await runOpen();
     // Arrivée : le vrai visuel a repris la place de la fenêtre ; l'assombrissement reste.
     expect(root()!.querySelector<HTMLElement>("[data-sheet-photo]")!.style.visibility).toBe("");
     expect(root()!.style.backgroundColor).toBe("rgb(10, 10, 15)");
     expect(layer()!.querySelectorAll("img").length).toBe(0);
-    // Le fond à part est parti : la vraie carte, posée exactement là, a repris son encre.
     expect(layer()!.children.length).toBe(1);
-    expect(layer()).not.toBeNull();
+  });
+
+  it("la fenêtre ne plonge jamais : son haut reste entre l'affiche et le haut de la carte", () => {
+    // Audit du 10/10/2026 : la bannière, logée dans une carte qui montait à part, partait vers le bas
+    // de l'écran avant de remonter (y 282 → 626 → 8).
+    press(addPoster().querySelector("img")!);
+    render(<Sheet />);
+    const track = live(windowOf())[0] as FakeAnimation;
+    for (const f of track.frames) {
+      const top = topAt(f);
+      expect(top).toBeLessThanOrEqual(BOXES.poster.y + 0.01);
+      expect(top).toBeGreaterThanOrEqual(BOXES.sheet.y - 0.01);
+    }
+  });
+
+  it("aucun rayon animé : seules des transformations et des opacités bougent", async () => {
+    press(addPoster().querySelector("img")!);
+    const { rerender } = render(<Sheet />);
+    await runOpen();
+    rerender(<Sheet leaving />);
+    for (const a of fake.created) for (const f of a.frames) expect(Object.keys(f).filter((k) => k !== "offset" && k !== "transform" && k !== "opacity")).toEqual([]);
+  });
+
+  it("ce qui est sous la ligne de flottaison attend l'arrivée et un moment calme", async () => {
+    press(addPoster().querySelector("img")!);
+    render(<Sheet />);
+    expect(root()!.dataset.settled).toBe("false");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    // En plein vol : toujours pas.
+    expect(root()!.dataset.settled).toBe("false");
+    await runOpen();
+    expect(root()!.dataset.settled).toBe("true");
+  });
+
+  it("sans trajet, tout est là d'emblée", () => {
+    render(<Sheet />);
+    expect(root()!.dataset.handles).toBe("false");
   });
 
   it("ne vole pas sans appui récent, ni au retour arrière, ni pour une fiche recouverte", () => {
@@ -210,8 +273,143 @@ describe("l'ouverture", () => {
   });
 });
 
+describe("le visuel de la fiche", () => {
+  it("pas encore chargé : la vignette touchée vole pleine, le visuel tenu éteint par son fondu", async () => {
+    press(addPoster().querySelector("img")!);
+    render(<Sheet />);
+    const win = windowOf();
+    const posterImg = Array.from(win.querySelectorAll("img")).find((i) => i.getAttribute("src") === "https://img.test/poster.jpg")!;
+    expect((live(posterImg)[0] as FakeAnimation).frames.every((f) => f.opacity === 1)).toBe(true);
+    const bdImg = Array.from(win.querySelectorAll("img")).find((i) => i.getAttribute("src") === "https://img.test/backdrop.jpg")!;
+    const bdFade = bdImg.parentElement!.parentElement as HTMLElement;
+    expect(bdFade.style.opacity).toBe("0");
+    expect(root()!.hasAttribute("data-sheet-flying")).toBe(true);
+    await runOpen();
+    expect(root()!.hasAttribute("data-sheet-flying")).toBe(false);
+    // Jamais arrivé pendant le vol : l'affiche reste par-dessus le visuel, dans un calque à elle.
+    const photo = root()!.querySelector<HTMLElement>("[data-sheet-photo]")!;
+    const standIn = photo.nextElementSibling as HTMLElement;
+    expect(standIn.hasAttribute("data-sheet-standin")).toBe(true);
+    expect(standIn.style.backgroundImage).toContain("https://img.test/poster.jpg");
+  });
+
+  it("décodé en plein vol : il paraît en fondu pendant le trajet, et l'arrivée n'a plus rien à échanger", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((ok) => (release = ok));
+    const original = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "decode");
+    Object.defineProperty(HTMLImageElement.prototype, "decode", {
+      configurable: true,
+      value(this: HTMLImageElement) {
+        return this.getAttribute("src") === "https://img.test/backdrop.jpg" ? gate : Promise.resolve();
+      },
+    });
+    try {
+      press(addPoster().querySelector("img")!);
+      render(<Sheet />);
+      const win = windowOf();
+      const bdImg = Array.from(win.querySelectorAll("img")).find((i) => i.getAttribute("src") === "https://img.test/backdrop.jpg")!;
+      const bdFade = bdImg.parentElement!.parentElement as HTMLElement;
+      const posterFade = (Array.from(win.querySelectorAll("img")).find((i) => i.getAttribute("src") === "https://img.test/poster.jpg")!).parentElement as HTMLElement;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(live(bdFade)).toHaveLength(0);
+      await act(async () => {
+        release();
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      const inFade = live(bdFade)[0] as FakeAnimation;
+      const outFade = live(posterFade)[0] as FakeAnimation;
+      expect(inFade.frames.map((f) => f.opacity)).toEqual([0, 1]);
+      expect(outFade.frames.map((f) => f.opacity)).toEqual([1, 0]);
+      await runOpen();
+      // Ce que la fenêtre montrait (le visuel) sert de relais tant que l'image de la fiche se charge.
+      const standIn = root()!.querySelector<HTMLElement>("[data-sheet-standin]");
+      expect(standIn?.style.backgroundImage ?? "").toContain("backdrop.jpg");
+    } finally {
+      if (original) Object.defineProperty(HTMLImageElement.prototype, "decode", original);
+      else delete (HTMLImageElement.prototype as { decode?: unknown }).decode;
+    }
+  });
+
+  it("arrivé après le trajet : l'affiche s'efface en fondu, jamais d'un coup", async () => {
+    press(addPoster().querySelector("img")!);
+    render(<Sheet />);
+    await runOpen();
+    const photo = root()!.querySelector<HTMLImageElement>("[data-sheet-photo]")!;
+    const standIn = photo.nextElementSibling as HTMLElement;
+    // Pas encore chargé : jamais rendu opaque pendant qu'il se peint par bandes.
+    expect(photo.style.opacity).not.toBe("1");
+    markLoaded(photo);
+    expect(photo.style.opacity).toBe("1");
+    const fade = live(standIn)[0] as FakeAnimation;
+    expect(fade.frames.map((f) => f.opacity)).toEqual([1, 0]);
+    expect(fade.options.duration).toBe(300);
+    expect(standIn.isConnected).toBe(true);
+    act(() => fade.finish());
+    expect(standIn.isConnected).toBe(false);
+  });
+
+  it("déjà chargé : l'affiche s'efface sur lui pendant le trajet", async () => {
+    loaded.add("https://img.test/backdrop.jpg");
+    {
+      press(addPoster().querySelector("img")!);
+      render(<Sheet />);
+      const posterImg = Array.from(windowOf().querySelectorAll("img")).find((i) => i.getAttribute("src") === "https://img.test/poster.jpg")!;
+      const posterTrack = live(posterImg)[0] as FakeAnimation;
+      expect(posterTrack.frames[0].opacity).toBe(1);
+      expect(posterTrack.frames.at(-1)!.opacity).toBe(0);
+    }
+  });
+
+  it("une adresse qui change pendant le chargement : l'image de relais reste jusqu'au nouveau visuel chargé", async () => {
+    // Fiche de série au premier lancement (Louis, iPhone, 10/10/2026) : la bannière noire, une fine
+    // bande d'image en haut — un grand visuel encore en chargement, rendu opaque trop tôt.
+    press(addPoster().querySelector("img")!);
+    render(<Sheet />);
+    await runOpen();
+    const photo = root()!.querySelector<HTMLImageElement>("[data-sheet-photo]")!;
+    const standIn = photo.nextElementSibling as HTMLElement;
+    photo.setAttribute("src", "https://img.test/backdrop-fresh.jpg");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // Toujours rien de chargé : l'image de relais tient la bannière, le visuel reste caché.
+    expect(standIn.isConnected).toBe(true);
+    expect(live(standIn)).toHaveLength(0);
+    expect(photo.style.opacity).not.toBe("1");
+    markLoaded(photo);
+    expect(photo.style.opacity).toBe("1");
+    expect((live(standIn)[0] as FakeAnimation).frames.map((f) => f.opacity)).toEqual([1, 0]);
+  });
+
+  it("le visuel monté après l'arrivée : l'image de relais tient la bannière jusqu'à son chargement", async () => {
+    press(addPoster().querySelector("img")!);
+    render(<Sheet />);
+    const photo = root()!.querySelector<HTMLImageElement>("[data-sheet-photo]")!;
+    const banner = photo.parentElement!;
+    await runOpen();
+    // La fiche remplace son visuel par un autre élément (les données de la série arrivées).
+    const fresh = document.createElement("img");
+    fresh.setAttribute("data-sheet-photo", "");
+    fresh.setAttribute("src", "https://img.test/series-bd.jpg");
+    photo.replaceWith(fresh);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const standIn = banner.querySelector<HTMLElement>("[data-sheet-standin]")!;
+    expect(standIn).not.toBeNull();
+    expect(live(standIn)).toHaveLength(0);
+    expect(fresh.style.opacity).not.toBe("1");
+    markLoaded(fresh);
+    expect(fresh.style.opacity).toBe("1");
+    expect((live(standIn)[0] as FakeAnimation).frames.map((f) => f.opacity)).toEqual([1, 0]);
+  });
+});
+
 describe("la fermeture", () => {
-  it("revole vers l'affiche : une copie sort à la place de la fiche, qui se cache aussitôt", async () => {
+  it("la carte entière rétrécit dans l'affiche ; la copie s'efface en place ; tout part une image plus tard", async () => {
     const poster = addPoster();
     press(poster.querySelector("img")!);
     const { rerender } = render(<Sheet />);
@@ -228,24 +426,27 @@ describe("la fermeture", () => {
     rerender(<Sheet leaving />);
     expect(root()!.style.visibility).toBe("hidden");
     const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
-    expect(copy).not.toBeNull();
     expect(copy.inert).toBe(true);
     // Copie légère : le bloc hors de l'écran n'y est qu'un vide de la même hauteur, sans ses images.
     const hole = copy.querySelector<HTMLElement>(".heavy")!;
     expect(hole.children.length).toBe(0);
     expect(hole.style.height).toBe("600px");
-    // Le fond de la carte redescend sous l'image jusque sous l'écran, et la copie (le contenu, la
-    // croix, le cadre) avec lui, sur la même piste ; la fenêtre revole vers l'affiche — sans attendre.
     expect(copy.style.backgroundColor).toBe("transparent");
+    // La copie ne bouge pas : seul son contenu s'efface.
+    expect(live(copy).some((a) => a.frames.some((f) => "transform" in f))).toBe(false);
     const win = copy.previousElementSibling as HTMLElement;
-    const shell = win.previousElementSibling as HTMLElement;
-    const down = live(shell).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))!;
-    expect(down.frames[0].transform).toBe("translateY(0.00px)");
-    expect(down.frames.at(-1)!.transform).toBe("translateY(804.00px)");
-    const copyDown = live(copy).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))!;
-    expect(copyDown.frames.map((f) => f.transform)).toEqual(down.frames.map((f) => f.transform));
-    expect(live(win).length).toBeGreaterThan(0);
-    expect(live(win).every((a) => !a.paused)).toBe(true);
+    const back = live(win)[0] as FakeAnimation;
+    // Part de la carte posée, finit réduite à l'affiche.
+    expect(back.frames[0].transform).toBe("translate(0.00px, 0.00px) scale(1.00000, 1.00000)");
+    expect(topAt(back.frames.at(-1)!)).toBeCloseTo(BOXES.poster.y, 0);
+    // Créées en pause, dans la tâche même de la fermeture ; lancées ensemble à l'image suivante.
+    expect(live(win).every((a) => a.paused && a.startTime === null)).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20);
+    });
+    const started = live(win).map((a) => a.startTime);
+    expect(started.every((t) => t !== null)).toBe(true);
+    expect(new Set(started).size).toBe(1);
     expect(sheetMorphForTests.flights()).toBe(1);
     expect(poster.style.opacity).toBe("0");
 
@@ -260,43 +461,23 @@ describe("la fermeture", () => {
     expect(sheetMorphForTests.flights()).toBe(0);
   });
 
-  it("fermée pendant l'aller, part de la pose peinte à cet instant : bannière, carte, contenu", async () => {
-    // Louis sur iPhone (10/10/2026) : fermée avant la fin de l'ouverture, « la bannière se décale
-    // légèrement du cadre de la fiche, comme si elle devait finir son animation puis se recaler ».
+  it("fermée pendant l'aller, part de la pose peinte à cet instant", async () => {
     press(addPoster().querySelector("img")!);
     const { rerender } = render(<Sheet />);
-    const winOpen = layer()!.lastElementChild as HTMLElement;
-    const shellOpen = winOpen.previousElementSibling as HTMLElement;
-    const rise = live(shellOpen).find((a) => /translateY/.test(String(a.frames[0].transform)))!;
-    const winTrack = live(winOpen)[0] as FakeAnimation;
-    // Le départ (décodage, deux images), puis 60 ms de trajet.
+    const winTrack = live(windowOf())[0] as FakeAnimation;
     await act(async () => {
       await vi.advanceTimersByTimeAsync(200);
     });
-    expect(rise.startTime).not.toBeNull();
+    expect(winTrack.startTime).not.toBeNull();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60);
     });
-    const at = (performance.now() - rise.startTime!) / Number(rise.options.duration);
+    const at = (performance.now() - winTrack.startTime!) / Number(winTrack.options.duration);
     expect(at).toBeGreaterThan(0);
     expect(at).toBeLessThan(1);
 
     rerender(<Sheet leaving />);
-    const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
-    const win = copy.previousElementSibling as HTMLElement;
-    const shell = win.previousElementSibling as HTMLElement;
-    const down = live(shell).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))!;
-    const copyDown = live(copy).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))!;
-    const winBack = live(win)[0] as FakeAnimation;
-
-    // La carte et la copie repartent d'où montait la carte — jamais de leur place au repos.
-    const yNow = sampleAt(rise.frames, at, "transform")[0];
-    const yFrom = numbers(down.frames[0].transform)[0];
-    expect(Math.abs(yFrom - yNow)).toBeLessThan(2);
-    expect(yFrom).toBeGreaterThan(1);
-    expect(copyDown.frames[0].transform).toBe(down.frames[0].transform);
-    expect(copy.style.transform).toBe(down.frames[0].transform);
-    // La fenêtre repart de la pose de l'aller à cet instant (place et échelle), pas de la bannière posée.
+    const winBack = live(layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!.previousElementSibling)[0] as FakeAnimation;
     const poseNow = sampleAt(winTrack.frames, at, "transform");
     const poseFrom = numbers(winBack.frames[0].transform);
     expect(poseFrom.length).toBe(poseNow.length);
@@ -304,109 +485,36 @@ describe("la fermeture", () => {
     expect(winBack.frames[0].transform).not.toBe(winTrack.frames.at(-1)!.transform);
   });
 
-  it("la bannière en vol se loge dans la carte qui monte, au lieu de flotter au-dessus de ses bords", async () => {
-    // Louis sur iPhone (10/10/2026) : sur une ouverture refermée vite, « la bannière apparaît
-    // brièvement en dehors de la fiche et ses bordures » — elle filait vers sa place au repos pendant
-    // que la carte (et le contenu qu'elle porte) montait encore du bas.
-    press(addPoster().querySelector("img")!);
-    render(<Sheet />);
-    const win = layer()!.lastElementChild as HTMLElement;
-    const shell = win.previousElementSibling as HTMLElement;
-    const rise = live(shell).find((a) => /translateY/.test(String(a.frames[0].transform)))!;
-    const track = live(win)[0] as FakeAnimation;
-    expect(track.frames.length).toBe(rise.frames.length);
-    // Au départ, l'affiche touchée, là où elle est.
-    expect(numbers(track.frames[0].transform)[1]).toBeCloseTo(BOXES.poster.y - BOXES.banner.y, 0);
-    // Passé le premier tiers, le haut de l'image n'est jamais au-dessus du haut de la carte.
-    let checked = 0;
-    track.frames.forEach((f, i) => {
-      if ((f.offset as number) < 0.5) return;
-      const imageTop = BOXES.banner.y + numbers(f.transform)[1];
-      const cardTop = BOXES.sheet.y + numbers(rise.frames[i].transform)[0];
-      expect(imageTop).toBeGreaterThanOrEqual(cardTop - 1);
-      checked++;
-    });
-    expect(checked).toBeGreaterThan(10);
-    // À l'arrivée, sa place au repos.
-    expect(numbers(track.frames.at(-1)!.transform).slice(0, 2)).toEqual([0, 0]);
-  });
-
-  it("le visuel de la fiche pas encore chargé : la vignette touchée vole jusqu'au bout et reste en fond de la bannière", async () => {
-    // Une reprise ouverte depuis « Reprendre » : sa bannière n'a jamais été demandée. On ne l'attend
-    // pas, rien n'est téléchargé pour animer — la vignette déjà là sert d'image jusqu'à son arrivée.
-    press(addPoster().querySelector("img")!);
-    render(<Sheet />);
-    const win = layer()!.lastElementChild as HTMLElement;
-    const imgs = Array.from(win.querySelectorAll("img"));
-    const posterImg = imgs.find((i) => i.getAttribute("src") === "https://img.test/poster.jpg")!;
-    const posterTrack = live(posterImg)[0] as FakeAnimation;
-    expect(posterTrack.frames.every((f) => f.opacity === 1)).toBe(true);
-    // Pendant le trajet, tout visuel de la fiche — même monté entre-temps — est caché (globals.css).
-    expect(root()!.hasAttribute("data-sheet-flying")).toBe(true);
-    await runOpen();
-    expect(root()!.hasAttribute("data-sheet-flying")).toBe(false);
-    const photo = root()!.querySelector<HTMLElement>("[data-sheet-photo]")!;
-    expect(photo.style.opacity).toBe("1");
-    // L'affiche reste par-dessus le visuel, dans un calque à elle, tant qu'il n'est pas arrivé.
-    const standIn = photo.nextElementSibling as HTMLElement;
-    expect(standIn.hasAttribute("data-sheet-standin")).toBe(true);
-    expect(standIn.style.backgroundImage).toContain("https://img.test/poster.jpg");
-    expect(live(standIn)).toHaveLength(0);
-  });
-
-  it("le visuel arrivé après le trajet : l'affiche s'efface en fondu, jamais d'un coup", async () => {
-    // Louis (iPhone, 10/10/2026) : depuis la bannière du téléphone, l'affiche en remplacement était
-    // recouverte d'un coup par le vrai visuel à son arrivée — « changement brutal, perturbant ».
-    press(addPoster().querySelector("img")!);
-    render(<Sheet />);
-    await runOpen();
-    const photo = root()!.querySelector<HTMLElement>("[data-sheet-photo]")!;
-    const standIn = photo.nextElementSibling as HTMLElement;
-    fireEvent.load(photo);
-    const fade = live(standIn)[0] as FakeAnimation;
-    expect(fade.frames.map((f) => f.opacity)).toEqual([1, 0]);
-    expect(fade.options.duration).toBe(300);
-    // Encore là pendant le fondu ; retiré seulement à sa fin.
-    expect(standIn.isConnected).toBe(true);
-    act(() => fade.finish());
-    expect(standIn.isConnected).toBe(false);
-  });
-
-  it("le visuel déjà chargé : l'affiche s'efface sur lui pendant le trajet", async () => {
-    const natural = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "naturalWidth");
-    const complete = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "complete");
-    Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", { configurable: true, get: () => 1280 });
-    Object.defineProperty(HTMLImageElement.prototype, "complete", { configurable: true, get: () => true });
-    try {
-      press(addPoster().querySelector("img")!);
-      render(<Sheet />);
-      const win = layer()!.lastElementChild as HTMLElement;
-      const posterImg = Array.from(win.querySelectorAll("img")).find((i) => i.getAttribute("src") === "https://img.test/poster.jpg")!;
-      const posterTrack = live(posterImg)[0] as FakeAnimation;
-      expect(posterTrack.frames[0].opacity).toBe(1);
-      expect(posterTrack.frames.at(-1)!.opacity).toBe(0);
-    } finally {
-      if (natural) Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", natural);
-      if (complete) Object.defineProperty(HTMLImageElement.prototype, "complete", complete);
-    }
-  });
-
-  it("tirée au doigt pendant l'aller, la carte repart de sa montée plus le doigt", async () => {
+  it("tirée au doigt, la carte repart d'où le doigt l'a mise — d'un bloc, visuel compris", async () => {
     press(addPoster().querySelector("img")!);
     const { rerender } = render(<Sheet />);
-    const shellOpen = (layer()!.lastElementChild as HTMLElement).previousElementSibling as HTMLElement;
-    const rise = live(shellOpen).find((a) => /translateY/.test(String(a.frames[0].transform)))!;
+    await runOpen();
+    root()!.style.transform = "translateY(60px)";
+    rerender(<Sheet leaving />);
+    const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
+    expect(copy.style.transform).toBe("translateY(60.00px)");
+    const win = copy.previousElementSibling as HTMLElement;
+    const back = live(win)[0] as FakeAnimation;
+    expect(topAt(back.frames[0])).toBeCloseTo(BOXES.sheet.y + 60, 1);
+    // Le visuel dans la fenêtre, décalé d'autant : rien ne se sépare de la carte.
+    const bdImg = Array.from(win.querySelectorAll("img")).find((i) => i.getAttribute("src") === "https://img.test/backdrop.jpg")!;
+    const bdTrack = live(bdImg.parentElement)[0] as FakeAnimation;
+    expect(numbers(bdTrack.frames[0].transform)[1]).toBeCloseTo(60, 1);
+  });
+
+  it("tirée au doigt pendant l'aller, la carte repart de la pose de l'aller plus le doigt", async () => {
+    press(addPoster().querySelector("img")!);
+    const { rerender } = render(<Sheet />);
+    const winTrack = live(windowOf())[0] as FakeAnimation;
     await act(async () => {
       await vi.advanceTimersByTimeAsync(260);
     });
-    const at = (performance.now() - rise.startTime!) / Number(rise.options.duration);
+    const at = (performance.now() - winTrack.startTime!) / Number(winTrack.options.duration);
     root()!.style.transform = "translateY(40px)";
     rerender(<Sheet leaving />);
-    const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
-    const shell = (copy.previousElementSibling as HTMLElement).previousElementSibling as HTMLElement;
-    const down = live(shell).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))!;
-    const yNow = sampleAt(rise.frames, at, "transform")[0];
-    expect(Math.abs(numbers(down.frames[0].transform)[0] - (yNow + 40))).toBeLessThan(2);
+    const winBack = live(layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!.previousElementSibling)[0] as FakeAnimation;
+    const yNow = sampleAt(winTrack.frames, at, "transform")[1];
+    expect(Math.abs(numbers(winBack.frames[0].transform)[1] - (yNow + 40))).toBeLessThan(2);
   });
 
   it("sans affiche à l'écran, descend un peu en s'effaçant", async () => {
@@ -481,7 +589,6 @@ describe("la fermeture", () => {
     expect(sheetMorphForTests.flights()).toBe(1);
     expect(layer()!.querySelector(".sheet-morph-clone")).not.toBeNull();
     expect(poster.style.opacity).toBe("0");
-    // Le drapeau du retour retombe à l'image suivante : la laisser passer, pour les tests d'après.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(50);
     });
@@ -511,7 +618,6 @@ describe("l'interruption", () => {
     const other = addPoster("other");
     press(other.querySelector("img")!);
     render(<Sheet />);
-    // L'ancien retour est coupé : son affiche reparaît, sa copie est partie ; la nouvelle fiche vole.
     expect(sheetMorphForTests.flights()).toBe(0);
     expect(poster.style.opacity).toBe("");
     expect(document.body.querySelectorAll(".sheet-morph-clone").length).toBe(0);
@@ -532,18 +638,11 @@ describe("l'interruption", () => {
     press(poster.querySelector("img")!);
     render(<Sheet />);
     expect(sheetMorphForTests.flights()).toBe(0);
-    // Toujours cachée : la fiche en repart. Et la fenêtre ne repart pas de la carte : sa première
-    // image est le point où en était le retour, plus grand que l'affiche.
     expect(poster.style.opacity).toBe("0");
-    // La fenêtre (l'élément qui porte les deux images), au-dessus du fond de la carte.
-    const win = layer()!.querySelector("img")!.parentElement!.parentElement!.parentElement as HTMLElement;
-    const firstFrame = live(win).find((a) => a.frames[0].transform)!.frames[0].transform as string;
-    // Le fond de la carte repart d'où le retour l'avait laissé, pas du bas de l'écran.
-    const shell = win.previousElementSibling as HTMLElement;
-    const rise = live(shell).find((a) => /translateY/.test(String(a.frames[0].transform)))!;
-    expect(rise.frames[0].transform).not.toBe("translateY(804.00px)");
+    // La fenêtre ne repart pas de l'affiche : sa première image est le point où en était le retour.
+    const firstFrame = (live(windowOf())[0] as FakeAnimation).frames[0].transform as string;
     const sx = Number(/scale\(([\d.]+),/.exec(firstFrame)![1]);
-    expect(sx).toBeGreaterThan(BOXES.poster.w / BOXES.banner.w + 0.01);
+    expect(sx).toBeGreaterThan(BOXES.poster.w / BOXES.sheet.w + 0.01);
   });
 });
 

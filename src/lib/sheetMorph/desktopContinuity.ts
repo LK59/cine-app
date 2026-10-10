@@ -515,7 +515,8 @@ export function useDesktopContinuity(opts: SheetMorphOptions & { off?: boolean; 
     timers.push(sheetTimeout(finish, d));
   }
 
-  return { handlesEntry: entry !== "none" };
+  // Les fiches du bureau ne diffèrent rien sous la ligne de flottaison : elles sont posées d'emblée.
+  return { handlesEntry: entry !== "none", settled: true };
 }
 
 /**

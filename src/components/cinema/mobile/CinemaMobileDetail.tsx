@@ -51,9 +51,6 @@ import { ToggleGlyph } from "@/components/ToggleGlyph";
 /** Un visage sans personne : ce qui donne sa hauteur à la place tenue de la distribution. */
 const RESERVED_CAST: CinemaCastMember[] = [{ tmdbId: 0, name: "\u00a0", character: "\u00a0", photoUrl: null }];
 
-/** Le temps d'une ouverture au t\u00e9l\u00e9phone (\u2248 400 ms pos\u00e9e) \u2014 voir `belowFold`. */
-const BELOW_FOLD_DELAY_MS = 450;
-
 /** Les \u00e9pisodes mont\u00e9s d'embl\u00e9e : le haut de la liste, s'il d\u00e9passe jamais de l'\u00e9cran \u00e0 l'ouverture. */
 const EPISODES_FIRST = 3;
 
@@ -186,13 +183,13 @@ export function CinemaMobileDetail({
    * fiche montée. Rien de cela n'est à l'écran pendant l'ouverture, et rien ne bouge au-dessus quand
    * ça arrive : seules les cibles du trajet (bannière, haut de la carte) comptent, et elles sont en haut.
    * Sans trajet (retour arrière, lien, mouvement réduit), tout est là d'emblée, comme avant.
+   *
+   * Monté à l'arrivée et au premier moment calme qui suit (`settled`), et non plus sur une minuterie
+   * de 450 ms : le trajet part 50 à 150 ms après le montage et se pose vers 400–600 ms, si bien que
+   * la minuterie tombait au milieu ou à la toute fin du vol, dans un contenu promu — des tâches de
+   * 57 à 62 ms juste avant l'arrivée (audit du 10/10/2026).
    */
-  const [belowFold, setBelowFold] = useState(() => !morph.handlesEntry);
-  useEffect(() => {
-    if (belowFold) return;
-    const timer = setTimeout(() => setBelowFold(true), BELOW_FOLD_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [belowFold]);
+  const belowFold = morph.settled;
 
 
   const isSeries = mediaType === "series";
@@ -244,6 +241,15 @@ export function CinemaMobileDetail({
 
   const [logoErrored, setLogoErrored] = useState(false);
   const [backdropFailed, setBackdropFailed] = useState(false);
+  /**
+   * Le visuel de la bannière, gardé tel qu'il était à l'ouverture : des données fraîches qui en
+   * changent l'adresse (le catalogue du réseau après celui de l'appareil) remplaçaient l'image
+   * affichée par une autre encore à télécharger — au premier lancement, une grande image de série se
+   * peignait alors par bandes sur une bannière noire (Louis, iPhone, 10/10/2026). Une fiche qui
+   * n'avait pas encore de visuel prend le premier qui arrive.
+   */
+  const [openedBackdrop] = useState(item.backdropUrl);
+  const backdropSrc = openedBackdrop || item.backdropUrl;
   const seasons = useMemo(() => episodesData?.seasons ?? [], [episodesData]);
   const seasonCount = isSeries ? seasons.length || ((item as CinemaSeries).seasonCount ?? 0) : 0;
   // Ce qui manque à la série — pour Sonarr, pas pour Jellyseerr : la série est là, ce sont des
@@ -462,9 +468,9 @@ export function CinemaMobileDetail({
             Sans cela le navigateur dessinait sa propre vignette d'image cassée — un « ? » en
             plein milieu de la bannière, ce qu'on voyait sur les fiches de séries dont le visuel
             manque. */}
-        {item.backdropUrl && !backdropFailed ? (
+        {backdropSrc && !backdropFailed ? (
           <FadeInImg
-            src={item.backdropUrl}
+            src={backdropSrc}
             alt=""
             onError={() => setBackdropFailed(true)}
             data-sheet-photo=""

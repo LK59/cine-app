@@ -5,7 +5,9 @@ import {
   appleCloseMotion,
   appleOpenMotion,
   appleResponse,
-  cardRiseTrack,
+  cardOpenPoses,
+  cardRestPose,
+  closeResponse,
   closePoses,
   closeStartVelocity,
   coverTf,
@@ -108,32 +110,47 @@ describe("les images clés", () => {
   });
 });
 
-describe("le fond de la carte du téléphone, à part (la maquette validée)", () => {
-  // Deux portages l'avaient perdue : la fiche entière montait sous l'image (8.31.0, « vient du bas et
-  // se colle »), puis la fiche entière collée à l'image (8.31.3, « arrive sèchement en un bloc »). Le
-  // fond monte seul, du bas de l'écran, sur le même ressort que l'image qui vole au-dessus de lui.
-  const ty = (k: Keyframe) => Number(/translateY\((-?[\d.]+)px\)/.exec(String(k.transform))![1]);
+describe("la carte du téléphone, une seule pièce (le modèle des cartes d'iOS)", () => {
+  // Avant : la bannière volait seule au-dessus d'un fond de carte qui montait à part. Pour la loger
+  // dans la carte, sa cible glissait avec elle et l'image plongeait vers le bas avant de remonter
+  // (y 282 → 626 → 8, audit du 10/10/2026). La carte entière grandit maintenant depuis l'affiche.
+  const card: Box = { x: 0, y: 24, w: 390, h: 820 };
+  const cardBanner: Box = { x: 0, y: 24, w: 390, h: 219 };
 
-  it("à l'aller, part tout entier sous l'écran et se pose, sur les mêmes images clés que l'image", () => {
-    const m = appleOpenMotion(poster, banner, stage, "phone");
-    const samples = sampleMotion(m);
-    const drop = stage.H - 24;
-    const track = cardRiseTrack(samples, drop, 0);
-    expect(track).toHaveLength(samples.length);
-    expect(ty(track[0])).toBeCloseTo(drop, 1);
-    expect(ty(track.at(-1)!)).toBe(0);
-    // Le même ressort que l'image, mais son propre trajet : rien ne le rattache au bas de l'image.
-    samples.forEach(({ q }, i) => expect(ty(track[i])).toBeCloseTo(drop * (1 - q), 1));
-    // Transformations seulement : rien qui passe par le fil principal.
-    for (const k of track) expect(Object.keys(k).sort()).toEqual(["offset", "transform"]);
+  it("la fenêtre ne s'éloigne jamais de son arrivée : son haut va de l'affiche à la carte, sans plonger", () => {
+    const { at } = cardOpenPoses(poster, uniformCorners(8), card, cardBanner, uniformCorners(16));
+    const m = appleOpenMotion(poster, card, stage, "phone");
+    for (const { q } of sampleMotion(m)) {
+      const y = at(q).box.y;
+      expect(y).toBeLessThanOrEqual(Math.max(poster.y, card.y) + 1e-6);
+      expect(y).toBeGreaterThanOrEqual(Math.min(poster.y, card.y) - 1e-6);
+    }
+    expect(at(0).box).toEqual(poster);
+    expect(at(1).box).toEqual(card);
   });
 
-  it("au retour, part d'où il en est (le doigt) et finit sous l'écran", () => {
-    const samples = sampleMotion(appleCloseMotion(banner, poster, stage, "phone"));
-    const finger = 60;
-    const track = cardRiseTrack(samples, finger, finger + stage.H - 24);
-    expect(ty(track[0])).toBe(finger);
-    expect(ty(track.at(-1)!)).toBeCloseTo(finger + stage.H - 24, 1);
+  it("le visuel est posé sur la bannière en haut de la carte, l'affiche part exactement d'elle-même", () => {
+    const { at } = cardOpenPoses(poster, uniformCorners(8), card, cardBanner, uniformCorners(16));
+    expect(at(0).bd).toEqual(coverTf(cardBanner, poster));
+    expect(at(0).poster).toEqual({ tx: 0, ty: 0, s: 1 });
+    expect(at(1).bd).toEqual({ tx: 0, ty: 0, s: 1 });
+    expect(at(1).bdOpacity).toBe(1);
+    expect(at(1).posterOpacity).toBe(0);
+  });
+
+  it("le retour part de la carte tirée au doigt, d'un bloc", () => {
+    const rest = cardRestPose(card, uniformCorners(16), cardBanner, poster, 60);
+    expect(rest.box.y).toBe(card.y + 60);
+    expect(rest.bd.ty).toBe(60);
+    expect(rest.bdOpacity).toBe(1);
+  });
+
+  it("la fermeture au doigt est moins vive qu'au bureau, mais jamais plus lente que l'ouverture", () => {
+    const open = appleResponse(card, poster, stage, "phone");
+    const close = closeResponse(card, poster, stage, "phone");
+    expect(close).toBeLessThan(open);
+    expect(close).toBeGreaterThan(0.7 * open);
+    expect(closeResponse(card, poster, stage, "desktop")).toBeCloseTo(0.7 * appleResponse(card, poster, stage, "desktop"), 6);
   });
 
   it("la croix paraît de 30 à 95 % du trajet, pas pleine sur une image encore en vol", () => {
@@ -141,5 +158,20 @@ describe("le fond de la carte du téléphone, à part (la maquette validée)", (
     expect(GLASS_IN.to).toBeLessThan(1);
     const m = appleOpenMotion(poster, banner, stage, "phone");
     expect(timeAt(sampleMotion(m), m.duration, GLASS_IN.from)).toBeGreaterThan(0);
+  });
+});
+
+describe("la fermeture au doigt, une seule pièce lancée à la vitesse du doigt", () => {
+  it("le ressort du retour part exactement à la vitesse du doigt projetée sur le chemin de la carte", () => {
+    const card: Box = { x: 0, y: 84, w: 390, h: 760 };
+    const v0 = closeStartVelocity(card, poster, null, 2400);
+    // L'affiche est plus bas que le centre de la carte : un doigt jeté vers le bas lance le retour.
+    expect(v0).toBeGreaterThan(0);
+    const m = appleCloseMotion(card, poster, stage, "phone", v0);
+    expect(m.v(0)).toBeCloseTo(v0, 6);
+    // La carte entière suit ce même ressort : sa vitesse de départ, projetée, est celle du doigt.
+    const dy = poster.y + poster.h / 2 - (card.y + card.h / 2);
+    const dx = poster.x + poster.w / 2 - (card.x + card.w / 2);
+    expect(m.v(0) * (dy * dy + dx * dx)).toBeCloseTo(2400 * dy, 3);
   });
 });

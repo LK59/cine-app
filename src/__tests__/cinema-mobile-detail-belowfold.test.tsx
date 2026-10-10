@@ -74,7 +74,7 @@ afterEach(() => {
 });
 
 describe("CinemaMobileDetail — le bas de la fiche pendant l'ouverture", () => {
-  it("ouverte depuis une affiche (le trajet mène l'entrée), le bas n'arrive qu'une fois l'ouverture posée", () => {
+  it("ouverte depuis une affiche (le trajet mène l'entrée), le bas n'arrive qu'une fois l'ouverture posée", async () => {
     const fake = installFakeAnimations();
     try {
       const card = document.createElement("button");
@@ -86,7 +86,15 @@ describe("CinemaMobileDetail — le bas de la fiche pendant l'ouverture", () => 
       fireEvent.pointerUp(img, { pointerId: 1, clientX: 5, clientY: 5 });
       draw();
       expect(below()).toEqual({ saga: false, similar: false });
-      act(() => vi.advanceTimersByTime(500));
+      // Pendant le trajet (le départ, puis un bout du vol) : toujours rien en bas.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(220);
+      });
+      expect(below()).toEqual({ saga: false, similar: false });
+      // Posée, puis un moment calme : le bas arrive (`settled`), et non sur une minuterie fixe.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
       expect(below()).toEqual({ saga: true, similar: true });
       card.remove();
     } finally {
