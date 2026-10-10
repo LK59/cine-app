@@ -266,6 +266,7 @@ export async function hydrateFromDisk(account: string | null, target: Hydrator, 
   let count = 0;
   try {
     const entries = await readAccountCache(account, now);
+    timing.idbMs = nowMs() - (timing.startedAt ?? 0);
     for (const entry of entries) {
       if (target.has(entry.key)) continue;
       if (entry.data && typeof entry.data === "object") hydratedObjects.add(entry.data);
@@ -297,6 +298,7 @@ export function noteResponse(key: string, data: unknown): void {
   if (lastNoted.get(key) === data) return;
   lastNoted.set(key, data);
   awaitingFresh.delete(key);
+  if (key === RESUME_FEED_KEY && timing.resumeNetworkMs === null) timing.resumeNetworkMs = nowMs();
   if (key === MOVIES_CATALOGUE_KEY && timing.networkMs === null) {
     timing.networkMs = nowMs();
     reportTiming();
@@ -451,14 +453,27 @@ export async function storageFacts(
 // ---------------------------------------------------------------------------------------------
 // Le journal des vitesses : ce que le cache a fait gagner, mesuré plutôt que supposé.
 
-const timing: {
-  startedAt: number | null;
-  cacheUsed: boolean;
-  cacheAgeMs: number | null;
-  cacheMs: number | null;
-  networkMs: number | null;
-  sent: boolean;
-} = { startedAt: null, cacheUsed: false, cacheAgeMs: null, cacheMs: null, networkMs: null, sent: false };
+/**
+ * `bootMs`, `idbMs` et `resumeNetworkMs` (10/10/2026) : `cacheMs` comptait depuis le début de la
+ * navigation, démarrage du JavaScript compris, et ne disait pas si la demi-seconde d'attente venait
+ * de l'appareil ou du code. Ils séparent le démarrage (le moment où la lecture commence), la lecture
+ * d'IndexedDB elle-même, et l'arrivée de « Reprendre » par le réseau — 4,3 s quand le serveur était
+ * bloqué par la construction du catalogue, alors que la route seule coûte 50 ms.
+ */
+const RESUME_FEED_KEY = "/api/jellyfin/resume";
+
+const EMPTY_TIMING = {
+  startedAt: null as number | null,
+  cacheUsed: false,
+  cacheAgeMs: null as number | null,
+  cacheMs: null as number | null,
+  networkMs: null as number | null,
+  idbMs: null as number | null,
+  resumeNetworkMs: null as number | null,
+  sent: false,
+};
+
+const timing = { ...EMPTY_TIMING };
 
 /**
  * Le premier passage en arrière-plan depuis le début de la navigation, s'il y en a eu un.
@@ -505,6 +520,9 @@ function reportTiming(): void {
     cacheUsed: timing.cacheUsed,
     cacheAgeMs: timing.cacheAgeMs,
     cacheMs: beforeHidden(timing.cacheMs),
+    bootMs: beforeHidden(timing.startedAt),
+    idbMs: timing.idbMs,
+    resumeNetworkMs: beforeHidden(timing.resumeNetworkMs),
     networkMs: beforeHidden(timing.networkMs),
     ...(firstHiddenAt !== null && (timing.networkMs === null || timing.networkMs >= firstHiddenAt) ? { hiddenAtMs: firstHiddenAt } : {}),
     standalone: typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches === true,
@@ -531,7 +549,7 @@ export function resetPersistentCacheForTests(): void {
   if (writeTimer) clearTimeout(writeTimer);
   writeTimer = null;
   dbPromise = null;
-  Object.assign(timing, { startedAt: null, cacheUsed: false, cacheAgeMs: null, cacheMs: null, networkMs: null, sent: false });
+  Object.assign(timing, EMPTY_TIMING);
   firstHiddenAt = null;
   watchingVisibility = false;
 }

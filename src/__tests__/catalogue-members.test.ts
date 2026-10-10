@@ -40,6 +40,38 @@ describe("le rapprochement par dossier", () => {
     expect(findJellyfinSeriesByTvdb([arenaJf], arena.tvdbId, arena.title, arena.year, arena.path)?.Id).toBe("jf1");
   });
 
+  it("garde le premier élément dans l'ordre de la liste, comme le parcours d'avant", () => {
+    const a = { Id: "a", Name: "X", ProviderIds: { Tmdb: "42" }, Path: "/m/A/a.mkv" } as JellyfinItem;
+    const b = { Id: "b", Name: "Y", ProviderIds: { tmdb: "42", Imdb: "tt1" }, Path: "/m/B/b.mkv" } as JellyfinItem;
+    expect(findJellyfinMovieByTmdb([a, b], 42)?.Id).toBe("a");
+    expect(findJellyfinMovieByTmdb([b, a], 42)?.Id).toBe("b");
+    expect(findJellyfinMovieByTmdb([a, b], 0, undefined, null, "tt1")?.Id).toBe("b");
+  });
+
+  it("relit une nouvelle liste : l'index suit le tableau, pas son contenu d'hier", () => {
+    const first = [{ Id: "old", Name: "Z", ProviderIds: { Tmdb: "7" }, Path: "/m/Z/z.mkv" } as JellyfinItem];
+    expect(findJellyfinMovieByTmdb(first, 7)?.Id).toBe("old");
+    const next = [{ Id: "new", Name: "Z", ProviderIds: { Tmdb: "7" }, Path: "/m/Z/z.mkv" } as JellyfinItem];
+    expect(findJellyfinMovieByTmdb(next, 7)?.Id).toBe("new");
+  });
+
+  it("ne relit pas toute la bibliothèque pour chaque titre (profil du 10/10/2026)", () => {
+    // 720 films × 720 éléments, le dossier de chacun recalculé à chaque fois : ~600 ms de boucle
+    // d'évènements bloquée par appel du catalogue. Indexé, les chemins ne sont lus qu'une fois.
+    const items = Array.from({ length: 800 }, (_, i) => {
+      const item = { Id: `jf${i}`, Name: `Film ${i}`, ProviderIds: { Tmdb: String(i + 1) } } as JellyfinItem;
+      let reads = 0;
+      Object.defineProperty(item, "Path", { get: () => (reads++, `/media/movies/Film ${i} (2000)/f.mkv`) });
+      Object.defineProperty(item, "reads", { get: () => reads });
+      return item;
+    });
+    for (let i = 0; i < 800; i++) {
+      expect(findJellyfinMovieByTmdb(items, i + 1, `Film ${i}`, 2000, null, `/movies/Film ${i} (2000)`)?.Id).toBe(`jf${i}`);
+    }
+    const totalReads = items.reduce((sum, item) => sum + (item as unknown as { reads: number }).reads, 0);
+    expect(totalReads).toBeLessThanOrEqual(800 * 2);
+  });
+
   it("ne choisit pas quand deux éléments partagent le nom du dossier", () => {
     const twin = { ...arenaJf, Id: "jf2", Path: "/autre/The Arena (2026)" } as JellyfinItem;
     expect(findJellyfinSeriesByTvdb([arenaJf, twin], 1, "Sans rapport", 1990, arena.path)).toBeNull();
