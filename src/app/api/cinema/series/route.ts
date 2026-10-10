@@ -6,7 +6,7 @@ import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
 import { cachedSeries, cachedJellyfinSeriesAdmin, cachedJellyfinFirstEpisodes, cachedJellyfinSeasons } from "@/lib/server-cache";
 import { matchSeries } from "@/lib/catalogueMembers";
-import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
+import { libraryPoster, seriesBackdrop } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt, logoForLocale } from "@/lib/title-art";
 import { catalogueExtras, getTitleExtras, type TitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
@@ -91,7 +91,7 @@ function seriesExtras(extras: TitleExtras | null, locale: Locale, sonarrRuntime:
 
 async function toCinemaSeries(
   s: SonarrSeries,
-  jellyfinItemId: string,
+  jellyfinItem: { Id: string; BackdropImageTags?: string[] },
   locale: Locale,
   firstEpisode: CinemaSeries["firstEpisode"],
   seasonCount: number | undefined
@@ -107,7 +107,7 @@ async function toCinemaSeries(
   const { title, aka } = localizedTitle(names, locale, s.title);
   return {
     sonarrId: s.id,
-    jellyfinItemId,
+    jellyfinItemId: jellyfinItem.Id,
     tvdbId: s.tvdbId,
     tmdbId: s.tmdbId ?? null,
     title,
@@ -115,7 +115,8 @@ async function toCinemaSeries(
     year: s.year,
     // Voir `libraryPoster` : la langue de qui regarde, l'affiche de Sonarr sinon.
     posterUrl: libraryPoster(art.posterByLang, s.images, locale),
-    backdropUrl: tmdbResize(backdropUrl(s.images, "full"), "w1280"),
+    // Redimensionné par Jellyfin plutôt que l'original de TheTVDB — voir `seriesBackdrop`.
+    backdropUrl: seriesBackdrop(jellyfinItem, s.images),
     // Le logo de la langue du titre affiché — voir `logoForLocale` (DECISIONS.md §58).
     logoUrl: logoForLocale(art, names, locale),
     posterTextlessUrl: art.posterTextlessUrl,
@@ -170,7 +171,7 @@ export async function GET(req: Request) {
     const downloaded = matched.map((x) => x.s);
 
     const locale = localeOf(req);
-    const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem.Id, locale, firstBySeries.get(jfItem.Id), seasonsBySeries.get(jfItem.Id)?.size)));
+    const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem, locale, firstBySeries.get(jfItem.Id), seasonsBySeries.get(jfItem.Id)?.size)));
 
     const bySonarrId = new Map<number, CinemaSeries>();
     // Des identifiants, pas des titres : un film à trois genres n'a pas à être écrit trois

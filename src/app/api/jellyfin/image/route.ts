@@ -33,9 +33,12 @@ export async function GET(req: NextRequest) {
     return new NextResponse(null, { status: 304, headers: { ETag: etag, "Cache-Control": cacheControl } });
   }
 
-  const params = new URLSearchParams({ quality: "90", maxWidth: "300" });
+  // `kind=backdrop` : le grand visuel d'une série, que Sonarr ne connaît qu'en original de
+  // TheTVDB (jusqu'à 2 Mo) — Jellyfin le rend à la largeur d'une bannière. Voir `seriesBackdrop`.
+  const backdrop = req.nextUrl.searchParams.get("kind") === "backdrop";
+  const params = new URLSearchParams(backdrop ? { quality: "80", maxWidth: "1280" } : { quality: "90", maxWidth: "300" });
   if (tag) params.set("tag", tag);
-  const url = `${config.jellyfin.url}/Items/${itemId}/Images/Primary?${params}`;
+  const url = `${config.jellyfin.url}/Items/${itemId}/Images/${backdrop ? "Backdrop/0" : "Primary"}?${params}`;
 
   try {
     const res = await fetch(url, {

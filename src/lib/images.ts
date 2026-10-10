@@ -77,3 +77,25 @@ export function libraryPoster(
 ): string | null {
   return posterByLang?.[locale] ?? posterUrl(images, "thumb");
 }
+
+/**
+ * Le grand visuel d'une série (bannière de la fiche, fond du bureau, préchargements) — une seule
+ * adresse, pour que tout ce qui la précharge la retrouve en cache (10/10/2026).
+ *
+ * Sonarr ne donne pour les séries que l'original de TheTVDB : 66 Ko à 2,1 Mo (relevé sur cette
+ * bibliothèque), sans aucune consigne de cache — le navigateur pouvait le retélécharger après une
+ * relance, et la première ouverture d'une fiche de série restait noire le temps de le recevoir.
+ * Jellyfin a le même visuel et le sert redimensionné : 1 280 px de large, 70 à 160 Ko, par notre
+ * relais `/api/jellyfin/image`, qui le marque immuable grâce à son `tag`. Repli : l'adresse de
+ * TheTVDB comme avant, pour la série que Jellyfin n'a pas illustrée.
+ */
+export function seriesBackdrop(
+  jellyfinItem: { Id: string; BackdropImageTags?: string[] } | undefined,
+  images: RadarrSonarrImage[] | undefined
+): string | null {
+  const tag = jellyfinItem?.BackdropImageTags?.[0];
+  if (jellyfinItem && tag) {
+    return `/api/jellyfin/image?${new URLSearchParams({ itemId: jellyfinItem.Id, kind: "backdrop", tag })}`;
+  }
+  return tmdbResize(backdropUrl(images, "full"), "w1280");
+}

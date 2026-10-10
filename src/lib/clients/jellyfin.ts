@@ -42,6 +42,8 @@ export interface JellyfinItem {
   /** Le chemin sur disque : un dossier pour une série, un fichier pour un film. Demandé par les listes d'administration (rapprochement par dossier). */
   Path?: string;
   ImageTags?: { Primary?: string };
+  /** Les empreintes des visuels de fond — rendues sans `Fields` ; la première sert de grand visuel (`seriesBackdrop`). */
+  BackdropImageTags?: string[];
   RunTimeTicks?: number;
   /**
    * Combien d'éléments cette série contient, tous niveaux confondus.
