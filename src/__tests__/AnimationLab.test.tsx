@@ -6,7 +6,7 @@ import { act, render, cleanup, fireEvent, screen, waitFor, within } from "@testi
 vi.mock("swr", () => ({ default: () => ({ data: undefined }) }));
 
 import { AnimationLab } from "@/components/animlab/AnimationLab";
-import { SheetOpenLot } from "@/components/animlab/IntroLots";
+import { SheetOpenLot, sheetMotionForTests } from "@/components/animlab/IntroLots";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
 // jsdom n'a ni Web Animations ni ResizeObserver : des doublures minimales, qui rendent une
@@ -63,7 +63,7 @@ describe("la page Tests animations", () => {
     expect(screen.getByText("Délai simulé")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Lueur sur le logo/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Ouverture de fiche/ }));
-    expect(screen.getByRole("button", { name: /Ressort Apple/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Apple — ressort/ })).toBeTruthy();
   });
 
   it("deuxième passe : fonds de qualité pour la lecture, maquette fidèle aux fiches pour l'ouverture", () => {
@@ -90,16 +90,76 @@ describe("la page Tests animations", () => {
     expect(screen.getByText(/Luminosité du fond \+20 %/)).toBeTruthy();
   });
 
-  it("quatrième passe : 250 ms par défaut, plus de View Transitions, les courbes expliquées", () => {
+  it("sixième passe : le ressort d'Apple par défaut, les durées fixes à comparer, le moteur et le profil", () => {
     render(<AnimationLab />);
     fireEvent.click(screen.getByRole("button", { name: /Ouverture de fiche/ }));
-    expect((screen.getByLabelText(/^Durée 250 ms/) as HTMLInputElement).min).toBe("150");
-    // Le ressort dure ce qu'on lui demande : 250 ms en jouaient 320 quand la réponse était la durée.
-    const real = Number(/ressort : (\d+) ms réels/.exec(screen.getByText(/ms réels/).textContent ?? "")?.[1]);
-    expect(real).toBeGreaterThanOrEqual(230);
-    expect(real).toBeLessThanOrEqual(300);
+    expect(screen.getByRole("button", { name: /^Apple — ressort/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /Transform \(compositeur\)/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /^Auto \(détecté/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText(/amorti critique/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /View Transitions/ })).toBeNull();
+    // Les durées fixes : la fermeture plus vive que l'ouverture, les courbes expliquées.
+    fireEvent.click(screen.getByRole("button", { name: "Durée fixe" }));
+    expect((screen.getByLabelText(/^Ouverture 260 ms/) as HTMLInputElement).min).toBe("150");
+    expect(screen.getByLabelText(/^Fermeture 210 ms/)).toBeTruthy();
     expect(screen.getByText(/cubic-bezier\(0\.2, 0, 0, 1\)/)).toBeTruthy();
+  });
+
+  describe("sixième passe : le ressort amorti critique d'UIKit", () => {
+    const { criticalSpring, appleResponse, closeMotion, openMotion, releaseVelocity, sampleMotion } = sheetMotionForTests;
+    const stage = { W: 390, H: 844 };
+    const pace = (profile: "phone" | "ipad" | "desktop") =>
+      ({ mode: "apple", ease: "spring", openMs: 260, closeMs: 210, engine: "transform", profile }) as const;
+
+    it("se pose sans rebond, l'essentiel du trajet dans les premiers 40 %, à 0,5 px près à la fin", () => {
+      const m = criticalSpring(0.4, 0, 600);
+      let prev = 0;
+      for (let t = 0; t <= m.duration; t += 5) {
+        const q = m.q(t);
+        expect(q).toBeGreaterThanOrEqual(prev - 1e-9);
+        expect(q).toBeLessThanOrEqual(1);
+        prev = q;
+      }
+      expect(m.q(m.duration * 0.4)).toBeGreaterThan(0.85);
+      expect(m.q(m.duration)).toBe(1);
+      expect((1 - m.q(m.duration - 2)) * 600).toBeLessThan(0.6);
+      expect((1 - m.q(m.duration - 60)) * 600).toBeGreaterThan(0.5);
+    });
+
+    it("part à la vitesse qu'on lui donne — celle du doigt, ou de l'ouverture interrompue", () => {
+      expect(criticalSpring(0.4, 6, 600).v(0)).toBeCloseTo(6, 6);
+      expect(criticalSpring(0.4, 0, 600).v(0)).toBe(0);
+    });
+
+    it("règle sa réponse sur la distance rapportée à l'écran, plus vive sur un ordinateur, plus vive encore à la fermeture", () => {
+      const near = { x: 0, y: 0, w: 100, h: 150 };
+      const far = { x: 0, y: 600, w: 100, h: 150 };
+      const short = appleResponse(near, { ...near, y: 20 }, stage, "phone");
+      const long = appleResponse(near, far, stage, "phone");
+      expect(short).toBeGreaterThanOrEqual(0.32);
+      expect(long).toBeGreaterThan(short);
+      expect(long).toBeLessThanOrEqual(0.5);
+      // La même fraction de l'écran, sur un écran deux fois plus grand : la même réponse.
+      const big = { W: stage.W * 2, H: stage.H * 2 };
+      const scaled = (b: typeof near) => ({ x: b.x * 2, y: b.y * 2, w: b.w * 2, h: b.h * 2 });
+      expect(appleResponse(scaled(near), scaled(far), big, "phone")).toBeCloseTo(long, 6);
+      expect(appleResponse(near, far, stage, "desktop")).toBeCloseTo(long * 0.8, 6);
+      expect(appleResponse(near, far, stage, "ipad")).toBeCloseTo(long, 6);
+      const open = openMotion(pace("phone"), near, far, stage);
+      const close = closeMotion(pace("phone"), far, near, stage, 0);
+      expect(close.duration).toBeLessThan(open.duration);
+    });
+
+    it("échantillonne au moins 60 images clés, la dernière exactement à l'arrivée", () => {
+      const s = sampleMotion(criticalSpring(0.35, 0, 400));
+      expect(s.length).toBeGreaterThanOrEqual(61);
+      expect(s[s.length - 1]).toEqual({ offset: 1, q: 1 });
+    });
+
+    it("lit la vitesse du doigt sur ses 100 dernières millisecondes", () => {
+      expect(releaseVelocity([{ t: 0, y: 0 }, { t: 400, y: 100 }, { t: 450, y: 150 }, { t: 500, y: 200 }])).toBeCloseTo(1000, 6);
+      expect(releaseVelocity([{ t: 0, y: 0 }])).toBe(0);
+    });
   });
 
   it("quatrième passe : au téléphone, la bannière de la fiche se tire vers le bas comme la vraie", () => {
@@ -209,6 +269,75 @@ describe("la page Tests animations", () => {
       await act(async () => {});
       fireEvent.keyDown(window, { key: "Escape" });
       await waitFor(() => expect(sheets()).toHaveLength(0));
+    });
+
+    it("sixième passe : le trajet n'anime que des transformations et des opacités, sur au moins 60 images clés", () => {
+      openDesktopMock();
+      openFromHome(3);
+      const morph = recorded.filter((r) => r.frames.length >= 61);
+      expect(morph.length).toBeGreaterThanOrEqual(5);
+      for (const r of recorded) {
+        for (const f of r.frames) {
+          expect(f).not.toHaveProperty("clipPath");
+          expect(f).not.toHaveProperty("width");
+          expect(f).not.toHaveProperty("height");
+          // Le rayon des coins vit sur sa propre piste : il ne doit pas écarter la transformation du compositeur.
+          if ("borderRadius" in f) expect(f).not.toHaveProperty("transform");
+        }
+      }
+    });
+
+    it("sixième passe : l'ancien moteur reste à comparer, par la découpe", () => {
+      render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
+      fireEvent.click(screen.getByRole("button", { name: /clip-path \(ancien\)/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Bureau" }));
+      fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
+      openFromHome(3);
+      expect(recorded.some((r) => r.frames.some((f) => "clipPath" in f))).toBe(true);
+    });
+
+    it("sixième passe : Échap rend le focus à l'affiche d'où la fiche est partie", async () => {
+      openDesktopMock();
+      const source = screen.getAllByRole("img", { name: "Film 3" })[0].closest("button")!;
+      source.focus();
+      fireEvent.click(source);
+      fireEvent.keyDown(window, { key: "Escape" });
+      await waitFor(() => expect(sheets()).toHaveLength(0));
+      expect(document.activeElement).toBe(source);
+    });
+
+    it("sixième passe : quitter la maquette au milieu d'une fermeture ne rappelle rien de démonté", async () => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      openDesktopMock();
+      openFromHome(3);
+      fireEvent.keyDown(window, { key: "Escape" });
+      fireEvent.click(screen.getByRole("button", { name: /Quitter la maquette/ }));
+      await act(async () => {
+        await new Promise((ok) => setTimeout(ok, 300));
+      });
+      expect(sheets()).toHaveLength(0);
+      expect(errors).not.toHaveBeenCalled();
+    });
+
+    it("sixième passe : à l'iPad, la fiche large se tire par sa poignée ; à l'ordinateur, aucune", () => {
+      render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
+      fireEvent.click(screen.getByRole("button", { name: "iPad" }));
+      fireEvent.click(screen.getByRole("button", { name: "Bureau" }));
+      fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
+      openFromHome(3);
+      const sheet = sheets()[0];
+      const grip = sheet.querySelector<HTMLElement>('[style*="touch-action: none"]');
+      expect(grip).toBeTruthy();
+      fireEvent.pointerDown(grip!, { clientY: 100, pointerId: 1, button: 0, pointerType: "touch" });
+      fireEvent.pointerMove(grip!, { clientY: 140, pointerId: 1, pointerType: "touch" });
+      expect(sheet.style.transform).toBe("translateY(40px)");
+      cleanup();
+      render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
+      fireEvent.click(screen.getByRole("button", { name: "Ordinateur" }));
+      fireEvent.click(screen.getByRole("button", { name: "Bureau" }));
+      fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
+      openFromHome(3);
+      expect(sheets()[0].querySelector('[style*="touch-action: none"]')).toBeNull();
     });
 
     it("ne propose pas, dans une fiche, sa propre affiche ; la variante hors bibliothèque est marquée", () => {
