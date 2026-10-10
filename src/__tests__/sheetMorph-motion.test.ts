@@ -1,17 +1,15 @@
 import { describe, it, expect } from "vitest";
 import {
-  CARD_IN,
-  CARD_OUT,
+  GLASS_IN,
   REVEAL_AT,
   appleCloseMotion,
   appleOpenMotion,
   appleResponse,
-  cardTrack,
+  cardRiseTrack,
   closePoses,
   closeStartVelocity,
   coverTf,
   criticalSpring,
-  gluedCardY,
   morphTracks,
   openPoses,
   sampleMotion,
@@ -110,44 +108,38 @@ describe("les images clés", () => {
   });
 });
 
-describe("la carte du téléphone, collée à la bannière", () => {
-  // Louis, iPhone, prod 8.31.2 : « la bannière grandit depuis l'affiche et le reste de la fiche vient
-  // du bas et se colle avec la bannière ». La carte avait sa propre montée (du bas de l'écran à zéro) ;
-  // elle se déduit maintenant de la pose de l'image, image clé par image clé.
-  const restingTop = 24;
-  const bandAt = banner.y + banner.h - restingTop;
-  const cardTop = (k: Keyframe) => restingTop + Number(/translateY\((-?[\d.]+)px\)/.exec(String(k.transform))![1]);
+describe("le fond de la carte du téléphone, à part (la maquette validée)", () => {
+  // Deux portages l'avaient perdue : la fiche entière montait sous l'image (8.31.0, « vient du bas et
+  // se colle »), puis la fiche entière collée à l'image (8.31.3, « arrive sèchement en un bloc »). Le
+  // fond monte seul, du bas de l'écran, sur le même ressort que l'image qui vole au-dessus de lui.
+  const ty = (k: Keyframe) => Number(/translateY\((-?[\d.]+)px\)/.exec(String(k.transform))![1]);
 
-  it("à l'aller, le bas de la bande de la carte suit le bas de l'image à chaque image clé", () => {
-    const { at } = openPoses(poster, uniformCorners(8), banner, [16, 16, 0, 0]);
-    const samples = sampleMotion(appleOpenMotion(poster, banner, stage, "phone"));
-    const track = cardTrack(samples, at, restingTop, bandAt, CARD_IN);
+  it("à l'aller, part tout entier sous l'écran et se pose, sur les mêmes images clés que l'image", () => {
+    const m = appleOpenMotion(poster, banner, stage, "phone");
+    const samples = sampleMotion(m);
+    const drop = stage.H - 24;
+    const track = cardRiseTrack(samples, drop, 0);
     expect(track).toHaveLength(samples.length);
-    samples.forEach(({ q }, i) => {
-      const box = at(q).box;
-      expect(Math.abs(cardTop(track[i]) + bandAt - (box.y + box.h))).toBeLessThanOrEqual(1);
-    });
-    // Posée à l'arrivée, sans décalage ; entrée en fondu depuis l'affiche.
-    expect(cardTop(track.at(-1)!)).toBeCloseTo(restingTop, 1);
-    expect(track[0].opacity).toBe(0);
-    expect(track.at(-1)!.opacity).toBe(1);
+    expect(ty(track[0])).toBeCloseTo(drop, 1);
+    expect(ty(track.at(-1)!)).toBe(0);
+    // Le même ressort que l'image, mais son propre trajet : rien ne le rattache au bas de l'image.
+    samples.forEach(({ q }, i) => expect(ty(track[i])).toBeCloseTo(drop * (1 - q), 1));
+    // Transformations seulement : rien qui passe par le fil principal.
+    for (const k of track) expect(Object.keys(k).sort()).toEqual(["offset", "transform"]);
   });
 
-  it("au retour, collée aussi, et effacée sur la fin", () => {
-    const back = closePoses(settledPose(banner, [16, 16, 0, 0], poster), sourcePose(poster, uniformCorners(8), banner));
+  it("au retour, part d'où il en est (le doigt) et finit sous l'écran", () => {
     const samples = sampleMotion(appleCloseMotion(banner, poster, stage, "phone"));
-    const track = cardTrack(samples, back, restingTop, bandAt, CARD_OUT);
-    samples.forEach(({ q }, i) => {
-      const box = back(q).box;
-      expect(Math.abs(cardTop(track[i]) + bandAt - (box.y + box.h))).toBeLessThanOrEqual(1);
-    });
-    expect(cardTop(track[0])).toBeCloseTo(restingTop, 1);
-    expect(track[0].opacity).toBe(1);
-    expect(track.at(-1)!.opacity).toBe(0);
+    const finger = 60;
+    const track = cardRiseTrack(samples, finger, finger + stage.H - 24);
+    expect(ty(track[0])).toBe(finger);
+    expect(ty(track.at(-1)!)).toBeCloseTo(finger + stage.H - 24, 1);
   });
 
-  it("le décalage pose exactement le bas de la bande sur le bas de l'image", () => {
-    expect(gluedCardY(banner, restingTop, bandAt)).toBe(0);
-    expect(gluedCardY({ ...banner, y: banner.y + 100 }, restingTop, bandAt)).toBe(100);
+  it("la croix paraît de 30 à 95 % du trajet, pas pleine sur une image encore en vol", () => {
+    expect(GLASS_IN.from).toBeGreaterThan(0);
+    expect(GLASS_IN.to).toBeLessThan(1);
+    const m = appleOpenMotion(poster, banner, stage, "phone");
+    expect(timeAt(sampleMotion(m), m.duration, GLASS_IN.from)).toBeGreaterThan(0);
   });
 });

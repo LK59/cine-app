@@ -19,6 +19,10 @@ const BOXES: Record<string, { x: number; y: number; w: number; h: number }> = {
   banner: { x: 0, y: 40, w: 390, h: 220 },
   sheet: { x: 0, y: 40, w: 390, h: 804 },
   home: { x: 0, y: 0, w: 390, h: 844 },
+  // Un bloc de la fiche défilé hors de l'écran : la copie légère ne le recopie pas.
+  below: { x: 0, y: 2000, w: 390, h: 600 },
+  // Le contenu d'une fiche longue : plus haut que l'écran, la copie n'en garde que le visible.
+  content: { x: 0, y: 236, w: 390, h: 2400 },
 };
 
 function rect(b: { x: number; y: number; w: number; h: number }): DOMRect {
@@ -116,7 +120,7 @@ afterEach(() => {
 });
 
 describe("l'ouverture", () => {
-  it("part de l'affiche touchée : le calque sous la fiche, l'affiche cachée, la fiche ajourée, le contenu à venir", async () => {
+  it("part de l'affiche touchée : le calque sous la fiche, l'affiche cachée, la fiche transparente, le contenu à venir", async () => {
     const poster = addPoster();
     press(poster.querySelector("img")!);
     render(<Sheet />);
@@ -126,8 +130,21 @@ describe("l'ouverture", () => {
     expect(layer()!.nextElementSibling).toBe(root());
     expect(layer()!.style.zIndex).toBe("48");
     expect(poster.style.opacity).toBe("0");
-    // La bande de la bannière est transparente, l'encre commence dessous (220 px sous le haut de la carte).
-    expect(root()!.style.backgroundImage).toContain("transparent 220px");
+    // La maquette validée : la fiche transparente et immobile, son fond (l'encre, les coins) monte à
+    // part, sous l'image qui vole — l'image au-dessus de la carte, jamais l'inverse.
+    expect(root()!.style.backgroundColor).toBe("transparent");
+    expect(live(root()).some((a) => a.frames.some((f) => /translateY/.test(String(f.transform))))).toBe(false);
+    const win = layer()!.lastElementChild as HTMLElement;
+    const shell = win.previousElementSibling as HTMLElement;
+    expect(shell.style.background).toContain("rgb(10, 10, 15)");
+    const rise = live(shell).find((a) => /translateY/.test(String(a.frames[0].transform)))!;
+    expect(rise.frames[0].transform).toBe("translateY(804.00px)");
+    expect(rise.frames.at(-1)!.transform).toBe("translateY(0.00px)");
+    expect(rise.frames.length).toBeGreaterThanOrEqual(61);
+    // La croix ne surgit pas pleine : elle paraît pendant le trajet.
+    const glass = live(root()!.querySelector("[data-sheet-glass]"))[0] as FakeAnimation;
+    expect(glass.frames[0].opacity).toBe(0);
+    expect(glass.options.delay).toBeGreaterThan(0);
     expect(root()!.querySelector<HTMLElement>("[data-sheet-photo]")!.style.visibility).toBe("hidden");
     // La fenêtre porte l'affiche déjà chargée — rien n'est téléchargé pour animer.
     const posters = Array.from(layer()!.querySelectorAll("img")).map((i) => i.getAttribute("src"));
@@ -141,8 +158,10 @@ describe("l'ouverture", () => {
     await runOpen();
     // Arrivée : le vrai visuel a repris la place de la fenêtre ; l'assombrissement reste.
     expect(root()!.querySelector<HTMLElement>("[data-sheet-photo]")!.style.visibility).toBe("");
-    expect(root()!.style.backgroundImage).toBe("");
+    expect(root()!.style.backgroundColor).toBe("rgb(10, 10, 15)");
     expect(layer()!.querySelectorAll("img").length).toBe(0);
+    // Le fond à part est parti : la vraie carte, posée exactement là, a repris son encre.
+    expect(layer()!.children.length).toBe(1);
     expect(layer()).not.toBeNull();
   });
 
@@ -175,20 +194,33 @@ describe("la fermeture", () => {
     press(poster.querySelector("img")!);
     const { rerender } = render(<Sheet />);
     await runOpen();
+    // Un long bloc défilé hors de l'écran (les épisodes, les titres similaires).
+    const below = document.createElement("div");
+    below.dataset.box = "below";
+    below.className = "heavy";
+    for (let i = 0; i < 40; i++) below.appendChild(document.createElement("img"));
+    const content = root()!.querySelector<HTMLElement>("[data-sheet-content]")!;
+    content.dataset.box = "content";
+    content.appendChild(below);
 
     rerender(<Sheet leaving />);
     expect(root()!.style.visibility).toBe("hidden");
     const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
     expect(copy).not.toBeNull();
     expect(copy.inert).toBe(true);
-    // La copie redescend collée à l'image (et non plus jusqu'au bas de l'écran, sur sa propre piste),
-    // et s'efface sur la fin ; la fenêtre, sous elle, revole vers l'affiche — sans attendre de décodage.
-    const card = live(copy).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)));
-    expect(card).toBeDefined();
-    expect(card!.frames.at(-1)!.transform).not.toBe("translateY(804.00px)");
-    expect(card!.frames.at(-1)!.opacity).toBe(0);
-    expect(card!.frames[0].opacity).toBe(1);
+    // Copie légère : le bloc hors de l'écran n'y est qu'un vide de la même hauteur, sans ses images.
+    const hole = copy.querySelector<HTMLElement>(".heavy")!;
+    expect(hole.children.length).toBe(0);
+    expect(hole.style.height).toBe("600px");
+    // La copie ne bouge pas (le contenu s'efface sur place) ; son fond, à part, redescend sous
+    // l'image jusque sous l'écran, et la fenêtre revole vers l'affiche — sans attendre de décodage.
+    expect(copy.style.backgroundColor).toBe("transparent");
+    expect(live(copy).some((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))).toBe(false);
     const win = copy.previousElementSibling as HTMLElement;
+    const shell = win.previousElementSibling as HTMLElement;
+    const down = live(shell).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))!;
+    expect(down.frames[0].transform).toBe("translateY(0.00px)");
+    expect(down.frames.at(-1)!.transform).toBe("translateY(804.00px)");
     expect(live(win).length).toBeGreaterThan(0);
     expect(live(win).every((a) => !a.paused)).toBe(true);
     expect(sheetMorphForTests.flights()).toBe(1);
@@ -331,8 +363,13 @@ describe("l'interruption", () => {
     // Toujours cachée : la fiche en repart. Et la fenêtre ne repart pas de la carte : sa première
     // image est le point où en était le retour, plus grand que l'affiche.
     expect(poster.style.opacity).toBe("0");
-    const win = layer()!.querySelector("div:nth-child(2)") as HTMLElement;
+    // La fenêtre (l'élément qui porte les deux images), au-dessus du fond de la carte.
+    const win = layer()!.querySelector("img")!.parentElement!.parentElement!.parentElement as HTMLElement;
     const firstFrame = live(win).find((a) => a.frames[0].transform)!.frames[0].transform as string;
+    // Le fond de la carte repart d'où le retour l'avait laissé, pas du bas de l'écran.
+    const shell = win.previousElementSibling as HTMLElement;
+    const rise = live(shell).find((a) => /translateY/.test(String(a.frames[0].transform)))!;
+    expect(rise.frames[0].transform).not.toBe("translateY(804.00px)");
     const sx = Number(/scale\(([\d.]+),/.exec(firstFrame)![1]);
     expect(sx).toBeGreaterThan(BOXES.poster.w / BOXES.banner.w + 0.01);
   });

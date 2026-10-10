@@ -246,42 +246,29 @@ export function sampleMotion(m: Motion): Sample[] {
 }
 
 /**
- * La carte du téléphone, collée à la bannière qui vole : son encre commence pile au bas de l'image
- * à chaque image clé, à l'aller comme au retour.
+ * Le fond de la carte du téléphone, à part : il monte du bas *sous* l'image qui vole, sur le même
+ * ressort, pendant que le contenu de la fiche reste à sa place et paraît à 90 % du trajet — la
+ * structure de la maquette validée (lot H, neuvième passe), où rien n'avait à se coller.
  *
- * La carte montait d'abord de tout l'écran sur une piste à elle (`translateY` du bas jusqu'à zéro),
- * pendant que la bannière grandissait depuis l'affiche : les deux ne se rejoignaient qu'à l'arrivée,
- * et sur un iPhone la fiche semblait « venir du bas et se coller à la bannière » (Louis, 10/10/2026,
- * prod 8.31.2). Ici le décalage de la carte se déduit de la pose même de l'image, échantillon par
- * échantillon — même nombre d'images clés, même horloge — : elles ne font plus qu'une pièce.
+ * Deux portages l'avaient perdue. Le premier (8.31.0) mettait l'image *sous* toute la fiche et
+ * faisait monter la fiche entière : la bande d'encre entre la bannière qui grandit et la carte qui
+ * monte se voyait — « le reste de la fiche vient du bas et se colle » (Louis, iPhone, 8.31.2). Le
+ * second (8.31.3) collait la fiche entière au bas de l'image, image clé par image clé : plus d'écart,
+ * mais un bloc rigide qui « arrive sèchement » (Louis, 8.31.4). Avec l'image au-dessus du fond qui
+ * monte, l'écart ne peut plus se voir, et la carte retrouve son propre mouvement.
  *
- * `restingTop` : le haut de la carte posée (sans décalage) ; `bandAt` : la hauteur de la bande où
- * arrive l'image, du haut de la carte au bas de sa bannière (le fond de la carte y est transparent).
- * L'opacité de la carte entre en fondu au départ et sort à la fin du retour, quand elle n'est plus
- * qu'une bande d'encre sous une affiche de rangée : `opacityAt(q)`.
+ * `fromY` / `toY` : le décalage vertical du fond (0 posé ; la hauteur de la carte : tout entier
+ * sous l'écran).
  */
-export function cardTrack(
-  samples: Sample[],
-  poseAt: (q: number) => Pose,
-  restingTop: number,
-  bandAt: number,
-  opacityAt: (q: number) => number,
-): Keyframe[] {
-  return samples.map(({ offset, q }) => {
-    const box = poseAt(q).box;
-    return { offset, transform: `translateY(${gluedCardY(box, restingTop, bandAt).toFixed(2)}px)`, opacity: Number(clamp(opacityAt(q), 0, 1).toFixed(4)) };
-  });
+export function cardRiseTrack(samples: Sample[], fromY: number, toY: number): Keyframe[] {
+  return samples.map(({ offset, q }) => ({ offset, transform: `translateY(${lerp(fromY, toY, q).toFixed(2)}px)` }));
 }
 
-/** Le décalage qui pose le bas de la bande de la carte sur le bas de l'image `box`. */
-export function gluedCardY(box: Box, restingTop: number, bandAt: number): number {
-  return box.y + box.h - restingTop - bandAt;
-}
-
-/** L'entrée de la carte collée : visible dès le premier tiers du trajet. */
-export const CARD_IN = (q: number) => smooth(0, 0.3, q);
-/** Sa sortie : elle s'efface dans le dernier tiers du retour, rendue à l'affiche. */
-export const CARD_OUT = (q: number) => 1 - smooth(0.65, 1, q);
+/**
+ * La croix posée sur la bannière (son verre) : elle paraît de 30 à 95 % du trajet, en espace parcouru
+ * — comme dans la maquette, où elle ne surgissait pas, pleine, sur une image encore en vol.
+ */
+export const GLASS_IN = { from: 0.3, to: 0.95, minMs: 160 } as const;
 
 /** Le premier instant (en ms) où le trajet atteint `q`. */
 export function timeAt(samples: Sample[], duration: number, q: number): number {
