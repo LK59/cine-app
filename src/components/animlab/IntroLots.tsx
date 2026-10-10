@@ -113,13 +113,14 @@ type Phase = "intro" | "video";
 type BgMode = "light" | "net" | "strong" | "old";
 
 /**
- * Les fonds proposés, le premier par défaut. « Flou léger » : le flou qui plaisait, sans les gros
- * pixels — une image de 1 280 px adoucie de 10 px se lit comme une mise au point, celle de 300 px
- * agrandie comme une image abîmée.
+ * Les fonds proposés, le premier par défaut. « Net » depuis le 10/10/2026 : même adouci, le flou
+ * se voyait comme une image de basse qualité ; net en 1 280 px, le voile suffit à faire lire le
+ * logo. « Flou léger » reste pour comparer — 1 280 px adoucie de 10 px, pas les gros pixels de
+ * l'ancienne image de 300 px agrandie.
  */
 const BG_MODES: { id: BgMode; label: string; blur: number }[] = [
-  { id: "light", label: "Flou léger", blur: 10 },
   { id: "net", label: "Net", blur: 0 },
+  { id: "light", label: "Flou léger", blur: 10 },
   { id: "strong", label: "Flou marqué", blur: 24 },
   { id: "old", label: "Ancien (300 px agrandi)", blur: 0 },
 ];
@@ -158,7 +159,7 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
   const [sweep, setSweep] = useState(true);
   const [caption, setCaption] = useState<Caption>("none");
   const [reduced, setReduced] = useState(prefersReduced);
-  const [bg, setBg] = useState<BgMode>("light");
+  const [bg, setBg] = useState<BgMode>("net");
   const [brightness, setBrightness] = useState(0);
   const [run, setRun] = useState(0);
   const title = choices.length > 0 ? choices[Math.min(pick, choices.length - 1)] : null;

@@ -68,8 +68,8 @@ describe("la page Tests animations", () => {
   it("deuxième passe : fonds de qualité pour la lecture, maquette fidèle aux fiches pour l'ouverture", () => {
     render(<AnimationLab />);
     fireEvent.click(screen.getByRole("button", { name: /Lancement de la lecture/ }));
-    // Le fond par défaut est le flou léger sur une image de 1 280 px ; l'ancien reste pour comparer.
-    expect(screen.getByRole("button", { name: "Flou léger" }).getAttribute("aria-pressed")).toBe("true");
+    // Le fond par défaut est net, en 1 280 px (le flou se voyait) ; l'ancien reste pour comparer.
+    expect(screen.getByRole("button", { name: "Net" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: /Ancien/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Ouverture de fiche/ }));
     expect(screen.getByRole("button", { name: "Téléphone" })).toBeTruthy();
