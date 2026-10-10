@@ -20,7 +20,7 @@ import {
   type Motion,
   type Stage,
 } from "./motion";
-import { afterTwoFrames, boxOf, detectProfile, opacityNow, prefersReducedMotion, promote, startTogether, translateYOf } from "./dom";
+import { afterTwoFrames, clearSheetTimeout, sheetTimeout, boxOf, detectProfile, opacityNow, prefersReducedMotion, promote, startTogether, translateYOf } from "./dom";
 import { peekPress, takePress } from "./source";
 import { useSheetMorph, type SheetLayout, type SheetMorph, type SheetMorphOptions } from "./useSheetMorph";
 
@@ -66,8 +66,8 @@ const canAnimate = () => typeof Element !== "undefined" && typeof Element.protot
 const LINEAR = (duration: number, fill: FillMode = "both"): KeyframeAnimationOptions => ({ duration, easing: "linear", fill });
 
 /** L'accueil du bureau, et ses deux volets que la fiche fait céder. */
-function homeParts(): { home: HTMLElement | null; hero: HTMLElement | null; rows: HTMLElement | null } {
-  const home = typeof document === "undefined" ? null : document.querySelector<HTMLElement>("[data-sheet-home]");
+function homeParts(given?: HTMLElement | null): { home: HTMLElement | null; hero: HTMLElement | null; rows: HTMLElement | null } {
+  const home = given ?? (typeof document === "undefined" ? null : document.querySelector<HTMLElement>("[data-sheet-home]"));
   return {
     home,
     hero: home?.querySelector<HTMLElement>("[data-sheet-hero]") ?? null,
@@ -164,7 +164,7 @@ function paused(list: Animation[], el: Element | null | undefined, frames: Keyfr
 /**
  * Le crochet de la continuité : mêmes options que `useSheetMorph`, et rien du tout quand `off`.
  */
-export function useDesktopContinuity(opts: SheetMorphOptions & { off?: boolean }): SheetMorph {
+export function useDesktopContinuity(opts: SheetMorphOptions & { off?: boolean; homeRef?: RefObject<HTMLElement | null> }): SheetMorph {
   const [entry] = useState<Entry>(() => decideEntry(opts, !!opts.off));
   const optsRef = useRef(opts);
   useLayoutEffect(() => {
@@ -238,7 +238,7 @@ export function useDesktopContinuity(opts: SheetMorphOptions & { off?: boolean }
     s.cancelStart?.();
     s.cancelStart = null;
     for (const a of s.anims.splice(0)) a.cancel();
-    for (const id of s.timers.splice(0)) window.clearTimeout(id);
+    for (const id of s.timers.splice(0)) clearSheetTimeout(id);
     for (const undo of s.restore.splice(0)) undo();
     s.unpromote?.();
     s.unpromote = null;
@@ -270,7 +270,7 @@ export function useDesktopContinuity(opts: SheetMorphOptions & { off?: boolean }
     }
 
     // 2. Tout lire d'un coup.
-    const { hero, rows } = otherSheetsOpen(root) ? { hero: null, rows: null } : homeParts();
+    const { hero, rows } = otherSheetsOpen(root) ? { hero: null, rows: null } : homeParts(optsRef.current.homeRef?.current);
     const owns = !!(hero || rows);
     const from = homeNow(hero, rows);
     const photo = root.querySelector<HTMLElement>("[data-sheet-photo]");
@@ -337,13 +337,13 @@ export function useDesktopContinuity(opts: SheetMorphOptions & { off?: boolean }
       cancelled = true;
     };
     const decoded = photo instanceof HTMLImageElement && photo.decode ? photo.decode().catch(() => undefined) : Promise.resolve();
-    void Promise.race([decoded, new Promise((ok) => window.setTimeout(ok, 150))]).then(() => {
+    void Promise.race([decoded, new Promise<void>((ok) => sheetTimeout(() => ok(), 150))]).then(() => {
       if (cancelled) return;
       s.cancelStart = afterTwoFrames(() => {
         if (cancelled || s.closing) return;
         s.cancelStart = null;
         startTogether([...anims, ...homeList]);
-        s.timers.push(window.setTimeout(() => settleOpen(photo), Math.max(d, BACKDROP_FADE_MS, revealAt + REVEAL_MS)));
+        s.timers.push(sheetTimeout(() => settleOpen(photo), Math.max(d, BACKDROP_FADE_MS, revealAt + REVEAL_MS)));
       });
     });
   }
@@ -369,7 +369,7 @@ export function useDesktopContinuity(opts: SheetMorphOptions & { off?: boolean }
     s.closing = true;
     s.closeAt = performance.now();
     const owns = s.ownsHome && !otherSheetsOpen(root);
-    const { hero, rows } = owns ? homeParts() : { hero: null, rows: null };
+    const { hero, rows } = owns ? homeParts(optsRef.current.homeRef?.current) : { hero: null, rows: null };
 
     if (o.instantExit || !canAnimate()) {
       stopOpen();
@@ -425,7 +425,7 @@ export function useDesktopContinuity(opts: SheetMorphOptions & { off?: boolean }
     for (const el of Array.from(copy.querySelectorAll<HTMLElement>("[data-sheet-settle]"))) el.style.visibility = "hidden";
     root.style.visibility = "hidden";
     s.timers.push(
-      window.setTimeout(() => {
+      sheetTimeout(() => {
         if (root.isConnected && optsRef.current.active) {
           root.style.visibility = "";
           s.closing = false;
@@ -492,7 +492,7 @@ export function useDesktopContinuity(opts: SheetMorphOptions & { off?: boolean }
     const timers: number[] = [];
     const finish = () => {
       flights.delete(flight);
-      for (const id of timers.splice(0)) window.clearTimeout(id);
+      for (const id of timers.splice(0)) clearSheetTimeout(id);
       for (const a of anims) a.cancel();
       unpromote();
       layer.remove();
@@ -504,7 +504,7 @@ export function useDesktopContinuity(opts: SheetMorphOptions & { off?: boolean }
       logoBox: () => (copyLogo ? boxOf(copyLogo) : null),
       cut: () => {
         flights.delete(flight);
-        for (const id of timers.splice(0)) window.clearTimeout(id);
+        for (const id of timers.splice(0)) clearSheetTimeout(id);
         for (const a of anims) (a as Partial<Animation>).pause?.();
         unpromote();
         const fade = copy.animate([{ opacity: opacityNow(copy) }, { opacity: 0 }], { duration: CUT_FADE_MS, easing: "ease-out", fill: "both" });
@@ -512,7 +512,7 @@ export function useDesktopContinuity(opts: SheetMorphOptions & { off?: boolean }
       },
     };
     flights.add(flight);
-    timers.push(window.setTimeout(finish, d));
+    timers.push(sheetTimeout(finish, d));
   }
 
   return { handlesEntry: entry !== "none" };
@@ -535,7 +535,6 @@ export function useSheetTransition(opts: SheetMorphOptions & { layout: SheetLayo
 export const desktopContinuityForTests = {
   flights: () => flights.size,
   reset: () => {
-    for (const f of Array.from(flights)) f.cut();
     flights.clear();
     cancelHome();
   },

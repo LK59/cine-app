@@ -1,4 +1,6 @@
 import { sheetMorphForTests } from "@/lib/sheetMorph/useSheetMorph";
+import { desktopContinuityForTests } from "@/lib/sheetMorph/desktopContinuity";
+import { cancelSheetSchedules } from "@/lib/sheetMorph/dom";
 
 /**
  * Les Web Animations, que jsdom n'a pas : de quoi voir ce que le mouvement des fiches demande au
@@ -63,4 +65,8 @@ export function installFakeAnimations(): { created: FakeAnimation[]; restore: ()
 export function clearMorphLayers(): void {
   for (const el of Array.from(document.querySelectorAll("[data-sheet-morph-layer]"))) el.remove();
   sheetMorphForTests.reset();
+  desktopContinuityForTests.reset();
+  // Les minuteurs et images en attente (une sortie qui finit après le démontage, l'affiche qui
+  // retrouve sa transition) : annulés ici, ils ne tombent plus après la fin de la page de test.
+  cancelSheetSchedules();
 }

@@ -46,7 +46,7 @@ import {
   type Pose,
   type Stage,
 } from "./motion";
-import { afterTwoFrames, boxOf, clockNow, detectProfile, opacityNow, place, prefersReducedMotion, promote, scaleOf, startTogether, swallowStrayClick, translateYOf } from "./dom";
+import { afterTwoFrames, clearSheetTimeout, sheetTimeout, boxOf, clockNow, detectProfile, opacityNow, place, prefersReducedMotion, promote, scaleOf, startTogether, swallowStrayClick, translateYOf } from "./dom";
 import { hideSource, installPressTracker, peekPress, showSource, takePress, visibleSource, type SheetSource } from "./source";
 
 /**
@@ -247,7 +247,7 @@ function playTracks(w: MorphWindow, poseAt: (q: number) => Pose, motion: Motion,
 /** Attend le décodage des deux images du trajet — au plus 150 ms : elles sont d'ordinaire déjà là. */
 function decoded(imgs: HTMLImageElement[]): Promise<unknown> {
   const all = Promise.all(imgs.map((img) => img.decode?.().catch(() => undefined)));
-  return Promise.race([all, new Promise((ok) => window.setTimeout(ok, 150))]);
+  return Promise.race([all, new Promise<void>((ok) => sheetTimeout(() => ok(), 150))]);
 }
 
 /** Les éléments de la copie qui correspondent, un à un, à ceux de la fiche — même sélecteur, même ordre. */
@@ -437,7 +437,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     s.cancelStart?.();
     s.cancelStart = null;
     for (const a of s.openAnims.splice(0)) a.cancel();
-    for (const id of s.timers.splice(0)) window.clearTimeout(id);
+    for (const id of s.timers.splice(0)) clearSheetTimeout(id);
     for (const undo of s.restore.splice(0)) undo();
     s.unpromote?.();
     s.unpromote = null;
@@ -600,7 +600,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
         if (cancelled || s.closing) return;
         s.cancelStart = null;
         run.startedAt = startTogether(anims);
-        s.timers.push(window.setTimeout(() => settleOpen(photo), d));
+        s.timers.push(sheetTimeout(() => settleOpen(photo), d));
       });
     });
   }
@@ -703,7 +703,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     root.style.visibility = "hidden";
     // Une fiche qui survit à sa fermeture (un écran empilé par-dessus pendant l'animation) ne doit pas
     // rester invisible : rendue au bout d'un moment si elle est toujours là et au-dessus.
-    const survive = window.setTimeout(() => {
+    const survive = sheetTimeout(() => {
       if (root.isConnected && optsRef.current.active) {
         root.style.visibility = "";
         s.closing = false;
@@ -746,7 +746,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
         },
         cut: () => {
           const left = { dim: dim ? opacityNow(dim) : 0, home: h ? scaleOf(h) : null };
-          window.clearTimeout(timer);
+          clearSheetTimeout(timer);
           for (const a of others) a.cancel();
           flights.delete(plain);
           removeLayer();
@@ -755,7 +755,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
         },
       };
       flights.add(plain);
-      timer = window.setTimeout(() => {
+      timer = sheetTimeout(() => {
         flights.delete(plain);
         removeLayer();
         if (plainSource) showSource(plainSource);
@@ -828,7 +828,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
         const r = flight.handover ? 1 : motion.q(t);
         const left = { dim: dim ? opacityNow(dim) : 0, home: h ? scaleOf(h) : null };
         for (const a of others) a.cancel();
-        for (const id of timers.splice(0)) window.clearTimeout(id);
+        for (const id of timers.splice(0)) clearSheetTimeout(id);
         flights.delete(flight);
         dim?.remove();
         copy.remove();
@@ -847,7 +847,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     /** La fin du retour, ou sa reprise par une ouverture (`restoreSource` faux : l'affiche reste cachée). */
     const end = (restoreSource: boolean) => {
       flights.delete(flight);
-      for (const id of timers.splice(0)) window.clearTimeout(id);
+      for (const id of timers.splice(0)) clearSheetTimeout(id);
       for (const a of [...ghost, ...others]) a.cancel();
       unpromote();
       removeLayer();
@@ -856,7 +856,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     flights.add(flight);
     // Le relais : la vraie carte reparaît dessous, et la fenêtre, superposée à elle, s'efface par-dessus.
     timers.push(
-      window.setTimeout(() => {
+      sheetTimeout(() => {
         flight.handover = true;
         unpromote();
         showSource(source);

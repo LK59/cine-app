@@ -537,6 +537,12 @@ address at once: a clone of the sheet (`.sheet-morph-clone`) plays the exit in a
 before it, so the home answers taps during the flight. Where the sheet came from is the last press
 on something carrying an image, noted at the capture phase (`sheetMorph/source.ts`) — a new card
 needs nothing to be a source; a card that isn't a button declares itself with `data-sheet-source`.
+On a computer (hover + fine pointer) the desktop sheets do not grow the poster: the hero already
+shows that title's backdrop, so `useSheetTransition` picks `useDesktopContinuity` at mount — the
+backdrop stays (the sheet's fades over the hero's), the hero logo glides to the sheet's logo, the
+hero text fades, the rows (`data-sheet-hero` / `data-sheet-rows` in CinemaClient) slide down and
+fade; iPad and phone keep the poster morph. Every timer the sheet motion schedules goes through
+`sheetTimeout` / `sheetFrame` (`sheetMorph/dom.ts`) so tests can cancel them all.
 
 Four rules, each of which cost a real failure:
 

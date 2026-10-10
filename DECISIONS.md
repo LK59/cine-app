@@ -2067,8 +2067,44 @@ dans `ExperimentalPlayerHost.test.tsx`.
 **Règle.** L'affiche qu'on touche devient le visuel de la fiche, et la fiche y revient en se
 fermant :
 - **téléphone** : l'affiche devient la bannière 16:9 pendant que la carte monte du bas ;
-- **bureau et iPad** (mise en page large) : l'affiche grandit jusqu'au visuel plein écran,
-  l'accueil recule de 2 % derrière la première fiche.
+- **iPad** (mise en page large, tactile) : l'affiche grandit jusqu'au visuel plein écran,
+  l'accueil recule de 2 % derrière la première fiche ;
+- **ordinateur** (survol et pointeur fin) : **pas d'affiche qui grandit** — la fiche relaie
+  l'aperçu (voir « Le bureau diffère exprès » plus bas).
+
+**Le bureau diffère exprès : la continuité du fond** (`src/lib/sheetMorph/desktopContinuity.ts`,
+10/10/2026). Au survol, l'aperçu du haut montre déjà le visuel et le logo du titre ; faire grandir
+l'affiche jusqu'à la fiche reconstruisait sous les yeux le même fond — « au survol on a déjà la
+bannière, et au clic la fiche zoome en affichant la même bannière, c'est perturbant » (Louis, sur la
+8.31.2). Netflix et l'Apple TV gardent le fond et changent le contenu ; c'est la règle :
+
+| | Ouverture | Fermeture |
+|---|---|---|
+| Fond | celui de la fiche fond par-dessus celui de l'aperçu, 250 ms — jamais déplacé (les cadrages diffèrent : l'aperçu est calé en haut et masqué) | celui de la copie s'efface sur l'aperçu, 250 ms |
+| Logo | celui de la fiche part de la boîte du logo de l'aperçu (même image) et glisse à sa place, sur le même ressort ×0,8 | il regagne la boîte du logo de l'aperçu |
+| Texte de l'aperçu | s'efface en 120 ms | revient en 140 ms quand le logo est à 90 % |
+| Rangées | descendent de 32 px en s'effaçant, sur le ressort | remontent et reparaissent |
+| Contenu de la fiche | d'un bloc à 90 % du trajet du logo, 160 ms | s'efface en 100 ms dès le départ |
+
+Sans logo commun (l'aperçu montre un autre titre, ou la fiche s'ouvre depuis la recherche, une
+grille, Ma liste, une fiche du dessous, une filmographie, la fiche TMDB) : le fond fond, et le logo
+arrive avec le contenu. Une fiche ouverte par-dessus une autre ne touche pas à l'accueil.
+Interruptible comme ailleurs : une ouverture pendant une fermeture la coupe (sa copie s'efface en
+80 ms), et l'accueil repart du point où elle l'avait laissé ; retoucher la même affiche fait
+repartir le logo d'où il en était.
+
+Le choix est fait une fois, au montage, par `useSheetTransition` (même module), qui appelle
+toujours les deux crochets — l'un des deux avec `off`. Fiches qui l'utilisent : `CinemaMovieDetail`,
+`CinemaSeriesDetail`, `PlayerDiscoverSheet` (en mise en page large). `CinemaMobileDetail` n'a que le
+trajet. La maquette « Bureau » du lot H joue le crochet de production lui-même
+(`animlab/ContinuityLot.tsx`), avec l'ancienne version à côté pour comparer. L'accueil marque ses
+deux volets : `data-sheet-hero`, `data-sheet-rows` (CinemaClient). Tests :
+`sheetMorph-continuity.test.tsx`, `decisions-partagees.test.ts`.
+
+**Les minuteurs du mouvement.** Tous passent par `sheetTimeout` / `sheetFrame` (`dom.ts`) :
+annulables un par un ou ensemble (`cancelSheetSchedules`), muets sans `window`. Un rappel tombé
+après la fin d'une page de test (l'affiche qui retrouvait sa transition deux images plus tard)
+faisait échouer la vérification complète sous charge.
 
 La colonne (logo, infos, Lire, synopsis) arrive d'un seul bloc à 90 % du trajet : 160 ms, 8 px de
 montée. Ce qui est derrière la fiche s'assombrit avec le trajet.
