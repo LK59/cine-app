@@ -2114,8 +2114,11 @@ iPhone et un Mac. Ce que chaque passe a corrigé est resté dans la forme du cod
   150 ms sous la fenêtre qui s'efface, un clignotement plus foncé à la fin de chaque fermeture.
 
 **La fermeture rend l'adresse aussitôt.** Au premier instant d'une fermeture, la fiche est copiée
-(`cloneNode`, son défilement compris) dans le calque du trajet. C'est la copie qui redescend et
-s'efface pendant que l'image revole ; la vraie fiche se cache et rend l'adresse. Retenue le temps
+dans le calque du trajet, son défilement compris. C'est la copie qui s'efface pendant que l'image
+revole ; la vraie fiche se cache et rend l'adresse. Au téléphone, la copie est *légère*
+(`cloneVisible`) : un bloc entièrement hors de l'écran (la liste des épisodes, les titres
+similaires) n'y est qu'un vide de la même hauteur. Copier toute la fiche coûtait une longue image au
+départ du retour sur l'iPhone, « un effet laggy alors que ça ne lag pas » (Louis, 8.31.4). Retenue le temps
 de l'animation, l'adresse gardait le titre : une affiche touchée pendant le retour empilait une
 entrée que la fermeture différée défaisait ensuite. Ainsi, l'accueil répond dès que la fermeture
 commence :
@@ -2139,9 +2142,19 @@ image.
 
 **Le calque.** Le trajet et l'assombrissement vivent dans un calque inséré juste avant la fiche
 dans `body`, au même plan. La colonne de la fiche passe donc au-dessus de l'image qui vole, et la
-fiche du dessous d'une cascade passe dessous. Le fond de la fiche est transparent là où l'image
-arrive (la bande de la bannière au téléphone, tout l'écran au bureau). Géométriquement, la fenêtre
-ne sort pas de cette bande pendant que la carte monte.
+fiche du dessous d'une cascade passe dessous. Au bureau, le fond de la fiche est transparent pendant
+le trajet. Au téléphone, c'est la structure de la maquette : la fiche est transparente et immobile,
+et le **fond de la carte** (son encre, ses coins, son liseré) est un élément à part du calque, *sous*
+la fenêtre, qui monte du bas de l'écran sur le même ressort (`cardRiseTrack`) et redescend de même
+à la fermeture. Le contenu ne bouge pas : il paraît à 90 % du trajet et s'efface sur place ; la
+croix paraît de 30 à 95 % (`GLASS_IN`).
+
+Ce que les deux premiers portages en avaient fait, et pourquoi c'est revenu à la maquette :
+- 8.31.0 : la fiche entière montait, l'image *sous* elle — la bande d'encre entre la bannière et la
+  carte qui monte se voyait, « le reste de la fiche vient du bas et se colle » ;
+- 8.31.3 : la fiche entière collée au bas de l'image, image clé par image clé — plus d'écart, mais
+  un bloc rigide, « ça arrive sèchement en un bloc ».
+L'image au-dessus du fond qui monte ne laisse voir aucun écart, et chacun garde son mouvement.
 
 **Ce que la fiche marque dans son DOM** :
 - `data-sheet-photo` : son visuel ;
