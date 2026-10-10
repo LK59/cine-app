@@ -1932,9 +1932,9 @@ de la semaine mêlent tous les comptes.
 
 ## 60. L'ouverture de la lecture : le visuel, le logo, puis le film — jamais un délai de plus
 
-**Règle.** Entre l'appui sur « Lire » et la première image, l'écran montre :
+**Règle.** Dès l'appui sur « Lire », et jusqu'au film qui bouge, l'écran montre :
 - le visuel du film, net, qui avance lentement (de 1,08 à 1) ;
-- son logo, qui paraît avec une lueur ;
+- son logo, qui paraît en 250 ms, puis une lueur une fois posé ;
 - une légende pour un épisode ou une reprise ;
 - une ligne de chargement.
 
@@ -1945,31 +1945,34 @@ le 10/10/2026 :
 |---|---|
 | Fond | « Net », 1 280 px (l'original au-delà de 1 700 pixels physiques de large) |
 | Voile | d'origine |
-| Apparition du logo | 600 ms |
-| Lueur | oui |
+| Apparition du logo | 250 ms, dès l'appui (600 ms après 200 ms d'attente jusqu'au 10/10 au soir) |
+| Lueur | oui, une fois le logo posé ; pas du tout si le film part avant |
 | Légende | contextuelle |
 
 **Pourquoi.** L'attente d'ouverture était une roue sur fond noir. Le premier essai avait un fond
 flou : une image de 300 px agrandie, et « le flou basse résolution se voit ». Le fond net en
 1 280 px, sous un voile, fait lire le logo sans rien abîmer.
 
-**La couverture, dès l'appui, et le seuil de 300 ms.** Dès le montage du lecteur, le visuel sous
-son voile couvre l'écran, immobile — à l'échelle de départ du zoom —, sans logo, légende ni ligne :
-le lecteur vide ne se montre jamais. Ensuite :
-- **la première image arrive avant 300 ms** (`imageShown` : `announced` au natif, même figée,
-  l'horloge pas encore partie ; l'image du lecteur serveur) : l'ouverture animée ne paraît jamais,
-  et la couverture **tient jusqu'au film qui bouge** (`phase` → `picture` : la règle de fin plus bas —
-  l'horloge partie, ou la lecture automatique refusée), puis s'efface en un seul fondu de 280 ms,
-  en décélérant, sur une image qui joue déjà. Une image décodée qui ne part pas en `COVER_HOLD_MS`
-  (1,2 s) est un vrai blocage : la couverture s'efface quand même, et l'attente se voit. La lecture
-  est alors close (`finishIntro`) ;
-- **rien à 300 ms** : l'ouverture animée part de la couverture — même image, même voile, même
-  échelle — et s'efface selon les règles plus bas ;
-- **une image à l'écran n'est jamais recouverte** : passé `imageShown`, l'ouverture animée ne peut
-  plus partir, et un lecteur monté sur une image déjà là (mini-lecteur rendu au plein écran, relais)
-  ne pose rien.
+**Entière dès l'appui, sans seuil.** Dès le montage du lecteur, l'ouverture entière couvre l'écran :
+le visuel déjà en mouvement, le logo (ou le titre écrit) qui paraît en 250 ms sans délai, la ligne et
+la légende avec lui. Le lecteur vide ne se montre jamais. Ensuite :
+- elle **tient jusqu'au film qui bouge** (`phase` → `picture` : la règle de fin plus bas — l'horloge
+  partie, ou la lecture automatique refusée), puis s'efface en un seul fondu de 280 ms, en
+  décélérant, sur une image qui joue déjà, et la lecture est close (`finishIntro`) ;
+- une image décodée qui ne part pas en `COVER_HOLD_MS` (1,2 s ; `imageShown` : `announced` au natif,
+  l'image du lecteur serveur) est un vrai blocage : l'ouverture s'efface quand même, et l'attente se
+  voit ;
+- **une image à l'écran n'est jamais recouverte** : un lecteur monté sur une image déjà là, ou sur
+  une ouverture close (mini-lecteur rendu au plein écran, relais), ne pose rien.
 
-Pourquoi (relu le 10/10/2026) : les reprises lues depuis l'appareil s'ouvrent en 34 à 115 ms. La
+Pourquoi sans seuil (10/10/2026, soir) : pendant quelques heures, sous 300 ms, seule une couverture
+immobile paraissait — le visuel sans logo ni ligne —, l'ouverture animée ne partant qu'au-delà. Sur
+les départs les plus rapides, ces quelques centaines de millisecondes d'image immobile se lisaient
+comme un écran figé (Louis, iPhone, 8.31.2 : « pourquoi on met pas directement la barre de chargement
+avec le logo ? »). Un logo posé en 250 ms donne au départ le plus bref l'air voulu, et la lueur, qui
+attend le logo posé, ne passe pas du tout si le film part avant.
+
+Pourquoi une couverture d'abord (relu le 10/10/2026) : les reprises lues depuis l'appareil s'ouvrent en 34 à 115 ms. La
 première image arrivait figée vers 50 ms, Safari mettait quelques centaines de ms à faire partir
 l'horloge, et l'ouverture animée — partie à 300 ms parce que sa fin était l'horloge qui avance —
 se posait *sur* l'image déjà là, puis s'effaçait un instant plus tard. Avant elle, le lecteur vide
@@ -2010,8 +2013,8 @@ retour d'une diffusion.
 
 | Cas | Ouverture |
 |---|---|
-| Lecteur natif et lecteur serveur, ouverture d'un titre | la couverture toujours ; l'ouverture animée si l'attente dépasse le seuil |
-| Épisode suivant (enchaînement automatique ou bouton) | la couverture (visuel de la série) à la place de l'écran noir du lecteur neuf ; sa propre ouverture animée avec la légende de l'épisode, si son chargement se fait attendre |
+| Lecteur natif et lecteur serveur, ouverture d'un titre | oui, dès l'appui |
+| Épisode suivant (enchaînement automatique ou bouton) | oui, dès l'appui : visuel et logo de la série, légende de l'épisode — à la place de l'écran noir du lecteur neuf |
 | Séance qui existe pour diffuser | non |
 | Retour d'une diffusion, page rechargée pour une piste WebKit | non : reprises en plein film |
 | Banc d'essai | non |
@@ -2025,10 +2028,11 @@ de SWR (`resolveIntroArt`), sans requête :
 
 Un épisode prend le visuel et le logo de sa série. Le visuel et le logo sont demandés dès l'appui
 (`preloadIntroArt`). Rien de trouvé : le titre écrit sur fond noir. Le logo de la description du
-fichier n'est pas attendu : il a 500 ms de budget côté serveur et arriverait après le seuil.
+fichier n'est pas attendu : il a 500 ms de budget côté serveur, et ce que l'ouverture montre est figé
+dès l'appui.
 
-**Quand l'ouverture animée laisse la place au film** (`src/lib/introEnd.ts`) — à la lecture partie,
-pas au lecteur prêt (la couverture seule aussi, ou à `COVER_HOLD_MS` sur une image qui ne part pas) :
+**Quand l'ouverture laisse la place au film** (`src/lib/introEnd.ts`) — à la lecture partie, pas au
+lecteur prêt (ou à `COVER_HOLD_MS` sur une image qui ne part pas) :
 - **lecteur natif** : l'horloge qui avance vraiment, mesurée depuis le dernier placement de la tête
   (l'atterrissage de l'ouverture et la poussée d'une horloge figée sont des sauts) ;
 - **lecteur serveur** : plus de saut en cours et `readyState` ≥ 3 (`loadeddata` précède le saut de

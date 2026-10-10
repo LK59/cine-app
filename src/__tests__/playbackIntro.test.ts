@@ -39,8 +39,8 @@ const series = {
 const catalogue = (items: unknown[]) => ({ genres: [], items, rows: {}, spotlight: [], recentlyAdded: [], top10: [] });
 
 describe("les réglages validés", () => {
-  it("sont ceux du banc le 10/10/2026 : fond net, voile d'origine, seuil 300 ms, logo 600 ms, lueur", () => {
-    expect(PLAYBACK_INTRO).toEqual({ thresholdMs: 300, zoom: 1.08, logoMs: 600, sweep: true, background: "net", brightness: 0 });
+  it("sont ceux du banc le 10/10/2026 : fond net, voile d'origine, logo en 250 ms dès l'appui, lueur — sans seuil", () => {
+    expect(PLAYBACK_INTRO).toEqual({ zoom: 1.08, logoMs: 250, sweep: true, background: "net", brightness: 0 });
   });
 
   it("le fond net est en 1 280 px, l'original sur un écran large et dense, jamais les 300 px agrandis", () => {

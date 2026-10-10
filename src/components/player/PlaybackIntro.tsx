@@ -21,8 +21,8 @@ import {
 
 /**
  * Où en est la lecture, vu de l'ouverture :
- * - `waiting` : pas encore d'image, rien d'anormal — l'ouverture paraît passé le seuil ;
- * - `picture` : la première image est là — fondu enchaîné vers le film, puis plus rien ;
+ * - `waiting` : le film ne joue pas encore, rien d'anormal — l'ouverture est là ;
+ * - `picture` : le film bouge (règles de `src/lib/introEnd.ts`) — fondu enchaîné vers lui, puis plus rien ;
  * - `gone` : une erreur, la connexion perdue, le mini-lecteur… — disparue à l'instant, et l'écran
  *   qui a quelque chose à dire se montre tel qu'avant.
  */
@@ -49,24 +49,24 @@ function prefersReducedMotion(): boolean {
  * `startedAt` vient de l'horloge partagée (`startIntroClock`) : un lecteur qui prend la relève avant la
  * première image reprend l'ouverture au point exact où l'autre en était.
  *
- * Deux temps (10/10/2026). Dès le montage — l'appui —, une **couverture** : le visuel du film sous son
- * voile, immobile, sans logo ni légende, pour que le lecteur vide ne se montre jamais. Puis :
- * - la première image arrive avant le seuil (`imageShown`) : l'ouverture animée ne paraîtra jamais,
- *   et la couverture reste jusqu'à ce que le film *bouge* (`phase` → `picture`, la règle de l'hôte :
- *   l'horloge partie, ou la lecture automatique refusée), puis s'efface en un seul fondu sur une image
- *   qui joue déjà. C'est le cas des reprises lues depuis l'appareil, ouvertes en 25 à 115 ms : effacée
- *   sur la première image figée (8.30.9), la couverture laissait voir quelques centaines de
- *   millisecondes d'image arrêtée, puis la roue de l'attente le temps que Safari démarre. Une image
- *   décodée qui ne part pas en `COVER_HOLD_MS` est un vrai blocage : la couverture s'efface quand
- *   même, pour que l'attente se voie ;
- * - rien à 300 ms : l'ouverture animée part de cette même couverture — même image, même voile, même
- *   échelle —, et s'efface comme avant, quand l'hôte passe en `picture`.
- * Une image à l'écran n'est jamais recouverte : passé `imageShown`, l'ouverture ne peut plus partir.
+ * Entière dès le montage — l'appui —, sans seuil (10/10/2026, soir) : le visuel sous son voile, déjà
+ * en mouvement, le logo (ou le titre écrit) qui paraît en 250 ms, la ligne de chargement et la légende
+ * avec lui. Pendant quelques heures, sous 300 ms, seule une couverture immobile paraissait — le visuel
+ * sans logo —, et sur les départs les plus rapides (reprises lues depuis l'appareil, 25 à 115 ms) elle
+ * se lisait comme une image figée (Louis, iPhone, 8.31.2). Un logo posé en 250 ms donne au départ le
+ * plus bref l'air voulu ; la lueur ne passe qu'une fois le logo posé, et pas du tout si le film part
+ * avant.
+ *
+ * La fin ne change pas : quand le film *bouge* (`phase` → `picture`, la règle de l'hôte : l'horloge
+ * partie, ou la lecture automatique refusée), un seul fondu de 280 ms, en décélérant, sur une image qui
+ * joue déjà. Une image décodée qui ne part pas en `COVER_HOLD_MS` est un vrai blocage : l'ouverture
+ * s'efface quand même, pour que l'attente se voie. Une image à l'écran n'est jamais recouverte : une
+ * ouverture close, ou une image déjà là au montage, ne dessine rien.
  */
 /**
- * Combien de temps la couverture tient sur une image décodée qui ne joue pas encore. Au-delà, ce
- * n'est plus le démarrage de Safari (quelques centaines de millisecondes, une poussée à 100 puis à
- * 400 ms pour un départ du début) mais une attente réelle, que l'interface du lecteur doit montrer.
+ * Combien de temps l'ouverture tient sur une image décodée qui ne joue pas encore. Au-delà, ce n'est
+ * plus le démarrage de Safari (quelques centaines de millisecondes, une poussée à 100 puis à 400 ms
+ * pour un départ du début) mais une attente réelle, que l'interface du lecteur doit montrer.
  */
 export const COVER_HOLD_MS = 1200;
 
@@ -90,17 +90,16 @@ export function PlaybackIntro({
 }: {
   phase: IntroPhase;
   /**
-   * La première image est décodée — fût-elle figée, l'horloge pas encore partie. Elle empêche
-   * l'ouverture animée de paraître (une image ne se recouvre pas d'un logo) ; la couverture, elle,
-   * tient jusqu'à `phase` → `picture` (le film qui bouge, règles de `src/lib/introEnd.ts`), ou
-   * `COVER_HOLD_MS` au plus.
+   * La première image est décodée — fût-elle figée, l'horloge pas encore partie. Déjà vraie au
+   * montage, rien ne paraît (une image ne se recouvre pas). Ensuite, l'ouverture tient jusqu'à
+   * `phase` → `picture` (le film qui bouge, règles de `src/lib/introEnd.ts`), ou `COVER_HOLD_MS` au plus.
    */
   imageShown?: boolean;
-  /** L'ouverture animée vient de paraître (la couverture seule ne compte pas). */
+  /** L'ouverture vient de paraître. */
   onShow?: () => void;
   /**
-   * Le calque couvre-t-il le lecteur — couverture ou ouverture animée, avant son fondu de sortie ?
-   * L'hôte s'en sert pour taire ses propres attentes (la roue des commandes) tant qu'il est là.
+   * Le calque couvre-t-il le lecteur, avant son fondu de sortie ? L'hôte s'en sert pour taire ses
+   * propres attentes (la roue des commandes) tant qu'il est là.
    */
   onCoverChange?: (covering: boolean) => void;
   startedAt: number;
@@ -120,57 +119,42 @@ export function PlaybackIntro({
   className?: string;
   style?: CSSProperties;
 }) {
-  const { thresholdMs, zoom, logoMs, sweep, background, brightness } = settings;
+  const { zoom, logoMs, sweep, background, brightness } = settings;
   const [reducedPref] = useState(prefersReducedMotion);
   const reduced = reducedProp ?? reducedPref;
 
-  // Ce qui sera montré, figé au moment où l'ouverture paraît : un logo arrivé un instant plus tard
-  // avec la description du fichier remplacerait le titre écrit en plein milieu de son apparition.
-  const latest = useRef<Shown>({ art, name: fallbackName, caption });
-  useEffect(() => {
-    latest.current = { art, name: fallbackName, caption };
-  }, [art, fallbackName, caption]);
   // Une image déjà là au montage, ou une ouverture déjà close — le mini-lecteur rendu au plein écran,
-  // un relais après la première image : rien, pas même la couverture. Recouvrir une image, c'est
-  // précisément ce que cette règle interdit.
+  // un relais après la première image : rien. Recouvrir une image, c'est précisément ce que cette
+  // règle interdit.
   const [done, setDone] = useState(() => imageShown || (clockKey ? introFinished(clockKey) : false));
-  // `shown` : l'ouverture animée a paru, figée sur ce qu'elle montre. Déjà passé le seuil au montage,
-  // c'est un relais (le lecteur serveur après le natif) — elle est là d'emblée, au point où elle en était.
-  const [shown, setShown] = useState<Shown | null>(() =>
-    !done && phase === "waiting" && Date.now() - startedAt >= thresholdMs
-      ? ((clockKey ? introSnapshot<Shown>(clockKey) : undefined) ?? { art, name: fallbackName, caption })
-      : null
-  );
-  const started = shown !== null;
+  // Ce qui est montré, figé dès l'appui : un logo arrivé un instant plus tard avec la description du
+  // fichier remplacerait le titre écrit en plein milieu de son apparition. Un relais (le lecteur serveur
+  // après le natif) reprend ce que l'autre montrait, gardé avec l'horloge partagée.
+  const [shown] = useState<Shown>(() => (clockKey ? introSnapshot<Shown>(clockKey) : undefined) ?? { art, name: fallbackName, caption });
+  useEffect(() => {
+    if (clockKey && !done) keepIntroSnapshot(clockKey, shown);
+    // Une fois, au montage : c'est l'instant où l'ouverture paraît.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const onShowRef = useRef(onShow);
   useEffect(() => {
     onShowRef.current = onShow;
   }, [onShow]);
-  useEffect(() => {
-    if (started) onShowRef.current?.();
-  }, [started]);
-
-  // Le seuil : sous lui, la première image arrive avant qu'une ouverture animée ait un sens, et seule
-  // la couverture aura paru. Une image arrivée entre-temps l'annule pour de bon.
-  useEffect(() => {
-    if (phase !== "waiting" || started || imageShown || done) return;
-    const id = window.setTimeout(() => {
-      if (clockKey) keepIntroSnapshot(clockKey, latest.current);
-      setShown(latest.current);
-    }, Math.max(0, startedAt + thresholdMs - Date.now()));
-    return () => window.clearTimeout(id);
-  }, [phase, started, imageShown, done, startedAt, thresholdMs, clockKey]);
 
   const backdropRef = useRef<HTMLDivElement>(null);
   const bgImgRef = useRef<HTMLImageElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
   const sweepRef = useRef<HTMLDivElement>(null);
+  const sweepAnimRef = useRef<Animation | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const detailsRef = useRef<HTMLDivElement>(null);
-  // La couverture est là dès le montage ; l'ouverture animée s'y ajoute (`started`).
   const visible = !done && phase !== "gone";
-  // Avant le seuil, la couverture montre ce que l'hôte sait à cet instant ; ensuite, ce qui a été figé.
-  const display: Shown = shown ?? { art, name: fallbackName, caption };
+  useEffect(() => {
+    if (visible) onShowRef.current?.();
+    // À l'apparition seulement.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const display = shown;
   // Un logo qui ne se charge pas (hors ligne, adresse périmée) laissait l'icône d'image cassée au
   // milieu de l'écran, avec son texte de remplacement : le titre écrit prend sa place.
   const [logoFailed, setLogoFailed] = useState(false);
@@ -179,53 +163,56 @@ export function PlaybackIntro({
   const blur = introBlur(background);
 
   // L'ouverture : le fond qui avance, le logo qui paraît, une lueur. Jouée une fois, depuis le point
-  // où elle en est — zéro d'ordinaire, plus pour un relais.
+  // où elle en est — l'appui d'ordinaire, plus loin pour un relais.
   useLayoutEffect(() => {
-    if (!visible || !started) return;
-    const offset = Math.max(0, Date.now() - (startedAt + thresholdMs));
+    if (!visible) return;
+    const offset = Math.max(0, Date.now() - startedAt);
     const animations: Animation[] = [];
     const at = (a: Animation | undefined) => {
-      if (!a) return;
+      if (!a) return undefined;
       a.currentTime = offset;
       animations.push(a);
+      return a;
     };
     if (!reduced) {
-      // Avance lente et continue : la durée d'un chargement n'est pas connue d'avance, on part donc
-      // sur six secondes, coupées par le fondu dès que l'image est là.
+      // Avance lente et continue, déjà en marche à la première image dessinée : la durée d'un
+      // chargement n'est pas connue d'avance, on part donc sur six secondes, coupées par le fondu.
       at(backdropRef.current?.animate?.([{ transform: `scale(${zoom})` }, { transform: "scale(1)" }], {
         duration: 6000, easing: "cubic-bezier(0.25, 0.6, 0.3, 1)", fill: "both",
       }));
     }
+    // Le logo dès l'appui, sans délai, et la ligne de chargement avec lui : posés en `logoMs`.
     at(logoRef.current?.animate?.(
       reduced
         ? [{ opacity: 0 }, { opacity: 1 }]
         : [{ opacity: 0, transform: "scale(0.96)" }, { opacity: 1, transform: "scale(1)" }],
-      { duration: reduced ? 200 : logoMs, delay: reduced ? 0 : 200, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both" }
+      { duration: reduced ? 200 : logoMs, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both" }
     ));
-    // La légende et la ligne de chargement : absentes de la couverture, elles arrivent avec le logo.
     at(detailsRef.current?.animate?.([{ opacity: 0 }, { opacity: 1 }], {
-      duration: reduced ? 200 : 300, delay: reduced ? 0 : 200, easing: "ease-out", fill: "both",
+      duration: reduced ? 200 : logoMs, easing: "ease-out", fill: "both",
     }));
+    // La lueur, une fois le logo posé seulement — un logo qui brille en apparaissant se lit mal.
     if (sweep && !reduced && logo) {
-      at(sweepRef.current?.animate?.([{ transform: "translateX(-120%)" }, { transform: "translateX(120%)" }], {
-        duration: 1100, delay: 200 + logoMs * 0.6, easing: "cubic-bezier(0.45, 0, 0.25, 1)", fill: "both",
-      }));
+      sweepAnimRef.current = at(sweepRef.current?.animate?.([{ transform: "translateX(-120%)" }, { transform: "translateX(120%)" }], {
+        duration: 1100, delay: logoMs, easing: "cubic-bezier(0.45, 0, 0.25, 1)", fill: "both",
+      })) ?? null;
     }
     return () => {
       for (const a of animations) a.cancel();
+      sweepAnimRef.current = null;
     };
     // Une fois, à l'apparition : la suite (le fondu) a son propre effet.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, started]);
+  }, [visible]);
 
-  // Le fond de la couverture. Déjà décodé — le cas courant, demandé dès l'appui (`preloadIntroArt`) —,
-  // il est là à la première image dessinée, sans fondu : un fondu laisserait voir le voile seul, puis
-  // l'image. Sinon le voile attend seul, et l'image le rejoint en 250 ms (600 si elle a tardé). Dans
-  // un relais, il est là tout de suite. Un échec laisse le voile — jamais le lecteur vide.
+  // Le fond. Déjà décodé — le cas courant, demandé dès l'appui (`preloadIntroArt`) —, il est là à la
+  // première image dessinée, sans fondu : un fondu laisserait voir le voile seul, puis l'image. Sinon
+  // le voile attend seul, et l'image le rejoint en 250 ms (600 si elle a tardé). Dans un relais, il est
+  // là tout de suite. Un échec laisse le voile — jamais le lecteur vide.
   useLayoutEffect(() => {
     const img = bgImgRef.current;
     if (!visible || !img || !bgSrc) return;
-    const continuing = Date.now() - (startedAt + thresholdMs) > 150;
+    const continuing = Date.now() - startedAt > 150;
     if (continuing || (img.complete && img.naturalWidth > 0)) {
       img.style.opacity = "1";
       return;
@@ -252,20 +239,19 @@ export function PlaybackIntro({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, bgSrc]);
 
-  // La couverture seule : jusqu'au film qui bouge (`picture`), jamais sur une image figée — sauf une
-  // image décodée qui ne part pas en `COVER_HOLD_MS`, un vrai blocage qui doit se voir.
+  // Jusqu'au film qui bouge (`picture`), jamais un fondu sur une image figée — sauf une image décodée
+  // qui ne part pas en `COVER_HOLD_MS`, un vrai blocage qui doit se voir.
   const [coverExpired, setCoverExpired] = useState(false);
   useEffect(() => {
-    if (!visible || started || !imageShown || phase !== "waiting") return;
+    if (!visible || !imageShown || phase !== "waiting") return;
     const id = window.setTimeout(() => setCoverExpired(true), COVER_HOLD_MS);
     return () => window.clearTimeout(id);
-  }, [visible, started, imageShown, phase]);
+  }, [visible, imageShown, phase]);
 
-  // La fin. L'ouverture animée parue : à `picture`, fondu enchaîné de 400 ms, le logo s'éloigne un
-  // peu. La couverture seule : au film qui bouge — il « sort » de son visuel en 280 ms, en décélérant,
-  // déjà en mouvement —, et l'ouverture est close pour cette lecture : un lecteur qui prendrait la
+  // La fin : au film qui bouge, il « sort » de l'ouverture en un seul fondu de 280 ms, en décélérant,
+  // déjà en mouvement — et l'ouverture est close pour cette lecture : un lecteur qui prendrait la
   // relève ne recouvrirait pas l'image. Puis le calque se retire.
-  const fading = visible && (phase === "picture" || (!started && coverExpired));
+  const fading = visible && (phase === "picture" || coverExpired);
   const covering = visible && !fading;
   const onCoverChangeRef = useRef(onCoverChange);
   useEffect(() => {
@@ -278,17 +264,20 @@ export function PlaybackIntro({
   useEffect(() => () => onCoverChangeRef.current?.(false), []);
   useLayoutEffect(() => {
     if (!fading) return;
-    const d = reduced ? 200 : started ? 400 : 280;
-    if (!started && clockKey) finishIntro(clockKey);
+    const d = reduced ? 200 : 280;
+    if (clockKey) finishIntro(clockKey);
+    // Le film parti avant que la lueur ait commencé : elle ne passera pas sur un logo qui s'efface.
+    const sweepAnim = sweepAnimRef.current;
+    if (sweepAnim && Date.now() - startedAt < logoMs) sweepAnim.cancel();
     rootRef.current?.animate?.([{ opacity: 1 }, { opacity: 0 }], {
-      duration: d, easing: started ? "ease-out" : "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both",
+      duration: d, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both",
     });
-    if (started && !reduced) logoRef.current?.animate?.([{ transform: "scale(1)" }, { transform: "scale(1.06)" }], { duration: d, easing: "ease-out", fill: "forwards", composite: "replace" });
     // Retiré au bout du fondu, par une minuterie et non par la fin de l'animation : un navigateur sans
     // `animate` (ou une animation annulée) ne doit pas laisser le calque posé sur le film.
     const id = window.setTimeout(() => setDone(true), d);
     return () => window.clearTimeout(id);
-  }, [fading, started, reduced, clockKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fading, reduced, clockKey]);
 
   if (!visible) return null;
   const name = display.art?.name ?? display.name;
@@ -298,9 +287,9 @@ export function PlaybackIntro({
       ref={rootRef}
       className={`overflow-hidden bg-black ${className}`}
       style={{ pointerEvents: "none", ...style }}
-      data-playback-intro={started ? "intro" : "cover"}
+      data-playback-intro="intro"
     >
-      {/* À l'échelle de départ du zoom dès la couverture : l'ouverture animée part de là, sans saut. */}
+      {/* À l'échelle de départ du zoom dès le premier rendu : l'avance part de là, sans saut. */}
       <div ref={backdropRef} className="absolute inset-0" style={{ willChange: "transform", transform: reduced ? undefined : `scale(${zoom})` }}>
         {bgSrc && (
           // Le filtre éventuel (banc seulement) est posé sur l'image, qui ne bouge pas ; seul son
@@ -345,20 +334,18 @@ export function PlaybackIntro({
             <h1 className="text-center text-4xl font-bold text-white sm:text-6xl font-display">{name}</h1>
           )}
         </div>
-        {started && (
-          <div ref={detailsRef} className="flex flex-col items-center gap-4" style={{ opacity: 0 }}>
-            {display.caption.map((line) => (
-              <p key={line} className="text-center text-sm font-medium text-muted sm:text-base">
-                {line}
-              </p>
-            ))}
-            {/* La ligne de chargement : une lueur qui passe, à la place de la roue. */}
-            <div className="relative h-[2px] w-28 overflow-hidden rounded-full bg-white/15">
-              <div className={`absolute inset-y-0 w-1/2 rounded-full bg-gradient-to-r from-transparent via-white/90 to-transparent ${reduced ? "" : "playback-intro-line"}`} />
-            </div>
-            {note && <p className="text-xs text-subtle">{note}</p>}
+        <div ref={detailsRef} className="flex flex-col items-center gap-4" style={{ opacity: 0 }} data-playback-intro-details="">
+          {display.caption.map((line) => (
+            <p key={line} className="text-center text-sm font-medium text-muted sm:text-base">
+              {line}
+            </p>
+          ))}
+          {/* La ligne de chargement : une lueur qui passe, à la place de la roue. */}
+          <div className="relative h-[2px] w-28 overflow-hidden rounded-full bg-white/15" data-playback-intro-line="">
+            <div className={`absolute inset-y-0 w-1/2 rounded-full bg-gradient-to-r from-transparent via-white/90 to-transparent ${reduced ? "" : "playback-intro-line"}`} />
           </div>
-        )}
+          {note && <p className="text-xs text-subtle">{note}</p>}
+        </div>
       </div>
       {onClose && (
         // La seule chose qui prenne un appui : à l'ouverture, les commandes du lecteur natif ne sont

@@ -18,14 +18,12 @@ import { tmdbResize } from "@/lib/images";
 export type IntroBackground = "net" | "light" | "strong" | "old";
 
 export interface PlaybackIntroSettings {
-  /**
-   * Sous ce délai entre l'appui et la première image, seule la couverture (le visuel sous son voile,
-   * immobile) aura paru, effacée sur l'image : l'ouverture animée n'aurait pas de sens.
-   */
-  thresholdMs: number;
   /** Le fond part de cette échelle et revient à 1 en six secondes. */
   zoom: number;
-  /** La durée d'apparition du logo. */
+  /**
+   * La durée d'apparition du logo, depuis l'appui. Courte (250 ms) : un départ en 200 à 400 ms — une
+   * reprise lue depuis l'appareil — doit lire un logo posé, pas un logo à moitié apparu.
+   */
   logoMs: number;
   /** La lueur qui traverse le logo, découpée à sa forme par un masque. */
   sweep: boolean;
@@ -34,11 +32,14 @@ export interface PlaybackIntroSettings {
   brightness: number;
 }
 
-/** Les réglages validés le 10/10/2026 : fond net, voile d'origine, et les délais par défaut du banc. */
+/**
+ * Les réglages validés le 10/10/2026 : fond net, voile d'origine. Plus de seuil depuis le même soir :
+ * l'ouverture entière paraît dès l'appui — sous 300 ms, une couverture immobile (le visuel sans logo)
+ * se lisait comme une image figée sur les départs les plus rapides (Louis, iPhone, 8.31.2).
+ */
 export const PLAYBACK_INTRO: PlaybackIntroSettings = {
-  thresholdMs: 300,
   zoom: 1.08,
-  logoMs: 600,
+  logoMs: 250,
   sweep: true,
   background: "net",
   brightness: 0,
@@ -154,8 +155,8 @@ function parseEpisodeSubtitle(subtitle: unknown): { season: number; episode: num
 /**
  * Le visuel d'un titre qu'on lance, trouvé dans ce que l'appareil a déjà reçu : le catalogue (films,
  * séries), « Reprendre », « À suivre », et les listes d'épisodes déjà ouvertes. Rien n'est demandé au
- * serveur — l'ouverture doit pouvoir paraître à l'instant de l'appui, et la description du fichier,
- * qui porte aussi un logo, arrive parfois après le seuil (son logo a 500 ms de budget côté serveur).
+ * serveur — l'ouverture paraît à l'instant de l'appui, et la description du fichier, qui porte aussi
+ * un logo, arrive après (son logo a 500 ms de budget côté serveur).
  *
  * Un épisode prend le visuel et le logo de sa série. Rien de trouvé : `null`, et l'ouverture écrit
  * le titre de la séance sur fond noir.
