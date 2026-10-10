@@ -245,6 +245,7 @@ export class PlaybackGuard {
       if (this.host.destroyed || this.startingFrom === null) return;
       if (metadata.mediaTime > from + 0.01) {
         this.startingFrom = null;
+        this.firstPictureOwed = false;
         this.setStarting(null, "première image affichée");
         return;
       }
@@ -314,8 +315,40 @@ export class PlaybackGuard {
     // frame from further on, briefly, then the right one. Settling the position here is what the
     // anchor was for, so it has done its job.
     this.pauseAnchor = null;
+    this.headPlaced(target);
     this.video.currentTime = target;
   }
+
+  /**
+   * La source vient de poser la tête ailleurs pendant qu'un démarrage est attendu : l'atterrissage
+   * de l'ouverture (0 → 0,27 s sur un fichier à images B), la poussée d'une horloge figée.
+   *
+   * Ce pas-là n'est pas de la lecture, et il passait pour elle : `clockTicked` comme la première
+   * image lisaient « la tête a dépassé le départ » et levaient l'attente sur une image figée. Sur
+   * iPhone, un tiers des ouvertures depuis le début restaient ainsi arrêtées 1,5 s sans rien dire,
+   * puis repartaient après la poussée — le « second petit chargement » vu par Louis sur *Her*
+   * (10/10/2026 ; trace de *Forrest Gump* du 06/10 : atterrissage à 0,27 s, « attente levée », puis
+   * « horloge figée à 0,27 s » 1,5 s plus tard). Le départ se compte donc depuis là où la tête a été
+   * posée.
+   */
+  headPlaced(at: number): void {
+    if (this.startingFrom === null) return;
+    this.startingFrom = at;
+    this.stopWatchingForFirstFrame();
+    this.watchForFirstFrame(at);
+  }
+
+  /**
+   * Vrai depuis l'ouverture jusqu'à la première image qui avance vraiment — voir
+   * `FROZEN_OPENING_MS` dans la source, qui pousse plus tôt une ouverture figée.
+   */
+  get awaitingFirstPicture(): boolean {
+    // Et près de là où elle s'est ouverte : un saut demandé avant toute image n'est plus
+    // l'ouverture, il a son propre délai, mesuré sur ce qu'il a à décoder.
+    return this.firstPictureOwed && this.openedFrom !== null && Math.abs(this.video.currentTime - this.openedFrom) < 1;
+  }
+
+  private firstPictureOwed = false;
 
   readonly clockTicked = () => {
     // The first tick after resuming is where a jump would show, so it is recorded before
@@ -323,6 +356,7 @@ export class PlaybackGuard {
     // Independent of the pause trace, so the first automatic play is answered too.
     if (this.startingFrom !== null && this.video.currentTime > this.startingFrom + 0.01) {
       this.startingFrom = null;
+      this.firstPictureOwed = false;
       this.stopWatchingForFirstFrame();
       this.setStarting(null, "l'horloge a avancé");
     }
@@ -485,6 +519,7 @@ export class PlaybackGuard {
     // the ones where it never announced anything sitting at 0:00.
     this.startAborted = startOwed;
     this.startRetries = 0;
+    this.firstPictureOwed = startOwed;
     this.openedFrom = playerSeconds;
     this.openedAt = Date.now();
     /**

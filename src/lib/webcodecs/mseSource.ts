@@ -41,6 +41,18 @@ const FROZEN_CLOCK_MS = 1500;
  */
 const FROZEN_SEEKING_MS = 6000;
 
+/**
+ * Et à l'ouverture, pour la première poussée seulement : une ouverture figée sur l'instant où elle
+ * a été posée ne se débloque pas seule sur Safari — 61 ouvertures depuis le début sur 186 sur
+ * iPhone, poussées au bout de 1,5 s (journal relu le 10/10/2026), autant de « second chargement ».
+ * La poussée les libère à coup sûr ; elle vient donc plus tôt. Les poussées suivantes gardent le délai ordinaire : un appareil
+ * lent qui décode vraiment ne doit pas gravir l'échelle des reprises en une seconde.
+ */
+const FROZEN_OPENING_MS = 400;
+
+/** Ce qu'est « au bord » : l'atterrissage pose la tête 0,04 s dans le média, une poussée 0,08 s. */
+const OPENING_EDGE_SECONDS = 0.5;
+
 /** Ce qu'une seconde de média à décoder ajoute à ce délai — voir `seekingPatienceMs`. */
 const SEEKING_PATIENCE_PER_SECOND_MS = 500;
 
@@ -1593,6 +1605,7 @@ export class MseSource {
         : `ouverture : le média commence après ${target.toFixed(1)} s, la tête est posée à ${landing.toFixed(2)} s`
     );
     this.seekState.moved(landing);
+    this.guard.headPlaced(landing);
     this.video.currentTime = landing;
     this.guard.opened(landing, !this.startPaused);
   }
@@ -1951,6 +1964,15 @@ export class MseSource {
    * secondes. Une plage qui commence loin derrière (un saut dans un long tampon continu) garde le
    * plafond — la vraie image clé est inconnue, et on reste alors sur la prudence d'avant.
    */
+  /** Ce que le décodeur traverse depuis le début de la plage sous la tête ; inconnu, le plafond. */
+  private decodeDistance(now: number): number {
+    const ranges = this.playable;
+    for (let i = 0; i < ranges.length; i++) {
+      if (ranges.start(i) <= now && now < ranges.end(i)) return now - ranges.start(i);
+    }
+    return (FROZEN_SEEKING_MS - FROZEN_CLOCK_MS) / SEEKING_PATIENCE_PER_SECOND_MS;
+  }
+
   private seekingPatienceMs(now: number): number {
     const ranges = this.playable;
     for (let i = 0; i < ranges.length; i++) {
@@ -1970,7 +1992,15 @@ export class MseSource {
       if (moved) this.frozenNudges = 0;
       return;
     }
-    if (Date.now() - this.frozenSince < (this.video.seeking ? this.seekingPatienceMs(now) : FROZEN_CLOCK_MS)) return;
+    const ordinary = this.video.seeking ? this.seekingPatienceMs(now) : FROZEN_CLOCK_MS;
+    // Seulement une tête posée au bord du média, le cas mesuré : une reprise posée loin derrière son
+    // image clé décode vraiment, et la pousser relancerait ce décodage (22/09/2026, « une seconde de
+    // lecture pour deux de chargement »).
+    const patience =
+      this.guard.awaitingFirstPicture && this.frozenNudges === 0 && this.decodeDistance(now) < OPENING_EDGE_SECONDS
+        ? FROZEN_OPENING_MS
+        : ordinary;
+    if (Date.now() - this.frozenSince < patience) return;
     // Only when there is plainly something to play: a clock that is not moving because the
     // buffer ran dry is an ordinary wait, and the fill loop is already on it.
     if (this.lead < 1) return;
@@ -1996,6 +2026,7 @@ export class MseSource {
     trace(`horloge figée à ${now.toFixed(2)} s avec ${this.lead.toFixed(1)} s en avance — on redemande la position`);
     this.guard.forgetPause();
     this.seekState.moved(now + FROZEN_STEP);
+    this.guard.headPlaced(now + FROZEN_STEP);
     this.video.currentTime = now + FROZEN_STEP;
     // Le mouvement se mesure depuis là où la poussée a mis l'horloge. Mesuré depuis `now`, les
     // 0,08 s de la poussée passaient pour de la lecture et remettaient le compteur à zéro : douze

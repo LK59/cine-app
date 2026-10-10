@@ -1152,9 +1152,14 @@ export function ExperimentalPlayerHost({
     if (!announced || introPlaying) return;
     const media = videoElRef.current;
     if (!media) return;
-    const from = media.currentTime;
+    // Mesuré depuis le dernier placement de la tête : l'atterrissage de l'ouverture (0 → 0,27 s) et
+    // la poussée d'une horloge figée sont des sauts, pas de la lecture (`headPlaced`, même raison).
+    let from = media.currentTime;
+    const onSeek = () => {
+      from = media.currentTime;
+    };
     const onTime = () => {
-      if (!media.paused && media.currentTime > from + 0.1) setIntroPlaying(true);
+      if (!media.paused && !media.seeking && media.currentTime > from + 0.1) setIntroPlaying(true);
     };
     // Lecture automatique refusée (iOS sans geste récent) : rien ne bougera avant un appui, et le
     // bouton Lecture des commandes doit se voir. Un élément arrêté sans attente armée, c'est ça.
@@ -1162,9 +1167,13 @@ export function ExperimentalPlayerHost({
       if (media.paused && startingRef.current === null) setIntroPlaying(true);
     }, 1500);
     media.addEventListener("timeupdate", onTime);
+    media.addEventListener("seeking", onSeek);
+    media.addEventListener("seeked", onSeek);
     return () => {
       window.clearInterval(blocked);
       media.removeEventListener("timeupdate", onTime);
+      media.removeEventListener("seeking", onSeek);
+      media.removeEventListener("seeked", onSeek);
     };
   }, [announced, introPlaying]);
   useEffect(() => {

@@ -164,6 +164,36 @@ describe("PlaybackGuard", () => {
     expect(starting.at(-1)).toBeNull();
   });
 
+  it("does not take the opening's landing for playback, and lifts the wait only when the clock really moves", () => {
+    // Sur iPhone, l'ouverture depuis le début pose la tête sur le premier média (0 → 0,27 s sur un
+    // fichier à images B). Ce pas levait l'attente : un tiers des ouvertures restaient figées
+    // 1,5 s sur une image arrêtée, jusqu'à la poussée (Her, 10/10/2026).
+    const { guard, video, starting } = build({ at: 0, playable: ranges([0.23, 30]) });
+    guard.opened(0);
+    guard.playing();
+    expect(guard.awaitingFirstPicture).toBe(true);
+
+    guard.nudgeIntoBuffer();
+    expect(video.currentTime).toBeCloseTo(0.27, 2);
+    guard.clockTicked();
+    expect(starting.at(-1)).toEqual(expect.any(Number));
+    expect(guard.awaitingFirstPicture).toBe(true);
+
+    (video as unknown as { currentTime: number }).currentTime = 0.5;
+    guard.clockTicked();
+    expect(starting.at(-1)).toBeNull();
+    expect(guard.awaitingFirstPicture).toBe(false);
+  });
+
+  it("counts a push of a frozen clock as a placement, not as playback", () => {
+    const { guard, video, starting } = build({ at: 3 });
+    guard.playing();
+    guard.headPlaced(3.08);
+    (video as unknown as { currentTime: number }).currentTime = 3.08;
+    guard.clockTicked();
+    expect(starting.at(-1)).toEqual(expect.any(Number));
+  });
+
   it("never leaves a wait behind when the source dies", () => {
     // A wait nobody will ever answer is a spinner for ever.
     const { guard, starting } = build({ at: 5 });

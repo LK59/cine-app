@@ -2244,6 +2244,33 @@ describe("l'échelle des reprises", () => {
     expect(video.currentTime).toBeGreaterThan(head);
   });
 
+  it("pousse tôt une ouverture figée au bord du média, une seule fois", async () => {
+    // Her sur iPhone (10/10/2026) : un tiers des ouvertures depuis le début restaient figées sur
+    // l'instant d'atterrissage jusqu'à la poussée de 1,5 s — un « second chargement ».
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(200);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    const internals = internalsOf(mse);
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 12, "du média devant la tête");
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    const head = video.buffered.start(0) + 0.04;
+
+    setTime(video, head);
+    video.dispatchEvent(new Event("play"));
+    internals.watchForFrozenClock(head);
+    internals.frozenSince = Date.now() - 300;
+    internals.watchForFrozenClock(head);
+    expect(video.currentTime).toBe(head);
+    internals.frozenSince = Date.now() - 450;
+    internals.watchForFrozenClock(head);
+    expect(video.currentTime).toBeGreaterThan(head);
+    // La suivante garde le délai ordinaire.
+    const pushed = video.currentTime;
+    internals.frozenSince = Date.now() - 450;
+    internals.watchForFrozenClock(pushed);
+    expect(video.currentTime).toBe(pushed);
+  });
+
   it("écrit un blocage une fois, avec de quoi le comprendre, et pas davantage", async () => {
     const video = fakeVideo();
     Object.assign(video, { readyState: 2, networkState: 2, seeking: false });
