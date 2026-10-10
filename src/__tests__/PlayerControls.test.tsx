@@ -1787,4 +1787,19 @@ describe("PlayerControls — la reprise après une pause", () => {
     expect(container.querySelector('[data-player-nav="playpause"]')).toBeNull();
     expect(container.querySelector(".player-wait-wheel")).not.toBeNull();
   });
+
+  it("se tait sous l'ouverture de la lecture et pendant la grâce du premier départ", async () => {
+    // 10/10/2026 : la roue et le fil montaient sur `waiting` sans délai, et un départ de quelques
+    // centaines de millisecondes en faisait clignoter un. L'hôte, qui connaît l'ouverture, les tait.
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { container, rerender } = render(<Harness loading openingQuiet onVideoRef={(el) => { video = el; }} />);
+    await act(async () => {});
+    await act(async () => void video!.dispatchEvent(new Event("waiting")));
+    expect(container.querySelector(".player-wait-wheel")).toBeNull();
+    expect(container.querySelector(".player-wait-thread")).toBeNull();
+    // Passé la grâce, une vraie attente se montre de nouveau.
+    rerender(<Harness loading openingQuiet={false} onVideoRef={(el) => { video = el; }} />);
+    expect(container.querySelector(".player-wait-wheel")).not.toBeNull();
+  });
 });

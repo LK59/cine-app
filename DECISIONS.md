@@ -1957,9 +1957,12 @@ flou : une image de 300 px agrandie, et « le flou basse résolution se voit ».
 son voile couvre l'écran, immobile — à l'échelle de départ du zoom —, sans logo, légende ni ligne :
 le lecteur vide ne se montre jamais. Ensuite :
 - **la première image arrive avant 300 ms** (`imageShown` : `announced` au natif, même figée,
-  l'horloge pas encore partie ; l'image du lecteur serveur) : la couverture s'efface sur elle en
-  280 ms, en décélérant, et l'ouverture animée ne paraît jamais. La lecture est alors close
-  (`finishIntro`) ;
+  l'horloge pas encore partie ; l'image du lecteur serveur) : l'ouverture animée ne paraît jamais,
+  et la couverture **tient jusqu'au film qui bouge** (`phase` → `picture` : la règle de fin plus bas —
+  l'horloge partie, ou la lecture automatique refusée), puis s'efface en un seul fondu de 280 ms,
+  en décélérant, sur une image qui joue déjà. Une image décodée qui ne part pas en `COVER_HOLD_MS`
+  (1,2 s) est un vrai blocage : la couverture s'efface quand même, et l'attente se voit. La lecture
+  est alors close (`finishIntro`) ;
 - **rien à 300 ms** : l'ouverture animée part de la couverture — même image, même voile, même
   échelle — et s'efface selon les règles plus bas ;
 - **une image à l'écran n'est jamais recouverte** : passé `imageShown`, l'ouverture animée ne peut
@@ -1972,8 +1975,19 @@ l'horloge, et l'ouverture animée — partie à 300 ms parce que sa fin était l
 se posait *sur* l'image déjà là, puis s'effaçait un instant plus tard. Avant elle, le lecteur vide
 se voyait un instant. Une couverture qui s'efface sur l'image règle les deux.
 
-Sur une couverture effacée sans ouverture animée, la roue de l'attente du natif reprend ses droits
-si l'horloge tarde : il n'y a plus rien pour en tenir lieu.
+Puis (8.30.9, même jour) : effacée sur l'image *figée*, la couverture laissait encore voir l'image
+arrêtée et, le temps que Safari démarre, la roue des commandes — montée sur `waiting`, sans délai.
+D'où la couverture qui tient jusqu'au film qui bouge, et trois silences :
+- **la roue de l'hôte** (`openingSpinner`, `resumeSpinner`) ne paraît pas sous le calque, ni pendant
+  la grâce du premier départ (`OPENING_SPINNER_GRACE_MS`, 1,2 s) ;
+- **la roue et le fil des commandes** suivent la même règle, par la propriété `openingQuiet` que
+  l'hôte leur passe (natif : calque ou grâce ; serveur : calque, signalé par `onCoverChange`) — les
+  vraies attentes en cours de film les gardent ;
+- **le gel des départs du début** est attaqué à la source : la position est redemandée une fois
+  100 ms après l'atterrissage de l'ouverture si rien n'a bougé (`OPENING_REASSERT_MS`, `MseSource`),
+  au bord du média seulement ; la poussée de 400 ms reste le filet. Mesuré ce jour-là : WarGames, La
+  Flamme, Drive ouverts en 14 à 373 ms, figés jusqu'à la poussée (`frozenNudges: 1`), que le chien de
+  garde à 250 ms ne livrait qu'à 500 ms.
 
 **Ce qu'elle ne fait jamais.**
 - **Retarder la lecture.** C'est un calque posé sur l'élément vidéo : le fichier s'ouvre dessous
@@ -2014,7 +2028,7 @@ Un épisode prend le visuel et le logo de sa série. Le visuel et le logo sont d
 fichier n'est pas attendu : il a 500 ms de budget côté serveur et arriverait après le seuil.
 
 **Quand l'ouverture animée laisse la place au film** (`src/lib/introEnd.ts`) — à la lecture partie,
-pas au lecteur prêt (la couverture seule, elle, s'efface à la première image) :
+pas au lecteur prêt (la couverture seule aussi, ou à `COVER_HOLD_MS` sur une image qui ne part pas) :
 - **lecteur natif** : l'horloge qui avance vraiment, mesurée depuis le dernier placement de la tête
   (l'atterrissage de l'ouverture et la poussée d'une horloge figée sont des sauts) ;
 - **lecteur serveur** : plus de saut en cours et `readyState` ≥ 3 (`loadeddata` précède le saut de

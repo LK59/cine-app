@@ -295,9 +295,12 @@ function ServerPlayerIntro({
   hidden,
   resumeSeconds,
   videoRef,
+  onCoverChange,
   onClose,
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
+  /** Le calque couvre-t-il le lecteur — l'hôte en tait la roue et le fil de ses commandes. */
+  onCoverChange?: (covering: boolean) => void;
   allowed: boolean;
   /** Pas encore d'image : `loading` de ce lecteur, qui tombe à `loadeddata`. */
   loading: boolean;
@@ -333,6 +336,7 @@ function ServerPlayerIntro({
       // Ici l'image et la fin ne font qu'un (`useServerIntroPicture`) : la couverture posée au montage
       // s'efface sur elle, ou l'ouverture animée si elle avait paru — même règle que chez le natif.
       imageShown={pictured}
+      onCoverChange={onCoverChange}
       fallbackName={session.title}
       caption={introCaption({ ...session.introArt, resumeSeconds }, t)}
       onClose={onClose}
@@ -460,6 +464,9 @@ function ActivePlayer({
   const [error, setError] = useState<string | null>(null);
   const [needsReauth, setNeedsReauth] = useState(false);
   const [loading, setLoading] = useState(true);
+  // L'ouverture de la lecture couvre-t-elle encore l'écran (`ServerPlayerIntro`) ? La roue et le fil
+  // des commandes se taisent dessous — même règle que chez le natif (DECISIONS.md §60).
+  const [introCovering, setIntroCovering] = useState(false);
   // True only while hls.js is mid-retry after a fatal network/media error — distinct from
   // `loading` (the initial "fetching a fresh manifest" spinner) and from `error` (retries
   // exhausted, playback truly stopped). Drives the small non-blocking "Reconnexion..." banner.
@@ -1983,6 +1990,7 @@ function ActivePlayer({
         hidden={isMini}
         resumeSeconds={initialResumeAt ?? null}
         videoRef={videoRef}
+        onCoverChange={setIntroCovering}
         onClose={handleClose}
       />
       {!isMini && (
@@ -2003,6 +2011,7 @@ function ActivePlayer({
           onChangeSubtitle={changeSubtitle}
           hidden={!!error || needsReauth}
           loading={loading}
+          openingQuiet={introCovering}
           introSkip={introSkip}
           creditsStart={creditsStart}
           nextEpisode={nextEpisode}
