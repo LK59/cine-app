@@ -346,11 +346,30 @@ describe("la fermeture", () => {
     await runOpen();
     expect(root()!.hasAttribute("data-sheet-flying")).toBe(false);
     const photo = root()!.querySelector<HTMLElement>("[data-sheet-photo]")!;
-    expect(photo.style.backgroundImage).toContain("https://img.test/poster.jpg");
     expect(photo.style.opacity).toBe("1");
-    // Le visuel arrivé se dessine par-dessus, et le fond de secours s'en va.
+    // L'affiche reste par-dessus le visuel, dans un calque à elle, tant qu'il n'est pas arrivé.
+    const standIn = photo.nextElementSibling as HTMLElement;
+    expect(standIn.hasAttribute("data-sheet-standin")).toBe(true);
+    expect(standIn.style.backgroundImage).toContain("https://img.test/poster.jpg");
+    expect(live(standIn)).toHaveLength(0);
+  });
+
+  it("le visuel arrivé après le trajet : l'affiche s'efface en fondu, jamais d'un coup", async () => {
+    // Louis (iPhone, 10/10/2026) : depuis la bannière du téléphone, l'affiche en remplacement était
+    // recouverte d'un coup par le vrai visuel à son arrivée — « changement brutal, perturbant ».
+    press(addPoster().querySelector("img")!);
+    render(<Sheet />);
+    await runOpen();
+    const photo = root()!.querySelector<HTMLElement>("[data-sheet-photo]")!;
+    const standIn = photo.nextElementSibling as HTMLElement;
     fireEvent.load(photo);
-    expect(photo.style.backgroundImage).toBe("");
+    const fade = live(standIn)[0] as FakeAnimation;
+    expect(fade.frames.map((f) => f.opacity)).toEqual([1, 0]);
+    expect(fade.options.duration).toBe(300);
+    // Encore là pendant le fondu ; retiré seulement à sa fin.
+    expect(standIn.isConnected).toBe(true);
+    act(() => fade.finish());
+    expect(standIn.isConnected).toBe(false);
   });
 
   it("le visuel déjà chargé : l'affiche s'efface sur lui pendant le trajet", async () => {

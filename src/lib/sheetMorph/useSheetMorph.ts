@@ -382,6 +382,51 @@ function cloneVisible(root: HTMLElement, layer: HTMLElement, H: number): HTMLEle
   return copy;
 }
 
+/** Le fondu du relais d'affiche vers le vrai visuel : assez long pour se voir comme un fondu, pas comme une attente. */
+export const STAND_IN_FADE_MS = 300;
+
+/**
+ * L'affiche qui a volé, posée par-dessus le visuel de la fiche, s'efface quand le visuel est là.
+ *
+ * Un calque juste après l'`<img>` (sous les voiles, qui sont ses frères suivants), à sa place exacte
+ * dans le même parent. Opacité seulement, décélérée. Un visuel qui échoue la laisse en place : une
+ * affiche vaut mieux qu'une bannière vide.
+ */
+function crossfadeStandIn(photo: HTMLImageElement, standIn: string): void {
+  const parent = photo.parentElement;
+  if (!parent) return;
+  const over = document.createElement("div");
+  over.setAttribute("data-sheet-standin", "");
+  over.setAttribute("aria-hidden", "true");
+  Object.assign(over.style, {
+    position: "absolute",
+    left: `${photo.offsetLeft}px`,
+    top: `${photo.offsetTop}px`,
+    width: `${photo.offsetWidth || parent.clientWidth}px`,
+    height: `${photo.offsetHeight || parent.clientHeight}px`,
+    pointerEvents: "none",
+    backgroundImage: `url("${standIn}")`,
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+  } satisfies Partial<CSSStyleDeclaration>);
+  photo.insertAdjacentElement("afterend", over);
+  const fade = () => {
+    if (!over.isConnected) return;
+    if (typeof over.animate !== "function") {
+      over.remove();
+      return;
+    }
+    const anim = over.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: STAND_IN_FADE_MS,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      fill: "forwards",
+    });
+    anim.onfinish = () => over.remove();
+  };
+  if (photo.complete && photo.naturalWidth > 0) fade();
+  else photo.addEventListener("load", fade, { once: true });
+}
+
 export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
   // Décidé au premier rendu — la fiche en retire sa classe d'entrée dès ce rendu-là.
   const [entry] = useState<Entry>(() => decideEntry(opts));
@@ -753,20 +798,18 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     if (s.closing) return;
     // Arrivée pendant le trajet, l'image de la fiche serait encore dans son fondu d'arrivée : montrée
     // à moitié transparente, elle assombrirait le relais.
-    if (photo?.complete && photo.naturalWidth > 0) {
+    if (photo && standIn) {
+      // L'affiche a volé seule (`posterOnly`, le visuel n'était pas là au départ) : elle reste
+      // par-dessus la bannière, et le vrai visuel apparaît dessous en fondu quand il arrive — ou
+      // tout de suite s'il est arrivé pendant le trajet. Posée en fond de l'`<img>`, elle était
+      // recouverte d'un coup à l'arrivée du visuel : « changement brutal » depuis la bannière du
+      // téléphone (Louis, 10/10/2026).
       photo.style.transition = "none";
       photo.style.opacity = "1";
-    } else if (photo && standIn) {
-      // Toujours en route : la vignette qui a volé reste en fond de la bannière, et le visuel se
-      // dessine par-dessus à son arrivée — pas de bannière vide entre les deux.
-      Object.assign(photo.style, { transition: "none", opacity: "1", backgroundImage: `url("${standIn}")`, backgroundSize: "cover", backgroundPosition: "center" });
-      const clear = () => {
-        photo.style.backgroundImage = "";
-        photo.removeEventListener("load", clear);
-        photo.removeEventListener("error", clear);
-      };
-      photo.addEventListener("load", clear);
-      photo.addEventListener("error", clear);
+      crossfadeStandIn(photo, standIn);
+    } else if (photo?.complete && photo.naturalWidth > 0) {
+      photo.style.transition = "none";
+      photo.style.opacity = "1";
     }
     for (const undo of s.restore.splice(0)) undo();
     s.win?.win.remove();

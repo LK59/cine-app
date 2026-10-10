@@ -2115,7 +2115,12 @@ vole porte `data-sheet-flying` : tout visuel ou voile monté pendant le trajet r
 
 **Rien n'est attendu, rien n'est téléchargé pour animer.** Si le visuel de la fiche n'est pas encore
 chargé (une reprise dont la bannière n'a jamais été demandée), la vignette touchée vole jusqu'au bout
-(`posterOnly`) et reste en fond de la bannière jusqu'à l'arrivée du visuel ; le départ n'attend que le
+(`posterOnly`) et reste par-dessus la bannière, dans un calque à elle (`data-sheet-standin`), jusqu'à
+l'arrivée du visuel, qui apparaît alors dessous en fondu de 300 ms — jamais d'un coup (posée en fond de
+l'`<img>`, elle était recouverte net à l'arrivée du visuel : « changement brutal » depuis la bannière du
+téléphone, 10/10/2026). Pour que ce relais soit rare, la bannière du téléphone demande d'avance, au
+repos, hors film et hors économie de données, le visuel du titre affiché et de ses deux voisins
+(`prefetchSheetBanners`, à l'adresse même que la fiche demande). Le départ n'attend que le
 décodage de la vignette. Les cartes de « Reprendre » sont servies au relâchement du doigt
 (`LongPressButton` avec `useTap`, comme les autres rangées) : servies au `click`, elles attendaient
 celui qu'iOS retient après un défilement ou pendant un retour. Tests : `sheetMorph-hook.test.tsx`,
