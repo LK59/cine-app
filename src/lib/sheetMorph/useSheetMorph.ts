@@ -18,8 +18,11 @@ import {
   REVEAL_AT,
   REVEAL_MS,
   REVEAL_RISE_PX,
+  CARD_IN,
+  CARD_OUT,
   appleCloseMotion,
   appleOpenMotion,
+  cardTrack,
   clamp,
   closePoses,
   closeStartVelocity,
@@ -127,7 +130,7 @@ type Flight = {
   layout: SheetLayout;
   /** Le relais final a commencé (la vraie carte est revenue dessous) — trop tard pour la retourner. */
   handover: boolean;
-  takeOver: () => { pose: Pose; v0: (ahead: number) => number; dim: number; home: number | null; cardY: number | null };
+  takeOver: () => { pose: Pose; v0: (ahead: number) => number; dim: number; home: number | null; cardOpacity: number };
   cut: () => { dim: number; home: number | null };
 };
 
@@ -477,7 +480,6 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     const srcBox = boxOf(source.frame);
     const rootTop = root.getBoundingClientRect().top;
     const bandAt = target.y + target.h - rootTop;
-    const cardDrop = layout === "phone" ? stage.H - rootTop : 0;
     const photo = root.querySelector<HTMLImageElement>("[data-sheet-photo]");
     const veils = Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-veil]"));
     const content = Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-content]"));
@@ -554,10 +556,14 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     anims.push(...playTracks(w, poseAt, motion, target, stage, true));
     go(dim, samples.map(({ offset, q }) => ({ offset, opacity: lerp(dimFrom, DIM, clamp(q, 0, 1)) })), LINEAR(d));
     if (layout === "phone") {
-      const cardFrom = reversed?.cardY ?? cardDrop;
-      // Sans remplissage à la fin : la montée finie, c'est le style de la carte qui reprend sa
+      // La carte collée à la bannière (`cardTrack`) : son encre suit le bas de l'image à chaque
+      // image clé. Reprise d'un retour : la pose de départ est celle où il en était, et la carte y
+      // était déjà collée — elle repart de l'opacité où son effacement l'avait laissée. Sans
+      // remplissage à la fin : la montée finie, c'est le style de la carte qui reprend sa
       // transformation — celle du doigt quand on tire la fiche.
-      go(root, samples.map(({ offset, q }) => ({ offset, transform: `translateY(${lerp(cardFrom, 0, q).toFixed(2)}px)` })), LINEAR(d, "backwards"));
+      const cardFrom = reversed ? reversed.cardOpacity : 0;
+      const cardOpacity = (q: number) => lerp(cardFrom, 1, CARD_IN(q));
+      go(root, cardTrack(samples, poseAt, rootTop, bandAt, cardOpacity), LINEAR(d, "backwards"));
     }
     // Le contenu part quand l'image est en place pour l'œil, d'un seul bloc, et se pose avec elle.
     const revealAt = timeAt(samples, d, REVEAL_AT);
@@ -662,7 +668,6 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     const rootTopNow = root.getBoundingClientRect().top;
     const bandAt = imageNow ? imageNow.y + imageNow.h - rootTopNow : 0;
     const restingTop = rootTopNow - cardFrom;
-    const cardDrop = layout === "phone" ? stage.H - restingTop : 0;
 
     // 2. L'ouverture s'arrête ; la fiche reprend son allure posée — c'est elle que la copie reproduit.
     stopOpen();
@@ -737,7 +742,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
         // Jamais appelé : une ouverture ne retourne qu'un trajet dont le relais n'a pas commencé.
         takeOver: () => {
           const box = { x: 0, y: 0, w: 0, h: 0 };
-          return { pose: { box, corners: uniformCorners(0), bd: IDENTITY, poster: IDENTITY, bdOpacity: 0, posterOpacity: 0 }, v0: () => 0, dim: 0, home: null, cardY: null };
+          return { pose: { box, corners: uniformCorners(0), bd: IDENTITY, poster: IDENTITY, bdOpacity: 0, posterOpacity: 0 }, v0: () => 0, dim: 0, home: null, cardOpacity: 1 };
         },
         cut: () => {
           const left = { dim: dim ? opacityNow(dim) : 0, home: h ? scaleOf(h) : null };
@@ -784,7 +789,8 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
 
     const ghost = playTracks(w, poseAt, motion, base, stage, false);
     if (layout === "phone") {
-      others.push(copy.animate(samples.map(({ offset, q }) => ({ offset, transform: `translateY(${lerp(cardFrom, cardDrop, q).toFixed(2)}px)` })), LINEAR(d)));
+      // La copie redescend collée à l'image qui rentre dans l'affiche, et s'efface sur la fin (`CARD_OUT`).
+      others.push(copy.animate(cardTrack(samples, poseAt, restingTop, bandAt, (q) => rootOpacity * CARD_OUT(q)), LINEAR(d)));
       copyContent.forEach((el, i) => {
         const from = contentNow[i] ?? 1;
         others.push(el.animate([{ opacity: from }, { opacity: 0 }], { duration: from > 0 ? CONTENT_OUT_MS : 1, easing: "ease-in", fill: "both" }));
@@ -810,7 +816,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
         const r = motion.q(t);
         const vr = motion.v(t);
         const pose = poseAt(r);
-        const left = { pose, dim: dim ? opacityNow(dim) : 0, home: h ? scaleOf(h) : null, cardY: layout === "phone" ? translateYOf(getComputedStyle(copy).transform) : null };
+        const left = { pose, dim: dim ? opacityNow(dim) : 0, home: h ? scaleOf(h) : null, cardOpacity: layout === "phone" ? opacityNow(copy) : 1 };
         end(false);
         // Le retour avançait de `vr·longueur` pixels par seconde vers la carte ; l'aller repart à
         // contre-sens, à −vr·longueur / (point → fiche).
