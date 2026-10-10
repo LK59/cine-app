@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type RefObject } from "react";
 import { Loader2 } from "lucide-react";
 import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession, stopOrphanSession } from "@/lib/usePlaybackSession";
@@ -293,6 +293,7 @@ function ServerPlayerIntro({
   trouble,
   hidden,
   resumeSeconds,
+  videoRef,
   onClose,
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
@@ -302,6 +303,7 @@ function ServerPlayerIntro({
   trouble: boolean;
   hidden: boolean;
   resumeSeconds: number | null;
+  videoRef: RefObject<HTMLVideoElement | null>;
   onClose: () => void;
 }) {
   const t = useT();
@@ -310,8 +312,30 @@ function ServerPlayerIntro({
   const [startedAt] = useState(() => startIntroClock(key));
   // Une image a été montrée : l'ouverture est finie pour cette lecture, quoi qu'il arrive ensuite
   // (un nouvel essai, un changement de piste remettent `loading` — ce n'est plus une ouverture).
+  //
+  // `loading` tombe à `loadeddata`, c'est-à-dire *avant* le saut vers la position de reprise : une
+  // reprise laissait ~3 s d'écran noir entre l'ouverture effacée et l'image (vu en capture le
+  // 10/10/2026, Forrest Gump repris à 21 min). L'image compte donc quand l'élément en a une à sa
+  // position actuelle — plus de saut en cours, `readyState` ≥ 2 —, attendue par ses événements.
   const [pictured, setPictured] = useState(false);
-  if (!loading && !pictured) setPictured(true);
+  useEffect(() => {
+    if (loading || pictured) return;
+    const video = videoRef.current;
+    const hasPicture = () => !video || (!video.seeking && video.readyState >= 2);
+    let live = true;
+    const check = () => {
+      if (live && hasPicture()) setPictured(true);
+    };
+    // Déjà là le plus souvent (un départ du début) : lu au tour suivant plutôt que dans le corps de
+    // l'effet, où le compilateur React refuse un `setState`.
+    queueMicrotask(check);
+    const events = ["seeked", "canplay", "playing", "loadeddata"] as const;
+    for (const e of events) video?.addEventListener(e, check);
+    return () => {
+      live = false;
+      for (const e of events) video?.removeEventListener(e, check);
+    };
+  }, [loading, pictured, videoRef]);
   useEffect(() => {
     if (pictured) finishIntro(key);
   }, [pictured, key]);
@@ -1972,6 +1996,7 @@ function ActivePlayer({
         trouble={!!error || needsReauth || castInterrupted || pendingAudioTrack !== null}
         hidden={isMini}
         resumeSeconds={initialResumeAt ?? null}
+        videoRef={videoRef}
         onClose={handleClose}
       />
       {!isMini && (
