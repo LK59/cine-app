@@ -85,29 +85,13 @@ function LoginForm() {
       // sur un petit téléphone, c'est elle qui touche le bas, et l'indicateur d'accueil la couvrait.
       style={{ paddingBottom: "max(2.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))" }}
     >
-      {/*
-        Une lueur, pas une image.
-        
-        La porte d'entrée doit ressembler à l'application qu'elle ouvre, et l'application est
-        sombre avec un accent chaud. Deux dégradés radiaux suffisent à le dire : rien à télécharger,
-        rien qui puisse manquer sur une connexion lente, et l'écran est peint avant même que la
-        police d'affichage soit arrivée. `pointer-events-none` parce qu'un décor ne se clique pas.
-      */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(60rem 40rem at 50% -10%, color-mix(in srgb, var(--color-accent-600) 22%, transparent), transparent 70%)," +
-            "radial-gradient(40rem 30rem at 100% 100%, color-mix(in srgb, var(--color-accent-500) 10%, transparent), transparent 70%)",
-        }}
-      />
-
+      {/* Plein noir (10/10/2026) : la lueur violette en dégradé ne disait plus rien de l'application,
+          dont l'accent n'est plus violet — le noir du cinéma suffit à la reconnaître. */}
       <div className="relative w-full max-w-sm">
         {/* L'enseigne, au-dessus de la carte plutôt que dedans : on reconnaît d'abord l'endroit,
             on s'identifie ensuite. */}
         <div className="mb-8 flex flex-col items-center text-center">
-          <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-600/15 text-accent-400 ring-1 ring-accent-500/25">
+          <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-white ring-1 ring-white/10">
             <Clapperboard size={28} />
           </span>
           <h1 className="font-display text-3xl font-bold tracking-tight text-white">Cine App</h1>
@@ -116,12 +100,12 @@ function LoginForm() {
 
         <div className="card settings-card p-6 sm:p-7">
           {reason === "playback" && (
-            <p className="mb-5 rounded-lg border border-accent-500/20 bg-accent-500/10 px-3 py-2 text-xs text-accent-200">
+            <p className="mb-5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200">
               {t("auth.reasonPlayback")}
             </p>
           )}
           {reason === "jellyfin" && (
-            <p className="mb-5 rounded-lg border border-accent-500/20 bg-accent-500/10 px-3 py-2 text-xs text-accent-200">
+            <p className="mb-5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200">
               {t("auth.reasonJellyfin")}
             </p>
           )}
@@ -146,7 +130,7 @@ function LoginForm() {
               */}
               <input
                 id="login-user"
-                className="input py-2.5"
+                className="input py-2.5 focus:border-white/40! focus:ring-white/25!"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
@@ -170,7 +154,7 @@ function LoginForm() {
                 <input
                   id="login-pass"
                   type={revealed ? "text" : "password"}
-                  className="input py-2.5 pr-11"
+                  className="input py-2.5 pr-11 focus:border-white/40! focus:ring-white/25!"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
@@ -193,7 +177,7 @@ function LoginForm() {
               </p>
             )}
 
-            <button type="submit" disabled={loading} data-liquid-pan="wide" className="btn-primary w-full justify-center rounded-full py-3 text-base">
+            <button type="submit" disabled={loading} data-liquid-pan="wide" className="flex w-full items-center justify-center rounded-full bg-white py-3 text-base font-semibold text-black transition-opacity hover:bg-white/90 disabled:opacity-60">
               {loading ? t("auth.jellyfin.submitting") : t("auth.jellyfin.submit")}
             </button>
           </form>
@@ -237,7 +221,7 @@ function LoginForm() {
               <div className="relative">
                 <input
                   type={revealed ? "text" : "password"}
-                  className="input w-full pr-11"
+                  className="input w-full pr-11 focus:border-white/40! focus:ring-white/25!"
                   placeholder={t("auth.local.passwordPlaceholder")}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

@@ -275,6 +275,21 @@ export function PlayerControls({
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
+  /**
+   * Ce que l'appui vient de demander, montré tout de suite (10/10/2026) : le triangle ne devenait
+   * pause qu'à l'évènement `play`/`pause` de l'élément, un battement plus tard — davantage sur
+   * WebKit, où `play()` attend la sortie audio. Effacé dès que l'élément confirme, ou au bout d'une
+   * seconde et demie s'il ne le fait jamais (lecture refusée) : l'icône revient alors à la vérité.
+   */
+  const [intended, setIntended] = useState<boolean | null>(null);
+  const intendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shownPlaying = intended ?? playing;
+  useEffect(() => {
+    const timers = intendTimer;
+    return () => {
+      if (timers.current) clearTimeout(timers.current);
+    };
+  }, []);
   const [buffering, setBuffering] = useState(false);
   /** Pending "this seek is taking long enough to say so". */
   const seekSpinner = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -645,9 +660,13 @@ export function PlayerControls({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const onPlay = () => setPlaying(true);
+    const onPlay = () => {
+      setPlaying(true);
+      setIntended(null);
+    };
     const onPause = () => {
       setPlaying(false);
+      setIntended(null);
       // La position exacte à l'arrêt, que le rythme des contrôles masqués ait laissé passer la
       // dernière ou non — voir `onTime`. Pas pendant qu'on tire la barre : c'est elle qui dit l'instant.
       if (!seekingRef.current) setCurrentTime(video.currentTime);
@@ -998,8 +1017,15 @@ export function PlayerControls({
   function togglePlay() {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) video.play();
-    else video.pause();
+    const wantsPlay = video.paused;
+    setIntended(wantsPlay);
+    if (intendTimer.current) clearTimeout(intendTimer.current);
+    intendTimer.current = setTimeout(() => setIntended(null), 1500);
+    if (wantsPlay) {
+      const started = video.play();
+      // Refusée (iOS sans geste récent, source perdue) : l'icône revient aussitôt à l'arrêt.
+      if (started && typeof started.catch === "function") started.catch(() => setIntended(null));
+    } else video.pause();
   }
 
   // Plain buttons only — deliberately not a double-tap-the-edge-of-the-screen gesture (easy to
@@ -2002,12 +2028,12 @@ export function PlayerControls({
                 e.stopPropagation();
                 togglePlay();
               }}
-              aria-label={playing ? t("player.pause") : t("player.play")}
+              aria-label={shownPlaying ? t("player.pause") : t("player.play")}
               data-size="main"
               data-liquid
               className="player-fade player-pill player-pill-light player-center-btn"
             >
-              {playing ? <Pause size={30} fill="currentColor" strokeWidth={0} /> : <Play size={30} fill="currentColor" strokeWidth={0} className="translate-x-[2px]" />}
+              {shownPlaying ? <Pause size={30} fill="currentColor" strokeWidth={0} /> : <Play size={30} fill="currentColor" strokeWidth={0} className="translate-x-[2px]" />}
               {/* La reprise en cours : un anneau qui tourne autour du bouton, qui reste touchable. */}
               {resuming && <span className="player-resume-ring" aria-hidden data-player-resuming="" />}
             </button>
