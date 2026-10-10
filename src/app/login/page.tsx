@@ -3,7 +3,7 @@
 import { Suspense, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Clapperboard, Activity, Eye, EyeOff } from "lucide-react";
+import { Activity, Eye, EyeOff } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { hardNavigate, safeNextPath } from "@/lib/signOut";
 import { touchHintHeaders } from "@/lib/deviceLabel";
@@ -91,9 +91,10 @@ function LoginForm() {
         {/* L'enseigne, au-dessus de la carte plutôt que dedans : on reconnaît d'abord l'endroit,
             on s'identifie ensuite. */}
         <div className="mb-8 flex flex-col items-center text-center">
-          <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-white ring-1 ring-white/10">
-            <Clapperboard size={28} />
-          </span>
+          {/* L'icône de l'application, en couleur : sur une page toute en noir et blanc, elle seule
+              dit que l'écran n'est pas passé en niveaux de gris (10/10/2026). */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- un SVG statique servi sans session (ACTIFS_PUBLICS), rien à optimiser */}
+          <img src="/icon.svg" alt="" width={64} height={64} className="mb-4 h-16 w-16 rounded-2xl" />
           <h1 className="font-display text-3xl font-bold tracking-tight text-white">Cine App</h1>
           <p className="mt-2 text-sm text-slate-400">{t("auth.tagline")}</p>
         </div>
