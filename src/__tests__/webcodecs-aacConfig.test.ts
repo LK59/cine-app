@@ -235,7 +235,7 @@ describe("livraison — ce que le remultiplexeur fait de chaque piste", () => {
     vi.resetModules();
     const ua = "Mozilla/5.0 (Linux; Android 11; AFTT) AppleWebKit/537.36 Silk/152.4.7 like Chrome/152.0.7977.140";
     const store = new Map<string, string>();
-    if (stored !== null) store.set("cine-aac-pce-mse:v1", JSON.stringify({ ua, ok: stored }));
+    if (stored !== null) store.set("cine-aac-pce-mse:v2", JSON.stringify({ ua, ok: stored }));
     // Ce que Chromium répond, à tort pour ce fichier : oui à tout AAC.
     vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: (t: string) => /mp4a|avc1/.test(t) } });
     vi.stubGlobal("navigator", { userAgent: ua });

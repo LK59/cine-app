@@ -225,7 +225,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     // Un AAC à PCE décodé (la copie a posé sa propre décision en construisant sa piste) : noté pour
     // la ligne `start` — DECISIONS.md §62.
     if (audioTrack?.codecId === "A_AAC" && parseAacConfig(audioTrack.codecPrivate)?.pce && audioDelivery(audioTrack, file, input.remux) === "transcode") {
-      notePceDecision("decode", false);
+      notePceDecision("decode", false, audioTrack.codecPrivate);
     }
     return { remuxer, plan: remuxer.plan() };
   } catch (error) {

@@ -142,7 +142,7 @@ export function transcodableAudio(track: MatroskaTrack): boolean {
   // L'AAC se copie partout — sauf un PCE que ce navigateur ne prend pas et qu'aucune configuration
   // standard ne décrit (DECISIONS.md §62) : décodé par l'AudioDecoder du navigateur, via
   // mediabunny, comme l'Opus.
-  if (track.codecId === "A_AAC") return aacPlan(track.codecPrivate, { pceAccepted: effectivePceAnswer() }).action === "decode";
+  if (track.codecId === "A_AAC") return aacPlan(track.codecPrivate, { pceAccepted: effectivePceAnswer(track.codecPrivate) }).action === "decode";
   return DECODABLE_HERE.has(track.codecId);
 }
 

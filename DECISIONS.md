@@ -2351,6 +2351,25 @@ ffmpeg, segments de la sonde à envoyer à un vrai MediaSource).
 
 **Décidé le 10/10/2026.**
 
+**Révisé le 11/10/2026 — hors Chromium, la sonde ne décide plus rien.** Sous 8.34.0, la sonde avait
+gardé `ok:false` pour tout Safari sur l'iPhone de Louis : Ruby s'y décodait (CoreAudio échoue sur
+son PCE — « InternalAudioDecoderCocoa decoding failed » — d'où le lecteur serveur) et la piste
+anglaise 7.1 de Forrest Gump sortait en L R C, là où tout AAC se copiait avant le 10/10. Une réponse
+par navigateur était fausse : l'acceptation dépend de la forme du PCE (CoreAudio décode le 7.1 de
+FFmpeg, pas son 5.1), et la sonde n'en essaie qu'une. Désormais (`effectivePceAnswer(asc)`) :
+- **WebKit, Firefox, tout moteur hors Chromium** : copie telle quelle d'abord, toujours — le
+  comportement d'avant le 10/10. Un refus constaté à l'envoi avant la première image est gardé pour
+  CETTE forme (octets de l'AudioSpecificConfig) et ce build (`cine-aac-pce-refus:v1`), la
+  reconstruction décode une fois, le lecteur serveur vient ensuite.
+- **Chromium** : inchangé (réponse de la sonde, réécriture, décodage).
+- L'ancienne clé `cine-aac-pce-mse:v1` n'est plus lue et s'efface ; la sonde écrit `:v2`.
+- La ligne `start` porte `aacPcePlan`, `aacPceAnswer` et, après un refus, `aacPceFallback`.
+
+Preuve (banc `aac-regress-bench.spec.ts`, 20 films, 43 pistes, code d'avant le 10/10 contre ce
+code) : moteur Safari iPhone, **43/43 octet pour octet** ; moteur Chromium, 35/43 — seules diffèrent
+les 8 pistes à PCE (Ruby ×2, pistes anglaises 7.1 de Forrest Gump, Deadpool, Walter Mitty, Once
+Upon a Time in Hollywood, Rocketman, Toy Story). Tests : `aacPce-engine-default.test.ts`.
+
 ## 63. Une image qui échoue réessaie, au lieu d'abandonner jusqu'au redémarrage
 
 **Règle.** Toute image du cinéma qui échoue montre son repli (carré gris, titre écrit, fond uni) et

@@ -236,7 +236,7 @@ export type AudioDelivery = "copy" | "transcode" | "none";
  */
 export function trackAacPlan(track: MatroskaTrack): AacPlan {
   if (track.codecId !== "A_AAC") return { action: "copy" };
-  const pceAccepted = effectivePceAnswer();
+  const pceAccepted = effectivePceAnswer(track.codecPrivate);
   const plan = aacPlan(track.codecPrivate, { pceAccepted });
   if (plan.action === "decode" && pceAccepted === null) primePceProbe();
   return plan;
@@ -251,7 +251,7 @@ function copiedAsc(track: MatroskaTrack): Uint8Array | null {
   resetPceCopyState();
   if (track.codecId === "A_AAC" && parseAacConfig(track.codecPrivate)?.pce) {
     const plan = trackAacPlan(track);
-    notePceDecision(plan.action, plan.action === "copy");
+    notePceDecision(plan.action, plan.action === "copy", track.codecPrivate);
   }
   return rewrittenAsc(track) ?? track.codecPrivate;
 }

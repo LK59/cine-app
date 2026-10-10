@@ -187,7 +187,7 @@ export function aacShaping(
 ): { channels: number; rows: number[][] | null } | null {
   const asc = file?.tracks.find((t) => t.number === trackNumber)?.codecPrivate;
   if (!asc) return null;
-  const plan = aacPlan(asc, { pceAccepted: effectivePceAnswer() });
+  const plan = aacPlan(asc, { pceAccepted: effectivePceAnswer(asc) });
   if (plan.action !== "decode") return null;
   if (plan.rows) return plan.rows[0]?.length === decoded ? { channels: plan.channels, rows: plan.rows } : { channels: Math.min(3, decoded), rows: null };
   return { channels: Math.min(plan.channels, decoded), rows: null };

@@ -18,6 +18,7 @@ import { audioSampleEntryFor } from "./mp4SampleEntries";
 import { initSegment, mediaSegment, type MuxTrackInfo } from "./mp4Muxer";
 import { sourceConstructor } from "./mseSupport";
 import { isChromiumEngine } from "./bufferBudget";
+import { APP_BUILD } from "@/lib/appBuild";
 
 /**
  * Le PCE de « Ruby » à 48 kHz, tel que l'encodeur de FFmpeg l'écrit pour un 5.1 (`-aac_pce 1`) :
@@ -32,7 +33,14 @@ export const PROBE_FRAME = Uint8Array.from([
   0x21, 0x10, 0x04, 0x60, 0x8c, 0x00, 0x23, 0x04, 0x00, 0x03, 0x18, 0x20, 0x01, 0x18, 0x80, 0x23, 0x04, 0x60, 0xe0,
 ]);
 
-const STORAGE_KEY = "cine-aac-pce-mse:v1";
+// v2 (11/10/2026) : la v1 (« cine-aac-pce-mse:v1 ») gardait une réponse par NAVIGATEUR, que la
+// sonde de 8.34.0 avait écrite à `false` sur l'iPhone de Louis — Ruby et la piste anglaise 7.1 de
+// Forrest Gump s'y décodaient depuis (échec CoreAudio pour l'un, L R C seulement pour l'autre), là
+// où tout AAC se copiait avant le 10/10. La v1 n'est plus lue ; la v2 ne sert qu'à Chromium.
+const STORAGE_KEY = "cine-aac-pce-mse:v2";
+const LEGACY_KEYS = ["cine-aac-pce-mse:v1"];
+/** Les refus de copie, par FORME de PCE (les octets de l'AudioSpecificConfig), valables pour ce build. */
+const REFUSALS_KEY = "cine-aac-pce-refus:v1";
 const PROBE_TIMEOUT_MS = 1500;
 
 /** La réponse gardée pour ce navigateur, ou `null` si la question n'a jamais été posée ici. */
@@ -61,54 +69,126 @@ export function pceCopyAccepted(): boolean | null {
  * ce qui envoyait au lecteur serveur un film que Safari aurait peut-être copié. Si la copie est
  * refusée à l'envoi, `takePceCopyRefusal` le retient et l'hôte reconstruit une fois en décodant.
  */
-export function effectivePceAnswer(): boolean | null {
-  const stored = pceCopyAccepted();
-  if (stored !== null) return stored;
+export function effectivePceAnswer(asc?: Uint8Array | null): boolean | null {
+  dropLegacyKeys();
   try {
     if (typeof navigator === "undefined") return null;
-    return isChromiumEngine(navigator.userAgent ?? "") ? null : true;
+    // Chromium (Chrome, Edge, Silk) : refus prouvé — la réponse de la sonde, réécriture ou décodage
+    // sinon, comme en 8.34.0.
+    if (isChromiumEngine(navigator.userAgent ?? "")) return pceCopyAccepted();
   } catch {
     return null;
+  }
+  // Tout autre moteur COPIE, comme avant le 10/10 — sans jamais lire la réponse globale de la sonde :
+  // l'acceptation dépend de la FORME du PCE (CoreAudio décode le 7.1 de Forrest Gump, pas le 5.1 de
+  // Ruby), et une sonde à un seul PCE ne dit rien des autres. Seul un refus constaté à l'envoi, pour
+  // CETTE forme et ce build, fait décoder (`takePceCopyRefusal`).
+  return asc && shapeRefused(asc) ? false : true;
+}
+
+function shapeKey(asc: Uint8Array): string {
+  let hex = "";
+  for (const byte of asc) hex += byte.toString(16).padStart(2, "0");
+  return hex;
+}
+
+function readRefusals(): string[] {
+  try {
+    if (typeof localStorage === "undefined") return [];
+    const raw = localStorage.getItem(REFUSALS_KEY);
+    if (!raw) return [];
+    const stored = JSON.parse(raw) as { build?: string; shapes?: unknown };
+    // Un refus vaut pour ce build : une mise à jour du lecteur (ou du navigateur) peut le lever.
+    if (stored.build !== APP_BUILD || !Array.isArray(stored.shapes)) return [];
+    return stored.shapes.filter((x): x is string => typeof x === "string");
+  } catch {
+    return [];
+  }
+}
+
+function shapeRefused(asc: Uint8Array): boolean {
+  return readRefusals().includes(shapeKey(asc));
+}
+
+function rememberShapeRefusal(asc: Uint8Array): void {
+  try {
+    const shapes = readRefusals();
+    const key = shapeKey(asc);
+    if (!shapes.includes(key)) shapes.push(key);
+    localStorage.setItem(REFUSALS_KEY, JSON.stringify({ build: APP_BUILD, shapes: shapes.slice(-32) }));
+  } catch {
+    // Stockage refusé : la copie sera retentée, puis décodée à nouveau — rien de pire qu'avant.
+  }
+}
+
+let legacyDropped = false;
+function dropLegacyKeys(): void {
+  if (legacyDropped) return;
+  legacyDropped = true;
+  try {
+    for (const key of LEGACY_KEYS) localStorage.removeItem(key);
+  } catch {
+    // Sans stockage, rien à effacer.
   }
 }
 
 /** Un AAC à PCE est-il copié tel quel par le pipeline qui s'ouvre ? Posé par le remultiplexeur. */
 let pceCopyInEffect = false;
+/** La configuration de ce PCE copié — pour retenir un refus de CETTE forme. */
+let pceCopyAsc: Uint8Array | null = null;
+/** Le repli d'une reconstruction après refus, porté sur la décision suivante. */
+let pendingFallback: string | null = null;
 /** La dernière décision AAC à PCE de ce navigateur, pour la ligne `start` du journal. */
-let lastPceDecision: { plan: string; answer: boolean | null } | null = null;
+let lastPceDecision: { plan: string; answer: boolean | null; fallback: string | null } | null = null;
 
-export function notePceDecision(plan: "copy" | "rewrite" | "decode", copiedAsIs: boolean): void {
-  lastPceDecision = { plan, answer: pceCopyAccepted() };
-  if (copiedAsIs) pceCopyInEffect = true;
+export function notePceDecision(plan: "copy" | "rewrite" | "decode", copiedAsIs: boolean, asc?: Uint8Array | null): void {
+  lastPceDecision = { plan, answer: effectivePceAnswer(asc), fallback: pendingFallback };
+  pendingFallback = null;
+  if (copiedAsIs) {
+    pceCopyInEffect = true;
+    pceCopyAsc = asc ?? null;
+  }
 }
 
-/** Ce qui est écrit sur la ligne `start` : le plan AAC à PCE retenu et la réponse gardée, ou rien. */
+/** Ce qui est écrit sur la ligne `start` : le plan AAC à PCE retenu, la réponse suivie, le repli. */
 export function pceDecisionFacts(): Record<string, unknown> {
   if (!lastPceDecision) return {};
-  return { aacPcePlan: lastPceDecision.plan, aacPceAnswer: lastPceDecision.answer ?? "inconnue" };
+  return {
+    aacPcePlan: lastPceDecision.plan,
+    aacPceAnswer: lastPceDecision.answer ?? "inconnue",
+    ...(lastPceDecision.fallback ? { aacPceFallback: lastPceDecision.fallback } : {}),
+  };
 }
 
 /**
  * La copie d'un PCE vient d'être refusée par le navigateur avant la première image : vrai une seule
- * fois — la réponse est gardée (`false`), et la reconstruction qui suit décode. Faux sinon.
+ * fois — le refus est gardé pour CETTE forme (et ce build), et la reconstruction qui suit décode.
  */
 export function takePceCopyRefusal(): boolean {
   if (!pceCopyInEffect) return false;
   pceCopyInEffect = false;
-  remember(false);
+  if (pceCopyAsc) rememberShapeRefusal(pceCopyAsc);
+  pceCopyAsc = null;
+  pendingFallback = "copie refusée → décodage";
   return true;
 }
 
-/** La copie d'un PCE a donné une image : ce navigateur la prend, c'est gardé. */
+/** La copie d'un PCE a donné une image : rien à retenir hors Chromium — c'est le comportement par défaut. */
 export function notePceCopyWorked(): void {
   if (!pceCopyInEffect) return;
   pceCopyInEffect = false;
-  remember(true);
+  pceCopyAsc = null;
+  try {
+    if (typeof navigator !== "undefined" && isChromiumEngine(navigator.userAgent ?? "")) remember(true);
+  } catch {
+    // Rien à garder.
+  }
 }
 
 /** Un nouveau pipeline s'ouvre : l'état de la copie précédente ne le concerne plus. */
 export function resetPceCopyState(): void {
   pceCopyInEffect = false;
+  pceCopyAsc = null;
   lastPceDecision = null;
 }
 
@@ -240,7 +320,12 @@ export const __testing = {
   reset: () => {
     pending = null;
     pceCopyInEffect = false;
+    pceCopyAsc = null;
+    pendingFallback = null;
     lastPceDecision = null;
+    legacyDropped = false;
   },
   STORAGE_KEY,
+  REFUSALS_KEY,
+  LEGACY_KEYS,
 };
