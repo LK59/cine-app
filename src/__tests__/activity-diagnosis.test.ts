@@ -84,6 +84,21 @@ describe("la frise d'une séance", () => {
     expect(m.marks.map((k) => k.kind)).toEqual(["start", "background", "stop"]);
   });
 
+  it("une relance du lecteur serveur n'est pas une nouvelle ouverture sur la frise", () => {
+    // « Elle s'appelle Ruby » sur la Fire TV (10/10/2026) : une ouverture, trois relances.
+    const m = friseModel(
+      [
+        { timestamp: at(0), kind: "start", at: 0, player: "serveur" },
+        { timestamp: at(6), kind: "start", at: 0, player: "serveur", retry: 1 },
+        { timestamp: at(12), kind: "start", at: 0, player: "serveur", retry: 2 },
+        { timestamp: at(20), kind: "start", at: 0, player: "serveur", retry: 3 },
+        { timestamp: at(40), kind: "error", reason: "pas de première image en 20 s" },
+      ],
+      start
+    );
+    expect(m.marks.filter((k) => k.kind === "start")).toHaveLength(1);
+  });
+
   it("sans durée de film, l'axe s'arrête un peu au-dessus de la plus grande position vue", () => {
     const m = friseModel([{ timestamp: at(0), kind: "start", at: 100 }, { timestamp: at(60), kind: "stop", at: 160 }], start);
     expect(m.top).toBeGreaterThan(160);

@@ -13,7 +13,7 @@ export interface JellyfinDeviceProfile {
     MaxAudioChannels: string;
   }[];
   CodecProfiles: {
-    Type: "Video";
+    Type: "Video" | "VideoAudio";
     Codec: string;
     Conditions: { Condition: string; Property: string; Value: string; IsRequired: boolean }[];
   }[];
@@ -75,6 +75,17 @@ const SAFE_VIDEO_RANGES = "SDR|HDR10|HDR10Plus|HLG|DOVIWithHDR10|DOVIWithHDR10Pl
 export interface DeviceProfileOptions {
   /** Les sous-titres doivent voyager dans le flux, pas à côté. */
   subtitlesInStream?: boolean;
+  /**
+   * Le son doit être ré-encodé, en AAC stéréo — jamais copié.
+   *
+   * Pour un son que le navigateur refuse alors qu'il en dit le codec lisible : l'AAC dont la
+   * disposition est un PCE (« Elle s'appelle Ruby », Fire TV, 10/10/2026). Jellyfin le copiait
+   * (`-codec:a copy`) puisque l'AAC est déclaré, hls.js le refusait, et le lecteur serveur échouait
+   * comme le lecteur natif. Stéréo, et pas six canaux : l'encodeur AAC de FFmpeg réécrit un PCE pour
+   * une disposition hors norme, et le même refus reviendrait. Une condition sur les canaux de l'AAC
+   * interdit la copie ; la cible ramenée à l'AAC seul fixe le codec du ré-encodage.
+   */
+  reencodeAudioStereo?: boolean;
 }
 
 export function buildDeviceProfile(
@@ -119,22 +130,33 @@ export function buildDeviceProfile(
         // Jellyfin re-encode already-browser-compatible AC3/EAC3 audio for no reason on every
         // container-only remux.
         VideoCodec: (videoCodecs.length ? videoCodecs : ["h264"]).join(","),
-        AudioCodec: (audioCodecs.length ? audioCodecs : ["aac"]).join(","),
+        AudioCodec: options.reencodeAudioStereo ? "aac" : (audioCodecs.length ? audioCodecs : ["aac"]).join(","),
         Protocol: "hls",
         Context: "Streaming",
-        MaxAudioChannels: "6",
+        MaxAudioChannels: options.reencodeAudioStereo ? "2" : "6",
       },
     ],
-    CodecProfiles: (videoCodecs.length ? videoCodecs : ["h264"]).map((codec) => ({
-      Type: "Video" as const,
-      Codec: codec,
-      Conditions: [
-        { Condition: "EqualsAny", Property: "VideoRangeType", Value: SAFE_VIDEO_RANGES, IsRequired: false },
-        ...(codec === "hevc" && !hevc10
-          ? [{ Condition: "LessThanEqual", Property: "VideoBitDepth", Value: "8", IsRequired: false }]
-          : []),
-      ],
-    })),
+    CodecProfiles: [
+      ...(videoCodecs.length ? videoCodecs : ["h264"]).map((codec) => ({
+        Type: "Video" as const,
+        Codec: codec,
+        Conditions: [
+          { Condition: "EqualsAny", Property: "VideoRangeType", Value: SAFE_VIDEO_RANGES, IsRequired: false },
+          ...(codec === "hevc" && !hevc10
+            ? [{ Condition: "LessThanEqual", Property: "VideoBitDepth", Value: "8", IsRequired: false }]
+            : []),
+        ],
+      })),
+      // Voir `reencodeAudioStereo` : une source qui ne passe pas cette condition ne peut être ni
+      // lue directement ni copiée — Jellyfin la ré-encode vers la cible du profil de transcodage.
+      ...(options.reencodeAudioStereo
+        ? audioCodecs.map((codec) => ({
+            Type: "VideoAudio" as const,
+            Codec: codec,
+            Conditions: [{ Condition: "LessThanEqual", Property: "AudioChannels", Value: "2", IsRequired: true }],
+          }))
+        : []),
+    ],
     // "External" is what makes Jellyfin extract embedded subtitle tracks (e.g. from an mkv
     // being direct-played, where the browser has no way to read them itself) as sidecar VTT,
     // served through the app's existing /api/jellyfin/stream/subtitle proxy. "Hls" covers the
@@ -148,6 +170,29 @@ export function buildDeviceProfile(
           { Format: "vtt", Method: "Hls" },
         ],
   };
+}
+
+/**
+ * Un son AAC que Jellyfin copierait et que le navigateur refuserait : plus de deux canaux et aucune
+ * disposition nommée.
+ *
+ * C'est la signature, côté Jellyfin, d'un AAC dont la disposition est un PCE (`channelConfiguration`
+ * à 0, voir src/lib/webcodecs/aacConfig.ts) : une configuration standard est nommée — « 5.1 »,
+ * « 7.1 » —, celle-là non. Les deux pistes de « Elle s'appelle Ruby » : `Codec` aac, `Channels` 6,
+ * pas de `ChannelLayout`.
+ */
+export function audioNeedsStereoReencode(stream: { Codec?: string; Channels?: number; ChannelLayout?: string } | null | undefined): boolean {
+  return !!stream && stream.Codec?.toLowerCase() === "aac" && (stream.Channels ?? 0) > 2 && !stream.ChannelLayout;
+}
+
+/** La piste son qui sera lue : celle demandée, sinon celle que Jellyfin retient par défaut. */
+export function chosenAudioStream<S extends { Type: string; Index: number }>(
+  source: { MediaStreams?: S[]; DefaultAudioStreamIndex?: number } | undefined,
+  audioStreamIndex: number | undefined
+): S | null {
+  const index = audioStreamIndex ?? source?.DefaultAudioStreamIndex;
+  const audio = (source?.MediaStreams ?? []).filter((s) => s.Type === "Audio");
+  return audio.find((s) => s.Index === index) ?? (index === undefined ? (audio[0] ?? null) : null);
 }
 
 /**

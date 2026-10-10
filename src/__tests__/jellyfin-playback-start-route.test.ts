@@ -93,6 +93,61 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(body.manifestUrl).toBe(`/api/jellyfin/stream/${validId}/master.m3u8?DeviceId=x`);
   });
 
+  it("renégocie aussitôt un AAC à PCE, ré-encodé en stéréo — « Elle s'appelle Ruby », Fire TV", async () => {
+    // Jellyfin copiait le son (`-codec:a copy`), hls.js le refusait, et quatre essais finissaient
+    // en « pas de première image en 20 s » (10/10/2026).
+    mockVerifySessionFull.mockResolvedValue({ u: "timothe", jfId: "jf-1", jfToken: "tok" });
+    const ruby = {
+      PlaySessionId: "play-1",
+      MediaSources: [{
+        Id: "src-1",
+        TranscodingUrl: "/videos/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/master.m3u8?DeviceId=x",
+        DefaultAudioStreamIndex: 3,
+        MediaStreams: [
+          { Type: "Video", Index: 0, Codec: "h264" },
+          { Type: "Audio", Index: 3, Codec: "aac", Channels: 6 },
+        ],
+      }],
+    };
+    mockJellyfin.getPlaybackInfo.mockResolvedValue(ruby);
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const res = await POST(fakeReq({ itemId: validId, codecSupport: { video: { "mp4/h264": true }, audio: { aac: true } } }));
+    expect(res.status).toBe(200);
+    expect(mockJellyfin.getPlaybackInfo).toHaveBeenCalledTimes(2);
+    const profiles = mockJellyfin.getPlaybackInfo.mock.calls.map((c) => (c[3] as { deviceProfile: { TranscodingProfiles: { MaxAudioChannels: string }[] } }).deviceProfile);
+    expect(profiles[0].TranscodingProfiles[0].MaxAudioChannels).toBe("6");
+    expect(profiles[1].TranscodingProfiles[0].MaxAudioChannels).toBe("2");
+  });
+
+  it("ne renégocie pas un AAC 5.1 ordinaire", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "timothe", jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "play-1",
+      MediaSources: [{
+        Id: "src-1",
+        TranscodingUrl: "/videos/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/master.m3u8?DeviceId=x",
+        DefaultAudioStreamIndex: 1,
+        MediaStreams: [{ Type: "Audio", Index: 1, Codec: "aac", Channels: 6, ChannelLayout: "5.1" }],
+      }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    await POST(fakeReq({ itemId: validId }));
+    expect(mockJellyfin.getPlaybackInfo).toHaveBeenCalledTimes(1);
+  });
+
+  it("le dernier échelon du client ré-encode le son d'emblée, sans seconde demande", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "timothe", jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "play-1",
+      MediaSources: [{ Id: "src-1", TranscodingUrl: "/videos/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/master.m3u8?DeviceId=x", MediaStreams: [] }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    await POST(fakeReq({ itemId: validId, forceAudioTranscode: true }));
+    expect(mockJellyfin.getPlaybackInfo).toHaveBeenCalledTimes(1);
+    const profile = (mockJellyfin.getPlaybackInfo.mock.calls[0][3] as { deviceProfile: { TranscodingProfiles: { MaxAudioChannels: string; AudioCodec: string }[] } }).deviceProfile;
+    expect(profile.TranscodingProfiles[0]).toMatchObject({ MaxAudioChannels: "2", AudioCodec: "aac" });
+  });
+
   it("donne une adresse absolue et signée à toute lecture, pas seulement à une diffusion demandée", async () => {
     // 24/09/2026 : un film ouvert sur le téléphone puis envoyé à la télé par le bouton AirPlay de
     // la vidéo — la télé recevait l'adresse relative, sans jeton, et 624 refus en une heure.

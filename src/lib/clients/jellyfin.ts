@@ -142,6 +142,8 @@ export interface JellyfinMediaStream {
   Width?: number;
   Height?: number;
   Channels?: number;
+  /** « 5.1 », « stereo »… Absent d'un AAC dont la disposition est un PCE — voir `audioNeedsStereoReencode`. */
+  ChannelLayout?: string;
   // Jellyfin 10.10 et suivants. Absent des versions antérieures, d'où l'optionnel : les
   // appelants retombent alors sur ce que la piste dit d'elle-même dans son nom.
   IsHearingImpaired?: boolean;
@@ -162,6 +164,8 @@ export interface JellyfinMediaSource {
   SupportsDirectPlay?: boolean;
   SupportsDirectStream?: boolean;
   MediaStreams?: JellyfinMediaStream[];
+  /** La piste son que Jellyfin retient quand on ne lui en demande aucune. */
+  DefaultAudioStreamIndex?: number;
 }
 
 export interface JellyfinPlaybackInfo {

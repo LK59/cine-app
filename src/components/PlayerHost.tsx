@@ -103,6 +103,11 @@ const AUDIO_FALLBACK_RUNGS: string[][] = [
   ["eac3", "flac", "opus", "ac3"], // AAC only — forces a clean server transcode, always works
 ];
 
+/** L'échelon final : AAC seul, et le son ré-encodé plutôt que copié — voir `forceAudioTranscode`. */
+function isLastAudioRung(index: number): boolean {
+  return index === AUDIO_FALLBACK_RUNGS.length - 1;
+}
+
 const AUDIO_BLOCKLIST_KEY = "cine:audio-codec-blocklist:v1";
 
 function readAudioBlocklist(): string[] {
@@ -446,7 +451,7 @@ function ActivePlayer({
   // The opts of the most recent startPlayback call, so an automatic retry replays the SAME
   // request (audio track included) — state like currentAudioId would be stale inside the
   // error listener's closure.
-  const lastPlaybackOpts = useRef<{ audioStreamIndex?: number; resumeAt?: number; disableAudioCodecs?: string[] } | undefined>(undefined);
+  const lastPlaybackOpts = useRef<{ audioStreamIndex?: number; resumeAt?: number; disableAudioCodecs?: string[]; forceAudioTranscode?: boolean } | undefined>(undefined);
   // La séance Jellyfin a été close par la fin de l'épisode, lecteur resté ouvert (voir l'effet
   // `ended`) : le prochain `play` doit la rouvrir. Une ref et non une variable de l'effet : celui-ci
   // se réinstalle quand le lecteur passe en mini-lecteur ou revient en plein écran, et l'état remis
@@ -661,7 +666,7 @@ function ActivePlayer({
   // Jellyfin to start the new stream at the right offset, we seek the video
   // to resumeAt ourselves once the new manifest's metadata is ready.
   const startPlayback = useCallback(
-    async (opts?: { audioStreamIndex?: number; resumeAt?: number; disableAudioCodecs?: string[] }) => {
+    async (opts?: { audioStreamIndex?: number; resumeAt?: number; disableAudioCodecs?: string[]; forceAudioTranscode?: boolean }) => {
       let video = videoRef.current;
       if (!video) return;
 
@@ -754,6 +759,8 @@ function ActivePlayer({
           startTicks: opts?.resumeAt ? Math.floor(opts.resumeAt * 10_000_000) : undefined,
           codecSupport,
           disableAudioCodecs,
+          // Le dernier échelon de l'échelle : le son ré-encodé quoi qu'il soit — voir la route.
+          ...(opts?.forceAudioTranscode ? { forceAudioTranscode: true } : {}),
           /**
            * Cette lecture part-elle vers un téléviseur ?
            *
@@ -1675,6 +1682,7 @@ function ActivePlayer({
       // 'loadeddata' handler, so future loads on this browser skip the failure dance entirely.
       if (nativeErrorRetryCount.current < AUDIO_FALLBACK_RUNGS.length) {
         const rung = AUDIO_FALLBACK_RUNGS[nativeErrorRetryCount.current];
+        const lastRung = isLastAudioRung(nativeErrorRetryCount.current);
         nativeErrorRetryCount.current += 1;
         const delay = 1200 * nativeErrorRetryCount.current;
         setReconnecting(true);
@@ -1698,6 +1706,11 @@ function ActivePlayer({
             ...lastPlaybackOpts.current,
             resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
             disableAudioCodecs: [...new Set([...(lastPlaybackOpts.current?.disableAudioCodecs ?? []), ...rung])],
+            // Le dernier échelon ne copie plus le son, même en AAC : l'AAC dont la disposition est
+            // un PCE se dit lisible et ne l'est pas (« Elle s'appelle Ruby », Fire TV, 10/10/2026 —
+            // les quatre essais finissaient sur le même refus). Jamais retenu pour la suite : c'est
+            // ce fichier-là qui le demande, pas l'appareil (voir `persistAudioBlocklist`).
+            ...(lastRung ? { forceAudioTranscode: true } : {}),
           });
         }, delay);
         return;

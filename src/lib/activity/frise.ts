@@ -78,8 +78,10 @@ export function friseModel(lines: Record<string, unknown>[], start: number, runt
     switch (kind) {
       case "start": {
         const pos = num(line.at) ?? 0;
-        // Une reconstruction réécrit `start` : ce n'est pas une nouvelle ouverture.
-        if (num(line.rebuild)) push({ t, pos });
+        // Une reconstruction réécrit `start` : ce n'est pas une nouvelle ouverture. Une relance du
+        // lecteur serveur (`retry`) non plus — les quatre essais de « Ruby » sur la Fire TV
+        // (10/10/2026) se lisaient comme quatre ouvertures sur la frise.
+        if (num(line.rebuild) || num(line.retry)) push({ t, pos });
         else {
           push({ t, pos });
           marks.push({ t, pos, kind: "start", label: reason });
