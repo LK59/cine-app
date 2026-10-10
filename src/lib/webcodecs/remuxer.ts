@@ -10,8 +10,8 @@
 // An MP4 comes through here too, described in the same shape (mp4Demux.ts) and read through the
 // same factory (mediaFile.ts): the remuxer never learns which container it is reading.
 
-import { aacPlan, type AacPlan } from "./aacConfig";
-import { pceCopyAccepted, primePceProbe } from "./aacPceProbe";
+import { aacPlan, parseAacConfig, type AacPlan } from "./aacConfig";
+import { effectivePceAnswer, notePceDecision, primePceProbe, resetPceCopyState } from "./aacPceProbe";
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./subtitleMarkup";
 import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, isRaslPicture, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
@@ -236,10 +236,24 @@ export type AudioDelivery = "copy" | "transcode" | "none";
  */
 export function trackAacPlan(track: MatroskaTrack): AacPlan {
   if (track.codecId !== "A_AAC") return { action: "copy" };
-  const pceAccepted = pceCopyAccepted();
+  const pceAccepted = effectivePceAnswer();
   const plan = aacPlan(track.codecPrivate, { pceAccepted });
   if (plan.action === "decode" && pceAccepted === null) primePceProbe();
   return plan;
+}
+
+/**
+ * La configuration AAC de la piste copiée : réécrite sans son PCE quand `aacPlan` le permet, telle
+ * quelle sinon. Pour une piste à PCE, la décision est notée (journal, et refus à l'envoi — voir
+ * `takePceCopyRefusal`) ; une piste ordinaire passe exactement comme avant.
+ */
+function copiedAsc(track: MatroskaTrack): Uint8Array | null {
+  resetPceCopyState();
+  if (track.codecId === "A_AAC" && parseAacConfig(track.codecPrivate)?.pce) {
+    const plan = trackAacPlan(track);
+    notePceDecision(plan.action, plan.action === "copy");
+  }
+  return rewrittenAsc(track) ?? track.codecPrivate;
 }
 
 /** La configuration AAC réécrite sans son PCE, quand `aacPlan` le permet — sinon `null`. */
@@ -541,7 +555,7 @@ async function describeAudio(
       codecId: track.codecId,
       // Un PCE équivalent à une configuration standard part réécrit ; les trames, elles, sont
       // copiées telles quelles (DECISIONS.md §62, couche 2).
-      codecPrivate: rewrittenAsc(track) ?? track.codecPrivate,
+      codecPrivate: copiedAsc(track),
       channels: track.audio?.channels ?? 2,
       sampleRate: track.audio?.sampleRate ?? 48000,
       firstFrame,

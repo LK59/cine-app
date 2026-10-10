@@ -90,6 +90,7 @@ import { forgetResumeCache, openDiskChunks, openingFacts, type FileIdentity } fr
 import { keepOnStop } from "@/lib/resumeCache/keepOnStop";
 import { MemoryReserve } from "@/lib/webcodecs/memoryReserve";
 import { PlayerLifecycle } from "@/lib/playerLifecycle";
+import { notePceCopyWorked, pceDecisionFacts, takePceCopyRefusal } from "@/lib/webcodecs/aacPceProbe";
 import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from "@/lib/hostSeek";
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { finishIntro, formatResumeClock, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
@@ -1671,6 +1672,9 @@ export function ExperimentalPlayerHost({
         // venaient de l'appareil : de quoi comparer `openedInMs` avant et après la reprise
         // instantanée (`src/lib/resumeCache/`, 25/09/2026).
         ...openingFacts(info.streamUrl),
+        // Le plan d'un AAC à PCE (copie, réécriture, décodage) et la réponse gardée du navigateur —
+        // de quoi lire, la prochaine fois, pourquoi « Ruby » est passé ou non (DECISIONS.md §62).
+        ...pceDecisionFacts(),
       });
     };
 
@@ -1692,6 +1696,8 @@ export function ExperimentalPlayerHost({
       }
       setReady(true);
       setAnnounced(true);
+      // Une image : si un AAC à PCE a été copié tel quel, ce navigateur le prend — c'est gardé.
+      notePceCopyWorked();
       everReadyRef.current = true;
     };
     // Where to open. A rebuild that asked for a position gets it; otherwise the film resumes
@@ -2032,6 +2038,15 @@ export function ExperimentalPlayerHost({
           reportPlayback("network", { ...describeFileRef.current(), reason: message, at: positionRef.current });
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
           setPlaying(false);
+          return;
+        }
+        // Un AAC à PCE copié tel quel — hors Chromium, comme avant le 10/10/2026 — que ce navigateur
+        // refuse à l'envoi, avant toute image : la réponse est gardée et le pipeline reconstruit une
+        // seule fois en le décodant ; le lecteur serveur ne vient qu'après (DECISIONS.md §62).
+        if (!everReadyRef.current && takePceCopyRefusal()) {
+          const at = positionRef.current || startSeconds;
+          reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `copie AAC à PCE refusée — ${message}`, at });
+          restart(at, "copie AAC à PCE refusée par le navigateur, décodée à la place");
           return;
         }
         // A closed source is not a fault to report, it is a pipeline to build again. Safari

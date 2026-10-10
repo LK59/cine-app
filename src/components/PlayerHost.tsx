@@ -315,9 +315,12 @@ function ServerPlayerIntro({
   resumeSeconds,
   videoRef,
   onCoverChange,
+  note,
   onClose,
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
+  /** Le mot d'une attente longue (« toujours en cours… »), dit sous la ligne de l'ouverture. */
+  note?: string | null;
   /** Le calque couvre-t-il le lecteur — l'hôte en tait la roue et le fil de ses commandes. */
   onCoverChange?: (covering: boolean) => void;
   allowed: boolean;
@@ -358,6 +361,7 @@ function ServerPlayerIntro({
       onCoverChange={onCoverChange}
       fallbackName={session.title}
       caption={introCaption({ ...session.introArt, resumeSeconds }, t)}
+      note={note ?? null}
       onClose={onClose}
       closeLabel={t("common.close")}
       className="absolute inset-0 z-[25]"
@@ -2196,7 +2200,10 @@ function ActivePlayer({
               Ils rejoignent donc la roue, qui est déjà au centre et dit la même chose sans les
               mots : un demi-écran plus deux rems et demie, soit juste sous elle. Et un plan
               au-dessus des commandes, pour que plus rien ne les recouvre. */}
-          {!error && !isMini && (isOffline || reconnecting || (loading && loadingLong)) && (
+          {/* Sous l'ouverture, la pastille n'a pas de place : posée à mi-écran, elle tombait sur la
+              ligne de chargement (iPhone de Louis, 10/10/2026). L'ouverture dit le même mot, sous sa
+              ligne — voir `note` ci-dessous. */}
+          {!error && !isMini && !introCovering && (isOffline || reconnecting || (loading && loadingLong)) && (
             <div
               className="pointer-events-none absolute inset-x-0 z-30 flex justify-center px-6"
               style={{ top: "calc(50% + 2.5rem)" }}
@@ -2239,6 +2246,7 @@ function ActivePlayer({
         resumeSeconds={initialResumeAt ?? null}
         videoRef={videoRef}
         onCoverChange={setIntroCovering}
+        note={isOffline ? t("player.offline") : loading && loadingLong ? t("player.stillLoading") : reconnecting ? t("player.reconnecting") : null}
         onClose={handleClose}
       />
       {!isMini && (

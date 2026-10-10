@@ -203,8 +203,10 @@ describe("couche 4 — un navigateur qui prend le PCE le reçoit copié", () => 
     expect(aacPlan(RUBY, { pceAccepted: null }).action).toBe("decode");
   });
 
-  it("préfère la réécriture sans perte à la copie d'un PCE, et copie toujours un AAC standard", () => {
-    expect(aacPlan(ascWithPce([false, true], [], [true], 1), { pceAccepted: true }).action).toBe("rewrite");
+  it("un PCE accepté part tel quel — comme avant le 10/10 —, réécrit seulement là où il est refusé ; un AAC standard toujours copié", () => {
+    expect(aacPlan(ascWithPce([false, true], [], [true], 1), { pceAccepted: true }).action).toBe("copy");
+    expect(aacPlan(ascWithPce([false, true], [], [true], 1), { pceAccepted: null }).action).toBe("rewrite");
+    expect(aacPlan(ascWithPce([false, true], [], [true], 1), { pceAccepted: false }).action).toBe("rewrite");
     expect(aacPlan(STANDARD_51)).toEqual({ action: "copy" });
     expect(aacPlan(null)).toEqual({ action: "copy" });
   });
@@ -280,6 +282,9 @@ describe("décodage — ce que le décodeur logiciel garde", () => {
   it("garde les six canaux de Ruby, rien à changer pour un AAC ordinaire", async () => {
     vi.resetModules();
     vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {} });
+    // Un moteur Chromium, où le PCE se décode faute de réponse gardée (DECISIONS.md §62) ; ailleurs
+    // il se copie tel quel et le décodeur n'a rien à ranger.
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36" });
     const { aacShaping } = await import("@/lib/webcodecs/softwareAudio");
     const file = (asc: Uint8Array) => ({ tracks: [piste(asc)] }) as unknown as MatroskaFile;
     expect(aacShaping(file(RUBY), 2, 6)).toEqual({ channels: 6, rows: null });

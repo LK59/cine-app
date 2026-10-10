@@ -17,6 +17,7 @@
 import { audioSampleEntryFor } from "./mp4SampleEntries";
 import { initSegment, mediaSegment, type MuxTrackInfo } from "./mp4Muxer";
 import { sourceConstructor } from "./mseSupport";
+import { isChromiumEngine } from "./bufferBudget";
 
 /**
  * Le PCE de « Ruby » à 48 kHz, tel que l'encodeur de FFmpeg l'écrit pour un 5.1 (`-aac_pce 1`) :
@@ -47,6 +48,68 @@ export function pceCopyAccepted(): boolean | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * La réponse à suivre pour cette ouverture : la réponse gardée, sinon celle du moteur.
+ *
+ * Sans réponse gardée, Chromium (Chrome, Edge, Silk sur Fire TV) décode : son refus du PCE est
+ * prouvé (« Elle s'appelle Ruby » sur une Fire TV, 10/10/2026). Tout autre moteur COPIE, comme
+ * avant le 10/10 — c'était le comportement de toujours pour un AAC, validé à l'oreille, et le
+ * « chemin sûr » du décodage ne l'est pas sur WebKit : le décodeur de Safari (CoreAudio) échoue sur
+ * ce même PCE (« InternalAudioDecoderCocoa decoding failed », iPhone de Louis, 10/10/2026, 21:52),
+ * ce qui envoyait au lecteur serveur un film que Safari aurait peut-être copié. Si la copie est
+ * refusée à l'envoi, `takePceCopyRefusal` le retient et l'hôte reconstruit une fois en décodant.
+ */
+export function effectivePceAnswer(): boolean | null {
+  const stored = pceCopyAccepted();
+  if (stored !== null) return stored;
+  try {
+    if (typeof navigator === "undefined") return null;
+    return isChromiumEngine(navigator.userAgent ?? "") ? null : true;
+  } catch {
+    return null;
+  }
+}
+
+/** Un AAC à PCE est-il copié tel quel par le pipeline qui s'ouvre ? Posé par le remultiplexeur. */
+let pceCopyInEffect = false;
+/** La dernière décision AAC à PCE de ce navigateur, pour la ligne `start` du journal. */
+let lastPceDecision: { plan: string; answer: boolean | null } | null = null;
+
+export function notePceDecision(plan: "copy" | "rewrite" | "decode", copiedAsIs: boolean): void {
+  lastPceDecision = { plan, answer: pceCopyAccepted() };
+  if (copiedAsIs) pceCopyInEffect = true;
+}
+
+/** Ce qui est écrit sur la ligne `start` : le plan AAC à PCE retenu et la réponse gardée, ou rien. */
+export function pceDecisionFacts(): Record<string, unknown> {
+  if (!lastPceDecision) return {};
+  return { aacPcePlan: lastPceDecision.plan, aacPceAnswer: lastPceDecision.answer ?? "inconnue" };
+}
+
+/**
+ * La copie d'un PCE vient d'être refusée par le navigateur avant la première image : vrai une seule
+ * fois — la réponse est gardée (`false`), et la reconstruction qui suit décode. Faux sinon.
+ */
+export function takePceCopyRefusal(): boolean {
+  if (!pceCopyInEffect) return false;
+  pceCopyInEffect = false;
+  remember(false);
+  return true;
+}
+
+/** La copie d'un PCE a donné une image : ce navigateur la prend, c'est gardé. */
+export function notePceCopyWorked(): void {
+  if (!pceCopyInEffect) return;
+  pceCopyInEffect = false;
+  remember(true);
+}
+
+/** Un nouveau pipeline s'ouvre : l'état de la copie précédente ne le concerne plus. */
+export function resetPceCopyState(): void {
+  pceCopyInEffect = false;
+  lastPceDecision = null;
 }
 
 function remember(ok: boolean): void {
@@ -176,6 +239,8 @@ export async function probePceCopy(): Promise<boolean | null> {
 export const __testing = {
   reset: () => {
     pending = null;
+    pceCopyInEffect = false;
+    lastPceDecision = null;
   },
   STORAGE_KEY,
 };

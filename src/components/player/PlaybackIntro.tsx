@@ -352,7 +352,13 @@ export function PlaybackIntro({
           <div className="relative h-[2px] w-28 overflow-hidden rounded-full bg-white/15" data-playback-intro-line="">
             <div className={`absolute inset-y-0 w-1/2 rounded-full bg-gradient-to-r from-transparent via-white/90 to-transparent ${reduced ? "" : "playback-intro-line"}`} />
           </div>
-          {note && <p className="text-xs text-subtle">{note}</p>}
+          {/* Le mot d'une attente longue : sous la ligne, jamais dessus, discret, en fondu — une
+              légende de l'ouverture plutôt qu'une pastille posée par-dessus (10/10/2026). */}
+          {note && (
+            <p className="mt-1 max-w-[min(80vw,22rem)] animate-fade-in text-center text-xs leading-snug text-muted" data-playback-intro-note="">
+              {note}
+            </p>
+          )}
         </div>
       </div>
       {onClose && (

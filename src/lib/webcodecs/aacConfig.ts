@@ -425,10 +425,11 @@ export function aacPlan(
   const config = parseAacConfig(asc);
   if (!config?.pce || !asc) return { action: "copy" };
   const pce = config.pce;
+  // Le navigateur le prend tel quel (prouvé, ou présumé hors Chromium — `effectivePceAnswer`) :
+  // copié comme avant le 10/10/2026, tous les canaux, sans rien réécrire.
+  if (options.pceAccepted === true) return { action: "copy" };
   const rewritten = rewriteToStandard(asc);
   if (rewritten) return { action: "rewrite", asc: rewritten, channels: pce.channels };
-  // Le navigateur l'a prouvé : il prend ce PCE tel quel — tous les canaux, sans perte.
-  if (options.pceAccepted === true) return { action: "copy" };
   const order = MEASURED_DECODED_ORDERS[pceShape(pce)];
   if (order && order.length === pce.channels && (options.orderMeasured ?? decodedOrderMeasuredHere())) {
     const matrix = standardMatrix(order);

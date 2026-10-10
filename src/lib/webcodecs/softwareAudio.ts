@@ -13,7 +13,7 @@
 // second demux costs CPU only.
 
 import { aacPlan, remapPlanes } from "./aacConfig";
-import { pceCopyAccepted } from "./aacPceProbe";
+import { effectivePceAnswer } from "./aacPceProbe";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaFile } from "./matroska";
 
@@ -187,7 +187,7 @@ export function aacShaping(
 ): { channels: number; rows: number[][] | null } | null {
   const asc = file?.tracks.find((t) => t.number === trackNumber)?.codecPrivate;
   if (!asc) return null;
-  const plan = aacPlan(asc, { pceAccepted: pceCopyAccepted() });
+  const plan = aacPlan(asc, { pceAccepted: effectivePceAnswer() });
   if (plan.action !== "decode") return null;
   if (plan.rows) return plan.rows[0]?.length === decoded ? { channels: plan.channels, rows: plan.rows } : { channels: Math.min(3, decoded), rows: null };
   return { channels: Math.min(plan.channels, decoded), rows: null };

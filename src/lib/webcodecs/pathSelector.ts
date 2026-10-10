@@ -18,6 +18,8 @@ import { dolbyVisionInfo } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { playabilityOf } from "./mseSource";
 import { trace } from "./trace";
+import { parseAacConfig } from "./aacConfig";
+import { notePceDecision } from "./aacPceProbe";
 import { audioDecoderExists, chooseTranscodePlan, chooseTranscodeCodec } from "./audioTranscode";
 import {
   Remuxer,
@@ -220,6 +222,11 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
       input.remux
     );
     trace("chemin : remultiplexeur ouvert");
+    // Un AAC à PCE décodé (la copie a posé sa propre décision en construisant sa piste) : noté pour
+    // la ligne `start` — DECISIONS.md §62.
+    if (audioTrack?.codecId === "A_AAC" && parseAacConfig(audioTrack.codecPrivate)?.pce && audioDelivery(audioTrack, file, input.remux) === "transcode") {
+      notePceDecision("decode", false);
+    }
     return { remuxer, plan: remuxer.plan() };
   } catch (error) {
     // Le réseau et la lecture abandonnée ne disent rien de ce chemin : ils remontent tels quels.
