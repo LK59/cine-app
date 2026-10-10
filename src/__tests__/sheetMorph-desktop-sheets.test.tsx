@@ -88,10 +88,16 @@ function pressCard(): HTMLButtonElement {
 }
 
 beforeEach(() => {
+  // `performance` figé : un appui ne vaut source que 1,2 s (`PRESS_FRESH_MS`), et monter une fiche
+  // juste après l'appui en prenait davantage sous la charge de plusieurs suites en parallèle — la
+  // fiche s'ouvrait alors, à raison, sans trajet, et le test lisait une fiche opaque (10/10/2026).
+  // Les minuteries restent réelles.
+  vi.useFakeTimers({ toFake: ["performance"] });
   fake = installFakeAnimations();
   forgetPress();
 });
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   clearMorphLayers();
   fake.restore();

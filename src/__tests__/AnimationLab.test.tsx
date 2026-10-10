@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
-import { act, render, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, configure, render, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+
+// Les requêtes par rôle sans leur test de visibilité : il appelle `getComputedStyle` sur chaque
+// ancêtre de chaque candidat, et une maquette entière (accueil, fiches, rangées) en compte des
+// centaines. Plusieurs tests de ce fichier en enchaînent des dizaines : 150–800 ms seuls, plus de
+// 5 s sous la charge de plusieurs suites en parallèle (10/10/2026). Aucun n'y distingue un élément
+// caché d'un visible — ce qui l'est le dit par `pointer-events`, vérifié à part.
+configure({ defaultHidden: true });
 
 // Le catalogue : vide — la page doit se dessiner sans image, sur son dégradé de secours.
 vi.mock("swr", () => ({ default: () => ({ data: undefined }) }));
@@ -23,13 +30,20 @@ beforeAll(() => {
 afterEach(cleanup);
 
 describe("la page Tests animations", () => {
-  it("monte chacun de ses huit lots", () => {
-    render(<AnimationLab />);
-    for (const name of ["Gestes d'appui", "Matières", "Apparition du flou", "Groupes et métamorphoses", "Défilement sous verre", "Lecteur simulé", "Lancement de la lecture", "Ouverture de fiche"]) {
-      fireEvent.click(screen.getByRole("button", { name: new RegExp(name) }));
-      expect(screen.getAllByRole("button").length).toBeGreaterThan(5);
+  // Un test par lot, et des requêtes directes : les huit dans un seul, par `getByRole` (qui recalcule
+  // l'arbre d'accessibilité de toute la page à chaque appel), prenaient 1,1 s seuls et passaient les
+  // 5 s sous la charge de plusieurs suites en parallèle (10/10/2026). Ce qui est prouvé ne change
+  // pas : chaque lot se monte, avec ses commandes.
+  it.each(["Gestes d'appui", "Matières", "Apparition du flou", "Groupes et métamorphoses", "Défilement sous verre", "Lecteur simulé", "Lancement de la lecture", "Ouverture de fiche"])(
+    "monte le lot « %s »",
+    (name) => {
+      const { container } = render(<AnimationLab />);
+      const chip = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes(name));
+      expect(chip).toBeTruthy();
+      fireEvent.click(chip!);
+      expect(container.querySelectorAll("button").length).toBeGreaterThan(5);
     }
-  });
+  );
 
   it("ouvre le menu des sous-titres depuis sa pilule, puis le referme au choix d'une piste", async () => {
     render(<AnimationLab />);

@@ -243,6 +243,26 @@ function player(over: Partial<{ resumeAt: number; itemId: string; mode: "full" |
   );
 }
 
+/**
+ * Attend une condition en tours de boucle, pas en millisecondes.
+ *
+ * L'ouverture simulée n'est faite que de promesses : elle aboutit en un nombre de tours borné, quel
+ * que soit le temps que la machine y met. `waitFor` et sa seconde par défaut supposaient une machine
+ * libre — sous la charge de plusieurs suites en parallèle, 250 ms en devenaient plus d'une, et le
+ * test échouait sans que rien n'ait changé dans le code (10/10/2026).
+ */
+async function untilSettled(check: () => void, turns = 200): Promise<void> {
+  for (let i = 0; i < turns; i++) {
+    try {
+      check();
+      return;
+    } catch {
+      await act(async () => {});
+    }
+  }
+  check();
+}
+
 function mount(over: Partial<{ resumeAt: number; itemId: string; mode: "full" | "mini"; startPaused: boolean }> = {}) {
   return render(player(over));
 }
@@ -305,7 +325,7 @@ describe("une piste que ce chemin ne portera jamais", () => {
   it("cède la main au lecteur serveur au lieu de refuser la VO", async () => {
     swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
     mount();
-    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    await untilSettled(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
 
     act(() => void screen.getByText(/^audio:Anglais/).click());
 
@@ -355,7 +375,7 @@ describe("une piste que ce chemin ne portera jamais", () => {
     // pistes, la correspondance par rang ne tient plus et un index calculé serait une invention.
     swr = { data: info({ audio: [{ index: 1 }] }), error: undefined };
     mount();
-    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    await untilSettled(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
 
     act(() => void screen.getByText(/^audio:Anglais/).click());
 
@@ -369,7 +389,7 @@ describe("une piste que ce chemin ne portera jamais", () => {
     serverFallback = false;
     swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
     mount();
-    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    await untilSettled(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
 
     act(() => void screen.getByText(/^audio:Anglais/).click());
 
@@ -2291,11 +2311,25 @@ describe("l'ouverture de la lecture : entière dès l'appui (DECISIONS §60)", (
     // jsdom ne joue rien : l'horloge ne part jamais. La première image (`announced`) ne retire pas
     // l'ouverture — elle tient jusqu'au film qui bouge —, mais une image figée au-delà de
     // `COVER_HOLD_MS` est un vrai blocage qui doit se voir.
-    mount();
-    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    expect(layer()?.getAttribute("data-playback-intro")).toBe("intro");
-    await waitFor(() => expect(layer()).toBeNull(), { timeout: 2500 });
-    await act(async () => void (await new Promise((r) => setTimeout(r, 400))));
-    expect(layer()).toBeNull();
+    // Sur une horloge factice : la garde (1,2 s), le fondu et la vérification d'après, attendus en
+    // temps réel, faisaient près de deux secondes d'attente — au-delà des 5 s sous la charge de
+    // plusieurs suites en parallèle (10/10/2026).
+    // Avancée par pas : chaque étape (image montrée, garde, fondu) arme la suivante au rendu d'après.
+    vi.useFakeTimers();
+    const advance = async (ms: number) => {
+      for (let t = 0; t < ms; t += 50) await act(async () => void vi.advanceTimersByTime(50));
+    };
+    try {
+      mount();
+      await advance(50);
+      expect(screen.getByTestId("controls")).toBeTruthy();
+      expect(layer()?.getAttribute("data-playback-intro")).toBe("intro");
+      await advance(2_500);
+      expect(layer()).toBeNull();
+      await advance(400);
+      expect(layer()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

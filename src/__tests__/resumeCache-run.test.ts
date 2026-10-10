@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 import { forgetHandover } from "@/lib/webcodecs/byteSource";
 import { setWatchingFullScreen } from "@/lib/playbackBusy";
 import { hydrateFromDisk, resetPersistentCacheForTests } from "@/lib/persistentCache";
@@ -40,6 +40,13 @@ beforeEach(async () => {
   // Le compte de la page, comme l'hydratation le pose au démarrage.
   await hydrateFromDisk("louis", { has: () => true, set: () => {} });
   fetchedChunks = [];
+  // Le « souffle » de 800 ms entre deux titres (`BETWEEN_TITLES_MS`), ramené à un tour de boucle :
+  // attendu en temps réel, il faisait de chaque test une seconde d'attente vide, et le premier du
+  // fichier (import compris) passait les 5 s sous la charge de plusieurs suites en parallèle
+  // (10/10/2026). Ce que ces tests prouvent, c'est ce qui est gardé — pas la longueur de la pause.
+  const realSetTimeout = globalThis.setTimeout;
+  vi.stubGlobal("setTimeout", ((cb: (...a: unknown[]) => void, ms?: number, ...rest: unknown[]) =>
+    realSetTimeout(cb, ms === 800 ? 0 : ms, ...rest)) as typeof setTimeout);
   vi.stubGlobal("fetch", async (url: string, init?: { headers?: Record<string, string> }) => {
     requests += 1;
     const file = FILES[url] ?? FILE;
@@ -56,6 +63,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
   setResumeStoreForTests(null);
   setWatchingFullScreen(false);
+});
+
+// Le module chargé une fois, avant le premier test : importé à froid *dans* le premier, il le faisait
+// passer les 5 s sous la charge de plusieurs suites en parallèle (10/10/2026).
+beforeAll(async () => {
+  await import("@/lib/resumeCache/useResumeCache");
 });
 
 async function run(targets: { itemId: string; startSeconds: number; positionSeconds?: number; started?: boolean }[], now = Date.now()) {
@@ -76,8 +89,9 @@ describe("un passage de la reprise instantanée", () => {
   it("jette sans erreur ce qui a été gardé pour un fichier depuis remplacé", async () => {
     await run([{ itemId: "a", startSeconds: 20.5 }]);
     expect(await openDiskChunks({ itemId: "a", streamUrl: URL_A, size: FILE.length, fileVersion: "etag-2" })).toBeNull();
-    await new Promise((r) => setTimeout(r, 10));
-    expect(await readResumeManifest("louis", "a")).toBeNull();
+    // L'effacement part en arrière-plan : attendu sur son effet, pas sur une durée — dix
+    // millisecondes ne suffisaient pas sous la charge de la suite complète.
+    await vi.waitFor(async () => expect(await readResumeManifest("louis", "a")).toBeNull());
     // Et le passage suivant le refait, pour le nouveau fichier.
     info = { ...info, fileVersion: "etag-2" };
     await run([{ itemId: "a", startSeconds: 20.5 }]);
@@ -91,8 +105,7 @@ describe("un passage de la reprise instantanée", () => {
     expect(await readResumeManifest("louis", "a")).toBeNull();
     expect(Object.keys(await readResumeIndex("louis"))).toEqual(["b"]);
     forgetResumeCache("b");
-    await new Promise((r) => setTimeout(r, 10));
-    expect(await readResumeIndex("louis")).toEqual({});
+    await vi.waitFor(async () => expect(await readResumeIndex("louis")).toEqual({}));
   });
 
   it("ne fait rien pendant qu'un film tient l'écran", async () => {

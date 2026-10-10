@@ -109,12 +109,37 @@ const settle = async () => {
 /**
  * La fin de l'entrée. jsdom n'anime rien et React n'y reçoit pas `animationend` : c'est le minuteur
  * de secours de la fiche qui la déclare posée — le chemin qu'on prend aussi quand l'évènement ne
- * vient pas pour de vrai (onglet caché, mouvement réduit). On l'attend donc, tout simplement.
+ * vient pas pour de vrai (onglet caché, mouvement réduit).
+ *
+ * Ce minuteur-là est retenu et déclenché à la main : attendu en temps réel, il tombait parfois
+ * *avant* la vérification « rien avant l'entrée » — sous la charge de plusieurs suites en
+ * parallèle, charger les données et vider les temps morts prenait à lui seul plus que ses 450 ms,
+ * et la biographie était déjà là (10/10/2026). Seul lui : une horloge entièrement factice bloquait
+ * les attentes de Testing Library et les requêtes de SWR.
  */
-const finishEntry = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 500)));
+const ENTRY_FALLBACK_MS = 450; // `SETTLE_FALLBACK_MS` dans PlayerPersonSheet
+let entryTimers: (() => void)[] = [];
+const finishEntry = () =>
+  act(async () => {
+    const pending = entryTimers;
+    entryTimers = [];
+    pending.forEach((cb) => cb());
+  });
 
+beforeEach(() => {
+  entryTimers = [];
+  const realSetTimeout = window.setTimeout.bind(window);
+  vi.spyOn(window, "setTimeout").mockImplementation(((cb: TimerHandler, ms?: number, ...rest: unknown[]) => {
+    if (ms === ENTRY_FALLBACK_MS && typeof cb === "function") {
+      entryTimers.push(() => (cb as (...a: unknown[]) => void)(...rest));
+      return -entryTimers.length;
+    }
+    return realSetTimeout(cb, ms, ...rest);
+  }) as typeof window.setTimeout);
+});
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
