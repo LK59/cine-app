@@ -50,4 +50,43 @@ describe("GET /api/jellyfin/image", () => {
     expect(res.headers.get("cache-control")).toContain("max-age=86400");
     expect(res.headers.get("etag")).toBeNull();
   });
+
+  it("le grand visuel d'une série : le fond de Jellyfin à 1 280 px, immuable comme une affiche", async () => {
+    // L'original de TheTVDB pesait jusqu'à 2 Mo, sans consigne de cache (10/10/2026).
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(new Response(new Uint8Array([1]), { headers: { "Content-Type": "image/jpeg" } }));
+    const { GET } = await import("@/app/api/jellyfin/image/route");
+    const res = await GET(req(`itemId=${ITEM}&kind=backdrop&tag=bd1`));
+    const called = String(fetchSpy.mock.calls[0][0]);
+    expect(called).toContain(`/Items/${ITEM}/Images/Backdrop/0?`);
+    expect(called).toContain("maxWidth=1280");
+    expect(called).toContain("tag=bd1");
+    expect(res.headers.get("cache-control")).toContain("immutable");
+  });
+
+  it("sans `kind`, l'affiche reste l'image principale à 300 px", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(new Response(new Uint8Array([1]), { headers: { "Content-Type": "image/jpeg" } }));
+    const { GET } = await import("@/app/api/jellyfin/image/route");
+    await GET(req(`itemId=${ITEM}&tag=p1`));
+    const called = String(fetchSpy.mock.calls[0][0]);
+    expect(called).toContain("/Images/Primary?");
+    expect(called).toContain("maxWidth=300");
+  });
+});
+
+describe("seriesBackdrop — une adresse pour le grand visuel d'une série", async () => {
+  const { seriesBackdrop } = await import("@/lib/images");
+  const tvdb = [{ coverType: "fanart", remoteUrl: "https://artworks.thetvdb.com/banners/fanart/original/1.jpg" }];
+
+  it("Jellyfin d'abord : le fond redimensionné par notre relais, étiqueté", () => {
+    expect(seriesBackdrop({ Id: ITEM, BackdropImageTags: ["t1", "t2"] }, tvdb)).toBe(`/api/jellyfin/image?itemId=${ITEM}&kind=backdrop&tag=t1`);
+  });
+
+  it("sans fond chez Jellyfin, l'adresse de TheTVDB comme avant", () => {
+    expect(seriesBackdrop({ Id: ITEM, BackdropImageTags: [] }, tvdb)).toBe(tvdb[0].remoteUrl);
+    expect(seriesBackdrop(undefined, tvdb)).toBe(tvdb[0].remoteUrl);
+  });
+
+  it("rien du tout : null", () => {
+    expect(seriesBackdrop({ Id: ITEM }, [])).toBeNull();
+  });
 });
