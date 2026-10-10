@@ -240,15 +240,20 @@ describe("useDecodeAhead, dans un panneau qui défile", () => {
   it("rechauffe en remontant une affiche lâchée entre-temps, et n'en tient qu'un nombre borné", () => {
     const srcs = Array.from({ length: 200 }, (_, i) => `/${i}.png`);
     const r = render(<Panneau srcs={srcs} />);
+    // Les deux cents tuiles lues une fois, nativement : deux cents `getByTestId` balayaient chacun
+    // tout le panneau par Testing Library — quadratique, 550 ms seul, plus de 5 s sous la charge de
+    // plusieurs suites en parallèle (10/10/2026).
+    const tiles = new Map([...r.container.querySelectorAll<HTMLElement>("[data-testid]")].map((el) => [el.dataset.testid!, el]));
+    const tile = (i: number) => tiles.get(`p${i}`)!;
     // On descend toute la grille…
-    for (let i = 0; i < 200; i++) dernier.cb([{ isIntersecting: true, target: r.getByTestId(`p${i}`) }]);
+    for (let i = 0; i < 200; i++) dernier.cb([{ isIntersecting: true, target: tile(i) }]);
     expect(decodes).toHaveLength(200);
     // …puis on remonte : la première affiche a été lâchée depuis longtemps, elle se rechauffe.
-    dernier.cb([{ isIntersecting: true, target: r.getByTestId("p0") }]);
+    dernier.cb([{ isIntersecting: true, target: tile(0) }]);
     expect(decodes).toHaveLength(201);
     expect(decodes[200]).toBe("/0.png");
     // Et la plus récente, elle, est encore tenue.
-    dernier.cb([{ isIntersecting: true, target: r.getByTestId("p199") }]);
+    dernier.cb([{ isIntersecting: true, target: tile(199) }]);
     expect(decodes).toHaveLength(201);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 
 // Choosing what to re-encode to now asks the browser what it will accept back in a MediaSource,
 // so there has to be one to ask. This stands in for a player that takes anything.
@@ -24,11 +24,16 @@ vi.mock("@/lib/webcodecs/softwareAudio", () => ({
 }));
 
 /** Decoded blocks of 512 frames, as a DTS decoder hands them over. */
+// Des plans de silence partagés : vingt mille images à six plans neufs chacune, c'était ~240 Mo
+// alloués pour des zéros — une seconde de ramasse-miettes seul, plus de 5 s sous la charge de
+// plusieurs suites en parallèle (10/10/2026). Le transcodeur ne fait que les lire.
+const SILENT_PLANES = Array.from({ length: 6 }, () => new Float32Array(512));
+
 function decoded(count: number, fromSeconds = 0) {
   return (async function* () {
     for (let i = 0; i < count; i++) {
       yield {
-        planes: Array.from({ length: 6 }, () => new Float32Array(512)),
+        planes: SILENT_PLANES,
         sampleRate: 48000,
         timestampSeconds: fromSeconds + (i * 512) / 48000,
       };
@@ -119,6 +124,10 @@ const source = { size: 1, read: async () => new Uint8Array(0), close: () => {} }
 async function load() {
   return import("@/lib/webcodecs/audioTranscode");
 }
+// Chargé une fois avant le premier test : importé à froid dedans, il passait les 5 s sous charge.
+beforeAll(async () => {
+  await load();
+});
 
 describe("transcodableAudio", () => {
   it("names what there is a decoder for here, which is not the same as what needs one", async () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
 
 // Une base et un dossier de données à ce fichier seul.
@@ -79,6 +79,21 @@ async function create(who: string, report: Record<string, unknown>, opts: { draf
 const settle = async () => {
   await (await import("@/lib/reports")).__testing.drain();
 };
+// Les routes importées une fois, avant le premier test : leur graphe de modules (sharp compris),
+// chargé à froid *dans* le premier test, le faisait passer les 5 s sous la charge de plusieurs
+// suites en parallèle — et ses créations encore en vol prévenaient l'administrateur pendant le test
+// suivant, qui comptait alors trois notifications au lieu d'une (10/10/2026).
+beforeAll(async () => {
+  await Promise.all([
+    import("@/app/api/reports/route"),
+    import("@/app/api/reports/[id]/route"),
+    import("@/app/api/reports/[id]/messages/route"),
+    import("@/app/api/admin/activity/reports/route"),
+    import("@/app/api/reports/[id]/images/[imageId]/route"),
+    import("@/lib/reportImages"),
+    import("@/lib/reports"),
+  ]);
+});
 beforeEach(async () => {
   await settle();
   vi.clearAllMocks();

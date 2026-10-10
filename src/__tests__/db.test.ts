@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -340,7 +340,16 @@ describe("le ménage par tranches", () => {
     const rows = Array.from({ length: 12_000 }, (_, i) => ({ id: `retard-${i % 3}`, status: "ok" }));
     for (let i = 0; i < 4; i++) db.statusHistoryDb.recordCapabilityChecks(rows.slice(0, 3000), old + i);
 
-    db.statusHistoryDb.cleanup(10 * 24 * 3600_000);
+    // L'horloge figée : le ménage s'arrête aussi sur un budget de temps (`CLEANUP_BUDGET_MS`), et
+    // sous la charge de plusieurs suites en parallèle une tranche de 5 000 dépassait à elle seule les
+    // 250 ms — le test lisait alors un arrêt sur budget, voulu, comme un ménage inachevé. Ce qu'il
+    // prouve, c'est l'enchaînement des tranches.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      db.statusHistoryDb.cleanup(10 * 24 * 3600_000);
+    } finally {
+      vi.useRealTimers();
+    }
 
     for (const id of ["retard-0", "retard-1", "retard-2"]) {
       expect(db.statusHistoryDb.getCapabilityHistory(id, 0)).toHaveLength(0);
