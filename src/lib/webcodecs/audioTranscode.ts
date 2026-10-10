@@ -9,7 +9,8 @@
 // The half-second of latency this adds is spent ahead of playback, not at it: a segment's audio is
 // produced while the previous one is still being watched.
 
-import { aacCopyable } from "./aacConfig";
+import { aacPlan } from "./aacConfig";
+import { pceCopyAccepted } from "./aacPceProbe";
 import { audioSampleEntryFor } from "./mp4SampleEntries";
 import { SoftwareAudioTrack, type DecodedAudio } from "./softwareAudio";
 import type { ByteSource } from "./byteSource";
@@ -138,9 +139,10 @@ export function audioDecoderExists(track: MatroskaTrack): boolean {
 
 export function transcodableAudio(track: MatroskaTrack): boolean {
   if (track.codecId === "A_OPUS") return (track.audio?.channels ?? 2) <= 2;
-  // L'AAC se copie partout — sauf celui dont la disposition est un PCE, que MediaSource refuse
-  // (voir aacConfig.ts) : décodé par l'AudioDecoder du navigateur, via mediabunny, comme l'Opus.
-  if (track.codecId === "A_AAC") return !aacCopyable(track.codecPrivate);
+  // L'AAC se copie partout — sauf un PCE que ce navigateur ne prend pas et qu'aucune configuration
+  // standard ne décrit (DECISIONS.md §62) : décodé par l'AudioDecoder du navigateur, via
+  // mediabunny, comme l'Opus.
+  if (track.codecId === "A_AAC") return aacPlan(track.codecPrivate, { pceAccepted: pceCopyAccepted() }).action === "decode";
   return DECODABLE_HERE.has(track.codecId);
 }
 

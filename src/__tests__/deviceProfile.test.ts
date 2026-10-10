@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { audioNeedsStereoReencode, buildDeviceProfile, chosenAudioStream } from "@/lib/deviceProfile";
+import { audioNeedsReencode, buildDeviceProfile, chosenAudioStream } from "@/lib/deviceProfile";
 import type { CodecSupport } from "@/lib/codecSupport";
 
 const NO_SUPPORT: CodecSupport = { video: {}, audio: {} };
@@ -117,16 +117,26 @@ describe("buildDeviceProfile", () => {
   });
 });
 
-describe("le son ré-encodé en stéréo — l'AAC à PCE de « Elle s'appelle Ruby »", () => {
+describe("le son ré-encodé — l'AAC à PCE de « Elle s'appelle Ruby »", () => {
   const support: CodecSupport = { video: { "mp4/h264": true }, audio: { aac: true, ac3: true, eac3: true } };
 
-  it("interdit la copie du son et vise l'AAC stéréo — ce que Jellyfin lit en AudioChannelsNotSupported", () => {
-    const profile = buildDeviceProfile(support, 8_000_000, { reencodeAudioStereo: true });
+  it("en ambiance : plafond à 5 canaux, que Jellyfin ne peut pas copier et ré-encode en 5.1 standard", () => {
+    // Mesuré le 10/10/2026 sur le vrai Jellyfin : `libfdk_aac -ac 6`, esds `11 b0` (5.1, sans PCE).
+    const profile = buildDeviceProfile(support, 8_000_000, { reencodeAudio: "surround" });
     expect(profile.TranscodingProfiles[0].AudioCodec).toBe("aac");
-    expect(profile.TranscodingProfiles[0].MaxAudioChannels).toBe("2");
+    expect(profile.TranscodingProfiles[0].MaxAudioChannels).toBe("5");
     const audioConditions = profile.CodecProfiles.filter((p) => p.Type === "VideoAudio");
     expect(audioConditions.map((p) => p.Codec)).toEqual(["aac", "ac3", "eac3"]);
     for (const p of audioConditions) {
+      expect(p.Conditions).toEqual([{ Condition: "LessThanEqual", Property: "AudioChannels", Value: "5", IsRequired: true }]);
+    }
+  });
+
+  it("en stéréo, le dernier recours : plafond à 2 canaux", () => {
+    const profile = buildDeviceProfile(support, 8_000_000, { reencodeAudio: "stereo" });
+    expect(profile.TranscodingProfiles[0].AudioCodec).toBe("aac");
+    expect(profile.TranscodingProfiles[0].MaxAudioChannels).toBe("2");
+    for (const p of profile.CodecProfiles.filter((c) => c.Type === "VideoAudio")) {
       expect(p.Conditions).toEqual([{ Condition: "LessThanEqual", Property: "AudioChannels", Value: "2", IsRequired: true }]);
     }
   });
@@ -139,13 +149,13 @@ describe("le son ré-encodé en stéréo — l'AAC à PCE de « Elle s'appelle R
   });
 });
 
-describe("audioNeedsStereoReencode et chosenAudioStream", () => {
+describe("audioNeedsReencode et chosenAudioStream", () => {
   it("reconnaît l'AAC multicanal sans disposition nommée — et lui seul", () => {
-    expect(audioNeedsStereoReencode({ Codec: "aac", Channels: 6 })).toBe(true);
-    expect(audioNeedsStereoReencode({ Codec: "aac", Channels: 6, ChannelLayout: "5.1" })).toBe(false);
-    expect(audioNeedsStereoReencode({ Codec: "aac", Channels: 2 })).toBe(false);
-    expect(audioNeedsStereoReencode({ Codec: "ac3", Channels: 6 })).toBe(false);
-    expect(audioNeedsStereoReencode(null)).toBe(false);
+    expect(audioNeedsReencode({ Codec: "aac", Channels: 6 })).toBe(true);
+    expect(audioNeedsReencode({ Codec: "aac", Channels: 6, ChannelLayout: "5.1" })).toBe(false);
+    expect(audioNeedsReencode({ Codec: "aac", Channels: 2 })).toBe(false);
+    expect(audioNeedsReencode({ Codec: "ac3", Channels: 6 })).toBe(false);
+    expect(audioNeedsReencode(null)).toBe(false);
   });
 
   it("prend la piste demandée, sinon celle que Jellyfin retient par défaut", () => {
