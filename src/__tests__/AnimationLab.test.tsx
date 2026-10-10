@@ -77,4 +77,14 @@ describe("la page Tests animations", () => {
     // Sans catalogue, pas de maquette à ouvrir.
     expect((screen.getByRole("button", { name: /Chargement du catalogue/ }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("troisième passe : la luminosité du fond se règle, et part du voile d'origine", () => {
+    render(<AnimationLab />);
+    fireEvent.click(screen.getByRole("button", { name: /Lancement de la lecture/ }));
+    const slider = screen.getByLabelText(/Luminosité du fond/) as HTMLInputElement;
+    expect(slider.value).toBe("0");
+    expect(screen.getByText(/voile d'origine/)).toBeTruthy();
+    fireEvent.change(slider, { target: { value: "20" } });
+    expect(screen.getByText(/Luminosité du fond \+20 %/)).toBeTruthy();
+  });
 });

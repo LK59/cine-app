@@ -135,13 +135,16 @@ function bgSource(url: string | null, mode: BgMode): string {
 /**
  * Le voile du fond. Plus dense sur une image nette, qui garde tous ses détails derrière le logo :
  * un voile radial pour le centrer, un dégradé du bas pour la légende et la ligne de chargement.
+ * `brightness` (en %, 0 par défaut — le voile d'origine) l'allège ou l'épaissit d'autant : +30
+ * retire 30 % de chaque opacité, −30 en ajoute 30 %, plafonné pour que le fond reste visible.
  */
-function bgVeil(mode: BgMode): string {
+function bgVeil(mode: BgMode, brightness = 0): string {
+  const a = (alpha: number) => `rgba(0,0,0,${Math.min(0.95, alpha * (1 - brightness / 100)).toFixed(3)})`;
   if (mode === "net") {
-    return "radial-gradient(ellipse at center, rgba(0,0,0,0.30), rgba(0,0,0,0.82) 78%), linear-gradient(to top, rgba(0,0,0,0.6), rgba(0,0,0,0) 45%)";
+    return `radial-gradient(ellipse at center, ${a(0.3)}, ${a(0.82)} 78%), linear-gradient(to top, ${a(0.6)}, rgba(0,0,0,0) 45%)`;
   }
-  if (mode === "old") return "radial-gradient(ellipse at center, rgba(0,0,0,0.35), rgba(0,0,0,0.78) 75%)";
-  return "radial-gradient(ellipse at center, rgba(0,0,0,0.25), rgba(0,0,0,0.72) 78%), linear-gradient(to top, rgba(0,0,0,0.45), rgba(0,0,0,0) 40%)";
+  if (mode === "old") return `radial-gradient(ellipse at center, ${a(0.35)}, ${a(0.78)} 75%)`;
+  return `radial-gradient(ellipse at center, ${a(0.25)}, ${a(0.72)} 78%), linear-gradient(to top, ${a(0.45)}, rgba(0,0,0,0) 40%)`;
 }
 
 export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
@@ -156,6 +159,7 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
   const [caption, setCaption] = useState<Caption>("none");
   const [reduced, setReduced] = useState(prefersReduced);
   const [bg, setBg] = useState<BgMode>("light");
+  const [brightness, setBrightness] = useState(0);
   const [run, setRun] = useState(0);
   const title = choices.length > 0 ? choices[Math.min(pick, choices.length - 1)] : null;
 
@@ -199,6 +203,10 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
         <Slider label={`Seuil de passage direct ${threshold} ms`} min={0} max={1000} step={50} value={threshold} set={setThreshold} />
         <Slider label={`Zoom du fond ${zoom.toFixed(2)} → 1,00`} min={1} max={1.2} step={0.01} value={zoom} set={setZoom} />
         <Slider label={`Apparition du logo ${logoMs} ms`} min={200} max={1500} step={50} value={logoMs} set={setLogoMs} />
+        <Slider
+          label={`Luminosité du fond ${brightness > 0 ? "+" : ""}${brightness} %${brightness === 0 ? " (voile d'origine)" : ""}`}
+          min={-30} max={40} step={5} value={brightness} set={setBrightness}
+        />
       </div>
       <Row label="Légende">
         <Chip on={caption === "none"} onClick={() => setCaption("none")}>Aucune</Chip>
@@ -226,6 +234,7 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
             caption={caption}
             reduced={reduced}
             bg={bg}
+            brightness={brightness}
             onReplay={() => setRun((n) => n + 1)}
             onClose={() => setRun(0)}
           />,
@@ -242,7 +251,7 @@ function captionText(caption: Caption): string | null {
 }
 
 function IntroStage({
-  title, delay, threshold, zoom, logoMs, sweep, caption, reduced, bg, onReplay, onClose,
+  title, delay, threshold, zoom, logoMs, sweep, caption, reduced, bg, brightness, onReplay, onClose,
 }: {
   title: CinemaMovie;
   delay: number;
@@ -253,6 +262,7 @@ function IntroStage({
   caption: Caption;
   reduced: boolean;
   bg: BgMode;
+  brightness: number;
   onReplay: () => void;
   onClose: () => void;
 }) {
@@ -362,7 +372,7 @@ function IntroStage({
             />
           </div>
           {/* Une vignette, puis le voile : le bord de l'écran s'assombrit, le logo se lit au centre. */}
-          <div className="absolute inset-0" style={{ background: bgVeil(bg) }} />
+          <div className="absolute inset-0" style={{ background: bgVeil(bg, brightness) }} />
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8">
             <div ref={logoRef} className="relative" style={{ opacity: 0 }}>
               {logo ? (
@@ -432,6 +442,18 @@ type Register = (key: string) => (el: HTMLElement | null) => void;
 const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
 const PHONE_POSTER_WIDTH = "w-28 sm:w-32";
 const STAGGER_MS = 50;
+// L'assombrissement de l'accueil derrière la fiche, et le recul de celui du bureau.
+const DIM = 0.6;
+const HOME_SCALE = 0.98;
+/*
+ * Le fondu affiche → visuel, en images clés sur toute la durée (courbe linéaire, adoucie par
+ * segment) : l'affiche s'efface sur le premier tiers, le visuel paraît de 10 à 50 %. À la
+ * fermeture, l'exact inverse. Un fondu de moitié chacun laissait les deux se mêler longtemps.
+ */
+const POSTER_OUT: Keyframe[] = [{ opacity: 1, easing: "ease-in" }, { opacity: 0, offset: 0.35 }, { opacity: 0 }];
+const BACKDROP_IN: Keyframe[] = [{ opacity: 0 }, { opacity: 0, offset: 0.1, easing: "ease-out" }, { opacity: 1, offset: 0.5 }, { opacity: 1 }];
+const POSTER_IN: Keyframe[] = [{ opacity: 0 }, { opacity: 0, offset: 0.65, easing: "ease-out" }, { opacity: 1 }];
+const BACKDROP_OUT: Keyframe[] = [{ opacity: 1 }, { opacity: 1, offset: 0.5, easing: "ease-in" }, { opacity: 0, offset: 0.9 }, { opacity: 0 }];
 const VT_NAME = "alab-hero";
 // Le téléphone simulé quand la disposition « Téléphone » est demandée sur un grand écran.
 const PHONE_FRAME = { w: 390, h: 844, statusBar: 47 };
@@ -595,11 +617,13 @@ function SheetStage({
       ) : (
         <DesktopHome titles={titles} hiddenKey={open?.key ?? null} register={register} onOpen={openFrom} />
       )}
+      {/* En haut à droite, la pilule tombait sur la croix de la fiche du téléphone : elle descend
+          au milieu du bas, là où ni l'accueil ni la fiche simulés n'ont de commande. */}
       <button
         type="button"
         onClick={onExit}
-        className="nav-glass absolute right-4 flex h-9 items-center gap-2 rounded-full px-3 text-xs text-white"
-        style={{ top: framed ? PHONE_FRAME.statusBar + 6 : "max(1rem, env(safe-area-inset-top))" }}
+        className={`nav-glass absolute z-30 flex h-9 items-center gap-2 rounded-full px-3 text-xs text-white ${phone ? "left-1/2 -translate-x-1/2" : "right-4"}`}
+        style={phone ? { bottom: framed ? 20 : "max(1rem, env(safe-area-inset-bottom))" } : { top: "max(1rem, env(safe-area-inset-top))" }}
       >
         <X size={14} /> Quitter la maquette
       </button>
@@ -672,7 +696,7 @@ function DesktopHome({ titles, hiddenKey, register, onOpen }: HomeProps) {
     { name: "Ma liste", items: [...titles].reverse() },
   ];
   return (
-    <div className="scrollbar-thin absolute inset-0 overflow-y-auto bg-ink pb-10">
+    <div data-alab-home className="scrollbar-thin absolute inset-0 overflow-y-auto bg-ink pb-10">
       {hero && (
         <div className="relative h-[58%] min-h-80 w-full overflow-hidden">
           <img src={tmdbResize(hero.backdropUrl, "w1280") ?? ""} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -723,6 +747,7 @@ function PhoneHome({ titles, framed, hiddenKey, register, onOpen }: HomeProps & 
   ];
   return (
     <div
+      data-alab-home
       className="scrollbar-none absolute inset-0 overflow-y-auto overflow-x-hidden bg-ink pb-24"
       style={{ paddingTop: framed ? PHONE_FRAME.statusBar : "env(safe-area-inset-top, 0px)" }}
     >
@@ -810,6 +835,16 @@ function MetaLine({ title, truncateGenres = false }: { title: CinemaMovie; trunc
  * vrai visuel de la fiche, caché le temps du trajet, prend le relais à l'arrivée — c'est lui qui
  * défile ensuite. Rien d'autre ne bouge que la transformation, l'opacité et la découpe, et tout est
  * mesuré une fois au départ.
+ *
+ * Troisième passe (10/10/2026), d'après les captures de la deuxième :
+ * - Les voiles du visuel voyagent *dans* le calque découpé, avec le visuel, à la même échelle — ceux
+ *   de la fiche, posés à leur place finale et fondus pendant le trajet, assombrissaient l'accueil
+ *   hors de la découpe : la bande sombre au bas de la bannière du téléphone, le fond boueux du bureau.
+ * - Les images ne grandissent que d'une échelle uniforme (`coverTransform`) : la découpe suit la
+ *   place, l'image la couvre toujours sans être étirée.
+ * - Le fondu est court et décalé : l'affiche s'efface sur le premier tiers, le visuel paraît de
+ *   10 à 50 % — plus de long passage où les deux se superposent à moitié.
+ * - L'accueil s'assombrit derrière la fiche (et recule un peu au bureau), puis revient à la fermeture.
  */
 function MockSheet({
   opening, phone, framed, rootRef, sources, timing, stagger, onClosed,
@@ -829,10 +864,13 @@ function MockSheet({
   const sheetRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
-  const morphBackdropRef = useRef<HTMLImageElement>(null);
+  // Le visuel du trajet et ses voiles, dans une seule enveloppe : une échelle, une opacité.
+  const morphBackdropRef = useRef<HTMLDivElement>(null);
   const morphPosterRef = useRef<HTMLImageElement>(null);
   const imageRef = useRef<HTMLDivElement>(null);
   const photoRef = useRef<HTMLImageElement>(null);
+  const dimRef = useRef<HTMLDivElement>(null);
+  const homeAnimRef = useRef<Animation | null>(null);
   const closingRef = useRef(false);
   const openTimersRef = useRef<number[]>([]);
   // Le flou localisé du bas de la fiche du bureau (`backdrop-blur`) n'est posé qu'une fois le
@@ -861,6 +899,19 @@ function MockSheet({
     };
   };
 
+  /**
+   * Le visuel de la fiche et ses voiles, cachés le temps du trajet : c'est la copie du calque découpé
+   * qui se montre. Les voiles sont repérés par `data-alab-veil`.
+   */
+  const showSheetImage = (visible: boolean) => {
+    const v = visible ? "" : "hidden";
+    if (photoRef.current) photoRef.current.style.visibility = v;
+    imageRef.current?.querySelectorAll<HTMLElement>("[data-alab-veil]").forEach((el) => (el.style.visibility = v));
+  };
+
+  /** L'accueil, que le bureau fait reculer d'un rien derrière la fiche. */
+  const home = () => rootRef.current?.querySelector<HTMLElement>("[data-alab-home]") ?? null;
+
   useLayoutEffect(() => {
     const sheet = sheetRef.current;
     if (!sheet) return;
@@ -878,11 +929,15 @@ function MockSheet({
       // « Réduire les animations » : un fondu simple, rien qui se déplace.
       play(sheet, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
       play(cardRef.current, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
+      play(dimRef.current, [{ opacity: 0 }, { opacity: DIM }], { duration: 200, easing: "ease-out" });
       return cleanup;
     }
     const m = measure();
     if (!m) return cleanup;
     const d = timing.duration;
+    // L'accueil s'éteint derrière : la fiche passe devant lui, elle ne le remplace pas. Une courbe
+    // simple et non le ressort, dont le dépassement ferait clignoter l'assombrissement.
+    play(dimRef.current, [{ opacity: 0 }, { opacity: DIM }], { duration: d, easing: "cubic-bezier(0.33, 1, 0.68, 1)" });
     const { items, fades } = parts();
     // Le contenu paraît quand le visuel a fait l'essentiel du chemin : avant, il se lirait sur un
     // fond encore en mouvement. Plus tard au téléphone : le texte s'y pose sur la carte qui monte, et
@@ -906,16 +961,22 @@ function MockSheet({
       place(bd, m.target);
       place(poster, m.source);
       frame.style.display = "";
-      photo.style.visibility = "hidden";
+      showSheetImage(false);
       play(frame, [{ clipPath: insetClip(m.source, m.W, m.H, sourceRadius) }, { clipPath: insetClip(m.target, m.W, m.H, imageRadius) }], timing);
       play(bd, [{ transform: coverTransform(m.target, m.source) }, { transform: "none" }], timing);
-      play(bd, [{ opacity: 0 }, { opacity: 1 }], { duration: d * 0.5, delay: d * 0.08, easing: "ease-out" });
+      play(bd, BACKDROP_IN, { duration: d, easing: "linear" });
       play(poster, [{ transform: "none" }, { transform: coverTransform(m.source, m.target) }], timing);
-      play(poster, [{ opacity: 1 }, { opacity: 0 }], { duration: d * 0.55, easing: "ease-in-out" });
+      play(poster, POSTER_OUT, { duration: d, easing: "linear" });
+      // Au bureau, l'accueil recule d'un rien : la profondeur, sans rien déplacer qui se lise.
+      const h = phone ? null : home();
+      if (h) {
+        homeAnimRef.current = h.animate([{ transform: "none" }, { transform: `scale(${HOME_SCALE})` }], { duration: d, easing: "cubic-bezier(0.2, 0, 0, 1)", fill: "both" });
+        anims.push(homeAnimRef.current);
+      }
       timers.push(
         window.setTimeout(() => {
           frame.style.display = "none";
-          photo.style.visibility = "";
+          showSheetImage(true);
         }, d),
       );
     }
@@ -937,6 +998,7 @@ function MockSheet({
     if (mode === "fade") {
       sheet?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
       cardRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
+      dimRef.current?.animate([{ opacity: DIM }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
       window.setTimeout(onClosed, 180);
       return;
     }
@@ -945,9 +1007,13 @@ function MockSheet({
     for (const el of items) el.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(8px)" }], { duration: 140, easing: "ease-in", fill: "both" });
     for (const el of fades) el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: d * 0.5, easing: "ease-in", fill: "both" });
     if (vt) {
+      dimRef.current?.animate([{ opacity: DIM }, { opacity: 0 }], { duration: 140, easing: "ease-in", fill: "both" });
       window.setTimeout(onClosed, 140);
       return;
     }
+    // L'accueil reprend sa taille avant la mesure : la carte d'arrivée se lit à sa vraie place, pas
+    // à celle de l'accueil reculé — retirée et relancée dans la même tâche, rien ne se peint entre.
+    homeAnimRef.current?.cancel();
     const m = measure();
     const frame = frameRef.current;
     const bd = morphBackdropRef.current;
@@ -961,14 +1027,17 @@ function MockSheet({
     place(bd, m.target);
     place(poster, m.source);
     frame.style.display = "";
-    photo.style.visibility = "hidden";
+    showSheetImage(false);
     const opts = { ...timing, fill: "both" as const };
     const back = frame.animate([{ clipPath: insetClip(m.target, m.W, m.H, imageRadius) }, { clipPath: insetClip(m.source, m.W, m.H, sourceRadius) }], opts);
     bd.animate([{ transform: "none" }, { transform: coverTransform(m.target, m.source) }], opts);
-    bd.animate([{ opacity: 1 }, { opacity: 0 }], { duration: d * 0.45, delay: d * 0.3, easing: "ease-in", fill: "both" });
+    bd.animate(BACKDROP_OUT, { duration: d, easing: "linear", fill: "both" });
     poster.animate([{ transform: coverTransform(m.source, m.target) }, { transform: "none" }], opts);
-    poster.animate([{ opacity: 0 }, { opacity: 1 }], { duration: d * 0.5, easing: "ease-out", fill: "both" });
+    poster.animate(POSTER_IN, { duration: d, easing: "linear", fill: "both" });
     cardRef.current?.animate([{ transform: "none" }, { transform: `translateY(${m.cardDrop}px)` }], opts);
+    dimRef.current?.animate([{ opacity: DIM }, { opacity: 0 }], { duration: d, easing: "cubic-bezier(0.65, 0, 0.35, 1)", fill: "both" });
+    // Sans remplissage : à la fin, l'accueil retrouve simplement son état, sans animation qui traîne.
+    if (!phone) home()?.animate([{ transform: `scale(${HOME_SCALE})` }, { transform: "none" }], { ...timing });
     back.onfinish = () => onClosed();
   };
 
@@ -981,16 +1050,31 @@ function MockSheet({
   });
 
   // Le calque du trajet : sous le contenu de la fiche, au-dessus de l'accueil. Caché hors du FLIP.
+  // Le visuel y emporte une copie de ses voiles, qui grandit avec lui : vue de la carte, la fiche en
+  // miniature ; rien ne s'assombrit hors de la découpe.
   const frame = (
     <div ref={frameRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden bg-ink" style={{ display: "none" }}>
-      <img ref={morphBackdropRef} src={backdrop} alt="" className="absolute max-w-none object-cover" style={{ transformOrigin: "0 0", opacity: 0 }} />
+      <div ref={morphBackdropRef} className="absolute overflow-hidden" style={{ transformOrigin: "0 0", opacity: 0 }}>
+        <img src={backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        {phone ? (
+          <div className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
+        ) : (
+          <>
+            <div className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
+            <div className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
+          </>
+        )}
+      </div>
       <img ref={morphPosterRef} src={opening.poster} alt="" className="absolute max-w-none object-cover" style={{ transformOrigin: "0 0" }} />
     </div>
   );
+  // L'accueil éteint derrière la fiche, sous tout le reste.
+  const dim = <div ref={dimRef} aria-hidden="true" className="pointer-events-none absolute inset-0 bg-ink" style={{ opacity: 0 }} />;
 
   if (!phone) {
     return (
       <>
+        {dim}
         {frame}
         <div ref={sheetRef} className="absolute inset-0 overflow-hidden">
           {/* Le visuel plein écran et ce qui le voile, comme CinemaMovieDetail : le flou localisé du
@@ -1003,8 +1087,8 @@ function MockSheet({
                 style={{ height: "45%", maskImage: "linear-gradient(to bottom, transparent 0%, black 60%)", WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)" }}
               />
             )}
-            <div data-alab-fade className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
-            <div data-alab-fade className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
+            <div data-alab-fade data-alab-veil className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
+            <div data-alab-fade data-alab-veil className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
           </div>
           <button
             data-alab-fade
@@ -1067,6 +1151,7 @@ function MockSheet({
   const top = framed ? `${PHONE_FRAME.statusBar + 8}px` : "calc(env(safe-area-inset-top, 0px) + 0.5rem)";
   return (
     <>
+      {dim}
       {/* Le fond de la carte, à part : il monte du bas pendant que la bannière se forme au-dessus. */}
       <div
         ref={cardRef}
@@ -1078,7 +1163,7 @@ function MockSheet({
         <div className="relative aspect-video w-full" style={{ maxHeight: framed ? PHONE_FRAME.h * 0.52 : "52svh" }}>
           <div ref={imageRef} className="absolute inset-0" style={{ viewTransitionName: vt ? VT_NAME : undefined } as CSSProperties}>
             <img ref={photoRef} src={backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
-            <div data-alab-fade className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
+            <div data-alab-fade data-alab-veil className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
             <button
               data-alab-fade
               type="button"
