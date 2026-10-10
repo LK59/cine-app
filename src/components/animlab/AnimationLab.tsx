@@ -10,7 +10,8 @@ import {
 } from "lucide-react";
 import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
 import { usePointerCapture } from "@/lib/usePointerCapture";
-import { cinemaFetcher } from "@/lib/cinemaPayload";
+import { catalogueTitles, cinemaFetcher } from "@/lib/cinemaPayload";
+import { PlayerIntroLot, SheetOpenLot } from "./IntroLots";
 import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { tmdbResize } from "@/lib/images";
 import { isWebKitEngine } from "@/lib/webkitEngine";
@@ -89,6 +90,8 @@ const LOTS = [
   { id: "C", name: "Apparition du flou" },
   { id: "D", name: "Groupes et métamorphoses" },
   { id: "E", name: "Défilement sous verre" },
+  { id: "G", name: "Lancement de la lecture" },
+  { id: "H", name: "Ouverture de fiche" },
 ] as const;
 type LotId = (typeof LOTS)[number]["id"];
 
@@ -140,6 +143,8 @@ export function AnimationLab() {
     return [...movies.recentlyAdded, ...Object.values(movies.rows).flat()].map((m) => m.posterUrl).filter((u): u is string => !!u).slice(0, 60);
   }, [movies]);
   const image = images.length > 0 ? images[((imageIndex % images.length) + images.length) % images.length] : null;
+  // Les titres entiers (logo, affiche, visuel) pour les lots G et H — voir `IntroLots.tsx`.
+  const titles = useMemo(() => (movies ? catalogueTitles(movies) : []), [movies]);
 
   const spring = useMemo(() => toSpring(response, ratio), [response, ratio]);
   const overshoot = useMemo(() => springOvershoot(spring), [spring]);
@@ -222,7 +227,7 @@ export function AnimationLab() {
             </select>
           </Row>
         )}
-        {lot !== "A" && (
+        {lot !== "A" && lot !== "G" && lot !== "H" && (
           <Row label="Geste des boutons">
             <select className="select max-w-full" value={gesture} onChange={(e) => setGesture(e.target.value as GestureKind)}>
               {GESTURES.map((g) => <option key={g.kind} value={g.kind}>{g.name}</option>)}
@@ -231,6 +236,8 @@ export function AnimationLab() {
         )}
 
         {lot === "F" && <PlayerSimLot />}
+        {lot === "G" && <PlayerIntroLot movies={titles} />}
+        {lot === "H" && <SheetOpenLot movies={titles} />}
         <div key={lot} className="grid gap-x-5 gap-y-7 sm:grid-cols-2 xl:grid-cols-3">
           {lot === "A" && GESTURES.map((g) => (
             <Card key={g.kind} title={g.name} hint={g.hint} cost="nul">

@@ -540,3 +540,16 @@
     max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem))
     calc(16px + env(safe-area-inset-left, 0px));
 }
+
+/* Lot G — la ligne de chargement de l'ouverture : une lueur qui traverse, en boucle, à la place de la
+   roue. Seule une translation s'anime. Coupée par « Réduire les animations ». */
+@keyframes alab-intro-line {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(200%); }
+}
+.alab-intro-line {
+  animation: alab-intro-line 1.4s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .alab-intro-line { animation: none; }
+}

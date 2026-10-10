@@ -21,9 +21,9 @@ beforeAll(() => {
 afterEach(cleanup);
 
 describe("la page Tests animations", () => {
-  it("monte chacun de ses six lots", () => {
+  it("monte chacun de ses huit lots", () => {
     render(<AnimationLab />);
-    for (const name of ["Gestes d'appui", "Matières", "Apparition du flou", "Groupes et métamorphoses", "Défilement sous verre", "Lecteur simulé"]) {
+    for (const name of ["Gestes d'appui", "Matières", "Apparition du flou", "Groupes et métamorphoses", "Défilement sous verre", "Lecteur simulé", "Lancement de la lecture", "Ouverture de fiche"]) {
       fireEvent.click(screen.getByRole("button", { name: new RegExp(name) }));
       expect(screen.getAllByRole("button").length).toBeGreaterThan(5);
     }
@@ -53,5 +53,15 @@ describe("la page Tests animations", () => {
     const pills = container.querySelectorAll(".alab-sim .alab-pill");
     expect(pills.length).toBeGreaterThan(0);
     for (const pill of pills) expect(pill.classList.contains("alab-slop")).toBe(true);
+  });
+
+  it("propose les réglages des deux prototypes du 10/10 : ouverture de la lecture et affiche qui se déploie", () => {
+    render(<AnimationLab />);
+    fireEvent.click(screen.getByRole("button", { name: /Lancement de la lecture/ }));
+    expect(screen.getByText("Délai simulé")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Lueur sur le logo/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Ouverture de fiche/ }));
+    expect(screen.getByRole("button", { name: /FLIP manuel/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Ressort Apple/ })).toBeTruthy();
   });
 });
