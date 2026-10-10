@@ -69,7 +69,7 @@ export function benchPlayerLogFiles(): string[] {
 }
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
-const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast", "reserve", "pause"]);
+const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast", "reserve", "pause", "opening"]);
 
 /**
  * `audio` est arrivé le 20/09/2026, et pour une raison qui vaut d'être dite : le changement de
@@ -106,7 +106,7 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  * (`why: "veille"`, `sleepTimer` : la minuterie). Les pauses ordinaires ne s'écrivent pas ; celle-ci
  * oui, parce qu'un film arrêté à minuit et jamais fermé se lisait sinon comme un abandon.
  */
-export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve" | "pause";
+export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve" | "pause" | "opening";
 
 /** Les valeurs de `sleepTimer` qu'une ligne peut porter — celles du menu, et rien d'autre. */
 const SLEEP_TIMER_VALUES = new Set(["15", "30", "60", "90", "episode"]);

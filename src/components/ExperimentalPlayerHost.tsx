@@ -1156,6 +1156,34 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     if (introPlaying) finishIntro(thisIntro);
   }, [introPlaying, thisIntro]);
+  /**
+   * La ligne `opening` : ce que la source a fait de l'appui jusqu'à six secondes après que le film
+   * a bougé. Ajoutée le 10/10/2026 parce qu'un « second petit chargement » juste après l'ouverture,
+   * surtout sur les reprises, ne laissait rien : moins de 250 ms, hors du bilan (`waits`), et la
+   * trace n'était écrite qu'au-delà de cinq secondes de blocage (`stall`). Une par séance ouverte.
+   */
+  useEffect(() => {
+    if (!introPlaying || !introEligible) return;
+    const movedAt = Date.now();
+    let sent = false;
+    // Six secondes après le premier mouvement, ou à la fermeture si elle vient avant : les essais
+    // durent souvent moins que ça, et ce sont eux qui montrent le défaut.
+    const send = () => {
+      if (sent) return;
+      sent = true;
+      reportPlayback("opening", {
+        ...describeFileRef.current(),
+        path: "remux",
+        firstMoveMs: movedAt - introStartedAt,
+        steps: traceRecent(Date.now() - introStartedAt + 300).slice(-60).join(" | "),
+      });
+    };
+    const timer = window.setTimeout(send, 6000);
+    return () => {
+      window.clearTimeout(timer);
+      send();
+    };
+  }, [introPlaying, introEligible, introStartedAt]);
   // Une erreur, la connexion perdue, l'attente devenue anormale (le rapport doit se lire), le
   // mini-lecteur : l'ouverture s'efface à l'instant et l'écran d'avant se montre, inchangé.
   const introPhase: IntroPhase =
@@ -1838,12 +1866,17 @@ export function ExperimentalPlayerHost({
        */
       let playedOnce = false;
       const onWaiting = () => {
+        // Au fil : les attentes de moins de 250 ms n'entrent pas au bilan (`waits`), et c'est
+        // justement l'un de ces « second petit chargement » après l'ouverture qu'il fallait voir
+        // (10/10/2026) — voir la ligne `opening`.
+        trace(`élément : en attente à ${element.currentTime.toFixed(2)} s${element.seeking ? " (saut)" : ""}, readyState ${element.readyState}`);
         if (playedOnce && !element.seeking && !seeks.pending()) {
           tally.waitStarted(Date.now());
           diagWaitStarted(leadAt(element));
         }
       };
       const onPlaying = () => {
+        trace(`élément : repart à ${element.currentTime.toFixed(2)} s`);
         playedOnce = true;
         tally.waitEnded(Date.now());
         diagWaitEnded();
