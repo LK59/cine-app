@@ -64,4 +64,17 @@ describe("la page Tests animations", () => {
     expect(screen.getByRole("button", { name: /FLIP manuel/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Ressort Apple/ })).toBeTruthy();
   });
+
+  it("deuxième passe : fonds de qualité pour la lecture, maquette fidèle aux fiches pour l'ouverture", () => {
+    render(<AnimationLab />);
+    fireEvent.click(screen.getByRole("button", { name: /Lancement de la lecture/ }));
+    // Le fond par défaut est le flou léger sur une image de 1 280 px ; l'ancien reste pour comparer.
+    expect(screen.getByRole("button", { name: "Flou léger" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /Ancien/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Ouverture de fiche/ }));
+    expect(screen.getByRole("button", { name: "Téléphone" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cascade du contenu" }).getAttribute("aria-pressed")).toBe("true");
+    // Sans catalogue, pas de maquette à ouvrir.
+    expect((screen.getByRole("button", { name: /Chargement du catalogue/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });

@@ -1,26 +1,43 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- des `<img>` nus, voulus : le FLIP lit `currentSrc` et la
-   place exacte de l'image, la lueur se découpe sur le logo par un masque, et les visuels sont déjà des
-   tailles du CDN de TMDB — l'optimiseur de Next n'apporterait rien à ce banc d'essai. */
+/* eslint-disable @next/next/no-img-element -- des `<img>` nus, voulus : le FLIP lit la place exacte de
+   l'image, la lueur se découpe sur le logo par un masque, et les visuels sont déjà des tailles du CDN de
+   TMDB — l'optimiseur de Next n'apporterait rien à ce banc d'essai. */
 
 import { createPortal, flushSync } from "react-dom";
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { Play, RotateCcw, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { ArrowLeft, Check, Play, Plus, RotateCcw, Video, X } from "lucide-react";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
+import { ImdbBadge } from "@/components/ImdbBadge";
+import { CinemaLogo } from "@/components/cinema/CinemaLogo";
+import { QualityBadges } from "@/components/cinema/QualityBadges";
+import { CinemaTagline } from "@/components/cinema/CinemaDetailExtras";
+import { CAST_CLASS, CAST_SHOWN, COLUMN_GAP, COLUMN_STYLE, CinemaOverview, HORIZONTAL_VEIL, MENU_STYLE, SECTION_CLASS, VERTICAL_VEIL } from "@/components/cinema/CinemaDetailLayout";
+import { MENU_BADGE, MENU_ROW, MENU_ROW_INACTIVE } from "@/components/cinema/detailMenu";
+import { useT } from "@/components/TranslationProvider";
+import { formatMinutes } from "@/lib/format";
+import { genreLabel } from "@/lib/top10Label";
 import { tmdbResize } from "@/lib/images";
 import { toSpring } from "@/lib/liquidGlass/liquid";
 import { simulateSpring } from "@/lib/liquidGlass/spring";
 
 /**
  * Deux prototypes de la page « Tests animations » (10/10/2026), à juger sur l'iPhone et le Mac avant
- * d'en brancher quoi que ce soit : le lancement de la lecture, et l'affiche qui se déploie en fiche.
+ * d'en brancher quoi que ce soit : le lancement de la lecture, et l'ouverture d'une fiche.
  *
  * Rien ici ne touche au vrai lecteur ni aux vraies fiches. Comme le reste de la page, les textes sont
- * des notes en français, hors dictionnaires. Seules l'opacité et la transformation s'animent — ce
- * que le compositeur joue seul, sans le fil principal — et aucun filtre CSS : le flou du fond vient
- * d'une petite image agrandie, parce que les calques filtrés sont justement ce que Safari a mal
- * repeint sur les fiches (logo invisible, 09/10/2026).
+ * des notes en français, hors dictionnaires. Seules l'opacité, la transformation et la découpe
+ * (`clip-path`) s'animent — ce que le compositeur joue seul, sans le fil principal.
+ *
+ * Deuxième passe (10/10/2026), d'après les retours sur la première :
+ * - G : « le flou basse résolution se voit » — le fond est maintenant un vrai visuel (1 280 px, ou
+ *   l'original sur un grand écran dense), net ou adouci par un filtre posé sur une image *immobile*
+ *   (seul son conteneur bouge). Le bogue de Safari du 09/10 tenait à un calque filtré dans une fiche
+ *   qui défile, recouverte puis découverte : rien de tel ici, et l'ancien fond reste pour comparer.
+ * - H : « mes fiches n'ont pas d'affiche mais une bannière et un logo » — les fiches simulées
+ *   reprennent la mise en page des vraies (bureau : visuel plein écran, voiles, colonne ; téléphone :
+ *   carte sous la barre d'état, bannière 16:9, logo qui chevauche), et c'est la carte touchée qui
+ *   devient ce visuel.
  */
 
 /* ─── Réglages partagés ─────────────────────────────────────────────────────── */
@@ -93,6 +110,39 @@ function springEasing(response: number, ratio: number): { easing: string; durati
 
 type Caption = "none" | "episode" | "resume";
 type Phase = "intro" | "video";
+type BgMode = "light" | "net" | "strong" | "old";
+
+/**
+ * Les fonds proposés, le premier par défaut. « Flou léger » : le flou qui plaisait, sans les gros
+ * pixels — une image de 1 280 px adoucie de 10 px se lit comme une mise au point, celle de 300 px
+ * agrandie comme une image abîmée.
+ */
+const BG_MODES: { id: BgMode; label: string; blur: number }[] = [
+  { id: "light", label: "Flou léger", blur: 10 },
+  { id: "net", label: "Net", blur: 0 },
+  { id: "strong", label: "Flou marqué", blur: 24 },
+  { id: "old", label: "Ancien (300 px agrandi)", blur: 0 },
+];
+
+/** Le visuel du fond : la petite image d'avant pour comparer, sinon 1 280 px — l'original quand l'écran en montre plus. */
+function bgSource(url: string | null, mode: BgMode): string {
+  if (!url) return "";
+  if (mode === "old") return tmdbResize(url, "w300") ?? url;
+  const wide = typeof window !== "undefined" && window.innerWidth * (window.devicePixelRatio || 1) > 1700;
+  return tmdbResize(url, wide ? "original" : "w1280") ?? url;
+}
+
+/**
+ * Le voile du fond. Plus dense sur une image nette, qui garde tous ses détails derrière le logo :
+ * un voile radial pour le centrer, un dégradé du bas pour la légende et la ligne de chargement.
+ */
+function bgVeil(mode: BgMode): string {
+  if (mode === "net") {
+    return "radial-gradient(ellipse at center, rgba(0,0,0,0.30), rgba(0,0,0,0.82) 78%), linear-gradient(to top, rgba(0,0,0,0.6), rgba(0,0,0,0) 45%)";
+  }
+  if (mode === "old") return "radial-gradient(ellipse at center, rgba(0,0,0,0.35), rgba(0,0,0,0.78) 75%)";
+  return "radial-gradient(ellipse at center, rgba(0,0,0,0.25), rgba(0,0,0,0.72) 78%), linear-gradient(to top, rgba(0,0,0,0.45), rgba(0,0,0,0) 40%)";
+}
 
 export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
   const { withLogo, withoutLogo } = useMemo(() => usableTitles(movies), [movies]);
@@ -105,13 +155,21 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
   const [sweep, setSweep] = useState(true);
   const [caption, setCaption] = useState<Caption>("none");
   const [reduced, setReduced] = useState(prefersReduced);
+  const [bg, setBg] = useState<BgMode>("light");
   const [run, setRun] = useState(0);
   const title = choices.length > 0 ? choices[Math.min(pick, choices.length - 1)] : null;
+
+  // Le fond demandé d'avance, dès qu'il est choisi : à « Lancer », il est d'ordinaire déjà en cache.
+  useEffect(() => {
+    if (!title?.backdropUrl) return;
+    const img = new Image();
+    img.src = bgSource(title.backdropUrl, bg);
+  }, [title, bg]);
 
   return (
     <section className="space-y-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
       <p className="text-sm text-muted">
-        {"Ce qu'on verrait entre l'appui sur « Lire » et la première image : le visuel du film flou (une image de 300 px agrandie, sans filtre) qui avance lentement, son logo qui apparaît avec une lueur, une ligne de chargement, puis un fondu enchaîné vers la « vidéo » (ici le visuel net). « Délai simulé » joue le temps que met le vrai lecteur ; sous le seuil de passage direct, il n'y a pas d'ouverture du tout."}
+        {"Ce qu'on verrait entre l'appui sur « Lire » et la première image : le visuel du film qui avance lentement, son logo qui apparaît avec une lueur, une ligne de chargement, puis un fondu enchaîné vers la « vidéo » (ici le visuel net). « Fond » compare la qualité du visuel : 1 280 px (l'original sur un grand écran dense), net ou adouci, et l'ancien 300 px agrandi. « Délai simulé » joue le temps que met le vrai lecteur ; sous le seuil de passage direct, il n'y a pas d'ouverture du tout."}
       </p>
       <Row label="Titre">
         {choices.length === 0 && <span className="text-sm text-subtle">Chargement du catalogue…</span>}
@@ -119,6 +177,13 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
           <Chip key={m.radarrId} on={i === pick} onClick={() => setPick(i)}>
             {m.title}
             {!m.logoUrl ? " (sans logo)" : ""}
+          </Chip>
+        ))}
+      </Row>
+      <Row label="Fond">
+        {BG_MODES.map((m) => (
+          <Chip key={m.id} on={bg === m.id} onClick={() => setBg(m.id)}>
+            {m.label}
           </Chip>
         ))}
       </Row>
@@ -160,6 +225,7 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
             sweep={sweep}
             caption={caption}
             reduced={reduced}
+            bg={bg}
             onReplay={() => setRun((n) => n + 1)}
             onClose={() => setRun(0)}
           />,
@@ -176,7 +242,7 @@ function captionText(caption: Caption): string | null {
 }
 
 function IntroStage({
-  title, delay, threshold, zoom, logoMs, sweep, caption, reduced, onReplay, onClose,
+  title, delay, threshold, zoom, logoMs, sweep, caption, reduced, bg, onReplay, onClose,
 }: {
   title: CinemaMovie;
   delay: number;
@@ -186,6 +252,7 @@ function IntroStage({
   sweep: boolean;
   caption: Caption;
   reduced: boolean;
+  bg: BgMode;
   onReplay: () => void;
   onClose: () => void;
 }) {
@@ -193,11 +260,13 @@ function IntroStage({
   const direct = delay < threshold;
   const [phase, setPhase] = useState<Phase>(direct ? "video" : "intro");
   const backdropRef = useRef<HTMLDivElement>(null);
+  const bgImgRef = useRef<HTMLImageElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
   const sweepRef = useRef<HTMLDivElement>(null);
   const introRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLDivElement>(null);
-  const small = tmdbResize(title.backdropUrl, "w300") ?? title.backdropUrl ?? "";
+  const bgSrc = bgSource(title.backdropUrl, bg);
+  const blur = BG_MODES.find((m) => m.id === bg)?.blur ?? 0;
   const full = tmdbResize(title.backdropUrl, "w1280") ?? title.backdropUrl ?? "";
   const logo = title.logoUrl;
   const text = captionText(caption);
@@ -237,6 +306,29 @@ function IntroStage({
     };
   }, [direct, reduced, zoom, logoMs, sweep, logo, delay]);
 
+  // Le fond paraît une fois décodé, jamais d'un coup. Déjà en cache — le cas courant, demandé dès le
+  // choix du titre —, il se pose en 250 ms avec le logo ; sinon le voile sombre attend seul, et
+  // l'image le rejoint en 600 ms dès qu'elle est prête. Un échec laisse le voile, sans image cassée.
+  useLayoutEffect(() => {
+    const img = bgImgRef.current;
+    if (direct || !img) return;
+    let cancelled = false;
+    let fade: Animation | undefined;
+    const t0 = performance.now();
+    const decoded = typeof img.decode === "function" ? img.decode() : Promise.resolve();
+    void decoded.then(
+      () => {
+        if (cancelled) return;
+        fade = img.animate([{ opacity: 0 }, { opacity: 1 }], { duration: performance.now() - t0 < 150 ? 250 : 600, easing: "ease-out", fill: "both" });
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+      fade?.cancel();
+    };
+  }, [direct, bgSrc]);
+
   // La première image : fondu enchaîné, le logo s'éloigne un peu.
   useLayoutEffect(() => {
     if (phase !== "video" || direct) return;
@@ -257,10 +349,20 @@ function IntroStage({
       {!direct && (
         <div ref={introRef} className="absolute inset-0">
           <div ref={backdropRef} className="absolute inset-0" style={{ willChange: "transform" }}>
-            {/* 300 px agrandis à tout l'écran : flou naturel, sans filtre à calculer à chaque image. */}
-            <img src={small} alt="" className="h-full w-full object-cover" />
+            {/* Le filtre est posé sur l'image, qui ne bouge pas ; seul ce conteneur avance. Floutée,
+                elle est agrandie de 8 % : le bord adouci d'une image floutée ne doit jamais se voir.
+                Invisible jusqu'à son décodage — voir l'effet plus haut. */}
+            <img
+              ref={bgImgRef}
+              src={bgSrc}
+              alt=""
+              decoding="async"
+              className="h-full w-full object-cover"
+              style={{ opacity: 0, filter: blur ? `blur(${blur}px)` : undefined, transform: blur ? "scale(1.08)" : undefined }}
+            />
           </div>
-          <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at center, rgba(0,0,0,0.35), rgba(0,0,0,0.78) 75%)" }} />
+          {/* Une vignette, puis le voile : le bord de l'écran s'assombrit, le logo se lit au centre. */}
+          <div className="absolute inset-0" style={{ background: bgVeil(bg) }} />
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8">
             <div ref={logoRef} className="relative" style={{ opacity: 0 }}>
               {logo ? (
@@ -314,240 +416,729 @@ function IntroStage({
 
 type Variant = "vt" | "flip";
 type Ease = "spring" | "emphasized" | "easeOut";
+type Layout = "auto" | "desktop" | "phone";
+type Mode = "vt" | "flip" | "fade";
+type Timing = { easing: string; duration: number };
+/** Une place dans la scène, en pixels depuis son coin haut gauche. */
+type Box = { x: number; y: number; w: number; h: number };
+type ViewTransition = { finished: Promise<void> };
+type ViewTransitionDoc = Document & { startViewTransition?: (update: () => void) => ViewTransition };
 
-function easingFor(ease: Ease, duration: number): { easing: string; duration: number } {
-  if (ease === "spring") return springEasing(Math.max(0.2, duration / 1000), 0.82);
+/** Ce que la fiche doit savoir de la carte touchée pour en partir, et pour y revenir. */
+type Opening = { title: CinemaMovie; key: string; poster: string; radius: number; mode: Mode };
+type Register = (key: string) => (el: HTMLElement | null) => void;
+
+// Les largeurs des vraies cartes : `CARD_WIDTH` de CinemaClient, `POSTER_WIDTH` de CinemaMobileClient.
+const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
+const PHONE_POSTER_WIDTH = "w-28 sm:w-32";
+const STAGGER_MS = 50;
+const VT_NAME = "alab-hero";
+// Le téléphone simulé quand la disposition « Téléphone » est demandée sur un grand écran.
+const PHONE_FRAME = { w: 390, h: 844, statusBar: 47 };
+
+function easingFor(ease: Ease, duration: number): Timing {
+  if (ease === "spring") return springEasing(Math.max(0.2, duration / 1000), 0.86);
   if (ease === "emphasized") return { easing: "cubic-bezier(0.2, 0, 0, 1)", duration };
   return { easing: "cubic-bezier(0.33, 1, 0.68, 1)", duration };
 }
 
-type ViewTransitionDoc = Document & { startViewTransition?: (update: () => void) => { finished: Promise<void> } };
+function boxIn(el: Element, root: DOMRect): Box {
+  const r = el.getBoundingClientRect();
+  return { x: r.left - root.left, y: r.top - root.top, w: r.width, h: r.height };
+}
+
+/** La découpe qui ne laisse voir que `b` d'un calque de `W` × `H` — animable d'une place à l'autre. */
+function insetClip(b: Box, W: number, H: number, radius: string): string {
+  return `inset(${b.y}px ${W - b.x - b.w}px ${H - b.y - b.h}px ${b.x}px round ${radius})`;
+}
+
+/** La transformation (origine en haut à gauche) qui fait couvrir `into` à un élément posé sur `at`, proportions gardées. */
+function coverTransform(at: Box, into: Box): string {
+  const s = Math.max(into.w / Math.max(1, at.w), into.h / Math.max(1, at.h));
+  const tx = into.x + into.w / 2 - (s * at.w) / 2 - at.x;
+  const ty = into.y + into.h / 2 - (s * at.h) / 2 - at.y;
+  return `translate(${tx}px, ${ty}px) scale(${s})`;
+}
+
+function place(el: HTMLElement, b: Box) {
+  Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${b.w}px`, height: `${b.h}px` });
+}
 
 export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
   const { withLogo } = useMemo(() => usableTitles(movies), [movies]);
   const supportsVT = typeof document !== "undefined" && "startViewTransition" in document;
-  const [variant, setVariant] = useState<Variant>(supportsVT ? "vt" : "flip");
-  const [duration, setDuration] = useState(450);
+  // Le FLIP par défaut : il marche partout, et c'est lui qui règle le fondu affiche → visuel et la
+  // découpe ; les View Transitions restent là pour comparer.
+  const [variant, setVariant] = useState<Variant>("flip");
+  const [duration, setDuration] = useState(520);
   const [ease, setEase] = useState<Ease>("spring");
+  const [stagger, setStagger] = useState(true);
+  const [layout, setLayout] = useState<Layout>("auto");
   const [reduced, setReduced] = useState(prefersReduced);
-  const [open, setOpen] = useState<CinemaMovie | null>(null);
-  const posterRefs = useRef(new Map<number, HTMLImageElement>());
-  const flipFrom = useRef<DOMRect | null>(null);
+  const [staged, setStaged] = useState(false);
   const timing = useMemo(() => easingFor(ease, duration), [ease, duration]);
-
-  const openTitle = (m: CinemaMovie) => {
-    const el = posterRefs.current.get(m.radarrId);
-    const doc = document as ViewTransitionDoc;
-    if (variant === "vt" && doc.startViewTransition && !reduced && el) {
-      // L'affiche touchée porte le nom partagé avant la capture, puis le cède à celle de la fiche.
-      el.style.setProperty("view-transition-name", "alab-poster");
-      doc.startViewTransition(() => {
-        el.style.removeProperty("view-transition-name");
-        flushSync(() => setOpen(m));
-      });
-      return;
-    }
-    flipFrom.current = el?.getBoundingClientRect() ?? null;
-    setOpen(m);
-  };
-
-  const closeTitle = () => {
-    if (!open) return;
-    const el = posterRefs.current.get(open.radarrId);
-    const doc = document as ViewTransitionDoc;
-    if (variant === "vt" && doc.startViewTransition && !reduced && el) {
-      const t = doc.startViewTransition(() => {
-        flushSync(() => setOpen(null));
-        el.style.setProperty("view-transition-name", "alab-poster");
-      });
-      void t.finished.finally(() => el.style.removeProperty("view-transition-name"));
-      return;
-    }
-    flipFrom.current = el?.getBoundingClientRect() ?? null;
-    // Le FLIP de fermeture est joué par la fiche elle-même, qui se démonte à la fin.
-    setOpen(null);
-  };
 
   return (
     <section className="space-y-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-      {/* Les durées et la courbe des View Transitions se règlent par CSS : posées ici, à jour à chaque réglage. */}
-      <style>{`
-        ::view-transition-group(alab-poster) { animation-duration: ${Math.round(timing.duration)}ms; animation-timing-function: ${timing.easing}; }
-        ::view-transition-old(root), ::view-transition-new(root) { animation-duration: ${Math.round(Math.min(timing.duration, 320))}ms; }
-      `}</style>
       <p className="text-sm text-muted">
-        {"Touche une affiche : elle grandit et se pose dans la fiche, à la place de la fiche qui monte du bas. Deux façons de le faire : les View Transitions du navigateur (Safari 18 et Chrome récents), et un FLIP fait à la main, qui marche partout. La croix ramène l'affiche à sa place."}
+        {"Une maquette de l'accueil et des vraies fiches — visuel et logo, pas d'affiche. Au bureau, l'affiche touchée s'agrandit jusqu'à l'écran entier en devenant le visuel du film, puis la colonne (logo, infos, accroche, synopsis, menu) paraît ligne par ligne. Au téléphone, l'affiche d'une rangée ou de la grande bannière devient la bannière 16:9 de la fiche, pendant que la carte monte du bas. Fermer (Retour, la croix, Échap) refait le chemin à l'envers, jusqu'à la carte."}
       </p>
       <Row label="Façon">
+        <Chip on={variant === "flip"} onClick={() => setVariant("flip")}>FLIP manuel</Chip>
         <Chip on={variant === "vt"} onClick={() => setVariant("vt")}>
           View Transitions{supportsVT ? "" : " (absent ici)"}
         </Chip>
-        <Chip on={variant === "flip"} onClick={() => setVariant("flip")}>FLIP manuel</Chip>
       </Row>
       <Row label="Courbe">
         <Chip on={ease === "spring"} onClick={() => setEase("spring")}>Ressort Apple</Chip>
         <Chip on={ease === "emphasized"} onClick={() => setEase("emphasized")}>Accentuée</Chip>
         <Chip on={ease === "easeOut"} onClick={() => setEase("easeOut")}>Décélération douce</Chip>
+      </Row>
+      <Row label="Disposition">
+        <Chip on={layout === "auto"} onClick={() => setLayout("auto")}>Selon l&apos;écran</Chip>
+        <Chip on={layout === "desktop"} onClick={() => setLayout("desktop")}>Bureau</Chip>
+        <Chip on={layout === "phone"} onClick={() => setLayout("phone")}>Téléphone</Chip>
+      </Row>
+      <Row label="Options">
+        <Chip on={stagger} onClick={() => setStagger(!stagger)}>Cascade du contenu</Chip>
         <Chip on={reduced} onClick={() => setReduced(!reduced)}>« Réduire les animations »</Chip>
       </Row>
-      <Slider label={`Durée ${duration} ms${ease === "spring" ? ` (ressort : ${Math.round(timing.duration)} ms réels)` : ""}`} min={200} max={1000} step={25} value={duration} set={setDuration} />
-      <div className="flex gap-3 overflow-x-auto pb-2">
-        {withLogo.length === 0 && <span className="text-sm text-subtle">Chargement du catalogue…</span>}
-        {withLogo.map((m) => (
-          <button key={m.radarrId} type="button" onClick={() => openTitle(m)} className="w-28 shrink-0 overflow-hidden rounded-lg sm:w-32">
-            <img
-              ref={(el) => {
-                if (el) posterRefs.current.set(m.radarrId, el);
-                else posterRefs.current.delete(m.radarrId);
-              }}
-              src={m.posterUrl ?? ""}
-              alt={m.title}
-              className="block aspect-[2/3] w-full object-cover"
-              // Pendant que sa fiche est ouverte par FLIP, l'affiche de la rangée laisse la place à son double.
-              style={{ visibility: open?.radarrId === m.radarrId && variant === "flip" && !reduced ? "hidden" : undefined }}
-            />
-          </button>
-        ))}
-      </div>
-      {open && createPortal(
-        <MockSheet
-          key={open.radarrId}
-          title={open}
-          variant={reduced ? "fade" : variant}
-          from={flipFrom}
-          timing={timing}
-          onClose={closeTitle}
-        />,
-        document.body,
-      )}
+      <Slider label={`Durée ${duration} ms${ease === "spring" ? ` (ressort : ${Math.round(timing.duration)} ms réels)` : ""}`} min={250} max={1000} step={25} value={duration} set={setDuration} />
+      <button type="button" className="btn-primary inline-flex items-center gap-2" disabled={withLogo.length === 0} onClick={() => setStaged(true)}>
+        <Play size={16} /> {withLogo.length === 0 ? "Chargement du catalogue…" : "Ouvrir la maquette"}
+      </button>
+      {staged &&
+        createPortal(
+          <SheetStage titles={withLogo} variant={variant} timing={timing} stagger={stagger} layout={layout} reduced={reduced} onExit={() => setStaged(false)} />,
+          document.body,
+        )}
     </section>
   );
 }
 
-function MockSheet({
-  title, variant, from, timing, onClose,
+function SheetStage({
+  titles, variant, timing, stagger, layout, reduced, onExit,
 }: {
-  title: CinemaMovie;
-  variant: Variant | "fade";
-  from: RefObject<DOMRect | null>;
-  timing: { easing: string; duration: number };
-  onClose: () => void;
+  titles: CinemaMovie[];
+  variant: Variant;
+  timing: Timing;
+  stagger: boolean;
+  layout: Layout;
+  reduced: boolean;
+  onExit: () => void;
 }) {
-  const targetRef = useRef<HTMLImageElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const [closing, setClosing] = useState(false);
-  const full = tmdbResize(title.backdropUrl, "w1280") ?? title.backdropUrl ?? "";
+  // Lu une fois, à l'ouverture de la maquette : la disposition ne change pas sous les yeux.
+  const [narrow] = useState(() => window.innerWidth < 768);
+  const phone = layout === "phone" || (layout === "auto" && narrow);
+  // Un téléphone demandé sur un grand écran se dessine dans un cadre à sa taille.
+  const framed = phone && !narrow;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const sources = useRef(new Map<string, HTMLElement>());
+  const [open, setOpen] = useState<Opening | null>(null);
 
-  // FLIP d'ouverture : un double de l'affiche part de la rangée et se pose sur l'affiche de la fiche.
-  useLayoutEffect(() => {
-    const body = bodyRef.current;
-    const target = targetRef.current;
-    if (!body || !target) return;
-    if (variant === "fade") {
-      body.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: "both" });
-      return;
-    }
-    if (variant === "vt") return; // le navigateur s'en charge
-    body.animate([{ opacity: 0, transform: "translateY(24px)" }, { opacity: 1, transform: "none" }], {
-      duration: timing.duration, easing: timing.easing, fill: "both",
-    });
-    const source = from.current;
-    if (!source) return;
-    const dest = target.getBoundingClientRect();
-    const clone = flyingClone(target.currentSrc || target.src, dest);
-    target.style.visibility = "hidden";
-    const a = clone.animate(
-      [{ transform: deltaTransform(source, dest) }, { transform: "none" }],
-      { duration: timing.duration, easing: timing.easing, fill: "both" },
-    );
-    a.onfinish = () => {
-      target.style.visibility = "";
-      clone.remove();
-    };
-    return () => clone.remove();
-  }, [variant, timing, from]);
-
-  const requestClose = () => {
-    const body = bodyRef.current;
-    const target = targetRef.current;
-    if (variant !== "flip" || !body || !target || closing) {
-      onClose();
-      return;
-    }
-    // FLIP de fermeture : le double repart de la fiche vers sa place dans la rangée.
-    setClosing(true);
-    const source = target.getBoundingClientRect();
-    const back = from.current;
-    body.animate([{ opacity: 1 }, { opacity: 0 }], { duration: Math.min(timing.duration, 280), easing: "ease-out", fill: "both" });
-    if (!back) {
-      window.setTimeout(onClose, Math.min(timing.duration, 280));
-      return;
-    }
-    const clone = flyingClone(target.currentSrc || target.src, source);
-    target.style.visibility = "hidden";
-    const a = clone.animate([{ transform: "none" }, { transform: deltaTransform(back, source) }], {
-      duration: timing.duration, easing: timing.easing, fill: "both",
-    });
-    a.onfinish = () => {
-      clone.remove();
-      onClose();
-    };
+  const register: Register = (key) => (el) => {
+    if (el) sources.current.set(key, el);
+    else sources.current.delete(key);
   };
 
-  return (
-    <div className="fixed inset-0 z-[100]">
-      <div ref={bodyRef} className="absolute inset-0 overflow-y-auto bg-ink">
-        <div className="relative aspect-video max-h-[60vh] w-full overflow-hidden">
-          <img src={full} alt="" className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-linear-to-t from-ink via-ink/30 to-transparent" />
-        </div>
-        <div className="relative -mt-24 flex gap-5 px-5 pb-16 sm:-mt-40 sm:px-12">
-          {/* La cible du morphing : l'affiche de la fiche, au même nom partagé pour les View Transitions. */}
-          <img
-            ref={targetRef}
-            src={title.posterUrl ?? ""}
-            alt=""
-            className="aspect-[2/3] w-28 shrink-0 self-start rounded-lg object-cover shadow-2xl sm:w-48"
-            style={{ viewTransitionName: variant === "vt" ? "alab-poster" : undefined } as CSSProperties}
-          />
-          <div className="flex min-w-0 flex-col justify-end gap-3 pt-10 sm:pt-24">
-            {title.logoUrl ? (
-              <img src={title.logoUrl} alt={title.title} className="max-h-16 max-w-[min(100%,22rem)] self-start object-contain sm:max-h-24" />
-            ) : (
-              <h1 className="text-2xl font-bold text-white sm:text-4xl">{title.title}</h1>
-            )}
-            <p className="text-sm text-muted">
-              {[title.year, title.runtimeMinutes ? `${Math.floor(title.runtimeMinutes / 60)} h ${String(title.runtimeMinutes % 60).padStart(2, "0")}` : null, title.genres.slice(0, 2).join(" · ")].filter(Boolean).join("  ·  ")}
-            </p>
-            <button type="button" className="inline-flex w-fit items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-ink">
-              <Play size={16} fill="currentColor" /> Lire
-            </button>
-          </div>
-        </div>
-      </div>
-      <button type="button" onClick={requestClose} aria-label="Fermer la fiche" className="nav-glass absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full text-white">
-        <X size={18} />
+  const openFrom = (o: Omit<Opening, "mode">) => {
+    if (open) return;
+    const el = sources.current.get(o.key);
+    const doc = document as ViewTransitionDoc;
+    if (reduced || !el) {
+      setOpen({ ...o, mode: "fade" });
+      return;
+    }
+    if (variant === "vt" && doc.startViewTransition) {
+      // La carte porte le nom partagé à la capture, puis le cède au visuel de la fiche.
+      el.style.setProperty("view-transition-name", VT_NAME);
+      doc.startViewTransition(() => {
+        el.style.removeProperty("view-transition-name");
+        flushSync(() => setOpen({ ...o, mode: "vt" }));
+      });
+      return;
+    }
+    setOpen({ ...o, mode: "flip" });
+  };
+
+  // Appelée par la fiche une fois sa sortie jouée — en View Transitions, une fois son contenu
+  // effacé : c'est alors le navigateur qui ramène le visuel sur la carte.
+  const closed = () => {
+    if (!open) return;
+    const el = sources.current.get(open.key);
+    const doc = document as ViewTransitionDoc;
+    if (open.mode === "vt" && el && doc.startViewTransition) {
+      const t = doc.startViewTransition(() => {
+        flushSync(() => setOpen(null));
+        el.style.setProperty("view-transition-name", VT_NAME);
+      });
+      void t.finished.finally(() => el.style.removeProperty("view-transition-name"));
+      return;
+    }
+    setOpen(null);
+  };
+
+  useEffect(() => {
+    if (open) return; // Échap ferme d'abord la fiche, qui l'écoute elle-même
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onExit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onExit]);
+
+  const d = Math.round(timing.duration);
+  const content = (
+    <>
+      {phone ? (
+        <PhoneHome titles={titles} framed={framed} hiddenKey={open?.key ?? null} register={register} onOpen={openFrom} />
+      ) : (
+        <DesktopHome titles={titles} hiddenKey={open?.key ?? null} register={register} onOpen={openFrom} />
+      )}
+      <button
+        type="button"
+        onClick={onExit}
+        className="nav-glass absolute right-4 flex h-9 items-center gap-2 rounded-full px-3 text-xs text-white"
+        style={{ top: framed ? PHONE_FRAME.statusBar + 6 : "max(1rem, env(safe-area-inset-top))" }}
+      >
+        <X size={14} /> Quitter la maquette
       </button>
+      {open && (
+        <MockSheet
+          key={open.title.radarrId}
+          opening={open}
+          phone={phone}
+          framed={framed}
+          rootRef={rootRef}
+          sources={sources}
+          timing={timing}
+          stagger={stagger}
+          onClosed={closed}
+        />
+      )}
+    </>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black">
+      {/* Les View Transitions se règlent par CSS, posé ici et à jour à chaque réglage. Le fond de page
+          (`root`) ne fond pas : la fiche fait paraître son contenu elle-même, en cascade, et la carte
+          du téléphone monte par ses propres images clés. */}
+      <style>{`
+        ::view-transition-group(${VT_NAME}) { animation-duration: ${d}ms; animation-timing-function: ${timing.easing}; overflow: hidden; }
+        ::view-transition-old(${VT_NAME}), ::view-transition-new(${VT_NAME}) { width: 100%; height: 100%; object-fit: cover; animation-duration: ${Math.round(d * 0.55)}ms; }
+        ::view-transition-old(root), ::view-transition-new(root),
+        ::view-transition-old(alab-column), ::view-transition-new(alab-column),
+        ::view-transition-old(alab-back), ::view-transition-new(alab-back) { animation: none; }
+        ::view-transition-new(alab-card) { animation: alab-card-up ${d}ms ${timing.easing} both; }
+        ::view-transition-old(alab-card) { animation: alab-card-down ${d}ms ${timing.easing} both; }
+        @keyframes alab-card-up { from { transform: translateY(100%); } }
+        @keyframes alab-card-down { to { transform: translateY(100%); } }
+      `}</style>
+      {framed ? (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6">
+          <div
+            ref={rootRef}
+            className="relative overflow-hidden rounded-[2.75rem] bg-ink ring-[6px] ring-zinc-800"
+            style={{ width: PHONE_FRAME.w, height: `min(${PHONE_FRAME.h}px, calc(100dvh - 5rem))` }}
+          >
+            {content}
+          </div>
+          <p className="text-xs text-subtle">Téléphone simulé, {PHONE_FRAME.w} px de large — sur un vrai téléphone, la maquette prend l&apos;écran.</p>
+        </div>
+      ) : (
+        <div ref={rootRef} className="absolute inset-0 overflow-hidden bg-ink">
+          {content}
+        </div>
+      )}
     </div>
   );
 }
 
-/** Le double qui vole : une image posée au-dessus de tout, à la place `rect`, que l'on déplace par transformation. */
-function flyingClone(src: string, rect: DOMRect): HTMLImageElement {
-  const img = document.createElement("img");
-  img.src = src;
-  img.alt = "";
-  Object.assign(img.style, {
-    position: "fixed", left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`,
-    objectFit: "cover", borderRadius: "8px", zIndex: "101", pointerEvents: "none", transformOrigin: "top left", willChange: "transform",
-  } satisfies Partial<CSSStyleDeclaration>);
-  document.body.appendChild(img);
-  return img;
+/* L'accueil simulé : de quoi partir. Ce n'est pas lui qu'on juge — seulement les cartes, à leur vraie
+   taille et à leurs vrais arrondis, puisque c'est d'elles que part le mouvement. */
+
+type HomeProps = {
+  titles: CinemaMovie[];
+  hiddenKey: string | null;
+  register: Register;
+  onOpen: (o: Omit<Opening, "mode">) => void;
+};
+
+function DesktopHome({ titles, hiddenKey, register, onOpen }: HomeProps) {
+  const hero = titles[0];
+  const rows = [
+    { name: "Récemment ajoutés", items: titles },
+    { name: "Ma liste", items: [...titles].reverse() },
+  ];
+  return (
+    <div className="scrollbar-thin absolute inset-0 overflow-y-auto bg-ink pb-10">
+      {hero && (
+        <div className="relative h-[58%] min-h-80 w-full overflow-hidden">
+          <img src={tmdbResize(hero.backdropUrl, "w1280") ?? ""} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
+          <div className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
+          <div className="absolute bottom-6 left-8 flex flex-col gap-3 sm:left-16" style={{ width: "min(36rem, 50vw)" }}>
+            {hero.logoUrl && <CinemaLogo src={hero.logoUrl} alt={hero.title} surface="hero" className="object-left" />}
+            <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
+              <MetaLine title={hero} />
+            </div>
+          </div>
+        </div>
+      )}
+      {rows.map((row, r) => (
+        <section key={row.name} className="px-8 pt-3 sm:px-16">
+          <h2 className="text-lg font-semibold text-white font-display">{row.name}</h2>
+          <div className="scrollbar-none -mx-3 flex gap-3 overflow-x-auto px-3 py-3">
+            {row.items.map((m) => {
+              const key = `bureau-${r}-${m.radarrId}`;
+              return (
+                <button
+                  key={key}
+                  ref={register(key)}
+                  type="button"
+                  onClick={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8 })}
+                  // La carte de CinemaCard, survol compris.
+                  className={`${CARD_WIDTH} relative shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition-[transform,box-shadow] duration-200 hover:z-10 hover:scale-105 hover:shadow-xl hover:shadow-black/60`}
+                  style={{ visibility: hiddenKey === key ? "hidden" : undefined }}
+                >
+                  <img src={m.posterUrl ?? ""} alt={m.title} className="block aspect-[2/3] w-full object-cover" />
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
 }
 
-/** La transformation qui pose un élément de la place `to` sur la place `from`. */
-function deltaTransform(from: DOMRect, to: DOMRect): string {
-  const sx = from.width / Math.max(1, to.width);
-  const sy = from.height / Math.max(1, to.height);
-  return `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${sx}, ${sy})`;
+function PhoneHome({ titles, framed, hiddenKey, register, onOpen }: HomeProps & { framed: boolean }) {
+  // La bannière du téléphone : l'affiche sans titre à 86 % de la largeur, ses voisines devinées de
+  // part et d'autre (`hero-peek-slide`, les classes de la vraie).
+  const slides = titles.length >= 3 ? [titles[1], titles[0], titles[2]] : [];
+  const rows = [
+    { name: "Récemment ajoutés", items: titles.slice(3).concat(titles.slice(0, 3)) },
+    { name: "Ma liste", items: [...titles].reverse() },
+  ];
+  return (
+    <div
+      className="scrollbar-none absolute inset-0 overflow-y-auto overflow-x-hidden bg-ink pb-24"
+      style={{ paddingTop: framed ? PHONE_FRAME.statusBar : "env(safe-area-inset-top, 0px)" }}
+    >
+      <div className="flex h-12 items-center px-4 text-lg font-semibold text-white font-display">Accueil</div>
+      {slides.length > 0 && (
+        <div className="overflow-hidden pb-3">
+          <div className="flex w-full" style={{ transform: "translateX(-79%)", ["--carousel-slide" as string]: "86%" } as CSSProperties}>
+            {slides.map((m, i) => {
+              const key = `banniere-${m.radarrId}`;
+              const on = i === 1;
+              const poster = m.posterTextlessUrl ?? m.posterUrl ?? "";
+              return (
+                <div key={key} className={`hero-peek-slide shrink-0 px-1.5 ${on ? "hero-peek-on" : ""}`}>
+                  <button
+                    ref={on ? register(key) : undefined}
+                    type="button"
+                    tabIndex={on ? 0 : -1}
+                    onClick={on ? () => onOpen({ title: m, key, poster, radius: 16 }) : undefined}
+                    className="relative block w-full overflow-hidden rounded-2xl bg-surface text-left shadow-xl shadow-black/50"
+                    style={{ visibility: hiddenKey === key ? "hidden" : undefined }}
+                  >
+                    <img src={poster} alt="" className="block aspect-[2/3] w-full object-cover" />
+                    {m.logoUrl && (
+                      <div className="absolute inset-x-0 bottom-0 flex justify-center bg-linear-to-t from-black/70 to-transparent px-6 pb-6 pt-20">
+                        <CinemaLogo src={m.logoUrl} alt={m.title} surface="phone" className="object-center" />
+                      </div>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {rows.map((row, r) => (
+        <section key={row.name} className="pt-3">
+          <h2 className="px-4 text-base font-semibold text-white font-display">{row.name}</h2>
+          <div className="scrollbar-none flex gap-2 overflow-x-auto px-4 py-2">
+            {row.items.map((m) => {
+              const key = `rangee-${r}-${m.radarrId}`;
+              return (
+                <button
+                  key={key}
+                  ref={register(key)}
+                  type="button"
+                  onClick={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8 })}
+                  className={`${PHONE_POSTER_WIDTH} relative shrink-0 overflow-hidden rounded-lg bg-surface`}
+                  style={{ visibility: hiddenKey === key ? "hidden" : undefined }}
+                >
+                  <img src={m.posterUrl ?? ""} alt={m.title} className="block aspect-[2/3] w-full object-cover" />
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/** La ligne d'infos des deux fiches : année, note, durée, qualité, genres — dans l'ordre des vraies. */
+function MetaLine({ title, truncateGenres = false }: { title: CinemaMovie; truncateGenres?: boolean }) {
+  const t = useT();
+  const runtime = formatMinutes(title.runtimeMinutes);
+  return (
+    <>
+      <span>{title.year}</span>
+      {title.imdbRating && <ImdbBadge rating={title.imdbRating} size="sm" />}
+      {runtime && <span>{runtime}</span>}
+      <QualityBadges quality={title.quality} />
+      {title.genres.length > 0 && (
+        <span className={truncateGenres ? "truncate" : undefined}>{title.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>
+      )}
+    </>
+  );
+}
+
+/**
+ * La fiche simulée, à l'image de CinemaMovieDetail (bureau) et de CinemaMobileDetail (téléphone) :
+ * mêmes constantes de mise en page, même logo, mêmes classes — à comparer à une capture.
+ *
+ * Le mouvement, en FLIP : un calque à part (`frameRef`) porte le visuel et l'affiche, découpé
+ * (`clip-path`) de la place de la carte à celle du visuel de la fiche ; dedans, l'affiche grandit en
+ * s'effaçant pendant que le visuel, réduit d'abord à la taille de la carte, retrouve la sienne. Le
+ * vrai visuel de la fiche, caché le temps du trajet, prend le relais à l'arrivée — c'est lui qui
+ * défile ensuite. Rien d'autre ne bouge que la transformation, l'opacité et la découpe, et tout est
+ * mesuré une fois au départ.
+ */
+function MockSheet({
+  opening, phone, framed, rootRef, sources, timing, stagger, onClosed,
+}: {
+  opening: Opening;
+  phone: boolean;
+  framed: boolean;
+  rootRef: RefObject<HTMLDivElement | null>;
+  sources: RefObject<Map<string, HTMLElement>>;
+  timing: Timing;
+  stagger: boolean;
+  onClosed: () => void;
+}) {
+  const t = useT();
+  const { title, mode } = opening;
+  const vt = mode === "vt";
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const morphBackdropRef = useRef<HTMLImageElement>(null);
+  const morphPosterRef = useRef<HTMLImageElement>(null);
+  const imageRef = useRef<HTMLDivElement>(null);
+  const photoRef = useRef<HTMLImageElement>(null);
+  const closingRef = useRef(false);
+  const openTimersRef = useRef<number[]>([]);
+  // Le flou localisé du bas de la fiche du bureau (`backdrop-blur`) n'est posé qu'une fois le
+  // visuel arrivé : un filtre ne doit pas voyager avec un calque qui bouge.
+  const [settled, setSettled] = useState(mode === "fade");
+  const backdrop = title.backdropUrl ?? "";
+  const imageRadius = phone ? "16px 16px 0px 0px" : "0px 0px 0px 0px";
+  const sourceRadius = `${opening.radius}px ${opening.radius}px ${opening.radius}px ${opening.radius}px`;
+
+  /** Toutes les places du trajet, lues d'un coup : la scène, la carte touchée, le visuel de la fiche, la carte du téléphone. */
+  const measure = () => {
+    const root = rootRef.current;
+    const image = imageRef.current;
+    const src = sources.current.get(opening.key);
+    if (!root || !image || !src) return null;
+    const r = root.getBoundingClientRect();
+    const card = cardRef.current ? boxIn(cardRef.current, r) : null;
+    return { W: r.width, H: r.height, source: boxIn(src, r), target: boxIn(image, r), cardDrop: card ? r.height - card.y : 0 };
+  };
+
+  const parts = () => {
+    const sheet = sheetRef.current;
+    return {
+      items: sheet ? Array.from(sheet.querySelectorAll<HTMLElement>("[data-alab-stagger]")) : [],
+      fades: sheet ? Array.from(sheet.querySelectorAll<HTMLElement>("[data-alab-fade]")) : [],
+    };
+  };
+
+  useLayoutEffect(() => {
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    const anims: Animation[] = [];
+    const timers = openTimersRef.current;
+    const play = (el: Element | null, frames: Keyframe[], opts: KeyframeAnimationOptions) => {
+      const a = el?.animate(frames, { fill: "both", ...opts });
+      if (a) anims.push(a);
+    };
+    const cleanup = () => {
+      for (const a of anims) a.cancel();
+      for (const id of timers.splice(0)) window.clearTimeout(id);
+    };
+    if (mode === "fade") {
+      // « Réduire les animations » : un fondu simple, rien qui se déplace.
+      play(sheet, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
+      play(cardRef.current, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
+      return cleanup;
+    }
+    const m = measure();
+    if (!m) return cleanup;
+    const d = timing.duration;
+    const { items, fades } = parts();
+    // Le contenu paraît quand le visuel a fait l'essentiel du chemin : avant, il se lirait sur un
+    // fond encore en mouvement. Plus tard au téléphone : le texte s'y pose sur la carte qui monte, et
+    // ne doit pas flotter sur l'accueil avant qu'elle soit arrivée sous lui.
+    const reveal = d * (phone ? 0.55 : 0.42);
+    items.forEach((el, i) =>
+      play(el, [{ opacity: 0, transform: "translateY(16px)" }, { opacity: 1, transform: "none" }], {
+        duration: 420, delay: reveal + (stagger ? i * STAGGER_MS : 0), easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      }),
+    );
+    fades.forEach((el) => play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: d * 0.6, delay: d * 0.3, easing: "ease-out" }));
+    // En View Transitions, la carte monte par ses propres images clés (voir la feuille de SheetStage).
+    if (!vt) play(cardRef.current, [{ transform: `translateY(${m.cardDrop}px)` }, { transform: "none" }], timing);
+    timers.push(window.setTimeout(() => setSettled(true), d + 40));
+
+    const frame = frameRef.current;
+    const bd = morphBackdropRef.current;
+    const poster = morphPosterRef.current;
+    const photo = photoRef.current;
+    if (mode === "flip" && frame && bd && poster && photo) {
+      place(bd, m.target);
+      place(poster, m.source);
+      frame.style.display = "";
+      photo.style.visibility = "hidden";
+      play(frame, [{ clipPath: insetClip(m.source, m.W, m.H, sourceRadius) }, { clipPath: insetClip(m.target, m.W, m.H, imageRadius) }], timing);
+      play(bd, [{ transform: coverTransform(m.target, m.source) }, { transform: "none" }], timing);
+      play(bd, [{ opacity: 0 }, { opacity: 1 }], { duration: d * 0.5, delay: d * 0.08, easing: "ease-out" });
+      play(poster, [{ transform: "none" }, { transform: coverTransform(m.source, m.target) }], timing);
+      play(poster, [{ opacity: 1 }, { opacity: 0 }], { duration: d * 0.55, easing: "ease-in-out" });
+      timers.push(
+        window.setTimeout(() => {
+          frame.style.display = "none";
+          photo.style.visibility = "";
+        }, d),
+      );
+    }
+    return cleanup;
+    // Une fois, à l'ouverture : les réglages ne changent pas pendant qu'une fiche est ouverte, et
+    // `measure` / `parts` ne lisent que des refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, vt, phone, timing, stagger, sourceRadius, imageRadius]);
+
+  const requestClose = () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    // Une fermeture pendant l'ouverture : le relais prévu à l'arrivée (calque du trajet caché, vrai
+    // visuel montré) tomberait au milieu du retour.
+    for (const id of openTimersRef.current.splice(0)) window.clearTimeout(id);
+    setSettled(false);
+    const d = timing.duration;
+    const sheet = sheetRef.current;
+    if (mode === "fade") {
+      sheet?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
+      cardRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
+      window.setTimeout(onClosed, 180);
+      return;
+    }
+    // Le contenu s'efface d'abord, d'un coup : la cascade ne se rejoue pas à l'envers en partant.
+    const { items, fades } = parts();
+    for (const el of items) el.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(8px)" }], { duration: 140, easing: "ease-in", fill: "both" });
+    for (const el of fades) el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: d * 0.5, easing: "ease-in", fill: "both" });
+    if (vt) {
+      window.setTimeout(onClosed, 140);
+      return;
+    }
+    const m = measure();
+    const frame = frameRef.current;
+    const bd = morphBackdropRef.current;
+    const poster = morphPosterRef.current;
+    const photo = photoRef.current;
+    if (!m || !frame || !bd || !poster || !photo) {
+      window.setTimeout(onClosed, 160);
+      return;
+    }
+    // Remesuré ici : la fiche du téléphone a pu défiler, la bannière n'est plus forcément en haut.
+    place(bd, m.target);
+    place(poster, m.source);
+    frame.style.display = "";
+    photo.style.visibility = "hidden";
+    const opts = { ...timing, fill: "both" as const };
+    const back = frame.animate([{ clipPath: insetClip(m.target, m.W, m.H, imageRadius) }, { clipPath: insetClip(m.source, m.W, m.H, sourceRadius) }], opts);
+    bd.animate([{ transform: "none" }, { transform: coverTransform(m.target, m.source) }], opts);
+    bd.animate([{ opacity: 1 }, { opacity: 0 }], { duration: d * 0.45, delay: d * 0.3, easing: "ease-in", fill: "both" });
+    poster.animate([{ transform: coverTransform(m.source, m.target) }, { transform: "none" }], opts);
+    poster.animate([{ opacity: 0 }, { opacity: 1 }], { duration: d * 0.5, easing: "ease-out", fill: "both" });
+    cardRef.current?.animate([{ transform: "none" }, { transform: `translateY(${m.cardDrop}px)` }], opts);
+    back.onfinish = () => onClosed();
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") requestClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  // Le calque du trajet : sous le contenu de la fiche, au-dessus de l'accueil. Caché hors du FLIP.
+  const frame = (
+    <div ref={frameRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden bg-ink" style={{ display: "none" }}>
+      <img ref={morphBackdropRef} src={backdrop} alt="" className="absolute max-w-none object-cover" style={{ transformOrigin: "0 0", opacity: 0 }} />
+      <img ref={morphPosterRef} src={opening.poster} alt="" className="absolute max-w-none object-cover" style={{ transformOrigin: "0 0" }} />
+    </div>
+  );
+
+  if (!phone) {
+    return (
+      <>
+        {frame}
+        <div ref={sheetRef} className="absolute inset-0 overflow-hidden">
+          {/* Le visuel plein écran et ce qui le voile, comme CinemaMovieDetail : le flou localisé du
+              bas, puis les deux voiles à étapes de CinemaDetailLayout. */}
+          <div ref={imageRef} className="absolute inset-0" style={{ viewTransitionName: vt ? VT_NAME : undefined } as CSSProperties}>
+            <img ref={photoRef} src={backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            {settled && (
+              <div
+                className="absolute inset-x-0 bottom-0 animate-fade-in backdrop-blur-md"
+                style={{ height: "45%", maskImage: "linear-gradient(to bottom, transparent 0%, black 60%)", WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)" }}
+              />
+            )}
+            <div data-alab-fade className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
+            <div data-alab-fade className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
+          </div>
+          <button
+            data-alab-fade
+            type="button"
+            onClick={requestClose}
+            className="btn btn-ghost absolute z-10 rounded-full bg-black/55 px-3 py-2 float-edge"
+            style={{ top: "max(1rem, env(safe-area-inset-top))", left: "1rem", viewTransitionName: vt ? "alab-back" : undefined } as CSSProperties}
+          >
+            <ArrowLeft size={16} /> {t("cinema.back")}
+          </button>
+          <div className="scrollbar-thin relative h-full overflow-y-auto">
+            <div className={SECTION_CLASS}>
+              <div style={{ ...COLUMN_STYLE, viewTransitionName: vt ? "alab-column" : undefined } as CSSProperties} className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16`}>
+                {/* Chaque ligne dans son enveloppe, pour la cascade ; celle du logo est une colonne
+                    flexible, comme la colonne qui le porte dans la vraie fiche. */}
+                <div data-alab-stagger className="flex flex-col">
+                  {title.logoUrl ? (
+                    <CinemaLogo src={title.logoUrl} alt={title.title} surface="sheet" className="mb-1" />
+                  ) : (
+                    <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{title.title}</h1>
+                  )}
+                </div>
+                <div data-alab-stagger className="flex flex-wrap items-center gap-3 text-sm text-muted">
+                  <MetaLine title={title} />
+                </div>
+                {title.tagline?.trim() && (
+                  <div data-alab-stagger>
+                    <CinemaTagline text={title.tagline} />
+                  </div>
+                )}
+                {title.overview && (
+                  <div data-alab-stagger>
+                    <CinemaOverview text={title.overview} readMore={t("cinema.readMore")} maxLines={5} onOpen={() => {}} />
+                  </div>
+                )}
+                {title.castNames && title.castNames.length > 0 && (
+                  <div data-alab-stagger className="flex items-baseline gap-1.5">
+                    <p className={CAST_CLASS}>
+                      {t("cinema.cast")} {title.castNames.slice(0, CAST_SHOWN).join(", ")}
+                    </p>
+                    {title.castNames.length > CAST_SHOWN && <span className="shrink-0 text-xs font-medium text-muted">+{title.castNames.length - CAST_SHOWN}</span>}
+                  </div>
+                )}
+                <div className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
+                  <MenuRow icon={<Play size={14} fill="currentColor" />} label={t("common.play")} />
+                  {title.trailerKey && <MenuRow icon={<Video size={14} />} label={t("cinema.trailer")} />}
+                  <MenuRow icon={<Check size={14} />} label={t("cinema.markWatched")} />
+                  <MenuRow icon={<Plus size={14} />} label={t("watchlist.statuses.toWatch")} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // La carte du téléphone commence sous la barre d'état (`phone-sheet-frame`) ; dans le cadre
+  // simulé, sous la barre d'état dessinée.
+  const top = framed ? `${PHONE_FRAME.statusBar + 8}px` : "calc(env(safe-area-inset-top, 0px) + 0.5rem)";
+  return (
+    <>
+      {/* Le fond de la carte, à part : il monte du bas pendant que la bannière se forme au-dessus. */}
+      <div
+        ref={cardRef}
+        className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-ink ring-1 ring-white/10"
+        style={{ top, viewTransitionName: vt ? "alab-card" : undefined } as CSSProperties}
+      />
+      {frame}
+      <div ref={sheetRef} className="scrollbar-none absolute inset-x-0 bottom-0 overflow-y-auto overscroll-contain rounded-t-2xl" style={{ top }}>
+        <div className="relative aspect-video w-full" style={{ maxHeight: framed ? PHONE_FRAME.h * 0.52 : "52svh" }}>
+          <div ref={imageRef} className="absolute inset-0" style={{ viewTransitionName: vt ? VT_NAME : undefined } as CSSProperties}>
+            <img ref={photoRef} src={backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <div data-alab-fade className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
+            <button
+              data-alab-fade
+              type="button"
+              onClick={requestClose}
+              aria-label="Fermer la fiche"
+              className="nav-glass absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-white"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+        <div className="relative -mt-6 px-4 pb-16" style={{ viewTransitionName: vt ? "alab-column" : undefined } as CSSProperties}>
+          <div data-alab-stagger>
+            {title.logoUrl ? (
+              <CinemaLogo src={title.logoUrl} alt={title.title} surface="phone" shadow={false} className="mb-3 object-left" />
+            ) : (
+              <h1 className="mb-3 text-2xl font-bold leading-tight text-white font-display">{title.title}</h1>
+            )}
+          </div>
+          <div data-alab-stagger className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
+            <MetaLine title={title} truncateGenres />
+          </div>
+          <button data-alab-stagger type="button" className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink">
+            <Play size={18} fill="currentColor" />
+            {t("common.play")}
+          </button>
+          {title.trailerKey && (
+            <button data-alab-stagger type="button" className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white">
+              <Video size={16} />
+              {t("cinema.trailer")}
+            </button>
+          )}
+          {title.tagline?.trim() && (
+            <div data-alab-stagger>
+              <CinemaTagline text={title.tagline} className="mb-1.5" />
+            </div>
+          )}
+          {title.overview && <p data-alab-stagger className="mb-3 text-sm leading-6 text-white">{title.overview}</p>}
+          <div data-alab-stagger className="mb-6 flex items-start gap-8">
+            <span className="flex w-16 flex-col items-center gap-1.5">
+              <Plus size={22} className="text-white" />
+              <span className="text-center text-xs leading-tight text-muted">{t("watchlist.statuses.toWatch")}</span>
+            </span>
+            <span className="flex w-16 flex-col items-center gap-1.5">
+              <Check size={22} className="text-white" />
+              <span className="text-center text-xs leading-tight text-muted">{t("cinema.markWatched")}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Une ligne du menu de la fiche du bureau : `MENU_ROW` et sa pastille, comme PlayButton en `variant="row"`. */
+function MenuRow({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <button data-alab-stagger type="button" className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}>
+      <span className={MENU_BADGE}>{icon}</span>
+      <span className="text-sm font-medium">{label}</span>
+    </button>
+  );
 }
