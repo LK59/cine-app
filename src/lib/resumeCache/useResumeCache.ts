@@ -7,6 +7,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 import { openingSpan } from "@/lib/resumeRewind";
 import { fetcher, followOnlyOptions, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
+import { watchUiActivity, whenUiQuiet } from "@/lib/uiQuiet";
 import { deviceBudget, deviceUsage, overQuota } from "./budget";
 import { planResumeCache, remainingChunks, resumeTargets, type ResumeTarget } from "./plan";
 import { mustStop, recordTitle } from "./recordTitle";
@@ -106,6 +107,10 @@ async function onePass(targets: ResumeTarget[], signal: AbortSignal, now: number
   for (const target of plan.record) {
     if (mustStop(signal)) return;
     if ((over || remaining <= 0) && !index[target.itemId]) continue;
+    // Jamais pendant un geste : la lecture de l'en-tête tient le fil principal, et un appui sur une
+    // affiche tombait au milieu — l'ouverture de la fiche démarrait derrière (`uiQuiet.ts`).
+    await whenUiQuiet(signal);
+    if (mustStop(signal)) return;
     remaining -= await recordTitle(account, target, remaining, signal);
     await new Promise((resolve) => setTimeout(resolve, BETWEEN_TITLES_MS));
   }
@@ -146,6 +151,8 @@ export function useResumeCache(): void {
 
   useEffect(() => {
     if (filmOpen || !signature) return;
+    // Les gestes sont écoutés dès le montage : le premier passage doit savoir si l'on vient de toucher.
+    watchUiActivity();
     const control = new AbortController();
     const cancel = whenIdle(() => void runResumeCache(latest.current, control.signal));
     // Relancé au retour au premier plan : un passage interrompu par l'arrière-plan reprend.

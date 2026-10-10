@@ -189,6 +189,7 @@ describe("le journal des vitesses", () => {
   it("part une fois, à la première réponse du catalogue, avec ce que le cache a fait", async () => {
     await writeEntries([entry("louis", MOVIES_CATALOGUE_KEY, { genres: [] }, Date.now() - 60_000)]);
     await hydrateFromDisk("louis", { has: () => false, set: () => {} });
+    noteResponse(RESUME_KEY, { items: [] });
     noteResponse(MOVIES_CATALOGUE_KEY, { genres: ["Drame"] });
     noteResponse(MOVIES_CATALOGUE_KEY, { genres: ["Drame", "Comédie"] });
     await settle();
@@ -212,6 +213,7 @@ describe("le journal des vitesses", () => {
       page.dispatchEvent(new Event("visibilitychange"));
       page.visibilityState = "visible";
       page.dispatchEvent(new Event("visibilitychange"));
+      noteResponse(RESUME_KEY, { items: [] });
       noteResponse(MOVIES_CATALOGUE_KEY, { genres: [] });
       await settle();
       const [call] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/startup-timing");
@@ -228,6 +230,7 @@ describe("le journal des vitesses", () => {
     vi.stubGlobal("document", page);
     try {
       await hydrateFromDisk("louis", { has: () => false, set: () => {} });
+      noteResponse(RESUME_KEY, { items: [] });
       noteResponse(MOVIES_CATALOGUE_KEY, { genres: [] });
       await settle();
       const [call] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/startup-timing");
@@ -241,10 +244,46 @@ describe("le journal des vitesses", () => {
 
   it("dit aussi une ouverture sans cache", async () => {
     await hydrateFromDisk("louis", { has: () => false, set: () => {} });
+    noteResponse(RESUME_KEY, { items: [] });
     noteResponse(MOVIES_CATALOGUE_KEY, { genres: [] });
     await settle();
     const [call] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/startup-timing");
     expect(JSON.parse((call[1] as RequestInit).body as string)).toMatchObject({ cacheUsed: false, cacheMs: null });
+  });
+
+  it("attend « Reprendre » quand le catalogue arrive le premier, et l'écrit", async () => {
+    // `resumeNetworkMs` restait vide sur l'iPhone de Louis (10/10/2026) : une fois le serveur débloqué,
+    // le catalogue arrivait d'ordinaire avant « Reprendre », et la ligne partait sans lui.
+    await hydrateFromDisk("louis", { has: () => false, set: () => {} });
+    noteResponse(MOVIES_CATALOGUE_KEY, { genres: [] });
+    await settle();
+    const timingCalls = () => (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/startup-timing");
+    expect(timingCalls()).toHaveLength(0);
+    noteResponse(RESUME_KEY, { items: [] });
+    await settle();
+    expect(timingCalls()).toHaveLength(1);
+    const body = JSON.parse((timingCalls()[0][1] as RequestInit).body as string);
+    expect(typeof body.resumeNetworkMs).toBe("number");
+    expect(typeof body.networkMs).toBe("number");
+  });
+
+  it("part sans « Reprendre » s'il ne vient pas, quelques secondes après le catalogue", async () => {
+    // L'IndexedDB factice travaille sur des minuteries : relue avant que le temps soit figé.
+    await hydrateFromDisk("louis", { has: () => false, set: () => {} });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      noteResponse(MOVIES_CATALOGUE_KEY, { genres: [] });
+      const timingCalls = () => (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/startup-timing");
+      await vi.advanceTimersByTimeAsync(7000);
+      expect(timingCalls()).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1500);
+      vi.useRealTimers();
+      await settle();
+      expect(timingCalls()).toHaveLength(1);
+      expect(JSON.parse((timingCalls()[0][1] as RequestInit).body as string).resumeNetworkMs).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

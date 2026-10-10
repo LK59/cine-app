@@ -2,6 +2,7 @@
 
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
+import { useTap } from "@/lib/useTap";
 
 const TV_NAV_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink";
@@ -44,13 +45,18 @@ export function CinemaTop10Card({
   onFocusItem?: () => void;
   onSelectItem: () => void;
 }) {
+  // Servi au relâchement du doigt, comme les autres affiches (`useTap`) : au `click`, iOS gardait le
+  // premier appui juste après un défilement de la rangée, et la fiche du Top 10 semblait lente à
+  // s'ouvrir — un second appui, ou un battement de retard (10/10/2026). Le `click` reste pour la
+  // souris et le clavier du bureau.
+  const tap = useTap(onSelectItem);
   return (
     <button
       type="button"
       {...(rowKey ? { "data-tv-card": true, "data-tv-row": rowKey, "data-tv-col": index } : {})}
       onFocus={onFocusItem}
       onMouseEnter={onFocusItem}
-      onClick={onSelectItem}
+      {...tap}
       aria-label={`${rank}. ${title}`}
       className={`flex shrink-0 items-end transition duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 active:scale-[0.96] active:delay-75 ${TV_NAV_RING}`}
     >

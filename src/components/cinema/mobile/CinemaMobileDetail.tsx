@@ -51,6 +51,12 @@ import { ToggleGlyph } from "@/components/ToggleGlyph";
 /** Un visage sans personne : ce qui donne sa hauteur à la place tenue de la distribution. */
 const RESERVED_CAST: CinemaCastMember[] = [{ tmdbId: 0, name: "\u00a0", character: "\u00a0", photoUrl: null }];
 
+/** Le temps d'une ouverture au t\u00e9l\u00e9phone (\u2248 400 ms pos\u00e9e) \u2014 voir `belowFold`. */
+const BELOW_FOLD_DELAY_MS = 450;
+
+/** Les \u00e9pisodes mont\u00e9s d'embl\u00e9e : le haut de la liste, s'il d\u00e9passe jamais de l'\u00e9cran \u00e0 l'ouverture. */
+const EPISODES_FIRST = 3;
+
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
 interface DetailInfo {
@@ -170,6 +176,23 @@ export function CinemaMobileDetail({
     revealed,
     instantExit: swapsInPlace,
   });
+  /**
+   * Ce qui est sous la ligne de flottaison attend que l'ouverture soit posée.
+   *
+   * Monter la saga, les titres similaires et toute une saison d'épisodes dans la même image que
+   * l'appui, c'est les mettre en page avant que le trajet puisse partir : la mesure de départ
+   * (`getBoundingClientRect` dans `useSheetMorph`) forçait la mise en page de toute la fiche. Mesuré
+   * le 10/10/2026 (Chromium, iPhone 13, processeur ×4) : une tâche de 80 à 220 ms entre l'appui et la
+   * fiche montée. Rien de cela n'est à l'écran pendant l'ouverture, et rien ne bouge au-dessus quand
+   * ça arrive : seules les cibles du trajet (bannière, haut de la carte) comptent, et elles sont en haut.
+   * Sans trajet (retour arrière, lien, mouvement réduit), tout est là d'emblée, comme avant.
+   */
+  const [belowFold, setBelowFold] = useState(() => !morph.handlesEntry);
+  useEffect(() => {
+    if (belowFold) return;
+    const timer = setTimeout(() => setBelowFold(true), BELOW_FOLD_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [belowFold]);
 
 
   const isSeries = mediaType === "series";
@@ -648,7 +671,7 @@ export function CinemaMobileDetail({
             )}
 
             <div className="space-y-4">
-              {episodes.map((episode) => (
+              {(belowFold ? episodes : episodes.slice(0, EPISODES_FIRST)).map((episode) => (
                 <button
                   key={episode.jellyfinItemId}
                   type="button"
@@ -710,22 +733,24 @@ export function CinemaMobileDetail({
               ))}
             </div>
 
-            <CinemaMissingEpisodes
-              season={activeSeason !== null ? missing.seasonOf(activeSeason) : undefined}
-            />
+            {belowFold && (
+              <CinemaMissingEpisodes
+                season={activeSeason !== null ? missing.seasonOf(activeSeason) : undefined}
+              />
+            )}
           </>
         )}
 
         {/* La saga d'abord, les titres similaires ensuite : « et la suite ? » est une question
             plus précise que « et quoi d'autre ? », et elle se pose plus souvent. */}
-        {mediaType === "movies" && "radarrId" in item && (
+        {belowFold && mediaType === "movies" && "radarrId" in item && (
           /* `onSelectOwned` est le rappel des titres similaires, volontairement : les deux rangées
              ouvrent une fiche de la même façon, et se referment donc de la même façon. */
           <CinemaMovieCollectionRow radarrId={item.radarrId} onSelectOwned={onSelectSimilar} className="mt-8" />
         )}
         {/* `mt-8` : collées à ce qui précède, ces rangées suivaient les épisodes à venir sans le
             moindre écart (relevé le 23/09/2026). La fiche du bureau espace ses blocs elle-même. */}
-        {onSelectSimilar && <CinemaSimilarRow items={similar} onSelect={onSelectSimilar} className="mt-8" />}
+        {belowFold && onSelectSimilar && <CinemaSimilarRow items={similar} onSelect={onSelectSimilar} className="mt-8" />}
       </div>
 
       {showTrailer && lead.trailerKey && (

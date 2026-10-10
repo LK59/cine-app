@@ -298,10 +298,17 @@ export function noteResponse(key: string, data: unknown): void {
   if (lastNoted.get(key) === data) return;
   lastNoted.set(key, data);
   awaitingFresh.delete(key);
-  if (key === RESUME_FEED_KEY && timing.resumeNetworkMs === null) timing.resumeNetworkMs = nowMs();
+  // La ligne part quand le catalogue ET « Reprendre » sont arrivés — ou au plus tard quelques
+  // secondes après le catalogue. Envoyée sur le seul catalogue, elle partait presque toujours avant
+  // « Reprendre » une fois le serveur débloqué (10/10/2026), et `resumeNetworkMs` restait vide.
+  if (key === RESUME_FEED_KEY && timing.resumeNetworkMs === null) {
+    timing.resumeNetworkMs = nowMs();
+    if (timing.networkMs !== null) reportTiming();
+  }
   if (key === MOVIES_CATALOGUE_KEY && timing.networkMs === null) {
     timing.networkMs = nowMs();
-    reportTiming();
+    if (timing.resumeNetworkMs !== null) reportTiming();
+    else setTimeout(reportTiming, RESUME_WAIT_MS);
   }
   if (!currentAccount) return;
   pendingWrites.set(key, data);
@@ -461,6 +468,9 @@ export async function storageFacts(
  * bloqué par la construction du catalogue, alors que la route seule coûte 50 ms.
  */
 const RESUME_FEED_KEY = "/api/jellyfin/resume";
+
+/** Combien attendre « Reprendre » après le catalogue avant d'envoyer la ligne sans lui. */
+const RESUME_WAIT_MS = 8000;
 
 const EMPTY_TIMING = {
   startedAt: null as number | null,

@@ -1,5 +1,6 @@
 import { fetchDirectInfo } from "@/lib/directInfo";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
+import { whenUiQuiet } from "@/lib/uiQuiet";
 import { CHUNK_SIZE, HttpByteSource } from "@/lib/webcodecs/byteSource";
 import type { MatroskaFile } from "@/lib/webcodecs/matroska";
 import { resumeEnd } from "./coverage";
@@ -59,6 +60,13 @@ export async function recordTitle(
     if (previous && !reusable) await removeResumeEntry(account, target.itemId);
     const onDisk = new Set(reusable?.chunks ?? []);
     const disk = reusable ? diskChunksFor(account, reusable) : null;
+    // L'en-tête et l'index sont lus d'un tenant sur le fil principal : pas pendant un geste
+    // (`uiQuiet.ts`). Pendant un film (`whilePlaying`, l'épisode suivant), la page n'a pas de geste à
+    // protéger de cette façon — le lecteur a ses propres règles.
+    if (!whilePlaying) {
+      await whenUiQuiet(signal);
+      if (stop()) return 0;
+    }
     // Sans lecture en avance : au repos, seul ce qui est lu est téléchargé (`budget.ts`).
     const source = (await HttpByteSource.open(info.streamUrl, info.sizeBytes, disk)).withoutReadahead();
     const written = new Set<number>();

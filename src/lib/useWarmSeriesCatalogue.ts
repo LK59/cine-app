@@ -5,6 +5,7 @@ import { SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { preloadQuietly } from "@/lib/prefetch";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
+import { uiBusy, whenUiQuiet } from "@/lib/uiQuiet";
 
 /**
  * Le catalogue des séries, chargé pendant qu'on regarde l'accueil.
@@ -45,6 +46,12 @@ export function useWarmSeriesCatalogue(ready: boolean): boolean {
     let cancelled = false;
     const warm = () => {
       if (cancelled || isWatchingFullScreen()) return;
+      // Le catalogue des séries se lit d'un bloc (plusieurs mégaoctets de JSON) : pas sous un geste —
+      // une fiche ouverte juste après le lancement démarrait derrière lui (`uiQuiet.ts`).
+      if (uiBusy()) {
+        void whenUiQuiet().then(warm);
+        return;
+      }
       // L'échec ne se rattrape pas : ce n'est qu'une avance prise, et l'écran qui en a
       // vraiment besoin refera la demande lui-même.
       // `cinemaFetcher`, jamais le récupérateur nu : un préchargement remplit le même cache SWR
