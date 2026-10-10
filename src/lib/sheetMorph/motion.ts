@@ -250,10 +250,11 @@ export function appleOpenMotion(from: Box, to: Box, stage: Stage, profile: Motio
   return criticalSpring(appleResponse(from, to, stage, profile), clamp(v0, -MAX_START_VELOCITY, MAX_START_VELOCITY), travelOf(from, to), settlePxFor(profile));
 }
 
-/** La fermeture : le même ressort, plus vif, lancé à `v0` — voir `closeResponse`. */
-export function appleCloseMotion(from: Box, to: Box, stage: Stage, profile: MotionProfile, v0 = 0): Motion {
+/** La fermeture : le même ressort, plus vif, lancé à `v0` — voir `closeResponse`. Lâchée au doigt,
+ * `fingerVy` (px/s, vers le bas positive) règle aussi son allure — voir `flickResponse`. */
+export function appleCloseMotion(from: Box, to: Box, stage: Stage, profile: MotionProfile, v0 = 0, fingerVy = 0): Motion {
   return criticalSpring(
-    closeResponse(from, to, stage, profile),
+    flickResponse(closeResponse(from, to, stage, profile), fingerVy),
     clamp(v0, -MAX_START_VELOCITY, MAX_START_VELOCITY),
     travelOf(from, to),
     settlePxFor(profile),
@@ -270,6 +271,31 @@ export function sampleMotion(m: Motion): Sample[] {
     const ms = (i / n) * m.duration;
     return { offset: i / n, q: i === n ? 1 : m.q(ms) };
   });
+}
+
+/**
+ * L'allure d'une fermeture au doigt suit le geste (10/10/2026, demandé par Louis) : lancée vite, la
+ * fiche rentre vite dans son affiche ; lâchée doucement, elle y rentre posément. Le ressort lancé à
+ * la vitesse du doigt démarrait bien sans cassure, mais sa durée restait celle de la croix (~0,35 s) :
+ * un geste vif finissait au même rythme qu'un geste lent. Comme iOS, la réponse est donc mise à
+ * l'échelle de la vitesse au lâcher — entre ×0,6 (un jet, ~3 000 px/s et plus) et ×1,25 (un
+ * glissement lent, ~250 px/s et moins), progressivement entre les deux (en échelle logarithmique,
+ * qui est ce que l'œil perçoit d'une vitesse), et bornée en absolu pour ne jamais paraître ni
+ * paresseuse ni brusque. Sans doigt (croix, Retour, Échap), rien ne change.
+ */
+export const FLICK_SLOW_PX_S = 250;
+export const FLICK_FAST_PX_S = 3000;
+export const FLICK_SLOW_FACTOR = 1.25;
+export const FLICK_FAST_FACTOR = 0.6;
+const FLICK_MIN_RESPONSE = 0.12;
+const FLICK_MAX_RESPONSE = 0.3;
+
+export function flickResponse(base: number, fingerVy: number): number {
+  const speed = Math.abs(fingerVy);
+  if (speed === 0) return base;
+  const t = clamp((Math.log(speed) - Math.log(FLICK_SLOW_PX_S)) / (Math.log(FLICK_FAST_PX_S) - Math.log(FLICK_SLOW_PX_S)), 0, 1);
+  const factor = FLICK_SLOW_FACTOR + (FLICK_FAST_FACTOR - FLICK_SLOW_FACTOR) * t;
+  return clamp(base * factor, Math.min(base, FLICK_MIN_RESPONSE), Math.max(base, FLICK_MAX_RESPONSE));
 }
 
 /**

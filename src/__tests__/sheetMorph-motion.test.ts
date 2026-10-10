@@ -175,3 +175,39 @@ describe("la fermeture au doigt, une seule pièce lancée à la vitesse du doigt
     expect(m.v(0) * (dy * dy + dx * dx)).toBeCloseTo(2400 * dy, 3);
   });
 });
+
+describe("fermeture au doigt — l'allure suit le geste (flickResponse)", async () => {
+  const { flickResponse, appleCloseMotion, FLICK_FAST_PX_S, FLICK_SLOW_PX_S } = await import("@/lib/sheetMorph/motion");
+  const base = 0.24;
+
+  it("sans doigt, rien ne change", () => {
+    expect(flickResponse(base, 0)).toBe(base);
+  });
+
+  it("un jet ferme plus vite, un glissement lent plus posément, et l'un après l'autre sans palier", () => {
+    const fast = flickResponse(base, FLICK_FAST_PX_S * 2);
+    const slow = flickResponse(base, FLICK_SLOW_PX_S / 2);
+    expect(fast).toBeLessThan(base);
+    expect(slow).toBeGreaterThan(base);
+    let previous = Infinity;
+    for (const v of [100, 250, 500, 1000, 2000, 3000, 6000]) {
+      const r = flickResponse(base, v);
+      expect(r).toBeLessThanOrEqual(previous);
+      previous = r;
+    }
+  });
+
+  it("reste bornée : jamais paresseuse ni brusque", () => {
+    expect(flickResponse(base, 20)).toBeLessThanOrEqual(0.3);
+    expect(flickResponse(base, 100000)).toBeGreaterThanOrEqual(0.12);
+  });
+
+  it("se voit dans la durée du mouvement", () => {
+    const stage = { W: 390, H: 664 };
+    const from = { x: 0, y: 200, w: 390, h: 656 };
+    const to = { x: 140, y: 282, w: 112, h: 168 };
+    const quick = appleCloseMotion(from, to, stage, "phone", 0, 4000).duration;
+    const calm = appleCloseMotion(from, to, stage, "phone", 0, 150).duration;
+    expect(quick).toBeLessThan(calm);
+  });
+});

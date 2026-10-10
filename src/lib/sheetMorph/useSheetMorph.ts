@@ -1092,7 +1092,8 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     // La vitesse de départ : celle de l'aller interrompu, ou celle du doigt projetée sur le chemin de
     // la carte — une seule pièce, rien ne peut s'en séparer.
     const v0 = closeStartVelocity(cur.box, toPose.box, run && midOpen ? { v: vNow, span: run.span } : null, fingerVy);
-    const motion = appleCloseMotion(cur.box, toPose.box, stage, detectProfile(), v0);
+    // Lâchée au doigt, l'allure suit le geste (`flickResponse`) ; un aller interrompu garde la sienne.
+    const motion = appleCloseMotion(cur.box, toPose.box, stage, detectProfile(), v0, run && midOpen ? 0 : fingerVy);
     const d = motion.duration;
     const samples = sampleMotion(motion);
     const poseAt = closePoses(cur, toPose);
