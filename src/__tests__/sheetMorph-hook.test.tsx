@@ -181,8 +181,13 @@ describe("la fermeture", () => {
     const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
     expect(copy).not.toBeNull();
     expect(copy.inert).toBe(true);
-    // La copie descend ; la fenêtre, sous elle, revole vers l'affiche — sans attendre de décodage.
-    expect(live(copy).some((a) => a.frames.at(-1)!.transform === "translateY(804.00px)")).toBe(true);
+    // La copie redescend collée à l'image (et non plus jusqu'au bas de l'écran, sur sa propre piste),
+    // et s'efface sur la fin ; la fenêtre, sous elle, revole vers l'affiche — sans attendre de décodage.
+    const card = live(copy).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)));
+    expect(card).toBeDefined();
+    expect(card!.frames.at(-1)!.transform).not.toBe("translateY(804.00px)");
+    expect(card!.frames.at(-1)!.opacity).toBe(0);
+    expect(card!.frames[0].opacity).toBe(1);
     const win = copy.previousElementSibling as HTMLElement;
     expect(live(win).length).toBeGreaterThan(0);
     expect(live(win).every((a) => !a.paused)).toBe(true);

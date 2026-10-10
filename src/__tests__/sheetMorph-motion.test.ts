@@ -1,13 +1,17 @@
 import { describe, it, expect } from "vitest";
 import {
+  CARD_IN,
+  CARD_OUT,
   REVEAL_AT,
   appleCloseMotion,
   appleOpenMotion,
   appleResponse,
+  cardTrack,
   closePoses,
   closeStartVelocity,
   coverTf,
   criticalSpring,
+  gluedCardY,
   morphTracks,
   openPoses,
   sampleMotion,
@@ -103,5 +107,47 @@ describe("les images clés", () => {
     for (const k of tracks.radius) expect(Object.keys(k).sort()).toEqual(["borderRadius", "offset"]);
     // La fenêtre, posée sur la bannière, en part réduite à la carte et finit sans transformation.
     expect(tracks.win.at(-1)!.transform).toBe("translate(0.00px, 0.00px) scale(1.00000, 1.00000)");
+  });
+});
+
+describe("la carte du téléphone, collée à la bannière", () => {
+  // Louis, iPhone, prod 8.31.2 : « la bannière grandit depuis l'affiche et le reste de la fiche vient
+  // du bas et se colle avec la bannière ». La carte avait sa propre montée (du bas de l'écran à zéro) ;
+  // elle se déduit maintenant de la pose de l'image, image clé par image clé.
+  const restingTop = 24;
+  const bandAt = banner.y + banner.h - restingTop;
+  const cardTop = (k: Keyframe) => restingTop + Number(/translateY\((-?[\d.]+)px\)/.exec(String(k.transform))![1]);
+
+  it("à l'aller, le bas de la bande de la carte suit le bas de l'image à chaque image clé", () => {
+    const { at } = openPoses(poster, uniformCorners(8), banner, [16, 16, 0, 0]);
+    const samples = sampleMotion(appleOpenMotion(poster, banner, stage, "phone"));
+    const track = cardTrack(samples, at, restingTop, bandAt, CARD_IN);
+    expect(track).toHaveLength(samples.length);
+    samples.forEach(({ q }, i) => {
+      const box = at(q).box;
+      expect(Math.abs(cardTop(track[i]) + bandAt - (box.y + box.h))).toBeLessThanOrEqual(1);
+    });
+    // Posée à l'arrivée, sans décalage ; entrée en fondu depuis l'affiche.
+    expect(cardTop(track.at(-1)!)).toBeCloseTo(restingTop, 1);
+    expect(track[0].opacity).toBe(0);
+    expect(track.at(-1)!.opacity).toBe(1);
+  });
+
+  it("au retour, collée aussi, et effacée sur la fin", () => {
+    const back = closePoses(settledPose(banner, [16, 16, 0, 0], poster), sourcePose(poster, uniformCorners(8), banner));
+    const samples = sampleMotion(appleCloseMotion(banner, poster, stage, "phone"));
+    const track = cardTrack(samples, back, restingTop, bandAt, CARD_OUT);
+    samples.forEach(({ q }, i) => {
+      const box = back(q).box;
+      expect(Math.abs(cardTop(track[i]) + bandAt - (box.y + box.h))).toBeLessThanOrEqual(1);
+    });
+    expect(cardTop(track[0])).toBeCloseTo(restingTop, 1);
+    expect(track[0].opacity).toBe(1);
+    expect(track.at(-1)!.opacity).toBe(0);
+  });
+
+  it("le décalage pose exactement le bas de la bande sur le bas de l'image", () => {
+    expect(gluedCardY(banner, restingTop, bandAt)).toBe(0);
+    expect(gluedCardY({ ...banner, y: banner.y + 100 }, restingTop, bandAt)).toBe(100);
   });
 });
