@@ -1990,7 +1990,12 @@ D'où la couverture qui tient jusqu'au film qui bouge, et trois silences :
   100 ms après l'atterrissage de l'ouverture si rien n'a bougé (`OPENING_REASSERT_MS`, `MseSource`),
   au bord du média seulement ; la poussée de 400 ms reste le filet. Mesuré ce jour-là : WarGames, La
   Flamme, Drive ouverts en 14 à 373 ms, figés jusqu'à la poussée (`frozenNudges: 1`), que le chien de
-  garde à 250 ms ne livrait qu'à 500 ms.
+  garde à 250 ms ne livrait qu'à 500 ms. **Jamais sur un élément qui repart** : un `playing` ou un
+  `seeked` après l'atterrissage annule la relance, qui ne part que si l'élément saute encore ou n'a
+  pas de quoi avancer (`readyState` < 3) ; et la poussée de 400 ms laisse 600 ms à un élément tout
+  juste reparti (`OPENING_PLAYING_GRACE_MS`). Mathis, iPhone, 8.32.9 : la minuterie, retardée par le
+  fil principal, tombait 283–348 ms après l'atterrissage, dans l'instant même du `playing` de Safari ;
+  son pas relançait le saut et coûtait ~1,1 s jusqu'à la première image.
 
 **Ce qu'elle ne fait jamais.**
 - **Retarder la lecture.** C'est un calque posé sur l'élément vidéo : le fichier s'ouvre dessous

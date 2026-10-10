@@ -62,6 +62,18 @@ const OPENING_EDGE_SECONDS = 0.5;
  */
 const OPENING_REASSERT_MS = 100;
 
+/**
+ * Mais jamais sur un élément qui vient de repartir (10/10/2026, Mathis, iPhone, 8.32.9) : la
+ * minuterie de 100 ms, retardée par le travail du fil principal (segments construits et envoyés),
+ * tombait 283 à 348 ms après l'atterrissage — dans le même instant que le `playing` de Safari, qui
+ * venait justement d'achever le placement. Le pas redemandé relançait le saut et refigeait l'élément :
+ * « repart à 0,27 s » et « position redemandée » à la même milliseconde, puis la poussée de 400 ms,
+ * puis la première image 1,1 s plus tard. Un `playing` ou un `seeked` après l'atterrissage l'annule ;
+ * et la poussée de l'ouverture laisse à un élément tout juste reparti ce délai pour montrer sa
+ * première image avant de le bousculer.
+ */
+const OPENING_PLAYING_GRACE_MS = 600;
+
 /** Ce qu'une seconde de média à décoder ajoute à ce délai — voir `seekingPatienceMs`. */
 const SEEKING_PATIENCE_PER_SECOND_MS = 500;
 
@@ -357,6 +369,16 @@ export class MseSource {
   /** La position redemandée une fois après l'atterrissage de l'ouverture — voir `OPENING_REASSERT_MS`. */
   private openingReassertTimer: ReturnType<typeof setTimeout> | null = null;
   private openingReassertDone = false;
+  /** Le dernier `playing` de l'élément — voir `OPENING_PLAYING_GRACE_MS`. */
+  private lastPlayingAt = 0;
+
+  /** Le placement de l'ouverture a abouti de lui-même (`playing`, `seeked`) : plus rien à redemander. */
+  private settleOpeningReassert(): void {
+    if (this.openingReassertTimer === null) return;
+    clearTimeout(this.openingReassertTimer);
+    this.openingReassertTimer = null;
+    this.openingReassertDone = true;
+  }
   /**
    * Which rung of the recovery ladder has been climbed since the clock last really played: 0 none,
    * 1 the keyframe step, 2 handed to the host for a rebuild. See `escalate`.
@@ -589,7 +611,7 @@ export class MseSource {
       this.video.addEventListener("pause", this.guard.paused);
       this.video.addEventListener("play", this.onPlay);
       this.video.addEventListener("playing", this.request);
-      this.video.addEventListener("playing", this.onResumed);
+      this.video.addEventListener("playing", this.onPlaying);
       this.lastAppendAt = Date.now();
       this.watchdogTimer = setInterval(this.watchdog, WATCHDOG_MS);
 
@@ -629,6 +651,13 @@ export class MseSource {
   private readonly onResumed = () => {
     this.frozenSince = null;
     this.lastClockAt = -1;
+  };
+
+  /** `playing` : l'élément repart vraiment — `play` n'est que la demande. */
+  private readonly onPlaying = () => {
+    this.onResumed();
+    this.lastPlayingAt = Date.now();
+    this.settleOpeningReassert();
   };
 
   private readonly onPlay = () => {
@@ -1710,6 +1739,7 @@ export class MseSource {
    */
   private readonly onSeeked = () => {
     if (this.destroyed) return;
+    this.settleOpeningReassert();
     this.seekState.arrive(this.video.currentTime);
   };
 
@@ -2006,8 +2036,10 @@ export class MseSource {
       this.openingReassertDone = true;
       if (this.destroyed || this.video.paused || !this.guard.awaitingFirstPicture) return;
       const now = this.video.currentTime;
-      // Parti de lui-même : rien à faire.
+      // Parti de lui-même : rien à faire. Ni sur un élément qui a de quoi avancer et ne saute plus
+      // (`readyState` ≥ 3) : il démarre, et le relancer le refigerait — voir `OPENING_PLAYING_GRACE_MS`.
       if (!this.video.seeking && Math.abs(now - at) > 0.05) return;
+      if (!this.video.seeking && this.video.readyState >= 3) return;
       if (this.decodeDistance(now) >= OPENING_EDGE_SECONDS || this.lead < 1) return;
       const target = now + FROZEN_STEP;
       trace(`ouverture : rien n'a bougé 100 ms après l'atterrissage à ${now.toFixed(2)} s — position redemandée`);
@@ -2049,6 +2081,9 @@ export class MseSource {
         ? FROZEN_OPENING_MS
         : ordinary;
     if (Date.now() - this.frozenSince < patience) return;
+    // Un élément tout juste reparti produit encore sa première image : la poussée de l'ouverture
+    // l'attend — voir `OPENING_PLAYING_GRACE_MS`.
+    if (patience === FROZEN_OPENING_MS && Date.now() - this.lastPlayingAt < OPENING_PLAYING_GRACE_MS) return;
     // Only when there is plainly something to play: a clock that is not moving because the
     // buffer ran dry is an ordinary wait, and the fill loop is already on it.
     if (this.lead < 1) return;
@@ -2334,7 +2369,7 @@ export class MseSource {
     this.video.removeEventListener("pause", this.guard.paused);
     this.video.removeEventListener("play", this.onPlay);
     this.video.removeEventListener("playing", this.request);
-    this.video.removeEventListener("playing", this.onResumed);
+    this.video.removeEventListener("playing", this.onPlaying);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
     if (this.openingReassertTimer) clearTimeout(this.openingReassertTimer);

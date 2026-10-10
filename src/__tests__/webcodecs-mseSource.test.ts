@@ -2271,6 +2271,28 @@ describe("l'échelle des reprises", () => {
     expect(video.currentTime).toBe(pushed);
   });
 
+  it("la poussée de l'ouverture laisse 600 ms à un élément tout juste reparti", async () => {
+    // Même trace : un élément qui vient d'émettre `playing` produit encore sa première image.
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
+    const internals = internalsOf(mse) as ReturnType<typeof internalsOf> & { lastPlayingAt: number };
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 12, "du média devant la tête");
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    const head = video.buffered.start(0) + 0.04;
+    setTime(video, head);
+    video.dispatchEvent(new Event("play"));
+    video.dispatchEvent(new Event("playing"));
+    internals.watchForFrozenClock(head);
+    internals.frozenSince = Date.now() - 450;
+    internals.watchForFrozenClock(head);
+    expect(video.currentTime).toBe(head);
+    // Le délai passé, la poussée revient.
+    internals.lastPlayingAt = Date.now() - 700;
+    internals.frozenSince = Date.now() - 450;
+    internals.watchForFrozenClock(head);
+    expect(video.currentTime).toBeGreaterThan(head);
+  });
+
   describe("la position redemandée 100 ms après l'atterrissage de l'ouverture", () => {
     // 8.30.9, iPhone de Louis (10/10/2026) : WarGames, La Flamme, Drive ouverts en 14 à 373 ms, puis
     // figés sur l'atterrissage jusqu'à la poussée de 400 ms — que le chien de garde ne livrait qu'à 500.
@@ -2311,6 +2333,53 @@ describe("l'échelle des reprises", () => {
       internals.guard.opened(head);
       setTime(video, head);
       internals.armOpeningReassert(head);
+      await tick(150);
+      expect(video.currentTime).toBe(head);
+    });
+
+    it("ne relance pas un placement que Safari vient d'achever (playing avant la minuterie)", async () => {
+      // Mathis, iPhone, 8.32.9 (10/10/2026) : « repart à 0,27 s » et « position redemandée » à la même
+      // milliseconde — le pas relançait le saut et refigeait l'élément jusqu'à la poussée de 400 ms.
+      const { video, internals } = await opened();
+      const head = video.buffered.start(0) + 0.04;
+      internals.guard.opened(head);
+      setTime(video, head);
+      internals.armOpeningReassert(head);
+      await tick(40);
+      video.dispatchEvent(new Event("playing"));
+      await tick(120);
+      expect(video.currentTime).toBe(head);
+    });
+
+    it("ne relance pas non plus un élément qui a de quoi avancer et ne saute plus quand elle tombe en retard", async () => {
+      const { video, internals } = await opened();
+      const head = video.buffered.start(0) + 0.04;
+      internals.guard.opened(head);
+      setTime(video, head);
+      Object.assign(video, { seeking: false, readyState: 4 });
+      internals.armOpeningReassert(head);
+      await tick(150);
+      expect(video.currentTime).toBe(head);
+    });
+
+    it("relance une fois un placement vraiment resté en suspens (toujours en saut à 100 ms)", async () => {
+      const { video, internals } = await opened();
+      const head = video.buffered.start(0) + 0.04;
+      internals.guard.opened(head);
+      setTime(video, head);
+      Object.assign(video, { seeking: true, readyState: 1 });
+      internals.armOpeningReassert(head);
+      await tick(150);
+      expect(video.currentTime).toBeCloseTo(head + 0.08, 5);
+    });
+
+    it("un seeked après l'atterrissage annule la relance", async () => {
+      const { video, internals } = await opened();
+      const head = video.buffered.start(0) + 0.04;
+      internals.guard.opened(head);
+      setTime(video, head);
+      internals.armOpeningReassert(head);
+      video.dispatchEvent(new Event("seeked"));
       await tick(150);
       expect(video.currentTime).toBe(head);
     });
