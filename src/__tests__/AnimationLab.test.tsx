@@ -340,6 +340,42 @@ describe("la page Tests animations", () => {
       expect(sheets()[0].querySelector('[style*="touch-action: none"]')).toBeNull();
     });
 
+    it("septième passe : le contenu ne part qu'une fois l'image en place, et se pose avec la fin du ressort", () => {
+      // À 60 % (sixième passe), la colonne se posait pendant que l'image volait encore : avec le
+      // ressort amorti, 60 % du trajet est couvert en ~100 ms.
+      const { criticalSpring, sampleMotion, timeAt, REVEAL_AT } = sheetMotionForTests;
+      expect(REVEAL_AT).toBeGreaterThanOrEqual(0.9);
+      const m = criticalSpring(0.4, 0, 600);
+      const at = timeAt(sampleMotion(m), m.duration, REVEAL_AT);
+      expect(m.q(at)).toBeGreaterThanOrEqual(0.89);
+      expect(at).toBeGreaterThan(timeAt(sampleMotion(m), m.duration, 0.6) + 50);
+      // Le bloc de 220 ms finit avec le ressort, pas après lui.
+      expect(at + 220).toBeLessThanOrEqual(m.duration + 60);
+    });
+
+    it("septième passe : au bureau, la saga loge sous la première page, comme dans la vraie fiche", () => {
+      // Dans la colonne calée en bas, elle la faisait grandir et poussait le logo sous « Retour ».
+      openDesktopMock();
+      openFromHome(3);
+      const sheet = sheets()[0];
+      const label = within(sheet).getByText("Dans la même saga");
+      const section = label.closest<HTMLElement>("[class*='snap-start']")!;
+      expect(section.className).toContain("pt-[calc(5rem+env(safe-area-inset-top))]");
+      // Et la colonne de la première page ne la contient plus.
+      const column = within(sheet).getByText(/^Film 3$|Lire/, { selector: "span" }).closest("[class*='justify-end']");
+      expect(column?.contains(label)).toBe(false);
+    });
+
+    it("septième passe : au téléphone, la ligne des mesures loge dans la pilule « Quitter », jamais sur la fiche", () => {
+      render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
+      fireEvent.click(screen.getByRole("button", { name: "Téléphone" }));
+      fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
+      const readouts = document.querySelectorAll("[data-alab-readout]");
+      expect(readouts).toHaveLength(1);
+      expect(readouts[0].closest("button")?.textContent).toContain("Quitter la maquette");
+      expect(readouts[0].textContent).not.toContain("Profil :");
+    });
+
     it("ne propose pas, dans une fiche, sa propre affiche ; la variante hors bibliothèque est marquée", () => {
       openDesktopMock();
       openFromHome(3);

@@ -12,7 +12,7 @@ import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { CinemaTagline } from "@/components/cinema/CinemaDetailExtras";
-import { CAST_CLASS, CAST_SHOWN, COLUMN_GAP, COLUMN_STYLE, CinemaOverview, HORIZONTAL_VEIL, MENU_STYLE, SECTION_CLASS, VERTICAL_VEIL } from "@/components/cinema/CinemaDetailLayout";
+import { BELOW_SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, COLUMN_STYLE, CinemaOverview, HORIZONTAL_VEIL, MENU_STYLE, SECTION_CLASS, VERTICAL_VEIL } from "@/components/cinema/CinemaDetailLayout";
 import { MENU_BADGE, MENU_ROW, MENU_ROW_INACTIVE } from "@/components/cinema/detailMenu";
 import { useT } from "@/components/TranslationProvider";
 import { formatMinutes } from "@/lib/format";
@@ -394,8 +394,16 @@ const CLOSE_RESPONSE_RATIO = 0.75;
 const SETTLE_PX = 0.5;
 /** Les vitesses de départ prises au doigt ou à l'ouverture, bornées (progression par seconde). */
 const MAX_START_VELOCITY = 25;
-/** Le contenu part quand le trajet en est là — avec un ressort, tôt dans le temps, tard dans l'espace. */
-const REVEAL_AT = 0.6;
+/**
+ * Le contenu part quand le trajet en est là — en distance, pas en temps.
+ *
+ * 0,6 en sixième passe : avec le ressort amorti, 60 % du trajet est couvert en ~100 ms, et la
+ * colonne (logo, infos, Lire, synopsis) se posait à sa place pendant que l'image volait encore —
+ * double exposition sur l'accueil au bureau, texte sur la bannière en mouvement au téléphone (vu
+ * en capture le 10/10/2026). À 90 %, l'image est pour l'œil arrivée : le bloc de 220 ms se pose
+ * avec la fin du ressort, comme un contenu qui apparaît dans une vue déjà en place.
+ */
+const REVEAL_AT = 0.9;
 // Les fiches d'une personne : une montée simple, sans trajet ni ressort à régler.
 const PERSON_RISE = { duration: 300, easing: "cubic-bezier(0.32, 0.72, 0, 1)" };
 
@@ -629,7 +637,7 @@ function releaseVelocity(moves: { t: number; y: number }[]): number {
 }
 
 /** Les fonctions pures du mouvement, pour les tests : le ressort, sa réponse selon l'appareil, la vitesse du doigt. */
-export const sheetMotionForTests = { criticalSpring, appleResponse, openMotion, closeMotion, releaseVelocity, sampleMotion };
+export const sheetMotionForTests = { criticalSpring, appleResponse, openMotion, closeMotion, releaseVelocity, sampleMotion, timeAt, REVEAL_AT };
 
 function boxIn(el: Element, root: DOMRect): Box {
   const r = el.getBoundingClientRect();
@@ -777,10 +785,12 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
 }
 
 /** La ligne de la maquette qui dit le profil et ce qu'ont réellement duré le dernier aller et le dernier retour. */
-function readoutText(pace: Pace, auto: boolean, last: { open?: Motion; close?: Motion }): string {
-  const parts = [`Profil : ${PROFILE_LABEL[pace.profile]}${auto ? " (détecté)" : ""}`];
-  if (last.open) parts.push(`ouverture ${Math.round(last.open.duration)} ms (${last.open.label})`);
-  if (last.close) parts.push(`fermeture ${Math.round(last.close.duration)} ms (${last.close.label})`);
+function readoutText(pace: Pace, auto: boolean, last: { open?: Motion; close?: Motion }, compact = false): string {
+  // Dans la pilule du téléphone, sans le détail de la courbe : deux lignes au plus.
+  const how = (m: Motion) => (compact ? "" : ` (${m.label})`);
+  const parts = [`${compact ? "" : "Profil : "}${PROFILE_LABEL[pace.profile]}${auto ? " (détecté)" : ""}`];
+  if (last.open) parts.push(`ouverture ${Math.round(last.open.duration)} ms${how(last.open)}`);
+  if (last.close) parts.push(`fermeture ${Math.round(last.close.duration)} ms${how(last.close)}`);
   return parts.join(" · ");
 }
 
@@ -833,15 +843,17 @@ function SheetStage({
   const closingCount = useRef(0);
   // La ligne des durées : écrite directement dans le DOM à l'arrivée d'un trajet, sans rendu de
   // React — rien ne doit redessiner la scène pendant ou juste après un mouvement.
-  const readoutRef = useRef<HTMLDivElement>(null);
+  const readoutRef = useRef<HTMLSpanElement>(null);
   const lastMotion = useRef<{ open?: Motion; close?: Motion }>({});
   const report = (kind: "open" | "close", motion: Motion) => {
     lastMotion.current[kind] = motion;
-    if (readoutRef.current) readoutRef.current.textContent = readoutText(pace, profileAuto, lastMotion.current);
+    if (readoutRef.current) readoutRef.current.textContent = readoutText(pace, profileAuto, lastMotion.current, phone);
   };
+  // `phone` aussi : la ligne change d'élément avec la disposition (pilule ou coin), et le nouveau
+  // naît vide.
   useLayoutEffect(() => {
-    if (readoutRef.current) readoutRef.current.textContent = readoutText(pace, profileAuto, lastMotion.current);
-  }, [pace, profileAuto]);
+    if (readoutRef.current) readoutRef.current.textContent = readoutText(pace, profileAuto, lastMotion.current, phone);
+  }, [pace, profileAuto, phone]);
 
   // Les visuels demandés dès l'ouverture de la maquette : sans eux, le calque du trajet grandissait
   // sur un visuel pas encore arrivé, et l'affiche s'effaçait sur du vide.
@@ -910,20 +922,28 @@ function SheetStage({
           au milieu du bas, là où ni l'accueil ni la fiche simulés n'ont de commande. Pleine et non
           en verre (sixième passe) : un `backdrop-filter` au-dessus d'un calque qui bouge se
           recalcule à chaque image. */}
+      {/* Au téléphone, la ligne des mesures loge dans la pilule, en seconde ligne (septième passe) :
+          posée au-dessus, elle tombait sur le synopsis de la fiche. Au bureau, le coin bas gauche
+          est libre — ni l'accueil ni la fiche n'y ont rien. */}
       <button
         type="button"
         onClick={onExit}
-        className={`absolute z-30 flex h-9 items-center gap-2 rounded-full bg-zinc-900/90 px-3 text-xs text-white ring-1 ring-white/15 ${phone ? "left-1/2 -translate-x-1/2" : "right-4"}`}
+        className={`absolute z-30 flex flex-col items-center rounded-2xl bg-zinc-900/90 px-3 py-2 text-xs text-white ring-1 ring-white/15 ${phone ? "left-1/2 max-w-[calc(100%-2rem)] -translate-x-1/2" : "right-4"}`}
         style={phone ? { bottom: framed ? 20 : "max(1rem, env(safe-area-inset-bottom))" } : { top: "max(1rem, env(safe-area-inset-top))" }}
       >
-        <X size={14} /> Quitter la maquette
+        <span className="flex items-center gap-2">
+          <X size={14} /> Quitter la maquette
+        </span>
+        {phone && <span ref={readoutRef} data-alab-readout aria-live="polite" className="mt-0.5 block text-center text-[10px] leading-[14px] text-white/65 empty:hidden" />}
       </button>
-      <div
-        ref={readoutRef}
-        aria-live="polite"
-        className={`pointer-events-none absolute z-30 max-w-[calc(100%-2rem)] rounded-md bg-black/70 px-2 py-1 text-[11px] leading-4 text-white/85 ${phone ? "left-1/2 -translate-x-1/2 text-center" : "bottom-4 left-4"}`}
-        style={phone ? { bottom: framed ? 64 : "calc(max(1rem, env(safe-area-inset-bottom)) + 2.75rem)" } : undefined}
-      />
+      {!phone && (
+        <span
+          ref={readoutRef}
+          data-alab-readout
+          aria-live="polite"
+          className="pointer-events-none absolute bottom-4 left-4 z-30 max-w-[calc(100%-2rem)] rounded-md bg-black/70 px-2 py-1 text-[11px] leading-4 text-white/85"
+        />
+      )}
       {stack.map((e, i) => {
         const common: SheetCommon = {
           depth: i,
@@ -1394,7 +1414,7 @@ function MockSheet({
     // Ce qui est derrière s'éteint au rythme du trajet : la fiche passe devant, elle ne remplace rien.
     play(dimRef.current, samples.map(({ offset, q }) => ({ offset, opacity: DIM * clamp(q, 0, 1) })), linear);
     const { items, fades } = parts();
-    // Le contenu part quand le trajet en est à 60 % et arrive avec la bannière, d'un bloc.
+    // Le contenu part quand l'image est en place pour l'œil (`REVEAL_AT`) et se pose avec elle, d'un bloc.
     revealContent(items, timeAt(samples, d, REVEAL_AT), stagger, play);
     const fadeAt = timeAt(samples, d, 0.3);
     fades.forEach((el) => play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: Math.max(160, timeAt(samples, d, 0.95) - fadeAt), delay: fadeAt, easing: "ease-out" }));
@@ -1782,10 +1802,15 @@ function MockSheet({
                     </>
                   )}
                 </div>
-                <div data-alab-stagger className="pb-10">
-                  {saga}
-                </div>
               </div>
+            </div>
+            {/* Septième passe : la saga dans la colonne la faisait grandir, et la première page — calée
+                en bas (`justify-end`) — poussait le logo sous le bouton Retour (y ≈ 30 sur un écran de
+                900 px). La vraie fiche met ses rangées du dessous dans une seconde section, avec sa
+                réserve en haut (`BELOW_SECTION_CLASS`) : la maquette fait pareil, et la colonne garde
+                la place qu'elle a dans la vraie. */}
+            <div data-alab-stagger className={BELOW_SECTION_CLASS}>
+              {saga}
             </div>
           </div>
         </div>
