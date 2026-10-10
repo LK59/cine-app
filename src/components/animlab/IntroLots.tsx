@@ -18,8 +18,45 @@ import { useT } from "@/components/TranslationProvider";
 import { formatMinutes } from "@/lib/format";
 import { genreLabel } from "@/lib/top10Label";
 import { tmdbResize } from "@/lib/images";
-import { toSpring } from "@/lib/liquidGlass/liquid";
-import { simulateSpring } from "@/lib/liquidGlass/spring";
+import {
+  CONTENT_OUT_MS,
+  DIM,
+  GHOST_FADE_MS,
+  GHOST_SNAP_AT,
+  HANDOVER_MS,
+  HOME_SCALE,
+  IDENTITY,
+  PLAIN_OUT_DROP,
+  PLAIN_OUT_MS,
+  REVEAL_AT,
+  REVEAL_MS,
+  appleCloseMotion,
+  appleOpenMotion,
+  appleResponse,
+  clamp,
+  coverTf,
+  criticalSpring,
+  fixedMotion,
+  lerp,
+  lerpBox,
+  lerpCorners,
+  lerpTf,
+  morphTracks,
+  releaseVelocity,
+  sampleMotion,
+  smooth,
+  timeAt,
+  travelOf,
+  uniformCorners,
+  type Box,
+  type Corners,
+  type FixedEase,
+  type MorphEngine,
+  type Motion,
+  type MotionProfile,
+  type Pose,
+} from "@/lib/sheetMorph/motion";
+import { afterTwoFrames, clockNow, detectProfile, opacityNow, place, posterStyle, promote, scaleOf, startTogether, swallowStrayClick, translateYOf } from "@/lib/sheetMorph/dom";
 import { PlaybackIntro } from "@/components/player/PlaybackIntro";
 import { INTRO_BACKGROUNDS, PLAYBACK_INTRO, introBackdropSrc, type IntroBackground } from "@/lib/playbackIntro";
 import { phoneSheetCorner } from "@/lib/sheetMotion";
@@ -273,7 +310,7 @@ function IntroStage({
 
 /* ─── Lot H : ouverture de fiche ───────────────────────────────────────────── */
 
-type Ease = "spring" | "emphasized" | "easeOut";
+type Ease = FixedEase;
 type Layout = "auto" | "desktop" | "phone";
 /*
  * Le FLIP, ou un fondu sous « Réduire les animations ». Les View Transitions ont été retirées à la
@@ -284,7 +321,6 @@ type Layout = "auto" | "desktop" | "phone";
  */
 type Mode = "flip" | "fade";
 /** Une place dans la scène, en pixels depuis son coin haut gauche. */
-type Box = { x: number; y: number; w: number; h: number };
 
 /**
  * Ce que la fiche doit savoir de la carte touchée pour en partir, et pour y revenir. `outside` : un
@@ -332,36 +368,10 @@ const SHEET_POSTER_WIDTH = "w-24 sm:w-28 md:w-32";
  * infos, puis « Lire », puis le synopsis) se lisait « une chose après l'autre, pas tout à fait
  * fluide » sur l'iPhone. Elle reste en option, resserrée : 15 ms par ligne, 150 ms en tout au plus.
  */
-// 160 ms depuis la huitième passe : à 220, le bloc traînait derrière le ressort accéléré.
-const REVEAL_MS = 160;
 const CASCADE_STEP_MS = 15;
 const CASCADE_TOTAL_MS = 150;
-// L'effacement du contenu à la fermeture, depuis l'opacité où il en est.
-const CONTENT_OUT_MS = 100;
-// L'assombrissement de ce qui est derrière la fiche, et le recul de l'accueil du bureau.
-const DIM = 0.6;
-const HOME_SCALE = 0.98;
-/*
- * Les fondus affiche → visuel suivent l'espace parcouru, et non le temps (sixième passe) : avec un
- * ressort, l'essentiel du trajet tient dans le premier tiers et la fin s'étire, et un fondu calé sur
- * le temps se serait étiré avec elle. À l'aller, l'affiche s'efface sur les premiers 60 % du trajet,
- * le visuel paraît de 10 à 70 %. Au retour, les deux se chevauchent sur presque tout le chemin —
- * l'affiche de 15 à 80 %, la bannière de 25 à 90 % —, chacun depuis l'opacité où il en est.
- */
-// Le relais final de la fermeture : la vraie carte reparaît sous le calque du trajet, qui s'efface
-// par-dessus en ce temps-là — plus de bascule de visibilité qui se voie (le logo de la grande
-// bannière du téléphone, absent de l'affiche du trajet, surgissait d'un coup).
-const HANDOVER_MS = 120;
-// La sortie sans trajet, quand l'affiche d'où la fiche était partie n'est plus à l'écran : la fiche
-// descend un peu en s'effaçant.
-const PLAIN_OUT_MS = 220;
-const PLAIN_OUT_DROP = 48;
 // Le téléphone simulé quand la disposition « Téléphone » est demandée sur un grand écran.
 const PHONE_FRAME = { w: 390, h: 844, statusBar: 47 };
-// Une fermeture interrompue par une autre ouverture (huitième passe) : son calque de retour s'efface
-// en ce temps-là — ou disparaît d'un coup, presque arrivé (`GHOST_SNAP_AT` du trajet).
-const GHOST_FADE_MS = 80;
-const GHOST_SNAP_AT = 0.85;
 
 /* ─── Le mouvement (sixième passe, 10/10/2026) ────────────────────────────────
  *
@@ -387,276 +397,32 @@ const GHOST_SNAP_AT = 0.85;
  *    celle du doigt qui lâche la fiche, ou celle de l'ouverture qu'elle interrompt.
  */
 
-/** Le moteur du trajet : la fenêtre transformée (compositeur), ou l'ancienne découpe animée. */
-type Engine = "transform" | "clip";
+/*
+ * Le moteur du trajet, son rythme et ses outils sont ceux des vraies fiches depuis leur passage en
+ * production (DECISIONS.md §61, `src/lib/sheetMorph/`) : ce qui est réglé ici est ce qui tourne là-bas.
+ * La maquette ne garde que ce qui n'est qu'à elle — sa scène simulée, l'ancien moteur (`clip`) et les
+ * durées fixes, pour comparer.
+ */
 /** Le rythme : le ressort d'iOS selon la distance, ou des durées fixes sur une courbe choisie. */
 type PaceMode = "apple" | "fixed";
-/**
- * L'appareil dont on imite le comportement : son ressort (l'ordinateur plus vif), ses gestes (le
- * doigt sur le téléphone et l'iPad, le clavier sur l'ordinateur).
- */
-type Profile = "phone" | "ipad" | "desktop";
+type Engine = MorphEngine;
+type Profile = MotionProfile;
 type Pace = { mode: PaceMode; ease: Ease; openMs: number; closeMs: number; engine: Engine; profile: Profile };
-
-/** Une transformation de calque (origine en haut à gauche) : translation puis échelle uniforme. */
-type Tf = { tx: number; ty: number; s: number };
-/** Les rayons visibles des quatre coins : haut gauche, haut droit, bas droit, bas gauche. */
-type Corners = [number, number, number, number];
-/** Tout ce que le trajet montre à un instant : la fenêtre, ses coins, les deux images et leurs opacités. */
-type Pose = { box: Box; corners: Corners; bd: Tf; poster: Tf; bdOpacity: number; posterOpacity: number };
-/**
- * Un mouvement : la progression spatiale `q` (0 → 1, un ressort lancé peut dépasser un rien) au
- * temps donné, sa vitesse en progression par seconde, et sa durée réelle.
- */
-type Motion = { duration: number; q: (ms: number) => number; v: (ms: number) => number; label: string };
-
-const IDENTITY: Tf = { tx: 0, ty: 0, s: 1 };
-/**
- * La réponse du ressort « Apple » selon la distance : 0,22 s pour un trajet nul, 0,34 s pour la
- * diagonale de l'écran. Huitième passe (10/10/2026) : 0,32 → 0,5 s se lisait « trop lent » sur
- * l'iPhone, même variable — un ressort amorti critique de réponse 0,5 s met ~740 ms à se poser.
- */
-const APPLE_RESPONSE = { min: 0.22, max: 0.34 };
-/** L'ordinateur : le même ressort, 20 % plus vif à distance égale. */
-const DESKTOP_RESPONSE_RATIO = 0.8;
-/** La fermeture : le même ressort, plus vif (0,75 jusqu'à la huitième passe). */
-const CLOSE_RESPONSE_RATIO = 0.7;
-/** « Posé » : à moins d'un demi-pixel de l'arrivée, pour de bon. */
-const SETTLE_PX = 0.5;
-/** Les vitesses de départ prises au doigt ou à l'ouverture, bornées (progression par seconde). */
-const MAX_START_VELOCITY = 25;
-/**
- * Le contenu part quand le trajet en est là — en distance, pas en temps.
- *
- * 0,6 en sixième passe : avec le ressort amorti, 60 % du trajet est couvert en ~100 ms, et la
- * colonne (logo, infos, Lire, synopsis) se posait à sa place pendant que l'image volait encore —
- * double exposition sur l'accueil au bureau, texte sur la bannière en mouvement au téléphone (vu
- * en capture le 10/10/2026). À 90 %, l'image est pour l'œil arrivée : le bloc de 220 ms se pose
- * avec la fin du ressort, comme un contenu qui apparaît dans une vue déjà en place.
- */
-const REVEAL_AT = 0.9;
-// Les fiches d'une personne : une montée simple, sans trajet ni ressort à régler.
-const PERSON_RISE = { duration: 300, easing: "cubic-bezier(0.32, 0.72, 0, 1)" };
-
-const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
-const lerp = (a: number, b: number, q: number) => a + (b - a) * q;
-/** 0 avant `e0`, 1 après `e1`, une marche douce entre les deux. */
-function smooth(e0: number, e1: number, x: number): number {
-  const t = clamp((x - e0) / (e1 - e0), 0, 1);
-  return t * t * (3 - 2 * t);
-}
-const lerpBox = (a: Box, b: Box, q: number): Box => ({ x: lerp(a.x, b.x, q), y: lerp(a.y, b.y, q), w: lerp(a.w, b.w, q), h: lerp(a.h, b.h, q) });
-const lerpTf = (a: Tf, b: Tf, q: number): Tf => ({ tx: lerp(a.tx, b.tx, q), ty: lerp(a.ty, b.ty, q), s: lerp(a.s, b.s, q) });
-const lerpCorners = (a: Corners, b: Corners, q: number): Corners => [0, 1, 2, 3].map((i) => Math.max(0, lerp(a[i], b[i], q))) as Corners;
-const uniformCorners = (r: number): Corners => [r, r, r, r];
-const tfCss = (t: Tf) => `translate(${t.tx.toFixed(2)}px, ${t.ty.toFixed(2)}px) scale(${t.s.toFixed(5)})`;
-
-/** La transformation qui fait couvrir `into` à un calque posé sur `at`, proportions gardées. */
-function coverTf(at: Box, into: Box): Tf {
-  const s = Math.max(into.w / Math.max(1, at.w), into.h / Math.max(1, at.h));
-  return { tx: into.x + into.w / 2 - (s * at.w) / 2 - at.x, ty: into.y + into.h / 2 - (s * at.h) / 2 - at.y, s };
-}
-
-/** Le chemin d'un trajet en pixels : les centres qui se déplacent, plus la moitié de l'écart des diagonales. */
-function travelOf(a: Box, b: Box): number {
-  const centre = Math.hypot(b.x + b.w / 2 - (a.x + a.w / 2), b.y + b.h / 2 - (a.y + a.h / 2));
-  return centre + Math.abs(Math.hypot(b.w, b.h) - Math.hypot(a.w, a.h)) / 2;
-}
-
-/**
- * Le ressort amorti critique d'UIKit et de SwiftUI (`dampingFraction: 1`), lancé à la vitesse `v0`.
- * Forme exacte, pas d'intégration : x(t) = 1 + (−1 + (v0 − ω)t)·e^(−ωt), ω = 2π / réponse. Sa durée
- * est le temps qu'il met à rester à moins de `SETTLE_PX` de l'arrivée sur un trajet de `travelPx`.
- */
-function criticalSpring(response: number, v0: number, travelPx: number): Motion {
-  const w = (2 * Math.PI) / response;
-  const at = (ms: number) => {
-    const t = ms / 1000;
-    return 1 + (-1 + (v0 - w) * t) * Math.exp(-w * t);
-  };
-  const speed = (ms: number) => {
-    const t = ms / 1000;
-    return Math.exp(-w * t) * (v0 - w * (v0 - w) * t);
-  };
-  const px = Math.max(1, travelPx);
-  let last = 0;
-  for (let ms = 0; ms <= 3000; ms += 1) if (Math.abs(1 - at(ms)) * px >= SETTLE_PX) last = ms;
-  const duration = Math.max(17, last + 1);
-  return {
-    duration,
-    q: (ms) => (ms >= duration ? 1 : at(Math.max(0, ms))),
-    v: (ms) => (ms >= duration ? 0 : speed(Math.max(0, ms))),
-    label: `ressort amorti, réponse ${response.toFixed(2).replace(".", ",")} s`,
-  };
-}
-
-/** Une courbe de Bézier CSS, en fonction : Newton, puis la dichotomie si Newton ne converge pas. */
-function cubicBezier(x1: number, y1: number, x2: number, y2: number): (x: number) => number {
-  const bx = (t: number) => ((1 - 3 * x2 + 3 * x1) * t + (3 * x2 - 6 * x1)) * t * t + 3 * x1 * t;
-  const by = (t: number) => ((1 - 3 * y2 + 3 * y1) * t + (3 * y2 - 6 * y1)) * t * t + 3 * y1 * t;
-  const dx = (t: number) => 3 * (1 - 3 * x2 + 3 * x1) * t * t + 2 * (3 * x2 - 6 * x1) * t + 3 * x1;
-  return (x) => {
-    if (x <= 0) return 0;
-    if (x >= 1) return 1;
-    let t = x;
-    for (let i = 0; i < 8; i++) {
-      const err = bx(t) - x;
-      if (Math.abs(err) < 1e-6) return by(t);
-      const d = dx(t);
-      if (Math.abs(d) < 1e-6) break;
-      t -= err / d;
-    }
-    let lo = 0;
-    let hi = 1;
-    t = x;
-    for (let i = 0; i < 30; i++) {
-      if (bx(t) < x) lo = t;
-      else hi = t;
-      t = (lo + hi) / 2;
-    }
-    return by(t);
-  };
-}
-
-/** L'ancien « Ressort Apple » à durée fixe (amortissement 0,86), comme fonction de 0 → 1. */
-let springShapeCache: ((p: number) => number) | null = null;
-function springShape(): (p: number) => number {
-  if (springShapeCache) return springShapeCache;
-  const samples = simulateSpring(0, 1, toSpring(1, 0.86));
-  const end = samples[samples.length - 1].t || 1;
-  springShapeCache = (p) => {
-    const t = clamp(p, 0, 1) * end;
-    let i = 1;
-    while (i < samples.length - 1 && samples[i].t < t) i++;
-    const a = samples[i - 1];
-    const b = samples[i];
-    return lerp(a.x, b.x, b.t > a.t ? (t - a.t) / (b.t - a.t) : 1);
-  };
-  return springShapeCache;
-}
-
-/** Une durée fixe sur l'une des trois courbes, pour comparer au ressort. */
-function fixedMotion(ease: Ease, ms: number): Motion {
-  const f = ease === "spring" ? springShape() : ease === "emphasized" ? cubicBezier(0.2, 0, 0, 1) : cubicBezier(0.33, 1, 0.68, 1);
-  const q = (t: number) => (t >= ms ? 1 : f(Math.max(0, t) / ms));
-  return {
-    duration: ms,
-    q,
-    v: (t) => (q(t + 4) - q(Math.max(0, t - 4))) * (1000 / 8),
-    label: `durée fixe, ${ease === "spring" ? "ressort" : ease === "emphasized" ? "accentuée" : "décélération douce"}`,
-  };
-}
-
-/**
- * La réponse du ressort pour ce trajet : la distance rapportée à la diagonale de l'écran (jamais en
- * pixels bruts — une affiche à mi-hauteur se comporte pareil sur un téléphone, un iPad et un 27
- * pouces), plus vive d'un cinquième sur un ordinateur.
- */
-function appleResponse(from: Box, to: Box, stage: { W: number; H: number }, profile: Profile): number {
-  const n = clamp(travelOf(from, to) / Math.max(1, Math.hypot(stage.W, stage.H)), 0, 1);
-  return lerp(APPLE_RESPONSE.min, APPLE_RESPONSE.max, n) * (profile === "desktop" ? DESKTOP_RESPONSE_RATIO : 1);
-}
 
 /** `v0` : une fermeture retournée en ouverture garde sa vitesse (négative : elle allait encore vers l'affiche). */
 function openMotion(pace: Pace, from: Box, to: Box, stage: { W: number; H: number }, v0 = 0): Motion {
-  if (pace.mode === "fixed") return fixedMotion(pace.ease, pace.openMs);
-  return criticalSpring(appleResponse(from, to, stage, pace.profile), clamp(v0, -MAX_START_VELOCITY, MAX_START_VELOCITY), travelOf(from, to));
+  return pace.mode === "fixed" ? fixedMotion(pace.ease, pace.openMs) : appleOpenMotion(from, to, stage, pace.profile, v0);
 }
 
 function closeMotion(pace: Pace, from: Box, to: Box, stage: { W: number; H: number }, v0: number): Motion {
-  if (pace.mode === "fixed") return fixedMotion(pace.ease, pace.closeMs);
-  return criticalSpring(
-    CLOSE_RESPONSE_RATIO * appleResponse(from, to, stage, pace.profile),
-    clamp(v0, -MAX_START_VELOCITY, MAX_START_VELOCITY),
-    travelOf(from, to),
-  );
+  return pace.mode === "fixed" ? fixedMotion(pace.ease, pace.closeMs) : appleCloseMotion(from, to, stage, pace.profile, v0);
 }
 
-/** Les instants échantillonnés d'un mouvement : au moins 60, une par image à 120 Hz au-delà, la dernière à l'arrivée exacte. */
-function sampleMotion(m: Motion): { offset: number; q: number }[] {
-  const n = Math.min(120, Math.max(60, Math.ceil(m.duration / (1000 / 120))));
-  return Array.from({ length: n + 1 }, (_, i) => ({ offset: i / n, q: i === n ? 1 : m.q((i / n) * m.duration) }));
-}
+/** Les fonctions pures du mouvement, pour les tests : le ressort, sa réponse selon l'appareil, la vitesse du doigt. */
+export const sheetMotionForTests = { criticalSpring, appleResponse, openMotion, closeMotion, releaseVelocity, sampleMotion, timeAt, REVEAL_AT };
 
-/** Le premier instant (en ms) où le trajet atteint `q`. */
-function timeAt(samples: { offset: number; q: number }[], duration: number, q: number): number {
-  const hit = samples.find((x) => x.q >= q);
-  return (hit?.offset ?? 1) * duration;
-}
-
-/**
- * Les images clés du trajet pour chaque calque. Moteur « transform » : la fenêtre, posée sur `base`,
- * est translatée et étirée jusqu'à la boîte du moment ; son contenu est contre-étiré à l'identique,
- * si bien que les images gardent leurs proportions et leur netteté ; les coins, en unités locales de
- * la fenêtre, se recalculent pour rester ronds à l'écran (piste à part : un rayon ne passe pas par le
- * compositeur, et ne doit pas en écarter la transformation). Moteur « clip » : la fenêtre couvre la
- * scène et se découpe, comme avant la sixième passe.
- */
-function morphTracks(poseAt: (q: number) => Pose, samples: { offset: number; q: number }[], base: Box, stage: { W: number; H: number }, engine: Engine) {
-  const win: Keyframe[] = [];
-  const radius: Keyframe[] = [];
-  const inner: Keyframe[] = [];
-  const bd: Keyframe[] = [];
-  const poster: Keyframe[] = [];
-  for (const { offset, q } of samples) {
-    const p = poseAt(q);
-    const b = p.box;
-    if (engine === "transform") {
-      const sx = Math.max(1e-3, b.w / Math.max(1, base.w));
-      const sy = Math.max(1e-3, b.h / Math.max(1, base.h));
-      win.push({ offset, transform: `translate(${(b.x - base.x).toFixed(2)}px, ${(b.y - base.y).toFixed(2)}px) scale(${sx.toFixed(5)}, ${sy.toFixed(5)})` });
-      inner.push({ offset, transform: `scale(${(1 / sx).toFixed(5)}, ${(1 / sy).toFixed(5)}) translate(${(-b.x).toFixed(2)}px, ${(-b.y).toFixed(2)}px)` });
-      const h = p.corners.map((c) => `${(c / sx).toFixed(2)}px`).join(" ");
-      const v = p.corners.map((c) => `${(c / sy).toFixed(2)}px`).join(" ");
-      radius.push({ offset, borderRadius: `${h} / ${v}` });
-    } else {
-      win.push({ offset, clipPath: insetClip(b, stage.W, stage.H, p.corners.map((c) => `${c.toFixed(2)}px`).join(" ")) });
-    }
-    bd.push({ offset, transform: tfCss(p.bd), opacity: p.bdOpacity });
-    poster.push({ offset, transform: tfCss(p.poster), opacity: p.posterOpacity });
-  }
-  return { win, radius, inner, bd, poster };
-}
-
-/** L'horloge des animations — celle que `startTime` attend. */
-function clockNow(): number {
-  const c = typeof document !== "undefined" ? document.timeline?.currentTime : null;
-  return typeof c === "number" ? c : performance.now();
-}
-
-/** Deux images plus tard : le montage de React et sa mise en page sont peints, le départ ne perd pas sa première image. */
-function afterTwoFrames(fn: () => void) {
-  const raf =
-    typeof window.requestAnimationFrame === "function"
-      ? window.requestAnimationFrame.bind(window)
-      : (cb: FrameRequestCallback) => window.setTimeout(() => cb(performance.now()), 16);
-  raf(() => raf(() => fn()));
-}
-
-/** Les calques qui vont bouger, promus avant le départ et rendus après : pas de création de calque à la première image. */
-function promote(els: (HTMLElement | null | undefined)[]): () => void {
-  const list = els.filter((e): e is HTMLElement => !!e);
-  for (const el of list) el.style.willChange = "transform, opacity";
-  return () => {
-    for (const el of list) el.style.willChange = "";
-  };
-}
-
-/**
- * Le style d'une affiche d'où une fiche part et où elle revient : cachée par l'opacité, et sans
- * transition sur l'opacité (neuvième passe).
- *
- * La règle de base `button:not(:disabled)` (globals.css) fait passer l'opacité de tout bouton en
- * 150 ms. Rendue au relais, l'affiche du téléphone remontait donc de 0 à 1 pendant que le calque du
- * retour s'effaçait par-dessus en 120 ms : un instant, deux images à moitié transparentes sur le fond
- * d'encre — le « mini clignotement » plus foncé vu par Louis sur iPhone (mesuré sous WebKit : carte à
- * 0,92, calque déjà à 0). Et une affiche qui s'allume par une transition au moment d'un appui, c'est
- * ce que WebKit lit comme un contenu révélé au survol : il garde alors le `click`. Seules la
- * transformation (l'enfoncement au doigt) et l'ombre restent animées.
- */
-function posterStyle(hidden: boolean): CSSProperties {
-  return { opacity: hidden ? 0 : undefined, transitionProperty: "transform, box-shadow" };
-}
+// Les fiches d'une personne : une montée simple, sans trajet ni ressort à régler.
+const PERSON_RISE = { duration: 300, easing: "cubic-bezier(0.32, 0.72, 0, 1)" };
 
 /**
  * Une affiche de la maquette, servie au relâchement du doigt comme les cartes de la vraie appli
@@ -684,55 +450,6 @@ function MockPoster({ k, register, hidden, onOpen, className, children }: {
   );
 }
 
-/**
- * Le `click` qui suit une fermeture servie au relâchement du doigt (le geste de la bannière) est
- * avalé : la fiche, déjà sans pointeur, le laissait tomber sur ce qu'il y a dessous — une affiche,
- * un bouton de la maquette. Un seul, et seulement dans la fenêtre où il arrive.
- */
-function swallowStrayClick(ms = 500): void {
-  let timer = 0;
-  const done = () => {
-    document.removeEventListener("click", stop, true);
-    window.clearTimeout(timer);
-  };
-  const stop = (e: MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    done();
-  };
-  document.addEventListener("click", stop, true);
-  timer = window.setTimeout(done, ms);
-}
-
-/** Démarre ensemble des animations créées en pause : un même `startTime`, une même première image. */
-function startTogether(anims: Animation[]): number {
-  const t0 = clockNow();
-  for (const a of anims) {
-    if ("startTime" in a) a.startTime = t0;
-    else (a as Partial<Animation>).play?.();
-  }
-  return t0;
-}
-
-/** Le profil de l'appareil, deviné : survol et pointeur fin → ordinateur ; tactile et large → iPad ; sinon téléphone. */
-function detectProfile(): Profile {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "desktop";
-  if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) return "desktop";
-  return Math.min(window.innerWidth, window.innerHeight) >= 700 ? "ipad" : "phone";
-}
-
-/** La vitesse du doigt au relâché (px/s, vers le bas positive), sur ses 100 dernières millisecondes. */
-function releaseVelocity(moves: { t: number; y: number }[]): number {
-  if (moves.length < 2) return 0;
-  const last = moves[moves.length - 1];
-  const first = moves.find((m) => last.t - m.t <= 100) ?? moves[0];
-  const dt = last.t - first.t;
-  return dt > 0 ? ((last.y - first.y) / dt) * 1000 : 0;
-}
-
-/** Les fonctions pures du mouvement, pour les tests : le ressort, sa réponse selon l'appareil, la vitesse du doigt. */
-export const sheetMotionForTests = { criticalSpring, appleResponse, openMotion, closeMotion, releaseVelocity, sampleMotion, timeAt, REVEAL_AT };
-
 function boxIn(el: Element, root: DOMRect): Box {
   const r = el.getBoundingClientRect();
   return { x: r.left - root.left, y: r.top - root.top, w: r.width, h: r.height };
@@ -756,33 +473,6 @@ function sourceOnScreen(src: HTMLElement, root: HTMLElement): boolean {
     clip(el.getBoundingClientRect());
   }
   return Math.max(0, box.r - box.l) * Math.max(0, box.b - box.t) >= area / 2;
-}
-
-/** La découpe qui ne laisse voir que `b` d'un calque de `W` × `H` — animable d'une place à l'autre. */
-function insetClip(b: Box, W: number, H: number, radius: string): string {
-  return `inset(${b.y}px ${W - b.x - b.w}px ${H - b.y - b.h}px ${b.x}px round ${radius})`;
-}
-
-/** Le décalage vertical d'une transformation calculée (`matrix(…)`, `matrix3d(…)`) ou écrite (`translateY(…)`). */
-function translateYOf(transform: string): number {
-  const m = /^matrix(3d)?\((.+)\)$/.exec(transform);
-  if (m) {
-    const v = m[2].split(",").map(Number);
-    return (m[1] ? v[13] : v[5]) || 0;
-  }
-  const y = /translateY\((-?[\d.]+)px\)/.exec(transform);
-  return y ? Number(y[1]) : 0;
-}
-
-/** L'opacité où en est un élément, animations comprises — 1 quand le navigateur n'en dit rien (jsdom). */
-function opacityNow(el: Element | null): number {
-  if (!el) return 1;
-  const v = parseFloat(getComputedStyle(el).opacity);
-  return Number.isFinite(v) ? v : 1;
-}
-
-function place(el: HTMLElement, b: Box) {
-  Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${b.w}px`, height: `${b.h}px` });
 }
 
 const PROFILE_LABEL: Record<Profile, string> = { phone: "Téléphone", ipad: "iPad", desktop: "Ordinateur" };
@@ -1467,13 +1157,6 @@ type CloseRun = {
   start: Box;
   handover: boolean;
 };
-
-/** L'échelle où en est un élément, animations comprises (`matrix(a, …)`) — 1 quand le navigateur n'en dit rien. */
-function scaleOf(el: Element): number {
-  const m = /^matrix\(([^,]+),/.exec(getComputedStyle(el).transform);
-  const a = m ? Number(m[1]) : NaN;
-  return Number.isFinite(a) && a > 0 ? a : 1;
-}
 
 /**
  * Pose la fenêtre du trajet pour un moteur : sur la boîte de base (transform), ou sur toute la scène

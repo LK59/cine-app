@@ -530,6 +530,14 @@ between them. Every UI bug found on 2026-09-16 lived in the wiring, never in a p
   `usePointerCapture` and nowhere else.
 - `cinemaClose` is the only way out, and only one of its `history.back()` is ever in flight.
 
+Title sheets (the phone sheet, both desktop sheets, the TMDB sheet) also carry `useSheetMorph`
+(DECISIONS.md §61): the poster touched becomes the sheet's visual, and the sheet flies back into it.
+It owns their entry and exit — none of them keeps a CSS exit of its own — and a close returns the
+address at once: a clone of the sheet (`.sheet-morph-clone`) plays the exit in a layer inserted just
+before it, so the home answers taps during the flight. Where the sheet came from is the last press
+on something carrying an image, noted at the capture phase (`sheetMorph/source.ts`) — a new card
+needs nothing to be a source; a card that isn't a button declares itself with `data-sheet-source`.
+
 Four rules, each of which cost a real failure:
 
 1. **A different title is a different sheet.** Give it a `key`. A reused instance freezes

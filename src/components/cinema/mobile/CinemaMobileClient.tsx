@@ -919,17 +919,19 @@ function PosterRowInner<T extends { title: string; posterUrl: string | null; add
   return (
     <MobileRow label={label} onSeeAll={seeAll === undefined ? undefined : () => openSeeAll(seeAll)} trackRef={track}>
       {items.map((item) => (
-        <button
+        // Servie au relâchement du doigt (`useTap`) : juste après un défilement, ou pendant le retour
+        // d'une fiche qui se ferme (DECISIONS.md §61), iOS garde parfois le premier `click` — il
+        // fallait toucher deux fois l'affiche qu'on venait de refermer.
+        <TapButton
           key={itemId(item)}
-          type="button"
           // Ce que la fiche va demander part dès que le doigt se pose — voir `prefetchTitleSheet`.
-          onPointerDown={() => prefetchLibraryItem(item)}
-          onClick={() => onSelect(item)}
+          onPress={() => prefetchLibraryItem(item)}
+          onTap={() => onSelect(item)}
           className={`${POSTER_WIDTH} pressable relative shrink-0 overflow-hidden rounded-lg`}
         >
           <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized sizes="(max-width: 640px) 112px, 128px" />
           {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} />}
-        </button>
+        </TapButton>
       ))}
     </MobileRow>
   );
@@ -969,10 +971,10 @@ const DiscoveryRow = memo(function DiscoveryRow({
   return (
     <MobileRow label={label} eyebrow={eyebrow} trackRef={track}>
       {items.map((item) => (
-        <button
+        // Au relâchement du doigt, comme les autres rangées — voir `PosterRowInner`.
+        <TapButton
           key={`${item.type}-${item.tmdbId}`}
-          type="button"
-          onClick={() => onSelect(item)}
+          onTap={() => onSelect(item)}
           className={`${POSTER_WIDTH} pressable relative shrink-0 overflow-hidden rounded-lg`}
         >
           <PosterImage src={item.poster} alt={item.title} subtle unoptimized sizes="(max-width: 640px) 112px, 128px" />
@@ -984,7 +986,7 @@ const DiscoveryRow = memo(function DiscoveryRow({
               <Plus size={12} />
             </span>
           )}
-        </button>
+        </TapButton>
       ))}
     </MobileRow>
   );

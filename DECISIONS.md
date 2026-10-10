@@ -2047,3 +2047,115 @@ Ses appelants :
 dans `ExperimentalPlayerHost.test.tsx`.
 
 **Décidé le 10/10/2026.**
+
+## 61. L'ouverture d'une fiche part de l'affiche touchée, et la fermeture y retourne
+
+**Règle.** L'affiche qu'on touche devient le visuel de la fiche, et la fiche y revient en se
+fermant :
+- **téléphone** : l'affiche devient la bannière 16:9 pendant que la carte monte du bas ;
+- **bureau et iPad** (mise en page large) : l'affiche grandit jusqu'au visuel plein écran,
+  l'accueil recule de 2 % derrière la première fiche.
+
+La colonne (logo, infos, Lire, synopsis) arrive d'un seul bloc à 90 % du trajet : 160 ms, 8 px de
+montée. Ce qui est derrière la fiche s'assombrit avec le trajet.
+
+**Le rythme.** Celui d'UIKit : un ressort amorti critique, sans rebond.
+
+| | Réponse |
+|---|---|
+| Ouverture | 0,22 s pour un trajet nul → 0,34 s pour la diagonale de l'écran, selon la distance rapportée à l'écran |
+| Bureau (pointeur fin) | ×0,8 |
+| Fermeture | ×0,7 |
+
+La durée réelle est le temps de se poser à un demi-pixel près : ~400 ms pour une affiche à
+mi-écran au téléphone, ~280 ms pour la fermeture. Une fermeture lancée au doigt part à la vitesse
+du doigt ; une fermeture qui coupe une ouverture, à la vitesse de celle-ci.
+
+**Les trois façons de se fermer, et quand.**
+
+| Cas | Fermeture |
+|---|---|
+| L'affiche d'origine est encore visible à moitié au moins | retour vers elle |
+| Elle n'est plus à l'écran (rangée défilée, fiche du dessous défilée) | la fiche descend de 48 px en s'effaçant (220 ms) |
+| Ce que la fiche découvre n'est pas dessiné (`useSheetBehind` sans `useRouteBehind`) | l'échange d'un coup, comme avant |
+
+La croix, le bouton Retour, Échap et le glissement vers le bas font la même fermeture.
+
+**Rien ne vole quand :**
+- la fiche est montée par un retour (`arrivedByBack`) ;
+- elle est ouverte sans appui récent (un lien, un rechargement, une adresse écrite) ;
+- « Réduire les animations » est demandé : un fondu de 200 ms, rien qui se déplace.
+
+**Pourquoi.** Mis au point en neuf passes sur la page « Tests animations » (lot H), d'après un
+iPhone et un Mac. Ce que chaque passe a corrigé est resté dans la forme du code :
+- **le compositeur seulement** : la découpe animée (`clip-path`) passait par le fil principal, « un peu
+  moins fluide que le reste de l'iPhone » sans qu'on sache dire où. La fenêtre est translatée et
+  étirée, son contenu contre-étiré, en images clés échantillonnées une fois (≥ 60) ;
+- **le contenu à 90 %** : à 60 %, il se posait pendant que l'image volait encore ;
+- **l'affiche sans transition d'opacité** : la règle de base des boutons la faisait remonter en
+  150 ms sous la fenêtre qui s'efface, un clignotement plus foncé à la fin de chaque fermeture.
+
+**La fermeture rend l'adresse aussitôt.** Au premier instant d'une fermeture, la fiche est copiée
+(`cloneNode`, son défilement compris) dans le calque du trajet. C'est la copie qui redescend et
+s'efface pendant que l'image revole ; la vraie fiche se cache et rend l'adresse. Retenue le temps
+de l'animation, l'adresse gardait le titre : une affiche touchée pendant le retour empilait une
+entrée que la fermeture différée défaisait ensuite. Ainsi, l'accueil répond dès que la fermeture
+commence :
+- une autre affiche touchée s'ouvre tout de suite, le retour en vol s'efface en 80 ms ;
+- l'affiche qui revient, retouchée, retourne la fermeture en ouverture d'où elle en est.
+
+Le `click` qui suit une fermeture au doigt est avalé : la fiche n'ayant déjà plus de pointeur, il
+tombait sur l'affiche dessous.
+
+**D'où part une fiche.** Une fiche s'ouvre par l'adresse et se monte un tour plus tard, sans savoir
+ce qui l'a ouverte. Le dernier appui est donc noté une fois pour toutes, à la capture
+(`src/lib/sheetMorph/source.ts`) :
+- un doigt relâché sans avoir glissé ;
+- un clic ;
+- Entrée.
+
+Il compte seulement sur un élément qui porte une image, et la fiche qui se monte dans la seconde le
+reprend. Toutes les rangées, grilles, résultats, rangées de saga et filmographies en profitent
+sans rien porter. Au retour, une carte redessinée entre-temps est retrouvée par l'adresse de son
+image.
+
+**Le calque.** Le trajet et l'assombrissement vivent dans un calque inséré juste avant la fiche
+dans `body`, au même plan. La colonne de la fiche passe donc au-dessus de l'image qui vole, et la
+fiche du dessous d'une cascade passe dessous. Le fond de la fiche est transparent là où l'image
+arrive (la bande de la bannière au téléphone, tout l'écran au bureau). Géométriquement, la fenêtre
+ne sort pas de cette bande pendant que la carte monte.
+
+**Ce que la fiche marque dans son DOM** :
+- `data-sheet-photo` : son visuel ;
+- `data-sheet-veil` : ses voiles, copiés dans la fenêtre — posés à leur place, ils assombrissaient
+  l'accueil hors de la fenêtre ;
+- `data-sheet-content` : la colonne ;
+- `data-sheet-settle` : le flou localisé du bureau, posé une fois arrivé ;
+- `data-sheet-glass` : le verre de la croix, coupé pendant le mouvement.
+
+L'accueil du bureau porte `data-sheet-home`.
+
+**Ce qui diffère exprès.**
+- **Téléphone / bureau** : la bannière et la carte qui monte d'un côté, le visuel plein écran et
+  l'accueil qui recule de l'autre.
+- **La fiche TMDB** n'a son visuel qu'avec la réponse du serveur. Sans elle au montage, elle entre
+  comme avant, et seule sa fermeture revole vers l'affiche.
+- **La fiche personne** garde sa montée simple : il n'y a pas d'affiche à faire devenir une bannière.
+- **Le banc** garde sa scène simulée, l'ancien moteur (`clip`) et les durées fixes pour comparer,
+  mais joue les mêmes fonctions (`src/lib/sheetMorph/motion.ts`, `dom.ts`).
+
+**Porteurs.**
+- `src/lib/sheetMorph/motion.ts` : le ressort, les poses, les images clés.
+- `src/lib/sheetMorph/dom.ts` : les lectures et écritures groupées, `posterStyle`,
+  `swallowStrayClick`, `visibleFraction`.
+- `src/lib/sheetMorph/source.ts` : le geste, la source, sa visibilité au retour.
+- `useSheetMorph` (`src/lib/sheetMorph/useSheetMorph.ts`).
+
+Ses appelants : `CinemaMobileDetail`, `CinemaMovieDetail`, `CinemaSeriesDetail`,
+`PlayerDiscoverSheet`. Le lot H de `IntroLots.tsx` importe le moteur.
+
+**Tests.** `sheetMorph-motion.test.ts`, `sheetMorph-source.test.tsx`, `sheetMorph-hook.test.tsx`,
+`sheetMorph-desktop-sheets.test.tsx`, `cinema-mobile-detail-keys.test.tsx`, `sheet-exit.test.tsx`
+et `decisions-partagees.test.ts` (un seul crochet, aucune sortie CSS propre).
+
+**Décidé le 10/10/2026.**

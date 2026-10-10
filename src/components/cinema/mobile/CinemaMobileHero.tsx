@@ -395,7 +395,8 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
               {/* Celles de la position de repos aussi, pendant un raccord : la case d'arrivée était vide
                   jusqu'au raccord, et son affiche et son logo montaient à neuf à cet instant. */}
               {Math.abs(i - trackPos) > 1 && Math.abs(i - (index + pad)) > 1 ? null : short ? (
-                <div className="flex cursor-pointer gap-4 rounded-2xl bg-surface/70 p-3 shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
+                // `data-sheet-source` : la fiche part de cette affiche, et y revient (DECISIONS.md §61).
+                <div data-sheet-source="" className="flex cursor-pointer gap-4 rounded-2xl bg-surface/70 p-3 shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
                   <div className="w-24 shrink-0 overflow-hidden rounded-lg">
                     <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === trackPos} eager sizes="120px" />
                   </div>
@@ -428,7 +429,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   </div>
                 </div>
               ) : (
-                <div className="relative cursor-pointer overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
+                <div data-sheet-source="" className="relative cursor-pointer overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
                   <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === trackPos} eager sizes="100vw" />
                   <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                     {item.logoUrl ? (

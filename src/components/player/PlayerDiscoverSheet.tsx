@@ -6,7 +6,8 @@ import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Eye, EyeOff, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack } from "@/lib/cinemaRoute";
+import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack, useRouteBehind, useSheetBehind } from "@/lib/cinemaRoute";
+import { useSheetMorph } from "@/lib/sheetMorph/useSheetMorph";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { useTitleWatched } from "@/lib/useTitleWatched";
@@ -117,6 +118,26 @@ export function PlayerDiscoverSheet({
   // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
   // `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());
+  /**
+   * L'affiche touchée devient le visuel, et la fiche y retourne (DECISIONS.md §61) — comme les fiches
+   * de bibliothèque, dont rien dans le geste ne la distingue (un titre de saga sur trois ouvre
+   * celle-ci). Le visuel n'arrive qu'avec la réponse : sans elle au montage, la fiche entre comme
+   * avant, et seule la fermeture revole vers l'affiche. La sortie se fait d'un coup quand ce qu'elle
+   * recouvre n'est pas dessiné — la même règle que `sheetExitMs` dans PlayerShell.
+   */
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const behind = useRouteBehind();
+  const swapsInPlace = useSheetBehind() && !(behind !== null && (behind.film !== null || behind.serie !== null));
+  const morph = useSheetMorph({
+    layout: isMobile ? "phone" : "desktop",
+    rootRef: containerRef,
+    imageRef: isMobile ? bannerRef : containerRef,
+    active: true,
+    leaving,
+    revealed,
+    ready: !!data?.backdrop,
+    instantExit: swapsInPlace,
+  });
 
   // Le focus part sur la première action, jamais sur le résumé : c'est ce qu'on est venu faire.
   //
@@ -160,11 +181,13 @@ export function PlayerDiscoverSheet({
   // tout le reste dans une colonne qui défile.
   const mobileSheet = (
     <div
+      ref={containerRef}
       className={`phone-sheet-frame safe-x fixed inset-x-0 overflow-y-auto overscroll-contain bg-ink ring-1 ring-white/10 ${
         // Exactement les classes des fiches de bibliothèque : dans une rangée de saga, un titre
         // sur trois ouvre celle-ci et les autres ouvrent l'autre, et rien dans le geste ne dit
         // laquelle — les deux doivent donc entrer et sortir de la même façon.
-        sheetMotionClass({ swipe, leaving, revealed })
+        // La sortie est celle de la copie (`useSheetMorph`) ; l'entrée, celle du trajet quand il y en a un.
+        sheetMotionClass({ swipe, leaving, revealed: revealed || morph.handlesEntry, out: "" })
       }`}
       style={{
         zIndex: 48,
@@ -189,6 +212,7 @@ export function PlayerDiscoverSheet({
           475 px de haut pour 390 px de fenêtre couchée — un écran entier d'image avant d'avoir
           appris qu'il y a un titre dessous. */}
       <div
+        ref={bannerRef}
         className="relative aspect-video w-full"
         {...swipe.handlers}
         // `touch-action: none` : le navigateur ne doit pas réclamer ce geste pour son propre
@@ -197,11 +221,11 @@ export function PlayerDiscoverSheet({
         style={{ maxHeight: "52svh", touchAction: "none" }}
       >
         {data?.backdrop ? (
-          <FadeInImg src={data.backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <FadeInImg src={data.backdrop} alt="" data-sheet-photo="" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="absolute inset-0 bg-surface" />
         )}
-        <div className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
+        <div data-sheet-veil="" className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
         <button
           type="button"
           // Dans la poignée, pas de la poignée — voir `NOT_THE_HANDLE`.
@@ -211,6 +235,7 @@ export function PlayerDiscoverSheet({
           // La croix en verre liquide, comme celle des fiches de titre (DECISIONS.md §45).
           ref={liquidButtonRef}
           data-liquid
+          data-sheet-glass=""
           className="nav-glass absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-white"
         >
           <X size={18} />
@@ -236,7 +261,7 @@ export function PlayerDiscoverSheet({
           à sa place — le chevauchement lui-même est voulu, c'est ce qui pose le titre dans le
           fondu de l'image. */}
       {data && (
-        <div className="relative -mt-6 px-4 pb-16">
+        <div data-sheet-content="" className="relative -mt-6 px-4 pb-16">
           <h1 className="mb-3 font-display text-2xl font-bold leading-tight text-white">{data.title}</h1>
 
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
@@ -318,7 +343,7 @@ export function PlayerDiscoverSheet({
     <div
       ref={containerRef}
       className={`fixed inset-0 overflow-hidden bg-ink ${
-        leaving ? "animate-fade-out" : revealed ? "" : "animate-fade-in"
+        revealed || morph.handlesEntry ? "" : "animate-fade-in"
       }`}
       // Le rail passe par-dessus tout : la fiche lui réserve sa bande, comme celles de la
       // bibliothèque. La variable vaut 0 hors du lecteur.
@@ -330,9 +355,10 @@ export function PlayerDiscoverSheet({
       }}
     >
       {data?.backdrop && (
-        <FadeInImg src={data.backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <FadeInImg src={data.backdrop} alt="" data-sheet-photo="" className="absolute inset-0 h-full w-full object-cover" />
       )}
       <div
+        data-sheet-settle=""
         // Grand écran seulement : sur téléphone cette fiche arrive en glissant, souvent au milieu
         // d'une cascade acteur → film → acteur, et un flou sur la moitié de l'écran se recalcule
         // à chaque image du mouvement. Les deux voiles suffisent à la lecture du texte.
@@ -343,8 +369,8 @@ export function PlayerDiscoverSheet({
           WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
         }}
       />
-      <div className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
-      <div className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
+      <div data-sheet-veil="" className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
+      <div data-sheet-veil="" className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
 
       <button
         onClick={requestClose}
@@ -379,7 +405,7 @@ export function PlayerDiscoverSheet({
       {data && (
         <div className="scrollbar-thin relative h-full overflow-y-auto">
           <div className={SECTION_CLASS}>
-            <div style={COLUMN_STYLE} className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving, revealed })}`}>
+            <div data-sheet-content="" style={COLUMN_STYLE} className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: false, revealed: revealed || morph.handlesEntry })}`}>
               <h1 className="font-display text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl">
                 {data.title}
               </h1>

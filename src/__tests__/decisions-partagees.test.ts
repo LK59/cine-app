@@ -949,3 +949,31 @@ describe("un seul défilement guidé (§50)", () => {
     }
   });
 });
+
+describe("une seule ouverture de fiche (§61)", () => {
+  // L'affiche touchée devient le visuel de la fiche, et la fiche y retourne : quatre fiches, un seul
+  // crochet. Une fiche qui réécrirait sa propre sortie (`sheet-out`, un fondu de sortie sur sa racine)
+  // la jouerait par-dessus celle de la copie — deux mécanismes de sortie, ce que la règle du cycle de
+  // vie des fiches interdit.
+  const SHEETS = [
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+  ];
+
+  it.each(SHEETS)("%s passe par useSheetMorph, sans sortie CSS à elle", (f) => {
+    const src = lire(f);
+    expect(src).toMatch(/useSheetMorph\(\{/);
+    expect(src).not.toMatch(/"sheet-out"/);
+    expect(src).not.toMatch(/\? "animate-fade-out"/);
+  });
+
+  it("la maquette du banc joue le moteur des vraies fiches, sans copie à elle", () => {
+    const src = lire("src/components/animlab/IntroLots.tsx");
+    expect(src).toMatch(/from "@\/lib\/sheetMorph\/motion"/);
+    for (const fn of ["criticalSpring", "appleResponse", "morphTracks", "sampleMotion", "coverTf"]) {
+      expect(src, fn).not.toMatch(new RegExp(`function ${fn}\\(`));
+    }
+  });
+});

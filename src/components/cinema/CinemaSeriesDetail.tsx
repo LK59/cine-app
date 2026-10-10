@@ -11,7 +11,8 @@ import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/componen
 import { CinemaCastRow } from "@/components/cinema/CinemaCastRow";
 import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
 import { detailColumnMotion } from "@/lib/sheetMotion";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
+import { useSheetMorph } from "@/lib/sheetMorph/useSheetMorph";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, useSheetBehind, useRouteBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
@@ -147,7 +148,23 @@ export function CinemaSeriesDetail({
   // n'ouvre rien, il se découvre — voir `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());
   const sheetBehind = useSheetBehind();
-  const { closing, requestClose } = useDelayedClose(onClose, sheetBehind ? 0 : 220);
+  /**
+   * La carte touchée devient le visuel plein écran, et la fiche y retourne (DECISIONS.md §61) — la
+   * même décision que la fiche du téléphone et la fiche TMDB. La fermeture rend l'adresse aussitôt :
+   * c'est une copie de la fiche qui s'efface pendant que l'image revole vers l'affiche. Sans fiche
+   * dessinée derrière (une fiche TMDB, une personne), l'échange se fait d'un coup, comme avant.
+   */
+  const behindIsDrawn = useRouteBehind() !== null;
+  const { closing, requestClose } = useDelayedClose(onClose, 0);
+  const morph = useSheetMorph({
+    layout: "desktop",
+    rootRef: containerRef,
+    imageRef: containerRef,
+    active: !underneath,
+    leaving: closing,
+    revealed,
+    instantExit: sheetBehind && !behindIsDrawn,
+  });
 
   /**
    * Refermer au doigt : la poignée du haut, écrite une fois pour les deux fiches du bureau.
@@ -265,7 +282,7 @@ export function CinemaSeriesDetail({
   return createPortal(
     <div
       ref={containerRef}
-      className={`fixed inset-0 overflow-hidden bg-ink ${closing ? "animate-fade-out" : revealed ? "" : "animate-fade-in"}`}
+      className={`fixed inset-0 overflow-hidden bg-ink ${revealed || morph.handlesEntry ? "" : "animate-fade-in"}`}
       // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
       // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
@@ -274,9 +291,10 @@ export function CinemaSeriesDetail({
       style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)", ...gripStyle }}
     >
       {item.backdropUrl && (
-        <FadeInImg src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <FadeInImg src={item.backdropUrl} alt="" data-sheet-photo="" className="absolute inset-0 h-full w-full object-cover" />
       )}
       <div
+        data-sheet-settle=""
         className="absolute inset-x-0 bottom-0 backdrop-blur-md"
         style={{
           height: "45%",
@@ -286,8 +304,8 @@ export function CinemaSeriesDetail({
       />
       {/* Deux voiles à étapes explicites plutôt qu'un dégradé en trois arrêts : voir
           CinemaDetailLayout, où la raison de chaque pourcentage est écrite. */}
-      <div className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
-      <div className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
+      <div data-sheet-veil="" className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
+      <div data-sheet-veil="" className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
 
       {/* Posée avant le bouton Retour, et non après : les deux sont au même rang, et le dernier
           dessiné reçoit les appuis — la poignée traverse toute la largeur, le bouton doit rester
@@ -314,8 +332,10 @@ export function CinemaSeriesDetail({
         <div data-snap-section className={SECTION_CLASS}>
         <div
           key={item.sonarrId}
+          data-sheet-content=""
           style={COLUMN_STYLE}
-          className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: closing, revealed })}`}
+          // La sortie est celle de la copie (`useSheetMorph`), plus celle de la colonne.
+          className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: false, revealed: revealed || morph.handlesEntry })}`}
         >
           {item.logoUrl && !logoErrored ? (
             <CinemaLogo

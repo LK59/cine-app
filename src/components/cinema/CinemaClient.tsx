@@ -1194,7 +1194,8 @@ export function CinemaClient() {
   return createPortal(
     // `--player-rail` est posée par PlayerShell : la bande repliée du rail est réservée ici,
     // parce qu'un écran porté dans document.body n'hérite d'aucun padding de la coquille.
-    <div className="fixed inset-0 animate-fade-in overflow-hidden bg-ink" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
+    // `data-sheet-home` : l'accueil que la première fiche fait reculer d'un rien (DECISIONS.md §61).
+    <div data-sheet-home="" className="fixed inset-0 animate-fade-in overflow-hidden bg-ink" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
       {/* La sortie et la loupe ont quitté les coins de l'écran : elles sont dans le rail, à
           gauche, avec le reste de la navigation. Deux boutons flottants de moins par-dessus les
           affiches, et un seul endroit où l'on va chercher où aller. */}
