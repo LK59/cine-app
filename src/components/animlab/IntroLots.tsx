@@ -6,7 +6,7 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { ArrowLeft, Check, Play, Plus, RotateCcw, Video, X } from "lucide-react";
+import { ArrowLeft, Bookmark, Check, Play, Plus, RotateCcw, Video, X } from "lucide-react";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
@@ -303,18 +303,39 @@ type Timing = { easing: string; duration: number };
 /** Une place dans la scène, en pixels depuis son coin haut gauche. */
 type Box = { x: number; y: number; w: number; h: number };
 
-/** Ce que la fiche doit savoir de la carte touchée pour en partir, et pour y revenir. */
-type Opening = { title: CinemaMovie; key: string; poster: string; radius: number; mode: Mode };
+/**
+ * Ce que la fiche doit savoir de la carte touchée pour en partir, et pour y revenir. `outside` : un
+ * titre hors bibliothèque, ouvert dans la variante de la fiche découverte (« Demander » au lieu de
+ * « Lire »), comme PlayerDiscoverSheet.
+ */
+type Opening = { title: CinemaMovie; key: string; poster: string; radius: number; mode: Mode; outside?: boolean };
+type OpenTitle = (o: Omit<Opening, "mode">) => void;
 type Register = (key: string) => (el: HTMLElement | null) => void;
+/**
+ * Une entrée de la pile des fiches (cinquième passe) : une fiche de titre, ou celle d'une personne.
+ * La pile se lit comme la vraie : chaque fiche couvre celle d'en dessous sans la remplacer, et seule
+ * celle du dessus écoute (« a screen on its way out has no opinion »).
+ */
+type Entry = { id: number; kind: "title"; opening: Opening } | { id: number; kind: "person"; name: string };
 
-// Les largeurs des vraies cartes : `CARD_WIDTH` de CinemaClient, `POSTER_WIDTH` de CinemaMobileClient.
+// Les largeurs des vraies cartes : `CARD_WIDTH` de CinemaClient, `POSTER_WIDTH` de CinemaMobileClient,
+// et celle des affiches de CinemaCollectionRow dans une fiche.
 const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
 const PHONE_POSTER_WIDTH = "w-28 sm:w-32";
-// La cascade de la colonne, resserrée pour un trajet de 250 ms : un pas de 30 ms, chaque ligne
-// en 250 ms. À 50 ms et 420 ms, elle durait deux fois le trajet et la fiche paraissait lente.
-const STAGGER_MS = 30;
-const LINE_MS = 250;
-// L'assombrissement de l'accueil derrière la fiche, et le recul de celui du bureau.
+const SHEET_POSTER_WIDTH = "w-24 sm:w-28 md:w-32";
+/*
+ * Le contenu de la fiche (cinquième passe) : d'un seul bloc par défaut — opacité et 8 px de montée,
+ * en 220 ms —, lancé à 60 % du trajet pour arriver avec la bannière. La cascade d'avant (logo, puis
+ * infos, puis « Lire », puis le synopsis) se lisait « une chose après l'autre, pas tout à fait
+ * fluide » sur l'iPhone. Elle reste en option, resserrée : 15 ms par ligne, 150 ms en tout au plus.
+ */
+const REVEAL_MS = 220;
+const REVEAL_AT = 0.6;
+const CASCADE_STEP_MS = 15;
+const CASCADE_TOTAL_MS = 150;
+// L'effacement du contenu à la fermeture, depuis l'opacité où il en est.
+const CONTENT_OUT_MS = 100;
+// L'assombrissement de ce qui est derrière la fiche, et le recul de l'accueil du bureau.
 const DIM = 0.6;
 const HOME_SCALE = 0.98;
 /*
@@ -325,16 +346,21 @@ const HOME_SCALE = 0.98;
  * La fermeture n'est plus l'exact inverse (quatrième passe) : l'affiche ne revenait que sur le
  * dernier tiers, et la bannière « redevenait l'affiche » d'un coup. Les deux fondus s'étirent
  * maintenant sur presque tout le retour et se chevauchent — l'affiche paraît de 25 à 85 %, la
- * bannière et ses voiles s'effacent de 35 à 95 %.
+ * bannière et ses voiles s'effacent de 35 à 95 %. Ils partent de l'opacité où en est chacun : une
+ * fermeture pendant l'ouverture repart de là, sans saut.
  */
 const POSTER_OUT: Keyframe[] = [{ opacity: 1, easing: "ease-in" }, { opacity: 0, offset: 0.35 }, { opacity: 0 }];
 const BACKDROP_IN: Keyframe[] = [{ opacity: 0 }, { opacity: 0, offset: 0.1, easing: "ease-out" }, { opacity: 1, offset: 0.5 }, { opacity: 1 }];
-const POSTER_IN: Keyframe[] = [{ opacity: 0 }, { opacity: 0, offset: 0.25, easing: "ease-in-out" }, { opacity: 1, offset: 0.85 }, { opacity: 1 }];
-const BACKDROP_OUT: Keyframe[] = [{ opacity: 1 }, { opacity: 1, offset: 0.35, easing: "ease-in-out" }, { opacity: 0, offset: 0.95 }, { opacity: 0 }];
+const posterIn = (from: number): Keyframe[] => [{ opacity: from }, { opacity: from, offset: 0.25, easing: "ease-in-out" }, { opacity: 1, offset: 0.85 }, { opacity: 1 }];
+const backdropOut = (from: number): Keyframe[] => [{ opacity: from }, { opacity: from, offset: 0.35, easing: "ease-in-out" }, { opacity: 0, offset: 0.95 }, { opacity: 0 }];
 // Le relais final de la fermeture : la vraie carte reparaît sous le calque du trajet, qui s'efface
 // par-dessus en ce temps-là — plus de bascule de visibilité qui se voie (le logo de la grande
 // bannière du téléphone, absent de l'affiche du trajet, surgissait d'un coup).
 const HANDOVER_MS = 120;
+// La sortie sans trajet, quand l'affiche d'où la fiche était partie n'est plus à l'écran : la fiche
+// descend un peu en s'effaçant.
+const PLAIN_OUT_MS = 220;
+const PLAIN_OUT_DROP = 48;
 // Le téléphone simulé quand la disposition « Téléphone » est demandée sur un grand écran.
 const PHONE_FRAME = { w: 390, h: 844, statusBar: 47 };
 
@@ -357,6 +383,26 @@ function easingFor(ease: Ease, duration: number): Timing {
 function boxIn(el: Element, root: DOMRect): Box {
   const r = el.getBoundingClientRect();
   return { x: r.left - root.left, y: r.top - root.top, w: r.width, h: r.height };
+}
+
+/**
+ * L'affiche d'origine est-elle encore à l'écran ? Au moins la moitié de sa surface dans la scène et
+ * dans chaque conteneur qui défile autour d'elle (`data-alab-scroll` : la fiche, sa rangée) — une
+ * affiche sortie de sa rangée ou de la fiche défilée ne reçoit pas de trajet de retour.
+ */
+function sourceOnScreen(src: HTMLElement, root: HTMLElement): boolean {
+  const r = src.getBoundingClientRect();
+  const area = r.width * r.height;
+  if (area <= 0) return false;
+  let box = { l: r.left, t: r.top, r: r.right, b: r.bottom };
+  const clip = (c: DOMRect) => {
+    box = { l: Math.max(box.l, c.left), t: Math.max(box.t, c.top), r: Math.min(box.r, c.right), b: Math.min(box.b, c.bottom) };
+  };
+  clip(root.getBoundingClientRect());
+  for (let el = src.parentElement?.closest<HTMLElement>("[data-alab-scroll]"); el; el = el.parentElement?.closest<HTMLElement>("[data-alab-scroll]") ?? null) {
+    clip(el.getBoundingClientRect());
+  }
+  return Math.max(0, box.r - box.l) * Math.max(0, box.b - box.t) >= area / 2;
 }
 
 /** La découpe qui ne laisse voir que `b` d'un calque de `W` × `H` — animable d'une place à l'autre. */
@@ -383,6 +429,13 @@ function translateYOf(transform: string): number {
   return y ? Number(y[1]) : 0;
 }
 
+/** L'opacité où en est un élément, animations comprises — 1 quand le navigateur n'en dit rien (jsdom). */
+function opacityNow(el: Element | null): number {
+  if (!el) return 1;
+  const v = parseFloat(getComputedStyle(el).opacity);
+  return Number.isFinite(v) ? v : 1;
+}
+
 function place(el: HTMLElement, b: Box) {
   Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${b.w}px`, height: `${b.h}px` });
 }
@@ -392,7 +445,8 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
   // 250 ms (quatrième passe) : à 520 ms, « joli, mais il faut absolument plus rapide ».
   const [duration, setDuration] = useState(250);
   const [ease, setEase] = useState<Ease>("spring");
-  const [stagger, setStagger] = useState(true);
+  // D'un seul bloc par défaut (cinquième passe) ; la cascade, resserrée, reste à comparer.
+  const [stagger, setStagger] = useState(false);
   const [layout, setLayout] = useState<Layout>("auto");
   const [reduced, setReduced] = useState(prefersReduced);
   const [staged, setStaged] = useState(false);
@@ -401,7 +455,7 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
   return (
     <section className="space-y-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
       <p className="text-sm text-muted">
-        {"Une maquette de l'accueil et des vraies fiches — visuel et logo, pas d'affiche. Au bureau, l'affiche touchée s'agrandit jusqu'à l'écran entier en devenant le visuel du film, puis la colonne (logo, infos, accroche, synopsis, menu) paraît ligne par ligne. Au téléphone, l'affiche d'une rangée ou de la grande bannière devient la bannière 16:9 de la fiche, pendant que la carte monte du bas. Fermer (Retour, la croix, Échap, ou la bannière tirée vers le bas au téléphone, comme dans la vraie fiche) refait le chemin à l'envers, jusqu'à la carte."}
+        {"Une maquette de l'accueil et des vraies fiches — visuel et logo, pas d'affiche. Au bureau, l'affiche touchée s'agrandit jusqu'à l'écran entier en devenant le visuel du film ; au téléphone, elle devient la bannière 16:9 pendant que la carte monte du bas. Le contenu arrive d'un seul bloc avec la bannière. Dans la fiche, « Dans la même saga » ouvre une fiche par-dessus (la dernière affiche est hors bibliothèque : variante « Demander »), et un nom de la distribution ouvre la fiche de la personne — d'où l'on peut rouvrir un film, à n'importe quelle profondeur. Fermer (Retour, la croix, Échap, ou la bannière tirée vers le bas au téléphone) ne ferme que la fiche du dessus, et revient dans l'affiche d'où elle est partie si elle est encore à l'écran."}
       </p>
       <Row label="Courbe">
         <Chip on={ease === "spring"} onClick={() => setEase("spring")}>Ressort Apple</Chip>
@@ -433,6 +487,28 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
   );
 }
 
+/** Ce que chaque fiche de la pile reçoit de la scène. */
+type SheetCommon = {
+  depth: number;
+  /** Une fiche au-dessus d'elle : rendue, assombrie, inerte — sans touche ni pointeur. */
+  covered: boolean;
+  phone: boolean;
+  framed: boolean;
+  rootRef: RefObject<HTMLDivElement | null>;
+  sources: RefObject<Map<string, HTMLElement>>;
+  timing: Timing;
+  /** La clé de l'affiche d'où part la fiche au-dessus, cachée le temps qu'elle soit ouverte. */
+  hiddenKey: string | null;
+  register: Register;
+  /** Les titres de ses rangées (saga, filmographie). */
+  related: CinemaMovie[];
+  onOpenTitle: OpenTitle;
+  onOpenPerson: (name: string) => void;
+  /** La fermeture commence : la scène n'ouvre plus rien tant qu'elle n'est pas finie. */
+  onCloseStart: () => void;
+  onClosed: () => void;
+};
+
 function SheetStage({
   titles, timing, stagger, layout, reduced, onExit,
 }: {
@@ -450,7 +526,11 @@ function SheetStage({
   const framed = phone && !narrow;
   const rootRef = useRef<HTMLDivElement>(null);
   const sources = useRef(new Map<string, HTMLElement>());
-  const [open, setOpen] = useState<Opening | null>(null);
+  const [stack, setStack] = useState<Entry[]>([]);
+  const nextId = useRef(1);
+  // Fermetures en cours : un appui pendant l'une d'elles n'ouvre rien. La fiche qui part n'a plus
+  // d'avis, et une fiche ouverte au même instant se serait glissée sous son retour.
+  const closingCount = useRef(0);
 
   // Les visuels demandés dès l'ouverture de la maquette : sans eux, le calque du trajet grandissait
   // sur un visuel pas encore arrivé, et l'affiche s'effaçait sur du vide.
@@ -467,30 +547,53 @@ function SheetStage({
     else sources.current.delete(key);
   };
 
-  const openFrom = (o: Omit<Opening, "mode">) => {
-    if (open) return;
+  const openTitle: OpenTitle = (o) => {
+    if (closingCount.current > 0) return;
+    const top = stack[stack.length - 1];
+    // Une affiche qui est le titre même de la fiche du dessus ne la rouvre pas par-dessus elle.
+    if (top?.kind === "title" && top.opening.title.radarrId === o.title.radarrId && !!top.opening.outside === !!o.outside) return;
     const el = sources.current.get(o.key);
-    setOpen({ ...o, mode: reduced || !el ? "fade" : "flip" });
+    const entry: Entry = { id: nextId.current++, kind: "title", opening: { ...o, mode: reduced || !el ? "fade" : "flip" } };
+    setStack((s) => [...s, entry]);
+  };
+  const openPerson = (name: string) => {
+    if (closingCount.current > 0) return;
+    const entry: Entry = { id: nextId.current++, kind: "person", name };
+    setStack((s) => [...s, entry]);
+  };
+  const closeStart = () => {
+    closingCount.current += 1;
+  };
+  // Appelée par une fiche une fois sa sortie jouée : elle seule quitte la pile, par son identité.
+  const closed = (id: number) => {
+    closingCount.current = Math.max(0, closingCount.current - 1);
+    setStack((s) => s.filter((e) => e.id !== id));
   };
 
-  // Appelée par la fiche une fois sa sortie jouée.
-  const closed = () => setOpen(null);
-
+  const keyOf = (e: Entry | undefined) => (e?.kind === "title" ? e.opening.key : null);
+  const empty = stack.length === 0;
   useEffect(() => {
-    if (open) return; // Échap ferme d'abord la fiche, qui l'écoute elle-même
+    if (!empty) return; // Échap ferme d'abord la fiche du dessus, qui l'écoute elle-même
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onExit();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onExit]);
+  }, [empty, onExit]);
+
+  /** Les titres d'une fiche : les autres du catalogue, décalés selon la profondeur pour varier. */
+  const relatedFor = (exclude: number | null, depth: number) => {
+    const others = titles.filter((m) => m.radarrId !== exclude);
+    const shift = others.length ? (depth * 2) % others.length : 0;
+    return others.slice(shift).concat(others.slice(0, shift)).slice(0, 7);
+  };
 
   const content = (
     <>
       {phone ? (
-        <PhoneHome titles={titles} framed={framed} hiddenKey={open?.key ?? null} register={register} onOpen={openFrom} />
+        <PhoneHome titles={titles} framed={framed} hiddenKey={keyOf(stack[0])} register={register} onOpen={openTitle} />
       ) : (
-        <DesktopHome titles={titles} hiddenKey={open?.key ?? null} register={register} onOpen={openFrom} />
+        <DesktopHome titles={titles} hiddenKey={keyOf(stack[0])} register={register} onOpen={openTitle} />
       )}
       {/* En haut à droite, la pilule tombait sur la croix de la fiche du téléphone : elle descend
           au milieu du bas, là où ni l'accueil ni la fiche simulés n'ont de commande. */}
@@ -502,19 +605,31 @@ function SheetStage({
       >
         <X size={14} /> Quitter la maquette
       </button>
-      {open && (
-        <MockSheet
-          key={open.title.radarrId}
-          opening={open}
-          phone={phone}
-          framed={framed}
-          rootRef={rootRef}
-          sources={sources}
-          timing={timing}
-          stagger={stagger}
-          onClosed={closed}
-        />
-      )}
+      {stack.map((e, i) => {
+        const common: SheetCommon = {
+          depth: i,
+          covered: i < stack.length - 1,
+          phone,
+          framed,
+          rootRef,
+          sources,
+          timing,
+          hiddenKey: keyOf(stack[i + 1]),
+          register,
+          related: relatedFor(e.kind === "title" ? e.opening.title.radarrId : null, i + 1),
+          onOpenTitle: openTitle,
+          onOpenPerson: openPerson,
+          onCloseStart: closeStart,
+          onClosed: () => closed(e.id),
+        };
+        // La clé est l'entrée et non le titre : un même film peut revenir plus haut dans la pile,
+        // et une autre fiche est une autre instance (règle 1 du cycle de vie des fiches).
+        return e.kind === "title" ? (
+          <MockSheet key={e.id} entryId={e.id} opening={e.opening} stagger={stagger} {...common} />
+        ) : (
+          <MockPersonSheet key={e.id} entryId={e.id} name={e.name} reduced={reduced} {...common} />
+        );
+      })}
     </>
   );
 
@@ -547,7 +662,7 @@ type HomeProps = {
   titles: CinemaMovie[];
   hiddenKey: string | null;
   register: Register;
-  onOpen: (o: Omit<Opening, "mode">) => void;
+  onOpen: OpenTitle;
 };
 
 function DesktopHome({ titles, hiddenKey, register, onOpen }: HomeProps) {
@@ -557,7 +672,7 @@ function DesktopHome({ titles, hiddenKey, register, onOpen }: HomeProps) {
     { name: "Ma liste", items: [...titles].reverse() },
   ];
   return (
-    <div data-alab-home className="scrollbar-thin absolute inset-0 overflow-y-auto bg-ink pb-10">
+    <div data-alab-home data-alab-scroll className="scrollbar-thin absolute inset-0 overflow-y-auto bg-ink pb-10">
       {hero && (
         <div className="relative h-[58%] min-h-80 w-full overflow-hidden">
           <img src={tmdbResize(hero.backdropUrl, "w1280") ?? ""} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -574,7 +689,7 @@ function DesktopHome({ titles, hiddenKey, register, onOpen }: HomeProps) {
       {rows.map((row, r) => (
         <section key={row.name} className="px-8 pt-3 sm:px-16">
           <h2 className="text-lg font-semibold text-white font-display">{row.name}</h2>
-          <div className="scrollbar-none -mx-3 flex gap-3 overflow-x-auto px-3 py-3">
+          <div data-alab-scroll className="scrollbar-none -mx-3 flex gap-3 overflow-x-auto px-3 py-3">
             {row.items.map((m) => {
               const key = `bureau-${r}-${m.radarrId}`;
               return (
@@ -609,6 +724,7 @@ function PhoneHome({ titles, framed, hiddenKey, register, onOpen }: HomeProps & 
   return (
     <div
       data-alab-home
+      data-alab-scroll
       className="scrollbar-none absolute inset-0 overflow-y-auto overflow-x-hidden bg-ink pb-24"
       style={{ paddingTop: framed ? PHONE_FRAME.statusBar : "env(safe-area-inset-top, 0px)" }}
     >
@@ -646,7 +762,7 @@ function PhoneHome({ titles, framed, hiddenKey, register, onOpen }: HomeProps & 
       {rows.map((row, r) => (
         <section key={row.name} className="pt-3">
           <h2 className="px-4 text-base font-semibold text-white font-display">{row.name}</h2>
-          <div className="scrollbar-none flex gap-2 overflow-x-auto px-4 py-2">
+          <div data-alab-scroll className="scrollbar-none flex gap-2 overflow-x-auto px-4 py-2">
             {row.items.map((m) => {
               const key = `rangee-${r}-${m.radarrId}`;
               return (
@@ -669,6 +785,56 @@ function PhoneHome({ titles, framed, hiddenKey, register, onOpen }: HomeProps & 
   );
 }
 
+/**
+ * Une rangée d'affiches dans une fiche — « Dans la même saga », ou la filmographie d'une personne —,
+ * à l'image de CinemaCollectionRow : mêmes largeurs, même pastille « Pas encore là » pour un titre
+ * hors bibliothèque. `markLastOutside` : la dernière affiche ouvre la variante découverte.
+ */
+function SheetPosterRow({
+  label, items, entryId, phone, hiddenKey, register, onOpen, markLastOutside,
+}: {
+  label: string;
+  items: CinemaMovie[];
+  entryId: number;
+  phone: boolean;
+  hiddenKey: string | null;
+  register: Register;
+  onOpen: OpenTitle;
+  markLastOutside: boolean;
+}) {
+  const t = useT();
+  if (items.length === 0) return null;
+  return (
+    <section className="w-full">
+      <h2 className={phone ? "mb-1 text-base font-semibold text-white font-display" : "mb-1 text-sm font-medium text-muted"}>{label}</h2>
+      <div data-alab-scroll className={`scrollbar-none flex overflow-x-auto overflow-y-hidden py-3 ${phone ? "-mx-4 gap-2 px-4" : "gap-3"}`}>
+        {items.map((m, i) => {
+          const outside = markLastOutside && i === items.length - 1;
+          // Unique dans toute la pile : l'entrée, le titre, et la variante.
+          const key = `fiche-${entryId}-${m.radarrId}${outside ? "-hors" : ""}`;
+          return (
+            <button
+              key={key}
+              ref={register(key)}
+              type="button"
+              onClick={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8, outside })}
+              className={`${phone ? PHONE_POSTER_WIDTH : SHEET_POSTER_WIDTH} relative shrink-0 overflow-hidden rounded-lg bg-surface shadow-lg shadow-black/40`}
+              style={{ visibility: hiddenKey === key ? "hidden" : undefined }}
+            >
+              <img src={m.posterUrl ?? ""} alt={m.title} className="block aspect-[2/3] w-full object-cover" />
+              {outside && (
+                <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-accent-400 ring-1 ring-accent-400/40">
+                  {t("player.notInLibrary")}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 /** La ligne d'infos des deux fiches : année, note, durée, qualité, genres — dans l'ordre des vraies. */
 function MetaLine({ title, truncateGenres = false }: { title: CinemaMovie; truncateGenres?: boolean }) {
   const t = useT();
@@ -686,6 +852,41 @@ function MetaLine({ title, truncateGenres = false }: { title: CinemaMovie; trunc
   );
 }
 
+/** Les noms de la distribution qu'une fiche propose d'ouvrir : trois au plus, un nom d'exemple sinon. */
+function castOf(title: CinemaMovie): string[] {
+  const names = title.castNames?.filter(Boolean).slice(0, CAST_SHOWN) ?? [];
+  return names.length > 0 ? names : ["Distribution (exemple)"];
+}
+
+/**
+ * Le contenu de la fiche qui paraît : d'un bloc (le même départ, la même durée pour toutes les
+ * lignes — un seul mouvement), ou en cascade resserrée. Partagé par la fiche de titre et celle d'une
+ * personne.
+ */
+function revealContent(items: HTMLElement[], at: number, cascade: boolean, play: (el: Element, f: Keyframe[], o: KeyframeAnimationOptions) => void) {
+  const step = cascade && items.length > 1 ? Math.min(CASCADE_STEP_MS, CASCADE_TOTAL_MS / (items.length - 1)) : 0;
+  items.forEach((el, i) =>
+    play(el, [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], {
+      duration: REVEAL_MS, delay: at + i * step, easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+    }),
+  );
+}
+
+/**
+ * Le contenu qui s'efface à la fermeture, depuis l'opacité où il en est.
+ *
+ * Cinquième passe : partir de `opacity: 1` en dur faisait *reparaître* une ligne pas encore révélée
+ * — fermée vite, la fiche montrait un instant son synopsis, voire « Lire », après la fermeture,
+ * « comme en clignotant ». Lues avant d'annuler les animations d'ouverture, les opacités disent où
+ * chaque ligne en était ; annulées dans la même tâche, rien ne se peint entre les deux.
+ */
+function fadeContentOut(els: HTMLElement[], snapshot: Map<HTMLElement, number>, duration: number) {
+  for (const el of els) {
+    const from = snapshot.get(el) ?? 1;
+    el.animate([{ opacity: from }, { opacity: 0 }], { duration: from > 0 ? duration : 1, easing: "ease-in", fill: "both" });
+  }
+}
+
 /**
  * La fiche simulée, à l'image de CinemaMovieDetail (bureau) et de CinemaMobileDetail (téléphone) :
  * mêmes constantes de mise en page, même logo, mêmes classes — à comparer à une capture.
@@ -697,39 +898,30 @@ function MetaLine({ title, truncateGenres = false }: { title: CinemaMovie; trunc
  * défile ensuite. Rien d'autre ne bouge que la transformation, l'opacité et la découpe, et tout est
  * mesuré une fois au départ.
  *
- * Troisième passe (10/10/2026), d'après les captures de la deuxième :
- * - Les voiles du visuel voyagent *dans* le calque découpé, avec le visuel, à la même échelle — ceux
- *   de la fiche, posés à leur place finale et fondus pendant le trajet, assombrissaient l'accueil
- *   hors de la découpe : la bande sombre au bas de la bannière du téléphone, le fond boueux du bureau.
- * - Les images ne grandissent que d'une échelle uniforme (`coverTransform`) : la découpe suit la
- *   place, l'image la couvre toujours sans être étirée.
- * - Le fondu est court et décalé : l'affiche s'efface sur le premier tiers, le visuel paraît de
- *   10 à 50 % — plus de long passage où les deux se superposent à moitié.
- * - L'accueil s'assombrit derrière la fiche (et recule un peu au bureau), puis revient à la fermeture.
+ * Troisième passe (10/10/2026) : voiles du visuel dans le calque découpé, échelle uniforme, fondu
+ * court et décalé, accueil assombri derrière la fiche.
  *
- * Quatrième passe (10/10/2026) :
- * - 250 ms par défaut, cascade resserrée (voir `STAGGER_MS`).
- * - La fermeture fond la bannière dans l'affiche sur presque tout le retour (`POSTER_IN`,
- *   `BACKDROP_OUT`), et la vraie carte reprend la main sous un dernier fondu (`HANDOVER_MS`).
- * - Au téléphone, la bannière se tire vers le bas comme dans la vraie fiche : le même
- *   `useSwipeToDismiss`, la même poignée, les mêmes coins et la même ombre (`phoneSheetCorner`).
- *   Lâchée au-delà du seuil, la fiche part de là où le doigt l'a laissée — la fermeture reprend
- *   la place mesurée, transformation comprise, sans revenir d'abord en haut.
+ * Quatrième passe (10/10/2026) : 250 ms, fondu étiré à la fermeture et relais sous la vraie carte
+ * (`HANDOVER_MS`), bannière qui se tire vers le bas comme dans la vraie fiche (`useSwipeToDismiss`,
+ * même poignée, mêmes coins), fermeture qui part de là où le doigt l'a laissée.
+ *
+ * Cinquième passe (10/10/2026), d'après l'iPhone :
+ * - Fermer vite ne fait plus clignoter le contenu : toute animation, tout minuteur de l'ouverture
+ *   est annulé au premier instant de la fermeture, et chaque rappel de l'ouverture vérifie qu'aucune
+ *   fermeture n'a commencé (`closingRef`). Le trajet de retour part de là où en est l'aller — la
+ *   découpe, les échelles et les opacités lues au même instant.
+ * - Le contenu arrive d'un seul bloc (`revealContent`).
+ * - Fiches en cascade : sa rangée « Dans la même saga » et sa distribution ouvrent des fiches
+ *   par-dessus. Couverte, elle reste rendue, assombrie par la suivante, inerte. Fermée, la fiche du
+ *   dessus revient dans l'affiche d'où elle est partie si celle-ci est encore à l'écran
+ *   (`sourceOnScreen`) ; sinon elle descend en s'effaçant.
  */
 function MockSheet({
-  opening, phone, framed, rootRef, sources, timing, stagger, onClosed,
-}: {
-  opening: Opening;
-  phone: boolean;
-  framed: boolean;
-  rootRef: RefObject<HTMLDivElement | null>;
-  sources: RefObject<Map<string, HTMLElement>>;
-  timing: Timing;
-  stagger: boolean;
-  onClosed: () => void;
-}) {
+  entryId, opening, stagger, depth, covered, phone, framed, rootRef, sources, timing, hiddenKey, register, related,
+  onOpenTitle, onOpenPerson, onCloseStart, onClosed,
+}: SheetCommon & { entryId: number; opening: Opening; stagger: boolean }) {
   const t = useT();
-  const { title, mode } = opening;
+  const { title, mode, outside } = opening;
   const sheetRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -742,6 +934,8 @@ function MockSheet({
   const homeAnimRef = useRef<Animation | null>(null);
   const closingRef = useRef(false);
   const openTimersRef = useRef<number[]>([]);
+  // Toutes les animations de l'ouverture, pour que la fermeture les arrête d'un coup.
+  const openAnimsRef = useRef<Animation[]>([]);
   // Le flou localisé du bas de la fiche du bureau (`backdrop-blur`) n'est posé qu'une fois le
   // visuel arrivé : un filtre ne doit pas voyager avec un calque qui bouge.
   const [settled, setSettled] = useState(mode === "fade");
@@ -753,6 +947,8 @@ function MockSheet({
   const backdrop = title.backdropUrl ?? "";
   const imageRadius = phone ? "16px 16px 0px 0px" : "0px 0px 0px 0px";
   const sourceRadius = `${opening.radius}px ${opening.radius}px ${opening.radius}px ${opening.radius}px`;
+  // Seule la première fiche fait reculer l'accueil ; celles du dessus passent devant une fiche.
+  const scalesHome = !phone && depth === 0;
 
   /** Toutes les places du trajet, lues d'un coup : la scène, la carte touchée, le visuel de la fiche, la carte du téléphone. */
   const measure = () => {
@@ -783,20 +979,27 @@ function MockSheet({
     imageRef.current?.querySelectorAll<HTMLElement>("[data-alab-veil]").forEach((el) => (el.style.visibility = v));
   };
 
-  /** L'accueil, que le bureau fait reculer d'un rien derrière la fiche. */
+  /** L'accueil, que le bureau fait reculer d'un rien derrière la première fiche. */
   const home = () => rootRef.current?.querySelector<HTMLElement>("[data-alab-home]") ?? null;
 
   useLayoutEffect(() => {
     const sheet = sheetRef.current;
     if (!sheet) return;
-    const anims: Animation[] = [];
+    const anims = openAnimsRef.current;
     const timers = openTimersRef.current;
     const play = (el: Element | null, frames: Keyframe[], opts: KeyframeAnimationOptions) => {
       const a = el?.animate(frames, { fill: "both", ...opts });
       if (a) anims.push(a);
     };
+    // Un rappel de l'ouverture ne s'exécute que tant qu'aucune fermeture n'a commencé.
+    const later = (fn: () => void, ms: number) =>
+      timers.push(
+        window.setTimeout(() => {
+          if (!closingRef.current) fn();
+        }, ms),
+      );
     const cleanup = () => {
-      for (const a of anims) a.cancel();
+      for (const a of anims.splice(0)) a.cancel();
       for (const id of timers.splice(0)) window.clearTimeout(id);
     };
     if (mode === "fade") {
@@ -809,26 +1012,18 @@ function MockSheet({
     const m = measure();
     if (!m) return cleanup;
     const d = timing.duration;
-    // L'accueil s'éteint derrière : la fiche passe devant lui, elle ne le remplace pas. Une courbe
-    // simple et non le ressort, dont le dépassement ferait clignoter l'assombrissement.
+    // Ce qui est derrière s'éteint : la fiche passe devant, elle ne remplace rien. Une courbe simple
+    // et non le ressort, dont le dépassement ferait clignoter l'assombrissement.
     play(dimRef.current, [{ opacity: 0 }, { opacity: DIM }], { duration: d, easing: "cubic-bezier(0.33, 1, 0.68, 1)" });
     const { items, fades } = parts();
-    // Le contenu paraît quand le visuel a fait l'essentiel du chemin : avant, il se lirait sur un
-    // fond encore en mouvement. Plus tard au téléphone : le texte s'y pose sur la carte qui monte, et
-    // ne doit pas flotter sur l'accueil avant qu'elle soit arrivée sous lui.
-    // Sur un trajet de 250 ms, la cascade commence vers la fin du mouvement plutôt qu'au milieu.
-    const reveal = d * (phone ? 0.7 : 0.6);
-    items.forEach((el, i) =>
-      play(el, [{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }], {
-        duration: LINE_MS, delay: reveal + (stagger ? i * STAGGER_MS : 0), easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-      }),
-    );
+    // Le contenu part à 60 % du trajet et arrive avec la bannière, d'un bloc.
+    revealContent(items, d * REVEAL_AT, stagger, play);
     fades.forEach((el) => play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: d * 0.6, delay: d * 0.3, easing: "ease-out" }));
     // Sans remplissage à la fin : la montée finie, c'est le style de la carte qui reprend sa
     // transformation — celle du doigt quand on tire la fiche. Une animation restée « both » la
     // tiendrait à sa place pour toujours.
     play(cardRef.current, [{ transform: `translateY(${m.cardDrop}px)` }, { transform: "none" }], { ...timing, fill: "backwards" });
-    timers.push(window.setTimeout(() => setSettled(true), d + 40));
+    later(() => setSettled(true), d + 40);
 
     const frame = frameRef.current;
     const bd = morphBackdropRef.current;
@@ -845,17 +1040,15 @@ function MockSheet({
       play(poster, [{ transform: "none" }, { transform: coverTransform(m.source, m.target) }], timing);
       play(poster, POSTER_OUT, { duration: d, easing: "linear" });
       // Au bureau, l'accueil recule d'un rien : la profondeur, sans rien déplacer qui se lise.
-      const h = phone ? null : home();
+      const h = scalesHome ? home() : null;
       if (h) {
         homeAnimRef.current = h.animate([{ transform: "none" }, { transform: `scale(${HOME_SCALE})` }], { duration: d, easing: "cubic-bezier(0.2, 0, 0, 1)", fill: "both" });
         anims.push(homeAnimRef.current);
       }
-      timers.push(
-        window.setTimeout(() => {
-          frame.style.display = "none";
-          showSheetImage(true);
-        }, d),
-      );
+      later(() => {
+        frame.style.display = "none";
+        showSheetImage(true);
+      }, d);
     }
     return cleanup;
     // Une fois, à l'ouverture : les réglages ne changent pas pendant qu'une fiche est ouverte, et
@@ -864,41 +1057,82 @@ function MockSheet({
   }, [mode, phone, timing, stagger, sourceRadius, imageRadius]);
 
   const requestClose = () => {
-    if (closingRef.current) return;
+    if (closingRef.current || covered) return;
     closingRef.current = true;
-    // Une fermeture pendant l'ouverture : le relais prévu à l'arrivée (calque du trajet caché, vrai
-    // visuel montré) tomberait au milieu du retour.
-    for (const id of openTimersRef.current.splice(0)) window.clearTimeout(id);
-    setSettled(false);
+    onCloseStart();
     const d = timing.duration;
     const sheet = sheetRef.current;
-    // Lu sur la fiche elle-même : le geste qui vient de la lâcher, ou un retour en place encore en
-    // cours si la croix est touchée juste après.
-    const off = sheet ? translateYOf(getComputedStyle(sheet).transform) : 0;
-    setFrozenOffset(off);
-    if (mode === "fade") {
-      sheet?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
-      cardRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
-      dimRef.current?.animate([{ opacity: DIM }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
-      window.setTimeout(onClosed, 180);
-      return;
-    }
-    // Le contenu s'efface d'abord, d'un coup : la cascade ne se rejoue pas à l'envers en partant.
-    const { items, fades } = parts();
-    for (const el of items) el.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(8px)" }], { duration: 140, easing: "ease-in", fill: "both" });
-    for (const el of fades) el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: d * 0.5, easing: "ease-in", fill: "both" });
-    // L'accueil reprend sa taille avant la mesure : la carte d'arrivée se lit à sa vraie place, pas
-    // à celle de l'accueil reculé — retirée et relancée dans la même tâche, rien ne se peint entre.
-    homeAnimRef.current?.cancel();
-    const m = measure();
     const frame = frameRef.current;
     const bd = morphBackdropRef.current;
     const poster = morphPosterRef.current;
-    const photo = photoRef.current;
-    if (!m || !frame || !bd || !poster || !photo) {
-      window.setTimeout(onClosed, 160);
+    const card = cardRef.current;
+    const dim = dimRef.current;
+    const h = scalesHome ? home() : null;
+    const { items, fades } = parts();
+
+    // 1. Tout lire d'où on en est, *avant* d'arrêter l'ouverture — le doigt, la montée de la carte,
+    //    la découpe et les échelles du trajet, chaque opacité.
+    const off = sheet ? translateYOf(getComputedStyle(sheet).transform) : 0;
+    const cardFrom = card ? translateYOf(getComputedStyle(card).transform) : off;
+    const midOpen = !!frame && frame.style.display !== "none";
+    const now = {
+      clip: midOpen && frame ? getComputedStyle(frame).clipPath : "",
+      bdTransform: midOpen && bd ? getComputedStyle(bd).transform : "",
+      bdOpacity: midOpen ? opacityNow(bd) : 1,
+      posterTransform: midOpen && poster ? getComputedStyle(poster).transform : "",
+      posterOpacity: midOpen ? opacityNow(poster) : 0,
+      dim: opacityNow(dim),
+      home: h ? getComputedStyle(h).transform : "none",
+    };
+    const snapshot = new Map<HTMLElement, number>();
+    for (const el of [...items, ...fades]) snapshot.set(el, opacityNow(el));
+
+    // 2. L'ouverture s'arrête net : plus rien d'elle ne peut révéler une ligne ou basculer un calque.
+    for (const a of openAnimsRef.current.splice(0)) a.cancel();
+    for (const id of openTimersRef.current.splice(0)) window.clearTimeout(id);
+    homeAnimRef.current = null;
+    setSettled(false);
+    setFrozenOffset(off);
+
+    // 3. Le contenu s'efface depuis où il en est ; rien ne se rejoue à l'envers.
+    fadeContentOut(items, snapshot, CONTENT_OUT_MS);
+    fadeContentOut(fades, snapshot, Math.max(CONTENT_OUT_MS, d * 0.5));
+
+    if (mode === "fade") {
+      sheet?.animate([{ opacity: opacityNow(sheet) }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
+      card?.animate([{ opacity: opacityNow(card) }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
+      dim?.animate([{ opacity: now.dim }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
+      window.setTimeout(onClosed, 180);
       return;
     }
+
+    // L'accueil reprend sa taille avant la mesure (l'animation vient d'être annulée) : la carte
+    // d'arrivée se lit à sa vraie place, pas à celle de l'accueil reculé.
+    const m = measure();
+    const src = sources.current.get(opening.key);
+    const root = rootRef.current;
+    const homeBack = () => {
+      // Sans remplissage : à la fin, l'accueil retrouve simplement son état.
+      if (h && now.home !== "none") h.animate([{ transform: now.home }, { transform: "none" }], { ...timing });
+    };
+
+    // L'affiche d'origine n'est plus à l'écran (la rangée a défilé, la fiche du dessous aussi) : pas
+    // de trajet vers un endroit qu'on ne voit pas — la fiche descend un peu en s'effaçant.
+    if (!m || !frame || !bd || !poster || !src || !root || !sourceOnScreen(src, root)) {
+      if (frame) frame.style.display = "none";
+      showSheetImage(true);
+      const out = { duration: PLAIN_OUT_MS, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "both" as const };
+      sheet?.animate([{ opacity: 1, transform: `translateY(${off}px)` }, { opacity: 0, transform: `translateY(${off + PLAIN_OUT_DROP}px)` }], out);
+      card?.animate([{ opacity: 1, transform: `translateY(${cardFrom}px)` }, { opacity: 0, transform: `translateY(${cardFrom + PLAIN_OUT_DROP}px)` }], out);
+      dim?.animate([{ opacity: now.dim }, { opacity: 0 }], out);
+      homeBack();
+      window.setTimeout(() => {
+        if (src) src.style.visibility = "";
+        onClosed();
+      }, PLAIN_OUT_MS);
+      return;
+    }
+
     // Remesuré ici : la fiche du téléphone a pu défiler, la bannière n'est plus forcément en haut.
     place(bd, m.target);
     place(poster, m.source);
@@ -908,27 +1142,25 @@ function MockSheet({
     // Tirée vers le bas, la carte a pris les coins arrondis du geste : le retour part de ceux-là.
     const c = phone ? phoneSheetCorner(off) : 0;
     const fromRadius = phone ? `${c}px ${c}px 0px 0px` : imageRadius;
-    const back = frame.animate([{ clipPath: insetClip(m.target, m.W, m.H, fromRadius) }, { clipPath: insetClip(m.source, m.W, m.H, sourceRadius) }], opts);
-    bd.animate([{ transform: "none" }, { transform: coverTransform(m.target, m.source) }], opts);
-    bd.animate(BACKDROP_OUT, { duration: d, easing: "linear", fill: "both" });
-    poster.animate([{ transform: coverTransform(m.source, m.target) }, { transform: "none" }], opts);
-    poster.animate(POSTER_IN, { duration: d, easing: "linear", fill: "both" });
-    // La carte est mesurée là où le doigt l'a laissée : elle part de ce décalage, et finit sous
-    // l'écran — `cardDrop` compte depuis sa place déplacée.
-    cardRef.current?.animate([{ transform: `translateY(${off}px)` }, { transform: `translateY(${off + m.cardDrop}px)` }], opts);
-    dimRef.current?.animate([{ opacity: DIM }, { opacity: 0 }], { duration: d, easing: "cubic-bezier(0.65, 0, 0.35, 1)", fill: "both" });
-    // Sans remplissage : à la fin, l'accueil retrouve simplement son état, sans animation qui traîne.
-    if (!phone) home()?.animate([{ transform: `scale(${HOME_SCALE})` }, { transform: "none" }], { ...timing });
+    const fromClip = now.clip && now.clip !== "none" ? now.clip : insetClip(m.target, m.W, m.H, fromRadius);
+    const back = frame.animate([{ clipPath: fromClip }, { clipPath: insetClip(m.source, m.W, m.H, sourceRadius) }], opts);
+    bd.animate([{ transform: now.bdTransform && now.bdTransform !== "none" ? now.bdTransform : "none" }, { transform: coverTransform(m.target, m.source) }], opts);
+    bd.animate(backdropOut(now.bdOpacity), { duration: d, easing: "linear", fill: "both" });
+    poster.animate([{ transform: now.posterTransform && now.posterTransform !== "none" ? now.posterTransform : coverTransform(m.source, m.target) }, { transform: "none" }], opts);
+    poster.animate(posterIn(now.posterOpacity), { duration: d, easing: "linear", fill: "both" });
+    // La carte part d'où elle en est (le doigt, ou sa montée interrompue), et finit sous l'écran.
+    card?.animate([{ transform: `translateY(${cardFrom}px)` }, { transform: `translateY(${off + m.cardDrop}px)` }], opts);
+    dim?.animate([{ opacity: now.dim }, { opacity: 0 }], { duration: d, easing: "cubic-bezier(0.65, 0, 0.35, 1)", fill: "both" });
+    homeBack();
     // Le relais : la vraie carte reparaît dessous, et le calque, maintenant superposé à elle, s'efface.
     back.onfinish = () => {
-      const src = sources.current.get(opening.key);
-      if (src) src.style.visibility = "";
+      src.style.visibility = "";
       frame.animate([{ opacity: 1 }, { opacity: 0 }], { duration: HANDOVER_MS, easing: "ease-out", fill: "both" }).onfinish = () => onClosed();
     };
   };
 
   // Le geste de la vraie fiche du téléphone, à l'identique : la bannière pour poignée, la croix
-  // tenue hors de la poignée.
+  // tenue hors de la poignée. Couverte, la fiche ne le reçoit pas.
   const swipe = useSwipeToDismiss(requestClose);
   const dragOffset = frozenOffset ?? (swipe.touched ? swipe.offset : 0);
   const dragStyle = (base: CSSProperties): CSSProperties => ({
@@ -941,7 +1173,9 @@ function MockSheet({
     borderTopRightRadius: phoneSheetCorner(dragOffset),
   });
 
+  // Échap pour la fiche du dessus seulement : deux fiches à l'écoute reculaient de deux sur une touche.
   useEffect(() => {
+    if (covered || closing) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") requestClose();
     };
@@ -949,9 +1183,33 @@ function MockSheet({
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  // Le calque du trajet : sous le contenu de la fiche, au-dessus de l'accueil. Caché hors du FLIP.
-  // Le visuel y emporte une copie de ses voiles, qui grandit avec lui : vue de la carte, la fiche en
-  // miniature ; rien ne s'assombrit hors de la découpe.
+  // Une fiche couverte ou qui part : ni pointeur ni focus (« a screen on its way out has no opinion »).
+  const quiet = covered || closing;
+  const saga = (
+    <SheetPosterRow
+      label="Dans la même saga"
+      items={related}
+      entryId={entryId}
+      phone={phone}
+      hiddenKey={hiddenKey}
+      register={register}
+      onOpen={onOpenTitle}
+      markLastOutside
+    />
+  );
+  const castButtons = castOf(title).map((name) => (
+    <button
+      key={name}
+      type="button"
+      onClick={() => onOpenPerson(name)}
+      className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-white/20"
+    >
+      {name}
+    </button>
+  ));
+
+  // Le calque du trajet : sous le contenu de la fiche, au-dessus de ce qu'elle couvre. Caché hors
+  // du FLIP. Le visuel y emporte une copie de ses voiles, qui grandit avec lui.
   const frame = (
     <div ref={frameRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden bg-ink" style={{ display: "none" }}>
       <div ref={morphBackdropRef} className="absolute overflow-hidden" style={{ transformOrigin: "0 0", opacity: 0 }}>
@@ -968,7 +1226,7 @@ function MockSheet({
       <img ref={morphPosterRef} src={opening.poster} alt="" className="absolute max-w-none object-cover" style={{ transformOrigin: "0 0" }} />
     </div>
   );
-  // L'accueil éteint derrière la fiche, sous tout le reste.
+  // Ce que la fiche couvre, éteint derrière elle, sous tout le reste.
   const dim = <div ref={dimRef} aria-hidden="true" className="pointer-events-none absolute inset-0 bg-ink" style={{ opacity: 0 }} />;
 
   if (!phone) {
@@ -976,7 +1234,13 @@ function MockSheet({
       <>
         {dim}
         {frame}
-        <div ref={sheetRef} className="absolute inset-0 overflow-hidden">
+        <div
+          ref={sheetRef}
+          data-alab-sheet={entryId}
+          inert={quiet}
+          className="absolute inset-0 overflow-hidden"
+          style={{ pointerEvents: quiet ? "none" : undefined }}
+        >
           {/* Le visuel plein écran et ce qui le voile, comme CinemaMovieDetail : le flou localisé du
               bas, puis les deux voiles à étapes de CinemaDetailLayout. */}
           <div ref={imageRef} className="absolute inset-0">
@@ -999,11 +1263,9 @@ function MockSheet({
           >
             <ArrowLeft size={16} /> {t("cinema.back")}
           </button>
-          <div className="scrollbar-thin relative h-full overflow-y-auto">
+          <div data-alab-scroll className="scrollbar-thin relative h-full overflow-y-auto">
             <div className={SECTION_CLASS}>
               <div style={COLUMN_STYLE} className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16`}>
-                {/* Chaque ligne dans son enveloppe, pour la cascade ; celle du logo est une colonne
-                    flexible, comme la colonne qui le porte dans la vraie fiche. */}
                 <div data-alab-stagger className="flex flex-col">
                   {title.logoUrl ? (
                     <CinemaLogo src={title.logoUrl} alt={title.title} surface="sheet" className="mb-1" />
@@ -1024,19 +1286,28 @@ function MockSheet({
                     <CinemaOverview text={title.overview} readMore={t("cinema.readMore")} maxLines={5} onOpen={() => {}} />
                   </div>
                 )}
-                {title.castNames && title.castNames.length > 0 && (
-                  <div data-alab-stagger className="flex items-baseline gap-1.5">
-                    <p className={CAST_CLASS}>
-                      {t("cinema.cast")} {title.castNames.slice(0, CAST_SHOWN).join(", ")}
-                    </p>
-                    {title.castNames.length > CAST_SHOWN && <span className="shrink-0 text-xs font-medium text-muted">+{title.castNames.length - CAST_SHOWN}</span>}
-                  </div>
-                )}
+                <div data-alab-stagger className="flex flex-wrap items-center gap-1.5">
+                  <span className={CAST_CLASS}>{t("cinema.cast")}</span>
+                  {castButtons}
+                </div>
                 <div className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
-                  <MenuRow icon={<Play size={14} fill="currentColor" />} label={t("common.play")} />
-                  {title.trailerKey && <MenuRow icon={<Video size={14} />} label={t("cinema.trailer")} />}
-                  <MenuRow icon={<Check size={14} />} label={t("cinema.markWatched")} />
-                  <MenuRow icon={<Plus size={14} />} label={t("watchlist.statuses.toWatch")} />
+                  {outside ? (
+                    <>
+                      <MenuRow icon={<Plus size={14} />} label={t("player.discover.request")} />
+                      <MenuRow icon={<Bookmark size={14} />} label={t("player.discover.addToList")} />
+                      <MenuRow icon={<Check size={14} />} label={t("player.discover.markWatched")} />
+                    </>
+                  ) : (
+                    <>
+                      <MenuRow icon={<Play size={14} fill="currentColor" />} label={t("common.play")} />
+                      {title.trailerKey && <MenuRow icon={<Video size={14} />} label={t("cinema.trailer")} />}
+                      <MenuRow icon={<Check size={14} />} label={t("cinema.markWatched")} />
+                      <MenuRow icon={<Plus size={14} />} label={t("watchlist.statuses.toWatch")} />
+                    </>
+                  )}
+                </div>
+                <div data-alab-stagger className="pb-10">
+                  {saga}
                 </div>
               </div>
             </div>
@@ -1061,12 +1332,19 @@ function MockSheet({
       {frame}
       <div
         ref={sheetRef}
+        data-alab-sheet={entryId}
+        data-alab-scroll
+        inert={quiet}
         className="scrollbar-none absolute inset-x-0 bottom-0 overflow-y-auto overscroll-contain rounded-t-2xl"
-        style={dragStyle({ top, pointerEvents: closing ? "none" : undefined })}
+        style={dragStyle({ top, pointerEvents: quiet ? "none" : undefined })}
       >
         {/* La poignée, comme dans CinemaMobileDetail : la bannière seule, `touch-action: none` pour
             que le navigateur n'en fasse pas un défilement ; le reste de la fiche défile. */}
-        <div className="relative aspect-video w-full" {...swipe.handlers} style={{ touchAction: "none", maxHeight: framed ? PHONE_FRAME.h * 0.52 : "52svh" }}>
+        <div
+          className="relative aspect-video w-full"
+          {...(covered ? {} : swipe.handlers)}
+          style={{ touchAction: "none", maxHeight: framed ? PHONE_FRAME.h * 0.52 : "52svh" }}
+        >
           <div ref={imageRef} className="absolute inset-0">
             <img ref={photoRef} src={backdrop} alt="" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
             <div data-alab-fade data-alab-veil className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
@@ -1082,6 +1360,8 @@ function MockSheet({
             </button>
           </div>
         </div>
+        {/* Chaque ligne repérée pour l'option « Cascade » ; par défaut toutes partent ensemble, d'un
+            bloc, avec la bannière. */}
         <div className="relative -mt-6 px-4 pb-16">
           <div data-alab-stagger>
             {title.logoUrl ? (
@@ -1093,33 +1373,210 @@ function MockSheet({
           <div data-alab-stagger className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
             <MetaLine title={title} truncateGenres />
           </div>
-          <button data-alab-stagger type="button" className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink">
-            <Play size={18} fill="currentColor" />
-            {t("common.play")}
-          </button>
-          {title.trailerKey && (
-            <button data-alab-stagger type="button" className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white">
-              <Video size={16} />
-              {t("cinema.trailer")}
-            </button>
-          )}
-          {title.tagline?.trim() && (
+          <div data-alab-stagger>
+            {outside ? (
+              <>
+                <button type="button" className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink">
+                  <Plus size={18} />
+                  {t("player.discover.request")}
+                </button>
+                <button type="button" className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white">
+                  <Bookmark size={16} />
+                  {t("player.discover.addToList")}
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink">
+                  <Play size={18} fill="currentColor" />
+                  {t("common.play")}
+                </button>
+                {title.trailerKey && (
+                  <button type="button" className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white">
+                    <Video size={16} />
+                    {t("cinema.trailer")}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          {(title.tagline?.trim() || title.overview) && (
             <div data-alab-stagger>
-              <CinemaTagline text={title.tagline} className="mb-1.5" />
+              {title.tagline?.trim() && <CinemaTagline text={title.tagline} className="mb-1.5" />}
+              {title.overview && <p className="mb-3 text-sm leading-6 text-white">{title.overview}</p>}
             </div>
           )}
-          {title.overview && <p data-alab-stagger className="mb-3 text-sm leading-6 text-white">{title.overview}</p>}
-          <div data-alab-stagger className="mb-6 flex items-start gap-8">
-            <span className="flex w-16 flex-col items-center gap-1.5">
-              <Plus size={22} className="text-white" />
-              <span className="text-center text-xs leading-tight text-muted">{t("watchlist.statuses.toWatch")}</span>
-            </span>
-            <span className="flex w-16 flex-col items-center gap-1.5">
-              <Check size={22} className="text-white" />
-              <span className="text-center text-xs leading-tight text-muted">{t("cinema.markWatched")}</span>
-            </span>
+          <div data-alab-stagger className="mb-4 flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted">{t("cinema.cast")}</span>
+            {castButtons}
+          </div>
+          {!outside && (
+            <div data-alab-stagger className="mb-6 flex items-start gap-8">
+              <span className="flex w-16 flex-col items-center gap-1.5">
+                <Plus size={22} className="text-white" />
+                <span className="text-center text-xs leading-tight text-muted">{t("watchlist.statuses.toWatch")}</span>
+              </span>
+              <span className="flex w-16 flex-col items-center gap-1.5">
+                <Check size={22} className="text-white" />
+                <span className="text-center text-xs leading-tight text-muted">{t("cinema.markWatched")}</span>
+              </span>
+            </div>
+          )}
+          <div data-alab-stagger>{saga}</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * La fiche d'une personne, ouverte depuis la distribution d'une fiche : photo, nom, filmographie —
+ * à l'image de PlayerPersonSheet, réduite à ce qui sert le mouvement. Elle arrive par une montée
+ * fondue et non par un trajet : il n'y a pas d'affiche qui devienne une bannière. Sa filmographie
+ * ouvre des fiches de titre par-dessus elle, comme la saga d'une fiche.
+ */
+function MockPersonSheet({
+  entryId, name, reduced, covered, phone, framed, timing, hiddenKey, register, related, onOpenTitle, onCloseStart, onClosed,
+}: SheetCommon & { entryId: number; name: string; reduced: boolean }) {
+  const t = useT();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const dimRef = useRef<HTMLDivElement>(null);
+  const openAnimsRef = useRef<Animation[]>([]);
+  const closingRef = useRef(false);
+  const [frozenOffset, setFrozenOffset] = useState<number | null>(null);
+  const closing = frozenOffset !== null;
+  const rise = reduced ? 0 : 24;
+
+  useLayoutEffect(() => {
+    const anims = openAnimsRef.current;
+    const opts = reduced ? { duration: 200, easing: "ease-out" } : timing;
+    const a = panelRef.current?.animate([{ opacity: 0, transform: `translateY(${rise}px)` }, { opacity: 1, transform: "none" }], { ...opts, fill: "backwards" });
+    const b = dimRef.current?.animate([{ opacity: 0 }, { opacity: DIM }], { duration: opts.duration, easing: "ease-out", fill: "both" });
+    if (a) anims.push(a);
+    if (b) anims.push(b);
+    return () => {
+      for (const x of anims.splice(0)) x.cancel();
+    };
+  }, [reduced, rise, timing]);
+
+  const requestClose = () => {
+    if (closingRef.current || covered) return;
+    closingRef.current = true;
+    onCloseStart();
+    const panel = panelRef.current;
+    const off = panel ? translateYOf(getComputedStyle(panel).transform) : 0;
+    const from = { opacity: opacityNow(panel), dim: opacityNow(dimRef.current) };
+    for (const a of openAnimsRef.current.splice(0)) a.cancel();
+    setFrozenOffset(off);
+    const out = { duration: 180, easing: "ease-in", fill: "both" as const };
+    panel?.animate([{ opacity: from.opacity, transform: `translateY(${off}px)` }, { opacity: 0, transform: `translateY(${off + rise}px)` }], out);
+    dimRef.current?.animate([{ opacity: from.dim }, { opacity: 0 }], out);
+    window.setTimeout(onClosed, 180);
+  };
+
+  const swipe = useSwipeToDismiss(requestClose);
+  const dragOffset = frozenOffset ?? (phone && swipe.touched ? swipe.offset : 0);
+
+  useEffect(() => {
+    if (covered || closing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") requestClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const quiet = covered || closing;
+  const initials = name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  const body = (
+    <>
+      <div className="mb-4 flex items-center gap-4">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-white/10 text-2xl font-semibold text-white ring-1 ring-white/15">
+          {initials || "?"}
+        </div>
+        <h1 className="text-2xl font-bold leading-tight text-white font-display">{name}</h1>
+      </div>
+      <SheetPosterRow
+        label={t("player.person.filmography")}
+        items={related}
+        entryId={entryId}
+        phone={phone}
+        hiddenKey={hiddenKey}
+        register={register}
+        onOpen={onOpenTitle}
+        markLastOutside={false}
+      />
+    </>
+  );
+  const dim = <div ref={dimRef} aria-hidden="true" className="pointer-events-none absolute inset-0 bg-ink" style={{ opacity: 0 }} />;
+
+  if (!phone) {
+    return (
+      <>
+        {dim}
+        <div
+          ref={panelRef}
+          data-alab-sheet={entryId}
+          data-alab-scroll
+          inert={quiet}
+          className="scrollbar-thin absolute inset-0 overflow-y-auto bg-ink/95"
+          style={{ pointerEvents: quiet ? "none" : undefined }}
+        >
+          <button
+            type="button"
+            onClick={requestClose}
+            className="btn btn-ghost absolute z-10 rounded-full bg-black/55 px-3 py-2 float-edge"
+            style={{ top: "max(1rem, env(safe-area-inset-top))", left: "1rem" }}
+          >
+            <ArrowLeft size={16} /> {t("cinema.back")}
+          </button>
+          <div className="px-8 pt-24 sm:px-16" style={COLUMN_STYLE}>
+            {body}
           </div>
         </div>
+      </>
+    );
+  }
+
+  const top = framed ? `${PHONE_FRAME.statusBar + 8}px` : "calc(env(safe-area-inset-top, 0px) + 0.5rem)";
+  return (
+    <>
+      {dim}
+      <div
+        ref={panelRef}
+        data-alab-sheet={entryId}
+        data-alab-scroll
+        inert={quiet}
+        className="scrollbar-none absolute inset-x-0 bottom-0 overflow-y-auto overscroll-contain rounded-t-2xl bg-ink ring-1 ring-white/10"
+        style={{
+          top,
+          pointerEvents: quiet ? "none" : undefined,
+          transform: dragOffset ? `translateY(${dragOffset}px)` : undefined,
+          transition: swipe.dragging || closing ? "none" : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1)",
+          borderTopLeftRadius: phoneSheetCorner(dragOffset),
+          borderTopRightRadius: phoneSheetCorner(dragOffset),
+        }}
+      >
+        {/* La poignée : le haut de la carte, comme la bannière d'une fiche de titre. */}
+        <div className="relative h-14 w-full" {...(covered ? {} : swipe.handlers)} style={{ touchAction: "none" }}>
+          <div className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-white/25" />
+          <button
+            type="button"
+            {...NOT_THE_HANDLE}
+            onClick={requestClose}
+            aria-label="Fermer la fiche"
+            className="nav-glass absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-white"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="px-4 pb-16">{body}</div>
       </div>
     </>
   );
