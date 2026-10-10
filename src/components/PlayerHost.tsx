@@ -37,6 +37,7 @@ import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
+import { useServerIntroPicture } from "@/lib/introEnd";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
 
@@ -317,27 +318,7 @@ function ServerPlayerIntro({
   // reprise laissait ~3 s d'écran noir entre l'ouverture effacée et l'image (vu en capture le
   // 10/10/2026, Forrest Gump repris à 21 min). L'image compte donc quand l'élément en a une à sa
   // position actuelle — plus de saut en cours, `readyState` ≥ 2 —, attendue par ses événements.
-  const [pictured, setPictured] = useState(false);
-  useEffect(() => {
-    if (loading || pictured) return;
-    const video = videoRef.current;
-    // `readyState` ≥ 3 : de quoi avancer, pas seulement une image — à 2, la roue des commandes
-    // prenait encore la suite le temps de remplir (même défaut que le lecteur natif, 10/10/2026).
-    const hasPicture = () => !video || (!video.seeking && video.readyState >= 3);
-    let live = true;
-    const check = () => {
-      if (live && hasPicture()) setPictured(true);
-    };
-    // Déjà là le plus souvent (un départ du début) : lu au tour suivant plutôt que dans le corps de
-    // l'effet, où le compilateur React refuse un `setState`.
-    queueMicrotask(check);
-    const events = ["seeked", "canplay", "canplaythrough", "playing"] as const;
-    for (const e of events) video?.addEventListener(e, check);
-    return () => {
-      live = false;
-      for (const e of events) video?.removeEventListener(e, check);
-    };
-  }, [loading, pictured, videoRef]);
+  const pictured = useServerIntroPicture(loading, videoRef);
   useEffect(() => {
     if (pictured) finishIntro(key);
   }, [pictured, key]);

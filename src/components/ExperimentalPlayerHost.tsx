@@ -93,6 +93,7 @@ import { PlayerLifecycle } from "@/lib/playerLifecycle";
 import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from "@/lib/hostSeek";
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { finishIntro, formatResumeClock, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
+import { useIntroPlaybackStarted } from "@/lib/introEnd";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -1143,39 +1144,12 @@ export function ExperimentalPlayerHost({
   // la roue de l'attente prendre la suite une ou deux secondes (vu par Louis le 10/10/2026 : « la
   // première image, puis le chargement classique »). Elle tient donc jusqu'à ce que l'horloge
   // avance vraiment — ou, la lecture automatique refusée, jusqu'à un élément arrêté sans attente.
-  const [introPlaying, setIntroPlaying] = useState(false);
-  const startingRef = useRef(startingAt);
+  const startingRef = useRef(startingAt !== null);
   useEffect(() => {
-    startingRef.current = startingAt;
+    startingRef.current = startingAt !== null;
   }, [startingAt]);
-  useEffect(() => {
-    if (!announced || introPlaying) return;
-    const media = videoElRef.current;
-    if (!media) return;
-    // Mesuré depuis le dernier placement de la tête : l'atterrissage de l'ouverture (0 → 0,27 s) et
-    // la poussée d'une horloge figée sont des sauts, pas de la lecture (`headPlaced`, même raison).
-    let from = media.currentTime;
-    const onSeek = () => {
-      from = media.currentTime;
-    };
-    const onTime = () => {
-      if (!media.paused && !media.seeking && media.currentTime > from + 0.1) setIntroPlaying(true);
-    };
-    // Lecture automatique refusée (iOS sans geste récent) : rien ne bougera avant un appui, et le
-    // bouton Lecture des commandes doit se voir. Un élément arrêté sans attente armée, c'est ça.
-    const blocked = window.setInterval(() => {
-      if (media.paused && startingRef.current === null) setIntroPlaying(true);
-    }, 1500);
-    media.addEventListener("timeupdate", onTime);
-    media.addEventListener("seeking", onSeek);
-    media.addEventListener("seeked", onSeek);
-    return () => {
-      window.clearInterval(blocked);
-      media.removeEventListener("timeupdate", onTime);
-      media.removeEventListener("seeking", onSeek);
-      media.removeEventListener("seeked", onSeek);
-    };
-  }, [announced, introPlaying]);
+  // La règle elle-même, et pourquoi un élément arrêté ne suffit pas : `useIntroPlaybackStarted`.
+  const introPlaying = useIntroPlaybackStarted(announced, videoElRef, startingRef);
   useEffect(() => {
     if (introPlaying) finishIntro(thisIntro);
   }, [introPlaying, thisIntro]);

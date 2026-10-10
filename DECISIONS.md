@@ -1992,6 +1992,19 @@ Un épisode prend le visuel et le logo de sa série. Le visuel et le logo sont d
 (`preloadIntroArt`). Rien de trouvé : le titre écrit sur fond noir. Le logo de la description du
 fichier n'est pas attendu : il a 500 ms de budget côté serveur et arriverait après le seuil.
 
+**Quand elle laisse la place au film** (`src/lib/introEnd.ts`) — à la lecture partie, pas au
+lecteur prêt :
+- **lecteur natif** : l'horloge qui avance vraiment, mesurée depuis le dernier placement de la tête
+  (l'atterrissage de l'ouverture et la poussée d'une horloge figée sont des sauts) ;
+- **lecteur serveur** : plus de saut en cours et `readyState` ≥ 3 (`loadeddata` précède le saut de
+  reprise) ;
+- **la lecture automatique refusée** : un élément arrêté *sur une image* (`readyState` ≥ 2, aucun
+  saut), confirmé sur la durée (1 s au natif, 2,5 s au serveur, où l'attribut `autoplay` laisse
+  l'élément arrêté le temps de remplir). Un élément arrêté *sans* image n'en est pas un : c'est une
+  reprise dont le média arrive, et l'ouverture effacée là laissait un écran noir sans roue.
+
+Un logo qui ne se charge pas laisse la place au titre écrit.
+
 **Ce qui diffère exprès.** Le banc garde ses curseurs et sa « vidéo » simulée, et rend le même
 composant. Le texte « Analyse du fichier… » ne s'y ajoute pas : seul « Toujours en cours… » paraît
 sous la ligne, après 8 s.
@@ -2000,6 +2013,7 @@ sous la ligne, après 8 s.
 - `src/lib/playbackIntro.ts` : réglages `PLAYBACK_INTRO`, `introBackdropSrc`, `introVeil`,
   `resolveIntroArt`, `introCaption`, l'horloge et `introAllowedFor`.
 - `PlaybackIntro` (`src/components/player/PlaybackIntro.tsx`).
+- `useIntroPlaybackStarted` / `useServerIntroPicture` (`src/lib/introEnd.ts`) : la fin de chaque côté.
 
 Ses appelants :
 - `ExperimentalPlayerHost` ;
@@ -2008,6 +2022,6 @@ Ses appelants :
 
 `PlaybackProvider` pose `introArt` et l'horloge.
 
-**Tests.** `playbackIntro.test.ts`, `PlaybackIntro.test.tsx`.
+**Tests.** `playbackIntro.test.ts`, `PlaybackIntro.test.tsx`, `introEnd.test.tsx`.
 
 **Décidé le 10/10/2026.**

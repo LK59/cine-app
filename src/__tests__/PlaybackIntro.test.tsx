@@ -93,4 +93,12 @@ describe("PlaybackIntro", () => {
     fireEvent.click(screen.getByRole("button", { name: "Fermer" }));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("un logo qui ne se charge pas laisse la place au titre écrit, pas à une image cassée", () => {
+    render(<Intro phase="waiting" />);
+    act(() => vi.advanceTimersByTime(300));
+    fireEvent.error(screen.getByAltText("Alien"));
+    expect(screen.queryByAltText("Alien")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Alien" })).toBeTruthy();
+  });
 });

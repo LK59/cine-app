@@ -116,7 +116,10 @@ export function PlaybackIntro({
   const sweepRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const visible = shown !== null && !done && phase !== "gone";
-  const logo = shown?.art?.logoUrl ?? null;
+  // Un logo qui ne se charge pas (hors ligne, adresse périmée) laissait l'icône d'image cassée au
+  // milieu de l'écran, avec son texte de remplacement : le titre écrit prend sa place.
+  const [logoFailed, setLogoFailed] = useState(false);
+  const logo = logoFailed ? null : (shown?.art?.logoUrl ?? null);
   const bgSrc = introBackdropSrc(shown?.art?.backdropUrl, background);
   const blur = introBlur(background);
 
@@ -226,7 +229,7 @@ export function PlaybackIntro({
         <div ref={logoRef} className="relative" style={{ opacity: 0 }}>
           {logo ? (
             <>
-              <img src={logo} alt={name} className="block max-h-[22vh] max-w-[min(60vw,32rem)] object-contain" />
+              <img src={logo} alt={name} onError={() => setLogoFailed(true)} className="block max-h-[22vh] max-w-[min(60vw,32rem)] object-contain" />
               {/* La lueur : une bande claire découpée à la forme du logo par un masque — pas un filtre. */}
               {sweep && !reduced && (
                 <div
