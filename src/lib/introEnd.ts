@@ -41,6 +41,13 @@ export function playbackRefused(media: IntroMedia, waitArmed: boolean): boolean 
  * Mesuré depuis le dernier placement de la tête : l'atterrissage de l'ouverture (0 → 0,27 s) et la
  * poussée d'une horloge figée sont des sauts, pas de la lecture (`PlaybackGuard.headPlaced`).
  */
+/** À quelle fréquence relire l'attente une fois l'horloge partie — une image à 60 Hz près. */
+const SETTLE_POLL_MS = 16;
+
+/** Et combien attendre la première image présentée au plus, l'horloge partie : un navigateur sans
+ * `requestVideoFrameCallback` lève l'attente sur l'horloge, avec un battement de retard. */
+const MOVED_WAIT_CAP_MS = 600;
+
 export function useIntroPlaybackStarted(
   active: boolean,
   mediaRef: RefObject<IntroMedia | null>,
@@ -55,9 +62,26 @@ export function useIntroPlaybackStarted(
     const onSeek = () => {
       from = media.currentTime;
     };
-    const onTime = () => {
-      if (!media.paused && !media.seeking && media.currentTime > from + 0.1) setStarted(true);
+    // L'horloge qui avance ne suffit pas : l'attente du lecteur (l'anneau autour du bouton) ne se
+    // lève qu'à la première image *présentée* (`requestVideoFrameCallback`), et sur Chrome Windows en
+    // 4K HEVC l'horloge part ~230 ms avant elle. L'ouverture effacée sur l'horloge laissait l'anneau
+    // prendre la suite : le « second petit chargement » de *Love Story* (10/10/2026, ligne
+    // `opening` : « repart » à +2295 ms, « première image affichée » à +2524 ms). Les deux tombent
+    // désormais ensemble — l'horloge a bougé, et l'attente est levée.
+    let moved = false;
+    let movedAt = 0;
+    const settle = () => {
+      if (!moved) return;
+      if (!waitArmedRef.current || Date.now() - movedAt >= MOVED_WAIT_CAP_MS) setStarted(true);
     };
+    const onTime = () => {
+      if (!moved && !media.paused && !media.seeking && media.currentTime > from + 0.1) {
+        moved = true;
+        movedAt = Date.now();
+      }
+      settle();
+    };
+    const settleLoop = window.setInterval(settle, SETTLE_POLL_MS);
     // Un refus se confirme sur la durée : l'élément passe par « arrêté sur une image » entre l'arrivée
     // du média et l'appel à `play()`, et ce passage-là n'en est pas un.
     let refusedSince: number | null = null;
@@ -74,6 +98,7 @@ export function useIntroPlaybackStarted(
     media.addEventListener("seeked", onSeek);
     return () => {
       window.clearInterval(recheck);
+      window.clearInterval(settleLoop);
       media.removeEventListener("timeupdate", onTime);
       media.removeEventListener("seeking", onSeek);
       media.removeEventListener("seeked", onSeek);

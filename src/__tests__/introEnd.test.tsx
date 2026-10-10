@@ -72,7 +72,7 @@ describe("lecteur natif — useIntroPlaybackStarted", () => {
 
   it("l'atterrissage de l'ouverture n'est pas de la lecture", () => {
     const media = fakeMedia({ readyState: 4 });
-    const { result } = renderHook(() => useIntroPlaybackStarted(true, { current: media }, { current: true }));
+    const { result } = renderHook(() => useIntroPlaybackStarted(true, { current: media }, { current: false }));
     act(() => {
       media.seeking = true;
       media.currentTime = 0.27;
@@ -85,6 +85,40 @@ describe("lecteur natif — useIntroPlaybackStarted", () => {
     act(() => {
       media.currentTime = 0.5;
       media.dispatchEvent(new Event("timeupdate"));
+    });
+    expect(result.current).toBe(true);
+  });
+
+  it("l'horloge partie avant la première image présentée : l'ouverture attend que l'attente se lève", () => {
+    // Love Story sur Chrome Windows (10/10/2026) : « repart » à +2295 ms, « première image affichée »
+    // à +2524 ms. Effacée sur l'horloge, l'ouverture laissait l'anneau du bouton prendre la suite.
+    const media = fakeMedia({ readyState: 4, currentTime: 306.9 });
+    const armed = { current: true };
+    const { result } = renderHook(() => useIntroPlaybackStarted(true, { current: media }, armed));
+    act(() => {
+      media.currentTime = 307.1;
+      media.dispatchEvent(new Event("timeupdate"));
+      vi.advanceTimersByTime(200);
+    });
+    expect(result.current).toBe(false);
+    act(() => {
+      armed.current = false;
+      vi.advanceTimersByTime(20);
+    });
+    expect(result.current).toBe(true);
+  });
+
+  it("sans image présentée annoncée, l'horloge partie suffit au bout de 600 ms", () => {
+    const media = fakeMedia({ readyState: 4, currentTime: 10 });
+    const { result } = renderHook(() => useIntroPlaybackStarted(true, { current: media }, { current: true }));
+    act(() => {
+      media.currentTime = 10.2;
+      media.dispatchEvent(new Event("timeupdate"));
+      vi.advanceTimersByTime(590);
+    });
+    expect(result.current).toBe(false);
+    act(() => {
+      vi.advanceTimersByTime(30);
     });
     expect(result.current).toBe(true);
   });
