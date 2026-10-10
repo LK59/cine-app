@@ -1184,6 +1184,18 @@
 }
 .player-loading-line { animation: player-loading-sweep 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
 
+/* L'ouverture de la lecture (DECISIONS.md §60) : sous le logo, une lueur qui traverse la ligne de
+   chargement, en boucle, à la place de la roue. Seule une translation s'anime ; coupée par
+   « Réduire les animations ». */
+@keyframes playback-intro-line {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(200%); }
+}
+.playback-intro-line { animation: playback-intro-line 1.4s cubic-bezier(0.45, 0, 0.25, 1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .playback-intro-line { animation: none; }
+}
+
 /* Sauf sur un téléphone tenu à la verticale, où le haut de l'écran ne nous appartient pas :
    dans la PWA, l'encoche et la Dynamic Island passent par-dessus, et un fil de deux pixels calé
    tout en haut disparaît dessous. Le descendre sous la zone sûre le laisserait flotter à

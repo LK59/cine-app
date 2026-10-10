@@ -1929,3 +1929,85 @@ de la semaine mêlent tous les comptes.
 **Tests.** `activity-alerts-cleared.test.ts`.
 
 **Décidé le 09/10/2026.**
+
+## 60. L'ouverture de la lecture : le visuel, le logo, puis le film — jamais un délai de plus
+
+**Règle.** Entre l'appui sur « Lire » et la première image, l'écran montre :
+- le visuel du film, net, qui avance lentement (de 1,08 à 1) ;
+- son logo, qui paraît avec une lueur ;
+- une légende pour un épisode ou une reprise ;
+- une ligne de chargement.
+
+Puis un fondu enchaîné vers le film. Sous 300 ms, rien ne paraît : la première image arrive avant
+qu'une ouverture ait un sens. Les réglages sont ceux validés dans « Tests animations » (lot G) le
+10/10/2026 :
+
+| Réglage | Valeur |
+|---|---|
+| Fond | « Net », 1 280 px (l'original au-delà de 1 700 pixels physiques de large) |
+| Voile | d'origine |
+| Apparition du logo | 600 ms |
+| Lueur | oui |
+| Légende | contextuelle |
+
+**Pourquoi.** L'attente d'ouverture était une roue sur fond noir. Le premier essai avait un fond
+flou : une image de 300 px agrandie, et « le flou basse résolution se voit ». Le fond net en
+1 280 px, sous un voile, fait lire le logo sans rien abîmer.
+
+**Ce qu'elle ne fait jamais.**
+- **Retarder la lecture.** C'est un calque posé sur l'élément vidéo : le fichier s'ouvre dessous
+  comme avant, et le fondu part de la première image.
+- **Prendre un appui.** Sa croix est le seul élément qui en reçoive. À l'ouverture du lecteur natif,
+  les commandes ne sont pas encore là, et la croix doit l'être.
+- **Masquer un écran qui a quelque chose à dire.** Elle s'efface à l'instant pour :
+  - une erreur ou la connexion perdue ;
+  - l'attente devenue anormale (le rapport de 20 s doit se lire) ;
+  - le mini-lecteur.
+
+**Une seule ouverture par lecture, partagée par les deux lecteurs.** Son horloge est posée à l'appui
+(`startIntroClock`, clé `${openId}:${itemId}`) et vit hors de React. Quand le lecteur natif passe la
+main au lecteur serveur avant la première image, le second reprend au point exact où le premier en
+était : même zoom, logo déjà là, même légende (`keepIntroSnapshot`). Une lecture qui a montré une
+image (`finishIntro`) ne la rejoue plus : ni une reconstruction, ni un relais en plein film, ni le
+retour d'une diffusion.
+
+**Où elle s'affiche, et où non.**
+
+| Cas | Ouverture |
+|---|---|
+| Lecteur natif et lecteur serveur, ouverture d'un titre | oui, si l'attente dépasse le seuil |
+| Épisode suivant (enchaînement automatique ou bouton) | oui, sa propre ouverture avec la légende de l'épisode, si son chargement se fait attendre |
+| Séance qui existe pour diffuser | non |
+| Retour d'une diffusion, page rechargée pour une piste WebKit | non : reprises en plein film |
+| Banc d'essai | non |
+
+**Les données sont déjà sur l'appareil.** `play()` et `advance()` cherchent le visuel dans le cache
+de SWR (`resolveIntroArt`), sans requête :
+- le catalogue ;
+- « Reprendre » et « À suivre » ;
+- les listes d'épisodes ouvertes ;
+- le premier épisode d'une série (§55).
+
+Un épisode prend le visuel et le logo de sa série. Le visuel et le logo sont demandés dès l'appui
+(`preloadIntroArt`). Rien de trouvé : le titre écrit sur fond noir. Le logo de la description du
+fichier n'est pas attendu : il a 500 ms de budget côté serveur et arriverait après le seuil.
+
+**Ce qui diffère exprès.** Le banc garde ses curseurs et sa « vidéo » simulée, et rend le même
+composant. Le texte « Analyse du fichier… » ne s'y ajoute pas : seul « Toujours en cours… » paraît
+sous la ligne, après 8 s.
+
+**Porteurs.**
+- `src/lib/playbackIntro.ts` : réglages `PLAYBACK_INTRO`, `introBackdropSrc`, `introVeil`,
+  `resolveIntroArt`, `introCaption`, l'horloge et `introAllowedFor`.
+- `PlaybackIntro` (`src/components/player/PlaybackIntro.tsx`).
+
+Ses appelants :
+- `ExperimentalPlayerHost` ;
+- `ServerPlayerIntro` dans `PlayerHost.tsx` ;
+- le lot G de `IntroLots.tsx`.
+
+`PlaybackProvider` pose `introArt` et l'horloge.
+
+**Tests.** `playbackIntro.test.ts`, `PlaybackIntro.test.tsx`.
+
+**Décidé le 10/10/2026.**

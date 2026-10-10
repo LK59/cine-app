@@ -91,6 +91,8 @@ import { keepOnStop } from "@/lib/resumeCache/keepOnStop";
 import { MemoryReserve } from "@/lib/webcodecs/memoryReserve";
 import { PlayerLifecycle } from "@/lib/playerLifecycle";
 import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from "@/lib/hostSeek";
+import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
+import { finishIntro, formatResumeClock, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -222,13 +224,6 @@ function syncFacts(
   return facts;
 }
 
-function formatClock(seconds: number): string {
-  const total = Math.max(0, Math.round(seconds));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const sec = total % 60;
-  return h > 0 ? `${h} h ${String(m).padStart(2, "0")}` : `${m} min ${String(sec).padStart(2, "0")}`;
-}
 
 /** "Français — VFF", falling back to whatever the file actually gives us. */
 /**
@@ -1133,6 +1128,26 @@ export function ExperimentalPlayerHost({
   // Nothing has failed, so there is no error screen — and this is exactly the case that leaves
   // nothing at all behind: a spinner that never stops, on a device with no console.
   const stuck = openingFor !== null && openingFor >= STUCK_AFTER_MS;
+
+  /**
+   * L'ouverture de la lecture (DECISIONS.md §60), par-dessus l'élément tant que la première image
+   * n'est pas là. Décidée une fois, au montage : une lecture qui a déjà montré une image — un relais
+   * revenu, une diffusion rendue — ne la rejoue pas, et son horloge est celle posée à l'appui, que
+   * le lecteur serveur reprendra s'il prend la main avant la première image.
+   */
+  const thisIntro = introKey(session.openId, itemId);
+  const [introEligible] = useState(() => introAllowedFor(session) && !introFinished(thisIntro));
+  const [introStartedAt] = useState(() => startIntroClock(thisIntro));
+  useEffect(() => {
+    if (announced) finishIntro(thisIntro);
+  }, [announced, thisIntro]);
+  // Une erreur, la connexion perdue, l'attente devenue anormale (le rapport doit se lire), le
+  // mini-lecteur : l'ouverture s'efface à l'instant et l'écran d'avant se montre, inchangé.
+  const introPhase: IntroPhase =
+    !introEligible || isMini ? "gone" : announced ? "picture" : error || networkLost || stuck ? "gone" : "waiting";
+  // Elle tient lieu de roue : les deux ne se montrent jamais ensemble — seuil compris, la roue
+  // paraissant à 120 ms et l'ouverture à 300.
+  const introCovers = introPhase === "waiting";
 
   /**
    * Comment la séance s'est terminée — la ligne `stop` du journal.
@@ -2188,7 +2203,7 @@ export function ExperimentalPlayerHost({
   // has no controls on screen yet, so it gets this component's own overlay, while a resume
   // borrows the spinner the controls already put in place of the button. Driving both from one
   // flag stacked one spinner on top of the other.
-  const openingSpinner = openingFor !== null && openingFor >= SPINNER_AFTER_MS;
+  const openingSpinner = openingFor !== null && openingFor >= SPINNER_AFTER_MS && !introCovers;
   const resumeSpinner = startingFor !== null && startingFor >= SPINNER_AFTER_MS;
   const waitingWord =
     waitingFor === null || waitingFor < WORD_AFTER_MS
@@ -2465,6 +2480,26 @@ export function ExperimentalPlayerHost({
         </div>
       </div>
 
+      {introPhase !== "gone" && (
+        <PlaybackIntro
+          phase={introPhase}
+          startedAt={introStartedAt}
+          clockKey={thisIntro}
+          art={session.introArt ?? null}
+          fallbackName={openedAs}
+          caption={introCaption(
+            { ...session.introArt, resumeSeconds: session.resumeAt ?? playbackState?.resumeSeconds ?? null },
+            t
+          )}
+          // Un mot seulement quand l'attente devient vraiment longue : l'ouverture se suffit, et
+          // « Analyse du fichier… » à trois secondes y serait du bruit.
+          note={openingFor !== null && openingFor >= STILL_WORKING_AFTER_MS ? t("player.experimental.stillWorking") : null}
+          onClose={handleClose}
+          closeLabel={t("common.close")}
+          className="absolute inset-0 z-[15]"
+        />
+      )}
+
       {subtitle && !isMini && (
         // En haut quand le fichier le demande (`{\an8}`) : un sous-titre forcé qui traduit un texte
         // à l'image ne doit pas le cacher. Voir `subtitlePlacement`.
@@ -2500,7 +2535,7 @@ export function ExperimentalPlayerHost({
             </p>
           </div>
           <p className="text-xs text-slate-500">
-            {t("player.experimental.resumeAt", { time: formatClock(networkLost.at) })}
+            {t("player.experimental.resumeAt", { time: formatResumeClock(networkLost.at) })}
             {networkLost.audio !== null &&
               ` · ${tracks.audio.find((a) => a.number === networkLost.audio)?.language ?? t("player.experimental.chosenTrack")}`}
           </p>

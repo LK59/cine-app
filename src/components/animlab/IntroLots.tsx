@@ -20,6 +20,8 @@ import { genreLabel } from "@/lib/top10Label";
 import { tmdbResize } from "@/lib/images";
 import { toSpring } from "@/lib/liquidGlass/liquid";
 import { simulateSpring } from "@/lib/liquidGlass/spring";
+import { PlaybackIntro } from "@/components/player/PlaybackIntro";
+import { INTRO_BACKGROUNDS, PLAYBACK_INTRO, introBackdropSrc, type IntroBackground } from "@/lib/playbackIntro";
 
 /**
  * Deux prototypes de la page « Tests animations » (10/10/2026), à juger sur l'iPhone et le Mac avant
@@ -108,59 +110,28 @@ function springEasing(response: number, ratio: number): { easing: string; durati
 
 /* ─── Lot G : lancement de la lecture ──────────────────────────────────────── */
 
+/*
+ * En production depuis le 10/10/2026 (DECISIONS.md §60) : ce banc rend le composant du vrai lecteur,
+ * `PlaybackIntro`, avec ses curseurs en plus. Les valeurs par défaut sont celles qui partent en
+ * production (`PLAYBACK_INTRO`) — régler ici, c'est régler ce que voient les spectateurs une fois
+ * reportées dans `src/lib/playbackIntro.ts`.
+ */
+
 type Caption = "none" | "episode" | "resume";
-type Phase = "intro" | "video";
-type BgMode = "light" | "net" | "strong" | "old";
-
-/**
- * Les fonds proposés, le premier par défaut. « Net » depuis le 10/10/2026 : même adouci, le flou
- * se voyait comme une image de basse qualité ; net en 1 280 px, le voile suffit à faire lire le
- * logo. « Flou léger » reste pour comparer — 1 280 px adoucie de 10 px, pas les gros pixels de
- * l'ancienne image de 300 px agrandie.
- */
-const BG_MODES: { id: BgMode; label: string; blur: number }[] = [
-  { id: "net", label: "Net", blur: 0 },
-  { id: "light", label: "Flou léger", blur: 10 },
-  { id: "strong", label: "Flou marqué", blur: 24 },
-  { id: "old", label: "Ancien (300 px agrandi)", blur: 0 },
-];
-
-/** Le visuel du fond : la petite image d'avant pour comparer, sinon 1 280 px — l'original quand l'écran en montre plus. */
-function bgSource(url: string | null, mode: BgMode): string {
-  if (!url) return "";
-  if (mode === "old") return tmdbResize(url, "w300") ?? url;
-  const wide = typeof window !== "undefined" && window.innerWidth * (window.devicePixelRatio || 1) > 1700;
-  return tmdbResize(url, wide ? "original" : "w1280") ?? url;
-}
-
-/**
- * Le voile du fond. Plus dense sur une image nette, qui garde tous ses détails derrière le logo :
- * un voile radial pour le centrer, un dégradé du bas pour la légende et la ligne de chargement.
- * `brightness` (en %, 0 par défaut — le voile d'origine) l'allège ou l'épaissit d'autant : +30
- * retire 30 % de chaque opacité, −30 en ajoute 30 %, plafonné pour que le fond reste visible.
- */
-function bgVeil(mode: BgMode, brightness = 0): string {
-  const a = (alpha: number) => `rgba(0,0,0,${Math.min(0.95, alpha * (1 - brightness / 100)).toFixed(3)})`;
-  if (mode === "net") {
-    return `radial-gradient(ellipse at center, ${a(0.3)}, ${a(0.82)} 78%), linear-gradient(to top, ${a(0.6)}, rgba(0,0,0,0) 45%)`;
-  }
-  if (mode === "old") return `radial-gradient(ellipse at center, ${a(0.35)}, ${a(0.78)} 75%)`;
-  return `radial-gradient(ellipse at center, ${a(0.25)}, ${a(0.72)} 78%), linear-gradient(to top, ${a(0.45)}, rgba(0,0,0,0) 40%)`;
-}
 
 export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
   const { withLogo, withoutLogo } = useMemo(() => usableTitles(movies), [movies]);
   const choices = useMemo(() => (withoutLogo ? [...withLogo.slice(0, 6), withoutLogo] : withLogo.slice(0, 6)), [withLogo, withoutLogo]);
   const [pick, setPick] = useState(0);
   const [delay, setDelay] = useState(2000);
-  const [threshold, setThreshold] = useState(300);
-  const [zoom, setZoom] = useState(1.08);
-  const [logoMs, setLogoMs] = useState(600);
-  const [sweep, setSweep] = useState(true);
-  const [caption, setCaption] = useState<Caption>("none");
+  const [threshold, setThreshold] = useState(PLAYBACK_INTRO.thresholdMs);
+  const [zoom, setZoom] = useState(PLAYBACK_INTRO.zoom);
+  const [logoMs, setLogoMs] = useState(PLAYBACK_INTRO.logoMs);
+  const [sweep, setSweep] = useState(PLAYBACK_INTRO.sweep);
+  const [caption, setCaption] = useState<Caption>("episode");
   const [reduced, setReduced] = useState(prefersReduced);
-  const [bg, setBg] = useState<BgMode>("net");
-  const [brightness, setBrightness] = useState(0);
+  const [bg, setBg] = useState<IntroBackground>(PLAYBACK_INTRO.background);
+  const [brightness, setBrightness] = useState(PLAYBACK_INTRO.brightness);
   const [run, setRun] = useState(0);
   const title = choices.length > 0 ? choices[Math.min(pick, choices.length - 1)] : null;
 
@@ -168,7 +139,7 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
   useEffect(() => {
     if (!title?.backdropUrl) return;
     const img = new Image();
-    img.src = bgSource(title.backdropUrl, bg);
+    img.src = introBackdropSrc(title.backdropUrl, bg);
   }, [title, bg]);
 
   return (
@@ -186,7 +157,7 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
         ))}
       </Row>
       <Row label="Fond">
-        {BG_MODES.map((m) => (
+        {INTRO_BACKGROUNDS.map((m) => (
           <Chip key={m.id} on={bg === m.id} onClick={() => setBg(m.id)}>
             {m.label}
           </Chip>
@@ -245,10 +216,10 @@ export function PlayerIntroLot({ movies }: { movies: readonly CinemaMovie[] }) {
   );
 }
 
-function captionText(caption: Caption): string | null {
-  if (caption === "episode") return "S01·É03 · Le Fil de l'histoire";
-  if (caption === "resume") return "Reprise à 1 h 12";
-  return null;
+function captionLines(caption: Caption): string[] {
+  if (caption === "episode") return ["S1 · É3 · Le Fil de l'histoire"];
+  if (caption === "resume") return ["Reprise à 1 h 12"];
+  return [];
 }
 
 function IntroStage({
@@ -262,154 +233,45 @@ function IntroStage({
   sweep: boolean;
   caption: Caption;
   reduced: boolean;
-  bg: BgMode;
+  bg: IntroBackground;
   brightness: number;
   onReplay: () => void;
   onClose: () => void;
 }) {
-  // Sous le seuil, la « vidéo » est prête avant qu'une ouverture ait un sens : pas d'ouverture.
+  // Le « délai simulé » tient lieu du vrai lecteur : la première image arrive au bout de lui.
+  const [startedAt] = useState(() => Date.now());
+  const [pictured, setPictured] = useState(false);
   const direct = delay < threshold;
-  const [phase, setPhase] = useState<Phase>(direct ? "video" : "intro");
-  const backdropRef = useRef<HTMLDivElement>(null);
-  const bgImgRef = useRef<HTMLImageElement>(null);
-  const logoRef = useRef<HTMLDivElement>(null);
-  const sweepRef = useRef<HTMLDivElement>(null);
-  const introRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLDivElement>(null);
-  const bgSrc = bgSource(title.backdropUrl, bg);
-  const blur = BG_MODES.find((m) => m.id === bg)?.blur ?? 0;
   const full = tmdbResize(title.backdropUrl, "w1280") ?? title.backdropUrl ?? "";
-  const logo = title.logoUrl;
-  const text = captionText(caption);
 
-  // L'ouverture : le fond qui avance, le logo qui paraît, une lueur. Lancée une fois au montage.
-  useLayoutEffect(() => {
-    if (direct) {
-      videoRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, fill: "both" });
-      return;
-    }
-    const animations: Animation[] = [];
-    if (!reduced) {
-      // Avance lente et continue : la durée réelle d'un chargement n'est pas connue d'avance, on part
-      // donc sur six secondes, coupées net par le fondu dès que l'image est là.
-      const b = backdropRef.current?.animate([{ transform: `scale(${zoom})` }, { transform: "scale(1)" }], {
-        duration: 6000, easing: "cubic-bezier(0.25, 0.6, 0.3, 1)", fill: "both",
-      });
-      if (b) animations.push(b);
-    }
-    const l = logoRef.current?.animate(
-      reduced
-        ? [{ opacity: 0 }, { opacity: 1 }]
-        : [{ opacity: 0, transform: "scale(0.96)" }, { opacity: 1, transform: "scale(1)" }],
-      { duration: reduced ? 200 : logoMs, delay: reduced ? 0 : 200, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both" },
-    );
-    if (l) animations.push(l);
-    if (sweep && !reduced && logo) {
-      const s = sweepRef.current?.animate([{ transform: "translateX(-120%)" }, { transform: "translateX(120%)" }], {
-        duration: 1100, delay: 200 + logoMs * 0.6, easing: "cubic-bezier(0.45, 0, 0.25, 1)", fill: "both",
-      });
-      if (s) animations.push(s);
-    }
-    const ready = window.setTimeout(() => setPhase("video"), delay);
-    return () => {
-      window.clearTimeout(ready);
-      for (const a of animations) a.cancel();
-    };
-  }, [direct, reduced, zoom, logoMs, sweep, logo, delay]);
+  useEffect(() => {
+    const id = window.setTimeout(() => setPictured(true), delay);
+    return () => window.clearTimeout(id);
+  }, [delay]);
 
-  // Le fond paraît une fois décodé, jamais d'un coup. Déjà en cache — le cas courant, demandé dès le
-  // choix du titre —, il se pose en 250 ms avec le logo ; sinon le voile sombre attend seul, et
-  // l'image le rejoint en 600 ms dès qu'elle est prête. Un échec laisse le voile, sans image cassée.
+  // La « vidéo » paraît comme celle du lecteur natif : en fondu, sous l'ouverture qui s'efface.
   useLayoutEffect(() => {
-    const img = bgImgRef.current;
-    if (direct || !img) return;
-    let cancelled = false;
-    let fade: Animation | undefined;
-    const t0 = performance.now();
-    const decoded = typeof img.decode === "function" ? img.decode() : Promise.resolve();
-    void decoded.then(
-      () => {
-        if (cancelled) return;
-        fade = img.animate([{ opacity: 0 }, { opacity: 1 }], { duration: performance.now() - t0 < 150 ? 250 : 600, easing: "ease-out", fill: "both" });
-      },
-      () => undefined,
-    );
-    return () => {
-      cancelled = true;
-      fade?.cancel();
-    };
-  }, [direct, bgSrc]);
-
-  // La première image : fondu enchaîné, le logo s'éloigne un peu.
-  useLayoutEffect(() => {
-    if (phase !== "video" || direct) return;
-    const d = reduced ? 200 : 400;
-    introRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: d, easing: "ease-out", fill: "both" });
-    if (!reduced) logoRef.current?.animate([{ transform: "scale(1)" }, { transform: "scale(1.06)" }], { duration: d, easing: "ease-out", fill: "forwards", composite: "replace" });
-    videoRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: d, easing: "ease-out", fill: "both" });
-  }, [phase, direct, reduced]);
+    if (!pictured) return;
+    videoRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: direct ? 160 : reduced ? 200 : 400, easing: "ease-out", fill: "both" });
+  }, [pictured, direct, reduced]);
 
   return (
     <div className="fixed inset-0 z-[100] overflow-hidden bg-black" style={{ pointerEvents: "none" }}>
-      {/* La « vidéo » : le visuel net, posé dessous dès le départ, révélé par le fondu. */}
       <div ref={videoRef} className="absolute inset-0" style={{ opacity: 0 }}>
         <img src={full} alt="" className="h-full w-full object-cover" />
         <div className="absolute bottom-4 left-5 text-xs font-medium text-white/70">{direct ? "Passage direct (sous le seuil)" : "Première image"}</div>
       </div>
 
-      {!direct && (
-        <div ref={introRef} className="absolute inset-0">
-          <div ref={backdropRef} className="absolute inset-0" style={{ willChange: "transform" }}>
-            {/* Le filtre est posé sur l'image, qui ne bouge pas ; seul ce conteneur avance. Floutée,
-                elle est agrandie de 8 % : le bord adouci d'une image floutée ne doit jamais se voir.
-                Invisible jusqu'à son décodage — voir l'effet plus haut. */}
-            <img
-              ref={bgImgRef}
-              src={bgSrc}
-              alt=""
-              decoding="async"
-              className="h-full w-full object-cover"
-              style={{ opacity: 0, filter: blur ? `blur(${blur}px)` : undefined, transform: blur ? "scale(1.08)" : undefined }}
-            />
-          </div>
-          {/* Une vignette, puis le voile : le bord de l'écran s'assombrit, le logo se lit au centre. */}
-          <div className="absolute inset-0" style={{ background: bgVeil(bg, brightness) }} />
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8">
-            <div ref={logoRef} className="relative" style={{ opacity: 0 }}>
-              {logo ? (
-                <>
-                  <img src={logo} alt={title.title} className="block max-h-[22vh] max-w-[min(60vw,32rem)] object-contain" />
-                  {/* La lueur : une bande claire découpée à la forme du logo par un masque — pas un filtre. */}
-                  {sweep && !reduced && (
-                    <div
-                      className="pointer-events-none absolute inset-0 overflow-hidden"
-                      style={{
-                        WebkitMaskImage: `url("${logo}")`, maskImage: `url("${logo}")`,
-                        WebkitMaskSize: "contain", maskSize: "contain",
-                        WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat",
-                        WebkitMaskPosition: "center", maskPosition: "center",
-                      } as CSSProperties}
-                    >
-                      <div
-                        ref={sweepRef}
-                        className="absolute inset-y-0 w-1/2"
-                        style={{ left: "25%", transform: "translateX(-120%)", background: "linear-gradient(100deg, transparent, rgba(255,255,255,0.85), transparent)" }}
-                      />
-                    </div>
-                  )}
-                </>
-              ) : (
-                <h1 className="text-center text-4xl font-bold text-white sm:text-6xl font-display">{title.title}</h1>
-              )}
-            </div>
-            {text && <p className="text-sm font-medium text-white/75 sm:text-base">{text}</p>}
-            {/* La ligne de chargement : une lueur qui passe, à la place de la roue. */}
-            <div className="relative h-[2px] w-28 overflow-hidden rounded-full bg-white/15">
-              <div className={`absolute inset-y-0 w-1/2 rounded-full bg-gradient-to-r from-transparent via-white/90 to-transparent ${reduced ? "" : "alab-intro-line"}`} />
-            </div>
-          </div>
-        </div>
-      )}
+      <PlaybackIntro
+        phase={pictured ? "picture" : "waiting"}
+        startedAt={startedAt}
+        art={{ name: title.title, backdropUrl: title.backdropUrl, logoUrl: title.logoUrl }}
+        fallbackName={title.title}
+        caption={captionLines(caption)}
+        settings={{ thresholdMs: threshold, zoom, logoMs, sweep, background: bg, brightness }}
+        reduced={reduced}
+      />
 
       <div className="absolute left-4 top-4 flex gap-2" style={{ pointerEvents: "auto" }}>
         <button type="button" onClick={onClose} aria-label="Fermer" className="nav-glass flex h-10 w-10 items-center justify-center rounded-full text-white">

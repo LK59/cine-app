@@ -35,6 +35,8 @@ import { WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
+import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
+import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
 
@@ -273,6 +275,60 @@ export function PlayerHost() {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * L'ouverture, côté lecteur serveur : la même que celle du lecteur natif, et — quand il prend la
+ * relève avant la première image — la même *instance visuelle* : l'horloge posée à l'appui la fait
+ * reprendre au point où l'autre en était (`startIntroClock`), sans rejouer son apparition.
+ *
+ * Décidée au montage, comme chez le natif : une lecture qui a déjà montré une image — un relais en
+ * plein film, une diffusion — n'en a pas. Ni une séance qui existe pour diffuser (`allowed`).
+ */
+function ServerPlayerIntro({
+  session,
+  allowed,
+  loading,
+  trouble,
+  hidden,
+  resumeSeconds,
+  onClose,
+}: {
+  session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
+  allowed: boolean;
+  /** Pas encore d'image : `loading` de ce lecteur, qui tombe à `loadeddata`. */
+  loading: boolean;
+  trouble: boolean;
+  hidden: boolean;
+  resumeSeconds: number | null;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const key = introKey(session.openId, session.itemId);
+  const [eligible] = useState(() => allowed && introAllowedFor(session) && !introFinished(key));
+  const [startedAt] = useState(() => startIntroClock(key));
+  // Une image a été montrée : l'ouverture est finie pour cette lecture, quoi qu'il arrive ensuite
+  // (un nouvel essai, un changement de piste remettent `loading` — ce n'est plus une ouverture).
+  const [pictured, setPictured] = useState(false);
+  if (!loading && !pictured) setPictured(true);
+  useEffect(() => {
+    if (pictured) finishIntro(key);
+  }, [pictured, key]);
+  const phase: IntroPhase = !eligible || hidden ? "gone" : pictured ? "picture" : trouble ? "gone" : "waiting";
+  if (phase === "gone") return null;
+  return (
+    <PlaybackIntro
+      phase={phase}
+      startedAt={startedAt}
+      clockKey={key}
+      art={session.introArt ?? null}
+      fallbackName={session.title}
+      caption={introCaption({ ...session.introArt, resumeSeconds }, t)}
+      onClose={onClose}
+      closeLabel={t("common.close")}
+      className="absolute inset-0 z-[25]"
+    />
   );
 }
 
@@ -1905,6 +1961,19 @@ function ActivePlayer({
           )}
         </>
       )}
+      {/* L'ouverture de la lecture (DECISIONS.md §60), au-dessus de la roue des commandes et sous les
+          écrans qui ont quelque chose à dire. Clé par lecture et par épisode : ce lecteur enchaîne
+          les épisodes sans être remonté, et chacun a sa propre ouverture. */}
+      <ServerPlayerIntro
+        key={introKey(session.openId, itemId)}
+        session={session}
+        allowed={!castSession}
+        loading={loading}
+        trouble={!!error || needsReauth || castInterrupted || pendingAudioTrack !== null}
+        hidden={isMini}
+        resumeSeconds={initialResumeAt ?? null}
+        onClose={handleClose}
+      />
       {!isMini && (
         <PlayerControls
           key={videoKey}

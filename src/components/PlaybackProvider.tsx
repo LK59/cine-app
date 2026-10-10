@@ -8,6 +8,7 @@ import { setWatchingFullScreen } from "@/lib/playbackBusy";
 import { flushOrphanStops } from "@/lib/unsentStop";
 import { flushUnsentLines } from "@/lib/unsentLines";
 import { sleepTimerStore } from "@/lib/sleepTimer";
+import { introAllowedFor, introKey, preloadIntroArt, resolveIntroArt, startIntroClock, type IntroCacheReader, type PlaybackIntroArt } from "@/lib/playbackIntro";
 
 export interface PlaybackSession {
   itemId: string;
@@ -80,6 +81,13 @@ export interface PlaybackSession {
    * des films, et chacun d'eux aurait été marqué vu, avec une reprise au milieu de nulle part.
    */
   bench?: string;
+  /**
+   * Le visuel, le logo et la place dans la série de ce qu'on lance — pour l'ouverture de la lecture
+   * (DECISIONS.md §60). Posé par `play()` et `advance()` à partir de ce que l'appareil a déjà reçu,
+   * jamais par un appelant : les endroits qui lancent un film n'ont pas à savoir qu'elle existe.
+   * `null` : rien de trouvé, l'ouverture écrit le titre.
+   */
+  introArt?: PlaybackIntroArt | null;
 }
 
 // WebKit-only workaround (see the long comment in PlayerHost's changeAudio) for a reproducible
@@ -234,19 +242,43 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     detectCodecSupport().catch(() => {});
   }, []);
 
+  /**
+   * L'ouverture de cette lecture commence à l'appui, pas au montage du lecteur : son horloge est
+   * posée ici, son visuel cherché dans le cache de SWR et demandé tout de suite (DECISIONS.md §60).
+   */
+  const prepareIntro = useCallback(
+    (s: PlaybackSession, openId: number | undefined): PlaybackIntroArt | null => {
+      if (!introAllowedFor(s)) return null;
+      startIntroClock(introKey(openId, s.itemId));
+      let art: PlaybackIntroArt | null = null;
+      try {
+        art = resolveIntroArt(s.itemId, cache as unknown as IntroCacheReader);
+      } catch {
+        // Un ornement : une forme de cache inattendue ne doit jamais empêcher un film de partir.
+      }
+      preloadIntroArt(art);
+      return art;
+    },
+    [cache]
+  );
+
   const play = useCallback((s: PlaybackSession) => {
     // La minuterie de veille appartient à la séance (`sleepTimer.ts`) : une nouvelle ouverture
     // repart sans elle. L'épisode suivant, lui, passe par `advance`, qui la garde — c'est pour lui
     // qu'elle existe.
     sleepTimerStore.clear();
     openCounter += 1;
-    setSession({ ...s, openId: openCounter });
+    const introArt = prepareIntro(s, openCounter);
+    // Absent plutôt que nul quand rien n'est trouvé : la séance garde la forme que ses lecteurs connaissent.
+    setSession({ ...s, openId: openCounter, ...(introArt ? { introArt } : {}) });
     setMode("full");
-  }, []);
+  }, [prepareIntro]);
 
   const currentOpenId = useRef<number | undefined>(undefined);
+  const currentSessionRef = useRef<PlaybackSession | null>(null);
   useEffect(() => {
     currentOpenId.current = session?.openId;
+    currentSessionRef.current = session;
   }, [session]);
   const close = useCallback((openId?: number) => {
     if (openId !== undefined && currentOpenId.current !== openId) return;
@@ -269,8 +301,12 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   // per-invocation player's behavior.
   const advance = useCallback((next: { itemId: string; title: string }) => {
     // Zéro, et non « pas d'avis » : c'est bien depuis le début que l'épisode suivant commence.
-    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt: 0 } : prev));
-  }, []);
+    // L'ouverture est préparée hors de la fonction de mise à jour, qui doit rester pure : la séance
+    // en cours est lue par la référence que l'effet plus haut tient à jour.
+    const current = currentSessionRef.current;
+    const introArt = current ? prepareIntro({ ...current, itemId: next.itemId, resumeAt: 0 }, current.openId) : null;
+    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt: 0, introArt } : prev));
+  }, [prepareIntro]);
 
   // Resumes into a WebKit reload-based track switch — see PLAYER_RELOAD_INTENT_KEY. Runs once on
   // mount, before anything has had a chance to open a *different* player session, so there's no
