@@ -100,8 +100,9 @@ describe("la page Tests animations", () => {
     expect(screen.queryByRole("button", { name: /View Transitions/ })).toBeNull();
     // Les durées fixes : la fermeture plus vive que l'ouverture, les courbes expliquées.
     fireEvent.click(screen.getByRole("button", { name: "Durée fixe" }));
-    expect((screen.getByLabelText(/^Ouverture 260 ms/) as HTMLInputElement).min).toBe("150");
-    expect(screen.getByLabelText(/^Fermeture 210 ms/)).toBeTruthy();
+    // Huitième passe : plus courtes, comme le ressort (260 / 210 ms avant).
+    expect((screen.getByLabelText(/^Ouverture 220 ms/) as HTMLInputElement).min).toBe("150");
+    expect(screen.getByLabelText(/^Fermeture 180 ms/)).toBeTruthy();
     expect(screen.getByText(/cubic-bezier\(0\.2, 0, 0, 1\)/)).toBeTruthy();
   });
 
@@ -136,9 +137,10 @@ describe("la page Tests animations", () => {
       const far = { x: 0, y: 600, w: 100, h: 150 };
       const short = appleResponse(near, { ...near, y: 20 }, stage, "phone");
       const long = appleResponse(near, far, stage, "phone");
-      expect(short).toBeGreaterThanOrEqual(0.32);
+      // Huitième passe : 0,22 → 0,34 s (0,32 → 0,5 avant, « trop lent » sur l'iPhone).
+      expect(short).toBeGreaterThanOrEqual(0.22);
       expect(long).toBeGreaterThan(short);
-      expect(long).toBeLessThanOrEqual(0.5);
+      expect(long).toBeLessThanOrEqual(0.34);
       // La même fraction de l'écran, sur un écran deux fois plus grand : la même réponse.
       const big = { W: stage.W * 2, H: stage.H * 2 };
       const scaled = (b: typeof near) => ({ x: b.x * 2, y: b.y * 2, w: b.w * 2, h: b.h * 2 });
@@ -228,7 +230,7 @@ describe("la page Tests animations", () => {
       const lines = recorded.filter((r) => r.el.hasAttribute("data-alab-stagger") && r.frames[r.frames.length - 1].opacity === 1);
       expect(lines.length).toBeGreaterThan(3);
       expect(new Set(lines.map((r) => r.opts.delay)).size).toBe(1);
-      expect(lines[0].opts.duration).toBe(220);
+      expect(lines[0].opts.duration).toBe(160);
     });
 
     it("annule la révélation à la fermeture : aucune ligne ne reprend d'opacité après", async () => {
@@ -349,8 +351,12 @@ describe("la page Tests animations", () => {
       const at = timeAt(sampleMotion(m), m.duration, REVEAL_AT);
       expect(m.q(at)).toBeGreaterThanOrEqual(0.89);
       expect(at).toBeGreaterThan(timeAt(sampleMotion(m), m.duration, 0.6) + 50);
-      // Le bloc de 220 ms finit avec le ressort, pas après lui.
-      expect(at + 220).toBeLessThanOrEqual(m.duration + 60);
+      // Le bloc (160 ms depuis la huitième passe) finit avec le ressort, pas après lui — y compris
+      // avec le ressort accéléré.
+      expect(at + 160).toBeLessThanOrEqual(m.duration + 60);
+      const fast = criticalSpring(0.22, 0, 300);
+      const fastAt = timeAt(sampleMotion(fast), fast.duration, REVEAL_AT);
+      expect(fastAt + 160).toBeLessThanOrEqual(fast.duration + 60);
     });
 
     it("septième passe : au bureau, la saga loge sous la première page, comme dans la vraie fiche", () => {
@@ -374,6 +380,75 @@ describe("la page Tests animations", () => {
       expect(readouts).toHaveLength(1);
       expect(readouts[0].closest("button")?.textContent).toContain("Quitter la maquette");
       expect(readouts[0].textContent).not.toContain("Profil :");
+    });
+
+    describe("huitième passe : une fermeture n'empêche rien, comme sur iOS", () => {
+      // Le retour en vol : son arrivée n'est jamais annoncée, il reste en cours aussi longtemps que
+      // le test le veut. Et des boîtes non nulles, pour que la fermeture prenne le trajet de retour
+      // vers l'affiche (et non la sortie simple, faute d'affiche « à l'écran »).
+      beforeEach(() => {
+        vi.spyOn(Element.prototype, "animate").mockImplementation(function (this: Element, frames, opts) {
+          const cancel = vi.fn();
+          recorded.push({ el: this, frames: frames as Keyframe[], opts: (typeof opts === "number" ? { duration: opts } : opts) ?? {}, cancel });
+          return { id: "", playState: "running", finished: new Promise(() => {}), cancel, pause: vi.fn(), onfinish: null } as unknown as Animation;
+        });
+        vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
+          x: 0, y: 0, left: 0, top: 0, width: 100, height: 150, right: 100, bottom: 150, toJSON() {},
+        } as DOMRect);
+      });
+      const homeCard = (id: number) => screen.getAllByRole("img", { name: `Film ${id}` })[0].closest("button")!;
+
+      it("ouvre une autre affiche pendant le retour, sans attendre qu'il se pose, et rend la première visible", async () => {
+        openDesktopMock();
+        openFromHome(3);
+        fireEvent.keyDown(window, { key: "Escape" });
+        // Le retour est en vol : la fiche est encore là, mais ne compte plus.
+        expect(sheets()).toHaveLength(1);
+        openFromHome(4);
+        // La seconde fiche est ouverte tout de suite, par-dessus le calque du retour — qui s'efface en
+        // 80 ms, ou a déjà disparu s'il était presque arrivé (selon l'horloge : pas de compte exact).
+        const top = sheets()[sheets().length - 1];
+        expect(within(top).getAllByAltText("Film 4").length).toBeGreaterThan(0);
+        expect(top.style.pointerEvents).toBe("");
+        expect(homeCard(3).style.opacity).toBe("");
+        expect(homeCard(4).style.opacity).toBe("0");
+        await waitFor(() => expect(sheets()).toHaveLength(1));
+        expect(within(sheets()[0]).getAllByAltText("Film 4").length).toBeGreaterThan(0);
+        expect(homeCard(3).style.opacity).toBe("");
+      });
+
+      it("rouvre la fiche dont on retouche l'affiche, d'où elle en est, au lieu d'en ouvrir une autre", async () => {
+        openDesktopMock();
+        openFromHome(3);
+        const sheet = sheets()[0];
+        fireEvent.keyDown(window, { key: "Escape" });
+        expect(sheet.style.pointerEvents).toBe("none");
+        openFromHome(3);
+        // La même instance, de nouveau vivante : pas de seconde fiche.
+        expect(sheets()).toEqual([sheet]);
+        expect(sheet.style.pointerEvents).toBe("");
+        await act(async () => {
+          await new Promise((ok) => setTimeout(ok, 200));
+        });
+        expect(sheets()).toEqual([sheet]);
+        // Et elle se referme encore normalement.
+        fireEvent.keyDown(window, { key: "Escape" });
+        expect(sheet.style.pointerEvents).toBe("none");
+      });
+
+      it("dans une pile, ouvre une autre affiche de la fiche du dessous pendant que celle du dessus revient", async () => {
+        openDesktopMock();
+        openFromHome(3);
+        fireEvent.click(sheets()[0].querySelector<HTMLElement>('img[alt="Film 4"]')!.closest("button")!);
+        expect(sheets()).toHaveLength(2);
+        fireEvent.keyDown(window, { key: "Escape" });
+        // La fiche du dessous redevient celle du dessus dès le début du retour.
+        expect(sheets()[0].style.pointerEvents).toBe("");
+        fireEvent.click(sheets()[0].querySelector<HTMLElement>('img[alt="Film 5"]')!.closest("button")!);
+        await waitFor(() => expect(sheets()).toHaveLength(2));
+        expect(within(sheets()[1]).getAllByAltText("Film 5").length).toBeGreaterThan(0);
+        expect(sheets()[0].style.pointerEvents).toBe("none");
+      });
     });
 
     it("ne propose pas, dans une fiche, sa propre affiche ; la variante hors bibliothèque est marquée", () => {

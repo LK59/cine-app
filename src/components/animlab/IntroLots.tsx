@@ -290,8 +290,28 @@ type Box = { x: number; y: number; w: number; h: number };
  * titre hors bibliothèque, ouvert dans la variante de la fiche découverte (« Demander » au lieu de
  * « Lire »), comme PlayerDiscoverSheet.
  */
-type Opening = { title: CinemaMovie; key: string; poster: string; radius: number; mode: Mode; outside?: boolean };
-type OpenTitle = (o: Omit<Opening, "mode">) => void;
+type Opening = {
+  title: CinemaMovie;
+  key: string;
+  poster: string;
+  radius: number;
+  mode: Mode;
+  outside?: boolean;
+  /**
+   * Ouverte pendant qu'une autre fiche se refermait (huitième passe) : l'assombrissement et le recul
+   * de l'accueil où cette fermeture les avait laissés — la nouvelle les reprend de là, sans éclair.
+   */
+  dimFrom?: number;
+  homeFrom?: number;
+};
+type OpenTitle = (o: Omit<Opening, "mode" | "dimFrom" | "homeFrom">) => void;
+/**
+ * Ce que la scène peut demander à une fiche qui se referme (huitième passe) : s'effacer tout de suite
+ * pour laisser la place à une autre ouverture (en rendant où en étaient l'assombrissement et
+ * l'accueil), ou — pour une fiche de titre dont on retouche l'affiche — se rouvrir d'où elle en est.
+ * `reverse` répond faux quand il est trop tard (le relais final a commencé).
+ */
+type SheetHandle = { interrupt: () => { dim: number; home: number }; reverse?: () => boolean; key?: string };
 type Register = (key: string) => (el: HTMLElement | null) => void;
 /**
  * Une entrée de la pile des fiches (cinquième passe) : une fiche de titre, ou celle d'une personne.
@@ -307,11 +327,12 @@ const PHONE_POSTER_WIDTH = "w-28 sm:w-32";
 const SHEET_POSTER_WIDTH = "w-24 sm:w-28 md:w-32";
 /*
  * Le contenu de la fiche (cinquième passe) : d'un seul bloc par défaut — opacité et 8 px de montée,
- * en 220 ms —, lancé à 60 % du trajet pour arriver avec la bannière. La cascade d'avant (logo, puis
+ * en 160 ms depuis la huitième passe (220 avant) —, lancé à 60 % du trajet pour arriver avec la bannière. La cascade d'avant (logo, puis
  * infos, puis « Lire », puis le synopsis) se lisait « une chose après l'autre, pas tout à fait
  * fluide » sur l'iPhone. Elle reste en option, resserrée : 15 ms par ligne, 150 ms en tout au plus.
  */
-const REVEAL_MS = 220;
+// 160 ms depuis la huitième passe : à 220, le bloc traînait derrière le ressort accéléré.
+const REVEAL_MS = 160;
 const CASCADE_STEP_MS = 15;
 const CASCADE_TOTAL_MS = 150;
 // L'effacement du contenu à la fermeture, depuis l'opacité où il en est.
@@ -336,6 +357,10 @@ const PLAIN_OUT_MS = 220;
 const PLAIN_OUT_DROP = 48;
 // Le téléphone simulé quand la disposition « Téléphone » est demandée sur un grand écran.
 const PHONE_FRAME = { w: 390, h: 844, statusBar: 47 };
+// Une fermeture interrompue par une autre ouverture (huitième passe) : son calque de retour s'efface
+// en ce temps-là — ou disparaît d'un coup, presque arrivé (`GHOST_SNAP_AT` du trajet).
+const GHOST_FADE_MS = 80;
+const GHOST_SNAP_AT = 0.85;
 
 /* ─── Le mouvement (sixième passe, 10/10/2026) ────────────────────────────────
  *
@@ -353,8 +378,9 @@ const PHONE_FRAME = { w: 390, h: 844, statusBar: 47 };
  *    montage et le décodage des images. L'ancien moteur reste à comparer.
  * 2. Le rythme n'était pas celui d'iOS. Par défaut, celui d'UIKit et de SwiftUI : un ressort amorti
  *    critique (aucun rebond) dont la réponse suit la distance parcourue, rapportée à la diagonale de
- *    l'écran — 0,32 s pour un petit trajet, 0,5 s pour l'écran entier, 20 % plus vif sur un
- *    ordinateur (macOS l'est plus qu'iOS) — et une fermeture au même ressort, 0,75 fois plus vive.
+ *    l'écran — 0,22 s pour un petit trajet, 0,34 s pour l'écran entier depuis la huitième passe
+ *    (0,32 → 0,5 avant), 20 % plus vif sur un ordinateur (macOS l'est plus qu'iOS) — et une
+ *    fermeture au même ressort, 0,7 fois plus vive.
  *    La durée n'est plus une consigne : c'est le temps qu'il met à se poser à 0,5 px près, affiché
  *    dans la maquette pour chaque appui. Une fermeture reprend la vitesse de ce qui l'a lancée :
  *    celle du doigt qui lâche la fiche, ou celle de l'ouverture qu'elle interrompt.
@@ -384,12 +410,16 @@ type Pose = { box: Box; corners: Corners; bd: Tf; poster: Tf; bdOpacity: number;
 type Motion = { duration: number; q: (ms: number) => number; v: (ms: number) => number; label: string };
 
 const IDENTITY: Tf = { tx: 0, ty: 0, s: 1 };
-/** La réponse du ressort « Apple » selon la distance : 0,32 s pour un trajet nul, 0,5 s pour la diagonale de l'écran. */
-const APPLE_RESPONSE = { min: 0.32, max: 0.5 };
+/**
+ * La réponse du ressort « Apple » selon la distance : 0,22 s pour un trajet nul, 0,34 s pour la
+ * diagonale de l'écran. Huitième passe (10/10/2026) : 0,32 → 0,5 s se lisait « trop lent » sur
+ * l'iPhone, même variable — un ressort amorti critique de réponse 0,5 s met ~740 ms à se poser.
+ */
+const APPLE_RESPONSE = { min: 0.22, max: 0.34 };
 /** L'ordinateur : le même ressort, 20 % plus vif à distance égale. */
 const DESKTOP_RESPONSE_RATIO = 0.8;
-/** La fermeture : le même ressort, plus vif. */
-const CLOSE_RESPONSE_RATIO = 0.75;
+/** La fermeture : le même ressort, plus vif (0,75 jusqu'à la huitième passe). */
+const CLOSE_RESPONSE_RATIO = 0.7;
 /** « Posé » : à moins d'un demi-pixel de l'arrivée, pour de bon. */
 const SETTLE_PX = 0.5;
 /** Les vitesses de départ prises au doigt ou à l'ouverture, bornées (progression par seconde). */
@@ -526,9 +556,10 @@ function appleResponse(from: Box, to: Box, stage: { W: number; H: number }, prof
   return lerp(APPLE_RESPONSE.min, APPLE_RESPONSE.max, n) * (profile === "desktop" ? DESKTOP_RESPONSE_RATIO : 1);
 }
 
-function openMotion(pace: Pace, from: Box, to: Box, stage: { W: number; H: number }): Motion {
+/** `v0` : une fermeture retournée en ouverture garde sa vitesse (négative : elle allait encore vers l'affiche). */
+function openMotion(pace: Pace, from: Box, to: Box, stage: { W: number; H: number }, v0 = 0): Motion {
   if (pace.mode === "fixed") return fixedMotion(pace.ease, pace.openMs);
-  return criticalSpring(appleResponse(from, to, stage, pace.profile), 0, travelOf(from, to));
+  return criticalSpring(appleResponse(from, to, stage, pace.profile), clamp(v0, -MAX_START_VELOCITY, MAX_START_VELOCITY), travelOf(from, to));
 }
 
 function closeMotion(pace: Pace, from: Box, to: Box, stage: { W: number; H: number }, v0: number): Motion {
@@ -699,8 +730,8 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
   const [paceMode, setPaceMode] = useState<PaceMode>("apple");
   const [ease, setEase] = useState<Ease>("spring");
   // Les durées fixes, pour comparer : la fermeture plus vive que l'ouverture, comme partout.
-  const [openMs, setOpenMs] = useState(260);
-  const [closeMs, setCloseMs] = useState(210);
+  const [openMs, setOpenMs] = useState(220);
+  const [closeMs, setCloseMs] = useState(180);
   const [engine, setEngine] = useState<Engine>("transform");
   const [profileChoice, setProfileChoice] = useState<"auto" | Profile>("auto");
   const [detected] = useState(detectProfile);
@@ -723,7 +754,7 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
       </Row>
       <p className="text-xs leading-5 text-subtle">
         {paceMode === "apple"
-          ? "Par défaut, le ressort d'UIKit et de SwiftUI : amorti critique (aucun rebond), l'essentiel du trajet dans les premiers 40 %. Sa réponse suit la distance parcourue, rapportée à la diagonale de l'écran — 0,32 s pour un petit trajet, 0,5 s pour l'écran entier —, 20 % plus vive sur un ordinateur ; la fermeture prend le même ressort, 0,75 fois plus vif, et repart à la vitesse du doigt qui lâche la fiche ou de l'ouverture qu'elle interrompt. La durée affichée dans la maquette est le temps réel pour se poser à 0,5 px près."
+          ? "Par défaut, le ressort d'UIKit et de SwiftUI : amorti critique (aucun rebond), l'essentiel du trajet dans les premiers 40 %. Sa réponse suit la distance parcourue, rapportée à la diagonale de l'écran — 0,22 s pour un petit trajet, 0,34 s pour l'écran entier —, 20 % plus vive sur un ordinateur ; la fermeture prend le même ressort, 0,7 fois plus vif, et repart à la vitesse du doigt qui lâche la fiche ou de l'ouverture qu'elle interrompt. Comme sur iOS, une fermeture n'empêche rien : l'accueil répond dès qu'elle commence, une autre affiche s'ouvre aussitôt, et toucher l'affiche vers laquelle la fiche revient la rouvre d'où elle en est. La durée affichée dans la maquette est le temps réel pour se poser à 0,5 px près."
           : "Une durée imposée sur l'une des trois courbes : la même pour tous les trajets, et sans reprise de vitesse."}
       </p>
       {paceMode === "fixed" && (
@@ -813,9 +844,17 @@ type SheetCommon = {
   related: CinemaMovie[];
   onOpenTitle: OpenTitle;
   onOpenPerson: (name: string) => void;
-  /** La fermeture commence : la scène n'ouvre plus rien tant qu'elle n'est pas finie. */
+  /**
+   * La fermeture commence. Depuis la huitième passe, elle n'empêche plus rien : la fiche cesse de
+   * compter dans la pile (celle d'en dessous redevient celle du dessus, l'accueil répond), et son
+   * calque finit son retour par-dessus, sans pointeur.
+   */
   onCloseStart: () => void;
+  /** Une fermeture retournée en ouverture : la fiche compte de nouveau. */
+  onReopen: () => void;
   onClosed: () => void;
+  /** Ce que la scène peut demander à la fiche pendant sa fermeture — voir `SheetHandle`. */
+  bindHandle: (handle: SheetHandle | null) => void;
 };
 
 function SheetStage({
@@ -838,9 +877,14 @@ function SheetStage({
   const sources = useRef(new Map<string, HTMLElement>());
   const [stack, setStack] = useState<Entry[]>([]);
   const nextId = useRef(1);
-  // Fermetures en cours : un appui pendant l'une d'elles n'ouvre rien. La fiche qui part n'a plus
-  // d'avis, et une fiche ouverte au même instant se serait glissée sous son retour.
-  const closingCount = useRef(0);
+  /*
+   * Les fiches qui se referment. Jusqu'à la septième passe, un appui pendant l'une d'elles n'ouvrait
+   * rien, le temps que le retour se pose — « je ne peux pas ouvrir une autre fiche tant que
+   * l'animation n'est pas finie » (Louis, 10/10/2026). Comme sur iOS, une fermeture n'est plus
+   * qu'un calque qui finit son chemin : elle ne couvre plus rien, et une ouverture la coupe.
+   */
+  const [closing, setClosing] = useState<ReadonlySet<number>>(() => new Set());
+  const handles = useRef(new Map<number, SheetHandle>());
   // La ligne des durées : écrite directement dans le DOM à l'arrivée d'un trajet, sans rendu de
   // React — rien ne doit redessiner la scène pendant ou juste après un mouvement.
   const readoutRef = useRef<HTMLSpanElement>(null);
@@ -870,30 +914,97 @@ function SheetStage({
     else sources.current.delete(key);
   };
 
+  // La pile telle qu'elle compte : sans les fiches qui se referment.
+  const live = stack.filter((e) => !closing.has(e.id));
+
+  /**
+   * Avant une ouverture, les fermetures en cours. Celle qui revient vers l'affiche touchée se rouvre
+   * d'où elle en est (même instance, même vitesse) ; les autres s'effacent tout de suite, et la
+   * nouvelle fiche reprend leur assombrissement là où il en était. `reopened` : une fiche a été
+   * rouverte — il n'y a alors rien d'autre à ouvrir.
+   */
+  const settleClosings = (key: string | null): { reopened: boolean; dim?: number; home?: number } => {
+    let dim: number | undefined;
+    let home: number | undefined;
+    let reopened = false;
+    for (const e of stack) {
+      if (!closing.has(e.id)) continue;
+      const h = handles.current.get(e.id);
+      if (!h) continue;
+      if (!reopened && key !== null && h.key === key && h.reverse?.()) {
+        reopened = true;
+        continue;
+      }
+      const left = h.interrupt();
+      dim = Math.max(dim ?? 0, left.dim);
+      home = home === undefined ? left.home : Math.min(home, left.home);
+    }
+    return { reopened, dim, home };
+  };
+
   const openTitle: OpenTitle = (o) => {
-    if (closingCount.current > 0) return;
-    const top = stack[stack.length - 1];
+    const top = live[live.length - 1];
     // Une affiche qui est le titre même de la fiche du dessus ne la rouvre pas par-dessus elle.
     if (top?.kind === "title" && top.opening.title.radarrId === o.title.radarrId && !!top.opening.outside === !!o.outside) return;
+    const left = settleClosings(o.key);
+    if (left.reopened) return;
     const el = sources.current.get(o.key);
-    const entry: Entry = { id: nextId.current++, kind: "title", opening: { ...o, mode: reduced || !el ? "fade" : "flip" } };
+    const entry: Entry = {
+      id: nextId.current++,
+      kind: "title",
+      opening: { ...o, mode: reduced || !el ? "fade" : "flip", dimFrom: left.dim, homeFrom: left.home },
+    };
     setStack((s) => [...s, entry]);
   };
   const openPerson = (name: string) => {
-    if (closingCount.current > 0) return;
+    settleClosings(null);
     const entry: Entry = { id: nextId.current++, kind: "person", name };
     setStack((s) => [...s, entry]);
   };
-  const closeStart = () => {
-    closingCount.current += 1;
-  };
-  // Appelée par une fiche une fois sa sortie jouée : elle seule quitte la pile, par son identité.
+  const closeStart = (id: number) => setClosing((c) => new Set(c).add(id));
+  const reopen = (id: number) =>
+    setClosing((c) => {
+      const n = new Set(c);
+      n.delete(id);
+      return n;
+    });
+  // Appelée par une fiche une fois sa sortie jouée (ou coupée) : elle seule quitte la pile, par son identité.
   const closed = (id: number) => {
-    closingCount.current = Math.max(0, closingCount.current - 1);
+    handles.current.delete(id);
+    setClosing((c) => {
+      if (!c.has(id)) return c;
+      const n = new Set(c);
+      n.delete(id);
+      return n;
+    });
     setStack((s) => s.filter((e) => e.id !== id));
   };
 
   const keyOf = (e: Entry | undefined) => (e?.kind === "title" ? e.opening.key : null);
+  // Une fiche couverte : quelqu'un au-dessus d'elle compte encore — une fiche qui se referme ne couvre plus rien.
+  const coveredAt = (i: number) => stack.slice(i + 1).some((e) => !closing.has(e.id));
+  /**
+   * L'affiche cachée d'un niveau (−1 : l'accueil) : celle de la fiche ouverte depuis lui qui compte,
+   * sinon celle de la fiche qui y revient. Le parent d'une fiche est la dernière fiche vivante sous
+   * elle — une fermeture et l'ouverture qui la coupe partent du même niveau. Passer de l'une à
+   * l'autre rend aussitôt la première affiche visible : c'est ce que veut la coupure.
+   */
+  const hiddenAt = (level: number): string | null => {
+    let lastLive = -1;
+    let hidden: string | null = null;
+    let liveChild = false;
+    stack.forEach((e, j) => {
+      if (lastLive === level && !liveChild) {
+        const k = keyOf(e);
+        if (!closing.has(e.id)) {
+          liveChild = true;
+          hidden = k;
+        } else if (k !== null) hidden = k;
+      }
+      if (!closing.has(e.id)) lastLive = j;
+    });
+    return hidden;
+  };
   const empty = stack.length === 0;
   useEffect(() => {
     if (!empty) return; // Échap ferme d'abord la fiche du dessus, qui l'écoute elle-même
@@ -914,9 +1025,9 @@ function SheetStage({
   const content = (
     <>
       {phone ? (
-        <PhoneHome titles={titles} framed={framed} hiddenKey={keyOf(stack[0])} register={register} onOpen={openTitle} />
+        <PhoneHome titles={titles} framed={framed} hiddenKey={hiddenAt(-1)} register={register} onOpen={openTitle} />
       ) : (
-        <DesktopHome titles={titles} hiddenKey={keyOf(stack[0])} register={register} onOpen={openTitle} />
+        <DesktopHome titles={titles} hiddenKey={hiddenAt(-1)} register={register} onOpen={openTitle} />
       )}
       {/* En haut à droite, la pilule tombait sur la croix de la fiche du téléphone : elle descend
           au milieu du bas, là où ni l'accueil ni la fiche simulés n'ont de commande. Pleine et non
@@ -947,20 +1058,25 @@ function SheetStage({
       {stack.map((e, i) => {
         const common: SheetCommon = {
           depth: i,
-          covered: i < stack.length - 1,
+          covered: coveredAt(i),
           phone,
           framed,
           rootRef,
           sources,
           pace,
           report,
-          hiddenKey: keyOf(stack[i + 1]),
+          hiddenKey: hiddenAt(i),
           register,
           related: relatedFor(e.kind === "title" ? e.opening.title.radarrId : null, i + 1),
           onOpenTitle: openTitle,
           onOpenPerson: openPerson,
-          onCloseStart: closeStart,
+          onCloseStart: () => closeStart(e.id),
+          onReopen: () => reopen(e.id),
           onClosed: () => closed(e.id),
+          bindHandle: (h) => {
+            if (h) handles.current.set(e.id, h);
+            else handles.current.delete(e.id);
+          },
         };
         // La clé est l'entrée et non le titre : un même film peut revenir plus haut dans la pile,
         // et une autre fiche est une autre instance (règle 1 du cycle de vie des fiches).
@@ -1040,7 +1156,7 @@ function DesktopHome({ titles, hiddenKey, register, onOpen }: HomeProps) {
                   onClick={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8 })}
                   // La carte de CinemaCard, survol compris.
                   className={`${CARD_WIDTH} relative shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition-[transform,box-shadow] duration-200 hover:z-10 hover:scale-105 hover:shadow-xl hover:shadow-black/60`}
-                  style={{ visibility: hiddenKey === key ? "hidden" : undefined }}
+                  style={{ opacity: hiddenKey === key ? 0 : undefined }}
                 >
                   <img src={m.posterUrl ?? ""} alt={m.title} className="block aspect-[2/3] w-full object-cover" />
                 </button>
@@ -1084,7 +1200,7 @@ function PhoneHome({ titles, framed, hiddenKey, register, onOpen }: HomeProps & 
                     tabIndex={on ? 0 : -1}
                     onClick={on ? () => onOpen({ title: m, key, poster, radius: 16 }) : undefined}
                     className="relative block w-full overflow-hidden rounded-2xl bg-surface text-left shadow-xl shadow-black/50"
-                    style={{ visibility: hiddenKey === key ? "hidden" : undefined }}
+                    style={{ opacity: hiddenKey === key ? 0 : undefined }}
                   >
                     <img src={poster} alt="" className="block aspect-[2/3] w-full object-cover" />
                     {m.logoUrl && (
@@ -1112,7 +1228,7 @@ function PhoneHome({ titles, framed, hiddenKey, register, onOpen }: HomeProps & 
                   type="button"
                   onClick={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8 })}
                   className={`${PHONE_POSTER_WIDTH} relative shrink-0 overflow-hidden rounded-lg bg-surface`}
-                  style={{ visibility: hiddenKey === key ? "hidden" : undefined }}
+                  style={{ opacity: hiddenKey === key ? 0 : undefined }}
                 >
                   <img src={m.posterUrl ?? ""} alt={m.title} className="block aspect-[2/3] w-full object-cover" />
                 </button>
@@ -1159,7 +1275,7 @@ function SheetPosterRow({
               type="button"
               onClick={() => onOpen({ title: m, key, poster: m.posterUrl ?? "", radius: 8, outside })}
               className={`${phone ? PHONE_POSTER_WIDTH : SHEET_POSTER_WIDTH} relative shrink-0 overflow-hidden rounded-lg bg-surface shadow-lg shadow-black/40`}
-              style={{ visibility: hiddenKey === key ? "hidden" : undefined }}
+              style={{ opacity: hiddenKey === key ? 0 : undefined }}
             >
               <img src={m.posterUrl ?? ""} alt={m.title} className="block aspect-[2/3] w-full object-cover" />
               {outside && (
@@ -1256,8 +1372,36 @@ function fadeContentOut(els: HTMLElement[], snapshot: Map<HTMLElement, number>, 
  *   dessus revient dans l'affiche d'où elle est partie si celle-ci est encore à l'écran
  *   (`sourceOnScreen`) ; sinon elle descend en s'effaçant.
  */
-/** Un aller en cours ou fini : de quoi reprendre son point et sa vitesse si une fermeture l'interrompt. */
-type Run = { motion: Motion; poseAt: (q: number) => Pose; startedAt: number | null };
+/**
+ * Un aller en cours ou fini : de quoi reprendre son point et sa vitesse si une fermeture l'interrompt.
+ * `span` : la longueur du trajet de l'aller en pixels — une progression de `v` par seconde déplace
+ * la fenêtre de `v·span` pixels par seconde, quel que soit le point de départ (l'affiche, ou une
+ * fermeture retournée en chemin).
+ */
+type Run = { motion: Motion; poseAt: (q: number) => Pose; startedAt: number | null; span: number };
+
+/**
+ * Une fermeture en vol (huitième passe) : de quoi la retourner en ouverture d'où elle en est, ou
+ * savoir à quel point de son retour elle est quand une autre ouverture la coupe. `handover` : le
+ * relais final a commencé (la vraie carte est revenue dessous) — trop tard pour la retourner.
+ */
+type CloseRun = {
+  motion: Motion;
+  poseAt: (r: number) => Pose;
+  startedAt: number;
+  stage: { W: number; H: number };
+  target: Box;
+  source: Box;
+  start: Box;
+  handover: boolean;
+};
+
+/** L'échelle où en est un élément, animations comprises (`matrix(a, …)`) — 1 quand le navigateur n'en dit rien. */
+function scaleOf(el: Element): number {
+  const m = /^matrix\(([^,]+),/.exec(getComputedStyle(el).transform);
+  const a = m ? Number(m[1]) : NaN;
+  return Number.isFinite(a) && a > 0 ? a : 1;
+}
 
 /**
  * Pose la fenêtre du trajet pour un moteur : sur la boîte de base (transform), ou sur toute la scène
@@ -1270,7 +1414,7 @@ function prepareFrame(frame: HTMLElement, inner: HTMLElement, stage: { W: number
 
 function MockSheet({
   entryId, opening, stagger, depth, covered, phone, framed, rootRef, sources, pace, report, hiddenKey, register, related,
-  onOpenTitle, onOpenPerson, onCloseStart, onClosed,
+  onOpenTitle, onOpenPerson, onCloseStart, onReopen, onClosed, bindHandle,
 }: SheetCommon & { entryId: number; opening: Opening; stagger: boolean }) {
   const t = useT();
   const { title, mode, outside } = opening;
@@ -1303,9 +1447,17 @@ function MockSheet({
   const [settled, setSettled] = useState(mode === "fade");
   // Où le doigt a laissé la fiche quand la fermeture a commencé (0 pour la croix ou Échap) :
   // gelé là, pour que le décalage du geste, que `useSwipeToDismiss` pousse ensuite jusqu'au bas de
-  // l'écran, ne fasse pas sauter la fiche sous le trajet de retour. Non nul : la fiche se ferme.
+  // l'écran, ne fasse pas sauter la fiche sous le trajet de retour. Une fermeture retournée en
+  // ouverture le gèle à 0 jusqu'au prochain geste : le geste, lui, est resté au bas de l'écran.
   const [frozenOffset, setFrozenOffset] = useState<number | null>(null);
-  const closing = frozenOffset !== null;
+  const [closing, setClosing] = useState(false);
+  const heldAfterReverseRef = useRef(false);
+  // La fermeture en vol (huitième passe) : ses animations et minuteurs — une autre ouverture la
+  // coupe, un appui sur son affiche la retourne —, et où en est son retour.
+  const closeAnimsRef = useRef<Animation[]>([]);
+  const ghostAnimsRef = useRef<Animation[]>([]);
+  const closeTimersRef = useRef<number[]>([]);
+  const closeRunRef = useRef<CloseRun | null>(null);
   // Sans visuel, l'affiche en tient lieu (chasse aux bogues de la sixième passe) : une `<img src="">`
   // grandissait vide jusqu'à l'écran entier.
   const backdrop = title.backdropUrl || title.posterUrl || opening.poster || "";
@@ -1408,11 +1560,13 @@ function MockSheet({
       posterOpacity: 1 - smooth(0, 0.6, q),
     });
     const samples = sampleMotion(motion);
-    const run: Run = { motion, poseAt, startedAt: null };
+    const run: Run = { motion, poseAt, startedAt: null, span: travelOf(m.source, m.target) };
     runRef.current = run;
     const linear = { duration: d, easing: "linear" };
     // Ce qui est derrière s'éteint au rythme du trajet : la fiche passe devant, elle ne remplace rien.
-    play(dimRef.current, samples.map(({ offset, q }) => ({ offset, opacity: DIM * clamp(q, 0, 1) })), linear);
+    // Ouverte en coupant une fermeture : l'assombrissement repart d'où celle-ci l'avait laissé.
+    const dimFrom = opening.dimFrom ?? 0;
+    play(dimRef.current, samples.map(({ offset, q }) => ({ offset, opacity: lerp(dimFrom, DIM, clamp(q, 0, 1)) })), linear);
     const { items, fades } = parts();
     // Le contenu part quand l'image est en place pour l'œil (`REVEAL_AT`) et se pose avec elle, d'un bloc.
     revealContent(items, timeAt(samples, d, REVEAL_AT), stagger, play);
@@ -1442,7 +1596,8 @@ function MockSheet({
       play(bd, tracks.bd, linear);
       play(poster, tracks.poster, linear);
       // Au bureau, l'accueil recule d'un rien : la profondeur, sans rien déplacer qui se lise.
-      if (h) play(h, samples.map(({ offset, q }) => ({ offset, transform: `scale(${lerp(1, HOME_SCALE, clamp(q, 0, 1)).toFixed(5)})` })), linear);
+      const homeFrom = opening.homeFrom ?? 1;
+      if (h) play(h, samples.map(({ offset, q }) => ({ offset, transform: `scale(${lerp(homeFrom, HOME_SCALE, clamp(q, 0, 1)).toFixed(5)})` })), linear);
     }
     unpromoteRef.current = promote([frame, inner, bd, poster, cardRef.current, dimRef.current, h, ...items]);
 
@@ -1471,6 +1626,23 @@ function MockSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, phone, pace, stagger]);
 
+  /** Arrête la fermeture en vol : ses animations (le calque du retour à part) et ses minuteurs. */
+  const stopClose = (ghost: "cancel" | "freeze") => {
+    for (const a of closeAnimsRef.current.splice(0)) a.cancel();
+    for (const a of ghostAnimsRef.current.splice(0)) {
+      if (ghost === "cancel") a.cancel();
+      else (a as Partial<Animation>).pause?.();
+    }
+    for (const id of closeTimersRef.current.splice(0)) window.clearTimeout(id);
+  };
+
+  /** Le focus revient à l'affiche — seulement s'il était dans la fiche (ou nulle part) : un appui ailleurs le garde. */
+  const focusSource = (src: HTMLElement | undefined) => {
+    if (!src) return;
+    const active = document.activeElement;
+    if (!active || active === document.body || sheetRef.current?.contains(active)) src.focus({ preventScroll: true });
+  };
+
   const requestClose = () => {
     if (closingRef.current || covered) return;
     closingRef.current = true;
@@ -1484,6 +1656,7 @@ function MockSheet({
     const dim = dimRef.current;
     const h = scalesHome ? home() : null;
     const { items, fades } = parts();
+    const src = sources.current.get(opening.key);
 
     // 1. Tout lire d'où on en est, *avant* d'arrêter l'ouverture : le doigt, la montée de la carte,
     //    le point et la vitesse de l'aller (calculés, pas relus dans les styles), chaque opacité.
@@ -1495,7 +1668,7 @@ function MockSheet({
     const qNow = run && midOpen ? (run.startedAt == null ? 0 : run.motion.q(elapsed)) : 1;
     const vNow = run && midOpen && run.startedAt != null ? run.motion.v(elapsed) : 0;
     const dimNow = opacityNow(dim);
-    const homeNow = h ? (run && midOpen ? lerp(1, HOME_SCALE, clamp(qNow, 0, 1)) : HOME_SCALE) : 1;
+    const homeNow = h ? (run && midOpen ? scaleOf(h) : HOME_SCALE) : 1;
     const fingerVy = releaseVelocity(movesRef.current);
     movesRef.current = [];
     const snapshot = new Map<HTMLElement, number>();
@@ -1506,21 +1679,34 @@ function MockSheet({
     for (const id of openTimersRef.current.splice(0)) window.clearTimeout(id);
     unpromoteRef.current?.();
     unpromoteRef.current = null;
+    heldAfterReverseRef.current = false;
     setSettled(false);
+    setClosing(true);
     setFrozenOffset(off);
+    // Le focus quitte la fiche, inerte dès maintenant, pour l'affiche d'où elle était partie : au
+    // clavier, Entrée la rouvre aussitôt, pendant le retour (huitième passe). Cachée par l'opacité
+    // et non plus la visibilité, elle peut le recevoir.
+    focusSource(src);
 
     // 3. Le contenu s'efface depuis où il en est ; rien ne se rejoue à l'envers.
     fadeContentOut(items, snapshot, CONTENT_OUT_MS);
     fadeContentOut(fades, snapshot, CONTENT_OUT_MS * 2);
 
+    const anim = (el: Element | null | undefined, frames: Keyframe[], opts: KeyframeAnimationOptions, ghost = false) => {
+      const a = el?.animate(frames, opts);
+      if (a) (ghost ? ghostAnimsRef : closeAnimsRef).current.push(a);
+      return a;
+    };
+    const wait = (fn: () => void, ms: number) => closeTimersRef.current.push(window.setTimeout(fn, ms));
     const done = () => {
+      closeRunRef.current = null;
       if (aliveRef.current) onClosed();
     };
     if (mode === "fade") {
-      sheet?.animate([{ opacity: opacityNow(sheet) }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
-      card?.animate([{ opacity: opacityNow(card) }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
-      dim?.animate([{ opacity: dimNow }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
-      window.setTimeout(done, 180);
+      anim(sheet, [{ opacity: opacityNow(sheet) }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
+      anim(card, [{ opacity: opacityNow(card) }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
+      anim(dim, [{ opacity: dimNow }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
+      wait(done, 180);
       return;
     }
 
@@ -1528,13 +1714,11 @@ function MockSheet({
     // d'arrivée se lit à sa vraie place, pas à celle de l'accueil reculé. Remesuré ici et non repris
     // de l'ouverture : la fiche a pu défiler, l'écran tourner.
     const m = measure();
-    const src = sources.current.get(opening.key);
     const root = rootRef.current;
-    // Le focus revient à l'affiche d'où la fiche était partie — au clavier, Échap ramène là où l'on était.
     const handBack = () => {
       if (!src) return;
-      src.style.visibility = "";
-      src.focus({ preventScroll: true });
+      src.style.opacity = "";
+      focusSource(src);
     };
 
     // L'affiche d'origine n'est plus à l'écran (la rangée a défilé, la fiche du dessous aussi) : pas
@@ -1543,11 +1727,11 @@ function MockSheet({
       if (frame) frame.style.display = "none";
       showSheetImage(true);
       const out = { duration: PLAIN_OUT_MS, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "both" as const };
-      sheet?.animate([{ opacity: 1, transform: `translateY(${off}px)` }, { opacity: 0, transform: `translateY(${off + PLAIN_OUT_DROP}px)` }], out);
-      card?.animate([{ opacity: 1, transform: `translateY(${cardFrom}px)` }, { opacity: 0, transform: `translateY(${cardFrom + PLAIN_OUT_DROP}px)` }], out);
-      dim?.animate([{ opacity: dimNow }, { opacity: 0 }], out);
-      if (h && homeNow !== 1) h.animate([{ transform: `scale(${homeNow})` }, { transform: "none" }], { duration: PLAIN_OUT_MS, easing: "cubic-bezier(0.2, 0, 0, 1)" });
-      window.setTimeout(() => {
+      anim(sheet, [{ opacity: 1, transform: `translateY(${off}px)` }, { opacity: 0, transform: `translateY(${off + PLAIN_OUT_DROP}px)` }], out);
+      anim(card, [{ opacity: 1, transform: `translateY(${cardFrom}px)` }, { opacity: 0, transform: `translateY(${cardFrom + PLAIN_OUT_DROP}px)` }], out);
+      anim(dim, [{ opacity: dimNow }, { opacity: 0 }], out);
+      if (h && homeNow !== 1) anim(h, [{ transform: `scale(${homeNow})` }, { transform: "none" }], { duration: PLAIN_OUT_MS, easing: "cubic-bezier(0.2, 0, 0, 1)" });
+      wait(() => {
         handBack();
         done();
       }, PLAIN_OUT_MS);
@@ -1562,13 +1746,15 @@ function MockSheet({
         ? run.poseAt(qNow)
         : { box: m.target, corners: phone ? [c, c, 0, 0] : imageCorners, bd: IDENTITY, poster: coverTf(m.source, m.target), bdOpacity: 1, posterOpacity: 0 };
     const toPose: Pose = { box: m.source, corners: sourceCorners, bd: coverTf(m.target, m.source), poster: IDENTITY, bdOpacity: 0, posterOpacity: 1 };
-    // La vitesse de départ, en progression du retour par seconde. Un aller interrompu à q avançait de
-    // v ; le retour couvre ces q d'un coup (q_aller = q·(1 − r)), d'où −v / q : il continue un instant
-    // vers la fiche avant de revenir, comme le fait iOS. Lâchée au doigt, la vitesse verticale du
-    // doigt projetée sur le chemin du retour.
+    // La vitesse de départ, en progression du retour par seconde. Un aller interrompu avançait de
+    // `v·span` pixels par seconde vers la fiche ; le retour, long de `travelOf(cur, carte)`, part donc
+    // à −v·span / longueur : il continue un instant vers la fiche avant de revenir, comme le fait
+    // iOS. Lâchée au doigt, la vitesse verticale du doigt projetée sur le chemin du retour.
     let v0 = 0;
-    if (run && midOpen) v0 = qNow > 0.05 ? -vNow / qNow : 0;
-    else if (fingerVy !== 0) {
+    if (run && midOpen) {
+      const back = travelOf(cur.box, toPose.box);
+      v0 = back > 4 ? (-vNow * run.span) / back : 0;
+    } else if (fingerVy !== 0) {
       const dx = toPose.box.x + toPose.box.w / 2 - (cur.box.x + cur.box.w / 2);
       const dy = toPose.box.y + toPose.box.h / 2 - (cur.box.y + cur.box.h / 2);
       const len2 = dx * dx + dy * dy;
@@ -1590,32 +1776,173 @@ function MockSheet({
     place(bd, m.target);
     place(poster, m.source);
     frame.style.display = "";
+    frame.style.opacity = "";
     showSheetImage(false);
     const linear = { duration: d, easing: "linear", fill: "both" as const };
     const tracks = morphTracks(poseAt, samples, m.target, stage, pace.engine);
-    const back = frame.animate(tracks.win, linear);
+    // Le calque du retour à part (`ghost`) : une ouverture qui coupe cette fermeture le fige là où il
+    // en est et l'efface, au lieu de le renvoyer d'un coup à la taille de la bannière.
+    const back = anim(frame, tracks.win, linear, true);
     if (pace.engine === "transform") {
-      frame.animate(tracks.radius, linear);
-      inner.animate(tracks.inner, linear);
+      anim(frame, tracks.radius, linear, true);
+      anim(inner, tracks.inner, linear, true);
     }
-    bd.animate(tracks.bd, linear);
-    poster.animate(tracks.poster, linear);
+    anim(bd, tracks.bd, linear, true);
+    anim(poster, tracks.poster, linear, true);
     // La carte part d'où elle en est (le doigt, ou sa montée interrompue), et finit sous l'écran.
-    card?.animate(samples.map(({ offset, q }) => ({ offset, transform: `translateY(${lerp(cardFrom, off + m.cardDrop, q).toFixed(2)}px)` })), linear);
-    dim?.animate(samples.map(({ offset, q }) => ({ offset, opacity: dimNow * (1 - clamp(q, 0, 1)) })), linear);
+    anim(card, samples.map(({ offset, q }) => ({ offset, transform: `translateY(${lerp(cardFrom, off + m.cardDrop, q).toFixed(2)}px)` })), linear);
+    anim(dim, samples.map(({ offset, q }) => ({ offset, opacity: dimNow * (1 - clamp(q, 0, 1)) })), linear);
     // Sans remplissage : à la fin, l'accueil retrouve simplement son état.
-    if (h && homeNow !== 1) h.animate(samples.map(({ offset, q }) => ({ offset, transform: `scale(${lerp(homeNow, 1, clamp(q, 0, 1)).toFixed(5)})` })), { duration: d, easing: "linear" });
+    if (h && homeNow !== 1) anim(h, samples.map(({ offset, q }) => ({ offset, transform: `scale(${lerp(homeNow, 1, clamp(q, 0, 1)).toFixed(5)})` })), { duration: d, easing: "linear" });
     const unpromote = promote([frame, inner, bd, poster, card, dim, h]);
+    closeRunRef.current = { motion, poseAt, startedAt: clockNow(), stage, target: m.target, source: m.source, start: cur.box, handover: false };
     // Le relais : la vraie carte reparaît dessous, et le calque, maintenant superposé à elle, s'efface.
     const finish = () => {
       unpromote();
+      if (closeRunRef.current) closeRunRef.current.handover = true;
       handBack();
       report("close", motion);
-      frame.animate([{ opacity: 1 }, { opacity: 0 }], { duration: HANDOVER_MS, easing: "ease-out", fill: "both" }).onfinish = done;
+      const fade = anim(frame, [{ opacity: 1 }, { opacity: 0 }], { duration: HANDOVER_MS, easing: "ease-out", fill: "both" }, true);
+      if (fade) fade.onfinish = done;
+      else done();
     };
     if (back) back.onfinish = finish;
     else finish();
   };
+
+  /**
+   * Une autre ouverture coupe cette fermeture (huitième passe). Le calque du retour est figé où il en
+   * est et s'efface en `GHOST_FADE_MS` — ou disparaît d'un coup s'il était presque arrivé —, la vraie
+   * carte reparaît dessous à l'instant, et tout le reste de la fiche s'éteint : son assombrissement,
+   * rendu à la scène, est repris par la nouvelle fiche à la même valeur.
+   */
+  const interruptedRef = useRef(false);
+  const interrupt = () => {
+    const dim = dimRef.current;
+    const h = scalesHome ? home() : null;
+    // Déjà coupée (son calque s'efface encore) : plus rien à rendre ni à éteindre.
+    if (interruptedRef.current) return { dim: 0, home: h ? scaleOf(h) : 1 };
+    interruptedRef.current = true;
+    const left = { dim: opacityNow(dim), home: h ? scaleOf(h) : 1 };
+    const run = closeRunRef.current;
+    const r = run ? (run.handover ? 1 : run.motion.q(clockNow() - run.startedAt)) : 1;
+    stopClose("freeze");
+    closeRunRef.current = null;
+    const src = sources.current.get(opening.key);
+    if (src) src.style.opacity = "";
+    for (const el of [dim, cardRef.current, sheetRef.current]) if (el) el.style.opacity = "0";
+    const frame = frameRef.current;
+    const done = () => {
+      if (aliveRef.current) onClosed();
+    };
+    if (!frame || frame.style.display === "none" || r >= GHOST_SNAP_AT) {
+      if (frame) frame.style.display = "none";
+      done();
+    } else {
+      frame.animate([{ opacity: opacityNow(frame) }, { opacity: 0 }], { duration: GHOST_FADE_MS, easing: "ease-out", fill: "both" });
+      window.setTimeout(done, GHOST_FADE_MS);
+    }
+    return left;
+  };
+
+  /**
+   * L'affiche vers laquelle la fiche revient est touchée de nouveau (huitième passe) : la fermeture se
+   * retourne en ouverture, d'où elle en est et à sa vitesse — comme une vue d'iOS qu'on rattrape —,
+   * au lieu de repartir de la carte. Faux quand il est trop tard : le relais final a commencé, la vraie
+   * carte est déjà revenue dessous ; la scène ouvre alors une fiche neuve.
+   */
+  const reverse = (): boolean => {
+    const run = closeRunRef.current;
+    const frame = frameRef.current;
+    const inner = innerRef.current;
+    const bd = morphBackdropRef.current;
+    const poster = morphPosterRef.current;
+    if (!run || run.handover || mode === "fade" || !frame || !inner || !bd || !poster) return false;
+    const card = cardRef.current;
+    const dim = dimRef.current;
+    const h = scalesHome ? home() : null;
+    // Lu avant d'arrêter quoi que ce soit, comme à la fermeture.
+    const t = clockNow() - run.startedAt;
+    const r = run.motion.q(t);
+    const vr = run.motion.v(t);
+    const cardNow = card ? translateYOf(getComputedStyle(card).transform) : 0;
+    const dimNow = opacityNow(dim);
+    const homeNow = h ? scaleOf(h) : 1;
+    stopClose("cancel");
+    closeRunRef.current = null;
+    closingRef.current = false;
+    setClosing(false);
+    // Tenue à 0 jusqu'au prochain geste : `useSwipeToDismiss` a laissé son décalage au bas de l'écran.
+    setFrozenOffset(0);
+    heldAfterReverseRef.current = true;
+    onReopen();
+
+    const P = run.poseAt(r);
+    const T: Pose = { box: run.target, corners: imageCorners, bd: IDENTITY, poster: coverTf(run.source, run.target), bdOpacity: 1, posterOpacity: 0 };
+    // Le retour avançait de `vr·longueur` pixels par seconde vers la carte ; l'aller repart de P à
+    // contre-sens, à −vr·longueur / (P → fiche).
+    const ahead = travelOf(P.box, T.box);
+    const v0 = ahead > 4 ? (-vr * travelOf(run.start, run.source)) / ahead : 0;
+    const motion = openMotion(pace, P.box, T.box, run.stage, v0);
+    const d = motion.duration;
+    const poseAt = (q: number): Pose => ({
+      box: lerpBox(P.box, T.box, q),
+      corners: lerpCorners(P.corners, T.corners, q),
+      bd: lerpTf(P.bd, T.bd, q),
+      poster: lerpTf(P.poster, T.poster, q),
+      bdOpacity: lerp(P.bdOpacity, 1, smooth(0, 0.6, q)),
+      posterOpacity: P.posterOpacity * (1 - smooth(0, 0.5, q)),
+    });
+    const samples = sampleMotion(motion);
+    const linear = { duration: d, easing: "linear", fill: "both" as const };
+    const anims = openAnimsRef.current;
+    const go = (el: Element | null | undefined, frames: Keyframe[], opts: KeyframeAnimationOptions) => {
+      const a = el?.animate(frames, opts);
+      if (a) anims.push(a);
+    };
+    frame.style.display = "";
+    frame.style.opacity = "";
+    const tracks = morphTracks(poseAt, samples, run.target, run.stage, pace.engine);
+    go(frame, tracks.win, linear);
+    if (pace.engine === "transform") {
+      go(frame, tracks.radius, linear);
+      go(inner, tracks.inner, linear);
+    }
+    go(bd, tracks.bd, linear);
+    go(poster, tracks.poster, linear);
+    go(card, samples.map(({ offset, q }) => ({ offset, transform: `translateY(${lerp(cardNow, 0, q).toFixed(2)}px)` })), { ...linear, fill: "backwards" });
+    go(dim, samples.map(({ offset, q }) => ({ offset, opacity: lerp(dimNow, DIM, clamp(q, 0, 1)) })), linear);
+    if (h) go(h, samples.map(({ offset, q }) => ({ offset, transform: `scale(${lerp(homeNow, HOME_SCALE, clamp(q, 0, 1)).toFixed(5)})` })), linear);
+    // Le contenu, qui s'effaçait, revient avec l'image comme à une ouverture.
+    const { items, fades } = parts();
+    for (const el of [...items, ...fades]) for (const a of el.getAnimations?.() ?? []) a.cancel();
+    revealContent(items, timeAt(samples, d, REVEAL_AT), stagger, (el, f, o) => go(el, f, { fill: "both", ...o }));
+    fades.forEach((el) => go(el, [{ opacity: 0 }, { opacity: 1 }], { duration: Math.max(120, timeAt(samples, d, 0.95)), easing: "ease-out", fill: "both" }));
+    unpromoteRef.current = promote([frame, inner, bd, poster, card, dim, h]);
+    runRef.current = { motion, poseAt, startedAt: clockNow(), span: ahead };
+    const timers = openTimersRef.current;
+    timers.push(
+      window.setTimeout(() => {
+        if (closingRef.current || !aliveRef.current) return;
+        frame.style.display = "none";
+        showSheetImage(true);
+        unpromoteRef.current?.();
+        unpromoteRef.current = null;
+        report("open", motion);
+        closeButtonRef.current?.focus({ preventScroll: true });
+      }, d),
+      window.setTimeout(() => {
+        if (!closingRef.current && aliveRef.current) setSettled(true);
+      }, d + 40),
+    );
+    return true;
+  };
+
+  // Ce que la scène peut demander à la fiche pendant sa fermeture, tenu à jour à chaque rendu.
+  useEffect(() => {
+    bindHandle({ interrupt, reverse, key: opening.key });
+    return () => bindHandle(null);
+  });
 
   // Le geste de la vraie fiche du téléphone, à l'identique : la bannière pour poignée, la croix
   // tenue hors de la poignée. Couverte, la fiche ne le reçoit pas. Les mouvements du doigt sont
@@ -1634,6 +1961,11 @@ function MockSheet({
     },
     onPointerMove: (e: ReactPointerEvent) => {
       note(e);
+      // Retournée en ouverture après un geste : la fiche était tenue à 0 ; le doigt la reprend.
+      if (heldAfterReverseRef.current) {
+        heldAfterReverseRef.current = false;
+        setFrozenOffset(null);
+      }
       swipe.handlers.onPointerMove(e);
     },
     onPointerUp: (e: ReactPointerEvent) => {
@@ -1828,7 +2160,8 @@ function MockSheet({
       <div
         ref={cardRef}
         className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-ink ring-1 ring-white/10"
-        style={dragStyle({ top, boxShadow: dragOffset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined })}
+        // Sans pointeur pendant sa fermeture : elle descend encore, l'accueil dessous répond déjà.
+        style={dragStyle({ top, pointerEvents: closing ? "none" : undefined, boxShadow: dragOffset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined })}
       />
       {frame}
       <div
@@ -1940,7 +2273,7 @@ function MockSheet({
  * ouvre des fiches de titre par-dessus elle, comme la saga d'une fiche.
  */
 function MockPersonSheet({
-  entryId, name, reduced, covered, phone, framed, hiddenKey, register, related, onOpenTitle, onCloseStart, onClosed,
+  entryId, name, reduced, covered, phone, framed, hiddenKey, register, related, onOpenTitle, onCloseStart, onClosed, bindHandle,
 }: SheetCommon & { entryId: number; name: string; reduced: boolean }) {
   const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -1952,6 +2285,9 @@ function MockPersonSheet({
   const [settled, setSettled] = useState(false);
   const closing = frozenOffset !== null;
   const rise = reduced ? 0 : 24;
+  // Sa sortie, qu'une autre ouverture peut couper (huitième passe).
+  const closeAnimsRef = useRef<Animation[]>([]);
+  const closeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -1987,12 +2323,31 @@ function MockPersonSheet({
     setFrozenOffset(off);
     setSettled(false);
     const out = { duration: 180, easing: "ease-in", fill: "both" as const };
-    panel?.animate([{ opacity: from.opacity, transform: `translateY(${off}px)` }, { opacity: 0, transform: `translateY(${off + rise}px)` }], out);
-    dimRef.current?.animate([{ opacity: from.dim }, { opacity: 0 }], out);
-    window.setTimeout(() => {
+    for (const a of [
+      panel?.animate([{ opacity: from.opacity, transform: `translateY(${off}px)` }, { opacity: 0, transform: `translateY(${off + rise}px)` }], out),
+      dimRef.current?.animate([{ opacity: from.dim }, { opacity: 0 }], out),
+    ]) {
+      if (a) closeAnimsRef.current.push(a);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
       if (aliveRef.current) onClosed();
     }, 180);
   };
+
+  // Coupée par une autre ouverture : elle s'éteint d'un coup, son assombrissement rendu à la scène.
+  const interrupt = () => {
+    const left = { dim: opacityNow(dimRef.current), home: 1 };
+    for (const a of closeAnimsRef.current.splice(0)) a.cancel();
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+    for (const el of [panelRef.current, dimRef.current]) if (el) el.style.opacity = "0";
+    if (aliveRef.current) onClosed();
+    return left;
+  };
+  useEffect(() => {
+    bindHandle({ interrupt });
+    return () => bindHandle(null);
+  });
 
   const swipe = useSwipeToDismiss(requestClose);
   const dragOffset = frozenOffset ?? (phone && swipe.touched ? swipe.offset : 0);
