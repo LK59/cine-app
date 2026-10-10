@@ -58,6 +58,9 @@ export async function POST(req: NextRequest) {
     cacheAgeMs: ms(body.cacheAgeMs),
     cacheMs: ms(body.cacheMs),
     networkMs: ms(body.networkMs),
+    bootMs: ms(body.bootMs),
+    idbMs: ms(body.idbMs),
+    resumeNetworkMs: ms(body.resumeNetworkMs),
     // La page est passée en arrière-plan pendant l'ouverture : les mesures d'après ne sont pas
     // envoyées (`beforeHidden`, persistentCache.ts), et ceci dit pourquoi elles manquent.
     ...(ms(body.hiddenAtMs) !== null ? { hiddenAtMs: ms(body.hiddenAtMs) as number } : {}),

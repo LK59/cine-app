@@ -30,6 +30,12 @@ export function logStartupTiming(fields: {
   cacheAgeMs: number | null;
   cacheMs: number | null;
   networkMs: number | null;
+  /** Le démarrage du code : quand la lecture du cache commence (depuis la navigation). */
+  bootMs?: number | null;
+  /** La lecture d'IndexedDB elle-même, du début à la fin. */
+  idbMs?: number | null;
+  /** L'arrivée de « Reprendre » par le réseau (depuis la navigation). */
+  resumeNetworkMs?: number | null;
   /** Quand la page est passée en arrière-plan avant la fin de l'ouverture — mesures d'après omises. */
   hiddenAtMs?: number;
   standalone: boolean;

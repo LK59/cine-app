@@ -142,7 +142,13 @@ written by `src/lib/eventLogs.ts` and read by the activity panel like the others
 `data/logs/startup.log` (since 2026-09-25, same module) records each opening of the cinema: whether
 it was drawn from the catalogue kept on the device (`src/lib/persistentCache.ts`, IndexedDB, one per
 account, seven days, wiped at sign-out) and how old that cache was, and when the cache and then the
-network answered (`cacheMs`, `networkMs`, from navigation start). The cache exists because every
+network answered (`cacheMs`, `networkMs`, from navigation start). Since 2026-10-10 it splits that
+wait: `bootMs` (when the cache read starts — JavaScript boot), `idbMs` (the IndexedDB read itself)
+and `resumeNetworkMs` (« Reprendre » from the network). The same day showed the device was never
+the problem: the home's routes answered together in 4.3 s because folder matching (§47) scanned the
+whole Jellyfin library for every title — ~0.6–1.2 s of blocked event loop per catalogue, list or
+discovery call — while the resume feed alone costs 50 ms; `matchIndex` (server-cache.ts) indexes
+each list once. The cache exists because every
 launch used to ask for the whole catalogue again — one to two seconds of loading screen for a phone
 roaming abroad; the log says what it actually saves. Since 2026-09-28 the same line carries the
 device's storage (`storageFacts`): the answer to `persist()` and whether storage is persistent,

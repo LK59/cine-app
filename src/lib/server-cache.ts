@@ -413,16 +413,63 @@ export function folderKey(path: string | null | undefined): string | null {
   return parts.length > 0 ? parts[parts.length - 1].toLowerCase() : null;
 }
 
-/** Le seul élément Jellyfin rangé dans ce dossier — aucun s'il y en a plusieurs (ambigu). */
-function byFolder(items: JellyfinItem[], folder: string | null | undefined, keyOf: (item: JellyfinItem) => string | null): JellyfinItem | null {
-  const key = folderKey(folder);
-  if (!key) return null;
-  const hits = items.filter((i) => keyOf(i) === key);
-  return hits.length === 1 ? hits[0] : null;
-}
-
 /** Le dossier d'un film chez Jellyfin : celui qui contient son fichier. */
 const movieFolderKey = (item: JellyfinItem) => folderKey(item.Path?.replace(/[\\/][^\\/]*$/, ""));
+
+/**
+ * Ce que les passes de rapprochement cherchent, indexé une fois par liste Jellyfin.
+ *
+ * Chaque titre de Radarr/Sonarr parcourait la bibliothèque entière, passe après passe — le dossier
+ * de chaque élément recalculé à chaque fois (une expression régulière, un découpage, une mise en
+ * minuscules). 720 films × 720 éléments : un demi-million de chemins analysés par appel du
+ * catalogue, ~600 ms de boucle d'évènements bloquée (profil CPU du 10/10/2026). Et pendant ce
+ * temps, « Reprendre » et « À suivre », qui coûtent 50 ms seuls, attendaient : lancées ensemble au
+ * démarrage de l'application, les routes de l'accueil répondaient toutes en 4,3 s.
+ *
+ * Les listes viennent du cache (`cachedJellyfinMoviesAdmin`…) : le même tableau tant qu'il n'a pas
+ * expiré, d'où l'index gardé par tableau (`WeakMap`) et oublié avec lui. Les règles ne changent pas :
+ * le premier élément dans l'ordre de la liste, comme `find` ; un dossier partagé par plusieurs
+ * éléments n'en désigne aucun.
+ */
+interface MatchIndex {
+  movieFolders: Map<string, JellyfinItem | null>;
+  seriesFolders: Map<string, JellyfinItem | null>;
+  tmdb: Map<string, JellyfinItem>;
+  imdb: Map<string, JellyfinItem>;
+  tvdb: Map<string, JellyfinItem>;
+}
+
+const matchIndexes = new WeakMap<JellyfinItem[], MatchIndex>();
+
+function matchIndex(items: JellyfinItem[]): MatchIndex {
+  const known = matchIndexes.get(items);
+  if (known) return known;
+  const index: MatchIndex = { movieFolders: new Map(), seriesFolders: new Map(), tmdb: new Map(), imdb: new Map(), tvdb: new Map() };
+  const addFolder = (map: Map<string, JellyfinItem | null>, key: string | null, item: JellyfinItem) => {
+    if (!key) return;
+    // Un second élément dans le même dossier le rend ambigu : il ne désigne plus personne.
+    map.set(key, map.has(key) ? null : item);
+  };
+  const addFirst = (map: Map<string, JellyfinItem>, id: string | undefined, item: JellyfinItem) => {
+    if (id !== undefined && !map.has(id)) map.set(id, item);
+  };
+  for (const item of items) {
+    addFolder(index.movieFolders, movieFolderKey(item), item);
+    addFolder(index.seriesFolders, folderKey(item.Path), item);
+    addFirst(index.tmdb, getProviderIdCI(item.ProviderIds, "tmdb"), item);
+    addFirst(index.imdb, getProviderIdCI(item.ProviderIds, "imdb"), item);
+    addFirst(index.tvdb, getProviderIdCI(item.ProviderIds, "tvdb"), item);
+  }
+  matchIndexes.set(items, index);
+  return index;
+}
+
+/** Le seul élément Jellyfin rangé dans ce dossier — aucun s'il y en a plusieurs (ambigu). */
+function byFolder(folders: Map<string, JellyfinItem | null>, folder: string | null | undefined): JellyfinItem | null {
+  const key = folderKey(folder);
+  if (!key) return null;
+  return folders.get(key) ?? null;
+}
 
 export function findJellyfinMovieByTmdb(
   items: JellyfinItem[],
@@ -435,18 +482,19 @@ export function findJellyfinMovieByTmdb(
   // Pass 0 — Le dossier (05/10/2026). Il ne dépend pas de l'identification de Jellyfin : un film
   // que Jellyfin a pris pour un autre gardait des identifiants faux, son titre ne ressemblait
   // plus — et il disparaissait du cinéma alors que son fichier était là.
-  const inFolder = byFolder(items, folder, movieFolderKey);
+  const index = matchIndex(items);
+  const inFolder = byFolder(index.movieFolders, folder);
   if (inFolder) return inFolder;
 
   // Pass 1 — TMDb ID (most reliable when present)
   if (tmdbId > 0) {
-    const byTmdb = items.find((i) => getProviderIdCI(i.ProviderIds, "tmdb") === String(tmdbId));
+    const byTmdb = index.tmdb.get(String(tmdbId));
     if (byTmdb) return byTmdb;
   }
 
   // Pass 2 — IMDb ID (also very reliable, often present when TMDb isn't)
   if (fallbackImdbId) {
-    const byImdb = items.find((i) => getProviderIdCI(i.ProviderIds, "imdb") === fallbackImdbId);
+    const byImdb = index.imdb.get(fallbackImdbId);
     if (byImdb) return byImdb;
   }
 
@@ -482,12 +530,13 @@ export function findJellyfinSeriesByTvdb(
   // World's Greatest Arena* — sans identifiant TVDB, et un titre qui ne ressemblait plus. La série
   // sortait du cinéma, et l'ouvrir depuis la recherche ne faisait rien. Le dossier, lui, est le
   // même des deux côtés quoi que Jellyfin en ait compris.
-  const inFolder = byFolder(items, folder, (i) => folderKey(i.Path));
+  const index = matchIndex(items);
+  const inFolder = byFolder(index.seriesFolders, folder);
   if (inFolder) return inFolder;
 
   // Pass 1 — TVDb ID
   if (tvdbId > 0) {
-    const byId = items.find((i) => getProviderIdCI(i.ProviderIds, "tvdb") === String(tvdbId));
+    const byId = index.tvdb.get(String(tvdbId));
     if (byId) return byId;
   }
 
