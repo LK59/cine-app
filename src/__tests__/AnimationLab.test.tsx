@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
-import { render, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
+import { act, render, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 // Le catalogue : vide — la page doit se dessiner sans image, sur son dégradé de secours.
 vi.mock("swr", () => ({ default: () => ({ data: undefined }) }));
@@ -74,7 +74,8 @@ describe("la page Tests animations", () => {
     expect(screen.getByRole("button", { name: /Ancien/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Ouverture de fiche/ }));
     expect(screen.getByRole("button", { name: "Téléphone" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Cascade du contenu" }).getAttribute("aria-pressed")).toBe("true");
+    // D'un bloc par défaut depuis la cinquième passe ; la cascade reste à comparer.
+    expect(screen.getByRole("button", { name: "Cascade du contenu" }).getAttribute("aria-pressed")).toBe("false");
     // Sans catalogue, pas de maquette à ouvrir.
     expect((screen.getByRole("button", { name: /Chargement du catalogue/ }) as HTMLButtonElement).disabled).toBe(true);
   });
@@ -128,5 +129,95 @@ describe("la page Tests animations", () => {
     fireEvent.pointerUp(handle!, { clientY: 400, pointerId: 1, pointerType: "touch" });
     expect(sheet.style.transform).toBe("translateY(300px)");
     expect(sheet.style.pointerEvents).toBe("none");
+  });
+
+  describe("cinquième passe : contenu d'un bloc, fermeture sans clignotement, fiches en cascade", () => {
+    type Recorded = { el: Element; frames: Keyframe[]; opts: KeyframeAnimationOptions; cancel: ReturnType<typeof vi.fn> };
+    let recorded: Recorded[] = [];
+    const movie = (id: number): CinemaMovie =>
+      ({
+        radarrId: id, title: `Film ${id}`, year: 2020, genres: [], quality: null, runtimeMinutes: 100, overview: `Résumé ${id}`,
+        posterUrl: `/p${id}.jpg`, backdropUrl: `/b${id}.jpg`, logoUrl: `/l${id}.png`,
+      }) as unknown as CinemaMovie;
+    const openDesktopMock = () => {
+      render(<SheetOpenLot movies={[1, 2, 3, 4, 5].map(movie)} />);
+      fireEvent.click(screen.getByRole("button", { name: "Bureau" }));
+      fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
+    };
+    const sheets = () => Array.from(document.querySelectorAll<HTMLElement>("[data-alab-sheet]"));
+    const openFromHome = (id: number) => fireEvent.click(screen.getAllByRole("img", { name: `Film ${id}` })[0].closest("button")!);
+
+    beforeEach(() => {
+      recorded = [];
+      vi.spyOn(Element.prototype, "animate").mockImplementation(function (this: Element, frames, opts) {
+        const cancel = vi.fn();
+        recorded.push({ el: this, frames: frames as Keyframe[], opts: (typeof opts === "number" ? { duration: opts } : opts) ?? {}, cancel });
+        return {
+          id: "", playState: "finished", finished: Promise.resolve(), cancel,
+          set onfinish(fn: () => void) {
+            queueMicrotask(fn);
+          },
+        } as unknown as Animation;
+      });
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it("fait paraître tout le contenu d'un bloc, au même instant, avec la bannière", () => {
+      openDesktopMock();
+      openFromHome(3);
+      const lines = recorded.filter((r) => r.el.hasAttribute("data-alab-stagger") && r.frames[r.frames.length - 1].opacity === 1);
+      expect(lines.length).toBeGreaterThan(3);
+      expect(new Set(lines.map((r) => r.opts.delay)).size).toBe(1);
+      expect(lines[0].opts.duration).toBe(220);
+    });
+
+    it("annule la révélation à la fermeture : aucune ligne ne reprend d'opacité après", async () => {
+      openDesktopMock();
+      openFromHome(3);
+      const reveal = recorded.filter((r) => r.el.hasAttribute("data-alab-stagger"));
+      expect(reveal.length).toBeGreaterThan(0);
+      const before = recorded.length;
+      fireEvent.keyDown(window, { key: "Escape" });
+      for (const r of reveal) expect(r.cancel).toHaveBeenCalled();
+      // Tout ce que la fermeture anime sur le contenu finit à 0.
+      const after = recorded.slice(before).filter((x) => x.el.hasAttribute("data-alab-stagger"));
+      expect(after.length).toBeGreaterThan(0);
+      for (const r of after) expect(r.frames[r.frames.length - 1].opacity).toBe(0);
+      await waitFor(() => expect(sheets()).toHaveLength(0));
+    });
+
+    it("empile les fiches et ne ferme que celle du dessus, à n'importe quelle profondeur", async () => {
+      openDesktopMock();
+      openFromHome(3);
+      expect(sheets()).toHaveLength(1);
+      // Une affiche de « Dans la même saga » : une deuxième fiche par-dessus, la première inerte.
+      fireEvent.click(sheets()[0].querySelector<HTMLElement>('img[alt="Film 4"]')!.closest("button")!);
+      expect(sheets()).toHaveLength(2);
+      expect(sheets()[0].style.pointerEvents).toBe("none");
+      // Puis la distribution : la fiche d'une personne, troisième niveau.
+      fireEvent.click(within(sheets()[1]).getByRole("button", { name: "Distribution (exemple)" }));
+      expect(sheets()).toHaveLength(3);
+      // Échap ne ferme que celle du dessus, une à la fois.
+      // Entre deux, les effets de la fiche redevenue celle du dessus (son écoute d'Échap) sont
+      // vidés : sous charge, l'appui suivant tombait avant qu'elle écoute.
+      fireEvent.keyDown(window, { key: "Escape" });
+      await waitFor(() => expect(sheets()).toHaveLength(2));
+      await act(async () => {});
+      expect(sheets()[1].style.pointerEvents).toBe("");
+      fireEvent.keyDown(window, { key: "Escape" });
+      await waitFor(() => expect(sheets()).toHaveLength(1));
+      await act(async () => {});
+      fireEvent.keyDown(window, { key: "Escape" });
+      await waitFor(() => expect(sheets()).toHaveLength(0));
+    });
+
+    it("ne propose pas, dans une fiche, sa propre affiche ; la variante hors bibliothèque est marquée", () => {
+      openDesktopMock();
+      openFromHome(3);
+      // Le logo porte le nom du titre : seules les affiches de la rangée comptent.
+      expect(sheets()[0].querySelector('section button img[alt="Film 3"]')).toBeNull();
+      expect(sheets()[0].querySelectorAll("button img").length).toBeGreaterThan(0);
+      expect(within(sheets()[0]).getAllByRole("button").some((b) => b.querySelector("span.text-accent-400"))).toBe(true);
+    });
   });
 });
