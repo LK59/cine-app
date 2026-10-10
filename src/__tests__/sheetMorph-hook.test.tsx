@@ -304,6 +304,74 @@ describe("la fermeture", () => {
     expect(winBack.frames[0].transform).not.toBe(winTrack.frames.at(-1)!.transform);
   });
 
+  it("la bannière en vol se loge dans la carte qui monte, au lieu de flotter au-dessus de ses bords", async () => {
+    // Louis sur iPhone (10/10/2026) : sur une ouverture refermée vite, « la bannière apparaît
+    // brièvement en dehors de la fiche et ses bordures » — elle filait vers sa place au repos pendant
+    // que la carte (et le contenu qu'elle porte) montait encore du bas.
+    press(addPoster().querySelector("img")!);
+    render(<Sheet />);
+    const win = layer()!.lastElementChild as HTMLElement;
+    const shell = win.previousElementSibling as HTMLElement;
+    const rise = live(shell).find((a) => /translateY/.test(String(a.frames[0].transform)))!;
+    const track = live(win)[0] as FakeAnimation;
+    expect(track.frames.length).toBe(rise.frames.length);
+    // Au départ, l'affiche touchée, là où elle est.
+    expect(numbers(track.frames[0].transform)[1]).toBeCloseTo(BOXES.poster.y - BOXES.banner.y, 0);
+    // Passé le premier tiers, le haut de l'image n'est jamais au-dessus du haut de la carte.
+    let checked = 0;
+    track.frames.forEach((f, i) => {
+      if ((f.offset as number) < 0.5) return;
+      const imageTop = BOXES.banner.y + numbers(f.transform)[1];
+      const cardTop = BOXES.sheet.y + numbers(rise.frames[i].transform)[0];
+      expect(imageTop).toBeGreaterThanOrEqual(cardTop - 1);
+      checked++;
+    });
+    expect(checked).toBeGreaterThan(10);
+    // À l'arrivée, sa place au repos.
+    expect(numbers(track.frames.at(-1)!.transform).slice(0, 2)).toEqual([0, 0]);
+  });
+
+  it("le visuel de la fiche pas encore chargé : la vignette touchée vole jusqu'au bout et reste en fond de la bannière", async () => {
+    // Une reprise ouverte depuis « Reprendre » : sa bannière n'a jamais été demandée. On ne l'attend
+    // pas, rien n'est téléchargé pour animer — la vignette déjà là sert d'image jusqu'à son arrivée.
+    press(addPoster().querySelector("img")!);
+    render(<Sheet />);
+    const win = layer()!.lastElementChild as HTMLElement;
+    const imgs = Array.from(win.querySelectorAll("img"));
+    const posterImg = imgs.find((i) => i.getAttribute("src") === "https://img.test/poster.jpg")!;
+    const posterTrack = live(posterImg)[0] as FakeAnimation;
+    expect(posterTrack.frames.every((f) => f.opacity === 1)).toBe(true);
+    // Pendant le trajet, tout visuel de la fiche — même monté entre-temps — est caché (globals.css).
+    expect(root()!.hasAttribute("data-sheet-flying")).toBe(true);
+    await runOpen();
+    expect(root()!.hasAttribute("data-sheet-flying")).toBe(false);
+    const photo = root()!.querySelector<HTMLElement>("[data-sheet-photo]")!;
+    expect(photo.style.backgroundImage).toContain("https://img.test/poster.jpg");
+    expect(photo.style.opacity).toBe("1");
+    // Le visuel arrivé se dessine par-dessus, et le fond de secours s'en va.
+    fireEvent.load(photo);
+    expect(photo.style.backgroundImage).toBe("");
+  });
+
+  it("le visuel déjà chargé : l'affiche s'efface sur lui pendant le trajet", async () => {
+    const natural = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "naturalWidth");
+    const complete = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "complete");
+    Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", { configurable: true, get: () => 1280 });
+    Object.defineProperty(HTMLImageElement.prototype, "complete", { configurable: true, get: () => true });
+    try {
+      press(addPoster().querySelector("img")!);
+      render(<Sheet />);
+      const win = layer()!.lastElementChild as HTMLElement;
+      const posterImg = Array.from(win.querySelectorAll("img")).find((i) => i.getAttribute("src") === "https://img.test/poster.jpg")!;
+      const posterTrack = live(posterImg)[0] as FakeAnimation;
+      expect(posterTrack.frames[0].opacity).toBe(1);
+      expect(posterTrack.frames.at(-1)!.opacity).toBe(0);
+    } finally {
+      if (natural) Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", natural);
+      if (complete) Object.defineProperty(HTMLImageElement.prototype, "complete", complete);
+    }
+  });
+
   it("tirée au doigt pendant l'aller, la carte repart de sa montée plus le doigt", async () => {
     press(addPoster().querySelector("img")!);
     const { rerender } = render(<Sheet />);

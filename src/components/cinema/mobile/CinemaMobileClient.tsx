@@ -10,6 +10,7 @@ import { useMissingTitleNotice } from "@/lib/useMissingTitleNotice";
 import { Clapperboard, Info, Play, Plus, X } from "lucide-react";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/lib/useLongPress";
+import { useTap } from "@/lib/useTap";
 import { prefetchLibraryItem } from "@/lib/prefetch";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
@@ -1182,12 +1183,12 @@ const ContinueRow = memo(function ContinueRow({
         }
         const entry = row.item;
         return (
-          <button
+          // La rangée des séries était restée sur la lecture directe quand celle des films
+          // est passée à la fiche : deux rangées voisines, deux gestes différents. Servie au
+          // relâchement du doigt, comme les affiches — voir `LongPressButton`.
+          <TapButton
             key={row.key}
-            type="button"
-            // La rangée des séries était restée sur la lecture directe quand celle des films
-            // est passée à la fiche : deux rangées voisines, deux gestes différents.
-            onClick={() => onOpenEpisode(entry)}
+            onTap={() => onOpenEpisode(entry)}
             className={`${CONTINUE_WIDTH} pressable shrink-0 text-left`}
           >
             <div className="relative overflow-hidden rounded-lg">
@@ -1207,15 +1208,22 @@ const ContinueRow = memo(function ContinueRow({
             <p className="truncate text-xs text-subtle">
               {formatContinueCaption(t, entry.resumeTicks, entry.runtimeTicks, entry.seasonNumber, entry.episodeNumber)}
             </p>
-          </button>
+          </TapButton>
         );
       })}
     </MobileRow>
   );
 });
 
-/** Un bouton qui ouvre aussi un menu à l'appui long — voir `useLongPress`. */
-function LongPressButton({
+/**
+ * Un bouton qui ouvre aussi un menu à l'appui long — voir `useLongPress`.
+ *
+ * L'appui ordinaire est servi au relâchement du doigt (`useTap`), comme les affiches des autres
+ * rangées : servi au `click`, il attendait celui qu'iOS retient juste après un défilement ou pendant
+ * le retour d'une fiche — les reprises « lentes à répondre », qu'on ne pouvait pas rouvrir coup sur
+ * coup (Louis, iPhone, 10/10/2026). Un appui long déjà servi n'ouvre pas la fiche en plus.
+ */
+export function LongPressButton({
   onLongPress,
   onClick,
   className,
@@ -1226,9 +1234,35 @@ function LongPressButton({
   className: string;
   children: React.ReactNode;
 }) {
-  const press = useLongPress(onLongPress);
+  const longFired = useRef(false);
+  const press = useLongPress(() => {
+    longFired.current = true;
+    onLongPress();
+  });
+  const tap = useTap(() => {
+    if (longFired.current) return;
+    onClick();
+  });
   return (
-    <button type="button" {...press} onClick={onClick} className={className}>
+    <button
+      type="button"
+      {...press}
+      onPointerDown={(e) => {
+        longFired.current = false;
+        press.onPointerDown?.(e);
+        tap.onPointerDown(e);
+      }}
+      onPointerUp={(e) => {
+        press.onPointerUp?.();
+        tap.onPointerUp(e);
+      }}
+      onPointerCancel={() => {
+        press.onPointerCancel?.();
+        tap.onPointerCancel();
+      }}
+      onClick={tap.onClick}
+      className={className}
+    >
       {children}
     </button>
   );
