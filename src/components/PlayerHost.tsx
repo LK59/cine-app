@@ -321,7 +321,9 @@ function ServerPlayerIntro({
   useEffect(() => {
     if (loading || pictured) return;
     const video = videoRef.current;
-    const hasPicture = () => !video || (!video.seeking && video.readyState >= 2);
+    // `readyState` ≥ 3 : de quoi avancer, pas seulement une image — à 2, la roue des commandes
+    // prenait encore la suite le temps de remplir (même défaut que le lecteur natif, 10/10/2026).
+    const hasPicture = () => !video || (!video.seeking && video.readyState >= 3);
     let live = true;
     const check = () => {
       if (live && hasPicture()) setPictured(true);
@@ -329,7 +331,7 @@ function ServerPlayerIntro({
     // Déjà là le plus souvent (un départ du début) : lu au tour suivant plutôt que dans le corps de
     // l'effet, où le compilateur React refuse un `setState`.
     queueMicrotask(check);
-    const events = ["seeked", "canplay", "playing", "loadeddata"] as const;
+    const events = ["seeked", "canplay", "canplaythrough", "playing"] as const;
     for (const e of events) video?.addEventListener(e, check);
     return () => {
       live = false;

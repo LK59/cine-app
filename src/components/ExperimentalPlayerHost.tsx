@@ -1138,13 +1138,46 @@ export function ExperimentalPlayerHost({
   const thisIntro = introKey(session.openId, itemId);
   const [introEligible] = useState(() => introAllowedFor(session) && !introFinished(thisIntro));
   const [introStartedAt] = useState(() => startIntroClock(thisIntro));
+  // `announced` dit le lecteur prêt — en-tête et premier segment posés —, pas la lecture partie :
+  // l'horloge attend encore que le navigateur ait de quoi jouer, et l'ouverture effacée là laissait
+  // la roue de l'attente prendre la suite une ou deux secondes (vu par Louis le 10/10/2026 : « la
+  // première image, puis le chargement classique »). Elle tient donc jusqu'à ce que l'horloge
+  // avance vraiment — ou, la lecture automatique refusée, jusqu'à un élément arrêté sans attente.
+  const [introPlaying, setIntroPlaying] = useState(false);
+  const startingRef = useRef(startingAt);
   useEffect(() => {
-    if (announced) finishIntro(thisIntro);
-  }, [announced, thisIntro]);
+    startingRef.current = startingAt;
+  }, [startingAt]);
+  useEffect(() => {
+    if (!announced || introPlaying) return;
+    const media = videoElRef.current;
+    if (!media) return;
+    const from = media.currentTime;
+    const onTime = () => {
+      if (!media.paused && media.currentTime > from + 0.1) setIntroPlaying(true);
+    };
+    // Lecture automatique refusée (iOS sans geste récent) : rien ne bougera avant un appui, et le
+    // bouton Lecture des commandes doit se voir. Un élément arrêté sans attente armée, c'est ça.
+    const blocked = window.setInterval(() => {
+      if (media.paused && startingRef.current === null) setIntroPlaying(true);
+    }, 1500);
+    media.addEventListener("timeupdate", onTime);
+    return () => {
+      window.clearInterval(blocked);
+      media.removeEventListener("timeupdate", onTime);
+    };
+  }, [announced, introPlaying]);
+  useEffect(() => {
+    if (introPlaying) finishIntro(thisIntro);
+  }, [introPlaying, thisIntro]);
   // Une erreur, la connexion perdue, l'attente devenue anormale (le rapport doit se lire), le
   // mini-lecteur : l'ouverture s'efface à l'instant et l'écran d'avant se montre, inchangé.
   const introPhase: IntroPhase =
-    !introEligible || isMini ? "gone" : announced ? "picture" : error || networkLost || stuck ? "gone" : "waiting";
+    !introEligible || isMini ? "gone" : introPlaying
+        ? "picture"
+        : error || networkLost || stuck || (startingFor !== null && startingFor >= STUCK_AFTER_MS)
+          ? "gone"
+          : "waiting";
   // Elle tient lieu de roue : les deux ne se montrent jamais ensemble — seuil compris, la roue
   // paraissant à 120 ms et l'ouverture à 300.
   const introCovers = introPhase === "waiting";
@@ -2204,7 +2237,8 @@ export function ExperimentalPlayerHost({
   // borrows the spinner the controls already put in place of the button. Driving both from one
   // flag stacked one spinner on top of the other.
   const openingSpinner = openingFor !== null && openingFor >= SPINNER_AFTER_MS && !introCovers;
-  const resumeSpinner = startingFor !== null && startingFor >= SPINNER_AFTER_MS;
+  // Sous l'ouverture, la roue de l'attente ne se montre pas non plus : l'une tient lieu de l'autre.
+  const resumeSpinner = startingFor !== null && startingFor >= SPINNER_AFTER_MS && !introCovers;
   const waitingWord =
     waitingFor === null || waitingFor < WORD_AFTER_MS
       ? null
