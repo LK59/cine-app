@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useImageRetry } from "@/lib/useImageRetry";
 
 /**
  * Le fond de l'accueil du bureau : un vrai fondu enchaîné d'un visuel au suivant.
@@ -79,26 +80,42 @@ export function HeroBackdrop({ src, id, mask }: { src: string | null; id: number
           data-hero-layer={layer.ready ? "shown" : "loading"}
           className={`absolute inset-0 ${layer.ready ? "animate-fade-in" : "opacity-0"}`}
         >
-          {layer.src && (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={layer.src} alt="" className="absolute inset-0 h-full w-full scale-110 object-cover object-top blur-2xl" />
-              <div className="absolute inset-0 bg-ink/55" />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={layer.src}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover object-top"
-                style={{ maskImage: mask, WebkitMaskImage: mask }}
-                // Le signal : l'image nette est décodable, la couche peut apparaître. En erreur
-                // aussi — un visuel introuvable ne doit pas retenir le fond sur le titre d'avant.
-                onLoad={() => markReady(layer.id)}
-                onError={() => markReady(layer.id)}
-              />
-            </>
-          )}
+          {layer.src && <HeroLayerImages src={layer.src} mask={mask} onSettled={() => markReady(layer.id)} />}
         </div>
       ))}
     </>
+  );
+}
+
+/**
+ * Les deux images d'une couche : le fond flou et le visuel net. Le signal de la couche est l'image
+ * nette, décodée — ou en échec : un visuel introuvable ne doit pas retenir le fond sur le titre
+ * d'avant. En échec, elle réessaie (`useImageRetry`, remontée par `retryKey`) et paraît en fondu à
+ * son arrivée, la couche déjà montrée.
+ */
+function HeroLayerImages({ src, mask, onSettled }: { src: string; mask: string; onSettled: () => void }) {
+  const { track, recovered, retryKey, onLoad: retried, onError: retryFailed } = useImageRetry(src);
+  return (
+    <div ref={track} className="absolute inset-0">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img key={`flou-${retryKey}`} src={src} alt="" className="absolute inset-0 h-full w-full scale-110 object-cover object-top blur-2xl" />
+      <div className="absolute inset-0 bg-ink/55" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        key={`net-${retryKey}`}
+        src={src}
+        alt=""
+        className={`absolute inset-0 h-full w-full object-cover object-top ${recovered ? "animate-fade-in" : ""}`}
+        style={{ maskImage: mask, WebkitMaskImage: mask }}
+        onLoad={() => {
+          retried();
+          onSettled();
+        }}
+        onError={() => {
+          retryFailed();
+          onSettled();
+        }}
+      />
+    </div>
   );
 }

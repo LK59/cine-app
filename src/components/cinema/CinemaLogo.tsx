@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useImageRetry } from "@/lib/useImageRetry";
 
 /**
  * Le logo d'un titre, à une taille qui ne dépend pas de la forme du logo.
@@ -98,7 +99,9 @@ export function CinemaLogo({
   const [ratio, setRatio] = useState<number | null>(() => KNOWN_RATIOS.get(src) ?? null);
   // L'adresse refusée, et non un simple drapeau : un autre logo passé à la même instance a droit
   // à sa chance.
-  const [failed, setFailed] = useState<string | null>(null);
+  // Un échec n'est plus définitif (`useImageRetry`, DECISIONS.md) : le repli (le titre écrit) tient
+  // la place, l'adresse est retentée hors du document, et le logo revient en fondu une fois en cache.
+  const retry = useImageRetry(src, { mode: "probe" });
   const [roomy, setRoomy] = useState(true);
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -117,7 +120,7 @@ export function CinemaLogo({
     remember(src, img.naturalWidth / img.naturalHeight, setRatio);
   }, [src]);
 
-  if (failed === src) return <>{fallback}</>;
+  if (retry.failed) return <>{fallback}</>;
 
   const { compact, roomy: tall, maxWidth } = SURFACES[surface];
   const maxHeight = (roomy ? tall : compact) * heightFactor(ratio);
@@ -128,11 +131,12 @@ export function CinemaLogo({
       src={src}
       alt={alt}
       onError={() => {
-        setFailed(src);
+        retry.onError();
         onError?.();
       }}
       ref={imgRef}
       onLoad={(e) => {
+        retry.onLoad();
         const img = e.currentTarget;
         if (img.naturalHeight > 0) remember(src, img.naturalWidth / img.naturalHeight, setRatio);
       }}
@@ -172,7 +176,7 @@ export function CinemaLogo({
        * Un appelant qui veut le centrer passe `mx-auto`, dont les marges automatiques
        * l'emportent sur cet alignement.
        */
-      className={`w-auto self-start object-contain ${className}`}
+      className={`w-auto self-start object-contain ${retry.recovered ? "animate-fade-in" : ""} ${className}`}
     />
   );
 }

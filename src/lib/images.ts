@@ -73,9 +73,25 @@ export function tmdbResize(url: string | null | undefined, size: string): string
 export function libraryPoster(
   posterByLang: Partial<Record<string, string>> | undefined,
   images: RadarrSonarrImage[] | undefined,
-  locale: string
+  locale: string,
+  /** Avant l'affiche de Radarr/Sonarr : celle de Jellyfin pour une série (`jellyfinPoster`). */
+  orElse: string | null = null
 ): string | null {
-  return posterByLang?.[locale] ?? posterUrl(images, "thumb");
+  return posterByLang?.[locale] ?? orElse ?? posterUrl(images, "thumb");
+}
+
+/**
+ * L'affiche de Jellyfin redimensionnée, le repli d'une série entre celle de TMDB dans la langue de
+ * qui regarde et l'original de TheTVDB que donne Sonarr — `libraryPoster(…, orElse)` (10/10/2026).
+ *
+ * Le repli de Sonarr est un original de TheTVDB servi sans aucune consigne de cache : après une
+ * relance de l'appli, le navigateur le redemandait (une dizaine de séries de l'accueil), là où les
+ * images de TMDB et de Jellyfin revenaient du disque. Même règle que `seriesBackdrop`.
+ */
+export function jellyfinPoster(jellyfinItem: { Id: string; ImageTags?: { Primary?: string } } | undefined): string | null {
+  const tag = jellyfinItem?.ImageTags?.Primary;
+  if (!jellyfinItem || !tag) return null;
+  return `/api/jellyfin/image?${new URLSearchParams({ itemId: jellyfinItem.Id, kind: "poster", tag })}`;
 }
 
 /**

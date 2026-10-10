@@ -63,6 +63,16 @@ describe("GET /api/jellyfin/image", () => {
     expect(res.headers.get("cache-control")).toContain("immutable");
   });
 
+  it("l'affiche d'une série sans affiche TMDB dans la langue : l'image principale à 500 px, immuable", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(new Response(new Uint8Array([1]), { headers: { "Content-Type": "image/jpeg" } }));
+    const { GET } = await import("@/app/api/jellyfin/image/route");
+    const res = await GET(req(`itemId=${ITEM}&kind=poster&tag=pp1`));
+    const called = String(fetchSpy.mock.calls[0][0]);
+    expect(called).toContain("/Images/Primary?");
+    expect(called).toContain("maxWidth=500");
+    expect(res.headers.get("cache-control")).toContain("immutable");
+  });
+
   it("sans `kind`, l'affiche reste l'image principale à 300 px", async () => {
     const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(new Response(new Uint8Array([1]), { headers: { "Content-Type": "image/jpeg" } }));
     const { GET } = await import("@/app/api/jellyfin/image/route");

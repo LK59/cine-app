@@ -138,7 +138,6 @@ export function CinemaSeriesDetail({
   const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist(
     item.tmdbId ? statusMap[`series:${item.tmdbId}`] ?? null : null
   );
-  const [logoErrored, setLogoErrored] = useState(false);
 
   // Same exit-animation delay as CinemaMovieDetail — see that hook's own doc comment.
   // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
@@ -339,13 +338,13 @@ export function CinemaSeriesDetail({
           // La sortie est celle de la copie (`useSheetMorph`), plus celle de la colonne.
           className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: false, revealed: revealed || morph.handlesEntry })}`}
         >
-          {item.logoUrl && !logoErrored ? (
+          {item.logoUrl ? (
             <CinemaLogo
               src={item.logoUrl}
               alt={item.title}
               surface="sheet"
-              onError={() => setLogoErrored(true)}
               className="mb-1"
+              fallback={<h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>}
             />
           ) : (
             <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>
