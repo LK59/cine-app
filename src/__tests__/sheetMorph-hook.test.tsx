@@ -96,6 +96,22 @@ async function runOpen() {
   });
 }
 
+/** Les nombres d'une valeur d'image clé (`translateY(…)`, `translate(…) scale(…)`). */
+function numbers(v: unknown): number[] {
+  return (String(v).match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/g) ?? []).map(Number);
+}
+
+/** La valeur d'une piste échantillonnée à `at` (0–1), interpolée entre ses deux images clés voisines. */
+function sampleAt(frames: Keyframe[], at: number, prop: string): number[] {
+  const offsets = frames.map((f, i) => (typeof f.offset === "number" ? f.offset : i / (frames.length - 1)));
+  let i = offsets.findIndex((o) => o >= at);
+  if (i <= 0) return numbers(frames[Math.max(0, i)][prop]);
+  const t = (at - offsets[i - 1]) / (offsets[i] - offsets[i - 1] || 1);
+  const a = numbers(frames[i - 1][prop]);
+  const b = numbers(frames[i][prop]);
+  return a.map((v, k) => v + (b[k] - v) * t);
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame", "performance", "Date"] });
   Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
@@ -149,11 +165,17 @@ describe("l'ouverture", () => {
     // La fenêtre porte l'affiche déjà chargée — rien n'est téléchargé pour animer.
     const posters = Array.from(layer()!.querySelectorAll("img")).map((i) => i.getAttribute("src"));
     expect(posters).toContain("https://img.test/poster.jpg");
-    // Créées en pause, démarrées ensemble ; le contenu attend 90 % du trajet.
+    // Créées en pause, démarrées ensemble ; le contenu est porté par la carte — la même piste que son
+    // fond —, et paraît de 55 à 95 % du trajet (« le décalage de l'arrivée du contenu, c'est bizarre »).
     const content = root()!.querySelector("[data-sheet-content]")!;
-    const reveal = live(content)[0] as FakeAnimation;
-    expect(reveal.paused).toBe(true);
-    expect(reveal.options.delay).toBeGreaterThan(0);
+    const ride = live(content)[0] as FakeAnimation;
+    expect(ride.paused).toBe(true);
+    expect(ride.frames.map((f) => f.transform)).toEqual(rise.frames.map((f) => f.transform));
+    expect(ride.frames[0].opacity).toBe(0);
+    expect(ride.frames.at(-1)!.opacity).toBe(1);
+    expect(ride.options.duration).toBe(rise.options.duration);
+    // Fini, le contenu ne garde aucune transformation.
+    expect(ride.options.fill).toBe("backwards");
 
     await runOpen();
     // Arrivée : le vrai visuel a repris la place de la fenêtre ; l'assombrissement reste.
@@ -212,15 +234,16 @@ describe("la fermeture", () => {
     const hole = copy.querySelector<HTMLElement>(".heavy")!;
     expect(hole.children.length).toBe(0);
     expect(hole.style.height).toBe("600px");
-    // La copie ne bouge pas (le contenu s'efface sur place) ; son fond, à part, redescend sous
-    // l'image jusque sous l'écran, et la fenêtre revole vers l'affiche — sans attendre de décodage.
+    // Le fond de la carte redescend sous l'image jusque sous l'écran, et la copie (le contenu, la
+    // croix, le cadre) avec lui, sur la même piste ; la fenêtre revole vers l'affiche — sans attendre.
     expect(copy.style.backgroundColor).toBe("transparent");
-    expect(live(copy).some((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))).toBe(false);
     const win = copy.previousElementSibling as HTMLElement;
     const shell = win.previousElementSibling as HTMLElement;
     const down = live(shell).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))!;
     expect(down.frames[0].transform).toBe("translateY(0.00px)");
     expect(down.frames.at(-1)!.transform).toBe("translateY(804.00px)");
+    const copyDown = live(copy).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))!;
+    expect(copyDown.frames.map((f) => f.transform)).toEqual(down.frames.map((f) => f.transform));
     expect(live(win).length).toBeGreaterThan(0);
     expect(live(win).every((a) => !a.paused)).toBe(true);
     expect(sheetMorphForTests.flights()).toBe(1);
@@ -235,6 +258,68 @@ describe("la fermeture", () => {
     act(() => fake.created.filter((a) => a.frames.length === 2 && a.frames[1].opacity === 0 && a.onfinish).forEach((a) => a.finish()));
     expect(layer()).toBeNull();
     expect(sheetMorphForTests.flights()).toBe(0);
+  });
+
+  it("fermée pendant l'aller, part de la pose peinte à cet instant : bannière, carte, contenu", async () => {
+    // Louis sur iPhone (10/10/2026) : fermée avant la fin de l'ouverture, « la bannière se décale
+    // légèrement du cadre de la fiche, comme si elle devait finir son animation puis se recaler ».
+    press(addPoster().querySelector("img")!);
+    const { rerender } = render(<Sheet />);
+    const winOpen = layer()!.lastElementChild as HTMLElement;
+    const shellOpen = winOpen.previousElementSibling as HTMLElement;
+    const rise = live(shellOpen).find((a) => /translateY/.test(String(a.frames[0].transform)))!;
+    const winTrack = live(winOpen)[0] as FakeAnimation;
+    // Le départ (décodage, deux images), puis 60 ms de trajet.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    expect(rise.startTime).not.toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60);
+    });
+    const at = (performance.now() - rise.startTime!) / Number(rise.options.duration);
+    expect(at).toBeGreaterThan(0);
+    expect(at).toBeLessThan(1);
+
+    rerender(<Sheet leaving />);
+    const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
+    const win = copy.previousElementSibling as HTMLElement;
+    const shell = win.previousElementSibling as HTMLElement;
+    const down = live(shell).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))!;
+    const copyDown = live(copy).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))!;
+    const winBack = live(win)[0] as FakeAnimation;
+
+    // La carte et la copie repartent d'où montait la carte — jamais de leur place au repos.
+    const yNow = sampleAt(rise.frames, at, "transform")[0];
+    const yFrom = numbers(down.frames[0].transform)[0];
+    expect(Math.abs(yFrom - yNow)).toBeLessThan(2);
+    expect(yFrom).toBeGreaterThan(1);
+    expect(copyDown.frames[0].transform).toBe(down.frames[0].transform);
+    expect(copy.style.transform).toBe(down.frames[0].transform);
+    // La fenêtre repart de la pose de l'aller à cet instant (place et échelle), pas de la bannière posée.
+    const poseNow = sampleAt(winTrack.frames, at, "transform");
+    const poseFrom = numbers(winBack.frames[0].transform);
+    expect(poseFrom.length).toBe(poseNow.length);
+    poseFrom.forEach((v, i) => expect(Math.abs(v - poseNow[i])).toBeLessThan(Math.max(2, Math.abs(poseNow[i]) * 0.02)));
+    expect(winBack.frames[0].transform).not.toBe(winTrack.frames.at(-1)!.transform);
+  });
+
+  it("tirée au doigt pendant l'aller, la carte repart de sa montée plus le doigt", async () => {
+    press(addPoster().querySelector("img")!);
+    const { rerender } = render(<Sheet />);
+    const shellOpen = (layer()!.lastElementChild as HTMLElement).previousElementSibling as HTMLElement;
+    const rise = live(shellOpen).find((a) => /translateY/.test(String(a.frames[0].transform)))!;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(260);
+    });
+    const at = (performance.now() - rise.startTime!) / Number(rise.options.duration);
+    root()!.style.transform = "translateY(40px)";
+    rerender(<Sheet leaving />);
+    const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
+    const shell = (copy.previousElementSibling as HTMLElement).previousElementSibling as HTMLElement;
+    const down = live(shell).find((a) => /translateY/.test(String(a.frames.at(-1)!.transform)))!;
+    const yNow = sampleAt(rise.frames, at, "transform")[0];
+    expect(Math.abs(numbers(down.frames[0].transform)[0] - (yNow + 40))).toBeLessThan(2);
   });
 
   it("sans affiche à l'écran, descend un peu en s'effaçant", async () => {

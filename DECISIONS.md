@@ -2182,8 +2182,15 @@ fiche du dessous d'une cascade passe dessous. Au bureau, le fond de la fiche est
 le trajet. Au téléphone, c'est la structure de la maquette : la fiche est transparente et immobile,
 et le **fond de la carte** (son encre, ses coins, son liseré) est un élément à part du calque, *sous*
 la fenêtre, qui monte du bas de l'écran sur le même ressort (`cardRiseTrack`) et redescend de même
-à la fermeture. Le contenu ne bouge pas : il paraît à 90 % du trajet et s'efface sur place ; la
-croix paraît de 30 à 95 % (`GLASS_IN`).
+à la fermeture. Le contenu est **porté par la carte** : la même piste que son fond
+(`contentRideTrack`), et une opacité de 55 à 95 % du trajet (`CONTENT_RIDE`) — posé d'avance et
+révélé à 90 % pendant que le fond montait encore, il arrivait détaché de sa carte (« le décalage de
+l'arrivée du contenu, c'est bizarre », 8.32.3). À la fermeture, la copie (contenu, croix, cadre)
+redescend sur la piste du fond, le contenu s'effaçant en 100 ms ; la croix paraît de 30 à 95 %
+(`GLASS_IN`). **Fermée pendant l'aller**, chaque pièce part de la pose peinte à cet instant : le temps
+du trajet lu sur son animation (`currentTime`), la carte et le contenu à leur point de la piste —
+partie de la place au repos, la copie décalait le cadre de la bannière, qui s'y recalait d'un coup
+(8.32.3). Une reprise par l'ouverture relit la carte sur cette même piste.
 
 Ce que les deux premiers portages en avaient fait, et pourquoi c'est revenu à la maquette :
 - 8.31.0 : la fiche entière montait, l'image *sous* elle — la bande d'encre entre la bannière et la
