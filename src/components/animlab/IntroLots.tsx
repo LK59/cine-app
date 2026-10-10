@@ -4,7 +4,7 @@
    l'image, la lueur se découpe sur le logo par un masque, et les visuels sont déjà des tailles du CDN de
    TMDB — l'optimiseur de Next n'apporterait rien à ce banc d'essai. */
 
-import { createPortal, flushSync } from "react-dom";
+import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { ArrowLeft, Check, Play, Plus, RotateCcw, Video, X } from "lucide-react";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
@@ -22,6 +22,8 @@ import { toSpring } from "@/lib/liquidGlass/liquid";
 import { simulateSpring } from "@/lib/liquidGlass/spring";
 import { PlaybackIntro } from "@/components/player/PlaybackIntro";
 import { INTRO_BACKGROUNDS, PLAYBACK_INTRO, introBackdropSrc, type IntroBackground } from "@/lib/playbackIntro";
+import { phoneSheetCorner } from "@/lib/sheetMotion";
+import { NOT_THE_HANDLE, useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 
 /**
  * Deux prototypes de la page « Tests animations » (10/10/2026), à juger sur l'iPhone et le Mac avant
@@ -287,15 +289,19 @@ function IntroStage({
 
 /* ─── Lot H : ouverture de fiche ───────────────────────────────────────────── */
 
-type Variant = "vt" | "flip";
 type Ease = "spring" | "emphasized" | "easeOut";
 type Layout = "auto" | "desktop" | "phone";
-type Mode = "vt" | "flip" | "fade";
+/*
+ * Le FLIP, ou un fondu sous « Réduire les animations ». Les View Transitions ont été retirées à la
+ * quatrième passe (10/10/2026) : à l'ouverture, le navigateur photographie la fiche avant que son
+ * visuel soit décodé — une boîte vide qui grandit, le contenu posé d'un coup, « l'ouverture ne
+ * marche pas, seulement la fermeture » —, les arrondis ne s'y animent pas, et rien ne permet d'y
+ * reprendre un glissement du doigt là où il s'arrête. Le FLIP fait tout cela, partout.
+ */
+type Mode = "flip" | "fade";
 type Timing = { easing: string; duration: number };
 /** Une place dans la scène, en pixels depuis son coin haut gauche. */
 type Box = { x: number; y: number; w: number; h: number };
-type ViewTransition = { finished: Promise<void> };
-type ViewTransitionDoc = Document & { startViewTransition?: (update: () => void) => ViewTransition };
 
 /** Ce que la fiche doit savoir de la carte touchée pour en partir, et pour y revenir. */
 type Opening = { title: CinemaMovie; key: string; poster: string; radius: number; mode: Mode };
@@ -304,25 +310,46 @@ type Register = (key: string) => (el: HTMLElement | null) => void;
 // Les largeurs des vraies cartes : `CARD_WIDTH` de CinemaClient, `POSTER_WIDTH` de CinemaMobileClient.
 const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
 const PHONE_POSTER_WIDTH = "w-28 sm:w-32";
-const STAGGER_MS = 50;
+// La cascade de la colonne, resserrée pour un trajet de 250 ms : un pas de 30 ms, chaque ligne
+// en 250 ms. À 50 ms et 420 ms, elle durait deux fois le trajet et la fiche paraissait lente.
+const STAGGER_MS = 30;
+const LINE_MS = 250;
 // L'assombrissement de l'accueil derrière la fiche, et le recul de celui du bureau.
 const DIM = 0.6;
 const HOME_SCALE = 0.98;
 /*
  * Le fondu affiche → visuel, en images clés sur toute la durée (courbe linéaire, adoucie par
- * segment) : l'affiche s'efface sur le premier tiers, le visuel paraît de 10 à 50 %. À la
- * fermeture, l'exact inverse. Un fondu de moitié chacun laissait les deux se mêler longtemps.
+ * segment) : l'affiche s'efface sur le premier tiers, le visuel paraît de 10 à 50 %. Un fondu de
+ * moitié chacun laissait les deux se mêler longtemps.
+ *
+ * La fermeture n'est plus l'exact inverse (quatrième passe) : l'affiche ne revenait que sur le
+ * dernier tiers, et la bannière « redevenait l'affiche » d'un coup. Les deux fondus s'étirent
+ * maintenant sur presque tout le retour et se chevauchent — l'affiche paraît de 25 à 85 %, la
+ * bannière et ses voiles s'effacent de 35 à 95 %.
  */
 const POSTER_OUT: Keyframe[] = [{ opacity: 1, easing: "ease-in" }, { opacity: 0, offset: 0.35 }, { opacity: 0 }];
 const BACKDROP_IN: Keyframe[] = [{ opacity: 0 }, { opacity: 0, offset: 0.1, easing: "ease-out" }, { opacity: 1, offset: 0.5 }, { opacity: 1 }];
-const POSTER_IN: Keyframe[] = [{ opacity: 0 }, { opacity: 0, offset: 0.65, easing: "ease-out" }, { opacity: 1 }];
-const BACKDROP_OUT: Keyframe[] = [{ opacity: 1 }, { opacity: 1, offset: 0.5, easing: "ease-in" }, { opacity: 0, offset: 0.9 }, { opacity: 0 }];
-const VT_NAME = "alab-hero";
+const POSTER_IN: Keyframe[] = [{ opacity: 0 }, { opacity: 0, offset: 0.25, easing: "ease-in-out" }, { opacity: 1, offset: 0.85 }, { opacity: 1 }];
+const BACKDROP_OUT: Keyframe[] = [{ opacity: 1 }, { opacity: 1, offset: 0.35, easing: "ease-in-out" }, { opacity: 0, offset: 0.95 }, { opacity: 0 }];
+// Le relais final de la fermeture : la vraie carte reparaît sous le calque du trajet, qui s'efface
+// par-dessus en ce temps-là — plus de bascule de visibilité qui se voie (le logo de la grande
+// bannière du téléphone, absent de l'affiche du trajet, surgissait d'un coup).
+const HANDOVER_MS = 120;
 // Le téléphone simulé quand la disposition « Téléphone » est demandée sur un grand écran.
 const PHONE_FRAME = { w: 390, h: 844, statusBar: 47 };
 
+/**
+ * La durée réelle d'un ressort de réponse 1 s à cet amortissement : elle croît en proportion de la
+ * réponse, si bien qu'une division suffit pour qu'un ressort dure ce qu'on demande. Avant, la
+ * réponse *était* la durée demandée, et le ressort mettait ~1,27 fois plus à se poser — 250 ms
+ * demandées en jouaient 320.
+ */
+let springPerSecond = 0;
 function easingFor(ease: Ease, duration: number): Timing {
-  if (ease === "spring") return springEasing(Math.max(0.2, duration / 1000), 0.86);
+  if (ease === "spring") {
+    if (!springPerSecond) springPerSecond = springEasing(1, 0.86).duration / 1000 || 1;
+    return springEasing(Math.max(0.1, duration / 1000 / springPerSecond), 0.86);
+  }
   if (ease === "emphasized") return { easing: "cubic-bezier(0.2, 0, 0, 1)", duration };
   return { easing: "cubic-bezier(0.33, 1, 0.68, 1)", duration };
 }
@@ -345,17 +372,25 @@ function coverTransform(at: Box, into: Box): string {
   return `translate(${tx}px, ${ty}px) scale(${s})`;
 }
 
+/** Le décalage vertical d'une transformation calculée (`matrix(…)`, `matrix3d(…)`) ou écrite (`translateY(…)`). */
+function translateYOf(transform: string): number {
+  const m = /^matrix(3d)?\((.+)\)$/.exec(transform);
+  if (m) {
+    const v = m[2].split(",").map(Number);
+    return (m[1] ? v[13] : v[5]) || 0;
+  }
+  const y = /translateY\((-?[\d.]+)px\)/.exec(transform);
+  return y ? Number(y[1]) : 0;
+}
+
 function place(el: HTMLElement, b: Box) {
   Object.assign(el.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${b.w}px`, height: `${b.h}px` });
 }
 
 export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
   const { withLogo } = useMemo(() => usableTitles(movies), [movies]);
-  const supportsVT = typeof document !== "undefined" && "startViewTransition" in document;
-  // Le FLIP par défaut : il marche partout, et c'est lui qui règle le fondu affiche → visuel et la
-  // découpe ; les View Transitions restent là pour comparer.
-  const [variant, setVariant] = useState<Variant>("flip");
-  const [duration, setDuration] = useState(520);
+  // 250 ms (quatrième passe) : à 520 ms, « joli, mais il faut absolument plus rapide ».
+  const [duration, setDuration] = useState(250);
   const [ease, setEase] = useState<Ease>("spring");
   const [stagger, setStagger] = useState(true);
   const [layout, setLayout] = useState<Layout>("auto");
@@ -366,19 +401,16 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
   return (
     <section className="space-y-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
       <p className="text-sm text-muted">
-        {"Une maquette de l'accueil et des vraies fiches — visuel et logo, pas d'affiche. Au bureau, l'affiche touchée s'agrandit jusqu'à l'écran entier en devenant le visuel du film, puis la colonne (logo, infos, accroche, synopsis, menu) paraît ligne par ligne. Au téléphone, l'affiche d'une rangée ou de la grande bannière devient la bannière 16:9 de la fiche, pendant que la carte monte du bas. Fermer (Retour, la croix, Échap) refait le chemin à l'envers, jusqu'à la carte."}
+        {"Une maquette de l'accueil et des vraies fiches — visuel et logo, pas d'affiche. Au bureau, l'affiche touchée s'agrandit jusqu'à l'écran entier en devenant le visuel du film, puis la colonne (logo, infos, accroche, synopsis, menu) paraît ligne par ligne. Au téléphone, l'affiche d'une rangée ou de la grande bannière devient la bannière 16:9 de la fiche, pendant que la carte monte du bas. Fermer (Retour, la croix, Échap, ou la bannière tirée vers le bas au téléphone, comme dans la vraie fiche) refait le chemin à l'envers, jusqu'à la carte."}
       </p>
-      <Row label="Façon">
-        <Chip on={variant === "flip"} onClick={() => setVariant("flip")}>FLIP manuel</Chip>
-        <Chip on={variant === "vt"} onClick={() => setVariant("vt")}>
-          View Transitions{supportsVT ? "" : " (absent ici)"}
-        </Chip>
-      </Row>
       <Row label="Courbe">
         <Chip on={ease === "spring"} onClick={() => setEase("spring")}>Ressort Apple</Chip>
         <Chip on={ease === "emphasized"} onClick={() => setEase("emphasized")}>Accentuée</Chip>
         <Chip on={ease === "easeOut"} onClick={() => setEase("easeOut")}>Décélération douce</Chip>
       </Row>
+      <p className="text-xs leading-5 text-subtle">
+        {"Ressort Apple : un ressort physique (réponse ≈ la durée, amortissement 0,86, dépassement d'environ 1 %), rendu en courbe CSS linear(). Accentuée : la décélération « emphasized » de Material 3, cubic-bezier(0.2, 0, 0, 1) — départ très vif, longue arrivée lente. Décélération douce : ease-out cubique, cubic-bezier(0.33, 1, 0.68, 1) — départ plus tranquille. Toutes trois freinent à l'arrivée : sur un trajet court elles se ressemblent ; au ralenti, la différence se voit au départ."}
+      </p>
       <Row label="Disposition">
         <Chip on={layout === "auto"} onClick={() => setLayout("auto")}>Selon l&apos;écran</Chip>
         <Chip on={layout === "desktop"} onClick={() => setLayout("desktop")}>Bureau</Chip>
@@ -388,13 +420,13 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
         <Chip on={stagger} onClick={() => setStagger(!stagger)}>Cascade du contenu</Chip>
         <Chip on={reduced} onClick={() => setReduced(!reduced)}>« Réduire les animations »</Chip>
       </Row>
-      <Slider label={`Durée ${duration} ms${ease === "spring" ? ` (ressort : ${Math.round(timing.duration)} ms réels)` : ""}`} min={250} max={1000} step={25} value={duration} set={setDuration} />
+      <Slider label={`Durée ${duration} ms${ease === "spring" ? ` (ressort : ${Math.round(timing.duration)} ms réels)` : ""}`} min={150} max={1000} step={25} value={duration} set={setDuration} />
       <button type="button" className="btn-primary inline-flex items-center gap-2" disabled={withLogo.length === 0} onClick={() => setStaged(true)}>
         <Play size={16} /> {withLogo.length === 0 ? "Chargement du catalogue…" : "Ouvrir la maquette"}
       </button>
       {staged &&
         createPortal(
-          <SheetStage titles={withLogo} variant={variant} timing={timing} stagger={stagger} layout={layout} reduced={reduced} onExit={() => setStaged(false)} />,
+          <SheetStage titles={withLogo} timing={timing} stagger={stagger} layout={layout} reduced={reduced} onExit={() => setStaged(false)} />,
           document.body,
         )}
     </section>
@@ -402,10 +434,9 @@ export function SheetOpenLot({ movies }: { movies: readonly CinemaMovie[] }) {
 }
 
 function SheetStage({
-  titles, variant, timing, stagger, layout, reduced, onExit,
+  titles, timing, stagger, layout, reduced, onExit,
 }: {
   titles: CinemaMovie[];
-  variant: Variant;
   timing: Timing;
   stagger: boolean;
   layout: Layout;
@@ -421,6 +452,16 @@ function SheetStage({
   const sources = useRef(new Map<string, HTMLElement>());
   const [open, setOpen] = useState<Opening | null>(null);
 
+  // Les visuels demandés dès l'ouverture de la maquette : sans eux, le calque du trajet grandissait
+  // sur un visuel pas encore arrivé, et l'affiche s'effaçait sur du vide.
+  useEffect(() => {
+    for (const m of titles) {
+      if (!m.backdropUrl) continue;
+      const img = new Image();
+      img.src = m.backdropUrl;
+    }
+  }, [titles]);
+
   const register: Register = (key) => (el) => {
     if (el) sources.current.set(key, el);
     else sources.current.delete(key);
@@ -429,39 +470,11 @@ function SheetStage({
   const openFrom = (o: Omit<Opening, "mode">) => {
     if (open) return;
     const el = sources.current.get(o.key);
-    const doc = document as ViewTransitionDoc;
-    if (reduced || !el) {
-      setOpen({ ...o, mode: "fade" });
-      return;
-    }
-    if (variant === "vt" && doc.startViewTransition) {
-      // La carte porte le nom partagé à la capture, puis le cède au visuel de la fiche.
-      el.style.setProperty("view-transition-name", VT_NAME);
-      doc.startViewTransition(() => {
-        el.style.removeProperty("view-transition-name");
-        flushSync(() => setOpen({ ...o, mode: "vt" }));
-      });
-      return;
-    }
-    setOpen({ ...o, mode: "flip" });
+    setOpen({ ...o, mode: reduced || !el ? "fade" : "flip" });
   };
 
-  // Appelée par la fiche une fois sa sortie jouée — en View Transitions, une fois son contenu
-  // effacé : c'est alors le navigateur qui ramène le visuel sur la carte.
-  const closed = () => {
-    if (!open) return;
-    const el = sources.current.get(open.key);
-    const doc = document as ViewTransitionDoc;
-    if (open.mode === "vt" && el && doc.startViewTransition) {
-      const t = doc.startViewTransition(() => {
-        flushSync(() => setOpen(null));
-        el.style.setProperty("view-transition-name", VT_NAME);
-      });
-      void t.finished.finally(() => el.style.removeProperty("view-transition-name"));
-      return;
-    }
-    setOpen(null);
-  };
+  // Appelée par la fiche une fois sa sortie jouée.
+  const closed = () => setOpen(null);
 
   useEffect(() => {
     if (open) return; // Échap ferme d'abord la fiche, qui l'écoute elle-même
@@ -472,7 +485,6 @@ function SheetStage({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onExit]);
 
-  const d = Math.round(timing.duration);
   const content = (
     <>
       {phone ? (
@@ -508,20 +520,6 @@ function SheetStage({
 
   return (
     <div className="fixed inset-0 z-[100] bg-black">
-      {/* Les View Transitions se règlent par CSS, posé ici et à jour à chaque réglage. Le fond de page
-          (`root`) ne fond pas : la fiche fait paraître son contenu elle-même, en cascade, et la carte
-          du téléphone monte par ses propres images clés. */}
-      <style>{`
-        ::view-transition-group(${VT_NAME}) { animation-duration: ${d}ms; animation-timing-function: ${timing.easing}; overflow: hidden; }
-        ::view-transition-old(${VT_NAME}), ::view-transition-new(${VT_NAME}) { width: 100%; height: 100%; object-fit: cover; animation-duration: ${Math.round(d * 0.55)}ms; }
-        ::view-transition-old(root), ::view-transition-new(root),
-        ::view-transition-old(alab-column), ::view-transition-new(alab-column),
-        ::view-transition-old(alab-back), ::view-transition-new(alab-back) { animation: none; }
-        ::view-transition-new(alab-card) { animation: alab-card-up ${d}ms ${timing.easing} both; }
-        ::view-transition-old(alab-card) { animation: alab-card-down ${d}ms ${timing.easing} both; }
-        @keyframes alab-card-up { from { transform: translateY(100%); } }
-        @keyframes alab-card-down { to { transform: translateY(100%); } }
-      `}</style>
       {framed ? (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6">
           <div
@@ -708,6 +706,15 @@ function MetaLine({ title, truncateGenres = false }: { title: CinemaMovie; trunc
  * - Le fondu est court et décalé : l'affiche s'efface sur le premier tiers, le visuel paraît de
  *   10 à 50 % — plus de long passage où les deux se superposent à moitié.
  * - L'accueil s'assombrit derrière la fiche (et recule un peu au bureau), puis revient à la fermeture.
+ *
+ * Quatrième passe (10/10/2026) :
+ * - 250 ms par défaut, cascade resserrée (voir `STAGGER_MS`).
+ * - La fermeture fond la bannière dans l'affiche sur presque tout le retour (`POSTER_IN`,
+ *   `BACKDROP_OUT`), et la vraie carte reprend la main sous un dernier fondu (`HANDOVER_MS`).
+ * - Au téléphone, la bannière se tire vers le bas comme dans la vraie fiche : le même
+ *   `useSwipeToDismiss`, la même poignée, les mêmes coins et la même ombre (`phoneSheetCorner`).
+ *   Lâchée au-delà du seuil, la fiche part de là où le doigt l'a laissée — la fermeture reprend
+ *   la place mesurée, transformation comprise, sans revenir d'abord en haut.
  */
 function MockSheet({
   opening, phone, framed, rootRef, sources, timing, stagger, onClosed,
@@ -723,7 +730,6 @@ function MockSheet({
 }) {
   const t = useT();
   const { title, mode } = opening;
-  const vt = mode === "vt";
   const sheetRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -739,6 +745,11 @@ function MockSheet({
   // Le flou localisé du bas de la fiche du bureau (`backdrop-blur`) n'est posé qu'une fois le
   // visuel arrivé : un filtre ne doit pas voyager avec un calque qui bouge.
   const [settled, setSettled] = useState(mode === "fade");
+  // Où le doigt a laissé la fiche quand la fermeture a commencé (0 pour la croix ou Échap) :
+  // gelé là, pour que le décalage du geste, que `useSwipeToDismiss` pousse ensuite jusqu'au bas de
+  // l'écran, ne fasse pas sauter la fiche sous le trajet de retour. Non nul : la fiche se ferme.
+  const [frozenOffset, setFrozenOffset] = useState<number | null>(null);
+  const closing = frozenOffset !== null;
   const backdrop = title.backdropUrl ?? "";
   const imageRadius = phone ? "16px 16px 0px 0px" : "0px 0px 0px 0px";
   const sourceRadius = `${opening.radius}px ${opening.radius}px ${opening.radius}px ${opening.radius}px`;
@@ -805,15 +816,18 @@ function MockSheet({
     // Le contenu paraît quand le visuel a fait l'essentiel du chemin : avant, il se lirait sur un
     // fond encore en mouvement. Plus tard au téléphone : le texte s'y pose sur la carte qui monte, et
     // ne doit pas flotter sur l'accueil avant qu'elle soit arrivée sous lui.
-    const reveal = d * (phone ? 0.55 : 0.42);
+    // Sur un trajet de 250 ms, la cascade commence vers la fin du mouvement plutôt qu'au milieu.
+    const reveal = d * (phone ? 0.7 : 0.6);
     items.forEach((el, i) =>
-      play(el, [{ opacity: 0, transform: "translateY(16px)" }, { opacity: 1, transform: "none" }], {
-        duration: 420, delay: reveal + (stagger ? i * STAGGER_MS : 0), easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      play(el, [{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }], {
+        duration: LINE_MS, delay: reveal + (stagger ? i * STAGGER_MS : 0), easing: "cubic-bezier(0.22, 1, 0.36, 1)",
       }),
     );
     fades.forEach((el) => play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: d * 0.6, delay: d * 0.3, easing: "ease-out" }));
-    // En View Transitions, la carte monte par ses propres images clés (voir la feuille de SheetStage).
-    if (!vt) play(cardRef.current, [{ transform: `translateY(${m.cardDrop}px)` }, { transform: "none" }], timing);
+    // Sans remplissage à la fin : la montée finie, c'est le style de la carte qui reprend sa
+    // transformation — celle du doigt quand on tire la fiche. Une animation restée « both » la
+    // tiendrait à sa place pour toujours.
+    play(cardRef.current, [{ transform: `translateY(${m.cardDrop}px)` }, { transform: "none" }], { ...timing, fill: "backwards" });
     timers.push(window.setTimeout(() => setSettled(true), d + 40));
 
     const frame = frameRef.current;
@@ -847,7 +861,7 @@ function MockSheet({
     // Une fois, à l'ouverture : les réglages ne changent pas pendant qu'une fiche est ouverte, et
     // `measure` / `parts` ne lisent que des refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, vt, phone, timing, stagger, sourceRadius, imageRadius]);
+  }, [mode, phone, timing, stagger, sourceRadius, imageRadius]);
 
   const requestClose = () => {
     if (closingRef.current) return;
@@ -858,6 +872,10 @@ function MockSheet({
     setSettled(false);
     const d = timing.duration;
     const sheet = sheetRef.current;
+    // Lu sur la fiche elle-même : le geste qui vient de la lâcher, ou un retour en place encore en
+    // cours si la croix est touchée juste après.
+    const off = sheet ? translateYOf(getComputedStyle(sheet).transform) : 0;
+    setFrozenOffset(off);
     if (mode === "fade") {
       sheet?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
       cardRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "both" });
@@ -869,11 +887,6 @@ function MockSheet({
     const { items, fades } = parts();
     for (const el of items) el.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(8px)" }], { duration: 140, easing: "ease-in", fill: "both" });
     for (const el of fades) el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: d * 0.5, easing: "ease-in", fill: "both" });
-    if (vt) {
-      dimRef.current?.animate([{ opacity: DIM }, { opacity: 0 }], { duration: 140, easing: "ease-in", fill: "both" });
-      window.setTimeout(onClosed, 140);
-      return;
-    }
     // L'accueil reprend sa taille avant la mesure : la carte d'arrivée se lit à sa vraie place, pas
     // à celle de l'accueil reculé — retirée et relancée dans la même tâche, rien ne se peint entre.
     homeAnimRef.current?.cancel();
@@ -892,17 +905,41 @@ function MockSheet({
     frame.style.display = "";
     showSheetImage(false);
     const opts = { ...timing, fill: "both" as const };
-    const back = frame.animate([{ clipPath: insetClip(m.target, m.W, m.H, imageRadius) }, { clipPath: insetClip(m.source, m.W, m.H, sourceRadius) }], opts);
+    // Tirée vers le bas, la carte a pris les coins arrondis du geste : le retour part de ceux-là.
+    const c = phone ? phoneSheetCorner(off) : 0;
+    const fromRadius = phone ? `${c}px ${c}px 0px 0px` : imageRadius;
+    const back = frame.animate([{ clipPath: insetClip(m.target, m.W, m.H, fromRadius) }, { clipPath: insetClip(m.source, m.W, m.H, sourceRadius) }], opts);
     bd.animate([{ transform: "none" }, { transform: coverTransform(m.target, m.source) }], opts);
     bd.animate(BACKDROP_OUT, { duration: d, easing: "linear", fill: "both" });
     poster.animate([{ transform: coverTransform(m.source, m.target) }, { transform: "none" }], opts);
     poster.animate(POSTER_IN, { duration: d, easing: "linear", fill: "both" });
-    cardRef.current?.animate([{ transform: "none" }, { transform: `translateY(${m.cardDrop}px)` }], opts);
+    // La carte est mesurée là où le doigt l'a laissée : elle part de ce décalage, et finit sous
+    // l'écran — `cardDrop` compte depuis sa place déplacée.
+    cardRef.current?.animate([{ transform: `translateY(${off}px)` }, { transform: `translateY(${off + m.cardDrop}px)` }], opts);
     dimRef.current?.animate([{ opacity: DIM }, { opacity: 0 }], { duration: d, easing: "cubic-bezier(0.65, 0, 0.35, 1)", fill: "both" });
     // Sans remplissage : à la fin, l'accueil retrouve simplement son état, sans animation qui traîne.
     if (!phone) home()?.animate([{ transform: `scale(${HOME_SCALE})` }, { transform: "none" }], { ...timing });
-    back.onfinish = () => onClosed();
+    // Le relais : la vraie carte reparaît dessous, et le calque, maintenant superposé à elle, s'efface.
+    back.onfinish = () => {
+      const src = sources.current.get(opening.key);
+      if (src) src.style.visibility = "";
+      frame.animate([{ opacity: 1 }, { opacity: 0 }], { duration: HANDOVER_MS, easing: "ease-out", fill: "both" }).onfinish = () => onClosed();
+    };
   };
+
+  // Le geste de la vraie fiche du téléphone, à l'identique : la bannière pour poignée, la croix
+  // tenue hors de la poignée.
+  const swipe = useSwipeToDismiss(requestClose);
+  const dragOffset = frozenOffset ?? (swipe.touched ? swipe.offset : 0);
+  const dragStyle = (base: CSSProperties): CSSProperties => ({
+    ...base,
+    transform: dragOffset ? `translateY(${dragOffset}px)` : undefined,
+    // Pendant le geste, la fiche est là où est le doigt ; relâchée en deçà du seuil, elle revient
+    // par la transition de la vraie (280 ms) ; en fermeture, ce sont les images clés qui mènent.
+    transition: swipe.dragging || closing ? "none" : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1), border-radius 200ms ease-out",
+    borderTopLeftRadius: phoneSheetCorner(dragOffset),
+    borderTopRightRadius: phoneSheetCorner(dragOffset),
+  });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -942,7 +979,7 @@ function MockSheet({
         <div ref={sheetRef} className="absolute inset-0 overflow-hidden">
           {/* Le visuel plein écran et ce qui le voile, comme CinemaMovieDetail : le flou localisé du
               bas, puis les deux voiles à étapes de CinemaDetailLayout. */}
-          <div ref={imageRef} className="absolute inset-0" style={{ viewTransitionName: vt ? VT_NAME : undefined } as CSSProperties}>
+          <div ref={imageRef} className="absolute inset-0">
             <img ref={photoRef} src={backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
             {settled && (
               <div
@@ -958,13 +995,13 @@ function MockSheet({
             type="button"
             onClick={requestClose}
             className="btn btn-ghost absolute z-10 rounded-full bg-black/55 px-3 py-2 float-edge"
-            style={{ top: "max(1rem, env(safe-area-inset-top))", left: "1rem", viewTransitionName: vt ? "alab-back" : undefined } as CSSProperties}
+            style={{ top: "max(1rem, env(safe-area-inset-top))", left: "1rem" }}
           >
             <ArrowLeft size={16} /> {t("cinema.back")}
           </button>
           <div className="scrollbar-thin relative h-full overflow-y-auto">
             <div className={SECTION_CLASS}>
-              <div style={{ ...COLUMN_STYLE, viewTransitionName: vt ? "alab-column" : undefined } as CSSProperties} className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16`}>
+              <div style={COLUMN_STYLE} className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16`}>
                 {/* Chaque ligne dans son enveloppe, pour la cascade ; celle du logo est une colonne
                     flexible, comme la colonne qui le porte dans la vraie fiche. */}
                 <div data-alab-stagger className="flex flex-col">
@@ -1019,17 +1056,24 @@ function MockSheet({
       <div
         ref={cardRef}
         className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-ink ring-1 ring-white/10"
-        style={{ top, viewTransitionName: vt ? "alab-card" : undefined } as CSSProperties}
+        style={dragStyle({ top, boxShadow: dragOffset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined })}
       />
       {frame}
-      <div ref={sheetRef} className="scrollbar-none absolute inset-x-0 bottom-0 overflow-y-auto overscroll-contain rounded-t-2xl" style={{ top }}>
-        <div className="relative aspect-video w-full" style={{ maxHeight: framed ? PHONE_FRAME.h * 0.52 : "52svh" }}>
-          <div ref={imageRef} className="absolute inset-0" style={{ viewTransitionName: vt ? VT_NAME : undefined } as CSSProperties}>
-            <img ref={photoRef} src={backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      <div
+        ref={sheetRef}
+        className="scrollbar-none absolute inset-x-0 bottom-0 overflow-y-auto overscroll-contain rounded-t-2xl"
+        style={dragStyle({ top, pointerEvents: closing ? "none" : undefined })}
+      >
+        {/* La poignée, comme dans CinemaMobileDetail : la bannière seule, `touch-action: none` pour
+            que le navigateur n'en fasse pas un défilement ; le reste de la fiche défile. */}
+        <div className="relative aspect-video w-full" {...swipe.handlers} style={{ touchAction: "none", maxHeight: framed ? PHONE_FRAME.h * 0.52 : "52svh" }}>
+          <div ref={imageRef} className="absolute inset-0">
+            <img ref={photoRef} src={backdrop} alt="" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
             <div data-alab-fade data-alab-veil className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
             <button
               data-alab-fade
               type="button"
+              {...NOT_THE_HANDLE}
               onClick={requestClose}
               aria-label="Fermer la fiche"
               className="nav-glass absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-white"
@@ -1038,7 +1082,7 @@ function MockSheet({
             </button>
           </div>
         </div>
-        <div className="relative -mt-6 px-4 pb-16" style={{ viewTransitionName: vt ? "alab-column" : undefined } as CSSProperties}>
+        <div className="relative -mt-6 px-4 pb-16">
           <div data-alab-stagger>
             {title.logoUrl ? (
               <CinemaLogo src={title.logoUrl} alt={title.title} surface="phone" shadow={false} className="mb-3 object-left" />

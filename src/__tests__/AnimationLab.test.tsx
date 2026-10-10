@@ -6,6 +6,8 @@ import { render, cleanup, fireEvent, screen, waitFor } from "@testing-library/re
 vi.mock("swr", () => ({ default: () => ({ data: undefined }) }));
 
 import { AnimationLab } from "@/components/animlab/AnimationLab";
+import { SheetOpenLot } from "@/components/animlab/IntroLots";
+import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
 // jsdom n'a ni Web Animations ni ResizeObserver : des doublures minimales, qui rendent une
 // animation déjà finie — la page ne doit dépendre de rien d'autre pour se monter.
@@ -61,7 +63,6 @@ describe("la page Tests animations", () => {
     expect(screen.getByText("Délai simulé")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Lueur sur le logo/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Ouverture de fiche/ }));
-    expect(screen.getByRole("button", { name: /FLIP manuel/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Ressort Apple/ })).toBeTruthy();
   });
 
@@ -86,5 +87,46 @@ describe("la page Tests animations", () => {
     expect(screen.getByText(/voile d'origine/)).toBeTruthy();
     fireEvent.change(slider, { target: { value: "20" } });
     expect(screen.getByText(/Luminosité du fond \+20 %/)).toBeTruthy();
+  });
+
+  it("quatrième passe : 250 ms par défaut, plus de View Transitions, les courbes expliquées", () => {
+    render(<AnimationLab />);
+    fireEvent.click(screen.getByRole("button", { name: /Ouverture de fiche/ }));
+    expect((screen.getByLabelText(/^Durée 250 ms/) as HTMLInputElement).min).toBe("150");
+    // Le ressort dure ce qu'on lui demande : 250 ms en jouaient 320 quand la réponse était la durée.
+    const real = Number(/ressort : (\d+) ms réels/.exec(screen.getByText(/ms réels/).textContent ?? "")?.[1]);
+    expect(real).toBeGreaterThanOrEqual(230);
+    expect(real).toBeLessThanOrEqual(300);
+    expect(screen.queryByRole("button", { name: /View Transitions/ })).toBeNull();
+    expect(screen.getByText(/cubic-bezier\(0\.2, 0, 0, 1\)/)).toBeTruthy();
+  });
+
+  it("quatrième passe : au téléphone, la bannière de la fiche se tire vers le bas comme la vraie", () => {
+    const movie = (id: number): CinemaMovie =>
+      ({
+        radarrId: id, title: `Film ${id}`, year: 2020, genres: [], quality: null, runtimeMinutes: 100, overview: "",
+        posterUrl: `/p${id}.jpg`, backdropUrl: `/b${id}.jpg`, logoUrl: `/l${id}.png`,
+      }) as unknown as CinemaMovie;
+    render(<SheetOpenLot movies={[movie(1), movie(2), movie(3), movie(4)]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Téléphone" }));
+    fireEvent.click(screen.getByRole("button", { name: /Ouvrir la maquette/ }));
+    fireEvent.click(screen.getAllByRole("img", { name: "Film 4" })[0].closest("button")!);
+    // La poignée : la bannière, rendue au geste (`touch-action: none`), la croix tenue à part.
+    const handle = document.querySelector<HTMLElement>('[style*="touch-action: none"]');
+    expect(handle).toBeTruthy();
+    expect(handle!.querySelector('[aria-label="Fermer la fiche"]')).toBeTruthy();
+    const sheet = handle!.parentElement!;
+    fireEvent.pointerDown(handle!, { clientY: 100, pointerId: 1, button: 0, pointerType: "touch" });
+    fireEvent.pointerMove(handle!, { clientY: 120, pointerId: 1, pointerType: "touch" });
+    expect(sheet.style.transform).toBe("translateY(20px)");
+    // Relâchée en deçà du seuil (et trop courte pour un lancer), elle revient en place.
+    fireEvent.pointerUp(handle!, { clientY: 120, pointerId: 1, pointerType: "touch" });
+    expect(sheet.style.transform).toBe("");
+    // Au-delà : elle se ferme depuis là où le doigt l'a laissée, sans filer d'abord au bas de l'écran.
+    fireEvent.pointerDown(handle!, { clientY: 100, pointerId: 1, button: 0, pointerType: "touch" });
+    fireEvent.pointerMove(handle!, { clientY: 400, pointerId: 1, pointerType: "touch" });
+    fireEvent.pointerUp(handle!, { clientY: 400, pointerId: 1, pointerType: "touch" });
+    expect(sheet.style.transform).toBe("translateY(300px)");
+    expect(sheet.style.pointerEvents).toBe("none");
   });
 });
