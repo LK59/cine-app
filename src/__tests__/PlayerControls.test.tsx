@@ -528,6 +528,47 @@ describe("PlayerControls", () => {
     expect(pause).toHaveBeenCalled();
   });
 
+  it("l'icône suit l'appui tout de suite, sans attendre l'évènement de l'élément", async () => {
+    // Le triangle ne devenait pause qu'à l'évènement `play`, un battement plus tard (10/10/2026).
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    const user = userEvent.setup();
+    render(
+      <Harness
+        onVideoRef={(v) => {
+          video = v;
+          video.play = vi.fn(() => new Promise<void>(() => {}));
+          video.pause = vi.fn();
+        }}
+      />
+    );
+    const playPause = screen.getAllByRole("button").find((b) => b.getAttribute("data-player-nav") === "playpause")!;
+    Object.defineProperty(video, "paused", { value: true, configurable: true });
+    expect(playPause.getAttribute("aria-label")).toBe("player.play");
+    await user.click(playPause);
+    // Pas d'évènement `play` encore : l'icône a déjà changé.
+    expect(playPause.getAttribute("aria-label")).toBe("player.pause");
+  });
+
+  it("revient à la vérité si la lecture est refusée", async () => {
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    const user = userEvent.setup();
+    render(
+      <Harness
+        onVideoRef={(v) => {
+          video = v;
+          video.play = vi.fn(() => Promise.reject(new DOMException("refusée", "NotAllowedError")));
+          video.pause = vi.fn();
+        }}
+      />
+    );
+    const playPause = screen.getAllByRole("button").find((b) => b.getAttribute("data-player-nav") === "playpause")!;
+    Object.defineProperty(video, "paused", { value: true, configurable: true });
+    await user.click(playPause);
+    await waitFor(() => expect(playPause.getAttribute("aria-label")).toBe("player.play"));
+  });
+
   it("skip buttons move currentTime by ±10s, clamped to [0, duration]", async () => {
     stubMediaFetches();
     let video!: HTMLVideoElement;
