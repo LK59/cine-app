@@ -1164,15 +1164,12 @@ export function ExperimentalPlayerHost({
         : error || networkLost || stuck || (startingFor !== null && startingFor >= STUCK_AFTER_MS)
           ? "gone"
           : "waiting";
-  // L'ouverture animée a-t-elle paru ? Sans elle, la couverture posée à l'appui s'efface dès la première
-  // image (`announced`, même figée) : une reprise lue depuis l'appareil s'ouvre en 34 à 115 ms
-  // (10/10/2026), bien avant le seuil, et ne voit jamais le logo — voir `PlaybackIntro`.
-  const [introShown, setIntroShown] = useState(false);
-  const onIntroShown = useCallback(() => setIntroShown(true), []);
-  // Elle tient lieu de roue : les deux ne se montrent jamais ensemble — seuil compris, la roue
-  // paraissant à 120 ms et l'ouverture à 300. Une couverture déjà effacée sur la première image ne
-  // couvre plus rien : la roue de l'attente reprend ses droits si l'horloge tarde à partir.
-  const introCovers = introPhase === "waiting" && (introShown || !announced);
+  // Le calque couvre-t-il le lecteur ? Couverture dès l'appui, puis ouverture animée passé 300 ms si
+  // aucune image n'est décodée ; dans les deux cas jusqu'au film qui bouge (`introPlaying`), ou
+  // `COVER_HOLD_MS` sur une image décodée qui ne part pas — voir `PlaybackIntro`. Il tient lieu de
+  // roue : les deux ne se montrent jamais ensemble.
+  const [introCovering, setIntroCovering] = useState(() => introEligible && !isMini);
+  const introCovers = introPhase === "waiting" && introCovering;
 
   /**
    * Comment la séance s'est terminée — la ligne `stop` du journal.
@@ -2230,12 +2227,15 @@ export function ExperimentalPlayerHost({
   // flag stacked one spinner on top of the other.
   const openingSpinner = openingFor !== null && openingFor >= SPINNER_AFTER_MS && !introCovers;
   // Sous l'ouverture, la roue de l'attente ne se montre pas non plus : l'une tient lieu de l'autre.
-  // À l'ouverture, une fois la couverture effacée sur la première image (reprise depuis l'appareil :
-  // image à ~50 ms), Safari met encore quelques centaines de millisecondes à faire partir l'horloge.
-  // L'image figée y suffit ; la roue revenait par-dessus à 120 ms — le « chargement classique après
-  // la première image » signalé par Louis (10/10/2026). Elle attend donc une vraie attente.
+  // Et au tout premier départ, sur une image déjà montrée (la couverture partie au bout de
+  // `COVER_HOLD_MS`, ou une séance sans ouverture), pas avant une vraie attente : la roue revenait par-
+  // dessus à 120 ms — le « chargement classique après la première image » signalé par Louis
+  // (10/10/2026).
   const openingGrace = introEligible && !introPlaying && startingFor !== null && startingFor < OPENING_SPINNER_GRACE_MS;
   const resumeSpinner = startingFor !== null && startingFor >= SPINNER_AFTER_MS && !introCovers && !openingGrace;
+  // Les commandes ont leur propre roue et leur fil, montés sur l'événement `waiting` de l'élément, sans
+  // délai : même règle pour eux — rien sous le calque, rien pendant la grâce du premier départ.
+  const openingQuiet = introCovers || openingGrace;
   const waitingWord =
     waitingFor === null || waitingFor < WORD_AFTER_MS
       ? null
@@ -2518,7 +2518,7 @@ export function ExperimentalPlayerHost({
           clockKey={thisIntro}
           art={session.introArt ?? null}
           imageShown={announced}
-          onShow={onIntroShown}
+          onCoverChange={setIntroCovering}
           fallbackName={openedAs}
           caption={introCaption(
             { ...session.introArt, resumeSeconds: session.resumeAt ?? playbackState?.resumeSeconds ?? null },
@@ -2779,6 +2779,7 @@ export function ExperimentalPlayerHost({
             // voir `resuming` dans PlayerControls.
             loading={!ready}
             resuming={ready && startingAt !== null}
+            openingQuiet={openingQuiet}
             // Jellyfin's own analysis of the episode, fetched alongside the file's description.
             // Playback speed needs nothing here: on the native path these controls hold a real
             // media element, so it is the browser's own.

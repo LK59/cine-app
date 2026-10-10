@@ -53,6 +53,15 @@ const FROZEN_OPENING_MS = 400;
 /** Ce qu'est « au bord » : l'atterrissage pose la tête 0,04 s dans le média, une poussée 0,08 s. */
 const OPENING_EDGE_SECONDS = 0.5;
 
+/**
+ * Et plus tôt encore, une fois : la position redemandée 100 ms après l'atterrissage de l'ouverture, si
+ * rien n'a bougé. Le gel des départs du début tenait encore en 8.30.9 (10/10/2026, iPhone : WarGames,
+ * La Flamme, Drive — ouverts en 14 à 373 ms, puis figés jusqu'à la poussée de 400 ms — que le chien
+ * de garde, qui passe toutes les 250 ms, ne livrait qu'à 500). Une minuterie à part, armée à
+ * l'atterrissage ; la poussée de 400 ms reste le filet, l'échelle ordinaire la suite.
+ */
+const OPENING_REASSERT_MS = 100;
+
 /** Ce qu'une seconde de média à décoder ajoute à ce délai — voir `seekingPatienceMs`. */
 const SEEKING_PATIENCE_PER_SECOND_MS = 500;
 
@@ -345,6 +354,9 @@ export class MseSource {
   private frozenNudges = 0;
   /** Every push over the session, for the `stop` line — the one above resets when the clock moves. */
   private frozenNudgesTotal = 0;
+  /** La position redemandée une fois après l'atterrissage de l'ouverture — voir `OPENING_REASSERT_MS`. */
+  private openingReassertTimer: ReturnType<typeof setTimeout> | null = null;
+  private openingReassertDone = false;
   /**
    * Which rung of the recovery ladder has been climbed since the clock last really played: 0 none,
    * 1 the keyframe step, 2 handed to the host for a rebuild. See `escalate`.
@@ -405,6 +417,8 @@ export class MseSource {
         noteSeekTarget: (seconds) => {
           // Un pas volontaire autour de la cible la déplace : ce n'est pas un départ.
           this.seekState.moved(seconds);
+          // L'atterrissage de l'ouverture depuis le début passe par là (`nudgeIntoBuffer`).
+          this.armOpeningReassert(seconds);
         },
       },
       callbacks.onStarting
@@ -1608,6 +1622,7 @@ export class MseSource {
     this.guard.headPlaced(landing);
     this.video.currentTime = landing;
     this.guard.opened(landing, !this.startPaused);
+    this.armOpeningReassert(landing);
   }
 
   /** Retire d'un tampon tout ce qui suit cet instant — voir `trimBeforeNextAppend`. */
@@ -1973,6 +1988,39 @@ export class MseSource {
     return (FROZEN_SEEKING_MS - FROZEN_CLOCK_MS) / SEEKING_PATIENCE_PER_SECOND_MS;
   }
 
+  /**
+   * Arme, une seule fois par source, la position redemandée 100 ms après l'atterrissage de
+   * l'ouverture — voir `OPENING_REASSERT_MS`.
+   *
+   * Seulement pour l'ouverture (la garde attend encore sa première image, près de là où elle s'est
+   * ouverte) et seulement au bord du média : une reprise posée loin derrière son image clé décode
+   * vraiment, et la relancer recommencerait ce décodage. Le pas est celui de la poussée (+0,08 s),
+   * le seul qui ait été vu libérer ce gel ; il est compté comme un placement (`headPlaced`), pas
+   * comme de la lecture, et ne consomme pas la poussée de 400 ms, qui reste le filet.
+   */
+  private armOpeningReassert(at: number): void {
+    if (this.openingReassertDone || this.openingReassertTimer !== null || this.destroyed) return;
+    if (!this.guard.awaitingFirstPicture || this.decodeDistance(at) >= OPENING_EDGE_SECONDS) return;
+    this.openingReassertTimer = setTimeout(() => {
+      this.openingReassertTimer = null;
+      this.openingReassertDone = true;
+      if (this.destroyed || this.video.paused || !this.guard.awaitingFirstPicture) return;
+      const now = this.video.currentTime;
+      // Parti de lui-même : rien à faire.
+      if (!this.video.seeking && Math.abs(now - at) > 0.05) return;
+      if (this.decodeDistance(now) >= OPENING_EDGE_SECONDS || this.lead < 1) return;
+      const target = now + FROZEN_STEP;
+      trace(`ouverture : rien n'a bougé 100 ms après l'atterrissage à ${now.toFixed(2)} s — position redemandée`);
+      this.guard.forgetPause();
+      this.seekState.moved(target);
+      this.guard.headPlaced(target);
+      this.video.currentTime = target;
+      // Le pas n'est pas de la lecture, et la poussée de 400 ms se mesure depuis lui.
+      this.lastClockAt = target;
+      this.frozenSince = Date.now();
+    }, OPENING_REASSERT_MS);
+  }
+
   private seekingPatienceMs(now: number): number {
     const ranges = this.playable;
     for (let i = 0; i < ranges.length; i++) {
@@ -2289,6 +2337,8 @@ export class MseSource {
     this.video.removeEventListener("playing", this.onResumed);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
+    if (this.openingReassertTimer) clearTimeout(this.openingReassertTimer);
+    this.openingReassertTimer = null;
     if (this.networkRetryTimer) clearTimeout(this.networkRetryTimer);
     this.networkRetryTimer = null;
     this.video.removeEventListener("error", this.onElementError);

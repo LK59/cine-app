@@ -106,6 +106,13 @@ interface PlayerControlsProps {
    * chargement : les boutons du centre disparaissaient sous une roue.
    */
   resuming?: boolean;
+  /**
+   * L'ouverture de la lecture couvre encore l'écran, ou le premier départ n'a pas dépassé sa grâce
+   * (DECISIONS.md §60) : ni roue ni fil. Ils montaient sur l'événement `waiting` de l'élément, sans
+   * délai, et un départ de quelques centaines de millisecondes en faisait clignoter un (10/10/2026).
+   * Décidé par l'hôte, qui connaît l'ouverture ; les vraies attentes en cours de film les gardent.
+   */
+  openingQuiet?: boolean;
   introSkip: { start: number; end: number } | null;
   creditsStart: number | null;
   nextEpisode: { itemId: string; title: string } | null;
@@ -253,6 +260,7 @@ export function PlayerControls({
   hidden,
   loading,
   resuming = false,
+  openingQuiet = false,
   introSkip,
   creditsStart,
   nextEpisode,
@@ -1383,7 +1391,7 @@ export function PlayerControls({
       {/* Une reprise n'a que le fil (en paysage, voir globals.css) et l'anneau du bouton lecture :
           ni roue au centre, ni boutons retirés. Le fil d'une reprise n'apparaît qu'après un
           instant (`player-wait-late`), pour qu'une reprise immédiate ne fasse rien clignoter. */}
-      {(loading || buffering || resuming) && (
+      {(loading || buffering || resuming) && !openingQuiet && (
         <>
           <div
             className={`player-wait-thread pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden bg-white/10 ${

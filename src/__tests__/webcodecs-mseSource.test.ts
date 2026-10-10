@@ -2271,6 +2271,62 @@ describe("l'échelle des reprises", () => {
     expect(video.currentTime).toBe(pushed);
   });
 
+  describe("la position redemandée 100 ms après l'atterrissage de l'ouverture", () => {
+    // 8.30.9, iPhone de Louis (10/10/2026) : WarGames, La Flamme, Drive ouverts en 14 à 373 ms, puis
+    // figés sur l'atterrissage jusqu'à la poussée de 400 ms — que le chien de garde ne livrait qu'à 500.
+    type Opening = Internals & {
+      armOpeningReassert: (at: number) => void;
+      guard: { opened: (at: number, owed?: boolean) => void; playing: () => void };
+    };
+    const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    async function opened() {
+      const video = fakeVideo();
+      const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
+      const internals = mse as unknown as Opening;
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) > 12, "du média devant la tête");
+      if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+      return { video, internals };
+    }
+
+    it("redemande la position une fois, à ~100 ms, sur une ouverture figée au bord du média", async () => {
+      const { video, internals } = await opened();
+      const head = video.buffered.start(0) + 0.04;
+      internals.guard.opened(head);
+      setTime(video, head);
+      internals.armOpeningReassert(head);
+      await tick(60);
+      expect(video.currentTime).toBe(head);
+      await tick(80);
+      expect(video.currentTime).toBeCloseTo(head + 0.08, 5);
+      // Une seule fois : armée de nouveau, elle ne repart pas.
+      const pushed = video.currentTime;
+      internals.armOpeningReassert(pushed);
+      await tick(150);
+      expect(video.currentTime).toBe(pushed);
+    });
+
+    it("ne touche pas une reprise posée loin derrière son image clé", async () => {
+      const { video, internals } = await opened();
+      const head = video.buffered.start(0) + 2.8;
+      internals.guard.opened(head);
+      setTime(video, head);
+      internals.armOpeningReassert(head);
+      await tick(150);
+      expect(video.currentTime).toBe(head);
+    });
+
+    it("ne fait rien quand l'horloge est partie d'elle-même", async () => {
+      const { video, internals } = await opened();
+      const head = video.buffered.start(0) + 0.04;
+      internals.guard.opened(head);
+      setTime(video, head);
+      internals.armOpeningReassert(head);
+      setTime(video, head + 0.3);
+      await tick(150);
+      expect(video.currentTime).toBeCloseTo(head + 0.3, 5);
+    });
+  });
+
   it("écrit un blocage une fois, avec de quoi le comprendre, et pas davantage", async () => {
     const video = fakeVideo();
     Object.assign(video, { readyState: 2, networkState: 2, seeking: false });

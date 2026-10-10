@@ -51,14 +51,25 @@ function prefersReducedMotion(): boolean {
  *
  * Deux temps (10/10/2026). Dès le montage — l'appui —, une **couverture** : le visuel du film sous son
  * voile, immobile, sans logo ni légende, pour que le lecteur vide ne se montre jamais. Puis :
- * - la première image arrive avant le seuil (`imageShown`) : la couverture s'efface sur elle en fondu,
- *   et l'ouverture animée ne paraît jamais. C'est le cas des reprises lues depuis l'appareil, ouvertes
- *   en 34 à 115 ms ce jour-là : l'ouverture, partie à 300 ms parce que l'horloge n'avançait pas encore,
- *   se posait *sur* une image déjà là, puis s'effaçait un instant plus tard ;
+ * - la première image arrive avant le seuil (`imageShown`) : l'ouverture animée ne paraîtra jamais,
+ *   et la couverture reste jusqu'à ce que le film *bouge* (`phase` → `picture`, la règle de l'hôte :
+ *   l'horloge partie, ou la lecture automatique refusée), puis s'efface en un seul fondu sur une image
+ *   qui joue déjà. C'est le cas des reprises lues depuis l'appareil, ouvertes en 25 à 115 ms : effacée
+ *   sur la première image figée (8.30.9), la couverture laissait voir quelques centaines de
+ *   millisecondes d'image arrêtée, puis la roue de l'attente le temps que Safari démarre. Une image
+ *   décodée qui ne part pas en `COVER_HOLD_MS` est un vrai blocage : la couverture s'efface quand
+ *   même, pour que l'attente se voie ;
  * - rien à 300 ms : l'ouverture animée part de cette même couverture — même image, même voile, même
  *   échelle —, et s'efface comme avant, quand l'hôte passe en `picture`.
  * Une image à l'écran n'est jamais recouverte : passé `imageShown`, l'ouverture ne peut plus partir.
  */
+/**
+ * Combien de temps la couverture tient sur une image décodée qui ne joue pas encore. Au-delà, ce
+ * n'est plus le démarrage de Safari (quelques centaines de millisecondes, une poussée à 100 puis à
+ * 400 ms pour un départ du début) mais une attente réelle, que l'interface du lecteur doit montrer.
+ */
+export const COVER_HOLD_MS = 1200;
+
 export function PlaybackIntro({
   phase,
   startedAt,
@@ -71,6 +82,7 @@ export function PlaybackIntro({
   reduced: reducedProp,
   imageShown = false,
   onShow,
+  onCoverChange,
   onClose,
   closeLabel,
   className = "absolute inset-0",
@@ -78,13 +90,19 @@ export function PlaybackIntro({
 }: {
   phase: IntroPhase;
   /**
-   * La première image est à l'écran — fût-elle figée, l'horloge pas encore partie. Avant que
-   * l'ouverture animée ait paru, c'est elle qui retire la couverture ; après, l'hôte garde la main
-   * (`phase`), avec ses propres règles de fin (`src/lib/introEnd.ts`).
+   * La première image est décodée — fût-elle figée, l'horloge pas encore partie. Elle empêche
+   * l'ouverture animée de paraître (une image ne se recouvre pas d'un logo) ; la couverture, elle,
+   * tient jusqu'à `phase` → `picture` (le film qui bouge, règles de `src/lib/introEnd.ts`), ou
+   * `COVER_HOLD_MS` au plus.
    */
   imageShown?: boolean;
   /** L'ouverture animée vient de paraître (la couverture seule ne compte pas). */
   onShow?: () => void;
+  /**
+   * Le calque couvre-t-il le lecteur — couverture ou ouverture animée, avant son fondu de sortie ?
+   * L'hôte s'en sert pour taire ses propres attentes (la roue des commandes) tant qu'il est là.
+   */
+  onCoverChange?: (covering: boolean) => void;
   startedAt: number;
   /** La clé de l'horloge partagée : ce qui a été montré y est gardé pour le lecteur qui prend la relève. */
   clockKey?: string;
@@ -234,11 +252,30 @@ export function PlaybackIntro({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, bgSrc]);
 
+  // La couverture seule : jusqu'au film qui bouge (`picture`), jamais sur une image figée — sauf une
+  // image décodée qui ne part pas en `COVER_HOLD_MS`, un vrai blocage qui doit se voir.
+  const [coverExpired, setCoverExpired] = useState(false);
+  useEffect(() => {
+    if (!visible || started || !imageShown || phase !== "waiting") return;
+    const id = window.setTimeout(() => setCoverExpired(true), COVER_HOLD_MS);
+    return () => window.clearTimeout(id);
+  }, [visible, started, imageShown, phase]);
+
   // La fin. L'ouverture animée parue : à `picture`, fondu enchaîné de 400 ms, le logo s'éloigne un
-  // peu. La couverture seule : dès la première image, même figée — le film « sort » de son visuel en
-  // 280 ms, en décélérant —, et l'ouverture est close pour cette lecture : un lecteur qui prendrait la
+  // peu. La couverture seule : au film qui bouge — il « sort » de son visuel en 280 ms, en décélérant,
+  // déjà en mouvement —, et l'ouverture est close pour cette lecture : un lecteur qui prendrait la
   // relève ne recouvrirait pas l'image. Puis le calque se retire.
-  const fading = visible && (started ? phase === "picture" : imageShown || phase === "picture");
+  const fading = visible && (phase === "picture" || (!started && coverExpired));
+  const covering = visible && !fading;
+  const onCoverChangeRef = useRef(onCoverChange);
+  useEffect(() => {
+    onCoverChangeRef.current = onCoverChange;
+  }, [onCoverChange]);
+  useEffect(() => {
+    onCoverChangeRef.current?.(covering);
+  }, [covering]);
+  // Démonté (erreur, mini-lecteur, fin du fondu) : plus rien ne couvre.
+  useEffect(() => () => onCoverChangeRef.current?.(false), []);
   useLayoutEffect(() => {
     if (!fading) return;
     const d = reduced ? 200 : started ? 400 : 280;

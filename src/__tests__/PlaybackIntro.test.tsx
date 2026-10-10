@@ -66,21 +66,48 @@ describe("PlaybackIntro", () => {
     expect(screen.queryByText("S1 · É3 · Le pari")).toBeNull();
   });
 
-  it("une première image avant le seuil : la couverture s'efface sur elle, l'ouverture animée ne paraît jamais", () => {
-    // Le cas des reprises lues depuis l'appareil — ouvertes en 34 à 115 ms le 10/10/2026.
+  it("une première image avant le seuil : pas d'ouverture animée, et la couverture tient jusqu'au film qui bouge", () => {
+    // Le cas des reprises lues depuis l'appareil — ouvertes en 25 à 115 ms le 10/10/2026. Effacée sur
+    // l'image figée (8.30.9), la couverture laissait voir l'image arrêtée et la roue de l'attente.
     const onShow = vi.fn();
     const { rerender } = render(<Intro phase="waiting" clockKey="k" onShow={onShow} />);
     act(() => vi.advanceTimersByTime(60));
-    // Image là, horloge pas encore partie : l'hôte reste en `waiting`, l'image suffit.
+    // Image décodée, horloge pas encore partie : la couverture reste, même passé le seuil.
     rerender(<Intro phase="waiting" imageShown clockKey="k" onShow={onShow} />);
+    act(() => vi.advanceTimersByTime(500));
     expect(state()).toBe("cover");
+    expect(onShow).not.toHaveBeenCalled();
+    expect(introFinished("k")).toBe(false);
+    // L'horloge part : un seul fondu de 280 ms, sur une image qui joue déjà.
+    rerender(<Intro phase="picture" imageShown clockKey="k" onShow={onShow} />);
+    expect(layer()).not.toBeNull();
     act(() => vi.advanceTimersByTime(280));
-    expect(layer()).toBeNull();
-    act(() => vi.advanceTimersByTime(2000));
     expect(layer()).toBeNull();
     expect(onShow).not.toHaveBeenCalled();
     // Close pour cette lecture : un lecteur qui prendrait la relève ne recouvrirait pas l'image.
     expect(introFinished("k")).toBe(true);
+  });
+
+  it("une image décodée qui ne part pas en 1,2 s : la couverture s'efface quand même, l'attente doit se voir", () => {
+    const { rerender } = render(<Intro phase="waiting" clockKey="k" />);
+    act(() => vi.advanceTimersByTime(50));
+    rerender(<Intro phase="waiting" imageShown clockKey="k" />);
+    act(() => vi.advanceTimersByTime(1199));
+    expect(state()).toBe("cover");
+    act(() => vi.advanceTimersByTime(1));
+    expect(introFinished("k")).toBe(true);
+    act(() => vi.advanceTimersByTime(280));
+    expect(layer()).toBeNull();
+  });
+
+  it("dit à l'hôte quand il couvre, pour qu'il taise la roue de ses commandes", () => {
+    const covers: boolean[] = [];
+    const onCoverChange = (c: boolean) => covers.push(c);
+    const { rerender } = render(<PlaybackIntro phase="waiting" startedAt={10_000} art={art} fallbackName="Alien" caption={[]} onCoverChange={onCoverChange} reduced={false} />);
+    expect(covers.at(-1)).toBe(true);
+    rerender(<PlaybackIntro phase="picture" imageShown startedAt={10_000} art={art} fallbackName="Alien" caption={[]} onCoverChange={onCoverChange} reduced={false} />);
+    // Dès le fondu de sortie : le film bouge, les vraies attentes reprennent leurs droits.
+    expect(covers.at(-1)).toBe(false);
   });
 
   it("une image arrivée avant le seuil annule l'ouverture même si l'hôte tarde à la retirer", () => {
