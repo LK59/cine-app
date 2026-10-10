@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Info, Play } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
@@ -13,7 +13,7 @@ import { formatContinueLabel, heroContinueFacts } from "@/lib/cinemaContinueLabe
 import { HeroContinueProgress } from "@/components/cinema/HeroContinueProgress";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import { useArrivalFade } from "@/lib/useArrivalFade";
-import { prefetchSheetBanners } from "@/lib/sheetMorph/prefetchBanners";
+import { keepSheetBanners, releaseSheetBanners, suspendSheetBanners } from "@/lib/sheetMorph/prefetchBanners";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 
@@ -111,26 +111,18 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   }
   const { items, index } = resolveHeroCarousel(order, orderIndex, official, heroKey, (key) => seen.get(key));
   useDecodeAhead(upcomingImages(items, index, heroImages));
-  // Le visuel de la fiche que chaque affiche ouvrirait (le titre affiché et ses deux voisins),
-  // demandé d'avance au repos : sans lui, la fiche s'ouvre sur l'affiche en remplacement et le vrai
-  // visuel arrive après — voir `prefetchSheetBanners`. Jamais quand la bannière n'est pas à l'écran
-  // (le lecteur plein écran, l'autre onglet, un panneau).
-  const bannerAhead =
-    items.length === 0
-      ? ""
-      : [items[index], items[(index + 1) % items.length], items[(index - 1 + items.length) % items.length]]
-          .map((item) => item?.backdropUrl ?? "")
-          .join("\n");
-  const offscreenRef = useRef(offscreen);
+  // Le visuel de la fiche que chaque affiche de la bannière ouvrirait — toutes, une dizaine au plus —,
+  // demandé dès que la liste est connue (au lancement, depuis le catalogue gardé) et gardé décodé :
+  // sans lui, la fiche s'ouvre sur l'affiche en remplacement et le vrai visuel arrive après — voir
+  // `keepSheetBanners`. Suspendu quand la bannière n'est pas à l'écran (le lecteur plein écran, l'autre
+  // onglet, un panneau) : ce qui se télécharge encore est abandonné.
+  const bannerOwner = useId();
+  const bannerUrls = items.map((item) => item?.backdropUrl ?? "").join("\n");
   useEffect(() => {
-    offscreenRef.current = offscreen;
-  }, [offscreen]);
-  useEffect(() => {
-    if (!bannerAhead || offscreen) return;
-    const abort = new AbortController();
-    void prefetchSheetBanners(bannerAhead.split("\n"), () => offscreenRef.current === true, abort.signal);
-    return () => abort.abort();
-  }, [bannerAhead, offscreen]);
+    if (offscreen) suspendSheetBanners(bannerOwner);
+    else if (bannerUrls) keepSheetBanners(bannerOwner, bannerUrls.split("\n"));
+  }, [bannerOwner, bannerUrls, offscreen]);
+  useEffect(() => () => releaseSheetBanners(bannerOwner), [bannerOwner]);
 
   /**
    * Un saut de plus d'un cran se fait sans glisser.

@@ -14,16 +14,20 @@ export function TapButton({
   onPress,
   className,
   children,
+  "data-sheet-backdrop": sheetBackdrop,
 }: {
   onTap: () => void;
   onPress?: () => void;
   className?: string;
   children: ReactNode;
+  /** Le visuel de la fiche qu'il ouvre, demandé dès l'appui (DECISIONS.md §61). */
+  "data-sheet-backdrop"?: string;
 }) {
   const tap = useTap(onTap);
   return (
     <button
       type="button"
+      data-sheet-backdrop={sheetBackdrop}
       {...tap}
       onPointerDown={(e: ReactPointerEvent) => {
         onPress?.();

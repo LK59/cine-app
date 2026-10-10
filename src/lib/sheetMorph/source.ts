@@ -1,4 +1,5 @@
 import { sheetFrame, visibleFraction } from "./dom";
+import { prefetchSheetBannerNow } from "./prefetchBanners";
 
 /**
  * D'où part une fiche (DECISIONS.md §61) : la carte qu'on vient de toucher, retenue au geste.
@@ -95,6 +96,8 @@ export function installPressTracker(): void {
     (e) => {
       const control = e.target instanceof Element ? e.target.closest<HTMLElement>(CONTROL) : null;
       down = control ? { control, x: e.clientX, y: e.clientY, id: e.pointerId } : null;
+      // Le visuel de la fiche que cette carte ouvrira, demandé dès que le doigt se pose.
+      if (control) prefetchSheetBannerNow(control.closest<HTMLElement>("[data-sheet-backdrop]")?.getAttribute("data-sheet-backdrop"));
     },
     true,
   );
