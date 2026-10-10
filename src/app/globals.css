@@ -1416,6 +1416,16 @@
   -webkit-backdrop-filter: none !important;
 }
 
+/* Une fiche dont l'image est en vol (`data-sheet-flying`, posé par `useSheetMorph` le temps de
+   l'ouverture) : son visuel et ses voiles sont dans le calque du trajet. Un visuel monté pendant le
+   trajet — une image remplacée à l'arrivée des données — reste caché lui aussi, au lieu de paraître à
+   sa place au repos, hors d'une carte encore en route. */
+[data-sheet-flying] [data-sheet-photo],
+[data-sheet-flying] [data-sheet-veil],
+[data-sheet-flying] [data-sheet-settle] {
+  visibility: hidden !important;
+}
+
 
 
 /* ─── Le verre liquide (DECISIONS.md §45) ─────────────────────────────────────

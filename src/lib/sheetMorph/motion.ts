@@ -293,6 +293,45 @@ export function contentRideTrack(samples: Sample[], fromY: number, toY: number):
  */
 export const GLASS_IN = { from: 0.3, to: 0.95, minMs: 160 } as const;
 
+/**
+ * La place de la bannière, portée par la carte du téléphone : l'image qui vole ne vise pas sa place
+ * au repos mais celle qu'elle a *dans la carte qui monte* — la cible glisse avec la carte, et l'image
+ * la rejoint à partir de 35 % du trajet (`SLOT_RIDE_IN`, en espace parcouru).
+ *
+ * Depuis que le contenu monte avec la carte (`contentRideTrack`), la bannière, elle, filait seule
+ * vers sa place au repos : au milieu du trajet elle flottait au-dessus d'une carte encore basse, hors
+ * de ses bords — « la bannière apparaît brièvement en dehors de la fiche » sur une ouverture refermée
+ * vite (Louis, iPhone, 10/10/2026). Portée par la carte, elle y est logée dès qu'elle l'a rejointe ;
+ * au tout début elle reste l'affiche touchée, là où elle est (la carte, elle, est encore sous l'écran).
+ */
+export const SLOT_RIDE_IN = 0.35;
+
+/** Le décalage de la place de la bannière à ce point du trajet : la montée de la carte, prise peu à peu. */
+export function slotRide(q: number, cardFromY: number): number {
+  const p = clamp(q, 0, 1);
+  return lerp(cardFromY, 0, p) * smooth(0, SLOT_RIDE_IN, p);
+}
+
+/** La même pose, déplacée verticalement d'un bloc : la fenêtre et les deux images qu'elle porte. */
+export function shiftPose(p: Pose, dy: number): Pose {
+  if (!dy) return p;
+  return {
+    ...p,
+    box: { ...p.box, y: p.box.y + dy },
+    bd: { ...p.bd, ty: p.bd.ty + dy },
+    poster: { ...p.poster, ty: p.poster.ty + dy },
+  };
+}
+
+/**
+ * L'affiche gardée de bout en bout : le visuel de la fiche n'est pas encore chargé (une reprise dont
+ * la bannière n'a jamais été demandée), et l'image qui vole ne l'attend pas — elle arrive avec la
+ * vignette touchée, déjà là, mise à l'échelle de la bannière. Rien n'est téléchargé pour animer.
+ */
+export function posterOnly(p: Pose): Pose {
+  return { ...p, bdOpacity: 0, posterOpacity: 1 };
+}
+
 /** Le premier instant (en ms) où le trajet atteint `q`. */
 export function timeAt(samples: Sample[], duration: number, q: number): number {
   const hit = samples.find((x) => x.q >= q);

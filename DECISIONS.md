@@ -2105,6 +2105,22 @@ trajet. La maquette « Bureau » du lot H joue le crochet de production lui-mêm
 deux volets : `data-sheet-hero`, `data-sheet-rows` (CinemaClient). Tests :
 `sheetMorph-continuity.test.tsx`, `decisions-partagees.test.ts`.
 
+**Au téléphone, la bannière se loge dans la carte qui monte** (`slotRide`, `shiftPose`, motion.ts,
+10/10/2026). Depuis que le contenu monte avec la carte, une image qui filait seule vers sa place au
+repos flottait au-dessus d'une carte encore basse — « la bannière apparaît brièvement en dehors de la
+fiche et ses bordures » sur une ouverture refermée vite. Sa cible glisse avec la carte, et elle la
+rejoint à partir de 35 % du trajet ; au départ, elle reste l'affiche touchée. Une fiche dont l'image
+vole porte `data-sheet-flying` : tout visuel ou voile monté pendant le trajet reste caché
+(globals.css). Test : `sheetMorph-hook.test.tsx` (« se loge dans la carte »).
+
+**Rien n'est attendu, rien n'est téléchargé pour animer.** Si le visuel de la fiche n'est pas encore
+chargé (une reprise dont la bannière n'a jamais été demandée), la vignette touchée vole jusqu'au bout
+(`posterOnly`) et reste en fond de la bannière jusqu'à l'arrivée du visuel ; le départ n'attend que le
+décodage de la vignette. Les cartes de « Reprendre » sont servies au relâchement du doigt
+(`LongPressButton` avec `useTap`, comme les autres rangées) : servies au `click`, elles attendaient
+celui qu'iOS retient après un défilement ou pendant un retour. Tests : `sheetMorph-hook.test.tsx`,
+`resume-row-tap.test.tsx`.
+
 **Les minuteurs du mouvement.** Tous passent par `sheetTimeout` / `sheetFrame` (`dom.ts`) :
 annulables un par un ou ensemble (`cancelSheetSchedules`), muets sans `window`. Un rappel tombé
 après la fin d'une page de test (l'affiche qui retrouvait sa transition deux images plus tard)

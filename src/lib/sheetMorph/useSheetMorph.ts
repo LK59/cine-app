@@ -33,6 +33,9 @@ import {
   lerpCorners,
   lerpTf,
   morphTracks,
+  posterOnly,
+  shiftPose,
+  slotRide,
   openPoses,
   releaseVelocity,
   sampleMotion,
@@ -625,6 +628,22 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     } else {
       poseAt = openPoses(srcBox, fromCorners, target, targetCorners).at;
     }
+    // Le visuel de la fiche pas encore chargé : on ne l'attend pas, on garde la vignette touchée
+    // (`posterOnly`) — une reprise ouverte depuis « Reprendre » attendait jusqu'à 150 ms le décodage
+    // d'une bannière jamais demandée, et l'appui semblait ne pas répondre (Louis, iPhone, 10/10/2026).
+    const bdReady = !photo || (photo.complete && photo.naturalWidth > 0);
+    // Au téléphone, d'où monte la carte : du bas de l'écran, ou d'où un retour repris l'avait laissée.
+    const cardFromY = layout === "phone" ? (reversed?.cardY ?? stage.H - rootTop) : null;
+    {
+      const base = poseAt;
+      const keep = !bdReady && !reversed;
+      // La place de la bannière portée par la carte (`slotRide`) : l'image se loge dans la carte qui
+      // monte au lieu de filer seule vers sa place au repos, hors des bords de la fiche.
+      poseAt = (q) => {
+        const p = cardFromY !== null ? shiftPose(base(q), slotRide(q, cardFromY)) : base(q);
+        return keep ? posterOnly(p) : p;
+      };
+    }
     const startBox = poseAt(0).box;
     const motion = appleOpenMotion(startBox, target, stage, detectProfile(), v0);
     const d = motion.duration;
@@ -642,6 +661,11 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     s.win = w;
     hideSource(source);
     hold(root, layout === "phone" ? { backgroundColor: "transparent", backgroundImage: "none", boxShadow: "none" } : holeBackground(layout, bandAt, ink));
+    // Et par un attribut sur la racine (globals.css) : un visuel ou un voile monté *pendant* le trajet
+    // — les données d'une reprise qui arrivent, une image remplacée — se cache aussi, au lieu de
+    // paraître à sa place au repos par-dessus une carte encore en route.
+    root.setAttribute("data-sheet-flying", "");
+    s.restore.push(() => root.removeAttribute("data-sheet-flying"));
     if (photo) hold(photo, { visibility: "hidden" });
     for (const el of veils) hold(el, { visibility: "hidden" });
     for (const el of settle) hold(el, { visibility: "hidden" });
@@ -658,7 +682,6 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     };
     anims.push(...playTracks(w, poseAt, motion, target, stage, true));
     go(dim, samples.map(({ offset, q }) => ({ offset, opacity: lerp(dimFrom, DIM, clamp(q, 0, 1)) })), LINEAR(d));
-    const cardFromY = shell ? (reversed?.cardY ?? stage.H - rootTop) : null;
     if (shell && cardFromY !== null) {
       // Le fond de la carte monte du bas de l'écran sous l'image (`cardRiseTrack`), sur le même
       // ressort ; repris d'un retour, il repart d'où celui-ci l'avait laissé. Le contenu monte
@@ -702,19 +725,20 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     s.cancelStart = () => {
       cancelled = true;
     };
-    void decoded([w.poster, w.bdImg]).then(() => {
+    // Seulement ce qui est déjà là : la vignette, et le visuel s'il l'est aussi — l'appui part sans attendre.
+    void decoded(bdReady ? [w.poster, w.bdImg] : [w.poster]).then(() => {
       if (cancelled) return;
       s.cancelStart = afterTwoFrames(() => {
         if (cancelled || s.closing) return;
         s.cancelStart = null;
         run.startedAt = startTogether(anims);
-        s.timers.push(sheetTimeout(() => settleOpen(photo), d));
+        s.timers.push(sheetTimeout(() => settleOpen(photo, bdReady ? null : source.image), d));
       });
     });
   }
 
   /** L'arrivée : le vrai visuel prend le relais de la fenêtre, pixel pour pixel ; l'assombrissement reste. */
-  function settleOpen(photo: HTMLImageElement | null) {
+  function settleOpen(photo: HTMLImageElement | null, standIn: string | null) {
     const s = st.current;
     if (s.closing) return;
     // Arrivée pendant le trajet, l'image de la fiche serait encore dans son fondu d'arrivée : montrée
@@ -722,6 +746,17 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     if (photo?.complete && photo.naturalWidth > 0) {
       photo.style.transition = "none";
       photo.style.opacity = "1";
+    } else if (photo && standIn) {
+      // Toujours en route : la vignette qui a volé reste en fond de la bannière, et le visuel se
+      // dessine par-dessus à son arrivée — pas de bannière vide entre les deux.
+      Object.assign(photo.style, { transition: "none", opacity: "1", backgroundImage: `url("${standIn}")`, backgroundSize: "cover", backgroundPosition: "center" });
+      const clear = () => {
+        photo.style.backgroundImage = "";
+        photo.removeEventListener("load", clear);
+        photo.removeEventListener("error", clear);
+      };
+      photo.addEventListener("load", clear);
+      photo.addEventListener("error", clear);
     }
     for (const undo of s.restore.splice(0)) undo();
     s.win?.win.remove();
