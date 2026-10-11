@@ -1870,6 +1870,15 @@ export function PlayerControls({
                     <ListVideo size={16} /> {t('player.chapters')}
                   </button>
                 )}
+                {/* La vitesse vit ici depuis le 11/10/2026 : un bouton à elle seule dans la barre pour
+                    un réglage qu'on touche rarement. La vitesse courante reste lisible dans la ligne. */}
+                <button
+                  data-player-nav="speed"
+                  onClick={() => setMenu("speed")}
+                  className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                >
+                  <Gauge size={16} /> {t("player.speed")} · {speed === 1 ? t("player.speedNormal") : `${speed}×`}
+                </button>
                 {/* Active, la lune à la place du chronomètre, et ce qui reste. Rien d'autre à l'écran
                     ne dit qu'une minuterie court. */}
                 <button
@@ -1943,7 +1952,7 @@ export function PlayerControls({
                 </div>
               </>
             )}
-            {(menu === "chapters" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep") && (
+            {(menu === "chapters" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep" || menu === "speed") && (
               <button
                 onClick={() => setMenu(menu === "subtitleStyle" ? "subtitles" : "more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
@@ -2208,19 +2217,10 @@ export function PlayerControls({
             <div className="player-fade player-title min-w-0 flex-1 pb-0.5">
               <PlayerTitle title={title} logoUrl={logoUrl} />
             </div>
-            {/* Vitesse · audio · sous-titres · ⋮ — et le plein écran au bout, là où il existe : à
+            {/* Audio · sous-titres · ⋮ — et le plein écran au bout, là où il existe : à
                 côté du temps restant, il aurait cassé la symétrie de la ligne du temps. Les menus
                 s'ouvrent vers le haut depuis cette pilule. */}
             <div ref={settingsPillRef} data-player-navgroup="bottombar" data-settings-pill data-liquid className="player-fade player-pill flex shrink-0 items-center gap-1 p-1 max-[379px]:gap-0.5">
-              <button
-                data-player-nav="speed"
-                onClick={() => setMenu(menu === "speed" ? null : "speed")}
-                aria-label={t("player.speed")}
-                data-on={menu === "speed" ? "" : undefined}
-                className="player-pill-btn"
-              >
-                {speed !== 1 ? <span className="text-[13px] font-semibold tabular-nums">{speed}×</span> : <Gauge size={22} />}
-              </button>
               {audioTracks.length > 1 && (
                 <button
                   data-player-nav="audio"

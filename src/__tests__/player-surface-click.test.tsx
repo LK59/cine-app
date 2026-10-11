@@ -201,7 +201,7 @@ describe("le clic sur l'image", () => {
 
   it("un clic sur un bouton n'est pas un clic sur l'image", async () => {
     const { container, video } = await setup();
-    await clickWith(container.querySelector('[data-player-nav="speed"]')!, "mouse");
+    await clickWith(container.querySelector('[data-player-nav="more"]')!, "mouse");
     expect(video.play).not.toHaveBeenCalled();
     expect(container.querySelector(".player-menu")).not.toBeNull();
   });

@@ -289,7 +289,7 @@ describe("PlayerControls — un seul matériau", () => {
     // Une seule matière (`player-pill`) : les boutons seuls la portent, ceux des pilules sont posés dedans.
     const nav = (name: string) => container.querySelector(`[data-player-nav="${name}"]`)!;
     for (const name of ["close", "playpause", "skip-back", "skip-fwd"]) expect(nav(name).className).toContain("player-pill");
-    for (const name of ["captions", "more", "minimize", "speed", "mute"]) {
+    for (const name of ["captions", "more", "minimize", "mute"]) {
       expect(nav(name).className).toContain("player-pill-btn");
       expect(nav(name).parentElement!.closest(".player-pill")).not.toBeNull();
     }
@@ -1354,7 +1354,9 @@ describe("PlayerControls — la disposition", () => {
     expect(screen.getByText("S02E01 · Richmond")).toBeInTheDocument();
     const pill = container.querySelector("[data-settings-pill]")!;
     const order = Array.from(pill.querySelectorAll("[data-player-nav]")).map((b) => b.getAttribute("data-player-nav"));
-    expect(order.slice(0, 4)).toEqual(["speed", "audio", "captions", "more"]);
+    // La vitesse est rangée dans ⋮ depuis le 11/10/2026 : plus de bouton à elle dans la pilule.
+    expect(order.slice(0, 3)).toEqual(["audio", "captions", "more"]);
+    expect(order).not.toContain("speed");
     // Sous-titres actifs : un point sous l'icône, pas le fond allumé — celui-ci se lisait comme un
     // bouton resté enfoncé sur un téléphone (02/10/2026) ; il reste réservé au menu ouvert.
     expect(nav(container, "captions")!.hasAttribute("data-active")).toBe(true);
@@ -1506,15 +1508,43 @@ describe("PlayerControls — la disposition", () => {
     }
   });
 
-  it("ouvre la vitesse directement depuis sa pilule, vers le haut", async () => {
+  it("range la vitesse dans ⋮ : plus de bouton dans la barre, une entrée qui dit la vitesse courante (11/10/2026)", async () => {
     stubMediaFetches();
     const { container } = render(<Harness />);
     await act(async () => {});
-    await act(async () => void fireEvent.click(nav(container, "speed")!));
+    // Plus de bouton de vitesse dans la pilule du bas.
+    expect(container.querySelector('[data-settings-pill] [data-player-nav="speed"]')).toBeNull();
+    expect(nav(container, "speed")).toBeNull();
+    await act(async () => void fireEvent.click(nav(container, "more")!));
+    const entry = nav(container, "speed")!;
+    expect(entry.closest(".player-menu")).not.toBeNull();
+    expect(entry.textContent).toContain("player.speed");
+    expect(entry.textContent).toContain("player.speedNormal");
+    // Un bouton focalisable comme ses voisins : la navigation spatiale d'une télécommande l'atteint.
+    expect(entry.tagName).toBe("BUTTON");
+    entry.focus();
+    expect(document.activeElement).toBe(entry);
+    // La liste des vitesses, avec un retour vers ⋮ comme les autres sous-menus.
+    await act(async () => void fireEvent.click(entry));
     const menu = container.querySelector<HTMLElement>(".player-menu")!;
-    expect(menu.textContent).toContain("player.speedNormal");
-    expect(menu.style.bottom).not.toBe("");
-    expect(menu.textContent).not.toContain("common.back");
+    expect(menu.textContent).toContain("common.back");
+    expect(screen.getByText("1.5x")).toBeInTheDocument();
+    await act(async () => void fireEvent.click(screen.getByText("common.back")));
+    expect(nav(container, "speed")).not.toBeNull();
+  });
+
+  it("choisir une vitesse dans ⋮ la règle sur la vidéo, et l'entrée l'affiche ensuite", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness />);
+    await act(async () => {});
+    const video = container.querySelector("video")!;
+    await act(async () => void fireEvent.click(nav(container, "more")!));
+    await act(async () => void fireEvent.click(nav(container, "speed")!));
+    await act(async () => void fireEvent.click(screen.getByText("1.5x")));
+    expect(video.playbackRate).toBe(1.5);
+    await act(async () => void fireEvent(video, new Event("ratechange")));
+    await act(async () => void fireEvent.click(nav(container, "more")!));
+    expect(nav(container, "speed")!.textContent).toContain("1.5×");
   });
 
   it("garde dans ⋮ chapitres, minuterie, puis, sous un trait, infos et luminosité HDR", async () => {
@@ -1533,11 +1563,11 @@ describe("PlayerControls — la disposition", () => {
     const menu = container.querySelector(".player-menu")!;
     const labels = Array.from(menu.querySelectorAll("button")).map((b) => b.textContent ?? "");
     expect(labels[0]).toContain("player.chapters");
-    expect(labels[1]).toContain("player.sleep.title");
+    expect(labels[1]).toContain("player.speed");
+    expect(labels[2]).toContain("player.sleep.title");
     expect(labels.at(-2)).toContain("player.playbackInfo");
     expect(labels.at(-1)).toContain("player.hdrCap.title");
     expect(menu.querySelector("[data-menu-secondary]")!.querySelectorAll("button")).toHaveLength(2);
-    expect(menu.textContent).not.toContain("player.speed");
     expect(menu.textContent).not.toContain("player.cast");
     expect(menu.textContent).not.toContain("player.subtitleStyle.title");
   });
