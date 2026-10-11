@@ -136,6 +136,16 @@ describe("couche 3 — décodé, rangé dans une disposition standard", () => {
     expect(aacPlan(RUBY)).toEqual({ action: "decode", channels: 6, rows: null, keep: null, measured: true });
   });
 
+  it("7.1 anglais de Forrest Gump & co : forme mesurée (11/10/2026), livré en 7.1 entier dans l'ordre du décodeur", () => {
+    // `ffprobe -show_data` sur la piste : avant [mono, paire], arrière [paire, paire], un caisson.
+    const forrest = Uint8Array.from([0x11, 0x80, 0x04, 0xc8, 0x09, 0x00, 0x01, 0x08, 0xc8, 0x00, 0x00, 0x00]);
+    expect(pceShape(parseAacConfig(forrest)!.pce!)).toBe("MP/-/PP/1");
+    expect(aacPlan(forrest)).toEqual({ action: "decode", channels: 8, rows: null, keep: null, measured: true });
+    // Rien ne change là où le décodé n'est pas mesuré, ni pour Ruby.
+    expect(aacPlan(forrest, { orderMeasured: false })).toEqual({ action: "decode", channels: 3, rows: null, keep: 3, measured: false });
+    expect(aacPlan(RUBY)).toMatchObject({ action: "decode", channels: 6 });
+  });
+
   it("un décodeur jamais mesuré (AudioToolbox, sur Safari) : L R C, même pour Ruby", () => {
     expect(aacPlan(RUBY, { orderMeasured: false })).toEqual({ action: "decode", channels: 3, rows: null, keep: 3, measured: false });
   });

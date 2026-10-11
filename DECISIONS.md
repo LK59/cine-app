@@ -2321,6 +2321,15 @@ pour un **5.1** passé par un PCE (`-aac_pce 1`), le « mono de côté » y port
 Ruby entièrement sous 200 Hz), et FFmpeg, l'AudioDecoder de Chromium, de Firefox et de WebKitGTK le
 rendent tous en L R C LFE Ls Rs. Ruby se livre donc en 5.1 entier.
 
+Le 11/10/2026, la seconde forme de la bibliothèque — `MP/-/PP/1`, les pistes anglaises 7.1 de six
+films (Forrest Gump, Deadpool, Walter Mitty, Once Upon a Time in Hollywood, Rocketman, Toy Story),
+jusque-là en L R C hors Safari — a été mesurée de la même façon : notre FFmpeg wasm la rend en 7.1
+FFmpeg (masque `0x63f`, l'ordre du TrueHD et du DTS 7.1), à 0,05 dB d'`ffmpeg astats` canal par
+canal sur les six films, caisson au quatrième rang, tonalités marquées à leur rang. Elle entre dans
+`MEASURED_DECODED_ORDERS` en 8 canaux et suit ensuite le chemin de tout 7.1 décodé (repli 5.1 de
+`fold` avant l'AAC d'Apple ou de Chrome). `aac-regress-bench` : 38 pistes sur 38 identiques avant et
+après, Safari et Chromium ; Safari continue de copier ces pistes telles quelles.
+
 **Côté lecteur serveur.** Jellyfin copie un AAC déclaré lisible quelles que soient les conditions de
 profil sur le codec (mesuré : l'esds rendue portait encore le PCE d'origine) ; seul un plafond de
 canaux sous la source l'en empêche. Pour un AAC multicanal sans disposition nommée, le profil

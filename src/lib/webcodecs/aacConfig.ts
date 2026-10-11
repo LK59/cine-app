@@ -305,9 +305,20 @@ export function pceShape(pce: AacPce): string {
  * `-aac_pce 1` contre un 5.1 standard) : rangs identiques. Les navigateurs d'Apple n'ont pas été
  * mesurés : Safari décode par AudioToolbox, dont l'ordre pour ce PCE reste inconnu — d'où la
  * question posée à part (`aacPceProbe.ts`), qui le fait copier plutôt que décoder s'il l'accepte.
+ *
+ * « MP/-/PP/1 » : avant [mono, paire], arrière [paire, paire], un caisson — les pistes anglaises 7.1
+ * de six films ici (Forrest Gump, Deadpool, Walter Mitty, Once Upon a Time in Hollywood, Rocketman,
+ * Toy Story), qui sortaient en L R C sur Chromium. Mesurée le 11/10/2026 : notre FFmpeg wasm rend
+ * le 7.1 de FFmpeg (masque `0x63f`, L R C LFE BL BR SL SR — l'ordre qu'il donne déjà au TrueHD et
+ * au DTS 7.1), à 0,05 dB près de `ffmpeg astats` canal par canal sur les six films (20 s à 20:00) ;
+ * l'AudioDecoder de Chromium, de Firefox et de WebKitGTK sort les mêmes niveaux à 0,01 dB ; le
+ * caisson est au quatrième rang (−77 à −139 dB passé un passe-haut à 200 Hz) ; et des tonalités
+ * marquées par canal (`-aac_pce 1`) ressortent à leur rang. Le sens côté/arrière des deux paires ne
+ * change rien au repli 5.1, qui les verse au même gain dans Ls/Rs.
  */
 export const MEASURED_DECODED_ORDERS: Record<string, Speaker[]> = {
   "PM/M/P/0": ["L", "R", "C", "LFE", "Ls", "Rs"],
+  "MP/-/PP/1": ["L", "R", "C", "LFE", "Ls", "Rs", "Lrs", "Rrs"],
 };
 
 /** Le coefficient de demi-puissance (ITU-R BS.775), écrit exactement — voir `HALF_POWER`, audioTranscode.ts. */
