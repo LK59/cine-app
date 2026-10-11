@@ -1255,8 +1255,8 @@ describe("ajuster à l'écran", () => {
   });
 });
 
-// « Améliorer les dialogues » (11/10/2026, bêta, administrateur) : comme l'Apple TV, sous les pistes
-// audio, trois choix — Désactivé / Améliorer / Améliorer davantage. Absent sans la prop (tout autre compte).
+// « Améliorer les dialogues » (11/10/2026, bêta ; tous les comptes depuis le 12/10) : comme l'Apple TV,
+// sous les pistes audio, trois choix — Désactivé / Améliorer / Améliorer davantage. Absent sans la prop.
 describe("améliorer les dialogues", () => {
   const oneTrack = [{ id: 1, label: "Anglais — 5.1" }];
   // Dans le menu des pistes audio, comme sur l'Apple TV (11/10/2026) : il vivait dans « … ».
@@ -1274,7 +1274,7 @@ describe("améliorer les dialogues", () => {
     return container;
   };
 
-  it("n'existe pas sans la prop — tout compte qui n'est pas administrateur ; une piste seule n'ouvre aucun menu audio", async () => {
+  it("n'existe pas sans la prop — le lecteur serveur ; une piste seule n'ouvre alors aucun menu audio", async () => {
     const container = await openAudio({});
     expect(container.querySelector('[data-player-nav="audio"]')).toBeNull();
     expect(screen.queryByText(/player\.dialogue\.title/)).toBeNull();

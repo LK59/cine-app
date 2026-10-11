@@ -1,7 +1,7 @@
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 
 /**
- * « Améliorer les dialogues » retenu sur cet appareil (11/10/2026, bêta, administrateur seulement).
+ * « Améliorer les dialogues » retenu sur cet appareil (11/10/2026, bêta ; tous les comptes depuis le 12/10).
  *
  * Par appareil, comme le plafond HDR : c'est un réglage d'écoute — un téléphone au lit, une barre de
  * son au salon —, pas une préférence de compte. Retenu d'une séance à l'autre comme sur l'Apple TV.

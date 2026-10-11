@@ -562,10 +562,14 @@ AudioDecoder: Safari's (CoreAudio) fails on Ruby's PCE. Chromium keeps its own A
 falls back to the WebAssembly one only if it refuses the track. `aac-wasm-bench.spec.ts` compares
 the module's output with `ffmpeg -af astats` channel by channel (Ruby: ≤ 0.03 dB on six channels).
 
-**"Enhance dialogue"** (beta, admin only — DECISIONS §68) shapes the voices inside this re-encode:
+**"Enhance dialogue"** (beta, every account — DECISIONS §68) shapes the voices inside this re-encode:
 `DialogueEnhancer` (`dialogueEnhance.ts`) runs between `fold` and the encoder's channel order, on the
-channels the chain delivers. It raises and equalises the centre of a 3.0/5.1/7.1, the mid of a
-stereo, then applies a linked power-detected compressor and a −1 dBFS limiter. With it on
+channels the chain delivers. It splits voice (the centre of a 3.0/5.1/7.1, the mid of a stereo) from
+background: the voice is equalised and only ever raised (a leveller driven by the voice alone), the
+background is attenuated, ducked while a speech detector on the voice channel hears speech, and
+compressed on its own, so an explosion never lowers the voice; two −1 dBFS limiters, voice and
+background. Version 1 used one linked compressor over every channel and lowered the voice with the
+explosions. With it on
 (`RemuxOptions.dialogue`), a copied track whose decoder here yields standard order is re-encoded so
 the samples pass through it. That covers Dolby, DTS, TrueHD and FLAC; AAC up to standard 5.1, decoded
 everywhere by the WebAssembly FFmpeg decoder, whose order is measured; and Opus up to 3.0, plus 5.1

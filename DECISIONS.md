@@ -2700,16 +2700,21 @@ Tests : `retryLedger.test.ts`, `PlayerHost-echelle.test.tsx` (caractérisation d
 exclusion retenue, boucle (a)1), `PlayerHost-hls-recovery.test.tsx` (caractérisation d'hls.js,
 boucle (a)2), `ExperimentalPlayerHost.test.tsx` (boucle (a)3).
 
-## 68. « Améliorer les dialogues » : dans la chaîne audio, sur les canaux livrés — bêta, administrateur
+## 68. « Améliorer les dialogues » : dans la chaîne audio, sur les canaux livrés — bêta, tous les comptes
 
 **Règle.** Le traitement des voix vit dans le ré-encodage du lecteur natif, entre le repli des
 canaux (`fold`) et la permutation de l'encodeur d'Apple (`toCodecChannelOrder`), là où les plans sont
 dans l'ordre standard. Il garde les canaux que la chaîne a choisis : un 5.1 reste un 5.1, la stéréo
-reste stéréo. Selon la disposition, il égalise et remonte le centre d'un 3.0, d'un 5.1 ou d'un 7.1
-(faces, ambiances et surtout caisson baissés), ou bien le milieu d'une stéréo (mid/side, côtés
-baissés), ou le canal unique d'un mono. Toute autre disposition reçoit la compression seule. Viennent
-ensuite un compresseur lié (un gain pour tous les canaux, détecteur en puissance), un rattrapage et un
-limiteur sous −1 dBFS. Deux forces, nommées comme sur l'Apple TV : « Améliorer » (`on`) et
+reste stéréo. Il sépare la **voix** (le centre d'un 3.0, d'un 5.1 ou d'un 7.1 ; le milieu d'une
+stéréo ; le canal d'un mono) du **fond** (tout le reste), et **la voix ne dépend jamais du fond** :
+- voix : égalisation (coupe-bas 150 Hz, corps 1 kHz, présence 3 kHz), gain fixe, un niveleur qui ne
+  fait que remonter une voix faible (piloté par la voix seule, jamais un silence), une compression
+  haute pour les cris ;
+- fond : gain fixe modéré (caisson davantage), retrait pendant la parole piloté par un détecteur de
+  parole sur le canal des voix (énergie 300–3400 Hz contre pleine bande, 40 ms / 450 ms), plafond
+  relatif à la voix pendant la parole, compresseur du fond seul — sans rattrapage, rien n'est remonté ;
+- deux limiteurs sous −1 dBFS, la voix et le fond.
+Toute autre disposition reçoit la compression du fond seule, liée. Deux forces, nommées comme sur l'Apple TV : « Améliorer » (`on`) et
 « Améliorer davantage » (`strong`). Activé, une piste copiée telle quelle passe par le ré-encodage si un décodeur d'ici rend
 ses canaux dans l'ordre standard (`dialogueCanShape`) : Dolby, DTS, TrueHD et FLAC. Pour l'AAC :
 mono, stéréo et 5.1 standard (configuration 6), ce dernier décodé partout par le décodeur AAC de FFmpeg
@@ -2731,7 +2736,18 @@ contexte `running` et niveaux à −∞, sans aucune différence à l'oreille. W
 son d'un élément nourri par ManagedMediaSource dans Web Audio. Le ré-encodage est le seul endroit où
 le son passe entre nos mains sur tous les navigateurs. La sonde est retirée.
 
-**Réglages mesurés, pas devinés.** Six scènes 5.1 réelles (« Interstellar », « Manchester by the
+**v2 (12/10/2026) : la voix ne baisse plus avec les explosions.** La v1 avait un seul compresseur
+lié sur tous les canaux et un rattrapage de +3/+9 dB. Entendu au casque : en « Améliorer
+davantage », sur l'explosion d'« Interstellar » (2:08:50), le son global baissait, et la voix avec ;
+sur « Tenet », « ça boost pas que les voix ». Mesuré sur la piste VF 5.1, pendant l'explosion, la
+voix (centre, RMS) : original −12,2 dB ; v1 −20,4 / −23,5 dB ; v2 −12,9 / −12,4 dB. Écart voix moins
+fond sur la bataille de « Tenet » (2:00:20) : original −5,8 ; v1 −1,0 / +2,4 ; v2 −2,4 / +5,0 — les
+deux forces se distinguent (6 à 7 dB de fond en plus en « davantage », contre 3 en v1). Comparaison
+directe à l'oreille (trois scènes, cinq versions, bascule au même instant) : v2 retenue.
+Coût : environ 2,5 % du temps réel. Sur la bataille de « Tenet », le limiteur de la voix agit 44 %
+du temps en « davantage » (1,1 dB en moyenne) : le centre y est déjà très fort.
+
+**Réglages de la v1, mesurés, pas devinés.** Six scènes 5.1 réelles (« Interstellar », « Manchester by the
 Sea ») et une stéréo (« Bref »). Mesures : niveau d'ensemble, 10e et 95e centiles du niveau par
 fenêtre de 400 ms, centre contre faces. « Améliorer » : niveau moyen −0,6 dB, voix +4 dB. « Encore
 plus fort » : −2 dB en moyenne, scènes calmes jusqu'à +11 dB, les plus fortes −10 à −19 dB, voix
@@ -2747,15 +2763,15 @@ l'appareil n'est pas effacé.
 (6e paramètre) et `encode` (`audioTranscode.ts`) ; `RemuxOptions.dialogue`, `audioDelivery`,
 `dialogueCanShape` (`remuxer.ts`) ; `RemuxPlaybackOptions.dialogue`, `canShapeDialogue`
 (`remuxPlayback.ts`) ; `readDialogueMode` / `writeDialogueMode` (`dialoguePreference.ts`, par
-appareil, clé `cine-dialogue`) ; `ExperimentalPlayerHost` (administrateur seulement, `dropDialogue`) ;
+appareil, clé `cine-dialogue`) ; `ExperimentalPlayerHost` (`dropDialogue` ; administrateur seulement jusqu'à la v2) ;
 le menu des pistes audio de `PlayerControls` (sous les pistes, comme l'Apple TV ; le bouton audio
 apparaît alors même pour une piste seule), marqué « Bêta » : « Améliorer les dialogues », puis une
 liste de trois choix (Désactivé, Améliorer, Améliorer davantage). La ligne `start` porte `dialogue` quand il est
 actif, et rien sinon.
 
 **Volontairement à part.** Le lecteur serveur (HLS de Jellyfin), où le son ne passe pas par nous. Les
-pistes que le traitement ne prend pas, plutôt que de parier sur l'ordre de leurs canaux. Les autres
-comptes, tant que c'est une bêta.
+pistes que le traitement ne prend pas, plutôt que de parier sur l'ordre de leurs canaux. La mention
+« Bêta » reste tant que le journal n'a pas montré la v2 chez d'autres que l'administrateur.
 
 Tests : `dialogueEnhance.test.ts`, `webcodecs-audioTranscode.test.ts`, `webcodecs-remuxer.test.ts`,
 `aacWasm-route.test.ts`, `PlayerControls.test.tsx`, `ExperimentalPlayerHost.test.tsx` (« améliorer

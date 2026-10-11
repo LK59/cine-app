@@ -45,7 +45,6 @@ import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { subtitleStyleStore, overlayCss } from "@/lib/subtitleStyle";
 import { useFrameFit } from "@/lib/frameFit";
-import { useRole } from "@/lib/useRole";
 import { readDialogueMode, writeDialogueMode } from "@/lib/dialoguePreference";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import { noteWatching, openingPosition, rewound, AWAY_MS } from "@/lib/resumeRewind";
@@ -609,14 +608,12 @@ export function ExperimentalPlayerHost({
   /** Le plafond de lumière HDR choisi sur cet appareil — voir `hdrDisplay.ts`. */
   const [hdrCapChoice, setHdrCapChoice] = useState<HdrCapChoice>(readHdrCapChoice);
   /**
-   * « Améliorer les dialogues » (bêta, administrateur seulement — `dialogueEnhance.ts`). Le réglage
-   * retenu sur l'appareil, et celui que la prochaine ouverture lira (`dialogueOpenRef`) : « off » pour
-   * tout compte qui n'est pas administrateur, quel que soit ce que l'appareil a retenu. Un pipeline
-   * ouvert avec le traitement et qui échoue avant sa première image repart une fois sans lui
-   * (`dialogueFellBackRef`) plutôt que de confier le film au lecteur serveur.
+   * « Améliorer les dialogues » (bêta, `dialogueEnhance.ts`) — proposé à tous les comptes depuis la
+   * v2 (12/10/2026 ; administrateur seulement avant). Le réglage retenu sur l'appareil, et celui que
+   * la prochaine ouverture lira (`dialogueOpenRef`). Un pipeline ouvert avec le traitement et qui
+   * échoue avant sa première image repart une fois sans lui (`dialogueFellBackRef`) plutôt que de
+   * confier le film au lecteur serveur.
    */
-  const { role } = useRole();
-  const dialogueAllowed = role === "admin";
   const [dialogueMode, setDialogueMode] = useState<DialogueMode>(readDialogueMode);
   /** Les pistes audio sur lesquelles le traitement a prise, publiées avec les pistes du pipeline. */
   const [dialogueShapeable, setDialogueShapeable] = useState<ReadonlySet<number>>(() => new Set());
@@ -624,8 +621,8 @@ export function ExperimentalPlayerHost({
   const dialogueFellBackRef = useRef(false);
   useEffect(() => {
     // Avant l'effet qui construit le pipeline (déclaré plus bas, exécuté après dans le même rendu).
-    dialogueOpenRef.current = dialogueAllowed && !dialogueFellBackRef.current ? dialogueMode : "off";
-  }, [dialogueAllowed, dialogueMode]);
+    dialogueOpenRef.current = !dialogueFellBackRef.current ? dialogueMode : "off";
+  }, [dialogueMode]);
   /**
    * Le réglage n'est proposé que là où il sert — écran SDR, hors WebKit — et « auto » y vaut ce
    * que `autoHdrCap` dit. Lu une fois à l'ouverture : l'écran ne change pas en cours de film, ou
@@ -2135,8 +2132,7 @@ export function ExperimentalPlayerHost({
       // Ce que le spectateur a choisi, si ce pipeline en remplace un : on ouvre dessus, au lieu
       // d'ouvrir ailleurs puis d'y basculer. Voir `openingAudio`.
       audioTrackNumber: wantedAudioRef.current,
-      // « Améliorer les dialogues », lu à cette ouverture — absent pour tout le monde sauf
-      // l'administrateur qui l'a activé.
+      // « Améliorer les dialogues », lu à cette ouverture — absent tant qu'il est désactivé.
       ...(openedDialogue !== "off" ? { dialogue: openedDialogue } : {}),
       // Reconstruit pour un changement de piste pendant une pause : rien ne doit le relancer, ni
       // ce composant (voir startRemux) ni la garde de démarrage de la source.
@@ -2975,7 +2971,7 @@ export function ExperimentalPlayerHost({
             // L'interrupteur n'apparaît que s'il y a un agrandissement à défaire — voir `useFrameFit`.
             frameFit={frameFitState.available ? { on: frameFitState.on, onChange: frameFitState.setOn } : undefined}
             dialogue={
-              path === "remux" && dialogueAllowed
+              path === "remux"
                 ? {
                     mode: dialogueMode,
                     // Sans effet sur la piste qui joue (un AAC 5.1, un MP3…) : dit dans le menu, pour

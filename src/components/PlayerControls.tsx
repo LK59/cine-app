@@ -162,8 +162,8 @@ interface PlayerControlsProps {
    */
   frameFit?: { on: boolean; onChange: (on: boolean) => void };
   /**
-   * « Améliorer les dialogues » (bêta, administrateur seulement — `dialogueEnhance.ts`). Absent pour
-   * tout autre compte et dans le lecteur serveur : rien n'est proposé. `applies` faux : la piste qui
+   * « Améliorer les dialogues » (bêta, `dialogueEnhance.ts`), proposé à tous les comptes sur le
+   * lecteur natif. Absent dans le lecteur serveur, où le son ne passe pas par nous. `applies` faux : la piste qui
    * joue est de celles que le traitement ne prend pas (un AAC 5.1 copié, un MP3), et le menu le dit.
    */
   dialogue?: { mode: DialogueMode; applies: boolean; onChange: (mode: DialogueMode) => void };

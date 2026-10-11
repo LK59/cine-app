@@ -1160,19 +1160,19 @@ describe("les sous-titres posés à côté du film", () => {
 // Le lecteur canevas, retiré le 24/09/2026 (docs/lecteur-canvas.md) : ce qui reste de ses tests
 // vaut pour le chemin natif — un refus passe au lecteur serveur sans autre essai, et les
 // avertissements du pipeline s'affichent puis s'effacent.
-// « Améliorer les dialogues » (11/10/2026, bêta, administrateur) : ce que l'ouverture demande au
-// pipeline. Personne d'autre que l'administrateur ne le demande jamais, même si l'appareil l'a
-// retenu ; et une ouverture qui échoue avec lui repart sans lui, sans passer au lecteur serveur.
+// « Améliorer les dialogues » (11/10/2026, bêta ; tous les comptes depuis la v2 du 12/10) : ce que
+// l'ouverture demande au pipeline — le réglage retenu sur l'appareil, quel que soit le rôle ; et une
+// ouverture qui échoue avec lui repart sans lui, sans passer au lecteur serveur.
 describe("améliorer les dialogues — l'ouverture", () => {
-  it("un compte qui n'est pas administrateur ne le demande jamais, même retenu sur l'appareil", async () => {
+  it("un compte qui n'est pas administrateur l'ouvre avec, s'il l'a retenu sur l'appareil", async () => {
     window.localStorage.setItem("cine-dialogue", "strong");
     me = { data: { role: "user" }, error: undefined };
     mount();
     await waitFor(() => expect(probes).toHaveLength(1));
-    expect(probes[0]).not.toHaveProperty("dialogue");
+    expect(probes[0]).toMatchObject({ dialogue: "strong" });
   });
 
-  it("l'administrateur qui l'a activé l'ouvre avec ; désactivé, rien n'est passé", async () => {
+  it("activé, l'ouverture le demande ; désactivé, rien n'est passé", async () => {
     me = { data: { role: "admin" }, error: undefined };
     mount();
     await waitFor(() => expect(probes).toHaveLength(1));
