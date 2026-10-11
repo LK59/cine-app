@@ -199,6 +199,43 @@ describe("le clic sur l'image", () => {
     Object.defineProperty(document, "fullscreenEnabled", { value: false, configurable: true });
   });
 
+  it("appui sur un bouton, glissé, relâché sur l'image : ni pause ni lecture (11/10/2026)", async () => {
+    // L'effet liquide suit le curseur ; relâché hors du bouton, le `click` part sur l'ancêtre commun.
+    const { container, video } = await setup();
+    await act(async () => {
+      press(container.querySelector('[data-player-nav="more"]')!, "mouse");
+      fireEvent.click(surface(container), { detail: 1 });
+    });
+    expect(video.play).not.toHaveBeenCalled();
+    expect(video.pause).not.toHaveBeenCalled();
+    // Le clic suivant, appuyé et relâché sur l'image, met bien en lecture.
+    await clickWith(surface(container), "mouse");
+    expect(video.play).toHaveBeenCalledTimes(1);
+  });
+
+  it("appui sur un bouton puis double-clic relâché sur l'image : pas de plein écran", async () => {
+    Object.defineProperty(document, "fullscreenEnabled", { value: true, configurable: true });
+    const { container, getByTestId } = await setup();
+    const box = getByTestId("container");
+    box.requestFullscreen = vi.fn(() => Promise.resolve());
+    await act(async () => {
+      press(container.querySelector('[data-player-nav="more"]')!, "mouse");
+      fireEvent.doubleClick(surface(container));
+    });
+    expect(box.requestFullscreen).not.toHaveBeenCalled();
+    Object.defineProperty(document, "fullscreenEnabled", { value: false, configurable: true });
+  });
+
+  it("au doigt, un appui commencé sur un bouton et relâché sur l'image garde son geste d'avant", async () => {
+    const { container, video } = await setup();
+    await act(async () => {
+      press(container.querySelector('[data-player-nav="more"]')!, "touch");
+      fireEvent.click(surface(container), { detail: 1 });
+    });
+    expect(controlsShown(container)).toBe(false);
+    expect(video.play).not.toHaveBeenCalled();
+  });
+
   it("un clic sur un bouton n'est pas un clic sur l'image", async () => {
     const { container, video } = await setup();
     await clickWith(container.querySelector('[data-player-nav="more"]')!, "mouse");

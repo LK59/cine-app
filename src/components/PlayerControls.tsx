@@ -1006,6 +1006,12 @@ export function PlayerControls({
    * jamais.
    */
   const lastPointerTypeRef = useRef("");
+  /**
+   * L'appui a-t-il commencé sur l'image vide ? Un bouton appuyé, l'effet liquide suivi du curseur,
+   * puis le bouton relâché hors de lui : le `click` part sur l'ancêtre commun — la surface — et
+   * mettait en pause (11/10/2026). À la souris, seul un clic appuyé ET relâché sur l'image compte.
+   */
+  const downOnSurfaceRef = useRef(false);
 
   /**
    * Un clic sur l'image (11/10/2026, DECISIONS.md §65) : à la souris, lecture/pause — comme YouTube,
@@ -1019,6 +1025,8 @@ export function PlayerControls({
    */
   function onSurfaceClick(e: React.MouseEvent<HTMLDivElement>) {
     const pointerType = (e.nativeEvent as MouseEvent & { pointerType?: string }).pointerType || lastPointerTypeRef.current;
+    // Relâché sur l'image après un appui ailleurs (un bouton, une pilule) : ni pause ni rien.
+    if (pointerType === "mouse" && !downOnSurfaceRef.current) return;
     const action = surfaceAction(pointerType, e.detail, isEmptySurface(e.target, e.currentTarget));
     if (action === "toggle-controls") {
       toggleControls();
@@ -1037,7 +1045,7 @@ export function PlayerControls({
 
   function onSurfaceDoubleClick(e: React.MouseEvent<HTMLDivElement>) {
     if (lastPointerTypeRef.current !== "mouse" || !fullscreenSupported) return;
-    if (!isEmptySurface(e.target, e.currentTarget)) return;
+    if (!downOnSurfaceRef.current || !isEmptySurface(e.target, e.currentTarget)) return;
     void toggleFullscreen();
   }
 
@@ -1495,6 +1503,7 @@ export function PlayerControls({
       onDoubleClick={onSurfaceDoubleClick}
       onPointerDown={(e) => {
         lastPointerTypeRef.current = e.pointerType;
+        downOnSurfaceRef.current = isEmptySurface(e.target, e.currentTarget);
       }}
       // Un bouton cliqué à la souris ne garde pas le focus : sinon Espace, qui doit mettre en
       // pause, le réactivait (voir le clavier plus haut). Les curseurs (son, progression) gardent
