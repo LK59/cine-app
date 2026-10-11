@@ -19,7 +19,8 @@ import type { MatroskaFile, MatroskaTrack, MediaSample, TrackColour } from "./ma
 import { clusterOffsetForTime, cueTimeAfter, cueTimeAtOrBefore } from "./matroska";
 import { isReadAbandoned, type NetworkWindow } from "./byteSource";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
-import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
+import { audioSampleEntryFor, isOpusHead, videoSampleEntry } from "./mp4SampleEntries";
+import { isWebKitEngine } from "@/lib/webkitEngine";
 import {
   transcodeTargetCodec,
   AudioTranscoder,
@@ -172,12 +173,32 @@ function aacCodecString(codecPrivate: Uint8Array | null): string {
   return `mp4a.40.${objectType === 31 ? 2 : objectType}`;
 }
 
+/**
+ * Si une piste Opus peut être proposée telle quelle à ce navigateur (DECISIONS.md §66) — le reste de
+ * la question (`containerAccepts`) est posé au navigateur, comme pour le FLAC ou l'AC-3.
+ *
+ * Jamais sur WebKit, et c'est une précaution, pas une capacité : Safari refusait l'Opus dans
+ * MediaSource quand les 608 pistes Opus d'ici ont été recensées (21/09/2026), et rien n'a mesuré
+ * depuis ce qu'un Safari qui répondrait « oui » ferait d'une entrée `Opus` copiée. Un iPhone garde
+ * donc exactement son chemin d'avant — mono et stéréo décodés puis ré-encodés en AAC, multicanal au
+ * lecteur serveur — tant que personne ne l'a prouvé sur un vrai appareil. Sans agent connu (Node),
+ * même prudence.
+ */
+function opusCopyConsidered(): boolean {
+  const agent = typeof navigator === "undefined" ? "" : (navigator.userAgent ?? "");
+  return agent !== "" && !isWebKitEngine(agent);
+}
+
 function audioCodecString(track: MatroskaTrack): string | null {
   switch (track.codecId) {
     case "A_AAC": return aacCodecString(track.codecPrivate);
     case "A_FLAC": return "flac";
     case "A_AC3": return "ac-3";
     case "A_EAC3": return "ec-3";
+    // Copié tel quel depuis le 11/10/2026 là où le navigateur le prend : avant, un Opus stéréo était
+    // décodé puis ré-encodé en AAC partout (seconde génération avec perte, calcul sur l'appareil),
+    // et un Opus multicanal partait au lecteur serveur. Un en-tête illisible garde ce chemin-là.
+    case "A_OPUS": return opusCopyConsidered() && isOpusHead(track.codecPrivate) ? "opus" : null;
     default: return null;
   }
 }

@@ -2609,3 +2609,47 @@ manquait un bouton du haut mettait en pause, un double-clic sur le titre ou la c
 l'image est retenu) : le double-clic du plein écran surlignait le titre et le logo — et un logo n'est
 plus glissable (`CinemaLogo`, `draggable={false}`, fiches comprises).
 Tests : `bughunt-zone3-player.test.tsx`.
+
+## 66. L'Opus copié tel quel là où le navigateur le prend — jamais sur WebKit
+
+**Règle.** Une piste Opus part telle quelle (entrée MP4 `Opus`, boîte `dOps`) quand le navigateur
+répond oui à `audio/mp4; codecs="opus"` et qu'il n'est pas WebKit. Ailleurs, rien ne change : un Opus
+mono ou stéréo est décodé puis ré-encodé en AAC, un Opus multicanal part au lecteur serveur.
+
+**Pourquoi.** Avant (le 11/10/2026), un Opus n'était jamais copié : seconde génération avec perte et
+calcul sur l'appareil pour le stéréo, lecteur serveur pour le 3.0 — alors que Chrome, Edge, Firefox
+et Android prennent l'Opus dans MediaSource. Ici, 190 fichiers (JoJo, saisons 1 à 5) : 152 avec deux
+Opus stéréo (japonais, anglais) et une AAC française, 38 avec un Opus 3.0 japonais et une AAC
+française. La piste d'ouverture ne change pour personne qui regarde en français : la langue passe
+avant tout (§3).
+
+**Ce qui est écrit.** Tout ce qu'un lecteur compare vient du fichier : le `dOps` est l'`OpusHead` que
+Matroska garde (ou que `mp4Demux` reconstruit d'un `dOps`), réécrit en big-endian sans « OpusHead » ni
+version Ogg (`dOps`, déjà écrit pour l'Opus ré-encodé de Firefox) ; le nombre de canaux de l'entrée
+est celui de l'en-tête, pas celui de l'en-tête Matroska ; la fréquence est 48 000, celle que la
+boîte exige. Un en-tête illisible (`isOpusHead`) garde le chemin d'avant. Les horodatages des blocs
+sont copiés tels quels, comme pour toute piste copiée : le `CodecDelay` de Matroska (le pre-skip,
+312 échantillons, 6,5 ms) n'est pas retranché, et le navigateur jette le pre-skip que le `dOps`
+déclare — au plus 6,5 ms, très en deçà du seuil de synchronisation.
+
+**Volontairement à part : WebKit.** Safari refusait l'Opus dans MediaSource au recensement du
+21/09/2026, et aucun appareil Apple n'a été mesuré sur un Opus copié. WebKitGTK (Playwright, Linux,
+moteur GStreamer) l'accepte et le lit — ce n'est pas CoreMedia : un iPhone garde son chemin d'avant
+tant que personne ne l'a prouvé sur un vrai appareil. C'est une précaution de moteur
+(`opusCopyConsidered`), pas une capacité devinée.
+
+**Preuves.** `aac-regress-bench` (19 films de la liste habituelle + JoJo S01E01 et S05E01, 40
+pistes) contre 8.37.0 : moteur WebKit 40/40 octet pour octet ; moteur Chromium 37/40, les trois
+pistes Opus seules différant (copiées au lieu d'échouer). La copie décodée par ffmpeg contre la
+source aux mêmes secondes : identique à l'échantillon près, écart nul, en stéréo (début et 10:00)
+et en 3.0. Chromium et Firefox (Playwright 1.63) : init et segments acceptés par MediaSource,
+lecture qui avance, stéréo, 3.0 et départ à 10:00.
+
+**Reste à entendre.** La synchronisation sur un Chrome de bureau et l'ordre des canaux du 3.0 (le
+décodeur Opus du navigateur lit lui-même la table de canaux du fichier — rien n'est permuté ici).
+
+**Une seule fonction.** `audioCodecString` / `opusCopyConsidered` (`remuxer.ts`) pour la décision,
+lue par `naturalDelivery`, `deliveredAudio`, `plannedMimeTypes` et l'unification par fichier ;
+`audioSampleEntryFor` / `isOpusHead` / `dOps` (`mp4SampleEntries.ts`) pour l'entrée.
+Tests : `webcodecs-remuxer.test.ts` (« l'Opus copié tel quel »), `webcodecs-mp4SampleEntries.test.ts`
+(« une piste Opus copiée »).
