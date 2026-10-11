@@ -220,6 +220,27 @@ describe("le clic sur l'image", () => {
     Object.defineProperty(document, "fullscreenEnabled", { value: false, configurable: true });
   });
 
+  it("double-tap au doigt sur iPhone/iPad (`click` déclarés « mouse ») : ni plein écran ni pause", async () => {
+    Object.defineProperty(document, "fullscreenEnabled", { value: true, configurable: true });
+    const { container, video, getByTestId } = await setup();
+    const box = getByTestId("container");
+    box.requestFullscreen = vi.fn(() => Promise.resolve());
+    const root = surface(container);
+    for (const detail of [1, 2]) {
+      await act(async () => {
+        press(root, "touch");
+        const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail });
+        Object.defineProperty(click, "pointerType", { value: "mouse" });
+        root.dispatchEvent(click);
+      });
+    }
+    await act(async () => void fireEvent.doubleClick(root));
+    expect(box.requestFullscreen).not.toHaveBeenCalled();
+    expect(video.play).not.toHaveBeenCalled();
+    expect(video.pause).not.toHaveBeenCalled();
+    Object.defineProperty(document, "fullscreenEnabled", { value: false, configurable: true });
+  });
+
   it("appui sur un bouton, glissé, relâché sur l'image : ni pause ni lecture (11/10/2026)", async () => {
     // L'effet liquide suit le curseur ; relâché hors du bouton, le `click` part sur l'ancêtre commun.
     const { container, video } = await setup();
