@@ -224,6 +224,49 @@ describe("Remuxer track selection", () => {
     expect(plannedMimeTypes(VIDEO, flac).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
   });
 
+  describe("l'Opus copié tel quel là où le navigateur le prend (11/10/2026, DECISIONS §66)", () => {
+    // Les en-têtes réels de la bibliothèque (JoJo, saisons 1 et 5) : stéréo famille 0, et 3.0
+    // famille 1 avec sa table (deux flux, un couplé, ordre Vorbis L C R).
+    const STEREO_HEAD = Uint8Array.from([0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64, 0x01, 0x02, 0x38, 0x01, 0x80, 0xbb, 0, 0, 0, 0, 0x00]);
+    const THREE_HEAD = Uint8Array.from([0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64, 0x01, 0x03, 0x38, 0x01, 0x80, 0xbb, 0, 0, 0, 0, 0x01, 0x02, 0x01, 0x00, 0x02, 0x01]);
+    const stereo = track({ number: 2, type: "audio", codecId: "A_OPUS", codecPrivate: STEREO_HEAD, audio: { sampleRate: 48000, channels: 2 } });
+    const three = track({ number: 3, type: "audio", codecId: "A_OPUS", codecPrivate: THREE_HEAD, audio: { sampleRate: 48000, channels: 3 } });
+    const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
+    const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15E148 Safari/604.1";
+    const MAC_SAFARI = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15";
+    const agent = (ua: string) => vi.stubGlobal("navigator", { userAgent: ua });
+
+    it("Chrome qui prend l'Opus : stéréo et 3.0 copiés, annoncés `opus`", () => {
+      agent(CHROME);
+      expect(audioDelivery(stereo)).toBe("copy");
+      expect(audioDelivery(three)).toBe("copy");
+      expect(plannedMimeTypes(VIDEO, stereo).audio).toBe('audio/mp4; codecs="opus"');
+      expect(playableAudio(three)).toBe(true);
+    });
+
+    it("un navigateur qui refuse l'Opus : le chemin d'avant — stéréo ré-encodé, multicanal au serveur", () => {
+      agent(CHROME);
+      vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: (t: string) => !t.includes("opus") } });
+      expect(audioDelivery(stereo)).toBe("transcode");
+      expect(audioDelivery(three)).toBe("none");
+    });
+
+    it("WebKit (iPhone, Mac) garde exactement son chemin d'avant, même s'il répondait oui", () => {
+      for (const ua of [IPHONE, MAC_SAFARI]) {
+        agent(ua);
+        expect(audioDelivery(stereo)).toBe("transcode");
+        expect(audioDelivery(three)).toBe("none");
+        expect(plannedMimeTypes(VIDEO, stereo).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
+      }
+    });
+
+    it("un en-tête Opus illisible n'est jamais copié", () => {
+      agent(CHROME);
+      const broken = track({ number: 4, type: "audio", codecId: "A_OPUS", codecPrivate: STEREO_HEAD.subarray(0, 12), audio: { sampleRate: 48000, channels: 2 } });
+      expect(audioDelivery(broken)).toBe("transcode");
+    });
+  });
+
   it("delivers every track in one codec when they cannot all keep their own — per-file unification", () => {
     // Utopia: DTS beside AC-3, on a player that takes AC-3 natively. Left alone, choosing the
     // other language changes what the audio buffer decodes by mid-playback — which this device

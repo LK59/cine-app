@@ -484,6 +484,23 @@ export function opusSampleEntry(opusHead: Uint8Array, channels: number, sampleRa
 }
 
 /**
+ * L'en-tête d'identification Opus que Matroska garde comme `CodecPrivate` (« OpusHead », version
+ * 1, au moins 19 octets, et la table de canaux complète quand la famille n'est pas 0) — ou faux.
+ * Un en-tête qui ne se lit pas ainsi n'est pas copié : la piste garde son chemin d'avant.
+ */
+export function isOpusHead(bytes: Uint8Array | null | undefined): bytes is Uint8Array {
+  if (!bytes || bytes.length < 19) return false;
+  const magic = [0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64]; // « OpusHead »
+  if (!magic.every((b, i) => bytes[i] === b)) return false;
+  if ((bytes[8] & 0xf0) !== 0) return false; // version 1 (0x01) ; les quatre bits hauts changent le format
+  const channels = bytes[9];
+  if (channels === 0) return false;
+  const family = bytes[18];
+  if (family === 0) return channels <= 2;
+  return bytes.length >= 19 + 2 + channels;
+}
+
+/**
  * FLAC: the STREAMINFO block, lifted out of what Matroska keeps as the codec's private data.
  *
  * Matroska stores a FLAC track's configuration as the file's own header — the four magic bytes
@@ -570,6 +587,14 @@ export function audioSampleEntryFor(input: AudioEntryInput): Uint8Array {
     case "A_EAC3":
       if (!firstFrame) throw new Error("Piste E-AC-3 sans trame à analyser.");
       return audioSampleEntry("ec-3", channels, sampleRate, dec3(firstFrame));
+    case "A_OPUS": {
+      // Copié tel quel (DECISIONS.md §66). Le nombre de canaux vient de l'en-tête Opus, comme celui
+      // du `dOps` : les deux boîtes se comparent, et l'en-tête Matroska peut dire autre chose. La
+      // fréquence est 48 000, toujours — celle de la boîte, quelle que soit la fréquence d'origine
+      // (« Encapsulation of Opus in ISO Base Media File Format », entrée `Opus`).
+      if (!isOpusHead(codecPrivate)) throw new Error("Configuration Opus illisible.");
+      return opusSampleEntry(codecPrivate, codecPrivate[9], 48000);
+    }
     default:
       throw new Error(`Codec audio non remultiplexable : ${codecId}`);
   }

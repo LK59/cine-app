@@ -284,6 +284,47 @@ describe("dOps", () => {
   });
 });
 
+describe("une piste Opus copiée (11/10/2026, DECISIONS §66)", () => {
+  // Les en-têtes réels de la bibliothèque (JoJo S01, stéréo famille 0 ; S05, 3.0 famille 1).
+  const STEREO = Uint8Array.from([0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64, 0x01, 0x02, 0x38, 0x01, 0x80, 0xbb, 0, 0, 0, 0, 0x00]);
+  const THREE = Uint8Array.from([0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64, 0x01, 0x03, 0x38, 0x01, 0x80, 0xbb, 0, 0, 0, 0, 0x01, 0x02, 0x01, 0x00, 0x02, 0x01]);
+  const at = (bytes: Uint8Array, fourcc: string) => {
+    const code = [...fourcc].map((c) => c.charCodeAt(0));
+    for (let i = 4; i + 4 <= bytes.length; i++) if (code.every((c, j) => bytes[i + j] === c)) return i - 4;
+    return -1;
+  };
+
+  it("entrée `Opus` à 48 000 Hz, canaux et dOps lus de l'en-tête — pas de l'en-tête Matroska", () => {
+    // L'en-tête Matroska peut dire autre chose : les deux boîtes se comparent, elles viennent du même endroit.
+    const entry = audioSampleEntryFor({ codecId: "A_OPUS", codecPrivate: THREE, channels: 6, sampleRate: 44100, firstFrame: null });
+    expect(String.fromCharCode(...entry.subarray(4, 8))).toBe("Opus");
+    // AudioSampleEntry : 8 d'en-tête de boîte, 6 réservés, 2 d'index, 8 réservés → canaux à 24, fréquence (16.16) à 32.
+    expect((entry[24] << 8) | entry[25]).toBe(3);
+    expect(((entry[32] << 8) | entry[33]) >>> 0).toBe(48000);
+    const d = at(entry, "dOps");
+    expect(d).toBeGreaterThan(0);
+    const body = entry.subarray(d + 8);
+    expect(body[1]).toBe(3);
+    expect((body[2] << 8) | body[3]).toBe(312); // pre-skip, celui du fichier
+    expect(body[10]).toBe(1);
+    expect(Array.from(body.subarray(11, 16))).toEqual([0x02, 0x01, 0x00, 0x02, 0x01]);
+  });
+
+  it("stéréo famille 0 : pas de table", () => {
+    const entry = audioSampleEntryFor({ codecId: "A_OPUS", codecPrivate: STEREO, channels: 2, sampleRate: 48000, firstFrame: null });
+    const d = at(entry, "dOps");
+    expect((entry[d] << 24) | (entry[d + 1] << 16) | (entry[d + 2] << 8) | entry[d + 3]).toBe(8 + 11);
+  });
+
+  it("un en-tête qui n'est pas « OpusHead », ou incomplet, est refusé plutôt que décrit de travers", () => {
+    expect(() => audioSampleEntryFor({ codecId: "A_OPUS", codecPrivate: STEREO.subarray(0, 18), channels: 2, sampleRate: 48000, firstFrame: null })).toThrow(/Opus/);
+    expect(() => audioSampleEntryFor({ codecId: "A_OPUS", codecPrivate: THREE.subarray(0, 22), channels: 3, sampleRate: 48000, firstFrame: null })).toThrow(/Opus/);
+    const notHead = STEREO.slice();
+    notHead[0] = 0x00;
+    expect(() => audioSampleEntryFor({ codecId: "A_OPUS", codecPrivate: notHead, channels: 2, sampleRate: 48000, firstFrame: null })).toThrow(/Opus/);
+  });
+});
+
 describe("dfLa", () => {
   /** A FLAC header as Matroska keeps it: the magic, then a STREAMINFO block. */
   const streamInfo = new Uint8Array([0x00, 0x00, 0x00, 0x22, ...new Array(34).fill(0)]);

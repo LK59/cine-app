@@ -490,6 +490,16 @@ MediaSource. AAC first, Opus second.
   server player.
 - **iOS does not accept Opus** in MediaSource, but encodes AAC in 5.1.
 
+**An Opus track is copied where the browser takes Opus** (since 2026-10-11, DECISIONS §66): Chrome,
+Edge, Firefox and Android answer yes to `audio/mp4; codecs="opus"`, and the track goes out as an `Opus`
+sample entry whose `dOps` is the file's own `OpusHead` (channel count, pre-skip, gain, mapping family
+and table), at 48 kHz — no second lossy generation, and a 3.0 Opus plays on the device instead of the
+server player. Never on WebKit, even if it answered yes: nothing has measured an Apple device on a
+copied Opus, so an iPhone keeps its old path (mono and stereo decoded and re-encoded to AAC,
+multichannel to the server). Block timestamps are copied as they are; Matroska's `CodecDelay` (the
+pre-skip, 312 samples = 6.5 ms here) is not subtracted, and the browser discards the pre-skip the
+`dOps` declares — at most 6.5 ms either way, far inside lip-sync tolerance.
+
 ### Channel order: who converts, measured (2026-09-21)
 
 Every decoder here hands back the **standard (WAVE) order** — L R C LFE Ls Rs (Lrs Rrs): mediabunny's
@@ -504,6 +514,7 @@ AC-3/E-AC3/DTS (measured against ffmpeg, 19/09), libFLAC (the format defines it)
 | AAC, Apple, 8 channels | never asked: folded to 5.1 first (`appleAacCap`) — AAC has no true back-surround 7.1 | — |
 | Opus, Firefox | standard order, converts itself (libopus) | tagged tones per channel encoded in Firefox, decoded by ffmpeg (21/09) |
 | Opus, Chrome / Safari | stereo only | refused beyond two channels |
+| Opus **copied** (Chrome, Edge, Firefox) | nothing to order: the browser's own Opus decoder reads the file's channel mapping | 3.0 JoJo S05 decoded by ffmpeg from the copied fMP4: identical to the source, sample for sample (11/10) |
 
 The table lives in `APPLE_AAC_ORDER` / `orderFor` (`audioTranscode.ts`), keyed on
 `appleAudioToolbox()` — the *system*, not the browser: it is the platform encoder that decides, and
