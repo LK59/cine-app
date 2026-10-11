@@ -566,8 +566,11 @@ the module's output with `ffmpeg -af astats` channel by channel (Ruby: ≤ 0.03 
 `DialogueEnhancer` (`dialogueEnhance.ts`) runs between `fold` and the encoder's channel order, on the
 channels the chain delivers. It raises and equalises the centre of a 3.0/5.1/7.1, the mid of a
 stereo, then applies a linked power-detected compressor and a −1 dBFS limiter. With it on
-(`RemuxOptions.dialogue`), a copied track whose decoder here yields standard order — Dolby, DTS,
-TrueHD, FLAC, AAC/Opus up to stereo — is re-encoded so the samples pass through it. Off, no processor
+(`RemuxOptions.dialogue`), a copied track whose decoder here yields standard order is re-encoded so
+the samples pass through it. That covers Dolby, DTS, TrueHD and FLAC; AAC up to standard 5.1, decoded
+everywhere by the WebAssembly FFmpeg decoder, whose order is measured; and Opus up to 3.0, plus 5.1
+on Firefox. Chromium 153's WebCodecs decoder returns Opus 5.1 out of order (L Rs C R Ls LFE), as
+measured by `tools/channel-order-bench`, real Chromium and Firefox through Playwright. Off, no processor
 exists and `audioDelivery` answers as before, byte for byte (`aac-regress-bench`). Web Audio was
 tried first and fails on iPhone: WebKit does not route a ManagedMediaSource element through
 `createMediaElementSource` (levels stay at −∞).

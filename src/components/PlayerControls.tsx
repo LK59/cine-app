@@ -163,6 +163,12 @@ interface PlayerControlsProps {
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
+/** « Améliorer les dialogues » : les trois choix du sous-menu, dans l'ordre de l'Apple TV. */
+const DIALOGUE_CHOICES: { mode: DialogueMode; label: string }[] = [
+  { mode: "off", label: "player.dialogue.off" },
+  { mode: "on", label: "player.dialogue.title" },
+  { mode: "strong", label: "player.dialogue.stronger" },
+];
 /** Combien de temps la confirmation de diffusion reste dépliée sans qu'on y touche. */
 const CAST_CONFIRM_MS = 4000;
 /**
@@ -1935,10 +1941,10 @@ export function PlayerControls({
                     className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                   >
                     <Speech size={16} />
+                    {/* Le nom seul : l'état coupé en « … » sur un téléphone ne disait rien (11/10/2026).
+                        Le choix courant se lit dans le sous-menu, comme pour l'audio. */}
                     <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate">
-                        {t("player.dialogue.title")} · {dialogue.mode === "off" ? t("player.dialogue.off") : t("player.dialogue.on")}
-                      </span>
+                      <span className="truncate">{t("player.dialogue.title")}</span>
                       <DialogueBeta />
                     </span>
                   </button>
@@ -2130,28 +2136,28 @@ export function PlayerControls({
                   {sleepLabel(choice)}
                 </button>
               ))}
-            {/* Comme l'Apple TV : un interrupteur, et dessous, une fois activé, « Encore plus fort ».
-                Chaque bascule reconstruit la lecture au même endroit (le traitement vit dans la
-                chaîne audio) : le menu reste ouvert, on entend le changement une seconde après. */}
+            {/* Comme l'audio et les sous-titres : trois choix dans une liste, le courant en couleur.
+                Choisir reconstruit la lecture au même endroit (le traitement vit dans la chaîne audio)
+                et referme le menu, comme un changement de piste. */}
             {menu === "dialogue" && dialogue && (
               <>
-                <div className="flex items-center gap-2 px-3 pt-1 pb-2">
-                  <DialogueBeta />
-                </div>
-                <DialogueSwitch
-                  label={t("player.dialogue.title")}
-                  on={dialogue.mode !== "off"}
-                  onToggle={() => dialogue.onChange(dialogue.mode === "off" ? "on" : "off")}
-                />
-                {dialogue.mode !== "off" && (
-                  <DialogueSwitch
-                    label={t("player.dialogue.stronger")}
-                    on={dialogue.mode === "strong"}
-                    onToggle={() => dialogue.onChange(dialogue.mode === "strong" ? "on" : "strong")}
-                  />
-                )}
+                {DIALOGUE_CHOICES.map(({ mode, label }) => (
+                  <button
+                    key={mode}
+                    data-dialogue-choice={mode}
+                    onClick={() => {
+                      if (mode !== dialogue.mode) dialogue.onChange(mode);
+                      setMenu(null);
+                    }}
+                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
+                      dialogue.mode === mode ? "text-accent-400" : "text-white"
+                    }`}
+                  >
+                    {t(label)}
+                  </button>
+                ))}
                 {dialogue.mode !== "off" && !dialogue.applies && (
-                  <p data-dialogue-not-applied className="px-3 pt-1 pb-2 text-xs text-white/60">
+                  <p data-dialogue-not-applied className="border-t border-white/10 px-3 pt-2 pb-2 text-xs text-white/60">
                     {t("player.dialogue.notThisTrack")}
                   </p>
                 )}
@@ -2699,23 +2705,5 @@ function DialogueBeta() {
     <span className="shrink-0 rounded-full border border-white/20 px-1.5 py-px text-[11px] font-semibold uppercase leading-4 tracking-wider text-white/70">
       {t("player.chromecast.beta")}
     </span>
-  );
-}
-
-/** Une ligne interrupteur du menu, la même forme que « Ajuster à l'écran ». */
-function DialogueSwitch({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={onToggle}
-      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-    >
-      <span>{label}</span>
-      <span aria-hidden className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-white/80" : "bg-white/20"}`}>
-        <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform ${on ? "translate-x-4 bg-black" : "bg-white"}`} />
-      </span>
-    </button>
   );
 }

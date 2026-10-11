@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><script type="module">
+import { Input, ALL_FORMATS, BlobSource, AudioSampleSink } from "./mediabunny.mjs";
+async function measure(name) {
+  const blob = await (await fetch(name)).blob();
+  const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
+  const [track] = await input.getAudioTracks();
+  if (!(await track.canDecode())) return { name, error: "canDecode false" };
+  const sink = new AudioSampleSink(track);
+  const n = track.numberOfChannels; const sums = new Array(n).fill(0); let frames = 0;
+  for await (const sample of sink.samples(2, 6)) {
+    for (let c = 0; c < n; c++) { const p = new Float32Array(sample.numberOfFrames); sample.copyTo(p, { planeIndex: c, format: "f32-planar" }); for (const v of p) sums[c] += v * v; }
+    frames += sample.numberOfFrames; sample.close();
+  }
+  return { name, codec: track.codec, channels: n, rmsDb: sums.map((s) => +(10 * Math.log10(s / frames)).toFixed(1)) };
+}
+window.results = Promise.all(["opus51.mkv", "opus30.mkv", "aac51.mkv"].map((f) => measure(f).catch((e) => ({ name: f, error: String(e) }))));
+</script>

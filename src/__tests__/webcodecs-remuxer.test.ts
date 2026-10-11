@@ -878,18 +878,36 @@ describe("« Améliorer les dialogues » — la décision de livraison", () => {
     }
   });
 
-  it("activé : le Dolby, le FLAC et l'AAC stéréo copiés passent par le ré-encodage", () => {
-    for (const t of [AC3, EAC3, FLAC, AAC_STEREO]) {
+  it("activé : le Dolby, le FLAC, l'AAC stéréo et l'AAC 5.1 standard copiés passent par le ré-encodage", () => {
+    for (const t of [AC3, EAC3, FLAC, AAC_STEREO, AAC_51]) {
       expect(audioDelivery(t, FILE)).toBe("copy");
       expect(audioDelivery(t, FILE, { dialogue: "on" })).toBe("transcode");
       expect(audioDelivery(t, FILE, { dialogue: "strong" })).toBe("transcode");
     }
   });
 
-  it("activé : un AAC ou un Opus multicanal, un MP3, restent copiés (ordre des canaux non mesuré, pas de décodeur)", () => {
-    for (const t of [AAC_51, OPUS_51, MP3]) {
+  it("activé : un Opus multicanal, un AAC 7.1, un MP3, restent copiés (ordre des canaux non mesuré, pas de décodeur)", () => {
+    const AAC_71 = a("A_AAC", 8, Uint8Array.from([0x11, 0xb8]));
+    for (const t of [OPUS_51, AAC_71, MP3]) {
       expect(audioDelivery(t, FILE, { dialogue: "on" })).toBe(audioDelivery(t, FILE));
     }
+  });
+
+  it("Opus multicanal : le 3.0 partout, le 5.1 seulement sur Firefox (ordre de Chromium mesuré désordonné)", () => {
+    // Un vrai OpusHead (famille de rangement 1) : sans lui, l'Opus n'est copié nulle part.
+    const head = (channels: number, streams: number, coupled: number, map: number[]) =>
+      Uint8Array.from([...new TextEncoder().encode("OpusHead"), 1, channels, 0x38, 0x01, 0x80, 0xbb, 0, 0, 0, 0, 1, streams, coupled, ...map]);
+    const OPUS_30 = { ...a("A_OPUS", 3), codecPrivate: head(3, 2, 1, [0, 2, 1]) };
+    const OPUS_51H = { ...a("A_OPUS", 6), codecPrivate: head(6, 4, 2, [0, 4, 1, 2, 3, 5]) };
+    const agent = (ua: string) => vi.stubGlobal("navigator", { userAgent: ua });
+    agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36");
+    expect(audioDelivery(OPUS_30, FILE)).toBe("copy");
+    expect(audioDelivery(OPUS_30, FILE, { dialogue: "on" })).toBe("transcode");
+    expect(audioDelivery(OPUS_51H, FILE)).toBe("copy");
+    expect(audioDelivery(OPUS_51H, FILE, { dialogue: "on" })).toBe("copy");
+    agent("Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0");
+    expect(audioDelivery(OPUS_51H, FILE)).toBe("copy");
+    expect(audioDelivery(OPUS_51H, FILE, { dialogue: "on" })).toBe("transcode");
   });
 
   it("activé : une piste déjà ré-encodée le reste", () => {

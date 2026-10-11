@@ -1466,7 +1466,6 @@
     "dialogue": {
       "title": "Dialoge verbessern",
       "stronger": "Noch stärker",
-      "on": "Ein",
       "off": "Aus",
       "notThisTrack": "Keine Wirkung auf diese Tonspur",
       "unavailable": "Dialoge lassen sich bei diesem Titel nicht verbessern: Wiedergabe ohne."

@@ -97,6 +97,19 @@ describe("SoftwareAudioTrack.open — la route d'un AAC", () => {
     expect(takeAacDecodeRoute()).toBe("wasm-decode");
   });
 
+  it("« Améliorer les dialogues » : sur Chromium aussi, un AAC 5.1 standard passe par le décodeur mesuré", async () => {
+    // 11/10/2026 (DECISIONS §68) : le traitement remonte le rang 2 ; seul le décodeur WebAssembly a un
+    // ordre de sortie mesuré (L R C LFE Ls Rs, à 0,06 dB d'ffmpeg sur la VF de « Forrest Gump »).
+    ua(CHROME_MAC);
+    wasmOpen.mockResolvedValue(fakeTrack(6));
+    const { SoftwareAudioTrack } = await import("@/lib/webcodecs/softwareAudio");
+    const file = { tracks: [{ number: 2, type: "audio", codecId: "A_AAC", codecPrivate: Uint8Array.from([0x11, 0xb0]) }] } as never;
+    const track = await SoftwareAudioTrack.open({ size: 0, read: async () => new Uint8Array() } as never, 2, "A_AAC", file, { measuredAacDecoder: true });
+    expect(wasmOpen).toHaveBeenCalledOnce();
+    const first = await track.samples(0).next();
+    expect(first.value?.planes.map((p: Float32Array) => p[0])).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
   it("un décodeur WebAssembly qui ne se charge pas : erreur nommée, pour que l'hôte passe au serveur", async () => {
     ua(SAFARI_IOS);
     wasmOpen.mockRejectedValue(new Error("instanciation impossible"));

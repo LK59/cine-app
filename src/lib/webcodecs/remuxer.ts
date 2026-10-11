@@ -481,17 +481,36 @@ export function audioDelivery(track: MatroskaTrack, file?: MatroskaFile, options
  * l'ordre standard des canaux, ce que le traitement suppose (il remonte le rang 2, le centre).
  * - Dolby (AC-3, E-AC-3), DTS, TrueHD, FLAC : nos décodeurs, dont l'ordre est celui que le
  *   ré-encodage utilise déjà tous les jours (Chrome pour le Dolby, Safari pour le DTS et le TrueHD).
- * - AAC et Opus en mono ou stéréo seulement : au-delà, l'ordre dans lequel le décodeur du navigateur
- *   rend leurs canaux n'a pas été mesuré partout (CLAUDE.md, « ne pas parier sur l'ordre des
- *   canaux ») — un 5.1 AAC reste copié, sans traitement, plutôt que de risquer les voix dans une
- *   ambiance. Un AAC à PCE garde sa propre décision (DECISIONS §62).
+ * - AAC en mono, stéréo ou 5.1 standard : le 5.1 passe alors par le décodeur AAC de FFmpeg en
+ *   WebAssembly sur tous les navigateurs, dont l'ordre de sortie est mesuré (L R C LFE Ls Rs) —
+ *   pas par celui du navigateur, qui ne l'est pas partout. Un AAC à PCE garde sa propre décision
+ *   (DECISIONS §62).
+ * - Opus : il n'existe ici que le décodeur du navigateur, mesuré dans de vrais navigateurs
+ *   (`tools/channel-order-bench`, 11/10/2026, une fréquence et un niveau par canal) : un 3.0 sort
+ *   L R C sur Chromium 153 et Firefox 155, un 5.1 sort dans l'ordre standard sur Firefox mais
+ *   **désordonné sur Chromium** (L Rs C R Ls LFE). Donc jusqu'à trois canaux partout, le 5.1 sur
+ *   Gecko seulement ; ailleurs il reste copié (CLAUDE.md, « ne pas parier sur l'ordre des
+ *   canaux »). Safari n'est pas concerné : l'Opus multicanal y part au lecteur serveur.
  * Le reste (MP3, Vorbis, PCM) reste copié.
  */
 export function dialogueCanShape(track: MatroskaTrack): boolean {
   const channels = track.audio?.channels ?? 2;
-  if (track.codecId === "A_AAC") return channels <= 2 && !parseAacConfig(track.codecPrivate)?.pce;
-  if (track.codecId === "A_OPUS") return channels <= 2;
+  if (track.codecId === "A_AAC") {
+    const config = parseAacConfig(track.codecPrivate);
+    if (config?.pce) return false;
+    // Le 5.1 standard (`channelConfiguration` 6) : décodé alors par le décodeur WebAssembly, dont
+    // l'ordre est mesuré — voir `SoftwareAudioTrack.open`. Le 7.1 standard (configuration 7) est
+    // un « 7.1 larges avant » que rien ici n'a mesuré : il reste copié.
+    return channels <= 2 || (channels === 6 && config?.channelConfiguration === 6);
+  }
+  if (track.codecId === "A_OPUS") return channels <= 3 || (channels === 6 && geckoEngine());
   return DIALOGUE_DECODERS.has(track.codecId);
+}
+
+/** Firefox (Gecko) — ni Chromium ni WebKit : Firefox sur iOS est un WebKit et n'en est pas. */
+function geckoEngine(): boolean {
+  const agent = typeof navigator === "undefined" ? "" : (navigator.userAgent ?? "");
+  return /Firefox\/\d/.test(agent) && !isWebKitEngine(agent) && !/Chrom(e|ium)\/\d/.test(agent);
 }
 
 const DIALOGUE_DECODERS = new Set(["A_AC3", "A_EAC3", "A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS", "A_TRUEHD", "A_MLP", "A_FLAC"]);

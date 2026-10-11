@@ -1466,7 +1466,6 @@
     "dialogue": {
       "title": "Améliorer les dialogues",
       "stronger": "Encore plus fort",
-      "on": "Activé",
       "off": "Désactivé",
       "notThisTrack": "Sans effet sur cette piste audio",
       "unavailable": "Les dialogues ne peuvent pas être améliorés sur ce film : lecture sans."

@@ -624,3 +624,28 @@ describe("« Améliorer les dialogues » dans le transcodeur", () => {
     reset.mockRestore();
   });
 });
+
+describe("« Améliorer les dialogues » — le décodeur d'un AAC multicanal", () => {
+  // Un AAC 5.1 traité passe par le décodeur WebAssembly dont l'ordre est mesuré, sur tous les
+  // navigateurs. Sans traitement — ou en stéréo —, la route d'avant.
+  const aac51 = { number: 2, codecId: "A_AAC", language: "fra", audio: { sampleRate: 48000, channels: 6 } };
+  const aacStereo = { ...aac51, audio: { sampleRate: 48000, channels: 2 } };
+
+  it("demande le décodeur mesuré pour un AAC 5.1 traité, et seulement là", async () => {
+    vi.stubGlobal("AudioEncoder", fakeEncoderClass());
+    samples.mockImplementation(() => decoded(8));
+    const { AudioTranscoder } = await load();
+    const { SoftwareAudioTrack } = await import("@/lib/webcodecs/softwareAudio");
+    const open = vi.mocked(SoftwareAudioTrack.open);
+    const optionsOf = () => open.mock.calls.at(-1)?.[4];
+
+    (await AudioTranscoder.open(source as never, aac51 as never, 0, undefined, undefined, "on")).close();
+    expect(optionsOf()).toEqual({ measuredAacDecoder: true });
+    (await AudioTranscoder.open(source as never, aac51 as never, 0, undefined, undefined, "off")).close();
+    expect(optionsOf()).toEqual({});
+    (await AudioTranscoder.open(source as never, aac51 as never)).close();
+    expect(optionsOf()).toEqual({});
+    (await AudioTranscoder.open(source as never, aacStereo as never, 0, undefined, undefined, "strong")).close();
+    expect(optionsOf()).toEqual({});
+  });
+});

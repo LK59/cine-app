@@ -551,7 +551,10 @@ export class AudioTranscoder {
     if (!Encoder) throw new Error("Ce navigateur ne sait pas encoder de l'audio.");
 
     trace(`transcodage audio : chargement du décodeur ${track.codecId}`);
-    const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId, file);
+    // « Améliorer les dialogues » sur un AAC multicanal : le décodeur dont l'ordre est mesuré, partout
+    // (voir `SoftwareAudioTrack.open`). Sans traitement, rien ne change : la route d'avant.
+    const measuredAacDecoder = !!dialogue && dialogue !== "off" && track.codecId === "A_AAC" && (track.audio?.channels ?? 2) > 2;
+    const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId, file, measuredAacDecoder ? { measuredAacDecoder } : {});
     // Tout ce qui suit peut lever — l'amorçage qui échoue sur le décodeur, une description que
     // l'on ne sait pas relire —, et le décodeur (pour le TrueHD, un contexte WebAssembly) comme
     // l'encodeur amorcé n'ont encore aucun propriétaire : fermés ici, sur chaque sortie en erreur.

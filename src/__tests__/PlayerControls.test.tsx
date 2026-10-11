@@ -1251,38 +1251,38 @@ describe("améliorer les dialogues", () => {
     expect(screen.queryByText(/player\.dialogue\.title/)).toBeNull();
   });
 
-  it("une entrée marquée Bêta, puis un interrupteur ; « Encore plus fort » n'apparaît qu'activé", async () => {
+  it("une entrée marquée Bêta, sans état coupé ; trois choix comme l'audio, le courant en couleur", async () => {
     const onChange = vi.fn();
     await openDialogue({ dialogue: { mode: "off", applies: true, onChange } });
     const row = screen.getByText(/player\.dialogue\.title/).closest("button")!;
     expect(row.textContent).toContain("player.chromecast.beta");
-    expect(row.textContent).toContain("player.dialogue.off");
+    expect(row.textContent).not.toContain("·");
     await act(async () => void fireEvent.click(row));
-    const switches = screen.getAllByRole("switch");
-    expect(switches).toHaveLength(1);
-    expect(switches[0].getAttribute("aria-checked")).toBe("false");
-    fireEvent.click(switches[0]);
-    expect(onChange).toHaveBeenCalledWith("on");
+    const choices = [...document.querySelectorAll("[data-dialogue-choice]")];
+    expect(choices.map((c) => c.getAttribute("data-dialogue-choice"))).toEqual(["off", "on", "strong"]);
+    expect(choices.map((c) => c.textContent)).toEqual(["player.dialogue.off", "player.dialogue.title", "player.dialogue.stronger"]);
+    expect(choices[0].className).toContain("text-accent-400");
+    expect(choices[1].className).not.toContain("text-accent-400");
   });
 
-  it("activé : « Encore plus fort » bascule entre les deux forces, et l'interrupteur principal éteint", async () => {
+  it("choisir une force l'applique et referme le menu ; rechoisir le courant ne reconstruit rien", async () => {
     const onChange = vi.fn();
     await openDialogue({ dialogue: { mode: "on", applies: true, onChange } });
     await act(async () => void fireEvent.click(screen.getByText(/player\.dialogue\.title/).closest("button")!));
-    const [main, stronger] = screen.getAllByRole("switch");
-    expect(stronger.textContent).toContain("player.dialogue.stronger");
-    expect(stronger.getAttribute("aria-checked")).toBe("false");
-    fireEvent.click(stronger);
-    expect(onChange).toHaveBeenLastCalledWith("strong");
-    fireEvent.click(main);
-    expect(onChange).toHaveBeenLastCalledWith("off");
+    await act(async () => void fireEvent.click(document.querySelector('[data-dialogue-choice="strong"]')!));
+    expect(onChange).toHaveBeenCalledWith("strong");
+    expect(document.querySelector("[data-dialogue-choice]")).toBeNull();
+    await act(async () => void fireEvent.click(document.querySelector('[data-player-nav="more"]')!));
+    await act(async () => void fireEvent.click(screen.getByText(/player\.dialogue\.title/).closest("button")!));
+    await act(async () => void fireEvent.click(document.querySelector('[data-dialogue-choice="on"]')!));
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 
   it("dit quand la piste qui joue n'est pas de celles qu'il prend", async () => {
     await openDialogue({ dialogue: { mode: "strong", applies: false, onChange: vi.fn() } });
     await act(async () => void fireEvent.click(screen.getByText(/player\.dialogue\.title/).closest("button")!));
     expect(screen.getByText("player.dialogue.notThisTrack")).toBeTruthy();
-    expect(screen.getAllByRole("switch")[1].getAttribute("aria-checked")).toBe("true");
+    expect(document.querySelector('[data-dialogue-choice="strong"]')!.className).toContain("text-accent-400");
   });
 });
 

@@ -2711,9 +2711,15 @@ baissés), ou le canal unique d'un mono. Toute autre disposition reçoit la comp
 ensuite un compresseur lié (un gain pour tous les canaux, détecteur en puissance), un rattrapage et un
 limiteur sous −1 dBFS. Deux forces : « Améliorer les dialogues » (`on`) et « Encore plus fort »
 (`strong`). Activé, une piste copiée telle quelle passe par le ré-encodage si un décodeur d'ici rend
-ses canaux dans l'ordre standard (`dialogueCanShape`) : Dolby, DTS, TrueHD, FLAC, et AAC ou Opus en
-mono ou stéréo. Un AAC ou un Opus multicanal (ordre de sortie du décodeur non mesuré partout), un
-AAC à PCE (§62) et un MP3 restent copiés, et le menu dit « Sans effet sur cette piste audio ».
+ses canaux dans l'ordre standard (`dialogueCanShape`) : Dolby, DTS, TrueHD et FLAC. Pour l'AAC :
+mono, stéréo et 5.1 standard (configuration 6), ce dernier décodé partout par le décodeur AAC de FFmpeg
+en WebAssembly (`measuredAacDecoder`), dont l'ordre est mesuré : L R C LFE Ls Rs sur un fichier où
+chaque canal porte son niveau, et à 0,06 dB d'ffmpeg sur la VF de « Forrest Gump ». Pour l'Opus,
+jusqu'à 3.0 partout, et le 5.1 sur Firefox seulement. Mesuré dans de vrais navigateurs
+(`tools/channel-order-bench`) : Chromium 153 rend un Opus 5.1 **désordonné** (L Rs C R Ls LFE), et
+Firefox 155 dans l'ordre standard ; un 3.0 sort L R C sur les deux, un AAC 5.1 dans l'ordre standard
+sur les deux. Restent copiés : un AAC 7.1 (« 7.1 larges avant » non mesuré), un AAC à PCE (§62), un
+Opus 5.1 sur Chromium et un MP3. Pour eux, le menu dit « Sans effet sur cette piste audio ».
 
 **Désactivé, rien ne change, à l'octet près.** Aucun processeur n'est instancié, et `audioDelivery`
 rend la décision d'avant (`fileAudioDelivery`). Prouvé avant le déploiement par
@@ -2742,7 +2748,8 @@ l'appareil n'est pas effacé.
 `dialogueCanShape` (`remuxer.ts`) ; `RemuxPlaybackOptions.dialogue`, `canShapeDialogue`
 (`remuxPlayback.ts`) ; `readDialogueMode` / `writeDialogueMode` (`dialoguePreference.ts`, par
 appareil, clé `cine-dialogue`) ; `ExperimentalPlayerHost` (administrateur seulement, `dropDialogue`) ;
-le menu « … » de `PlayerControls`, marqué « Bêta ». La ligne `start` porte `dialogue` quand il est
+le menu « … » de `PlayerControls`, marqué « Bêta » : une liste de trois choix, comme l'audio
+(Désactivé, Améliorer les dialogues, Encore plus fort). La ligne `start` porte `dialogue` quand il est
 actif, et rien sinon.
 
 **Volontairement à part.** Le lecteur serveur (HLS de Jellyfin), où le son ne passe pas par nous. Les
@@ -2750,4 +2757,5 @@ pistes que le traitement ne prend pas, plutôt que de parier sur l'ordre de leur
 comptes, tant que c'est une bêta.
 
 Tests : `dialogueEnhance.test.ts`, `webcodecs-audioTranscode.test.ts`, `webcodecs-remuxer.test.ts`,
-`PlayerControls.test.tsx`, `ExperimentalPlayerHost.test.tsx` (« améliorer les dialogues »).
+`aacWasm-route.test.ts`, `PlayerControls.test.tsx`, `ExperimentalPlayerHost.test.tsx` (« améliorer
+les dialogues »). Mesure de l'ordre des canaux des navigateurs : `sh tools/channel-order-bench/run.sh`.

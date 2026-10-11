@@ -90,7 +90,14 @@ export class SoftwareAudioTrack {
     trackNumber: number,
     codecId?: string,
     /** Le fichier déjà lu par l'appelant, pour ne pas relire son en-tête — voir le TrueHD. */
-    file?: MatroskaFile
+    file?: MatroskaFile,
+    /**
+     * Décoder un AAC par le décodeur de FFmpeg en WebAssembly sur tous les navigateurs, Chromium
+     * compris : c'est le seul dont l'ordre de sortie d'un 5.1 est mesuré ici (L R C LFE Ls Rs, à
+     * 0,06 dB d'ffmpeg sur la VF de « Forrest Gump », 11/10/2026). Demandé par « Améliorer les
+     * dialogues », qui remonte le rang 2 et ne doit pas parier sur l'ordre d'un autre décodeur.
+     */
+    options: { measuredAacDecoder?: boolean } = {}
   ): Promise<SoftwareAudioTrack> {
     // Le TrueHD ne passe pas par mediabunny, qui ne le connaît pas : notre propre décodeur, et
     // la même forme de sortie — voir truehd/truehdAudio.ts.
@@ -107,7 +114,7 @@ export class SoftwareAudioTrack {
     // navigateur — celui de Safari (CoreAudio) échoue sur le PCE de « Ruby », et un décodeur qu'on
     // n'a pas mesuré pourrait ranger les canaux autrement. Sur Chromium, l'AudioDecoder du navigateur
     // (prouvé, mesuré), et le même décodeur WebAssembly s'il refuse la piste (DECISIONS.md §62).
-    if (codecId === "A_AAC" && aacDecoderRouteHere() === "wasm") return SoftwareAudioTrack.openWasmAac(source, trackNumber, file);
+    if (codecId === "A_AAC" && (aacDecoderRouteHere() === "wasm" || options.measuredAacDecoder)) return SoftwareAudioTrack.openWasmAac(source, trackNumber, file);
     if (codecId === "A_AAC") {
       try {
         return await SoftwareAudioTrack.openWithMediabunny(source, trackNumber, codecId, file);

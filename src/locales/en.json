@@ -1466,7 +1466,6 @@
     "dialogue": {
       "title": "Enhance dialogue",
       "stronger": "Even stronger",
-      "on": "On",
       "off": "Off",
       "notThisTrack": "No effect on this audio track",
       "unavailable": "Dialogue can't be enhanced on this title: playing without it."
