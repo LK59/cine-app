@@ -986,3 +986,23 @@ describe("une seule ouverture de fiche (§61)", () => {
     }
   });
 });
+
+describe("une seule lecture des repères d'un épisode", () => {
+  // DECISIONS.md §65. Les routes du lecteur natif et du lecteur serveur recopiaient chacune la
+  // conversion des repères ; le récap n'aurait été ajouté qu'à l'une. Les deux passent par
+  // `playerMarkers`, et aucune ne relit plus `timestamps.Introduction` à la main.
+  it.each(["src/app/api/jellyfin/direct/[itemId]/route.ts", "src/app/api/jellyfin/playback/start/route.ts"])(
+    "%s appelle `playerMarkers`",
+    (f) => {
+      const code = lire(f);
+      expect([f, code.includes("playerMarkers(timestamps)")]).toEqual([f, true]);
+      expect([f, /timestamps\?\.(Introduction|Credits|Recap)/.test(code)]).toEqual([f, false]);
+    }
+  );
+
+  it("un seul bouton « Passer… », décidé par `activeSkip`", () => {
+    const src = lire("src/components/PlayerControls.tsx");
+    expect(src).toMatch(/activeSkip\(currentTime, introSkip, recapSkip\)/);
+    expect(src).not.toMatch(/currentTime >= introSkip\.start/);
+  });
+});

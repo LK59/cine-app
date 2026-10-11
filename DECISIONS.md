@@ -2438,3 +2438,44 @@ TMDB dans la langue vient de Jellyfin redimensionnée (`jellyfinPoster` via `lib
 l'original de TheTVDB, servi sans consigne de cache.
 
 Tests : `imageRetry.test.ts`, `imageRetry-components.test.tsx`, `jellyfin-image-etag.test.ts`.
+
+## 65. Le lecteur : clic à la souris, épisode suivant, récap et bon générique
+
+**Le clic sur l'image.** À la souris, un clic sur une zone vide met en pause ou relance (le même
+`togglePlay` que la barre d'espace, icône optimiste comprise) et montre les commandes ; un double-clic
+passe en plein écran. Au doigt et au stylet, rien ne change : afficher/masquer. Décidé par l'appui
+lui-même (`pointerType` du `click`, sinon du dernier `pointerdown`), jamais par l'appareil : un PC
+Windows à écran tactile reçoit les deux, et chacun garde son geste ; un iPad répond au doigt comme un
+téléphone et à son trackpad comme un ordinateur. Une media query (`hover`, `pointer: fine`) décrit
+l'appareil et se trompe sur ces deux cas. Le simple clic bascule aussitôt — le retarder pour attendre
+un éventuel second clic se sentirait à chaque pause ; c'est le double-clic qui paie, par un arrêt
+d'un quart de seconde entre ses deux clics (ce que fait YouTube). Un clic qui referme un menu ne
+touche pas à la lecture. Quand la souris quitte la fenêtre pendant la lecture, les commandes partent
+aussitôt — sauf menu ouvert, glisser en cours ou focus clavier dans les commandes.
+
+**L'épisode suivant à tout moment.** Un bouton dans la pilule des réglages, pendant un épisode qui a
+une suite, par le même `onAdvance` que la carte du générique (le stop rapporté est `next`, à la
+position courante) ; absent quand la minuterie de veille arrête la série à la fin de l'épisode.
+
+**Le récap.** Les segments `Recap` de Jellyfin (~20 % des épisodes ici) donnent « Passer le récap »,
+le même bouton que « Passer l'intro » : `activeSkip` choisit lequel montrer, et, s'ils se
+chevauchent, celui qui finit le plus tard.
+
+**Le bon générique.** Deux greffons écrivent des segments (Intro Skipper, Chapter Segments
+Provider) : doublons, et faux « Outro » en milieu d'épisode. On prenait le premier « Outro » passé la
+première minute — la carte « Épisode suivant » venait 2 min 30 trop tôt sur « Shōgun » S01E06, à
+3 min sur « Mentalist ». Désormais : segments trop courts et génériques de la première minute
+écartés d'abord, puis passages d'un même type fusionnés (chevauchement ou écart de moins de 20 s :
+doublons et morceaux d'un même générique), puis le générique qui se termine le plus tard ; l'intro
+et le récap gardent leur premier passage. Mesuré sur 628 épisodes : 8 changent de générique, aucun ne
+change de début d'intro.
+
+**Une seule fonction.** `timestampsFromSegments` (`src/lib/clients/jellyfin.ts`) et `playerMarkers` (`src/lib/episodeMarkers.ts`),
+lus par les routes `direct/[itemId]` (lecteur natif) et `playback/start` (lecteur serveur), qui
+recopiaient chacune la conversion ; `activeSkip`, `surfaceAction`, `isEmptySurface`,
+`keyboardFocusWithin` (`src/lib/playerSkip.ts`), lus par `PlayerControls`, commun aux deux hôtes.
+
+**Volontairement à part.** Un élément qui n'est pas l'image le déclare (`data-player-surface-ignore` :
+l'écran « vous êtes toujours là ? ») ; boutons, curseurs, menus et cartes ne sont jamais la surface.
+
+Tests : `playerSkip.test.ts`, `player-surface-click.test.tsx`, `jellyfin-mediaSegments.test.ts`.

@@ -600,6 +600,7 @@ function ActivePlayer({
     logContext.current = { itemId, title, cast: castSession || castActive, bench: session.bench, session: logSession.current.id, agent };
   }, [itemId, title, castSession, castActive, session.bench, agent]);
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
+  const [recapSkip, setRecapSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   // Le temps joué, porté par ses lignes `stop` et de fin de diffusion — voir `WatchedClock`.
@@ -1044,6 +1045,7 @@ function ActivePlayer({
       setCurrentAudioId(opts?.audioStreamIndex ?? data.audioTracks?.find((t: { isDefault: boolean }) => t.isDefault)?.index ?? null);
       setServerTitle(data.title ?? null);
       setIntroSkip(data.introSkip ?? null);
+      setRecapSkip(data.recapSkip ?? null);
       setCreditsStart(data.creditsStart ?? null);
       setPlaybackInfo(data.playbackInfo ?? null);
 
@@ -2269,6 +2271,7 @@ function ActivePlayer({
           loading={loading}
           openingQuiet={introCovering}
           introSkip={introSkip}
+          recapSkip={recapSkip}
           creditsStart={creditsStart}
           nextEpisode={nextEpisode}
           onAdvance={handleAdvance}

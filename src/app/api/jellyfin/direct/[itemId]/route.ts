@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
+import { playerMarkers } from "@/lib/episodeMarkers";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
@@ -126,6 +127,8 @@ export interface DirectPlayInfo {
   logoUrl: string | null;
   /** Where the opening titles run, when Jellyfin has analysed the episode. Null otherwise. */
   introSkip: { start: number; end: number } | null;
+  /** Où court le « précédemment dans… » — « Passer le récap », comme l'intro (DECISIONS.md §65). */
+  recapSkip: { start: number; end: number } | null;
   /** Where the closing credits begin, which is when the next episode is offered. */
   creditsStart: number | null;
 }
@@ -328,10 +331,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     externalSubtitles,
     title: naming ? displayTitle(naming, "") || null : null,
     logoUrl,
-    introSkip: timestamps?.Introduction?.Valid
-      ? { start: timestamps.Introduction.Start, end: timestamps.Introduction.End }
-      : null,
-    creditsStart: timestamps?.Credits?.Valid ? timestamps.Credits.Start : null,
+    ...playerMarkers(timestamps),
   };
 
   return NextResponse.json(payload);

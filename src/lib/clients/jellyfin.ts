@@ -717,6 +717,8 @@ export const jellyfin = {
 
 export interface EpisodeTimestamps {
   Introduction?: { Start: number; End: number; Valid: boolean };
+  /** Le « précédemment dans… » — lu depuis le 11/10/2026 (DECISIONS.md §65). */
+  Recap?: { Start: number; End: number; Valid: boolean };
   Credits?: { Start: number; End: number; Valid: boolean };
 }
 
@@ -735,16 +737,57 @@ const MIN_SEGMENT_S = 5;
  */
 const MIN_CREDITS_START_S = 60;
 
-/** Les segments de Jellyfin, ramenés à la forme qu'attend le lecteur (secondes). */
+/**
+ * Deux segments du même type séparés de moins que ça sont un seul et même passage.
+ *
+ * Deux greffons écrivent ici leurs segments (Intro Skipper et Chapter Segments Provider), si bien
+ * qu'un même générique arrive souvent deux fois, décalé d'une seconde ou chevauchant l'autre ; et un
+ * générique d'anime coupé d'un écran noir arrive en deux morceaux (« Seven Deadly Sins » : fin de
+ * chanson à 1432 s, suite à 1451 s). Au-delà de vingt secondes d'écart, ce sont deux passages
+ * distincts — mesuré sur un échantillon de 628 épisodes le 11/10/2026 : les vrais doublons se
+ * touchent ou se chevauchent, les morceaux d'un même générique sont à moins de vingt secondes, et
+ * les faux génériques en milieu d'épisode sont à plusieurs minutes du vrai.
+ */
+const SAME_PASSAGE_GAP_S = 20;
+
+type Span = { start: number; end: number };
+
+/** Les passages d'un type, doublons et morceaux fusionnés, dans l'ordre du film. */
+function mergedSpans(spans: Span[]): Span[] {
+  const merged: Span[] = [];
+  for (const span of [...spans].sort((a, b) => a.start - b.start)) {
+    const last = merged[merged.length - 1];
+    if (last && span.start <= last.end + SAME_PASSAGE_GAP_S) last.end = Math.max(last.end, span.end);
+    else merged.push({ ...span });
+  }
+  return merged;
+}
+
+/**
+ * Les segments de Jellyfin, ramenés à la forme qu'attend le lecteur (secondes) — DECISIONS.md §65.
+ *
+ * L'intro et le récap : le premier passage, doublons fusionnés. Le générique de fin : celui qui se
+ * termine le plus tard. On prenait le premier « Outro » passé la première minute, et un faux
+ * générique en milieu d'épisode faisait venir la carte « Épisode suivant » des minutes trop tôt —
+ * « Shōgun » S01E06 : un « Outro » de 25 s à 3147 s, le vrai à 3290 s ; « Trying » : un de 14 s à
+ * 1386 s pour un épisode de 1727 s ; « Mentalist » : cinq minutes en plein milieu (11/10/2026).
+ * Les filtres viennent avant la fusion : un faux générique qui commence à 8 s ne doit pas
+ * entraîner avec lui le vrai qu'il chevauche (« Bref », voir `MIN_CREDITS_START_S`).
+ */
 export function timestampsFromSegments(items: MediaSegment[]): EpisodeTimestamps {
   const spans = items
     .map((s) => ({ type: s.Type, start: s.StartTicks / 10_000_000, end: s.EndTicks / 10_000_000 }))
-    .filter((s) => s.end - s.start >= MIN_SEGMENT_S)
-    .sort((a, b) => a.start - b.start);
-  const intro = spans.find((s) => s.type === "Intro");
-  const credits = spans.find((s) => s.type === "Outro" && s.start >= MIN_CREDITS_START_S);
+    .filter((s) => s.end - s.start >= MIN_SEGMENT_S);
+  const of = (type: string, keep: (s: Span) => boolean = () => true) => mergedSpans(spans.filter((s) => s.type === type && keep(s)));
+  const intro = of("Intro")[0];
+  const recap = of("Recap")[0];
+  const credits = of("Outro", (s) => s.start >= MIN_CREDITS_START_S).reduce<Span | undefined>(
+    (latest, s) => (!latest || s.end > latest.end || (s.end === latest.end && s.start > latest.start) ? s : latest),
+    undefined
+  );
   return {
     ...(intro ? { Introduction: { Start: intro.start, End: intro.end, Valid: true } } : {}),
+    ...(recap ? { Recap: { Start: recap.start, End: recap.end, Valid: true } } : {}),
     ...(credits ? { Credits: { Start: credits.start, End: credits.end, Valid: true } } : {}),
   };
 }

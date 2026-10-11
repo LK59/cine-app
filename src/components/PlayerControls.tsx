@@ -2,7 +2,7 @@
 
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward } from "lucide-react";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
 import { createLiquidPress, prefersReducedMotion } from "@/lib/liquidGlass/liquid";
@@ -18,6 +18,7 @@ import {
 import { useMediaSession } from "@/lib/useMediaSession";
 import { VOLUME_STORAGE_KEY } from "@/lib/rememberedVolume";
 import { normalizeKey } from "@/lib/remoteKeys";
+import { activeSkip, isEmptySurface, keyboardFocusWithin, surfaceAction } from "@/lib/playerSkip";
 import {
   SLEEP_DURATIONS,
   sleepBlocksAdvanceSnapshot,
@@ -115,6 +116,8 @@ interface PlayerControlsProps {
    */
   openingQuiet?: boolean;
   introSkip: { start: number; end: number } | null;
+  /** Le « précédemment dans… » : même bouton que l'intro, autre libellé (DECISIONS.md §65). */
+  recapSkip?: { start: number; end: number } | null;
   creditsStart: number | null;
   nextEpisode: { itemId: string; title: string } | null;
   onAdvance: () => void;
@@ -263,6 +266,7 @@ export function PlayerControls({
   resuming = false,
   openingQuiet = false,
   introSkip,
+  recapSkip = null,
   creditsStart,
   nextEpisode,
   onAdvance,
@@ -610,7 +614,8 @@ export function PlayerControls({
     onAdvance();
   }, [showNextUp, nextUpCountdown, askStillThere, onAdvance]);
 
-  const showSkipIntro = !!introSkip && currentTime >= introSkip.start && currentTime < introSkip.end;
+  // « Passer l'intro » et « Passer le récap » : un seul bouton, dont la décision vit dans `activeSkip`.
+  const skipNow = activeSkip(currentTime, introSkip, recapSkip);
 
   // `document` is unavailable during SSR — feature detection must run post-mount. State starts
   // at the fixed `false`, matching SSR output, so this doesn't cause a hydration mismatch.
@@ -995,6 +1000,66 @@ export function PlayerControls({
     if (visible) hideControls();
     else showControls();
   }
+
+  /**
+   * Le type du dernier appui posé sur le lecteur — repli pour un `click` qui ne le porte pas (un
+   * `click` n'est un PointerEvent que dans les navigateurs récents) et pour `dblclick`, qui ne l'est
+   * jamais.
+   */
+  const lastPointerTypeRef = useRef("");
+
+  /**
+   * Un clic sur l'image (11/10/2026, DECISIONS.md §65) : à la souris, lecture/pause — comme YouTube,
+   * Netflix ou Jellyfin dans un navigateur ; au doigt et au stylet, afficher/masquer, comme avant et
+   * comme partout au doigt (une pause à chaque toucher serait pénible). Voir `surfaceAction`.
+   *
+   * Basculé aussitôt, sans attendre de savoir si un second clic suit : le simple clic est de loin le
+   * geste le plus fréquent, et le retarder de 250 ms se sentirait à chaque pause. Le double-clic
+   * paie à la place : son premier clic met en pause, le second relance, et le `dblclick` passe en
+   * plein écran — un arrêt de l'ordre du quart de seconde, ce que fait YouTube.
+   */
+  function onSurfaceClick(e: React.MouseEvent<HTMLDivElement>) {
+    const pointerType = (e.nativeEvent as MouseEvent & { pointerType?: string }).pointerType || lastPointerTypeRef.current;
+    const action = surfaceAction(pointerType, e.detail, isEmptySurface(e.target, e.currentTarget));
+    if (action === "toggle-controls") {
+      toggleControls();
+      return;
+    }
+    if (action === "ignore") return;
+    if (menu !== null) {
+      // Un menu ouvert se referme d'abord ; le clic qui le referme ne touche pas à la lecture.
+      setMenu(null);
+      showControls();
+      return;
+    }
+    togglePlay();
+    showControls();
+  }
+
+  function onSurfaceDoubleClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (lastPointerTypeRef.current !== "mouse" || !fullscreenSupported) return;
+    if (!isEmptySurface(e.target, e.currentTarget)) return;
+    void toggleFullscreen();
+  }
+
+  /**
+   * La souris quitte la fenêtre : les commandes partent aussitôt, sans attendre leurs trois secondes
+   * (demandé le 11/10/2026) — personne ne les regarde plus. Seulement pendant la lecture, sans menu
+   * ouvert ni glisser sur la barre, et jamais quand le clavier a le focus dans les commandes : on
+   * les parcourt alors à la télécommande ou au clavier. Un `pointerout` sans destination
+   * (`relatedTarget` nul) est la sortie de la page ; un doigt ne le déclenche jamais (`pointerType`).
+   */
+  useEffect(() => {
+    function onPointerOut(e: PointerEvent) {
+      if (e.pointerType !== "mouse" || e.relatedTarget !== null) return;
+      if (!playingRef.current || menuOpenRef.current || seekingRef.current || suspendedRef.current) return;
+      if (keyboardFocusWithin(liquidRootRef.current)) return;
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      setVisible(false);
+    }
+    window.addEventListener("pointerout", onPointerOut);
+    return () => window.removeEventListener("pointerout", onPointerOut);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1411,7 +1476,11 @@ export function PlayerControls({
       // commandes (`onPointerMove`), et le curseur avec. En pause, il reste : on s'attend à agir.
       className={`player-liquid absolute inset-0 z-10 ${!visible && playing ? "cursor-none" : ""}`}
       ref={liquidRootRef}
-      onClick={toggleControls}
+      onClick={onSurfaceClick}
+      onDoubleClick={onSurfaceDoubleClick}
+      onPointerDown={(e) => {
+        lastPointerTypeRef.current = e.pointerType;
+      }}
       // Un bouton cliqué à la souris ne garde pas le focus : sinon Espace, qui doit mettre en
       // pause, le réactivait (voir le clavier plus haut). Les curseurs (son, progression) gardent
       // le leur — on les fait glisser.
@@ -1460,13 +1529,13 @@ export function PlayerControls({
 
       {/* Skip-intro and next-up prompts stay visible even when the rest of the
           controls have auto-hidden — they're time-sensitive, not navigation. */}
-      {showSkipIntro && (
+      {skipNow && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             if (videoRef.current) {
-              onSeekRequest?.(introSkip!.end);
-              videoRef.current.currentTime = introSkip!.end;
+              onSeekRequest?.(skipNow.end);
+              videoRef.current.currentTime = skipNow.end;
             }
           }}
           data-liquid
@@ -1476,7 +1545,7 @@ export function PlayerControls({
             right: "max(1rem, env(safe-area-inset-right))",
           }}
         >
-          {t('player.skipIntro')}
+          {skipNow.kind === "recap" ? t("player.skipRecap") : t("player.skipIntro")}
         </button>
       )}
 
@@ -1510,7 +1579,10 @@ export function PlayerControls({
       {/* La question, à la place de l'épisode suivant. Elle occupe tout l'écran plutôt qu'un coin :
           si personne n'est là, autant que la pièce cesse d'être éclairée par un film qui joue. */}
       {askStillThere && nextEpisode && (
-        <div className="pointer-events-auto absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black/80 px-6 text-center">
+        <div
+          // Un clic sur son fond n'est pas un clic sur l'image : il ne met rien en pause derrière.
+          data-player-surface-ignore
+          className="pointer-events-auto absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black/80 px-6 text-center">
           <p className="text-lg font-medium text-white">{t("player.stillThere")}</p>
           <p className="max-w-sm text-sm text-slate-400">{t("player.stillThereHint")}</p>
           <button
@@ -2126,6 +2198,24 @@ export function PlayerControls({
                   className="player-pill-btn"
                 >
                   <Captions size={22} />
+                </button>
+              )}
+              {/* L'épisode suivant à tout moment (11/10/2026), comme sur Netflix ou Prime Video : par
+                  le même `onAdvance` que la carte du générique, jamais un second chemin. Absent
+                  quand la minuterie de veille arrête la série à la fin de cet épisode : elle a dit
+                  « rien ne s'enchaîne ». */}
+              {nextEpisode && !sleepBlocksAdvance && (
+                <button
+                  data-player-nav="next-episode"
+                  onClick={() => {
+                    noteViewerPresent();
+                    onAdvance();
+                  }}
+                  title={t("player.nextEpisode")}
+                  aria-label={t("player.nextEpisode")}
+                  className="player-pill-btn"
+                >
+                  <SkipForward size={22} />
                 </button>
               )}
               <button

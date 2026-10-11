@@ -1447,6 +1447,8 @@
     "subtitleSizeLarge": "Grande",
     "subtitleSizeXLarge": "Muy grande",
     "skipIntro": "Saltar intro",
+    "skipRecap": "Saltar resumen",
+    "nextEpisode": "Siguiente episodio",
     "nextEpisodeIn": "Siguiente episodio · {n}s",
     "playNow": "Reproducir ahora",
     "moreOptions": "Más opciones",

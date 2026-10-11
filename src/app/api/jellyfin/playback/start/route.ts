@@ -1,6 +1,7 @@
 import { publicOrigin } from "@/lib/publicOrigin";
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
+import { playerMarkers } from "@/lib/episodeMarkers";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { playbackDevice } from "@/lib/playbackDevice";
 import { HttpError } from "@/lib/http";
@@ -347,9 +348,7 @@ export async function POST(req: NextRequest) {
             .catch(() => null)
         : null;
 
-    const introSkip =
-      timestamps?.Introduction?.Valid ? { start: timestamps.Introduction.Start, end: timestamps.Introduction.End } : null;
-    const creditsStart = timestamps?.Credits?.Valid ? timestamps.Credits.Start : null;
+    const { introSkip, recapSkip, creditsStart } = playerMarkers(timestamps);
 
     /**
      * Pour un téléviseur, l'adresse doit être complète et porter son laissez-passer.
@@ -400,6 +399,7 @@ export async function POST(req: NextRequest) {
        */
       originalLanguage,
       introSkip,
+      recapSkip,
       creditsStart,
       /** "Série — S02E05 · Titre", from the server rather than from whoever opened the player. */
       title: naming ? displayTitle(naming, "") || null : null,

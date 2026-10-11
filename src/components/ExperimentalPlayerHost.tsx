@@ -2852,6 +2852,7 @@ export function ExperimentalPlayerHost({
             // Playback speed needs nothing here: on the native path these controls hold a real
             // media element, so it is the browser's own.
             introSkip={info?.introSkip ?? null}
+            recapSkip={info?.recapSkip ?? null}
             creditsStart={info?.creditsStart ?? null}
             nextEpisode={nextEpisode}
             onAdvance={handleAdvance}
