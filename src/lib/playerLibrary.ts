@@ -1,10 +1,13 @@
 import { catalogueMembers } from "@/lib/catalogueMembers";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
+import type { JellyfinItem } from "@/lib/clients/jellyfin";
 
 export interface PlayableLibrary {
   movies: Map<number, RadarrMovie>;
   series: Map<number, SonarrSeries>;
+  /** L'élément Jellyfin de chaque série, par identifiant TMDB — voir `CatalogueMembers.seriesJellyfin`. */
+  seriesJellyfin: Map<number, JellyfinItem>;
 }
 
 /**
@@ -20,10 +23,18 @@ export interface PlayableLibrary {
  * fiche TMDB (*The Arena*, 05/10/2026 — Jellyfin l'avait pris pour une autre série).
  */
 export async function playableLibrary(): Promise<PlayableLibrary> {
-  const { movies, series } = await catalogueMembers();
+  const { movies, series, seriesJellyfin } = await catalogueMembers();
+  const jellyfinBySonarr = seriesJellyfin ?? new Map<number, JellyfinItem>();
+  const playableSeries = series.filter((s) => s.tmdbId != null);
   return {
     movies: new Map(movies.filter((m) => m.tmdbId).map((m) => [m.tmdbId, m])),
-    series: new Map(series.filter((s) => s.tmdbId != null).map((s) => [s.tmdbId!, s])),
+    series: new Map(playableSeries.map((s) => [s.tmdbId!, s])),
+    seriesJellyfin: new Map(
+      playableSeries.flatMap((s) => {
+        const item = jellyfinBySonarr.get(s.id);
+        return item ? [[s.tmdbId!, item] as const] : [];
+      })
+    ),
   };
 }
 

@@ -16,9 +16,10 @@
  * démarrage, et un arrêt net si l'optimiseur se met à refuser.
  */
 
-import { cachedMovies, cachedSeries } from "@/lib/server-cache";
+import { cachedJellyfinSeriesAdmin, cachedMovies, cachedSeries } from "@/lib/server-cache";
+import { matchSeries } from "@/lib/catalogueMembers";
 import { getTitleArt } from "@/lib/title-art";
-import { libraryPoster } from "@/lib/images";
+import { cataloguePoster } from "@/lib/images";
 import { LOCALES, type Locale } from "@/lib/i18n";
 import { readOverride } from "@/lib/settings/store";
 
@@ -85,25 +86,32 @@ export function variantPath(url: string, width: number, quality = QUALITY): stri
 }
 
 /**
- * Les affiches du catalogue, par la même règle que les routes du cinéma (`libraryPoster` sur
+ * Les affiches du catalogue, par la même règle que les routes du cinéma (`cataloguePoster` sur
  * `getTitleArt`) : ce sont exactement les adresses que les cartes passent à l'optimiseur. Les
  * films sans fichier ne sont pas à l'écran ; les préparer ne servirait à rien.
  */
 export async function collectPosterUrls(locales: Locale[]): Promise<string[]> {
   const [movies, series] = await Promise.all([cachedMovies(), cachedSeries()]);
+  // L'élément Jellyfin de chaque série, pour l'affiche que le catalogue montre vraiment : sans lui,
+  // le préchauffage préparait l'original de TheTVDB qu'aucun écran n'affiche plus (11/10/2026).
+  // Jellyfin muet : la règle sans son repli, comme avant.
+  const jellyfinSeries = await Promise.resolve()
+    .then(() => cachedJellyfinSeriesAdmin())
+    .catch(() => null);
+  const jellyfinBySonarr = new Map((jellyfinSeries ? matchSeries(series, jellyfinSeries) : []).map((x) => [x.s.id, x.jfItem]));
   const urls = new Set<string>();
   for (const m of movies) {
     if (!m.hasFile) continue;
     const art = await getTitleArt(m.tmdbId, "movie");
     for (const locale of locales) {
-      const url = libraryPoster(art.posterByLang, m.images, locale);
+      const url = cataloguePoster("movie", art.posterByLang, m.images, locale);
       if (isOptimizable(url)) urls.add(url);
     }
   }
   for (const s of series) {
     const art = await getTitleArt(s.tmdbId ?? 0, "series");
     for (const locale of locales) {
-      const url = libraryPoster(art.posterByLang, s.images, locale);
+      const url = cataloguePoster("series", art.posterByLang, s.images, locale, jellyfinBySonarr.get(s.id));
       if (isOptimizable(url)) urls.add(url);
     }
   }

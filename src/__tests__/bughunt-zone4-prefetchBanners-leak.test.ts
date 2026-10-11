@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
-// CHASSE AUX BUGS zone 4 — copie du montage de prefetchBanners.test.ts.
+// GARDE-FOU (chasse aux défauts du 11/10/2026) — une bannière suspendue par un film, revenue avec
+// une autre liste, rend les visuels de l ancienne. Montage copié de prefetchBanners.test.ts.
 // Les visuels des fiches de la bannière du téléphone, gardés décodés dès que sa liste est connue —
 // voir `keepSheetBanners` (Louis, 10/10/2026 : au premier lancement, une fiche ouverte depuis la
 // bannière s'ouvrait encore sur l'affiche en remplacement).
@@ -63,8 +64,8 @@ describe("keepSheetBanners après une suspension (un film)", () => {
     // Après le film, la bannière des reprises a changé (le film regardé en sort, un autre y entre).
     keepSheetBanners("films", ["https://img.test/c.jpg", "https://img.test/d.jpg"]);
     // Attendu (« une liste qui change rend ceux qui en sortent ») : seuls c et d restent gardés.
-    // Constaté : a et b restent référencés pour toujours — `before` a été effacé par la suspension,
-    // plus rien ne les rend. Un film = jusqu'à dix visuels 1280 px décodés de plus sur un iPhone.
+    // Constaté avant le correctif : a et b restaient référencés pour toujours — `before` a été effacé par la suspension,
+    // plus rien ne les rendait. Un film = jusqu'à dix visuels 1280 px décodés de plus sur un iPhone.
     expect(prefetchBannersForTests.kept().sort()).toEqual(["https://img.test/c.jpg", "https://img.test/d.jpg"]);
   });
 });

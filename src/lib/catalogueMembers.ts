@@ -30,6 +30,11 @@ export function matchSeries(series: SonarrSeries[], jellyfin: JellyfinItem[]) {
 export interface CatalogueMembers {
   movies: RadarrMovie[];
   series: SonarrSeries[];
+  /**
+   * L'élément Jellyfin rapproché de chaque série (par identifiant Sonarr) — vide si Jellyfin ne
+   * répond pas. Il donne l'affiche de repli d'une série (`cataloguePoster`), la même que le catalogue.
+   */
+  seriesJellyfin: Map<number, JellyfinItem>;
 }
 
 /**
@@ -49,8 +54,10 @@ export async function catalogueMembers(): Promise<CatalogueMembers> {
     attempt(() => cachedJellyfinMoviesAdmin()),
     attempt(() => cachedJellyfinSeriesAdmin()),
   ]);
+  const matchedSeries = jfSeries ? matchSeries(series, jfSeries) : null;
   return {
     movies: jfMovies ? matchMovies(movies, jfMovies).map((x) => x.m) : movies.filter((m) => m.hasFile),
-    series: jfSeries ? matchSeries(series, jfSeries).map((x) => x.s) : series.filter((s) => (s.statistics?.episodeFileCount ?? 0) > 0),
+    series: matchedSeries ? matchedSeries.map((x) => x.s) : series.filter((s) => (s.statistics?.episodeFileCount ?? 0) > 0),
+    seriesJellyfin: new Map((matchedSeries ?? []).map((x) => [x.s.id, x.jfItem])),
   };
 }

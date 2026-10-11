@@ -6,7 +6,7 @@ import { migrateFavoritesToWatchlist } from "@/lib/migrateFavorites";
 import { cachedJellyfinPlayed, cachedJellyfinFavorites, getProviderIdCI } from "@/lib/server-cache";
 import { playableLibrary } from "@/lib/playerLibrary";
 import { getPlayerRequests, type PlayerRequest } from "@/lib/playerRequests";
-import { posterUrl, libraryPoster } from "@/lib/images";
+import { cataloguePoster } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
 import { getTitleNames } from "@/lib/titleNames";
 import { localeOf } from "@/lib/i18n";
@@ -130,16 +130,27 @@ export async function GET(req: NextRequest) {
     // pouvoir emporter la liste elle-même. C'est la règle de CLAUDE.md sur les vérifications qui
     // tournent sur le chemin d'erreur d'autrui — ici, on retombe simplement sur l'affiche de
     // Radarr, c'est-à-dire sur ce qui s'affichait hier.
-    const artByTmdb = await Promise.all(
-      local.map(async (w) => {
-        const entry = w.mediaType === "series" ? seriesLibrary.get(w.tmdbId) : movieLibrary.get(w.tmdbId);
-        if (!entry) return [w.tmdbId, undefined] as const;
-        const art = await getTitleArt(w.tmdbId, w.mediaType === "series" ? "series" : "movie");
-        return [w.tmdbId, art.posterByLang] as const;
-      })
+    // « Vus » passe par la même règle (11/10/2026) : il ne recevait pas les affiches localisées et
+    // montrait l'affiche d'origine de presque tous les films. Clé par type ET identifiant : un film
+    // et une série peuvent partager un identifiant TMDB.
+    const watched = watchedRows(userId);
+    const artKey = (type: "movie" | "series", tmdbId: number) => `${type}:${tmdbId}`;
+    const owned = [
+      ...local.map((w) => ({ type: w.mediaType === "series" ? ("series" as const) : ("movie" as const), tmdbId: w.tmdbId })),
+      ...watched.map((row) => ({ type: row.mediaType, tmdbId: row.tmdbId })),
+    ].filter(({ type, tmdbId }) => (type === "series" ? seriesLibrary : movieLibrary).has(tmdbId));
+    const artByTitle = await Promise.all(
+      owned.map(async ({ type, tmdbId }) => [artKey(type, tmdbId), (await getTitleArt(tmdbId, type)).posterByLang] as const)
     )
       .then((rows) => new Map(rows))
-      .catch(() => new Map<number, Partial<Record<string, string>> | undefined>());
+      .catch(() => new Map<string, Partial<Record<string, string>> | undefined>());
+    /** L'affiche d'un titre qu'on possède : exactement celle du catalogue (`cataloguePoster`). */
+    const ownedPoster = (type: "movie" | "series", tmdbId: number): string | null => {
+      const entry = type === "series" ? seriesLibrary.get(tmdbId) : movieLibrary.get(tmdbId);
+      if (!entry) return null;
+      const jellyfinItem = type === "series" ? lib.seriesJellyfin?.get(tmdbId) : null;
+      return cataloguePoster(type, artByTitle.get(artKey(type, tmdbId)), entry.images, locale, jellyfinItem);
+    };
     const fromWatchlist = (statuses: string[]): PlayerListItem[] =>
       local
         .filter((w) => statuses.includes(w.status))
@@ -155,9 +166,7 @@ export async function GET(req: NextRequest) {
             // L'affiche de la bibliothèque quand on l'a : c'est celle que le reste de l'interface
             // montre, et elle est à jour. Celle enregistrée dans la liste sert de repli — pour un
             // titre qu'on ne possède pas, c'est la seule.
-            poster:
-              (entry ? libraryPoster(artByTmdb.get(w.tmdbId), entry.images, locale) : null) ??
-              watchlistPoster(w.posterPath),
+            poster: ownedPoster(w.mediaType === "series" ? "series" : "movie", w.tmdbId) ?? watchlistPoster(w.posterPath),
             libraryId: entry?.id ?? null,
             jellyfinId: null,
             addedAt: w.updatedAt,
@@ -178,7 +187,7 @@ export async function GET(req: NextRequest) {
           title: getTitleNames(row.tmdbId, type)[locale] || row.title,
           year: row.year,
           poster:
-            (entry ? libraryPoster(undefined, entry.images, locale) : null) ??
+            ownedPoster(type, row.tmdbId) ??
             (jellyfinId ? `/api/jellyfin/image?itemId=${jellyfinId}` : null) ??
             watchlistPoster(row.posterPath),
           libraryId: entry?.id ?? null,
@@ -195,7 +204,7 @@ export async function GET(req: NextRequest) {
       // ramenés à « À voir » par `migrate()`, où ils apparaissaient déjà ici — mais pas dans la
       // rangée « Ma liste » du cinéma, qui ne lisait que to_watch.
       toWatch: fromWatchlist(["to_watch"]),
-      watched: fromWatched(watchedRows(userId)),
+      watched: fromWatched(watched),
     } satisfies PlayerListsPayload;
   }, "player-lists");
 }

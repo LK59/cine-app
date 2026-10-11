@@ -81,6 +81,24 @@ export function libraryPoster(
 }
 
 /**
+ * L'affiche qu'un titre de la bibliothèque montre **partout** — catalogue, « Ma liste », « Vus », et
+ * les affiches que le serveur prépare d'avance (`posterPrewarm`). Une seule règle, et non plus trois :
+ * le 11/10/2026, « Vus » montrait l'affiche d'origine de 38 films sur 40 (l'appel ne passait pas les
+ * affiches localisées) et « Ma liste » l'original de TheTVDB pour les séries (sans le repli Jellyfin),
+ * quand le catalogue d'à côté montrait l'affiche française et celle de Jellyfin. Pour une série,
+ * l'élément Jellyfin rapproché donne le repli (`jellyfinPoster`) ; pour un film, il n'en sert pas.
+ */
+export function cataloguePoster(
+  kind: "movie" | "series",
+  posterByLang: Partial<Record<string, string>> | undefined,
+  images: RadarrSonarrImage[] | undefined,
+  locale: string,
+  jellyfinItem?: { Id: string; ImageTags?: { Primary?: string } } | null
+): string | null {
+  return libraryPoster(posterByLang, images, locale, kind === "series" ? jellyfinPoster(jellyfinItem ?? undefined) : null);
+}
+
+/**
  * L'affiche de Jellyfin redimensionnée, le repli d'une série entre celle de TMDB dans la langue de
  * qui regarde et l'original de TheTVDB que donne Sonarr — `libraryPoster(…, orElse)` (10/10/2026).
  *

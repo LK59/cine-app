@@ -5,7 +5,7 @@ import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
 import { cachedMovies, cachedJellyfinMoviesAdmin } from "@/lib/server-cache";
 import { matchMovies } from "@/lib/catalogueMembers";
-import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
+import { posterUrl, backdropUrl, tmdbResize, cataloguePoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt, logoForLocale } from "@/lib/title-art";
 import { catalogueExtras, getTitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
@@ -129,7 +129,7 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string, locale: Loc
     ...(m.originalTitle && m.originalTitle !== title && m.originalTitle !== aka ? { originalTitle: m.originalTitle } : {}),
     year: m.year,
     // L'affiche dans la langue de qui regarde, celle de Radarr sinon. Voir `libraryPoster`.
-    posterUrl: libraryPoster(art.posterByLang, m.images, locale),
+    posterUrl: cataloguePoster("movie", art.posterByLang, m.images, locale),
     backdropUrl: tmdbResize(backdropUrl(m.images, "full"), "w1280"),
     // Le logo de la langue du titre affiché — voir `logoForLocale` (DECISIONS.md §58).
     logoUrl: logoForLocale(art, names, locale),

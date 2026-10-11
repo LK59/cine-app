@@ -13,7 +13,8 @@ import {
   type RetryEntry,
 } from "@/lib/imageRetry";
 
-// CHASSE AUX BUGS zone 4 — un essai « en vol » qui ne se termine jamais garde sa place pour toujours.
+// GARDE-FOU (chasse aux défauts du 11/10/2026) — un essai « en vol » qui ne se termine jamais ne
+// garde pas sa place : il est compté comme un échec au bout de `RETRY_TIMEOUT_MS`. Le défaut :
 //
 // `PosterImage` réessaie en remontant son `<Image>` (mode `element`), et next/image est en
 // `loading="lazy"` par défaut (seules `priority`/`eager` changent cela). Une affiche hors de l'écran
