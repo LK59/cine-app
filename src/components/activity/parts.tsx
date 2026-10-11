@@ -227,6 +227,9 @@ export function SeanceFlags({ s }: { s: Seance }) {
   if (s.stop?.why === "lost") flags.push({ label: t("activity.flags.lost"), tone: "bg-slate-500/20 text-slate-300" });
   if (s.player === "serveur") flags.push({ label: t("activity.flags.server"), tone: "bg-violet-500/15 text-violet-300" });
   if (s.onTv) flags.push({ label: t("activity.flags.tv"), tone: "bg-violet-500/15 text-violet-300" });
+  // Le téléviseur nommé quand ce n'est pas AirPlay (DECISIONS.md §64) — absent des séances d'avant.
+  if (s.onTv && s.castTarget === "chromecast") flags.push({ label: t("activity.flags.chromecast"), tone: "bg-violet-500/15 text-violet-300" });
+  if (s.serverRelay) flags.push({ label: t("activity.flags.serverRelay"), tone: "bg-slate-500/20 text-slate-300" });
   if (!flags.length) return null;
   return (
     <span className="flex flex-wrap gap-1">

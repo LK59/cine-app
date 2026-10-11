@@ -44,8 +44,13 @@ async function resumeThresholds(): Promise<{ min: number; max: number }> {
 
 type Kind = "playing" | "progress" | "stop";
 
-/** Ce que Jellyfin aurait retenu de ce rapport, écrit avec la clé d'administration. */
-async function saveAsAdmin(userId: string, itemId: string, kind: Kind, positionTicks: number): Promise<string> {
+/**
+ * Ce que Jellyfin aurait retenu de ce rapport, écrit avec la clé d'administration.
+ *
+ * Deux appelants : le filet d'un jeton refusé (ci-dessous), et le relais du serveur pendant une
+ * diffusion dont la page s'est tue (`castProgress.ts`) — même règle de seuils pour l'un et l'autre.
+ */
+export async function saveAsAdmin(userId: string, itemId: string, kind: Kind, positionTicks: number): Promise<string> {
   // Un démarrage ne porte rien à garder : la position suivra avec le premier rapport de progression.
   if (kind === "playing") return "rien à garder";
   if (kind === "progress") {

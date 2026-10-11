@@ -188,6 +188,91 @@ export function buildDeviceProfile(
 }
 
 /**
+ * Où part un flux diffusé. AirPlay garde le profil de la page ({@link buildDeviceProfile} avec
+ * `subtitlesInStream`), qui n'a pas bougé ; le Chromecast a le sien ({@link buildChromecastProfile}).
+ */
+export type CastTarget = "chromecast";
+
+/** La seule valeur reconnue, lue telle quelle dans le corps d'une requête — rien d'autre ne passe. */
+export function castTargetOf(value: unknown): CastTarget | null {
+  return value === "chromecast" ? "chromecast" : null;
+}
+
+/** Les sons qu'un Chromecast prend tels quels — voir {@link buildChromecastProfile}. */
+const CHROMECAST_AUDIO = "aac,ac3,eac3";
+/** Les sous-titres en images, que seul le serveur peut afficher, en les incrustant. */
+const CHROMECAST_IMAGE_SUBTITLES = ["pgssub", "dvdsub", "dvbsub", "xsub"];
+
+/**
+ * Ce que le Chromecast reçoit — DECISIONS.md §64.
+ *
+ * **Prudent, exprès.** La page qui lance la diffusion ne sait rien du téléviseur : le kit de
+ * Google donne son nom, pas ses décodeurs, et un Chromecast de 2018 ne lit ni le HEVC ni le HDR
+ * qu'un Chromecast avec Google TV prend. Le profil annonce donc ce que tous les modèles lisent :
+ * H.264 jusqu'au niveau 4.2, 8 bits, en SDR, 1080p au plus. Un fichier HEVC, 4K ou HDR est
+ * transcodé par Jellyfin — plus de travail pour le serveur, jamais un écran noir sur la télé.
+ * Annoncer davantage attendra une détection fiable du modèle (un récepteur à nous).
+ *
+ * Le son : AAC (stéréo ou 5.1), AC-3 et E-AC3, copiés tels quels — le Chromecast les décode ou les
+ * passe au téléviseur. Jamais DTS, TrueHD ni FLAC : Jellyfin les ré-encode.
+ *
+ * Les sous-titres : en texte, servis à côté en WebVTT (`External`), que le récepteur charge comme
+ * des pistes qu'on allume sans relancer le flux ; en images (PGS, VobSub), incrustés par le serveur
+ * (`Encode`) quand on les choisit, aucun récepteur ne sachant les dessiner. Au contraire d'AirPlay,
+ * qui refuse la diffusion plutôt que de ré-encoder une image copiée (`castRefusalFor`) : ici l'image
+ * est souvent transcodée de toute façon, et l'incrustation ne coûte rien de plus.
+ *
+ * Conteneur fMP4, comme pour la page : c'est ce que Jellyfin produit le plus sûrement en HLS. Le
+ * récepteur en est prévenu par la requête de chargement (`hlsSegmentFormat`, `chromecast/media.ts`).
+ */
+export function buildChromecastProfile(maxBitrate: number, options: Pick<DeviceProfileOptions, "reencodeAudio"> = {}): JellyfinDeviceProfile {
+  const audio = options.reencodeAudio ? "aac" : CHROMECAST_AUDIO;
+  return {
+    MaxStreamingBitrate: maxBitrate,
+    DirectPlayProfiles: [{ Container: "mp4,m4v", Type: "Video", VideoCodec: "h264", AudioCodec: audio }],
+    TranscodingProfiles: [
+      {
+        Container: "mp4",
+        Type: "Video",
+        VideoCodec: "h264",
+        AudioCodec: audio,
+        Protocol: "hls",
+        Context: "Streaming",
+        MaxAudioChannels: options.reencodeAudio === "stereo" ? "2" : options.reencodeAudio === "surround" ? "5" : "6",
+      },
+    ],
+    CodecProfiles: [
+      {
+        Type: "Video",
+        Codec: "h264",
+        Conditions: [
+          { Condition: "EqualsAny", Property: "VideoRangeType", Value: "SDR", IsRequired: false },
+          { Condition: "LessThanEqual", Property: "VideoBitDepth", Value: "8", IsRequired: false },
+          { Condition: "LessThanEqual", Property: "VideoLevel", Value: "42", IsRequired: false },
+          { Condition: "EqualsAny", Property: "VideoProfile", Value: "high|main|baseline|constrained baseline", IsRequired: false },
+          { Condition: "LessThanEqual", Property: "Width", Value: "1920", IsRequired: false },
+          { Condition: "LessThanEqual", Property: "Height", Value: "1080", IsRequired: false },
+        ],
+      },
+      // La même règle que le profil de la page — voir `reencodeAudio`.
+      ...(options.reencodeAudio
+        ? audio.split(",").map((codec) => ({
+            Type: "VideoAudio" as const,
+            Codec: codec,
+            Conditions: [
+              { Condition: "LessThanEqual", Property: "AudioChannels", Value: options.reencodeAudio === "stereo" ? "2" : "5", IsRequired: true },
+            ],
+          }))
+        : []),
+    ],
+    SubtitleProfiles: [
+      { Format: "vtt", Method: "External" },
+      ...CHROMECAST_IMAGE_SUBTITLES.map((Format) => ({ Format, Method: "Encode" })),
+    ],
+  };
+}
+
+/**
  * Un son AAC que Jellyfin copierait et que le navigateur refuserait : plus de deux canaux et aucune
  * disposition nommée.
  *

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward } from "lucide-react";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
+import { formatTime } from "@/lib/playerClock";
 import { createLiquidPress, prefersReducedMotion } from "@/lib/liquidGlass/liquid";
 import { LiquidMenu } from "@/components/player/LiquidMenu";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
@@ -71,6 +72,13 @@ interface PlayerControlsProps {
    * lecteur serveur — le sélecteur s'ouvre comme avant, à l'identique.
    */
   onCastRequest?: () => void;
+  /**
+   * Le bouton Chromecast (DECISIONS.md §64), quand l'hôte peut le proposer : un navigateur qui sait
+   * émettre, un compte qui y a droit, au moins un récepteur sur le réseau. `onRequest` est appelé
+   * **dans le geste** : Chrome n'ouvre sa liste des récepteurs que pendant un appui. Absent, rien de
+   * ce qui suit ne change.
+   */
+  chromecast?: { active: boolean; onRequest: () => void };
   /**
    * La sortie, quand cette séance n'existe que pour diffuser.
    *
@@ -235,16 +243,6 @@ function SkipGlyph({ direction }: { direction: "back" | "forward" }) {
   );
 }
 
-function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
-  const ss = String(s).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
-
 export function PlayerControls({
   videoRef,
   containerRef,
@@ -271,6 +269,7 @@ export function PlayerControls({
   nextEpisode,
   onAdvance,
   onCastRequest,
+  chromecast,
   onCastReturn,
   castActive,
   onSeekRequest,
@@ -1687,7 +1686,27 @@ export function PlayerControls({
                 inert={castConfirm}
                 aria-hidden={castConfirm || undefined}
               >
-                {castSupported && (
+                {chromecast && (
+                  <button
+                    data-player-nav="chromecast"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Dans le geste même : la liste des récepteurs de Chrome ne s'ouvre qu'ainsi.
+                      chromecast.onRequest();
+                    }}
+                    aria-label={t("player.chromecast.button")}
+                    title={t("player.chromecast.button")}
+                    data-active={chromecast.active ? "" : undefined}
+                    className="player-pill-btn"
+                  >
+                    <Cast size={22} />
+                  </button>
+                )}
+                {/* Le bouton de diffusion du navigateur (Remote Playback) se tait quand celui du
+                    Chromecast est là : deux icônes identiques pour deux chemins, l'un des deux ne
+                    menant nulle part sur un flux MediaSource. AirPlay n'est jamais concerné — il
+                    n'existe pas là où le Chromecast se propose. */}
+                {castSupported && !(chromecast && castKind === "remote") && (
                   <button
                     data-player-nav="cast"
                     onClick={(e) => {

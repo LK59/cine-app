@@ -81,6 +81,18 @@ export interface Seance {
    * comme une lecture serveur sur téléphone (24/09/2026).
    */
   onTv: boolean;
+  /**
+   * Le téléviseur, quand ce n'est pas AirPlay : `"chromecast"` (lignes marquées `target`, DECISIONS.md
+   * §64). `null` pour AirPlay et pour toute séance sans diffusion.
+   */
+  castTarget: string | null;
+  /**
+   * Le serveur a pris le relais de la reprise pendant une diffusion, la page s'étant tue (lignes
+   * `serverRelay`, `castProgress.ts`, DECISIONS.md §64). Ces lignes n'ont pas d'identifiant de
+   * séance — le serveur ne le connaît pas — et sont rattachées à la dernière séance du compte et du
+   * titre ouverte avant elles.
+   */
+  serverRelay: boolean;
   errors: number;
   /** Les motifs des incidents, dans l'ordre — de quoi dire « pourquoi » sans ouvrir la séance. */
   incidents: { kind: string; t: number; reason: string }[];
@@ -140,6 +152,8 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     fallbacks: 0,
     casts: 0,
     onTv: false,
+    castTarget: null,
+    serverRelay: false,
     errors: 0,
     incidents: [],
     restarts: [],
@@ -228,6 +242,7 @@ function absorb(s: Seance, r: LogRecord): void {
       break;
     case "cast":
       s.onTv = true;
+      if (str(r.target)) s.castTarget = str(r.target);
       break;
     case "error":
       s.errors += 1;
@@ -291,6 +306,22 @@ export function buildSeances(records: LogRecord[]): Seance[] {
   for (const r of records) {
     if (r.bench) continue;
     const session = str(r.session);
+    // Le relais du serveur n'ouvre pas de séance : il en prolonge une (voir `Seance.serverRelay`).
+    // Sans séance à qui le rattacher — journal tourné entre-temps —, il est laissé de côté.
+    if (r.serverRelay === true && !session) {
+      const user = str(r.user);
+      const itemId = str(r.itemId);
+      const t = lineTime(r);
+      let owner: Seance | null = null;
+      for (const s of byId.values()) {
+        if (s.user === user && s.itemId === itemId && s.start <= t && (!owner || s.start > owner.start)) owner = s;
+      }
+      if (owner) {
+        owner.serverRelay = true;
+        owner.end = Math.max(owner.end, t);
+      }
+      continue;
+    }
     if (session) {
       let s = byId.get(session);
       if (!s) byId.set(session, (s = blank(session, false, r)));

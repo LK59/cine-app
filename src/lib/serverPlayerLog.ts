@@ -103,6 +103,12 @@ export interface ServerPlayerContext {
    */
   session?: string;
   agent?: string;
+  /**
+   * Vers quoi l'on diffuse, quand ce n'est pas AirPlay : `"chromecast"` (DECISIONS.md §64). Absent
+   * des lignes d'AirPlay, qui restent exactement ce qu'elles étaient ; la page Activité le lit pour
+   * nommer le téléviseur.
+   */
+  target?: "chromecast";
 }
 
 /** Le lecteur serveur a obtenu son flux et le pose sur l'élément. */
@@ -260,5 +266,6 @@ function base(ctx: ServerPlayerContext): Record<string, unknown> {
     ...(ctx.bench ? { bench: ctx.bench } : {}),
     ...(ctx.session ? { session: ctx.session } : {}),
     ...(ctx.agent ? { agent: ctx.agent } : {}),
+    ...(ctx.target ? { target: ctx.target } : {}),
   };
 }

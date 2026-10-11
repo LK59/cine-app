@@ -258,7 +258,9 @@
       "restart": "{n} relance|{n} relances",
       "lost": "fin perdue",
       "server": "lecteur serveur",
-      "tv": "sur un téléviseur"
+      "tv": "sur un téléviseur",
+      "chromecast": "Chromecast",
+      "serverRelay": "reprise gardée par le serveur"
     },
     "seance": {
       "watched": "{d} regardé",
@@ -1908,6 +1910,17 @@
       "warning": "Arrêt dans {n} s",
       "continue": "Continuer"
     },
+    "chromecast": {
+      "button": "Diffuser sur un Chromecast",
+      "playingOn": "Lecture sur {device}",
+      "tv": "le téléviseur",
+      "loading": "Le téléviseur prépare le film…",
+      "failed": "Le téléviseur n'a pas pu lire ce film.",
+      "retry": "Réessayer",
+      "resumeHere": "Reprendre sur cet appareil",
+      "expand": "Agrandir",
+      "position": "Position dans le film"
+    },
     "castConfirm": {
       "airplay": "Passer sur AirPlay",
       "remote": "Passer sur le téléviseur",
@@ -2540,6 +2553,8 @@
       "PLAYER_ENABLED": "Lecteur intégré",
       "PLAYER_SERVER_FALLBACK": "Relais vers Jellyfin pour les fichiers que le navigateur ne lit pas",
       "PLAYER_AUTO_FRAME": "Agrandir l'image au-dessus des bandes noires",
+      "CAST_RECEIVER_APP_ID": "Récepteur Chromecast (identifiant d'application, vide = celui de Google)",
+      "CHROMECAST_FOR_EVERYONE": "Diffusion Chromecast pour tous les comptes (sinon administrateurs seulement)",
       "HOME_BROWSE_BUTTON": "Bouton « Tous les films / séries » en haut de l'accueil",
       "HOME_CONTINUE_HERO": "Afficher les reprises dans la bannière d'accueil",
       "NEW_ACCOUNT_BLOCKED_TAGS": "Tags bloqués des nouveaux comptes (séparés par des virgules)",

@@ -4,7 +4,9 @@ import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId, isStreamPath, isUnderJellyfinPrefix } from "@/lib/jellyfinPath";
-import { castPassFor, withCastPass, CAST_TOKEN_PARAM } from "@/lib/castToken";
+import { castPassDetailsFor, castPreflightFor, withCastPass, CAST_TOKEN_PARAM, type CastPass } from "@/lib/castToken";
+import { castProgressRelay } from "@/lib/castProgress";
+import { castPreflightResponse, withCastCors } from "@/lib/castCors";
 import { stripAccessToken } from "@/lib/stripAccessToken";
 import { castMasterPlaylist } from "@/lib/castMaster";
 import { fixVttTimestampMap } from "@/lib/vttTimestampMap";
@@ -55,10 +57,33 @@ function withoutCastToken(search: string): string {
   return rest ? `?${rest}` : "";
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ itemId: string; path: string[] }> }
-) {
+type StreamParams = { params: Promise<{ itemId: string; path: string[] }> };
+
+/**
+ * Le laissez-passer est vérifié une fois, ici, avant tout le reste : il décide de l'accès sans
+ * cookie (plus bas) et des en-têtes CORS de la réponse, quelle qu'elle soit — un refus lisible par
+ * le récepteur Chromecast vaut mieux qu'une réponse qu'il jette (DECISIONS.md §64, `castCors.ts`).
+ * Sans laissez-passer, la réponse sort exactement telle qu'avant.
+ */
+export async function GET(req: NextRequest, context: StreamParams) {
+  const pass = await castPassDetailsFor(req);
+  const res = await serveStream(req, context, pass);
+  return pass ? withCastCors(res) : res;
+}
+
+/**
+ * La question préalable du récepteur Chromecast, pour une adresse munie de son laissez-passer.
+ * Sans lui, refusée : rien d'autre que ce titre, en lecture, ne s'ouvre à un autre domaine.
+ */
+export async function OPTIONS(req: NextRequest, { params }: StreamParams) {
+  const { itemId, path } = await params;
+  if (!isJellyfinId(itemId) || !isStreamPath(path)) return new NextResponse(null, { status: 400 });
+  if (!(await castPreflightFor(req))) return new NextResponse(null, { status: 403 });
+  return castPreflightResponse();
+}
+
+async function serveStream(req: NextRequest, { params }: StreamParams, pass: CastPass | null) {
+  const castPass = pass?.user ?? null;
   if (!config.player.enabled) return new NextResponse(null, { status: 404 });
   const receivedAt = performance.now();
 
@@ -70,8 +95,7 @@ export async function GET(
   if (!isStreamPath(path)) return new NextResponse(null, { status: 400 });
 
   // Un téléviseur en diffusion n'a pas de cookie : son laissez-passer répond à sa place. Même
-  // fonction que le proxy, jamais une seconde formulation — voir `castPassFor`.
-  const castPass = await castPassFor(req);
+  // fonction que le proxy, jamais une seconde formulation — voir `castPassFor` (posée par `GET`).
   if (!castPass) {
     const token = req.cookies.get(SESSION_COOKIE)?.value;
     const session = await verifySessionFull(token);
@@ -238,6 +262,11 @@ export async function GET(
     // full movie, so a rewind past hls.js's in-memory buffer replays from the
     // browser's HTTP cache instead of re-hitting Jellyfin. `private`, like the file above: only the
     // browser's cache may keep it.
+    //
+    // Un segment demandé par un téléviseur : sa position est notée, et rapportée à Jellyfin si la
+    // page qui a lancé la diffusion s'est tue (`castProgress.ts`, DECISIONS.md §64). Seulement avec
+    // un laissez-passer — une lecture dans la page ne passe jamais par là.
+    if (pass) castProgressRelay().noteCastSegment({ jfId: pass.jfId, user: pass.user, itemId, restPath, search: req.nextUrl.searchParams });
     return new NextResponse(res.body, {
       headers: { "Content-Type": contentType, "Cache-Control": "private, max-age=21600, immutable" },
     });

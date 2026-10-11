@@ -6,6 +6,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { reportPlayback } from "@/lib/playbackReport";
+import { castProgressRelay } from "@/lib/castProgress";
 import { playbackDevice } from "@/lib/playbackDevice";
 
 export async function POST(req: NextRequest) {
@@ -32,6 +33,8 @@ export async function POST(req: NextRequest) {
   }
 
   const { jfId, jfToken } = session;
+  // La page parle pour ce titre : le relais du serveur se tait (`castProgress.ts`, DECISIONS.md §64).
+  castProgressRelay().notePageReport(jfId, itemId);
   // L'appareil de la connexion et son vrai nom, plus un appareil fantôme par compte — `playbackDevice.ts`.
   const device = playbackDevice(req, session.jti);
   return reportPlayback({ ...session, jfId }, "stop", itemId, positionTicks, () =>

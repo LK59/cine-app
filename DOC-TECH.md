@@ -108,6 +108,29 @@ draws its own subtitles and never showed the offset. **Choosing subtitles from t
 reach the television yet**: the phone's menu drives its own `<track>` elements, the television
 reads the stream's subtitle renditions — pick them on the television meanwhile.
 
+**A Chromecast is driven, not fed** (DECISIONS §64). On Chrome and Edge (desktop, Android) the
+native player offers a Chromecast button — administrators by default, everyone when
+`CHROMECAST_FOR_EVERYONE` is on. Google's sender kit is loaded on demand only there
+(`src/lib/chromecast/framework.ts`). Once a receiver is picked in Chrome's list, the host hands over
+with `cast: true, castTarget: "chromecast"`, and `PlayerHost` mounts `ChromecastPlayer` instead of
+the server player: a remote control. The receiver fetches the signed `castUrl` itself; the stream is
+negotiated with a cautious profile of its own (`buildChromecastProfile`: H.264 ≤ 4.2, 8-bit SDR,
+1080p, AAC/AC-3/E-AC3 copied, text subtitles side-loaded as WebVTT, image subtitles burned in) —
+the sender cannot tell the receiver's model. The stream and subtitle routes answer CORS (`*`, no
+credentials) only to a request carrying a valid cast pass, `OPTIONS` preflight included
+(`castCors.ts`); a page with its cookie keeps exactly its former headers. An audio change
+renegotiates at the same position; a text subtitle is switched on the receiver without a reload.
+The receiver application is Google's Default Media Receiver unless `CAST_RECEIVER_APP_ID` names
+one an install registered itself.
+
+**When the page goes quiet, the server keeps the resume point** — Chromecast and AirPlay alike
+(`castProgress.ts`). Each HLS segment served to a cast pass carries its position (`runtimeTicks`,
+written by Jellyfin); minus 30 s of receiver read-ahead, it is saved for that account
+(`saveAsAdmin`) when the page has sent nothing for that title in the last minute, at most every
+30 s; after 90 s without a segment, the stop is saved at the last position and Jellyfin applies its
+watched threshold. Never without a cast pass: the native and in-page server players never go
+through it.
+
 **The native path is nearly free.** Matroska samples are already exactly what MP4 wants — length-prefixed
 HEVC/AVC access units, AC-3/AAC frames as they are. Only the packaging differs. No pixel and no
 audio sample passes through JavaScript: the browser decodes in hardware, composes the image itself,
@@ -1138,3 +1161,6 @@ Everything is in `src/lib/webcodecs/` unless stated otherwise.
 | `trace.ts` | The timestamped account |
 | `src/lib/pictureFrame.ts`, `src/app/api/player/frame/[itemId]` | Where the picture sits in the frame, measured from trickplay thumbnails |
 | `src/lib/frameFit.ts` | The enlargement to the nearest screen edge, and its hook |
+| `src/lib/chromecast/` | Chromecast: who can send (`eligible`), Google's kit and the shared state (`framework`), the load request (`media`), the receiver application (`receiverAppId`), the hooks (`useChromecast`) |
+| `src/components/player/ChromecastPlayer.tsx` | The remote control a Chromecast handover mounts |
+| `src/lib/castCors.ts`, `src/lib/castProgress.ts` | CORS for a cast pass; the resume point kept by the server when the page goes quiet |

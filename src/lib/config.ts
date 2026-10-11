@@ -1,4 +1,5 @@
 import { readOverride } from "@/lib/settings/store";
+import { receiverAppIdOf } from "@/lib/chromecast/receiverAppId";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -115,6 +116,16 @@ export const config = {
     // needs trickplay images to exist; without them the picture is simply shown as it is.
     get autoFrame() {
       return optional("PLAYER_AUTO_FRAME", "true") === "true";
+    },
+    // L'application que le Chromecast ouvre (DECISIONS.md §64) : le récepteur de Google par défaut,
+    // ou celui qu'une installation a enregistré elle-même. Une valeur mal formée retombe sur le
+    // défaut — voir `receiverAppIdOf`.
+    get castReceiverAppId() {
+      return receiverAppIdOf(optional("CAST_RECEIVER_APP_ID"));
+    },
+    // Le bouton Chromecast pour tous les comptes, ou pour les administrateurs seulement (défaut).
+    get chromecastForEveryone() {
+      return optional("CHROMECAST_FOR_EVERYONE", "false") === "true";
     },
   },
   home: {

@@ -10,7 +10,7 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { stripAccessToken } from "@/lib/stripAccessToken";
-import { audioNeedsReencode, buildDeviceProfile, castRefusalFor, chosenAudioStream } from "@/lib/deviceProfile";
+import { audioNeedsReencode, buildChromecastProfile, buildDeviceProfile, castRefusalFor, castTargetOf, chosenAudioStream } from "@/lib/deviceProfile";
 import type { CodecSupport } from "@/lib/codecSupport";
 import { cachedMovies } from "@/lib/server-cache";
 import { originalLanguageCode } from "@/lib/originalLanguage";
@@ -120,7 +120,13 @@ export async function POST(req: NextRequest) {
    * absolue et porter son laissez-passer, puisque c'est le téléviseur qui ira la chercher, sans
    * notre cookie.
    */
-  const forCast = body?.forCast === true;
+  /**
+   * Vers un Chromecast (DECISIONS.md §64) : son propre profil, prudent, au lieu de celui de la page
+   * — `buildChromecastProfile`. Absent, tout ce qui suit est exactement ce qu'il était, AirPlay
+   * compris. Un Chromecast est toujours une diffusion.
+   */
+  const castTarget = castTargetOf(body?.castTarget);
+  const forCast = body?.forCast === true || castTarget !== null;
   /**
    * Une lecture du banc d'essai : rien n'est annoncé à Jellyfin.
    *
@@ -160,7 +166,9 @@ export async function POST(req: NextRequest) {
         audioStreamIndex,
         subtitleStreamIndex,
         startTicks,
-        deviceProfile: buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast, reencodeAudio }),
+        deviceProfile: castTarget
+          ? buildChromecastProfile(maxBitrate, { reencodeAudio })
+          : buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast, reencodeAudio }),
       });
     let info = await negotiate(forceAudioTranscode ? "stereo" : undefined);
     // Un son que Jellyfin copierait et que le navigateur refuserait — l'AAC à PCE, voir
@@ -179,7 +187,9 @@ export async function POST(req: NextRequest) {
     // Refusé avant d'avoir lancé quoi que ce soit : un sous-titre image forcerait Jellyfin à
     // ré-encoder la vidéo pour l'incruster, et la diffusion perdrait la seule chose qui la rend
     // acceptable — l'image copiée telle quelle. Le dire vaut mieux que le faire en silence.
-    if (forCast) {
+    // Pas pour un Chromecast : son image est souvent transcodée de toute façon, et il reçoit le
+    // sous-titre en images incrusté — voir `buildChromecastProfile`.
+    if (forCast && !castTarget) {
       const refusal = castRefusalFor(source.MediaStreams, subtitleStreamIndex);
       if (refusal) return NextResponse.json({ error: "cast-refused", code: refusal }, { status: 409 });
     }
@@ -277,8 +287,8 @@ export async function POST(req: NextRequest) {
     // vidéo — jamais la lecture elle-même (voir `castUrl`).
     // Lié à la session qui le demande : il meurt avec elle — voir `CastClaims.s`.
     const castPass = forCast
-      ? await signCastToken(itemId, session.u, Date.now(), session.jti)
-      : await signCastToken(itemId, session.u, Date.now(), session.jti).catch(() => null);
+      ? await signCastToken(itemId, session.u, Date.now(), session.jti, session.jfId)
+      : await signCastToken(itemId, session.u, Date.now(), session.jti, session.jfId).catch(() => null);
     /**
      * Les **faits** des pistes, et non une étiquette déjà écrite.
      *
@@ -301,6 +311,10 @@ export async function POST(req: NextRequest) {
         isForced: s.IsForced ?? false,
         isHearingImpaired: s.IsHearingImpaired ?? false,
         isExternal: s.IsExternal ?? false,
+        // Pour un Chromecast seulement : une piste texte s'allume sur le récepteur sans relancer le
+        // flux, une piste en images doit être incrustée par le serveur — voir `ChromecastPlayer`.
+        // Absent ailleurs, pour que la réponse des autres lecteurs reste ce qu'elle était.
+        ...(castTarget ? { isText: s.IsTextSubtitleStream ?? null } : {}),
         url:
           `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${source.Id}&index=${s.Index}` +
           (castPass ? `&${CAST_TOKEN_PARAM}=${encodeURIComponent(castPass)}` : ""),

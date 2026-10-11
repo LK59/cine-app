@@ -37,6 +37,8 @@ import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import type { StableTakeover } from "@/lib/useStableFallback";
+import { useChromecast, useChromecastAllowed } from "@/lib/chromecast/useChromecast";
+import { chromecastSnapshot, requestChromecastSession } from "@/lib/chromecast/framework";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
@@ -1052,6 +1054,29 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     takeoverNowRef.current = takeoverNow;
   }, [takeoverNow]);
+  /**
+   * Le Chromecast (DECISIONS.md §64) : proposé seulement s'il y a un lecteur serveur pour préparer
+   * le flux (`serverFallback` connu et vrai — dans le doute, pas de bouton), hors banc d'essai, et
+   * pour un compte et un navigateur qui y ont droit (`useChromecastAllowed`). Ailleurs le kit de
+   * Google n'est jamais chargé et rien de ce lecteur ne change.
+   *
+   * Le récepteur choisi dans la liste de Chrome, la main passe comme pour AirPlay — `cast: true`,
+   * un choix et non un échec — mais à `ChromecastPlayer`, qui pilote le téléviseur (`castTarget`).
+   * Une session déjà ouverte (un autre onglet, un essai précédent) est reprise sans redemander.
+   */
+  const chromecastAllowed = useChromecastAllowed(serverFallback === true && !session.bench);
+  const chromecastState = useChromecast(chromecastAllowed);
+  const requestChromecast = useCallback(() => {
+    const handOver = () => fallToStable("diffusion demandée", { ...takeoverNow(), cast: true, castTarget: "chromecast" });
+    if (chromecastSnapshot().connected) {
+      handOver();
+      return;
+    }
+    void requestChromecastSession().then((answer) => {
+      if (answer.ok) handOver();
+      else if (answer.code !== "cancel") trace(`chromecast : session refusée — ${answer.code}`);
+    });
+  }, [fallToStable, takeoverNow]);
   /**
    * Où en est ce spectateur, et dans quelles langues il regarde — relu à chaque ouverture.
    *
@@ -2823,6 +2848,7 @@ export function ExperimentalPlayerHost({
                 ? undefined
                 : () => fallToStable("diffusion demandée", { ...takeoverNow(), cast: true })
             }
+            chromecast={chromecastAllowed && chromecastState.devices ? { active: chromecastState.connected, onRequest: requestChromecast } : undefined}
             currentAudioId={currentAudio}
             onChangeAudio={changeAudioTrack}
             subtitleTracks={subtitleChoices.map((track) => ({

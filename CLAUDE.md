@@ -111,6 +111,12 @@ was changing tracks — and its `stop` is a summary like the native one (`waits`
 `page` / `unmount`, and a copy kept on the device for iOS-killed pages (`why: "lost"`, same
 `unsentStop` mechanism). An HLS seek does not renegotiate, so it has no `start`; the activity page
 counts the stop's `seeks`, marks ladder rungs as incidents and viewer restarts apart.
+Since 2026-10-11 a Chromecast handover writes the same lines from `ChromecastPlayer` (the page is a
+remote control there, DECISIONS §64), marked `target: "chromecast"` with the receiver's `device` and,
+on a refused load, the Cast error `code`; AirPlay lines carry no `target`. And when a casting page
+goes quiet, the **server** keeps the resume point from the segments the television fetches
+(`castProgress.ts`) and says so with a `cast` line marked `serverRelay: true` — no `session`, the
+activity page attaches it to the account's latest session of that title.
 `data/logs/server.log` is its counterpart for the server's own errors, with the stack the console
 line omits: `docker logs` dies with the container, which is recreated on every deploy — several a
 day — so an error a viewer hit in the evening was gone before anyone went looking. Since
@@ -203,6 +209,12 @@ Grep the cinema's callers before gating a route), the refusal of any
 `x-session-expired: 1` header. **It is that header's only
 emitter** (with the one exception below): a bare 401 may come from an upstream service whose key
 is wrong, and only this header means the viewer's own session is gone.
+
+**The only accesses without a session are a television's** (`castToken.ts`): a `GET` on the stream
+or subtitle routes carrying a valid cast pass for that title (`castPassFor`), and since 2026-10-11 the
+CORS `OPTIONS` preflight a Chromecast receiver sends for the same address (`castPreflightFor`, answered
+by the route — DECISIONS §64). Responses served to a cast pass, and only those, carry
+`Access-Control-Allow-Origin: *` without credentials (`castCors.ts`).
 
 **Client addresses come from the connection** (DECISIONS §57). `server-boot/boot.mjs` wraps
 `http.createServer` and writes the socket's address into `x-cine-peer` on every request (overwriting

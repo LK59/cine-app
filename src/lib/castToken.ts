@@ -67,11 +67,25 @@ interface CastClaims {
    * Absent des jetons d'avant, qui expirent d'eux-mêmes.
    */
   s?: string;
+  /**
+   * L'identifiant Jellyfin du compte (11/10/2026, DECISIONS.md §64) : quand la page s'est tue
+   * pendant une diffusion, le serveur rapporte lui-même la position déduite des segments que le
+   * téléviseur demande (`castProgress.ts`), et c'est ce compte-là qui la reçoit. Un identifiant, pas
+   * un droit : il n'ouvre rien de plus que le titre signé. Absent des jetons d'avant : le serveur se
+   * tait alors, comme avant.
+   */
+  j?: string;
+}
+
+/** Ce qu'un laissez-passer valable dit de qui l'a demandé. */
+export interface CastPass {
+  user: string;
+  jfId: string | null;
 }
 
 /** Le laissez-passer pour ce titre, à coller dans l'adresse donnée au téléviseur. */
-export async function signCastToken(itemId: string, userId: string, now = Date.now(), sessionJti?: string): Promise<string> {
-  const claims: CastClaims = { i: itemId, u: userId, e: now + LIFETIME_MS, ...(sessionJti ? { s: sessionJti } : {}) };
+export async function signCastToken(itemId: string, userId: string, now = Date.now(), sessionJti?: string, jfId?: string): Promise<string> {
+  const claims: CastClaims = { i: itemId, u: userId, e: now + LIFETIME_MS, ...(sessionJti ? { s: sessionJti } : {}), ...(jfId ? { j: jfId } : {}) };
   const payload = base64url(new TextEncoder().encode(JSON.stringify(claims)));
   const signature = base64url(await crypto.subtle.sign("HMAC", await getKey(), new TextEncoder().encode(payload)));
   return `${payload}.${signature}`;
@@ -90,6 +104,16 @@ export async function verifyCastToken(
   now = Date.now(),
   sessionAlive: (jti: string) => boolean = (jti) => sessionDb.exists(jti)
 ): Promise<string | null> {
+  return (await verifyCastPass(token, itemId, now, sessionAlive))?.user ?? null;
+}
+
+/** La même vérification que {@link verifyCastToken}, qui rend aussi l'identifiant Jellyfin signé. */
+export async function verifyCastPass(
+  token: string | null | undefined,
+  itemId: string,
+  now = Date.now(),
+  sessionAlive: (jti: string) => boolean = (jti) => sessionDb.exists(jti)
+): Promise<CastPass | null> {
   if (!token) return null;
   try {
     const [payload, signature] = token.split(".");
@@ -112,7 +136,7 @@ export async function verifyCastToken(
     if (typeof claims.e !== "number" || claims.e <= now) return null;
     if (typeof claims.u !== "string" || !claims.u) return null;
     if (claims.s !== undefined && (typeof claims.s !== "string" || !sessionAlive(claims.s))) return null;
-    return claims.u;
+    return { user: claims.u, jfId: typeof claims.j === "string" && claims.j ? claims.j : null };
   } catch {
     return null;
   }
@@ -142,7 +166,36 @@ export async function castPassFor(req: {
   method: string;
   nextUrl: { pathname: string; searchParams: URLSearchParams };
 }): Promise<string | null> {
+  return (await castPassDetailsFor(req))?.user ?? null;
+}
+
+/** La même question que {@link castPassFor}, qui rend aussi l'identifiant Jellyfin signé. */
+export async function castPassDetailsFor(req: {
+  method: string;
+  nextUrl: { pathname: string; searchParams: URLSearchParams };
+}): Promise<CastPass | null> {
   if (req.method !== "GET") return null;
+  const itemId = castItemOf(req.nextUrl.pathname);
+  if (!itemId) return null;
+  return verifyCastPass(req.nextUrl.searchParams.get(CAST_TOKEN_PARAM), itemId);
+}
+
+/**
+ * La question préalable d'un récepteur Chromecast (CORS), munie d'un laissez-passer valable pour
+ * cette adresse — DECISIONS.md §64.
+ *
+ * Le récepteur de Google lit le flux depuis son propre domaine : avant un GET qui porte un en-tête
+ * hors liste blanche (une plage `Range`, selon sa version), le navigateur du téléviseur demande la
+ * permission par un `OPTIONS`. Un `OPTIONS` n'envoie jamais de cookie, et ne lit ni n'écrit rien :
+ * le laisser passer ne sert qu'à répondre « oui, ce titre, en lecture ». Mêmes bornes que
+ * {@link castPassFor} — le préfixe du flux, et un jeton qui nomme ce titre-là ; la réponse est
+ * écrite par la route (`castPreflightResponse`), jamais par le proxy.
+ */
+export async function castPreflightFor(req: {
+  method: string;
+  nextUrl: { pathname: string; searchParams: URLSearchParams };
+}): Promise<string | null> {
+  if (req.method !== "OPTIONS") return null;
   const itemId = castItemOf(req.nextUrl.pathname);
   if (!itemId) return null;
   return verifyCastToken(req.nextUrl.searchParams.get(CAST_TOKEN_PARAM), itemId);

@@ -2439,6 +2439,79 @@ l'original de TheTVDB, servi sans consigne de cache.
 
 Tests : `imageRetry.test.ts`, `imageRetry-components.test.tsx`, `jellyfin-image-etag.test.ts`.
 
+## 64. Le Chromecast : une télécommande, pas un lecteur — et la reprise gardée même quand la page se tait
+
+**Règle.** Sur Chrome et Edge (ordinateur, Android), le lecteur natif propose un bouton Chromecast à
+côté d'AirPlay — aux administrateurs par défaut, à tous les comptes quand l'installation l'ouvre
+(`CHROMECAST_FOR_EVERYONE`). Le récepteur choisi dans la liste de Chrome, la main passe comme pour
+AirPlay (`fallToStable("diffusion demandée", { …, cast: true, castTarget: "chromecast" })`) : un choix,
+pas un échec, donc un retour possible. Le relais est pris par `ChromecastPlayer`, qui ne lit rien : le
+récepteur va chercher lui-même le flux que Jellyfin prépare, à l'adresse signée du serveur (`castUrl`,
+laissez-passer de six heures, `castToken.ts`), et la page en est la télécommande — lecture/pause,
+saut, volume, pistes, « Reprendre sur cet appareil ».
+
+**Le flux.** Négocié avec son propre profil (`buildChromecastProfile`, `castTarget: "chromecast"` sur
+`/api/jellyfin/playback/start`) : H.264 jusqu'au niveau 4.2, 8 bits, SDR, 1080p ; AAC, AC-3, E-AC3
+copiés ; DTS, TrueHD, FLAC ré-encodés ; sous-titres texte servis à côté en WebVTT, en images
+incrustés. Prudent exprès : la page ne sait rien du modèle du téléviseur, et un écran noir est pire
+qu'un transcodage. Le profil d'AirPlay ne change pas (un test le fige), ni son refus des sous-titres en
+images. Le récepteur lit depuis le domaine de Google : la route du flux et celle des sous-titres
+répondent en CORS (`castCors.ts`, `*` sans identifiants) **seulement** à une requête munie d'un
+laissez-passer valable, question préalable `OPTIONS` comprise (`castPreflightFor`, laissée passer par
+le proxy). Une lecture dans la page garde ses en-têtes d'avant.
+
+**Les pistes.** Une piste son relance le flux à la même position (nouvelle négociation, comme
+AirPlay) ; un sous-titre texte s'allume sur le récepteur sans relance (`editTracksInfo`) ; un sous-titre
+en images relance, incrusté.
+
+**La reprise.** Rapportée à Jellyfin depuis la page avec le temps du récepteur (`usePlaybackSession`,
+comme les autres lecteurs). Et quand la page se tait — iPhone verrouillé, onglet fermé, ordinateur en
+veille — **le serveur prend le relais**, pour le Chromecast comme pour AirPlay (`castProgress.ts`) :
+chaque segment HLS servi à un laissez-passer porte sa position (`runtimeTicks`, écrit par Jellyfin),
+dont on retranche 30 s d'avance de tampon du récepteur (sous-estimer fait revoir quelques secondes,
+surestimer ferait sauter de la scène). Le serveur ne rapporte que si la page n'a rien rapporté pour ce
+titre et ce compte depuis une minute (`notePageReport`, appelé par `playing`/`progress`/`stop`), au plus
+toutes les 30 s, par `saveAsAdmin` (le filet du jeton refusé, mêmes seuils) ; 90 s sans segment, page
+muette : l'arrêt à la dernière position, que Jellyfin traduit en « vu » au-delà de son seuil. État en
+mémoire borné (500 entrées), purgé. Jamais sans laissez-passer — le lecteur natif et le lecteur
+serveur dans la page ne passent pas par là. Le laissez-passer porte pour cela l'identifiant Jellyfin
+du compte (`j`, un identifiant, pas un droit) ; un laissez-passer d'avant n'en a pas, et le serveur se
+tait.
+
+**L'application du récepteur.** Le récepteur public de Google (`CC1AD845`) par défaut, gratuit et
+sans inscription ; une installation qui enregistre son propre récepteur dans la console Google Cast
+met son identifiant dans `CAST_RECEIVER_APP_ID` (réglage de l'application → `.env` → défaut, §48). Pas
+un secret. Une valeur mal formée retombe sur celui de Google.
+
+**Une seule fonction par décision.** `chromecastSenderEligible` (qui peut émettre), `useChromecastAllowed`
++ `/api/player/cast` (qui voit le bouton), `startChromecastSender` (le kit, chargé une fois, à la
+demande — `framework.ts`), `chromecastNow` (l'aiguillage de `PlayerHost`), `buildChromecastProfile`,
+`chromecastMediaSpec` (la demande de chargement), `withCastCors`/`castPreflightResponse`, `CastProgressRelay`.
+
+**Le journal.** Les lignes du Chromecast sont celles du lecteur serveur pour AirPlay (`start`, `cast`,
+`fallback` de fin de diffusion, `error`, `stop`), marquées `target: "chromecast"` (absent des lignes
+d'AirPlay), avec `device` (le nom du récepteur) et, sur un refus de chargement, `code` (le code Cast).
+Le relais du serveur écrit une ligne `cast` `serverRelay: true` quand il prend la main et une à
+l'arrêt ; sans identifiant de séance, la page Activité les rattache à la dernière séance du compte et
+du titre (« reprise gardée par le serveur »), et nomme le Chromecast d'une séance diffusée vers lui.
+
+**Volontairement à part.** Le bouton n'existe ni sur iPhone (Google ne fournit pas Cast aux pages web
+sur iOS), ni sur Safari, Firefox ou la Fire TV ; ni sur le lecteur serveur (un fichier que le natif ne
+porte pas : y revenir à la fin de la diffusion rejouerait l'échec, `stepBack` vidant `handedOver`).
+Le bouton de diffusion du navigateur (Remote Playback) se tait derrière celui du Chromecast. Un
+récepteur à nous — logo, intro, détection du modèle pour annoncer HEVC/HDR, rapport de position par le
+récepteur lui-même — reste à faire : seul son identifiant est prévu.
+
+**Ce qui ne se prouve qu'avec un appareil.** Que le récepteur de Google lise le HLS fMP4 de Jellyfin
+annoncé ainsi, le volume et les pistes sur un vrai téléviseur, l'avance réelle de son tampon (la marge
+de 30 s), et le comportement de Chrome sur Android installé en application.
+
+Tests : `chromecast-profile.test.ts`, `chromecast-playback-start-route.test.ts`, `chromecast-cors.test.ts`,
+`chromecast-config.test.ts`, `chromecast-framework.test.ts`, `chromecast-media.test.ts`,
+`chromecast-wiring.test.ts`, `ChromecastPlayer.test.tsx`, `PlayerControls-chromecast.test.tsx`,
+`PlayerHost-chromecast.test.tsx`, la section « le Chromecast » d'`ExperimentalPlayerHost.test.tsx`,
+`castProgress.test.ts`, `castProgress-page-reports.test.ts` ; le kit simulé : `helpers/fakeCast.ts`.
+
 ## 65. Le lecteur : clic à la souris, épisode suivant, récap et bon générique
 
 **Le clic sur l'image.** À la souris, un clic sur une zone vide met en pause ou relance (le même

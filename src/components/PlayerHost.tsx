@@ -7,7 +7,8 @@ import { usePlaybackSession, stopOrphanSession } from "@/lib/usePlaybackSession"
 import { refreshAfterPlayback } from "@/lib/swr";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { useStableFallback, takeoverFor, castCarriedTo, castingNow, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, castCarriedTo, castingNow, chromecastNow, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
+import { ChromecastPlayer } from "@/components/player/ChromecastPlayer";
 import { publishHandedOver } from "@/lib/playerBench/bridge";
 import { PlayerControls, type Track } from "@/components/PlayerControls";
 import { restoreRememberedVolume } from "@/lib/rememberedVolume";
@@ -262,6 +263,22 @@ export function PlayerHost() {
         session={playing}
         mode={mode === "mini" ? "mini" : "full"}
         onFallback={handOver}
+      />
+    );
+  }
+
+  // Vers un Chromecast, le relais n'est pas un lecteur mais une télécommande : le récepteur lit lui-même
+  // le flux que Jellyfin lui prépare (DECISIONS.md §64). Même clé que le lecteur serveur, pour la
+  // même raison : il enchaîne lui-même les épisodes, le relais reporté par `castCarriedTo`.
+  if (chromecastNow(takeover, carried, session)) {
+    return (
+      <ChromecastPlayer
+        key={session.openId ?? 0}
+        session={session}
+        mode={mode === "mini" ? "mini" : "full"}
+        takeover={carried ?? takeoverFor(takeover, session)}
+        continuesSession={continued?.owner === session ? continued.id : undefined}
+        onCastEnded={handCastBack}
       />
     );
   }

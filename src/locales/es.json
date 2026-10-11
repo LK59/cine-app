@@ -258,7 +258,9 @@
       "restart": "{n} reinicio|{n} reinicios",
       "lost": "final perdido",
       "server": "reproductor del servidor",
-      "tv": "en un televisor"
+      "tv": "en un televisor",
+      "chromecast": "Chromecast",
+      "serverRelay": "reanudación guardada por el servidor"
     },
     "seance": {
       "watched": "{d} vistos",
@@ -1908,6 +1910,17 @@
       "warning": "Se detiene en {n} s",
       "continue": "Continuar"
     },
+    "chromecast": {
+      "button": "Enviar a un Chromecast",
+      "playingOn": "Reproduciendo en {device}",
+      "tv": "el televisor",
+      "loading": "El televisor está preparando la película…",
+      "failed": "El televisor no pudo reproducir esta película.",
+      "retry": "Reintentar",
+      "resumeHere": "Continuar en este dispositivo",
+      "expand": "Ampliar",
+      "position": "Posición en la película"
+    },
     "castConfirm": {
       "airplay": "Pasar a AirPlay",
       "remote": "Pasar al televisor",
@@ -2540,6 +2553,8 @@
       "PLAYER_ENABLED": "Reproductor integrado",
       "PLAYER_SERVER_FALLBACK": "Pasar a Jellyfin los archivos que el navegador no reproduce",
       "PLAYER_AUTO_FRAME": "Ampliar la imagen sobre las bandas negras",
+      "CAST_RECEIVER_APP_ID": "Receptor de Chromecast (ID de aplicación, vacío = el de Google)",
+      "CHROMECAST_FOR_EVERYONE": "Chromecast para todas las cuentas (si no, solo administradores)",
       "HOME_BROWSE_BUTTON": "Botón «Todas las películas / series» arriba del inicio",
       "HOME_CONTINUE_HERO": "Mostrar lo que se está viendo en el banner del inicio",
       "NEW_ACCOUNT_BLOCKED_TAGS": "Etiquetas bloqueadas para cuentas nuevas (separadas por comas)",

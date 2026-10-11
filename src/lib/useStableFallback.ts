@@ -55,6 +55,13 @@ export interface StableTakeover {
    * `stepBack`.
    */
   cast?: boolean;
+  /**
+   * Vers quoi l'on diffuse, quand ce n'est pas AirPlay : `"chromecast"` (DECISIONS.md §64). Le
+   * relais est alors pris par `ChromecastPlayer`, qui pilote le récepteur à distance, au lieu du
+   * lecteur serveur. Absent, rien ne change — AirPlay compris. Il voyage avec le relais à
+   * l'épisode suivant (`castCarriedTo` le recopie tel quel).
+   */
+  castTarget?: "chromecast";
 }
 
 /**
@@ -80,6 +87,18 @@ export function takeoverFor(takeover: StableTakeover | null | undefined, session
 /** Cette lecture-ci est-elle en diffusion ? Seul le relais de sa séance le dit — voir `stepAside`. */
 export function castingNow(takeover: StableTakeover | null | undefined, session: unknown): boolean {
   return takeoverFor(takeover, session)?.cast === true;
+}
+
+/**
+ * Cette lecture-ci part-elle vers un Chromecast ? Le relais de sa séance, ou celui qu'elle hérite à
+ * l'épisode suivant, le dit — et lui seul décide que `PlayerHost` monte `ChromecastPlayer`.
+ */
+export function chromecastNow(
+  takeover: StableTakeover | null | undefined,
+  carried: StableTakeover | null | undefined,
+  session: unknown
+): boolean {
+  return (carried ?? takeoverFor(takeover, session))?.castTarget === "chromecast" && (carried?.cast === true || castingNow(takeover, session));
 }
 
 export function castCarriedTo(

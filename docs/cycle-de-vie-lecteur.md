@@ -32,15 +32,27 @@ noms de fonctions et de champs, beaucoup moins. En cas de doute, chercher le nom
 ```
  PlaybackProvider  ── la séance : ouverte ? plein écran ou réduite ? quel numéro d'ouverture ?
         │
-    PlayerHost     ── le choix du lecteur, les passages de relais, la diffusion (AirPlay)
+    PlayerHost     ── le choix du lecteur, les passages de relais, la diffusion (AirPlay, Chromecast)
       ├── ExperimentalPlayerHost   (lecteur natif : remultiplexage → MediaSource → <video>)
       │       │
       │   RemuxPlayback ── MseSource ── PlaybackGuard / SeekLifecycle / BufferQueue
       │                        │
       │                     Remuxer ── HttpByteSource
       │
-      └── ActivePlayer             (lecteur serveur : négociation Jellyfin, HLS ou lecture directe)
+      ├── ActivePlayer             (lecteur serveur : négociation Jellyfin, HLS ou lecture directe)
+      │
+      └── ChromecastPlayer         (télécommande d'un Chromecast : le récepteur lit lui-même le flux)
 ```
+
+Le relais vers un Chromecast (DECISIONS.md §64) est un relais de diffusion comme celui d'AirPlay —
+`cast: true`, donc `stepBack` possible — marqué `castTarget: "chromecast"` ; `chromecastNow` le lit et
+`PlayerHost` monte `ChromecastPlayer` (clé `openId`, comme le lecteur serveur : il enchaîne lui-même
+l'épisode suivant, le relais reporté par `castCarriedTo`). Il ne possède aucun élément vidéo : la
+session Cast vit dans le kit de Google (`chromecast/framework.ts`), partagée par la page. Ses sorties :
+`onCastEnded(position, true)` quand la session tombe ou que le téléviseur s'arrête de lui-même,
+`onCastEnded(position, false)` sur « Reprendre sur cet appareil », `close` (bilan, arrêt Jellyfin,
+récepteur arrêté) sur la croix ou la fin sans épisode suivant ; démonté autrement, il arrête le
+récepteur un tour plus tard (le double montage du mode strict ne doit pas couper la diffusion).
 
 | Couche | Fichiers | Ce qu'elle possède |
 |---|---|---|
@@ -430,7 +442,7 @@ banc ou une touche média y arriveraient, et le code le traite (`wantedAudioRef`
 | `rebuild` | source perdue, retour d'arrière-plan (`hiddenMs`) — **pas** pour un changement de piste, le plafond HDR ni un nouvel essai réseau | — |
 | `network` | coupure en pleine lecture — **pas** pendant le sondage ou l'attache | — |
 | `seek`, `stall`, `audio` | oui | — |
-| `cast` | — | route AirPlay établie |
+| `cast` | — | route AirPlay établie ; Chromecast chargé (`target: "chromecast"`, `device`) ; relais de la reprise par le serveur (`serverRelay`, écrit par le serveur, sans séance) |
 | `pause` | minuterie de veille : pause à échéance, épisode retenu à sa fin (`why: "veille"`) | idem |
 
 Trous connus côté serveur : aucune ligne quand les nouveaux essais hls.js ou l'échelle audio sont

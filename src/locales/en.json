@@ -258,7 +258,9 @@
       "restart": "{n} restart|{n} restarts",
       "lost": "end lost",
       "server": "server player",
-      "tv": "on a TV"
+      "tv": "on a TV",
+      "chromecast": "Chromecast",
+      "serverRelay": "resume kept by the server"
     },
     "seance": {
       "watched": "{d} watched",
@@ -1908,6 +1910,17 @@
       "warning": "Stopping in {n} s",
       "continue": "Keep watching"
     },
+    "chromecast": {
+      "button": "Cast to a Chromecast",
+      "playingOn": "Playing on {device}",
+      "tv": "the TV",
+      "loading": "The TV is getting the film ready…",
+      "failed": "The TV couldn't play this film.",
+      "retry": "Try again",
+      "resumeHere": "Continue on this device",
+      "expand": "Expand",
+      "position": "Position in the film"
+    },
     "castConfirm": {
       "airplay": "Switch to AirPlay",
       "remote": "Switch to the TV",
@@ -2540,6 +2553,8 @@
       "PLAYER_ENABLED": "Built-in player",
       "PLAYER_SERVER_FALLBACK": "Hand files the browser can't play over to Jellyfin",
       "PLAYER_AUTO_FRAME": "Enlarge the picture over black bars",
+      "CAST_RECEIVER_APP_ID": "Chromecast receiver (application ID, empty = Google's)",
+      "CHROMECAST_FOR_EVERYONE": "Chromecast for every account (otherwise administrators only)",
       "HOME_BROWSE_BUTTON": "“All movies / series” button at the top of home",
       "HOME_CONTINUE_HERO": "Show what people are watching in the home banner",
       "NEW_ACCOUNT_BLOCKED_TAGS": "Blocked tags for new accounts (comma-separated)",

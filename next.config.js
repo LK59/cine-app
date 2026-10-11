@@ -96,7 +96,11 @@ const nextConfig = {
               // Le mot-clé CSP3 autorise WebAssembly *sans* rouvrir eval().
               //
               // www.youtube.com : loadYoutubeIframeApi.ts:82 injecte <script src=…/iframe_api>.
-              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.youtube.com",
+              //
+              // www.gstatic.com : le kit d'émission Chromecast (`src/lib/chromecast/framework.ts`,
+              // DECISIONS.md §64), chargé seulement là où une diffusion est possible ; il charge
+              // lui-même son module (`cast_framework.js`) depuis le même hôte.
+              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.youtube.com https://www.gstatic.com",
               // React écrit des attributs style= ; seul 'unsafe-inline' les couvre. Les polices
               // next/font sont auto-hébergées sous /_next/static, donc 'self'.
               "style-src 'self' 'unsafe-inline'",
@@ -123,7 +127,9 @@ const nextConfig = {
               //
               // 'self' couvre le reste : /api/sse (SSENotifier.tsx:91) et les GET par plages du
               // lecteur natif (byteSource.ts:185,235, en-tête Range sur /api/jellyfin/stream).
-              "connect-src 'self' https://image.tmdb.org https://artworks.thetvdb.com https://img.youtube.com https://www.youtube.com",
+              // www.gstatic.com pour la même raison que www.youtube.com : le service worker rejoue en
+              // fetch() le script du kit Chromecast qu'il intercepte.
+              "connect-src 'self' https://image.tmdb.org https://artworks.thetvdb.com https://img.youtube.com https://www.youtube.com https://www.gstatic.com",
               // Deux hôtes : youtube-nocookie pour TrailerModal.tsx:48, www.youtube.com pour la
               // carte vidéo de person/[id]/page.tsx:288 et pour les cadres que crée l'API iframe.
               "frame-src https://www.youtube-nocookie.com https://www.youtube.com",

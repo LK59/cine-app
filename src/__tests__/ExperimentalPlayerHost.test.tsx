@@ -67,9 +67,11 @@ vi.mock("@/components/PlayerControls", () => ({
     subtitleOffset?: { seconds: number; onShift: (delta: number) => void };
     hdrCap?: { current: string | number; autoNits: number | null; onPick: (choice: string | number) => void };
     onClose?: () => void;
+    chromecast?: { active: boolean; onRequest: () => void };
   }) => (
     <div data-testid="controls" data-loading={String(props.loading)} data-suspended={String(!!props.suspended)}>
       {props.onClose && <button onClick={props.onClose}>fermer</button>}
+      {props.chromecast && <button onClick={props.chromecast.onRequest}>chromecast</button>}
       {/* Un saut demandé depuis les commandes : le signal d'abord, puis l'élément, comme elles. */}
       <button
         onClick={(e) => {
@@ -2370,5 +2372,86 @@ describe("un AAC à PCE refusé pendant l'ouverture", () => {
     mount();
     await untilSettled(() => expect(onFallback).toHaveBeenCalled());
     expect(probes.length).toBe(1);
+  });
+});
+
+/**
+ * Le Chromecast (DECISIONS.md §64), sur un kit simulé : le bouton n'existe que pour un navigateur
+ * qui sait émettre et un compte qui y a droit, et le choix d'un récepteur passe la main comme une
+ * diffusion AirPlay — `cast: true` —, marquée `castTarget: "chromecast"`.
+ */
+describe("le Chromecast", () => {
+  const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
+  const castAnswer = (allowed: boolean) => (url: string) =>
+    url === "/api/player/cast" ? { ok: true, json: async () => ({ allowed, receiverAppId: "CC1AD845" }) } : { ok: true, text: async () => "" };
+
+  beforeEach(async () => {
+    const { resetChromecastForTests } = await import("@/lib/chromecast/framework");
+    resetChromecastForTests();
+    serverFallback = true;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (window as unknown as { cast?: unknown }).cast;
+    delete (window as unknown as { chrome?: unknown }).chrome;
+  });
+
+  it("hors Chrome (ici jsdom) : aucun bouton, et rien n'est demandé à l'installation", async () => {
+    stubFetch(castAnswer(true));
+    mount();
+    await untilSettled(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    expect(screen.queryByText("chromecast")).toBeNull();
+    const asked = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => c[0]);
+    expect(asked).not.toContain("/api/player/cast");
+  });
+
+  it("Chrome, compte autorisé, un récepteur : le choix dans la liste passe la main au Chromecast", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(CHROME);
+    stubFetch(castAnswer(true));
+    const { createFakeCast } = await import("./helpers/fakeCast");
+    const fake = createFakeCast();
+    fake.install();
+    mount();
+    await untilSettled(() => expect(screen.getByText("chromecast")).toBeTruthy());
+    act(() => void screen.getByText("chromecast").click());
+    await untilSettled(() =>
+      expect(onFallback).toHaveBeenCalledWith("diffusion demandée", expect.objectContaining({ cast: true, castTarget: "chromecast" }))
+    );
+    expect(fake.ended).toEqual([]);
+  });
+
+  it("la liste fermée sans choix : rien ne se passe", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(CHROME);
+    stubFetch(castAnswer(true));
+    const { createFakeCast } = await import("./helpers/fakeCast");
+    const fake = createFakeCast();
+    fake.install();
+    fake.requestSession.next = () => Promise.reject("cancel");
+    mount();
+    await untilSettled(() => expect(screen.getByText("chromecast")).toBeTruthy());
+    act(() => void screen.getByText("chromecast").click());
+    await settle();
+    await settle();
+    expect(onFallback).not.toHaveBeenCalled();
+  });
+
+  it("Chrome, compte non autorisé : pas de bouton, et le kit de Google n'est jamais chargé", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(CHROME);
+    stubFetch(castAnswer(false));
+    mount();
+    await untilSettled(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    await settle();
+    expect(screen.queryByText("chromecast")).toBeNull();
+    expect(document.head.querySelector('script[src*="gstatic"]')).toBeNull();
+  });
+
+  it("sans lecteur serveur sur l'installation : pas de bouton", async () => {
+    serverFallback = false;
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(CHROME);
+    stubFetch(castAnswer(true));
+    mount();
+    await untilSettled(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    await settle();
+    expect(screen.queryByText("chromecast")).toBeNull();
   });
 });

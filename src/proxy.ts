@@ -7,7 +7,7 @@ import { SESSION_COOKIE, SESSION_MAX_AGE, refreshSessionToken, shouldRefresh } f
 import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { isPublicPath } from "@/lib/publicPaths";
 import { verifySessionFull } from "@/lib/session";
-import { castPassFor } from "@/lib/castToken";
+import { castPassFor, castPreflightFor } from "@/lib/castToken";
 import { fromLoopback } from "@/lib/trustedProxy";
 import { sessionDb } from "@/lib/db";
 import { forgetJellyfinToken, jellyfinTokenAlive } from "@/lib/jellyfinToken";
@@ -350,6 +350,9 @@ export async function proxy(req: NextRequest) {
    * laissez-passer ne doit jamais pouvoir contourner ce qui précède.
    */
   if (await castPassFor(req)) return NextResponse.next();
+  // La question préalable (CORS) d'un récepteur Chromecast, sur la même adresse et avec le même
+  // laissez-passer : elle n'emporte jamais de cookie. La route y répond — DECISIONS.md §64.
+  if (await castPreflightFor(req)) return NextResponse.next();
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);

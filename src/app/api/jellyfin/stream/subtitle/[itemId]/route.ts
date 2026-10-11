@@ -4,13 +4,39 @@ import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId, isSubtitleStreamIndex, isUnderJellyfinPrefix } from "@/lib/jellyfinPath";
-import { castPassFor } from "@/lib/castToken";
+import { castPassFor, castPreflightFor } from "@/lib/castToken";
+import { castPreflightResponse, withCastCors } from "@/lib/castCors";
 import { assertVisible } from "@/lib/itemVisibility";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ itemId: string }> }
-) {
+type SubtitleParams = { params: Promise<{ itemId: string }> };
+
+/**
+ * Les en-têtes CORS de diffusion sur toute réponse servie au seul laissez-passer — le récepteur
+ * Chromecast charge les sous-titres depuis son propre domaine (DECISIONS.md §64, `castCors.ts`).
+ * Servie à une session, la réponse sort exactement telle qu'avant.
+ */
+export async function GET(req: NextRequest, context: SubtitleParams) {
+  const { res, castPass } = await serveSubtitle(req, context);
+  return castPass ? withCastCors(res) : res;
+}
+
+/** La question préalable du récepteur, avec son laissez-passer — voir la route des segments. */
+export async function OPTIONS(req: NextRequest, { params }: SubtitleParams) {
+  const { itemId } = await params;
+  if (!isJellyfinId(itemId)) return new NextResponse(null, { status: 400 });
+  if (!(await castPreflightFor(req))) return new NextResponse(null, { status: 403 });
+  return castPreflightResponse();
+}
+
+async function serveSubtitle(req: NextRequest, context: SubtitleParams): Promise<{ res: NextResponse; castPass: string | null }> {
+  let castPass: string | null = null;
+  const res = await subtitle(req, context, (pass) => {
+    castPass = pass;
+  });
+  return { res, castPass };
+}
+
+async function subtitle(req: NextRequest, { params }: SubtitleParams, notePass: (pass: string | null) => void) {
   if (!config.player.enabled) return new NextResponse(null, { status: 404 });
 
   const { itemId } = await params;
@@ -29,6 +55,7 @@ export async function GET(
   const session = await verifySessionFull(token);
   const castPass = session?.jfId ? null : await castPassFor(req);
   if (!session?.jfId && !castPass) return new NextResponse(null, { status: 403 });
+  notePass(castPass);
   // Signé avec la clé d'administration : le droit du compte sur ce titre est demandé à Jellyfin
   // d'abord — voir `assertVisible` (le laissez-passer de diffusion n'y passe pas, voir là-bas).
   if (session?.jfId) {

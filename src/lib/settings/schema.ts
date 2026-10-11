@@ -63,6 +63,12 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "PLAYER_ENABLED", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "PLAYER_SERVER_FALLBACK", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  // L'application que le Chromecast ouvre (DECISIONS.md §64) : vide, le récepteur public de Google.
+  // Pas un secret — l'identifiant d'un récepteur qu'une installation a enregistré elle-même.
+  { key: "CAST_RECEIVER_APP_ID", group: "playback", kind: "text", need: "optional", fallback: "", inApp: true, placeholder: "CC1AD845" },
+  // Le bouton Chromecast : administrateurs seulement par défaut, le temps d'un premier essai sur un
+  // vrai récepteur ; ouvert à tous les comptes d'un geste ici.
+  { key: "CHROMECAST_FOR_EVERYONE", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   // La disposition de l'accueil (07/10/2026, DECISIONS.md §52) — deux variantes d'une installation à
   // l'autre, sans fourche du code : un accès direct à tout le catalogue en tête, et une bannière
   // qui montre ce qu'on regarde plutôt que ce qui vient d'arriver. « Réglages par défaut » : ce que
