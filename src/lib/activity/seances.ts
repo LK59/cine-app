@@ -52,6 +52,8 @@ export interface Seance {
     backgrounds: number;
     backgroundMs: number;
     lateByMs: number | null;
+    /** Les reprises qui en rejouaient une déjà échouée (registre des tentatives, DECISIONS §67). */
+    identicalRetries: number;
   } | null;
   seeks: number;
   slowSeeks: number;
@@ -265,6 +267,7 @@ function absorb(s: Seance, r: LogRecord): void {
         backgrounds: num(r.backgrounds) ?? 0,
         backgroundMs: num(r.backgroundMs) ?? 0,
         lateByMs: num(r.lateByMs),
+        identicalRetries: num(r.identicalRetries) ?? 0,
       };
       // Le lecteur serveur n'écrit pas de ligne par saut ni par piste : son bilan les compte
       // (depuis le 10/10/2026). Gardé à part — le dernier bilan l'emporte, comme `watched` — et

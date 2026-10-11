@@ -260,7 +260,8 @@
       "server": "server player",
       "tv": "on a TV",
       "chromecast": "Chromecast",
-      "serverRelay": "resume kept by the server"
+      "serverRelay": "resume kept by the server",
+      "identicalRetry": "{n} identical retry|{n} identical retries"
     },
     "seance": {
       "watched": "{d} watched",

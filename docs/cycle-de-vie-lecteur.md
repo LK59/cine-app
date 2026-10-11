@@ -283,6 +283,11 @@ files des tampons fermées (ce qui y attend se résout sans s'exécuter), fin de
 `takeover = carried ?? takeover`, `continuesSession` (si `continued.owner === session`),
 `onCastEnded(resumeAt, paused?)` (sans effet hors d'une diffusion venue du natif).
 
+L'échelle du son de ce lecteur repart de la marche 0 à chaque ouverture (`learnedExclusions`,
+DECISIONS.md §67) : plus aucune exclusion de codec n'est retenue d'une séance à l'autre. Le registre
+des tentatives (`SessionTally.retries`) note ses marches et les erreurs fatales d'hls.js, en
+observation.
+
 ### Hôte natif → moteur
 
 | Appel | Quand | Note |
@@ -448,6 +453,10 @@ banc ou une touche média y arriveraient, et le code le traite (`wantedAudioRef`
 Trous connus côté serveur : aucune ligne quand les nouveaux essais hls.js ou l'échelle audio sont
 épuisés, ni pour l'escalade par rechargement WebKit, le bouton Réessayer ou le retour de
 diffusion.
+
+Les deux lecteurs : le bilan `stop` porte `identicalRetries` et `retryMotif` quand une reprise
+automatique en a rejoué une déjà échouée sans lecture entre-temps (registre des tentatives,
+DECISIONS.md §67, en observation) ; le natif l'écrit aussi dans sa trace (« tentative identique n°k »).
 
 ---
 

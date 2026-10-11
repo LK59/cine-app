@@ -2609,3 +2609,49 @@ manquait un bouton du haut mettait en pause, un double-clic sur le titre ou la c
 l'image est retenu) : le double-clic du plein écran surlignait le titre et le logo — et un logo n'est
 plus glissable (`CinemaLogo`, `draggable={false}`, fiches comprises).
 Tests : `bughunt-zone3-player.test.tsx`.
+
+## 67. Les reprises du lecteur : une tentative doit changer quelque chose — registre en observation, aucun codec banni
+
+**Règle.** Une reprise automatique (reconstruction du lecteur natif, marche de l'échelle du son du
+lecteur serveur, récupération d'hls.js) qui rejoue une tentative déjà échouée — même motif, même
+configuration, sans que le film ait joué entre-temps — est inutile. Le registre des tentatives de la
+séance (`RetryLedger`, `src/lib/retryLedger.ts`) le dit : une signature (motif + configuration : piste
+et position arrondie à dix secondes pour le natif ; codecs exclus, transcodage forcé et position pour
+le serveur), `noteFailure`, `notePosition` (trois secondes jouées en continu effacent les échecs —
+ni `loadeddata` ni la première image, qui arrivent justement avant l'échec qui se répète), `mayRetry`.
+
+**En observation seulement (étape 2 du plan du 11/10/2026).** Rien ne décide encore d'après lui : les
+hôtes notent, le bilan `stop` des deux lecteurs porte `identicalRetries` et `retryMotif` (absents
+quand rien ne s'est répété : le budget de champs du journal n'est pas entamé), la trace du natif
+écrit « tentative identique n°k », et la page Activité affiche « n reprises identiques ». L'activation
+viendra chemin par chemin quand le journal aura dit si la signature est assez fine.
+
+**Pourquoi.** L'inventaire du 11/10/2026 : neuf compteurs, quatre notions de « ça remarche », et trois
+chemins sans borne propre, prouvés par des tests qui échouent (`it.fails`, à basculer à l'activation) :
+l'échelle du son du serveur, remise à zéro par `loadeddata` (un flux qui se charge puis échoue au même
+endroit la remonte sans fin) ; la récupération d'hls.js, dont les compteurs sont remis à zéro par
+chaque fragment ; la reconstruction du natif « sur la piste voulue, autre que celle ouverte », hors
+budget — près de 2 900 pipelines en 300 tours quand le pipeline rouvre toujours sur une autre piste.
+
+**Aucun codec banni (décision du 11/10/2026).** L'échelle retenait pour toujours, par navigateur
+(`cine:audio-codec-blocklist:v1`), les codecs qu'une marche réussie avait exclus — quelle que soit la
+cause de l'échec : une coupure ou une image illisible suffisait à faire convertir l'E-AC3 par le
+serveur sur cet appareil, à jamais. Désormais chaque séance repart de la marche 0. Ce qu'une marche a
+appris vaut pour l'ouverture en cours (`learnedExclusions` : un changement de piste ou l'épisode
+suivant ne rejouent pas l'échelle), et traverse le rechargement de page du changement de piste sur
+WebKit (`fromReload`, `sessionStorage`, lu par cette seule ouverture rechargée), qui continue la même
+séance. L'ancienne clé est effacée une fois par page (`purgeLegacyAudioBlocklist`).
+
+**Porteurs.** `RetryLedger`, `retrySignature`, `positionBucket`, `retryMotif` (`retryLedger.ts`),
+tenu par `SessionTally.retries` (`playerSessionTally.ts`, le décompte partagé des deux lecteurs) ; lu
+par `restart` (`ExperimentalPlayerHost`, reconstructions automatiques seulement), l'écouteur
+d'erreur et les erreurs hls.js de `PlayerHost`. `learnedExclusions`, `purgeLegacyAudioBlocklist`
+(`PlayerHost`).
+
+**Volontairement à part.** La coupure réseau (attente sans fin, voulue et visible) ; les gestes du
+spectateur (réessayer, piste, plafond HDR) ; `mseSource` et `playbackGuard`, déjà bornés ; le
+rechargement WebKit en fin d'échelle, borné par `reloadAttempt`.
+
+Tests : `retryLedger.test.ts`, `PlayerHost-echelle.test.tsx` (caractérisation de l'échelle, aucune
+exclusion retenue, boucle (a)1), `PlayerHost-hls-recovery.test.tsx` (caractérisation d'hls.js,
+boucle (a)2), `ExperimentalPlayerHost.test.tsx` (boucle (a)3).

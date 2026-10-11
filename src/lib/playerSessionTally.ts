@@ -14,10 +14,12 @@
  * Pur, sans horloge à lui : chaque appel reçoit l'instant, ce qui le rend testable.
  */
 
+import { RetryLedger, type RetrySummary } from "./retryLedger";
+
 /** En dessous, une attente ne se voit pas : le navigateur en signale de très brèves en continu. */
 export const MIN_WAIT_MS = 250;
 
-export interface TallySummary {
+export interface TallySummary extends RetrySummary {
   /** Attentes d'au moins `MIN_WAIT_MS` en pleine lecture, hors sauts et hors ouverture. */
   waits: number;
   waitedMs: number;
@@ -45,6 +47,11 @@ export interface TallySummary {
 }
 
 export class SessionTally {
+  /**
+   * Les tentatives de reprise de la séance (`retryLedger.ts`, DECISIONS §67) — en observation : le
+   * bilan dit combien rejouaient une tentative déjà échouée, rien ne décide encore d'après lui.
+   */
+  readonly retries = new RetryLedger();
   private waits = 0;
   private waitedMs = 0;
   private longestWaitMs = 0;
@@ -177,6 +184,7 @@ export class SessionTally {
       resumes: this.resumes,
       resumeWaitMs: Math.round(this.resumeWaitMs),
       longestResumeMs: Math.round(this.longestResumeMs),
+      ...this.retries.summary(),
     };
   }
 
