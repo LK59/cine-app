@@ -1748,3 +1748,11 @@
     text-box: trim-both cap alphabetic;
   }
 }
+
+/* Le lecteur ne sélectionne rien (`select-none` sur sa racine, 11/10/2026) — sauf un champ où l'on
+   écrirait : la sélection y est utile. */
+.player-liquid input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+.player-liquid textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}

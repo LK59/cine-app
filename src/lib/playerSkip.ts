@@ -52,10 +52,15 @@ export function surfaceAction(pointerType: string, detail: number, onEmptySurfac
 
 /**
  * Ce qui n'est pas la surface vide : un contrôle, une carte posée sur l'image, ou ce qui se déclare
- * tel (`data-player-surface-ignore`). Le reste — l'image, les voiles, les vides entre les boutons —
- * est la surface.
+ * tel (`data-player-surface-ignore`). Le reste — l'image, les voiles — est la surface.
+ *
+ * Les pilules (`.player-pill`) et les groupes de commandes (`[data-player-navgroup]`) en sont
+ * exclus en entier, marges comprises (chasse aux défauts, 11/10/2026) : un clic qui manquait de peu
+ * un bouton de la pilule du haut mettait le film en pause, et un double-clic sur le titre ou la
+ * pilule du bas passait en plein écran — leur `click` était arrêté, leur `dblclick` non.
  */
-const NOT_SURFACE = 'button, a, input, select, textarea, label, [role="menu"], [role="dialog"], [data-player-surface-ignore]';
+const NOT_SURFACE =
+  'button, a, input, select, textarea, label, [role="menu"], [role="dialog"], [data-player-surface-ignore], .player-pill, [data-player-navgroup]';
 
 export function isEmptySurface(target: EventTarget | null, root: Element | null): boolean {
   if (!(target instanceof Element) || !root || !root.contains(target)) return false;

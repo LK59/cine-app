@@ -130,6 +130,9 @@ export function CinemaLogo({
     <img
       src={src}
       alt={alt}
+      // Un logo n'est pas une image à emporter : glissé, il partait en fantôme au lieu de laisser le
+      // geste au lecteur ou à la fiche (11/10/2026).
+      draggable={false}
       onError={() => {
         retry.onError();
         onError?.();

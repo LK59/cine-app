@@ -1048,11 +1048,24 @@ export function PlayerControls({
    * les parcourt alors à la télécommande ou au clavier. Un `pointerout` sans destination
    * (`relatedTarget` nul) est la sortie de la page ; un doigt ne le déclenche jamais (`pointerType`).
    */
+  /**
+   * Si une sortie de la fenêtre doit cacher les commandes maintenant. Lue aussi par le `mouseleave`
+   * de la barre de progression, qui suit le `pointerout` quand la souris sort par le bas : il les
+   * rappelait pour cinq secondes juste après qu'elles étaient parties (chasse aux défauts, 11/10/2026).
+   */
+  function windowExitHides(): boolean {
+    if (!playingRef.current || menuOpenRef.current || seekingRef.current || suspendedRef.current) return false;
+    return !keyboardFocusWithin(liquidRootRef.current);
+  }
+  const windowExitHidesRef = useRef(windowExitHides);
+  useEffect(() => {
+    windowExitHidesRef.current = windowExitHides;
+  });
+
   useEffect(() => {
     function onPointerOut(e: PointerEvent) {
       if (e.pointerType !== "mouse" || e.relatedTarget !== null) return;
-      if (!playingRef.current || menuOpenRef.current || seekingRef.current || suspendedRef.current) return;
-      if (keyboardFocusWithin(liquidRootRef.current)) return;
+      if (!windowExitHidesRef.current()) return;
       if (hideTimer.current) clearTimeout(hideTimer.current);
       setVisible(false);
     }
@@ -1473,7 +1486,10 @@ export function PlayerControls({
       // Commandes cachées pendant la lecture, le curseur s'en va avec elles : il restait planté au
       // milieu de l'image sous Windows (02/10/2026). Le moindre mouvement de souris rappelle les
       // commandes (`onPointerMove`), et le curseur avec. En pause, il reste : on s'attend à agir.
-      className={`player-liquid absolute inset-0 z-10 ${!visible && playing ? "cursor-none" : ""}`}
+      // Rien à sélectionner dans le lecteur (11/10/2026) : un double-clic pour le plein écran
+      // surlignait le titre de l'épisode et le logo. `select-none` s'hérite ; les champs de saisie
+      // gardent leur sélection (globals.css, `.player-liquid` et ses champs).
+      className={`player-liquid absolute inset-0 z-10 select-none ${!visible && playing ? "cursor-none" : ""}`}
       ref={liquidRootRef}
       onClick={onSurfaceClick}
       onDoubleClick={onSurfaceDoubleClick}
@@ -1485,6 +1501,9 @@ export function PlayerControls({
       // le leur — on les fait glisser.
       onMouseDown={(e) => {
         if ((e.target as Element).closest("button")) e.preventDefault();
+        // Le second appui d'un double-clic sur l'image : pas de sélection de mot — la ceinture
+        // de `select-none`, pour un moteur qui sélectionnerait quand même.
+        else if (e.detail > 1 && isEmptySurface(e.target, e.currentTarget)) e.preventDefault();
       }}
       onPointerMove={(e) => {
         // Only real mouse hover implies "show" — a touch pointer fires a
@@ -1552,6 +1571,7 @@ export function PlayerControls({
           Visible commandes masquées — c'est précisément quand personne ne les regarde qu'elle sert. */}
       {sleepWarning !== null && (
         <div
+          data-player-surface-ignore
           onClick={(e) => e.stopPropagation()}
           className="player-pill pointer-events-auto absolute flex items-center gap-2 py-1.5 pl-3.5 pr-1.5 text-xs text-white/80"
           style={{
@@ -1599,7 +1619,9 @@ export function PlayerControls({
 
       {showNextUp && !askStillThere && nextEpisode && (
         <div
-          // Ses boutons ne doivent pas atteindre le fond, dont l'appui montre ou cache les commandes.
+          // Ses boutons ne doivent pas atteindre le fond, dont l'appui montre ou cache les commandes —
+          // ni son double-clic le plein écran (`data-player-surface-ignore`, 11/10/2026).
+          data-player-surface-ignore
           onClick={(e) => e.stopPropagation()}
           // Le verre des pilules, et une entrée qui rebondit (`glass-pop`) : une carte opaque à part
           // était la dernière surface du lecteur à ne pas en être (04/10/2026).
@@ -2172,6 +2194,9 @@ export function PlayerControls({
             dessous. */}
         <div
           className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none translate-y-1"} player-spring flex flex-col gap-3 pt-4 motion-reduce:translate-y-0`}
+          // Son `click` est arrêté ; son `dblclick`, qui remonte quand même, ne doit pas passer en
+          // plein écran depuis le titre (chasse aux défauts, 11/10/2026).
+          data-player-surface-ignore
           onClick={(e) => e.stopPropagation()}
           onClickCapture={() => showControls(10000)}
           style={{ paddingBottom: BOTTOM_EDGE }}
@@ -2287,8 +2312,11 @@ export function PlayerControls({
               holdControls();
               updatePreview(e.clientX);
             }}
-            onMouseLeave={() => {
+            onMouseLeave={(e) => {
               setPreviewTime(null);
+              // Sortie de la fenêtre par la barre : le `pointerout` vient de les cacher, rien à rappeler.
+              // Hors de la page, React donne la fenêtre — ou rien — pour destination, jamais un nœud.
+              if (!(e.relatedTarget instanceof Node) && windowExitHides()) return;
               if (!seekingRef.current) showControls(5000);
             }}
             onTouchStart={(e) => {
