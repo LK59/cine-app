@@ -1236,51 +1236,73 @@ describe("ajuster à l'écran", () => {
   });
 });
 
-// « Améliorer les dialogues » (11/10/2026, bêta, administrateur) : comme l'Apple TV, un
-// interrupteur, puis « Encore plus fort » une fois activé. Absent sans la prop (tout autre compte).
+// « Améliorer les dialogues » (11/10/2026, bêta, administrateur) : comme l'Apple TV, sous les pistes
+// audio, trois choix — Désactivé / Améliorer / Améliorer davantage. Absent sans la prop (tout autre compte).
 describe("améliorer les dialogues", () => {
-  async function openDialogue(props: Record<string, unknown>) {
+  const oneTrack = [{ id: 1, label: "Anglais — 5.1" }];
+  // Dans le menu des pistes audio, comme sur l'Apple TV (11/10/2026) : il vivait dans « … ».
+  async function openAudio(props: Record<string, unknown>) {
     stubMediaFetches();
-    const { container } = render(<Harness {...props} />);
+    const { container } = render(<Harness audioTracks={oneTrack} currentAudioId={1} {...props} />);
     await act(async () => {});
-    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));
+    const audio = container.querySelector('[data-player-nav="audio"]');
+    if (audio) await act(async () => void fireEvent.click(audio));
+    return container;
   }
+  const openDialogue = async (props: Record<string, unknown>) => {
+    const container = await openAudio(props);
+    await act(async () => void fireEvent.click(container.querySelector("[data-dialogue-row]")!));
+    return container;
+  };
 
-  it("n'existe pas sans la prop — tout compte qui n'est pas administrateur", async () => {
-    await openDialogue({});
+  it("n'existe pas sans la prop — tout compte qui n'est pas administrateur ; une piste seule n'ouvre aucun menu audio", async () => {
+    const container = await openAudio({});
+    expect(container.querySelector('[data-player-nav="audio"]')).toBeNull();
     expect(screen.queryByText(/player\.dialogue\.title/)).toBeNull();
   });
 
-  it("une entrée marquée Bêta, sans état coupé ; trois choix comme l'audio, le courant en couleur", async () => {
-    const onChange = vi.fn();
-    await openDialogue({ dialogue: { mode: "off", applies: true, onChange } });
-    const row = screen.getByText(/player\.dialogue\.title/).closest("button")!;
+  it("n'est plus dans le menu « … »", async () => {
+    const container = await openAudio({ dialogue: { mode: "off", applies: true, onChange: vi.fn() } });
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));
+    expect(screen.queryByText(/player\.dialogue\.title/)).toBeNull();
+  });
+
+  it("sous les pistes audio, même d'un film à une seule piste ; Bêta, sans état coupé ; les trois choix de l'Apple TV", async () => {
+    const container = await openAudio({ dialogue: { mode: "off", applies: true, onChange: vi.fn() } });
+    expect(screen.getByText("Anglais — 5.1")).toBeTruthy();
+    const row = container.querySelector("[data-dialogue-row]")!;
+    expect(row.textContent).toContain("player.dialogue.title");
     expect(row.textContent).toContain("player.chromecast.beta");
     expect(row.textContent).not.toContain("·");
     await act(async () => void fireEvent.click(row));
     const choices = [...document.querySelectorAll("[data-dialogue-choice]")];
     expect(choices.map((c) => c.getAttribute("data-dialogue-choice"))).toEqual(["off", "on", "strong"]);
-    expect(choices.map((c) => c.textContent)).toEqual(["player.dialogue.off", "player.dialogue.title", "player.dialogue.stronger"]);
+    expect(choices.map((c) => c.textContent)).toEqual(["player.dialogue.off", "player.dialogue.enhance", "player.dialogue.further"]);
     expect(choices[0].className).toContain("text-accent-400");
     expect(choices[1].className).not.toContain("text-accent-400");
+  });
+
+  it("Retour ramène aux pistes audio", async () => {
+    await openDialogue({ dialogue: { mode: "off", applies: true, onChange: vi.fn() } });
+    await act(async () => void fireEvent.click(screen.getByText("common.back")));
+    expect(screen.getByText("Anglais — 5.1")).toBeTruthy();
+    expect(document.querySelector("[data-dialogue-choice]")).toBeNull();
   });
 
   it("choisir une force l'applique et referme le menu ; rechoisir le courant ne reconstruit rien", async () => {
     const onChange = vi.fn();
     await openDialogue({ dialogue: { mode: "on", applies: true, onChange } });
-    await act(async () => void fireEvent.click(screen.getByText(/player\.dialogue\.title/).closest("button")!));
     await act(async () => void fireEvent.click(document.querySelector('[data-dialogue-choice="strong"]')!));
     expect(onChange).toHaveBeenCalledWith("strong");
     expect(document.querySelector("[data-dialogue-choice]")).toBeNull();
-    await act(async () => void fireEvent.click(document.querySelector('[data-player-nav="more"]')!));
-    await act(async () => void fireEvent.click(screen.getByText(/player\.dialogue\.title/).closest("button")!));
+    await act(async () => void fireEvent.click(document.querySelector('[data-player-nav="audio"]')!));
+    await act(async () => void fireEvent.click(document.querySelector("[data-dialogue-row]")!));
     await act(async () => void fireEvent.click(document.querySelector('[data-dialogue-choice="on"]')!));
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
   it("dit quand la piste qui joue n'est pas de celles qu'il prend", async () => {
     await openDialogue({ dialogue: { mode: "strong", applies: false, onChange: vi.fn() } });
-    await act(async () => void fireEvent.click(screen.getByText(/player\.dialogue\.title/).closest("button")!));
     expect(screen.getByText("player.dialogue.notThisTrack")).toBeTruthy();
     expect(document.querySelector('[data-dialogue-choice="strong"]')!.className).toContain("text-accent-400");
   });

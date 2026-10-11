@@ -163,11 +163,12 @@ interface PlayerControlsProps {
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
-/** « Améliorer les dialogues » : les trois choix du sous-menu, dans l'ordre de l'Apple TV. */
+/** « Améliorer les dialogues » : les trois choix du sous-menu, avec les mots et dans l'ordre de
+ *  l'Apple TV (Désactivé / Améliorer / Améliorer davantage — demande de Louis, 11/10/2026). */
 const DIALOGUE_CHOICES: { mode: DialogueMode; label: string }[] = [
   { mode: "off", label: "player.dialogue.off" },
-  { mode: "on", label: "player.dialogue.title" },
-  { mode: "strong", label: "player.dialogue.stronger" },
+  { mode: "on", label: "player.dialogue.enhance" },
+  { mode: "strong", label: "player.dialogue.further" },
 ];
 /** Combien de temps la confirmation de diffusion reste dépliée sans qu'on y touche. */
 const CAST_CONFIRM_MS = 4000;
@@ -1935,20 +1936,6 @@ export function PlayerControls({
                     {castActive ? t("player.castStop") : t("player.castReturn")}
                   </button>
                 )}
-                {dialogue && (
-                  <button
-                    onClick={() => setMenu("dialogue")}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                  >
-                    <Speech size={16} />
-                    {/* Le nom seul : l'état coupé en « … » sur un téléphone ne disait rien (11/10/2026).
-                        Le choix courant se lit dans le sous-menu, comme pour l'audio. */}
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate">{t("player.dialogue.title")}</span>
-                      <DialogueBeta />
-                    </span>
-                  </button>
-                )}
                 {frameFit && (
                   // Le menu reste ouvert : l'image glisse derrière, et c'est ce qu'on veut voir.
                   <button
@@ -1994,7 +1981,7 @@ export function PlayerControls({
             )}
             {(menu === "chapters" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep" || menu === "speed" || menu === "dialogue") && (
               <button
-                onClick={() => setMenu(menu === "subtitleStyle" ? "subtitles" : "more")}
+                onClick={() => setMenu(menu === "subtitleStyle" ? "subtitles" : menu === "dialogue" ? "audio" : "more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
               >
                 <ArrowLeft size={14} /> {t('common.back')}
@@ -2025,6 +2012,25 @@ export function PlayerControls({
                   {tr.label}
                 </button>
               ))}
+            {/* Sous les pistes, comme sur l'Apple TV : c'est un réglage du son, il vivait dans le
+                menu « … » jusqu'au 11/10/2026. Le nom seul et un chevron, comme l'apparence des
+                sous-titres : l'état coupé en « … » sur un téléphone ne disait rien. */}
+            {menu === "audio" && dialogue && (
+              <div className="border-t border-white/10">
+                <button
+                  data-dialogue-row
+                  onClick={() => setMenu("dialogue")}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Speech size={16} className="shrink-0" />
+                    <span className="truncate">{t("player.dialogue.title")}</span>
+                    <DialogueBeta />
+                  </span>
+                  <ChevronRight size={14} className="shrink-0 text-white/50" />
+                </button>
+              </div>
+            )}
             {menu === "subtitles" && (
               <button
                 onClick={() => {
@@ -2288,7 +2294,8 @@ export function PlayerControls({
                 côté du temps restant, il aurait cassé la symétrie de la ligne du temps. Les menus
                 s'ouvrent vers le haut depuis cette pilule. */}
             <div ref={settingsPillRef} data-player-navgroup="bottombar" data-settings-pill data-liquid className="player-fade player-pill flex shrink-0 items-center gap-1 p-1 max-[379px]:gap-0.5">
-              {audioTracks.length > 1 && (
+              {/* Une seule piste n'a rien à choisir — sauf le réglage des dialogues, qui vit là. */}
+              {(audioTracks.length > 1 || dialogue) && (
                 <button
                   data-player-nav="audio"
                   onClick={() => setMenu(menu === "audio" ? null : "audio")}

@@ -1465,7 +1465,8 @@
     "none": "Keine",
     "dialogue": {
       "title": "Dialoge verbessern",
-      "stronger": "Noch stärker",
+      "enhance": "Verbessern",
+      "further": "Weiter verbessern",
       "off": "Aus",
       "notThisTrack": "Keine Wirkung auf diese Tonspur",
       "unavailable": "Dialoge lassen sich bei diesem Titel nicht verbessern: Wiedergabe ohne."

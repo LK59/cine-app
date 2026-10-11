@@ -2709,8 +2709,8 @@ reste stéréo. Selon la disposition, il égalise et remonte le centre d'un 3.0,
 (faces, ambiances et surtout caisson baissés), ou bien le milieu d'une stéréo (mid/side, côtés
 baissés), ou le canal unique d'un mono. Toute autre disposition reçoit la compression seule. Viennent
 ensuite un compresseur lié (un gain pour tous les canaux, détecteur en puissance), un rattrapage et un
-limiteur sous −1 dBFS. Deux forces : « Améliorer les dialogues » (`on`) et « Encore plus fort »
-(`strong`). Activé, une piste copiée telle quelle passe par le ré-encodage si un décodeur d'ici rend
+limiteur sous −1 dBFS. Deux forces, nommées comme sur l'Apple TV : « Améliorer » (`on`) et
+« Améliorer davantage » (`strong`). Activé, une piste copiée telle quelle passe par le ré-encodage si un décodeur d'ici rend
 ses canaux dans l'ordre standard (`dialogueCanShape`) : Dolby, DTS, TrueHD et FLAC. Pour l'AAC :
 mono, stéréo et 5.1 standard (configuration 6), ce dernier décodé partout par le décodeur AAC de FFmpeg
 en WebAssembly (`measuredAacDecoder`), dont l'ordre est mesuré : L R C LFE Ls Rs sur un fichier où
@@ -2748,8 +2748,9 @@ l'appareil n'est pas effacé.
 `dialogueCanShape` (`remuxer.ts`) ; `RemuxPlaybackOptions.dialogue`, `canShapeDialogue`
 (`remuxPlayback.ts`) ; `readDialogueMode` / `writeDialogueMode` (`dialoguePreference.ts`, par
 appareil, clé `cine-dialogue`) ; `ExperimentalPlayerHost` (administrateur seulement, `dropDialogue`) ;
-le menu « … » de `PlayerControls`, marqué « Bêta » : une liste de trois choix, comme l'audio
-(Désactivé, Améliorer les dialogues, Encore plus fort). La ligne `start` porte `dialogue` quand il est
+le menu des pistes audio de `PlayerControls` (sous les pistes, comme l'Apple TV ; le bouton audio
+apparaît alors même pour une piste seule), marqué « Bêta » : « Améliorer les dialogues », puis une
+liste de trois choix (Désactivé, Améliorer, Améliorer davantage). La ligne `start` porte `dialogue` quand il est
 actif, et rien sinon.
 
 **Volontairement à part.** Le lecteur serveur (HLS de Jellyfin), où le son ne passe pas par nous. Les

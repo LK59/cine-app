@@ -1464,8 +1464,9 @@
     "subtitleOffset": "Desfase",
     "none": "Ninguno",
     "dialogue": {
-      "title": "Mejorar los diálogos",
-      "stronger": "Aún más fuerte",
+      "title": "Mejorar diálogos",
+      "enhance": "Mejorar",
+      "further": "Mejorar más",
       "off": "Desactivado",
       "notThisTrack": "Sin efecto en esta pista de audio",
       "unavailable": "No se pueden mejorar los diálogos de este título: se reproduce sin ello."
