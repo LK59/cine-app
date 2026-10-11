@@ -1463,6 +1463,12 @@
     "subtitleSize": "Untertitelgröße",
     "subtitleOffset": "Versatz",
     "none": "Keine",
+    "voiceBoost": {
+      "title": "Klare Stimmen (Test)",
+      "off": "Aus",
+      "voices": "Klare Stimmen",
+      "night": "Nachtmodus"
+    },
     "speedNormal": "Normal",
     "rewind10": "10s zurück",
     "forward10": "10s vor",

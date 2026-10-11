@@ -2,7 +2,8 @@
 
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech } from "lucide-react";
+import type { VoiceBoostControl } from "@/lib/voiceBoost";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
 import { formatTime } from "@/lib/playerClock";
@@ -153,6 +154,11 @@ interface PlayerControlsProps {
    * défaire sur cet écran. Absent, rien n'est proposé : un film sans bandes n'a pas d'interrupteur.
    */
   frameFit?: { on: boolean; onChange: (on: boolean) => void };
+  /**
+   * « Voix claires », sonde administrateur (`voiceBoost.ts`). Absent pour tout autre compte et
+   * dans le lecteur serveur : rien n'est proposé, et le son ne passe jamais par Web Audio.
+   */
+  voiceBoost?: VoiceBoostControl;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -276,6 +282,7 @@ export function PlayerControls({
   suspended = false,
   hdrCap,
   frameFit,
+  voiceBoost,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -364,7 +371,7 @@ export function PlayerControls({
   useEffect(() => {
     visibleRef.current = visible;
   }, [visible]);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "more">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "voiceBoost" | "more">(null);
   /** « Auto · 203 nits », « Natif », « 400 nits » — le réglage de luminosité HDR, en mots. */
   const hdrCapLabel = (choice: HdrCapChoice): string =>
     choice === "auto"
@@ -1918,6 +1925,14 @@ export function PlayerControls({
                     {castActive ? t("player.castStop") : t("player.castReturn")}
                   </button>
                 )}
+                {voiceBoost && (
+                  <button
+                    onClick={() => setMenu("voiceBoost")}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    <Speech size={16} /> {t("player.voiceBoost.title")} · {t(`player.voiceBoost.${voiceBoost.mode}`)}
+                  </button>
+                )}
                 {frameFit && (
                   // Le menu reste ouvert : l'image glisse derrière, et c'est ce qu'on veut voir.
                   <button
@@ -1961,7 +1976,7 @@ export function PlayerControls({
                 </div>
               </>
             )}
-            {(menu === "chapters" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep" || menu === "speed") && (
+            {(menu === "chapters" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep" || menu === "speed" || menu === "voiceBoost") && (
               <button
                 onClick={() => setMenu(menu === "subtitleStyle" ? "subtitles" : "more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
@@ -2105,6 +2120,44 @@ export function PlayerControls({
                   {sleepLabel(choice)}
                 </button>
               ))}
+            {menu === "voiceBoost" && voiceBoost && (
+              <>
+                {(["off", "voices", "night"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => voiceBoost.setMode(m)}
+                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
+                      voiceBoost.mode === m ? "text-accent-400" : "text-white"
+                    }`}
+                  >
+                    {t(`player.voiceBoost.${m}`)}
+                  </button>
+                ))}
+                {/* Le relevé de la sonde, lu à l'écran par l'administrateur : il dit si le son passe
+                    encore, ce qui arrive (canaux) et la latence ajoutée. Pas traduit : c'est un outil. */}
+                {(voiceBoost.diag || voiceBoost.error) && (
+                  <div data-voice-boost-diag className="border-t border-white/[0.08] px-3 py-2 font-mono text-[11px] leading-snug text-white/60">
+                    {voiceBoost.error && <div className="text-red-300">{voiceBoost.error}</div>}
+                    {voiceBoost.diag && (
+                      <>
+                        <div>
+                          {voiceBoost.diag.state} · {voiceBoost.diag.sampleRate} Hz
+                          {voiceBoost.diag.latencyMs !== null ? ` · +${voiceBoost.diag.latencyMs} ms` : ""}
+                        </div>
+                        <div>
+                          {voiceBoost.diag.layout} · out {voiceBoost.diag.outDb ?? "−∞"} dB
+                        </div>
+                        <div>
+                          {["L", "R", "C", "LFE", "Ls", "Rs"]
+                            .map((n, i) => `${n} ${voiceBoost.diag?.levelsDb[i] ?? "−∞"}`)
+                            .join(" · ")}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
             {menu === "speed" &&
               PLAYBACK_SPEEDS.map((rate) => (
                 <button

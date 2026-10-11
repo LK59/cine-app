@@ -1463,6 +1463,12 @@
     "subtitleSize": "Subtitle size",
     "subtitleOffset": "Offset",
     "none": "None",
+    "voiceBoost": {
+      "title": "Clear voices (test)",
+      "off": "Off",
+      "voices": "Clear voices",
+      "night": "Night mode"
+    },
     "speedNormal": "Normal",
     "rewind10": "Rewind 10s",
     "forward10": "Forward 10s",

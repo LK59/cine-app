@@ -45,6 +45,8 @@ import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { subtitleStyleStore, overlayCss } from "@/lib/subtitleStyle";
 import { useFrameFit } from "@/lib/frameFit";
+import { useVoiceBoost } from "@/lib/voiceBoost";
+import { useRole } from "@/lib/useRole";
 import { noteWatching, openingPosition, rewound, AWAY_MS } from "@/lib/resumeRewind";
 import { warmNextEpisode } from "@/lib/nextEpisodeWarmup";
 import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
@@ -2582,6 +2584,10 @@ export function ExperimentalPlayerHost({
   // proche, sans rien couper — voir `frameFit`. Pas dans le mini-lecteur, qui remplit déjà sa
   // fenêtre (`object-cover`).
   const frameFitState = useFrameFit(itemId, !isMini, containerRef, videoElRef);
+  // « Voix claires », sonde réservée à l'administrateur (voiceBoost.ts) : pour tout autre compte
+  // la commande n'existe pas et rien ne touche au son.
+  const { role } = useRole();
+  const voiceBoost = useVoiceBoost(videoElRef, role === "admin");
 
   // Après tous les hooks : le banc d'essai en a ajouté trois au-dessus, et un retour anticipé
   // avant eux en changeait le nombre d'un rendu à l'autre.
@@ -2916,6 +2922,7 @@ export function ExperimentalPlayerHost({
             suspended={!ready || networkLost !== null || endScreen}
             // L'interrupteur n'apparaît que s'il y a un agrandissement à défaire — voir `useFrameFit`.
             frameFit={frameFitState.available ? { on: frameFitState.on, onChange: frameFitState.setOn } : undefined}
+            voiceBoost={voiceBoost}
             hdrCap={
               path === "remux" && hdrCapContext.relevant && info?.video?.rangeType && info.video.rangeType !== "SDR"
                 ? {

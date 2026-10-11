@@ -1463,6 +1463,12 @@
     "subtitleSize": "Tamaño de subtítulos",
     "subtitleOffset": "Desfase",
     "none": "Ninguno",
+    "voiceBoost": {
+      "title": "Voces claras (prueba)",
+      "off": "Desactivado",
+      "voices": "Voces claras",
+      "night": "Modo noche"
+    },
     "speedNormal": "Normal",
     "rewind10": "Retroceder 10s",
     "forward10": "Avanzar 10s",
