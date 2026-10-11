@@ -47,6 +47,7 @@ import { sleepTimerLogFields, sleepTimerStore, type SleepMode } from "@/lib/slee
 import { CastResume } from "@/lib/castResume";
 import { castRouteActive } from "@/lib/castRoute";
 import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
+import { positionBucket, retrySignature } from "@/lib/retryLedger";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
@@ -109,9 +110,12 @@ const MAX_NETWORK_RETRIES = 6;
 // error, retry the same request with a progressively reduced audio codec set, which makes
 // Jellyfin fall back to a genuine server-side audio transcode. The final rung (AAC only) is
 // always transcodable and universally decodable, so the ladder can't strand the user.
-// A codec disabled on the rung that finally SUCCEEDS is persisted per-browser (localStorage)
-// so every future load on this device excludes it up front — one failed attempt total, ever,
-// instead of a failure dance on every playback.
+//
+// Ce qu'une marche a appris ne vaut que pour l'ouverture du lecteur en cours (`learnedExclusions`,
+// épisodes enchaînés compris) : chaque nouvelle séance repart de la marche 0 (DECISIONS §67, décision
+// du 11/10/2026). Les codecs exclus étaient retenus pour toujours par navigateur, quelle que soit la
+// cause de l'échec — une coupure ou une image illisible suffisait à faire convertir l'E-AC3 par le
+// serveur sur cet appareil, à jamais.
 const AUDIO_FALLBACK_RUNGS: string[][] = [
   [], // replay the identical request first — absorbs transient teardown races, learns nothing
   ["eac3", "flac", "opus"], // keep aac+ac3, the two most reliably decoded codecs on Apple hw
@@ -123,23 +127,59 @@ function isLastAudioRung(index: number): boolean {
   return index === AUDIO_FALLBACK_RUNGS.length - 1;
 }
 
-const AUDIO_BLOCKLIST_KEY = "cine:audio-codec-blocklist:v1";
+/** L'ancienne mémoire permanente des codecs exclus, par navigateur — retirée le 11/10/2026 (§67). */
+export const LEGACY_AUDIO_BLOCKLIST_KEY = "cine:audio-codec-blocklist:v1";
+let legacyBlocklistPurged = false;
 
-function readAudioBlocklist(): string[] {
+/**
+ * Efface, une fois par page, ce que l'ancienne mémoire avait retenu : un appareil « banni » d'un
+ * codec par un échec d'il y a des semaines repart propre, et l'échelle réessaie depuis la marche 0.
+ */
+export function purgeLegacyAudioBlocklist(): void {
+  if (legacyBlocklistPurged) return;
+  legacyBlocklistPurged = true;
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(AUDIO_BLOCKLIST_KEY) ?? "[]");
-    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === "string") : [];
+    localStorage.removeItem(LEGACY_AUDIO_BLOCKLIST_KEY);
+  } catch {
+    // Stockage indisponible : il n'y a rien à lire non plus.
+  }
+}
+
+/**
+ * Ce que l'échelle a appris, porté à travers le rechargement de page du changement de piste sur
+ * WebKit (`fromReload`) — qui continue la même séance : sans lui, chaque changement de langue sur un
+ * iPhone rejouait les trois marches. `sessionStorage`, lu par cette seule ouverture rechargée et
+ * effacé par toute autre : une nouvelle séance repart de la marche 0.
+ */
+const LADDER_CARRY_KEY = "cine:audio-ladder-carry:v1";
+
+function carryLearnedExclusions(itemId: string, codecs: string[]): void {
+  try {
+    sessionStorage.setItem(LADDER_CARRY_KEY, JSON.stringify({ itemId, codecs }));
+  } catch {
+    // Stockage indisponible : le rechargement rejouera l'échelle, comme une séance neuve.
+  }
+}
+
+/** Ce qu'un rechargement de la même séance a apporté — et la mémoire vidée dans tous les cas. */
+function takeCarriedExclusions(itemId: string, fromReload: boolean | undefined): string[] {
+  try {
+    const raw = sessionStorage.getItem(LADDER_CARRY_KEY);
+    sessionStorage.removeItem(LADDER_CARRY_KEY);
+    if (!fromReload || !raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return [];
+    const { itemId: carriedFor, codecs } = parsed as { itemId?: unknown; codecs?: unknown };
+    if (carriedFor !== itemId || !Array.isArray(codecs)) return [];
+    return codecs.filter((c): c is string => typeof c === "string");
   } catch {
     return [];
   }
 }
 
-function persistAudioBlocklist(codecs: string[]): void {
-  try {
-    localStorage.setItem(AUDIO_BLOCKLIST_KEY, JSON.stringify([...new Set(codecs)]));
-  } catch {
-    // Storage unavailable — the ladder just re-learns next session.
-  }
+/** Pour les tests : la purge se refait à la prochaine négociation. */
+export function __resetLegacyBlocklistPurgeForTests(): void {
+  legacyBlocklistPurged = false;
 }
 const MAX_MEDIA_RETRIES = 3;
 
@@ -492,6 +532,13 @@ function ActivePlayer({
   // Reset on every successful load ('loadeddata'), NOT at the top of startPlayback — the retry
   // itself goes through startPlayback, which would otherwise clear its own budget.
   const nativeErrorRetryCount = useRef(0);
+  /**
+   * Les codecs qu'une marche de l'échelle a dû exclure pour que cette ouverture se charge. Gardés le
+   * temps de l'ouverture — un changement de piste ou l'épisode suivant ne rejoue pas l'échelle —, et
+   * jamais au-delà : la prochaine séance repart de la marche 0 (DECISIONS §67).
+   */
+  const [carried] = useState(() => takeCarriedExclusions(itemId, fromReload));
+  const learnedExclusions = useRef<string[]>(carried);
   const nativeErrorRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The opts of the most recent startPlayback call, so an automatic retry replays the SAME
   // request (audio track included) — state like currentAudioId would be stale inside the
@@ -855,10 +902,10 @@ function ActivePlayer({
       // sitting behind it unused.
       setServerTitle(null);
 
-      // Per-browser learned exclusions (see AUDIO_FALLBACK_RUNGS) merged with this call's own —
-      // so a codec this device already proved it can't play is excluded from the very first
-      // negotiation, not rediscovered through a failure on every playback.
-      const disableAudioCodecs = [...new Set([...readAudioBlocklist(), ...(opts?.disableAudioCodecs ?? [])])];
+      // Ce qu'une marche a appris pendant cette ouverture (voir AUDIO_FALLBACK_RUNGS), joint aux
+      // exclusions de l'appel — un changement de piste ne redécouvre pas le même échec.
+      purgeLegacyAudioBlocklist();
+      const disableAudioCodecs = [...new Set([...learnedExclusions.current, ...(opts?.disableAudioCodecs ?? [])])];
       lastPlaybackOpts.current = opts;
       // Une négociation ouvre sa propre séance : la fin de la précédente n'a plus rien à rouvrir.
       endStoppedRef.current = false;
@@ -1089,11 +1136,11 @@ function ActivePlayer({
           if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
           loadWatchdog.current = null;
           nativeErrorRetryCount.current = 0;
-          // A successful load with codecs disabled beyond what the blocklist already held means
-          // the fallback ladder just identified the culprit(s) — persist so every future load on
-          // this browser excludes them from the first negotiation (see AUDIO_FALLBACK_RUNGS).
+          // Une marche qui se charge a trouvé le coupable : retenu pour le reste de cette ouverture
+          // seulement (voir AUDIO_FALLBACK_RUNGS et `learnedExclusions`).
           if (opts?.disableAudioCodecs?.length) {
-            persistAudioBlocklist([...readAudioBlocklist(), ...opts.disableAudioCodecs]);
+            learnedExclusions.current = [...new Set([...learnedExclusions.current, ...opts.disableAudioCodecs])];
+            carryLearnedExclusions(itemId, learnedExclusions.current);
           }
           if (resumeAt) video.currentTime = resumeAt;
           // Seeded here rather than waiting for the first 'timeupdate' — otherwise a progress
@@ -1253,6 +1300,7 @@ function ActivePlayer({
         if (!data2.fatal) return;
         switch (data2.type) {
           case Hls.ErrorTypes.NETWORK_ERROR: {
+            tallyRef.current.retries.noteFailure(retrySignature("hls.js : réseau", { pos: positionBucket(lastKnownTime.current) }));
             if (networkRetryCount.current >= MAX_NETWORK_RETRIES) {
               setReconnecting(false);
               setLoading(false);
@@ -1270,6 +1318,7 @@ function ActivePlayer({
             return;
           }
           case Hls.ErrorTypes.MEDIA_ERROR: {
+            tallyRef.current.retries.noteFailure(retrySignature("hls.js : média", { pos: positionBucket(lastKnownTime.current) }));
             if (mediaRetryCount.current >= MAX_MEDIA_RETRIES) {
               setReconnecting(false);
               setLoading(false);
@@ -1778,6 +1827,8 @@ function ActivePlayer({
       // battement (relevé le 23/09/2026). La position semée par `startPlayback` tient jusque-là.
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
       lastKnownTime.current = video.currentTime;
+      // Trois secondes vraiment jouées : la preuve qui efface les échecs du registre (§67).
+      tallyRef.current.retries.notePosition(video.currentTime);
       castResume.observed(video.currentTime);
       if (!video.paused && !bench && Date.now() - notedAt > 15_000) {
         notedAt = Date.now();
@@ -1932,8 +1983,18 @@ function ActivePlayer({
       // Walks AUDIO_FALLBACK_RUNGS (see its comment for the why): rung 0 replays the identical
       // request (absorbs transient teardown races and learns nothing), each further rung
       // disables more audio codecs until the AAC-only rung guarantees a clean server-side audio
-      // transcode. The rung whose exclusions finally make the load succeed gets persisted by the
-      // 'loadeddata' handler, so future loads on this browser skip the failure dance entirely.
+      // transcode. The rung whose exclusions finally make the load succeed is kept by the
+      // 'loadeddata' handler for the rest of this opening only (`learnedExclusions`).
+      // Le registre des tentatives (§67), en observation : la négociation qui vient d'échouer, telle
+      // qu'elle serait rejouée. Il compte, il ne décide rien.
+      const failed = lastPlaybackOpts.current;
+      tallyRef.current.retries.noteFailure(
+        retrySignature(`élément : code ${code ?? "?"}`, {
+          codecs: [...new Set([...learnedExclusions.current, ...(failed?.disableAudioCodecs ?? [])])].sort().join("+") || "-",
+          transcode: failed?.forceAudioTranscode === true,
+          pos: positionBucket(lastKnownTime.current || failed?.resumeAt),
+        })
+      );
       if (nativeErrorRetryCount.current < AUDIO_FALLBACK_RUNGS.length) {
         const rung = AUDIO_FALLBACK_RUNGS[nativeErrorRetryCount.current];
         const lastRung = isLastAudioRung(nativeErrorRetryCount.current);
@@ -1964,7 +2025,7 @@ function ActivePlayer({
             // Le dernier échelon ne copie plus le son, même en AAC : l'AAC dont la disposition est
             // un PCE se dit lisible et ne l'est pas (« Elle s'appelle Ruby », Fire TV, 10/10/2026 —
             // les quatre essais finissaient sur le même refus). Jamais retenu pour la suite : c'est
-            // ce fichier-là qui le demande, pas l'appareil (voir `persistAudioBlocklist`).
+            // ce fichier-là qui le demande, pas l'appareil.
             ...(lastRung ? { forceAudioTranscode: true } : {}),
             // L'échelon et l'erreur qui l'a provoqué : une échelle qui échoue se distingue ainsi,
             // au journal, d'un changement de piste ou d'un « Réessayer ».

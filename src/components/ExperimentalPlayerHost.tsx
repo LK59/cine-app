@@ -87,6 +87,7 @@ import { sleepTimerLogFields, sleepTimerStore, type SleepMode } from "@/lib/slee
 import { registerBenchBridge } from "@/lib/playerBench/bridge";
 import { seekArrived } from "@/lib/webcodecs/seekArrival";
 import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
+import { positionBucket, retryMotif, retrySignature } from "@/lib/retryLedger";
 import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
 import { forgetResumeCache, openDiskChunks, openingFacts, type FileIdentity } from "@/lib/resumeCache/diskChunks";
 import { keepOnStop } from "@/lib/resumeCache/keepOnStop";
@@ -940,6 +941,12 @@ export function ExperimentalPlayerHost({
       return;
     }
     trace(`reprise : ${why} — reconstruction à ${at.toFixed(1)} s`);
+    // Le registre des tentatives (§67), en observation : une reconstruction automatique qui en rejoue
+    // une déjà échouée, au même endroit et sur la même piste, sans lecture entre-temps, est notée.
+    if (!byViewer) {
+      const rank = tally.retries.noteFailure(retrySignature(why, { track: wantedAudioRef.current, pos: positionBucket(at) }));
+      if (rank > 1) trace(`tentative identique n°${rank} : ${retryMotif(why)}`);
+    }
     // Une reconstruction ne relance pas un film que le spectateur avait mis en pause : seuls le
     // changement de piste et le plafond HDR y veillaient, et un film arrêté, rendu par iOS au
     // retour d'arrière-plan, repartait tout seul (relu le 24/09/2026). Une pause suivie de près par
@@ -955,7 +962,7 @@ export function ExperimentalPlayerHost({
     setPlaying(false);
     setRuntimeError(null);
     setRebuildCount((count) => count + 1);
-  }, [lifecycle, background]);
+  }, [lifecycle, background, tally]);
 
   // Fetched once and then left alone. The description of a file does not change while it is
   // being watched, and every revalidation handed back a fresh object — which the effect below

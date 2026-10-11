@@ -260,7 +260,8 @@
       "server": "reproductor del servidor",
       "tv": "en un televisor",
       "chromecast": "Chromecast",
-      "serverRelay": "reanudación guardada por el servidor"
+      "serverRelay": "reanudación guardada por el servidor",
+      "identicalRetry": "{n} reintento idéntico|{n} reintentos idénticos"
     },
     "seance": {
       "watched": "{d} vistos",

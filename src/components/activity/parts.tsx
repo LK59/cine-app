@@ -224,6 +224,9 @@ export function SeanceFlags({ s }: { s: Seance }) {
   const failed = restarts.filter((r) => r.failure).length;
   if (failed) flags.push({ label: t("activity.flags.ladder", { n: failed }), tone: "bg-amber-500/15 text-amber-300" });
   if (restarts.length > failed) flags.push({ label: t("activity.flags.restart", { n: restarts.length - failed }), tone: "bg-slate-500/20 text-slate-300" });
+  // Une reprise qui rejouait une tentative déjà échouée (DECISIONS §67) : en observation, le
+  // registre la compte sans l'empêcher — c'est ce chiffre qui dira s'il faut l'activer.
+  if (s.stop?.identicalRetries) flags.push({ label: t("activity.flags.identicalRetry", { n: s.stop.identicalRetries }), tone: "bg-amber-500/15 text-amber-300" });
   if (s.stop?.why === "lost") flags.push({ label: t("activity.flags.lost"), tone: "bg-slate-500/20 text-slate-300" });
   if (s.player === "serveur") flags.push({ label: t("activity.flags.server"), tone: "bg-violet-500/15 text-violet-300" });
   if (s.onTv) flags.push({ label: t("activity.flags.tv"), tone: "bg-violet-500/15 text-violet-300" });

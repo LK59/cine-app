@@ -863,6 +863,21 @@ describe("changer de piste audio", () => {
     );
   });
 
+  // Boucle (a)3 du registre des tentatives (DECISIONS §67) : la reconstruction « sur la piste voulue,
+  // autre que celle ouverte » ne consomme pas le budget. Un pipeline qui rouvre toujours sur une autre
+  // piste la rejoue sans fin. Prouvée et non corrigée (étape 2 : observation seulement) — à basculer en
+  // `it` quand le registre sera activé sur ce chemin.
+  it.fails("un pipeline qui rouvre toujours sur une autre piste n'est pas reconstruit sans fin", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    // Chaque pipeline suivant ouvre sur la piste 1, quelle que soit celle demandée.
+    nextProbe = () => ({ path: "remux", start: async () => fakeRemux(), discard: vi.fn() });
+    await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
+    // Mesuré le 11/10/2026 : près de 2 900 pipelines en 300 tours, sans fin ni passage au serveur.
+    for (let i = 0; i < 40; i++) await act(async () => {});
+    expect(probes.length).toBeLessThanOrEqual(4);
+  });
+
   it("garde un film en pause en pause", async () => {
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());

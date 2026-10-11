@@ -260,7 +260,8 @@
       "server": "Server-Player",
       "tv": "auf einem Fernseher",
       "chromecast": "Chromecast",
-      "serverRelay": "Fortsetzung vom Server gesichert"
+      "serverRelay": "Fortsetzung vom Server gesichert",
+      "identicalRetry": "{n} identischer Wiederholungsversuch|{n} identische Wiederholungsversuche"
     },
     "seance": {
       "watched": "{d} geschaut",

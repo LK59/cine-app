@@ -260,7 +260,8 @@
       "server": "lecteur serveur",
       "tv": "sur un téléviseur",
       "chromecast": "Chromecast",
-      "serverRelay": "reprise gardée par le serveur"
+      "serverRelay": "reprise gardée par le serveur",
+      "identicalRetry": "{n} reprise identique|{n} reprises identiques"
     },
     "seance": {
       "watched": "{d} regardé",
