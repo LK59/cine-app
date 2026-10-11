@@ -428,6 +428,30 @@ describe("garde-fous — refus de copie d'un AAC à PCE", () => {
     expect(probes[2]).toMatchObject({ audioTrackNumber: 2 });
     expect(pce.effectivePceAnswer(pce.PROBE_ASC)).toBe(false);
   });
+  it("une reconstruction de récupération en cours de film qui échoue n'est pas un refus du PCE", async () => {
+    // Le film joue (PCE copié, accepté) ; une perte du lecteur en cours de séance — retour
+    // d'arrière-plan, coupure — reconstruit, et ce pipeline-là échoue avant son image. Ce n'est pas
+    // ce navigateur qui refuse le PCE : retenu, la piste serait décodée pour toujours au lieu d'être
+    // copiée (relecture du correctif B3, 11/10/2026).
+    pce.__testing.reset();
+    serverFallback = true;
+    mount();
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    let attempt = 0;
+    nextProbe = () => {
+      if (++attempt === 1) {
+        pce.notePceDecision("copy", true, pce.PROBE_ASC);
+        throw new Error(REFUSED);
+      }
+      return { path: "remux", start: async () => fakeRemux(), discard: vi.fn() };
+    };
+    // Une source perdue en cours de séance (iOS l'a fermée en arrière-plan) : l'hôte reconstruit.
+    remux.lost = true;
+    await act(async () => probes[0].onError(REFUSED, "playback"));
+    await untilSettled(() => expect(attempt + onFallback.mock.calls.length).toBeGreaterThanOrEqual(1));
+    await extraTurns(30);
+    expect(pce.effectivePceAnswer(pce.PROBE_ASC)).not.toBe(false);
+  });
 });
 
 describe("garde-fous — ce qui compte comme refus du PCE", () => {

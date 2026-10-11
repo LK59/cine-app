@@ -1619,6 +1619,9 @@ export function ExperimentalPlayerHost({
     // une reconstruction en ouvre une neuve. `everReadyRef` (le lecteur a-t-il jamais joué) ne
     // suffisait pas : après la première image, une piste à PCE choisie au menu et refusée par Safari
     // n'était jamais essayée décodée — la piste d'avant revenait (chasse du 11/10/2026, B3).
+    // Seulement à l'ouverture du film ou après un changement de piste (`pendingSwitchRef`) : une
+    // reconstruction de récupération (arrière-plan, réseau) qui échoue n'est pas un refus du PCE —
+    // la retenir ferait décoder pour toujours une piste que ce navigateur copiait.
     let pipelineShowedPicture = false;
     let unsubscribes: (() => void)[] = [];
 
@@ -2091,7 +2094,7 @@ export function ExperimentalPlayerHost({
         // Un AAC à PCE copié tel quel — hors Chromium, comme avant le 10/10/2026 — que ce navigateur
         // refuse à l'envoi, avant toute image : la réponse est gardée et le pipeline reconstruit une
         // seule fois en le décodant ; le lecteur serveur ne vient qu'après (DECISIONS.md §62).
-        if (!pipelineShowedPicture && !pceRebuildRef.current && takePceCopyRefusal(message)) {
+        if ((!everReadyRef.current || pendingSwitchRef.current) && !pipelineShowedPicture && !pceRebuildRef.current && takePceCopyRefusal(message)) {
           pceRebuildRef.current = true;
           const at = positionRef.current || startSeconds;
           reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `copie AAC à PCE refusée — ${message}`, at });
@@ -2183,7 +2186,7 @@ export function ExperimentalPlayerHost({
         // n'arrivait jamais au `onError` du pipeline, et le film partait au lecteur serveur sans la
         // reconstruction prévue. Retenu pour cette forme, reconstruit une fois en décodant
         // (DECISIONS.md §62) ; le lecteur serveur ne vient qu'après.
-        if (!pipelineShowedPicture && !pceRebuildRef.current && takePceCopyRefusal(message)) {
+        if ((!everReadyRef.current || pendingSwitchRef.current) && !pipelineShowedPicture && !pceRebuildRef.current && takePceCopyRefusal(message)) {
           pceRebuildRef.current = true;
           const at = positionRef.current || startSeconds;
           reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `copie AAC à PCE refusée à l'ouverture — ${message}`, at });
