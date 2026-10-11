@@ -1729,3 +1729,22 @@
 @media (prefers-reduced-motion: reduce) {
   .hero-peek-slide { transition: none; }
 }
+
+/*
+ * Le chiffre du badge IMDb, centré sur la hauteur de ses chiffres et non sur sa ligne (11/10/2026).
+ * Centrée sur la ligne de texte, une boîte de chiffres paraît trop haute (ils occupent le haut de
+ * la ligne, sans jambage) ; descendue d'un forfait de 0,08 em, elle sortait 1 px trop bas sur
+ * iPhone — mesuré sur une capture : chiffres 135–160, logo 128–161 à l'échelle 3. `text-box`
+ * rogne la boîte à la hauteur de capitale et à la ligne de base : `items-center` centre alors ce
+ * qu'on voit, au pixel, quelle que soit la police. Le forfait reste pour un moteur qui l'ignore.
+ */
+.imdb-value {
+  position: relative;
+  top: 0.08em;
+}
+@supports (text-box: trim-both cap alphabetic) {
+  .imdb-value {
+    top: 0;
+    text-box: trim-both cap alphabetic;
+  }
+}
