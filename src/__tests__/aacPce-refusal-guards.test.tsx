@@ -306,9 +306,10 @@ afterEach(() => {
 });
 
 // ----------------------------------------------------------------------------------------------
-// CHASSE AUX BUGS, ZONE 2 (11/10/2026) — AAC à PCE (DECISIONS §62). Harnais recopié tel quel de
-// ExperimentalPlayerHost.test.tsx (lignes 1–308). Chaque test ci-dessous ÉCHOUE sur le code actuel :
-// il décrit le comportement attendu, pas celui d'aujourd'hui. Aucun correctif dans ce commit.
+// GARDE-FOUS DU REPLI AAC À PCE (DECISIONS §62) — quatre défauts trouvés par la chasse du 11/10/2026
+// et corrigés : B1 boucle quand le stockage refuse d'écrire le refus, B2 boucle sur Chromium dont la
+// sonde a dit « accepté », B3 piste à PCE choisie au menu et refusée jamais essayée décodée, B4 panne
+// vidéo prise pour un refus du PCE. Harnais recopié de ExperimentalPlayerHost.test.tsx (1–308).
 // ----------------------------------------------------------------------------------------------
 import * as pce from "@/lib/webcodecs/aacPceProbe";
 
@@ -332,7 +333,7 @@ async function extraTurns(n: number) {
   for (let i = 0; i < n; i++) await act(async () => {});
 }
 
-describe("zone 2 — refus de copie d'un AAC à PCE", () => {
+describe("garde-fous — refus de copie d'un AAC à PCE", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     window.localStorage.clear();
@@ -362,8 +363,8 @@ describe("zone 2 — refus de copie d'un AAC à PCE", () => {
     mount();
     await untilSettled(() => expect(probes.length).toBeGreaterThanOrEqual(2));
     await extraTurns(60);
-    // Attendu : refus → une reconstruction décodée (2 ouvertures en tout). Observé : la copie est
-    // retentée à chaque reconstruction, `takePceCopyRefusal` répond oui à chaque fois — sans fin.
+    // Refus → une reconstruction décodée (2 ouvertures en tout) : le refus est gardé en mémoire
+    // même quand le stockage refuse de l'écrire.
     expect(probes.length).toBe(2);
   });
 
@@ -377,8 +378,7 @@ describe("zone 2 — refus de copie d'un AAC à PCE", () => {
     mount();
     await untilSettled(() => expect(probes.length).toBeGreaterThanOrEqual(2));
     await extraTurns(60);
-    // Sur Chromium, `effectivePceAnswer` ne lit que la sonde globale ; le refus par forme y est
-    // écrit mais jamais lu, et `remember(false)` n'est jamais appelé : la copie repart à chaque fois.
+    // Le refus par forme prime sur la sonde, sur Chromium aussi.
     expect(probes.length).toBe(2);
   });
 
@@ -399,8 +399,7 @@ describe("zone 2 — refus de copie d'un AAC à PCE", () => {
     mount();
     await untilSettled(() => expect(probes.length + onFallback.mock.calls.length).toBeGreaterThanOrEqual(2));
     await extraTurns(20);
-    // Observé : `takePceCopyRefusal` ne regarde pas la cause — la forme est retenue « refusée » pour
-    // tout le build, et cette piste, que Safari copiait, est désormais décodée et ré-encodée.
+    // Un code 3 ne dit rien du son : la forme reste copiée.
     expect(pce.effectivePceAnswer(pce.PROBE_ASC)).toBe(true);
   });
 
@@ -424,10 +423,19 @@ describe("zone 2 — refus de copie d'un AAC à PCE", () => {
     };
     await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
     await untilSettled(() => expect(probes.length + onFallback.mock.calls.length).toBeGreaterThanOrEqual(3));
-    // Attendu : le refus est retenu pour cette forme et la piste 2 est rouverte, décodée.
-    // Observé : `everReadyRef` est vrai, la branche PCE est sautée, et la piste d'avant revient
-    // (`revertFailedSwitch`) — le choix du spectateur est annulé sans essai décodé.
+    // Le refus est retenu pour cette forme et la piste 2 est rouverte, décodée — pas la piste
+    // d'avant rétablie sans essai.
     expect(probes[2]).toMatchObject({ audioTrackNumber: 2 });
     expect(pce.effectivePceAnswer(pce.PROBE_ASC)).toBe(false);
+  });
+});
+
+describe("garde-fous — ce qui compte comme refus du PCE", () => {
+  it("refus de source ou d'envoi : oui ; panne de décodage ou délai : non", () => {
+    expect(pce.isPceRefusalMessage(REFUSED)).toBe(true);
+    expect(pce.isPceRefusalMessage("Le navigateur a refusé une opération sur le tampon. (MediaSource closed, readyState 0, réseau 3)")).toBe(true);
+    expect(pce.isPceRefusalMessage("Le navigateur a refusé une opération sur le tampon. (MediaSource open, élément code 3 « Media failed to decode », readyState 1, réseau 2)")).toBe(false);
+    expect(pce.isPceRefusalMessage("Le tampon n'a pas répondu en 10 s. (MediaSource open, readyState 0, réseau 2)")).toBe(false);
+    expect(pce.isPceRefusalMessage("Failed to fetch")).toBe(false);
   });
 });

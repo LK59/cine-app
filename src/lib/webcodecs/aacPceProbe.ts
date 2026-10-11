@@ -75,7 +75,10 @@ export function effectivePceAnswer(asc?: Uint8Array | null): boolean | null {
     if (typeof navigator === "undefined") return null;
     // Chromium (Chrome, Edge, Silk) : refus prouvé — la réponse de la sonde, réécriture ou décodage
     // sinon, comme en 8.34.0.
-    if (isChromiumEngine(navigator.userAgent ?? "")) return pceCopyAccepted();
+    // Un refus constaté pour CETTE forme prime sur la sonde, ici aussi : une sonde qui a dit
+    // « accepté » pour le PCE de Ruby ne dit rien d'une autre forme, et sans cela un refus réel
+    // recopiait à chaque reconstruction (chasse du 11/10/2026, B2).
+    if (isChromiumEngine(navigator.userAgent ?? "")) return asc && shapeRefused(asc) ? false : pceCopyAccepted();
   } catch {
     return null;
   }
@@ -106,11 +109,20 @@ function readRefusals(): string[] {
   }
 }
 
+/**
+ * Les refus de cette page, en mémoire : lus avant le stockage, et seuls à compter quand il refuse
+ * d'écrire (navigation privée, quota) — sans eux, la reconstruction recopiait la forme qu'on venait
+ * de voir refusée (chasse du 11/10/2026, B1).
+ */
+const refusedHere = new Set<string>();
+
 function shapeRefused(asc: Uint8Array): boolean {
-  return readRefusals().includes(shapeKey(asc));
+  const key = shapeKey(asc);
+  return refusedHere.has(key) || readRefusals().includes(key);
 }
 
 function rememberShapeRefusal(asc: Uint8Array): void {
+  refusedHere.add(shapeKey(asc));
   try {
     const shapes = readRefusals();
     const key = shapeKey(asc);
@@ -161,12 +173,30 @@ export function pceDecisionFacts(): Record<string, unknown> {
 }
 
 /**
+ * Une panne qui dit « le navigateur a refusé ce qu'on lui envoyait » : la source fermée, l'élément
+ * en erreur 4 (format refusé), un envoi au tampon refusé. Pas une panne de décodage (code 3) ni
+ * rien d'autre : une image HEVC qui échoue pendant qu'un PCE est copié ne dit rien du son, et la
+ * retenir comme refus faisait décoder pour tout le build une piste que Safari copiait (chasse du
+ * 11/10/2026, B4).
+ */
+export function isPceRefusalMessage(message: string): boolean {
+  const code = /élément code (\d+)/.exec(message)?.[1];
+  if (code !== undefined) return code === "4";
+  return /MediaSource closed|refusé une opération sur le tampon/.test(message);
+}
+
+/**
  * La copie d'un PCE vient d'être refusée par le navigateur avant la première image : vrai une seule
  * fois — le refus est gardé pour CETTE forme (et ce build), et la reconstruction qui suit décode.
+ * `message`, la panne : seul un refus de source ou d'envoi compte (`isPceRefusalMessage`).
  */
-export function takePceCopyRefusal(): boolean {
+export function takePceCopyRefusal(message?: string): boolean {
   if (!pceCopyInEffect) return false;
   pceCopyInEffect = false;
+  if (message !== undefined && !isPceRefusalMessage(message)) {
+    pceCopyAsc = null;
+    return false;
+  }
   if (pceCopyAsc) rememberShapeRefusal(pceCopyAsc);
   pceCopyAsc = null;
   pendingFallback = "copie refusée → décodage";
@@ -324,6 +354,7 @@ export const __testing = {
     pendingFallback = null;
     lastPceDecision = null;
     legacyDropped = false;
+    refusedHere.clear();
   },
   STORAGE_KEY,
   REFUSALS_KEY,

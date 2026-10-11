@@ -390,6 +390,13 @@ export function ExperimentalPlayerHost({
   const positionKnownRef = useRef(false);
   /** `announced`, lisible depuis `fallToStable` qui ne doit dépendre de rien. */
   const everReadyRef = useRef(false);
+  /**
+   * La reconstruction en cours vient-elle d'un refus de copie d'un AAC à PCE ? Une seule par chaîne :
+   * si le pipeline reconstruit est refusé à son tour avant d'avoir donné une image, on ne
+   * reconstruit plus pour ce motif (chasse aux défauts du 11/10/2026, B1 : un stockage qui refusait
+   * d'écrire le refus faisait recopier, et refuser, sans fin). Remise à faux par la première image.
+   */
+  const pceRebuildRef = useRef(false);
   /** `takeoverNow`, pour `fallToStable` qui est déclaré avant lui et doit rester stable. */
   const takeoverNowRef = useRef<() => StableTakeover | undefined>(() => undefined);
 
@@ -1608,6 +1615,11 @@ export function ExperimentalPlayerHost({
     if (!info || playbackState === undefined || !videoElRef.current) return;
 
     let cancelled = false;
+    // Ce pipeline-ci a-t-il donné une image ? Propre à chaque ouverture — un changement de piste ou
+    // une reconstruction en ouvre une neuve. `everReadyRef` (le lecteur a-t-il jamais joué) ne
+    // suffisait pas : après la première image, une piste à PCE choisie au menu et refusée par Safari
+    // n'était jamais essayée décodée — la piste d'avant revenait (chasse du 11/10/2026, B3).
+    let pipelineShowedPicture = false;
     let unsubscribes: (() => void)[] = [];
 
     // A pipeline that has just become ready cannot owe a resume or a track change: whatever the
@@ -1733,6 +1745,8 @@ export function ExperimentalPlayerHost({
       // Une image : si un AAC à PCE a été copié tel quel, ce navigateur le prend — c'est gardé.
       notePceCopyWorked();
       everReadyRef.current = true;
+      pipelineShowedPicture = true;
+      pceRebuildRef.current = false;
     };
     // Where to open. A rebuild that asked for a position gets it; otherwise the film resumes
     // where it actually is, and only a player that has never played anything falls back to where
@@ -2077,7 +2091,8 @@ export function ExperimentalPlayerHost({
         // Un AAC à PCE copié tel quel — hors Chromium, comme avant le 10/10/2026 — que ce navigateur
         // refuse à l'envoi, avant toute image : la réponse est gardée et le pipeline reconstruit une
         // seule fois en le décodant ; le lecteur serveur ne vient qu'après (DECISIONS.md §62).
-        if (!everReadyRef.current && takePceCopyRefusal()) {
+        if (!pipelineShowedPicture && !pceRebuildRef.current && takePceCopyRefusal(message)) {
+          pceRebuildRef.current = true;
           const at = positionRef.current || startSeconds;
           reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `copie AAC à PCE refusée — ${message}`, at });
           restart(at, "copie AAC à PCE refusée par le navigateur, décodée à la place");
@@ -2168,7 +2183,8 @@ export function ExperimentalPlayerHost({
         // n'arrivait jamais au `onError` du pipeline, et le film partait au lecteur serveur sans la
         // reconstruction prévue. Retenu pour cette forme, reconstruit une fois en décodant
         // (DECISIONS.md §62) ; le lecteur serveur ne vient qu'après.
-        if (!everReadyRef.current && takePceCopyRefusal()) {
+        if (!pipelineShowedPicture && !pceRebuildRef.current && takePceCopyRefusal(message)) {
+          pceRebuildRef.current = true;
           const at = positionRef.current || startSeconds;
           reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `copie AAC à PCE refusée à l'ouverture — ${message}`, at });
           restart(at, "copie AAC à PCE refusée par le navigateur, décodée à la place");
