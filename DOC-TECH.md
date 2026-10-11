@@ -126,10 +126,12 @@ one an install registered itself.
 **When the page goes quiet, the server keeps the resume point** — Chromecast and AirPlay alike
 (`castProgress.ts`). Each HLS segment served to a cast pass carries its position (`runtimeTicks`,
 written by Jellyfin); minus 30 s of receiver read-ahead, it is saved for that account
-(`saveAsAdmin`) when the page has sent nothing for that title in the last minute, at most every
-30 s; after 90 s without a segment, the stop is saved at the last position and Jellyfin applies its
-watched threshold. Never without a cast pass: the native and in-page server players never go
-through it.
+(`saveAsAdmin`) when the page has sent nothing for that title in the last 150 s (a paused page
+beats only every 60–70 s), at most every 30 s; after 90 s without a segment, the stop is saved at the
+last position and Jellyfin applies its watched threshold. Only for a request **without a session
+cookie** — a television: the in-page server player loads the same signed address (`castUrl`) but
+carries its cookie, and neither the relay nor CORS applies to it. A relayed entry is forgotten as
+soon as the page reports again, so a page back to local playback is never overwritten.
 
 **The native path is nearly free.** Matroska samples are already exactly what MP4 wants — length-prefixed
 HEVC/AVC access units, AC-3/AAC frames as they are. Only the packaging differs. No pixel and no

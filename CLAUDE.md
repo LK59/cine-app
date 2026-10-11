@@ -116,7 +116,9 @@ remote control there, DECISIONS §64), marked `target: "chromecast"` with the re
 on a refused load, the Cast error `code`; AirPlay lines carry no `target`. And when a casting page
 goes quiet, the **server** keeps the resume point from the segments the television fetches
 (`castProgress.ts`) and says so with a `cast` line marked `serverRelay: true` — no `session`, the
-activity page attaches it to the account's latest session of that title.
+activity page attaches it to the account's latest session of that title. Only a request without a
+session cookie is a television: the in-page server player loads the same signed address, and until
+8.36.3 every server session (paused for a minute) went through that relay.
 `data/logs/server.log` is its counterpart for the server's own errors, with the stack the console
 line omits: `docker logs` dies with the container, which is recreated on every deploy — several a
 day — so an error a viewer hit in the evening was gone before anyone went looking. Since
@@ -213,8 +215,8 @@ is wrong, and only this header means the viewer's own session is gone.
 **The only accesses without a session are a television's** (`castToken.ts`): a `GET` on the stream
 or subtitle routes carrying a valid cast pass for that title (`castPassFor`), and since 2026-10-11 the
 CORS `OPTIONS` preflight a Chromecast receiver sends for the same address (`castPreflightFor`, answered
-by the route — DECISIONS §64). Responses served to a cast pass, and only those, carry
-`Access-Control-Allow-Origin: *` without credentials (`castCors.ts`).
+by the route — DECISIONS §64). Responses served to a cast pass without a session cookie, and only
+those, carry `Access-Control-Allow-Origin: *` without credentials (`castCors.ts`).
 
 **Client addresses come from the connection** (DECISIONS §57). `server-boot/boot.mjs` wraps
 `http.createServer` and writes the socket's address into `x-cine-peer` on every request (overwriting

@@ -2406,6 +2406,23 @@ Gump compris ; moteur Chromium 36/44, les 8 pistes à PCE seules différant, com
 Tests : `aacWasm-route.test.ts`, `ExperimentalPlayerHost.test.tsx` (« un AAC à PCE refusé pendant
 l'ouverture »).
 
+**Révisé le 11/10/2026 (ter) — chasse aux défauts, les garde-fous du refus.** Quatre défauts prouvés
+par des tests qui échouaient, corrigés sans qu'aucune piste ne change (`aac-regress-bench`, 19 films,
+38 pistes, contre 8.36.3 : 38/38 octet pour octet sur WebKit comme sur Chromium) :
+- **Pas de boucle.** Un stockage qui refusait d'écrire le refus faisait recopier et refuser sans fin
+  (13 ouvertures au lieu de 2) : le refus est aussi gardé dans la mémoire de la page
+  (`refusedHere`), et l'hôte ne reconstruit qu'une fois pour ce motif par chaîne (`pceRebuildRef`,
+  remis à faux par la première image).
+- **Le refus par forme prime partout**, Chromium compris, sur la réponse globale de la sonde.
+- **Une piste à PCE choisie au menu et refusée est essayée décodée**, au lieu de rétablir la piste
+  d'avant : « avant la première image » se lit par pipeline (`pipelineShowedPicture`) — mais
+  seulement à l'ouverture du film ou après un changement de piste (`pendingSwitchRef`) ; l'échec
+  d'une reconstruction de récupération (arrière-plan, source perdue) n'est pas un refus du PCE, sans
+  quoi une piste que ce navigateur copiait serait décodée pour toujours.
+- **Seul un refus d'envoi compte** (`isPceRefusalMessage` : élément en erreur code 4, `MediaSource
+  closed`, envoi refusé) — jamais un échec de décodage (code 3, l'image), un délai ni le réseau.
+Tests : `aacPce-refusal-guards.test.tsx`.
+
 ## 63. Une image qui échoue réessaie, au lieu d'abandonner jusqu'au redémarrage
 
 **Règle.** Toute image du cinéma qui échoue montre son repli (carré gris, titre écrit, fond uni) et
@@ -2438,6 +2455,19 @@ TMDB dans la langue vient de Jellyfin redimensionnée (`jellyfinPoster` via `lib
 l'original de TheTVDB, servi sans consigne de cache.
 
 Tests : `imageRetry.test.ts`, `imageRetry-components.test.tsx`, `jellyfin-image-etag.test.ts`.
+
+**Révisé le 11/10/2026 — chasse aux défauts.** Un essai sans réponse au bout de 20 s
+(`RETRY_TIMEOUT_MS`) compte comme un échec et rend sa place : une affiche hors de l'écran remontée en
+`lazy` ne chargeait rien, ni succès ni échec, et six d'entre elles bloquaient pour toujours les essais
+des images visibles. **L'affiche d'un titre est la même partout** : `cataloguePoster`
+(`src/lib/images.ts`) sert le catalogue films et séries, « Ma liste », « Vus » et `posterPrewarm` —
+« Vus » montrait l'affiche d'origine au lieu de celle de la langue (38 films sur 40), « Ma liste »
+l'original TheTVDB des séries, et le préchauffage préparait des affiches que l'interface ne montrait
+pas. `decisions-partagees.test.ts` interdit `libraryPoster`/`jellyfinPoster` dans ces appelants. Et
+les visuels de la bannière gardés décodés (`keepSheetBanners`) sont rendus quand la bannière revient
+après un film avec d'autres titres — jusqu'à ~37 Mo de plus sur iPhone à chaque film.
+Tests : `bughunt-zone4-imageRetry-slots.test.ts`, `bughunt-zone4-prefetchBanners-leak.test.ts`,
+`posterPrewarm.test.ts`.
 
 ## 64. Le Chromecast : une télécommande, pas un lecteur — et la reprise gardée même quand la page se tait
 
@@ -2514,6 +2544,20 @@ Tests : `chromecast-profile.test.ts`, `chromecast-playback-start-route.test.ts`,
 `PlayerHost-chromecast.test.tsx`, la section « le Chromecast » d'`ExperimentalPlayerHost.test.tsx`,
 `castProgress.test.ts`, `castProgress-page-reports.test.ts` ; le kit simulé : `helpers/fakeCast.ts`.
 
+**Révisé le 11/10/2026 — ouvert à tous, et le relais réservé aux téléviseurs.** Le bouton est ouvert
+à tous les comptes par défaut (8.36.2), marqué « bêta » sur l'écran de diffusion et dans son
+libellé, faute d'essai sur un vrai récepteur ; `CHROMECAST_FOR_EVERYONE=false` le referme aux
+administrateurs. Le relais de reprise avait trois défauts, prouvés et corrigés en 8.36.3 avant
+d'avoir écrit une seule ligne : le lecteur serveur **de la page** charge aussi l'adresse signée
+(`castUrl`), donc toute séance serveur passait par le relais et recevait CORS — relais et CORS ne
+valent plus que pour une requête **sans cookie de session**, ce qu'est toujours un téléviseur ; une
+page en pause ne bat qu'une fois toutes les 60 à 70 s, et la fraîcheur de 60 s la faisait passer pour
+muette — portée à 150 s (`PAGE_FRESH_MS`) ; une page revenue lire en local voyait son arrêt écrasé
+90 s plus tard par la vieille position du téléviseur — l'entrée relayée est oubliée dès que la page
+reparle. Le CSP n'ouvre de `www.gstatic.com` que les chemins du kit (`CAST_KIT_SOURCES`,
+`next.config.js` : `cv/js/sender/`, `cast/sdk/libs/sender/`, `eureka/clank/`).
+Tests : `bughunt-zone1-castProgress.test.ts`, `bughunt-zone5-relay.test.ts`.
+
 ## 65. Le lecteur : clic à la souris, épisode suivant, récap et bon générique
 
 **Le clic sur l'image.** À la souris, un clic sur une zone vide met en pause ou relance (le même
@@ -2554,3 +2598,14 @@ recopiaient chacune la conversion ; `activeSkip`, `surfaceAction`, `isEmptySurfa
 l'écran « vous êtes toujours là ? ») ; boutons, curseurs, menus et cartes ne sont jamais la surface.
 
 Tests : `playerSkip.test.ts`, `player-surface-click.test.tsx`, `jellyfin-mediaSegments.test.ts`.
+
+**Révisé le 11/10/2026 — chasse aux défauts.** Les pilules (`.player-pill`) et les groupes de
+commandes (`[data-player-navgroup]`) ne sont plus la surface, marges comprises, ni la barre du bas, la
+carte « Épisode suivant » et la pastille de minuterie (`data-player-surface-ignore`) : un clic qui
+manquait un bouton du haut mettait en pause, un double-clic sur le titre ou la carte passait en plein
+écran. Une sortie de la fenêtre par la barre de progression ne rappelle plus les commandes pour 5 s
+(`windowExitHides`, partagé avec le `pointerout` de la fenêtre). Le lecteur ne sélectionne plus rien
+(`select-none` sur sa racine, les champs de saisie exceptés ; le second appui d'un double-clic sur
+l'image est retenu) : le double-clic du plein écran surlignait le titre et le logo — et un logo n'est
+plus glissable (`CinemaLogo`, `draggable={false}`, fiches comprises).
+Tests : `bughunt-zone3-player.test.tsx`.
