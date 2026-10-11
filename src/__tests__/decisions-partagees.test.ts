@@ -55,9 +55,24 @@ describe("une seule source d'affiche", () => {
     "src/app/api/player/lists/route.ts",
   ];
 
-  it.each(ROUTES)("%s passe par libraryPoster, et non par posterUrl seul", (route) => {
+  it.each(ROUTES)("%s passe par cataloguePoster (donc libraryPoster), et non par posterUrl seul", (route) => {
     const src = lire(route);
-    expect(src).toMatch(/libraryPoster\(/);
+    expect(src).toMatch(/cataloguePoster\(/);
+  });
+
+  /**
+   * Le 11/10/2026, « Vus » montrait l'affiche d'origine de 38 films sur 40 et « Ma liste »
+   * l'original de TheTVDB des séries, quand le catalogue montrait l'affiche française et celle de
+   * Jellyfin : chacun appelait `libraryPoster` avec ses propres arguments. Une seule règle désormais,
+   * `cataloguePoster`, et personne d'autre n'appelle `libraryPoster` ni `jellyfinPoster` directement.
+   */
+  it("catalogue, listes et préchauffage montrent la même affiche (`cataloguePoster`)", () => {
+    for (const f of [...ROUTES, "src/lib/posterPrewarm.ts"]) {
+      const src = lire(f);
+      expect(src, f).toMatch(/cataloguePoster\(/);
+      expect(src, f).not.toMatch(/\blibraryPoster\(/);
+      expect(src, f).not.toMatch(/\bjellyfinPoster\(/);
+    }
   });
 
   it("le choix de la langue n'est écrit qu'à un endroit", () => {

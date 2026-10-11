@@ -1,5 +1,20 @@
 const { version } = require("./package.json");
 
+/**
+ * Le kit d'émission Chromecast, au chemin près et non tout www.gstatic.com (11/10/2026) : l'hôte sert
+ * bien d'autres scripts de Google, qu'aucune page d'ici n'a à charger. Relevé par curl sur le kit
+ * lui-même : `cv/js/sender/v1/cast_sender.js` (ce que charge `src/lib/chromecast/framework.ts`)
+ * charge `cast/sdk/libs/sender/1.0/cast_framework.js`, et sur Chrome Android
+ * `eureka/clank/cast_sender.js`. Le reste passe par l'extension intégrée de Chrome
+ * (`chrome-extension://…`), que la CSP d'une page ne bloque pas. Un chemin finissant par « / » est un
+ * préfixe en CSP.
+ */
+const CAST_KIT_SOURCES = [
+  "https://www.gstatic.com/cv/js/sender/",
+  "https://www.gstatic.com/cast/sdk/libs/sender/",
+  "https://www.gstatic.com/eureka/clank/",
+].join(" ");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Pas de `x-powered-by: Next.js` : rien à gagner à annoncer la pile à qui sonde le site.
@@ -99,8 +114,8 @@ const nextConfig = {
               //
               // www.gstatic.com : le kit d'émission Chromecast (`src/lib/chromecast/framework.ts`,
               // DECISIONS.md §64), chargé seulement là où une diffusion est possible ; il charge
-              // lui-même son module (`cast_framework.js`) depuis le même hôte.
-              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.youtube.com https://www.gstatic.com",
+              // lui-même son module (`cast_framework.js`) depuis le même hôte — chemins dans `CAST_KIT_SOURCES`.
+              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.youtube.com " + CAST_KIT_SOURCES,
               // React écrit des attributs style= ; seul 'unsafe-inline' les couvre. Les polices
               // next/font sont auto-hébergées sous /_next/static, donc 'self'.
               "style-src 'self' 'unsafe-inline'",
@@ -129,7 +144,7 @@ const nextConfig = {
               // lecteur natif (byteSource.ts:185,235, en-tête Range sur /api/jellyfin/stream).
               // www.gstatic.com pour la même raison que www.youtube.com : le service worker rejoue en
               // fetch() le script du kit Chromecast qu'il intercepte.
-              "connect-src 'self' https://image.tmdb.org https://artworks.thetvdb.com https://img.youtube.com https://www.youtube.com https://www.gstatic.com",
+              "connect-src 'self' https://image.tmdb.org https://artworks.thetvdb.com https://img.youtube.com https://www.youtube.com " + CAST_KIT_SOURCES,
               // Deux hôtes : youtube-nocookie pour TrailerModal.tsx:48, www.youtube.com pour la
               // carte vidéo de person/[id]/page.tsx:288 et pour les cadres que crée l'API iframe.
               "frame-src https://www.youtube-nocookie.com https://www.youtube.com",

@@ -26,6 +26,22 @@ const MAX_REMEMBERED = 60;
 /** Les visuels gardés décodés, et qui les veut (une bannière par onglet). */
 const kept = new Map<string, HTMLImageElement>();
 const owners = new Map<string, Set<string>>();
+/**
+ * Ce qu'une bannière suspendue (un film, l'autre onglet) a laissé décodé, en son nom. Sans cette
+ * trace, son retour avec une autre liste — celle des reprises change justement après un film — ne
+ * savait plus ce qu'elle tenait : jusqu'à dix visuels de 1 280 px restaient décodés pour toujours
+ * (chasse aux défauts du 11/10/2026, `bughunt-zone4-prefetchBanners-leak.test.ts`).
+ */
+const suspended = new Map<string, Set<string>>();
+
+/** Tout ce qu'une bannière, active ou suspendue, veut encore garder — sauf `except`. */
+function wantedBy(except?: string): Set<string> {
+  const wanted = new Set<string>();
+  for (const map of [owners, suspended]) {
+    for (const [owner, urls] of map) if (owner !== except) for (const u of urls) wanted.add(u);
+  }
+  return wanted;
+}
 
 function saveData(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -45,8 +61,7 @@ function decodeOne(url: string): HTMLImageElement {
 
 /** Rend ce que plus personne ne veut. */
 function prune(): void {
-  const wanted = new Set<string>();
-  for (const urls of owners.values()) for (const u of urls) wanted.add(u);
+  const wanted = wantedBy();
   for (const url of Array.from(kept.keys())) if (!wanted.has(url)) kept.delete(url);
 }
 
@@ -57,13 +72,14 @@ function prune(): void {
 export function keepSheetBanners(owner: string, urls: readonly (string | null | undefined)[]): void {
   if (saveData()) return;
   const want = new Set(urls.filter((u): u is string => typeof u === "string" && u.length > 0));
-  const before = owners.get(owner);
+  // Ce qu'elle tenait avant, active ou suspendue : c'est ce qui permet de rendre une liste périmée.
+  const before = owners.get(owner) ?? suspended.get(owner);
+  suspended.delete(owner);
   owners.set(owner, want);
   // Ceux que cette bannière ne montre plus, et que personne d'autre ne veut, sont rendus — pas ceux
-  // qu'une bannière suspendue (l'autre onglet) a laissés décodés.
+  // qu'une autre bannière suspendue (l'autre onglet) a laissés décodés.
   if (before) {
-    const wanted = new Set<string>();
-    for (const urls of owners.values()) for (const u of urls) wanted.add(u);
+    const wanted = wantedBy();
     for (const url of before) if (!wanted.has(url)) kept.delete(url);
   }
   for (const url of want) if (!kept.has(url)) kept.set(url, decodeOne(url));
@@ -76,19 +92,26 @@ export function keepSheetBanners(owner: string, urls: readonly (string | null | 
  * ne sont pas touchés.
  */
 export function suspendSheetBanners(owner: string): void {
+  const mine = owners.get(owner);
   owners.delete(owner);
-  const wanted = new Set<string>();
-  for (const urls of owners.values()) for (const u of urls) wanted.add(u);
+  const wanted = wantedBy(owner);
   for (const [url, img] of Array.from(kept)) {
     if (wanted.has(url) || (img.complete && img.naturalWidth > 0)) continue;
     img.removeAttribute("src");
     kept.delete(url);
+  }
+  // Ce qui reste décodé de sa liste lui est gardé à son nom, pour être rendu à son retour.
+  if (mine) {
+    const held = new Set([...mine].filter((u) => kept.has(u)));
+    for (const u of suspended.get(owner) ?? []) if (kept.has(u)) held.add(u);
+    suspended.set(owner, held);
   }
 }
 
 /** La bannière n'existe plus : ses visuels sont rendus. */
 export function releaseSheetBanners(owner: string): void {
   owners.delete(owner);
+  suspended.delete(owner);
   prune();
 }
 
@@ -111,6 +134,7 @@ export const prefetchBannersForTests = {
     asked.clear();
     kept.clear();
     owners.clear();
+    suspended.clear();
   },
   kept: () => Array.from(kept.keys()),
 };

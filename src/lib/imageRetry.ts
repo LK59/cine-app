@@ -32,6 +32,16 @@ export const RETRY_DELAYS_MS = [2000, 6000, 15000] as const;
 /** Combien d'essais en vol à la fois, au plus. */
 export const MAX_CONCURRENT_RETRIES = 6;
 
+/**
+ * Un essai qui ne dit rien au bout de ce délai est compté comme un échec, et rend sa place.
+ *
+ * Une affiche hors de l'écran remontée pour réessayer ne charge rien (next/image est paresseux) :
+ * ni `onLoad` ni `onError`, et sa place restait prise pour toujours. Six affiches hors écran au retour
+ * du réseau bloquaient ainsi tous les essais suivants, ceux des images visibles compris (chasse aux
+ * défauts du 11/10/2026, `bughunt-zone4-imageRetry-slots.test.ts`).
+ */
+export const RETRY_TIMEOUT_MS = 20_000;
+
 /** Une image différée par un film est relue à ce rythme, le temps qu'il se termine. */
 const DEFERRED_RECHECK_MS = 3000;
 
@@ -50,6 +60,8 @@ type Tracked = RetryEntry & {
   attempt: number;
   state: State;
   timer: ReturnType<typeof setTimeout> | null;
+  /** La borne de l'essai en vol (`RETRY_TIMEOUT_MS`). */
+  watchdog: ReturnType<typeof setTimeout> | null;
 };
 
 const tracked = new Map<RetryEntry, Tracked>();
@@ -130,6 +142,11 @@ function pump(): void {
     if (!pick) break;
     pick.state = "running";
     running += 1;
+    const inFlight = pick;
+    inFlight.watchdog = setTimeout(() => {
+      inFlight.watchdog = null;
+      if (inFlight.state === "running" && tracked.get(inFlight) === inFlight) settleRetry(inFlight, false);
+    }, RETRY_TIMEOUT_MS);
     try {
       pick.retry();
     } catch {
@@ -149,10 +166,11 @@ export function reportImageFailure(entry: RetryEntry): void {
   install();
   let t = tracked.get(entry);
   if (!t) {
-    t = Object.assign(entry as Tracked, { attempt: 0, state: "waiting" as State, timer: null });
+    t = Object.assign(entry as Tracked, { attempt: 0, state: "waiting" as State, timer: null, watchdog: null });
     tracked.set(entry, t);
   }
   if (t.state === "running") running = Math.max(0, running - 1);
+  clearWatchdog(t);
   schedule(t);
   pump();
 }
@@ -175,8 +193,14 @@ export function forgetImage(entry: RetryEntry): void {
   const t = tracked.get(entry);
   if (!t) return;
   if (t.timer !== null) clearTimeout(t.timer);
+  clearWatchdog(t);
   if (t.state === "running") running = Math.max(0, running - 1);
   tracked.delete(entry);
+}
+
+function clearWatchdog(t: Tracked): void {
+  if (t.watchdog) clearTimeout(t.watchdog);
+  t.watchdog = null;
 }
 
 /** Pour les tests : l'état du registre. */
@@ -185,7 +209,10 @@ export function imageRetryStateForTests(): { tracked: number; running: number; s
 }
 
 export function resetImageRetryForTests(): void {
-  for (const t of tracked.values()) if (t.timer !== null) clearTimeout(t.timer);
+  for (const t of tracked.values()) {
+    if (t.timer !== null) clearTimeout(t.timer);
+    clearWatchdog(t);
+  }
   tracked.clear();
   running = 0;
   if (deferredTimer !== null) clearTimeout(deferredTimer);

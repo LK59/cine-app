@@ -9,9 +9,15 @@ const movies = [
   { id: 2, tmdbId: 22, hasFile: false, images: [{ coverType: "poster", remoteUrl: "https://image.tmdb.org/t/p/original/b.jpg" }] },
 ];
 const series = [{ id: 3, tmdbId: 33, images: [{ coverType: "poster", remoteUrl: "https://artworks.thetvdb.com/banners/posters/c.jpg" }] }];
-vi.mock("@/lib/server-cache", () => ({
+let jellyfinSeries: unknown[] | null = null;
+vi.mock("@/lib/server-cache", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server-cache")>()),
   cachedMovies: async () => movies,
   cachedSeries: async () => series,
+  cachedJellyfinSeriesAdmin: async () => {
+    if (!jellyfinSeries) throw new Error("Jellyfin muet");
+    return jellyfinSeries;
+  },
 }));
 vi.mock("@/lib/title-art", () => ({
   getTitleArt: async (tmdbId: number) =>
@@ -74,6 +80,20 @@ describe("les adresses", () => {
       ])
     );
     expect(urls.some((u) => u.includes("/b.jpg"))).toBe(false);
+  });
+
+  it("une série que Jellyfin illustre : son affiche, comme le catalogue — pas l'original de TheTVDB", async () => {
+    // Garde-fou (chasse aux défauts du 11/10/2026) : le préchauffage suit `cataloguePoster`.
+    const before = series[0];
+    series.splice(0, 1, { ...before, tvdbId: 333, title: "Série", year: 2020, statistics: { episodeFileCount: 3 } } as typeof before);
+    jellyfinSeries = [{ Id: "jf33", Name: "Série", ProductionYear: 2020, ProviderIds: { Tvdb: "333" }, ImageTags: { Primary: "t1" } }];
+    try {
+      const urls = await collectPosterUrls(["fr"]);
+      expect(urls.some((u) => u.includes("thetvdb"))).toBe(false);
+    } finally {
+      jellyfinSeries = null;
+      series.splice(0, 1, before);
+    }
   });
 });
 
