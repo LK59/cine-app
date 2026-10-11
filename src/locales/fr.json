@@ -1463,11 +1463,13 @@
     "subtitleSize": "Taille sous-titres",
     "subtitleOffset": "Décalage",
     "none": "Aucun",
-    "voiceBoost": {
-      "title": "Voix claires (test)",
+    "dialogue": {
+      "title": "Améliorer les dialogues",
+      "stronger": "Encore plus fort",
+      "on": "Activé",
       "off": "Désactivé",
-      "voices": "Voix claires",
-      "night": "Mode nuit"
+      "notThisTrack": "Sans effet sur cette piste audio",
+      "unavailable": "Les dialogues ne peuvent pas être améliorés sur ce film : lecture sans."
     },
     "speedNormal": "Normale",
     "rewind10": "Reculer de 10s",

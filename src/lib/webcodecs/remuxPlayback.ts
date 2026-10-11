@@ -5,6 +5,7 @@
 // public surface of a second player — a WebCodecs engine painting a canvas — so the component
 // could branch once between the two; that engine was removed on 2026-09-24 (docs/lecteur-canvas.md).
 
+import type { DialogueMode } from "./dialogueEnhance";
 import { displayIsHdr, hdrLightCap } from "./hdrDisplay";
 import { NO_INDEX_REACH_SECONDS, reachable } from "./seekArrival";
 import { playerWarning, type PlayerWarning } from "./playerWarning";
@@ -14,7 +15,7 @@ import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { forgetMediaHeader, mediaHeaderKey, openMediaFile } from "./mediaFile";
 import { MseSource, type RecoveryFacts } from "./mseSource";
 import { choosePlaybackPath, NATIVE_PATH, type ChosenPath } from "./pathSelector";
-import { Remuxer, playableAudio, deliveredAudio, primeAudioDelivery, type TrackedCue } from "./remuxer";
+import { Remuxer, playableAudio, deliveredAudio, primeAudioDelivery, audioDelivery, dialogueCanShape, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
 import { diagMedia } from "./playbackDiagnosis";
@@ -54,6 +55,11 @@ export interface RemuxPlaybackOptions {
    */
   disk?: Promise<DiskChunks | null> | null;
   startSeconds: number;
+  /**
+   * « Améliorer les dialogues » pour cette ouverture (`RemuxOptions.dialogue`) — absent : « off »,
+   * le chemin d'avant. Lu ici une fois et passé au remultiplexeur de cette ouverture seulement.
+   */
+  dialogue?: DialogueMode;
   onError: (message: string, kind?: "network" | "playback") => void;
   onWarning?: (warning: PlayerWarning) => void;
   /** Play pressed and the clock not yet moving, or null once it is. See MseCallbacks. */
@@ -288,6 +294,7 @@ async function probeOpened(source: ByteSource, options: RemuxPlaybackOptions, li
   await primeAudioDelivery(file);
   const audioTrack = openingAudio(file, options.audioPreferences, options.audioTrackNumber);
   trace(`piste audio retenue : ${audioTrack ? `${audioTrack.codecId} ${audioTrack.audio?.channels ?? "?"}ch ${audioTrack.language ?? "?"}` : "aucune"}`);
+  if (options.dialogue && options.dialogue !== "off") trace(`dialogues améliorés demandés (${options.dialogue === "strong" ? "encore plus fort" : "normal"})`);
 
   const chosen = await choosePlaybackPath({
     source,
@@ -297,7 +304,7 @@ async function probeOpened(source: ByteSource, options: RemuxPlaybackOptions, li
     dimensions: { width: videoTrack.video?.width ?? 1920, height: videoTrack.video?.height ?? 1080 },
     videoRangeType: options.videoRangeType,
     startSeconds: options.startSeconds,
-    remux: { lightCapNits: lightCap },
+    remux: { lightCapNits: lightCap, ...(options.dialogue && options.dialogue !== "off" ? { dialogue: options.dialogue } : {}) },
   });
 
   trace(`chemin choisi : ${NATIVE_PATH}`);
@@ -511,6 +518,17 @@ export class RemuxPlayback {
    * steps aside to a player that *can* carry it instead of rebuilding this one onto a refusal, or
    * telling the viewer their language is unavailable.
    */
+  /**
+   * « Améliorer les dialogues » aurait-il prise sur cette piste ? Oui si elle est déjà ré-encodée
+   * (DTS, TrueHD… là où le navigateur ne les prend pas), ou si notre chaîne sait la décoder pour la
+   * ré-encoder (`dialogueCanShape`). Non pour un AAC 5.1 ou un MP3 copiés : le menu le dit.
+   */
+  canShapeDialogue(trackNumber: number): boolean {
+    const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
+    if (!track) return true;
+    return audioDelivery(track) === "transcode" || dialogueCanShape(track);
+  }
+
   canCarryAudio(trackNumber: number): boolean {
     const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
     // An unknown number is not a codec refusal: let the usual path answer it.

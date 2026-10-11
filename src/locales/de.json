@@ -1463,11 +1463,13 @@
     "subtitleSize": "Untertitelgröße",
     "subtitleOffset": "Versatz",
     "none": "Keine",
-    "voiceBoost": {
-      "title": "Klare Stimmen (Test)",
+    "dialogue": {
+      "title": "Dialoge verbessern",
+      "stronger": "Noch stärker",
+      "on": "Ein",
       "off": "Aus",
-      "voices": "Klare Stimmen",
-      "night": "Nachtmodus"
+      "notThisTrack": "Keine Wirkung auf diese Tonspur",
+      "unavailable": "Dialoge lassen sich bei diesem Titel nicht verbessern: Wiedergabe ohne."
     },
     "speedNormal": "Normal",
     "rewind10": "10s zurück",

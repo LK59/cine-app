@@ -562,6 +562,16 @@ AudioDecoder: Safari's (CoreAudio) fails on Ruby's PCE. Chromium keeps its own A
 falls back to the WebAssembly one only if it refuses the track. `aac-wasm-bench.spec.ts` compares
 the module's output with `ffmpeg -af astats` channel by channel (Ruby: ≤ 0.03 dB on six channels).
 
+**"Enhance dialogue"** (beta, admin only — DECISIONS §68) shapes the voices inside this re-encode:
+`DialogueEnhancer` (`dialogueEnhance.ts`) runs between `fold` and the encoder's channel order, on the
+channels the chain delivers. It raises and equalises the centre of a 3.0/5.1/7.1, the mid of a
+stereo, then applies a linked power-detected compressor and a −1 dBFS limiter. With it on
+(`RemuxOptions.dialogue`), a copied track whose decoder here yields standard order — Dolby, DTS,
+TrueHD, FLAC, AAC/Opus up to stereo — is re-encoded so the samples pass through it. Off, no processor
+exists and `audioDelivery` answers as before, byte for byte (`aac-regress-bench`). Web Audio was
+tried first and fails on iPhone: WebKit does not route a ManagedMediaSource element through
+`createMediaElementSource` (levels stay at −∞).
+
 **Changing track has one path: the player is rebuilt** at the same position, opening directly on
 the new track (`RemuxPlayback.requestAudioTrack`, `openingAudio`, `ExperimentalPlayerHost`) — same
 format or not, on every engine, since 2026-09-22. It is the machinery that already brings the

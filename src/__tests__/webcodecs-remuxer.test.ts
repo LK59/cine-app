@@ -13,12 +13,15 @@ let transcoderCodec = "mp4a.40.2";
 let failNextFrames = false;
 /** Ce que rend `framesUpTo`, et où on le lui a demandé — par défaut, rien. */
 let framesHook: ((endSeconds: number) => Promise<{ data: Uint8Array; timestampUs: number; durationUs: number }[]>) | null = null;
+/** Les arguments du dernier `AudioTranscoder.open` — le 6e est le traitement des voix. */
+let lastTranscoderArgs: unknown[] = [];
 vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/webcodecs/audioTranscode")>();
   return {
     ...original,
     AudioTranscoder: {
-      open: async () => {
+      open: async (...args: unknown[]) => {
+        lastTranscoderArgs = args;
         const instance = {
           closed: false,
           codecString: transcoderCodec,
@@ -845,5 +848,61 @@ describe("des horodatages audio qui reculent", () => {
     readerSamples = [];
     expect(spans.length).toBeGreaterThan(2);
     for (let i = 1; i < spans.length; i++) expect(spans[i].start).toBeGreaterThanOrEqual(spans[i - 1].end);
+  });
+});
+
+describe("« Améliorer les dialogues » — la décision de livraison", () => {
+  // 11/10/2026 (bêta, administrateur). Désactivé, aucune piste ne change de sort : c'est la promesse
+  // faite à tout le monde. Activé, seule une piste copiée que notre chaîne sait décoder passe par le
+  // ré-encodage — là où le traitement a les échantillons entre les mains.
+  const a = (codecId: string, channels: number, codecPrivate?: Uint8Array) =>
+    track({ number: 2, type: "audio", codecId, codecPrivate, audio: { sampleRate: 48000, channels } });
+  const AC3 = a("A_AC3", 6);
+  const EAC3 = a("A_EAC3", 6);
+  const FLAC = a("A_FLAC", 2);
+  const AAC_STEREO = a("A_AAC", 2, Uint8Array.from([0x11, 0x90]));
+  const AAC_51 = a("A_AAC", 6, Uint8Array.from([0x11, 0xb0]));
+  const OPUS_STEREO = a("A_OPUS", 2);
+  const OPUS_51 = a("A_OPUS", 6);
+  const MP3 = a("A_MPEG/L3", 2);
+  const DTS = a("A_DTS", 6);
+  const TRUEHD = a("A_TRUEHD", 8);
+  const ALL = [AC3, EAC3, FLAC, AAC_STEREO, AAC_51, OPUS_STEREO, OPUS_51, MP3, DTS, TRUEHD];
+
+  it("désactivé ou absent : la décision d'avant, piste par piste", () => {
+    for (const t of ALL) {
+      const before = audioDelivery(t, FILE);
+      expect(audioDelivery(t, FILE, {})).toBe(before);
+      expect(audioDelivery(t, FILE, { dialogue: "off" })).toBe(before);
+      expect(plannedMimeTypes(VIDEO, t, FILE, { dialogue: "off" })).toEqual(plannedMimeTypes(VIDEO, t, FILE));
+    }
+  });
+
+  it("activé : le Dolby, le FLAC et l'AAC stéréo copiés passent par le ré-encodage", () => {
+    for (const t of [AC3, EAC3, FLAC, AAC_STEREO]) {
+      expect(audioDelivery(t, FILE)).toBe("copy");
+      expect(audioDelivery(t, FILE, { dialogue: "on" })).toBe("transcode");
+      expect(audioDelivery(t, FILE, { dialogue: "strong" })).toBe("transcode");
+    }
+  });
+
+  it("activé : un AAC ou un Opus multicanal, un MP3, restent copiés (ordre des canaux non mesuré, pas de décodeur)", () => {
+    for (const t of [AAC_51, OPUS_51, MP3]) {
+      expect(audioDelivery(t, FILE, { dialogue: "on" })).toBe(audioDelivery(t, FILE));
+    }
+  });
+
+  it("activé : une piste déjà ré-encodée le reste", () => {
+    // L'Opus stéréo n'est copié qu'hors WebKit et sous conditions (§66) — ici, ré-encodé d'office.
+    for (const t of [DTS, TRUEHD, OPUS_STEREO]) expect(audioDelivery(t, FILE, { dialogue: "on" })).toBe("transcode");
+  });
+
+  it("le remultiplexeur passe le mode au transcodeur ; désactivé, il copie comme avant", async () => {
+    opened.length = 0;
+    await Remuxer.open(SOURCE, FILE, VIDEO, AAC_STEREO, { width: 1920, height: 1080 });
+    expect(opened).toHaveLength(0);
+    await Remuxer.open(SOURCE, FILE, VIDEO, AAC_STEREO, { width: 1920, height: 1080 }, null, 0, { dialogue: "strong" });
+    expect(opened).toHaveLength(1);
+    expect(lastTranscoderArgs[5]).toBe("strong");
   });
 });

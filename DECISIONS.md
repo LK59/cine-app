@@ -2699,3 +2699,55 @@ rechargement WebKit en fin d'échelle, borné par `reloadAttempt`.
 Tests : `retryLedger.test.ts`, `PlayerHost-echelle.test.tsx` (caractérisation de l'échelle, aucune
 exclusion retenue, boucle (a)1), `PlayerHost-hls-recovery.test.tsx` (caractérisation d'hls.js,
 boucle (a)2), `ExperimentalPlayerHost.test.tsx` (boucle (a)3).
+
+## 68. « Améliorer les dialogues » : dans la chaîne audio, sur les canaux livrés — bêta, administrateur
+
+**Règle.** Le traitement des voix vit dans le ré-encodage du lecteur natif, entre le repli des
+canaux (`fold`) et la permutation de l'encodeur d'Apple (`toCodecChannelOrder`), là où les plans sont
+dans l'ordre standard. Il garde les canaux que la chaîne a choisis : un 5.1 reste un 5.1, la stéréo
+reste stéréo. Selon la disposition, il égalise et remonte le centre d'un 3.0, d'un 5.1 ou d'un 7.1
+(faces, ambiances et surtout caisson baissés), ou bien le milieu d'une stéréo (mid/side, côtés
+baissés), ou le canal unique d'un mono. Toute autre disposition reçoit la compression seule. Viennent
+ensuite un compresseur lié (un gain pour tous les canaux, détecteur en puissance), un rattrapage et un
+limiteur sous −1 dBFS. Deux forces : « Améliorer les dialogues » (`on`) et « Encore plus fort »
+(`strong`). Activé, une piste copiée telle quelle passe par le ré-encodage si un décodeur d'ici rend
+ses canaux dans l'ordre standard (`dialogueCanShape`) : Dolby, DTS, TrueHD, FLAC, et AAC ou Opus en
+mono ou stéréo. Un AAC ou un Opus multicanal (ordre de sortie du décodeur non mesuré partout), un
+AAC à PCE (§62) et un MP3 restent copiés, et le menu dit « Sans effet sur cette piste audio ».
+
+**Désactivé, rien ne change, à l'octet près.** Aucun processeur n'est instancié, et `audioDelivery`
+rend la décision d'avant (`fileAudioDelivery`). Prouvé avant le déploiement par
+`aac-regress-bench.spec.ts` sur 43 pistes, en agent WebKit et Chromium, sorties identiques avant et
+après ; et par les tests du transcodeur (l'encodeur reçoit les échantillons du décodeur tels quels).
+
+**Pourquoi pas Web Audio.** La sonde 8.39.0 (`createMediaElementSource` sur l'élément) : sur iPhone,
+contexte `running` et niveaux à −∞, sans aucune différence à l'oreille. WebKit ne fait pas passer le
+son d'un élément nourri par ManagedMediaSource dans Web Audio. Le ré-encodage est le seul endroit où
+le son passe entre nos mains sur tous les navigateurs. La sonde est retirée.
+
+**Réglages mesurés, pas devinés.** Six scènes 5.1 réelles (« Interstellar », « Manchester by the
+Sea ») et une stéréo (« Bref »). Mesures : niveau d'ensemble, 10e et 95e centiles du niveau par
+fenêtre de 400 ms, centre contre faces. « Améliorer » : niveau moyen −0,6 dB, voix +4 dB. « Encore
+plus fort » : −2 dB en moyenne, scènes calmes jusqu'à +11 dB, les plus fortes −10 à −19 dB, voix
++5,7 dB. Un premier détecteur de crête baissait tout de plus de 10 dB : les crêtes d'un film passent
+12 à 15 dB au-dessus des voix. Coût : environ 1,4 % du temps réel pour un 5.1.
+
+**Bascule.** Comme le plafond HDR : la reconstruction du lecteur à la même position, avec l'image
+figée et la pause respectée. Une ouverture avec le traitement qui échoue avant sa première image
+repart une fois sans lui (`dropDialogue`), jamais vers le lecteur serveur pour ça. Le réglage de
+l'appareil n'est pas effacé.
+
+**Porteurs.** `DialogueEnhancer`, `DIALOGUE_TUNING` (`dialogueEnhance.ts`) ; `AudioTranscoder.open`
+(6e paramètre) et `encode` (`audioTranscode.ts`) ; `RemuxOptions.dialogue`, `audioDelivery`,
+`dialogueCanShape` (`remuxer.ts`) ; `RemuxPlaybackOptions.dialogue`, `canShapeDialogue`
+(`remuxPlayback.ts`) ; `readDialogueMode` / `writeDialogueMode` (`dialoguePreference.ts`, par
+appareil, clé `cine-dialogue`) ; `ExperimentalPlayerHost` (administrateur seulement, `dropDialogue`) ;
+le menu « … » de `PlayerControls`, marqué « Bêta ». La ligne `start` porte `dialogue` quand il est
+actif, et rien sinon.
+
+**Volontairement à part.** Le lecteur serveur (HLS de Jellyfin), où le son ne passe pas par nous. Les
+pistes que le traitement ne prend pas, plutôt que de parier sur l'ordre de leurs canaux. Les autres
+comptes, tant que c'est une bêta.
+
+Tests : `dialogueEnhance.test.ts`, `webcodecs-audioTranscode.test.ts`, `webcodecs-remuxer.test.ts`,
+`PlayerControls.test.tsx`, `ExperimentalPlayerHost.test.tsx` (« améliorer les dialogues »).

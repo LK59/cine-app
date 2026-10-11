@@ -551,3 +551,76 @@ describe("AudioTranscoder — horloges du son", () => {
   });
 });
 
+
+describe("« Améliorer les dialogues » dans le transcodeur", () => {
+  // 11/10/2026. Désactivé : l'encodeur reçoit exactement ce que le décodeur rend (rien n'est
+  // instancié). Activé : le traitement passe sur chaque bloc, aux mêmes canaux, et repart à neuf
+  // à chaque saut.
+  const TONE = Array.from({ length: 6 }, (_, c) => {
+    const p = new Float32Array(512);
+    for (let i = 0; i < 512; i++) p[i] = 0.2 * Math.sin((2 * Math.PI * (300 + c * 200) * i) / 48000);
+    return p;
+  });
+  function toneBlocks(count: number, fromSeconds = 0) {
+    return (async function* () {
+      for (let i = 0; i < count; i++) yield { planes: TONE, sampleRate: 48000, timestampSeconds: fromSeconds + (i * 512) / 48000 };
+    })();
+  }
+  /** Le même faux encodeur, qui garde en plus les échantillons qu'on lui donne. */
+  function capturingEncoder() {
+    const Base = fakeEncoderClass();
+    const fed: { channels: number; data: Float32Array }[] = [];
+    class Capturing extends Base {
+      static fed = fed;
+      encode(data: FakeAudioData) {
+        const init = data.init as unknown as { numberOfChannels: number; data: Float32Array };
+        fed.push({ channels: init.numberOfChannels, data: init.data.slice() });
+        super.encode(data);
+      }
+    }
+    return Capturing;
+  }
+  const interleaved = (planes: Float32Array[]) => {
+    const out = new Float32Array(planes[0].length * planes.length);
+    planes.forEach((p, c) => p.forEach((v, i) => (out[i * planes.length + c] = v)));
+    return out;
+  };
+
+  it("désactivé : l'encodeur reçoit les échantillons du décodeur, tels quels", async () => {
+    const Encoder = capturingEncoder();
+    vi.stubGlobal("AudioEncoder", Encoder);
+    samples.mockImplementation((from: number) => toneBlocks(200, from));
+    const { AudioTranscoder } = await load();
+    for (const dialogue of [undefined, "off" as const]) {
+      Encoder.fed.length = 0;
+      const transcoder = await AudioTranscoder.open(source as never, track as never, 0, undefined, undefined, dialogue);
+      await transcoder.framesUpTo(0.5);
+      expect(Encoder.fed.length).toBeGreaterThan(0);
+      for (const block of Encoder.fed) {
+        expect(block.channels).toBe(6);
+        expect(block.data).toEqual(interleaved(TONE));
+      }
+      transcoder.close();
+    }
+  });
+
+  it("activé : chaque bloc est traité, aux mêmes six canaux, et le traitement repart à neuf après un saut", async () => {
+    const Encoder = capturingEncoder();
+    vi.stubGlobal("AudioEncoder", Encoder);
+    samples.mockImplementation((from: number) => toneBlocks(200, from));
+    const { AudioTranscoder } = await load();
+    const { DialogueEnhancer } = await import("@/lib/webcodecs/dialogueEnhance");
+    const reset = vi.spyOn(DialogueEnhancer.prototype, "reset");
+    const transcoder = await AudioTranscoder.open(source as never, track as never, 0, undefined, undefined, "on");
+    const resetsAtOpen = reset.mock.calls.length;
+    Encoder.fed.length = 0;
+    await transcoder.framesUpTo(0.5);
+    const treated = Encoder.fed.filter((b) => b.channels === 6);
+    expect(treated.length).toBe(Encoder.fed.length);
+    expect(treated.some((b) => !b.data.every((v, i) => v === interleaved(TONE)[i]))).toBe(true);
+    transcoder.seekTo(60);
+    expect(reset.mock.calls.length).toBe(resetsAtOpen + 1);
+    transcoder.close();
+    reset.mockRestore();
+  });
+});

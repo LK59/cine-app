@@ -1236,6 +1236,56 @@ describe("ajuster à l'écran", () => {
   });
 });
 
+// « Améliorer les dialogues » (11/10/2026, bêta, administrateur) : comme l'Apple TV, un
+// interrupteur, puis « Encore plus fort » une fois activé. Absent sans la prop (tout autre compte).
+describe("améliorer les dialogues", () => {
+  async function openDialogue(props: Record<string, unknown>) {
+    stubMediaFetches();
+    const { container } = render(<Harness {...props} />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));
+  }
+
+  it("n'existe pas sans la prop — tout compte qui n'est pas administrateur", async () => {
+    await openDialogue({});
+    expect(screen.queryByText(/player\.dialogue\.title/)).toBeNull();
+  });
+
+  it("une entrée marquée Bêta, puis un interrupteur ; « Encore plus fort » n'apparaît qu'activé", async () => {
+    const onChange = vi.fn();
+    await openDialogue({ dialogue: { mode: "off", applies: true, onChange } });
+    const row = screen.getByText(/player\.dialogue\.title/).closest("button")!;
+    expect(row.textContent).toContain("player.chromecast.beta");
+    expect(row.textContent).toContain("player.dialogue.off");
+    await act(async () => void fireEvent.click(row));
+    const switches = screen.getAllByRole("switch");
+    expect(switches).toHaveLength(1);
+    expect(switches[0].getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(switches[0]);
+    expect(onChange).toHaveBeenCalledWith("on");
+  });
+
+  it("activé : « Encore plus fort » bascule entre les deux forces, et l'interrupteur principal éteint", async () => {
+    const onChange = vi.fn();
+    await openDialogue({ dialogue: { mode: "on", applies: true, onChange } });
+    await act(async () => void fireEvent.click(screen.getByText(/player\.dialogue\.title/).closest("button")!));
+    const [main, stronger] = screen.getAllByRole("switch");
+    expect(stronger.textContent).toContain("player.dialogue.stronger");
+    expect(stronger.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(stronger);
+    expect(onChange).toHaveBeenLastCalledWith("strong");
+    fireEvent.click(main);
+    expect(onChange).toHaveBeenLastCalledWith("off");
+  });
+
+  it("dit quand la piste qui joue n'est pas de celles qu'il prend", async () => {
+    await openDialogue({ dialogue: { mode: "strong", applies: false, onChange: vi.fn() } });
+    await act(async () => void fireEvent.click(screen.getByText(/player\.dialogue\.title/).closest("button")!));
+    expect(screen.getByText("player.dialogue.notThisTrack")).toBeTruthy();
+    expect(screen.getAllByRole("switch")[1].getAttribute("aria-checked")).toBe("true");
+  });
+});
+
 describe("PlayerControls — la minuterie de veille", () => {
   afterEach(() => sleepTimerStore.clear());
 

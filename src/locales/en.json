@@ -1463,11 +1463,13 @@
     "subtitleSize": "Subtitle size",
     "subtitleOffset": "Offset",
     "none": "None",
-    "voiceBoost": {
-      "title": "Clear voices (test)",
+    "dialogue": {
+      "title": "Enhance dialogue",
+      "stronger": "Even stronger",
+      "on": "On",
       "off": "Off",
-      "voices": "Clear voices",
-      "night": "Night mode"
+      "notThisTrack": "No effect on this audio track",
+      "unavailable": "Dialogue can't be enhanced on this title: playing without it."
     },
     "speedNormal": "Normal",
     "rewind10": "Rewind 10s",

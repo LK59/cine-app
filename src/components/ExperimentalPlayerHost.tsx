@@ -45,8 +45,9 @@ import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { subtitleStyleStore, overlayCss } from "@/lib/subtitleStyle";
 import { useFrameFit } from "@/lib/frameFit";
-import { useVoiceBoost } from "@/lib/voiceBoost";
 import { useRole } from "@/lib/useRole";
+import { readDialogueMode, writeDialogueMode } from "@/lib/dialoguePreference";
+import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import { noteWatching, openingPosition, rewound, AWAY_MS } from "@/lib/resumeRewind";
 import { warmNextEpisode } from "@/lib/nextEpisodeWarmup";
 import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
@@ -607,6 +608,24 @@ export function ExperimentalPlayerHost({
   const [currentAudio, setCurrentAudio] = useState<number | null>(null);
   /** Le plafond de lumière HDR choisi sur cet appareil — voir `hdrDisplay.ts`. */
   const [hdrCapChoice, setHdrCapChoice] = useState<HdrCapChoice>(readHdrCapChoice);
+  /**
+   * « Améliorer les dialogues » (bêta, administrateur seulement — `dialogueEnhance.ts`). Le réglage
+   * retenu sur l'appareil, et celui que la prochaine ouverture lira (`dialogueOpenRef`) : « off » pour
+   * tout compte qui n'est pas administrateur, quel que soit ce que l'appareil a retenu. Un pipeline
+   * ouvert avec le traitement et qui échoue avant sa première image repart une fois sans lui
+   * (`dialogueFellBackRef`) plutôt que de confier le film au lecteur serveur.
+   */
+  const { role } = useRole();
+  const dialogueAllowed = role === "admin";
+  const [dialogueMode, setDialogueMode] = useState<DialogueMode>(readDialogueMode);
+  /** Les pistes audio sur lesquelles le traitement a prise, publiées avec les pistes du pipeline. */
+  const [dialogueShapeable, setDialogueShapeable] = useState<ReadonlySet<number>>(() => new Set());
+  const dialogueOpenRef = useRef<DialogueMode>("off");
+  const dialogueFellBackRef = useRef(false);
+  useEffect(() => {
+    // Avant l'effet qui construit le pipeline (déclaré plus bas, exécuté après dans le même rendu).
+    dialogueOpenRef.current = dialogueAllowed && !dialogueFellBackRef.current ? dialogueMode : "off";
+  }, [dialogueAllowed, dialogueMode]);
   /**
    * Le réglage n'est proposé que là où il sert — écran SDR, hors WebKit — et « auto » y vaut ce
    * que `autoHdrCap` dit. Lu une fois à l'ouverture : l'écran ne change pas en cours de film, ou
@@ -1633,6 +1652,28 @@ export function ExperimentalPlayerHost({
     // la retenir ferait décoder pour toujours une piste que ce navigateur copiait.
     let pipelineShowedPicture = false;
     let unsubscribes: (() => void)[] = [];
+    // Le traitement des voix demandé à CETTE ouverture : c'est lui qu'un échec désigne, pas le
+    // réglage courant, qui a pu changer depuis.
+    const openedDialogue = dialogueOpenRef.current;
+    /**
+     * Une ouverture avec « Améliorer les dialogues » qui échoue avant sa première image : on repart
+     * une fois, au même endroit, sans le traitement — un réglage d'écoute ne doit jamais coûter le
+     * film ni l'envoyer au lecteur serveur. Le réglage retenu sur l'appareil n'est pas effacé : le
+     * film suivant le reprend.
+     */
+    const dropDialogue = (why: string): boolean => {
+      if (openedDialogue === "off" || pipelineShowedPicture || dialogueFellBackRef.current) return false;
+      if (!lifecycle.mayRebuild()) return true;
+      dialogueFellBackRef.current = true;
+      dialogueOpenRef.current = "off";
+      setDialogueMode("off");
+      const at = positionRef.current || startSeconds;
+      trace(`dialogues améliorés impossibles ici (${why}) — reprise sans eux`);
+      reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `dialogues améliorés impossibles — ${why}`, at });
+      showWarning(tRef.current("player.dialogue.unavailable"));
+      restart(at, "dialogues améliorés impossibles, reprise sans eux");
+      return true;
+    };
 
     // A pipeline that has just become ready cannot owe a resume or a track change: whatever the
     // previous one was waiting for died with it, and a wait nobody will ever answer is a spinner
@@ -1733,6 +1774,8 @@ export function ExperimentalPlayerHost({
         ...pceDecisionFacts(),
         // Et, décodé, par quel décodeur : FFmpeg en WebAssembly hors Chromium, le navigateur sinon.
         ...aacRouteFacts(),
+        // Écrit seulement quand il est actif : la ligne de tout autre compte ne change pas.
+        ...(openedDialogue !== "off" ? { dialogue: openedDialogue } : {}),
       });
     };
 
@@ -1800,6 +1843,13 @@ export function ExperimentalPlayerHost({
       setPath("remux");
       announceStart("remux", "remultiplexage → lecteur natif");
       setTracks({ audio: playback.audioTracks, subtitles: playback.subtitleTracks });
+      // Une question annexe, posée sur le chemin du démarrage : elle ne doit jamais en devenir la
+      // panne (CLAUDE.md). Sans réponse, le menu ne dit simplement rien de la piste.
+      try {
+        setDialogueShapeable(new Set(playback.audioTracks.filter((track) => playback.canShapeDialogue(track.number)).map((track) => track.number)));
+      } catch {
+        setDialogueShapeable(new Set(playback.audioTracks.map((track) => track.number)));
+      }
 
       // Given back what the viewer had chosen, if this pipeline is a replacement for one that
       // had it. A film that comes back after a network cut in the wrong language, with the
@@ -2085,6 +2135,9 @@ export function ExperimentalPlayerHost({
       // Ce que le spectateur a choisi, si ce pipeline en remplace un : on ouvre dessus, au lieu
       // d'ouvrir ailleurs puis d'y basculer. Voir `openingAudio`.
       audioTrackNumber: wantedAudioRef.current,
+      // « Améliorer les dialogues », lu à cette ouverture — absent pour tout le monde sauf
+      // l'administrateur qui l'a activé.
+      ...(openedDialogue !== "off" ? { dialogue: openedDialogue } : {}),
       // Reconstruit pour un changement de piste pendant une pause : rien ne doit le relancer, ni
       // ce composant (voir startRemux) ni la garde de démarrage de la source.
       startPaused: lifecycle.keepPaused,
@@ -2110,6 +2163,7 @@ export function ExperimentalPlayerHost({
           restart(at, "copie AAC à PCE refusée par le navigateur, décodée à la place");
           return;
         }
+        if (dropDialogue(message)) return;
         // A closed source is not a fault to report, it is a pipeline to build again. Safari
         // closes one from time to time — a decode failure it will not explain, sometimes on a
         // seek, sometimes at a change of track — and everything that follows is wreckage. The
@@ -2205,6 +2259,7 @@ export function ExperimentalPlayerHost({
         // Reconstruit pour une piste que le lecteur natif n'a finalement pas pu ouvrir — module
         // TrueHD injoignable, encodeur qui refuse : le lecteur serveur coûterait un film qui jouait
         // très bien, pour un choix de langue. On revient à la piste d'avant.
+        if (dropDialogue(message)) return;
         if (revertFailedSwitch(message)) return;
         fallToStable(message);
       });
@@ -2584,10 +2639,6 @@ export function ExperimentalPlayerHost({
   // proche, sans rien couper — voir `frameFit`. Pas dans le mini-lecteur, qui remplit déjà sa
   // fenêtre (`object-cover`).
   const frameFitState = useFrameFit(itemId, !isMini, containerRef, videoElRef);
-  // « Voix claires », sonde réservée à l'administrateur (voiceBoost.ts) : pour tout autre compte
-  // la commande n'existe pas et rien ne touche au son.
-  const { role } = useRole();
-  const voiceBoost = useVoiceBoost(videoElRef, role === "admin");
 
   // Après tous les hooks : le banc d'essai en a ajouté trois au-dessus, et un retour anticipé
   // avant eux en changeait le nombre d'un rendu à l'autre.
@@ -2922,7 +2973,28 @@ export function ExperimentalPlayerHost({
             suspended={!ready || networkLost !== null || endScreen}
             // L'interrupteur n'apparaît que s'il y a un agrandissement à défaire — voir `useFrameFit`.
             frameFit={frameFitState.available ? { on: frameFitState.on, onChange: frameFitState.setOn } : undefined}
-            voiceBoost={voiceBoost}
+            dialogue={
+              path === "remux" && dialogueAllowed
+                ? {
+                    mode: dialogueMode,
+                    // Sans effet sur la piste qui joue (un AAC 5.1, un MP3…) : dit dans le menu, pour
+                    // qu'un réglage inaudible ne passe pas pour un réglage cassé.
+                    applies: currentAudio === null || dialogueShapeable.has(currentAudio),
+                    onChange: (mode) => {
+                      writeDialogueMode(mode);
+                      setDialogueMode(mode);
+                      dialogueFellBackRef.current = false;
+                      dialogueOpenRef.current = mode;
+                      if (!remuxRef.current) return; // entre deux pipelines : le suivant le lira
+                      // Le traitement est dans la chaîne audio : il faut la reconstruire, à la même
+                      // position, comme pour un changement de piste — pause et image figée comprises.
+                      lifecycle.setKeepPaused(videoElRef.current?.paused ?? false);
+                      setFrozen(freezeFrame());
+                      restart(intendedPosition(), `dialogues améliorés : ${mode}`, true);
+                    },
+                  }
+                : undefined
+            }
             hdrCap={
               path === "remux" && hdrCapContext.relevant && info?.video?.rangeType && info.video.rangeType !== "SDR"
                 ? {

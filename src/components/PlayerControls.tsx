@@ -3,7 +3,7 @@
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech } from "lucide-react";
-import type { VoiceBoostControl } from "@/lib/voiceBoost";
+import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
 import { formatTime } from "@/lib/playerClock";
@@ -155,10 +155,11 @@ interface PlayerControlsProps {
    */
   frameFit?: { on: boolean; onChange: (on: boolean) => void };
   /**
-   * « Voix claires », sonde administrateur (`voiceBoost.ts`). Absent pour tout autre compte et
-   * dans le lecteur serveur : rien n'est proposé, et le son ne passe jamais par Web Audio.
+   * « Améliorer les dialogues » (bêta, administrateur seulement — `dialogueEnhance.ts`). Absent pour
+   * tout autre compte et dans le lecteur serveur : rien n'est proposé. `applies` faux : la piste qui
+   * joue est de celles que le traitement ne prend pas (un AAC 5.1 copié, un MP3), et le menu le dit.
    */
-  voiceBoost?: VoiceBoostControl;
+  dialogue?: { mode: DialogueMode; applies: boolean; onChange: (mode: DialogueMode) => void };
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -282,7 +283,7 @@ export function PlayerControls({
   suspended = false,
   hdrCap,
   frameFit,
-  voiceBoost,
+  dialogue,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -371,7 +372,7 @@ export function PlayerControls({
   useEffect(() => {
     visibleRef.current = visible;
   }, [visible]);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "voiceBoost" | "more">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "more">(null);
   /** « Auto · 203 nits », « Natif », « 400 nits » — le réglage de luminosité HDR, en mots. */
   const hdrCapLabel = (choice: HdrCapChoice): string =>
     choice === "auto"
@@ -1928,12 +1929,18 @@ export function PlayerControls({
                     {castActive ? t("player.castStop") : t("player.castReturn")}
                   </button>
                 )}
-                {voiceBoost && (
+                {dialogue && (
                   <button
-                    onClick={() => setMenu("voiceBoost")}
+                    onClick={() => setMenu("dialogue")}
                     className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                   >
-                    <Speech size={16} /> {t("player.voiceBoost.title")} · {t(`player.voiceBoost.${voiceBoost.mode}`)}
+                    <Speech size={16} />
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate">
+                        {t("player.dialogue.title")} · {dialogue.mode === "off" ? t("player.dialogue.off") : t("player.dialogue.on")}
+                      </span>
+                      <DialogueBeta />
+                    </span>
                   </button>
                 )}
                 {frameFit && (
@@ -1979,7 +1986,7 @@ export function PlayerControls({
                 </div>
               </>
             )}
-            {(menu === "chapters" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep" || menu === "speed" || menu === "voiceBoost") && (
+            {(menu === "chapters" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep" || menu === "speed" || menu === "dialogue") && (
               <button
                 onClick={() => setMenu(menu === "subtitleStyle" ? "subtitles" : "more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
@@ -2123,41 +2130,30 @@ export function PlayerControls({
                   {sleepLabel(choice)}
                 </button>
               ))}
-            {menu === "voiceBoost" && voiceBoost && (
+            {/* Comme l'Apple TV : un interrupteur, et dessous, une fois activé, « Encore plus fort ».
+                Chaque bascule reconstruit la lecture au même endroit (le traitement vit dans la
+                chaîne audio) : le menu reste ouvert, on entend le changement une seconde après. */}
+            {menu === "dialogue" && dialogue && (
               <>
-                {(["off", "voices", "night"] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => voiceBoost.setMode(m)}
-                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
-                      voiceBoost.mode === m ? "text-accent-400" : "text-white"
-                    }`}
-                  >
-                    {t(`player.voiceBoost.${m}`)}
-                  </button>
-                ))}
-                {/* Le relevé de la sonde, lu à l'écran par l'administrateur : il dit si le son passe
-                    encore, ce qui arrive (canaux) et la latence ajoutée. Pas traduit : c'est un outil. */}
-                {(voiceBoost.diag || voiceBoost.error) && (
-                  <div data-voice-boost-diag className="border-t border-white/[0.08] px-3 py-2 font-mono text-[11px] leading-snug text-white/60">
-                    {voiceBoost.error && <div className="text-red-300">{voiceBoost.error}</div>}
-                    {voiceBoost.diag && (
-                      <>
-                        <div>
-                          {voiceBoost.diag.state} · {voiceBoost.diag.sampleRate} Hz
-                          {voiceBoost.diag.latencyMs !== null ? ` · +${voiceBoost.diag.latencyMs} ms` : ""}
-                        </div>
-                        <div>
-                          {voiceBoost.diag.layout} · out {voiceBoost.diag.outDb ?? "−∞"} dB
-                        </div>
-                        <div>
-                          {["L", "R", "C", "LFE", "Ls", "Rs"]
-                            .map((n, i) => `${n} ${voiceBoost.diag?.levelsDb[i] ?? "−∞"}`)
-                            .join(" · ")}
-                        </div>
-                      </>
-                    )}
-                  </div>
+                <div className="flex items-center gap-2 px-3 pt-1 pb-2">
+                  <DialogueBeta />
+                </div>
+                <DialogueSwitch
+                  label={t("player.dialogue.title")}
+                  on={dialogue.mode !== "off"}
+                  onToggle={() => dialogue.onChange(dialogue.mode === "off" ? "on" : "off")}
+                />
+                {dialogue.mode !== "off" && (
+                  <DialogueSwitch
+                    label={t("player.dialogue.stronger")}
+                    on={dialogue.mode === "strong"}
+                    onToggle={() => dialogue.onChange(dialogue.mode === "strong" ? "on" : "strong")}
+                  />
+                )}
+                {dialogue.mode !== "off" && !dialogue.applies && (
+                  <p data-dialogue-not-applied className="px-3 pt-1 pb-2 text-xs text-white/60">
+                    {t("player.dialogue.notThisTrack")}
+                  </p>
                 )}
               </>
             )}
@@ -2693,5 +2689,33 @@ function PlayerTitle({ title, logoUrl }: { title: string; logoUrl: string | null
       )}
       {cut !== -1 && <p className="truncate text-[13px] font-medium text-white/70 sm:text-sm">{title.slice(cut + 3)}</p>}
     </>
+  );
+}
+
+/** « Bêta », le même badge que la diffusion Chromecast — à retirer quand le réglage aura fait ses preuves. */
+function DialogueBeta() {
+  const t = useT();
+  return (
+    <span className="shrink-0 rounded-full border border-white/20 px-1.5 py-px text-[11px] font-semibold uppercase leading-4 tracking-wider text-white/70">
+      {t("player.chromecast.beta")}
+    </span>
+  );
+}
+
+/** Une ligne interrupteur du menu, la même forme que « Ajuster à l'écran ». */
+function DialogueSwitch({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+    >
+      <span>{label}</span>
+      <span aria-hidden className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-white/80" : "bg-white/20"}`}>
+        <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform ${on ? "translate-x-4 bg-black" : "bg-white"}`} />
+      </span>
+    </button>
   );
 }

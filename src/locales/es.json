@@ -1463,11 +1463,13 @@
     "subtitleSize": "Tamaño de subtítulos",
     "subtitleOffset": "Desfase",
     "none": "Ninguno",
-    "voiceBoost": {
-      "title": "Voces claras (prueba)",
+    "dialogue": {
+      "title": "Mejorar los diálogos",
+      "stronger": "Aún más fuerte",
+      "on": "Activado",
       "off": "Desactivado",
-      "voices": "Voces claras",
-      "night": "Modo noche"
+      "notThisTrack": "Sin efecto en esta pista de audio",
+      "unavailable": "No se pueden mejorar los diálogos de este título: se reproduce sin ello."
     },
     "speedNormal": "Normal",
     "rewind10": "Retroceder 10s",

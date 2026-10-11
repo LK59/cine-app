@@ -30,6 +30,7 @@ import {
   type TranscodedFrame,
 } from "./audioTranscode";
 import { trace } from "./trace";
+import type { DialogueMode } from "./dialogueEnhance";
 import { diagInterval, diagNow } from "./playbackDiagnosis";
 import { containerAccepts } from "./mseSource";
 import { createSampleReader, type MediaSampleReader } from "./mediaFile";
@@ -338,10 +339,17 @@ export interface RemuxOptions {
    * n'affiche pas le HDR. Voir `withCappedLightLevels` et `hdrLuminanceCap`.
    */
   lightCapNits?: number | null;
+  /**
+   * « Améliorer les dialogues » (`dialogueEnhance.ts`) pour cette ouverture — absent ou « off » par
+   * défaut, et alors rien ne change, à l'octet près. Actif, une piste qui serait copiée telle quelle
+   * passe par le ré-encodage si notre chaîne sait la décoder (`dialogueCanShape`), pour que le
+   * traitement des voix ait les échantillons entre les mains.
+   */
+  dialogue?: DialogueMode;
 }
 
-/** Ce que les fonctions de plan lisent des options : la livraison seulement. */
-export type AudioDeliveryOptions = Pick<RemuxOptions, "perTrack">;
+/** Ce que les fonctions de plan lisent des options : la livraison, et le traitement des voix. */
+export type AudioDeliveryOptions = Pick<RemuxOptions, "perTrack" | "dialogue">;
 
 const perTrackOf = (options: AudioDeliveryOptions | undefined): boolean => options?.perTrack ?? DEFAULT_PER_TRACK;
 
@@ -461,6 +469,35 @@ export function unifiedAudioChannels(file: MatroskaFile, options?: AudioDelivery
  * {@link unifiedAudioCodec}.
  */
 export function audioDelivery(track: MatroskaTrack, file?: MatroskaFile, options?: AudioDeliveryOptions): AudioDelivery {
+  const delivery = fileAudioDelivery(track, file, options);
+  // « Améliorer les dialogues » : seule une piste copiée change de sort, et seulement si notre chaîne
+  // sait la décoder. Désactivé — le cas de tout le monde —, la réponse est celle d'avant.
+  if (delivery === "copy" && options?.dialogue && options.dialogue !== "off" && dialogueCanShape(track)) return "transcode";
+  return delivery;
+}
+
+/**
+ * Les pistes copiées que le traitement des voix peut prendre : celles qu'un décodeur d'ici rend dans
+ * l'ordre standard des canaux, ce que le traitement suppose (il remonte le rang 2, le centre).
+ * - Dolby (AC-3, E-AC-3), DTS, TrueHD, FLAC : nos décodeurs, dont l'ordre est celui que le
+ *   ré-encodage utilise déjà tous les jours (Chrome pour le Dolby, Safari pour le DTS et le TrueHD).
+ * - AAC et Opus en mono ou stéréo seulement : au-delà, l'ordre dans lequel le décodeur du navigateur
+ *   rend leurs canaux n'a pas été mesuré partout (CLAUDE.md, « ne pas parier sur l'ordre des
+ *   canaux ») — un 5.1 AAC reste copié, sans traitement, plutôt que de risquer les voix dans une
+ *   ambiance. Un AAC à PCE garde sa propre décision (DECISIONS §62).
+ * Le reste (MP3, Vorbis, PCM) reste copié.
+ */
+export function dialogueCanShape(track: MatroskaTrack): boolean {
+  const channels = track.audio?.channels ?? 2;
+  if (track.codecId === "A_AAC") return channels <= 2 && !parseAacConfig(track.codecPrivate)?.pce;
+  if (track.codecId === "A_OPUS") return channels <= 2;
+  return DIALOGUE_DECODERS.has(track.codecId);
+}
+
+const DIALOGUE_DECODERS = new Set(["A_AC3", "A_EAC3", "A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS", "A_TRUEHD", "A_MLP", "A_FLAC"]);
+
+/** La livraison d'une piste dans son fichier, sans le traitement des voix — la règle d'avant. */
+function fileAudioDelivery(track: MatroskaTrack, file?: MatroskaFile, options?: AudioDeliveryOptions): AudioDelivery {
   const natural = naturalDelivery(track);
   if (!file || natural === "none") return natural;
 
@@ -773,9 +810,10 @@ export class Remuxer {
      */
     private readonly dolbyVisionCodec: string | null = null,
     /** Les options de son ouverture, à lui seul — voir `RemuxOptions`. */
-    private readonly settings: { perTrack: boolean; lightCapNits: number | null } = {
+    private readonly settings: { perTrack: boolean; lightCapNits: number | null; dialogue: DialogueMode } = {
       perTrack: DEFAULT_PER_TRACK,
       lightCapNits: null,
+      dialogue: "off",
     }
   ) {
     this.nalLength = nalLengthSize(videoTrack.codecId, videoTrack.codecPrivate);
@@ -802,7 +840,7 @@ export class Remuxer {
     startSeconds = 0,
     options: RemuxOptions = {}
   ): Promise<Remuxer> {
-    const settings = { perTrack: perTrackOf(options), lightCapNits: options.lightCapNits ?? null };
+    const settings = { perTrack: perTrackOf(options), lightCapNits: options.lightCapNits ?? null, dialogue: options.dialogue ?? ("off" as DialogueMode) };
     if (!remuxableVideo(videoTrack)) throw new Error(`Vidéo non remultiplexable : ${videoTrack.codecId}`);
     if (audioTrack && !playableAudio(audioTrack)) throw new Error(`Audio non remultiplexable : ${audioTrack.codecId}`);
 
@@ -811,7 +849,7 @@ export class Remuxer {
     // and the encoder — not the file — is then what describes it.
     const transcoder =
       audioTrack && audioDelivery(audioTrack, file, settings) === "transcode"
-        ? await AudioTranscoder.open(source, audioTrack, startSeconds, unifiedAudioChannels(file, settings) ?? undefined, file)
+        ? await AudioTranscoder.open(source, audioTrack, startSeconds, unifiedAudioChannels(file, settings) ?? undefined, file, settings.dialogue)
         : null;
     if (transcoder) assertContainerTakes(transcoder);
     const audioInfo = audioTrack
@@ -1282,7 +1320,7 @@ export class Remuxer {
     const previous = this.transcoder;
     let next: AudioTranscoder;
     try {
-      next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file, this.settings) ?? undefined, this.file);
+      next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file, this.settings) ?? undefined, this.file, this.settings.dialogue);
     } catch (error) {
       // Une lecture coupée par un saut n'est pas un échec de l'encodeur : elle ne compte pas dans
       // le budget de reconstructions — sans quoi quelques sauts pendant une panne d'encodeur

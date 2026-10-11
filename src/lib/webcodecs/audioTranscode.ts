@@ -9,6 +9,7 @@
 // The half-second of latency this adds is spent ahead of playback, not at it: a segment's audio is
 // produced while the previous one is still being watched.
 
+import { DialogueEnhancer, type DialogueMode } from "./dialogueEnhance";
 import { aacPlan } from "./aacConfig";
 import { effectivePceAnswer } from "./aacPceProbe";
 import { audioSampleEntryFor } from "./mp4SampleEntries";
@@ -493,7 +494,12 @@ export class AudioTranscoder {
      * Un encodeur neuf, configuré comme celui-ci et branché au même endroit — voir seekTo. Absent
      * dans les tests qui construisent un transcodeur à la main : on retombe alors sur reset().
      */
-    private readonly renew: (() => AudioEncoder) | null = null
+    private readonly renew: (() => AudioEncoder) | null = null,
+    /**
+     * « Améliorer les dialogues » (`dialogueEnhance.ts`), ou rien : sans lui, chaque bloc va à
+     * l'encodeur exactement comme avant. Remis à zéro à chaque saut, comme l'encodeur.
+     */
+    private readonly enhancer: DialogueEnhancer | null = null
   ) {}
 
   /** What the encoder actually produced, not what it was asked for. */
@@ -534,7 +540,12 @@ export class AudioTranscoder {
      * l'index d'un 4K de soixante gigaoctets à chaque changement de piste : 4,4 et 5,3 s mesurées
      * sur un iPhone le 21/09/2026, l'essentiel de l'attente.
      */
-    file?: MatroskaFile
+    file?: MatroskaFile,
+    /**
+     * Le traitement des voix demandé pour cette ouverture (`RemuxOptions.dialogue`). Absent ou
+     * « off » : aucun processeur n'est créé.
+     */
+    dialogue?: DialogueMode
   ): Promise<AudioTranscoder> {
     const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
     if (!Encoder) throw new Error("Ce navigateur ne sait pas encoder de l'audio.");
@@ -546,9 +557,16 @@ export class AudioTranscoder {
     // l'encodeur amorcé n'ont encore aucun propriétaire : fermés ici, sur chaque sortie en erreur.
     let primedEncoder: AudioEncoder | null = null;
     try {
-      return await AudioTranscoder.build(Encoder, decoder, fromSeconds, unifiedChannels, (encoder) => {
-        primedEncoder = encoder;
-      });
+      return await AudioTranscoder.build(
+        Encoder,
+        decoder,
+        fromSeconds,
+        unifiedChannels,
+        (encoder) => {
+          primedEncoder = encoder;
+        },
+        dialogue
+      );
     } catch (error) {
       try {
         (primedEncoder as AudioEncoder | null)?.close();
@@ -570,7 +588,8 @@ export class AudioTranscoder {
     decoder: SoftwareAudioTrack,
     fromSeconds: number,
     unifiedChannels: number | undefined,
-    onPrimed: (encoder: AudioEncoder) => void
+    onPrimed: (encoder: AudioEncoder) => void,
+    dialogue?: DialogueMode
   ): Promise<AudioTranscoder> {
     const { sampleRate, numberOfChannels } = decoder.format;
     trace(`transcodage audio : décodeur prêt — ${sampleRate} Hz, ${numberOfChannels} canaux`);
@@ -684,6 +703,9 @@ export class AudioTranscoder {
       sink.current = fresh;
       return fresh;
     };
+    // Sur les canaux que la chaîne livre (après le repli éventuel) : un 5.1 reste un 5.1.
+    const enhancer = dialogue && dialogue !== "off" ? new DialogueEnhancer(sampleRate, outChannels, dialogue) : null;
+    if (enhancer) trace(`transcodage audio : dialogues améliorés (${dialogue === "strong" ? "encore plus fort" : "normal"}) sur ${outChannels} canaux`);
     const transcoder = new AudioTranscoder(
       decoder,
       encoder,
@@ -692,7 +714,8 @@ export class AudioTranscoder {
       outChannels,
       codecString,
       config,
-      renew
+      renew,
+      enhancer
     );
     sink.frame = (frame) => transcoder.collect(frame);
     sink.failed = (message) => transcoder.fail(message);
@@ -705,6 +728,9 @@ export class AudioTranscoder {
   /** Restarts decoding at this point on the file's clock. */
   seekTo(seconds: number): void {
     void this.generator?.return?.(undefined);
+    // Les filtres et les enveloppes du traitement des voix ne doivent rien porter d'un endroit du
+    // film à l'autre — même raison que l'encodeur neuf, plus bas.
+    this.enhancer?.reset();
 
     // The encoder is emptied too, and it has to be. It holds whatever did not fill a frame —
     // roughly half of one, always — and a flush after the jump would either emit that with its
@@ -767,7 +793,7 @@ export class AudioTranscoder {
       }
       this.lastDecodedSeconds = next.value.timestampSeconds;
       this.noteInput(next.value);
-      encode(this.encoder, next.value, this.channels, this.actualCodec);
+      encode(this.encoder, next.value, this.channels, this.actualCodec, this.enhancer);
     }
 
     // At the end of the file there is nothing left to feed, so the remainder has to be asked for.
@@ -1137,10 +1163,19 @@ export function toCodecChannelOrder(planes: Float32Array[], codec: string): Floa
 }
 
 /** Interleaves the decoder's planes, which is the layout an encoder takes. */
-function encode(encoder: AudioEncoder, decoded: DecodedAudio, outChannels: number | undefined, codec: string): void {
+function encode(
+  encoder: AudioEncoder,
+  decoded: DecodedAudio,
+  outChannels: number | undefined,
+  codec: string,
+  enhancer: DialogueEnhancer | null = null
+): void {
   const folded = outChannels ? fold(decoded.planes, outChannels) : decoded.planes;
+  // Le traitement des voix entre les deux : après le repli (les canaux livrés), avant la
+  // permutation de l'encodeur (il raisonne en ordre standard, celui du décodeur et de `fold`).
+  const shaped = enhancer ? enhancer.process(folded) : folded;
   // Après le repli, jamais avant : `fold` raisonne en ordre WAVE, comme le décodeur.
-  const planes = toCodecChannelOrder(folded, codec);
+  const planes = toCodecChannelOrder(shaped, codec);
   const channels = planes.length;
   const frames = planes[0]?.length ?? 0;
   if (frames === 0) return;

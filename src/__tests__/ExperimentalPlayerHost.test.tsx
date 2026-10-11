@@ -101,7 +101,9 @@ vi.mock("@/components/PlayerControls", () => ({
 
 type Info = Record<string, unknown>;
 let swr: { data: Info | undefined; error: unknown };
-vi.mock("swr", () => ({ default: () => swr }));
+/** Le compte (`/api/auth/me`, lu par `useRole`) — inconnu par défaut, comme avant la réponse. */
+let me: { data: { role: "admin" | "user" } | undefined; error: unknown } = { data: undefined, error: undefined };
+vi.mock("swr", () => ({ default: (key: unknown) => (key === "/api/auth/me" ? me : swr) }));
 // La relecture des vues après une fermeture : hors de ce qui est examiné ici, et bâtie sur le
 // `mutate` global que ce double de SWR n'a pas — les tests qui ferment le lecteur la laissaient
 // échouer en arrière-plan.
@@ -289,6 +291,8 @@ beforeEach(() => {
   probes = [];
   announcedSessions.length = 0;
   swr = { data: info(), error: undefined };
+  me = { data: undefined, error: undefined };
+  window.localStorage.removeItem("cine-dialogue");
   viewerState = { resumeSeconds: 0, preferences: null };
   stubFetch();
   remux = fakeRemux();
@@ -1156,6 +1160,58 @@ describe("les sous-titres posés à côté du film", () => {
 // Le lecteur canevas, retiré le 24/09/2026 (docs/lecteur-canvas.md) : ce qui reste de ses tests
 // vaut pour le chemin natif — un refus passe au lecteur serveur sans autre essai, et les
 // avertissements du pipeline s'affichent puis s'effacent.
+// « Améliorer les dialogues » (11/10/2026, bêta, administrateur) : ce que l'ouverture demande au
+// pipeline. Personne d'autre que l'administrateur ne le demande jamais, même si l'appareil l'a
+// retenu ; et une ouverture qui échoue avec lui repart sans lui, sans passer au lecteur serveur.
+describe("améliorer les dialogues — l'ouverture", () => {
+  it("un compte qui n'est pas administrateur ne le demande jamais, même retenu sur l'appareil", async () => {
+    window.localStorage.setItem("cine-dialogue", "strong");
+    me = { data: { role: "user" }, error: undefined };
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(probes[0]).not.toHaveProperty("dialogue");
+  });
+
+  it("l'administrateur qui l'a activé l'ouvre avec ; désactivé, rien n'est passé", async () => {
+    me = { data: { role: "admin" }, error: undefined };
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(probes[0]).not.toHaveProperty("dialogue");
+    cleanup();
+    probes = [];
+    window.localStorage.setItem("cine-dialogue", "on");
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(probes[0]).toMatchObject({ dialogue: "on" });
+  });
+
+  it("une ouverture qui échoue avec lui repart une fois sans lui — jamais le lecteur serveur pour ça", async () => {
+    window.localStorage.setItem("cine-dialogue", "strong");
+    me = { data: { role: "admin" }, error: undefined };
+    nextProbe = () => {
+      if (probes.length === 1) throw new Error("Aucun chemin de lecture disponible pour ce fichier. remux : encodeur refusé");
+      return { path: "remux", start: async () => remux, discard: vi.fn() };
+    };
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(probes[0]).toMatchObject({ dialogue: "strong" });
+    expect(probes[1]).not.toHaveProperty("dialogue");
+    expect(onFallback).not.toHaveBeenCalled();
+    // Le réglage de l'appareil n'est pas effacé : le film suivant le reprend.
+    expect(window.localStorage.getItem("cine-dialogue")).toBe("strong");
+  });
+
+  it("sans lui, un échec d'ouverture part au lecteur serveur comme avant", async () => {
+    me = { data: { role: "admin" }, error: undefined };
+    nextProbe = () => {
+      throw new Error("Aucun chemin de lecture disponible pour ce fichier. remux : vidéo V_VP9 non remultiplexable");
+    };
+    mount();
+    await waitFor(() => expect(onFallback).toHaveBeenCalledTimes(1));
+    expect(probes).toHaveLength(1);
+  });
+});
+
 describe("un fichier que le chemin natif ne porte pas", () => {
   it("passe directement au lecteur serveur, avec le motif du refus", async () => {
     nextProbe = () => {
