@@ -620,6 +620,25 @@ describe("PlayerControls", () => {
     expect(video.currentTime).toBe(100);
   });
 
+  // Tenet sur iPhone (11/10/2026) : « Améliorer les dialogues » changé, puis −10 s aussitôt — le
+  // lecteur reconstruit à 654 s avait un élément neuf encore à 0, et le saut partait de là.
+  it("±10 s part de la position du lecteur, pas d'un élément qui se reconstruit encore à 0", async () => {
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    const user = userEvent.setup();
+    const onSeekRequest = vi.fn();
+    render(<Harness onVideoRef={(v) => { video = v; }} positionNow={() => 654.6} onSeekRequest={onSeekRequest} />);
+    Object.defineProperty(video, "duration", { value: 9000, configurable: true });
+    Object.defineProperty(video, "currentTime", { value: 0, writable: true, configurable: true });
+    act(() => video.dispatchEvent(new Event("durationchange")));
+
+    await user.click(screen.getByTitle("player.rewind10"));
+    expect(onSeekRequest).toHaveBeenLastCalledWith(644.6);
+    expect(video.currentTime).toBeCloseTo(644.6, 5);
+    await user.click(screen.getByTitle("player.forward10"));
+    expect(onSeekRequest).toHaveBeenLastCalledWith(664.6);
+  });
+
   it("shows the skip-intro button only while currentTime is within the intro window", async () => {
     stubMediaFetches();
     let video!: HTMLVideoElement;

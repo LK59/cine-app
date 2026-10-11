@@ -138,6 +138,13 @@ interface PlayerControlsProps {
    */
   onSeekRequest?: (seconds: number) => void;
   /**
+   * Où en est le film selon le lecteur — la cible d'un saut pas encore atteint, la position d'un
+   * lecteur qui se reconstruit. Les sauts relatifs (±10 s, flèches) partent de là : juste après un
+   * changement de piste ou de « Améliorer les dialogues », l'élément neuf est encore à 0 le temps
+   * d'atterrir, et −10 s ramenait Tenet au début (iPhone, 11/10/2026). Absent : l'élément.
+   */
+  positionNow?: () => number;
+  /**
    * Visibles mais en train de s'effacer, pendant qu'un lecteur se reconstruit : elles ne répondent
    * plus au clavier, dont l'écouteur est posé sur la fenêtre. Une barre d'espace à ce moment-là
    * relançait un film que la reconstruction devait garder en pause.
@@ -287,6 +294,7 @@ export function PlayerControls({
   onCastReturn,
   castActive,
   onSeekRequest,
+  positionNow,
   suspended = false,
   hdrCap,
   frameFit,
@@ -1144,8 +1152,9 @@ export function PlayerControls({
     // bornait alors à la position courante, c'est-à-dire ne bougeait pas. Les boutons, eux,
     // fonctionnaient : ils sont recréés à chaque rendu. C'est pourquoi les flèches semblaient
     // sans effet là où les boutons marchaient.
-    const limit = video.duration || duration || video.currentTime;
-    const target = Math.min(Math.max(0, video.currentTime + deltaSeconds), limit);
+    const from = positionNow ? positionNow() : video.currentTime;
+    const limit = video.duration || duration || from;
+    const target = Math.min(Math.max(0, from + deltaSeconds), limit);
     onSeekRequest?.(target);
     video.currentTime = target;
   }

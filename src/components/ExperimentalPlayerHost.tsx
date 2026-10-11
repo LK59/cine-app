@@ -2904,6 +2904,7 @@ export function ExperimentalPlayerHost({
             // A real media element: seeking, volume and rate are the browser's own.
             videoRef={videoElRef}
             onSeekRequest={noteSeekRequest}
+            positionNow={intendedPosition}
             containerRef={containerRef}
             itemId={itemId}
             title={title}
