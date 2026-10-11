@@ -135,6 +135,27 @@ describe("le clic sur l'image", () => {
     expect(video.pause).not.toHaveBeenCalled();
   });
 
+  it("au doigt sur iPhone/iPad, même quand le `click` se déclare « mouse » : commandes, jamais pause", async () => {
+    // WebKit iOS (11/10/2026) : le tap envoie un `pointerdown` « touch », puis un `click` dont le
+    // `pointerType` vaut « mouse ». Lu sur le `click`, chaque toucher de l'image mettait en pause.
+    const { container, video } = await setup();
+    const tap = async () => {
+      await act(async () => {
+        press(surface(container), "touch");
+        const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 });
+        Object.defineProperty(click, "pointerType", { value: "mouse" });
+        surface(container).dispatchEvent(click);
+      });
+    };
+    expect(controlsShown(container)).toBe(true);
+    await tap();
+    expect(controlsShown(container)).toBe(false);
+    await tap();
+    expect(controlsShown(container)).toBe(true);
+    expect(video.play).not.toHaveBeenCalled();
+    expect(video.pause).not.toHaveBeenCalled();
+  });
+
   it("au stylet, comme au doigt", async () => {
     const { container, video } = await setup();
     await clickWith(surface(container), "pen");

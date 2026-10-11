@@ -1008,9 +1008,9 @@ export function PlayerControls({
   }
 
   /**
-   * Le type du dernier appui posé sur le lecteur — repli pour un `click` qui ne le porte pas (un
-   * `click` n'est un PointerEvent que dans les navigateurs récents) et pour `dblclick`, qui ne l'est
-   * jamais.
+   * Le type du dernier appui posé sur le lecteur — la source de vérité pour `click` et `dblclick` :
+   * `dblclick` ne porte jamais de type, et le `click` d'un tap au doigt se dit « mouse » sur WebKit
+   * iOS. Le `pointerdown` précède toujours le `click` et dit juste.
    */
   const lastPointerTypeRef = useRef("");
   /**
@@ -1031,7 +1031,10 @@ export function PlayerControls({
    * plein écran — un arrêt de l'ordre du quart de seconde, ce que fait YouTube.
    */
   function onSurfaceClick(e: React.MouseEvent<HTMLDivElement>) {
-    const pointerType = (e.nativeEvent as MouseEvent & { pointerType?: string }).pointerType || lastPointerTypeRef.current;
+    // L'appui d'abord, le `click` seulement à défaut : WebKit iOS déclare « mouse » sur le `click`
+    // d'un tap au doigt, alors que son `pointerdown` dit bien « touch » — lu sur le `click`, chaque
+    // toucher de l'image mettait le film en pause au lieu d'afficher les commandes (11/10/2026).
+    const pointerType = lastPointerTypeRef.current || (e.nativeEvent as MouseEvent & { pointerType?: string }).pointerType || "";
     // Relâché sur l'image après un appui ailleurs (un bouton, une pilule) : ni pause ni rien.
     if (pointerType === "mouse" && !downOnSurfaceRef.current) return;
     const action = surfaceAction(pointerType, e.detail, isEmptySurface(e.target, e.currentTarget));
