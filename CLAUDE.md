@@ -61,7 +61,7 @@ Tests default to the `node` environment; a component test opts into jsdom with a
 `vitest.config.ts` — that is Vitest 4's default, kept deliberately when moving to 5 so that no
 test quietly changed meaning; flipping it is a decision to take by reading the tests it affects.
 
-**Seven benches sit beside the suite, all skipped unless given a file or a library root.**
+**Benches sit beside the suite, all skipped unless given a file or a library root.**
 `reprise.spec.ts` proves, on a real file, that the bytes the resume cache keeps reopen it at a
 position and produce the first segment with nothing else.
 `truehd-bench.spec.ts`
@@ -74,7 +74,13 @@ the first segment and a seek. The second answers "why is it slow" without guessi
 that launching is bound by bytes, not by CPU, and its header carries the numbers measured on this
 library. The other three survey rather than prove: `audit.spec.ts` asks every file in a
 library the player's questions, `subs.spec.ts` lists its subtitle codecs, and `raps.spec.ts`
-measures what a seek costs in one file.
+measures what a seek costs in one file. Four guard the AAC decisions (DECISIONS §62):
+`aac-regress-bench.spec.ts` writes, per track, the decision and the hash of the audio init and first
+segments — run it on the code before and after an audio change, with `AAC_UA` set to a WebKit and a
+Chromium user agent, and only the tracks meant to change may differ; `aac-census-bench.spec.ts`
+classes every AAC track of a library by `aacPlan`'s decision; `aac-pce-bench.spec.ts` checks the
+lossless PCE rewrite and writes the browser probe's files; `aac-wasm-bench.spec.ts` prints each
+channel's level through the WebAssembly AAC decoder, to compare with `ffmpeg astats`.
 
 **Diagnose against the running container rather than reasoning in the dark.**
 `docker exec cine-app node -e '...'` has every service URL and API key in its environment, and
