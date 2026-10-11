@@ -68,7 +68,9 @@ type StreamParams = { params: Promise<{ itemId: string; path: string[] }> };
 export async function GET(req: NextRequest, context: StreamParams) {
   const pass = await castPassDetailsFor(req);
   const res = await serveStream(req, context, pass);
-  return pass ? withCastCors(res) : res;
+  // CORS pour un téléviseur seulement : le lecteur serveur de la page charge aussi l'adresse signée,
+  // mais avec son cookie, et garde ses en-têtes d'avant (chasse aux bugs du 11/10/2026).
+  return pass && !req.cookies.get(SESSION_COOKIE) ? withCastCors(res) : res;
 }
 
 /**
@@ -265,8 +267,11 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
     //
     // Un segment demandé par un téléviseur : sa position est notée, et rapportée à Jellyfin si la
     // page qui a lancé la diffusion s'est tue (`castProgress.ts`, DECISIONS.md §64). Seulement avec
-    // un laissez-passer — une lecture dans la page ne passe jamais par là.
-    if (pass) castProgressRelay().noteCastSegment({ jfId: pass.jfId, user: pass.user, itemId, restPath, search: req.nextUrl.searchParams });
+    // un laissez-passer, et seulement pour un téléviseur : le lecteur serveur de la page charge lui
+    // aussi l'adresse signée (`castUrl`), mais il porte le cookie de session — un récepteur AirPlay ou
+    // Chromecast n'en a jamais. Sans ce filtre, toute lecture serveur en pause était « relayée »
+    // (chasse aux bugs du 11/10/2026).
+    if (pass && !req.cookies.get(SESSION_COOKIE)) castProgressRelay().noteCastSegment({ jfId: pass.jfId, user: pass.user, itemId, restPath, search: req.nextUrl.searchParams });
     return new NextResponse(res.body, {
       headers: { "Content-Type": contentType, "Cache-Control": "private, max-age=21600, immutable" },
     });

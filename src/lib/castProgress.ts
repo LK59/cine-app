@@ -43,7 +43,10 @@ import { logError } from "@/lib/logger";
 /** Ce qu'on retranche du début du segment demandé — voir l'en-tête. */
 export const CAST_BUFFER_MARGIN_SECONDS = 30;
 /** Une page qui a rapporté ce titre depuis moins que cela est vivante : le serveur se tait. */
-export const PAGE_FRESH_MS = 60_000;
+// 150 s et non 60 (chasse aux bugs du 11/10/2026) : une page EN PAUSE ne bat qu'une fois la
+// minute, sur un minuteur de 10 s — 60 à 70 s entre deux battements (`usePlaybackSession`). À 60 s,
+// une page ouverte passait pour muette jusqu'à 10 s par minute, et le relais parlait par-dessus.
+export const PAGE_FRESH_MS = 150_000;
 /** Au plus un rapport par diffusion dans cet intervalle. */
 export const REPORT_EVERY_MS = 30_000;
 /** Plus aucun segment depuis cela, page muette : l'arrêt est rapporté. */
@@ -104,6 +107,11 @@ export class CastProgressRelay {
   /** La page a rapporté ce titre pour ce compte — le serveur se tait pour la minute qui vient. */
   notePageReport(jfId: string, itemId: string, now = Date.now()): void {
     const k = key(jfId, itemId);
+    // La page reparle : c'est elle qui fait foi. Une diffusion que le serveur relayait est oubliée —
+    // gardée, elle envoyait 90 s plus tard un « arrêt » à la vieille position du téléviseur, par-dessus
+    // l'arrêt juste de la page revenue lire en local (chasse aux bugs du 11/10/2026). Si le
+    // téléviseur continue et que la page se tait de nouveau, le prochain segment la recrée.
+    if (this.entries.get(k)?.relaying) this.entries.delete(k);
     this.pageSeen.delete(k);
     this.pageSeen.set(k, now);
     this.trim(this.pageSeen);

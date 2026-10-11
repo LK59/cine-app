@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import type { NextRequest } from "next/server";
 
 // Chasse aux bugs du 11/10/2026, zone 5 — le relais de reprise du serveur (castProgress.ts, §64).
-// Ces tests ÉCHOUENT sur 6712fd2c : ils décrivent le comportement promis, que le code ne tient pas.
+// Ils échouaient sur 6712fd2c (8.36.2) ; corrigé en 8.36.3, gardés comme garde-fous.
 
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
 vi.mock("@/lib/itemVisibility", () => ({ assertVisible: async () => null }));
@@ -90,9 +90,9 @@ describe("bughunt zone 5 — page en pause : le battement réel (60–70 s) croi
 
   it("une page vivante (pause, un battement toutes les 60–70 s comme usePlaybackSession) n'est jamais relayée ni arrêtée", () => {
     // usePlaybackSession : vérifie toutes les 10 s, envoie en pause quand 60 s sont passées → un
-    // battement toutes les 60 à 70 s. PAGE_FRESH_MS vaut 60 s, strict : la page passe pour morte
-    // jusqu'à 10 s par minute.
-    expect(PAGE_FRESH_MS).toBe(60_000);
+    // battement toutes les 60 à 70 s. À 60 s (8.36.2), la page passait pour morte jusqu'à 10 s par
+    // minute ; la fraîcheur doit couvrir largement le battement de pause.
+    expect(PAGE_FRESH_MS).toBeGreaterThan(70_000);
     const save = vi.fn(async () => "position");
     const log = vi.fn();
     const r = new CastProgressRelay({ save, log });

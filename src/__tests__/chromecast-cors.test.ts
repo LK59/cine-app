@@ -131,6 +131,16 @@ describe("route des segments — la position notée pour le relais du serveur", 
     expect(noteCastSegment.mock.calls[0][0]).toMatchObject({ jfId: null });
   });
 
+  it("le lecteur serveur de la page (cookie ET laissez-passer, `castUrl`) ne passe pas par le relais — chasse aux bugs 11/10/2026", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
+    mockFetch.mockResolvedValue(upstream());
+    const { signCastToken } = await import("@/lib/castToken");
+    const token = encodeURIComponent(await signCastToken(itemId, "louis", Date.now(), undefined, "jf-louis"));
+    const { GET } = await import("@/app/api/jellyfin/stream/[itemId]/[...path]/route");
+    await GET(req("GET", url(token), "t"), { params: Promise.resolve({ itemId, path: segment }) });
+    expect(noteCastSegment).not.toHaveBeenCalled();
+  });
+
   it("une lecture dans la page (cookie, pas de laissez-passer) ne passe jamais par le relais", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
     mockFetch.mockResolvedValue(upstream());

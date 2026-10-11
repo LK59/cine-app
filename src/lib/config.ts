@@ -123,7 +123,8 @@ export const config = {
     get castReceiverAppId() {
       return receiverAppIdOf(optional("CAST_RECEIVER_APP_ID"));
     },
-    // Le bouton Chromecast pour tous les comptes, ou pour les administrateurs seulement (défaut).
+    // Le bouton Chromecast pour tous les comptes (défaut depuis le 11/10/2026), ou pour les seuls
+    // administrateurs quand l'installation le referme.
     get chromecastForEveryone() {
       return optional("CHROMECAST_FOR_EVERYONE", "true") === "true";
     },

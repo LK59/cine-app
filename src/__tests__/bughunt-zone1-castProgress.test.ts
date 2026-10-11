@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { CastProgressRelay } from "@/lib/castProgress";
 
-// Chasse aux bugs zone 1 (11/10/2026) — relais de reprise du serveur (§64). Ces tests ÉCHOUENT sur le
-// code actuel : chacun décrit un défaut prouvé, à corriger avant de les garder.
+// Chasse aux bugs zone 1 (11/10/2026) — relais de reprise du serveur (§64). Chacun a échoué sur 8.36.2
+// et décrit un défaut prouvé, corrigé en 8.36.3 : gardés comme garde-fous.
 
 const JF = "jf-louis";
 const ITEM = "a".repeat(32);
