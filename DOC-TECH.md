@@ -516,7 +516,15 @@ the PCE's elements match one in order; copied as-is where a real MediaSource app
 browser takes a PCE (`aacPceProbe.ts` — Chromium refuses, Firefox accepts); otherwise decoded and
 put in standard order — every channel when the decoder's output order for that PCE shape was
 measured, L R C when it was not. `isTypeSupported('mp4a.40.2')` says nothing about a PCE: Chromium
-answers yes and then refuses the init segment.
+answers yes and then refuses the init segment. Outside Chromium a PCE is copied first (the
+pre-2026-10-10 behaviour); if the browser refuses the copy — Safari on iPhone does for Ruby, during
+path selection — the player rebuilds once and decodes it with **FFmpeg's native AAC decoder compiled
+to WebAssembly** (`src/lib/webcodecs/aac/aac-wasm.mjs`, 913 KB / 386 KB gzipped, rebuilt
+byte-for-byte by `tools/aac-wasm/build.sh` — SHA-256
+`e45134157bb1417b10d72f8189fdd3c59df6dbdc0208c40de1e907fe5588f1ca`), never with the browser's
+AudioDecoder: Safari's (CoreAudio) fails on Ruby's PCE. Chromium keeps its own AudioDecoder and
+falls back to the WebAssembly one only if it refuses the track. `aac-wasm-bench.spec.ts` compares
+the module's output with `ffmpeg -af astats` channel by channel (Ruby: ≤ 0.03 dB on six channels).
 
 **Changing track has one path: the player is rebuilt** at the same position, opening directly on
 the new track (`RemuxPlayback.requestAudioTrack`, `openingAudio`, `ExperimentalPlayerHost`) — same

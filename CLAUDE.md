@@ -342,6 +342,12 @@ copied the TypeScript source into `static/media` as-is, a worker that would neve
 The gate and the build both pass on that; only reading what the build emitted shows it. Once TrueHD
 became playable, per-file audio unification made the Dolby track of 19 mixed films re-encoded too —
 which is what per-track delivery (below) undoes.
+Its twin, **FFmpeg's native AAC decoder** (`src/lib/webcodecs/aac/aac-wasm.mjs`, 913 KB,
+`tools/aac-wasm/build.sh`, same FFmpeg and emscripten pins), decodes an AAC whose layout is a PCE
+outside Chromium once the browser has refused to take it as-is (DECISIONS §62): Safari's own
+AudioDecoder fails on such a PCE, so it is never used for one. A separate module rather than an
+addition to the TrueHD one, so the measured TrueHD file stays byte-identical;
+`aac-wasm-bench.spec.ts` is its proof against ffmpeg.
 
 **Track names are written once, in `src/lib/trackLabel.ts`** — by both players, and by the
 `<track>` elements the browser and the Apple TV display in their own pickers. The form is fixed:

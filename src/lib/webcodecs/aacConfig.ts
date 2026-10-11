@@ -31,6 +31,7 @@
  */
 
 import { isWebKitEngine } from "@/lib/webkitEngine";
+import { isChromiumEngine } from "./bufferBudget";
 
 /** Un élément du PCE, dans l'ordre du flux : son rang, sa nature (mono ou paire), son étiquette. */
 export interface PceElement {
@@ -411,11 +412,29 @@ export type AacPlan =
  * mesuré pour un PCE. Chromium — Chrome sur Mac compris — et Firefox décodent l'AAC par FFmpeg,
  * mesuré (voir `MEASURED_DECODED_ORDERS`).
  */
+//
+// Oui partout depuis le 11/10/2026 : un AAC à PCE n'est plus jamais décodé par AudioToolbox. Hors
+// Chromium, il passe par le décodeur AAC de FFmpeg compilé en WebAssembly (aac/aacWasmAudio.ts) —
+// celui dont l'ordre a été mesuré — parce que l'AudioDecoder de Safari échouait sur le PCE de
+// « Ruby » (« InternalAudioDecoderCocoa decoding failed »). Chromium décode par FFmpeg, mesuré.
 export function decodedOrderMeasuredHere(): boolean {
-  if (typeof navigator === "undefined") return true;
+  return aacDecoderRouteHere() === "wasm" || !appleWebKit();
+}
+
+function appleWebKit(): boolean {
+  if (typeof navigator === "undefined") return false;
   const agent = navigator.userAgent ?? "";
   const apple = /iPhone|iPad|iPod|Macintosh|Mac OS X/.test(agent) && !/Android/.test(agent);
-  return !(apple && isWebKitEngine(agent));
+  return apple && isWebKitEngine(agent);
+}
+
+/**
+ * Quel décodeur décode un AAC à PCE ici : celui du navigateur sur Chromium (Chrome, Edge, Silk) —
+ * prouvé et mesuré —, celui de FFmpeg en WebAssembly partout ailleurs (DECISIONS.md §62).
+ */
+export function aacDecoderRouteHere(): "wasm" | "browser" {
+  if (typeof navigator === "undefined") return "wasm";
+  return isChromiumEngine(navigator.userAgent ?? "") ? "browser" : "wasm";
 }
 
 export function aacPlan(

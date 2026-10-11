@@ -2333,3 +2333,42 @@ describe("l'ouverture de la lecture : entière dès l'appui (DECISIONS §60)", (
     }
   });
 });
+
+describe("un AAC à PCE refusé pendant l'ouverture", () => {
+  // L'iPhone de Louis, 11/10/2026 (« Elle s'appelle Ruby », `path: "non décidé"`) : le segment
+  // d'initialisation à PCE copié tel quel est refusé pendant le choix du chemin, avant tout pipeline.
+  // Le refus n'arrivait jamais au `onError` : le film partait au lecteur serveur sans la reconstruction
+  // décodée prévue (DECISIONS.md §62).
+  it("reconstruit une fois en décodant, au lieu de passer au lecteur serveur", async () => {
+    const { notePceDecision, PROBE_ASC, __testing } = await import("@/lib/webcodecs/aacPceProbe");
+    __testing.reset();
+    serverFallback = true;
+    let attempts = 0;
+    nextProbe = () => {
+      attempts++;
+      if (attempts === 1) {
+        // Le remultiplexeur a noté la copie telle quelle, puis l'envoi a été refusé.
+        notePceDecision("copy", true, PROBE_ASC);
+        throw new Error("Le navigateur a refusé une opération sur le tampon. (MediaSource closed, élément code 4, readyState 0, réseau 3)");
+      }
+      return { path: "remux", start: async () => remux, discard: vi.fn() };
+    };
+    mount();
+    await untilSettled(() => expect(probes.length).toBe(2));
+    expect(onFallback).not.toHaveBeenCalled();
+    window.localStorage.clear();
+    __testing.reset();
+  });
+
+  it("une erreur d'ouverture ordinaire passe toujours au lecteur serveur, sans reconstruction", async () => {
+    const { __testing } = await import("@/lib/webcodecs/aacPceProbe");
+    __testing.reset();
+    serverFallback = true;
+    nextProbe = () => {
+      throw new Error("Aucun chemin de lecture disponible pour ce fichier. remux : Vidéo non prise en charge");
+    };
+    mount();
+    await untilSettled(() => expect(onFallback).toHaveBeenCalled());
+    expect(probes.length).toBe(1);
+  });
+});

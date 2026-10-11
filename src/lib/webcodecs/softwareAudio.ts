@@ -12,7 +12,7 @@
 // it reads through the same 1 MiB chunk cache, so the bytes cross the network once and the
 // second demux costs CPU only.
 
-import { aacPlan, remapPlanes } from "./aacConfig";
+import { aacDecoderRouteHere, aacPlan, remapPlanes } from "./aacConfig";
 import { effectivePceAnswer } from "./aacPceProbe";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaFile } from "./matroska";
@@ -59,6 +59,16 @@ function sharedInput(source: ByteSource, core: Mediabunny, iso: boolean): Promis
   return input;
 }
 
+/** Par quel décodeur le dernier AAC à PCE s'est ouvert — pour la ligne `start` (DECISIONS.md §62). */
+let lastAacRoute: "wasm-decode" | "browser-decode" | null = null;
+
+/** Lu (et oublié) par qui écrit la ligne `start`. */
+export function takeAacDecodeRoute(): "wasm-decode" | "browser-decode" | null {
+  const route = lastAacRoute;
+  lastAacRoute = null;
+  return route;
+}
+
 export class SoftwareAudioTrack {
   private constructor(
     /** Le décodé à partir d'un instant — par mediabunny, ou par notre décodeur TrueHD. */
@@ -93,6 +103,49 @@ export class SoftwareAudioTrack {
       }
       return new SoftwareAudioTrack(track.samples, track.format, () => track.close());
     }
+    // Un AAC à PCE hors Chromium : le décodeur AAC de FFmpeg en WebAssembly, jamais celui du
+    // navigateur — celui de Safari (CoreAudio) échoue sur le PCE de « Ruby », et un décodeur qu'on
+    // n'a pas mesuré pourrait ranger les canaux autrement. Sur Chromium, l'AudioDecoder du navigateur
+    // (prouvé, mesuré), et le même décodeur WebAssembly s'il refuse la piste (DECISIONS.md §62).
+    if (codecId === "A_AAC" && aacDecoderRouteHere() === "wasm") return SoftwareAudioTrack.openWasmAac(source, trackNumber, file);
+    if (codecId === "A_AAC") {
+      try {
+        return await SoftwareAudioTrack.openWithMediabunny(source, trackNumber, codecId, file);
+      } catch (error) {
+        try {
+          return await SoftwareAudioTrack.openWasmAac(source, trackNumber, file);
+        } catch {
+          throw error;
+        }
+      }
+    }
+    return SoftwareAudioTrack.openWithMediabunny(source, trackNumber, codecId, file);
+  }
+
+  /** Un AAC à PCE par le décodeur de FFmpeg en WebAssembly — voir aac/aacWasmAudio.ts. */
+  private static async openWasmAac(source: ByteSource, trackNumber: number, file?: MatroskaFile): Promise<SoftwareAudioTrack> {
+    let track;
+    try {
+      track = await (await import("./aac/aacWasmAudio")).openWasmAacTrack(source, trackNumber, file);
+    } catch (error) {
+      throw new Error(`décodeur AAC non chargé (${error instanceof Error ? error.message : "import échoué"})`);
+    }
+    lastAacRoute = "wasm-decode";
+    const { channels, rows } = aacShaping(file, trackNumber, track.format.numberOfChannels, true) ?? { channels: track.format.numberOfChannels, rows: null };
+    const produce = rows
+      ? (fromSeconds: number) => remapped(track.samples(fromSeconds), rows)
+      : channels < track.format.numberOfChannels
+        ? (fromSeconds: number) => firstPlanes(track.samples(fromSeconds), channels)
+        : (fromSeconds: number) => track.samples(fromSeconds);
+    return new SoftwareAudioTrack(produce, { sampleRate: track.format.sampleRate, numberOfChannels: channels }, () => track.close());
+  }
+
+  private static async openWithMediabunny(
+    source: ByteSource,
+    trackNumber: number,
+    codecId?: string,
+    file?: MatroskaFile
+  ): Promise<SoftwareAudioTrack> {
     // Dynamic, and only the extension this file actually needs: the two are a megabyte and a
     // half each, and a file whose audio the browser already decodes never pays for either.
     let core;
@@ -124,6 +177,7 @@ export class SoftwareAudioTrack {
     // comment le ranger (DECISIONS.md §62) — tel quel pour une forme dont l'ordre de sortie a été
     // mesuré (« Ruby » : un 5.1), par une matrice pour une disposition à replier, L R C sinon.
     const shape = codecId === "A_AAC" ? aacShaping(file, trackNumber, track.numberOfChannels) : null;
+    if (codecId === "A_AAC") lastAacRoute = "browser-decode";
     const produce = shape?.rows
       ? (fromSeconds: number) => remapped(planesFrom(sink, fromSeconds), shape.rows!)
       : shape && shape.channels < track.numberOfChannels
@@ -183,11 +237,16 @@ async function* planesFrom(
 export function aacShaping(
   file: MatroskaFile | undefined,
   trackNumber: number,
-  decoded: number
+  decoded: number,
+  /** Le décodeur AAC de FFmpeg en WebAssembly : l'ordre mesuré, quel que soit le navigateur. */
+  ffmpegDecoder = false
 ): { channels: number; rows: number[][] | null } | null {
   const asc = file?.tracks.find((t) => t.number === trackNumber)?.codecPrivate;
   if (!asc) return null;
-  const plan = aacPlan(asc, { pceAccepted: effectivePceAnswer(asc) });
+  // Décodé ici, il l'est de toute façon : la copie n'est plus en jeu (refusée, ou Chromium).
+  const plan = ffmpegDecoder
+    ? aacPlan(asc, { pceAccepted: false, orderMeasured: true })
+    : aacPlan(asc, { pceAccepted: effectivePceAnswer(asc) });
   if (plan.action !== "decode") return null;
   if (plan.rows) return plan.rows[0]?.length === decoded ? { channels: plan.channels, rows: plan.rows } : { channels: Math.min(3, decoded), rows: null };
   return { channels: Math.min(plan.channels, decoded), rows: null };

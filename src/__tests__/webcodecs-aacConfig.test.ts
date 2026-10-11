@@ -140,15 +140,15 @@ describe("couche 3 — décodé, rangé dans une disposition standard", () => {
     expect(aacPlan(RUBY, { orderMeasured: false })).toEqual({ action: "decode", channels: 3, rows: null, keep: 3, measured: false });
   });
 
-  it("reconnaît les décodeurs mesurés : tout sauf WebKit sur un système Apple", () => {
+  it("ordre mesuré partout : hors Chromium, le décodeur AAC de FFmpeg en WebAssembly remplace AudioToolbox (11/10/2026)", () => {
     const at = (ua: string) => {
       vi.stubGlobal("navigator", { userAgent: ua });
       const answer = decodedOrderMeasuredHere();
       vi.unstubAllGlobals();
       return answer;
     };
-    expect(at("Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1")).toBe(false);
-    expect(at("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15")).toBe(false);
+    expect(at("Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1")).toBe(true);
+    expect(at("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15")).toBe(true);
     expect(at("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0 Safari/537.36")).toBe(true);
     expect(at("Mozilla/5.0 (Linux; Android 11; AFTT) AppleWebKit/537.36 (KHTML, like Gecko) Silk/152.4.7 like Chrome/152.0 Safari/537.36")).toBe(true);
   });

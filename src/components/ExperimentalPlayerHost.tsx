@@ -91,6 +91,13 @@ import { keepOnStop } from "@/lib/resumeCache/keepOnStop";
 import { MemoryReserve } from "@/lib/webcodecs/memoryReserve";
 import { PlayerLifecycle } from "@/lib/playerLifecycle";
 import { notePceCopyWorked, pceDecisionFacts, takePceCopyRefusal } from "@/lib/webcodecs/aacPceProbe";
+import { takeAacDecodeRoute } from "@/lib/webcodecs/softwareAudio";
+
+/** Le décodeur d'un AAC à PCE décodé, pour la ligne `start` (DECISIONS.md §62) ; rien sinon. */
+function aacRouteFacts(): Record<string, unknown> {
+  const route = takeAacDecodeRoute();
+  return route ? { aacRoute: route } : {};
+}
 import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from "@/lib/hostSeek";
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { finishIntro, formatResumeClock, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
@@ -1675,6 +1682,8 @@ export function ExperimentalPlayerHost({
         // Le plan d'un AAC à PCE (copie, réécriture, décodage) et la réponse gardée du navigateur —
         // de quoi lire, la prochaine fois, pourquoi « Ruby » est passé ou non (DECISIONS.md §62).
         ...pceDecisionFacts(),
+        // Et, décodé, par quel décodeur : FFmpeg en WebAssembly hors Chromium, le navigateur sinon.
+        ...aacRouteFacts(),
       });
     };
 
@@ -2126,6 +2135,18 @@ export function ExperimentalPlayerHost({
           lifecycle.noteNetworkLost();
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
           setPlaying(false);
+          return;
+        }
+        // Un AAC à PCE copié tel quel que ce navigateur refuse PENDANT l'ouverture — avant même que
+        // le chemin soit choisi : le segment d'initialisation est envoyé là. C'est ce que montrait
+        // l'iPhone de Louis le 11/10/2026 (« Elle s'appelle Ruby », `path: "non décidé"`) : le refus
+        // n'arrivait jamais au `onError` du pipeline, et le film partait au lecteur serveur sans la
+        // reconstruction prévue. Retenu pour cette forme, reconstruit une fois en décodant
+        // (DECISIONS.md §62) ; le lecteur serveur ne vient qu'après.
+        if (!everReadyRef.current && takePceCopyRefusal()) {
+          const at = positionRef.current || startSeconds;
+          reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `copie AAC à PCE refusée à l'ouverture — ${message}`, at });
+          restart(at, "copie AAC à PCE refusée par le navigateur, décodée à la place");
           return;
         }
         // Reconstruit pour une piste que le lecteur natif n'a finalement pas pu ouvrir — module

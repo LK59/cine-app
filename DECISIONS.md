@@ -2370,6 +2370,33 @@ code) : moteur Safari iPhone, **43/43 octet pour octet** ; moteur Chromium, 35/4
 les 8 pistes à PCE (Ruby ×2, pistes anglaises 7.1 de Forrest Gump, Deadpool, Walter Mitty, Once
 Upon a Time in Hollywood, Rocketman, Toy Story). Tests : `aacPce-engine-default.test.ts`.
 
+**Révisé le 11/10/2026 (bis) — décodé, un PCE passe par FFmpeg en WebAssembly hors Chromium.**
+Sous 8.34.2, l'iPhone de Louis : la copie de Ruby refusée par MediaSource (« Le navigateur a refusé
+une opération sur le tampon… », pendant le choix du chemin, `path: "non décidé"`), et l'AudioDecoder
+de Safari en échec sur ce PCE la veille — aucun chemin natif, le lecteur serveur à chaque fois. Deux
+corrections :
+- **Le refus pendant l'ouverture reconstruit aussi.** Il arrivait au `.catch` de l'ouverture, jamais
+  au `onError` du pipeline : `takePceCopyRefusal` y est maintenant lu (`ExperimentalPlayerHost`).
+- **Le décodeur.** Hors Chromium, un AAC à PCE décodé l'est par le décodeur AAC natif de FFmpeg
+  compilé en WebAssembly (`aac/aacWasmAudio.ts`, module `aac/aac-wasm.mjs`, construit à l'identique
+  par `tools/aac-wasm/build.sh`, 913 Ko — 386 compressés —, chargé seulement par une telle piste).
+  Il lit le PCE, et son ordre de sortie est celui qui a été mesuré : Ruby sort en 5.1 entier
+  (`aacShaping(…, ffmpegDecoder)`), puis la chaîne ré-encode comme pour le TrueHD (ordre AAC
+  d'Apple sur AudioToolbox). Sur Chromium, l'AudioDecoder du navigateur reste (prouvé, mesuré) ; le
+  décodeur WebAssembly n'y sert que s'il refuse la piste. `decodedOrderMeasuredHere` dit donc oui
+  partout : AudioToolbox ne décode plus jamais un PCE. L'échelle hors Chromium : copie → (refusée)
+  décodage WebAssembly → lecteur serveur.
+- La ligne `start` porte `aacRoute` (`wasm-decode` / `browser-decode`) en plus du plan.
+
+Preuves : banc `aac-wasm-bench.spec.ts` — Ruby décodé par le module contre `ffmpeg -af astats`,
+mêmes 10 s, à 10:00 et 20:00 (piste française) et 50:00 (piste anglaise) : écart au plus 0,03 dB
+sur les six canaux, le caisson au 4ᵉ rang, une quarantaine de fois le temps réel dans Node. Banc
+`aac-regress-bench.spec.ts` (22 films, 44 pistes, code d'avant le 10/10 contre ce code) : moteur
+Safari iPhone **44/44 octet pour octet** — rien ne change tant que la copie est acceptée, Forrest
+Gump compris ; moteur Chromium 36/44, les 8 pistes à PCE seules différant, comme depuis le 10/10.
+Tests : `aacWasm-route.test.ts`, `ExperimentalPlayerHost.test.tsx` (« un AAC à PCE refusé pendant
+l'ouverture »).
+
 ## 63. Une image qui échoue réessaie, au lieu d'abandonner jusqu'au redémarrage
 
 **Règle.** Toute image du cinéma qui échoue montre son repli (carré gris, titre écrit, fond uni) et
