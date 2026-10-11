@@ -11,8 +11,9 @@ import { PlayerControls } from "@/components/PlayerControls";
 import { sleepTimerStore } from "@/lib/sleepTimer";
 
 /**
- * Chasse aux défauts, zone 3 (11/10/2026) — interactions du lecteur livrées avec §65. Chaque test
- * échoue sur le code au moment de la chasse ; harnais repris de player-surface-click.test.tsx.
+ * Garde-fous des interactions du lecteur (§65), nés de la chasse aux défauts du 11/10/2026 : chacun
+ * échouait sur le code d'alors. Sortie de fenêtre par la barre, double-clic hors de l'image, clic
+ * dans la marge d'une pilule, sélection du texte au double-clic.
  */
 
 afterEach(() => {
@@ -177,5 +178,28 @@ describe("zone 3 — un clic manqué de peu sur un bouton ne met pas en pause", 
     const pill = container.querySelector("[data-cast-pill]")!;
     await clickWith(pill, "mouse");
     expect(video.play).not.toHaveBeenCalled();
+  });
+});
+
+describe("zone 3 — un double-clic ne sélectionne pas le texte du lecteur", () => {
+  it("la racine du lecteur ne se sélectionne pas, et le second appui d'un double-clic sur l'image est retenu", async () => {
+    const { container } = await setup();
+    const root = container.querySelector(".player-liquid")!;
+    expect(root.className).toContain("select-none");
+    const second = new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail: 2 });
+    root.dispatchEvent(second);
+    expect(second.defaultPrevented).toBe(true);
+    // Le premier appui reste libre : rien à retenir d'un simple clic.
+    const first = new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail: 1 });
+    root.dispatchEvent(first);
+    expect(first.defaultPrevented).toBe(false);
+  });
+
+  it("le glisser de la barre de temps n'est pas retenu", async () => {
+    const { container } = await setup();
+    const seek = container.querySelector('[data-player-nav="seek"]')!;
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail: 2 });
+    seek.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(false);
   });
 });
