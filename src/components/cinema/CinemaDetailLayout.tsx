@@ -128,6 +128,15 @@ export function CinemaOverview({
   const [clamped, setClamped] = useState(false);
   const [lines, setLines] = useState(2);
   const bodyRef = useRef<HTMLParagraphElement>(null);
+  /**
+   * Les nombres de lignes essayés pendant la mesure en cours (une rafale : les mesures à moins de
+   * 250 ms l'une de l'autre). La formule est faite pour converger, mais une mise en page où gagner
+   * une ligne rend moins de place — et en perdre une, plus — la faisait osciller : 2 → 4 → 2 → …
+   * jusqu'à la limite de React, et l'écran d'erreur remplaçait le cinéma (React #185, Mac Safari 18.6,
+   * fiche de « The Creep Tapes », 11/10/2026). Revenir sur une valeur déjà essayée arrête la mesure,
+   * sur la plus petite des deux : le synopsis ne remonte jamais sous le bouton Retour.
+   */
+  const triedRef = useRef<{ values: number[]; at: number }>({ values: [], at: 0 });
 
   // Mesuré plutôt que deviné : la longueur qui tient en deux lignes dépend de la largeur de la
   // colonne, donc de la fenêtre. Relu à chaque redimensionnement, pour la même raison.
@@ -151,7 +160,16 @@ export function CinemaOverview({
         // Pas plus de lignes que le texte n'en demande.
         const natural = Math.max(2, Math.ceil(el.scrollHeight / lineHeight));
         const next = Math.max(2, Math.min(maxLines, room, natural));
-        setLines((prev) => (prev === next ? prev : next));
+        const now = performance.now();
+        const tried = triedRef.current;
+        if (now - tried.at > 250) tried.values = [lines];
+        tried.at = now;
+        if (next !== lines) {
+          if (!tried.values.includes(next)) {
+            tried.values.push(next);
+            setLines(next);
+          } else if (next < lines) setLines(next);
+        }
       }
       setClamped(el.scrollHeight - el.clientHeight > 2);
     };

@@ -178,3 +178,40 @@ describe("la fenêtre du synopsis", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   });
 });
+
+// Sarah, Mac Safari 18.6, fiche de « The Creep Tapes » (11/10/2026) : React #185 au journal, la pile
+// sur le `setLines` de la mesure. Une mise en page où gagner des lignes en rend moins de place — et
+// en perdre, plus — faisait osciller la mesure (2 → 4 → 2 → …) jusqu'à la limite de React, et l'écran
+// d'erreur remplaçait le cinéma. Ici, la colonne est placée pour produire exactement cette boucle.
+describe("le résumé d'une fiche du bureau, quand la place dépend du nombre de lignes", () => {
+  afterEach(() => {
+    delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+    delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
+  });
+
+  it("ne boucle pas : il se pose sur une valeur au lieu d'osciller", () => {
+    const linesOf = (el: HTMLElement) => Number(el.style.getPropertyValue("--clamp-lines") || 2);
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => 240 });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      get(this: HTMLElement) { return this.tagName === "P" ? linesOf(this) * 24 : 0; },
+    });
+    const rect = (top: number) => ({ top, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) });
+    const { container } = render(
+      <div data-snap-section="">
+        <div className="flex flex-col">
+          <CinemaOverview text="Un long synopsis." readMore="Voir plus" onOpen={vi.fn()} maxLines={5} />
+        </div>
+      </div>
+    );
+    const page = container.querySelector<HTMLElement>("[data-snap-section]")!;
+    const column = container.querySelector<HTMLElement>(".flex.flex-col")!;
+    const body = container.querySelector<HTMLElement>("p")!;
+    page.getBoundingClientRect = () => rect(0);
+    // Deux lignes : de quoi en mettre quatre. Quatre : plus de place que pour deux.
+    column.getBoundingClientRect = () => rect(120 + (linesOf(body) <= 2 ? 60 : -30));
+    expect(() => act(() => void window.dispatchEvent(new Event("resize")))).not.toThrow();
+    // Posé sur la plus petite des deux : le synopsis ne remonte jamais sous le bouton Retour.
+    expect(linesOf(body)).toBe(2);
+  });
+});
