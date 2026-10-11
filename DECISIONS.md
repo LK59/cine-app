@@ -2442,8 +2442,10 @@ Tests : `imageRetry.test.ts`, `imageRetry-components.test.tsx`, `jellyfin-image-
 ## 64. Le Chromecast : une télécommande, pas un lecteur — et la reprise gardée même quand la page se tait
 
 **Règle.** Sur Chrome et Edge (ordinateur, Android), le lecteur natif propose un bouton Chromecast à
-côté d'AirPlay — aux administrateurs par défaut, à tous les comptes quand l'installation l'ouvre
-(`CHROMECAST_FOR_EVERYONE`). Le récepteur choisi dans la liste de Chrome, la main passe comme pour
+côté d'AirPlay, marqué « bêta » — à tous les comptes par défaut depuis le 11/10/2026 (8.36.2), aux
+seuls administrateurs quand l'installation le referme (`CHROMECAST_FOR_EVERYONE=false`). Ouvert avant
+tout essai sur un vrai récepteur, faute d'appareil : un échec rend le film à l'appareil, en pause, et
+le journal en garde le code ; la mention « bêta » part quand le journal montre des diffusions réussies. Le récepteur choisi dans la liste de Chrome, la main passe comme pour
 AirPlay (`fallToStable("diffusion demandée", { …, cast: true, castTarget: "chromecast" })`) : un choix,
 pas un échec, donc un retour possible. Le relais est pris par `ChromecastPlayer`, qui ne lit rien : le
 récepteur va chercher lui-même le flux que Jellyfin prépare, à l'adresse signée du serveur (`castUrl`,

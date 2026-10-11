@@ -1911,7 +1911,8 @@
       "continue": "Continuar"
     },
     "chromecast": {
-      "button": "Enviar a un Chromecast",
+      "button": "Enviar a un Chromecast (beta)",
+      "beta": "Beta",
       "playingOn": "Reproduciendo en {device}",
       "tv": "el televisor",
       "loading": "El televisor está preparando la película…",

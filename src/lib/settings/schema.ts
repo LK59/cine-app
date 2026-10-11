@@ -68,7 +68,7 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "CAST_RECEIVER_APP_ID", group: "playback", kind: "text", need: "optional", fallback: "", inApp: true, placeholder: "CC1AD845" },
   // Le bouton Chromecast : administrateurs seulement par défaut, le temps d'un premier essai sur un
   // vrai récepteur ; ouvert à tous les comptes d'un geste ici.
-  { key: "CHROMECAST_FOR_EVERYONE", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  { key: "CHROMECAST_FOR_EVERYONE", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   // La disposition de l'accueil (07/10/2026, DECISIONS.md §52) — deux variantes d'une installation à
   // l'autre, sans fourche du code : un accès direct à tout le catalogue en tête, et une bannière
   // qui montre ce qu'on regarde plutôt que ce qui vient d'arriver. « Réglages par défaut » : ce que

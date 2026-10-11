@@ -109,8 +109,8 @@ reach the television yet**: the phone's menu drives its own `<track>` elements, 
 reads the stream's subtitle renditions — pick them on the television meanwhile.
 
 **A Chromecast is driven, not fed** (DECISIONS §64). On Chrome and Edge (desktop, Android) the
-native player offers a Chromecast button — administrators by default, everyone when
-`CHROMECAST_FOR_EVERYONE` is on. Google's sender kit is loaded on demand only there
+native player offers a Chromecast button, marked beta — every account by default, administrators
+only when `CHROMECAST_FOR_EVERYONE` is off. Google's sender kit is loaded on demand only there
 (`src/lib/chromecast/framework.ts`). Once a receiver is picked in Chrome's list, the host hands over
 with `cast: true, castTarget: "chromecast"`, and `PlayerHost` mounts `ChromecastPlayer` instead of
 the server player: a remote control. The receiver fetches the signed `castUrl` itself; the stream is

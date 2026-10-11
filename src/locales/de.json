@@ -1911,7 +1911,8 @@
       "continue": "Weiter"
     },
     "chromecast": {
-      "button": "Auf einen Chromecast streamen",
+      "button": "Auf einen Chromecast streamen (Beta)",
+      "beta": "Beta",
       "playingOn": "Wiedergabe auf {device}",
       "tv": "dem Fernseher",
       "loading": "Der Fernseher bereitet den Film vor…",

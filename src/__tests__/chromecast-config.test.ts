@@ -25,13 +25,13 @@ afterEach(() => {
 describe("les réglages", () => {
   it("figurent dans la liste unique, réglables dans l'application", () => {
     expect(SETTINGS_BY_KEY.get("CAST_RECEIVER_APP_ID")).toMatchObject({ group: "playback", kind: "text", inApp: true, fallback: "" });
-    expect(SETTINGS_BY_KEY.get("CHROMECAST_FOR_EVERYONE")).toMatchObject({ group: "playback", kind: "boolean", inApp: true, fallback: "false" });
+    expect(SETTINGS_BY_KEY.get("CHROMECAST_FOR_EVERYONE")).toMatchObject({ group: "playback", kind: "boolean", inApp: true, fallback: "true" });
   });
 
-  it("par défaut : le récepteur public de Google, et les administrateurs seulement", async () => {
+  it("par défaut : le récepteur public de Google, ouvert à tous (11/10/2026)", async () => {
     const { config } = await import("@/lib/config");
     expect(config.player.castReceiverAppId).toBe("CC1AD845");
-    expect(config.player.chromecastForEveryone).toBe(false);
+    expect(config.player.chromecastForEveryone).toBe(true);
   });
 
   it("relus à chaque accès : un récepteur enregistré par l'installation, le bouton ouvert à tous", async () => {
@@ -47,12 +47,21 @@ describe("les réglages", () => {
 });
 
 describe("GET /api/player/cast", () => {
-  it("un administrateur voit le bouton, un compte ordinaire non — par défaut", async () => {
+  it("ouvert à tous par défaut (11/10/2026) : administrateur et compte ordinaire voient le bouton", async () => {
     const { GET } = await import("@/app/api/player/cast/route");
     mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "admin" });
     expect(await (await GET(req())).json()).toEqual({ allowed: true, receiverAppId: "CC1AD845" });
     mockVerifySessionFull.mockResolvedValue({ u: "ami", role: "user" });
-    expect(await (await GET(req())).json()).toEqual({ allowed: false, receiverAppId: "CC1AD845" });
+    expect(await (await GET(req())).json()).toEqual({ allowed: true, receiverAppId: "CC1AD845" });
+  });
+
+  it("refermé aux administrateurs par le réglage", async () => {
+    process.env.CHROMECAST_FOR_EVERYONE = "false";
+    const { GET } = await import("@/app/api/player/cast/route");
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "admin" });
+    expect((await (await GET(req())).json()).allowed).toBe(true);
+    mockVerifySessionFull.mockResolvedValue({ u: "ami", role: "user" });
+    expect((await (await GET(req())).json()).allowed).toBe(false);
   });
 
   it("ouvert à tous par le réglage", async () => {

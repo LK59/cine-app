@@ -1911,7 +1911,8 @@
       "continue": "Continuer"
     },
     "chromecast": {
-      "button": "Diffuser sur un Chromecast",
+      "button": "Diffuser sur un Chromecast (bêta)",
+      "beta": "Bêta",
       "playingOn": "Lecture sur {device}",
       "tv": "le téléviseur",
       "loading": "Le téléviseur prépare le film…",

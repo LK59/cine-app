@@ -1911,7 +1911,8 @@
       "continue": "Keep watching"
     },
     "chromecast": {
-      "button": "Cast to a Chromecast",
+      "button": "Cast to a Chromecast (beta)",
+      "beta": "Beta",
       "playingOn": "Playing on {device}",
       "tv": "the TV",
       "loading": "The TV is getting the film ready…",

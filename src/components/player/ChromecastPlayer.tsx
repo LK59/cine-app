@@ -605,6 +605,11 @@ export function ChromecastPlayer({
         <Cast size={40} className="text-subtle" aria-hidden />
         <div className="flex max-w-xl flex-col gap-2">
           <h2 className="text-balance text-xl font-semibold sm:text-2xl">{title}</h2>
+          {/* « Bêta » tant qu'aucune diffusion n'a été vue réussir au journal (DECISIONS §64) : ouvert à
+              tous sans essai sur un vrai récepteur, un échec doit se lire comme un essai. */}
+          <span className="mx-auto rounded-full border border-white/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
+            {t("player.chromecast.beta")}
+          </span>
           <p className="text-sm text-muted" data-chromecast-status>
             {phase === "error"
               ? t("player.chromecast.failed")

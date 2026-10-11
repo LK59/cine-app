@@ -125,7 +125,7 @@ export const config = {
     },
     // Le bouton Chromecast pour tous les comptes, ou pour les administrateurs seulement (défaut).
     get chromecastForEveryone() {
-      return optional("CHROMECAST_FOR_EVERYONE", "false") === "true";
+      return optional("CHROMECAST_FOR_EVERYONE", "true") === "true";
     },
   },
   home: {
