@@ -748,6 +748,33 @@ Two details of real server responses the parser must handle: a **BOM** before th
 and **position settings** at the end of a cue timing line (`region:subtitle line:90%`) which are not
 part of the text.
 
+### Generated subtitles
+
+A full text subtitle of the title can be translated into another language, on demand and during
+playback, by an online AI (DECISIONS.md §69). Server side: `src/lib/subtitleGen/`.
+
+- **Source.** Text tracks only, internal or external, read through Jellyfin's
+  `/Videos/{id}/{msid}/Subtitles/{index}/Stream.vtt` (an internal Matroska track takes ~14 s to
+  extract the first time). A track counts as full by its number of cues against the runtime, not by
+  its forced flag.
+- **Requests.** Every request of a job starts with the same bytes: instructions, the glossary once
+  it exists, and the whole source text with cue ids. Only the previous ~20 translations and the ids
+  to translate vary. Anthropic gets an explicit cache breakpoint on the last prefix block; OpenAI and
+  Gemini cache identical prefixes on their own. Requests of one job are sequential; at most three
+  run at once across jobs.
+- **Priority.** Viewers who polled in the last 30 s come first, from their position minus 10 s,
+  until they have five minutes translated ahead; then ahead of them, then the beginning.
+- **Delivery.** The player polls `/api/subtitle-gen/jobs/<id>/poll` about every 2 s with the last
+  revision it holds and its position, and receives the new cues. When every cue is done, the `.srt`
+  is written to `data/subtitles/<itemId>/` and uploaded to Jellyfin (`POST /Videos/{id}/Subtitles`),
+  which places it next to the video. Once Jellyfin lists it, `/api/jellyfin/direct/[itemId]` flags it
+  `generated: true`; if the upload fails for good, the copy in `data/` is listed instead.
+- **Cost and limits.** Tokens are billed by category (input, cache write, cache read, output) from a
+  per-model price table; a monthly budget and 50 new generations per account per day bound the spend.
+- **Log.** `data/logs/subtitle-gen.log`: `start`, `source`, `first`, `seek`, `batch` (periodic
+  summary), `retry`, `pause`, `refusal`, `kept`, `done` (tokens, cache read rate, cost, duration),
+  `present`, `cleanup`. Never the key, never subtitle text.
+
 ---
 
 ## Track selection and account preferences

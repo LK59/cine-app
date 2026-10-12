@@ -2776,3 +2776,113 @@ pistes que le traitement ne prend pas, plutôt que de parier sur l'ordre de leur
 Tests : `dialogueEnhance.test.ts`, `webcodecs-audioTranscode.test.ts`, `webcodecs-remuxer.test.ts`,
 `aacWasm-route.test.ts`, `PlayerControls.test.tsx`, `ExperimentalPlayerHost.test.tsx` (« améliorer
 les dialogues »). Mesure de l'ordre des canaux des navigateurs : `sh tools/channel-order-bench/run.sh`.
+
+## 69. Générer des sous-titres : traduire en flux un sous-titre complet du titre, présenté ensuite à Jellyfin
+
+**Règle.** Un sous-titre texte **complet** déjà présent dans le titre (piste du fichier ou fichier
+voisin) est traduit vers une langue choisie par une IA en ligne — Anthropic, OpenAI ou Google, au
+choix de l'administrateur —, pendant que le film joue, là où regarde le spectateur. Pas de
+transcription de la piste son, pas de modèle local. Sans clé, la fonction n'existe pas : aucune route
+ne l'annonce (`enabled: false`). La clé ne quitte jamais le serveur — ni dans une réponse, ni dans un
+journal ; les réglages la montrent masquée (`secret`).
+
+**La source.** Seulement des pistes texte ; jamais une image. Le drapeau « forcé » ne sert qu'à
+l'ordre : un SDH complet peut être marqué forcé, un vrai forcé ne pas l'être, une piste peut n'avoir
+aucune langue. Ce qui tranche est le **nombre de répliques** rapporté à la durée (`isFullTrack` :
+au moins 50, et 2 par minute), mesuré une fois la piste lue. Ordre d'essai (`orderCandidates`) :
+langue de l'audio d'origine, anglais, leurs SDH, autres langues, pistes sans langue, pistes marquées
+forcées. La langue d'une piste sans étiquette est vérifiée par l'IA pendant la préparation ; si elle
+est déjà la langue voulue, la tâche s'arrête (`exists`). Une langue déjà présente en complet n'est
+pas proposée (409).
+
+**Le préfixe stable et le cache.** Chaque requête d'une tâche commence par le même préfixe, octet
+pour octet : consignes, glossaire (une fois établi), puis le **texte source complet**, chaque réplique
+avec son identifiant `i`, sans minutages (`stablePrefix`, `sourceBlock`). Le suffixe variable dit
+seulement les ~20 traductions qui précèdent le lot et les identifiants à traduire (`batchUser`).
+Anthropic : point de cache explicite (`cache_control: ephemeral`, 5 min) sur le dernier bloc du
+préfixe. OpenAI et Gemini : leur cache implicite des préfixes identiques, rien à poser. Le modèle voit
+tout le film — qui parle, tu ou vous, les renvois — pour un coût moindre que des lots isolés. Le
+glossaire, produit à la préparation, est **figé** dès qu'il existe : le changer casserait le préfixe.
+Les requêtes d'une même tâche partent **en série** (un cache ne se relit qu'une fois la première
+réponse commencée) ; la concurrence (3 requêtes) est entre tâches. Seule exception : le premier petit
+lot part pendant la préparation du glossaire, pour afficher vite. Une pause de plus de 5 min fait
+réécrire le cache : accepté, ni TTL d'une heure ni maintien en vie.
+
+**Priorité aux spectateurs** (`nextBatch`). Un spectateur est actif s'il a sondé dans les 30
+dernières secondes ; on traduit depuis sa position moins 10 s, à tour de rôle s'ils sont plusieurs,
+tant qu'il a moins de cinq minutes d'avance ; puis devant eux jusqu'au bout, puis le début. Premier
+lot de 8 répliques (et pour un spectateur qui attend), 40 ensuite. Un saut : la position la plus
+récente fait foi, la requête en cours n'est pas annulée. Rien n'est retraduit : une ligne faite ou en
+vol n'est jamais choisie, et l'écriture en base ne remplit que les lignes vides. Sans spectateur, la
+tâche va au bout. Une tâche par (fichier, langue), partagée entre comptes.
+
+**Validation stricte** (`validateBatch`) : mêmes identifiants, ni manquant (fusion), ni en trop, ni
+doublon, texte non vide, deux lignes au plus, pas resté dans la langue source. Sinon : un nouvel essai,
+puis le lot coupé en deux, puis la ligne garde son texte d'origine (journalisée `kept`). Un refus du
+modèle suit le même chemin, sans nouvel essai (`refusal`) — pas de repli serveur pour Haiku 5.5.
+
+**Résilience.** Lignes écrites dès réception (`subtitle_gen_cues`) ; au démarrage, chaque tâche en
+cours vérifie le fichier (ETag et taille de la source Jellyfin, comme le cache de reprise) et la piste
+source (empreinte de son texte) puis reprend ; un changement la rend **obsolète** (`stale`). Erreurs
+passagères (429, 5xx, réseau) : nouvel essai à 2, 5, 15, 30 s, puis pause `unavailable`. Clé refusée
+ou modèle inconnu : pause `config` de toutes les tâches. Crédit épuisé (« credit balance is too low »,
+`insufficient_quota`) ou budget mensuel atteint : pause `budget`. Reprise par un nouveau POST
+(`/resume`), qui ne passe pas outre un budget toujours atteint ni une clé absente.
+
+**Limites.** 50 générations **lancées** par jour et par compte (`DAILY_LIMIT`, 30 au départ, portée à
+50 le 12/10/2026) ; rejoindre, reprendre ou refaire une tâche ne compte pas. Budget mensuel global
+(5 $ par défaut). Refus nommés : 429 `quota`, 402 `budget`, 409 `exists`, 422 `no-source`, 404
+`disabled`.
+
+**Le coût, exact.** Chaque réponse donne ses jetons par catégorie : entrée, écriture du cache,
+lecture du cache, sortie (réflexion comprise). Table de prix par modèle (`pricing.ts`, relevés le
+12/10/2026) : Haiku 5.5 0,10 / 0,50 $ par million, écriture ×1,25, lecture ×0,1 ; gpt-6-luna 0,10 /
+0,50, lecture 0,01 ; gemini-3.8-flash 0,75 / 3,75 jusqu'au 31/12/2026 puis 1,50 / 7,50, lecture de
+cache comptée au prix plein faute de tarif relevé. Un modèle inconnu sans prix saisi : la fonction ne
+part pas (`priceFor` rend null) — aucun prix inventé.
+
+**Fin de tâche : présenter le sous-titre à Jellyfin** (`present.ts`, décidé le 12/10/2026). Le
+`.srt` (minutages d'origine) est écrit dans `data/subtitles/<itemId>/` — la source de vérité — puis
+envoyé par `POST /Videos/{itemId}/Subtitles` (langue en ISO 639-2 terminologique, `fra`), qui le pose
+à côté du film : la fonction ne dépend ni de Bazarr ni d'un montage de la bibliothèque. Un nom de
+fichier déjà pris n'est jamais réutilisé (l'envoi écraserait un sous-titre qui n'est pas le nôtre).
+Le nôtre se reconnaît : fichier absent avant l'envoi (liste gardée en base), dans le dossier de la
+vidéo, au nom attendu, à la bonne langue (`isOurStream`). Envoi en échec : nouvel essai à 1 min,
+5 min, 15 min, 1 h, puis abandon — la copie de `data/` est alors servie (`/api/subtitle-gen/files/…`).
+Jellyfin qui tarde à lister le fichier : rafraîchissement demandé après 5 min, abandon après 45. Un
+fichier vidéo remplacé ensuite : notre sous-titre n'est supprimé (`DELETE /Videos/{id}/Subtitles/{i}`)
+que s'il est le nôtre **avec certitude** — chemin mémorisé et même texte relu chez Jellyfin ; sinon
+rien, et le journal le dit (`cleanup`).
+
+**Porteurs.** `src/lib/subtitleGen/` : `engine.ts` (ordonnancement, lots, pauses, fin, présentation,
+reprise), `scheduler.ts`, `validate.ts`, `prompts.ts`, `source.ts`, `pricing.ts`, `present.ts`,
+`store.ts` (tables créées par `migrate()`), `providers/` (interface `TranslationProvider` ;
+Anthropic par le SDK officiel, OpenAI Responses et Gemini `generateContent` en `fetch`), `service.ts`
+(le contrat des routes), `direct.ts` (ce que la route `direct` ajoute), `log.ts`
+(`data/logs/subtitle-gen.log`, lu par le panneau Activité, jamais la clé ni le texte). Routes :
+`/api/subtitle-gen/options`, `/jobs`, `/jobs/<id>/poll`, `/jobs/<id>/resume`, `/files/<id>.vtt`,
+`/admin`, `/admin/jobs/<id>/cancel`. Réglages : groupe `subtitles` du schéma (§48) et
+`SubtitleGenCard` dans « Réglages serveur ». Libellé de piste : `trackLabel.ts` (`isGenerated`,
+`isGenerating` → « Français — généré », « Français — génération… »).
+
+**Appelants.** Le lecteur natif (`/options` pour proposer, `/jobs` pour lancer, `/poll` toutes les
+~2 s pour afficher les lignes et donner sa position) ; la route `/api/jellyfin/direct/[itemId]`, qui
+marque `generated: true` le fichier voisin reconnu comme le nôtre et n'ajoute la copie de `data/` que
+si l'envoi à Jellyfin a échoué pour de bon ; le panneau de la gestion (dépense, tâches, reprendre,
+annuler).
+
+**Proxy.** `POST /api/subtitle-gen/jobs` et `POST /api/subtitle-gen/jobs/<32 hex>/(poll|resume)`
+sont ouverts aux comptes ordinaires ; `/api/subtitle-gen/admin*` et les réglages sont à
+l'administrateur ; `crossSiteWrite` s'applique comme partout.
+
+**Volontairement à part.** Pas de laissez-passer de diffusion sur la route `.vtt` : l'adresse ne
+porte pas le titre que `castPassFor` lit dans le chemin ; un téléviseur reçoit le sous-titre par
+Jellyfin une fois présenté. Les tâches en cours ne sont pas dans `externalSubtitles` : le lecteur
+dessine lui-même son entrée « génération… » à partir de `/options` et `/poll`.
+
+Tests : `subtitleGen-source.test.ts`, `subtitleGen-scheduler.test.ts`, `subtitleGen-validate.test.ts`,
+`subtitleGen-pricing.test.ts`, `subtitleGen-engine.test.ts` (tâche complète, préfixe identique après
+un saut, requêtes en série, reprise après redémarrage, pauses 429/crédit/clé/budget, refus, quota,
+présentation simulée, repli `data/`, suppression seulement du nôtre, clé jamais sortie),
+`subtitleGen-routes.test.ts`, `subtitleGen-proxy.test.ts`, `trackLabel.test.ts`,
+`jellyfin-direct-route.test.ts`.
