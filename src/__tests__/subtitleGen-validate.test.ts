@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import fixture from "./fixtures/subtitleGen/drift-bench-2026-10-12.json";
-import { DRIFT, LineSplitter, detectDrift, parseReply, parseReplyLine, validateBatch, type ReplyLine } from "@/lib/subtitleGen/validate";
+import { DRIFT, LineSplitter, detectDrift, fitLines, parseReply, parseReplyLine, validateBatch, type ReplyLine } from "@/lib/subtitleGen/validate";
 import { batchUser, idsAsked, oneLine, sourceBlock } from "@/lib/subtitleGen/prompts";
 import { isAllCaps, matchSourceCase } from "@/lib/subtitleGen/textCase";
 
@@ -35,14 +35,21 @@ describe("validateBatch", () => {
     const v = validateBatch(req, [ok[0], { i: 11, text: "  " }, ok[2]]);
     expect(v).toMatchObject({ ok: false, problem: "lignes", bad: [11] });
   });
-  it("refuse plus de deux lignes", () => {
-    const v = validateBatch(req, [ok[0], { i: 11, text: "a\nb\nc" }, ok[2]]);
-    expect(v).toMatchObject({ ok: false, bad: [11] });
+  // Une ligne de trop se recoud au lieu de refaire le lot (5 lots refaits pour ça, mesuré le 12/10/2026).
+  it("recoud une réplique de trois lignes en deux plutôt que de refuser le lot", () => {
+    const v = validateBatch(req, [ok[0], { i: 11, text: "Bonjour\nà\ntoi" }, ok[2]]);
+    expect(v.ok).toBe(true);
+    if (v.ok) expect(v.texts.get(11)).toBe("Bonjour\nà toi");
+  });
+  it("ne recoud jamais devant la réplique d'une autre voix tant qu'il y a un autre choix", () => {
+    expect(fitLines("- Tu viens ?\nOui\n- Non.", 2)).toBe("- Tu viens ? Oui\n- Non.");
+    expect(fitLines("a\nb", 2)).toBe("a\nb");
   });
   it("accepte trois lignes quand la source en a trois (vieux SDH)", () => {
     const three = [{ id: 1, source: "BOYS, WHERE ARE YOU?\nWHERE DO YOU BOYS LIVE?\nJUST IN THIS BOOK?" }];
     expect(validateBatch(three, [{ i: 1, text: "LES GARÇONS, OÙ ÊTES-VOUS ?\nOÙ VIVEZ-VOUS ?\nSEULEMENT DANS CE LIVRE ?" }]).ok).toBe(true);
-    expect(validateBatch(three, [{ i: 1, text: "a\nb\nc\nd" }])).toMatchObject({ ok: false, bad: [1] });
+    const four = validateBatch(three, [{ i: 1, text: "UN\nDEUX\nTROIS\nQUATRE" }]);
+    expect(four.ok && four.texts.get(1)?.split("\n").length).toBe(3);
   });
   it("refuse une phrase restée dans la langue source", () => {
     const v = validateBatch(req, [ok[0], { i: 11, text: req[1].source }, ok[2]]);

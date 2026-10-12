@@ -3,7 +3,7 @@ import { config } from "@/lib/config";
 import { logError } from "@/lib/logger";
 import { genAvailable, genSettings, providerFor, ProviderError, type GenSettings, type TranslationProvider, type Usage } from "./providers";
 import { GLOSSARY_SCHEMA, GLOSSARY_USER, batchSystem, batchUser, glossarySystem, parseGlossary, sourceBlock, stablePrefix, type Glossary } from "./prompts";
-import { LineSplitter, maxLinesFor, parseReply, parseReplyLine, validateBatch } from "./validate";
+import { LineSplitter, fitLines, maxLinesFor, parseReply, parseReplyLine, validateBatch } from "./validate";
 import { matchSourceCase } from "./textCase";
 import { nextBatch, activeViewers, anchorIndex, seekBatch, type Plan, type Viewer } from "./scheduler";
 import { cuesDb, jobsDb, sameFile, spendDb, type JobRow } from "./store";
@@ -528,8 +528,8 @@ async function translateIds(job: JobRow, ids: number[], tries: number, seekLane 
     const parsed = parseReplyLine(line);
     // Validable seule : un identifiant demandé, un texte non vide, pas plus de lignes que permis.
     // Le reste (comptes, décalage) attend la fin du lot.
-    if (!parsed || !asked.has(parsed.i) || !parsed.text || parsed.text.split("\n").length > maxLinesFor(cues.sources[parsed.i])) return;
-    const text = matchSourceCase(cues.sources[parsed.i], parsed.text, job.target);
+    if (!parsed || !asked.has(parsed.i) || !parsed.text) return;
+    const text = matchSourceCase(cues.sources[parsed.i], fitLines(parsed.text, maxLinesFor(cues.sources[parsed.i])), job.target);
     if (cuesDb.writeProvisional(job.id, [{ idx: parsed.i, text }]) > 0) {
       streamed.add(parsed.i);
       noteFirst(job.id, 1, startedAt, true);

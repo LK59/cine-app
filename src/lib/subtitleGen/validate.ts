@@ -92,6 +92,31 @@ export function maxLinesFor(source: string): number {
   return Math.max(2, cleanText(source).split("\n").length);
 }
 
+/**
+ * Ramener une réplique à `max` lignes en recousant les plus courtes voisines, jamais devant une
+ * ligne qui ouvre par un tiret (une autre voix d'un dialogue) tant qu'il reste un autre choix.
+ */
+export function fitLines(text: string, max: number): string {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  while (lines.length > max) {
+    let best = -1;
+    let bestLen = Infinity;
+    for (const dashOk of [false, true]) {
+      for (let k = 0; k + 1 < lines.length; k++) {
+        if (!dashOk && lines[k + 1].startsWith("-")) continue;
+        const len = lines[k].length + lines[k + 1].length;
+        if (len < bestLen) {
+          bestLen = len;
+          best = k;
+        }
+      }
+      if (best >= 0) break;
+    }
+    lines.splice(best, 2, `${lines[best]} ${lines[best + 1]}`);
+  }
+  return lines.join("\n");
+}
+
 // ─── Le décalage ──────────────────────────────────────────────────────────────
 
 /**
@@ -199,10 +224,10 @@ export function validateBatch(requested: RequestedLine[], items: readonly ReplyL
     }
     // Deux lignes à l'écran, ou autant que la source : certains vieux SDH ont des répliques de trois
     // lignes, dont la traduction fidèle ne doit pas être refusée.
-    if (text.split("\n").length > maxLinesFor(source)) {
-      bad.push(id);
-      continue;
-    }
+    // Une ligne de trop n'est pas une faute de traduction : elle est recousue (`fitLines`) plutôt
+    // que de refaire tout le lot. Mesuré le 12/10/2026 : 5 lots de 40 refaits pour une seule
+    // réplique coupée en trois sur un épisode et demi.
+    if (text.split("\n").length > maxLinesFor(source)) texts.set(id, fitLines(text, maxLinesFor(source)));
     if (words(source) >= 3) {
       comparable++;
       if (flat(text) === flat(source)) {
