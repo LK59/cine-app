@@ -190,21 +190,17 @@ describe("WebKit : la bascule natif → serveur recharge la page tout de suite",
     expect(carriedLighter()).toEqual(STEP);
   }, 15_000);
 
-  it("un repli ordinaire (sans palier) recharge aussi — et rien n'emporte de palier", async () => {
+  // Choix de Louis (12/10/2026) : seules les bascules allégées rechargent — un repli ordinaire passe
+  // la main dans la page, son chemin éprouvé (5 des 6 replis de « Ruby » sur iPhone y ont marché).
+  it("un repli ordinaire (sans palier) ne recharge pas : il passe la main dans la page, comme avant", async () => {
     page(film);
     await waitFor(() => expect(native.onFallback).not.toBeNull());
     act(() => native.onFallback!("Aucun chemin de lecture disponible pour ce fichier. remux : x"));
-    expect(reloads).toHaveBeenCalledTimes(1);
-    const intent = JSON.parse(sessionStorage.getItem(PLAYER_RELOAD_INTENT_KEY) ?? "null");
-    expect(intent).toMatchObject({ itemId: "film", attempt: 1, server: true, carry: { direct: { opening: true } } });
-    expect(intent.carry.lighter).toBeUndefined();
-    cleanup();
-    page();
-    await waitFor(() => expect(starts()).toHaveLength(1), { timeout: 6000 });
-    expect(starts()[0]).toMatchObject({ why: "reload-direct" });
-    expect(starts()[0].lighterMbps).toBeUndefined();
-    expect(playerNegotiations()[0].lighter).toBeUndefined();
-  }, 15_000);
+    expect(reloads).not.toHaveBeenCalled();
+    await waitFor(() => expect(starts()).toHaveLength(1));
+    expect(starts()[0].why).not.toBe("reload-direct");
+    expect(sessionStorage.getItem(PLAYER_RELOAD_INTENT_KEY)).toBeNull();
+  });
 
   it("une seule tentative par séance : une séance qui a déjà consommé son rechargement passe la main dans la page, comme avant", async () => {
     page({ ...film, reloadAttempt: 1 });
@@ -222,7 +218,8 @@ describe("WebKit : la bascule natif → serveur recharge la page tout de suite",
     expect(shouldReloadDirect({ ...base, takeover: { resumeAt: 0, castTarget: "chromecast" } })).toBe(false);
     expect(shouldReloadDirect({ ...base, takeover: undefined, bench: "banc" })).toBe(false);
     expect(shouldReloadDirect({ ...base, takeover: undefined, serverFallback: false })).toBe(false);
-    expect(shouldReloadDirect({ ...base, takeover: undefined })).toBe(true);
+    expect(shouldReloadDirect({ ...base, takeover: undefined })).toBe(false);
+    expect(shouldReloadDirect({ ...base, takeover: { resumeAt: 0, lighter: { targetBps: 1_500_000, tier: 1 } } })).toBe(true);
   });
 });
 

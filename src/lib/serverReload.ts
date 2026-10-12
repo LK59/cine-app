@@ -95,6 +95,12 @@ export function shouldReloadDirect(input: {
   if (!input.nativeHls || input.serverFallback === false) return false;
   if (input.takeover?.cast || input.takeover?.castTarget) return false;
   if (input.bench) return false;
+  // Les bascules vers la version allégée seulement : ce sont elles qui ont échoué dans la page à
+  // chaque essai sur iPhone (12/10/2026, « élément : code 4 » ×3 puis rechargement), alors que 5 des 6
+  // replis ordinaires de « Ruby » sur iPhone et les bascules de Safari Mac y ont marché. Un repli
+  // ordinaire garde son chemin éprouvé plutôt que de payer un rechargement (choix de Louis : la
+  // stabilité d'abord).
+  if (!input.takeover?.lighter) return false;
   return (input.reloadAttempt ?? 0) < 1;
 }
 

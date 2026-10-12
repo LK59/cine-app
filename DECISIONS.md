@@ -3664,6 +3664,8 @@ ne mesure rien : inchangé. Le préchauffage n'est pas bridé par le simulateur 
 
 **Décidé le 12/10/2026.**
 
+**Rechargement direct limité aux bascules allégées (12/10/2026, choix de Louis).** `shouldReloadDirect` ne recharge que si le relais porte un palier allégé : les replis ordinaires du lecteur natif vers le serveur sur WebKit gardent leur passage dans la page (5 des 6 replis de « Ruby » sur iPhone y ont marché), les bascules allégées sur iPhone y échouaient toutes (code 4 ×3).
+
 ## 79. La connexion lente s'exécute à un seul endroit pour les deux lecteurs
 
 **La règle.** Ce que `slowLinkPolicy.ts` décide (§78) est exécuté par **une** classe, `SlowLinkRunner`
