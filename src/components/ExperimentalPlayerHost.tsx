@@ -9,7 +9,7 @@ import { directInfoForOpening } from "@/lib/directInfo";
 import { directInfoKey, fetchPlaybackState, takePrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { errorMessage, isUpstreamUnreachable } from "@/lib/upstreamError";
 import { usePlayback } from "@/components/PlaybackProvider";
-import { PlayerControls } from "@/components/PlayerControls";
+import { PlayerControls, type SubtitleGenerationMenu } from "@/components/PlayerControls";
 import { restoreRememberedVolume } from "@/lib/rememberedVolume";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { isPlayerWarning } from "@/lib/webcodecs/playerWarning";
@@ -81,8 +81,15 @@ import {
   toPlayerTrack as externalToPlayerTrack,
   type ExternalSubtitleSource,
 } from "@/lib/webcodecs/externalSubtitles";
-import { chooseAudioTrack, chooseSubtitleTrack, trackLanguage } from "@/lib/trackPreferences";
-import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
+import { chooseAudioTrack, chooseSubtitleTrack, normaliseLanguage, trackLanguage } from "@/lib/trackPreferences";
+import { labelAudioTracks, labelSubtitleTracks, languageName } from "@/lib/trackLabel";
+import {
+  isGeneratingTrack,
+  SubtitleGeneration,
+  type GenerationNotice,
+  type GenerationSnapshot,
+} from "@/lib/subtitleGen/generation";
+import type { SubtitleGenErrorCode } from "@/lib/subtitleGen/client";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { useSleepTimer } from "@/lib/useSleepTimer";
 import { sleepTimerLogFields, sleepTimerStore, type SleepMode } from "@/lib/sleepTimer";
@@ -269,29 +276,102 @@ function jellyfinAudioIndex(
   return jellyfinTracks[ordinal]?.index;
 }
 
+/** Les raisons de pause que le serveur nomme ; toute autre se dit « en attente ». */
+const PAUSE_REASONS = new Set(["budget", "quota", "network", "config"]);
+
+/** Un message d'état de génération, en mots — voir `SubtitleGeneration.noticeAt`. */
+function noticeText(notice: GenerationNotice, t: (key: string, vars?: Record<string, string | number>) => string): string {
+  if (notice.kind === "preparing") return t("player.subtitleGen.preparing");
+  if (notice.kind === "resuming") return t("player.subtitleGen.resuming");
+  const reason = notice.reason && PAUSE_REASONS.has(notice.reason) ? notice.reason : "other";
+  return t("player.subtitleGen.paused", { reason: t(`player.subtitleGen.reasons.${reason}`) });
+}
+
+/** Un échec de génération, dit au spectateur — jamais une erreur de lecture. */
+function generationErrorText(
+  code: SubtitleGenErrorCode | "job-failed",
+  quotaLimit: number | null,
+  t: (key: string, vars?: Record<string, string | number>) => string
+): string {
+  if (code === "quota") return quotaLimit ? t("player.subtitleGen.errors.quota", { n: quotaLimit }) : t("player.subtitleGen.errors.quotaToday");
+  if (code === "budget") return t("player.subtitleGen.errors.budget");
+  if (code === "no-source") return t("player.subtitleGen.errors.noSource");
+  if (code === "network") return t("player.subtitleGen.errors.network");
+  return t("player.subtitleGen.errors.failed");
+}
+
+/**
+ * Ce que le menu montre d'une génération de sous-titres : les entrées temporaires (avec leur
+ * avancement discret), les langues qu'on peut encore demander, les générations à reprendre.
+ *
+ * Une langue ne se propose pas deux fois : ni si elle a déjà des sous-titres (`existing`), ni si une
+ * génération la porte, ni si une piste générée est déjà dans la liste des externes. Une entrée
+ * temporaire disparaît dès que sa piste finale y est — c'est la bascule (§70).
+ */
+function generationMenu(
+  state: GenerationSnapshot,
+  externals: readonly ExternalSubtitleSource[],
+  locale: string,
+  t: (key: string, vars?: Record<string, string | number>) => string
+): {
+  entries: { track: PlayerTrack; detail: string | undefined }[];
+  targets: { code: string; label: string }[];
+  resumable: { code: string; label: string }[];
+} {
+  const generatedLanguages = new Set(externals.filter((s) => s.generated === true).map((s) => normaliseLanguage(s.language)));
+  const live = state.jobs.filter((job) => job.status !== "failed" && !job.finalized && !generatedLanguages.has(normaliseLanguage(job.target)));
+  const name = (code: string) => languageName(code, locale) ?? code.toUpperCase();
+  const entries = live.map((job) => ({
+    track: { number: job.id, codecId: "S_TEXT/UTF8", language: job.target, name: null, isDefault: false, isForced: false },
+    // Finie mais pas encore présentée par Jellyfin : « finalisation… » plutôt qu'un 100 % qui dure.
+    detail:
+      job.status === "done"
+        ? t("player.subtitleGen.finalizing")
+        : job.total > 0
+          ? t("player.subtitleGen.percent", { n: Math.min(99, Math.floor((job.done / job.total) * 100)) })
+          : undefined,
+  }));
+  const taken = new Set([
+    ...(state.options?.existing ?? []).map(normaliseLanguage),
+    ...state.jobs.filter((job) => job.status !== "failed").map((job) => normaliseLanguage(job.target)),
+    ...generatedLanguages,
+  ]);
+  const targets = state.options?.enabled
+    ? state.options.targets.filter((code) => !taken.has(normaliseLanguage(code))).map((code) => ({ code, label: name(code) }))
+    : [];
+  const resumable = live
+    .filter((job) => job.status === "paused" || job.status === "stale")
+    .map((job) => ({ code: job.target, label: name(job.target) }));
+  return { entries, targets, resumable };
+}
+
 /**
  * Les étiquettes des sous-titres — langue et type, dans la même forme que l'audio.
  *
  * Les pistes externes portent un identifiant négatif (voir `ExternalSubtitle`), ce qui suffit à
  * les reconnaître sans leur ajouter un champ.
  */
-function useSubtitleLabels(tracks: PlayerTrack[]) {
+function useSubtitleLabels(tracks: PlayerTrack[], origins: ReadonlyMap<number, "generating" | "generated">) {
   const t = useT();
   const { locale } = useLocale();
   return useMemo(() => {
     const etiquettes = labelSubtitleTracks(
-      tracks.map((track) => ({ ...track, isExternal: track.number < 0 })),
+      // L'origine d'une piste générée — en cours ou finie — passe par la forme unique des noms
+      // (`trackLabel.ts`, DECISIONS.md §70) : le type y devient « génération… » puis « généré ».
+      tracks.map((track) => ({ ...track, isExternal: track.number < 0, origin: origins.get(track.number) })),
       {
         locale,
         forces: t("player.trackLabel.forced"),
         complets: t("player.trackLabel.full"),
         malentendants: t("player.trackLabel.sdh"),
         externe: t("player.trackLabel.external"),
+        genere: t("player.trackLabel.generated"),
+        enCours: t("player.trackLabel.generating"),
         piste: (n) => t("player.trackLabel.track", { n }),
       }
     );
     return new Map(etiquettes.map((e) => [e.number, e.label]));
-  }, [tracks, locale, t]);
+  }, [tracks, origins, locale, t]);
 }
 
 /**
@@ -758,6 +838,25 @@ export function ExperimentalPlayerHost({
   const subtitleFetchRef = useRef<AbortController | null>(null);
 
   /**
+   * « Générer des sous-titres » (DECISIONS.md §70) : les générations du titre, leurs lignes et leur
+   * sondage. Un objet par hôte, au-dessus des pipelines comme les fichiers externes : une
+   * reconstruction ne perd rien de ce qui a été reçu. Ses rappels sont posés plus bas
+   * (`setHooks`), une fois tout ce qu'ils lisent défini.
+   */
+  const [generation] = useState(() => new SubtitleGeneration({ itemId, sessionId }));
+  const generationState = useSyncExternalStore(generation.subscribe, generation.snapshot, generation.snapshot);
+  /**
+   * La liste des fichiers à côté du film, relue quand Jellyfin présente un fichier généré — à la
+   * place de celle de l'ouverture. Un état à part, et non la description du fichier : celle-ci est
+   * une dépendance du pipeline, et la remplacer reconstruirait le lecteur en plein film.
+   */
+  const [refreshedExternals, setRefreshedExternals] = useState<ExternalSubtitleSource[] | null>(null);
+  /** Le dernier décalage d'horloge du fichier (`presentationDelay`) : pour redessiner hors `timeupdate`. */
+  const fileDelayRef = useRef(0);
+  /** La ligne affichée est un message d'état de la génération, pas une réplique. */
+  const [subtitleIsNotice, setSubtitleIsNotice] = useState(false);
+
+  /**
    * Chooses a subtitle, from the menu or from the viewer's account — a track of the file, told to
    * the pipeline, or a file beside the film, fetched here.
    */
@@ -779,7 +878,12 @@ export function ExperimentalPlayerHost({
       // chargement du nouveau, et pour de bon si ce chargement échouait — du français sous un menu
       // qui disait anglais (relu le 24/09/2026).
       externalSubtitleRef.current = null;
-      if (!external) return;
+      setSubtitleIsNotice(false);
+      // Une entrée « … génération… » : ses lignes viennent du sondage, pas d'un fichier. Toute
+      // autre piste arrête de sonder — on ne sonde que ce que le spectateur regarde.
+      const generating = isGeneratingTrack(id);
+      generation.activate(generating ? id : null);
+      if (!external || generating) return;
       const source = sources.find((candidate) => candidate.id === id);
       if (!source) return;
       // Fetched on being chosen rather than up front: a film may carry half a dozen of these
@@ -798,7 +902,28 @@ export function ExperimentalPlayerHost({
           if (!fetching.signal.aborted) showWarning(tRef.current("player.experimental.externalSubtitlesUnavailable"));
         });
     },
-    [showWarning]
+    [showWarning, generation]
+  );
+
+  /**
+   * Ce qu'une génération en cours écrit à cet instant (horloge du fichier) : sa ligne, ou — dans
+   * une zone pas encore traduite seulement — un message d'état, au même endroit et du même style
+   * (DECISIONS.md §70). Jamais les deux : un message ne remplace qu'un vide.
+   */
+  const showGeneratedAt = useCallback(
+    (fileSeconds: number) => {
+      const text = generation.textAt(fileSeconds);
+      if (text) {
+        setSubtitleIsNotice(false);
+        setSubtitle(text);
+        generation.noteShown();
+        return;
+      }
+      const notice = generation.noticeAt(fileSeconds);
+      setSubtitleIsNotice(notice !== null);
+      setSubtitle(notice ? noticeText(notice, tRef.current) : null);
+    },
+    [generation]
   );
 
   /**
@@ -812,10 +937,17 @@ export function ExperimentalPlayerHost({
     (playerSeconds: number, fromContainer: (at: number) => string | null, fileDelay = 0) => {
       const at = playerSeconds - subtitleOffsetRef.current;
       const external = externalSubtitleRef.current;
+      fileDelayRef.current = fileDelay;
+      // Une génération est datée comme un fichier à côté du film : sur l'horloge du fichier.
+      if (!external && generation.activeTarget) {
+        showGeneratedAt(at - fileDelay);
+        return;
+      }
+      setSubtitleIsNotice(false);
       // Un fichier à côté du film est daté sur l'horloge du fichier, pas sur celle du lecteur.
       setSubtitle(external ? external.textAt(at - fileDelay) : fromContainer(at));
     },
-    []
+    [generation, showGeneratedAt]
   );
 
   // Reset for every attempt, not fixed at the mount. A rebuild lowers `ready`, and measured from
@@ -1055,11 +1187,101 @@ export function ExperimentalPlayerHost({
    * liste complète — savoir qu'une étiquette est ambiguë demande de voir les autres, et une
    * piste interne peut être le sosie d'une externe.
    */
-  const subtitleChoices = useMemo(
-    () => [...tracks.subtitles, ...(info?.externalSubtitles ?? []).map(externalToPlayerTrack)],
-    [tracks.subtitles, info?.externalSubtitles]
+  // Les fichiers à côté du film : ceux de l'ouverture, ou la liste relue après une génération.
+  const externals: ExternalSubtitleSource[] = useMemo(
+    () => refreshedExternals ?? info?.externalSubtitles ?? [],
+    [refreshedExternals, info?.externalSubtitles]
   );
-  const subtitleLabels = useSubtitleLabels(subtitleChoices);
+  const externalsRef = useRef(externals);
+  useEffect(() => {
+    externalsRef.current = externals;
+  }, [externals]);
+  const { locale: uiLocale } = useLocale();
+  // Puis les générations en cours, en entrées temporaires (DECISIONS.md §70).
+  const generationView = useMemo(() => generationMenu(generationState, externals, uiLocale, t), [generationState, externals, uiLocale, t]);
+  const subtitleChoices = useMemo(
+    () => [...tracks.subtitles, ...externals.map(externalToPlayerTrack), ...generationView.entries.map((entry) => entry.track)],
+    [tracks.subtitles, externals, generationView]
+  );
+  const subtitleOrigins = useMemo(() => {
+    const origins = new Map<number, "generating" | "generated">();
+    for (const source of externals) if (source.generated === true) origins.set(source.id, "generated");
+    for (const entry of generationView.entries) origins.set(entry.track.number, "generating");
+    return origins;
+  }, [externals, generationView]);
+  const subtitleLabels = useSubtitleLabels(subtitleChoices, subtitleOrigins);
+  const subtitleDetails = useMemo(
+    () => new Map(generationView.entries.map((entry) => [entry.track.number, entry.detail])),
+    [generationView]
+  );
+
+  // Les rappels de la génération, recopiés à chaque rendu : ils lisent ce que ce rendu sait.
+  useEffect(() => {
+    generation.setHooks({
+      // La position voulue — la cible d'un saut pas encore atteint comprise : c'est elle qui dit au
+      // serveur quoi traduire d'abord.
+      position: () => intendedPosition(),
+      log: (fields) => reportPlayback("subtitle-gen", { ...describeFileRef.current(), ...fields }),
+      // Un message passager, comme une piste externe introuvable : jamais l'écran d'erreur.
+      onError: (code, facts) => showWarning(generationErrorText(code, facts.quotaLimit, tRef.current)),
+      onFinal: (target, source, list) => {
+        setRefreshedExternals(list);
+        const wanted = wantedSubtitleRef.current;
+        if (!isGeneratingTrack(wanted) || generation.targetOf(wanted) !== target) return;
+        // Sans à-coup : les lignes déjà reçues deviennent tout de suite la piste finale — même
+        // position, même texte —, puis le fichier de Jellyfin les remplace s'il arrive. Attendre le
+        // fichier aurait laissé un instant sans rien, et un échec, sans rien pour de bon.
+        wantedSubtitleRef.current = source.id;
+        setCurrentSubtitle(source.id);
+        externalSubtitleRef.current = ExternalSubtitleTrack.fromCues(source.id, generation.cuesOf(target));
+        setSubtitleIsNotice(false);
+        subtitleFetchRef.current?.abort();
+        const fetching = new AbortController();
+        subtitleFetchRef.current = fetching;
+        void ExternalSubtitleTrack.load(source, fetching.signal)
+          .then((loaded) => {
+            if (wantedSubtitleRef.current === source.id && loaded.count > 0) externalSubtitleRef.current = loaded;
+          })
+          .catch(() => {
+            // Les lignes en mémoire sont complètes : rien à dire au spectateur.
+          });
+      },
+      onFailed: (target) => {
+        const wanted = wantedSubtitleRef.current;
+        if (!isGeneratingTrack(wanted) || generation.targetOf(wanted) !== target) return;
+        wantedSubtitleRef.current = null;
+        setCurrentSubtitle(null);
+        setSubtitle(null);
+        setSubtitleIsNotice(false);
+      },
+    });
+  });
+  // Ouverte avec l'hôte, fermée avec lui ; pas pendant un banc d'essai, qui mesure la lecture seule.
+  useEffect(() => {
+    if (session.bench) return;
+    void generation.open();
+    return () => generation.close();
+  }, [generation, session.bench]);
+  // Un sondage qui apporte des lignes (ou change d'état) redessine l'instant — film en pause compris,
+  // où aucun `timeupdate` ne le ferait.
+  useEffect(
+    () =>
+      generation.subscribe(() => {
+        const element = videoElRef.current;
+        if (!element || externalSubtitleRef.current || !generation.activeTarget) return;
+        showGeneratedAt(element.currentTime - subtitleOffsetRef.current - fileDelayRef.current);
+      }),
+    [generation, showGeneratedAt]
+  );
+  /** « Générer » dans le menu : la demande part, et l'entrée temporaire devient la piste choisie. */
+  const requestGeneration = useCallback(
+    (code: string) => {
+      void generation.generate(code).then((id) => {
+        if (id !== null) chooseSubtitle(id, externalsRef.current);
+      });
+    },
+    [generation, chooseSubtitle]
+  );
 
   /**
    * Où en est cette lecture, dans les termes que le lecteur qui reprend comprend.
@@ -2479,6 +2701,9 @@ export function ExperimentalPlayerHost({
    */
   const noteSeekRequest = (seconds: number) => {
     seeks.request(seconds);
+    // Une génération active l'apprend tout de suite (sur l'horloge du fichier) : le serveur traduit
+    // d'abord là où le spectateur va, et un saut dans une zone pas encore faite est mesuré.
+    generation.noteSeek(seconds - subtitleOffsetRef.current - fileDelayRef.current);
     // Une reconstruction pas encore ouverte rouvre directement là.
     lifecycle.seekDuringRebuild(seconds);
     // Mesuré une fois le chemin natif en marche : c'est le `seeked` de son élément qui ferme la
@@ -2579,7 +2804,7 @@ export function ExperimentalPlayerHost({
     benchStateRef.current = {
       seek: noteSeekRequest,
       changeAudio: changeAudioTrack,
-      changeSubtitle: (id) => chooseSubtitle(id, info?.externalSubtitles ?? []),
+      changeSubtitle: (id) => chooseSubtitle(id, externals),
       ready,
       path,
       error: runtimeError ?? (networkLost ? "connexion perdue" : null),
@@ -2714,6 +2939,9 @@ export function ExperimentalPlayerHost({
           }`}
         >
           <p
+            // Un message d'état de génération (« Préparation des sous-titres… ») : même place, même
+            // style qu'une réplique, marqué pour qui le cherche — jamais mêlé à une vraie ligne.
+            data-subtitle-notice={subtitleIsNotice ? "" : undefined}
             // Ni taille ni couleur écrites ici : ce lecteur dessine ses lignes lui-même, et il
             // ignorait donc les réglages de sous-titres, qui ne touchaient que les pistes natives.
             // Un réglage qui marche un film sur deux n'est pas un réglage — voir `subtitleStyle`.
@@ -2934,9 +3162,23 @@ export function ExperimentalPlayerHost({
             subtitleTracks={subtitleChoices.map((track) => ({
               id: track.number,
               label: subtitleLabels.get(track.number) ?? String(track.number),
+              detail: subtitleDetails.get(track.number),
             }))}
             currentSubtitleId={currentSubtitle}
-            onChangeSubtitle={(id) => chooseSubtitle(id, info?.externalSubtitles ?? [])}
+            onChangeSubtitle={(id) => chooseSubtitle(id, externals)}
+            // « Générer des sous-titres » (DECISIONS.md §70) : lecteur natif seulement, et seulement
+            // s'il reste une langue à demander ou une génération à reprendre.
+            subtitleGeneration={
+              path === "remux" && (generationView.targets.length > 0 || generationView.resumable.length > 0)
+                ? ({
+                    targets: generationView.targets,
+                    busy: generationState.requesting !== null,
+                    onGenerate: requestGeneration,
+                    resumable: generationView.resumable,
+                    onResume: (code) => void generation.resume(code),
+                  } satisfies SubtitleGenerationMenu)
+                : undefined
+            }
             subtitleOffset={{
               seconds: subtitleOffset,
               onShift: (delta) => {

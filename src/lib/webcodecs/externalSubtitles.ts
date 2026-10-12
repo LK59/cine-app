@@ -33,6 +33,11 @@ export interface ExternalSubtitleSource {
   language: string | null;
   title: string | null;
   url: string;
+  /**
+   * Un fichier que CineApp a fait générer (« Générer des sous-titres », DECISIONS.md §70) : son
+   * étiquette dit « généré » à la place du type. Absent : un fichier ordinaire posé à côté du film.
+   */
+  generated?: boolean;
 }
 
 export function toPlayerTrack(source: ExternalSubtitleSource): PlayerTrack {
@@ -118,24 +123,43 @@ export class ExternalSubtitleTrack {
     return this.cues.length;
   }
 
-  textAt(seconds: number): string | null {
-    // Bisect to the last cue that starts at or before the playhead, then walk back over any
-    // that overlap it — two speakers talking at once are two cues covering the same instant, and
-    // the one that starts later is not necessarily the one still on screen.
-    let low = 0;
-    let high = this.cues.length;
-    while (low < high) {
-      const mid = (low + high) >> 1;
-      if (this.cues[mid].startSeconds <= seconds) low = mid + 1;
-      else high = mid;
-    }
-    // Trente-deux en arrière : un panneau de plusieurs secondes peut avoir commencé bien avant
-    // les répliques qui le chevauchent, et huit le perdaient.
-    const covering = [];
-    for (let i = low - 1; i >= 0 && i >= low - 32; i--) {
-      const cue = this.cues[i];
-      if (cue.startSeconds <= seconds && cue.endSeconds >= seconds) covering.push(cue);
-    }
-    return simultaneousText(covering);
+  /**
+   * Une piste déjà en mémoire — les lignes d'une génération finie, gardées telles quelles le temps
+   * que le fichier final arrive (DECISIONS.md §70) : basculer dessus ne coûte aucune requête, donc
+   * aucune seconde sans texte.
+   */
+  static fromCues(id: number, cues: readonly SubtitleCue[]): ExternalSubtitleTrack {
+    return new ExternalSubtitleTrack(id, [...cues].sort((a, b) => a.startSeconds - b.startSeconds));
   }
+
+  textAt(seconds: number): string | null {
+    return cueTextAt(this.cues, seconds);
+  }
+}
+
+/**
+ * La ligne à afficher à cet instant, dans des lignes **triées par début** — la seule recherche de
+ * ligne des sous-titres tenus en mémoire : les fichiers externes et les lignes d'une génération en
+ * cours (`subtitleGen/generatedCues.ts`) passent tous deux par ici (DECISIONS.md §70), pour que
+ * deux recherches ne divergent pas le jour où l'une des deux est corrigée.
+ */
+export function cueTextAt(cues: readonly SubtitleCue[], seconds: number): string | null {
+  // Bisect to the last cue that starts at or before the playhead, then walk back over any
+  // that overlap it — two speakers talking at once are two cues covering the same instant, and
+  // the one that starts later is not necessarily the one still on screen.
+  let low = 0;
+  let high = cues.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (cues[mid].startSeconds <= seconds) low = mid + 1;
+    else high = mid;
+  }
+  // Trente-deux en arrière : un panneau de plusieurs secondes peut avoir commencé bien avant
+  // les répliques qui le chevauchent, et huit le perdaient.
+  const covering = [];
+  for (let i = low - 1; i >= 0 && i >= low - 32; i--) {
+    const cue = cues[i];
+    if (cue.startSeconds <= seconds && cue.endSeconds >= seconds) covering.push(cue);
+  }
+  return simultaneousText(covering);
 }

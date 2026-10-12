@@ -2,7 +2,7 @@
 
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
@@ -38,6 +38,27 @@ import {
 export interface Track {
   id: number;
   label: string;
+  /**
+   * Un complément discret, en petit à côté de l'étiquette : l'avancement d'une génération de
+   * sous-titres (« 42 % », « finalisation… »). Hors de l'étiquette pour qu'elle reste la forme
+   * unique de `trackLabel.ts`, et qu'un chiffre qui bouge toutes les deux secondes ne la décale pas.
+   */
+  detail?: string;
+}
+
+/**
+ * « Générer des sous-titres » dans le menu des sous-titres (lecteur natif, DECISIONS.md §70).
+ * Absent : rien à proposer — fonction coupée, ou toutes les langues déjà là.
+ */
+export interface SubtitleGenerationMenu {
+  /** Les langues qu'on peut encore demander, celle du compte en premier, déjà nommées. */
+  targets: { code: string; label: string }[];
+  /** Une demande est en vol : ne pas la proposer deux fois. */
+  busy: boolean;
+  onGenerate: (code: string) => void;
+  /** Les générations en pause, à reprendre d'un geste. */
+  resumable: { code: string; label: string }[];
+  onResume: (code: string) => void;
 }
 
 // AirPlay (Safari, webkit-prefixed) isn't in lib.dom's HTMLVideoElement typings — unlike the
@@ -167,6 +188,8 @@ interface PlayerControlsProps {
    * joue est de celles que le traitement ne prend pas (un AAC 5.1 copié, un MP3), et le menu le dit.
    */
   dialogue?: { mode: DialogueMode; applies: boolean; onChange: (mode: DialogueMode) => void };
+  /** Voir `SubtitleGenerationMenu`. Lecteur natif seulement. */
+  subtitleGeneration?: SubtitleGenerationMenu;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -231,6 +254,8 @@ const MENU_TITLES: Record<string, string> = {
   audio: "player.audio",
   subtitles: "player.subtitles",
   subtitleStyle: "player.subtitleStyle.title",
+  subtitleGen: "player.subtitleGen.generate",
+  subtitleGenOther: "player.subtitleGen.generate",
   more: "player.moreOptions",
   chapters: "player.chapters",
   sleep: "player.sleep.title",
@@ -241,6 +266,8 @@ const MENU_ICONS: Record<string, React.ReactNode> = {
   audio: <AudioLines size={20} />,
   subtitles: <Captions size={20} />,
   subtitleStyle: <Captions size={20} />,
+  subtitleGen: <Languages size={20} />,
+  subtitleGenOther: <Languages size={20} />,
   more: <EllipsisVertical size={20} />,
   chapters: <ListVideo size={20} />,
   sleep: <Timer size={20} />,
@@ -299,6 +326,7 @@ export function PlayerControls({
   hdrCap,
   frameFit,
   dialogue,
+  subtitleGeneration,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -387,7 +415,7 @@ export function PlayerControls({
   useEffect(() => {
     visibleRef.current = visible;
   }, [visible]);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "more">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "subtitleGen" | "subtitleGenOther" | "more">(null);
   /** « Auto · 203 nits », « Natif », « 400 nits » — le réglage de luminosité HDR, en mots. */
   const hdrCapLabel = (choice: HdrCapChoice): string =>
     choice === "auto"
@@ -1988,9 +2016,26 @@ export function PlayerControls({
                 </div>
               </>
             )}
-            {(menu === "chapters" || menu === "subtitleStyle" || menu === "hdrCap" || menu === "sleep" || menu === "speed" || menu === "dialogue") && (
+            {(menu === "chapters" ||
+              menu === "subtitleStyle" ||
+              menu === "hdrCap" ||
+              menu === "sleep" ||
+              menu === "speed" ||
+              menu === "dialogue" ||
+              menu === "subtitleGen" ||
+              menu === "subtitleGenOther") && (
               <button
-                onClick={() => setMenu(menu === "subtitleStyle" ? "subtitles" : menu === "dialogue" ? "audio" : "more")}
+                onClick={() =>
+                  setMenu(
+                    menu === "subtitleStyle" || menu === "subtitleGen"
+                      ? "subtitles"
+                      : menu === "subtitleGenOther"
+                        ? "subtitleGen"
+                        : menu === "dialogue"
+                          ? "audio"
+                          : "more"
+                  )
+                }
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
               >
                 <ArrowLeft size={14} /> {t('common.back')}
@@ -2019,6 +2064,11 @@ export function PlayerControls({
                   }`}
                 >
                   {tr.label}
+                  {tr.detail && (
+                    <span data-track-detail className="ml-2 text-xs tabular-nums text-white/50">
+                      {tr.detail}
+                    </span>
+                  )}
                 </button>
               ))}
             {/* Sous les pistes, comme sur l'Apple TV : c'est un réglage du son, il vivait dans le
@@ -2053,6 +2103,83 @@ export function PlayerControls({
                 {t('player.none')}
               </button>
             )}
+            {/* « Générer des sous-titres » : sous les pistes, comme « Améliorer les dialogues » sous
+                celles du son — le nom et un chevron vers le choix de la langue. La reprise d'une
+                génération en pause vit ici aussi : c'est là que le spectateur voit l'entrée en pause. */}
+            {menu === "subtitles" && subtitleGeneration && (
+              <div className="border-t border-white/10">
+                {subtitleGeneration.targets.length > 0 && (
+                  <button
+                    data-subtitle-gen-row
+                    disabled={subtitleGeneration.busy}
+                    onClick={() => setMenu("subtitleGen")}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Languages size={16} className="shrink-0" />
+                      <span className="truncate">{t("player.subtitleGen.generate")}</span>
+                    </span>
+                    <ChevronRight size={14} className="shrink-0 text-white/50" />
+                  </button>
+                )}
+                {subtitleGeneration.resumable.map((entry) => (
+                  <button
+                    key={entry.code}
+                    data-subtitle-gen-resume={entry.code}
+                    onClick={() => {
+                      subtitleGeneration.onResume(entry.code);
+                      setMenu(null);
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    {t("player.subtitleGen.resume", { language: entry.label })}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* La langue du compte d'abord, d'un geste ; les autres derrière « Autre langue… », pour
+                que le cas courant ne demande pas de parcourir une liste. */}
+            {menu === "subtitleGen" && subtitleGeneration && subtitleGeneration.targets.length > 0 && (
+              <>
+                <button
+                  data-subtitle-gen-target={subtitleGeneration.targets[0].code}
+                  disabled={subtitleGeneration.busy}
+                  onClick={() => {
+                    subtitleGeneration.onGenerate(subtitleGeneration.targets[0].code);
+                    setMenu(null);
+                  }}
+                  className="block w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+                >
+                  {subtitleGeneration.targets[0].label}
+                </button>
+                {subtitleGeneration.targets.length > 1 && (
+                  <button
+                    data-subtitle-gen-other
+                    onClick={() => setMenu("subtitleGenOther")}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    {t("player.subtitleGen.otherLanguage")}
+                    <ChevronRight size={14} className="shrink-0 text-white/50" />
+                  </button>
+                )}
+              </>
+            )}
+            {menu === "subtitleGenOther" &&
+              subtitleGeneration &&
+              subtitleGeneration.targets.slice(1).map((target) => (
+                <button
+                  key={target.code}
+                  data-subtitle-gen-target={target.code}
+                  disabled={subtitleGeneration.busy}
+                  onClick={() => {
+                    subtitleGeneration.onGenerate(target.code);
+                    setMenu(null);
+                  }}
+                  className="block w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+                >
+                  {target.label}
+                </button>
+              ))}
             {/* Sous les pistes, ce qui règle leur affichage : l'apparence (une porte, la taille, la
                 couleur et le fond se réglant ensemble) et, une piste choisie, son décalage. */}
             {menu === "subtitles" && (
@@ -2315,7 +2442,9 @@ export function PlayerControls({
                   <AudioLines size={22} />
                 </button>
               )}
-              {subtitleTracks.length > 0 && (
+              {/* Sans piste, le bouton reste s'il y a une génération à proposer : un film sans aucun
+                  sous-titre est justement celui pour lequel on en génère. */}
+              {(subtitleTracks.length > 0 || subtitleGeneration) && (
                 <button
                   data-player-nav="captions"
                   onClick={() => setMenu(menu === "subtitles" ? null : "subtitles")}

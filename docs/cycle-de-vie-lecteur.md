@@ -446,7 +446,7 @@ banc ou une touche média y arriveraient, et le code le traite (`wantedAudioRef`
 | `error` | bascule impossible (pas de lecteur serveur) | refus de négociation, reconnexion Jellyfin, pas d'image en 20 s, erreur pendant une diffusion |
 | `rebuild` | source perdue, retour d'arrière-plan (`hiddenMs`) — **pas** pour un changement de piste, le plafond HDR ni un nouvel essai réseau | — |
 | `network` | coupure en pleine lecture — **pas** pendant le sondage ou l'attache | — |
-| `seek`, `stall`, `audio` | oui | — |
+| `seek`, `stall`, `audio`, `subtitle-gen` | oui (`subtitle-gen` : « Générer des sous-titres », §70 — son sondage vit au-dessus des pipelines, une reconstruction ne le touche pas) | — |
 | `cast` | — | route AirPlay établie ; Chromecast chargé (`target: "chromecast"`, `device`) ; relais de la reprise par le serveur (`serverRelay`, écrit par le serveur, sans séance) |
 | `pause` | minuterie de veille : pause à échéance, épisode retenu à sa fin (`why: "veille"`) | idem |
 

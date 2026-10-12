@@ -1471,6 +1471,31 @@
       "notThisTrack": "Sin efecto en esta pista de audio",
       "unavailable": "No se pueden mejorar los diálogos de este título: se reproduce sin ello."
     },
+    "subtitleGen": {
+      "generate": "Generar subtítulos",
+      "otherLanguage": "Otro idioma…",
+      "resume": "Reanudar la generación ({language})",
+      "finalizing": "finalizando…",
+      "percent": "{n} %",
+      "preparing": "Preparando los subtítulos…",
+      "resuming": "Reanudando la generación de subtítulos…",
+      "paused": "Generación en pausa — {reason}",
+      "reasons": {
+        "budget": "presupuesto alcanzado",
+        "quota": "límite diario alcanzado",
+        "network": "conexión interrumpida",
+        "config": "ajustes por revisar",
+        "other": "en espera"
+      },
+      "errors": {
+        "quota": "Límite de {n} generaciones por día alcanzado.",
+        "quotaToday": "Se ha alcanzado el límite de generaciones de hoy.",
+        "budget": "El presupuesto de generación está agotado por ahora.",
+        "noSource": "No se pueden generar subtítulos para este título: nada que transcribir.",
+        "network": "No se puede generar: conexión interrumpida.",
+        "failed": "La generación de subtítulos ha fallado."
+      }
+    },
     "speedNormal": "Normal",
     "rewind10": "Retroceder 10s",
     "forward10": "Avanzar 10s",
@@ -1869,7 +1894,9 @@
       "forced": "Forzados",
       "full": "Completos",
       "sdh": "Sordos",
-      "external": "externo"
+      "external": "externo",
+      "generated": "generado",
+      "generating": "generando…"
     },
     "onboarding": {
       "skip": "Omitir",

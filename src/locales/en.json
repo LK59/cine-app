@@ -1471,6 +1471,31 @@
       "notThisTrack": "No effect on this audio track",
       "unavailable": "Dialogue can't be enhanced on this title: playing without it."
     },
+    "subtitleGen": {
+      "generate": "Generate subtitles",
+      "otherLanguage": "Other language…",
+      "resume": "Resume generation ({language})",
+      "finalizing": "finalizing…",
+      "percent": "{n}%",
+      "preparing": "Preparing subtitles…",
+      "resuming": "Resuming subtitle generation…",
+      "paused": "Generation paused — {reason}",
+      "reasons": {
+        "budget": "budget reached",
+        "quota": "daily limit reached",
+        "network": "connection lost",
+        "config": "settings need attention",
+        "other": "waiting"
+      },
+      "errors": {
+        "quota": "Limit of {n} generations per day reached.",
+        "quotaToday": "Today's generation limit has been reached.",
+        "budget": "The generation budget is used up for now.",
+        "noSource": "Subtitles can't be generated for this title: nothing to transcribe.",
+        "network": "Can't generate: connection lost.",
+        "failed": "Subtitle generation failed."
+      }
+    },
     "speedNormal": "Normal",
     "rewind10": "Rewind 10s",
     "forward10": "Forward 10s",
@@ -1869,7 +1894,9 @@
       "forced": "Forced",
       "full": "Full",
       "sdh": "Hearing impaired",
-      "external": "external"
+      "external": "external",
+      "generated": "generated",
+      "generating": "generating…"
     },
     "onboarding": {
       "skip": "Skip",

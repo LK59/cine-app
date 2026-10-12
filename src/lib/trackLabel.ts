@@ -266,6 +266,13 @@ export interface SubtitleTrackFacts extends NamedTrack {
   isHearingImpaired?: boolean;
   /** Un fichier posé à côté du film plutôt qu'une piste du conteneur. */
   isExternal?: boolean;
+  /**
+   * Des sous-titres que CineApp fait générer (DECISIONS.md §70) : `generating` pendant la
+   * génération (l'entrée temporaire du menu), `generated` une fois le fichier posé à côté du film.
+   * Le type les dit à la place de « Complets » : ce qu'on veut savoir d'une telle piste, c'est
+   * qu'elle vient d'une machine — et, pendant la génération, qu'elle n'est pas finie.
+   */
+  origin?: "generating" | "generated";
 }
 
 export interface SubtitleLabelOptions {
@@ -274,10 +281,16 @@ export interface SubtitleLabelOptions {
   complets: string;
   malentendants: string;
   externe: string;
+  /** « généré » — facultatif : sans lui, une piste générée se lit comme une autre. */
+  genere?: string;
+  /** « génération… » — facultatif, comme `genere`. */
+  enCours?: string;
   piste: (n: number) => string;
 }
 
 function typeSousTitre(track: SubtitleTrackFacts, options: SubtitleLabelOptions): string {
+  if (track.origin === "generating" && options.enCours) return options.enCours;
+  if (track.origin === "generated" && options.genere) return options.genere;
   // Les malentendants avant les forcés : une piste peut porter les deux drapeaux, et c'est la
   // description des sons qui change le plus ce qu'on voit à l'écran.
   if (track.isHearingImpaired || titleSaysHearingImpaired(track.name)) return options.malentendants;

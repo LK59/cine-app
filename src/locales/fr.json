@@ -1471,6 +1471,31 @@
       "notThisTrack": "Sans effet sur cette piste audio",
       "unavailable": "Les dialogues ne peuvent pas être améliorés sur ce film : lecture sans."
     },
+    "subtitleGen": {
+      "generate": "Générer des sous-titres",
+      "otherLanguage": "Autre langue…",
+      "resume": "Reprendre la génération ({language})",
+      "finalizing": "finalisation…",
+      "percent": "{n} %",
+      "preparing": "Préparation des sous-titres…",
+      "resuming": "Reprise de la génération des sous-titres…",
+      "paused": "Génération en pause — {reason}",
+      "reasons": {
+        "budget": "budget atteint",
+        "quota": "limite du jour atteinte",
+        "network": "connexion interrompue",
+        "config": "réglages à revoir",
+        "other": "en attente"
+      },
+      "errors": {
+        "quota": "Limite de {n} générations par jour atteinte.",
+        "quotaToday": "Limite de générations du jour atteinte.",
+        "budget": "Le budget de génération est épuisé pour le moment.",
+        "noSource": "Impossible de générer des sous-titres pour ce titre : rien à transcrire.",
+        "network": "Génération impossible : connexion interrompue.",
+        "failed": "La génération des sous-titres a échoué."
+      }
+    },
     "speedNormal": "Normale",
     "rewind10": "Reculer de 10s",
     "forward10": "Avancer de 10s",
@@ -1869,7 +1894,9 @@
       "forced": "Forcés",
       "full": "Complets",
       "sdh": "Malentendants",
-      "external": "externe"
+      "external": "externe",
+      "generated": "généré",
+      "generating": "génération…"
     },
     "onboarding": {
       "skip": "Passer",

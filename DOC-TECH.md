@@ -748,6 +748,27 @@ Two details of real server responses the parser must handle: a **BOM** before th
 and **position settings** at the end of a cue timing line (`region:subtitle line:90%`) which are not
 part of the text.
 
+### Generated subtitles (native player)
+
+« Générer des sous-titres » (DECISIONS.md §70, `src/lib/subtitleGen/`) asks the server to transcribe
+and translate a title, and shows the result while it is being made:
+
+- A generation in progress is a **temporary menu entry** numbered below −1 000 000, labelled through
+  `trackLabel.ts` (« Français — génération… », progress shown apart). Never passed to the pipeline.
+- Only the **active** entry is polled (`POST …/poll`, every 2 s, 10 s when paused or finished but
+  not yet presented), **always with the intended position** — it is what tells the server where to
+  translate first — and not while the page is hidden. Lines are held **above the pipelines**, sorted,
+  and looked up by the same function as external files (`cueTextAt`).
+- Where nothing is translated yet — judged by the transcription's line ranks, so a silence between
+  two consecutive lines is not a gap — a **status line is drawn as a subtitle** (preparing, resuming
+  after a seek, paused with its reason). A real line always wins.
+- Once Jellyfin presents the finished file (`presented`), the external list is re-read with a bare
+  `fetch` and the player switches to the `generated: true` entry — first on the lines already in
+  memory, then on the file. Refusals (429/402/422, network) are passing messages; none stops playback.
+
+The server player, AirPlay and Chromecast only ever see the finished file, through the ordinary
+external list.
+
 ---
 
 ## Track selection and account preferences
@@ -906,6 +927,7 @@ unwitnessed.
 | `stall` | The element says it is playing and the clock has covered under a second in 5 s — once per stall, at most one a minute. Position, `readyState`/`networkState`/`seeking`, source state, video and audio ranges near the head, lead, whether a read is running, `recoveryStreak`/`frozenNudges`/`recoveries`, ms since the last append, `streaming` (ManagedMediaSource only), `diag.*` for the 30 s before it (see *Supply diagnosis* below), and `steps`: the last 20 s of trace. Emitted by `MseSource.watchForStall` on the watchdog tick |
 | `audio` | A track change: both tracks described, copied or re-encoded, `applied`, how long, and `steps` |
 | `cast` | Server player only: a television has actually taken the route |
+| `subtitle-gen` | Native player, « Générer des sous-titres » (§70). `event`: `demande` (with `at`), `activation`, `première-ligne` (`ms` since the click), `saut-non-traduit` (`waitMs` from a seek into an untranslated zone to its first line), `pause` (`reason`), `reprise`, `fin`, `bascule` (`via` `jellyfin` or `repli`), `erreur` (`code`), `échec` |
 | `reserve` | The lead reserve in memory (`MemoryReserve`, below). `event`: `départ` (`allowedMB`, `speedMbps`), `point` every 30 s (`aheadMB` / `aheadS` held ahead of the head, `leadS` of the browser buffer, `windowMB` / `fetchMbps` fetched since the last point, `reserveMB` / `deviceMB` / `networkMB` the player read from each, `emptiedMB` given back when the page was hidden, and `idle` — why it is not fetching), `erreur`, `arrêt` |
 | `stop` | The session's summary. `why` (`close`, `next`, `page`, `unmount`, or `lost` — see below), `watched` seconds, `ended`, `rebuild`; `waits` / `waitedMs` / `longestWaitMs` — stops of 250 ms or more mid-playback, excluding opening and seeks (`stall` only fires at 5 s); `seeks` / `seekWaitMs`; `audioSwitches`; `backgrounds` / `backgroundMs` / `backgroundRebuilds` — times the page went to the background, for how long, and how many returns found the source closed by the platform and rebuilt (each also written as a `rebuild` line, reason "source fermée en arrière-plan", with `hiddenMs`); `recoveries`, `frozenNudges`, `escalations` when any; `audioSync` and `frames` (presented / dropped); `diag.*`, the session's supply diagnosis with every wait classified. The server player writes `why` and `at` |
 

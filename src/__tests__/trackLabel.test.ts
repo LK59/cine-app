@@ -344,3 +344,36 @@ describe("une langue lue dans le titre", () => {
     expect(a.label).toMatch(/^Anglais/);
   });
 });
+
+// « Générer des sous-titres » (DECISIONS.md §70) : l'entrée temporaire et la piste finale passent
+// par la même forme — langue — type —, le type disant d'où elles viennent.
+describe("labelSubtitleTracks — sous-titres générés", () => {
+  const genOptions = { ...stOptions, genere: "généré", enCours: "génération…" };
+
+  it("nomme l'entrée temporaire et la piste finale par leur origine", () => {
+    const etiquettes = labelSubtitleTracks(
+      [
+        st({ number: -1_000_000, language: "fr", isExternal: true, origin: "generating" }),
+        st({ number: -4, language: "en", isExternal: true, origin: "generated" }),
+      ],
+      genOptions
+    );
+    expect(etiquettes.map((e) => e.label)).toEqual(["Français — génération…", "Anglais — généré"]);
+  });
+
+  it("ne change rien aux autres pistes, ni sans les mots facultatifs", () => {
+    const pistes = [st({ number: 5, language: "fra" }), st({ number: -2, language: "fra", isExternal: true, isForced: true })];
+    expect(labelSubtitleTracks(pistes, genOptions)).toEqual(labelSubtitleTracks(pistes, stOptions));
+    // Un appelant qui ne connaît pas ces mots (le lecteur serveur) lit une piste générée comme une autre.
+    const [g] = labelSubtitleTracks([st({ number: -3, language: "fr", origin: "generated" })], stOptions);
+    expect(g.label).toBe("Français — Complets");
+  });
+
+  it("départage une piste générée d'un fichier ordinaire de même langue sans parenthèse inutile", () => {
+    const etiquettes = labelSubtitleTracks(
+      [st({ number: -2, language: "fr", isExternal: true }), st({ number: -3, language: "fr", isExternal: true, origin: "generated" })],
+      genOptions
+    );
+    expect(etiquettes.map((e) => e.label)).toEqual(["Français — Complets", "Français — généré"]);
+  });
+});

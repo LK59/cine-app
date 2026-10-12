@@ -69,7 +69,7 @@ export function benchPlayerLogFiles(): string[] {
 }
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
-const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast", "reserve", "pause", "opening"]);
+const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast", "reserve", "pause", "opening", "subtitle-gen"]);
 
 /**
  * `audio` est arrivé le 20/09/2026, et pour une raison qui vaut d'être dite : le changement de
@@ -106,7 +106,15 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  * (`why: "veille"`, `sleepTimer` : la minuterie). Les pauses ordinaires ne s'écrivent pas ; celle-ci
  * oui, parce qu'un film arrêté à minuit et jamais fermé se lisait sinon comme un abandon.
  */
-export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve" | "pause" | "opening";
+/**
+ * `subtitle-gen` (12/10/2026) : « Générer des sous-titres » vu du lecteur natif (DECISIONS.md §70).
+ * `event` : `demande` (le clic, avec la position), `activation`, `première-ligne` (`ms` depuis le
+ * clic ou la réactivation), `saut-non-traduit` (`waitMs` jusqu'à la première ligne après un saut
+ * dans une zone pas encore faite), `pause`, `reprise`, `fin`, `bascule` (vers la piste finale :
+ * `via` jellyfin ou repli), `erreur` (`code`), `échec`. Une ligne de détail, sous le budget horaire :
+ * une génération en écrit une dizaine.
+ */
+export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve" | "pause" | "opening" | "subtitle-gen";
 
 /** Les valeurs de `sleepTimer` qu'une ligne peut porter — celles du menu, et rien d'autre. */
 const SLEEP_TIMER_VALUES = new Set(["15", "30", "60", "90", "episode"]);
