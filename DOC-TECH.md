@@ -106,7 +106,9 @@ are fMP4 with the file's own timestamps (`-copyts -start_at_zero`); the relay re
 `MPEGTS:0` (`fixVttTimestampMap`), or an Apple TV shows each subtitle ten seconds late. The phone
 draws its own subtitles and never showed the offset. **Choosing subtitles from the phone does not
 reach the television yet**: the phone's menu drives its own `<track>` elements, the television
-reads the stream's subtitle renditions — pick them on the television meanwhile.
+reads the stream's subtitle renditions — pick them on the television meanwhile. Playlists (`.m3u8`)
+leave the relay compressed (brotli, else gzip, by `Accept-Encoding` — `encodePlaylist`, DECISIONS §76):
+Jellyfin repeats the whole request on every segment line, and an episode's playlist was 954 KB in clear.
 
 **A Chromecast is driven, not fed** (DECISIONS §64). On Chrome and Edge (desktop, Android) the
 native player offers a Chromecast button, marked beta — every account by default, administrators

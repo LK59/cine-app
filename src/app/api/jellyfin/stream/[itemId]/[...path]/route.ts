@@ -11,6 +11,7 @@ import { stripAccessToken } from "@/lib/stripAccessToken";
 import { castMasterPlaylist } from "@/lib/castMaster";
 import { fixVttTimestampMap } from "@/lib/vttTimestampMap";
 import { assertVisible } from "@/lib/itemVisibility";
+import { encodePlaylist } from "@/lib/playlistEncoding";
 
 // Root cause found live via temporary request logging: right after a fresh remux job starts
 // (e.g. on an audio-track switch, which always requests a brand new PlaySessionId/ffmpeg job),
@@ -211,8 +212,13 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
       // that ~1.4KB probe window (e.g. a Dolby Vision file's multi-variant master, ~3.5KB) hit
       // this on every load; smaller masters slipped through because the "slice" happened to
       // contain the full text.
-      return new NextResponse(buf, {
-        headers: { "Content-Type": contentType, "Cache-Control": "no-store", "Content-Length": String(buf.length) },
+      //
+      // Compressée quand le client l'accepte (12/10/2026) : la liste d'un épisode pesait 954 Ko en
+      // clair, et sur une connexion lente le lecteur serveur ne démarrait jamais — voir
+      // `encodePlaylist`. Le texte ci-dessus n'en est pas changé d'un octet.
+      const encoded = await encodePlaylist(buf, req.headers.get("accept-encoding"));
+      return new NextResponse(new Uint8Array(encoded.body), {
+        headers: { "Content-Type": contentType, "Cache-Control": "no-store", ...encoded.headers },
       });
     }
 

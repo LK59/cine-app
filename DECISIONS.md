@@ -3366,3 +3366,41 @@ de séries, Jellyfin muet).
 **Décidé le 12/10/2026.**
 
 **Sur les rangées de nouveautés (12/10/2026).** « Récemment ajoutés » et « À la une » coupaient la pastille (`showNewBadge={false}` : écrire « Nouveau » sur chaque carte d'une rangée de nouveautés ne dit rien) — or c'est là que remonte une série pour un épisode. Elles passent en mode `"reason"` (`NewBadgeMode`) : une série remontée y dit « Nouvel épisode » ou « Nouvelle saison », un film ou une série elle-même nouvelle reste sans pastille. Bureau et téléphone par le même `CinemaNewBadge`.
+
+## 76. Les listes de lecture HLS partent compressées, et rien d'autre ne change
+
+Relevé le 12/10/2026 dans le journal du relais inverse : une spectatrice sur Edge, connexion à ~40 Ko/s,
+n'a eu ni image du lecteur natif ni du lecteur serveur (« pas de première image en 20 s », trois fois).
+hls.js avait téléchargé `master.m3u8` puis `main.m3u8` — **954 782 octets, non compressés** — plusieurs
+fois, sans jamais demander un segment ; Jellyfin n'avait pas lancé ffmpeg. Jellyfin recopie toute la
+requête (codecs, profils `*-rangetype`, `TranscodeReasons`…) dans chaque ligne de segment, et le relais y
+ajoute le laissez-passer (`withCastPass`) : ~1,1 Ko par segment de 3 s.
+
+**Règle.** La route de flux compresse toute liste `.m3u8` d'au moins 1 Ko selon `Accept-Encoding` :
+brotli (niveau 4) si accepté, sinon gzip, sinon en clair comme avant ; `Vary: Accept-Encoding` toujours,
+`Content-Length` du corps envoyé. Le texte décompressé est **octet pour octet** celui d'avant : adresses,
+place et forme du `castToken`, variantes de diffusion, en-têtes CORS d'un téléviseur — rien n'est
+touché. Les segments, les sous-titres et le fichier lu par plages ne sont pas compressés.
+
+**Pourquoi ici.** Next compresse ses réponses (`compress: true`), mais son module `compression` ne touche
+qu'aux types que mime-db dit compressibles, et `application/vnd.apple.mpegurl` ne l'est pas ; il laisse
+passer une réponse qui porte déjà son `Content-Encoding` (comme `cachedJson`). Le relais inverse est
+partagé avec d'autres sites : on n'y touche pas.
+
+**Mesuré** sur les vraies listes de Jellyfin (épisode de 41 min, 826 segments ; *Kill Bill*, 253 min,
+5 067 segments), avec laissez-passer : épisode 920 Ko → 10 Ko en gzip, 4,0 Ko en brotli ; *Kill Bill*
+5,6 Mo → 56 Ko en gzip, 19 Ko en brotli (14 ms, dans le pool de libuv, pas sur la boucle d'événements).
+
+**Écarté pour l'instant (choix de Louis : aucun risque sur le lecteur serveur).** Raccourcir les adresses
+des segments (porter la requête commune une seule fois, dans le chemin de la variante) et ne plus répéter
+le laissez-passer sur chaque ligne : la liste en clair tomberait à ~70 Ko, mais cela touche ce que
+Jellyfin, Safari, AirPlay et le Chromecast lisent. Et un message « connexion trop lente » quand le débit
+reçu pendant l'attente de la première image est trop bas.
+
+**Porteurs.** `encodePlaylist` / `playlistEncodingFor` (`src/lib/playlistEncoding.ts`).
+**Appelant.** `GET /api/jellyfin/stream/[itemId]/[...path]` (branche manifeste seule).
+**Tests.** `playlist-compression.test.ts` (sans `Accept-Encoding` en clair ; gzip et brotli décompressés
+identiques ; téléviseur sans cookie : même contenu signé, mêmes en-têtes CORS ; petit maître en clair ;
+segments jamais compressés ; `q=0` respecté).
+
+**Décidé le 12/10/2026.**
