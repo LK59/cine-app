@@ -1,4 +1,5 @@
 import { videoTranscodingAllowed } from "@/lib/transcodePolicy";
+import { notePrewarmSession } from "@/lib/prewarmSessions";
 import { publicOrigin } from "@/lib/publicOrigin";
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
@@ -237,6 +238,10 @@ export async function POST(req: NextRequest) {
       // `stripAccessToken`.
       manifestUrl = `/api/jellyfin/stream/${itemId}/${restPath}${stripAccessToken(parsed.search)}`;
       ({ videoCodecs, reasons: transcodeReasons } = parseTranscodingUrlInfo(source.TranscodingUrl));
+      // Un préchauffage (§78) : sa séance est retenue pour ce compte — la route d'arrêt `prewarm` ne
+      // coupera qu'elle, sous l'appareil que Jellyfin a écrit dans l'adresse.
+      const prewarmDevice = parsed.searchParams.get("DeviceId");
+      if (prewarm && prewarmDevice && info.PlaySessionId) notePrewarmSession(session.jfId, info.PlaySessionId, prewarmDevice);
 
       // Found live: a track switch that needs a genuine transcode (not just a remux copy — e.g.
       // Dolby TrueHD/Atmos audio, which nothing in our codec-support detection claims, forcing a
@@ -416,12 +421,12 @@ export async function POST(req: NextRequest) {
       /** L'adresse que l'élément reçoit, et que le téléviseur ira chercher s'il la prend. */
       castUrl,
       isDirectPlay,
+      /** La « version allégée » est-elle possible pour ce compte (§78) ? */
+      lighterAllowed: transcodingAllowed,
       /**
        * Le débit du fichier d'origine, en pleine qualité (§78) : ce que le lien doit retrouver, pendant
        * une version allégée, pour que la lecture suivante revienne au lecteur natif.
        */
-      /** La « version allégée » est-elle possible pour ce compte (§78) ? */
-      lighterAllowed: transcodingAllowed,
       sourceBitrateBps: typeof source.Bitrate === "number" && source.Bitrate > 0 ? source.Bitrate : null,
       subtitleTracks,
       audioTracks,

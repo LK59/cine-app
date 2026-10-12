@@ -680,3 +680,39 @@ describe("« Connexion perdue ou instable… » (DECISIONS.md §78)", () => {
     source.close();
   });
 });
+
+describe("un saut relancé faute de premier octet n'est pas une coupure (§78)", () => {
+  it("la relance d'une plage muette après un saut (`muted`) ne dit pas « Connexion perdue ou instable… »", async () => {
+    const { resetNetworkTrouble, subscribeNetworkTrouble } = await import("@/lib/networkTrouble");
+    resetNetworkTrouble();
+    const seen: boolean[] = [];
+    const stop = subscribeNetworkTrouble((v) => seen.push(v));
+    let ranges = 0;
+    let afterSeek = false;
+    vi.stubGlobal("fetch", (_url: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      if (init?.method === "HEAD") return Promise.resolve({ ok: true, headers: { get: (n: string) => (n === "Content-Length" ? String(SIZE) : null) } });
+      const [, from, to] = /bytes=(\d+)-(\d+)/.exec(init?.headers?.Range ?? "")!.map(Number);
+      // La première plage après le saut reste muette : pas un octet, jusqu'à l'échéance du saut.
+      if (afterSeek && ++ranges === 1) {
+        return new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("coupée", "AbortError"))));
+      }
+      return Promise.resolve({ status: 206, headers: { get: () => `bytes ${from}-${to}/${SIZE}` }, arrayBuffer: async () => new Uint8Array(to - from + 1).fill(7).buffer });
+    });
+    const source = await HttpByteSource.open("/film.mkv");
+    vi.useFakeTimers();
+    try {
+      afterSeek = true;
+      source.abandon(5 * CHUNK);
+      const read = source.read(5 * CHUNK, 4);
+      await vi.advanceTimersByTimeAsync(5_100);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(Array.from(await read)).toEqual([7, 7, 7, 7]);
+      expect(ranges).toBeGreaterThanOrEqual(2);
+      expect(seen).not.toContain(true);
+    } finally {
+      vi.useRealTimers();
+      stop();
+      source.close();
+    }
+  });
+});

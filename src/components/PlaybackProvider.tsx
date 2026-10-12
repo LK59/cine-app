@@ -7,8 +7,8 @@ import { isAwaitingFresh } from "@/lib/persistentCache";
 import { setWatchingFullScreen } from "@/lib/playbackBusy";
 import { flushOrphanStops } from "@/lib/unsentStop";
 import { flushUnsentLines } from "@/lib/unsentLines";
-import { flushUnsentPositions } from "@/lib/unsentPosition";
-import { carriedLighter } from "@/lib/slowLinkPolicy";
+import { flushUnsentPositions, unsentPositionsPending } from "@/lib/unsentPosition";
+import { carriedLighter } from "@/lib/playbackQuality";
 import { sleepTimerStore } from "@/lib/sleepTimer";
 import { introAllowedFor, introKey, preloadIntroArt, resolveIntroArt, startIntroClock, type IntroCacheReader, type PlaybackIntroArt } from "@/lib/playbackIntro";
 
@@ -148,14 +148,15 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   // qu'après ce délai. Avec elles, les lignes du journal qui n'ont pas pu partir — un redémarrage du
   // serveur, une coupure du réseau (voir unsentLines.ts, 01/10/2026).
   useEffect(() => {
-    const flush = () => {
+    const flush = (launch: boolean) => {
       void flushOrphanStops();
       void flushUnsentLines();
-      // Les positions qu'une coupure a gardées sur l'appareil (§78).
-      void flushUnsentPositions();
+      // Les positions qu'une coupure a gardées sur l'appareil (§78) : relues au lancement, puis
+      // seulement si cette page en a gardé — sans quoi chaque minute parcourait tout `localStorage`.
+      if (launch || unsentPositionsPending()) void flushUnsentPositions();
     };
-    flush();
-    const timer = setInterval(flush, 60_000);
+    flush(true);
+    const timer = setInterval(() => flush(false), 60_000);
     return () => clearInterval(timer);
   }, []);
 
@@ -280,7 +281,8 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     openCounter += 1;
     const introArt = prepareIntro(s, openCounter);
     // Absent plutôt que nul quand rien n'est trouvé : la séance garde la forme que ses lecteurs connaissent.
-    // La règle des deux minutes (§78) : décidée ici, une fois, pour toute la séance.
+    // La règle des deux minutes (§78) : décidée ici, une fois, pour toute la séance — en « Automatique »
+    // seulement (`carriedLighter` ne rend rien en « Originale »).
     const lighter = carriedLighter();
     setSession({ ...s, openId: openCounter, ...(introArt ? { introArt } : {}), ...(lighter ? { lighter } : {}) });
     setMode("full");

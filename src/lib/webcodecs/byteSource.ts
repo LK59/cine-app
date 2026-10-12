@@ -743,8 +743,10 @@ export class HttpByteSource implements ByteSource {
         last = error;
         diagRequestFailed();
         // Une autre tentative suit : « Connexion perdue ou instable… » (§78), jusqu'à ce que ce morceau
-        // arrive, soit abandonné, ou laisse la place à l'écran « connexion perdue ».
-        if (attempt < FETCH_ATTEMPTS - 1) noteRetrying();
+        // arrive, soit abandonné, ou laisse la place à l'écran « connexion perdue ». Pas pour la plage
+        // qu'un saut a relancée faute de premier octet (`muted`) : c'est la relance ordinaire d'un saut,
+        // pas une tentative en échec — la dire « instable » mentait après chaque saut un peu lent.
+        if (attempt < FETCH_ATTEMPTS - 1 && !muted) noteRetrying();
         if (muted) trace(`réseau : aucun octet en ${SEEK_FIRST_BYTE_MS / 1000} s après un saut, plage ${start}-${end} redemandée`);
         else if (attempt === 0) trace(`réseau : plage ${start}-${end} refusée, nouvelle tentative`);
       } finally {

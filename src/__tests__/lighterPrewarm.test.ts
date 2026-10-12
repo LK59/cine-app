@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("@/lib/codecSupport", () => ({ detectCodecSupport: async () => ({ video: { "mp4/hevc10": true }, audio: {} }) }));
 vi.mock("@/lib/webkitEngine", () => ({ playsHlsNatively: () => false }));
 
-import { cancelPrewarm, forgetPrewarm, prewarmFields, segmentAt, startPrewarm, takePrewarm } from "@/lib/lighterPrewarm";
+import { cancelPrewarm, forgetPrewarm, prewarmFields, prewarmStatusOf, segmentAt, startPrewarm, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
 
 const START = {
   playSessionId: "ps-1",
@@ -78,5 +78,40 @@ describe("le préchauffage", () => {
     const prewarm = startPrewarm({ itemId: "film", step: { targetBps: 1_500_000, tier: 1 }, startSeconds: 0 });
     expect(await prewarm.ready).toBe(false);
     expect(prewarm.state).toBe("failed");
+  });
+
+  it("abandonné en plein téléchargement du segment : la requête est interrompue (le lien revient à la lecture), la séance refermée une seule fois", async () => {
+    let segmentSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+        if (String(url) === "/api/jellyfin/playback/start") return { ok: true, status: 200, json: async () => START };
+        if (String(url).includes("master.m3u8")) return { ok: true, text: async () => MASTER };
+        if (String(url).includes("main.m3u8")) return { ok: true, text: async () => VARIANT };
+        if (String(url).includes("/hls1/main/")) {
+          segmentSignal = init?.signal ?? undefined;
+          return new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("interrompu", "AbortError"))));
+        }
+        return { ok: true, status: 200, json: async () => ({}) };
+      })
+    );
+    const prewarm = startPrewarm({ itemId: "film", step: { targetBps: 1_500_000, tier: 1 }, startSeconds: 0 });
+    for (let i = 0; i < 20 && !segmentSignal; i++) await Promise.resolve();
+    expect(segmentSignal?.aborted).toBe(false);
+    cancelPrewarm(prewarm);
+    expect(segmentSignal?.aborted).toBe(true);
+    expect(await prewarm.ready).toBe(false);
+    await Promise.resolve();
+    expect(calls.filter((c) => c.url === "/api/jellyfin/playback/stop")).toHaveLength(1);
+  });
+
+  it("l'état pour la décision : aucun, en cours, prêt, en échec — et « en cours » s'il est tenu pour une autre cause", () => {
+    const prewarm = { state: "ready" } as Prewarm;
+    expect(prewarmStatusOf(null, "ouverture")).toBe("none");
+    expect(prewarmStatusOf({ prewarm, cause: "ouverture" }, "ouverture")).toBe("ready");
+    expect(prewarmStatusOf({ prewarm, cause: "saut" }, "ouverture")).toBe("running");
+    expect(prewarmStatusOf({ prewarm: { ...prewarm, state: "failed" }, cause: "lecture" }, "lecture")).toBe("failed");
+    expect(prewarmStatusOf({ prewarm: { ...prewarm, state: "running" }, cause: "lecture" }, "lecture")).toBe("running");
   });
 });

@@ -17,10 +17,6 @@ export function setSlowLinkMonitor(enabled: boolean): void {
   for (const l of listeners) l();
 }
 
-export function slowLinkMonitorOn(): boolean {
-  return on;
-}
-
 export function pushSlowLinkEvent(text: string): void {
   if (!on) return;
   events.push({ at: Date.now(), text });

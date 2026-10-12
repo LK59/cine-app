@@ -941,22 +941,24 @@ answer, even an error, still goes through the usual refusal path.
 **A slow connection is measured, pre-warmed and switched automatically — never confused with a cut**
 (12/10/2026, DECISIONS.md §77 and §78). No figure is ever shown to the viewer — they go to the log and the
 technical panel. One pure state machine (`src/lib/slowLinkPolicy.ts`: `decideOpening`, `decidePlayback`)
-decides for both players; the hosts only measure, display and execute (the existing rebuild —
-`fallToStable` natively, a renegotiation on the server player).
+decides for both players; one executor (`src/lib/slowLinkRunner.ts`, DECISIONS.md §79) holds the pre-warm,
+the final screen and the seek watch for both; the hosts only measure, display and switch (the existing
+rebuild — `fallToStable` natively, a renegotiation on the server player).
 
 | When | Condition (measured) | Effect |
 |---|---|---|
 | Opening | ≥ 5 s of reception, < 50 % of the stream's need | « Connexion lente… » under the loading line |
 | Opening | same, from 8 s | the lighter version is **pre-warmed** in the background (negotiation + first segment) |
 | Opening | < 25 % with proofs (10 s, 256 KiB) from 10 s, or 25–50 % at 20 s, still no picture | **switch** to the lighter version, reusing the pre-warmed transcode; brief notice « Passage en vidéo allégée en raison d'une connexion lente. » |
-| Seek | no picture 10 s after a seek | the opening rules, timed from the seek |
+| Seek | no picture 10 s after a seek made while playing (never one made while paused; the timer runs only while a seek waits) | the opening rules, timed from the seek |
 | Playback | a network wait > 5 s, or the 3rd > 1 s within 3 min, measured link under the need | pre-warm at the current position, switch when ready |
 | Give-up (35 s native, 20 s server watchdog) | slowness proven, no switch possible (« Originale », not allowed, floor reached) | screen « Lecture impossible : la connexion est trop lente. » — Réessayer · Fermer |
 | Retries in progress | a range attempt failed and another follows (`networkTrouble.ts`), or offline | « Connexion perdue ou instable… »; never a pre-warm or a switch; all attempts failed → the « connexion perdue » screen (Réessayer, Fermer) |
 
 A slowness measured while playback works (picture present, no visible stall) triggers nothing; an opening
-pre-warm is cancelled when the native picture arrives, and the Jellyfin transcode stopped
-(`DELETE /Videos/ActiveEncodings`, through the stop route marked `prewarm`). Measures taken while the page
+pre-warm is cancelled when the native picture arrives — its list and segment requests aborted — and the
+Jellyfin transcode stopped (`DELETE /Videos/ActiveEncodings`, through the stop route marked `prewarm`, which
+only stops a session the start route registered as a pre-warm for that account, `prewarmSessions.ts`). Measures taken while the page
 is hidden are never judged: an opening restarts its measurement on return.
 
 **The lighter version** is a Jellyfin transcode at half the measured throughput, 1.5 Mbit/s at least,
@@ -971,11 +973,14 @@ production server: one ffmpeg for both, replayed segments in under 10 ms. Safari
 segment 0 first, which restarts ffmpeg once (~1.85 s, measured on the server; not verified on a device).
 
 It needs the server player (`PLAYER_SERVER_FALLBACK`) and the account's Jellyfin policy allowing video
-transcoding (`EnableVideoPlaybackTranscoding`); the « Qualité » setting of the ⋮ menu (Automatique /
-Originale, per account and device, `playbackQuality.ts`) turns it off. The film keeps playing lighter to
-its end; a playback started within 2 minutes of a lighter session starts lighter too (`carriedLighter`,
-page and `sessionStorage` memory only), unless the link's capacity reached 110 % of the original file's
-need for 10 s meanwhile (`LinkRecovery`). Audio track, subtitle and position cross over.
+transcoding (`EnableVideoPlaybackTranscoding`, read with at most 300 ms of wait on the opening, then the
+last known answer); the « Qualité » setting of the ⋮ menu (Automatique / Originale, per account and
+device, `playbackQuality.ts`) turns it off. Never for a cast (AirPlay) negotiation, never for the device
+bench. The film keeps playing lighter to its end; a playback started within 2 minutes of a lighter
+session starts lighter too (`carriedLighter`, the **only** memory of the lighter version: page and
+`sessionStorage`, tied to the account, Automatique only), unless the link's capacity reached 110 % of the
+original file's need for 10 s meanwhile (`LinkRecovery`); choosing Originale erases it. Audio track,
+subtitle and position cross over; the step itself travels on the native player's handover.
 
 A position Jellyfin did not receive (a failed heartbeat or stop) is kept on the device
 (`unsentPosition.ts`) and sent when a report gets through again or at the next launch, through the stop

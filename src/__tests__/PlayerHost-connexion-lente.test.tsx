@@ -99,8 +99,7 @@ vi.mock("hls.js", () => {
 });
 
 import { PlayerHost } from "@/components/PlayerHost";
-import { carriedLighter, forgetLighterCarry, forgetLighters, noteLighter } from "@/lib/slowLinkPolicy";
-import { writePlaybackQuality } from "@/lib/playbackQuality";
+import { carriedLighter, forgetLighterCarry, writePlaybackQuality } from "@/lib/playbackQuality";
 import { forgetPrewarm } from "@/lib/lighterPrewarm";
 
 const reponse: Record<string, unknown> & { playbackInfo: Record<string, unknown> & { video: Record<string, unknown> & { bitRate: number } }; subtitleTracks: unknown[] } = {
@@ -154,7 +153,6 @@ beforeEach(() => {
   reported.length = 0;
   stableTakeover = null;
   legacy = true;
-  forgetLighters();
   forgetLighterCarry();
   forgetPrewarm();
 });
@@ -164,6 +162,11 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+/** Le relais du lecteur natif après une bascule sur ce palier (§78) — la seule façon d'en avoir un, hors règle des deux minutes. */
+function switchedTo(step: { targetBps: number; tier: number }, over: Record<string, unknown> = {}) {
+  stableTakeover = { resumeAt: 0, lighter: step, owner: playback.session, ...over };
+}
 
 /** Monté, avec hls.js construit — en tours de boucle, les minuteurs étant simulés. */
 async function mounted() {
@@ -244,10 +247,33 @@ describe("le débit demandé à Jellyfin", () => {
   });
 
   it("abaissé au palier de version allégée de ce titre, avec la largeur de son barème", async () => {
-    noteLighter("film", { targetBps: 2_500_000, tier: 1 });
+    switchedTo({ targetBps: 2_500_000, tier: 1 });
     await mounted();
     expect(startBodies[0]).toMatchObject({ maxBitrate: 2_500_000, lighter: true });
     expect(reported.find((r) => r.kind === "start")!.fields).toMatchObject({ lighterMbps: 2.5, lighterTier: 1 });
+  });
+
+  it("« Originale » : une séance qui hérite d'un palier repart en pleine qualité — aucun plafond allégé", async () => {
+    playback.session = { itemId: "film", openId: 1, resumeAt: 0, title: "Film", lighter: { targetBps: 2_500_000, tier: 1 } };
+    writePlaybackQuality("original");
+    await mounted();
+    expect(startBodies[0].maxBitrate).toBe(100_000_000);
+    expect(startBodies[0].lighter).toBeUndefined();
+  });
+
+  it("une diffusion (AirPlay) n'hérite jamais du palier : le téléviseur a son propre lien", async () => {
+    playback.session = { itemId: "film", openId: 1, resumeAt: 0, title: "Film", lighter: { targetBps: 2_500_000, tier: 1 } };
+    stableTakeover = { resumeAt: 0, cast: true, owner: playback.session };
+    await mounted();
+    expect(startBodies[0]).toMatchObject({ forCast: true, maxBitrate: 100_000_000 });
+    expect(startBodies[0].lighter).toBeUndefined();
+  });
+
+  it("le banc d'essai n'hérite jamais du palier : il reste au lecteur natif", async () => {
+    legacy = false;
+    playback.session = { itemId: "film", openId: 1, resumeAt: 0, title: "Film", bench: true, lighter: { targetBps: 2_500_000, tier: 1 } };
+    render(<PlayerHost />);
+    expect(document.querySelector("[data-testid=natif]")).not.toBeNull();
   });
 
   it("sans palier, la demande d'avant à l'octet : ni plafond abaissé, ni largeur", async () => {
@@ -331,7 +357,7 @@ describe("pendant le chargement : indice, préchauffage, bascule (§78)", () => 
   it("dégressif : la version allégée en cours bloque encore — palier suivant ; au plancher, l'écran final (Réessayer · Quitter)", async () => {
     reponse.playbackInfo.video.bitRate = 4_600_000;
     try {
-      noteLighter("film", { targetBps: 5_000_000, tier: 1 });
+      switchedTo({ targetBps: 5_000_000, tier: 1 });
       await mounted();
       await trickle(40_000, 12);
       await settleAll();
@@ -340,12 +366,11 @@ describe("pendant le chargement : indice, préchauffage, bascule (§78)", () => 
     } finally {
       reponse.playbackInfo.video.bitRate = 3_500_000;
     }
-    forgetLighters();
     cleanup();
     fake.config = null;
     reported.length = 0;
     startBodies.length = 0;
-    noteLighter("film", { targetBps: 1_500_000, tier: 3 });
+    switchedTo({ targetBps: 1_500_000, tier: 3 });
     await mounted();
     await trickle(40_000, 21);
     expect(prewarmBodies()).toHaveLength(0);
@@ -361,6 +386,15 @@ describe("pendant le chargement : indice, préchauffage, bascule (§78)", () => 
     expect(prewarmBodies()).toHaveLength(0);
     expect(errors()[0].fields).toMatchObject({ reason: "connexion trop lente", quality: "original" });
     expect(document.body.textContent).toContain("player.slowLink.failed");
+  });
+
+  it("banc d'essai : ni préchauffage ni bascule — l'écran final, comme « Originale »", async () => {
+    playback.session = { itemId: "film", openId: 1, resumeAt: 0, title: "Film", bench: true };
+    await mounted();
+    await trickle(40_000, 21);
+    expect(prewarmBodies()).toHaveLength(0);
+    expect(starts().filter((s) => s.fields.why === "lighter")).toHaveLength(0);
+    expect(errors()[0].fields.reason).toBe("connexion trop lente");
   });
 
   it("version allégée non permise au compte (politique Jellyfin) : comme « Originale »", async () => {
@@ -452,8 +486,7 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
   it("le relais du lecteur natif garde le sous-titre choisi, et dit brièvement qu'une génération ne suivra pas", async () => {
     reponse.subtitleTracks = [{ index: 7, language: "fre", title: null, isDefault: false, url: "/sous-titre" }];
     try {
-      stableTakeover = { resumeAt: 600, lighter: true, subtitleStreamIndex: 7, subtitleGenerating: true, owner: playback.session };
-      noteLighter("film", { targetBps: 1_500_000, tier: 1 });
+      switchedTo({ targetBps: 1_500_000, tier: 1 }, { resumeAt: 600, subtitleStreamIndex: 7, subtitleGenerating: true });
       await mounted();
       await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
       expect(document.querySelector("[data-testid=commandes]")!.getAttribute("data-subtitle")).toBe("7");
@@ -476,7 +509,7 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
     expect(document.querySelector("[data-testid=natif]")).toBeNull();
     cleanup();
     playback.session = { itemId: "film", openId: 3, resumeAt: 0, title: "Film" };
-    stableTakeover = { resumeAt: 0, lighter: true, owner: playback.session };
+    switchedTo({ targetBps: 2_500_000, tier: 1 });
     render(<PlayerHost />);
     expect(document.querySelector("[data-testid=natif]")).toBeNull();
   });
@@ -489,15 +522,46 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
   });
 
   it("une séance allégée qui s'arrête est retenue deux minutes", async () => {
-    noteLighter("film", { targetBps: 2_500_000, tier: 1 });
+    switchedTo({ targetBps: 2_500_000, tier: 1 });
     await mounted();
     await picture();
     cleanup();
     expect(carriedLighter()).toEqual({ targetBps: 2_500_000, tier: 1 });
   });
 
+  it("une seule mémoire : un titre déjà allégé, rouvert hors de la règle des deux minutes, repart en pleine qualité et ne réarme rien", async () => {
+    switchedTo({ targetBps: 2_500_000, tier: 1 });
+    await mounted();
+    await picture();
+    cleanup();
+    expect(carriedLighter()).toEqual({ targetBps: 2_500_000, tier: 1 });
+    // Plus de deux minutes après : la mémoire n'existe plus ; une séance serveur ordinaire du même titre.
+    forgetLighterCarry();
+    stableTakeover = null;
+    fake.config = null;
+    startBodies.length = 0;
+    playback.session = { itemId: "film", openId: 2, resumeAt: 0, title: "Film" };
+    await mounted();
+    expect(startBodies[0].lighter).toBeUndefined();
+    expect(startBodies[0].maxBitrate).toBe(100_000_000);
+    await picture();
+    cleanup();
+    expect(carriedLighter()).toBeNull();
+  });
+
+  it("un saut fait en pause n'est jamais traité comme une ouverture", async () => {
+    await mounted();
+    await picture();
+    Object.defineProperty(video(), "paused", { value: true, configurable: true });
+    await act(async () => void fireEvent(video(), new Event("seeking")));
+    await act(async () => void fireEvent(video(), new Event("seeked")));
+    await trickle(40_000, 15);
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(0);
+    expect(reported.filter((r) => r.kind === "error")).toHaveLength(0);
+  });
+
   it("le lien à 115 % du besoin classique pendant 10 s : la mémoire s'efface — la lecture suivante sera native", async () => {
-    noteLighter("film", { targetBps: 2_500_000, tier: 1 });
+    switchedTo({ targetBps: 2_500_000, tier: 1 });
     await mounted();
     await picture();
     // 16 Mbit/s en pleine qualité ; 18,4 Mbit/s de capacité (115 %). Les premières secondes d'une
@@ -512,7 +576,7 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
   });
 
   it("le lien à 100 % du besoin classique : la mémoire reste — la lecture suivante sera allégée", async () => {
-    noteLighter("film", { targetBps: 2_500_000, tier: 1 });
+    switchedTo({ targetBps: 2_500_000, tier: 1 });
     await mounted();
     await picture();
     await flow(2_000_000, 30);

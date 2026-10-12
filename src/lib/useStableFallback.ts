@@ -1,5 +1,6 @@
 "use client";
 
+import type { LighterStep } from "@/lib/slowLinkPolicy";
 import { useCallback, useEffect, useState } from "react";
 
 /** How long the word stays up. Long enough to read, short enough not to become furniture. */
@@ -63,11 +64,12 @@ export interface StableTakeover {
    */
   castTarget?: "chromecast";
   /**
-   * La « version allégée » demandée par le spectateur (DECISIONS.md §78) : un choix, pas un échec —
-   * comme la diffusion, le titre n'entre pas dans `handedOver`, et la prochaine lecture repart sur le
-   * lecteur natif (sauf la règle des deux minutes, `carriedLighter`).
+   * La bascule automatique sur la version allégée (DECISIONS.md §78), et le palier que le lecteur
+   * serveur demande à Jellyfin : une décision du lecteur sur le lien, pas un échec du fichier — comme la
+   * diffusion, le titre n'entre pas dans `handedOver`, et la prochaine lecture repart sur le lecteur
+   * natif (sauf la règle des deux minutes, `carriedLighter`).
    */
-  lighter?: boolean;
+  lighter?: LighterStep;
   /**
    * Le sous-titre choisi, en index Jellyfin, que le lecteur serveur rallume (§78) ; `null` : aucun.
    * Absent : le lecteur serveur garde son défaut, comme avant.
@@ -106,7 +108,7 @@ export function castingNow(takeover: StableTakeover | null | undefined, session:
 
 /** Cette lecture-ci est-elle passée en version allégée (§78) ? Seul le relais de sa séance le dit. */
 export function lighterNow(takeover: StableTakeover | null | undefined, session: unknown): boolean {
-  return takeoverFor(takeover, session)?.lighter === true;
+  return takeoverFor(takeover, session)?.lighter !== undefined;
 }
 
 /**
@@ -225,7 +227,7 @@ export function useStableFallback(): StableFallback {
     // passait pour illisible jusqu'au rechargement de l'app dès qu'on fermait le lecteur pendant
     // une diffusion au lieu de la rendre : chaque relance partait au lecteur serveur
     // (*Ted Lasso*, 25/09/2026).
-    // La version allégée aussi (§78) : un choix du spectateur, pour cette lecture seulement.
+    // La version allégée aussi (§78) : une bascule pour cette lecture seulement, jamais retenue contre le titre.
     if (resumeInto?.cast || resumeInto?.lighter) {
       setReason(why);
       setTakeover(resumeInto);

@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
-  LIGHTER_CARRY_MS,
   LIGHTER_FLOOR_BPS,
   LinkRecovery,
   PREWARM_AFTER_MS,
@@ -8,22 +7,15 @@ import {
   SWITCH_VERY_SLOW_MS,
   SlowLog,
   StutterWatch,
-  capForLighter,
   decideOpening,
   decidePlayback,
-  carriedLighter,
-  forgetLighterCarry,
-  forgetLighters,
-  lighterFor,
   lighterMaxWidth,
   nextLighter,
-  noteLighter,
   openingAdvice,
   playbackLinkSlow,
-  rememberLighter,
 } from "@/lib/slowLinkPolicy";
 
-// Ce que le lecteur propose quand le lien ne porte pas le film (DECISIONS.md §78) — les règles de Louis
+// Ce que le lecteur fait quand le lien ne porte pas le film (DECISIONS.md §78) — les règles de Louis
 // du 12/10/2026, une par une.
 
 const NEED = 3_900_000;
@@ -146,14 +138,6 @@ describe("D — la version allégée : débit adapté et dégressif", () => {
     expect(lighterMaxWidth(20_000_000, true)).toBe(1920);
   });
 
-  it("le palier vaut pour ce titre, dix minutes, et abaisse le plafond ; sans palier, le plafond d'avant", () => {
-    forgetLighters();
-    expect(capForLighter("film", 100_000_000, 0)).toEqual({ maxBitrate: 100_000_000, step: null });
-    noteLighter("film", { targetBps: 2_500_000, tier: 1 }, 0);
-    expect(capForLighter("film", 100_000_000, 1000).maxBitrate).toBe(2_500_000);
-    expect(capForLighter("autre", 100_000_000, 1000).step).toBeNull();
-    expect(lighterFor("film", 11 * 60_000)).toBeNull();
-  });
 });
 
 describe("B — les saccades en pleine lecture", () => {
@@ -185,19 +169,7 @@ describe("B — les saccades en pleine lecture", () => {
   });
 });
 
-describe("la règle des deux minutes et le lien rétabli", () => {
-  beforeEach(() => {
-    forgetLighterCarry();
-  });
-
-  it("une séance allégée arrêtée : la lecture lancée dans les 2 min reprend son palier, quel que soit le titre ; après, non", () => {
-    rememberLighter({ targetBps: 2_500_000, tier: 1 }, 1000);
-    expect(carriedLighter(1000 + LIGHTER_CARRY_MS - 1)).toEqual({ targetBps: 2_500_000, tier: 1 });
-    expect(carriedLighter(1000 + LIGHTER_CARRY_MS + 1)).toBeNull();
-    forgetLighterCarry();
-    expect(carriedLighter(2000)).toBeNull();
-  });
-
+describe("le lien rétabli", () => {
   it("la capacité à 115 % du besoin classique pendant 10 s efface la mémoire ; à 100 %, non", () => {
     const classic = 16_000_000;
     // Rafales à 18,4 Mb/s (115 %) : 10 s d'affilée suffisent.

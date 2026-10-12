@@ -208,7 +208,7 @@ describe("PlaybackProvider — la minuterie de veille", () => {
 
 describe("la règle des deux minutes (DECISIONS.md §78)", () => {
   it("une lecture lancée moins de 2 min après une séance allégée — quel que soit le titre — porte son palier ; après, non ; l'épisode suivant aussi", async () => {
-    const { rememberLighter, forgetLighterCarry } = await import("@/lib/slowLinkPolicy");
+    const { rememberLighter, forgetLighterCarry } = await import("@/lib/playbackQuality");
     vi.useFakeTimers();
     try {
       const { result } = renderHook(() => usePlayback(), { wrapper });
@@ -229,6 +229,22 @@ describe("la règle des deux minutes (DECISIONS.md §78)", () => {
       expect(result.current.session?.lighter).toBeUndefined();
     } finally {
       vi.useRealTimers();
+      forgetLighterCarry();
+    }
+  });
+
+  it("« Originale » : aucune lecture n'hérite du palier — ni à l'ouverture, ni à l'épisode suivant", async () => {
+    const { rememberLighter, forgetLighterCarry, writePlaybackQuality } = await import("@/lib/playbackQuality");
+    try {
+      const { result } = renderHook(() => usePlayback(), { wrapper });
+      rememberLighter({ targetBps: 2_500_000, tier: 1 });
+      writePlaybackQuality("original");
+      act(() => result.current.play({ itemId: "1", title: "Originale" }));
+      expect(result.current.session?.lighter).toBeUndefined();
+      act(() => result.current.advance({ itemId: "2", title: "Épisode suivant" }));
+      expect(result.current.session?.lighter).toBeUndefined();
+    } finally {
+      writePlaybackQuality("auto");
       forgetLighterCarry();
     }
   });

@@ -57,7 +57,6 @@ import {
   disarmOpeningMeter,
   fileNeedBps,
   slowLinkFields,
-  slowLinkVerdict,
   frozenReading,
   readLink,
   type LinkMeasure,
@@ -148,7 +147,8 @@ function aacRouteFacts(): Record<string, unknown> {
 import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from "@/lib/hostSeek";
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { usePlaybackQuality } from "@/lib/playbackQuality";
-import { cancelPrewarm, prewarmFields, startPrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { prewarmFields } from "@/lib/lighterPrewarm";
+import { SlowLinkRunner, type SlowLinkHost } from "@/lib/slowLinkRunner";
 import {
   LONG_STALL_MS,
   PLAYBACK_MEASURE_WINDOW_MS,
@@ -156,13 +156,10 @@ import {
   StutterWatch,
   decideOpening,
   decidePlayback,
-  type PrewarmStatus,
-  type SlowAction,
+  type LighterStep,
   mbps,
   measuredBps,
-  noteLighter,
   playbackLinkSlow,
-  type SwitchCause,
 } from "@/lib/slowLinkPolicy";
 import { networkUnstable, subscribeNetworkTrouble } from "@/lib/networkTrouble";
 import { pushSlowLinkEvent } from "@/lib/slowLinkMonitor";
@@ -199,13 +196,6 @@ const STUCK_AFTER_MS = 20000;
  * failure a viewer cannot wait out, because nothing on screen ever changes.
  */
 const GIVE_UP_AFTER_MS = 35000;
-
-/**
- * Un saut sans image depuis dix secondes est traité comme une ouverture (§78, choix de Louis) : un
- * saut qui arrive en deux ou trois secondes n'a rien à dire, et un saut ordinaire sur un lien
- * correct se pose bien avant.
- */
-const SEEK_AS_OPENING_MS = 10_000;
 
 /**
  * How long a passing notice stays on screen.
@@ -623,12 +613,13 @@ export function ExperimentalPlayerHost({
    * préchauffage et bascule, ou l'écran du renoncement à 35 s. `at` : l'instant du saut.
    */
   const [seekSignal, setSeekSignal] = useState<{ at: number; hint: boolean; recvBps: number | null; needBps: number | null } | null>(null);
-  /** Le saut en attente de son image — posé par les écouteurs du pipeline, lu par la lecture du lien. */
-  const seekWaitRef = useRef<number | null>(null);
   /** La bascule en pleine lecture — posée par un effet plus bas, appelée par les écouteurs du pipeline. */
   const offerStutterRef = useRef<(kind: "long" | "repeated") => void>(() => {});
-  /** Le préchauffage de la version allégée en cours (`lighterPrewarm.ts`), et pour quoi. */
-  const prewarmRef = useRef<{ prewarm: Prewarm; cause: SwitchCause } | null>(null);
+  /**
+   * L'exécution des décisions (§78, `slowLinkRunner.ts`, commune aux deux lecteurs) : le préchauffage
+   * tenu, et le saut qui attend son image. Ce qu'elle lit de ce lecteur lui est rattaché plus bas.
+   */
+  const [runner] = useState(() => new SlowLinkRunner());
   /** La décision en pleine lecture, rappelée quand un préchauffage de saccades est prêt. */
   const playbackDecisionRef = useRef<(triggered?: boolean) => void>(() => {});
   /** Le compteur de l'ouverture en cours — voir l'effet qui l'arme, avant celui du pipeline. */
@@ -1092,6 +1083,12 @@ export function ExperimentalPlayerHost({
   // the mount the wait was instantly minutes long — so a rebuild that takes half a second
   // announced itself as "still working", which is a spinner lying about what it knows.
   const [openedAt, setOpenedAt] = useState(() => Date.now());
+  /**
+   * L'instant de la dernière première image, posé à l'instant même où le pipeline la déclare — avant
+   * le rendu qui abaisse `ready`. Les minuteurs de l'ouverture (§78) le comparent à `openedAt` : un
+   * tic tombé entre l'image et ce rendu aurait sinon pu basculer un film qui joue déjà.
+   */
+  const pictureAtRef = useRef(0);
 
   /** Builds the pipeline again from where the viewer is, keeping what they had chosen. */
   /**
@@ -1617,10 +1614,11 @@ export function ExperimentalPlayerHost({
    * La version allégée existe-t-elle ici, et le lecteur a-t-il le droit d'y passer de lui-même (§78) ?
    * Un lecteur serveur sur l'installation, le transcodage vidéo permis au compte (`lighterAllowed` de
    * la description, lu chez Jellyfin) et le réglage « Qualité » sur Automatique. Sinon : l'indice, et
-   * l'écran final au renoncement — le comportement « Originale ».
+   * l'écran final au renoncement — le comportement « Originale ». Jamais pour le banc d'essai : il
+   * mesure ce lecteur-ci sur cet appareil, une bascule fausserait sa mesure.
    */
   const quality = usePlaybackQuality();
-  const autoLighter = quality === "auto" && serverFallback !== false && info?.lighterAllowed !== false;
+  const autoLighter = quality === "auto" && serverFallback !== false && info?.lighterAllowed !== false && !session.bench;
   const autoLighterRef = useRef(autoLighter);
   useEffect(() => {
     autoLighterRef.current = autoLighter;
@@ -2227,6 +2225,7 @@ export function ExperimentalPlayerHost({
         const media = videoElRef.current;
         if (media) media.currentTime = asked;
       }
+      pictureAtRef.current = Date.now();
       setReady(true);
       setAnnounced(true);
       // Une image : si un AAC à PCE a été copié tel quel, ce navigateur le prend — c'est gardé.
@@ -2406,7 +2405,7 @@ export function ExperimentalPlayerHost({
         tally.waitEnded(Date.now());
         endWait(diagWaitEnded());
         // Un saut posé en pause a son image : il n'attend plus rien (§78).
-        if (element.paused && !element.seeking) seekWaitRef.current = null;
+        if (element.paused && !element.seeking) runner.seekDone();
         pausedAt = Date.now();
         if (!session.bench) noteWatching(itemId);
       };
@@ -2454,7 +2453,7 @@ export function ExperimentalPlayerHost({
         trace(`élément : repart à ${element.currentTime.toFixed(2)} s`);
         playedOnce = true;
         // L'image est là : un saut qui l'attendait n'attend plus (§78).
-        seekWaitRef.current = null;
+        runner.seekDone();
         tally.waitEnded(Date.now());
         endWait(diagWaitEnded());
       };
@@ -2464,7 +2463,7 @@ export function ExperimentalPlayerHost({
         if (longWaitTimer !== null) clearTimeout(longWaitTimer);
         longWaitTimer = null;
         // Un saut en pleine lecture attend son image : traité comme une ouverture au-delà de 10 s (§78).
-        if (playedOnce) seekWaitRef.current = Date.now();
+        if (playedOnce) runner.seekStarted();
       };
       const onEnded = () => {
         setPlaying(false);
@@ -2487,6 +2486,9 @@ export function ExperimentalPlayerHost({
       };
       // Le saut demandé est atteint : la position lue redevient la vérité.
       const onSeeked = () => {
+        // Posé en pause, ou de quoi repartir aussitôt : ce saut n'attend plus son image (§78). Sans cela,
+        // un saut fait en pause devenait, dix secondes plus tard, une « ouverture » à préchauffer.
+        if (element.paused || element.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) runner.seekDone();
         const timing = seeks.seeked(element.currentTime);
         // Posée ailleurs que la cible — sur le premier média, sur l'image clé suivante — mais
         // arrivée selon la source : la cible demandée ne vaut plus (voir `HostSeek.settled`). Lu
@@ -2524,6 +2526,9 @@ export function ExperimentalPlayerHost({
       element.addEventListener("playing", onPlaying);
       element.addEventListener("seeking", onSeeking);
       unsubscribes.push(() => {
+        // Le blocage de 5 s en attente meurt avec ce pipeline : il ne doit rien décider pour le suivant.
+        if (longWaitTimer !== null) clearTimeout(longWaitTimer);
+        longWaitTimer = null;
         element.removeEventListener("timeupdate", onTime);
         element.removeEventListener("play", onPlay);
         element.removeEventListener("pause", onPause);
@@ -2751,8 +2756,8 @@ export function ExperimentalPlayerHost({
   // comme `tally`, `seeks` et `background` —, et pour `itemId` et `session.bench`,
   // fixés pour toute la vie de ce lecteur — sa clé est `itemId:openId` (voir PlayerHost). Même
   // chose pour `watched`, créé une fois au montage (`useState`) et jamais remplacé (la réserve lit
-  // le temps regardé, 28/09/2026). `stutter` aussi (les saccades, §78) : créé une fois au montage.
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter]);
+  // le temps regardé, 28/09/2026). `stutter` et `runner` aussi (§78) : créés une fois au montage.
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -2840,30 +2845,17 @@ export function ExperimentalPlayerHost({
   }, [warning]);
 
 
-  /** Le préchauffage ne sert plus (le natif a son image, ou se ferme) : arrêté chez Jellyfin, noté. */
-  const dropPrewarm = useCallback(
-    (why: string) => {
-      const held = prewarmRef.current;
-      if (!held) return;
-      prewarmRef.current = null;
-      cancelPrewarm(held.prewarm);
-      slowLog.note(`préchauffage annulé (${why})`);
-      trace(`connexion lente : préchauffage annulé — ${why}`);
-    },
-    [slowLog]
-  );
-
   /**
-   * Le relais d'une bascule en version allégée (§78) : un choix du lecteur, pas un échec (`lighter`,
+   * Le relais d'une bascule en version allégée (§78) : une décision du lecteur, pas un échec (`lighter`,
    * hors `handedOver` : la lecture suivante repart sur le natif, sauf la règle des deux minutes), qui
-   * garde ce que le spectateur avait choisi — position, piste audio, sous-titre — et dit si une
-   * génération de sous-titres était en cours.
+   * porte le palier à demander, garde ce que le spectateur avait choisi — position, piste audio,
+   * sous-titre — et dit si une génération de sous-titres était en cours.
    */
   const lighterTakeover = useCallback(
-    (resumeAt: number): StableTakeover => ({
+    (resumeAt: number, step: LighterStep): StableTakeover => ({
       ...(everReadyRef.current ? takeoverNowRef.current() ?? { resumeAt } : { resumeAt, audioStreamIndex: jellyfinAudioIndex(tracks.audio, info?.audio, wantedAudioRef.current ?? currentAudio ?? -1) }),
       resumeAt,
-      lighter: true,
+      lighter: step,
       switchedAt: Date.now(),
       subtitleStreamIndex: generationView.entries.some((e) => e.track.number === currentSubtitle)
         ? null
@@ -2873,117 +2865,90 @@ export function ExperimentalPlayerHost({
     [tracks.audio, tracks.subtitles, info?.audio, info?.embeddedSubtitleIndexes, currentAudio, currentSubtitle, generationView, externals]
   );
 
-  /** L'état du préchauffage en cours, pour la décision (`decideOpening` / `decidePlayback`). */
-  const prewarmStatus = (cause: SwitchCause): PrewarmStatus => {
-    const held = prewarmRef.current;
-    if (!held || held.cause !== cause) return held ? "running" : "none";
-    return held.prewarm.state === "ready" ? "ready" : held.prewarm.state === "failed" ? "failed" : "running";
-  };
-  const prewarmStatusRef = useRef(prewarmStatus);
-
   /**
-   * Exécute ce que la décision dit (§78) : préchauffer, basculer — par la reconstruction habituelle,
-   * `fallToStable`, avec un relais `lighter` —, ou montrer l'écran final. Gardé : une erreur ici ne
-   * doit jamais interrompre la lecture.
+   * Ce que l'exécution commune des décisions (§78, `SlowLinkRunner`) lit de ce lecteur. Seule la bascule
+   * lui est propre : `fallToStable`, avec un relais `lighter` qui porte le palier.
    */
-  const execute = useCallback(
-    (action: SlowAction, cause: SwitchCause, at: number, reading: { recvBps: number | null; needBps: number | null }) => {
-      try {
-        if (action.kind === "prewarm") {
-          if (prewarmRef.current || lifecycle.isOver()) return;
-          const prewarm = startPrewarm({ itemId, step: action.step, startSeconds: at, audioStreamIndex: jellyfinAudioIndex(tracks.audio, info?.audio, wantedAudioRef.current ?? currentAudio ?? -1) });
-          prewarmRef.current = { prewarm, cause };
-          slowLog.note(`préchauffage (${cause}) à ${Math.round(at)} s : ${mbps(action.step.targetBps)} Mb/s palier ${action.step.tier} (${mbps(reading.recvBps)}/${mbps(reading.needBps)})`);
-          trace(`connexion lente : préchauffage de la version allégée (${cause}) — ${action.step.targetBps} b/s à ${at.toFixed(1)} s`);
-          void prewarm.ready.then((ok) => {
-            if (prewarm.state === "cancelled") return;
-            slowLog.note(ok ? `préchauffage prêt en ${Math.round((prewarm.readyAt ?? 0) - prewarm.startedAt)} ms` : "préchauffage en échec");
-            // En pleine lecture, la bascule suit le préchauffage dès qu'il est prêt.
-            if (cause === "lecture") playbackDecisionRef.current();
-          });
-          return;
-        }
-        if (action.kind === "switch") {
-          const held = prewarmRef.current;
-          prewarmRef.current = null;
-          const resumeAt = held && cause !== "lecture" ? held.prewarm.startSeconds : at;
-          noteLighter(itemId, action.step);
-          slowLog.note(`bascule (${cause}) à ${Math.round(resumeAt)} s, ${mbps(action.step.targetBps)} Mb/s palier ${action.step.tier}${held ? "" : ", sans préchauffage"}`);
-          trace(`connexion lente : bascule en version allégée (${cause}) à ${resumeAt.toFixed(1)} s`);
-          fallToStable(cause === "lecture" ? SLOW_LINK_STUTTER_REASON : SLOW_LINK_LIGHTER_REASON, lighterTakeover(resumeAt), {
-            ...(reading.recvBps !== null && reading.needBps !== null
-              ? { recvMbps: Math.round((reading.recvBps / 1e6) * 100) / 100, needMbps: Math.round((reading.needBps / 1e6) * 10) / 10 }
-              : {}),
-            lighterMbps: Math.round(action.step.targetBps / 1e5) / 10,
-            lighterTier: action.step.tier,
-            switch: { cause, from: Math.round(positionRef.current * 10) / 10, to: Math.round(resumeAt * 10) / 10 },
-            ...(held ? { prewarm: prewarmFields(held.prewarm) } : {}),
-            quality: "auto",
-            ...slowFields(),
-          });
-          return;
-        }
-        if (action.kind === "screen") {
-          dropPrewarm("écran final");
-          if (!lifecycle.stepAside()) return;
-          const slow = action.slow;
-          slowLog.note(`écran trop lente (${cause}) (${mbps(slow.recvBps)}/${mbps(slow.needBps)})`);
-          const figures = slowLinkFields(slow);
-          trace(`connexion trop lente : ${figures.recvMbps} Mb/s reçus sur ${figures.measuredS} s de réception, ${figures.needMbps} Mb/s demandés — écran`);
-          clearUnsentStop(sessionId);
-          reportPlayback("error", {
-            ...describeFileRef.current(),
-            reason: SLOW_LINK_REASON,
-            path: pathRef.current ?? "non décidé",
-            ...(cause === "saut" ? { afterSeek: true } : {}),
-            ...figures,
-            quality: autoLighterRef.current ? "auto" : "original",
-            ...slowFields(),
-            ...tally.backgroundFacts(Date.now()),
-          });
-          setSlowLink(slow);
-          setRuntimeError(SLOW_LINK_REASON);
-          setNetworkLost(null);
-          return;
-        }
-        if (action.kind === "giveUp") {
-          dropPrewarm("renoncement sans lenteur prouvée");
-          fallToStable(`aucune image après ${GIVE_UP_AFTER_MS / 1000} s`, undefined, slowFields());
-        }
-      } catch {
-        /* la décision n'est pas la lecture */
-      }
-    },
-    [lifecycle, itemId, tracks.audio, info, currentAudio, slowLog, fallToStable, lighterTakeover, slowFields, dropPrewarm, sessionId, tally]
-  );
-  const executeRef = useRef(execute);
   useEffect(() => {
-    executeRef.current = execute;
-    prewarmStatusRef.current = prewarmStatus;
-  });
+    runner.attach({
+      itemId,
+      log: () => slowLog,
+      audioStreamIndex: () => jellyfinAudioIndex(tracks.audio, info?.audio, wantedAudioRef.current ?? currentAudio ?? -1),
+      over: () => lifecycle.isOver(),
+      trace,
+      switchTo: (step, resumeAt, cause, held, reading) =>
+        fallToStable(cause === "lecture" ? SLOW_LINK_STUTTER_REASON : SLOW_LINK_LIGHTER_REASON, lighterTakeover(resumeAt, step), {
+          ...(reading.recvBps !== null && reading.needBps !== null
+            ? { recvMbps: Math.round((reading.recvBps / 1e6) * 100) / 100, needMbps: Math.round((reading.needBps / 1e6) * 10) / 10 }
+            : {}),
+          lighterMbps: Math.round(step.targetBps / 1e5) / 10,
+          lighterTier: step.tier,
+          switch: { cause, from: Math.round(positionRef.current * 10) / 10, to: Math.round(resumeAt * 10) / 10 },
+          ...(held ? { prewarm: prewarmFields(held) } : {}),
+          quality: "auto",
+          ...slowFields(),
+        }),
+      screen: (slow, cause) => {
+        if (!lifecycle.stepAside()) return;
+        const figures = slowLinkFields(slow);
+        trace(`connexion trop lente : ${figures.recvMbps} Mb/s reçus sur ${figures.measuredS} s de réception, ${figures.needMbps} Mb/s demandés — écran`);
+        clearUnsentStop(sessionId);
+        reportPlayback("error", {
+          ...describeFileRef.current(),
+          reason: SLOW_LINK_REASON,
+          path: pathRef.current ?? "non décidé",
+          ...(cause === "saut" ? { afterSeek: true } : {}),
+          ...figures,
+          quality: autoLighterRef.current ? "auto" : "original",
+          ...slowFields(),
+          ...tally.backgroundFacts(Date.now()),
+        });
+        setSlowLink(slow);
+        setRuntimeError(SLOW_LINK_REASON);
+        setNetworkLost(null);
+      },
+      giveUp: () => fallToStable(`aucune image après ${GIVE_UP_AFTER_MS / 1000} s`, undefined, slowFields()),
+      playbackDecision: () => playbackDecisionRef.current(),
+      seekBlocked: () => !readyRef.current || !!runtimeError || !!networkLost || !!error || document.visibilityState === "hidden",
+      paused: () => videoElRef.current?.paused === true,
+      seekMeasure: (elapsedMs) => diagLinkMeasure(elapsedMs),
+      needBps: () => needBpsRef.current,
+      unstable: () => networkUnstable(),
+      auto: () => autoLighterRef.current,
+      currentStep: () => null,
+      position: () => intendedPosition(),
+      seekSignal: setSeekSignal,
+    } satisfies SlowLinkHost);
+  }, [runner, itemId, slowLog, tracks.audio, info?.audio, currentAudio, lifecycle, fallToStable, lighterTakeover, slowFields, sessionId, tally, runtimeError, networkLost, error, intendedPosition]);
   // La première image du natif : le préchauffage d'ouverture ne sert plus. Et au démontage, rien d'orphelin.
   useEffect(() => {
-    if (ready && prewarmRef.current?.cause === "ouverture") dropPrewarm("image du lecteur natif");
-  }, [ready, dropPrewarm]);
-  useEffect(() => () => dropPrewarm("lecteur fermé"), [dropPrewarm]);
+    if (ready && runner.held?.cause === "ouverture") runner.drop("image du lecteur natif");
+  }, [ready, runner]);
+  useEffect(
+    () => () => {
+      runner.drop("lecteur fermé");
+      runner.dispose();
+    },
+    [runner]
+  );
 
-  /** Une décision d'ouverture (ou de saut), avec la mesure courante — voir `decideOpening`. */
+  /** Une décision d'ouverture, avec la mesure courante — voir `decideOpening`. */
   const decideAndRun = useCallback(
-    (cause: "ouverture" | "saut", measure: LinkMeasure | null, elapsedMs: number, at: number) => {
+    (measure: LinkMeasure | null, elapsedMs: number, at: number) => {
       const { advice, action } = decideOpening({
         measure,
         needBps: needBpsRef.current,
         elapsedMs,
         unstable: networkUnstable(),
         auto: autoLighterRef.current,
-        prewarm: prewarmStatusRef.current(cause),
+        prewarm: runner.status("ouverture"),
         currentStep: null,
         giveUpMs: GIVE_UP_AFTER_MS,
       });
-      executeRef.current(action, cause, at, advice.recvBps !== null ? advice : action.kind === "screen" ? action.slow : advice);
+      runner.execute(action, "ouverture", at, advice.recvBps !== null ? advice : action.kind === "screen" ? action.slow : advice);
       return advice;
     },
-    []
+    [runner]
   );
 
   /**
@@ -2999,7 +2964,7 @@ export function ExperimentalPlayerHost({
     } catch {
       measure = null;
     }
-    decideAndRun("ouverture", measure, GIVE_UP_AFTER_MS, positionRef.current);
+    decideAndRun(measure, GIVE_UP_AFTER_MS, positionRef.current);
   }, [decideAndRun]);
 
   // A player that never starts is the one failure a viewer cannot wait out: nothing on screen
@@ -3020,6 +2985,7 @@ export function ExperimentalPlayerHost({
     // Ni pendant que des tentatives échouent (§78) : c'est une coupure, pas une lenteur — elle finit
     // par l'arrivée des octets, ou par l'écran « connexion perdue » ; le renoncement attend son issue.
     const tick = () => {
+      if (pictureAtRef.current > openedAt) return;
       if (networkUnstable()) {
         id = setTimeout(tick, 1000);
         return;
@@ -3042,6 +3008,9 @@ export function ExperimentalPlayerHost({
     if (ready || runtimeError || networkLost || error) return;
     let hinted = false;
     const id = setInterval(() => {
+      // L'image vient d'arriver, avant que cet effet ne s'arrête au rendu suivant : plus rien à décider
+      // — une bascule ici aurait remplacé un film qui joue.
+      if (readyRef.current || pictureAtRef.current > openedAt) return;
       const meter = openingMeterRef.current;
       // Page cachée : aucune mesure ne vaut (§78) — elle reprendra de zéro au retour.
       if (!meter || document.visibilityState === "hidden") return;
@@ -3053,7 +3022,7 @@ export function ExperimentalPlayerHost({
       }
       // Avant le délai du renoncement : celui-ci reste au minuteur d'abandon, comme avant.
       const elapsed = Math.min(Date.now() - Math.max(openedAt, measureEpoch), GIVE_UP_AFTER_MS - 1);
-      const advice = decideAndRun("ouverture", measure, elapsed, positionRef.current);
+      const advice = decideAndRun(measure, elapsed, positionRef.current);
       if (advice.hint !== hinted) {
         slowLog.noteAt(advice.hint ? "indice" : "indice retiré", Date.now() - openedAt, advice.recvBps, advice.needBps);
         hinted = advice.hint;
@@ -3101,15 +3070,15 @@ export function ExperimentalPlayerHost({
     playbackDecisionRef.current = (triggered = false) => {
       const measure = diagLinkMeasure(PLAYBACK_MEASURE_WINDOW_MS);
       const reading = { recvBps: measuredBps(measure), needBps: needBpsRef.current };
-      const action = decidePlayback({ triggered, auto: autoLighterRef.current, prewarm: prewarmStatusRef.current("lecture"), currentStep: null, ...reading });
+      const action = decidePlayback({ triggered, auto: autoLighterRef.current, prewarm: runner.status("lecture"), currentStep: null, ...reading });
       if (triggered && action.kind === "prewarm") slowLog.note(`saccades à ${Math.round(positionRef.current)} s (${mbps(reading.recvBps)}/${mbps(reading.needBps)})`);
       // La position de l'élément : celle que le spectateur voit, figée sur le blocage.
       const element = videoElRef.current;
       const at = element && Number.isFinite(element.currentTime) && element.currentTime > 0 ? element.currentTime : intendedPosition();
-      executeRef.current(action, "lecture", at, reading);
+      runner.execute(action, "lecture", at, reading);
     };
     offerStutterRef.current = () => playbackDecisionRef.current(true);
-  }, [slowLog, intendedPosition]);
+  }, [slowLog, intendedPosition, runner]);
 
   /**
    * Le retour au premier plan (§78). Une ouverture encore en cours repart de zéro pour sa mesure
@@ -3126,41 +3095,6 @@ export function ExperimentalPlayerHost({
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [slowLog]);
-
-  /**
-   * Un saut traité comme une ouverture (§78) : 10 s après le saut sans image, `decideOpening` sur la
-   * mesure prise depuis le saut — indice, préchauffage, bascule ; à 35 s, la bascule ou l'écran si la
-   * lenteur est prouvée (sans lenteur prouvée, rien : le moteur a ses propres rattrapages). Rien d'autre
-   * ne change dans le cycle du saut.
-   */
-  useEffect(() => {
-    if (!ready || runtimeError || networkLost || error) return;
-    let shown: { at: number; hint: boolean } | null = null;
-    const id = setInterval(() => {
-      const at = seekWaitRef.current;
-      const now = Date.now();
-      if (at === null || now - at < SEEK_AS_OPENING_MS || document.visibilityState === "hidden") {
-        if (shown) {
-          shown = null;
-          setSeekSignal(null);
-        }
-        if (at === null && prewarmRef.current?.cause === "saut") dropPrewarm("image après le saut");
-        return;
-      }
-      const elapsed = now - at;
-      const measure = diagLinkMeasure(elapsed);
-      // Sans lenteur prouvée au délai du renoncement, rien : le saut garde son propre cycle.
-      if (elapsed >= GIVE_UP_AFTER_MS && !slowLinkVerdict(measure, needBpsRef.current)) return;
-      if (elapsed >= GIVE_UP_AFTER_MS) seekWaitRef.current = null;
-      const advice = decideAndRun("saut", measure, elapsed, intendedPosition());
-      if (shown && shown.at === at && shown.hint === advice.hint) return;
-      if (advice.hint && !shown?.hint) slowLog.note(`indice après un saut, +${(elapsed / 1000).toFixed(1)} s (${mbps(advice.recvBps)}/${mbps(advice.needBps)})`);
-      shown = { at, hint: advice.hint };
-      setSeekSignal({ at, hint: advice.hint, recvBps: advice.recvBps, needBps: advice.needBps });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [ready, runtimeError, networkLost, error, slowLog, intendedPosition, dropPrewarm, decideAndRun]);
-
 
   // Below the threshold nothing is shown, and a resume that takes a moment reads as instant
   // rather than as a flash of spinner drawing attention to itself.

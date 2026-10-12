@@ -37,32 +37,22 @@ import {
   RECOVERY_WINDOW_MS,
   SlowLog,
   StutterWatch,
-  capForLighter,
-  forgetLighterCarry,
-  lighterFor,
   mbps,
   measuredBps,
   decideOpening,
   decidePlayback,
-  noteLighter,
   playbackLinkSlow,
-  rememberLighter,
-  type SlowAction,
-  type SwitchCause,
+  type LighterStep,
 } from "@/lib/slowLinkPolicy";
-import { cancelPrewarm, prewarmFields, startPrewarm, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
-import { usePlaybackQuality } from "@/lib/playbackQuality";
+import { cancelPrewarm, prewarmFields, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { SlowLinkRunner, type SeekSignal, type SlowLinkHost } from "@/lib/slowLinkRunner";
+import { forgetLighterCarry, readPlaybackQuality, rememberLighter, usePlaybackQuality } from "@/lib/playbackQuality";
 import { simulatorActive, throttledHlsLoader } from "@/lib/linkSimulator";
 import { pushSlowLinkEvent } from "@/lib/slowLinkMonitor";
 
 /** Pas d'indice : l'état ordinaire d'un chargement (§78). */
 type LinkSignal = { hint: boolean; recvBps: number | null; needBps: number | null };
 const NO_LINK_SIGNAL: LinkSignal = { hint: false, recvBps: null, needBps: null };
-
-/** Un saut sans image depuis dix secondes est traité comme une ouverture (§78) — comme chez le natif. */
-const SEEK_AS_OPENING_MS = 10_000;
-/** Et le renoncement d'un saut, comme celui de l'ouverture du natif : 35 s, et seulement sur une lenteur prouvée. */
-const SEEK_GIVE_UP_MS = 35_000;
 import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
@@ -339,9 +329,10 @@ export function PlayerHost() {
   // Une page rechargée par le lecteur serveur (piste WebKit, escalade de l'échelle audio) revient
   // à lui : le rechargement a effacé le relais qui l'avait choisi — voir `reloadedOnServer`.
   const reloadedOnServer = session.reloadedOnServer === session.itemId;
-  // La version allégée (§78) : choisie pour cette lecture (`lighterNow`), ou héritée d'une séance
-  // allégée arrêtée il y a moins de deux minutes (`session.lighter`, posé à l'ouverture).
-  const lighter = lighterNow(takeover, session) || session.lighter !== undefined;
+  // La version allégée (§78) : une bascule de cette lecture (`lighterNow`), ou héritée d'une séance
+  // allégée arrêtée il y a moins de deux minutes (`session.lighter`, posé à l'ouverture en
+  // « Automatique » seulement). Jamais pour le banc d'essai : il mesure le lecteur natif.
+  const lighter = lighterNow(takeover, session) || (session.lighter !== undefined && !session.bench);
   const useNative =
     !serverFallback ||
     (!legacy && !handedOver.includes(session.itemId) && !carried && !castingNow(takeover, session) && !reloadedOnServer && !lighter);
@@ -677,21 +668,30 @@ function ActivePlayer({
   const stutterRef = useRef(new StutterWatch());
   /** La bascule en pleine lecture — posée par un effet plus bas, appelée par les écouteurs de l'élément. */
   const offerStutterRef = useRef<() => void>(() => {});
-  /** Le saut qui attend son image, posé par les écouteurs de l'élément (§78). */
-  const seekWaitRef = useRef<number | null>(null);
   /** Le début de la mesure du chargement, et le chien de garde à réarmer au retour du premier plan (§78). */
   const measureStartRef = useRef(0);
   const watchdogFireRef = useRef<(() => void) | null>(null);
-  /** L'échec qu'une connexion trop lente explique, quand aucun palier ne reste : « Lecture impossible… ». */
-  const [slowFailure, setSlowFailure] = useState<SlowLink | null>(null);
   /** Un saut sans image depuis 10 s, traité comme une ouverture (§78). */
-  const [seekSignal, setSeekSignal] = useState<(LinkSignal & { at: number }) | null>(null);
+  const [seekSignal, setSeekSignal] = useState<SeekSignal | null>(null);
   /** Le palier de version allégée de la négociation en cours (§78), pour le panneau et le bilan. */
-  const [lighterStep, setLighterStep] = useState<{ targetBps: number; tier: number } | null>(null);
-  /** Le préchauffage du palier suivant (`lighterPrewarm.ts`), et pour quoi. */
-  const prewarmHeldRef = useRef<{ prewarm: Prewarm; cause: SwitchCause } | null>(null);
-  /** Exécute une décision (`decideOpening` / `decidePlayback`) — posée par un effet plus bas. */
-  const executeRef = useRef<(action: SlowAction, cause: SwitchCause, at: number, reading: { recvBps: number | null; needBps: number | null }) => void>(() => {});
+  const [lighterStep, setLighterStep] = useState<LighterStep | null>(null);
+  /** Le même, lu par le bilan (`reportStop`) : seule une séance réellement allégée est retenue. */
+  const negotiatedStepRef = useRef<LighterStep | null>(null);
+  /**
+   * Le palier choisi pour ce titre par une bascule — ici, ou au relais du lecteur natif (`lighter` du
+   * relais) — et que chaque négociation de ce titre redemande (réessai, piste audio).
+   */
+  const switchStepRef = useRef<{ itemId: string; step: LighterStep } | null>(
+    (() => {
+      const step = takeoverFor(takeover, session)?.lighter;
+      return step ? { itemId, step } : null;
+    })()
+  );
+  /**
+   * L'exécution des décisions (§78, `slowLinkRunner.ts`, commune aux deux lecteurs) : le préchauffage
+   * tenu, et le saut qui attend son image. Ce qu'elle lit de ce lecteur lui est rattaché plus bas.
+   */
+  const [runner] = useState(() => new SlowLinkRunner());
   /** La décision en pleine lecture, rappelée quand un préchauffage de saccades est prêt. */
   const playbackDecisionRef = useRef<(triggered?: boolean) => void>(() => {});
   /**
@@ -701,7 +701,7 @@ function ActivePlayer({
   const switchedAtRef = useRef<number | null>(takeoverFor(takeover, session)?.switchedAt ?? null);
   const switchGapRef = useRef<number | null>(null);
   /** « Passage en vidéo allégée en raison d'une connexion lente. » — bref, en bas à gauche. */
-  const [switchNotice, setSwitchNotice] = useState(() => takeoverFor(takeover, session)?.lighter === true && takeoverFor(takeover, session)?.switchedAt !== undefined);
+  const [switchNotice, setSwitchNotice] = useState(() => takeoverFor(takeover, session)?.lighter !== undefined && takeoverFor(takeover, session)?.switchedAt !== undefined);
   /**
    * Pendant une lecture allégée, la capacité du lien comparée au besoin du fichier d'origine (§78) :
    * rétablie, la mémoire des deux minutes s'efface. Le besoin d'origine vient de la négociation.
@@ -711,17 +711,21 @@ function ActivePlayer({
   const lighterClearedRef = useRef(false);
   /** La version allégée est-elle permise à ce compte (réponse de la négociation, §78) ? */
   const [lighterAllowed, setLighterAllowed] = useState(true);
-  /** Le réglage « Qualité » (§78) : en « Originale », jamais de bascule. */
+  /** Le réglage « Qualité » (§78) : en « Originale », jamais de bascule ; ni pour le banc d'essai. */
   const quality = usePlaybackQuality();
   const autoLighterRef = useRef(false);
   useEffect(() => {
-    autoLighterRef.current = quality === "auto" && lighterAllowed;
-  }, [quality, lighterAllowed]);
+    autoLighterRef.current = quality === "auto" && lighterAllowed && !bench;
+  }, [quality, lighterAllowed, bench]);
   /** Ce flux passe-t-il par hls.js — le seul qui mesure (§78) ? Safari et la lecture directe : non. */
   const [hlsJs, setHlsJs] = useState(false);
   /** Une coupure en cours — hls.js réessaie, ou le navigateur est hors ligne : jamais une lenteur (§78). */
   const unstableRef = useRef(false);
-  /** Les commandes : leur hauteur — les messages brefs se posent au-dessus. */
+  /**
+   * Les commandes : leur hauteur — les messages brefs se posent au-dessus. Suivie seulement pendant
+   * qu'un de ces messages est affiché : chaque apparition des commandes re-rendait sinon tout le
+   * lecteur pour rien.
+   */
   const [chromeEdges, setChromeEdges] = useState<ChromeEdges | null>(null);
   /**
    * Le palier hérité de la règle des deux minutes (`session.lighter`, §78), lu par `startPlayback` —
@@ -826,8 +830,6 @@ function ActivePlayer({
   const [recapSkip, setRecapSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
-  /** Le film est allé au bout (§78) : rien de la lenteur ne se dit sur l'écran de fin. */
-  const [filmEnded, setFilmEnded] = useState(false);
   // Le temps joué, porté par ses lignes `stop` et de fin de diffusion — voir `WatchedClock`.
   const [watched] = useState(() => new WatchedClock());
   useEffect(() => {
@@ -945,9 +947,10 @@ function ActivePlayer({
   /** Envoie le bilan et efface sa copie gardée sur l'appareil — une seule fois par séance. */
   const reportStop = useCallback(
     (why: ServerStopWhy) => {
-      // Une séance allégée qui s'arrête est retenue deux minutes (§78) — sauf si le lien a retrouvé de
-      // quoi porter la lecture classique pendant qu'elle jouait.
-      const step = lighterFor(logContext.current.itemId);
+      // Une séance réellement allégée qui s'arrête est retenue deux minutes (§78) — sauf si le lien a
+      // retrouvé de quoi porter la lecture classique pendant qu'elle jouait. Une séance ordinaire du
+      // lecteur serveur ne retient rien.
+      const step = negotiatedStepRef.current;
       if (step && !lighterClearedRef.current && !logContext.current.bench) rememberLighter(step);
       reportPlayback("stop", stopFields(why, true));
       if (logContext.current.session) clearUnsentStop(logContext.current.session);
@@ -1185,17 +1188,22 @@ function ActivePlayer({
       const hlsModule = nativeHls ? null : import("hls.js");
       hlsModule?.catch(() => {});
 
-      // La version allégée (§78) : le palier de ce titre, ou celui qu'hérite une lecture lancée moins de
-      // deux minutes après une séance allégée (`session.lighter`) — noté pour ce titre, la mesure
-      // continue et le palier suivant en part.
+      // La version allégée (§78) : le palier choisi pour ce titre par une bascule, ou celui qu'hérite une
+      // lecture lancée moins de deux minutes après une séance allégée (`session.lighter`) — retenu pour
+      // ce titre, la mesure continue et le palier suivant en part. Jamais en « Originale », jamais pour
+      // une diffusion (le téléviseur a son propre lien), jamais pour le banc d'essai.
+      const allowed = !castSession && !bench && readPlaybackQuality() === "auto";
       let lighterCarried = false;
-      if (!lighterFor(itemId) && sessionLighterRef.current) {
-        noteLighter(itemId, sessionLighterRef.current);
+      if (allowed && switchStepRef.current?.itemId !== itemId && sessionLighterRef.current) {
+        switchStepRef.current = { itemId, step: sessionLighterRef.current };
         lighterCarried = true;
         slowLogRef.current.note(`allégée ${(sessionLighterRef.current.targetBps / 1e6).toFixed(1)} Mb/s palier ${sessionLighterRef.current.tier} (moins de 2 min après une séance allégée)`);
       }
-      const cap = capForLighter(itemId, pickMaxBitrate());
-      setLighterStep(cap.step);
+      const step = allowed && switchStepRef.current?.itemId === itemId ? switchStepRef.current.step : null;
+      const maxBitrate = step ? Math.min(pickMaxBitrate(), step.targetBps) : pickMaxBitrate();
+      const cap = { maxBitrate, step };
+      negotiatedStepRef.current = step;
+      setLighterStep(step);
       // L'instant de la demande : la décision de l'ouverture et le résultat d'une version allégée en partent.
       const startedAt = performance.now();
       const startedAtWall = Date.now();
@@ -1412,11 +1420,7 @@ function ActivePlayer({
           // l'interruption depuis la bascule.
           if (cap.step) slowLogRef.current.note(`image en ${Math.round(performance.now() - startedAt)} ms (allégée palier ${cap.step.tier}${warmed ? ", préchauffée" : ""})`);
           // L'image est là : un préchauffage d'ouverture ne sert plus — arrêté chez Jellyfin.
-          if (prewarmHeldRef.current && prewarmHeldRef.current.cause !== "lecture") {
-            cancelPrewarm(prewarmHeldRef.current.prewarm);
-            prewarmHeldRef.current = null;
-            slowLogRef.current.note("préchauffage annulé (image)");
-          }
+          if (runner.held && runner.held.cause !== "lecture") runner.drop("image");
           if (switchedAtRef.current !== null) {
             switchGapRef.current = Date.now() - switchedAtRef.current;
             slowLogRef.current.note(`bascule : image ${switchGapRef.current} ms après`);
@@ -1451,7 +1455,6 @@ function ActivePlayer({
       linkMeterRef.current = linkMeter;
       streamNeedRef.current = needBps;
       setLinkFailure(null);
-      setSlowFailure(null);
       setHlsJs(!nativeHls && !data.isDirectPlay);
       measureStartRef.current = startedAtWall;
       const fireWatchdog = () => {
@@ -1484,14 +1487,13 @@ function ActivePlayer({
           giveUpMs: 20_000,
         });
         if (slow && action.kind === "switch") {
-          executeRef.current(action, "ouverture", resumeAt ?? 0, slow);
+          runner.execute(action, "ouverture", resumeAt ?? 0, slow);
           return;
         }
         if (slow) {
           slowLogRef.current.noteAt("écran trop lente", Date.now() - startedAtWall, slow.recvBps, slow.needBps);
           reportPlayback("error", serverFailureFields(logContext.current, SLOW_LINK_REASON, { ...slowLinkFields(slow), ...stages, quality: autoLighterRef.current ? "auto" : "original", ...slowLogRef.current.fields() }));
           setLinkFailure(frozenReading(slow));
-          setSlowFailure(slow);
           // « Lecture impossible : la connexion est trop lente. » — sans chiffres (§78).
           setError(t("player.slowLink.failed"));
         } else {
@@ -1522,14 +1524,13 @@ function ActivePlayer({
           }
           // Avant le chien de garde : le renoncement reste à lui, comme avant.
           const elapsed = Math.min(Date.now() - measureStartRef.current, 20_000 - 1);
-          const held = prewarmHeldRef.current;
           const { advice, action } = decideOpening({
             measure,
             needBps,
             elapsedMs: elapsed,
             unstable: unstableRef.current,
             auto: autoLighterRef.current,
-            prewarm: !held ? "none" : held.prewarm.state === "ready" ? "ready" : held.prewarm.state === "failed" ? "failed" : "running",
+            prewarm: runner.status("ouverture"),
             currentStep: cap.step,
             giveUpMs: 20_000,
           });
@@ -1538,7 +1539,7 @@ function ActivePlayer({
             shown = { hint: advice.hint, recvBps: advice.recvBps, needBps: advice.needBps };
             setLinkSignal(shown);
           }
-          executeRef.current(action, "ouverture", resumeAt ?? 0, advice);
+          runner.execute(action, "ouverture", resumeAt ?? 0, advice);
         }, 1000);
       }
 
@@ -1853,13 +1854,13 @@ function ActivePlayer({
     // moindre nouvel échec directement dessus, sans un seul des essais de repli.
     nativeErrorRetryCount.current = 0;
     if (!slowLogRef.current.empty) slowLogRef.current.choose("réessayer", Date.now() - sessionStartedAtRef.current);
-    setSeekSignal(null);
+    runner.seekDone();
     startPlayback({
       ...lastPlaybackOpts.current,
       resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
       cause: { why: "retry" },
     });
-  }, [startPlayback]);
+  }, [startPlayback, runner]);
 
   /** Les messages brefs de la version allégée (§78) : quelques secondes, puis retirés seuls. */
   useEffect(() => {
@@ -2218,20 +2219,13 @@ function ActivePlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const onPlay = () => {
-      setPlaying(true);
-      setFilmEnded(false);
-    };
+    const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
-    // Le film fini (§78).
-    const onEnded = () => setFilmEnded(true);
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
-    video.addEventListener("ended", onEnded);
     return () => {
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
-      video.removeEventListener("ended", onEnded);
     };
   }, [videoKey]);
 
@@ -2321,7 +2315,8 @@ function ActivePlayer({
       sessionPlayedRef.current = true;
       tallyRef.current.waitEnded(now);
       endWait(now);
-      seekWaitRef.current = null;
+      // L'image est là : un saut qui l'attendait n'attend plus (§78).
+      runner.seekDone();
       if (seekSince !== null) {
         tallyRef.current.seekArrived(now - seekSince);
         seekSince = null;
@@ -2346,14 +2341,16 @@ function ActivePlayer({
       longTimer = null;
       waitStart = null;
       seekSince ??= Date.now();
-      // Un saut attend son image : au-delà de 10 s, traité comme une ouverture (§78).
-      seekWaitRef.current ??= Date.now();
+      // Un saut attend son image : au-delà de 10 s, traité comme une ouverture (§78). Compté depuis le
+      // premier d'une série de sauts.
+      if (runner.seekPending === null) runner.seekStarted();
     };
     const onSeeked = () => {
+      // Posé en pause, ou de quoi repartir aussitôt : ce saut n'attend plus son image (§78).
+      if (video.paused || video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) runner.seekDone();
       if (seekSince === null || !video.paused) return;
       tallyRef.current.seekArrived(Date.now() - seekSince);
       seekSince = null;
-      seekWaitRef.current = null;
     };
     const onPause = () => {
       tallyRef.current.waitEnded(Date.now());
@@ -2372,7 +2369,7 @@ function ActivePlayer({
       video.removeEventListener("seeked", onSeeked);
       video.removeEventListener("pause", onPause);
     };
-  }, [videoKey]);
+  }, [videoKey, runner]);
 
   /** La coupure en cours, lue par les rappels figés (§78). */
   useEffect(() => {
@@ -2380,65 +2377,53 @@ function ActivePlayer({
   }, [reconnecting, isOffline]);
 
   /**
-   * Exécute ce que la décision dit (§78, `decideOpening` / `decidePlayback`) : préchauffer le palier
-   * suivant, basculer — une renégociation (`startPlayback`, `why: "lighter"`) qui reprend le
-   * préchauffage tel quel —, ou montrer l'écran final. Gardé : une erreur ici n'interrompt rien.
+   * Ce que l'exécution commune des décisions (§78, `SlowLinkRunner`) lit de ce lecteur. Seule la bascule
+   * lui est propre : une renégociation (`startPlayback`, `why: "lighter"`) qui reprend le préchauffage
+   * tel quel.
    */
   useEffect(() => {
-    executeRef.current = (action, cause, at, reading) => {
-      try {
-        if (action.kind === "prewarm") {
-          if (prewarmHeldRef.current) return;
-          const prewarm = startPrewarm({ itemId, step: action.step, startSeconds: at, audioStreamIndex: lastPlaybackOpts.current?.audioStreamIndex });
-          prewarmHeldRef.current = { prewarm, cause };
-          slowLogRef.current.note(`préchauffage (${cause}) à ${Math.round(at)} s : ${mbps(action.step.targetBps)} Mb/s palier ${action.step.tier} (${mbps(reading.recvBps)}/${mbps(reading.needBps)})`);
-          void prewarm.ready.then((ok) => {
-            if (prewarm.state === "cancelled") return;
-            slowLogRef.current.note(ok ? `préchauffage prêt en ${Math.round((prewarm.readyAt ?? 0) - prewarm.startedAt)} ms` : "préchauffage en échec");
-            if (cause === "lecture") playbackDecisionRef.current();
-          });
-          return;
-        }
-        if (action.kind === "switch") {
-          const held = prewarmHeldRef.current;
-          prewarmHeldRef.current = null;
-          const resumeAt = held && cause !== "lecture" ? held.prewarm.startSeconds : at;
-          noteLighter(itemId, action.step);
-          slowLogRef.current.note(`bascule (${cause}) à ${Math.round(resumeAt)} s, ${mbps(action.step.targetBps)} Mb/s palier ${action.step.tier}${held ? "" : ", sans préchauffage"}`);
-          switchedAtRef.current = Date.now();
-          setSwitchNotice(true);
-          setSeekSignal(null);
-          seekWaitRef.current = null;
-          startPlayback({
-            ...lastPlaybackOpts.current,
-            resumeAt,
-            cause: { why: "lighter", trigger: `${cause}, palier ${action.step.tier}, ${mbps(action.step.targetBps)} Mb/s (${mbps(reading.recvBps)} reçus)` },
-          });
-          return;
-        }
-        if (action.kind === "screen") {
-          if (prewarmHeldRef.current) cancelPrewarm(prewarmHeldRef.current.prewarm);
-          prewarmHeldRef.current = null;
-          const slow = action.slow;
-          slowLogRef.current.note(`écran trop lente (${cause}) à ${Math.round(at)} s (${mbps(slow.recvBps)}/${mbps(slow.needBps)})`);
-          reportPlayback(
-            "error",
-            serverFailureFields(logContext.current, SLOW_LINK_REASON, {
-              ...slowLinkFields(slow),
-              ...(cause === "saut" ? { afterSeek: true } : {}),
-              quality: autoLighterRef.current ? "auto" : "original",
-              ...slowLogRef.current.fields(),
-            })
-          );
-          setLinkFailure(frozenReading(slow));
-          setSlowFailure(slow);
-          setError(t("player.slowLink.failed"));
-        }
-      } catch {
-        /* la décision n'est pas la lecture */
-      }
-    };
-  }, [itemId, startPlayback, t]);
+    runner.attach({
+      itemId,
+      log: () => slowLogRef.current,
+      audioStreamIndex: () => lastPlaybackOpts.current?.audioStreamIndex,
+      over: () => false,
+      switchTo: (step, resumeAt, cause, _held, reading) => {
+        switchStepRef.current = { itemId, step };
+        switchedAtRef.current = Date.now();
+        setSwitchNotice(true);
+        startPlayback({
+          ...lastPlaybackOpts.current,
+          resumeAt,
+          cause: { why: "lighter", trigger: `${cause}, palier ${step.tier}, ${mbps(step.targetBps)} Mb/s (${mbps(reading.recvBps)} reçus)` },
+        });
+      },
+      screen: (slow, cause) => {
+        reportPlayback(
+          "error",
+          serverFailureFields(logContext.current, SLOW_LINK_REASON, {
+            ...slowLinkFields(slow),
+            ...(cause === "saut" ? { afterSeek: true } : {}),
+            quality: autoLighterRef.current ? "auto" : "original",
+            ...slowLogRef.current.fields(),
+          })
+        );
+        setLinkFailure(frozenReading(slow));
+        setError(t("player.slowLink.failed"));
+      },
+      // Le chien de garde des 20 s renonce lui-même (`fireWatchdog`).
+      giveUp: () => {},
+      playbackDecision: () => playbackDecisionRef.current(),
+      seekBlocked: () => hlsRef.current === null || !!errorRef.current || document.visibilityState === "hidden",
+      paused: () => videoRef.current?.paused === true,
+      seekMeasure: (elapsedMs) => linkMeterRef.current?.recentMeasure(elapsedMs) ?? null,
+      needBps: () => streamNeedRef.current,
+      unstable: () => unstableRef.current,
+      auto: () => autoLighterRef.current,
+      currentStep: () => negotiatedStepRef.current,
+      position: () => lastKnownTime.current,
+      seekSignal: setSeekSignal,
+    } satisfies SlowLinkHost);
+  }, [runner, itemId, startPlayback, t]);
 
   /**
    * Les saccades en pleine lecture (§78) : un problème visible (`StutterWatch`). `decidePlayback` :
@@ -2447,25 +2432,25 @@ function ActivePlayer({
   useEffect(() => {
     playbackDecisionRef.current = (triggered = false) => {
       const reading = { recvBps: measuredBps(linkMeterRef.current?.recentMeasure(PLAYBACK_MEASURE_WINDOW_MS)), needBps: streamNeedRef.current };
-      const held = prewarmHeldRef.current;
       const action = decidePlayback({
         triggered,
         auto: autoLighterRef.current,
-        prewarm: !held || held.cause !== "lecture" ? (held ? "running" : "none") : held.prewarm.state === "ready" ? "ready" : held.prewarm.state === "failed" ? "failed" : "running",
-        currentStep: lighterFor(itemId),
+        prewarm: runner.status("lecture"),
+        currentStep: negotiatedStepRef.current,
         ...reading,
       });
       if (triggered && action.kind === "prewarm") slowLogRef.current.note(`saccades à ${Math.round(lastKnownTime.current)} s (${mbps(reading.recvBps)}/${mbps(reading.needBps)})`);
-      executeRef.current(action, "lecture", lastKnownTime.current, reading);
+      runner.execute(action, "lecture", lastKnownTime.current, reading);
     };
     offerStutterRef.current = () => playbackDecisionRef.current(true);
-  }, [itemId]);
-  // Démonté : un préchauffage qui n'a pas servi est arrêté chez Jellyfin.
+  }, [runner]);
+  // Démonté : un préchauffage qui n'a pas servi est arrêté chez Jellyfin, et le saut n'est plus suivi.
   useEffect(
     () => () => {
-      if (prewarmHeldRef.current) cancelPrewarm(prewarmHeldRef.current.prewarm);
+      runner.drop("lecteur fermé");
+      runner.dispose();
     },
-    []
+    [runner]
   );
   useEffect(() => {
     const onVisibility = () => {
@@ -2483,50 +2468,6 @@ function ActivePlayer({
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
-
-  /**
-   * Un saut traité comme une ouverture (§78, hls.js) : 10 s sans image après le saut, `decideOpening`
-   * sur la mesure prise depuis le saut — indice, préchauffage, bascule ; à 35 s, la bascule ou l'écran
-   * si la lenteur est prouvée (sans preuve, rien : le saut garde son cycle).
-   */
-  useEffect(() => {
-    let shown: (LinkSignal & { at: number }) | null = null;
-    const id = setInterval(() => {
-      const at = seekWaitRef.current;
-      const now = Date.now();
-      if (at === null || now - at < SEEK_AS_OPENING_MS || hlsRef.current === null || errorRef.current || document.visibilityState === "hidden") {
-        if (shown) {
-          shown = null;
-          setSeekSignal(null);
-        }
-        if (at === null && prewarmHeldRef.current?.cause === "saut") {
-          cancelPrewarm(prewarmHeldRef.current.prewarm);
-          prewarmHeldRef.current = null;
-        }
-        return;
-      }
-      const elapsed = now - at;
-      const measure = linkMeterRef.current?.recentMeasure(elapsed) ?? null;
-      if (elapsed >= SEEK_GIVE_UP_MS && !slowLinkVerdict(measure, streamNeedRef.current)) return;
-      if (elapsed >= SEEK_GIVE_UP_MS) seekWaitRef.current = null;
-      const held = prewarmHeldRef.current;
-      const { advice, action } = decideOpening({
-        measure,
-        needBps: streamNeedRef.current,
-        elapsedMs: elapsed,
-        unstable: unstableRef.current,
-        auto: autoLighterRef.current,
-        prewarm: !held ? "none" : held.cause !== "saut" ? "running" : held.prewarm.state === "ready" ? "ready" : held.prewarm.state === "failed" ? "failed" : "running",
-        currentStep: lighterFor(itemId),
-        giveUpMs: SEEK_GIVE_UP_MS,
-      });
-      executeRef.current(action, "saut", lastKnownTime.current, action.kind === "screen" ? action.slow : advice);
-      if (shown && shown.at === at && shown.hint === advice.hint) return;
-      shown = { at, hint: advice.hint, recvBps: advice.recvBps, needBps: advice.needBps };
-      setSeekSignal(shown);
-    }, 1000);
-    return () => clearInterval(id);
-  }, [itemId]);
 
   /**
    * Pendant une version allégée, le lien retrouve-t-il de quoi porter la lecture classique (§78,
@@ -3042,7 +2983,7 @@ function ActivePlayer({
           hidden={!!error || needsReauth}
           loading={loading}
           openingQuiet={introCovering}
-          onChromeEdges={setChromeEdges}
+          onChromeEdges={switchNotice || subtitleGenNotice ? setChromeEdges : undefined}
           introSkip={introSkip}
           recapSkip={recapSkip}
           creditsStart={creditsStart}

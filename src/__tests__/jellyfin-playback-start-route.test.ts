@@ -301,6 +301,23 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(profile).toContain('"Value":"SDR"');
   });
 
+  it("un préchauffage transcodé retient sa séance pour ce compte et l'appareil de son adresse : seule celle-là s'arrêtera (§78)", async () => {
+    const { forgetPrewarmSessions, takePrewarmSession } = await import("@/lib/prewarmSessions");
+    forgetPrewarmSessions();
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "ps-pre",
+      MediaSources: [{ Id: "src-1", TranscodingUrl: "/videos/x/master.m3u8?DeviceId=dev-9&PlaySessionId=ps-pre&VideoCodec=hevc", MediaStreams: [{ Type: "Video", Index: 0, Codec: "hevc" }] }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    expect((await POST(fakeReq({ itemId: validId, prewarm: true, lighter: true, maxBitrate: 1_500_000, nativeHls: false }))).status).toBe(200);
+    expect(takePrewarmSession("jf-2", "ps-pre", "dev-9")).toBe(false);
+    expect(takePrewarmSession("jf-1", "ps-pre", "dev-9")).toBe(true);
+    // Une lecture ordinaire ne retient rien.
+    expect((await POST(fakeReq({ itemId: validId, nativeHls: false }))).status).toBe(200);
+    expect(takePrewarmSession("jf-1", "ps-pre", "dev-9")).toBe(false);
+  });
+
   it("labels playMethod Transcode when the source's own video codec isn't in the accepted VideoCodec list — a real re-encode, regardless of the reason text", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
     mockJellyfin.getPlaybackInfo.mockResolvedValue({

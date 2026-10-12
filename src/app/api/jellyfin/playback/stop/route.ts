@@ -9,6 +9,7 @@ import { reportPlayback } from "@/lib/playbackReport";
 import { castProgressRelay } from "@/lib/castProgress";
 import { playbackDevice } from "@/lib/playbackDevice";
 import { recoverLostPosition } from "@/lib/lostStopPosition";
+import { takePrewarmSession } from "@/lib/prewarmSessions";
 
 export async function POST(req: NextRequest) {
   if (!config.player.enabled) {
@@ -53,13 +54,18 @@ export async function POST(req: NextRequest) {
    * Un préchauffage abandonné (§78, `lighterPrewarm.ts`) : le lecteur natif a trouvé son image. Rien
    * n'a été annoncé à Jellyfin, aucune position n'est à écrire : seul le transcodage est arrêté
    * (`DELETE /Videos/ActiveEncodings`, à la clé d'administration — la séance du préchauffage est celle de
-   * l'appareil que Jellyfin a écrit dans son adresse).
+   * l'appareil que Jellyfin a écrit dans son adresse). Seulement une séance que la route de démarrage a
+   * ouverte en préchauffage pour **ce** compte, sous cet appareil (`prewarmSessions.ts`) : la clé
+   * d'administration arrêterait sinon le transcodage de n'importe qui.
    */
   if (body?.prewarm === true) {
     const deviceId = typeof body?.deviceId === "string" ? body.deviceId : "";
     const safe = (v: string) => /^[A-Za-z0-9._-]{1,128}$/.test(v);
     if (!isJellyfinId(itemId) || !playSessionId || !safe(playSessionId) || !safe(deviceId)) {
       return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+    }
+    if (!takePrewarmSession(session.jfId, playSessionId, deviceId)) {
+      return NextResponse.json({ error: "Préchauffage inconnu" }, { status: 404 });
     }
     const ok = await jellyfin.stopTranscode(deviceId, playSessionId).then(
       () => true,

@@ -1083,3 +1083,25 @@ describe("une seule décision d'ouvrir les Nouveautés", () => {
     }
   });
 });
+
+describe("une seule exécution de la connexion lente (§79)", () => {
+  // DECISIONS.md §79. Les deux lecteurs exécutent les décisions de `slowLinkPolicy.ts` par
+  // `SlowLinkRunner` : préchauffer, laisser tomber, l'écran final, le saut traité comme une ouverture.
+  // Seule la bascule leur est propre. Écrite deux fois, la règle du saut avait déjà divergé.
+  const HOSTS = ["src/components/ExperimentalPlayerHost.tsx", "src/components/PlayerHost.tsx"];
+
+  it.each(HOSTS)("%s passe par SlowLinkRunner et ne refait ni le préchauffage ni le saut", (f) => {
+    const src = lire(f);
+    expect(src).toMatch(/new SlowLinkRunner\(/);
+    expect(src).not.toMatch(/\bstartPrewarm\(/);
+    expect(src).not.toMatch(/prewarm\.state === "ready"/);
+    expect(src).not.toMatch(/SEEK_AS_OPENING_MS|SEEK_GIVE_UP_MS/);
+  });
+
+  it("une seule mémoire de la version allégée : la règle des deux minutes (`playbackQuality.ts`)", () => {
+    for (const f of [...HOSTS, "src/lib/slowLinkPolicy.ts", "src/components/PlaybackProvider.tsx"]) {
+      expect(lire(f), f).not.toMatch(/\b(noteLighter|lighterFor|capForLighter)\b/);
+    }
+    expect(lire("src/lib/playbackQuality.ts")).toMatch(/export function carriedLighter\(/);
+  });
+});

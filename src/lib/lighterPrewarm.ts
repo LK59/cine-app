@@ -18,7 +18,7 @@
 import { detectCodecSupport } from "@/lib/codecSupport";
 import { playsHlsNatively } from "@/lib/webkitEngine";
 import { touchHintHeaders } from "@/lib/deviceLabel";
-import type { LighterStep } from "@/lib/slowLinkPolicy";
+import type { LighterStep, PrewarmStatus, SwitchCause } from "@/lib/slowLinkPolicy";
 
 export type PrewarmState = "running" | "ready" | "failed" | "cancelled" | "used";
 
@@ -43,6 +43,12 @@ export interface Prewarm {
   variant: { codecs: string | null; resolution: string | null } | null;
   /** Résolue quand le premier segment est là (vrai) ou que le préchauffage a échoué (faux). */
   ready: Promise<boolean>;
+  /**
+   * Interrompt les listes et le segment en cours (`cancelPrewarm`) : sur un lien lent, le segment d'un
+   * préchauffage abandonné prenait encore le peu de débit que la lecture native venait de retrouver.
+   * Pas la négociation : sa réponse porte la séance à refermer chez Jellyfin, et elle est petite.
+   */
+  abort: AbortController;
 }
 
 let current: Prewarm | null = null;
@@ -103,7 +109,9 @@ export function startPrewarm(options: { itemId: string; step: LighterStep; start
     segment: null,
     variant: null,
     ready: new Promise<boolean>((resolve) => (settle = resolve)),
+    abort: new AbortController(),
   };
+  const signal = prewarm.abort.signal;
   current = prewarm;
   void (async () => {
     try {
@@ -141,22 +149,24 @@ export function startPrewarm(options: { itemId: string; step: LighterStep; start
       const masterUrl = String(data.castUrl ?? data.manifestUrl ?? "");
       const base = typeof location !== "undefined" ? location.href : "http://localhost/";
       const masterAbs = new URL(masterUrl, base).href;
-      const master = await (await fetch(masterAbs)).text();
+      const master = await (await fetch(masterAbs, { signal })).text();
       const variant = firstVariant(master, masterAbs);
       if (!variant) throw new Error("liste maître sans variante");
       prewarm.variant = { codecs: variant.codecs, resolution: variant.resolution };
-      const list = await (await fetch(variant.url)).text();
+      const list = await (await fetch(variant.url, { signal })).text();
       const segment = segmentAt(list, variant.url, options.startSeconds);
       if (!segment) throw new Error("variante sans segment");
       prewarm.segment = { index: segment.index, startsAt: segment.startsAt };
       // Le segment lui-même, en entier : c'est sa demande qui fait partir ffmpeg chez Jellyfin.
-      const seg = await fetch(segment.url);
+      const seg = await fetch(segment.url, { signal });
       await seg.arrayBuffer();
       if (prewarm.state !== "running") return settle(false);
       prewarm.state = "ready";
       prewarm.readyAt = now();
       settle(true);
     } catch {
+      // Annulé : `cancelPrewarm` a déjà refermé la séance — une seule fois.
+      if (prewarm.state === "cancelled") return settle(false);
       if (prewarm.state === "running") prewarm.state = "failed";
       if (prewarm.data) void stopAtJellyfin(prewarm);
       settle(false);
@@ -174,17 +184,24 @@ export function takePrewarm(itemId: string): Prewarm | null {
   return prewarm;
 }
 
-/** Le préchauffage en cours, s'il y en a un (pour le journal et les tests). */
-export function currentPrewarm(): Prewarm | null {
-  return current;
-}
-
 /** Abandonner : le natif a trouvé son image, ou le lecteur se ferme. Le transcodage est arrêté. */
 export function cancelPrewarm(prewarm: Prewarm | null = current): void {
   if (!prewarm || prewarm.state === "used" || prewarm.state === "cancelled") return;
   prewarm.state = "cancelled";
   if (current === prewarm) current = null;
+  prewarm.abort.abort();
   if (prewarm.data) void stopAtJellyfin(prewarm);
+}
+
+/**
+ * Ce que la décision (`decideOpening` / `decidePlayback`) doit savoir du préchauffage tenu par l'hôte
+ * pour une cause : aucun, en cours, prêt ou en échec. Un préchauffage tenu pour une autre cause compte
+ * « en cours » : il occupe la place (un seul à la fois).
+ */
+export function prewarmStatusOf(held: { prewarm: Prewarm; cause: SwitchCause } | null | undefined, cause: SwitchCause): PrewarmStatus {
+  if (!held) return "none";
+  if (held.cause !== cause) return "running";
+  return held.prewarm.state === "ready" ? "ready" : held.prewarm.state === "failed" ? "failed" : "running";
 }
 
 /** Les paramètres de la séance Jellyfin, lus dans l'adresse qu'elle a donnée. */

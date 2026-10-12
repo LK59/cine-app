@@ -12,9 +12,8 @@ import {
   subscribeLinkSimulator,
 } from "@/lib/linkSimulator";
 import { setSlowLinkMonitor, slowLinkEvents, subscribeSlowLinkMonitor } from "@/lib/slowLinkMonitor";
-import { usePlaybackQuality, writePlaybackQuality } from "@/lib/playbackQuality";
+import { carriedLighter, usePlaybackQuality, writePlaybackQuality } from "@/lib/playbackQuality";
 import { diagNeedBps } from "@/lib/webcodecs/playbackDiagnosis";
-import { lighterFor } from "@/lib/slowLinkPolicy";
 
 /**
  * Lot S — la connexion simulée (DECISIONS.md §78). Un film de la bibliothèque, lu dans le VRAI lecteur,
@@ -57,7 +56,8 @@ export function LinkSimLot({ movies }: { movies: CinemaMovie[] }) {
 
   const mbps = sim.bps / 1e6;
   const need = diagNeedBps();
-  const step = film ? lighterFor(film.jellyfinItemId) : null;
+  // La seule mémoire de la version allégée : la règle des deux minutes (§78).
+  const step = carriedLighter();
   const last = useMemo(() => [...events].reverse().slice(0, 40), [events]);
   const playing = playback.session?.itemId ?? null;
 
@@ -118,7 +118,7 @@ export function LinkSimLot({ movies }: { movies: CinemaMovie[] }) {
           <tr><th className="pr-3 font-medium text-white/60">Débit livré (5 s)</th><td>{deliveredMbps(5000)} Mbit/s</td></tr>
           <tr><th className="pr-3 font-medium text-white/60">Besoin (lecteur natif)</th><td>{need ? `${(need / 1e6).toFixed(1)} Mbit/s` : "—"}</td></tr>
           <tr><th className="pr-3 font-medium text-white/60">Lecture</th><td>{playing ? (playing === film?.jellyfinItemId ? "ce film" : "un autre titre") : "aucune"}</td></tr>
-          <tr><th className="pr-3 font-medium text-white/60">Palier allégé (ce film)</th><td>{step ? `palier ${step.tier} · ${(step.targetBps / 1e6).toFixed(1)} Mbit/s` : "—"}</td></tr>
+          <tr><th className="pr-3 font-medium text-white/60">Palier allégé retenu (2 min)</th><td>{step ? `palier ${step.tier} · ${(step.targetBps / 1e6).toFixed(1)} Mbit/s` : "—"}</td></tr>
           <tr><th className="pr-3 font-medium text-white/60">Qualité</th><td>{quality === "auto" ? "Automatique" : "Originale"}</td></tr>
         </tbody>
       </table>

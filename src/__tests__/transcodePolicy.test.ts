@@ -27,4 +27,28 @@ describe("le droit de transcoder la vidéo", () => {
     expect(await videoTranscodingAllowed("cccccccccccccccccccccccccccccccc", 10 * 60_000)).toBe(false);
     expect(await videoTranscodingAllowed("dddddddddddddddddddddddddddddddd")).toBe(true);
   });
+
+  it("un Jellyfin qui traîne ne retarde pas l'ouverture : 300 ms au plus, puis la dernière réponse connue (sinon oui) ; une seule lecture pour des appels simultanés", async () => {
+    vi.useFakeTimers();
+    try {
+      let answer: (value: unknown) => void = () => {};
+      const slow = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+      vi.stubGlobal("fetch", slow);
+      const id = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+      let settled: boolean[] = [];
+      void Promise.all([videoTranscodingAllowed(id), videoTranscodingAllowed(id)]).then((v) => (settled = v));
+      await vi.advanceTimersByTimeAsync(299);
+      expect(settled).toEqual([]);
+      await vi.advanceTimersByTimeAsync(2);
+      expect(settled).toEqual([true, true]);
+      expect(slow).toHaveBeenCalledTimes(1);
+      // La réponse finit par arriver : elle remplit le cache pour la suivante.
+      answer({ ok: true, json: async () => ({ Policy: { EnableVideoPlaybackTranscoding: false } }) });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await videoTranscodingAllowed(id)).toBe(false);
+      expect(slow).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -34,7 +34,8 @@ const prewarms: { options: { itemId: string; step: { targetBps: number; tier: nu
 const cancelPrewarmSpy = vi.fn((p?: FakePrewarm | null) => {
   if (p) p.state = "cancelled";
 });
-vi.mock("@/lib/lighterPrewarm", () => ({
+vi.mock("@/lib/lighterPrewarm", async (original) => ({
+  prewarmStatusOf: (await original<typeof import("@/lib/lighterPrewarm")>()).prewarmStatusOf,
   startPrewarm: (options: { itemId: string; step: { targetBps: number; tier: number }; startSeconds: number }) => {
     let resolve: (ok: boolean) => void = () => {};
     const prewarm: FakePrewarm = { ...options, state: "running", startedAt: 0, readyAt: null, ready: new Promise<boolean>((r) => (resolve = r)) };
@@ -292,13 +293,13 @@ import { noteWatching } from "@/lib/resumeRewind";
 import { resetIntroClocks } from "@/lib/playbackIntro";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { meterOpeningRequest } from "@/lib/slowLink";
-import { capForLighter, forgetLighterCarry, forgetLighters } from "@/lib/slowLinkPolicy";
+import { forgetLighterCarry } from "@/lib/playbackQuality";
 import { noteFetchRetrying, noteFetchSettled, resetNetworkTrouble } from "@/lib/networkTrouble";
 import { writePlaybackQuality } from "@/lib/playbackQuality";
 
 const onFallback = vi.fn();
 
-function player(over: Partial<{ resumeAt: number; itemId: string; mode: "full" | "mini"; startPaused: boolean }> = {}) {
+function player(over: Partial<{ resumeAt: number; itemId: string; mode: "full" | "mini"; startPaused: boolean; bench: boolean }> = {}) {
   return (
     <ExperimentalPlayerHost
       session={
@@ -307,6 +308,7 @@ function player(over: Partial<{ resumeAt: number; itemId: string; mode: "full" |
           title: "Un film",
           resumeAt: over.resumeAt ?? null,
           ...(over.startPaused ? { startPaused: true } : {}),
+          ...(over.bench ? { bench: true } : {}),
         } as never
       }
       mode={over.mode ?? "full"}
@@ -338,7 +340,7 @@ async function untilSettled(check: () => void, turns = 200): Promise<void> {
   check();
 }
 
-function mount(over: Partial<{ resumeAt: number; itemId: string; mode: "full" | "mini"; startPaused: boolean }> = {}) {
+function mount(over: Partial<{ resumeAt: number; itemId: string; mode: "full" | "mini"; startPaused: boolean; bench: boolean }> = {}) {
   return render(player(over));
 }
 
@@ -2844,7 +2846,6 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
   }
 
   beforeEach(() => {
-    forgetLighters();
     forgetLighterCarry();
     resetNetworkTrouble();
     prewarms.length = 0;
@@ -2872,7 +2873,7 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
     const line = logged("fallback")[0].fields;
     expect(line.reason).toBe("aucune image après 35 s");
     expect(line.slowLink).toBeUndefined();
-    expect(capForLighter("item-1", 100_000_000).step).toBeNull();
+    expect(onFallback.mock.calls[0][1]).toBeUndefined();
   });
 
   it("très lente (≈0,3 Mbit/s) : l'indice dès 5 s, le préchauffage à 8 s, la bascule dès qu'il est prêt (≥ 10 s), par la reconstruction habituelle", async () => {
@@ -2891,8 +2892,7 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
     expect(onFallback).toHaveBeenCalledTimes(1);
     const [reason, takeover] = onFallback.mock.calls[0];
     expect(reason).toBe("connexion trop lente (version allégée demandée)");
-    expect(takeover).toMatchObject({ lighter: true, resumeAt: 0, subtitleStreamIndex: null });
-    expect(capForLighter("item-1", 100_000_000).maxBitrate).toBe(1_500_000);
+    expect(takeover).toMatchObject({ lighter: { targetBps: 1_500_000, tier: 1 }, resumeAt: 0, subtitleStreamIndex: null });
     const line = logged("fallback")[0].fields;
     expect(line).toMatchObject({ lighterMbps: 1.5, lighterTier: 1, quality: "auto", needMbps: 3.9 });
     expect(line.slowLink).toContain("préchauffage (ouverture)");
@@ -2909,7 +2909,7 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
     await more(170_000, 9);
     expect(onFallback).not.toHaveBeenCalled();
     await more(170_000, 3);
-    expect(onFallback).toHaveBeenCalledWith("connexion trop lente (version allégée demandée)", expect.objectContaining({ lighter: true }));
+    expect(onFallback).toHaveBeenCalledWith("connexion trop lente (version allégée demandée)", expect.objectContaining({ lighter: { targetBps: 1_500_000, tier: 1 } }));
   });
 
   it("la première image arrive : le préchauffage est annulé (transcodage arrêté), le film part en natif", async () => {
@@ -3032,6 +3032,8 @@ describe("pendant la lecture : les saccades (§78)", () => {
     mount();
     await untilSettled(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
     const element = videoElement(600);
+    // Un film qui joue : jsdom laisse l'élément « en pause » à jamais.
+    Object.defineProperty(element, "paused", { value: false, configurable: true });
     await act(async () => void fireEvent(element, new Event("playing")));
     return element;
   }
@@ -3041,7 +3043,6 @@ describe("pendant la lecture : les saccades (§78)", () => {
   }
 
   beforeEach(() => {
-    forgetLighters();
     resetNetworkTrouble();
     prewarms.length = 0;
     cancelPrewarmSpy.mockClear();
@@ -3063,7 +3064,7 @@ describe("pendant la lecture : les saccades (§78)", () => {
     await act(async () => prewarms[0].settle(true));
     const [reason, takeover] = onFallback.mock.calls[0];
     expect(reason).toBe("connexion trop lente (saccades, version allégée demandée)");
-    expect(takeover).toMatchObject({ lighter: true, subtitleStreamIndex: null });
+    expect(takeover).toMatchObject({ lighter: expect.objectContaining({ tier: 1 }), subtitleStreamIndex: null });
     expect(Math.abs((takeover as { resumeAt: number }).resumeAt - 600)).toBeLessThanOrEqual(5);
   });
 
@@ -3119,7 +3120,7 @@ describe("pendant la lecture : les saccades (§78)", () => {
     expect(prewarms[0].options.step).toEqual({ targetBps: 1_500_000, tier: 1 });
     act(() => prewarms[0].settle(true));
     await act(async () => void vi.advanceTimersByTime(1_100));
-    expect(onFallback).toHaveBeenCalledWith("connexion trop lente (version allégée demandée)", expect.objectContaining({ lighter: true }));
+    expect(onFallback).toHaveBeenCalledWith("connexion trop lente (version allégée demandée)", expect.objectContaining({ lighter: { targetBps: 1_500_000, tier: 1 } }));
   });
 
   it("l'image revient après le saut : le préchauffage est annulé", async () => {
@@ -3131,6 +3132,51 @@ describe("pendant la lecture : les saccades (§78)", () => {
     await act(async () => void fireEvent(element, new Event("playing")));
     await act(async () => void vi.advanceTimersByTime(1_100));
     expect(cancelPrewarmSpy).toHaveBeenCalled();
+    expect(onFallback).not.toHaveBeenCalled();
+  });
+
+  it("un saut fait en pause n'est jamais traité comme une ouverture — ni préchauffage, ni bascule, ni indice", async () => {
+    const element = await playing();
+    diagMock.link = { bytes: 40_000 * 12, receivingMs: 12_000 };
+    Object.defineProperty(element, "paused", { value: true, configurable: true });
+    await act(async () => void fireEvent(element, new Event("pause")));
+    await act(async () => void fireEvent(element, new Event("seeking")));
+    await act(async () => void fireEvent(element, new Event("seeked")));
+    await act(async () => void vi.advanceTimersByTime(40_000));
+    expect(prewarms).toHaveLength(0);
+    expect(onFallback).not.toHaveBeenCalled();
+    const errors = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([url, init]) => url === "/api/player/log" && JSON.parse((init as RequestInit).body as string).kind === "error"
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it("un blocage en cours quand le lecteur se ferme : son minuteur de 5 s meurt avec lui — rien n'est préchauffé après coup", async () => {
+    const element = await playing();
+    diagMock.currentWait = { verdict: "réseau", ms: 5000 };
+    diagMock.link = slowLinkNow;
+    await act(async () => void fireEvent(element, new Event("waiting")));
+    await act(async () => void vi.advanceTimersByTime(2_000));
+    cleanup();
+    await act(async () => void vi.advanceTimersByTime(6_000));
+    expect(prewarms).toHaveLength(0);
+  });
+
+  it("banc d'essai : ni préchauffage ni bascule — il mesure ce lecteur-ci", async () => {
+    vi.useFakeTimers();
+    serverFallback = true;
+    swr = { data: info({ sizeBytes: 1_170_000_000, runtimeSeconds: 2400 }), error: undefined };
+    mount({ bench: true });
+    await untilSettled(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(600);
+    await act(async () => void fireEvent(element, new Event("playing")));
+    diagMock.currentWait = { verdict: "réseau", ms: 5000 };
+    diagMock.link = slowLinkNow;
+    await stall(element, 6000);
+    diagMock.link = { bytes: 40_000 * 12, receivingMs: 12_000 };
+    await act(async () => void fireEvent(element, new Event("seeking")));
+    await act(async () => void vi.advanceTimersByTime(20_000));
+    expect(prewarms).toHaveLength(0);
     expect(onFallback).not.toHaveBeenCalled();
   });
 });

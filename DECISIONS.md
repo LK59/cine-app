@@ -3527,9 +3527,9 @@ tout : en cas de doute, le comportement de 8.47.0.
 **La machine** (`src/lib/slowLinkPolicy.ts`, pure, une seule copie pour les deux lecteurs) :
 mesure → indice → préchauffage → bascule → écran final. `decideOpening` (ouverture, et saut resté sans
 image 10 s) et `decidePlayback` (saccades) rendent une action — `none`, `prewarm`, `switch`, `screen`,
-`giveUp` — que les hôtes exécutent sans rien décider : `ExperimentalPlayerHost` (`execute` :
-`startPrewarm`, `fallToStable` avec un relais `lighter`, l'écran) et `ActivePlayer` (`executeRef` :
-`startPrewarm`, `startPlayback` `why: "lighter"`, l'écran).
+`giveUp` — qu'une seule exécution commune applique (`SlowLinkRunner`, §79) ; chaque hôte n'y ajoute que
+sa bascule : `ExperimentalPlayerHost` → `fallToStable` avec un relais `lighter` qui porte le palier,
+`ActivePlayer` → `startPlayback` `why: "lighter"`.
 
 - *Mesure* — ouverture : la moyenne de toute la réception (une ouverture dure 35 s au plus : sa moyenne
   est la moyenne récente ; 10 s glissantes oscilleraient, le natif comptant ses morceaux de 1 Mio une fois
@@ -3538,14 +3538,19 @@ image 10 s) et `decidePlayback` (saccades) rendent une action — `none`, `prewa
 - *Indice* « Connexion lente… » — 5 s de réception sous 50 % du besoin ; retiré au-dessus.
 - *Préchauffage* (`lighterPrewarm.ts`) — dès **8 s** sous 50 % : `/playback/start` au palier (marqué
   `prewarm`, rien n'est annoncé à Jellyfin), puis maître, variante et **le** segment qui contient la
-  position — sa demande fait partir ffmpeg. Annulé (et le transcodage arrêté : route d'arrêt `prewarm`,
-  `DELETE /Videos/ActiveEncodings` par l'appareil et la séance lus dans l'adresse) si la première image
-  arrive, et au démontage : aucun job orphelin (Jellyfin ne les tue pas seul — 90 s observées).
+  position — sa demande fait partir ffmpeg. Annulé (listes et segment interrompus, `AbortController` ; et
+  le transcodage arrêté : route d'arrêt `prewarm`, `DELETE /Videos/ActiveEncodings` par l'appareil et la
+  séance lus dans l'adresse, **seulement** pour une séance que la route de démarrage a retenue en
+  préchauffage pour ce compte et cet appareil, `prewarmSessions.ts`) si la première image arrive, et au
+  démontage : aucun job orphelin (Jellyfin ne les tue pas seul — 90 s observées).
 - *Bascule* — très lente (< 25 %, preuves 10 s / 256 Kio) dès 10 s, ou dès que le préchauffage est prêt
   s'il l'est plus tard ; moyenne (25–50 %) à 20 s ; au délai du renoncement (35 s natif, chien de garde de
   20 s serveur) si la lenteur est prouvée. Le lecteur serveur **reprend le préchauffage tel quel**
   (`takePrewarm` : même `PlaySessionId`, mêmes adresses) et hls.js part du segment préchauffé
   (`startPosition`).
+- *Saut* — un saut fait en lecture et resté 10 s sans image suit les règles de l'ouverture, mesurées depuis
+  le saut ; un saut fait en pause, jamais. Suivi seulement tant qu'un saut attend (armé sur `seeking`,
+  arrêté à l'image ou sur `seeked` en pause) : aucun minuteur permanent.
 - *En lecture* (`StutterWatch`) — un blocage visible de plus de 5 s, ou le 3e de plus d'1 s en 3 min (la
   fenêtre du budget de reconstructions), classés *réseau* (`playbackDiagnosis` ; serveur : tampon vide au
   début de l'attente) sous un débit mesuré inférieur au besoin. Jamais calcul/décodeur, jamais une attente
@@ -3571,7 +3576,10 @@ image 10 s) et `decidePlayback` (saccades) rendent une action — `none`, `prewa
   **Originale** (jamais de bascule : l'indice, puis l'écran final). Pas de « vidéo allégée » à la demande.
 - *Existence* — bascule et préchauffage seulement avec un lecteur serveur (`PLAYER_SERVER_FALLBACK`) et
   le transcodage vidéo permis au compte (`Policy.EnableVideoPlaybackTranscoding`, `transcodePolicy.ts`,
-  relu toutes les 2 min) ; sinon le comportement « Originale ».
+  relu toutes les 2 min ; l'ouverture ne l'attend jamais plus de 300 ms — au-delà, la dernière réponse
+  connue, sinon oui —, une seule lecture en vol par compte) ; sinon le comportement « Originale ». Jamais
+  pour le banc d'essai (il mesure le lecteur natif), jamais pour une négociation de diffusion (AirPlay :
+  le téléviseur a son propre lien).
 - *La cible* (`buildDeviceProfile`, option `lighter`, décidée par le serveur) — débit = moitié du mesuré,
   plancher 1,5 Mbit/s, toujours sous le besoin (30/5 → 2,5 ; 16/10 → 5 ; 0,3 → 1,5). HEVC (Main 8 bits,
   `hvc1`) si l'appareil lit le HEVC 10 bits — le maître de Jellyfin annonce le profil de la *source*
@@ -3583,9 +3591,12 @@ image 10 s) et `decidePlayback` (saccades) rendent une action — `none`, `prewa
   la lecture suivante repart sur le natif.
 - *D'une lecture à l'autre* — le film reste allégé jusqu'à sa fin. Une lecture lancée moins de 2 min
   après une séance allégée, quel que soit le titre, démarre allégée au dernier palier (`carriedLighter`,
-  posé par `PlaybackProvider` ; mémoire de page et `sessionStorage`, jamais persistante). Sauf si la
-  *capacité* du lien (débit pendant la réception, 10 s) a tenu 110 % du besoin du fichier d'origine
-  pendant 10 s (`LinkRecovery`) : mémoire effacée, `lighterCleared` au bilan.
+  `playbackQuality.ts`, posé par `PlaybackProvider` ; mémoire de page et `sessionStorage`, liée au compte,
+  jamais persistante). C'est **la seule** mémoire de la version allégée : le palier d'une bascule voyage
+  sur le relais (`lighter`), et seule une séance réellement allégée le retient à son arrêt. Effacée par
+  « Originale » (jamais lue ni écrite hors « Automatique »), et si la *capacité* du lien (débit pendant
+  la réception, 10 s) a tenu 110 % du besoin du fichier d'origine pendant 10 s (`LinkRecovery`) :
+  `lighterCleared` au bilan.
 - *Position* — un battement ou un arrêt que Jellyfin ne reçoit pas garde la position sur l'appareil
   (`unsentPosition.ts`) ; un rapport accepté l'efface ; le reste part au retour du réseau, au lancement et
   chaque minute, par la route d'arrêt `late` (`recoverLostPosition`, n'avance jamais qu'une position).
@@ -3612,18 +3623,50 @@ les lignes de bascule et de renoncement. Activité : tout motif commençant par 
 rangé avec les connexions lentes, jamais contre le fichier.
 
 **Porteurs.** `slowLinkPolicy.ts` (`openingAdvice`, `decideOpening`, `decidePlayback`, `StutterWatch`,
-`nextLighter`, `lighterMaxWidth`, `LinkRecovery`, `carriedLighter`, `SlowLog`), `lighterPrewarm.ts`,
-`networkTrouble.ts`, `unsentPosition.ts`, `transcodePolicy.ts`, `playbackQuality.ts`, `linkSimulator.ts`,
-`slowLinkMonitor.ts`. **Appelants.** `ExperimentalPlayerHost`, `PlayerHost` / `ActivePlayer`,
+`nextLighter`, `lighterMaxWidth`, `LinkRecovery`, `SlowLog`), `slowLinkRunner.ts` (§79), `lighterPrewarm.ts`
+(`prewarmStatusOf`), `networkTrouble.ts`, `unsentPosition.ts`, `transcodePolicy.ts`, `prewarmSessions.ts`,
+`playbackQuality.ts` (`carriedLighter`), `linkSimulator.ts`, `slowLinkMonitor.ts`. **Appelants.** `ExperimentalPlayerHost`, `PlayerHost` / `ActivePlayer`,
 `PlaybackProvider`, `PlayerControls` (Qualité), `usePlaybackSession`, `HttpByteSource`, routes `direct`,
 `playback/start`, `playback/stop`. **Tests.** `slowLinkPolicy.test.ts`, `lighterPrewarm.test.ts`,
 `linkSimulator.test.ts`, `ExperimentalPlayerHost.test.tsx` (« §78 », « les saccades »),
 `PlayerHost-connexion-lente.test.tsx`, `deviceProfile.test.ts`, `jellyfin-playback-start-route.test.ts`,
 `playback-stop-late.test.ts`, `unsentPosition.test.ts`, `networkTrouble.test.ts`,
 `webcodecs-byteSource.test.ts`, `PlaybackProvider.test.tsx`, `transcodePolicy.test.ts`,
-`PlayerControls.test.tsx`, `activity-connexion-lente.test.ts`.
+`PlayerControls.test.tsx`, `activity-connexion-lente.test.ts`, `playbackQuality.test.ts`,
+`playback-stop-late.test.ts`.
 
 **Différent exprès.** Le serveur renonce à 20 s (son chien de garde), le natif à 35 s. Safari en HLS natif
 ne mesure rien : inchangé. Le préchauffage n'est pas bridé par le simulateur (seule la lecture l'est).
+
+**Décidé le 12/10/2026.**
+
+## 79. La connexion lente s'exécute à un seul endroit pour les deux lecteurs
+
+**La règle.** Ce que `slowLinkPolicy.ts` décide (§78) est exécuté par **une** classe, `SlowLinkRunner`
+(`src/lib/slowLinkRunner.ts`) : tenir le préchauffage (un seul), le lancer, le laisser tomber (à l'image,
+à la fermeture, à l'écran final), montrer l'écran « Lecture impossible… », renoncer comme avant, et suivre
+le saut resté sans image (le « saut traité comme une ouverture » : 10 s, puis 35 s — `SEEK_AS_OPENING_MS`,
+`SEEK_GIVE_UP_MS`). L'état du préchauffage pour la décision s'écrit une fois, `prewarmStatusOf`
+(`lighterPrewarm.ts`). Seule la **bascule** reste à chaque hôte, parce qu'elle est réellement différente :
+le natif passe la main (`fallToStable`, relais `lighter` qui porte le palier), le lecteur serveur
+renégocie (`startPlayback`, `why: "lighter"`). Chacun rattache ce qu'il sait de lui (`attach`) : sa mesure,
+sa position, son écran.
+
+**Pourquoi.** Écrite dans les deux hôtes le 12/10/2026, la même exécution avait divergé en un jour : un
+saut fait en pause effacé côté serveur et pas côté natif (dix secondes plus tard, un film en pause se
+faisait préchauffer et basculer), deux intervalles d'une seconde permanents, la conversion de l'état du
+préchauffage écrite quatre fois. Relevé par une relecture indépendante.
+
+**Appelants.** `ExperimentalPlayerHost`, `ActivePlayer` (PlayerHost.tsx).
+
+**Tests.** `ExperimentalPlayerHost.test.tsx` (« les saccades » : saut en pause, minuteur de 5 s qui meurt
+avec le pipeline, banc d'essai), `PlayerHost-connexion-lente.test.tsx`, `lighterPrewarm.test.ts`
+(`prewarmStatusOf`, abandon interrompu). `decisions-partagees.test.ts` fait échouer le retour d'un
+`startPrewarm`, d'une conversion d'état ou d'un délai de saut dans un hôte, et d'une seconde mémoire du
+palier.
+
+**Différent exprès.** Le serveur compte un saut depuis le premier d'une série (il ne relance pas le compte
+à chaque `seeking`), le natif depuis le dernier — le comportement de chacun avant le partage. Le serveur
+n'a pas de `giveUp` : son chien de garde des 20 s renonce lui-même.
 
 **Décidé le 12/10/2026.**
