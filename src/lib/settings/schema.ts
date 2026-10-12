@@ -15,9 +15,9 @@
  *   ou `optional` (enrichit l'interface).
  */
 
-export type SettingKind = "url" | "secret" | "text" | "boolean" | "select" | "profile";
+export type SettingKind = "url" | "secret" | "text" | "boolean" | "select" | "profile" | "number";
 export type SettingNeed = "required" | "library" | "optional";
-export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "playback" | "app" | "defaults" | "deployment";
+export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "playback" | "subtitles" | "app" | "defaults" | "deployment";
 
 export interface SettingDef {
   key: string;
@@ -57,6 +57,18 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "JACKETT_API_KEY", group: "jackett", kind: "secret", need: "optional", fallback: "", inApp: true },
   { key: "OMDB_API_KEY", group: "ratings", kind: "secret", need: "optional", fallback: "", inApp: true },
   { key: "MDBLIST_API_KEY", group: "ratings", kind: "secret", need: "optional", fallback: "", inApp: true },
+  // ── Les sous-titres générés (DECISIONS.md §69) ──
+  // Traduits par une IA en ligne à partir d'un sous-titre complet du titre. Sans clé, la fonction
+  // n'existe pas : aucune route ne l'annonce. La clé ne quitte jamais le serveur (`secret`).
+  // Le modèle vide vaut celui du fournisseur (`DEFAULT_MODELS`, subtitleGen/pricing.ts) ; les prix
+  // vides valent la table officielle — remplis, ils la remplacent (un modèle qu'elle ne connaît pas).
+  { key: "SUBTITLE_GEN_ENABLED", group: "subtitles", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  { key: "SUBTITLE_GEN_PROVIDER", group: "subtitles", kind: "select", need: "optional", fallback: "anthropic", inApp: true, options: ["anthropic", "openai", "google"] },
+  { key: "SUBTITLE_GEN_API_KEY", group: "subtitles", kind: "secret", need: "optional", fallback: "", inApp: true },
+  { key: "SUBTITLE_GEN_MODEL", group: "subtitles", kind: "text", need: "optional", fallback: "", inApp: true },
+  { key: "SUBTITLE_GEN_BUDGET_USD", group: "subtitles", kind: "number", need: "optional", fallback: "5", inApp: true, placeholder: "5" },
+  { key: "SUBTITLE_GEN_PRICE_INPUT", group: "subtitles", kind: "number", need: "optional", fallback: "", inApp: true },
+  { key: "SUBTITLE_GEN_PRICE_OUTPUT", group: "subtitles", kind: "number", need: "optional", fallback: "", inApp: true },
   // ── L'application ──
   { key: "APP_LANGUAGE", group: "app", kind: "select", need: "optional", fallback: "en", inApp: true, options: ["fr", "en", "es", "de"] },
   { key: "COOKIE_SECURE", group: "app", kind: "boolean", need: "optional", fallback: "false", inApp: true },
@@ -91,7 +103,7 @@ export const SETTINGS: readonly SettingDef[] = [
 export const SETTINGS_BY_KEY: ReadonlyMap<string, SettingDef> = new Map(SETTINGS.map((s) => [s.key, s]));
 
 /** Les groupes réglables, dans l'ordre de l'assistant et de la page. */
-export const SETTING_GROUPS: readonly SettingGroup[] = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "playback", "app", "defaults", "deployment"];
+export const SETTING_GROUPS: readonly SettingGroup[] = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "playback", "subtitles", "app", "defaults", "deployment"];
 
 /**
  * Le guide de déploiement : ce qui ne se règle pas dans l'application — un dossier à monter, le

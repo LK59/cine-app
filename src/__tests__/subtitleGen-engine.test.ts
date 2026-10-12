@@ -1,0 +1,495 @@
+import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+/**
+ * Le moteur des sous-titres générés, de bout en bout sur une vraie base (DECISIONS.md §69).
+ * Aucun appel réseau réel : le fournisseur est simulé (`setProviderFactoryForTests`), Jellyfin
+ * aussi (`fetch` doublé) — l'envoi du sous-titre comme sa suppression ne partent jamais.
+ */
+const env = vi.hoisted(() => {
+  const dir = require("node:fs").mkdtempSync(require("node:path").join(require("node:os").tmpdir(), "cine-subgen-"));
+  process.env.DATA_DIR = dir;
+  process.env.JELLYFIN_URL = "http://jf.test";
+  process.env.JELLYFIN_API_KEY = "jf-admin-key";
+  process.env.SUBTITLE_GEN_API_KEY = "sk-ant-TEST-SECRET-KEY-0001";
+  process.env.SUBTITLE_GEN_BUDGET_USD = "5";
+  return { dir, key: "sk-ant-TEST-SECRET-KEY-0001" };
+});
+
+const jf = vi.hoisted(() => ({ name: "Film" as string, runtimeTicks: 3000 * 1e7 }));
+vi.mock("@/lib/clients/jellyfin", () => ({
+  jellyfin: {
+    getItemMediaSources: async () => ({ Name: jf.name, RunTimeTicks: jf.runtimeTicks, MediaSources: [currentSource()] }),
+  },
+}));
+
+import { getDb } from "@/lib/db";
+import { setProviderFactoryForTests, ProviderError, type TranslationCall, type TranslationReply } from "@/lib/subtitleGen/providers";
+import { cleanupPresented, engineBusy, noteViewer, presentTick, resetEngineForTests, setTransientDelaysForTests, startEngine, startForTests, whenIdle } from "@/lib/subtitleGen/engine";
+import { adminSummary, createOrJoin, genOptions, pollJob, resume } from "@/lib/subtitleGen/service";
+import { cuesDb, jobsDb, quotaDb } from "@/lib/subtitleGen/store";
+import { sourceHash } from "@/lib/subtitleGen/source";
+import { generatedForDirect } from "@/lib/subtitleGen/direct";
+import { readFinal, toVtt } from "@/lib/subtitleGen/files";
+import { SUBTITLE_GEN_LOG } from "@/lib/subtitleGen/log";
+import type { JellyfinMediaSource, JellyfinMediaStream } from "@/lib/clients/jellyfin";
+
+const ITEM = "a".repeat(32);
+const VIDEO = "/media/movies/Film (2020)/Film (2020).mkv";
+const OUR_PATH = "/media/movies/Film (2020)/Film (2020).fra.srt";
+const N = 120;
+const caller = { user: "emma", jfId: "jf-emma", locale: "fr" };
+
+// 120 répliques, une toutes les 25 s, sur 50 minutes : un sous-titre complet.
+const fixtureCues = Array.from({ length: N }, (_, i) => ({ start: i * 25, end: i * 25 + 4, text: `Line ${i} source here` }));
+const vttOf = (cues: { start: number; end: number; text: string }[]) => toVtt(cues);
+
+let streams: JellyfinMediaStream[] = [];
+let sourceVtt = vttOf(fixtureCues);
+let ourVtt = "";
+let uploadStatus = 204;
+const uploads: Record<string, unknown>[] = [];
+const deletes: string[] = [];
+let etag = "etag-1";
+
+function baseStreams(): JellyfinMediaStream[] {
+  return [
+    { Type: "Audio", Index: 1, Language: "eng", IsDefault: true, Codec: "eac3" },
+    { Type: "Subtitle", Index: 3, Language: "eng", Codec: "subrip" },
+    { Type: "Subtitle", Index: 4, Language: "fre", Codec: "subrip", IsForced: true },
+  ];
+}
+
+function currentSource(): JellyfinMediaSource {
+  return { Id: ITEM, ETag: etag, Size: 1000, Path: VIDEO, MediaStreams: streams };
+}
+
+const fetchStub = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+  const url = String(input);
+  const method = init?.method ?? "GET";
+  if (url.startsWith("http://jf.test/Items?Ids=")) return Response.json({ Items: [{ MediaSources: [currentSource()] }] });
+  if (/\/Subtitles\/3\/Stream\.vtt$/.test(url)) return new Response(sourceVtt);
+  if (/\/Subtitles\/9\/Stream\.vtt$/.test(url)) return new Response(ourVtt);
+  if (url === `http://jf.test/Videos/${ITEM}/Subtitles` && method === "POST") {
+    uploads.push(JSON.parse(String(init?.body)));
+    return new Response(null, { status: uploadStatus });
+  }
+  if (method === "DELETE") {
+    deletes.push(url);
+    return new Response(null, { status: 204 });
+  }
+  if (url.includes("/Refresh")) return new Response(null, { status: 204 });
+  return new Response(null, { status: 404 });
+});
+vi.stubGlobal("fetch", fetchStub);
+
+// ─── Le fournisseur simulé ────────────────────────────────────────────────────
+
+const calls: TranslationCall[] = [];
+const seenPrefixes = new Set<string>();
+let concurrentBatches = 0;
+let maxConcurrentBatches = 0;
+const GLOSSARY = { source_language: "en", register: "neutre", characters: ["Paul: le héros"], address_forms: ["Paul -> Anne: tu"], terms: [] };
+
+function usageFor(call: TranslationCall) {
+  const prefix = [call.system, ...call.stable].join("\u0000");
+  const cached = call.cache && seenPrefixes.has(prefix);
+  if (call.cache) seenPrefixes.add(prefix);
+  return { inputTokens: 40, cacheWriteTokens: call.cache && !cached ? 3000 : 0, cacheReadTokens: cached ? 3000 : 0, outputTokens: 200 };
+}
+
+const translateAll = async (call: TranslationCall): Promise<TranslationReply> => {
+  if (call.schemaName === "subtitle_glossary") return { json: GLOSSARY, usage: usageFor(call) };
+  const ids = (JSON.parse(call.user) as { translate: number[] }).translate;
+  return { json: { translations: ids.map((i) => ({ i, text: `Ligne ${i} traduite` })) }, usage: usageFor(call) };
+};
+let behavior: (call: TranslationCall) => Promise<TranslationReply> = translateAll;
+
+setProviderFactoryForTests(() => ({
+  name: "anthropic",
+  model: "claude-haiku-5-5",
+  async complete(call) {
+    calls.push(call);
+    const batch = call.schemaName === "subtitle_batch";
+    if (batch) maxConcurrentBatches = Math.max(maxConcurrentBatches, ++concurrentBatches);
+    try {
+      await new Promise((r) => setTimeout(r, 1));
+      return await behavior(call);
+    } finally {
+      if (batch) concurrentBatches--;
+    }
+  },
+}));
+
+const batchCalls = () => calls.filter((c) => c.schemaName === "subtitle_batch");
+const idsOf = (c: TranslationCall) => (JSON.parse(c.user) as { translate: number[] }).translate;
+
+async function settle(): Promise<void> {
+  for (let i = 0; i < 400; i++) {
+    await whenIdle();
+    if (!engineBusy()) return;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
+function logText(): string {
+  try {
+    return fs.readFileSync(SUBTITLE_GEN_LOG(), "utf8");
+  } catch {
+    return "";
+  }
+}
+
+beforeEach(() => {
+  resetEngineForTests();
+  startForTests();
+  setTransientDelaysForTests([0, 0, 0, 0]);
+  const db = getDb();
+  db.exec("DELETE FROM subtitle_gen_jobs; DELETE FROM subtitle_gen_cues; DELETE FROM subtitle_gen_spend; DELETE FROM subtitle_gen_quota;");
+  streams = baseStreams();
+  sourceVtt = vttOf(fixtureCues);
+  uploadStatus = 204;
+  uploads.length = 0;
+  deletes.length = 0;
+  calls.length = 0;
+  seenPrefixes.clear();
+  maxConcurrentBatches = 0;
+  behavior = translateAll;
+  etag = "etag-1";
+  process.env.SUBTITLE_GEN_API_KEY = env.key;
+  process.env.SUBTITLE_GEN_BUDGET_USD = "5";
+});
+
+afterAll(() => {
+  resetEngineForTests();
+  setProviderFactoryForTests(null);
+  vi.unstubAllGlobals();
+  fs.rmSync(env.dir, { recursive: true, force: true });
+});
+
+async function runJob(position = 1500): Promise<string> {
+  const created = await createOrJoin(caller, { itemId: ITEM, target: "fr", position }, "emma:s1");
+  expect(created.ok).toBe(true);
+  if (!created.ok) throw new Error("création refusée");
+  await settle();
+  return created.jobId;
+}
+
+describe("une tâche complète", () => {
+  it("choisit la piste anglaise complète, part de la position du spectateur, finit et écrit le fichier", async () => {
+    const id = await runJob(1500);
+    const job = jobsDb.get(id)!;
+    expect(job.status).toBe("done");
+    expect(job.source_index).toBe(3);
+    expect(job.done).toBe(N);
+    // Le premier lot : petit, autour de la position (1500 s − 10 s → réplique 60).
+    expect(idsOf(batchCalls()[0])).toEqual([60, 61, 62, 63, 64, 65, 66, 67]);
+    expect(readFinal(ITEM, id, "fr", "srt")).toContain("Ligne 0 traduite");
+    expect(readFinal(ITEM, id, "fr", "vtt")).toMatch(/^WEBVTT/);
+    // Rien n'est traduit deux fois.
+    const all = batchCalls().flatMap(idsOf);
+    expect(new Set(all).size).toBe(all.length);
+    expect(all.length).toBe(N);
+  });
+
+  it("garde le préfixe identique octet pour octet d'un lot à l'autre, même après un saut, et traduit en série", async () => {
+    let jobId = "";
+    let seen = 0;
+    behavior = async (call) => {
+      if (call.schemaName === "subtitle_batch" && ++seen === 3) noteViewer(jobId, "emma:s1", 2900);
+      return translateAll(call);
+    };
+    const created = await createOrJoin(caller, { itemId: ITEM, target: "fr", position: 100 }, "emma:s1");
+    if (!created.ok) throw new Error("refus");
+    jobId = created.jobId;
+    await settle();
+
+    const withGlossary = batchCalls().filter((c) => c.stable.length === 2);
+    expect(withGlossary.length).toBeGreaterThanOrEqual(2);
+    const prefix = (c: TranslationCall) => JSON.stringify([c.system, ...c.stable]);
+    for (const c of withGlossary) expect(prefix(c)).toBe(prefix(withGlossary[0]));
+    // Le saut a bien été suivi : un lot part de 2900 s − 10 s (réplique 116).
+    expect(batchCalls().some((c) => idsOf(c)[0] === 116)).toBe(true);
+    // Rien de variable dans le préfixe : ni position, ni identifiants demandés.
+    expect(withGlossary[0].stable.join("")).not.toContain("translate");
+    // Le bloc source est le même que celui du glossaire.
+    const glossaryCall = calls.find((c) => c.schemaName === "subtitle_glossary")!;
+    expect(withGlossary[0].stable[1]).toBe(glossaryCall.stable[0]);
+    expect(glossaryCall.cache).toBe(false);
+    // Une requête à la fois pour une tâche : le cache ne se partage qu'en série.
+    expect(maxConcurrentBatches).toBe(1);
+    // Le cache est relu : la ligne `done` le dit.
+    const done = logText().split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((l) => l.kind === "done" && l.job === jobId);
+    expect(done.cacheReadTokens).toBeGreaterThan(0);
+    expect(done.cacheWriteTokens).toBeGreaterThan(0);
+    expect(done.cacheReadRate).toBeGreaterThan(0.5);
+  });
+
+  it("compte la dépense exacte, cache compris", async () => {
+    const id = await runJob();
+    const job = jobsDb.get(id)!;
+    const expected = (job.input_tokens * 0.1 + job.cache_write_tokens * 0.125 + job.cache_read_tokens * 0.01 + job.output_tokens * 0.5) / 1e6;
+    expect(job.cost_usd).toBeCloseTo(expected, 10);
+    expect(adminSummary().month.cost).toBeCloseTo(expected, 10);
+  });
+});
+
+describe("reprise après un redémarrage", () => {
+  function seedRunning(hash = sourceHash(fixtureCues)): string {
+    const id = "c".repeat(32);
+    jobsDb.insert({
+      id,
+      item_id: ITEM,
+      media_source_id: ITEM,
+      file_etag: "etag-1",
+      file_size: 1000,
+      video_path: VIDEO,
+      title: "Film",
+      runtime_seconds: 3000,
+      target: "fr",
+      candidates: "[]",
+      provider: "anthropic",
+      model: "claude-haiku-5-5",
+      created_by: "emma",
+      last_position: null,
+    });
+    cuesDb.replaceAll(id, fixtureCues);
+    jobsDb.update(id, { status: "running", total: N, source_index: 3, source_hash: hash, glossary: JSON.stringify(GLOSSARY) });
+    cuesDb.write(id, Array.from({ length: 40 }, (_, i) => ({ idx: i, text: `Déjà ${i}`, kept: false })));
+    return id;
+  }
+
+  it("garde les lignes acquises et ne les retraduit pas", async () => {
+    const id = seedRunning();
+    resetEngineForTests();
+    startEngine();
+    await settle();
+    const job = jobsDb.get(id)!;
+    expect(job.status).toBe("done");
+    expect(batchCalls().flatMap(idsOf).filter((i) => i < 40)).toEqual([]);
+    expect(readFinal(ITEM, id, "fr", "srt")).toContain("Déjà 0");
+    resetEngineForTests();
+  });
+
+  it("rend obsolète une tâche dont le sous-titre source a changé", async () => {
+    const id = seedRunning("autre-empreinte");
+    resetEngineForTests();
+    startEngine();
+    await settle();
+    expect(jobsDb.get(id)!.status).toBe("stale");
+    expect(batchCalls()).toEqual([]);
+    resetEngineForTests();
+  });
+
+  it("rend obsolète une tâche dont le fichier vidéo a été remplacé", async () => {
+    const id = seedRunning();
+    etag = "etag-2";
+    resetEngineForTests();
+    startEngine();
+    await settle();
+    expect(jobsDb.get(id)!.status).toBe("stale");
+    resetEngineForTests();
+  });
+});
+
+describe("les pauses", () => {
+  it("met en pause `unavailable` après des 429 répétés, et reprend sur demande", async () => {
+    behavior = async (call) => {
+      if (call.schemaName === "subtitle_batch") throw new ProviderError("rate", "limite");
+      return translateAll(call);
+    };
+    const id = await runJob();
+    expect(jobsDb.get(id)).toMatchObject({ status: "paused", reason: "unavailable" });
+    expect(logText()).toContain('"kind":"retry"');
+    behavior = translateAll;
+    expect(resume(id)?.status).toBe("running");
+    await settle();
+    expect(jobsDb.get(id)!.status).toBe("done");
+  });
+
+  it("met en pause `budget` quand le crédit est épuisé", async () => {
+    behavior = async (call) => {
+      if (call.schemaName === "subtitle_batch") throw new ProviderError("credit", "crédit");
+      return translateAll(call);
+    };
+    const id = await runJob();
+    expect(jobsDb.get(id)).toMatchObject({ status: "paused", reason: "budget" });
+  });
+
+  it("met en pause `config` quand la clé est refusée", async () => {
+    behavior = async () => {
+      throw new ProviderError("auth", "clé");
+    };
+    const id = await runJob();
+    expect(jobsDb.get(id)).toMatchObject({ status: "paused", reason: "config" });
+  });
+
+  it("met en pause `budget` quand le budget du mois est atteint, et refuse d'en lancer d'autres (402)", async () => {
+    process.env.SUBTITLE_GEN_BUDGET_USD = "0.00001";
+    const id = await runJob();
+    expect(jobsDb.get(id)).toMatchObject({ status: "paused", reason: "budget" });
+    jf.name = "Autre";
+    const other = await createOrJoin(caller, { itemId: "d".repeat(32), target: "de" }, "emma:s1");
+    expect(other).toMatchObject({ ok: false, status: 402, error: "budget" });
+    // Reprendre ne passe pas outre.
+    expect(resume(id)).toMatchObject({ status: "paused", reason: "budget" });
+    jf.name = "Film";
+  });
+
+  it("garde en langue source la ligne que le modèle refuse, et finit quand même", async () => {
+    behavior = async (call) => {
+      if (call.schemaName === "subtitle_batch" && idsOf(call).includes(7)) throw new ProviderError("refusal", "refus", { inputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0 });
+      return translateAll(call);
+    };
+    const id = await runJob(0);
+    const job = jobsDb.get(id)!;
+    expect(job.status).toBe("done");
+    expect(job.kept_source).toBe(1);
+    expect(cuesDb.all(id)[7]).toMatchObject({ text: "Line 7 source here", kept: 1 });
+    expect(logText()).toContain('"kind":"refusal"');
+  });
+
+  it("réessaie un lot invalide, puis le réduit de moitié", async () => {
+    let broken = 2;
+    behavior = async (call) => {
+      if (call.schemaName === "subtitle_batch" && broken-- > 0) return { json: { translations: [] }, usage: usageFor(call) };
+      return translateAll(call);
+    };
+    const id = await runJob(0);
+    expect(jobsDb.get(id)!.status).toBe("done");
+    const sizes = batchCalls().slice(0, 4).map((c) => idsOf(c).length);
+    expect(sizes).toEqual([8, 8, 4, 4]);
+  });
+});
+
+describe("le quota quotidien", () => {
+  it("refuse la 51e génération du jour, mais rejoindre ou relancer ne compte pas", async () => {
+    // Tout se met en pause au premier lot : on ne mesure ici que les lancements.
+    behavior = async () => {
+      throw new ProviderError("auth", "clé");
+    };
+    const hex = (n: number) => n.toString(16).padStart(32, "0");
+    for (let n = 1; n <= 50; n++) {
+      expect((await createOrJoin(caller, { itemId: hex(n), target: "fr" }, "emma:s1")).ok).toBe(true);
+    }
+    await settle();
+    expect(quotaDb.used("emma")).toBe(50);
+    expect(await createOrJoin(caller, { itemId: hex(51), target: "fr" }, "emma:s1")).toMatchObject({ ok: false, status: 429, error: "quota" });
+    // Rejoindre une tâche existante : accepté, sans compter.
+    expect((await createOrJoin(caller, { itemId: hex(1), target: "fr" }, "emma:s2")).ok).toBe(true);
+    expect(quotaDb.used("emma")).toBe(50);
+    // Un autre compte a son propre quota.
+    expect((await createOrJoin({ ...caller, user: "lucas" }, { itemId: hex(51), target: "fr" }, "lucas:s1")).ok).toBe(true);
+    await settle();
+  });
+});
+
+describe("le contrat des options et du sondage", () => {
+  it("propose la langue du compte d'abord, sans celles déjà présentes en complet", async () => {
+    const options = await genOptions(caller, ITEM);
+    expect(options.enabled).toBe(true);
+    expect(options.existing).toEqual(["en"]);
+    expect(options.targets[0]).toBe("fr");
+    expect(options.targets).not.toContain("en");
+    expect(options.quota).toEqual({ used: 0, limit: 50 });
+  });
+
+  it("n'existe pas sans clé", async () => {
+    process.env.SUBTITLE_GEN_API_KEY = "";
+    expect(await genOptions(caller, ITEM)).toMatchObject({ enabled: false, targets: [], jobs: [] });
+    expect(await createOrJoin(caller, { itemId: ITEM, target: "fr" }, "emma:s1")).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it("refuse une langue déjà présente (409) et un titre sans source texte (422)", async () => {
+    expect(await createOrJoin(caller, { itemId: ITEM, target: "en" }, "emma:s1")).toMatchObject({ ok: false, status: 409, error: "exists" });
+    streams = [{ Type: "Audio", Index: 1, Language: "eng" }, { Type: "Subtitle", Index: 2, Language: "eng", Codec: "PGSSUB" }];
+    expect(await createOrJoin(caller, { itemId: ITEM, target: "fr" }, "emma:s1")).toMatchObject({ ok: false, status: 422, error: "no-source" });
+  });
+
+  it("rend les lignes depuis une révision, et l'adresse du fichier une fois fini", async () => {
+    const id = await runJob(0);
+    const first = pollJob(id, 0, 10, "emma:s1")!;
+    expect(first).toMatchObject({ status: "done", done: N, total: N, fileUrl: `/api/subtitle-gen/files/${id}.vtt` });
+    expect(first.cues).toHaveLength(N);
+    expect(first.cues[0]).toEqual({ i: 0, start: 0, end: 4, text: "Ligne 0 traduite" });
+    expect(pollJob(id, first.rev, 10, "emma:s1")!.cues).toEqual([]);
+    const options = await genOptions(caller, ITEM);
+    expect(options.jobs).toEqual([{ jobId: id, target: "fr", status: "done", done: N, total: N, presented: false }]);
+  });
+});
+
+describe("la clé ne sort jamais", () => {
+  it("ni dans le panneau d'administration, ni dans le journal, et le texte des sous-titres non plus", async () => {
+    await runJob();
+    expect(JSON.stringify(adminSummary())).not.toContain(env.key);
+    expect(adminSummary().hasKey).toBe(true);
+    const log = logText();
+    expect(log.length).toBeGreaterThan(0);
+    expect(log).not.toContain(env.key);
+    expect(log).not.toContain("source here");
+    expect(log).not.toContain("traduite");
+  });
+});
+
+describe("la présentation à Jellyfin", () => {
+  it("envoie le .srt, attend que Jellyfin le liste, puis le marque comme le nôtre", async () => {
+    const id = await runJob();
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0]).toMatchObject({ Language: "fra", Format: "srt", IsForced: false, IsHearingImpaired: false });
+    expect(Buffer.from(String(uploads[0].Data), "base64").toString("utf8")).toContain("Ligne 0 traduite");
+    expect(jobsDb.get(id)!.present_state).toBe("uploaded");
+    // Pas encore listé : ni marqué, ni remplacé par la copie de data/.
+    expect(pollJob(id, 0, undefined, "emma:s1")!.presented).toBe(false);
+    expect(generatedForDirect(ITEM, currentSource(), streams)).toEqual({ ours: new Set(), fallbacks: [] });
+
+    streams = [...streams, { Type: "Subtitle", Index: 9, Language: "fra", Codec: "subrip", IsExternal: true, Path: OUR_PATH }];
+    await presentTick();
+    expect(jobsDb.get(id)).toMatchObject({ present_state: "presented", present_path: OUR_PATH, present_index: 9 });
+    expect(pollJob(id, 0, undefined, "emma:s1")!.presented).toBe(true);
+    expect(generatedForDirect(ITEM, currentSource(), streams).ours).toEqual(new Set([9]));
+    // Désormais présente en complet : plus proposée.
+    expect((await genOptions(caller, ITEM)).targets).not.toContain("fr");
+  });
+
+  it("sert la copie de data/ quand l'envoi échoue pour de bon", async () => {
+    uploadStatus = 500;
+    const id = await runJob();
+    for (let k = 1; k <= 5; k++) await presentTick(Date.now() + k * 24 * 3600_000);
+    expect(jobsDb.get(id)).toMatchObject({ present_state: "failed" });
+    expect(generatedForDirect(ITEM, currentSource(), streams).fallbacks).toEqual([{ language: "fr", url: `/api/subtitle-gen/files/${id}.vtt` }]);
+    expect((await genOptions(caller, ITEM)).existing).toContain("fr");
+  });
+
+  it("n'écrase jamais un fichier voisin qui porte déjà le nom", async () => {
+    streams = [...streams, { Type: "Subtitle", Index: 8, Codec: "subrip", IsExternal: true, Path: OUR_PATH, Language: "und" }];
+    const id = await runJob();
+    expect(uploads).toEqual([]);
+    expect(jobsDb.get(id)).toMatchObject({ present_state: "failed", present_reason: "name-taken" });
+  });
+
+  it("ne supprime un sous-titre posé que s'il est le nôtre avec certitude", async () => {
+    const id = await runJob();
+    streams = [...streams, { Type: "Subtitle", Index: 9, Language: "fra", Codec: "subrip", IsExternal: true, Path: OUR_PATH }];
+    await presentTick();
+    const job = jobsDb.get(id)!;
+    // Même chemin, autre texte : quelqu'un l'a remplacé. On ne touche à rien.
+    ourVtt = vttOf([{ start: 0, end: 1, text: "Autre chose" }]);
+    expect(await cleanupPresented(job)).toBe("skipped");
+    expect(deletes).toEqual([]);
+    // Un autre chemin : jamais.
+    expect(await cleanupPresented({ ...job, present_path: "/media/autre.fra.srt" })).toBe("skipped");
+    expect(deletes).toEqual([]);
+    // Le même chemin et le même texte : le nôtre.
+    ourVtt = vttOf(cuesDb.all(id).map((c) => ({ start: c.start_s, end: c.end_s, text: c.text! })));
+    expect(await cleanupPresented(job)).toBe("deleted");
+    expect(deletes).toEqual([`http://jf.test/Videos/${ITEM}/Subtitles/9`]);
+  });
+});
+
+// Le dossier temporaire de cette suite : rien n'est écrit dans le vrai data/.
+it("écrit dans un dossier jetable", () => {
+  expect(env.dir.startsWith(os.tmpdir())).toBe(true);
+  expect(fs.existsSync(path.join(env.dir, "cine.db"))).toBe(true);
+});

@@ -358,6 +358,92 @@ function migrate(db: Database.Database): void {
       updated_at INTEGER NOT NULL
     );
   `);
+  /**
+   * Les sous-titres générés par traduction (DECISIONS.md §69) — voir `src/lib/subtitleGen/`.
+   *
+   * Une tâche par (fichier, source, langue cible), partagée entre comptes. Les lignes sont écrites
+   * dès qu'un lot revient : un redémarrage du serveur au milieu d'un film ne fait rien repayer.
+   * `subtitle_gen_cues` garde aussi le texte source, pour reprendre sans rouvrir la piste (que
+   * Jellyfin met jusqu'à 14 s à extraire d'un Matroska — mesuré le 12/10/2026).
+   */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS subtitle_gen_jobs (
+      id                TEXT    PRIMARY KEY,
+      item_id           TEXT    NOT NULL,
+      media_source_id   TEXT    NOT NULL,
+      file_etag         TEXT,
+      file_size         INTEGER,
+      video_path        TEXT,
+      title             TEXT,
+      runtime_seconds   REAL,
+      target            TEXT    NOT NULL,
+      candidates        TEXT    NOT NULL DEFAULT '[]',
+      source_index      INTEGER,
+      source_external   INTEGER,
+      source_lang       TEXT,
+      source_hi         INTEGER NOT NULL DEFAULT 0,
+      source_hash       TEXT,
+      provider          TEXT    NOT NULL,
+      model             TEXT    NOT NULL,
+      glossary          TEXT,
+      status            TEXT    NOT NULL,
+      reason            TEXT,
+      total             INTEGER NOT NULL DEFAULT 0,
+      done              INTEGER NOT NULL DEFAULT 0,
+      rev               INTEGER NOT NULL DEFAULT 0,
+      input_tokens      INTEGER NOT NULL DEFAULT 0,
+      cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens     INTEGER NOT NULL DEFAULT 0,
+      cost_usd          REAL    NOT NULL DEFAULT 0,
+      requests          INTEGER NOT NULL DEFAULT 0,
+      kept_source       INTEGER NOT NULL DEFAULT 0,
+      last_position     REAL,
+      first_ms          INTEGER,
+      out_hash          TEXT,
+      present_state     TEXT,
+      present_reason    TEXT,
+      present_attempts  INTEGER NOT NULL DEFAULT 0,
+      present_next_at   INTEGER,
+      present_pre_paths TEXT,
+      present_path      TEXT,
+      present_index     INTEGER,
+      present_uploaded_at INTEGER,
+      created_by        TEXT    NOT NULL,
+      created_at        INTEGER NOT NULL,
+      updated_at        INTEGER NOT NULL,
+      finished_at       INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_subgen_item ON subtitle_gen_jobs (item_id, target);
+    CREATE INDEX IF NOT EXISTS idx_subgen_status ON subtitle_gen_jobs (status);
+    CREATE TABLE IF NOT EXISTS subtitle_gen_cues (
+      job_id   TEXT    NOT NULL,
+      idx      INTEGER NOT NULL,
+      start_s  REAL    NOT NULL,
+      end_s    REAL    NOT NULL,
+      source   TEXT    NOT NULL,
+      text     TEXT,
+      kept     INTEGER NOT NULL DEFAULT 0,
+      rev      INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (job_id, idx)
+    );
+    CREATE INDEX IF NOT EXISTS idx_subgen_cues_rev ON subtitle_gen_cues (job_id, rev);
+    CREATE TABLE IF NOT EXISTS subtitle_gen_spend (
+      month         TEXT    PRIMARY KEY,
+      cost_usd      REAL    NOT NULL DEFAULT 0,
+      input_tokens  INTEGER NOT NULL DEFAULT 0,
+      cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      requests      INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS subtitle_gen_quota (
+      user_name TEXT    NOT NULL,
+      day       TEXT    NOT NULL,
+      count     INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_name, day)
+    );
+  `);
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
     const now = Date.now();
     db.prepare("INSERT OR IGNORE INTO onboarding (user_name, pending, updated_at) VALUES ('louis', 1, ?)").run(now);

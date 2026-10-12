@@ -153,10 +153,14 @@ export interface JellyfinMediaStream {
   Title?: string;
   AverageFrameRate?: number;
   DeliveryUrl?: string;
+  /** Le fichier d'un sous-titre voisin — de quoi reconnaître celui que l'application a fait poser (§69). */
+  Path?: string;
 }
 
 export interface JellyfinMediaSource {
   Id: string;
+  /** Le fichier vidéo, dont Jellyfin tire le nom des sous-titres qu'on lui confie (§69). */
+  Path?: string;
   ETag?: string;
   TranscodingUrl?: string;
   Container?: string;

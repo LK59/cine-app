@@ -196,6 +196,32 @@ export const config = {
       return optional("MDBLIST_API_KEY");
     },
   },
+  // Les sous-titres générés par traduction (DECISIONS.md §69). Lus à chaque appel comme le reste :
+  // une clé retirée dans la gestion met les tâches en pause au lot suivant, sans redémarrage.
+  subtitleGen: {
+    get enabled() {
+      return optional("SUBTITLE_GEN_ENABLED", "true") === "true";
+    },
+    get provider() {
+      return optional("SUBTITLE_GEN_PROVIDER", "anthropic");
+    },
+    get apiKey() {
+      return optional("SUBTITLE_GEN_API_KEY");
+    },
+    /** Vide : le modèle par défaut du fournisseur. */
+    get model() {
+      return optional("SUBTITLE_GEN_MODEL");
+    },
+    get budgetUsd() {
+      return optional("SUBTITLE_GEN_BUDGET_USD", "5");
+    },
+    get priceInput() {
+      return optional("SUBTITLE_GEN_PRICE_INPUT");
+    },
+    get priceOutput() {
+      return optional("SUBTITLE_GEN_PRICE_OUTPUT");
+    },
+  },
   push: {
     get subject() {
       return optional("VAPID_SUBJECT", "mailto:admin@example.com");
