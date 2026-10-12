@@ -192,6 +192,24 @@ describe("WebKit : la bascule natif → serveur recharge la page tout de suite",
 
   // Choix de Louis (12/10/2026) : seules les bascules allégées rechargent — un repli ordinaire passe
   // la main dans la page, son chemin éprouvé (5 des 6 replis de « Ruby » sur iPhone y ont marché).
+  // Safari refuse de reprendre seul dans la page rechargée : le message reste, avec quoi faire, jusqu'à
+  // la lecture (12/10/2026 — disparu au bout de 5 s, il laissait une image figée sans explication).
+  it("après le rechargement, Safari refuse la reprise automatique : « Touchez Lecture » reste jusqu'à la lecture", async () => {
+    page(film);
+    await waitFor(() => expect(native.onFallback).not.toBeNull());
+    act(() => native.onFallback!("connexion trop lente (version allégée demandée)", { resumeAt: 600, lighter: STEP, switchedAt: Date.now() }, "seance-natif"));
+    cleanup();
+    (HTMLMediaElement.prototype.play as unknown as { mockImplementation: (f: () => Promise<void>) => void }).mockImplementation(() =>
+      Promise.reject(new DOMException("pas de geste", "NotAllowedError"))
+    );
+    page();
+    await waitFor(() => expect(document.querySelector("[data-lighter-tap-notice]")).not.toBeNull(), { timeout: 6000 });
+    await act(() => new Promise((r) => setTimeout(r, 5200)));
+    expect(document.querySelector("[data-lighter-tap-notice]")).not.toBeNull();
+    act(() => void document.querySelector("video")!.dispatchEvent(new Event("playing")));
+    await waitFor(() => expect(document.querySelector("[data-lighter-tap-notice]")).toBeNull());
+  }, 20_000);
+
   it("un repli ordinaire (sans palier) ne recharge pas : il passe la main dans la page, comme avant", async () => {
     page(film);
     await waitFor(() => expect(native.onFallback).not.toBeNull());

@@ -374,8 +374,23 @@ export function meterXhr(meter: LinkMeter, xhr: XMLHttpRequest): void {
   }
 }
 
-/** Le débit que le lecteur serveur reçoit de Jellyfin : vidéo et son du flux négocié. */
-export function streamNeedBps(info: { video?: { bitRate: number | null } | null; audio?: { bitRate: number | null } | null } | null | undefined): number | null {
+/**
+ * Le débit que le lecteur serveur reçoit de Jellyfin : vidéo et son du flux négocié.
+ *
+ * Pour un transcodage, celui que Jellyfin vise (`streamBitrate`, lu dans son adresse) : `video` et
+ * `audio` décrivent la **source** (`MediaStreams` ne change pas avec le profil — vérifié le 12/10/2026,
+ * une version allégée à 1,5 Mbit/s d'un fichier à 6,8 y gardait 6,1 + 0,4). Le besoin d'une séance
+ * allégée était ainsi celui du fichier d'origine : le panneau disait « trop lente » à un lien qui
+ * portait très bien le flux, et le palier suivant se décidait contre le mauvais chiffre.
+ */
+export function streamNeedBps(
+  info:
+    | { video?: { bitRate: number | null } | null; audio?: { bitRate: number | null } | null; streamBitrate?: number | null }
+    | null
+    | undefined
+): number | null {
+  const stream = info?.streamBitrate;
+  if (typeof stream === "number" && stream > 0 && Number.isFinite(stream)) return stream;
   const video = info?.video?.bitRate;
   if (typeof video !== "number" || !(video > 0)) return null;
   const audio = info?.audio?.bitRate;

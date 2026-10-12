@@ -1621,7 +1621,8 @@
       "failed": "Wiedergabe nicht möglich: Die Verbindung ist zu langsam.",
       "unstable": "Verbindung verloren oder instabil…",
       "subtitlesGenerating": "Untertitel werden noch erstellt: in der leichteren Version nicht verfügbar. Sie sind es, sobald die Erstellung abgeschlossen ist.",
-      "switched": "Wechsel zu einem leichteren Video wegen einer langsamen Verbindung."
+      "switched": "Wechsel zu einem leichteren Video wegen einer langsamen Verbindung.",
+      "tapToResume": "Leichtere Version bereit. Tippe auf Wiedergabe, um fortzufahren."
     },
     "unsupportedBrowser": "Dieser Browser kann diesen Stream nicht abspielen.",
     "playbackInterruptedCheckConnection": "Die Wiedergabe wurde unterbrochen. Prüfe deine Verbindung und versuch's erneut.",
@@ -1681,7 +1682,9 @@
         "file": "Die Datei",
         "sound": "Der Ton",
         "stream": "Der Datenstrom",
-        "device": "Was dieses Gerät akzeptiert"
+        "device": "Was dieses Gerät akzeptiert",
+        "served": "Übertragen",
+        "fileOriginal": "Die Originaldatei"
       },
       "range": "Bereich",
       "tracks": "Spuren",
@@ -1699,7 +1702,12 @@
         "pendingDetail": "die Datei hat noch nichts gesagt"
       },
       "linkLighter": "Leichteres Video",
-      "linkLighterValue": "Stufe {tier} · {rate}"
+      "linkLighterValue": "Stufe {tier} · {rate}",
+      "lighterName": "Leichtere Version",
+      "describeLighter": "Langsame Verbindung: Der Server codiert das Video mit {rate} neu, damit die Wiedergabe weiterläuft.",
+      "lighterSwitchedAt": "Automatischer Wechsel (langsame Verbindung) bei {position}",
+      "lighterSwitched": "Automatischer Wechsel (langsame Verbindung)",
+      "lighterInherited": "Leichtere Version von der vorherigen Wiedergabe übernommen (vor weniger als 2 Min.)"
     },
     "experimental": {
       "title": "Der experimentelle Player konnte diese Datei nicht abspielen",

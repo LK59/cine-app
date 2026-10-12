@@ -30,6 +30,8 @@ export interface ReloadLighter extends LighterStep {
    * réarme pas la mémoire (règle de 8.48.2).
    */
   real: boolean;
+  /** La position de la bascule (secondes), pour le panneau d'infos techniques — connue d'une vraie bascule. */
+  at?: number;
 }
 
 /** Ce que l'intention emporte au-delà de la position et de la piste — posé par le code d'après le 12/10/2026. */
@@ -47,7 +49,16 @@ export interface ReloadCarry {
   switchedAt?: number;
   /** La séance du journal que la page rechargée poursuit (le natif l'a ouverte). */
   continues?: string;
+  /**
+   * Pourquoi le lecteur natif a cédé la main — la note « a cédé la main » du panneau d'infos
+   * techniques. Sans elle, le rechargement direct effaçait la cause (`useStableFallback` vit dans la
+   * page) : le panneau ne disait plus pourquoi le serveur lisait (12/10/2026).
+   */
+  reason?: string;
 }
+
+/** Une cause emportée reste lisible et bornée : c'est du texte relu d'un stockage de page. */
+const REASON_MAX = 300;
 
 /** L'intention écrite avant le rechargement, relue par `PlaybackProvider` au montage de la page suivante. */
 export interface PlayerReloadIntent {
@@ -63,8 +74,8 @@ export interface PlayerReloadIntent {
 }
 
 /** Le palier à emporter, d'après ce que la séance négociait — `undefined` sans palier. */
-export function reloadLighterOf(step: LighterStep | null | undefined, real: boolean): ReloadLighter | undefined {
-  return step ? { targetBps: step.targetBps, tier: step.tier, real } : undefined;
+export function reloadLighterOf(step: LighterStep | null | undefined, real: boolean, at?: number | null): ReloadLighter | undefined {
+  return step ? { targetBps: step.targetBps, tier: step.tier, real, ...(typeof at === "number" && Number.isFinite(at) ? { at } : {}) } : undefined;
 }
 
 /**
@@ -109,6 +120,7 @@ export function directReloadIntent(
   session: { itemId: string; title: string; resumeAt?: number; initialAudioStreamIndex?: number },
   takeover: StableTakeover | undefined,
   logSession: string | undefined,
+  reason?: string,
   now = Date.now()
 ): PlayerReloadIntent {
   const audio = takeover ? takeover.audioStreamIndex : session.initialAudioStreamIndex;
@@ -122,10 +134,11 @@ export function directReloadIntent(
     server: true,
     carry: {
       direct: { decidedAt: now, opening: !takeover },
-      ...(takeover?.lighter ? { lighter: reloadLighterOf(takeover.lighter, true) } : {}),
+      ...(takeover?.lighter ? { lighter: reloadLighterOf(takeover.lighter, true, takeover.resumeAt) } : {}),
       ...(takeover?.lighter && takeover.subtitleStreamIndex !== undefined ? { subtitleStreamIndex: takeover.subtitleStreamIndex } : {}),
       ...(takeover?.switchedAt !== undefined ? { switchedAt: takeover.switchedAt } : {}),
       ...(logSession ? { continues: logSession } : {}),
+      ...(reason ? { reason: reason.slice(0, REASON_MAX) } : {}),
     },
   };
 }
@@ -149,7 +162,14 @@ export function parseReloadIntent(raw: string): PlayerReloadIntent | null {
         ? {
             carry: {
               ...(lighter && typeof lighter.targetBps === "number" && typeof lighter.tier === "number"
-                ? { lighter: { targetBps: lighter.targetBps, tier: lighter.tier, real: lighter.real === true } }
+                ? {
+                    lighter: {
+                      targetBps: lighter.targetBps,
+                      tier: lighter.tier,
+                      real: lighter.real === true,
+                      ...(typeof lighter.at === "number" && Number.isFinite(lighter.at) && lighter.at >= 0 ? { at: lighter.at } : {}),
+                    },
+                  }
                 : {}),
               ...(direct && typeof direct.decidedAt === "number" ? { direct: { decidedAt: direct.decidedAt, opening: direct.opening === true } } : {}),
               ...(typeof carry.subtitleStreamIndex === "number" || carry.subtitleStreamIndex === null
@@ -157,6 +177,7 @@ export function parseReloadIntent(raw: string): PlayerReloadIntent | null {
                 : {}),
               ...(typeof carry.switchedAt === "number" ? { switchedAt: carry.switchedAt } : {}),
               ...(typeof carry.continues === "string" ? { continues: carry.continues } : {}),
+              ...(typeof carry.reason === "string" && carry.reason ? { reason: carry.reason.slice(0, REASON_MAX) } : {}),
             },
           }
         : {}),

@@ -1621,7 +1621,8 @@
       "failed": "Can't play: the connection is too slow.",
       "unstable": "Connection lost or unstable…",
       "subtitlesGenerating": "Subtitles are still being generated: not available in the lighter version. They will be once generation is finished.",
-      "switched": "Switching to a lighter video because the connection is slow."
+      "switched": "Switching to a lighter video because the connection is slow.",
+      "tapToResume": "Lighter version ready. Tap Play to resume."
     },
     "unsupportedBrowser": "This browser can't play this stream.",
     "playbackInterruptedCheckConnection": "Playback was interrupted. Check your connection and try again.",
@@ -1681,7 +1682,9 @@
         "file": "The file",
         "sound": "The sound",
         "stream": "The stream",
-        "device": "What this device accepts"
+        "device": "What this device accepts",
+        "served": "Streamed",
+        "fileOriginal": "The original file"
       },
       "range": "Range",
       "tracks": "Tracks",
@@ -1699,7 +1702,12 @@
         "pendingDetail": "the file has not spoken yet"
       },
       "linkLighter": "Lighter video",
-      "linkLighterValue": "step {tier} · {rate}"
+      "linkLighterValue": "step {tier} · {rate}",
+      "lighterName": "Lighter version",
+      "describeLighter": "Slow connection: the server re-encodes the video at {rate} so playback can continue.",
+      "lighterSwitchedAt": "Automatic switch (slow connection) at {position}",
+      "lighterSwitched": "Automatic switch (slow connection)",
+      "lighterInherited": "Lighter version carried over from the previous playback (less than 2 min earlier)"
     },
     "experimental": {
       "title": "The experimental player could not play this file",

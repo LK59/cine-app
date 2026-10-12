@@ -19,6 +19,7 @@ import { originalLanguageCode } from "@/lib/originalLanguage";
 import { displayTitle } from "@/lib/displayTitle";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { signCastToken, CAST_TOKEN_PARAM } from "@/lib/castToken";
+import { masterVariantFacts } from "@/lib/playbackPanel";
 import { forwardedFor } from "@/lib/clientAddress";
 
 // Both "no Jellyfin identity in session" and "Jellyfin rejected our stored
@@ -36,11 +37,17 @@ function reauthRequired() {
 // Jellyfin version (verified against the real server — MediaSourceInfo has no such field of
 // its own), never as a separate JSON field — so it has to be parsed out of the URL rather than
 // read directly.
-function parseTranscodingUrlInfo(transcodingUrl: string): { videoCodecs: string[]; reasons: string[] } {
+function parseTranscodingUrlInfo(transcodingUrl: string): { videoCodecs: string[]; reasons: string[]; streamBitrate: number | null } {
   const parsed = new URL(transcodingUrl, "http://internal");
   const videoCodecs = (parsed.searchParams.get("VideoCodec") ?? "").split(",").filter(Boolean);
   const reasons = (parsed.searchParams.get("TranscodeReasons") ?? "").split(",").filter(Boolean);
-  return { videoCodecs, reasons };
+  // Le débit que ffmpeg vise (vidéo + son), écrit par Jellyfin dans l'adresse : celui du flux envoyé,
+  // que `MediaStreams` (la source) ne dit pas — voir `streamNeedBps`.
+  const videoBitrate = Number(parsed.searchParams.get("VideoBitrate"));
+  const audioBitrate = Number(parsed.searchParams.get("AudioBitrate"));
+  const streamBitrate =
+    Number.isFinite(videoBitrate) && videoBitrate > 0 ? videoBitrate + (Number.isFinite(audioBitrate) && audioBitrate > 0 ? audioBitrate : 0) : null;
+  return { videoCodecs, reasons, streamBitrate };
 }
 
 // Jellyfin's PlayMethod isn't handed to us directly by PlaybackInfo (unlike /Sessions, which
@@ -211,6 +218,8 @@ export async function POST(req: NextRequest) {
     let manifestUrl: string;
     let videoCodecs: string[] = [];
     let transcodeReasons: string[] = [];
+    let streamBitrate: number | null = null;
+    let served: { codecs: string | null; videoRange: string | null } | null = null;
 
     if (isDirectPlay) {
       // No TranscodingUrl is returned for DirectPlay — jellyfin-web builds this same static
@@ -237,7 +246,7 @@ export async function POST(req: NextRequest) {
       // et cette adresse finit dans la page, l'historique et le journal du relais inverse — voir
       // `stripAccessToken`.
       manifestUrl = `/api/jellyfin/stream/${itemId}/${restPath}${stripAccessToken(parsed.search)}`;
-      ({ videoCodecs, reasons: transcodeReasons } = parseTranscodingUrlInfo(source.TranscodingUrl));
+      ({ videoCodecs, reasons: transcodeReasons, streamBitrate } = parseTranscodingUrlInfo(source.TranscodingUrl));
       // Un préchauffage (§78) : sa séance est retenue pour ce compte — la route d'arrêt `prewarm` ne
       // coupera qu'elle, sous l'appareil que Jellyfin a écrit dans l'adresse.
       const prewarmDevice = parsed.searchParams.get("DeviceId");
@@ -268,7 +277,9 @@ export async function POST(req: NextRequest) {
           });
           // Read it to completion (a ~700 byte playlist) rather than dropping the response on the
           // floor: an unconsumed body holds its connection open until the GC gets to it.
-          await warmup.text().catch(() => "");
+          const master = await warmup.text().catch(() => "");
+          // Ce que ce maître annonce, pour le panneau d'infos techniques (le lecteur HLS natif ne le dit pas).
+          if (warmup.ok) served = masterVariantFacts(master);
         } catch {
           // Fall through — see comment above.
         }
@@ -457,6 +468,7 @@ export async function POST(req: NextRequest) {
           bitDepth: videoStream.BitDepth ?? null,
           frameRate: videoStream.AverageFrameRate ?? null,
           bitRate: videoStream.BitRate ?? null,
+          rangeType: videoStream.VideoRangeType ?? null,
         },
         audio: audioStreamForPlayback && {
           codec: audioStreamForPlayback.Codec ?? null,
@@ -464,6 +476,10 @@ export async function POST(req: NextRequest) {
           bitRate: audioStreamForPlayback.BitRate ?? null,
           language: audioStreamForPlayback.Language ?? null,
         },
+        // Le flux envoyé quand Jellyfin transcode — voir `streamNeedBps` et le panneau (« Diffusé »).
+        // Une vidéo copiée ignore le débit visé : rien hors transcodage.
+        streamBitrate: playMethod === "Transcode" ? streamBitrate : null,
+        served,
       },
     });
   } catch (err) {

@@ -442,6 +442,36 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(mockFetch).toHaveBeenCalledOnce();
   });
 
+  it("panneau technique : le débit visé par Jellyfin, la plage de la source et ce que le maître préchauffé annonce — sans requête de plus", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "play-1",
+      MediaSources: [{
+        Id: "src-1",
+        TranscodingUrl: "/videos/aaaa/master.m3u8?VideoCodec=hevc,h264&VideoBitrate=1116000&AudioBitrate=384000&TranscodeReasons=ContainerBitrateExceedsLimit,VideoRangeTypeNotSupported",
+        MediaStreams: [{ Type: "Video", Index: 0, Codec: "hevc", BitRate: 6_131_829, Width: 3840, VideoRangeType: "DOVIWithHDR10" }],
+      }],
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1500000,VIDEO-RANGE=SDR,CODECS="hvc1.2.4.L150.B0,mp4a.40.2",RESOLUTION=1280x533\nmain.m3u8\n',
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const body = await (await POST(fakeReq({ itemId: validId, nativeHls: true, lighter: true, maxBitrate: 1_500_000 }))).json();
+    expect(mockFetch).toHaveBeenCalledOnce();
+    expect(body.playbackInfo).toMatchObject({
+      playMethod: "Transcode",
+      streamBitrate: 1_500_000,
+      video: { bitRate: 6_131_829, rangeType: "DOVIWithHDR10" },
+      served: { codecs: "hvc1.2.4.L150.B0,mp4a.40.2", videoRange: "SDR" },
+    });
+    // hls.js : pas de maître lu ici (il le lit lui-même), rien d'annoncé.
+    mockJellyfin.getPlaybackInfo.mockClear();
+    const hlsJs = await (await POST(fakeReq({ itemId: validId, nativeHls: false }))).json();
+    expect(hlsJs.playbackInfo.served).toBeNull();
+    expect(hlsJs.playbackInfo.streamBitrate).toBe(1_500_000);
+  });
+
   it("skips the pre-warm for an hls.js client, so the response isn't held behind ffmpeg", async () => {
     transcodingSource();
     const { POST } = await import("@/app/api/jellyfin/playback/start/route");

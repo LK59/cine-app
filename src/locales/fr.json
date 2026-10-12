@@ -1621,7 +1621,8 @@
       "failed": "Lecture impossible : la connexion est trop lente.",
       "unstable": "Connexion perdue ou instable…",
       "subtitlesGenerating": "Sous-titres en cours de génération : indisponibles dans la version allégée. Ils le seront une fois la génération terminée.",
-      "switched": "Passage en vidéo allégée en raison d'une connexion lente."
+      "switched": "Passage en vidéo allégée en raison d'une connexion lente.",
+      "tapToResume": "Version allégée prête. Touchez Lecture pour reprendre."
     },
     "unsupportedBrowser": "Ce navigateur ne peut pas lire ce flux.",
     "playbackInterruptedCheckConnection": "La lecture a été interrompue. Vérifie ta connexion et réessaie.",
@@ -1681,7 +1682,9 @@
         "file": "Le fichier",
         "sound": "Le son",
         "stream": "Le flux",
-        "device": "Ce que l'appareil accepte"
+        "device": "Ce que l'appareil accepte",
+        "served": "Diffusé",
+        "fileOriginal": "Le fichier d'origine"
       },
       "range": "Plage",
       "tracks": "Pistes",
@@ -1699,7 +1702,12 @@
         "pendingDetail": "le fichier n'a pas encore parlé"
       },
       "linkLighter": "Vidéo allégée",
-      "linkLighterValue": "palier {tier} · {rate}"
+      "linkLighterValue": "palier {tier} · {rate}",
+      "lighterName": "Version allégée",
+      "describeLighter": "Connexion lente : la vidéo est réencodée par le serveur à {rate} pour que la lecture continue.",
+      "lighterSwitchedAt": "Bascule automatique (connexion lente) à {position}",
+      "lighterSwitched": "Bascule automatique (connexion lente)",
+      "lighterInherited": "Version allégée reprise de la lecture précédente (moins de 2 min avant)"
     },
     "experimental": {
       "title": "Le lecteur expérimental n'a pas pu lire ce fichier",

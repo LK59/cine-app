@@ -1621,7 +1621,8 @@
       "failed": "No se puede reproducir: la conexión es demasiado lenta.",
       "unstable": "Conexión perdida o inestable…",
       "subtitlesGenerating": "Subtítulos en generación: no disponibles en la versión ligera. Lo estarán cuando termine la generación.",
-      "switched": "Cambio a vídeo ligero por una conexión lenta."
+      "switched": "Cambio a vídeo ligero por una conexión lenta.",
+      "tapToResume": "Versión aligerada lista. Toca Reproducir para continuar."
     },
     "unsupportedBrowser": "Este navegador no puede reproducir este flujo.",
     "playbackInterruptedCheckConnection": "La reproducción se interrumpió. Comprueba tu conexión e inténtalo de nuevo.",
@@ -1681,7 +1682,9 @@
         "file": "El archivo",
         "sound": "El sonido",
         "stream": "El flujo",
-        "device": "Lo que acepta el dispositivo"
+        "device": "Lo que acepta el dispositivo",
+        "served": "Emitido",
+        "fileOriginal": "El archivo original"
       },
       "range": "Rango",
       "tracks": "Pistas",
@@ -1699,7 +1702,12 @@
         "pendingDetail": "el archivo aún no ha hablado"
       },
       "linkLighter": "Vídeo ligero",
-      "linkLighterValue": "nivel {tier} · {rate}"
+      "linkLighterValue": "nivel {tier} · {rate}",
+      "lighterName": "Versión aligerada",
+      "describeLighter": "Conexión lenta: el servidor recodifica el vídeo a {rate} para que la reproducción continúe.",
+      "lighterSwitchedAt": "Cambio automático (conexión lenta) en {position}",
+      "lighterSwitched": "Cambio automático (conexión lenta)",
+      "lighterInherited": "Versión aligerada heredada de la reproducción anterior (hace menos de 2 min)"
     },
     "experimental": {
       "title": "El reproductor experimental no pudo reproducir este archivo",

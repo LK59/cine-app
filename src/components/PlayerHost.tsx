@@ -59,7 +59,7 @@ import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
-import { describeJellyfinPlayback } from "@/lib/playbackPanel";
+import { describeJellyfinPlayback, splitCodecs, type LighterOrigin } from "@/lib/playbackPanel";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 import { playsHlsNatively } from "@/lib/webkitEngine";
 import { detectCodecSupport } from "@/lib/codecSupport";
@@ -113,6 +113,8 @@ export interface PlaybackInfoSummary {
     bitDepth: number | null;
     frameRate: number | null;
     bitRate: number | null;
+    /** `VideoRangeType` de la source. */
+    rangeType?: string | null;
   } | null;
   audio: {
     codec: string | null;
@@ -120,6 +122,10 @@ export interface PlaybackInfoSummary {
     bitRate: number | null;
     language: string | null;
   } | null;
+  /** Le débit que Jellyfin vise en transcodage (vidéo + son) — le flux envoyé, pas la source. */
+  streamBitrate?: number | null;
+  /** Ce que le maître annonce (HLS natif seulement : la route le lit en le préchauffant). */
+  served?: { codecs: string | null; videoRange: string | null } | null;
 }
 
 interface ExternalSubtitleTrack {
@@ -291,7 +297,7 @@ export function PlayerHost() {
       if (
         session &&
         shouldReloadDirect({ nativeHls: playsHlsNatively(), serverFallback, takeover: resumeInto, reloadAttempt: session.reloadAttempt, bench: session.bench }) &&
-        reloadIntoServerPlayer(directReloadIntent(session, resumeInto, sessionId))
+        reloadIntoServerPlayer(directReloadIntent(session, resumeInto, sessionId, reason))
       ) {
         // Le préchauffage prêt de la version allégée passe à la page suivante ; tout autre est arrêté
         // chez Jellyfin — le démontage qui l'aurait fait n'aura pas lieu.
@@ -407,7 +413,9 @@ export function PlayerHost() {
         key={session.openId ?? 0}
         session={session}
         mode={mode === "mini" ? "mini" : "full"}
-        fallbackReason={fallbackReason}
+        // La cause emportée par un rechargement direct : `useStableFallback` vit dans la page, et la page
+        // rechargée ne la connaissait plus — la note « a cédé la main » disparaissait du panneau.
+        fallbackReason={fallbackReason ?? session.reloadCarry?.reason ?? null}
         takeover={carried ?? takeover}
         // Un rechargement direct poursuit la séance que le natif avait ouverte (`reloadCarry.continues`).
         continuesSession={continued?.owner === session ? continued.id : session.reloadCarry?.continues}
@@ -708,6 +716,35 @@ function ActivePlayer({
   /** Le même, lu par le bilan (`reportStop`) : seule une séance réellement allégée est retenue. */
   const negotiatedStepRef = useRef<LighterStep | null>(null);
   /**
+   * D'où vient la version allégée en cours (§78), pour le panneau d'infos techniques : une bascule —
+   * relais du lecteur natif, renégociation d'ici, ou emportée par un rechargement — et sa position ;
+   * ou la règle des deux minutes. Le ref suit l'état pour `reloadCarryNow`, aux dépendances figées.
+   */
+  const [lighterOrigin, setLighterOrigin] = useState<LighterOrigin | null>(() => {
+    const handover = takeoverFor(takeover, session);
+    if (handover?.lighter) return { kind: "switch", at: handover.resumeAt };
+    const carried = session.reloadCarry?.lighter;
+    if (carried) return carried.real ? { kind: "switch", at: carried.at ?? null } : { kind: "inherited" };
+    return null;
+  });
+  const lighterOriginRef = useRef(lighterOrigin);
+  const noteLighterOrigin = useCallback((origin: LighterOrigin | null) => {
+    lighterOriginRef.current = origin;
+    setLighterOrigin(origin);
+  }, []);
+  /** La cause du relais, emportée par un rechargement de page (`reloadCarry.reason`) comme le palier. */
+  const fallbackReasonRef = useRef(fallbackReason);
+  useEffect(() => {
+    fallbackReasonRef.current = fallbackReason;
+  }, [fallbackReason]);
+  /**
+   * Ce que le flux transcodé est réellement (panneau, section « Diffusé ») : codecs et plage annoncés
+   * par la liste maître — hls.js les lit, Safari HLS natif par la route —, et la taille que le
+   * navigateur décode, suivie sur `resize`. Rien d'inventé : inconnu, `null`.
+   */
+  const [servedCodecs, setServedCodecs] = useState<{ video: string | null; audio: string | null; range: string | null } | null>(null);
+  const [decodedSize, setDecodedSize] = useState<{ width: number; height: number } | null>(null);
+  /**
    * Vrai quand le palier en cours n'est qu'hérité (règle des deux minutes) et qu'aucune bascule n'a
    * eu lieu dans cette séance : elle ne réarme pas la mémoire. Sinon chaque séance héritée repoussait
    * les deux minutes, et un appareil restait au lecteur serveur tant qu'on relançait vite (12/10/2026).
@@ -744,6 +781,13 @@ function ActivePlayer({
   const reloadGapRef = useRef<number | null>(null);
   /** Le palier emporté par le rechargement (`reloadCarry.lighter`) : vient-il d'une vraie bascule ? */
   const reloadLighterRef = useRef(session.reloadCarry?.lighter);
+  /**
+   * Safari a refusé de reprendre seul après le rechargement d'une bascule allégée (pas de geste du
+   * spectateur dans la page neuve) : le message reste, avec ce qu'il faut faire, jusqu'à la lecture.
+   * Disparu au bout de 5 s, il laissait une image figée sans explication à qui avait posé son
+   * téléphone pendant le chargement (12/10/2026).
+   */
+  const [awaitingTap, setAwaitingTap] = useState(false);
   /** « Passage en vidéo allégée en raison d'une connexion lente. » — bref, en bas à gauche. */
   const [switchNotice, setSwitchNotice] = useState(
     () =>
@@ -762,10 +806,17 @@ function ActivePlayer({
    * négocié, et s'il vient d'une vraie bascule — un palier seulement hérité, ou dont le lien s'est
    * rétabli (`lighterCleared`), ne réarmera pas la mémoire des deux minutes de l'autre côté.
    */
-  const reloadCarryNow = useCallback(
-    () => ({ ...(negotiatedStepRef.current ? { lighter: reloadLighterOf(negotiatedStepRef.current, !carriedOnlyRef.current && !lighterClearedRef.current) } : {}) }),
-    []
-  );
+  const reloadCarryNow = useCallback(() => {
+    const origin = lighterOriginRef.current;
+    const at = origin?.kind === "switch" ? origin.at : null;
+    return {
+      ...(negotiatedStepRef.current
+        ? { lighter: reloadLighterOf(negotiatedStepRef.current, !carriedOnlyRef.current && !lighterClearedRef.current, at) }
+        : {}),
+      // La cause du relais survit à un rechargement de plus (piste audio, échelle) : le panneau la garde.
+      ...(fallbackReasonRef.current ? { reason: fallbackReasonRef.current } : {}),
+    };
+  }, []);
   /** La version allégée est-elle permise à ce compte (réponse de la négociation, §78) ? */
   const [lighterAllowed, setLighterAllowed] = useState(true);
   /** Le réglage « Qualité » (§78) : en « Originale », jamais de bascule ; ni pour le banc d'essai. */
@@ -1266,6 +1317,8 @@ function ActivePlayer({
         lighterReloaded = reloaded !== undefined;
         lighterCarried = !reloaded?.real;
         carriedOnlyRef.current = !reloaded?.real;
+        // Seulement hérité (règle des deux minutes), sans rechargement qui en dirait l'origine : dit tel quel.
+        if (!reloaded) noteLighterOrigin({ kind: "inherited" });
         const mbpsText = (sessionLighterRef.current.targetBps / 1e6).toFixed(1);
         slowLogRef.current.note(
           reloaded
@@ -1278,6 +1331,7 @@ function ActivePlayer({
       const cap = { maxBitrate, step };
       negotiatedStepRef.current = step;
       setLighterStep(step);
+      if (!step) noteLighterOrigin(null);
       // L'instant de la demande : la décision de l'ouverture et le résultat d'une version allégée en partent.
       const startedAt = performance.now();
       const startedAtWall = Date.now();
@@ -1468,6 +1522,10 @@ function ActivePlayer({
       setRecapSkip(data.recapSkip ?? null);
       setCreditsStart(data.creditsStart ?? null);
       setPlaybackInfo(data.playbackInfo ?? null);
+      // Ce que le maître annonce (HLS natif : lu par la route ; repris d'un préchauffage : son maître) —
+      // hls.js le redira plus bas, d'après ses propres niveaux.
+      const announced = (data.playbackInfo as PlaybackInfoSummary | undefined)?.served ?? (warmed?.variant ? { codecs: warmed.variant.codecs, videoRange: null } : null);
+      setServedCodecs(announced ? { ...splitCodecs(announced.codecs), range: announced.videoRange } : null);
 
       const resumeAt = opts?.resumeAt;
       // Avant le chargement, et pas seulement dans son rappel plus bas : entre cet instant et
@@ -1693,6 +1751,7 @@ function ActivePlayer({
         video.play().catch((e: unknown) => {
           if (e instanceof DOMException && e.name === "NotAllowedError") {
             setLoading(false);
+            if (session.reloadCarry?.direct !== undefined && session.reloadCarry.lighter !== undefined) setAwaitingTap(true);
           }
         });
       };
@@ -1767,6 +1826,19 @@ function ActivePlayer({
         return;
       }
       hlsRef.current = hls;
+      // Le flux réellement envoyé, d'après le maître que hls.js a lu (panneau, « Diffusé ») : `attrs`
+      // brut pour la plage — son `videoRange` répond « SDR » quand le maître ne dit rien.
+      const noteLevel = (level: { videoCodec?: string; audioCodec?: string; attrs?: Record<string, unknown> } | undefined) => {
+        try {
+          if (!level || generation !== playbackGeneration.current) return;
+          const range = level.attrs?.["VIDEO-RANGE"];
+          setServedCodecs({ video: level.videoCodec ?? null, audio: level.audioCodec ?? null, range: typeof range === "string" ? range : null });
+        } catch {
+          /* le panneau se passe de cette ligne */
+        }
+      };
+      hls.on(Hls.Events.MANIFEST_PARSED, (_e, d) => noteLevel(d?.levels?.[0]));
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_e, d) => noteLevel(hls.levels?.[d?.level]));
 
       // A successfully buffered fragment means the stream is healthy again — reset both
       // counters so a later, unrelated blip gets its own full retry budget instead of
@@ -2309,6 +2381,22 @@ function ActivePlayer({
 
   // Tracked independently of PlayerControls (which keeps its own copy for the full-mode UI)
   // so the mini player's play/pause icon stays correct without threading state through props.
+  // La taille que le navigateur décode réellement (panneau, « Diffusé ») — celle du flux, pas du fichier.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const read = () =>
+      setDecodedSize(video.videoWidth > 0 && video.videoHeight > 0 ? { width: video.videoWidth, height: video.videoHeight } : null);
+    video.addEventListener("loadedmetadata", read);
+    video.addEventListener("resize", read);
+    video.addEventListener("emptied", read);
+    return () => {
+      video.removeEventListener("loadedmetadata", read);
+      video.removeEventListener("resize", read);
+      video.removeEventListener("emptied", read);
+    };
+  }, [videoKey]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -2408,6 +2496,7 @@ function ActivePlayer({
     };
     const onPlaying = () => {
       const now = Date.now();
+      setAwaitingTap(false);
       playedOnce = true;
       sessionPlayedRef.current = true;
       tallyRef.current.waitEnded(now);
@@ -2487,6 +2576,7 @@ function ActivePlayer({
       switchTo: (step, resumeAt, cause, _held, reading) => {
         switchStepRef.current = { itemId, step };
         carriedOnlyRef.current = false;
+        noteLighterOrigin({ kind: "switch", at: resumeAt });
         switchedAtRef.current = Date.now();
         setSwitchNotice(true);
         startPlayback({
@@ -2521,7 +2611,7 @@ function ActivePlayer({
       position: () => lastKnownTime.current,
       seekSignal: setSeekSignal,
     } satisfies SlowLinkHost);
-  }, [runner, itemId, startPlayback, t]);
+  }, [runner, itemId, startPlayback, t, noteLighterOrigin]);
 
   /**
    * Les saccades en pleine lecture (§78) : un problème visible (`StutterWatch`). `decidePlayback` :
@@ -3042,7 +3132,7 @@ function ActivePlayer({
       />
       {/* Les messages brefs de la version allégée (§78), en bas à gauche, au-dessus des commandes, retirés
           seuls : la bascule, et une génération de sous-titres qui ne suivra pas. */}
-      {!isMini && (switchNotice || subtitleGenNotice) && (
+      {!isMini && (switchNotice || subtitleGenNotice || awaitingTap) && (
         <div
           className="subtitle-lift pointer-events-none absolute z-40 flex max-w-[min(80vw,22rem)] flex-col gap-2"
           style={{
@@ -3052,10 +3142,16 @@ function ActivePlayer({
           }}
           role="status"
         >
-          {switchNotice && (
-            <p data-lighter-switch-notice="" className="nav-glass animate-fade-in rounded-2xl px-3 py-2 text-xs leading-snug text-white">
-              {t("player.slowLink.switched")}
+          {awaitingTap ? (
+            <p data-lighter-tap-notice="" className="nav-glass animate-fade-in rounded-2xl px-3 py-2 text-xs leading-snug text-white">
+              {t("player.slowLink.tapToResume")}
             </p>
+          ) : (
+            switchNotice && (
+              <p data-lighter-switch-notice="" className="nav-glass animate-fade-in rounded-2xl px-3 py-2 text-xs leading-snug text-white">
+                {t("player.slowLink.switched")}
+              </p>
+            )
           )}
           {subtitleGenNotice && (
             <p data-subtitle-gen-notice="" className="nav-glass animate-fade-in rounded-2xl px-3 py-2 text-xs leading-snug text-white">
@@ -3083,7 +3179,7 @@ function ActivePlayer({
           hidden={!!error || needsReauth}
           loading={loading}
           openingQuiet={introCovering}
-          onChromeEdges={switchNotice || subtitleGenNotice ? setChromeEdges : undefined}
+          onChromeEdges={switchNotice || subtitleGenNotice || awaitingTap ? setChromeEdges : undefined}
           introSkip={introSkip}
           recapSkip={recapSkip}
           creditsStart={creditsStart}
@@ -3103,7 +3199,23 @@ function ActivePlayer({
           data={
             playbackInfo
               ? {
-                  ...describeJellyfinPlayback(playbackInfo, networkBitrate, fallbackReason, t, { ...(linkFailure ?? linkLive ?? readLink(null, null)), lighter: lighterStep }),
+                  ...describeJellyfinPlayback(
+                    playbackInfo,
+                    networkBitrate,
+                    fallbackReason,
+                    t,
+                    { ...(linkFailure ?? linkLive ?? readLink(null, null)), lighter: lighterStep },
+                    {
+                      served: {
+                        videoCodec: servedCodecs?.video ?? null,
+                        audioCodec: servedCodecs?.audio ?? null,
+                        videoRange: servedCodecs?.range ?? null,
+                        width: decodedSize?.width ?? null,
+                        height: decodedSize?.height ?? null,
+                      },
+                      origin: lighterOrigin,
+                    }
+                  ),
                   // Le même rapport copiable que le lecteur natif : c'est ce qui manquait ici,
                   // et c'est justement la lecture dont on a le plus de mal à rapporter l'état.
                   report: {
