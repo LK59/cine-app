@@ -542,7 +542,7 @@ async function translateIds(job: JobRow, ids: number[], tries: number, seekLane 
   try {
     try {
       const reply = await provider.complete({
-        system: batchSystem(job.target),
+        system: batchSystem(job.target, current.source_lang),
         stable: stablePrefix(current.glossary ? parseGlossary(JSON.parse(current.glossary)) : null, cues.sources),
         cache: true,
         user: batchUser(previous, open, cues.sources),

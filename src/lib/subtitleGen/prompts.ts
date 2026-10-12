@@ -94,10 +94,14 @@ export function stablePrefix(glossary: Glossary | null, lines: readonly string[]
 
 export const GLOSSARY_USER = "Produce the glossary for these subtitle lines.";
 
-export function batchSystem(target: string): string {
+export function batchSystem(target: string, sourceLanguage?: string | null): string {
   const language = englishName(target);
+  const from = sourceLanguage && sourceLanguage !== target ? englishName(sourceLanguage) : null;
   return [
     `You translate film subtitles into ${language}.`,
+    // Dite en clair, la langue de la source : sans elle, Haiku laissait des passages entiers en
+    // français dans une version allemande (28 répliques sur 40 ; 3 avec cette phrase — 12/10/2026).
+    ...(from ? [`The source lines are written in ${from}; translate every one of them into ${language}.`] : []),
     DATA_RULE,
     'The whole subtitle is given below as "SOURCE SUBTITLE LINES". Use it to know who speaks, what is referred to, and how characters address each other.',
     `Translate only the ids the user message asks for, into natural, idiomatic ${language} that reads well as a subtitle: concise, faithful to meaning, tone and register, not word for word.`,
@@ -105,7 +109,9 @@ export function batchSystem(target: string): string {
     `At most two lines per subtitle (or as many as the source subtitle has), written "${LINE_BREAK}" between them. Keep a leading '-' for lines spoken by two people.`,
     "Sound descriptions in brackets or parentheses (for example [door slams]) are translated and keep their brackets. Keep the ♪ signs and translate the lyrics between them.",
     'Follow the glossary for names and for formal/informal address. "Previous translations" are the translations already made for the lines just before: stay consistent with them.',
-    `If a line is only a name, a sound, or already ${language}, return it unchanged.`,
+    // « un son » était lu comme « une description sonore » : « Une branche craque. » restait en
+    // français. Les sous-titres pour malentendants décrivent les sons en clair, et se traduisent.
+    `Every line is translated, including sound and music descriptions written as plain text (for example "A branch snaps.", "Suspense music"): they are hearing-impaired captions, not sounds to copy. Return a line unchanged only when it is nothing but a proper name, an interjection (Ah!, Hmm…) or punctuation, or is already ${language}.`,
     `Output ONLY the translations, one per line, in the form "id|translation", in the requested order, nothing else.`,
     // Mesuré le 12/10/2026 (10 lots de 40, film A.I.) : sans cette phrase ni l'ancrage de `batchUser`,
     // 5 lots sur 10 portaient un commentaire (« les ids 305 à 344 n'existent pas… ») et 4 étaient à refaire.

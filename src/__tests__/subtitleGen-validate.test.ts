@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fixture from "./fixtures/subtitleGen/drift-bench-2026-10-12.json";
 import { DRIFT, LineSplitter, detectDrift, fitLines, sameShape, parseReply, parseReplyLine, validateBatch, type ReplyLine } from "@/lib/subtitleGen/validate";
-import { batchUser, idsAsked, oneLine, sourceBlock } from "@/lib/subtitleGen/prompts";
+import { batchSystem, batchUser, idsAsked, oneLine, sourceBlock } from "@/lib/subtitleGen/prompts";
 import { isAllCaps, matchSourceCase } from "@/lib/subtitleGen/textCase";
 
 /** La lecture et la validation stricte d'un lot (DECISIONS.md §69). */
@@ -209,5 +209,17 @@ describe("sameShape", () => {
   });
   it("refuse deux réponses qui ne couvrent pas les mêmes lignes", () => {
     expect(sameShape(m(["a", "b"]), new Map([[0, "a"], [5, "b"]]))).toBe(false);
+  });
+});
+
+describe("batchSystem", () => {
+  it("dit la langue de la source quand elle est connue et différente de la cible", () => {
+    expect(batchSystem("de", "fr")).toContain("The source lines are written in French; translate every one of them into German.");
+    expect(batchSystem("de", null)).not.toContain("The source lines are written in");
+    expect(batchSystem("fr", "fr")).not.toContain("The source lines are written in");
+  });
+  it("fait traduire les descriptions sonores écrites en clair", () => {
+    expect(batchSystem("de", "fr")).toContain("including sound and music descriptions written as plain text");
+    expect(batchSystem("de", "fr")).not.toContain("only a name, a sound");
   });
 });

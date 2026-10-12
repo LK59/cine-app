@@ -2973,6 +2973,14 @@ Mesuré sur 10 lots de 40 répliques (film *A.I.*) : consigne seule, 5 lots comm
 langues cibles passent de 7 à 26 (`TARGET_LANGUAGES`) ; le chinois est le simplifié, `zho` ne
 distinguant pas l'écriture. Le calque des sous-titres porte `dir="auto"` pour l'arabe et l'hébreu.
 
+**Lots refaits et descriptions sonores (12/10/2026, deux films entiers).** Une réplique coupée en trois
+lignes est recousue (`fitLines`) au lieu de refaire son lot de 40. Le détecteur de décalage compte les
+lettres et pas les espaces (un SDH passé par l'OCR, « U n f in ish ed », gonflait la source). Deux
+alertes de décalage dont les réponses ont la même forme (`sameShape`) sont acceptées : 30 lots sains
+refaits sur *Kompromat*. La consigne disait « rends tel quel ce qui n'est qu'un son » : Haiku laissait
+« Une branche craque. » en français ; elle fait désormais traduire les descriptions sonores écrites en
+clair, et nomme la langue de la source (28 répliques laissées en français sur un lot, 3 ensuite).
+
 ## 70. « Générer des sous-titres » dans le lecteur natif : une entrée temporaire, des messages dits comme des sous-titres, une seule recherche de ligne
 
 **Règle.** Le lecteur natif propose, sous les pistes du menu des sous-titres, « Générer des
