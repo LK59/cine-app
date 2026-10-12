@@ -16,7 +16,7 @@ export type SubtitleColor = "white" | "yellow";
 export type SubtitleBackground = "none" | "shadow" | "box";
 
 export interface SubtitleStyle {
-  /** Un facteur, pas une taille : la taille de base dépend de la largeur de l'écran. */
+  /** Un facteur, pas une taille : la taille de base dépend de la hauteur et de la largeur de l'image. */
   size: number;
   color: SubtitleColor;
   background: SubtitleBackground;
@@ -40,15 +40,69 @@ export const SUBTITLE_BACKGROUNDS: SubtitleBackground[] = ["shadow", "box", "non
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = { size: 0.75, color: "white", background: "shadow" };
 
 /**
- * La taille du texte, pour les deux façons de le dessiner.
+ * La taille du texte : la plus petite de deux mesures, l'une tirée de la hauteur de l'image,
+ * l'autre de sa largeur, chacune affine (une part fixe plus une part proportionnelle).
+ *
+ * Elle suivait la largeur seule (`4 vw`, 12/10/2026 : « trop gros, ils couvrent trop d'image ») :
+ * sur un téléphone en paysage, 844 px de large pour 390 de haut, une ligne prenait 6,5 % de la
+ * hauteur, deux lignes et leur interligne près d'un sixième de l'image. Les lecteurs de référence
+ * (Netflix, Apple TV) règlent la taille sur la hauteur, et en proportion plus petite sur un petit
+ * écran — d'où la part fixe : 37 px sur 1080 de haut (3,4 %), 17,5 px sur 390 (4,5 %, encore
+ * lisible) avec une droite. La hauteur seule ferait d'un téléphone en portrait (844 de haut, 390 de
+ * large) un écran de bureau, avec quinze caractères par ligne : la largeur le borne, réglée pour
+ * donner 14 px sur 390 de large et laisser le reste à la hauteur (sauf l'iPad, 27,5 px au lieu de
+ * 29,5). Valeurs à « Petite » (0,75, le défaut) ; les autres tailles gardent leurs proportions,
+ * puisque le facteur multiplie tout.
+ */
+export const SUBTITLE_FONT = {
+  /** px fixes + % de la hauteur, avant le facteur de taille. */
+  height: { px: 8.6, percent: 3.77 },
+  /** px fixes + % de la largeur, avant le facteur de taille. */
+  width: { px: 9.8, percent: 2.28 },
+  /**
+   * Plancher et plafond, eux aussi multipliés par le facteur (plancher absolu : 8 px). Le plancher
+   * ne sert qu'aux tout petits écrans (moins de 320 px de large) : partout ailleurs la règle donne plus.
+   */
+  floor: 13,
+  cap: 64,
+} as const;
+
+function floorPx(size: number): number {
+  return Math.max(8, Math.round(SUBTITLE_FONT.floor * size));
+}
+function capPx(size: number): number {
+  return Math.round(SUBTITLE_FONT.cap * size);
+}
+
+/**
+ * La même règle en pixels, pour une zone donnée — ce que la CSS ci-dessous calcule dans le
+ * navigateur. Sert aux tests et à qui veut raisonner sur un écran sans en avoir un.
+ */
+export function subtitleFontPx(size: number, width: number, height: number): number {
+  const { height: h, width: w } = SUBTITLE_FONT;
+  const byHeight = size * (h.px + (h.percent / 100) * height);
+  const byWidth = size * (w.px + (w.percent / 100) * width);
+  return Math.min(capPx(size), Math.max(floorPx(size), Math.min(byHeight, byWidth)));
+}
+
+/**
+ * La taille du texte en CSS, pour les deux façons de le dessiner.
+ *
+ * `units` dit à quoi se mesurent hauteur et largeur. Le calque du lecteur natif se mesure à sa
+ * propre zone (`cqh`/`cqw`, il est un conteneur de taille) : c'est l'écran du film, pas la
+ * fenêtre — la même chose en plein écran, mais pas dans une fenêtre de navigateur entourée d'autre
+ * chose. `::cue` vit dans l'arbre fantôme de l'élément vidéo, où l'on ne sait pas à quel conteneur
+ * une unité de requête se rapporterait : il se mesure à la fenêtre, que le lecteur serveur remplit.
  *
  * Le plancher suit le facteur. Il était fixé à 14 px pour toutes les tailles, et sur un téléphone
- * en portrait (4 vw ≈ 15,6 px) « Petite » tombait dessus : elle s'affichait presque comme
- * « Normale », et une taille plus petite encore n'aurait rien changé du tout.
+ * en portrait « Petite » tombait dessus : elle s'affichait presque comme « Normale ».
  */
-function fontSize(size: number): string {
-  const floor = Math.max(10, Math.round(14 * size));
-  return `clamp(${floor}px, ${size * 4}vw, ${Math.round(size * 48)}px)`;
+function fontSize(size: number, units: "container" | "viewport"): string {
+  const [vh, vw] = units === "container" ? ["cqh", "cqw"] : ["vh", "vw"];
+  const { height: h, width: w } = SUBTITLE_FONT;
+  const byHeight = `calc(${size} * (${h.px}px + ${h.percent}${vh}))`;
+  const byWidth = `calc(${size} * (${w.px}px + ${w.percent}${vw}))`;
+  return `clamp(${floorPx(size)}px, min(${byHeight}, ${byWidth}), ${capPx(size)}px)`;
 }
 
 const HEX: Record<SubtitleColor, string> = { white: "#ffffff", yellow: "#f2e14c" };
@@ -65,7 +119,7 @@ const SHADOW = "0 2px 6px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,1)";
  */
 export function cueCss(style: SubtitleStyle): string {
   const parts = [
-    `font-size: ${fontSize(style.size)}`,
+    `font-size: ${fontSize(style.size, "viewport")}`,
     `color: ${HEX[style.color]}`,
     // `::cue` a un fond noir par défaut : le retirer explicitement est ce qui rend l'ombre seule
     // possible, et l'oublier laisserait la boîte du navigateur sous notre propre traitement.
@@ -78,7 +132,8 @@ export function cueCss(style: SubtitleStyle): string {
 /** Les mêmes réglages, en style en ligne, pour les lignes que le lecteur dessine lui-même. */
 export function overlayCss(style: SubtitleStyle): React.CSSProperties {
   return {
-    fontSize: fontSize(style.size),
+    // Mesuré à la zone du calque, qui doit donc être un conteneur de taille — voir `SUBTITLE_LAYER_STYLE`.
+    fontSize: fontSize(style.size, "container"),
     color: HEX[style.color],
     textShadow: style.background === "box" ? "none" : SHADOW,
     backgroundColor: style.background === "box" ? "rgba(0,0,0,0.72)" : undefined,
@@ -90,6 +145,58 @@ export function overlayCss(style: SubtitleStyle): React.CSSProperties {
     boxDecorationBreak: style.background === "box" ? "clone" : undefined,
     WebkitBoxDecorationBreak: style.background === "box" ? "clone" : undefined,
   } as React.CSSProperties;
+}
+
+/**
+ * Où se pose le calque du lecteur natif, et de combien il s'écarte des commandes.
+ *
+ * Il était à 96 px du bas (`bottom-24`) quoi qu'il arrive : un quart de la hauteur d'un téléphone en
+ * paysage, et toujours aussi haut une fois les commandes parties (12/10/2026). Désormais la ligne
+ * repose à 6,5 % de la hauteur (Netflix et l'Apple TV sont entre 6 et 8 %), jamais à moins de
+ * 12 px, plus la zone sûre — et ne monte que pour passer au-dessus des commandes quand elles sont
+ * là, de la hauteur exacte qu'elles occupent (`ChromeEdges`, mesurée par `PlayerControls`) et pas
+ * d'une constante qui vaudrait pour un écran sur trois. Un sous-titre placé en haut (`{\an8}`) fait
+ * la même chose de l'autre côté, sous la rangée du haut.
+ *
+ * Le déplacement est un `transform` seul (`.subtitle-lift`, globals.css) : il suit le fondu des
+ * commandes sans relancer de mise en page à chaque image.
+ */
+export const SUBTITLE_REST = { percent: 6.5, minPx: 12 } as const;
+
+/** Les bords des commandes affichées, en px depuis le haut et depuis le bas de l'écran. */
+export interface ChromeEdges {
+  top: number;
+  bottom: number;
+}
+
+/** Le style du calque : un conteneur de taille, pour que `cqh`/`cqw` se mesurent à lui. */
+export const SUBTITLE_LAYER_STYLE: React.CSSProperties = { containerType: "size" };
+
+function restCss(edge: "top" | "bottom"): string {
+  return `calc(max(${SUBTITLE_REST.minPx}px, ${SUBTITLE_REST.percent}cqh) + env(safe-area-inset-${edge}, 0px))`;
+}
+
+/**
+ * Le style de la rangée qui porte les lignes, à l'intérieur du calque. `chrome` absent : commandes
+ * cachées, la ligne repose. Présent : elle s'en écarte, si elle ne l'est pas déjà.
+ */
+export function subtitleRowStyle(top: boolean, chrome: ChromeEdges | null): React.CSSProperties {
+  const rest = restCss(top ? "top" : "bottom");
+  const edge = chrome ? (top ? chrome.top : chrome.bottom) : 0;
+  const lift = chrome ? `max(0px, ${Math.round(edge)}px - ${rest})` : "0px";
+  return {
+    [top ? "top" : "bottom"]: rest,
+    transform: `translateY(${top ? lift : `calc(-1 * ${lift})`})`,
+  };
+}
+
+/**
+ * Le même calcul en pixels — ce que donne `subtitleRowStyle` sur un écran de cette hauteur. Pour
+ * les tests : la distance entre le bas (ou le haut) de l'écran et la ligne la plus proche.
+ */
+export function subtitleOffsetPx(height: number, chromeEdge: number | null, safeArea = 0): number {
+  const rest = Math.max(SUBTITLE_REST.minPx, (SUBTITLE_REST.percent / 100) * height) + safeArea;
+  return chromeEdge === null ? rest : Math.max(rest, chromeEdge);
 }
 
 const STORAGE_KEY = "cine:subtitle-style";

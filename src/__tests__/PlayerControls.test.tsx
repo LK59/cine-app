@@ -929,6 +929,41 @@ describe("PlayerControls — une touche pendant le film", () => {
   });
 });
 
+// Les sous-titres du lecteur natif se posent au-dessus des commandes affichées, et redescendent
+// quand elles partent (12/10/2026) : il leur faut la hauteur réelle des rangées, et le moment où
+// elles s'en vont.
+describe("PlayerControls — ce que les commandes occupent", () => {
+  it("dit les bords des rangées affichées, puis rien une fois cachées ou démontées", async () => {
+    stubMediaFetches();
+    vi.useFakeTimers();
+    const edges = vi.fn();
+    let video!: HTMLVideoElement;
+    const { container, unmount } = render(<Harness onVideoRef={(v) => (video = v)} onChromeEdges={edges} />);
+    await act(async () => {});
+    const root = container.querySelector(".player-liquid") as HTMLElement;
+    const top = container.querySelector('[data-player-navgroup="topbar"]') as HTMLElement;
+    const bottom = container.querySelector(".player-chrome-x.flex-col") as HTMLElement;
+    const rect = (y: number, height: number) =>
+      ({ left: 0, width: 844, top: y, height, right: 844, bottom: y + height, x: 0, y, toJSON: () => ({}) }) as DOMRect;
+    root.getBoundingClientRect = () => rect(0, 390);
+    top.getBoundingClientRect = () => rect(0, 76);
+    bottom.getBoundingClientRect = () => rect(270, 120);
+
+    Object.defineProperty(video, "paused", { value: false, configurable: true });
+    Object.defineProperty(video, "duration", { value: 3600, configurable: true });
+    act(() => void video.dispatchEvent(new Event("play")));
+    await act(async () => void vi.advanceTimersByTime(4000));
+    expect(edges).toHaveBeenLastCalledWith(null);
+
+    act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", code: "ArrowRight" })));
+    expect(edges).toHaveBeenLastCalledWith({ top: 76, bottom: 120 });
+
+    edges.mockClear();
+    unmount();
+    expect(edges).toHaveBeenLastCalledWith(null);
+  });
+});
+
 describe("PlayerControls — masquées, elles suivent la position une fois par seconde", () => {
   it("ne se recalculent pas à chaque timeupdate quand personne ne les voit", async () => {
     // 28/09/2026 : ~4 recalculs par seconde de tout le composant, contrôles masqués compris.

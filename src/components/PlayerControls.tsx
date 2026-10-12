@@ -13,6 +13,7 @@ import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER
 import {
   subtitleStyleStore,
   cueCss,
+  type ChromeEdges,
   SUBTITLE_SIZES,
   SUBTITLE_COLORS,
   SUBTITLE_BACKGROUNDS,
@@ -190,6 +191,14 @@ interface PlayerControlsProps {
   dialogue?: { mode: DialogueMode; applies: boolean; onChange: (mode: DialogueMode) => void };
   /** Voir `SubtitleGenerationMenu`. Lecteur natif seulement. */
   subtitleGeneration?: SubtitleGenerationMenu;
+  /**
+   * Les bords des commandes affichées (px depuis le haut de l'écran pour la rangée du haut, depuis
+   * le bas pour celle du bas), `null` quand elles sont cachées : le lecteur natif y pose ses
+   * sous-titres juste au-dessus, au lieu d'une hauteur fixe qui couvrait l'image même commandes
+   * parties (`subtitleRowStyle`). Les pistes `<track>` du lecteur serveur sont placées par le
+   * navigateur et n'en ont pas l'usage.
+   */
+  onChromeEdges?: (edges: ChromeEdges | null) => void;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -327,6 +336,7 @@ export function PlayerControls({
   frameFit,
   dialogue,
   subtitleGeneration,
+  onChromeEdges,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -415,6 +425,40 @@ export function PlayerControls({
   useEffect(() => {
     visibleRef.current = visible;
   }, [visible]);
+  const topRowRef = useRef<HTMLDivElement>(null);
+  const bottomRowRef = useRef<HTMLDivElement>(null);
+  /**
+   * Ce que les commandes occupent, mesuré plutôt que supposé : la rangée du bas va de 110 px sur un
+   * téléphone à plus de 150 au bureau, selon le titre (logo ou texte, une ou deux lignes) et la zone
+   * sûre. Remesurée quand une rangée change de taille (rotation, titre chargé) ; cachées, `null`.
+   * Les rangées glissent de 4 px en apparaissant (`translate-y-1`) : la mesure prise pendant ce
+   * glissement est fausse d'autant au plus, et la suivante la corrige.
+   */
+  useEffect(() => {
+    if (!onChromeEdges) return;
+    if (!visible || hidden) {
+      onChromeEdges(null);
+      return;
+    }
+    const root = liquidRootRef.current;
+    const top = topRowRef.current;
+    const bottom = bottomRowRef.current;
+    if (!root || !top || !bottom) return;
+    const measure = () => {
+      const area = root.getBoundingClientRect();
+      onChromeEdges({
+        top: top.getBoundingClientRect().bottom - area.top,
+        bottom: area.bottom - bottom.getBoundingClientRect().top,
+      });
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    for (const el of [root, top, bottom]) observer.observe(el);
+    return () => observer.disconnect();
+  }, [visible, hidden, onChromeEdges]);
+  // Démonté (fermeture, passage au mini-lecteur), il n'y a plus de commandes à éviter.
+  useEffect(() => () => onChromeEdges?.(null), [onChromeEdges]);
   const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "subtitleGen" | "subtitleGenOther" | "more">(null);
   /** « Auto · 203 nits », « Natif », « 400 nits » — le réglage de luminosité HDR, en mots. */
   const hdrCapLabel = (choice: HdrCapChoice): string =>
@@ -1743,6 +1787,7 @@ export function PlayerControls({
             (encoche en paysage, Dynamic Island en portrait). */}
         <div
           data-player-navgroup="topbar"
+          ref={topRowRef}
           className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none -translate-y-1"} player-spring flex items-center justify-between gap-3 pb-4 motion-reduce:translate-y-0`}
           // Capture phase: children stopPropagation() in the bubble phase, which is exactly why
           // the old timer never got reset by button use — capture fires on the way DOWN, before
@@ -2411,6 +2456,7 @@ export function PlayerControls({
         {/* En bas : le titre et la pilule des réglages sur une rangée, la barre et ses deux temps
             dessous. */}
         <div
+          ref={bottomRowRef}
           className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none translate-y-1"} player-spring flex flex-col gap-3 pt-4 motion-reduce:translate-y-0`}
           // Son `click` est arrêté ; son `dblclick`, qui remonte quand même, ne doit pas passer en
           // plein écran depuis le titre (chasse aux défauts, 11/10/2026).

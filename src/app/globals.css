@@ -1014,7 +1014,14 @@
 .player-spring {
   transition: translate 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+/* Les sous-titres du lecteur natif montent au-dessus des commandes quand elles arrivent et
+   redescendent quand elles partent (`subtitleRowStyle`) : un `transform` seul, à peu près au rythme
+   des rangées, sans rebond — une réplique qui sautille se lit mal. */
+.subtitle-lift {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
 @media (prefers-reduced-motion: reduce) {
+  .subtitle-lift { transition: none; }
   .player-menu { animation: none; }
   .player-pill-seg { transition: none; }
   .player-spring { transition: none; }

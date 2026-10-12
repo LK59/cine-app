@@ -714,6 +714,15 @@ which fills its window already. The server-side player is not affected.
 
 ## Subtitles
 
+**Size and position** (DECISIONS.md §72, `subtitleStyle.ts`). The text size is the smaller of two
+affine measures — one from the height, one from the width — times the chosen factor: at the default
+(« Petite », 0.75) 37 px on 1920×1080, 28 px on 1366×768, 27.5 px on an iPad in landscape, 17.5 px on
+a phone in landscape, 14 px in portrait. The native player's layer is a size container and measures
+against itself (`cqh`/`cqw`); `::cue` uses the window (`vh`/`vw`). The bottom line rests at 6.5 % of
+the height (12 px minimum) plus the safe area, and rises just above the controls while they are
+shown — their real height, reported by `PlayerControls` through `onChromeEdges` — by a transform
+alone. Native `<track>` cues keep the browser's own placement.
+
 **Overlapping lines** are shown together, in the order they appeared, two at most
 (`simultaneousText`, DECISIONS.md n°19); they stay at the top only if every one asks for it.
 

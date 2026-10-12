@@ -43,7 +43,13 @@ import { ExperimentalPlayerReport, type ReportInput } from "@/components/Experim
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
-import { subtitleStyleStore, overlayCss } from "@/lib/subtitleStyle";
+import {
+  subtitleStyleStore,
+  overlayCss,
+  subtitleRowStyle,
+  SUBTITLE_LAYER_STYLE,
+  type ChromeEdges,
+} from "@/lib/subtitleStyle";
 import { useFrameFit } from "@/lib/frameFit";
 import { readDialogueMode, writeDialogueMode } from "@/lib/dialoguePreference";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
@@ -636,6 +642,8 @@ export function ExperimentalPlayerHost({
     subtitleStyleStore.snapshot,
     subtitleStyleStore.serverSnapshot
   );
+  /** Ce que les commandes affichées occupent, pour que les sous-titres passent au-dessus — `null` cachées. */
+  const [chromeEdges, setChromeEdges] = useState<ChromeEdges | null>(null);
 
   const showWarning = useCallback((text: string | null) => {
     setWarning(text ? { text, at: Date.now() } : null);
@@ -2933,27 +2941,32 @@ export function ExperimentalPlayerHost({
       {subtitle && !isMini && (
         // En haut quand le fichier le demande (`{\an8}`) : un sous-titre forcé qui traduit un texte
         // à l'image ne doit pas le cacher. Voir `subtitlePlacement`.
-        <div
-          className={`pointer-events-none absolute inset-x-0 z-10 flex justify-center px-8 ${
-            subtitlePlacement(subtitle).top ? "top-20" : "bottom-24"
-          }`}
-        >
-          <p
-            // Un message d'état de génération (« Préparation des sous-titres… ») : même place, même
-            // style qu'une réplique, marqué pour qui le cherche — jamais mêlé à une vraie ligne.
-            data-subtitle-notice={subtitleIsNotice ? "" : undefined}
-            // Le sens d'écriture vient du texte : une réplique arabe ou hébraïque (pistes du
-            // conteneur, ou générées depuis le 12/10/2026) mettrait sinon sa ponctuation finale du
-            // mauvais côté, la page étant écrite de gauche à droite.
-            dir="auto"
-            // Ni taille ni couleur écrites ici : ce lecteur dessine ses lignes lui-même, et il
-            // ignorait donc les réglages de sous-titres, qui ne touchaient que les pistes natives.
-            // Un réglage qui marche un film sur deux n'est pas un réglage — voir `subtitleStyle`.
-            className="max-w-4xl whitespace-pre-line text-center font-display font-medium leading-snug"
-            style={overlayCss(subtitleStyle)}
+        // Le calque couvre tout l'écran du lecteur et en est un conteneur de taille : la taille du
+        // texte et sa hauteur de repos se mesurent à lui (`cqh`/`cqw`), et la rangée ne s'écarte que
+        // des commandes réellement affichées (`subtitleRowStyle`, 12/10/2026 — elle était à 96 px
+        // fixes du bas, un quart d'un téléphone en paysage, commandes cachées ou non).
+        <div className="pointer-events-none absolute inset-0 z-10" style={SUBTITLE_LAYER_STYLE}>
+          <div
+            className="subtitle-lift absolute inset-x-0 flex justify-center px-8"
+            style={subtitleRowStyle(subtitlePlacement(subtitle).top, chromeEdges)}
           >
-            {subtitlePlacement(subtitle).text}
-          </p>
+            <p
+              // Un message d'état de génération (« Préparation des sous-titres… ») : même place, même
+              // style qu'une réplique, marqué pour qui le cherche — jamais mêlé à une vraie ligne.
+              data-subtitle-notice={subtitleIsNotice ? "" : undefined}
+              // Le sens d'écriture vient du texte : une réplique arabe ou hébraïque (pistes du
+              // conteneur, ou générées depuis le 12/10/2026) mettrait sinon sa ponctuation finale du
+              // mauvais côté, la page étant écrite de gauche à droite.
+              dir="auto"
+              // Ni taille ni couleur écrites ici : ce lecteur dessine ses lignes lui-même, et il
+              // ignorait donc les réglages de sous-titres, qui ne touchaient que les pistes natives.
+              // Un réglage qui marche un film sur deux n'est pas un réglage — voir `subtitleStyle`.
+              className="max-w-4xl whitespace-pre-line text-center font-display font-medium leading-snug"
+              style={overlayCss(subtitleStyle)}
+            >
+              {subtitlePlacement(subtitle).text}
+            </p>
+          </div>
         </div>
       )}
 
@@ -3138,6 +3151,7 @@ export function ExperimentalPlayerHost({
             title={title}
             // Le logo du titre, à la place du titre écrit — voir `PlayerTitle` (09/10/2026).
             logoUrl={info?.logoUrl ?? null}
+            onChromeEdges={setChromeEdges}
             onClose={handleClose}
             onMinimize={() => playback.minimize()}
             // Straight from the container the player is reading, not from Jellyfin's view of the

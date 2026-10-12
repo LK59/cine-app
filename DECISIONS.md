@@ -3104,3 +3104,49 @@ Tests : `firetv-spatial-nav.test.tsx` (la scène de Timothé rejouée : curseur 
 déplacé sans touche, ← ×3 puis →, ↑ ; « Voir tout » ; survol immobile), `fireTv.test.ts` (relevé par
 mode, bornes, focus avant / après), `remote-diag-route.test.ts`, `useTvGridNav.test.tsx`,
 `decisions-partagees.test.ts` (« un survol ne désigne une affiche que si le pointeur a bougé »).
+
+## 72. Sous-titres : une taille tirée de la hauteur et de la largeur, une ligne qui ne monte qu'au-dessus des commandes
+
+**Règle.** La taille du texte est la plus petite de deux mesures affines, l'une de la hauteur de la
+zone, l'autre de sa largeur, multipliées par le facteur choisi (`subtitleFontPx` en pixels,
+`fontSize` en CSS) : à « Petite », le défaut, 37 px sur 1920×1080, 28 px sur 1366×768, 27,5 px sur un
+iPad en paysage (1180×820), 17,5 px sur un téléphone en paysage (844×390), 14 px en portrait
+(390×844). La ligne du bas repose à 6,5 % de la hauteur (jamais moins de 12 px), plus la zone sûre ;
+quand les commandes sont affichées, elle monte juste au-dessus de la rangée du bas — de la hauteur que
+`PlayerControls` mesure, pas d'une constante — par un `transform` seul (`.subtitle-lift`, 200 ms). Un
+sous-titre placé en haut (`{\an8}`, `subtitlePlacement`) fait la même chose sous la rangée du haut.
+
+**Pourquoi.** « Les sous-titres sont trop gros et trop hauts surtout, ils couvrent trop d'image »
+(Louis, 12/10/2026). La taille suivait la largeur seule (`4 vw`) : 25 px sur un téléphone en paysage,
+6,5 % de sa hauteur par ligne. Et le calque était à 96 px fixes du bas (`bottom-24`), commandes ou
+non : un quart de la hauteur du même téléphone, 12 % d'un portable de 13 pouces. Mesuré sous Chromium
+avec deux lignes, commandes cachées, la part de l'image sous la plus haute ligne passe de 42,5 % à
+18,8 % sur le téléphone en paysage, de 25,4 % à 16,6 % sur 1366×768, de 18,1 % à 15,9 % sur
+1920×1080. Les lecteurs de référence (Netflix, Apple TV) règlent leur taille sur la hauteur, en
+proportion plus petite sur un petit écran — d'où la part fixe de chaque mesure — et posent la ligne
+entre 6 et 8 % du bas.
+
+**La zone, pas l'image.** Le calque du lecteur natif est un conteneur de taille (`containerType:
+"size"`) et se mesure en `cqh`/`cqw` : c'est l'écran du lecteur. La hauteur réellement occupée par
+l'image (bandes noires d'un 2.39:1) n'est pas prise : l'agrandissement automatique (`frameFit`) la
+rapproche déjà du bord, et une ligne posée dans la bande noire sous l'image est ce que font aussi les
+lecteurs de référence.
+
+**Porteurs.** `subtitleFontPx` / `fontSize` / `SUBTITLE_FONT`, `subtitleRowStyle` /
+`subtitleOffsetPx` / `SUBTITLE_REST` / `SUBTITLE_LAYER_STYLE` (`subtitleStyle.ts`) ;
+`onChromeEdges` (`PlayerControls`, `null` cachées ou démontées).
+
+**Appelants.** `ExperimentalPlayerHost` (le calque), `cueCss` (via `PlayerControls`, pour les pistes
+`<track>` du lecteur serveur).
+
+**Volontairement à part.** `::cue` prend la même taille mais mesurée à la fenêtre (`vh`/`vw`) : il vit
+dans l'arbre fantôme de l'élément vidéo, où rien ne le rattache à un conteneur, et le lecteur serveur
+remplit la fenêtre. Sa *position* reste celle du navigateur : `::cue` n'accepte aucune propriété de
+placement, et déplacer chaque cue (`line`) au gré des commandes réécrirait les pistes en direct pour
+un lecteur de secours ; le navigateur la pose déjà près du bas. L'Apple TV, en AirPlay, dessine
+elle-même. Le mini-lecteur n'affiche pas de sous-titres.
+
+Tests : `subtitleStyle.test.ts` (cibles par écran, hauteur ou largeur qui borne, proportions entre
+tailles, plafond, repos à 6,5 %, montée au-dessus des commandes, placement en haut, même règle pour
+`::cue` et le calque), `PlayerControls.test.tsx` (« ce que les commandes occupent » : bords mesurés,
+`null` une fois cachées puis démontées).
