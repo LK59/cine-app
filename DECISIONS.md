@@ -3109,7 +3109,7 @@ mode, bornes, focus avant / après), `remote-diag-route.test.ts`, `useTvGridNav.
 
 **Règle.** La taille du texte est la plus petite de deux mesures affines, l'une de la hauteur de la
 zone, l'autre de sa largeur, multipliées par le facteur choisi (`subtitleFontPx` en pixels,
-`fontSize` en CSS) : à « Petite », le défaut, 37 px sur 1920×1080, 28 px sur 1366×768, 27,5 px sur un
+`fontSize` en CSS) : à « Normale », le défaut, 37 px sur 1920×1080, 28 px sur 1366×768, 27,5 px sur un
 iPad en paysage (1180×820), 17,5 px sur un téléphone en paysage (844×390), 14 px en portrait
 (390×844). La ligne du bas repose à 6,5 % de la hauteur (jamais moins de 12 px), plus la zone sûre ;
 quand les commandes sont affichées, elle monte juste au-dessus de la rangée du bas — de la hauteur que
@@ -3126,13 +3126,28 @@ avec deux lignes, commandes cachées, la part de l'image sous la plus haute lign
 proportion plus petite sur un petit écran — d'où la part fixe de chaque mesure — et posent la ligne
 entre 6 et 8 % du bas.
 
+**L'échelle centrée sur le modèle** (12/10/2026, « les réglages d'apparence doivent s'accorder sur ce
+modèle-là »). Le modèle avait d'abord été calibré sur « Petite » (0,75), le défaut depuis le 23/09 où
+l'ancienne « Normale » était jugée trop grosse : le défaut s'appelait « Petite » et « Normale » était
+4/3 plus grosse que la référence. Les constantes de `SUBTITLE_FONT` ont été multipliées par 0,75 et le
+défaut passé à 1 — le rendu par défaut n'a pas bougé d'un pixel (testé sur les cinq écrans) — et
+l'échelle resserrée autour : Très petite 0,75, Petite 0,875, Normale 1, Grande 1,2, Très grande 1,45
+(l'ancienne allait de 0,6 à 1,6 d'une base plus grosse : du simple au presque triple autour d'une
+taille déjà lisible). Le stockage est versionné (`v: 2` dans `cine:subtitle-style`), puisque 0,75 et 1
+existent dans les deux échelles avec des rendus différents ; une valeur non marquée — ou l'ancienne
+clé `cine:subtitle-size` — est traduite une fois par `migrateV1Size` vers la taille au *rendu* le plus
+proche (ancien v ⇒ v / 0,75 de la nouvelle base, valeur la plus proche numériquement) : 0,6 → 0,75,
+0,75 → 1, 1 → 1,45 (1,33 est plus près de 1,45 que de 1,2), 1,3 et 1,6 → 1,45 ; puis réécrite marquée,
+et jamais retraduite. Une préférence jamais choisie suit le défaut.
+
 **La zone, pas l'image.** Le calque du lecteur natif est un conteneur de taille (`containerType:
 "size"`) et se mesure en `cqh`/`cqw` : c'est l'écran du lecteur. La hauteur réellement occupée par
 l'image (bandes noires d'un 2.39:1) n'est pas prise : l'agrandissement automatique (`frameFit`) la
 rapproche déjà du bord, et une ligne posée dans la bande noire sous l'image est ce que font aussi les
 lecteurs de référence.
 
-**Porteurs.** `subtitleFontPx` / `fontSize` / `SUBTITLE_FONT`, `subtitleRowStyle` /
+**Porteurs.** `subtitleFontPx` / `fontSize` / `SUBTITLE_FONT`, `SUBTITLE_SIZES` /
+`DEFAULT_SUBTITLE_STYLE` / `migrateV1Size` / `subtitleStyleStore`, `subtitleRowStyle` /
 `subtitleOffsetPx` / `SUBTITLE_REST` / `SUBTITLE_LAYER_STYLE` (`subtitleStyle.ts`) ;
 `onChromeEdges` (`PlayerControls`, `null` cachées ou démontées).
 
@@ -3146,7 +3161,8 @@ placement, et déplacer chaque cue (`line`) au gré des commandes réécrirait l
 un lecteur de secours ; le navigateur la pose déjà près du bas. L'Apple TV, en AirPlay, dessine
 elle-même. Le mini-lecteur n'affiche pas de sous-titres.
 
-Tests : `subtitleStyle.test.ts` (cibles par écran, hauteur ou largeur qui borne, proportions entre
+Tests : `subtitleStyle.test.ts` (cibles par écran, rendu par défaut identique à l'ancien défaut,
+migration de chaque ancienne taille, valeur marquée jamais retraduite, hauteur ou largeur qui borne, proportions entre
 tailles, plafond, repos à 6,5 %, montée au-dessus des commandes, placement en haut, même règle pour
 `::cue` et le calque), `PlayerControls.test.tsx` (« ce que les commandes occupent » : bords mesurés,
-`null` une fois cachées puis démontées).
+`null` une fois cachées puis démontées ; « Normale » cochée par défaut dans « Apparence »).

@@ -1727,6 +1727,9 @@ describe("PlayerControls — la disposition", () => {
     expect(menu.textContent).toContain("player.subtitleOffset");
     await act(async () => void fireEvent.click(screen.getByText("player.subtitleStyle.title")));
     expect(screen.getByText("player.subtitleSize")).toBeInTheDocument();
+    // Le modèle (§72) est « Normale », et c'est lui qui est coché tant que rien n'a été choisi.
+    expect(screen.getByText("player.subtitleSizeNormal").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("player.subtitleSizeSmall").getAttribute("aria-pressed")).toBe("false");
     await act(async () => void fireEvent.click(screen.getByText("common.back")));
     expect(screen.getByText("Français")).toBeInTheDocument();
   });

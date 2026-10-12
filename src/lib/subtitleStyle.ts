@@ -22,22 +22,30 @@ export interface SubtitleStyle {
   background: SubtitleBackground;
 }
 
+/**
+ * L'échelle, centrée sur le modèle (§72) : « Normale » (1) est la taille des lecteurs de référence,
+ * et les autres s'en écartent peu — le modèle est déjà lisible, il ne s'agit que d'yeux et d'écrans
+ * qui diffèrent. L'ancienne échelle (0,6 / 0,75 / 1 / 1,3 / 1,6, base 4/3 plus grosse) allait du
+ * simple au presque triple et faisait du défaut une « Petite » : voir `migrateV1Size`.
+ */
 export const SUBTITLE_SIZES = [
-  { labelKey: "subtitleSizeXSmall", value: 0.6 },
-  { labelKey: "subtitleSizeSmall", value: 0.75 },
+  { labelKey: "subtitleSizeXSmall", value: 0.75 },
+  { labelKey: "subtitleSizeSmall", value: 0.875 },
   { labelKey: "subtitleSizeNormal", value: 1 },
-  { labelKey: "subtitleSizeLarge", value: 1.3 },
-  { labelKey: "subtitleSizeXLarge", value: 1.6 },
+  { labelKey: "subtitleSizeLarge", value: 1.2 },
+  { labelKey: "subtitleSizeXLarge", value: 1.45 },
 ] as const;
 
 export const SUBTITLE_COLORS: SubtitleColor[] = ["white", "yellow"];
 export const SUBTITLE_BACKGROUNDS: SubtitleBackground[] = ["shadow", "box", "none"];
 
 /**
- * « Petite » par défaut depuis le 23/09/2026 : « Normale » était jugée trop grosse sur téléphone dès
- * le premier film. Seul le défaut change — une taille déjà choisie est gardée, « Normale » comprise.
+ * « Normale », qui est le modèle (§72). Du 23/09 au 12/10/2026 le défaut était « Petite » (0,75) :
+ * l'ancienne « Normale » était jugée trop grosse sur téléphone dès le premier film. Le modèle a été
+ * calibré sur cette « Petite », puis l'échelle recentrée dessus — les pixels rendus par défaut n'ont
+ * pas bougé, seul le nom a rejoint la référence.
  */
-export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = { size: 0.75, color: "white", background: "shadow" };
+export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = { size: 1, color: "white", background: "shadow" };
 
 /**
  * La taille du texte : la plus petite de deux mesures, l'une tirée de la hauteur de l'image,
@@ -51,20 +59,24 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = { size: 0.75, color: "white
  * lisible) avec une droite. La hauteur seule ferait d'un téléphone en portrait (844 de haut, 390 de
  * large) un écran de bureau, avec quinze caractères par ligne : la largeur le borne, réglée pour
  * donner 14 px sur 390 de large et laisser le reste à la hauteur (sauf l'iPad, 27,5 px au lieu de
- * 29,5). Valeurs à « Petite » (0,75, le défaut) ; les autres tailles gardent leurs proportions,
+ * 29,5). Valeurs à « Normale » (1, le défaut) ; les autres tailles gardent leurs proportions,
  * puisque le facteur multiplie tout.
+ *
+ * Les constantes sont exactement les premières (8,6 / 3,77 / 9,8 / 2,28 / 13 / 64, calibrées au
+ * facteur 0,75) multipliées par 0,75 : le défaut est passé de 0,75 à 1 le 12/10/2026 sans qu'un
+ * pixel change — un test le vérifie sur les cinq écrans.
  */
 export const SUBTITLE_FONT = {
   /** px fixes + % de la hauteur, avant le facteur de taille. */
-  height: { px: 8.6, percent: 3.77 },
+  height: { px: 6.45, percent: 2.8275 },
   /** px fixes + % de la largeur, avant le facteur de taille. */
-  width: { px: 9.8, percent: 2.28 },
+  width: { px: 7.35, percent: 1.71 },
   /**
    * Plancher et plafond, eux aussi multipliés par le facteur (plancher absolu : 8 px). Le plancher
    * ne sert qu'aux tout petits écrans (moins de 320 px de large) : partout ailleurs la règle donne plus.
    */
-  floor: 13,
-  cap: 64,
+  floor: 9.75,
+  cap: 48,
 } as const;
 
 function floorPx(size: number): number {
@@ -202,23 +214,68 @@ export function subtitleOffsetPx(height: number, chromeEdge: number | null, safe
 const STORAGE_KEY = "cine:subtitle-style";
 /** L'ancienne clé, qui ne portait que la taille. Relue une fois pour ne rien perdre. */
 const LEGACY_SIZE_KEY = "cine:subtitle-size";
+/**
+ * La version de l'échelle enregistrée. Sans elle, 0,75 et 1 ne disent pas de quelle échelle ils
+ * viennent : ils existent dans les deux, avec des rendus différents d'un facteur 4/3.
+ */
+const STORAGE_VERSION = 2;
+
+/** Les facteurs de l'échelle d'avant le 12/10/2026, dont la base était 4/3 de l'actuelle. */
+const V1_SIZES = [0.6, 0.75, 1, 1.3, 1.6];
+
+/**
+ * Une taille de l'ancienne échelle, traduite en celle de la nouvelle qui *rend* le plus près : un
+ * facteur v d'avant valait v / 0,75 d'aujourd'hui, et l'on prend la valeur la plus proche
+ * numériquement. 0,6 → 0,75 (0,8) ; 0,75 → 1 (exact) ; 1 → 1,45 (1,33 est à 0,117 de 1,45 et à
+ * 0,133 de 1,2 — l'ancienne « Normale » était plus grosse que la nouvelle « Grande », et quelqu'un
+ * qui l'avait gardée après le 23/09 la voulait grosse) ; 1,3 et 1,6 → 1,45, le plus grand qui reste.
+ * Une valeur hors de l'ancienne échelle ne veut rien dire : `null`.
+ */
+export function migrateV1Size(v1: unknown): number | null {
+  if (typeof v1 !== "number" || !V1_SIZES.includes(v1)) return null;
+  const target = v1 / 0.75;
+  let best: number = SUBTITLE_SIZES[0].value;
+  for (const { value } of SUBTITLE_SIZES) if (Math.abs(value - target) < Math.abs(best - target)) best = value;
+  return best;
+}
+
+function validStyle(parsed: Partial<SubtitleStyle>, size: number | null): SubtitleStyle {
+  return {
+    size: size ?? DEFAULT_SUBTITLE_STYLE.size,
+    color: SUBTITLE_COLORS.includes(parsed.color as SubtitleColor) ? parsed.color! : DEFAULT_SUBTITLE_STYLE.color,
+    background: SUBTITLE_BACKGROUNDS.includes(parsed.background as SubtitleBackground)
+      ? parsed.background!
+      : DEFAULT_SUBTITLE_STYLE.background,
+  };
+}
+
+function write(style: SubtitleStyle): void {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...style, v: STORAGE_VERSION }));
+}
 
 function read(): SubtitleStyle {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<SubtitleStyle>;
-      return {
-        size: SUBTITLE_SIZES.some((s) => s.value === parsed.size) ? parsed.size! : DEFAULT_SUBTITLE_STYLE.size,
-        color: SUBTITLE_COLORS.includes(parsed.color as SubtitleColor) ? parsed.color! : DEFAULT_SUBTITLE_STYLE.color,
-        background: SUBTITLE_BACKGROUNDS.includes(parsed.background as SubtitleBackground)
-          ? parsed.background!
-          : DEFAULT_SUBTITLE_STYLE.background,
-      };
+      const parsed = JSON.parse(raw) as Partial<SubtitleStyle> & { v?: number };
+      if (parsed.v === STORAGE_VERSION) {
+        const size = SUBTITLE_SIZES.some((s) => s.value === parsed.size) ? parsed.size! : null;
+        return validStyle(parsed, size);
+      }
+      // Enregistré dans l'ancienne échelle : traduit une fois, réécrit marqué, jamais retraduit.
+      const migrated = validStyle(parsed, migrateV1Size(parsed.size));
+      write(migrated);
+      return migrated;
     }
-    // Quelqu'un qui avait déjà réglé sa taille la garde : c'est le seul réglage qui existait.
-    const legacy = Number(window.localStorage.getItem(LEGACY_SIZE_KEY));
-    if (SUBTITLE_SIZES.some((s) => s.value === legacy)) return { ...DEFAULT_SUBTITLE_STYLE, size: legacy };
+    // Quelqu'un qui avait déjà réglé sa taille la garde : c'est le seul réglage qui existait. Cette
+    // clé est d'avant l'échelle actuelle, et n'est plus relue une fois la nouvelle écrite.
+    const legacyRaw = window.localStorage.getItem(LEGACY_SIZE_KEY);
+    const legacy = migrateV1Size(legacyRaw === null ? null : Number(legacyRaw));
+    if (legacy !== null) {
+      const migrated = { ...DEFAULT_SUBTITLE_STYLE, size: legacy };
+      write(migrated);
+      return migrated;
+    }
   } catch {
     // Stockage indisponible : les valeurs par défaut.
   }
@@ -246,7 +303,7 @@ export const subtitleStyleStore = {
   set(patch: Partial<SubtitleStyle>): void {
     cached = { ...subtitleStyleStore.snapshot(), ...patch };
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cached));
+      write(cached);
     } catch {
       // Voir `read` : le réglage vaut pour cette session, et c'est déjà mieux que rien.
     }
