@@ -3085,7 +3085,27 @@ describe("pendant la lecture : les saccades (§78)", () => {
     expect(onFallback).not.toHaveBeenCalled();
   });
 
-  it("le 3e blocage de plus d'1 s en 3 min, réseau : le préchauffage ; les deux premiers, rien", async () => {
+  it("le 2e blocage de plus d'1 s, réseau : le préchauffage, sans bascule ; le 3e : la bascule sur le préchauffage déjà prêt", async () => {
+    const element = await playing();
+    diagMock.link = slowLinkNow;
+    diagMock.waitEnded = { verdict: "réseau", ms: 1500 };
+    await stall(element, 1500);
+    await act(async () => void fireEvent(element, new Event("playing")));
+    expect(prewarms).toHaveLength(0);
+    await stall(element, 1500);
+    await act(async () => void fireEvent(element, new Event("playing")));
+    expect(prewarms).toHaveLength(1);
+    // Prêt : il attend la règle de bascule.
+    await act(async () => prewarms[0].settle(true));
+    expect(onFallback).not.toHaveBeenCalled();
+    await stall(element, 1500);
+    await act(async () => void fireEvent(element, new Event("playing")));
+    // Le même préchauffage, pas un second : la bascule part tout de suite.
+    expect(prewarms).toHaveLength(1);
+    expect(onFallback).toHaveBeenCalledWith("connexion trop lente (saccades, version allégée demandée)", expect.objectContaining({ lighter: expect.objectContaining({ tier: 1 }) }));
+  });
+
+  it("le 2e blocage sans 3e dans la minute : le préchauffage est annulé, aucune bascule", async () => {
     const element = await playing();
     diagMock.link = slowLinkNow;
     diagMock.waitEnded = { verdict: "réseau", ms: 1500 };
@@ -3093,10 +3113,12 @@ describe("pendant la lecture : les saccades (§78)", () => {
       await stall(element, 1500);
       await act(async () => void fireEvent(element, new Event("playing")));
     }
-    expect(prewarms).toHaveLength(0);
-    await stall(element, 1500);
-    await act(async () => void fireEvent(element, new Event("playing")));
     expect(prewarms).toHaveLength(1);
+    await act(async () => prewarms[0].settle(true));
+    expect(cancelPrewarmSpy).not.toHaveBeenCalled();
+    await act(async () => void vi.advanceTimersByTime(61_000));
+    expect(cancelPrewarmSpy).toHaveBeenCalled();
+    expect(onFallback).not.toHaveBeenCalled();
   });
 
   it("les attentes après un saut ne comptent jamais", async () => {

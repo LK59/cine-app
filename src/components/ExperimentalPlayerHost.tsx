@@ -621,7 +621,7 @@ export function ExperimentalPlayerHost({
    */
   const [runner] = useState(() => new SlowLinkRunner());
   /** La décision en pleine lecture, rappelée quand un préchauffage de saccades est prêt. */
-  const playbackDecisionRef = useRef<(triggered?: boolean) => void>(() => {});
+  const playbackDecisionRef = useRef<(triggered?: boolean, early?: boolean) => void>(() => {});
   /** Le compteur de l'ouverture en cours — voir l'effet qui l'arme, avant celui du pipeline. */
   const openingMeterRef = useRef<LinkMeter | null>(null);
   /** Le débit moyen du fichier, d'après sa description — ce que le lien doit tenir. */
@@ -2447,7 +2447,11 @@ export function ExperimentalPlayerHost({
         longWaitTimer = null;
         // Le tableau du simulateur de la page de test, s'il est allumé (rien sinon).
         if (wait && wait.ms > 1000) pushSlowLinkEvent(`blocage de ${Math.round(wait.ms)} ms (${wait.verdict})`);
-        if (wait && stutter.waitEnded(Date.now(), wait.ms, networkStall(wait.verdict))) offerStutterRef.current("repeated");
+        if (!wait) return;
+        // Le 2e blocage préchauffe, le 3e bascule (§78) — la règle de bascule, elle, est inchangée.
+        const signal = stutter.waitEndedSignal(Date.now(), wait.ms, networkStall(wait.verdict));
+        if (signal === "switch") offerStutterRef.current("repeated");
+        else if (signal === "prewarm") playbackDecisionRef.current(false, true);
       };
       const onPlaying = () => {
         trace(`élément : repart à ${element.currentTime.toFixed(2)} s`);
@@ -3067,10 +3071,10 @@ export function ExperimentalPlayerHost({
    * à la position d'alors. En « Originale » : rien. Appelée par les écouteurs du pipeline.
    */
   useEffect(() => {
-    playbackDecisionRef.current = (triggered = false) => {
+    playbackDecisionRef.current = (triggered = false, early = false) => {
       const measure = diagLinkMeasure(PLAYBACK_MEASURE_WINDOW_MS);
       const reading = { recvBps: measuredBps(measure), needBps: needBpsRef.current };
-      const action = decidePlayback({ triggered, auto: autoLighterRef.current, prewarm: runner.status("lecture"), currentStep: null, ...reading });
+      const action = decidePlayback({ triggered: runner.armPlayback(triggered), early, auto: autoLighterRef.current, prewarm: runner.status("lecture"), currentStep: null, ...reading });
       if (triggered && action.kind === "prewarm") slowLog.note(`saccades à ${Math.round(positionRef.current)} s (${mbps(reading.recvBps)}/${mbps(reading.needBps)})`);
       // La position de l'élément : celle que le spectateur voit, figée sur le blocage.
       const element = videoElRef.current;

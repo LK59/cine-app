@@ -13,6 +13,7 @@
 
 import { cancelPrewarm, prewarmStatusOf, startPrewarm, type Prewarm } from "@/lib/lighterPrewarm";
 import {
+  EARLY_PREWARM_MS,
   SEEK_AS_OPENING_MS,
   SEEK_GIVE_UP_MS,
   decideOpening,
@@ -76,6 +77,13 @@ export class SlowLinkRunner {
   private seekTimer: ReturnType<typeof setInterval> | null = null;
   private shown: { at: number; hint: boolean } | null = null;
   private current: SlowLinkHost | null = null;
+  /**
+   * En pleine lecture, la règle de bascule a joué (`StutterWatch` : 5 s, ou le 3e blocage) : le
+   * préchauffage prêt bascule. Faux tant que seul le 2e blocage a parlé — il préchauffe, sans plus.
+   */
+  private playbackArmed = false;
+  /** L'annulation du préchauffage du 2e blocage, si la bascule ne vient pas (`EARLY_PREWARM_MS`). */
+  private earlyTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** L'hôte, tel qu'il est à son dernier rendu (posé par un effet). */
   attach(host: SlowLinkHost): void {
@@ -92,11 +100,29 @@ export class SlowLinkRunner {
     return prewarmStatusOf(this.held, cause);
   }
 
+  /**
+   * La décision en pleine lecture est-elle armée ? `triggered` : la règle de bascule vient de jouer —
+   * elle le reste jusqu'à la bascule. Lu par les deux hôtes avant `decidePlayback`.
+   */
+  armPlayback(triggered: boolean): boolean {
+    if (triggered) {
+      this.playbackArmed = true;
+      this.clearEarlyTimer();
+    }
+    return this.playbackArmed;
+  }
+
+  private clearEarlyTimer(): void {
+    if (this.earlyTimer !== null) clearTimeout(this.earlyTimer);
+    this.earlyTimer = null;
+  }
+
   /** Le préchauffage ne sert plus (une image, une fermeture) : arrêté chez Jellyfin, noté. */
   drop(why: string): void {
     const held = this.held;
     if (!held) return;
     this.held = null;
+    this.clearEarlyTimer();
     try {
       cancelPrewarm(held.prewarm);
       const host = this.host();
@@ -116,7 +142,17 @@ export class SlowLinkRunner {
         if (this.held || host.over()) return;
         const prewarm = startPrewarm({ itemId: host.itemId, step: action.step, startSeconds: at, audioStreamIndex: host.audioStreamIndex() });
         this.held = { prewarm, cause };
-        log.note(`préchauffage (${cause}) à ${Math.round(at)} s : ${mbps(action.step.targetBps)} Mb/s palier ${action.step.tier} (${mbps(reading.recvBps)}/${mbps(reading.needBps)})`);
+        // En pleine lecture sans déclenchement : le 2e blocage. Préchauffé d'avance, annulé si la règle
+        // de bascule ne suit pas dans la minute — aucun transcodage tenu pour rien.
+        const early = cause === "lecture" && !this.playbackArmed;
+        if (early) {
+          this.clearEarlyTimer();
+          this.earlyTimer = setTimeout(() => {
+            this.earlyTimer = null;
+            if (this.held?.prewarm === prewarm && !this.playbackArmed) this.drop(`pas de bascule en ${EARLY_PREWARM_MS / 1000} s`);
+          }, EARLY_PREWARM_MS);
+        }
+        log.note(`préchauffage (${early ? "2e blocage" : cause}) à ${Math.round(at)} s : ${mbps(action.step.targetBps)} Mb/s palier ${action.step.tier} (${mbps(reading.recvBps)}/${mbps(reading.needBps)})`);
         host.trace?.(`connexion lente : préchauffage de la version allégée (${cause}) — ${action.step.targetBps} b/s à ${at.toFixed(1)} s`);
         void prewarm.ready.then((ok) => {
           if (prewarm.state === "cancelled") return;
@@ -129,6 +165,8 @@ export class SlowLinkRunner {
       if (action.kind === "switch") {
         const held = this.held;
         this.held = null;
+        this.clearEarlyTimer();
+        if (cause === "lecture") this.playbackArmed = false;
         // Un préchauffage d'ouverture ou de saut fixe la position : le lecteur serveur part de son segment.
         const resumeAt = held && cause !== "lecture" ? held.prewarm.startSeconds : at;
         log.note(`bascule (${cause}) à ${Math.round(resumeAt)} s, ${mbps(action.step.targetBps)} Mb/s palier ${action.step.tier}${held ? "" : ", sans préchauffage"}`);
@@ -182,6 +220,7 @@ export class SlowLinkRunner {
 
   /** Le lecteur se démonte : le minuteur seulement — plus d'état à écrire. */
   dispose(): void {
+    this.clearEarlyTimer();
     if (this.seekTimer !== null) clearInterval(this.seekTimer);
     this.seekTimer = null;
     this.seekAt = null;

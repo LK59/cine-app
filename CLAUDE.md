@@ -103,7 +103,10 @@ also carry a `session` id and the `agent`: without them they were rebuilt "the o
 activity page's file-or-device diagnosis. A handover to it *to cast* is logged as `fallback` with
 `cast: true`, and is not counted as a failure. Since 2026-10-10 every server-player `start` says
 **why** it (re)negotiated (`why`: `open`, `handover`, `audio`, `audio-reload`, `retry`,
-`cast-relaunch`, `ladder` with `rung` and `trigger`, `retry-reload`) — four identical « transcodé
+`cast-relaunch`, `ladder` with `rung` and `trigger`, `retry-reload`, and since 2026-10-12
+`reload-direct` — on WebKit a native → server handover reloads the page at once instead of trying
+native HLS in a page that served the native player, its stop carrying `reloadGapMs`, decision to
+first picture, DECISIONS §78) — four identical « transcodé
 par le serveur » lines used to hide whether a Fire TV was climbing the audio ladder or a viewer
 was changing tracks — and its `stop` is a summary like the native one (`waits`/`waitedMs`/
 `longestWaitMs`, `seeks`/`seekWaitMs`, `audioSwitches`, `subtitleSwitches`, `backgrounds`,

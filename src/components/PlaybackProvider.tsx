@@ -9,6 +9,7 @@ import { flushOrphanStops } from "@/lib/unsentStop";
 import { flushUnsentLines } from "@/lib/unsentLines";
 import { flushUnsentPositions, unsentPositionsPending } from "@/lib/unsentPosition";
 import { carriedLighter } from "@/lib/playbackQuality";
+import { parseReloadIntent, reloadedLighter, type ReloadCarry } from "@/lib/serverReload";
 import { sleepTimerStore } from "@/lib/sleepTimer";
 import { introAllowedFor, introKey, preloadIntroArt, resolveIntroArt, startIntroClock, type IntroCacheReader, type PlaybackIntroArt } from "@/lib/playbackIntro";
 
@@ -69,6 +70,13 @@ export interface PlaybackSession {
    * L'épisode suivant, ou toute nouvelle séance, repart par l'aiguillage ordinaire.
    */
   reloadedOnServer?: string;
+  /**
+   * Ce que l'intention de rechargement emporte au-delà de la position et de la piste (`serverReload.ts`,
+   * DECISIONS.md §78) : le palier allégé de la séance, le rechargement direct d'une bascule natif →
+   * serveur, le sous-titre du relais, la séance du journal poursuivie. Posé seulement par la relecture
+   * d'une intention écrite par le code du 12/10/2026 ; effacé par `advance` (il ne vaut que pour ce titre).
+   */
+  reloadCarry?: ReloadCarry;
   /**
    * Le palier de version allégée hérité d'une séance allégée qui s'est arrêtée il y a moins de deux
    * minutes (DECISIONS.md §78, `carriedLighter`) — posé à l'ouverture et à l'épisode suivant, jamais
@@ -283,7 +291,9 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     // Absent plutôt que nul quand rien n'est trouvé : la séance garde la forme que ses lecteurs connaissent.
     // La règle des deux minutes (§78) : décidée ici, une fois, pour toute la séance — en « Automatique »
     // seulement (`carriedLighter` ne rend rien en « Originale »).
-    const lighter = carriedLighter();
+    // Une page rechargée par le lecteur serveur dit elle-même son palier (`reloadCarry`) : la mémoire
+    // des deux minutes n'a pas à le deviner — elle pouvait avoir expiré pendant une séance allégée.
+    const lighter = s.reloadCarry ? reloadedLighter(s.reloadCarry) : carriedLighter();
     setSession({ ...s, openId: openCounter, ...(introArt ? { introArt } : {}), ...(lighter ? { lighter } : {}) });
     setMode("full");
   }, [prepareIntro]);
@@ -322,7 +332,7 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     // L'épisode suivant d'une séance allégée en hérite par la même règle (§78) : l'arrêt de l'épisode
     // vient d'être rapporté, et il a retenu son palier.
     const lighter = carriedLighter() ?? undefined;
-    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt: 0, introArt, lighter } : prev));
+    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt: 0, introArt, lighter, reloadCarry: undefined } : prev));
   }, [prepareIntro]);
 
   // Resumes into a WebKit reload-based track switch — see PLAYER_RELOAD_INTENT_KEY. Runs once on
@@ -337,23 +347,22 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (!raw) return;
-    try {
-      // `server` : écrit par le lecteur serveur depuis le 29/09/2026. Une intention sans ce champ
-      // (une page d'avant, rechargée sur ce code) garde l'aiguillage ordinaire.
-      const intent = JSON.parse(raw) as { itemId: string; title: string; audioStreamIndex: number; resumeAt: number; attempt?: number; server?: boolean };
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      play({
-        itemId: intent.itemId,
-        title: intent.title,
-        resumeAt: intent.resumeAt,
-        initialAudioStreamIndex: intent.audioStreamIndex,
-        fromReload: true,
-        reloadAttempt: intent.attempt ?? 0,
-        ...(intent.server === true ? { reloadedOnServer: intent.itemId } : {}),
-      });
-    } catch {
-      // Malformed — ignore, nothing to resume.
-    }
+    // `server` : écrit par le lecteur serveur depuis le 29/09/2026. Une intention sans ce champ
+    // (une page d'avant, rechargée sur ce code) garde l'aiguillage ordinaire. `carry` : depuis le
+    // 12/10/2026 (`serverReload.ts`).
+    const intent = parseReloadIntent(raw);
+    if (!intent) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    play({
+      itemId: intent.itemId,
+      title: intent.title,
+      resumeAt: intent.resumeAt,
+      initialAudioStreamIndex: intent.audioStreamIndex,
+      fromReload: true,
+      reloadAttempt: intent.attempt ?? 0,
+      ...(intent.server === true ? { reloadedOnServer: intent.itemId } : {}),
+      ...(intent.carry ? { reloadCarry: intent.carry } : {}),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

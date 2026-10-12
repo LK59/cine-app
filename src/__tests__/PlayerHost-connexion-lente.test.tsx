@@ -606,6 +606,46 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
     expect(reported.filter((r) => r.kind === "error")).toHaveLength(0);
   });
 
+  it("B : le 2e blocage réseau de plus d'1 s préchauffe sans basculer ; le 3e bascule sur ce préchauffage, déjà prêt", async () => {
+    await mounted();
+    await picture();
+    const stallFor = async (seconds: number) => {
+      await act(async () => void fireEvent(video(), new Event("waiting")));
+      await trickle(250_000, seconds);
+      await act(async () => void fireEvent(video(), new Event("playing")));
+      for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    };
+    await stallFor(2);
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(0);
+    await stallFor(2);
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(1);
+    expect(reported.filter((r) => r.kind === "start" && r.fields.why === "lighter")).toHaveLength(0);
+    await stallFor(2);
+    // Le même préchauffage, repris : aucune négociation de plus.
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(1);
+    const lighter = reported.filter((r) => r.kind === "start" && r.fields.why === "lighter");
+    expect(lighter).toHaveLength(1);
+    expect(lighter[0].fields.prewarm).toMatchObject({ used: true });
+    expect(String(lighter[0].fields.slowLink)).toContain("préchauffage (2e blocage)");
+  });
+
+  it("B : un 2e blocage sans 3e dans la minute — le préchauffage est arrêté chez Jellyfin, aucune bascule", async () => {
+    await mounted();
+    await picture();
+    for (let n = 0; n < 2; n++) {
+      await act(async () => void fireEvent(video(), new Event("waiting")));
+      await trickle(250_000, 2);
+      await act(async () => void fireEvent(video(), new Event("playing")));
+    }
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(1);
+    const stops = () => (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/jellyfin/playback/stop");
+    expect(stops()).toHaveLength(0);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(61_000)));
+    expect(stops()).toHaveLength(1);
+    expect(reported.filter((r) => r.kind === "start" && r.fields.why === "lighter")).toHaveLength(0);
+  });
+
   it("B en « Originale » : rien — jamais d'erreur tant que la lecture continue", async () => {
     writePlaybackQuality("original");
     await mounted();

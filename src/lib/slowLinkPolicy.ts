@@ -153,12 +153,16 @@ export function decideOpening(tick: OpeningTick): { advice: OpeningAdvice; actio
 }
 
 /**
- * En pleine lecture, après un déclenchement de `StutterWatch` (un problème visible). Préchauffer à la
- * position courante, puis basculer dès que le préchauffage est prêt (ou a échoué). En « Originale »,
- * sans version allégée permise, ou au plancher : rien — jamais d'erreur tant que la lecture continue.
+ * En pleine lecture (§78). `triggered` : la règle de bascule de `StutterWatch` a joué (un blocage de
+ * plus de 5 s, ou le 3e de plus d'1 s en 3 min) — préchauffer s'il n'y a rien, puis basculer dès que le
+ * préchauffage est prêt (ou a échoué). `early` : le 2e blocage seulement — préchauffer, **jamais**
+ * basculer : un préchauffage prêt sans déclenchement attend (et l'exécution l'annule au bout de
+ * `EARLY_PREWARM_MS`). En « Originale », sans version allégée permise, ou au plancher : rien — jamais
+ * d'erreur tant que la lecture continue.
  */
 export function decidePlayback(tick: {
   triggered: boolean;
+  early?: boolean;
   auto: boolean;
   prewarm: PrewarmStatus;
   recvBps: number | null;
@@ -169,8 +173,8 @@ export function decidePlayback(tick: {
     if (!tick.auto) return { kind: "none" };
     const step = nextLighter(tick.recvBps, tick.needBps, tick.currentStep);
     if (!step) return { kind: "none" };
-    if (tick.prewarm === "ready" || tick.prewarm === "failed") return { kind: "switch", step };
-    if (tick.triggered && tick.prewarm === "none") return { kind: "prewarm", step };
+    if (tick.triggered && (tick.prewarm === "ready" || tick.prewarm === "failed")) return { kind: "switch", step };
+    if ((tick.triggered || tick.early) && tick.prewarm === "none") return { kind: "prewarm", step };
     return { kind: "none" };
   } catch {
     return { kind: "none" };
@@ -261,6 +265,14 @@ export const LONG_STALL_MS = 5_000;
 export const SHORT_STALL_MS = 1_000;
 export const STALLS_TO_TRIGGER = 3;
 /**
+ * Le préchauffage part dès le 2e de ces blocages (12/10/2026) : attendre le 3e pour le lancer ajoutait
+ * son délai (~1,3 s, plus sur un lien lent) à l'interruption de la bascule. La bascule, elle, attend
+ * toujours la règle ci-dessus.
+ */
+export const STALLS_TO_PREWARM = 2;
+/** Un préchauffage du 2e blocage que la règle de bascule n'a pas suivi en une minute est annulé. */
+export const EARLY_PREWARM_MS = 60_000;
+/**
  * …dans une fenêtre de trois minutes : un blocage par minute se remarque à coup sûr, et c'est la
  * fenêtre que le lecteur natif donne déjà à son budget de reconstructions (3 par 180 s,
  * `PlayerLifecycle`). Trois attentes éparses dans un film de deux heures n'ont rien d'un lien qui
@@ -319,12 +331,21 @@ export class StutterWatch {
 
   /** Un blocage fini, de `ms` millisecondes. Vrai : basculer (le 3e de plus d'1 s en 3 min). */
   waitEnded(now: number, ms: number, network: boolean): boolean {
-    if (!network || !(ms > SHORT_STALL_MS)) return false;
+    return this.waitEndedSignal(now, ms, network) === "switch";
+  }
+
+  /**
+   * Le même, avec le palier intermédiaire : `"prewarm"` au 2e blocage de la fenêtre (préchauffer sans
+   * basculer), `"switch"` au 3e, `"none"` sinon.
+   */
+  waitEndedSignal(now: number, ms: number, network: boolean): "none" | "prewarm" | "switch" {
+    if (!network || !(ms > SHORT_STALL_MS)) return "none";
     this.waits = this.waits.filter((at) => now - at < STALL_WINDOW_MS);
     this.waits.push(now);
-    if (this.waits.length < STALLS_TO_TRIGGER) return false;
+    if (this.waits.length === STALLS_TO_PREWARM) return "prewarm";
+    if (this.waits.length < STALLS_TO_TRIGGER) return "none";
     this.waits = [];
-    return true;
+    return "switch";
   }
 }
 

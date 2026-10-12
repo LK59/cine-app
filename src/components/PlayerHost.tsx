@@ -44,7 +44,8 @@ import {
   playbackLinkSlow,
   type LighterStep,
 } from "@/lib/slowLinkPolicy";
-import { cancelPrewarm, prewarmFields, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { cancelPrewarm, carryPrewarmAcrossReload, prewarmFields, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { directReloadIntent, reloadLighterOf, reloadPage, shouldReloadDirect, type PlayerReloadIntent } from "@/lib/serverReload";
 import { SlowLinkRunner, type SeekSignal, type SlowLinkHost } from "@/lib/slowLinkRunner";
 import { forgetLighterCarry, readPlaybackQuality, rememberLighter, usePlaybackQuality } from "@/lib/playbackQuality";
 import { simulatorActive, throttledHlsLoader } from "@/lib/linkSimulator";
@@ -223,6 +224,19 @@ function takeCarriedExclusions(itemId: string, fromReload: boolean | undefined):
 export function __resetLegacyBlocklistPurgeForTests(): void {
   legacyBlocklistPurged = false;
 }
+
+/**
+ * Écrit l'intention que la page rechargée relira (`PlaybackProvider`). Faux si le stockage la refuse :
+ * l'appelant garde alors son chemin d'avant (la lecture dans la page, ou l'écran d'erreur).
+ */
+function reloadIntoServerPlayer(intent: PlayerReloadIntent): boolean {
+  try {
+    sessionStorage.setItem(PLAYER_RELOAD_INTENT_KEY, JSON.stringify(intent));
+    return true;
+  } catch {
+    return false;
+  }
+}
 const MAX_MEDIA_RETRIES = 3;
 
 // The single, always-mounted playback engine for the whole app (mounted once in the
@@ -270,10 +284,25 @@ export function PlayerHost() {
   const handOver = useCallback(
     (reason: string, resumeInto?: StableTakeover, sessionId?: string) => {
       if (!itemId) return;
+      // WebKit : le lecteur serveur lirait en HLS natif dans une page qui vient de servir le lecteur
+      // natif — ce que WebKit refuse (code 4, aucun segment demandé, trois marches de l'échelle pour
+      // rien : ~10 s perdues à chaque bascule le 12/10/2026). On passe directement par le rechargement
+      // qui, lui, a toujours marché (`serverReload.ts`, DECISIONS §78). Une fois par séance.
+      if (
+        session &&
+        shouldReloadDirect({ nativeHls: playsHlsNatively(), serverFallback, takeover: resumeInto, reloadAttempt: session.reloadAttempt, bench: session.bench }) &&
+        reloadIntoServerPlayer(directReloadIntent(session, resumeInto, sessionId))
+      ) {
+        // Le préchauffage prêt de la version allégée passe à la page suivante ; tout autre est arrêté
+        // chez Jellyfin — le démontage qui l'aurait fait n'aura pas lieu.
+        if (!(resumeInto?.lighter && carryPrewarmAcrossReload(itemId))) cancelPrewarm();
+        reloadPage();
+        return;
+      }
       if (sessionId) setContinued({ owner: session, id: sessionId });
       stepAside(itemId, reason, resumeInto ? { ...resumeInto, owner: session } : undefined);
     },
-    [itemId, session, stepAside]
+    [itemId, session, stepAside, serverFallback]
   );
 
   /**
@@ -380,7 +409,8 @@ export function PlayerHost() {
         mode={mode === "mini" ? "mini" : "full"}
         fallbackReason={fallbackReason}
         takeover={carried ?? takeover}
-        continuesSession={continued?.owner === session ? continued.id : undefined}
+        // Un rechargement direct poursuit la séance que le natif avait ouverte (`reloadCarry.continues`).
+        continuesSession={continued?.owner === session ? continued.id : session.reloadCarry?.continues}
         onCastEnded={handCastBack}
       />
       {/* Shown over the stable player while it makes its own arrangements, and gone on its own.
@@ -699,15 +729,27 @@ function ActivePlayer({
    */
   const [runner] = useState(() => new SlowLinkRunner());
   /** La décision en pleine lecture, rappelée quand un préchauffage de saccades est prêt. */
-  const playbackDecisionRef = useRef<(triggered?: boolean) => void>(() => {});
+  const playbackDecisionRef = useRef<(triggered?: boolean, early?: boolean) => void>(() => {});
   /**
    * La bascule en cours : son instant (`Date.now()`), pour mesurer l'interruption jusqu'à la première
    * image du flux allégé — posé par une bascule d'ici ou par le relais du lecteur natif.
    */
-  const switchedAtRef = useRef<number | null>(takeoverFor(takeover, session)?.switchedAt ?? null);
+  const switchedAtRef = useRef<number | null>(takeoverFor(takeover, session)?.switchedAt ?? session.reloadCarry?.switchedAt ?? null);
   const switchGapRef = useRef<number | null>(null);
+  /**
+   * Le rechargement direct (bascule natif → serveur sur WebKit, `serverReload.ts`) : l'instant de sa
+   * décision, et l'interruption jusqu'à la première image — `reloadGapMs` au bilan.
+   */
+  const reloadDecidedAtRef = useRef<number | null>(session.reloadCarry?.direct?.decidedAt ?? null);
+  const reloadGapRef = useRef<number | null>(null);
+  /** Le palier emporté par le rechargement (`reloadCarry.lighter`) : vient-il d'une vraie bascule ? */
+  const reloadLighterRef = useRef(session.reloadCarry?.lighter);
   /** « Passage en vidéo allégée en raison d'une connexion lente. » — bref, en bas à gauche. */
-  const [switchNotice, setSwitchNotice] = useState(() => takeoverFor(takeover, session)?.lighter !== undefined && takeoverFor(takeover, session)?.switchedAt !== undefined);
+  const [switchNotice, setSwitchNotice] = useState(
+    () =>
+      (takeoverFor(takeover, session)?.lighter !== undefined && takeoverFor(takeover, session)?.switchedAt !== undefined) ||
+      (session.reloadCarry?.direct !== undefined && session.reloadCarry.lighter !== undefined && session.reloadCarry.switchedAt !== undefined)
+  );
   /**
    * Pendant une lecture allégée, la capacité du lien comparée au besoin du fichier d'origine (§78) :
    * rétablie, la mémoire des deux minutes s'efface. Le besoin d'origine vient de la négociation.
@@ -715,6 +757,15 @@ function ActivePlayer({
   const recoveryRef = useRef(new LinkRecovery());
   const classicNeedRef = useRef<number | null>(null);
   const lighterClearedRef = useRef(false);
+  /**
+   * Ce qu'un rechargement de page emporte de la version allégée (`serverReload.ts`) : le palier
+   * négocié, et s'il vient d'une vraie bascule — un palier seulement hérité, ou dont le lien s'est
+   * rétabli (`lighterCleared`), ne réarmera pas la mémoire des deux minutes de l'autre côté.
+   */
+  const reloadCarryNow = useCallback(
+    () => ({ ...(negotiatedStepRef.current ? { lighter: reloadLighterOf(negotiatedStepRef.current, !carriedOnlyRef.current && !lighterClearedRef.current) } : {}) }),
+    []
+  );
   /** La version allégée est-elle permise à ce compte (réponse de la négociation, §78) ? */
   const [lighterAllowed, setLighterAllowed] = useState(true);
   /** Le réglage « Qualité » (§78) : en « Originale », jamais de bascule ; ni pour le banc d'essai. */
@@ -742,7 +793,10 @@ function ActivePlayer({
   const subtitleCarryRef = useRef<number | null>(
     (() => {
       const handover = takeoverFor(takeover, session);
-      return handover?.lighter && typeof handover.subtitleStreamIndex === "number" ? handover.subtitleStreamIndex : null;
+      if (handover?.lighter && typeof handover.subtitleStreamIndex === "number") return handover.subtitleStreamIndex;
+      // Le même relais, emporté par un rechargement direct.
+      const carried = session.reloadCarry?.subtitleStreamIndex;
+      return typeof carried === "number" ? carried : null;
     })()
   );
   const takeSubtitleCarry = useCallback(() => {
@@ -752,6 +806,7 @@ function ActivePlayer({
   }, []);
   useEffect(() => {
     sessionLighterRef.current = session.lighter;
+    reloadLighterRef.current = session.reloadCarry?.lighter;
   }, [session]);
   /** Une génération de sous-titres était en cours au passage en allégée : dit brièvement (§78). */
   const [subtitleGenNotice, setSubtitleGenNotice] = useState(() => takeoverFor(takeover, session)?.subtitleGenerating === true);
@@ -941,6 +996,7 @@ function ActivePlayer({
       // Ce que la lenteur a fait paraître et les choix faits (§78), et la mémoire allégée effacée.
       ...slowLogRef.current.fields(),
       ...(switchGapRef.current !== null ? { switchGapMs: switchGapRef.current } : {}),
+      ...(reloadGapRef.current !== null ? { reloadGapMs: reloadGapRef.current } : {}),
       ...(lighterClearedRef.current ? { lighterCleared: true } : {}) };
     },
     [watched]
@@ -1200,11 +1256,22 @@ function ActivePlayer({
       // une diffusion (le téléviseur a son propre lien), jamais pour le banc d'essai.
       const allowed = !castSession && !bench && readPlaybackQuality() === "auto";
       let lighterCarried = false;
+      let lighterReloaded = false;
       if (allowed && switchStepRef.current?.itemId !== itemId && sessionLighterRef.current) {
         switchStepRef.current = { itemId, step: sessionLighterRef.current };
-        lighterCarried = true;
-        carriedOnlyRef.current = true;
-        slowLogRef.current.note(`allégée ${(sessionLighterRef.current.targetBps / 1e6).toFixed(1)} Mb/s palier ${sessionLighterRef.current.tier} (moins de 2 min après une séance allégée)`);
+        // Emporté par un rechargement de page (`reloadCarry.lighter`) : la séance d'avant le rechargement
+        // continue — une vraie bascule reste une vraie bascule (son arrêt retiendra le palier), un palier
+        // hérité reste hérité (il ne réarme pas la mémoire des deux minutes).
+        const reloaded = reloadLighterRef.current;
+        lighterReloaded = reloaded !== undefined;
+        lighterCarried = !reloaded?.real;
+        carriedOnlyRef.current = !reloaded?.real;
+        const mbpsText = (sessionLighterRef.current.targetBps / 1e6).toFixed(1);
+        slowLogRef.current.note(
+          reloaded
+            ? `allégée ${mbpsText} Mb/s palier ${sessionLighterRef.current.tier} (repris au rechargement, ${reloaded.real ? "bascule" : "hérité"})`
+            : `allégée ${mbpsText} Mb/s palier ${sessionLighterRef.current.tier} (moins de 2 min après une séance allégée)`
+        );
       }
       const step = allowed && switchStepRef.current?.itemId === itemId ? switchStepRef.current.step : null;
       const maxBitrate = step ? Math.min(pickMaxBitrate(), step.targetBps) : pickMaxBitrate();
@@ -1340,7 +1407,14 @@ function ActivePlayer({
         ...(nativeErrorRetryCount.current > 0 ? { retry: nativeErrorRetryCount.current } : {}),
         // La version allégée (§78) : débit demandé, palier, s'il vient de la règle des deux minutes, et le
         // préchauffage repris (son délai, son codec, sa résolution).
-        ...(cap.step ? { lighterMbps: Math.round(cap.step.targetBps / 1e5) / 10, lighterTier: cap.step.tier, ...(lighterCarried ? { lighterCarried: true } : {}) } : {}),
+        ...(cap.step
+          ? {
+              lighterMbps: Math.round(cap.step.targetBps / 1e5) / 10,
+              lighterTier: cap.step.tier,
+              ...(lighterCarried ? { lighterCarried: true } : {}),
+              ...(lighterReloaded ? { lighterReloaded: true } : {}),
+            }
+          : {}),
         ...(warmed ? { prewarm: { ...prewarmFields(warmed), used: true } } : {}),
         ...startup.fields(),
         ...slowLogRef.current.fields(),
@@ -1432,6 +1506,11 @@ function ActivePlayer({
             switchGapRef.current = Date.now() - switchedAtRef.current;
             slowLogRef.current.note(`bascule : image ${switchGapRef.current} ms après`);
             switchedAtRef.current = null;
+          }
+          if (reloadDecidedAtRef.current !== null) {
+            reloadGapRef.current = Date.now() - reloadDecidedAtRef.current;
+            slowLogRef.current.note(`rechargement direct : image ${reloadGapRef.current} ms après la décision`);
+            reloadDecidedAtRef.current = null;
           }
           // Une marche qui se charge a trouvé le coupable : retenu pour le reste de cette ouverture
           // seulement (voir AUDIO_FALLBACK_RUNGS et `learnedExclusions`).
@@ -1799,7 +1878,9 @@ function ActivePlayer({
           sessionStorage.setItem(
             PLAYER_RELOAD_INTENT_KEY,
             // `server` : la page rechargée revient au lecteur serveur — voir `reloadedOnServer`.
-            JSON.stringify({ itemId, title, audioStreamIndex: id, resumeAt, server: true })
+            // `carry.lighter` : le palier en cours voyage avec la piste, pas par la mémoire des deux
+            // minutes (qui pouvait avoir expiré : la séance repartait en pleine qualité, 12/10/2026).
+            JSON.stringify({ itemId, title, audioStreamIndex: id, resumeAt, server: true, carry: reloadCarryNow() } satisfies PlayerReloadIntent)
           );
         } catch {
           // Storage unavailable (private browsing, quota) — falls through to the in-place
@@ -1818,7 +1899,7 @@ function ActivePlayer({
       }
       startPlayback({ audioStreamIndex: id, resumeAt, cause: { why: "audio" } });
     },
-    [startPlayback, itemId, title]
+    [startPlayback, itemId, title, reloadCarryNow]
   );
 
   /**
@@ -1931,14 +2012,19 @@ function ActivePlayer({
          * pas le banc. La durée n'est pas encore connue ici : le recul près de la fin n'est donc
          * pas retenu, ce qui ne coûte que cinq secondes rejouées.
          */
-        const at = !mine && !fromReload && !bench ? openingPosition(itemId, resumeAt, null) : resumeAt;
+        // Un rechargement direct d'avant toute image est une ouverture qui a changé de lecteur : même recul.
+        const opening = !fromReload || session.reloadCarry?.direct?.opening === true;
+        const at = !mine && opening && !bench ? openingPosition(itemId, resumeAt, null) : resumeAt;
         // Pourquoi cette première négociation : une page rechargée (piste WebKit, ou dernier
         // recours de l'échelle audio), le relais du lecteur natif — la séance qu'il passe, pas
         // l'épisode suivant que ce lecteur enchaîne ensuite —, ou une ouverture.
+        // Le rechargement direct d'une bascule natif → serveur (WebKit) a son propre motif.
         const why: ServerStartWhy = fromReload
-          ? (reloadAttempt ?? 0) > 0
-            ? "retry-reload"
-            : "audio-reload"
+          ? session.reloadCarry?.direct
+            ? "reload-direct"
+            : (reloadAttempt ?? 0) > 0
+              ? "retry-reload"
+              : "audio-reload"
           : continuesSession && logSession.current.id === continuesSession
             ? "handover"
             : "open";
@@ -2314,7 +2400,11 @@ function ActivePlayer({
       const started = waitStart;
       waitStart = null;
       if (started && now - started.at > 1000) pushSlowLinkEvent(`blocage de ${now - started.at} ms (serveur)`);
-      if (started && stutterRef.current.waitEnded(now, now - started.at, networkStall(started.ahead))) offerStutterRef.current();
+      if (!started) return;
+      // Le 2e blocage préchauffe, le 3e bascule (§78) — la règle de bascule, elle, est inchangée.
+      const signal = stutterRef.current.waitEndedSignal(now, now - started.at, networkStall(started.ahead));
+      if (signal === "switch") offerStutterRef.current();
+      else if (signal === "prewarm") playbackDecisionRef.current(false, true);
     };
     const onPlaying = () => {
       const now = Date.now();
@@ -2438,10 +2528,11 @@ function ActivePlayer({
    * préchauffer le palier suivant à la position courante, puis basculer dès qu'il est prêt.
    */
   useEffect(() => {
-    playbackDecisionRef.current = (triggered = false) => {
+    playbackDecisionRef.current = (triggered = false, early = false) => {
       const reading = { recvBps: measuredBps(linkMeterRef.current?.recentMeasure(PLAYBACK_MEASURE_WINDOW_MS)), needBps: streamNeedRef.current };
       const action = decidePlayback({
-        triggered,
+        triggered: runner.armPlayback(triggered),
+        early,
         auto: autoLighterRef.current,
         prewarm: runner.status("lecture"),
         currentStep: negotiatedStepRef.current,
@@ -2652,7 +2743,8 @@ function ActivePlayer({
               attempt: (reloadAttempt ?? 0) + 1,
               server: true,
               ...(audioIdx !== undefined ? { audioStreamIndex: audioIdx } : {}),
-            })
+              carry: reloadCarryNow(),
+            } satisfies PlayerReloadIntent)
           );
           video!.pause();
           video!.removeAttribute("src");

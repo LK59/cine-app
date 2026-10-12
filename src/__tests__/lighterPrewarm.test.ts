@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("@/lib/codecSupport", () => ({ detectCodecSupport: async () => ({ video: { "mp4/hevc10": true }, audio: {} }) }));
 vi.mock("@/lib/webkitEngine", () => ({ playsHlsNatively: () => false }));
 
-import { cancelPrewarm, forgetPrewarm, prewarmFields, prewarmStatusOf, segmentAt, startPrewarm, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { PREWARM_CARRY_MS, cancelPrewarm, carryPrewarmAcrossReload, forgetPrewarm, prewarmFields, prewarmStatusOf, segmentAt, startPrewarm, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
 
 const START = {
   playSessionId: "ps-1",
@@ -70,6 +70,35 @@ describe("le préchauffage", () => {
     await Promise.resolve();
     const stop = calls.find((c) => c.url === "/api/jellyfin/playback/stop");
     expect(stop?.body).toEqual({ itemId: "film", playSessionId: "ps-1", mediaSourceId: "ms-1", deviceId: "dev-1", prewarm: true });
+    expect(takePrewarm("film")).toBeNull();
+  });
+
+  it("emporté par un rechargement (WebKit) : la page suivante le reprend tel quel, une fois ; trop ancien, il est arrêté chez Jellyfin", async () => {
+    const prewarm = startPrewarm({ itemId: "film", step: { targetBps: 1_500_000, tier: 1 }, startSeconds: 1200 });
+    await prewarm.ready;
+    expect(carryPrewarmAcrossReload("film")).toBe(true);
+    // « La page suivante » : plus rien en mémoire, seulement ce que le rechargement a emporté.
+    const taken = takePrewarm("film");
+    expect(taken?.data).toEqual(START);
+    expect(taken).toMatchObject({ startSeconds: 1200, carried: true, state: "used" });
+    expect(prewarmFields(taken)).toMatchObject({ carried: 1, segment: 399 });
+    expect(takePrewarm("film")).toBeNull();
+
+    const old = startPrewarm({ itemId: "film", step: { targetBps: 1_500_000, tier: 1 }, startSeconds: 0 });
+    await old.ready;
+    expect(carryPrewarmAcrossReload("film", Date.now() - PREWARM_CARRY_MS - 1)).toBe(true);
+    expect(takePrewarm("film")).toBeNull();
+    await Promise.resolve();
+    expect(calls.filter((c) => c.url === "/api/jellyfin/playback/stop")).toHaveLength(1);
+  });
+
+  it("pas encore prêt au rechargement : rien n'est emporté, le transcodage est arrêté", async () => {
+    const prewarm = startPrewarm({ itemId: "film", step: { targetBps: 1_500_000, tier: 1 }, startSeconds: 0 });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(carryPrewarmAcrossReload("film")).toBe(false);
+    expect(prewarm.state).toBe("cancelled");
     expect(takePrewarm("film")).toBeNull();
   });
 

@@ -402,6 +402,7 @@
         "handover": "Handover from the native player",
         "audio-reload": "Audio track (page reloaded)",
         "retry-reload": "Page reloaded after a failure",
+        "reload-direct": "Native player handover (page reloaded)",
         "audio": "Audio track change",
         "retry": "Retry",
         "cast-relaunch": "Cast relaunched",

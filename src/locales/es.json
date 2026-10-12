@@ -402,6 +402,7 @@
         "handover": "Relevo del reproductor nativo",
         "audio-reload": "Pista de audio (página recargada)",
         "retry-reload": "Página recargada tras un fallo",
+        "reload-direct": "Relevo del reproductor nativo (página recargada)",
         "audio": "Cambio de pista de audio",
         "retry": "Reintentar",
         "cast-relaunch": "Transmisión relanzada",

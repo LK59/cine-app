@@ -402,6 +402,7 @@
         "handover": "Übergabe vom nativen Player",
         "audio-reload": "Tonspur (Seite neu geladen)",
         "retry-reload": "Seite nach einem Fehler neu geladen",
+        "reload-direct": "Übergabe vom nativen Player (Seite neu geladen)",
         "audio": "Tonspurwechsel",
         "retry": "Erneut versuchen",
         "cast-relaunch": "Übertragung neu gestartet",

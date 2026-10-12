@@ -402,6 +402,7 @@
         "handover": "Relais du lecteur natif",
         "audio-reload": "Piste audio (page rechargée)",
         "retry-reload": "Page rechargée après échec",
+        "reload-direct": "Relais du lecteur natif (page rechargée)",
         "audio": "Changement de piste audio",
         "retry": "Réessayer",
         "cast-relaunch": "Relance de la diffusion",

@@ -3556,6 +3556,28 @@ sa bascule : `ExperimentalPlayerHost` → `fallToStable` avec un relais `lighter
   début de l'attente) sous un débit mesuré inférieur au besoin. Jamais calcul/décodeur, jamais une attente
   de saut. Préchauffage à la position courante, bascule dès qu'il est prêt, à la position d'alors (la même
   seconde si l'image est restée figée). Une lenteur mesurée sans problème visible ne déclenche **rien**.
+  Le préchauffage part **dès le 2e** blocage de plus d'1 s (`waitEndedSignal` → `"prewarm"`,
+  `decidePlayback` `early` : préchauffer, jamais basculer ; `SlowLinkRunner.armPlayback` tient le
+  déclenchement) — la bascule reste décidée par la règle ci-dessus et trouve le préchauffage prêt. Sans
+  déclenchement dans les 60 s (`EARLY_PREWARM_MS`), il est annulé (transcodage arrêté chez Jellyfin). Fil :
+  « préchauffage (2e blocage) ». (12/10/2026.)
+- *Rechargement WebKit* (`serverReload.ts`) — sur WebKit avec HLS natif (`playsHlsNatively`, la condition
+  des deux autres rechargements), une bascule du lecteur natif vers le lecteur serveur — allégée ou repli
+  ordinaire — **recharge la page tout de suite** (`shouldReloadDirect`, dans `PlayerHost` `handOver`) au
+  lieu d'essayer le HLS natif dans la page : le 12/10/2026 sur iPhone, chaque bascule allégée donnait code 4
+  en 1,8 s, trois marches de l'échelle audio, puis le rechargement de dernier recours qui marchait (~10 s
+  perdues sur 15,8 ; Safari chargeait les listes et ne demandait aucun segment). L'intention porte position,
+  piste, `attempt: 1`, et `carry` : palier, sous-titre du relais, séance du journal poursuivie, instant de
+  la décision ; le préchauffage prêt passe la page (`carryPrewarmAcrossReload`, `sessionStorage`, 60 s au
+  plus — même `PlaySessionId`, mêmes adresses), un préchauffage pas prêt est arrêté. Jamais pour une
+  diffusion, le banc, une ouverture directe au lecteur serveur, ni hls.js ; une fois par séance (une page
+  rechargée qui échoue suit l'échelle et l'écran d'avant). Journal : `start` `why: "reload-direct"`,
+  `reloadGapMs` (décision → première image) au bilan, plus aucune `ladder` dans ce cas.
+- *Palier à travers un rechargement* — `audio-reload`, `retry-reload` et `reload-direct` emportent le palier
+  en cours dans l'intention (`carry.lighter` : cible, palier, `real` = vraie bascule ou seulement hérité),
+  repris par `play` (`reloadedLighter`, « Automatique » seulement) **à la place** de la mémoire des deux
+  minutes : une séance allégée reste allégée après un changement de piste, même la mémoire expirée. Un
+  palier hérité le reste (`lighterCarried`, ne réarme rien) ; `lighterReloaded` sur le `start`.
 - *Dégressif* — sur le lecteur serveur déjà allégé, les mêmes règles visent le palier suivant :
   `max(1,5, min(précédent / 2, mesuré / 2))` ; au plancher, plus de palier.
 - *Écran final* « Lecture impossible : la connexion est trop lente. » (Réessayer · Fermer, qui ferme le
@@ -3617,15 +3639,17 @@ navigateur seulement (`linkSimulator.ts` : `HttpByteSource` et un chargeur hls.j
 l'onglet courant ; ailleurs `simulatorActive()` est faux et aucune de ses branches n'est prise.
 
 **Journal** — aucune ligne de plus : `slowLink` (fil borné) et `slowChoice` ; `lighterMbps`, `lighterTier`,
-`lighterCarried`, `lighterCleared`, `switch.*` (cause, position avant/après), `prewarm.*` (débit, palier,
-état, codecs, résolution, délai), `switchGapMs` (interruption jusqu'à l'image du serveur), `quality` sur
-les lignes de bascule et de renoncement. Activité : tout motif commençant par « connexion trop lente » est
+`lighterCarried`, `lighterReloaded`, `lighterCleared`, `switch.*` (cause, position avant/après), `prewarm.*`
+(débit, palier, état, codecs, résolution, délai, `carried` repris après un rechargement), `switchGapMs`
+(interruption jusqu'à l'image du serveur), `reloadGapMs` (rechargement direct : décision → image), `why:
+"reload-direct"`, `quality` sur les lignes de bascule et de renoncement. Activité : tout motif commençant par « connexion trop lente » est
 rangé avec les connexions lentes, jamais contre le fichier.
 
 **Porteurs.** `slowLinkPolicy.ts` (`openingAdvice`, `decideOpening`, `decidePlayback`, `StutterWatch`,
 `nextLighter`, `lighterMaxWidth`, `LinkRecovery`, `SlowLog`), `slowLinkRunner.ts` (§79), `lighterPrewarm.ts`
 (`prewarmStatusOf`), `networkTrouble.ts`, `unsentPosition.ts`, `transcodePolicy.ts`, `prewarmSessions.ts`,
-`playbackQuality.ts` (`carriedLighter`), `linkSimulator.ts`, `slowLinkMonitor.ts`. **Appelants.** `ExperimentalPlayerHost`, `PlayerHost` / `ActivePlayer`,
+`playbackQuality.ts` (`carriedLighter`), `serverReload.ts` (`shouldReloadDirect`, `directReloadIntent`,
+`reloadedLighter`), `linkSimulator.ts`, `slowLinkMonitor.ts`. **Appelants.** `ExperimentalPlayerHost`, `PlayerHost` / `ActivePlayer`,
 `PlaybackProvider`, `PlayerControls` (Qualité), `usePlaybackSession`, `HttpByteSource`, routes `direct`,
 `playback/start`, `playback/stop`. **Tests.** `slowLinkPolicy.test.ts`, `lighterPrewarm.test.ts`,
 `linkSimulator.test.ts`, `ExperimentalPlayerHost.test.tsx` (« §78 », « les saccades »),
@@ -3633,7 +3657,7 @@ rangé avec les connexions lentes, jamais contre le fichier.
 `playback-stop-late.test.ts`, `unsentPosition.test.ts`, `networkTrouble.test.ts`,
 `webcodecs-byteSource.test.ts`, `PlaybackProvider.test.tsx`, `transcodePolicy.test.ts`,
 `PlayerControls.test.tsx`, `activity-connexion-lente.test.ts`, `playbackQuality.test.ts`,
-`playback-stop-late.test.ts`.
+`playback-stop-late.test.ts`, `rechargement-direct-webkit.test.tsx`.
 
 **Différent exprès.** Le serveur renonce à 20 s (son chien de garde), le natif à 35 s. Safari en HLS natif
 ne mesure rien : inchangé. Le préchauffage n'est pas bridé par le simulateur (seule la lecture l'est).

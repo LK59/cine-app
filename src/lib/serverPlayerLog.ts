@@ -33,6 +33,11 @@ export type ServerStartWhy =
   | "audio-reload"
   /** Page rechargée en dernier recours après une échelle de repli épuisée (WebKit). */
   | "retry-reload"
+  /**
+   * Page rechargée dès la bascule natif → serveur (WebKit, HLS natif) : le relais, sans l'essai dans la
+   * page que WebKit refusait (`serverReload.ts`, 12/10/2026). Une ouverture, comme `handover`.
+   */
+  | "reload-direct"
   /** Changement de piste audio sur place. */
   | "audio"
   /** « Réessayer », pressé par le spectateur sur l'écran d'erreur. */
@@ -49,6 +54,7 @@ export const SERVER_START_WHY_LABELS: Record<ServerStartWhy, string> = {
   handover: "relais du lecteur natif",
   "audio-reload": "piste audio (page rechargée)",
   "retry-reload": "page rechargée après échec",
+  "reload-direct": "relais du lecteur natif (page rechargée)",
   audio: "changement de piste audio",
   retry: "réessayer",
   "cast-relaunch": "relance de la diffusion",
@@ -62,7 +68,7 @@ export function isStartWhy(why: unknown): why is ServerStartWhy {
 
 /** Une ouverture n'est pas une relance : la séance commence. */
 export function isServerRestart(why: unknown): boolean {
-  return isStartWhy(why) && why !== "open" && why !== "handover";
+  return isStartWhy(why) && why !== "open" && why !== "handover" && why !== "reload-direct";
 }
 
 /** Une relance qui suit une panne, et non un geste du spectateur. */

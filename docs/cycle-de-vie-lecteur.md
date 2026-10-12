@@ -100,6 +100,7 @@ terminé », sinon `loading` qui retombe dans `ActivePlayer`.
 |---|---|---|
 | `playback.play(s)` (bouton Lecture, fiches, épisode suivant, banc, rechargement WebKit) | `openId++`, `mode = full`, SWR mis en pause (`setWatchingFullScreen`) | `PlaybackProvider` `play` |
 | L'hôte natif abandonne (`fallToStable`) | `stepAside` : l'élément rejoint `handedOver` (sauf diffusion), `takeover` posé, `continued` relie les deux séances du journal | `PlayerHost` `handOver`, `useStableFallback` |
+| L'hôte natif abandonne, WebKit + HLS natif (`shouldReloadDirect`) | **pas de `stepAside`** : intention (`directReloadIntent` : position, piste, `attempt: 1`, `server: true`, `carry` = palier allégé, sous-titre du relais, séance du journal, instant de la décision), préchauffage prêt emporté (`carryPrewarmAcrossReload`, sinon arrêté), puis `reloadPage()`. La page rechargée ouvre le lecteur serveur, `why: "reload-direct"`, et reprend le préchauffage. Jamais pour une diffusion, le banc, ni une séance qui a déjà consommé son rechargement (`reloadAttempt ≥ 1`) | `PlayerHost` `handOver`, `serverReload.ts` (DECISIONS.md §78) |
 | Diffusion demandée depuis le menu natif | `fallToStable("diffusion demandée", {...takeoverNow(), cast: true})` ; le sélecteur s'ouvre à `loadedmetadata` côté serveur | `ExperimentalPlayerHost`, `PlayerHost` |
 | Route AirPlay établie / perdue | ligne `cast` / ligne `fallback` (`cast: true`) ; si la diffusion venait du natif, `onCastEnded(position, paused = true)` | `PlayerHost` écoute de la route |
 | Bouton « revenir sur le téléphone » | `onCastEnded(position)` → `stepBack` → le natif remonte | `PlayerHost` `handleCastReturn` |
@@ -109,10 +110,15 @@ terminé », sinon `loading` qui retombe dans `ActivePlayer`.
 | Fermer | ligne `stop`, arrêt Jellyfin, fondu, `close(openId)` après 200 ms, `refreshAfterPlayback` | les deux hôtes, `handleClose` |
 | La séance passe à `null` | `RESUME_KEY` et `NEXT_UP_KEY` redemandés | `PlaybackProvider` effet `wasPlaying` |
 | `refreshAfterPlayback` | attend le rapport d'arrêt **puis** l'écran libre (au plus 3 s), puis revalide Reprendre, À suivre, la progression du titre et toutes les listes d'épisodes | `swr.ts` |
-| Changement de piste sur le lecteur serveur | WebKit : intention dans `sessionStorage` puis `location.reload()` ; ailleurs : nouvelle négociation, nouveau `playSessionId` | `PlayerHost` `changeAudio` (protégé, voir `CLAUDE.md`) |
+| Changement de piste sur le lecteur serveur | WebKit : intention dans `sessionStorage` (avec `carry.lighter`, le palier en cours) puis `location.reload()` ; ailleurs : nouvelle négociation, nouveau `playSessionId` | `PlayerHost` `changeAudio` (protégé, voir `CLAUDE.md`) |
 
 Ce qui est perdu au rechargement WebKit : `getNextEpisode`, la route AirPlay, `handedOver` et
-`takeover`, l'identifiant de séance du journal, `openId`. C'est accepté et documenté dans le code.
+`takeover`, l'identifiant de séance du journal (sauf le rechargement direct, qui poursuit celle du
+natif), `openId`. C'est accepté et documenté dans le code. Ce qui ne l'est plus depuis le 12/10/2026 :
+le palier allégé — les trois rechargements l'écrivent dans l'intention (`carry.lighter`, avec `real` :
+vraie bascule ou palier seulement hérité), et `play` le reprend au lieu de consulter la mémoire des
+deux minutes (`reloadedLighter`, en « Automatique » seulement) ; une séance héritée le reste, sans
+réarmer la mémoire.
 Le choix du lecteur serveur, lui, survit : l'intention porte `server: true`, relue en
 `reloadedOnServer` (l'élément rouvert), sans quoi la page revenait sur le lecteur natif, qui ignore
 la piste demandée. Il ne vaut que pour cet élément : l'épisode suivant repart par l'aiguillage
@@ -190,7 +196,7 @@ stockée.
 | Minuteur d'abandon | pas prêt, pas d'erreur, pas de réseau perdu | après 35 s : `giveUpOnOpening` — `fallToStable`, ou l'écran « connexion trop lente » si le lien mesuré pendant l'ouverture l'explique (§77) | Passé la main / écran |
 | Lecture du lien (chaque seconde) | pas prêt, pas d'erreur, pas de réseau perdu, page visible | `decideOpening` (§78) : indice ; en « Automatique », préchauffage dès 8 s (`startPrewarm`), bascule à 10 s (très lente) ou 20 s (moyenne) → `fallToStable(SLOW_LINK_LIGHTER_REASON, relais lighter)` portant le palier ; la première image annule le préchauffage (`runner.drop`). Exécuté par `SlowLinkRunner` (`slowLinkRunner.ts`, commun aux deux lecteurs, DECISIONS.md §79) ; aucun tic après la première image (`pictureAtRef`, posé à l'instant de l'image) | Inchangé / Passé la main |
 | Saut sans image (chaque seconde) | prêt ; `runner.seekStarted` sur `seeking` arme le minuteur, `runner.seekDone` l'arrête sur `playing`, sur `seeked` en pause ou avec de quoi repartir (`HAVE_FUTURE_DATA`), sur `pause` posé ; un saut en pause n'est jamais une ouverture | après 10 s, `decideOpening` sur la mesure depuis le saut ; à 35 s, lenteur prouvée → bascule ou écran | Inchangé / Passé la main / écran |
-| Saccades | `waiting` compté (ni saut, ni ouverture) | 5 s → `diagCurrentWait` ; fin d'attente → `diagWaitEnded` ; réseau + lien sous le besoin → `StutterWatch` → `decidePlayback` : préchauffage à la position, bascule dès qu'il est prêt → `fallToStable(SLOW_LINK_STUTTER_REASON, relais lighter)` | Inchangé / Passé la main |
+| Saccades | `waiting` compté (ni saut, ni ouverture) | 5 s → `diagCurrentWait` ; fin d'attente → `diagWaitEnded` ; réseau + lien sous le besoin → `StutterWatch` → `decidePlayback` : le 2e blocage de plus d'1 s préchauffe sans basculer (annulé après 60 s sans déclenchement, `EARLY_PREWARM_MS`) ; au déclenchement (5 s, ou le 3e), préchauffage s'il n'y en a pas, bascule dès qu'il est prêt → `fallToStable(SLOW_LINK_STUTTER_REASON, relais lighter)` | Inchangé / Passé la main |
 | Tentatives réseau (`networkTrouble`) | une plage réessaie, ou hors ligne | `unstable` : « Connexion perdue ou instable… » sous la ligne ou la roue ; ni préchauffage ni bascule ; le renoncement attend | Inchangé |
 | Changement de piste (menu) | `"rebuild"` | image figée, `lifecycle.keepPaused = paused`, `restart(intendedPosition())` | Changement de piste |
 | Saut (commandes) | — | `noteSeekRequest` : cible notée, réécrit `lifecycle.rebuildAt` si une reconstruction attend ; le déplacement lui-même est écrit sur l'élément par `PlayerControls` | Saut |
@@ -457,7 +463,8 @@ banc ou une touche média y arriveraient, et le code le traite (`wantedAudioRef`
 
 Trous connus côté serveur : aucune ligne quand les nouveaux essais hls.js ou l'échelle audio sont
 épuisés, ni pour l'escalade par rechargement WebKit, le bouton Réessayer ou le retour de
-diffusion.
+diffusion. Le rechargement direct, lui, se lit : la ligne `fallback` du natif, puis le `start`
+`why: "reload-direct"` de la même séance, et `reloadGapMs` (décision → première image) au bilan.
 
 Les deux lecteurs, connexion lente (§78) : `slowLink` et `slowChoice` sur les lignes qui partent de toute
 façon (`opening`, `fallback`, `error`, `stop`, et `start` du serveur), jamais une ligne de plus ; une

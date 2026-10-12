@@ -97,9 +97,18 @@ describe("la décision (une seule machine pour les deux lecteurs)", () => {
     const reading = { recvBps: 2_000_000, needBps: NEED };
     expect(decidePlayback({ triggered: true, auto: true, prewarm: "none", currentStep: null, ...reading })).toEqual({ kind: "prewarm", step: { targetBps: 1_500_000, tier: 1 } });
     expect(decidePlayback({ triggered: false, auto: true, prewarm: "running", currentStep: null, ...reading })).toEqual({ kind: "none" });
-    expect(decidePlayback({ triggered: false, auto: true, prewarm: "ready", currentStep: null, ...reading }).kind).toBe("switch");
+    expect(decidePlayback({ triggered: true, auto: true, prewarm: "ready", currentStep: null, ...reading }).kind).toBe("switch");
+    expect(decidePlayback({ triggered: true, auto: true, prewarm: "failed", currentStep: null, ...reading }).kind).toBe("switch");
     expect(decidePlayback({ triggered: true, auto: false, prewarm: "none", currentStep: null, ...reading })).toEqual({ kind: "none" });
     expect(decidePlayback({ triggered: true, auto: true, prewarm: "none", currentStep: { targetBps: 1_500_000, tier: 3 }, ...reading })).toEqual({ kind: "none" });
+  });
+
+  it("le 2e blocage (`early`) préchauffe sans jamais basculer : un préchauffage prêt attend la règle de bascule", () => {
+    const reading = { recvBps: 2_000_000, needBps: NEED };
+    expect(decidePlayback({ triggered: false, early: true, auto: true, prewarm: "none", currentStep: null, ...reading })).toEqual({ kind: "prewarm", step: { targetBps: 1_500_000, tier: 1 } });
+    expect(decidePlayback({ triggered: false, auto: true, prewarm: "ready", currentStep: null, ...reading })).toEqual({ kind: "none" });
+    expect(decidePlayback({ triggered: false, early: true, auto: true, prewarm: "ready", currentStep: null, ...reading })).toEqual({ kind: "none" });
+    expect(decidePlayback({ triggered: false, early: true, auto: false, prewarm: "none", currentStep: null, ...reading })).toEqual({ kind: "none" });
   });
 
   it("dégressif côté serveur : le palier suivant part du palier en cours", () => {
@@ -159,6 +168,18 @@ describe("B — les saccades en pleine lecture", () => {
     sparse.waitEnded(0, 2000, true);
     sparse.waitEnded(100_000, 2000, true);
     expect(sparse.waitEnded(200_000, 2000, true)).toBe(false);
+  });
+
+  it("le palier intermédiaire : le 2e blocage préchauffe, le 3e bascule — dans la même fenêtre de 3 min", () => {
+    const watch = new StutterWatch();
+    expect(watch.waitEndedSignal(0, 1500, true)).toBe("none");
+    expect(watch.waitEndedSignal(5_000, 1500, false)).toBe("none");
+    expect(watch.waitEndedSignal(10_000, 1500, true)).toBe("prewarm");
+    expect(watch.waitEndedSignal(20_000, 1500, true)).toBe("switch");
+    expect(watch.waitEndedSignal(30_000, 1500, true)).toBe("none");
+    const sparse = new StutterWatch();
+    sparse.waitEndedSignal(0, 2000, true);
+    expect(sparse.waitEndedSignal(200_000, 2000, true)).toBe("none");
   });
 
   it("le débit mesuré sous le besoin, prouvé (2 s de réception, 256 Kio) ; rien reçu n'est pas une lenteur", () => {

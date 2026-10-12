@@ -49,9 +49,16 @@ export interface Prewarm {
    * Pas la négociation : sa réponse porte la séance à refermer chez Jellyfin, et elle est petite.
    */
   abort: AbortController;
+  /** Repris d'une page rechargée (`carryPrewarmAcrossReload`) : sa négociation a eu lieu avant le rechargement. */
+  carried?: boolean;
 }
 
 let current: Prewarm | null = null;
+
+/** Le préchauffage emporté à travers un rechargement de page (WebKit, rechargement direct). */
+const RELOAD_CARRY_KEY = "cine:prewarm-carry";
+/** Au-delà, le transcodage préchauffé ne vaut plus la peine d'être repris : arrêté, renégocié. */
+export const PREWARM_CARRY_MS = 60_000;
 
 /** Une ligne `#EXT-X-STREAM-INF` et l'adresse qui la suit. */
 function firstVariant(master: string, base: string): { url: string; codecs: string | null; resolution: string | null } | null {
@@ -177,11 +184,99 @@ export function startPrewarm(options: { itemId: string; step: LighterStep; start
 
 /** Le préchauffage de ce titre, pris par le lecteur serveur qui va le lire — une seule fois. */
 export function takePrewarm(itemId: string): Prewarm | null {
-  const prewarm = current;
+  const prewarm = current ?? takeCarriedPrewarm(itemId);
   if (!prewarm || prewarm.itemId !== itemId || (prewarm.state !== "ready" && prewarm.state !== "running")) return null;
   prewarm.state = "used";
   current = null;
   return prewarm;
+}
+
+/**
+ * Le rechargement direct (WebKit, `serverReload.ts`) emporte le préchauffage prêt de ce titre : la page
+ * suivante le reprend tel quel (même `PlaySessionId`, mêmes adresses), comme le relais dans la page.
+ * Un préchauffage pas encore prêt ne survivrait pas au rechargement (ses requêtes meurent avec la
+ * page) : il est arrêté chez Jellyfin. Ne lève jamais.
+ */
+export function carryPrewarmAcrossReload(itemId: string, nowMs = Date.now()): boolean {
+  const prewarm = current;
+  if (!prewarm || prewarm.itemId !== itemId) return false;
+  if (prewarm.state !== "ready" || !prewarm.data) {
+    cancelPrewarm(prewarm);
+    return false;
+  }
+  try {
+    sessionStorage.setItem(
+      RELOAD_CARRY_KEY,
+      JSON.stringify({
+        itemId,
+        step: prewarm.step,
+        startSeconds: prewarm.startSeconds,
+        audioStreamIndex: prewarm.audioStreamIndex,
+        data: prewarm.data,
+        segment: prewarm.segment,
+        variant: prewarm.variant,
+        readyMs: prewarm.readyAt !== null ? Math.round(prewarm.readyAt - prewarm.startedAt) : null,
+        at: nowMs,
+      })
+    );
+  } catch {
+    // Stockage indisponible : la page suivante renégociera — le transcodage d'ici est arrêté.
+    cancelPrewarm(prewarm);
+    return false;
+  }
+  // Passé à la page suivante : ni repris ici, ni annulé par le démontage de ce lecteur.
+  prewarm.state = "used";
+  current = null;
+  return true;
+}
+
+/** Le préchauffage emporté par le rechargement, s'il est pour ce titre et récent — lu une seule fois. */
+function takeCarriedPrewarm(itemId: string, nowMs = Date.now()): Prewarm | null {
+  let raw: string | null = null;
+  try {
+    raw = sessionStorage.getItem(RELOAD_CARRY_KEY);
+    if (raw) sessionStorage.removeItem(RELOAD_CARRY_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  try {
+    const saved = JSON.parse(raw) as {
+      itemId?: unknown;
+      step?: LighterStep;
+      startSeconds?: unknown;
+      audioStreamIndex?: unknown;
+      data?: PrewarmedStart;
+      segment?: Prewarm["segment"];
+      variant?: Prewarm["variant"];
+      readyMs?: unknown;
+      at?: unknown;
+    };
+    if (!saved.data || !saved.step || typeof saved.step.targetBps !== "number" || typeof saved.startSeconds !== "number") return null;
+    const prewarm: Prewarm = {
+      itemId: String(saved.itemId),
+      step: { targetBps: saved.step.targetBps, tier: saved.step.tier },
+      startSeconds: saved.startSeconds,
+      ...(typeof saved.audioStreamIndex === "number" ? { audioStreamIndex: saved.audioStreamIndex } : {}),
+      state: "ready",
+      startedAt: 0,
+      readyAt: typeof saved.readyMs === "number" ? saved.readyMs : null,
+      data: saved.data,
+      segment: saved.segment ?? null,
+      variant: saved.variant ?? null,
+      ready: Promise.resolve(true),
+      abort: new AbortController(),
+      carried: true,
+    };
+    // Un autre titre, ou trop ancien : la séance qu'il tenait est refermée chez Jellyfin.
+    if (prewarm.itemId !== itemId || typeof saved.at !== "number" || nowMs - saved.at > PREWARM_CARRY_MS || nowMs < saved.at) {
+      void stopAtJellyfin(prewarm);
+      return null;
+    }
+    return prewarm;
+  } catch {
+    return null;
+  }
 }
 
 /** Abandonner : le natif a trouvé son image, ou le lecteur se ferme. Le transcodage est arrêté. */
@@ -247,10 +342,16 @@ export function prewarmFields(prewarm: Prewarm | null): Record<string, string | 
     ...(prewarm.variant?.resolution ? { res: prewarm.variant.resolution } : {}),
     ...(prewarm.readyAt !== null ? { readyMs: Math.round(prewarm.readyAt - prewarm.startedAt) } : {}),
     ...(prewarm.segment ? { segment: prewarm.segment.index } : {}),
+    ...(prewarm.carried ? { carried: 1 } : {}),
   };
 }
 
 /** Pour les tests. */
 export function forgetPrewarm(): void {
   current = null;
+  try {
+    sessionStorage.removeItem(RELOAD_CARRY_KEY);
+  } catch {
+    /* rien */
+  }
 }
