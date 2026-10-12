@@ -444,6 +444,9 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (user_name, day)
     );
   `);
+  // Une ligne arrivée en flux mais dont le lot n'est pas encore validé (DECISIONS.md §69) : montrée au
+  // lecteur, jamais comptée comme faite, remplacée ou effacée selon le verdict du lot entier.
+  try { db.exec("ALTER TABLE subtitle_gen_cues ADD COLUMN provisional INTEGER NOT NULL DEFAULT 0"); } catch { /* already exists */ }
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
     const now = Date.now();
     db.prepare("INSERT OR IGNORE INTO onboarding (user_name, pending, updated_at) VALUES ('louis', 1, ?)").run(now);

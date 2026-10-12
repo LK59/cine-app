@@ -758,8 +758,21 @@ playback, by an online AI (DECISIONS.md §69). Server side: `src/lib/subtitleGen
   extract the first time). A track counts as full by its number of cues against the runtime, not by
   its forced flag.
 - **Requests.** Every request of a job starts with the same bytes: instructions, the glossary once
-  it exists, and the whole source text with cue ids. Only the previous ~20 translations and the ids
-  to translate vary. Anthropic gets an explicit cache breakpoint on the last prefix block; OpenAI and
+  it exists, and the whole source text as `id|text` lines (an inner line break written ` / `). Only
+  the previous ~20 translations and the ids to translate vary. Batches answer in plain `id|text`
+  lines, not JSON: on real batches the JSON form shifted translations by one cue under perfect ids
+  (2 of 6 batches), the line form never did, and it costs about a third fewer tokens. Any reply line
+  not starting with `<id>|` is ignored (the model sometimes adds a remark); the glossary stays a
+  single structured-JSON call. The first small batch runs while the glossary is being prepared; the
+  following ones wait for it.
+- **Streaming.** With Anthropic each complete line is written as soon as it arrives, marked
+  provisional, so the player shows it before the batch ends; the whole batch is then validated (ids,
+  counts, line limits, source language, and a length-based drift detector). A rejected batch clears
+  its provisional lines and the retry rewrites them under a higher revision, which the player
+  replaces by cue index. OpenAI and Gemini use the same line format without streaming.
+- **Case.** A source cue written in capitals (over 80 % of at least four letters) gets its
+  translation upper-cased by code, with the target language's rules; other cues are left as the model
+  wrote them. Anthropic gets an explicit cache breakpoint on the last prefix block; OpenAI and
   Gemini cache identical prefixes on their own. Requests of one job are sequential; at most three
   run at once across jobs.
 - **Priority.** Viewers who polled in the last 30 s come first, from their position minus 10 s,
@@ -771,8 +784,10 @@ playback, by an online AI (DECISIONS.md §69). Server side: `src/lib/subtitleGen
   `generated: true`; if the upload fails for good, the copy in `data/` is listed instead.
 - **Cost and limits.** Tokens are billed by category (input, cache write, cache read, output) from a
   per-model price table; a monthly budget and 50 new generations per account per day bound the spend.
-- **Log.** `data/logs/subtitle-gen.log`: `start`, `source`, `first`, `seek`, `batch` (periodic
-  summary), `retry`, `pause`, `refusal`, `kept`, `done` (tokens, cache read rate, cost, duration),
+- **Log.** `data/logs/subtitle-gen.log`: `start`, `source`, `first` (click-to-first-line and
+  request-to-first-line delays), `seek`, `batch` (periodic
+  summary), `retry` (with the cause of a rejected batch, e.g. `drift`), `pause`, `refusal`, `kept`,
+  `done` (tokens, output tokens per cue, cache read rate, cost, duration),
   `present`, `cleanup`. Never the key, never subtitle text.
 
 ### Generated subtitles (native player)

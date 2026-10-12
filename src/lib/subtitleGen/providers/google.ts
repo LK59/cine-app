@@ -1,4 +1,4 @@
-import { ProviderError, kindOfStatus, parseJsonText, safeMessage, type TranslationCall, type TranslationProvider, type TranslationReply } from "./types";
+import { ProviderError, kindOfStatus, replyOf, safeMessage, type TranslationCall, type TranslationProvider, type TranslationReply } from "./types";
 
 /**
  * Google Gemini, par `generateContent` en `fetch` direct.
@@ -9,6 +9,9 @@ import { ProviderError, kindOfStatus, parseJsonText, safeMessage, type Translati
  * La clé part dans l'en-tête `x-goog-api-key`, jamais dans l'adresse : une URL finit dans des
  * journaux, un en-tête non. Les jetons de réflexion (`thoughtsTokenCount`) sont facturés comme la
  * sortie — ils y sont ajoutés.
+ *
+ * Pas de flux : la réponse d'un lot arrive d'un bloc, ses lignes sont écrites à la fin (le flux
+ * n'est branché que chez Anthropic, le fournisseur par défaut).
  *
  * Cache : implicite sur les modèles Gemini 3 pour les préfixes identiques ; le préfixe stable va
  * dans `systemInstruction`, le suffixe dans le message. Les jetons relus
@@ -39,8 +42,8 @@ export function googleProvider(apiKey: string, model: string, fetchImpl: typeof 
             systemInstruction: { parts: [call.system, ...call.stable].map((text) => ({ text })) },
             contents: [{ role: "user", parts: [{ text: call.user }] }],
             generationConfig: {
-              responseMimeType: "application/json",
-              responseJsonSchema: call.schema,
+              // Sans schéma (les lots), du texte libre en lignes `id|traduction`.
+              ...(call.schema ? { responseMimeType: "application/json", responseJsonSchema: call.schema } : {}),
               maxOutputTokens: call.maxOutputTokens,
               thinkingConfig: { thinkingLevel: "low" },
             },
@@ -70,7 +73,7 @@ export function googleProvider(apiKey: string, model: string, fetchImpl: typeof 
       if (REFUSALS.has(finish)) throw new ProviderError("refusal", `refus (${finish})`, usage);
       if (finish === "MAX_TOKENS") throw new ProviderError("truncated", "réponse coupée", usage);
       const text = (candidate?.content?.parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? "").join("");
-      return { json: parseJsonText(text, usage), usage };
+      return replyOf(call, text, usage);
     },
   };
 }

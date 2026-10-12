@@ -34,6 +34,7 @@ import { sourceHash } from "@/lib/subtitleGen/source";
 import { generatedForDirect } from "@/lib/subtitleGen/direct";
 import { readFinal, toVtt } from "@/lib/subtitleGen/files";
 import { SUBTITLE_GEN_LOG } from "@/lib/subtitleGen/log";
+import { idsAsked } from "@/lib/subtitleGen/prompts";
 import type { JellyfinMediaSource, JellyfinMediaStream } from "@/lib/clients/jellyfin";
 
 const ITEM = "a".repeat(32);
@@ -100,10 +101,16 @@ function usageFor(call: TranslationCall) {
   return { inputTokens: 40, cacheWriteTokens: call.cache && !cached ? 3000 : 0, cacheReadTokens: cached ? 3000 : 0, outputTokens: 200 };
 }
 
+/** Une réponse de lot en lignes `id|texte`, envoyée au fil de l'eau quand l'appel est en flux. */
+function linesReply(call: TranslationCall, lines: string[]): TranslationReply {
+  const text = lines.join("\n");
+  if (call.onText) for (const line of lines) call.onText(`${line}\n`);
+  return { text, usage: usageFor(call) };
+}
+
 const translateAll = async (call: TranslationCall): Promise<TranslationReply> => {
-  if (call.schemaName === "subtitle_glossary") return { json: GLOSSARY, usage: usageFor(call) };
-  const ids = (JSON.parse(call.user) as { translate: number[] }).translate;
-  return { json: { translations: ids.map((i) => ({ i, text: `Ligne ${i} traduite` })) }, usage: usageFor(call) };
+  if (call.schemaName === "subtitle_glossary") return { json: GLOSSARY, text: JSON.stringify(GLOSSARY), usage: usageFor(call) };
+  return linesReply(call, idsAsked(call.user).map((i) => `${i}|Ligne ${i} traduite`));
 };
 let behavior: (call: TranslationCall) => Promise<TranslationReply> = translateAll;
 
@@ -124,7 +131,7 @@ setProviderFactoryForTests(() => ({
 }));
 
 const batchCalls = () => calls.filter((c) => c.schemaName === "subtitle_batch");
-const idsOf = (c: TranslationCall) => (JSON.parse(c.user) as { translate: number[] }).translate;
+const idsOf = (c: TranslationCall) => idsAsked(c.user);
 
 async function settle(): Promise<void> {
   for (let i = 0; i < 400; i++) {
@@ -233,6 +240,108 @@ describe("une tâche complète", () => {
     const expected = (job.input_tokens * 0.1 + job.cache_write_tokens * 0.125 + job.cache_read_tokens * 0.01 + job.output_tokens * 0.5) / 1e6;
     expect(job.cost_usd).toBeCloseTo(expected, 10);
     expect(adminSummary().month.cost).toBeCloseTo(expected, 10);
+  });
+});
+
+describe("le premier lot et le flux", () => {
+  it("fait partir le premier lot pendant le glossaire, et seulement lui", async () => {
+    // Le 12/10/2026 en prod : la tâche restait `busy` pendant tout le glossaire, et le « premier lot
+    // en parallèle » l'attendait — 18,5 s avant la première ligne.
+    let releaseGlossary: () => void = () => undefined;
+    const glossaryHeld = new Promise<void>((r) => (releaseGlossary = r));
+    let batchesDuringGlossary = 0;
+    let glossaryPending = false;
+    let glossaryResolved = false;
+    behavior = async (call) => {
+      if (call.schemaName === "subtitle_glossary") {
+        glossaryPending = true;
+        await glossaryHeld;
+        glossaryPending = false;
+        glossaryResolved = true;
+      } else if (!glossaryResolved) batchesDuringGlossary++;
+      return translateAll(call);
+    };
+    const created = await createOrJoin(caller, { itemId: ITEM, target: "fr", position: 1500 }, "emma:s1");
+    if (!created.ok) throw new Error("refus");
+    for (let k = 0; k < 400 && !(glossaryPending && cuesDb.all(created.jobId).some((c) => c.text !== null && !c.provisional)); k++) await new Promise((r) => setTimeout(r, 5));
+    // Le premier lot est fait, glossaire toujours en attente — et rien d'autre n'est parti.
+    await new Promise((r) => setTimeout(r, 30));
+    expect(glossaryPending).toBe(true);
+    expect(batchesDuringGlossary).toBe(1);
+    expect(jobsDb.get(created.jobId)!.done).toBe(8);
+    const first = logText().split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((l) => l.kind === "first" && l.job === created.jobId);
+    expect(first).toMatchObject({ streamed: true });
+    expect(first.clickToFirstMs).toBe(first.ms);
+    expect(typeof first.requestToFirstMs).toBe("number");
+    releaseGlossary();
+    await settle();
+    expect(jobsDb.get(created.jobId)!.status).toBe("done");
+    expect(batchesDuringGlossary).toBe(1);
+    const done = logText().split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((l) => l.kind === "done" && l.job === created.jobId);
+    expect(done.outputTokensPerLine).toBeGreaterThan(0);
+  });
+
+  it("écrit chaque ligne reçue en flux avant la fin du lot, provisoire, puis la valide", async () => {
+    let jobId = "";
+    const seenMidStream: { rev: number; texts: string[]; provisional: number[] }[] = [];
+    behavior = async (call) => {
+      if (call.schemaName !== "subtitle_batch" || seenMidStream.length > 0) return translateAll(call);
+      const ids = idsOf(call);
+      call.onText!(`${ids[0]}|Ligne ${ids[0]} traduite\n${ids[1]}|Ligne`);
+      const poll = pollJob(jobId, 0, undefined, "emma:s1")!;
+      seenMidStream.push({ rev: poll.rev, texts: poll.cues.map((c) => c.text), provisional: cuesDb.all(jobId).filter((c) => c.provisional).map((c) => c.idx) });
+      call.onText!(` ${ids[1]} traduite\n`);
+      for (const i of ids.slice(2)) call.onText!(`${i}|Ligne ${i} traduite\n`);
+      return { text: ids.map((i) => `${i}|Ligne ${i} traduite`).join("\n"), usage: usageFor(call) };
+    };
+    const created = await createOrJoin(caller, { itemId: ITEM, target: "fr", position: 1500 }, "emma:s1");
+    if (!created.ok) throw new Error("refus");
+    jobId = created.jobId;
+    await settle();
+    // Au milieu du lot : la première ligne, complète, est déjà au sondage ; la seconde, coupée, pas encore.
+    expect(seenMidStream[0].texts).toEqual(["Ligne 60 traduite"]);
+    expect(seenMidStream[0].provisional).toEqual([60]);
+    expect(seenMidStream[0].rev).toBeGreaterThan(0);
+    const job = jobsDb.get(jobId)!;
+    expect(job.status).toBe("done");
+    expect(cuesDb.all(jobId).every((c) => !c.provisional && c.text === `Ligne ${c.idx} traduite`)).toBe(true);
+  });
+
+  it("retire les lignes d'un lot refusé et les remplace par le nouvel essai, que le sondage rend", async () => {
+    let jobId = "";
+    let attempt = 0;
+    let revAfterRejected = 0;
+    behavior = async (call) => {
+      if (call.schemaName !== "subtitle_batch") return translateAll(call);
+      attempt++;
+      const ids = idsOf(call);
+      if (attempt === 1) {
+        // Toutes les lignes sauf la dernière : le lot est refusé (« manquant ») une fois le flux fini.
+        return linesReply(call, ids.slice(0, -1).map((i) => `${i}|Mauvaise ${i}`));
+      }
+      if (attempt === 2) revAfterRejected = jobsDb.get(jobId)!.rev;
+      return translateAll(call);
+    };
+    const created = await createOrJoin(caller, { itemId: ITEM, target: "fr", position: 1500 }, "emma:s1");
+    if (!created.ok) throw new Error("refus");
+    jobId = created.jobId;
+    await settle();
+    // Le lecteur qui avait reçu les lignes refusées (révision ≤ revAfterRejected) reçoit leurs remplaçantes.
+    const later = pollJob(jobId, revAfterRejected, undefined, "emma:s1")!;
+    for (const i of [60, 61, 62]) expect(later.cues.find((c) => c.i === i)?.text).toBe(`Ligne ${i} traduite`);
+    expect(cuesDb.all(jobId).some((c) => (c.text ?? "").startsWith("Mauvaise"))).toBe(false);
+    expect(jobsDb.get(jobId)!.status).toBe("done");
+    expect(logText()).toMatch(/"kind":"retry"[^\n]*"cause":"manquant"/);
+  });
+
+  it("rend la casse d'une source tout en capitales, et elle seule", async () => {
+    sourceVtt = vttOf(fixtureCues.map((c, i) => ({ ...c, text: i % 2 === 0 ? `WHERE ARE YOU ${i}?` : c.text })));
+    behavior = async (call) =>
+      call.schemaName === "subtitle_batch" ? linesReply(call, idsOf(call).map((i) => `${i}|où êtes-vous ${i} ?`)) : translateAll(call);
+    const id = await runJob(0);
+    const rows = cuesDb.all(id);
+    expect(rows[0].text).toBe("OÙ ÊTES-VOUS 0 ?");
+    expect(rows[1].text).toBe("où êtes-vous 1 ?");
   });
 });
 
@@ -354,7 +463,7 @@ describe("les pauses", () => {
   it("réessaie un lot invalide, puis le réduit de moitié", async () => {
     let broken = 2;
     behavior = async (call) => {
-      if (call.schemaName === "subtitle_batch" && broken-- > 0) return { json: { translations: [] }, usage: usageFor(call) };
+      if (call.schemaName === "subtitle_batch" && broken-- > 0) return { text: "", usage: usageFor(call) };
       return translateAll(call);
     };
     const id = await runJob(0);

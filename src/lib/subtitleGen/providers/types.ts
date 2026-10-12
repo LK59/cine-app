@@ -3,8 +3,9 @@ import type { BilledUsage, ProviderName } from "../pricing";
 /**
  * Ce que le moteur demande à un fournisseur d'IA, quel qu'il soit (DECISIONS.md §69).
  *
- * Une seule forme d'appel : des consignes, un message, un schéma JSON que la réponse doit suivre.
- * Pas d'outils, jamais : le texte des sous-titres est une donnée, et un modèle sans outil ne peut
+ * Une seule forme d'appel : des consignes, un message, et soit un schéma JSON que la réponse doit
+ * suivre (le glossaire), soit du texte libre en lignes `id|traduction` (les lots, lus et vérifiés
+ * par `validate.ts`). Pas d'outils, jamais : le texte des sous-titres est une donnée, et un modèle sans outil ne peut
  * rien faire d'autre que répondre — c'est la première défense contre une réplique qui
  * ressemblerait à une instruction.
  */
@@ -22,11 +23,20 @@ export interface TranslationCall {
   cache: boolean;
   /** Le suffixe variable : le contexte proche et les lignes à traduire. */
   user: string;
-  /** Le schéma de la réponse ; `additionalProperties: false` partout (exigé par les trois). */
-  schema: Record<string, unknown>;
+  /**
+   * Le schéma de la réponse ; `additionalProperties: false` partout (exigé par les trois). Absent :
+   * la réponse est du texte libre, rendu tel quel dans `text` (les lots, DECISIONS.md §69).
+   */
+  schema?: Record<string, unknown>;
   schemaName: string;
   maxOutputTokens: number;
   signal?: AbortSignal;
+  /**
+   * Le texte au fil de sa production, pour écrire chaque ligne dès qu'elle est complète. Anthropic
+   * seulement (flux du SDK) ; OpenAI et Gemini l'ignorent et rendent la réponse d'un bloc — le
+   * moteur s'en accommode : les lignes sont alors écrites à la fin du lot.
+   */
+  onText?: (delta: string) => void;
 }
 
 /**
@@ -36,8 +46,10 @@ export interface TranslationCall {
 export type Usage = BilledUsage;
 
 export interface TranslationReply {
-  /** Le JSON de la réponse, déjà analysé — sa forme est vérifiée par l'appelant. */
-  json: unknown;
+  /** Le JSON de la réponse, déjà analysé quand un schéma était demandé — sa forme est vérifiée par l'appelant. */
+  json?: unknown;
+  /** Le texte de la réponse, tel quel. */
+  text: string;
   usage: Usage;
 }
 
@@ -81,6 +93,11 @@ export function kindOfStatus(status: number): ProviderErrorKind {
 /** Un message d'erreur sans rien de la requête : la clé n'y figure jamais, le texte non plus. */
 export function safeMessage(text: string): string {
   return text.replace(/\s+/g, " ").slice(0, 200);
+}
+
+/** La réponse d'un appel : le JSON analysé si un schéma était demandé, toujours le texte. */
+export function replyOf(call: Pick<TranslationCall, "schema">, text: string, usage: Usage): TranslationReply {
+  return call.schema ? { json: parseJsonText(text, usage), text, usage } : { text, usage };
 }
 
 /** Lire une réponse JSON qui doit en être une ; sinon `invalid`. */

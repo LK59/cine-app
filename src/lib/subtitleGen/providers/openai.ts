@@ -1,4 +1,4 @@
-import { ProviderError, kindOfStatus, parseJsonText, safeMessage, type TranslationCall, type TranslationProvider, type TranslationReply } from "./types";
+import { ProviderError, kindOfStatus, replyOf, safeMessage, type TranslationCall, type TranslationProvider, type TranslationReply } from "./types";
 
 /**
  * OpenAI, par l'API Responses en `fetch` direct — pas de SDK pour un seul appel.
@@ -9,6 +9,9 @@ import { ProviderError, kindOfStatus, parseJsonText, safeMessage, type Translati
  * `reasoning.effort: "none"` pour gpt-6-luna, qui l'accepte (vérifié sur sa fiche le 12/10/2026) ;
  * d'autres modèles le refusent d'un 400 (GPT-6 Astra), ils reçoivent donc `low`.
  * `store: false` : rien du texte n'a à rester chez le fournisseur au-delà de la réponse.
+ *
+ * Pas de flux : la réponse d'un lot arrive d'un bloc, ses lignes sont écrites à la fin (le flux
+ * n'est branché que chez Anthropic, le fournisseur par défaut).
  *
  * Cache : implicite chez OpenAI, sur les préfixes identiques d'au moins 1 024 jetons. Le préfixe
  * stable (consignes, glossaire, texte source) va donc dans `instructions`, le suffixe variable dans
@@ -41,7 +44,8 @@ export function openaiProvider(apiKey: string, model: string, fetchImpl: typeof 
             input: call.user,
             max_output_tokens: call.maxOutputTokens,
             reasoning: { effort: /luna/.test(model) ? "none" : "low" },
-            text: { format: { type: "json_schema", name: call.schemaName, schema: call.schema, strict: true } },
+            // Sans schéma (les lots), du texte libre en lignes `id|traduction`.
+            ...(call.schema ? { text: { format: { type: "json_schema", name: call.schemaName, schema: call.schema, strict: true } } } : {}),
             store: false,
           }),
           signal: call.signal ? AbortSignal.any([call.signal, AbortSignal.timeout(90_000)]) : AbortSignal.timeout(90_000),
@@ -69,7 +73,7 @@ export function openaiProvider(apiKey: string, model: string, fetchImpl: typeof 
         throw new ProviderError(reason === "content_filter" ? "refusal" : "truncated", `réponse incomplète (${safeMessage(reason)})`, usage);
       }
       const text = parts.filter((p) => p.type === "output_text").map((p) => p.text ?? "").join("");
-      return { json: parseJsonText(text, usage), usage };
+      return replyOf(call, text, usage);
     },
   };
 }

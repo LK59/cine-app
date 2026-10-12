@@ -2,8 +2,9 @@ import { budgetOf, cacheReadRate, costOf } from "./pricing";
 import { config } from "@/lib/config";
 import { logError } from "@/lib/logger";
 import { genAvailable, genSettings, providerFor, ProviderError, type GenSettings, type TranslationProvider, type Usage } from "./providers";
-import { BATCH_SCHEMA, GLOSSARY_SCHEMA, GLOSSARY_USER, batchSystem, batchUser, glossarySystem, parseGlossary, sourceBlock, stablePrefix, type Glossary } from "./prompts";
-import { validateBatch } from "./validate";
+import { GLOSSARY_SCHEMA, GLOSSARY_USER, batchSystem, batchUser, glossarySystem, parseGlossary, sourceBlock, stablePrefix, type Glossary } from "./prompts";
+import { LineSplitter, maxLinesFor, parseReply, parseReplyLine, validateBatch } from "./validate";
+import { matchSourceCase } from "./textCase";
 import { nextBatch, activeViewers, type Plan, type Viewer } from "./scheduler";
 import { cuesDb, jobsDb, sameFile, spendDb, type JobRow } from "./store";
 import { fetchSourceCues, isFullTrack, sourceHash, type SourceCandidate } from "./source";
@@ -24,6 +25,9 @@ import { twoLetter } from "./languages";
  *   suivants attendent le glossaire, qui est ensuite figé (le changer casserait le préfixe).
  * - **Priorité aux spectateurs** : `nextBatch` (scheduler.ts) choisit le passage ; entre tâches,
  *   celle dont un spectateur manque d'avance passe d'abord.
+ * - **En flux** : chaque ligne `id|traduction` est écrite dès qu'elle arrive, **provisoire** tant
+ *   que le lot entier n'est pas validé (comptes, décalage) ; un lot refusé efface les siennes, et le
+ *   nouvel essai les remplace chez le lecteur par leur rang.
  * - **Résilience** : lignes écrites dès réception ; erreurs passagères → nouvel essai à attente
  *   croissante, puis pause `unavailable` ; clé refusée → pause `config` ; crédit ou budget épuisé →
  *   pause `budget` ; reprise par un nouveau POST. Au démarrage, les tâches en cours reprennent là
@@ -138,8 +142,10 @@ function loadCues(jobId: string): JobCues {
     starts: rows.map((r) => r.start_s),
     ends: rows.map((r) => r.end_s),
     sources: rows.map((r) => r.source),
-    translations: rows.map((r) => r.text),
-    done: Uint8Array.from(rows.map((r) => (r.text !== null ? 1 : 0))),
+    // Une ligne provisoire (un lot interrompu par un redémarrage avant sa validation) n'est pas faite :
+    // elle sera retraduite, et la nouvelle traduction la remplacera.
+    translations: rows.map((r) => (r.provisional ? null : r.text)),
+    done: Uint8Array.from(rows.map((r) => (r.text !== null && !r.provisional ? 1 : 0))),
   };
   s.cues.set(jobId, c);
   return c;
@@ -376,50 +382,74 @@ async function translateIds(job: JobRow, ids: number[], tries: number): Promise<
     if (text !== null) previous.push({ i, text });
   }
 
+  // Les lignes reçues en flux et écrites, provisoires, pendant cet essai : effacées si le lot n'est
+  // pas validé, quoi qu'il arrive (refus, réponse coupée, coupure réseau).
+  const streamed = new Set<number>();
+  const startedAt = Date.now();
+  const sourceOf = (id: number) => cues.sources[id];
+  const asked = new Set(open);
+  const splitter = new LineSplitter((line) => {
+    const parsed = parseReplyLine(line);
+    // Validable seule : un identifiant demandé, un texte non vide, pas plus de lignes que permis.
+    // Le reste (comptes, décalage) attend la fin du lot.
+    if (!parsed || !asked.has(parsed.i) || !parsed.text || parsed.text.split("\n").length > maxLinesFor(cues.sources[parsed.i])) return;
+    const text = matchSourceCase(cues.sources[parsed.i], parsed.text, job.target);
+    if (cuesDb.writeProvisional(job.id, [{ idx: parsed.i, text }]) > 0) {
+      streamed.add(parsed.i);
+      noteFirst(job.id, 1, startedAt, true);
+    }
+  });
+
   let verdict: ReturnType<typeof validateBatch> | null = null;
   let problem = "";
   try {
-    const reply = await provider.complete({
-      system: batchSystem(job.target),
-      stable: stablePrefix(current.glossary ? parseGlossary(JSON.parse(current.glossary)) : null, cues.sources),
-      cache: true,
-      user: batchUser(previous, open),
-      schema: BATCH_SCHEMA as unknown as Record<string, unknown>,
-      schemaName: "subtitle_batch",
-      // ~60 jetons par réplique traduite au plus, plus la marge du JSON.
-      maxOutputTokens: Math.max(1024, open.length * 150),
-    });
-    bill(job.id, settings, reply.usage);
-    verdict = validateBatch(requested, reply.json);
-    if (!verdict.ok) problem = verdict.problem;
-  } catch (error) {
-    if (!(error instanceof ProviderError)) throw new Transient("network");
-    bill(job.id, settings, error.usage);
-    switch (error.kind) {
-      case "rate":
-      case "server":
-      case "network":
-        throw new Transient(error.kind);
-      case "auth":
-      case "config":
-        pauseAll("config");
-        throw new Stop();
-      case "credit":
-        pauseAll("budget");
-        throw new Stop();
-      case "refusal":
-        problem = "refusal";
-        logGen("refusal", { job: job.id, count: open.length, detail: error.message });
-        break;
-      default:
-        problem = error.kind;
+    try {
+      const reply = await provider.complete({
+        system: batchSystem(job.target),
+        stable: stablePrefix(current.glossary ? parseGlossary(JSON.parse(current.glossary)) : null, cues.sources),
+        cache: true,
+        user: batchUser(previous, open),
+        schemaName: "subtitle_batch",
+        // ~24 jetons par réplique en lignes (mesuré), 60 au plus pour une longue ; la marge pour le reste.
+        maxOutputTokens: Math.max(1024, open.length * 150),
+        onText: (delta) => splitter.push(delta),
+      });
+      bill(job.id, settings, reply.usage);
+      verdict = validateBatch(requested, parseReply(reply.text), sourceOf);
+      if (!verdict.ok) problem = verdict.problem;
+    } catch (error) {
+      if (!(error instanceof ProviderError)) throw new Transient("network");
+      bill(job.id, settings, error.usage);
+      switch (error.kind) {
+        case "rate":
+        case "server":
+        case "network":
+          throw new Transient(error.kind);
+        case "auth":
+        case "config":
+          pauseAll("config");
+          throw new Stop();
+        case "credit":
+          pauseAll("budget");
+          throw new Stop();
+        case "refusal":
+          problem = "refusal";
+          logGen("refusal", { job: job.id, count: open.length, detail: error.message });
+          break;
+        default:
+          problem = error.kind;
+      }
     }
+  } finally {
+    if (!verdict?.ok && streamed.size > 0) cuesDb.clearProvisional(job.id, [...streamed]);
   }
 
   if (verdict?.ok) {
-    record(job, open.map((id) => ({ idx: id, text: verdict.texts.get(id)!, kept: false })));
+    record(job, open.map((id) => ({ idx: id, text: matchSourceCase(cues.sources[id], verdict.texts.get(id)!, job.target), kept: false })), startedAt);
     return;
   }
+  // Un lot refusé se dit — le décalage surtout, qui passait inaperçu avant le détecteur.
+  if (problem !== "refusal") logGen("retry", { job: job.id, cause: problem, attempt: tries + 1, count: open.length, streamed: streamed.size });
   if (tries < 1 && problem !== "refusal") return translateIds(job, open, tries + 1);
   if (open.length > 1) {
     const half = Math.ceil(open.length / 2);
@@ -433,7 +463,7 @@ async function translateIds(job: JobRow, ids: number[], tries: number): Promise<
   record(job, [{ idx: open[0], text: cues.sources[open[0]], kept: true }]);
 }
 
-function record(job: JobRow, entries: { idx: number; text: string; kept: boolean }[]): void {
+function record(job: JobRow, entries: { idx: number; text: string; kept: boolean }[], startedAt = Date.now()): void {
   const cues = loadCues(job.id);
   const { written } = cuesDb.write(job.id, entries);
   for (const e of entries) {
@@ -443,12 +473,23 @@ function record(job: JobRow, entries: { idx: number; text: string; kept: boolean
   const st = statsOf(job.id);
   st.batches++;
   st.lines += written;
-  const fresh = jobsDb.get(job.id);
-  if (fresh && fresh.first_ms === null && written > 0) {
-    const ms = Date.now() - fresh.created_at;
-    jobsDb.update(job.id, { first_ms: ms });
-    logGen("first", { job: job.id, ms, count: written });
-  }
+  noteFirst(job.id, written, startedAt, false);
+}
+
+/**
+ * La première ligne écrite d'une tâche, une fois : `ms` (et `clickToFirstMs`, le même, nommé) va du
+ * clic — la création de la tâche — à l'écriture ; `requestToFirstMs` de l'envoi du lot à l'écriture.
+ * Le 12/10/2026, la première ligne arrivait 18,5 s après le clic alors qu'un premier lot ne prend que
+ * 1,5-2,7 s : l'écart entre les deux champs dit où passe l'attente.
+ */
+function noteFirst(jobId: string, written: number, startedAt: number, streamed: boolean): void {
+  if (written <= 0) return;
+  const fresh = jobsDb.get(jobId);
+  if (!fresh || fresh.first_ms !== null) return;
+  const now = Date.now();
+  const ms = now - fresh.created_at;
+  jobsDb.update(jobId, { first_ms: ms });
+  logGen("first", { job: jobId, ms, clickToFirstMs: ms, requestToFirstMs: now - startedAt, streamed, count: written });
 }
 
 // ─── Préparation ──────────────────────────────────────────────────────────────
@@ -518,6 +559,11 @@ async function prepareNow(jobId: string): Promise<void> {
   });
   const s = S();
   s.awaitingGlossary.add(jobId);
+  // La tâche quitte `busy` dès que ses lignes sont en base : `choose` saute les tâches `busy`, et le
+  // « premier lot en parallèle du glossaire » attendait en réalité le glossaire — 18,5 s avant la
+  // première ligne en prod le 12/10/2026, pour un lot qui en prend 2. Les lots suivants l'attendent
+  // toujours, par `awaitingGlossary`.
+  s.busy.delete(jobId);
   kick();
   try {
     await requestGlossary(jobId, chosen.c, chosen.cues.map((c) => c.text));
@@ -575,7 +621,7 @@ async function finish(job: JobRow): Promise<void> {
   const current = jobsDb.get(job.id);
   if (!current || current.status !== "running") return;
   const rows = cuesDb.all(job.id);
-  if (rows.some((r) => r.text === null)) return;
+  if (rows.some((r) => r.text === null || r.provisional)) return;
   const final = rows.map((r) => ({ start: r.start_s, end: r.end_s, text: r.text as string }));
   const { hash } = writeFinal(job.item_id, job.id, job.target, final);
   const now = Date.now();
@@ -594,6 +640,8 @@ async function finish(job: JobRow): Promise<void> {
     cacheWriteTokens: fresh.cache_write_tokens,
     cacheReadTokens: fresh.cache_read_tokens,
     outputTokens: fresh.output_tokens,
+    // Le coût de sortie par réplique : ≈ 24 jetons en lignes contre ≈ 33 en JSON (banc du 12/10/2026).
+    outputTokensPerLine: fresh.total > 0 ? Number((fresh.output_tokens / fresh.total).toFixed(1)) : null,
     cacheReadRate: cacheReadRate({ inputTokens: fresh.input_tokens, cacheWriteTokens: fresh.cache_write_tokens, cacheReadTokens: fresh.cache_read_tokens }),
     cost: Number(fresh.cost_usd.toFixed(5)),
     durationMs: now - fresh.created_at,

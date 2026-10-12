@@ -67,6 +67,8 @@ export interface CueRow {
   text: string | null;
   kept: number;
   rev: number;
+  /** Écrite en flux, lot pas encore validé : pas comptée comme faite (voir `writeProvisional`). */
+  provisional: number;
 }
 
 const db = () => getDb();
@@ -148,38 +150,75 @@ export const cuesDb = {
   },
 
   all(jobId: string): CueRow[] {
-    return db().prepare("SELECT idx, start_s, end_s, source, text, kept, rev FROM subtitle_gen_cues WHERE job_id = ? ORDER BY idx").all(jobId) as CueRow[];
+    return db().prepare("SELECT idx, start_s, end_s, source, text, kept, rev, provisional FROM subtitle_gen_cues WHERE job_id = ? ORDER BY idx").all(jobId) as CueRow[];
   },
 
   since(jobId: string, rev: number): CueRow[] {
     return db()
-      .prepare("SELECT idx, start_s, end_s, source, text, kept, rev FROM subtitle_gen_cues WHERE job_id = ? AND rev > ? AND text IS NOT NULL ORDER BY idx")
+      .prepare("SELECT idx, start_s, end_s, source, text, kept, rev, provisional FROM subtitle_gen_cues WHERE job_id = ? AND rev > ? AND text IS NOT NULL ORDER BY idx")
       .all(jobId, rev) as CueRow[];
   },
 
   /**
-   * Écrit des lignes traduites, en une transaction : seulement celles encore vides (rien n'est
-   * jamais retraduit ni écrasé), sous une révision nouvelle que le sondage du lecteur suit.
-   * Rend la révision et le nombre de lignes faites.
+   * Écrit des lignes traduites **validées**, en une transaction : seulement celles encore vides ou
+   * provisoires (rien de validé n'est jamais retraduit ni écrasé), sous une révision nouvelle que le
+   * sondage du lecteur suit. Une ligne provisoire confirmée à l'identique garde sa révision : le
+   * lecteur l'a déjà. Rend la révision et le nombre de lignes faites.
    */
   write(jobId: string, entries: { idx: number; text: string; kept: boolean }[]): { rev: number; done: number; written: number } {
     const d = db();
     return d.transaction(() => {
       const job = d.prepare("SELECT rev FROM subtitle_gen_jobs WHERE id = ?").get(jobId) as { rev: number } | undefined;
       const rev = (job?.rev ?? 0) + 1;
-      const stmt = d.prepare("UPDATE subtitle_gen_cues SET text = ?, kept = ?, rev = ? WHERE job_id = ? AND idx = ? AND text IS NULL");
+      // Les expressions du SET lisent les valeurs d'avant la mise à jour (SQLite) : `text = ?` compare
+      // bien l'ancien texte provisoire au nouveau.
+      const stmt = d.prepare(
+        "UPDATE subtitle_gen_cues SET rev = CASE WHEN provisional = 1 AND text = ? THEN rev ELSE ? END, text = ?, kept = ?, provisional = 0 WHERE job_id = ? AND idx = ? AND (text IS NULL OR provisional = 1)"
+      );
       let written = 0;
       let kept = 0;
       for (const e of entries) {
-        const changes = stmt.run(e.text, e.kept ? 1 : 0, rev, jobId, e.idx).changes;
+        const changes = stmt.run(e.text, rev, e.text, e.kept ? 1 : 0, jobId, e.idx).changes;
         written += changes;
         if (changes && e.kept) kept++;
       }
       d.prepare(
-        "UPDATE subtitle_gen_jobs SET rev = ?, done = (SELECT COUNT(*) FROM subtitle_gen_cues WHERE job_id = ? AND text IS NOT NULL), kept_source = kept_source + ?, updated_at = ? WHERE id = ?"
+        "UPDATE subtitle_gen_jobs SET rev = ?, done = (SELECT COUNT(*) FROM subtitle_gen_cues WHERE job_id = ? AND text IS NOT NULL AND provisional = 0), kept_source = kept_source + ?, updated_at = ? WHERE id = ?"
       ).run(rev, jobId, kept, Date.now(), jobId);
       const done = (d.prepare("SELECT done FROM subtitle_gen_jobs WHERE id = ?").get(jobId) as { done: number }).done;
       return { rev, done, written };
+    })();
+  },
+
+  /**
+   * Une ligne reçue en flux, avant que son lot soit validé : écrite pour que le lecteur l'affiche
+   * tout de suite (révision nouvelle), mais **provisoire** — pas comptée dans `done`, remplacée par
+   * `write` si le lot est validé, effacée par `clearProvisional` s'il est refusé. Jamais par-dessus
+   * une ligne validée. Rend le nombre de lignes écrites.
+   */
+  writeProvisional(jobId: string, entries: { idx: number; text: string }[]): number {
+    const d = db();
+    return d.transaction(() => {
+      const job = d.prepare("SELECT rev FROM subtitle_gen_jobs WHERE id = ?").get(jobId) as { rev: number } | undefined;
+      const rev = (job?.rev ?? 0) + 1;
+      const stmt = d.prepare("UPDATE subtitle_gen_cues SET text = ?, kept = 0, provisional = 1, rev = ? WHERE job_id = ? AND idx = ? AND (text IS NULL OR provisional = 1)");
+      let written = 0;
+      for (const e of entries) written += stmt.run(e.text, rev, jobId, e.idx).changes;
+      if (written > 0) d.prepare("UPDATE subtitle_gen_jobs SET rev = ?, updated_at = ? WHERE id = ?").run(rev, Date.now(), jobId);
+      return written;
+    })();
+  },
+
+  /**
+   * Le lot est refusé : ses lignes provisoires redeviennent vides, à retraduire. Pas de révision : un
+   * vide ne se transmet pas (`since` ne rend que des textes) — le lecteur garde la ligne refusée
+   * jusqu'à ce que le nouvel essai la remplace, sous une révision plus haute, par le même rang `i`.
+   */
+  clearProvisional(jobId: string, idxs: readonly number[]): void {
+    const d = db();
+    const stmt = d.prepare("UPDATE subtitle_gen_cues SET text = NULL, provisional = 0 WHERE job_id = ? AND idx = ? AND provisional = 1");
+    d.transaction(() => {
+      for (const idx of idxs) stmt.run(jobId, idx);
     })();
   },
 };

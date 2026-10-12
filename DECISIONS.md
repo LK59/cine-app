@@ -2796,16 +2796,22 @@ est déjà la langue voulue, la tâche s'arrête (`exists`). Une langue déjà p
 pas proposée (409).
 
 **Le préfixe stable et le cache.** Chaque requête d'une tâche commence par le même préfixe, octet
-pour octet : consignes, glossaire (une fois établi), puis le **texte source complet**, chaque réplique
-avec son identifiant `i`, sans minutages (`stablePrefix`, `sourceBlock`). Le suffixe variable dit
-seulement les ~20 traductions qui précèdent le lot et les identifiants à traduire (`batchUser`).
+pour octet : consignes, glossaire (une fois établi), puis le **texte source complet**, une ligne
+`id|texte` par réplique (saut de ligne interne écrit ` / `), sans minutages (`stablePrefix`,
+`sourceBlock` ; le glossaire lit le même bloc). Le suffixe variable dit seulement les ~20 traductions
+qui précèdent le lot (`Previous translations`, mêmes lignes `id|texte`) et les identifiants à traduire
+(« Translate ids a to b. », ou leur liste si le lot est troué — `batchUser`).
 Anthropic : point de cache explicite (`cache_control: ephemeral`, 5 min) sur le dernier bloc du
 préfixe. OpenAI et Gemini : leur cache implicite des préfixes identiques, rien à poser. Le modèle voit
 tout le film — qui parle, tu ou vous, les renvois — pour un coût moindre que des lots isolés. Le
 glossaire, produit à la préparation, est **figé** dès qu'il existe : le changer casserait le préfixe.
 Les requêtes d'une même tâche partent **en série** (un cache ne se relit qu'une fois la première
 réponse commencée) ; la concurrence (3 requêtes) est entre tâches. Seule exception : le premier petit
-lot part pendant la préparation du glossaire, pour afficher vite. Une pause de plus de 5 min fait
+lot part pendant la préparation du glossaire, pour afficher vite — la tâche quitte `busy` dès que ses
+lignes source sont en base et son statut `running` ; les lots suivants attendent le glossaire
+(`awaitingGlossary`). Jusqu'au 12/10/2026, elle restait `busy` pendant tout le glossaire, et
+l'ordonnanceur la sautait : première ligne 18,5 s après le clic en prod, pour un lot de 8 qui prend
+1,5-2,7 s avec le texte complet. Une pause de plus de 5 min fait
 réécrire le cache : accepté, ni TTL d'une heure ni maintien en vie.
 
 **Priorité aux spectateurs** (`nextBatch`). Un spectateur est actif s'il a sondé dans les 30
@@ -2816,10 +2822,52 @@ récente fait foi, la requête en cours n'est pas annulée. Rien n'est retraduit
 vol n'est jamais choisie, et l'écriture en base ne remplit que les lignes vides. Sans spectateur, la
 tâche va au bout. Une tâche par (fichier, langue), partagée entre comptes.
 
+**Les lots en lignes, pas en JSON** (`prompts.ts`, mesuré le 12/10/2026 sur Haiku 5.5 avec le texte
+complet en préfixe, *A.I.*, 1 221 répliques). La réponse est uniquement `id|traduction`, une par
+ligne, dans l'ordre, ` / ` pour un saut interne (reconverti en `\n`) ; sans schéma JSON. Le glossaire,
+appel unique, reste en JSON structuré. Pourquoi : sur 6 lots de 40, le format
+`{"translations":[{"i","text"}]}` en a rendu **2 décalés** — la traduction de la réplique N+1 rangée
+sous l'identifiant N, dix lignes d'affilée, avec des identifiants parfaits, donc invisibles à la
+validation d'alors ; le format lignes n'a jamais décalé. Il coûte ~25-35 % de jetons de sortie en
+moins (≈ 24 contre ≈ 33 par réplique) et ~35 % d'entrée en moins pour la source (21 k contre 32 k
+jetons pour ce film). En revanche 2 réponses sur 8 portaient une phrase du modèle (« Wait — I need
+to be careful… ») en plus des 40 lignes justes : l'analyse **ignore toute ligne qui ne commence pas
+par `<id>|`**, et la dernière occurrence d'un identifiant l'emporte (une réponse avait écrit une
+ligne fausse, la remarque, puis repris le lot entier). Un tableau de chaînes sans identifiants a été
+écarté : nombre de lignes faux dans les deux essais.
+
+**En flux** (Anthropic, `messages.stream`). Chaque ligne `id|texte` complète et validable seule (id
+demandé, non vide, pas trop de lignes) est écrite en base dès réception, **provisoire**
+(`subtitle_gen_cues.provisional`) sous une révision nouvelle : le lecteur l'affiche sans attendre la
+fin du lot, mais elle ne compte pas dans `done`. À la fin, la validation du lot entier : validé, les
+lignes deviennent définitives (révision gardée si le texte est identique) ; refusé, les provisoires
+sont effacées et le nouvel essai les réécrit sous une révision plus haute — le lecteur remplace par
+rang `i` (§70), il garde la ligne refusée quelques secondes au plus. Une ligne provisoire trouvée au
+redémarrage n'est pas faite : elle est retraduite. OpenAI et Gemini : même format lignes, sans flux —
+les lignes sont écrites à la fin du lot.
+
 **Validation stricte** (`validateBatch`) : mêmes identifiants, ni manquant (fusion), ni en trop, ni
-doublon, texte non vide, deux lignes au plus, pas resté dans la langue source. Sinon : un nouvel essai,
-puis le lot coupé en deux, puis la ligne garde son texte d'origine (journalisée `kept`). Un refus du
-modèle suit le même chemin, sans nouvel essai (`refusal`) — pas de repli serveur pour Haiku 5.5.
+doublon, texte non vide, au plus **max(2, lignes de la source)** lignes (de vieux SDH ont des
+répliques de trois lignes, dont la traduction fidèle ne doit pas être refusée), pas resté dans la
+langue source, **pas décalé** (`detectDrift`, sur les seules longueurs visibles — la casse n'y entre
+pas) : (1) au moins 3 répliques dont la source fait ≥ 12 caractères avec un rapport de longueur
+traduction/source > 2,2 ou < 0,35 ; ou (2) sur 5 répliques consécutives, des longueurs traduites qui
+collent nettement mieux aux sources décalées de ±1 ou ±2 qu'aux leurs (gain moyen ≥ 0,5 en
+|log(rapport / rapport médian du lot)|). Calibré sur les 12 lots réels du banc (fixtures
+`drift-bench-2026-10-12.json`, longueurs seulement) : décalés 6 et 8 répliques hors bornes, gain 0,76
+et 1,04 ; sains 2 au plus et 0,25 au plus. Sinon : un nouvel essai, puis le lot coupé en deux, puis la
+ligne garde son texte d'origine (journalisée `kept`) ; chaque lot refusé écrit une ligne `retry` avec
+sa cause (`drift`, `manquant`, `lignes`…). Un refus du modèle suit le même chemin, sans nouvel essai
+(`refusal`) — pas de repli serveur pour Haiku 5.5.
+
+**La casse de la source, par le code** (`matchSourceCase`, `textCase.ts`). Une réplique source « tout
+en capitales » (plus de 80 % des lettres en majuscules, au moins 4 lettres) donne une traduction tout
+en capitales, par `toLocaleUpperCase` de la langue cible (« ß » → « SS » en allemand, « i » → « İ »
+en turc) ; crochets compris, balises laissées telles quelles. Une réplique en casse normale n'est
+jamais touchée, et il n'y a pas de normalisation inverse : fidèle à la source. Mesuré le 12/10/2026
+sur *La Quatrième Dimension* S00E01 (source SDH à 89 % en capitales) : Haiku n'avait recopié les
+majuscules que sur 118 répliques sur 302, un mélange au gré des lots ; une consigne dans le prompt n'y
+changeait rien.
 
 **Résilience.** Lignes écrites dès réception (`subtitle_gen_cues`) ; au démarrage, chaque tâche en
 cours vérifie le fichier (ETag et taille de la source Jellyfin, comme le cache de reprise) et la piste
@@ -2880,9 +2928,11 @@ porte pas le titre que `castPassFor` lit dans le chemin ; un téléviseur reçoi
 Jellyfin une fois présenté. Les tâches en cours ne sont pas dans `externalSubtitles` : le lecteur
 dessine lui-même son entrée « génération… » à partir de `/options` et `/poll`.
 
-Tests : `subtitleGen-source.test.ts`, `subtitleGen-scheduler.test.ts`, `subtitleGen-validate.test.ts`,
+Tests : `subtitleGen-source.test.ts`, `subtitleGen-scheduler.test.ts`, `subtitleGen-validate.test.ts`
+(format lignes, phrase parasite, ` / `, décalage sur les lots réels, casse),
 `subtitleGen-pricing.test.ts`, `subtitleGen-engine.test.ts` (tâche complète, préfixe identique après
-un saut, requêtes en série, reprise après redémarrage, pauses 429/crédit/clé/budget, refus, quota,
+un saut, requêtes en série, premier lot pendant le glossaire, lignes en flux puis validées, lot refusé
+remplacé, casse, reprise après redémarrage, pauses 429/crédit/clé/budget, refus, quota,
 présentation simulée, repli `data/`, suppression seulement du nôtre, clé jamais sortie),
 `subtitleGen-routes.test.ts`, `subtitleGen-proxy.test.ts`, `trackLabel.test.ts`,
 `jellyfin-direct-route.test.ts`.
