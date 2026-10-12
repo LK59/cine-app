@@ -7,7 +7,8 @@ import type { NextRequest } from "next/server";
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
 vi.mock("@/lib/session", () => ({ verifySessionFull: async () => ({ u: "louis", jfId: "jf-1", jfToken: "tok" }) }));
 const reportPlaybackStopped = vi.fn(async () => {});
-vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: { reportPlaybackStopped } }));
+const stopTranscode = vi.fn(async (..._args: unknown[]) => {});
+vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: { reportPlaybackStopped, stopTranscode: (...args: unknown[]) => stopTranscode(...args) } }));
 vi.mock("@/lib/db", () => ({ sessionDb: { jfDevice: () => null }, maintenanceDb: { get: () => null } }));
 vi.mock("@/lib/config", () => ({ config: { get player() { return { enabled: true }; } } }));
 vi.mock("@/lib/castProgress", () => ({ castProgressRelay: () => ({ notePageReport: vi.fn(), noteCastSegment: vi.fn() }) }));
@@ -34,5 +35,22 @@ describe("une position renvoyée après une coupure", () => {
     const { POST } = await import("@/app/api/jellyfin/playback/stop/route");
     expect((await POST(req({ itemId: "../x", positionTicks: 10, late: true, lateByMs: 1 }))).status).toBe(400);
     expect((await POST(req({ itemId, positionTicks: 0, late: true, lateByMs: 1 }))).status).toBe(400);
+  });
+});
+
+describe("un préchauffage abandonné (§78)", () => {
+  it("arrête le transcodage par son appareil et sa séance — aucune position écrite, aucun arrêt annoncé", async () => {
+    const { POST } = await import("@/app/api/jellyfin/playback/stop/route");
+    const res = await POST(req({ itemId, playSessionId: "ps-1", mediaSourceId: "ms-1", deviceId: "dev-1", prewarm: true }));
+    expect(res.status).toBe(200);
+    expect(stopTranscode).toHaveBeenCalledWith("dev-1", "ps-1");
+    expect(reportPlaybackStopped).not.toHaveBeenCalled();
+    expect(recoverLostPosition).not.toHaveBeenCalled();
+  });
+
+  it("refusé avec des identifiants qui ne sont pas des identifiants", async () => {
+    const { POST } = await import("@/app/api/jellyfin/playback/stop/route");
+    expect((await POST(req({ itemId, playSessionId: "a&b", mediaSourceId: "m", deviceId: "dev-1", prewarm: true }))).status).toBe(400);
+    expect(stopTranscode).not.toHaveBeenCalled();
   });
 });

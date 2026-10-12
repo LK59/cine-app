@@ -1,4 +1,5 @@
 import { noteFetchRetrying, noteFetchSettled } from "@/lib/networkTrouble";
+import { simulateRequestGate, simulateTransfer, simulatorActive } from "@/lib/linkSimulator";
 import { noteUnauthorized, SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { trace } from "./trace";
 import { diagInterval, diagNow, diagRequest, diagRequestFailed } from "./playbackDiagnosis";
@@ -681,6 +682,9 @@ export class HttpByteSource implements ByteSource {
       // Suivie si une ouverture du lecteur natif est en cours — voir `meterOpeningRequest`.
       const metered = meterOpeningRequest();
       try {
+        // Le simulateur de connexion de la page de test (§78) — inerte partout ailleurs : sans lui,
+        // aucune de ces deux branches n'est prise.
+        if (simulatorActive()) simulateRequestGate();
         const sentAt = performance.now();
         const res = await fetch(this.url, {
           headers: { Range: `bytes=${start}-${end}` },
@@ -719,6 +723,7 @@ export class HttpByteSource implements ByteSource {
         // de toutes les ouvertures, Safari compris, pour la précision d'un verdict que les morceaux
         // finis donnent déjà — gardée prête, non branchée (12/10/2026).
         const bytes = new Uint8Array(await res.arrayBuffer());
+        if (simulatorActive()) await simulateTransfer(bytes.byteLength, headersAt, attemptControl.signal);
         metered?.received(bytes.byteLength);
         this.networkBytes += bytes.byteLength;
         const endAt = performance.now();

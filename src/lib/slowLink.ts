@@ -22,13 +22,13 @@
 export const SLOW_LINK_REASON = "connexion trop lente";
 
 /**
- * Le motif d'un relais *demandé* depuis le message chiffré de l'ouverture (« Version allégée », §77) :
- * le spectateur a choisi, le lien en est la cause. Commence par `SLOW_LINK_REASON`, pour que le
+ * Le motif de la bascule automatique sur la version allégée à l'ouverture ou après un saut (§78) :
+ * le lien en est la cause. Commence par `SLOW_LINK_REASON`, pour que le
  * panneau Activité le range au même endroit (`isSlowLinkReason`).
  */
 export const SLOW_LINK_LIGHTER_REASON = `${SLOW_LINK_REASON} (version allégée demandée)`;
 
-/** La version allégée choisie en pleine lecture, sur la fenêtre des saccades (§78). Même préfixe. */
+/** La bascule sur la version allégée en pleine lecture, sur des saccades (§78). Même préfixe. */
 export const SLOW_LINK_STUTTER_REASON = `${SLOW_LINK_REASON} (saccades, version allégée demandée)`;
 
 /** Un motif de journal qui accuse le lien, pas le fichier : le verdict, ou la version allégée demandée. */
@@ -99,7 +99,7 @@ export function slowLinkVerdict(measure: LinkMeasure | null | undefined, needBps
   }
 }
 
-// --- pendant l'ouverture : les seuils de l'indice et des fenêtres (décidées dans slowLinkPolicy.ts) ---
+// --- pendant l'ouverture : les seuils de l'indice et de la bascule (décidées dans slowLinkPolicy.ts) ---
 
 /**
  * Le temps de réception avant de *dire* qu'un lien semble lent (l'indice « Connexion lente… » sous
@@ -113,10 +113,9 @@ export const HINT_MEASURED_MS = 5_000;
 /**
  * « Très en dessous du besoin » : moins du quart du débit moyen du fichier — quatre secondes de réseau
  * pour chaque seconde de film. Avec les preuves du verdict (10 s de réception, 256 Kio), l'ouverture
- * montre la fenêtre « Votre connexion semble lente » (Version allégée · Réessayer · Fermer) sans rien
- * abandonner (`openingAdvice`, slowLinkPolicy.ts, DECISIONS.md §78). Le cas réel du 12/10/2026 (Edge
- * d'Augustine : ≈ 0,3 Mbit/s reçus pour 3,9 demandés) est sous 10 % dès dix secondes : la marge
- * jusqu'à 25 % est large. Entre 25 % et 50 %, la fenêtre attend 20 s sans image.
+ * bascule sur la version allégée dès 10 s (`openingAdvice`, slowLinkPolicy.ts, DECISIONS.md §78). Le cas
+ * réel du 12/10/2026 (Edge d'Augustine : ≈ 0,3 Mbit/s reçus pour 3,9 demandés) est sous 10 % dès dix
+ * secondes : la marge jusqu'à 25 % est large. Entre 25 % et 50 %, la bascule attend 20 s sans image.
  */
 export const NOTICE_SHARE = 0.25;
 

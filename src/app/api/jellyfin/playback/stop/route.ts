@@ -49,6 +49,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ result });
   }
 
+  /**
+   * Un préchauffage abandonné (§78, `lighterPrewarm.ts`) : le lecteur natif a trouvé son image. Rien
+   * n'a été annoncé à Jellyfin, aucune position n'est à écrire : seul le transcodage est arrêté
+   * (`DELETE /Videos/ActiveEncodings`, à la clé d'administration — la séance du préchauffage est celle de
+   * l'appareil que Jellyfin a écrit dans son adresse).
+   */
+  if (body?.prewarm === true) {
+    const deviceId = typeof body?.deviceId === "string" ? body.deviceId : "";
+    const safe = (v: string) => /^[A-Za-z0-9._-]{1,128}$/.test(v);
+    if (!isJellyfinId(itemId) || !playSessionId || !safe(playSessionId) || !safe(deviceId)) {
+      return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+    }
+    const ok = await jellyfin.stopTranscode(deviceId, playSessionId).then(
+      () => true,
+      () => false
+    );
+    return NextResponse.json({ stopped: ok }, { status: ok ? 200 : 502 });
+  }
+
   if (!isJellyfinId(itemId) || !playSessionId || !mediaSourceId) {
     return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
   }

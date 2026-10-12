@@ -2,7 +2,7 @@
 //
 // `slowLink.ts` mesure ; ce module décide, pour les deux lecteurs à la fois — le natif
 // (ExperimentalPlayerHost) et le lecteur serveur quand il passe par hls.js (PlayerHost) —, quoi
-// dire et quoi offrir : l'indice sous la ligne de chargement, les fenêtres (« popups ») non
+// dire et quoi faire : l'indice sous la ligne de chargement, le préchauffage puis la bascule automatique
 // bloquantes de l'ouverture et de la lecture, l'écran de renoncement, et le débit de la « version
 // allégée » palier par palier. Une seule copie de chaque règle : deux lecteurs qui décident chacun
 // de leur côté finissent par ne plus dire la même chose (CLAUDE.md, « The same decision is made in
@@ -14,35 +14,36 @@
 //
 // Pur et sans horloge propre : chaque fonction reçoit l'instant et les mesures. Rien ici ne lève.
 
-import { MIN_MEASURED_MS, MIN_RECEIVED_BYTES, NOTICE_SHARE, SLOW_SHARE, HINT_MEASURED_MS, type LinkMeasure } from "@/lib/slowLink";
+import { MIN_MEASURED_MS, MIN_RECEIVED_BYTES, NOTICE_SHARE, SLOW_SHARE, HINT_MEASURED_MS, slowLinkVerdict, type LinkMeasure, type SlowLink } from "@/lib/slowLink";
 import { CRAWL } from "@/lib/networkBitrate";
+import { pushSlowLinkEvent } from "@/lib/slowLinkMonitor";
 
-// --- l'ouverture (avant la première image) -----------------------------------------------------
+// --- l'ouverture (avant la première image), ou un saut traité comme elle ---------------------------
 
-/**
- * La connexion « moyenne » — entre le quart et la moitié du besoin — a le temps de se rattraper :
- * on ne propose la version allégée qu'au bout de vingt secondes sans image, le seuil où l'ouverture
- * devient « bloquée » chez le natif (`STUCK_AFTER_MS`) et où le lecteur serveur renonce déjà.
- */
-export const MEDIUM_POPUP_AFTER_MS = 20_000;
-
-/** Les deux fenêtres de l'ouverture : très lente (< 25 %), moyenne (25–50 % après 20 s). */
-export type OpeningPopup = "lente" | "moyenne";
+/** Préchauffer dès 8 s si la mesure est mauvaise (§78, Louis) — assez tôt pour qu'à 10 s tout soit prêt. */
+export const PREWARM_AFTER_MS = 8_000;
+/** Très lente (< 25 % du besoin) : bascule à 10 s, ou dès que le préchauffage est prêt s'il l'est plus tard. */
+export const SWITCH_VERY_SLOW_MS = 10_000;
+/** Moyenne (25–50 %) : elle a le temps de se rattraper — bascule à 20 s sans image. */
+export const SWITCH_MEDIUM_MS = 20_000;
 
 export interface OpeningAdvice {
   /** « Connexion lente… » sous la ligne de chargement. */
   hint: boolean;
-  /** La fenêtre à montrer, ou rien. */
-  popup: OpeningPopup | null;
-  /** Le débit mesuré (moyenne de la réception de l'ouverture) et le besoin, pour le journal. */
+  /** Préchauffer la version allégée (en « Automatique » seulement — c'est l'hôte qui le sait). */
+  prewarm: boolean;
+  /** Basculer maintenant, si le préchauffage est prêt (sinon dès qu'il le sera). */
+  switchNow: boolean;
+  /** Le débit mesuré (moyenne de la réception) et le besoin, pour le journal. */
   recvBps: number | null;
   needBps: number | null;
 }
 
-const NOTHING: OpeningAdvice = { hint: false, popup: null, recvBps: null, needBps: null };
+const NOTHING: OpeningAdvice = { hint: false, prewarm: false, switchNow: false, recvBps: null, needBps: null };
 
 /**
- * Ce que l'ouverture dit du lien, lu chaque seconde.
+ * Ce que l'ouverture dit du lien, lu chaque seconde (DECISIONS.md §78) — et ce qu'elle en fait en
+ * qualité « Automatique » : préchauffer, puis basculer sur la version allégée.
  *
  * Le débit est la **moyenne** de toute la réception de l'ouverture (union des requêtes, des en-têtes
  * au dernier octet) : Louis préfère la moyenne au minimum, et une ouverture dure au plus 35 s — sa
@@ -53,40 +54,133 @@ const NOTHING: OpeningAdvice = { hint: false, popup: null, recvBps: null, needBp
  * - `unstable` (une coupure : des tentatives échouent, ou le navigateur se dit hors ligne) : rien.
  *   Une coupure a son propre message, et jamais la version allégée.
  * - indice : 5 s de réception, des octets, sous la moitié du besoin.
- * - « lente » : les preuves du verdict (10 s de réception, 256 Kio) sous le quart du besoin.
- *   Montrée, elle reste tant que le débit est sous la moitié (pas de clignotement autour du quart).
- * - « moyenne » : les mêmes preuves, entre le quart et la moitié, et `elapsedMs` ≥ 20 s.
- * - `dismissed` : le spectateur a fermé la fenêtre de cette ouverture — elle ne revient pas ;
- *   l'indice, lui, reste.
+ * - préchauffage : la même mesure, à partir de 8 s.
+ * - bascule : les preuves du verdict (10 s de réception, 256 Kio) et sous le quart du besoin dès 10 s,
+ *   ou sous la moitié à 20 s.
  */
 export function openingAdvice(
   measure: LinkMeasure | null | undefined,
   needBps: number | null | undefined,
   elapsedMs: number,
-  state: { popup: OpeningPopup | null; dismissed: boolean; unstable: boolean }
+  unstable: boolean
 ): OpeningAdvice {
   try {
-    if (state.unstable) return NOTHING;
+    if (unstable) return NOTHING;
     if (!measure || typeof needBps !== "number" || !Number.isFinite(needBps) || needBps <= 0) return NOTHING;
     const { bytes, receivingMs } = measure;
     if (!Number.isFinite(bytes) || !Number.isFinite(receivingMs) || !(bytes > 0)) return NOTHING;
     if (receivingMs < HINT_MEASURED_MS) return NOTHING;
     const recvBps = (bytes * 8) / (receivingMs / 1000);
     const reading = { recvBps, needBps };
-    if (!(recvBps < SLOW_SHARE * needBps)) return { hint: false, popup: null, ...reading };
+    if (!(recvBps < SLOW_SHARE * needBps)) return { ...NOTHING, ...reading };
     const proven = receivingMs >= MIN_MEASURED_MS && bytes >= MIN_RECEIVED_BYTES;
-    let popup: OpeningPopup | null = null;
-    if (!state.dismissed && proven) {
-      if (recvBps < NOTICE_SHARE * needBps || state.popup === "lente") popup = "lente";
-      else if (elapsedMs >= MEDIUM_POPUP_AFTER_MS) popup = "moyenne";
-    }
-    return { hint: true, popup, ...reading };
+    const verySlow = recvBps < NOTICE_SHARE * needBps;
+    const switchNow = proven && ((verySlow && elapsedMs >= SWITCH_VERY_SLOW_MS) || elapsedMs >= SWITCH_MEDIUM_MS);
+    return { hint: true, prewarm: elapsedMs >= PREWARM_AFTER_MS, switchNow, ...reading };
   } catch {
     return NOTHING;
   }
 }
 
+// --- la décision : une seule machine pour les deux lecteurs ---------------------------------------
+
+/**
+ * Ce que l'hôte doit faire maintenant (§78). Les hôtes n'en décident rien : ils mesurent, appellent
+ * `decideOpening` / `decidePlayback`, et exécutent — préchauffer (`lighterPrewarm.ts`), basculer (la
+ * reconstruction habituelle : `fallToStable` côté natif, renégociation côté serveur), montrer l'écran
+ * final, ou renoncer comme avant.
+ *
+ *   mesure → indice → préchauffage → bascule → écran final
+ *
+ * - `none` : rien de plus que l'indice.
+ * - `prewarm` : lancer le préchauffage de ce palier (une fois — l'hôte dit s'il y en a déjà un).
+ * - `switch` : basculer sur ce palier (le préchauffage est prêt, ou a échoué : le serveur négociera).
+ * - `screen` : « Lecture impossible : la connexion est trop lente. » — lenteur prouvée et plus de
+ *   bascule possible (réglage « Originale », version allégée non permise, ou plancher atteint).
+ * - `giveUp` : le renoncement d'avant, motif d'avant — rien n'est prouvé.
+ */
+export type SlowAction =
+  | { kind: "none" }
+  | { kind: "prewarm"; step: LighterStep }
+  | { kind: "switch"; step: LighterStep }
+  | { kind: "screen"; slow: SlowLink }
+  | { kind: "giveUp" };
+
+export type PrewarmStatus = "none" | "running" | "ready" | "failed";
+
+export interface OpeningTick {
+  /** Ce que le lien a livré depuis le début de l'ouverture (ou du saut). */
+  measure: LinkMeasure | null | undefined;
+  needBps: number | null | undefined;
+  /** Depuis le début de l'ouverture, du saut, ou du retour au premier plan. */
+  elapsedMs: number;
+  /** Des tentatives réseau échouent, ou le navigateur est hors ligne : une coupure, pas une lenteur. */
+  unstable: boolean;
+  /** « Automatique » et version allégée permise (lecteur serveur, transcodage du compte). */
+  auto: boolean;
+  /** Le préchauffage de cette ouverture. */
+  prewarm: PrewarmStatus;
+  /** Le palier en cours (lecteur serveur déjà allégé), ou `null` (pleine qualité). */
+  currentStep: LighterStep | null;
+  /** Le délai du renoncement : 35 s pour le natif, le chien de garde de 20 s pour le serveur. */
+  giveUpMs: number;
+}
+
+/**
+ * Avant la première image — à l'ouverture, ou 10 s après un saut resté sans image. Pure, ne lève pas :
+ * en cas de doute, `none` puis l'ancien renoncement.
+ */
+export function decideOpening(tick: OpeningTick): { advice: OpeningAdvice; action: SlowAction } {
+  const advice = openingAdvice(tick.measure, tick.needBps, tick.elapsedMs, tick.unstable);
+  try {
+    if (tick.elapsedMs >= tick.giveUpMs) {
+      // Une coupure en cours : on attend son issue (l'écran « connexion perdue » ou les octets).
+      if (tick.unstable) return { advice, action: { kind: "none" } };
+      const slow = slowLinkVerdict(tick.measure, tick.needBps);
+      if (!slow) return { advice, action: { kind: "giveUp" } };
+      const step = tick.auto ? nextLighter(slow.recvBps, slow.needBps, tick.currentStep) : null;
+      return { advice, action: step ? { kind: "switch", step } : { kind: "screen", slow } };
+    }
+    if (!tick.auto || !advice.hint) return { advice, action: { kind: "none" } };
+    const step = nextLighter(advice.recvBps, advice.needBps, tick.currentStep);
+    if (!step) return { advice, action: { kind: "none" } };
+    if (advice.switchNow && (tick.prewarm === "ready" || tick.prewarm === "failed")) return { advice, action: { kind: "switch", step } };
+    if (advice.prewarm && tick.prewarm === "none") return { advice, action: { kind: "prewarm", step } };
+    return { advice, action: { kind: "none" } };
+  } catch {
+    return { advice, action: { kind: "none" } };
+  }
+}
+
+/**
+ * En pleine lecture, après un déclenchement de `StutterWatch` (un problème visible). Préchauffer à la
+ * position courante, puis basculer dès que le préchauffage est prêt (ou a échoué). En « Originale »,
+ * sans version allégée permise, ou au plancher : rien — jamais d'erreur tant que la lecture continue.
+ */
+export function decidePlayback(tick: {
+  triggered: boolean;
+  auto: boolean;
+  prewarm: PrewarmStatus;
+  recvBps: number | null;
+  needBps: number | null;
+  currentStep: LighterStep | null;
+}): SlowAction {
+  try {
+    if (!tick.auto) return { kind: "none" };
+    const step = nextLighter(tick.recvBps, tick.needBps, tick.currentStep);
+    if (!step) return { kind: "none" };
+    if (tick.prewarm === "ready" || tick.prewarm === "failed") return { kind: "switch", step };
+    if (tick.triggered && tick.prewarm === "none") return { kind: "prewarm", step };
+    return { kind: "none" };
+  } catch {
+    return { kind: "none" };
+  }
+}
+
 // --- la version allégée -----------------------------------------------------------------------
+
+/** Ce qui fait basculer : l'ouverture, un saut traité comme elle, ou des saccades en pleine lecture. */
+export type SwitchCause = "ouverture" | "saut" | "lecture";
 
 /** Le plus bas débit demandé au serveur : `CRAWL`, 1,5 Mbit/s. */
 export const LIGHTER_FLOOR_BPS = CRAWL;
@@ -144,13 +238,14 @@ export function nextLighter(measuredBps: number | null | undefined, needBps: num
  * 720p, 8 à 10 du 1440p pour un 4K. Le barème rend la chose régulière :
  * - HEVC : 720p jusqu'à 2,5 Mbit/s, 1080p au-dessus — le HEVC tient le 1080p dès ~3 Mbit/s, et un
  *   1080p à 2 Mbit/s de vidéo est plus flou à l'œil qu'un 720p net ;
- * - H.264 : 720p sous 4,5 Mbit/s (un 1080p à 2,5 Mbit/s de vidéo en H.264 est pâteux), 1080p au-dessus.
+ * - H.264 : 720p sous 6 Mbit/s, 1080p au-dessus — Jellyfin ne sort de toute façon pas de 1080p en H.264
+ *   sous 6 Mbit/s, même autorisé (mesuré le 12/10/2026 : 720p à 4 et 5 Mbit/s avec `Width` ≤ 1920).
  * Une source 4K descend donc en 1080p au plus ; une source déjà plus petite garde sa taille (c'est un
  * plafond, pas une consigne).
  */
 export function lighterMaxWidth(targetBps: number, hevc: boolean): number {
   if (hevc) return targetBps <= 2_500_000 ? 1280 : 1920;
-  return targetBps < 4_500_000 ? 1280 : 1920;
+  return targetBps < 6_000_000 ? 1280 : 1920;
 }
 
 /**
@@ -207,10 +302,6 @@ export const STALLS_TO_TRIGGER = 3;
  * ne suit pas.
  */
 export const STALL_WINDOW_MS = 3 * 60_000;
-/** Une seconde fenêtre seulement trois minutes après la fermeture de la première ; deux au plus. */
-export const POPUP_GAP_MS = 3 * 60_000;
-export const MAX_STUTTER_POPUPS = 2;
-
 /**
  * La fenêtre de mesure du débit en pleine lecture : les 30 dernières secondes, celles de la ligne
  * `stall` (`STALL_WINDOW_MS`, playbackDiagnosis.ts) — les chiffres du journal et ceux de la décision
@@ -245,57 +336,37 @@ export function measuredBps(measure: LinkMeasure | null | undefined): number | n
 }
 
 /**
- * Quand proposer la version allégée en pleine lecture. Nourrie par l'hôte : un blocage qui dure
- * (`longWait`, à 5 s), un blocage fini (`waitEnded`), et le sort de la fenêtre (`shown`, `closed`).
- * `network` : la cause classée *réseau* par le diagnostic (`playbackDiagnosis`) **et** un débit
- * mesuré sous le besoin. Une attente de calcul ou de décodeur ne compte jamais.
+ * Quand basculer en pleine lecture (§78). Nourrie par l'hôte : un blocage qui dure (`longWait`, à 5 s),
+ * un blocage fini (`waitEnded`). `network` : la cause classée *réseau* par le diagnostic
+ * (`playbackDiagnosis`) **et** un débit mesuré sous le besoin. Une attente de calcul ou de décodeur ne
+ * compte jamais, ni celle d'un saut (l'hôte ne les lui donne pas). Un déclenchement remet le compte à
+ * zéro : la version allégée suivante (dégressive) repart de rien.
  */
 export class StutterWatch {
   private waits: number[] = [];
-  private popups = 0;
-  private open = false;
-  private closedAt: number | null = null;
 
-  /** Un nouveau popup est-il permis à cet instant ? */
-  private allowed(now: number): boolean {
-    if (this.open || this.popups >= MAX_STUTTER_POPUPS) return false;
-    return this.closedAt === null || now - this.closedAt >= POPUP_GAP_MS;
+  /** Un blocage en cours atteint 5 s. Vrai : basculer. */
+  longWait(_now: number, network: boolean): boolean {
+    if (!network) return false;
+    this.waits = [];
+    return true;
   }
 
-  /** Un blocage en cours atteint 5 s. Vrai : montrer la fenêtre. */
-  longWait(now: number, network: boolean): boolean {
-    return network && this.allowed(now);
-  }
-
-  /** Un blocage fini, de `ms` millisecondes. Vrai : montrer la fenêtre (le 3e de plus d'1 s en 3 min). */
+  /** Un blocage fini, de `ms` millisecondes. Vrai : basculer (le 3e de plus d'1 s en 3 min). */
   waitEnded(now: number, ms: number, network: boolean): boolean {
     if (!network || !(ms > SHORT_STALL_MS)) return false;
     this.waits = this.waits.filter((at) => now - at < STALL_WINDOW_MS);
     this.waits.push(now);
-    return this.waits.length >= STALLS_TO_TRIGGER && this.allowed(now);
-  }
-
-  shown(): void {
-    this.open = true;
-    this.popups += 1;
+    if (this.waits.length < STALLS_TO_TRIGGER) return false;
     this.waits = [];
-  }
-
-  closed(now: number): void {
-    this.open = false;
-    this.closedAt = now;
-    this.waits = [];
-  }
-
-  get count(): number {
-    return this.popups;
+    return true;
   }
 }
 
 // --- le journal --------------------------------------------------------------------------------
 
-/** Ce que le spectateur a fait d'une fenêtre ou d'un écran. */
-export type SlowChoice = "allégée" | "réessayer" | "fermer";
+/** Ce que le spectateur a fait de l'écran final. */
+export type SlowChoice = "réessayer" | "fermer";
 
 /** `1.234e6` → `"1.2"` ; sous 10, une décimale (deux sous 1). */
 export function mbps(bps: number | null | undefined): string {
@@ -320,6 +391,8 @@ export class SlowLog {
 
   note(event: string): void {
     try {
+      // Le tableau du simulateur de la page de test, s'il est allumé (rien sinon).
+      pushSlowLinkEvent(event);
       this.events.push(event);
       if (this.events.length > 16) this.events.splice(0, this.events.length - 16);
     } catch {

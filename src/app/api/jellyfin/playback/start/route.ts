@@ -148,6 +148,11 @@ export async function POST(req: NextRequest) {
    * le profil le décide (`buildDeviceProfile`, `lighter`). Absente, le profil est l'ordinaire.
    */
   const lighter = body?.lighter === true;
+  /**
+   * Un préchauffage (§78, `lighterPrewarm.ts`) : la négociation est faite, mais rien n'est annoncé à
+   * Jellyfin — ce n'est pas encore une lecture. Le lecteur serveur l'annoncera s'il la reprend.
+   */
+  const prewarm = body?.prewarm === true;
   const disableAudioCodecs = Array.isArray(body?.disableAudioCodecs)
     ? (body.disableAudioCodecs as unknown[]).filter((c): c is string => typeof c === "string" && /^[a-z0-9]{1,16}$/.test(c))
     : [];
@@ -342,7 +347,7 @@ export async function POST(req: NextRequest) {
     // Same for intro/credits timestamps — 404s for movies and unanalyzed
     // episodes, which just means no skip-intro / next-up prompt for this item.
     const [, timestamps, naming, transcodingAllowed] = await Promise.all([
-      bench
+      bench || prewarm
         ? Promise.resolve()
         : jellyfin
             // Sous l'appareil de la connexion, comme les rapports qui suivront — `playbackDevice.ts`.

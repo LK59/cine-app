@@ -1673,7 +1673,7 @@ describe("PlayerControls — la disposition", () => {
     expect(nav(container, "speed")!.textContent).toContain("1.5×");
   });
 
-  it("garde dans ⋮ chapitres, minuterie, puis, sous un trait, infos et luminosité HDR", async () => {
+  it("garde dans ⋮ chapitres, minuterie, puis, sous un trait, infos, qualité et luminosité HDR", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) =>
@@ -1691,11 +1691,27 @@ describe("PlayerControls — la disposition", () => {
     expect(labels[0]).toContain("player.chapters");
     expect(labels[1]).toContain("player.speed");
     expect(labels[2]).toContain("player.sleep.title");
-    expect(labels.at(-2)).toContain("player.playbackInfo");
+    expect(labels.at(-3)).toContain("player.playbackInfo");
+    // « Qualité » (§78) : Automatique ou Originale.
+    expect(labels.at(-2)).toContain("player.quality.title");
+    expect(labels.at(-2)).toContain("player.quality.auto");
     expect(labels.at(-1)).toContain("player.hdrCap.title");
-    expect(menu.querySelector("[data-menu-secondary]")!.querySelectorAll("button")).toHaveLength(2);
+    expect(menu.querySelector("[data-menu-secondary]")!.querySelectorAll("button")).toHaveLength(3);
     expect(menu.textContent).not.toContain("player.cast");
     expect(menu.textContent).not.toContain("player.subtitleStyle.title");
+  });
+
+  it("« Qualité » (§78) : Automatique par défaut, Originale retenue par compte et par appareil", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(nav(container, "more")!));
+    await act(async () => void fireEvent.click(container.querySelector("[data-quality-row]")!));
+    await act(async () => void fireEvent.click(container.querySelector('[data-quality-choice="original"]')!));
+    const { readPlaybackQuality, writePlaybackQuality } = await import("@/lib/playbackQuality");
+    expect(readPlaybackQuality()).toBe("original");
+    writePlaybackQuality("auto");
+    expect(readPlaybackQuality()).toBe("auto");
   });
 
   it("garde le retour de diffusion dans ⋮", async () => {

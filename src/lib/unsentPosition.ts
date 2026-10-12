@@ -23,6 +23,17 @@ import { persistedCacheAccount } from "@/lib/persistentCache";
  */
 
 const PREFIX = "cine:unsent-position:";
+/**
+ * Y a-t-il peut-être quelque chose en attente ? Faux tant que rien n'a été gardé dans cette page : un
+ * rapport accepté sur un bon réseau ne touche alors pas au stockage. Le lancement (`flushUnsentPositions`)
+ * le relit une fois.
+ */
+let maybePending = false;
+
+/** Un rapport accepté a-t-il quelque chose à effacer ou à renvoyer derrière lui ? */
+export function unsentPositionsPending(): boolean {
+  return maybePending;
+}
 /** Au-delà d'une semaine, la position ne veut plus rien dire. */
 const KEEP_MS = 7 * 24 * 3600_000;
 
@@ -38,6 +49,7 @@ export function saveUnsentPosition(itemId: string, seconds: number, now = Date.n
     if (!itemId || !(seconds > 0) || !Number.isFinite(seconds)) return;
     const saved: Saved = { itemId, seconds, savedAt: now, account: persistedCacheAccount() };
     localStorage.setItem(PREFIX + itemId, JSON.stringify(saved));
+    maybePending = true;
   } catch {
     /* pas de stockage : pas de filet */
   }
@@ -93,7 +105,9 @@ export async function flushUnsentPositions(now = Date.now(), except?: string): P
   if (flushing) return;
   flushing = true;
   try {
-    for (const saved of findUnsentPositions(now)) {
+    const found = findUnsentPositions(now);
+    maybePending = found.length > 0;
+    for (const saved of found) {
       if (saved.itemId === except) continue;
       try {
         const res = await fetch("/api/jellyfin/playback/stop", {

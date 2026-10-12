@@ -104,13 +104,15 @@ vi.mock("hls.js", () => {
 
 import { PlayerHost } from "@/components/PlayerHost";
 import { carriedLighter, forgetLighterCarry, forgetLighters, noteLighter } from "@/lib/slowLinkPolicy";
+import { writePlaybackQuality } from "@/lib/playbackQuality";
+import { forgetPrewarm } from "@/lib/lighterPrewarm";
 
 const reponse: Record<string, unknown> & { playbackInfo: Record<string, unknown> & { video: Record<string, unknown> & { bitRate: number } }; subtitleTracks: unknown[] } = {
   playSessionId: "seance-jf",
   sourceBitrateBps: 16_000_000,
   mediaSourceId: "source",
   isDirectPlay: false,
-  manifestUrl: "/api/jellyfin/stream/film/master.m3u8",
+  manifestUrl: "/api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf",
   audioTracks: [],
   subtitleTracks: [],
   title: "Film",
@@ -140,10 +142,15 @@ beforeEach(() => {
         startBodies.push(JSON.parse(String(init?.body ?? "{}")));
         return { ok: true, status: 200, json: async () => reponse };
       }
-      return { ok: true, status: 200, json: async () => ({}), text: async () => "" };
+      // Les listes et le segment d'un préchauffage (§78).
+      if (String(url).includes("master.m3u8")) return { ok: true, status: 200, text: async (): Promise<string> => "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1500000,RESOLUTION=1280x720,CODECS=\"hvc1.1.4.L120.B0,mp4a.40.2\"\nmain.m3u8?x=1\n" };
+      if (String(url).includes("main.m3u8")) return { ok: true, status: 200, text: async (): Promise<string> => "#EXTM3U\n#EXTINF:3.003,\nhls1/main/0.mp4\n#EXTINF:3.003,\nhls1/main/1.mp4\n#EXT-X-ENDLIST\n" };
+      if (String(url).includes("/hls1/main/")) return { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(1000) };
+      return { ok: true, status: 200, json: async () => ({}), text: async (): Promise<string> => "" };
     })
   );
   playback.session = { itemId: "film", openId: 1, resumeAt: 0, title: "Film" };
+  writePlaybackQuality("auto");
   fake.listeners = new Map();
   fake.config = null;
   fake.stopLoad.mockClear();
@@ -153,6 +160,7 @@ beforeEach(() => {
   legacy = true;
   forgetLighters();
   forgetLighterCarry();
+  forgetPrewarm();
 });
 afterEach(() => {
   cleanup();
@@ -209,10 +217,12 @@ describe("le chien de garde des 20 s", () => {
     expect(document.body.textContent).toContain("player.loadingTooLong");
   });
 
-  it("≈0,3 Mbit/s pour 3,9 demandés : la cause, nommée, avec ses chiffres", async () => {
+  it("≈0,3 Mbit/s pour 3,9 demandés : la cause, nommée, avec ses chiffres (« Originale » : sans bascule)", async () => {
+    writePlaybackQuality("original");
     await mounted();
     await trickle(40_000, 21);
     expect(document.body.textContent).toContain("player.slowLink.failed");
+    expect(document.body.textContent).not.toMatch(/\d+[,.]\d+ ?Mbit/);
     expect(document.body.textContent).not.toContain("player.loadingTooLong");
     const line = reported.find((r) => r.kind === "error")!.fields;
     expect(line).toMatchObject({ reason: "connexion trop lente", needMbps: 3.9, path: "serveur" });
@@ -221,6 +231,7 @@ describe("le chien de garde des 20 s", () => {
   });
 
   it("le bilan `stop` porte le verdict du lien sous `diag`", async () => {
+    writePlaybackQuality("original");
     await mounted();
     await trickle(40_000, 21);
     // Démonté : le bilan part (`why: "unmount"`).
@@ -258,6 +269,7 @@ describe("les étapes du démarrage et la chronologie, sur les lignes du lecteur
       .filter((k) => !k.startsWith("diag.") && k !== "timeline" && !["build", "version", "resent", "lateByMs", "sleepTimer"].includes(k));
 
   it("`start` porte la négociation ; l'échec, ses étapes et l'étape atteinte ; le bilan tient dans le plafond", async () => {
+    writePlaybackQuality("original");
     await mounted();
     const start = reported.find((r) => r.kind === "start")!.fields;
     expect((start.startup as Record<string, number>).negotiateMs).toBeTypeOf("number");
@@ -276,137 +288,121 @@ describe("les étapes du démarrage et la chronologie, sur les lignes du lecteur
 });
 
 /**
- * Dire la lenteur pendant le chargement et la lecture, sans jamais abandonner plus tôt (DECISIONS.md §78) :
- * l'indice, la fenêtre « Votre connexion semble lente » et ses choix, la version allégée palier par palier.
+ * La connexion lente sur le lecteur serveur (DECISIONS.md §78) : l'indice, le préchauffage du palier
+ * suivant, la bascule automatique en reprenant ce préchauffage, l'écran final, le réglage « Qualité ».
  */
-describe("pendant le chargement : l'indice et la fenêtre (§78)", () => {
+describe("pendant le chargement : indice, préchauffage, bascule (§78)", () => {
   const errors = () => reported.filter((r) => r.kind === "error");
-  const popup = () => document.querySelector<HTMLElement>("[data-slow-link-popup]");
-  const popupButtons = () => Array.from(popup()?.querySelectorAll("button") ?? []).map((b) => b.textContent);
-  const popupButton = (label: string) => Array.from(popup()!.querySelectorAll("button")).find((b) => b.textContent === label)!;
-  const negotiated = async (count: number) => {
-    for (let i = 0; i < 50 && startBodies.length < count; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
-    expect(startBodies).toHaveLength(count);
+  const starts = () => reported.filter((r) => r.kind === "start");
+  const negotiations = () => startBodies.filter((b) => b.prewarm !== true);
+  const prewarmBodies = () => startBodies.filter((b) => b.prewarm === true);
+  const settleAll = async () => {
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
   };
 
-  it("bon réseau : ni indice ni fenêtre — « trop long » à 20 s, comme avant", async () => {
+  it("bon réseau : ni indice ni préchauffage — « trop long » à 20 s, comme avant, et pas une requête de plus", async () => {
     await mounted();
     const seen = await trickle(2_000_000, 21);
     expect(seen).not.toContain("player.slowLink.hint");
-    expect(popup()).toBeNull();
+    expect(prewarmBodies()).toHaveLength(0);
     expect(errors()).toHaveLength(1);
     expect(errors()[0].fields.reason).toBe("pas de première image en 20 s");
+    expect(errors()[0].fields.slowLink).toBeUndefined();
   });
 
-  it("A1 + A2 : ≈0,3 Mbit/s — l'indice dès 5 s, la fenêtre vers 10 s (Allégée · Réessayer · Fermer), puis l'écran à 20 s", async () => {
+  it("très lente : l'indice dès 5 s, le préchauffage à 8 s, la bascule qui REPREND le préchauffage (même séance Jellyfin, aucune négociation de plus)", async () => {
     await mounted();
-    const seen = await trickle(40_000, 9);
-    expect(seen.slice(0, 4)).not.toContain("player.slowLink.hint");
-    expect(seen.slice(5)).toEqual(Array(4).fill("player.slowLink.hint"));
-    await trickle(40_000, 3);
-    expect(popup()!.textContent).toContain("player.slowLink.popup");
-    expect(popup()!.textContent).not.toMatch(/\d/);
-    expect(popupButtons()).toEqual(["player.slowLink.lighter", "common.retry", "common.close"]);
-    expect(errors()).toHaveLength(0);
-    expect(startBodies).toHaveLength(1);
     await trickle(40_000, 9);
-    expect(errors()).toHaveLength(1);
-    expect(errors()[0].fields.reason).toBe("connexion trop lente");
-    expect(document.body.textContent).toContain("player.slowLink.failed");
-    // L'écran : Version allégée, Réessayer, Quitter.
-    expect(screenLabels()).toEqual(expect.arrayContaining(["player.slowLink.lighter", "common.retry", "player.quit"]));
-    cleanup();
-    const stop = reported.find((r) => r.kind === "stop")!.fields;
-    expect(stop.slowLink).toContain("fenêtre lente");
-    expect(stop.slowChoice).toBe("aucun");
+    expect(prewarmBodies()).toHaveLength(1);
+    expect(prewarmBodies()[0]).toMatchObject({ itemId: "film", maxBitrate: 1_500_000, lighter: true, prewarm: true });
+    await settleAll();
+    await trickle(40_000, 2);
+    await settleAll();
+    // Une seule négociation de lecture : la première ; la bascule a repris la réponse du préchauffage.
+    expect(negotiations()).toHaveLength(1);
+    const second = starts()[1]?.fields;
+    expect(second).toMatchObject({ why: "lighter", lighterTier: 1, lighterMbps: 1.5 });
+    expect(second.prewarm).toMatchObject({ used: true, tier: 1 });
+    // hls.js part du segment préchauffé.
+    expect((fake.config as Record<string, unknown>).startPosition).toBe(0);
+    expect(errors()).toHaveLength(0);
+    // Le message bref de la bascule.
+    expect(document.querySelector("[data-lighter-switch-notice]")?.textContent).toBe("player.slowLink.switched");
+    await act(async () => void (await vi.advanceTimersByTimeAsync(5_500)));
+    expect(document.querySelector("[data-lighter-switch-notice]")).toBeNull();
   });
 
-  it("« Version allégée » : une négociation neuve au palier (moitié du mesuré, plancher 1,5), 720p au plus", async () => {
-    reponse.playbackInfo.video.bitRate = 15_600_000;
+  it("dégressif : la version allégée en cours bloque encore — palier suivant ; au plancher, l'écran final (Réessayer · Quitter)", async () => {
+    reponse.playbackInfo.video.bitRate = 4_600_000;
     try {
-      await mounted();
-      // 2 Mbit/s reçus pour 16 demandés : palier 1 = 1,5 (moitié de 2 → 1, plancher).
-      await trickle(250_000, 12);
-      await act(async () => void fireEvent.click(popupButton("player.slowLink.lighter")));
-      await negotiated(2);
-      expect(startBodies[1]).toMatchObject({ maxBitrate: 1_500_000, lighter: true });
-      const start = reported.filter((r) => r.kind === "start")[1].fields;
-      expect(start).toMatchObject({ why: "lighter", lighterMbps: 1.5, lighterTier: 1 });
-    } finally {
-      reponse.playbackInfo.video.bitRate = 3_500_000;
-    }
-  });
-
-  it("dégressif : la version allégée échoue encore — palier suivant ; au plancher, plus que Réessayer · Fermer", async () => {
-    reponse.playbackInfo.video.bitRate = 15_600_000;
-    try {
-      // Un premier palier à 5 Mbit/s, déjà en cours ; le lien mesure 2 → max(1,5, min(2,5, 1)) = 1,5.
       noteLighter("film", { targetBps: 5_000_000, tier: 1 });
       await mounted();
-      await trickle(250_000, 12);
-      await act(async () => void fireEvent.click(popupButton("player.slowLink.lighter")));
-      await negotiated(2);
-      expect(startBodies[1]).toMatchObject({ maxBitrate: 1_500_000 });
-      expect(reported.filter((r) => r.kind === "start")[1].fields).toMatchObject({ lighterTier: 2 });
+      await trickle(40_000, 12);
+      await settleAll();
+      const switched = starts().find((s) => s.fields.why === "lighter")?.fields;
+      expect(switched).toMatchObject({ lighterTier: 2, lighterMbps: 1.5 });
     } finally {
       reponse.playbackInfo.video.bitRate = 3_500_000;
     }
     forgetLighters();
     cleanup();
     fake.config = null;
+    reported.length = 0;
+    startBodies.length = 0;
     noteLighter("film", { targetBps: 1_500_000, tier: 3 });
     await mounted();
-    await trickle(40_000, 12);
-    expect(popupButtons()).toEqual(["common.retry", "common.close"]);
-  });
-
-  it("A2 « Fermer » ferme la fenêtre seulement : le chargement continue, elle ne revient pas ; Retour fait de même", async () => {
-    await mounted();
-    await trickle(40_000, 12);
-    await act(async () => void fireEvent.click(popupButton("common.close")));
-    expect(popup()).toBeNull();
-    await trickle(40_000, 3);
-    expect(popup()).toBeNull();
-    expect(playback.close).not.toHaveBeenCalled();
-    expect(startBodies).toHaveLength(1);
-    cleanup();
-    reported.length = 0;
-    fake.config = null;
-    await mounted();
-    await trickle(40_000, 12);
-    await act(async () => void fireEvent.keyDown(window, { key: "Escape" }));
-    expect(popup()).toBeNull();
-    expect(playback.close).not.toHaveBeenCalled();
-  });
-
-  it("A3 : ≈35 % — l'indice ; le chien de garde des 20 s rend le verdict, avec la version allégée", async () => {
-    await mounted();
-    const seen = await trickle(170_000, 19);
-    expect(seen.slice(6)).toEqual(Array(13).fill("player.slowLink.hint"));
-    expect(popup()).toBeNull();
-    expect(errors()).toHaveLength(0);
-    await trickle(170_000, 2);
+    await trickle(40_000, 21);
+    expect(prewarmBodies()).toHaveLength(0);
     expect(errors()[0].fields.reason).toBe("connexion trop lente");
+    expect(document.body.textContent).toContain("player.slowLink.failed");
+    expect(screenLabels()).not.toContain("player.slowLink.lighter");
   });
 
-  it("un débit qui remonte : l'indice se retire", async () => {
+  it("« Originale » : jamais de préchauffage ni de bascule — l'indice, puis l'écran final à 20 s", async () => {
+    writePlaybackQuality("original");
     await mounted();
-    const seen = await trickle((t) => (t <= 7 ? 40_000 : 2_000_000), 12);
-    expect(seen[6]).toBe("player.slowLink.hint");
-    expect(seen.slice(8)).not.toContain("player.slowLink.hint");
-    expect(errors()).toHaveLength(0);
+    await trickle(40_000, 21);
+    expect(prewarmBodies()).toHaveLength(0);
+    expect(errors()[0].fields).toMatchObject({ reason: "connexion trop lente", quality: "original" });
+    expect(document.body.textContent).toContain("player.slowLink.failed");
   });
 
-  it("C : hors ligne pendant le chargement — ni indice ni fenêtre, jamais d'allégée ; l'ancien « trop long »", async () => {
+  it("version allégée non permise au compte (politique Jellyfin) : comme « Originale »", async () => {
+    reponse.lighterAllowed = false;
+    try {
+      await mounted();
+      await trickle(40_000, 21);
+      expect(prewarmBodies()).toHaveLength(0);
+      expect(errors()[0].fields.reason).toBe("connexion trop lente");
+    } finally {
+      delete reponse.lighterAllowed;
+    }
+  });
+
+  it("la première image arrive : le préchauffage est arrêté chez Jellyfin (aucun transcodage orphelin)", async () => {
+    await mounted();
+    await trickle(40_000, 9);
+    await settleAll();
+    expect(prewarmBodies()).toHaveLength(1);
+    await act(async () => void fireEvent(document.querySelector("video")!, new Event("loadeddata")));
+    await settleAll();
+    const stopCall = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([url, init]) => url === "/api/jellyfin/playback/stop" && JSON.parse(String((init as RequestInit).body)).prewarm === true
+    );
+    expect(stopCall).toBeTruthy();
+    expect(JSON.parse(String((stopCall![1] as RequestInit).body))).toMatchObject({ playSessionId: "seance-jf", deviceId: "appareil-1" });
+    expect(starts().filter((s) => s.fields.why === "lighter")).toHaveLength(0);
+  });
+
+  it("C : hors ligne pendant le chargement — ni indice ni préchauffage, jamais de bascule ; l'ancien « trop long »", async () => {
     await mounted();
     await trickle(40_000, 6);
     Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
     act(() => void window.dispatchEvent(new Event("offline")));
     try {
       await trickle(40_000, 15);
-      expect(popup()).toBeNull();
+      expect(prewarmBodies()).toHaveLength(0);
       expect(errors()[0].fields.reason).toBe("pas de première image en 20 s");
-      expect(document.body.textContent).not.toContain("player.slowLink.lighter");
     } finally {
       Object.defineProperty(navigator, "onLine", { value: true, writable: true, configurable: true });
     }
@@ -421,25 +417,14 @@ describe("pendant le chargement : l'indice et la fenêtre (§78)", () => {
       seen.push(introNote());
     }
     expect(seen).not.toContain("player.slowLink.hint");
-    expect(popup()).toBeNull();
+    expect(prewarmBodies()).toHaveLength(0);
     expect(errors()).toHaveLength(1);
     expect(errors()[0].fields.reason).toBe("pas de première image en 20 s");
     expect(document.body.textContent).toContain("player.loadingTooLong");
   });
-
-  it("version allégée non permise au compte (politique Jellyfin) : Réessayer · Fermer", async () => {
-    reponse.lighterAllowed = false;
-    try {
-      await mounted();
-      await trickle(40_000, 12);
-      expect(popupButtons()).toEqual(["common.retry", "common.close"]);
-    } finally {
-      delete reponse.lighterAllowed;
-    }
-  });
 });
 
-/** Les libellés des boutons de l'écran d'erreur du lecteur serveur. */
+/** Les libellés des boutons de la page. */
 function screenLabels() {
   return Array.from(document.querySelectorAll("button")).map((b) => b.textContent);
 }
@@ -539,17 +524,24 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
     expect(carriedLighter()).toEqual({ targetBps: 2_500_000, tier: 1 });
   });
 
-  it("B : un blocage réseau de plus de 5 s pendant la lecture — la fenêtre des saccades ; jamais sous un menu ouvert", async () => {
+  it("B : un blocage réseau de plus de 5 s pendant la lecture — préchauffage du palier, puis bascule à la position courante ; aucune erreur", async () => {
     await mounted();
     await picture();
     await act(async () => void fireEvent(video(), new Event("waiting")));
     await trickle(250_000, 6);
-    const popup = document.querySelector("[data-slow-link-popup]");
-    expect(popup?.textContent).toContain("player.slowLink.popupStutter");
-    expect(Array.from(popup!.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["player.slowLink.lighter", "common.close"]);
-    // Pas d'erreur : la lecture continue.
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(1);
+    expect(reported.filter((r) => r.kind === "start" && r.fields.why === "lighter")).toHaveLength(1);
     expect(reported.filter((r) => r.kind === "error")).toHaveLength(0);
-    await act(async () => void fireEvent.click(document.querySelector("[data-testid=commandes] button")!));
-    expect(document.querySelector("[data-slow-link-popup]")).toBeNull();
+  });
+
+  it("B en « Originale » : rien — jamais d'erreur tant que la lecture continue", async () => {
+    writePlaybackQuality("original");
+    await mounted();
+    await picture();
+    await act(async () => void fireEvent(video(), new Event("waiting")));
+    await trickle(250_000, 6);
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(0);
+    expect(reported.filter((r) => r.kind === "error")).toHaveLength(0);
   });
 });

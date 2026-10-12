@@ -160,11 +160,11 @@ and each wait classified *réseau* / *calcul* / *décodeur*. It exists because a
 times an episode while a Mac on the same router never did, and nothing said which of the three it was.
 Since 2026-10-12 (DECISIONS §77) a give-up that the measured link explains says so: `reason:
 "connexion trop lente"` with `recvMbps`/`needMbps`/`measuredS`/`bytes` (only when ≥ 10 s of reception
-delivered < half the stream's bitrate); since §78 the same day, whatever a slow link made appear (hint,
-popups, screen, « instable ») and the viewer's choice ride on the lines already sent — `slowLink` (a
-bounded `event +12.3 s (recv/need)` thread) and `slowChoice` (`allégée`/`réessayer`/`fermer`/`aucun`) on
-`opening`, `fallback`, `error`, `stop` and the server's `start`; a lighter version adds `lighterMbps`,
-`lighterTier`, `lighterCarried` (the 2-minute rule) and `lighterCleared` (link recovered); server-player `start`/`error`/`stop` carry `startup.*` (lists,
+delivered < half the stream's bitrate); since §78 the same day, a slow link is pre-warmed then switched to a lighter Jellyfin transcode on
+its own, and what it did rides on the lines already sent — `slowLink` (a bounded `event +12.3 s
+(recv/need)` thread: hint, pre-warm, switch, screen, « instable ») and `slowChoice` on `opening`,
+`fallback`, `error`, `stop` and the server's `start`, plus `lighterMbps`/`lighterTier`/`lighterCarried`/
+`lighterCleared`, `switch.*`, `prewarm.*`, `switchGapMs` and `quality`; server-player `start`/`error`/`stop` carry `startup.*` (lists,
 first segment, picture, ms from the request, and `startup.stage` on a failure); `stall`, `error`,
 `fallback`, `rebuild`, `network` and `stop` carry `timeline`, the last two minutes sampled every 5 s in
 memory (`pos,s,Mb/s,ahead,reserveMB,state;…`, `playbackTimeline.ts`) — no extra line is ever sent for it.

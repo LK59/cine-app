@@ -75,6 +75,8 @@ export interface StableTakeover {
   subtitleStreamIndex?: number | null;
   /** Une génération de sous-titres était en cours au passage : le lecteur serveur le dit, brièvement. */
   subtitleGenerating?: boolean;
+  /** L'instant de la bascule (`Date.now()`) : le lecteur serveur mesure l'interruption jusqu'à son image. */
+  switchedAt?: number;
 }
 
 /**

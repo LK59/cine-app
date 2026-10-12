@@ -26,6 +26,33 @@ let recentSteps: string[] = [];
 vi.mock("@/lib/webcodecs/trace", () => ({ trace: vi.fn(), traceKeepAcrossReset: vi.fn(), traceRecent: () => recentSteps }));
 vi.mock("@/lib/webcodecs/pathSelector", () => ({ NATIVE_PATH: "raison du choix" }));
 /**
+ * Le préchauffage de la version allégée (§78), simulé : chaque lancement est noté, et le test dit quand
+ * il est prêt (`settle`). Le module réel a ses propres tests (`lighterPrewarm.test.ts`).
+ */
+type FakePrewarm = { state: string; startSeconds: number; step: { targetBps: number; tier: number }; ready: Promise<boolean>; startedAt: number; readyAt: number | null };
+const prewarms: { options: { itemId: string; step: { targetBps: number; tier: number }; startSeconds: number }; prewarm: FakePrewarm; settle: (ok: boolean) => void }[] = [];
+const cancelPrewarmSpy = vi.fn((p?: FakePrewarm | null) => {
+  if (p) p.state = "cancelled";
+});
+vi.mock("@/lib/lighterPrewarm", () => ({
+  startPrewarm: (options: { itemId: string; step: { targetBps: number; tier: number }; startSeconds: number }) => {
+    let resolve: (ok: boolean) => void = () => {};
+    const prewarm: FakePrewarm = { ...options, state: "running", startedAt: 0, readyAt: null, ready: new Promise<boolean>((r) => (resolve = r)) };
+    prewarms.push({
+      options,
+      prewarm,
+      settle: (ok) => {
+        prewarm.state = ok ? "ready" : "failed";
+        prewarm.readyAt = ok ? 1500 : null;
+        resolve(ok);
+      },
+    });
+    return prewarm;
+  },
+  cancelPrewarm: (p?: FakePrewarm | null) => cancelPrewarmSpy(p),
+  prewarmFields: () => ({ mbps: 1.5 }),
+}));
+/**
  * Le diagnostic de la séance (§78) : réel, sauf ce que les tests des saccades et des sauts imposent —
  * la classe de l'attente en cours ou finie, et le lien mesuré sur une fenêtre.
  */
@@ -97,7 +124,6 @@ vi.mock("@/components/PlayerControls", () => ({
     hdrCap?: { current: string | number; autoNits: number | null; onPick: (choice: string | number) => void };
     onClose?: () => void;
     chromecast?: { active: boolean; onRequest: () => void };
-    onMenuChange?: (open: boolean) => void;
   }) => (
     <div
       data-testid="controls"
@@ -106,8 +132,6 @@ vi.mock("@/components/PlayerControls", () => ({
       data-current-subtitle={String(props.currentSubtitleId ?? "")}
     >
       {props.onClose && <button onClick={props.onClose}>fermer</button>}
-      {props.onMenuChange && <button onClick={() => props.onMenuChange!(true)}>menu:ouvrir</button>}
-      {props.onMenuChange && <button onClick={() => props.onMenuChange!(false)}>menu:fermer</button>}
       {props.chromecast && <button onClick={props.chromecast.onRequest}>chromecast</button>}
       {/* Un saut demandé depuis les commandes : le signal d'abord, puis l'élément, comme elles. */}
       <button
@@ -270,6 +294,7 @@ import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { meterOpeningRequest } from "@/lib/slowLink";
 import { capForLighter, forgetLighterCarry, forgetLighters } from "@/lib/slowLinkPolicy";
 import { noteFetchRetrying, noteFetchSettled, resetNetworkTrouble } from "@/lib/networkTrouble";
+import { writePlaybackQuality } from "@/lib/playbackQuality";
 
 const onFallback = vi.fn();
 
@@ -2788,10 +2813,6 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
 
   /** Le mot sous la ligne de chargement de l'ouverture (§60), s'il y en a un. */
   const introNote = () => document.querySelector("[data-playback-intro-note]")?.textContent ?? null;
-  /** La fenêtre d'une connexion lente, si elle est là. */
-  const popup = () => document.querySelector<HTMLElement>("[data-slow-link-popup]");
-  const popupButtons = () => Array.from(popup()?.querySelectorAll("button") ?? []).map((b) => b.textContent);
-  const popupButton = (label: string) => Array.from(popup()!.querySelectorAll("button")).find((b) => b.textContent === label)!;
   /** L'écran « Lecture impossible : la connexion est trop lente. ». */
   const slowScreen = () => document.querySelector<HTMLElement>("[data-slow-link-screen]");
   const screenButtons = () => Array.from(slowScreen()?.querySelectorAll("button") ?? []).map((b) => b.textContent);
@@ -2803,11 +2824,7 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
     }
   }
 
-  /**
-   * Une ouverture qui ne finit jamais, et un lien qui livre `rate` octets par seconde. `seen[t]` :
-   * « screen » si l'écran du renoncement est là, « popup:<texte> » si une fenêtre est là, sinon le mot
-   * sous la ligne de chargement.
-   */
+  /** Une ouverture qui ne finit jamais, et un lien qui livre `rate` octets par seconde. */
   async function openOver(rate: number | ((t: number) => number), seconds = 36, probe?: () => unknown) {
     vi.useFakeTimers();
     nextProbe = probe ?? ((() => new Promise(() => {})) as never);
@@ -2821,7 +2838,7 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
       await act(async () => void vi.advanceTimersByTime(1000));
       const bytes = typeof rate === "function" ? rate(t) : rate;
       if (bytes > 0) request!.received(bytes);
-      seen.push(slowScreen() ? "screen" : popup() ? `popup:${popup()!.querySelector("p")!.textContent}` : introNote());
+      seen.push(slowScreen() ? "screen" : introNote());
     }
     return seen;
   }
@@ -2830,6 +2847,9 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
     forgetLighters();
     forgetLighterCarry();
     resetNetworkTrouble();
+    prewarms.length = 0;
+    cancelPrewarmSpy.mockClear();
+    writePlaybackQuality("auto");
     diagMock.currentWait = null;
     diagMock.waitEnded = null;
     diagMock.link = null;
@@ -2837,14 +2857,14 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
     resetIntroClocks();
   });
 
-  it("bon réseau : strictement l'ancien comportement — ni indice ni fenêtre, aucune requête de plus, le même renoncement", async () => {
+  it("bon réseau : strictement l'ancien comportement — ni indice, ni préchauffage, aucune requête de plus, le même renoncement", async () => {
     serverFallback = true;
     swr = { data: slowInfo(), error: undefined };
     const calls = () => (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.length;
     const seen = await openOver(2_000_000, 34);
     expect(seen).not.toContain("hint");
-    expect(seen.some((v) => v?.startsWith("popup"))).toBe(false);
     expect(seen[10]).toBe("stillWorking");
+    expect(prewarms).toHaveLength(0);
     const before = calls();
     await act(async () => void vi.advanceTimersByTime(2000));
     expect(onFallback).toHaveBeenCalledWith("aucune image après 35 s");
@@ -2852,121 +2872,95 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
     const line = logged("fallback")[0].fields;
     expect(line.reason).toBe("aucune image après 35 s");
     expect(line.slowLink).toBeUndefined();
-    expect(line.slowChoice).toBeUndefined();
     expect(capForLighter("item-1", 100_000_000).step).toBeNull();
   });
 
-  it("A1 + A2 : ≈0,3 Mbit/s — l'indice dès 5 s, puis « Votre connexion semble lente » vers 10 s (Allégée · Réessayer · Fermer), sans chiffres, le chargement continue", async () => {
+  it("très lente (≈0,3 Mbit/s) : l'indice dès 5 s, le préchauffage à 8 s, la bascule dès qu'il est prêt (≥ 10 s), par la reconstruction habituelle", async () => {
     serverFallback = true;
     swr = { data: slowInfo(), error: undefined };
-    const seen = await openOver(40_000, 12);
+    const seen = await openOver(40_000, 9);
     expect(seen.slice(0, 4)).not.toContain("hint");
-    expect(seen.slice(5, 9)).toEqual(["hint", "hint", "hint", "hint"]);
-    expect(seen.slice(10)).toEqual(["popup:popup", "popup:popup"]);
-    expect(popupButtons()).toEqual(["lighter", "retry", "close"]);
-    // Aucun chiffre dans la fenêtre.
-    expect(popup()!.textContent).not.toMatch(/\d/);
-    // Aucun bouton pré-sélectionné.
-    expect(popup()!.contains(document.activeElement)).toBe(false);
-    // Rien d'abandonné : ni ligne, ni relais, et la même ouverture compte toujours ses octets.
-    expect(logged("error")).toHaveLength(0);
+    expect(seen[5]).toBe("hint");
+    expect(prewarms).toHaveLength(1);
+    expect(prewarms[0].options).toMatchObject({ itemId: "item-1", step: { targetBps: 1_500_000, tier: 1 }, startSeconds: 0 });
+    // À 10 s le préchauffage tourne encore : on l'attend.
+    await more(40_000, 3);
     expect(onFallback).not.toHaveBeenCalled();
-    expect(probes).toHaveLength(1);
-    expect(meterOpeningRequest()).not.toBeNull();
-  });
-
-  it("A2 « Fermer » ferme la fenêtre seulement : le chargement continue, elle ne revient pas, le choix va au bilan", async () => {
-    serverFallback = true;
-    swr = { data: slowInfo(), error: undefined };
-    await openOver(40_000, 12);
-    await act(async () => void fireEvent.click(popupButton("close")));
-    expect(popup()).toBeNull();
-    await more(40_000, 5);
-    expect(popup()).toBeNull();
-    expect(introNote()).toBe("hint");
-    expect(onFallback).not.toHaveBeenCalled();
-    cleanup();
-    const stop = logged("stop")[0].fields;
-    expect(stop.slowChoice).toBe("fermer");
-    expect(stop.slowLink).toContain("fenêtre lente");
-  });
-
-  it("A2 « Retour » de la télécommande ferme la fenêtre, pas le lecteur", async () => {
-    serverFallback = true;
-    swr = { data: slowInfo(), error: undefined };
-    await openOver(40_000, 12);
-    await act(async () => void fireEvent.keyDown(window, { key: "Escape" }));
-    expect(popup()).toBeNull();
-    expect(logged("stop")).toHaveLength(0);
-    await act(async () => void vi.advanceTimersByTime(300));
-    expect(logged("stop")).toHaveLength(0);
-  });
-
-  it("A2 « Réessayer » : une ouverture neuve, au même endroit", async () => {
-    serverFallback = true;
-    swr = { data: slowInfo(), error: undefined };
-    await openOver(40_000, 12);
-    await act(async () => void fireEvent.click(popupButton("retry")));
-    await act(async () => void vi.advanceTimersByTime(10));
-    expect(probes).toHaveLength(2);
-    expect(popup()).toBeNull();
-  });
-
-  it("A2 « Version allégée » : le lecteur serveur au palier calculé (plancher 1,5), la position et la piste gardées, hors des titres « illisibles »", async () => {
-    serverFallback = true;
-    swr = { data: slowInfo(), error: undefined };
-    await openOver(40_000, 12);
-    await act(async () => void fireEvent.click(popupButton("lighter")));
+    act(() => prewarms[0].settle(true));
+    await more(40_000, 1);
     expect(onFallback).toHaveBeenCalledTimes(1);
     const [reason, takeover] = onFallback.mock.calls[0];
     expect(reason).toBe("connexion trop lente (version allégée demandée)");
     expect(takeover).toMatchObject({ lighter: true, resumeAt: 0, subtitleStreamIndex: null });
-    expect(capForLighter("item-1", 100_000_000)).toEqual({ maxBitrate: 1_500_000, step: { targetBps: 1_500_000, tier: 1 } });
+    expect(capForLighter("item-1", 100_000_000).maxBitrate).toBe(1_500_000);
     const line = logged("fallback")[0].fields;
-    expect(line).toMatchObject({ lighterMbps: 1.5, lighterTier: 1, slowChoice: "allégée", needMbps: 3.9 });
-    expect(line.slowLink).toContain("allégée 1.5 Mb/s palier 1");
+    expect(line).toMatchObject({ lighterMbps: 1.5, lighterTier: 1, quality: "auto", needMbps: 3.9 });
+    expect(line.slowLink).toContain("préchauffage (ouverture)");
+    expect(line.slowLink).toContain("bascule (ouverture)");
+    expect(cancelPrewarmSpy).not.toHaveBeenCalled();
   });
 
-  it("A3 : connexion moyenne (≈35 %) — l'indice, et la fenêtre (Allégée · Fermer) seulement à 20 s sans image", async () => {
+  it("moyenne (≈35 %) : préchauffage à 8 s, pas de bascule avant 20 s, bascule à 20 s", async () => {
     serverFallback = true;
     swr = { data: slowInfo(), error: undefined };
-    const seen = await openOver(170_000, 22);
-    expect(seen.slice(6, 18)).toEqual(Array(12).fill("hint"));
-    expect(seen.slice(0, 19).some((v) => v?.startsWith("popup"))).toBe(false);
-    expect(seen[20]).toBe("popup:popup");
-    expect(popupButtons()).toEqual(["lighter", "close"]);
+    await openOver(170_000, 9);
+    expect(prewarms).toHaveLength(1);
+    act(() => prewarms[0].settle(true));
+    await more(170_000, 9);
     expect(onFallback).not.toHaveBeenCalled();
-  });
-
-  it("A4 : 35 s sans image, lenteur prouvée — « Lecture impossible : la connexion est trop lente. » (Allégée · Réessayer · Fermer), plus de relais silencieux", async () => {
-    serverFallback = true;
-    swr = { data: slowInfo(), error: undefined };
-    const seen = await openOver(40_000, 36);
-    expect(seen.slice(0, 34)).not.toContain("screen");
-    expect(slowScreen()).not.toBeNull();
-    expect(slowScreen()!.textContent).toContain("failed");
-    expect(slowScreen()!.textContent).not.toMatch(/\d/);
-    expect(screenButtons()).toEqual(["lighter", "retry", "close"]);
-    expect(onFallback).not.toHaveBeenCalled();
-    const line = logged("error")[0].fields;
-    expect(line).toMatchObject({ reason: "connexion trop lente", needMbps: 3.9 });
-    expect(line.slowLink).toContain("écran trop lente");
-    // Le spectateur choisit la version allégée depuis l'écran : le relais part enfin.
-    await act(async () => void fireEvent.click(Array.from(slowScreen()!.querySelectorAll("button")).find((b) => b.textContent === "lighter")!));
+    await more(170_000, 3);
     expect(onFallback).toHaveBeenCalledWith("connexion trop lente (version allégée demandée)", expect.objectContaining({ lighter: true }));
   });
 
-  it("A4 : « Fermer » sur l'écran ferme le lecteur ; « Réessayer » rouvre", async () => {
+  it("la première image arrive : le préchauffage est annulé (transcodage arrêté), le film part en natif", async () => {
     serverFallback = true;
     swr = { data: slowInfo(), error: undefined };
-    await openOver(40_000, 36);
-    await act(async () => void fireEvent.click(Array.from(slowScreen()!.querySelectorAll("button")).find((b) => b.textContent === "retry")!));
+    let open: (value: unknown) => void = () => {};
+    await openOver(40_000, 9, () => new Promise((resolve) => (open = resolve)));
+    expect(prewarms).toHaveLength(1);
+    await act(async () => open({ path: "remux", start: async () => remux, discard: vi.fn() }));
+    await untilSettled(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    expect(cancelPrewarmSpy).toHaveBeenCalledWith(prewarms[0].prewarm);
+    act(() => prewarms[0].settle(true));
+    await act(async () => void vi.advanceTimersByTime(40_000));
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(logged("error")).toHaveLength(0);
+  });
+
+  it("« Originale » : jamais de préchauffage ni de bascule — l'indice, puis à 35 s l'écran final (Réessayer · Fermer)", async () => {
+    serverFallback = true;
+    writePlaybackQuality("original");
+    swr = { data: slowInfo(), error: undefined };
+    const seen = await openOver(40_000, 36);
+    expect(prewarms).toHaveLength(0);
+    expect(seen.slice(0, 34)).not.toContain("screen");
+    expect(slowScreen()!.textContent).toContain("failed");
+    expect(slowScreen()!.textContent).not.toMatch(/\d/);
+    expect(screenButtons()).toEqual(["retry", "close"]);
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(logged("error")[0].fields).toMatchObject({ reason: "connexion trop lente", quality: "original" });
+    await act(async () => void fireEvent.click(screen.getByRole("button", { name: /retry/ })));
     await act(async () => void vi.advanceTimersByTime(10));
     expect(probes).toHaveLength(2);
     expect(slowScreen()).toBeNull();
   });
 
-  it("A4 sans lenteur prouvée (rien reçu, durée inconnue) : l'ancien renoncement et l'ancien motif", async () => {
+  it("version allégée non permise (transcodage refusé au compte, ou pas de lecteur serveur) : comme « Originale »", async () => {
+    serverFallback = true;
+    swr = { data: slowInfo({ lighterAllowed: false }), error: undefined };
+    await openOver(40_000, 36);
+    expect(prewarms).toHaveLength(0);
+    expect(screenButtons()).toEqual(["retry", "close"]);
+    cleanup();
+    vi.useRealTimers();
+    serverFallback = false;
+    swr = { data: slowInfo(), error: undefined };
+    await openOver(40_000, 36);
+    expect(prewarms).toHaveLength(0);
+    expect(screenButtons()).toEqual(["retry", "close"]);
+  });
+
+  it("renoncement sans lenteur prouvée (rien reçu, durée inconnue) : l'ancien renoncement et l'ancien motif", async () => {
     serverFallback = true;
     swr = { data: slowInfo(), error: undefined };
     await openOver(0);
@@ -2978,37 +2972,7 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
     expect(onFallback).toHaveBeenLastCalledWith("aucune image après 35 s");
   });
 
-  it("A5 : la première image arrive malgré tout — fenêtre et indice retirés, le film part normalement", async () => {
-    serverFallback = true;
-    swr = { data: slowInfo(), error: undefined };
-    let open: (value: unknown) => void = () => {};
-    const seen = await openOver(40_000, 12, () => new Promise((resolve) => (open = resolve)));
-    expect(seen[11]).toBe("popup:popup");
-    await act(async () => open({ path: "remux", start: async () => remux, discard: vi.fn() }));
-    await untilSettled(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
-    await act(async () => void vi.advanceTimersByTime(1000));
-    expect(popup()).toBeNull();
-    await act(async () => void vi.advanceTimersByTime(40_000));
-    expect(logged("error")).toHaveLength(0);
-    expect(onFallback).not.toHaveBeenCalled();
-  });
-
-  it("version allégée non permise (pas de transcodage pour ce compte, ou pas de lecteur serveur) : Réessayer · Fermer partout", async () => {
-    serverFallback = true;
-    swr = { data: slowInfo({ lighterAllowed: false }), error: undefined };
-    await openOver(40_000, 12);
-    expect(popupButtons()).toEqual(["retry", "close"]);
-    await more(40_000, 24);
-    expect(screenButtons()).toEqual(["retry", "close"]);
-    cleanup();
-    vi.useRealTimers();
-    serverFallback = false;
-    swr = { data: slowInfo(), error: undefined };
-    await openOver(40_000, 12);
-    expect(popupButtons()).toEqual(["retry", "close"]);
-  });
-
-  it("C : des tentatives qui échouent — « Connexion perdue ou instable… », jamais d'indice ni de version allégée ; le renoncement attend leur issue", async () => {
+  it("C : des tentatives qui échouent — « Connexion perdue ou instable… », jamais d'indice ni de préchauffage ; le renoncement attend leur issue", async () => {
     serverFallback = true;
     swr = { data: slowInfo(), error: undefined };
     await openOver(40_000, 6);
@@ -3017,59 +2981,47 @@ describe("une ouverture qui traîne : le lien, mesuré (§78)", () => {
     await more(0, 1);
     expect(introNote()).toBe("unstable");
     await more(40_000, 40);
-    expect(popup()).toBeNull();
-    // Toujours en train de réessayer à 35 s : ni écran de lenteur, ni relais.
+    expect(prewarms).toHaveLength(0);
     expect(slowScreen()).toBeNull();
     expect(onFallback).not.toHaveBeenCalled();
-    // Le réseau répond : le message s'en va.
     act(() => noteFetchSettled());
     await more(40_000, 1);
     expect(introNote()).not.toBe("unstable");
   });
 
-  it("C : toutes les tentatives échouent — l'écran « connexion perdue » avec Réessayer et la fermeture seulement, jamais la version allégée", async () => {
+  it("C : toutes les tentatives échouent — l'écran « connexion perdue », Réessayer et Fermer seulement, jamais de bascule", async () => {
     serverFallback = true;
     swr = { data: slowInfo(), error: undefined };
-    await openOver(40_000, 12);
+    await openOver(40_000, 6);
     Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
     act(() => probes[0].onError("plus de réseau", "network"));
     await act(async () => void vi.advanceTimersByTime(60_000));
     expect(screen.getByText("connectionLost")).toBeTruthy();
-    expect(popup()).toBeNull();
-    expect(screen.queryByText("lighter")).toBeNull();
-    expect(screen.getByRole("button", { name: /retry/ })).toBeTruthy();
+    expect(prewarms).toHaveLength(0);
     expect(onFallback).not.toHaveBeenCalled();
   });
 
   it("5 : une ouverture passée en arrière-plan repart de zéro pour sa mesure au retour — aucun verdict sur l'arrière-plan", async () => {
     serverFallback = true;
     swr = { data: slowInfo(), error: undefined };
-    await openOver(40_000, 8);
+    await openOver(40_000, 6);
     Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
     act(() => void document.dispatchEvent(new Event("visibilitychange")));
     await more(40_000, 20);
-    // Cachée : aucune fenêtre.
-    expect(popup()).toBeNull();
+    expect(prewarms).toHaveLength(0);
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
     act(() => void document.dispatchEvent(new Event("visibilitychange")));
-    // Un compteur neuf : la requête suivie avant le départ ne compte plus.
     request = meterOpeningRequest();
     request!.headers();
     await more(40_000, 4);
-    expect(popup()).toBeNull();
-    expect(introNote()).not.toBe("hint");
-    await more(40_000, 8);
-    expect(popup()).not.toBeNull();
-    // Le renoncement repart du retour : pas à 35 s de l'appui.
-    await more(40_000, 10);
-    expect(slowScreen()).toBeNull();
+    expect(prewarms).toHaveLength(0);
+    await more(40_000, 6);
+    expect(prewarms).toHaveLength(1);
     expect(onFallback).not.toHaveBeenCalled();
   });
 });
 
 describe("pendant la lecture : les saccades (§78)", () => {
-  const popup = () => document.querySelector<HTMLElement>("[data-slow-link-popup]");
-  const popupButtons = () => Array.from(popup()?.querySelectorAll("button") ?? []).map((b) => b.textContent);
   const slowLinkNow = { bytes: 300_000 * 20, receivingMs: 20_000 }; // ≈2,4 Mbit/s pour 3,9
   const fastLinkNow = { bytes: 2_000_000 * 20, receivingMs: 20_000 };
 
@@ -3091,36 +3043,48 @@ describe("pendant la lecture : les saccades (§78)", () => {
   beforeEach(() => {
     forgetLighters();
     resetNetworkTrouble();
+    prewarms.length = 0;
+    cancelPrewarmSpy.mockClear();
+    writePlaybackQuality("auto");
     diagMock.currentWait = null;
     diagMock.waitEnded = null;
     diagMock.link = null;
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
   });
 
-  it("un blocage de plus de 5 s, causé par le réseau sous le besoin : « Votre connexion semble lente, ce qui provoque des saccades. » (Allégée · Fermer)", async () => {
+  it("un blocage réseau de plus de 5 s : préchauffage à la position courante, puis bascule dès qu'il est prêt — aucune fenêtre, aucune erreur", async () => {
     const element = await playing();
     diagMock.currentWait = { verdict: "réseau", ms: 5000 };
     diagMock.link = slowLinkNow;
     await stall(element, 5100);
-    expect(popup()!.textContent).toContain("popupStutter");
-    expect(popupButtons()).toEqual(["lighter", "close"]);
+    expect(prewarms).toHaveLength(1);
+    expect(prewarms[0].options.startSeconds).toBe(600);
     expect(onFallback).not.toHaveBeenCalled();
+    await act(async () => prewarms[0].settle(true));
+    const [reason, takeover] = onFallback.mock.calls[0];
+    expect(reason).toBe("connexion trop lente (saccades, version allégée demandée)");
+    expect(takeover).toMatchObject({ lighter: true, subtitleStreamIndex: null });
+    expect(Math.abs((takeover as { resumeAt: number }).resumeAt - 600)).toBeLessThanOrEqual(5);
   });
 
-  it("une attente de calcul ou de décodeur, ou un lien qui suffit : rien, jamais", async () => {
+  it("une attente de calcul ou de décodeur, un lien qui suffit, ou « Originale » : rien, jamais", async () => {
     const element = await playing();
     diagMock.currentWait = { verdict: "calcul", ms: 5000 };
     diagMock.link = slowLinkNow;
     await stall(element, 6000);
-    expect(popup()).toBeNull();
     diagMock.currentWait = { verdict: "réseau", ms: 5000 };
     diagMock.link = fastLinkNow;
     await act(async () => void fireEvent(element, new Event("playing")));
     await stall(element, 6000);
-    expect(popup()).toBeNull();
+    writePlaybackQuality("original");
+    diagMock.link = slowLinkNow;
+    await act(async () => void fireEvent(element, new Event("playing")));
+    await stall(element, 6000);
+    expect(prewarms).toHaveLength(0);
+    expect(onFallback).not.toHaveBeenCalled();
   });
 
-  it("le 3e blocage de plus d'1 s en 3 min, réseau : la fenêtre ; les deux premiers, rien", async () => {
+  it("le 3e blocage de plus d'1 s en 3 min, réseau : le préchauffage ; les deux premiers, rien", async () => {
     const element = await playing();
     diagMock.link = slowLinkNow;
     diagMock.waitEnded = { verdict: "réseau", ms: 1500 };
@@ -3128,10 +3092,10 @@ describe("pendant la lecture : les saccades (§78)", () => {
       await stall(element, 1500);
       await act(async () => void fireEvent(element, new Event("playing")));
     }
-    expect(popup()).toBeNull();
+    expect(prewarms).toHaveLength(0);
     await stall(element, 1500);
     await act(async () => void fireEvent(element, new Event("playing")));
-    expect(popup()).not.toBeNull();
+    expect(prewarms).toHaveLength(1);
   });
 
   it("les attentes après un saut ne comptent jamais", async () => {
@@ -3141,99 +3105,32 @@ describe("pendant la lecture : les saccades (§78)", () => {
     Object.defineProperty(element, "seeking", { value: true, configurable: true });
     await act(async () => void fireEvent(element, new Event("seeking")));
     await stall(element, 6000);
-    expect(popup()).toBeNull();
+    expect(prewarms).toHaveLength(0);
   });
 
-  it("« Version allégée » : le lecteur serveur à la position courante, piste et sous-titre gardés", async () => {
-    const element = await playing();
-    diagMock.currentWait = { verdict: "réseau", ms: 5000 };
-    diagMock.link = slowLinkNow;
-    await stall(element, 5100);
-    await act(async () => void fireEvent.click(Array.from(popup()!.querySelectorAll("button")).find((b) => b.textContent === "lighter")!));
-    const [reason, takeover] = onFallback.mock.calls[0];
-    expect(reason).toBe("connexion trop lente (saccades, version allégée demandée)");
-    expect(takeover).toMatchObject({ lighter: true, subtitleStreamIndex: null });
-    // Moitié de ≈2,4 Mbit/s mesurés : 1,2 → le plancher, 1,5.
-    expect(capForLighter("item-1", 100_000_000).maxBitrate).toBe(1_500_000);
-  });
-
-  it("deux fenêtres au plus, la seconde trois minutes après la fermeture de la première", async () => {
-    const element = await playing();
-    diagMock.currentWait = { verdict: "réseau", ms: 5000 };
-    diagMock.link = slowLinkNow;
-    await stall(element, 5100);
-    await act(async () => void fireEvent.click(Array.from(popup()!.querySelectorAll("button")).find((b) => b.textContent === "close")!));
-    expect(popup()).toBeNull();
-    await act(async () => void fireEvent(element, new Event("playing")));
-    await stall(element, 5100);
-    expect(popup()).toBeNull();
-    await act(async () => void fireEvent(element, new Event("playing")));
-    await act(async () => void vi.advanceTimersByTime(3 * 60_000));
-    await stall(element, 5100);
-    expect(popup()).not.toBeNull();
-    await act(async () => void fireEvent.click(Array.from(popup()!.querySelectorAll("button")).find((b) => b.textContent === "close")!));
-    await act(async () => void fireEvent(element, new Event("playing")));
-    await act(async () => void vi.advanceTimersByTime(3 * 60_000));
-    await stall(element, 5100);
-    expect(popup()).toBeNull();
-  });
-
-  it("6 : jamais par-dessus un menu ouvert — elle se montre à sa fermeture", async () => {
-    const element = await playing();
-    await act(async () => void fireEvent.click(screen.getByText("menu:ouvrir")));
-    diagMock.currentWait = { verdict: "réseau", ms: 5000 };
-    diagMock.link = slowLinkNow;
-    await stall(element, 5100);
-    expect(popup()).toBeNull();
-    await act(async () => void fireEvent.click(screen.getByText("menu:fermer")));
-    expect(popup()).not.toBeNull();
-  });
-
-  it("5 : page cachée, aucune fenêtre ; due, elle se montre au retour si le lien est toujours lent, et s'oublie sinon", async () => {
-    const element = await playing();
-    diagMock.currentWait = { verdict: "réseau", ms: 5000 };
-    diagMock.link = slowLinkNow;
-    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
-    act(() => void document.dispatchEvent(new Event("visibilitychange")));
-    await stall(element, 5100);
-    expect(popup()).toBeNull();
-    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
-    act(() => void document.dispatchEvent(new Event("visibilitychange")));
-    await act(async () => void vi.advanceTimersByTime(10));
-    // Caché, le blocage n'a pas été compté comme réseau (mesures d'arrière-plan invalides) : rien.
-    expect(popup()).toBeNull();
-  });
-
-  it("5 : réduit en mini-lecteur, aucune fenêtre ; due, elle se montre au retour en plein écran si le lien est toujours lent", async () => {
-    vi.useFakeTimers();
-    serverFallback = true;
-    swr = { data: info({ sizeBytes: 1_170_000_000, runtimeSeconds: 2400 }), error: undefined };
-    const view = mount({ mode: "mini" });
-    await untilSettled(() => expect(document.querySelector("video")).not.toBeNull());
-    await act(async () => void vi.advanceTimersByTime(100));
-    const element = videoElement(600);
-    await act(async () => void fireEvent(element, new Event("playing")));
-    diagMock.currentWait = { verdict: "réseau", ms: 5000 };
-    diagMock.link = slowLinkNow;
-    await stall(element, 5100);
-    expect(popup()).toBeNull();
-    view.rerender(player({ mode: "full" }));
-    await act(async () => void vi.advanceTimersByTime(10));
-    expect(popup()).not.toBeNull();
-  });
-
-  it("un saut sans image depuis plus de 10 s, sur un lien lent : traité comme une ouverture (indice, puis fenêtre)", async () => {
+  it("un saut sans image depuis plus de 10 s sur un lien très lent : traité comme une ouverture (préchauffage puis bascule)", async () => {
     const element = await playing();
     diagMock.link = { bytes: 40_000 * 12, receivingMs: 12_000 };
     await act(async () => void fireEvent(element, new Event("seeking")));
     await act(async () => void vi.advanceTimersByTime(9_000));
-    expect(popup()).toBeNull();
-    await act(async () => void vi.advanceTimersByTime(3_000));
-    expect(popup()!.textContent).toContain("popup");
-    expect(popupButtons()).toEqual(["lighter", "retry", "close"]);
-    // L'image arrive : tout se retire.
+    expect(prewarms).toHaveLength(0);
+    await act(async () => void vi.advanceTimersByTime(2_000));
+    expect(prewarms).toHaveLength(1);
+    expect(prewarms[0].options.step).toEqual({ targetBps: 1_500_000, tier: 1 });
+    act(() => prewarms[0].settle(true));
+    await act(async () => void vi.advanceTimersByTime(1_100));
+    expect(onFallback).toHaveBeenCalledWith("connexion trop lente (version allégée demandée)", expect.objectContaining({ lighter: true }));
+  });
+
+  it("l'image revient après le saut : le préchauffage est annulé", async () => {
+    const element = await playing();
+    diagMock.link = { bytes: 40_000 * 12, receivingMs: 12_000 };
+    await act(async () => void fireEvent(element, new Event("seeking")));
+    await act(async () => void vi.advanceTimersByTime(11_000));
+    expect(prewarms).toHaveLength(1);
     await act(async () => void fireEvent(element, new Event("playing")));
     await act(async () => void vi.advanceTimersByTime(1_100));
-    expect(popup()).toBeNull();
+    expect(cancelPrewarmSpy).toHaveBeenCalled();
+    expect(onFallback).not.toHaveBeenCalled();
   });
 });

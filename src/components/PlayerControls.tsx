@@ -20,6 +20,7 @@ import {
 } from "@/lib/subtitleStyle";
 import { useMediaSession } from "@/lib/useMediaSession";
 import { VOLUME_STORAGE_KEY } from "@/lib/rememberedVolume";
+import { usePlaybackQuality, writePlaybackQuality } from "@/lib/playbackQuality";
 import { normalizeKey } from "@/lib/remoteKeys";
 import { activeSkip, isEmptySurface, keyboardFocusWithin, surfaceAction } from "@/lib/playerSkip";
 import {
@@ -199,8 +200,6 @@ interface PlayerControlsProps {
    * navigateur et n'en ont pas l'usage.
    */
   onChromeEdges?: (edges: ChromeEdges | null) => void;
-  /** Un menu s'ouvre ou se ferme : la fenêtre d'une connexion lente ne se pose jamais dessus (§78). */
-  onMenuChange?: (open: boolean) => void;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -339,7 +338,6 @@ export function PlayerControls({
   dialogue,
   subtitleGeneration,
   onChromeEdges,
-  onMenuChange,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -462,12 +460,9 @@ export function PlayerControls({
   }, [visible, hidden, onChromeEdges]);
   // Démonté (fermeture, passage au mini-lecteur), il n'y a plus de commandes à éviter.
   useEffect(() => () => onChromeEdges?.(null), [onChromeEdges]);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "subtitleGen" | "subtitleGenOther" | "more">(null);
-  // Dit à l'hôte (§78), comme les bords des commandes ; refermé au démontage.
-  useEffect(() => {
-    onMenuChange?.(menu !== null);
-  }, [menu, onMenuChange]);
-  useEffect(() => () => onMenuChange?.(false), [onMenuChange]);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "subtitleGen" | "subtitleGenOther" | "quality" | "more">(null);
+  // « Qualité » (§78) : Automatique ou Originale, par compte et par appareil.
+  const quality = usePlaybackQuality();
   /** « Auto · 203 nits », « Natif », « 400 nits » — le réglage de luminosité HDR, en mots. */
   const hdrCapLabel = (choice: HdrCapChoice): string =>
     choice === "auto"
@@ -2058,6 +2053,15 @@ export function PlayerControls({
                   >
                     <Info size={16} /> {t('player.playbackInfo')}
                   </button>
+                  {/* « Qualité » (§78) : Automatique — la vidéo allégée prend le relais d'elle-même sur une
+                      connexion trop lente — ou Originale. Jamais de vidéo allégée à la demande. */}
+                  <button
+                    data-quality-row=""
+                    onClick={() => setMenu("quality")}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white/85 hover:bg-white/10"
+                  >
+                    <Gauge size={16} /> {t("player.quality.title")} · {quality === "original" ? t("player.quality.original") : t("player.quality.auto")}
+                  </button>
                   {hdrCap && (
                     <button
                       onClick={() => setMenu("hdrCap")}
@@ -2075,6 +2079,7 @@ export function PlayerControls({
               menu === "sleep" ||
               menu === "speed" ||
               menu === "dialogue" ||
+              menu === "quality" ||
               menu === "subtitleGen" ||
               menu === "subtitleGenOther") && (
               <button
@@ -2334,6 +2339,24 @@ export function PlayerControls({
             {/* Comme l'audio et les sous-titres : trois choix dans une liste, le courant en couleur.
                 Choisir reconstruit la lecture au même endroit (le traitement vit dans la chaîne audio)
                 et referme le menu, comme un changement de piste. */}
+            {menu === "quality" && (
+              <>
+                {(["auto", "original"] as const).map((choice) => (
+                  <button
+                    key={choice}
+                    data-quality-choice={choice}
+                    onClick={() => {
+                      if (choice !== quality) writePlaybackQuality(choice);
+                      setMenu(null);
+                    }}
+                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${quality === choice ? "text-accent-400" : "text-white"}`}
+                  >
+                    {choice === "auto" ? t("player.quality.auto") : t("player.quality.original")}
+                  </button>
+                ))}
+                <p className="border-t border-white/10 px-3 pt-2 pb-2 text-xs text-white/60">{t("player.quality.hint")}</p>
+              </>
+            )}
             {menu === "dialogue" && dialogue && (
               <>
                 {DIALOGUE_CHOICES.map(({ mode, label }) => (

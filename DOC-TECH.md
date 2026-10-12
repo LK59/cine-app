@@ -938,41 +938,54 @@ screen with its automatic retry, and the retry asks for the description again un
 (`infoAttempt`) without touching the opening position (`PlayerLifecycle.retryOpening`). A server
 answer, even an error, still goes through the usual refusal path.
 
-**A slow connection is said early, offered a lighter version, and never confused with a cut** (12/10/2026,
-DECISIONS.md §77 and §78). No figure is ever shown to the viewer — they go to the log and the technical
-panel. The rules live in one pure module, `src/lib/slowLinkPolicy.ts`, shared by both players (the
-server player measures only through hls.js; Safari's native HLS keeps the old behaviour, unchanged).
+**A slow connection is measured, pre-warmed and switched automatically — never confused with a cut**
+(12/10/2026, DECISIONS.md §77 and §78). No figure is ever shown to the viewer — they go to the log and the
+technical panel. One pure state machine (`src/lib/slowLinkPolicy.ts`: `decideOpening`, `decidePlayback`)
+decides for both players; the hosts only measure, display and execute (the existing rebuild —
+`fallToStable` natively, a renegotiation on the server player).
 
-| When | Condition (measured, `openingAdvice` / `StutterWatch`) | Shown | Choices |
-|---|---|---|---|
-| Opening | ≥ 5 s of reception, < 50 % of the stream's need | « Connexion lente… » under the loading line | — |
-| Opening | ≥ 10 s and ≥ 256 KiB, < 25 % | popup « Votre connexion semble lente » | Version allégée (qualité réduite) · Réessayer · Fermer |
-| Opening | same proofs, 25–50 %, 20 s without a picture | same popup | Version allégée · Fermer |
-| Opening | 35 s (native) / 20 s watchdog (server), slowness proven | screen « Lecture impossible : la connexion est trop lente. » | Version allégée · Réessayer · Fermer (closes the player) |
-| Seek | no picture 10 s after a seek | the opening rules, timed from the seek; the screen at 35 s if proven | same |
-| Playback | a network wait > 5 s, or the 3rd > 1 s within 3 min, with the measured link under the need | popup « Votre connexion semble lente, ce qui provoque des saccades. » (2 per session at most, 3 min apart) | Version allégée · Fermer |
-| Retries in progress | a range attempt failed and another follows (`networkTrouble.ts`), or offline | « Connexion perdue ou instable… » under the line, or under the spinner of a visible wait | none — never a lighter version for a cut; all attempts failed → the « connexion perdue » screen (Réessayer, Fermer) |
+| When | Condition (measured) | Effect |
+|---|---|---|
+| Opening | ≥ 5 s of reception, < 50 % of the stream's need | « Connexion lente… » under the loading line |
+| Opening | same, from 8 s | the lighter version is **pre-warmed** in the background (negotiation + first segment) |
+| Opening | < 25 % with proofs (10 s, 256 KiB) from 10 s, or 25–50 % at 20 s, still no picture | **switch** to the lighter version, reusing the pre-warmed transcode; brief notice « Passage en vidéo allégée en raison d'une connexion lente. » |
+| Seek | no picture 10 s after a seek | the opening rules, timed from the seek |
+| Playback | a network wait > 5 s, or the 3rd > 1 s within 3 min, measured link under the need | pre-warm at the current position, switch when ready |
+| Give-up (35 s native, 20 s server watchdog) | slowness proven, no switch possible (« Originale », not allowed, floor reached) | screen « Lecture impossible : la connexion est trop lente. » — Réessayer · Fermer |
+| Retries in progress | a range attempt failed and another follows (`networkTrouble.ts`), or offline | « Connexion perdue ou instable… »; never a pre-warm or a switch; all attempts failed → the « connexion perdue » screen (Réessayer, Fermer) |
 
-« Fermer » on a popup closes the popup only, as does Back (Escape / the remote's Back). No popup while
-the player is minimised, the page hidden, a controls menu open, on the end screen, or over an error; a
-playback popup due meanwhile shows on return if the link is still slow. A measure taken while hidden is
-never judged: an opening that went to the background restarts its measurement on return.
+A slowness measured while playback works (picture present, no visible stall) triggers nothing; an opening
+pre-warm is cancelled when the native picture arrives, and the Jellyfin transcode stopped
+(`DELETE /Videos/ActiveEncodings`, through the stop route marked `prewarm`). Measures taken while the page
+is hidden are never judged: an opening restarts its measurement on return.
 
-**The lighter version** is a Jellyfin transcode chosen by the viewer: half the measured throughput,
-1.5 Mbit/s at least, always under the file's need; each further failure halves again
-(`max(1.5, min(previous / 2, measured / 2))`) until the floor, after which only Retry/Close remain. HEVC
-(Main 8-bit, `hvc1`) when the device decodes 10-bit HEVC, otherwise H.264; SDR (tone-mapped); 720p up to
-2.5 Mbit/s in HEVC (4.5 in H.264), 1080p above, never more (`lighterMaxWidth`, a `Width` condition of the
-device profile). It needs the server player (`PLAYER_SERVER_FALLBACK`) and the account's Jellyfin policy
-allowing video transcoding (`EnableVideoPlaybackTranscoding`); otherwise the button is absent everywhere.
-The film keeps playing lighter to its end; a playback started within 2 minutes of a lighter session
-starts lighter too (`carriedLighter`, page and `sessionStorage` memory only), unless the link's capacity
-reached 110 % of the original file's need for 10 s meanwhile (`LinkRecovery`). Audio track, subtitle and
-position cross over; a subtitle generation in progress is announced briefly, bottom left, as unavailable.
+**The lighter version** is a Jellyfin transcode at half the measured throughput, 1.5 Mbit/s at least,
+always under the file's need, lowered again on each further failure
+(`max(1.5, min(previous / 2, measured / 2))`) down to the floor. HEVC (Main 8-bit, `hvc1`) when the device
+decodes 10-bit HEVC, otherwise H.264; SDR (tone-mapped); 720p up to 2.5 Mbit/s in HEVC (under 6 in
+H.264), 1080p above, never more (`lighterMaxWidth`, a `Width` condition of the device profile). The
+pre-warm (`lighterPrewarm.ts`) negotiates without announcing (`prewarm: true`) and fetches the master, the
+variant and **the** segment holding the position; the server player takes that answer as-is
+(`takePrewarm`: same `PlaySessionId`, same URLs) and starts hls.js there (`startPosition`) — verified on the
+production server: one ffmpeg for both, replayed segments in under 10 ms. Safari's native HLS asks for
+segment 0 first, which restarts ffmpeg once (~1.85 s, measured on the server; not verified on a device).
+
+It needs the server player (`PLAYER_SERVER_FALLBACK`) and the account's Jellyfin policy allowing video
+transcoding (`EnableVideoPlaybackTranscoding`); the « Qualité » setting of the ⋮ menu (Automatique /
+Originale, per account and device, `playbackQuality.ts`) turns it off. The film keeps playing lighter to
+its end; a playback started within 2 minutes of a lighter session starts lighter too (`carriedLighter`,
+page and `sessionStorage` memory only), unless the link's capacity reached 110 % of the original file's
+need for 10 s meanwhile (`LinkRecovery`). Audio track, subtitle and position cross over.
 
 A position Jellyfin did not receive (a failed heartbeat or stop) is kept on the device
 (`unsentPosition.ts`) and sent when a report gets through again or at the next launch, through the stop
 route marked `late`, which only ever advances a position (`recoverLostPosition`).
+
+**Link simulator** (admin, « Tests animations » panel, lot S): pick a film, play it in the real player
+under a hand-set throughput (0.2–50 Mbit/s), total cut or 5 s cut, with a live thread of what the player
+did. Throttling happens in the browser only (`linkSimulator.ts`: `HttpByteSource` and an hls.js loader),
+armed by that page in the current tab; elsewhere `simulatorActive()` is false and none of its branches
+run.
 
 Sent to the trace instead, because the viewer saw nothing and has nothing to do: refused segment
 retried, refused seek retried, recovery abandoned after N attempts (the remuxer's index back-off

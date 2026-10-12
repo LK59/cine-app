@@ -12,6 +12,7 @@ import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
 import { usePointerCapture } from "@/lib/usePointerCapture";
 import { catalogueTitles, cinemaFetcher } from "@/lib/cinemaPayload";
 import { PlayerIntroLot, SheetOpenLot } from "./IntroLots";
+import { LinkSimLot } from "./LinkSimLot";
 import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { tmdbResize } from "@/lib/images";
 import { isWebKitEngine } from "@/lib/webkitEngine";
@@ -92,6 +93,7 @@ const LOTS = [
   { id: "E", name: "Défilement sous verre" },
   { id: "G", name: "Lancement de la lecture" },
   { id: "H", name: "Ouverture de fiche" },
+  { id: "S", name: "Connexion simulée" },
 ] as const;
 type LotId = (typeof LOTS)[number]["id"];
 
@@ -145,6 +147,12 @@ export function AnimationLab() {
   const image = images.length > 0 ? images[((imageIndex % images.length) + images.length) % images.length] : null;
   // Les titres entiers (logo, affiche, visuel) pour les lots G et H — voir `IntroLots.tsx`.
   const titles = useMemo(() => (movies ? catalogueTitles(movies) : []), [movies]);
+  // Les films du catalogue, pour le simulateur de connexion (lot S).
+  const simMovies = useMemo(() => {
+    if (!movies) return [];
+    const seen = new Set<string>();
+    return [...movies.recentlyAdded, ...Object.values(movies.rows).flat()].filter((m) => !seen.has(m.jellyfinItemId) && !!seen.add(m.jellyfinItemId)).slice(0, 200);
+  }, [movies]);
 
   const spring = useMemo(() => toSpring(response, ratio), [response, ratio]);
   const overshoot = useMemo(() => springOvershoot(spring), [spring]);
@@ -238,6 +246,8 @@ export function AnimationLab() {
         {lot === "F" && <PlayerSimLot />}
         {lot === "G" && <PlayerIntroLot movies={titles} />}
         {lot === "H" && <SheetOpenLot movies={titles} />}
+        {/* La connexion simulée (§78) : le vrai lecteur sous un débit réglé à la main. */}
+        {lot === "S" && <LinkSimLot movies={simMovies} />}
         <div key={lot} className="grid gap-x-5 gap-y-7 sm:grid-cols-2 xl:grid-cols-3">
           {lot === "A" && GESTURES.map((g) => (
             <Card key={g.kind} title={g.name} hint={g.hint} cost="nul">

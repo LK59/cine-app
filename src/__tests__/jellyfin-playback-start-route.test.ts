@@ -285,6 +285,22 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(mockJellyfin.reportPlaybackStart).not.toHaveBeenCalled();
   });
 
+  it("n'annonce rien non plus pour un préchauffage de la version allégée (§78) — le lecteur serveur l'annoncera s'il le reprend", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "s",
+      MediaSources: [{ Id: "src-1", Container: "mp4", SupportsDirectPlay: true, SupportsDirectStream: true, MediaStreams: [{ Type: "Video", Index: 0, Codec: "h264" }] }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const res = await POST(fakeReq({ itemId: validId, prewarm: true, lighter: true, maxBitrate: 1_500_000 }));
+    expect(res.status).toBe(200);
+    expect(mockJellyfin.reportPlaybackStart).not.toHaveBeenCalled();
+    // Le profil de la version allégée : SDR et une largeur maximale.
+    const profile = JSON.stringify(mockJellyfin.getPlaybackInfo.mock.calls.at(-1));
+    expect(profile).toContain('"Property":"Width"');
+    expect(profile).toContain('"Value":"SDR"');
+  });
+
   it("labels playMethod Transcode when the source's own video codec isn't in the accepted VideoCodec list — a real re-encode, regardless of the reason text", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
     mockJellyfin.getPlaybackInfo.mockResolvedValue({

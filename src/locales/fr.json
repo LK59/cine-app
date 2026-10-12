@@ -1617,12 +1617,10 @@
     "loadingTooLong": "Le chargement prend trop de temps. Réessaie.",
     "slowLink": {
       "hint": "Connexion lente…",
-      "popup": "Votre connexion semble lente",
-      "popupStutter": "Votre connexion semble lente, ce qui provoque des saccades.",
       "failed": "Lecture impossible : la connexion est trop lente.",
-      "lighter": "Version allégée (qualité réduite)",
       "unstable": "Connexion perdue ou instable…",
-      "subtitlesGenerating": "Sous-titres en cours de génération : indisponibles dans la version allégée. Ils le seront une fois la génération terminée."
+      "subtitlesGenerating": "Sous-titres en cours de génération : indisponibles dans la version allégée. Ils le seront une fois la génération terminée.",
+      "switched": "Passage en vidéo allégée en raison d'une connexion lente."
     },
     "unsupportedBrowser": "Ce navigateur ne peut pas lire ce flux.",
     "playbackInterruptedCheckConnection": "La lecture a été interrompue. Vérifie ta connexion et réessaie.",
@@ -1639,8 +1637,6 @@
       "linkSlow": "trop lente",
       "linkUnknown": "pas encore mesurée",
       "linkFrozen": "mesurée au moment de l'échec",
-      "linkLighter": "Version allégée",
-      "linkLighterValue": "palier {tier} · {rate}",
       "reason": "Raison",
       "container": "Conteneur",
       "video": "Vidéo",
@@ -1700,7 +1696,9 @@
         "remuxDetail": "décodage matériel, HDR natif",
         "pendingName": "En cours d'examen",
         "pendingDetail": "le fichier n'a pas encore parlé"
-      }
+      },
+      "linkLighter": "Vidéo allégée",
+      "linkLighterValue": "palier {tier} · {rate}"
     },
     "experimental": {
       "title": "Le lecteur expérimental n'a pas pu lire ce fichier",
@@ -2095,7 +2093,13 @@
     "audio": "Audio",
     "subtitles": "Sous-titres",
     "fullscreen": "Plein écran",
-    "mute": "Couper ou rétablir le son"
+    "mute": "Couper ou rétablir le son",
+    "quality": {
+      "title": "Qualité",
+      "auto": "Automatique",
+      "original": "Originale",
+      "hint": "Automatique : sur une connexion trop lente, la vidéo passe d'elle-même en version allégée."
+    }
   },
   "cinema": {
     "fileMissing": "Fichier introuvable",
@@ -2731,7 +2735,7 @@
       "HOME_CONTINUE_HERO": "Afficher les reprises dans la bannière d'accueil",
       "NEW_ACCOUNT_BLOCKED_TAGS": "Tags bloqués des nouveaux comptes (séparés par des virgules)",
       "VAPID_SUBJECT": "Contact des notifications (mailto:…)",
-      "TRUSTED_PROXIES": "Relais de confiance (noms de conteneur ou adresses)",
+      "TRUSTED_PROXIES": "Relais de confiance",
       "TZ": "Fuseau horaire",
       "MEDIA_ROOT": "Dossier des médias (statistiques de stockage)",
       "APP_ADMIN_USER": "Compte administrateur défini dans le .env",
@@ -2739,7 +2743,6 @@
       "MEDIA_PATHS": "Sous-dossiers de la bibliothèque",
       "CLARA_GALLERY": "Galerie de photos",
       "POSTER_PREWARM_TUNING": "Tailles et langues des affiches préparées",
-      "TRUSTED_PROXIES": "Relais de confiance",
       "RADARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
       "SONARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
       "SUBTITLE_GEN_ENABLED": "Proposer la génération de sous-titres",

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useMemo } from "react";
 import { PLAYBACK_CLIENTS, type PlaybackClient } from "@/lib/playbackClients";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { noteMaintenanceState } from "@/lib/useMaintenance";
-import { clearUnsentPosition, flushUnsentPositions, saveUnsentPosition } from "@/lib/unsentPosition";
+import { clearUnsentPosition, flushUnsentPositions, saveUnsentPosition, unsentPositionsPending } from "@/lib/unsentPosition";
 
 interface PlaybackSessionInfo {
   itemId: string;
@@ -55,7 +55,7 @@ function report(
       // ancienne, s'efface, et ce qui attendait pour d'autres titres part derrière.
       if (res.status >= 500) {
         saveUnsentPosition(info.itemId, positionTicks / TICKS_PER_SECOND);
-      } else if (res.ok) {
+      } else if (res.ok && unsentPositionsPending()) {
         clearUnsentPosition(info.itemId);
         void flushUnsentPositions(Date.now(), info.itemId);
       }

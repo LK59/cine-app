@@ -261,6 +261,19 @@ export const jellyfin = {
       }),
     }),
 
+  /**
+   * Arrête un transcodage par son appareil et sa séance (`DELETE /Videos/ActiveEncodings`) — le
+   * préchauffage abandonné d'une version allégée (DECISIONS.md §78). Vérifié sur la prod le 12/10/2026 :
+   * 204, et plus aucun ffmpeg.
+   */
+  stopTranscode: async (deviceId: string, playSessionId: string) => {
+    const res = await fetch(
+      `${cfg.url}/Videos/ActiveEncodings?DeviceId=${encodeURIComponent(deviceId)}&PlaySessionId=${encodeURIComponent(playSessionId)}`,
+      { method: "DELETE", headers: { ...jellyfinAuthHeaders(cfg.apiKey), ...(await forwardedFor()) }, signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) throw new Error(`ActiveEncodings ${res.status}`);
+  },
+
   reportPlaybackStart: async (
     userId: string,
     itemId: string,
