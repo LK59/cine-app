@@ -2806,7 +2806,8 @@ préfixe. OpenAI et Gemini : leur cache implicite des préfixes identiques, rien
 tout le film — qui parle, tu ou vous, les renvois — pour un coût moindre que des lots isolés. Le
 glossaire, produit à la préparation, est **figé** dès qu'il existe : le changer casserait le préfixe.
 Les requêtes d'une même tâche partent **en série** (un cache ne se relit qu'une fois la première
-réponse commencée) ; la concurrence (3 requêtes) est entre tâches. Seule exception : le premier petit
+réponse commencée) ; la concurrence (3 requêtes) est entre tâches. Deux exceptions. Le **lot de saut**
+(ci-dessous). Et le premier petit
 lot part pendant la préparation du glossaire, pour afficher vite — la tâche quitte `busy` dès que ses
 lignes source sont en base et son statut `running` ; les lots suivants attendent le glossaire
 (`awaitingGlossary`). Jusqu'au 12/10/2026, elle restait `busy` pendant tout le glossaire, et
@@ -2818,7 +2819,33 @@ réécrire le cache : accepté, ni TTL d'une heure ni maintien en vie.
 dernières secondes ; on traduit depuis sa position moins 10 s, à tour de rôle s'ils sont plusieurs,
 tant qu'il a moins de cinq minutes d'avance ; puis devant eux jusqu'au bout, puis le début. Premier
 lot de 8 répliques (et pour un spectateur qui attend), 40 ensuite. Un saut : la position la plus
-récente fait foi, la requête en cours n'est pas annulée. Rien n'est retraduit : une ligne faite ou en
+récente fait foi, la requête en cours n'est pas annulée.
+
+**Le lot de saut** (`settleSeek`, `seekLane` dans `engine.ts`, `seekBatch` dans `scheduler.ts` ;
+décidé le 12/10/2026). Mesuré en prod (8.43.1) : un saut dans une zone non traduite était couvert en
+**6,1 s**, parce que le lot de 40 déjà en cours devait finir avant que la zone du saut passe en tête.
+Désormais, quand la position d'un spectateur actif saute vers une zone dont la réplique à
+position − 10 s n'est ni faite ni en vol, un lot de **8 répliques** part tout de suite à cette
+position, **en parallèle** du lot en cours — seule exception à « une requête à la fois par tâche »
+avec le premier lot. Même préfixe stable (consignes, glossaire figé, texte source complet) : le cache
+est déjà écrit à ce stade et se relit à 0,1× — qualité identique, ~0,0003 $. Glossaire pas encore
+figé : même règle que le premier lot (il part sans). Flux, validation, détecteur de décalage, casse :
+le même `translateIds`. Ses répliques sont marquées en vol ; le lot en cours n'est pas annulé, et le
+lot ordinaire suivant repart de la position du spectateur, après elles. Bornes : **au plus un lot de
+saut en vol par tâche** ; un saut pendant qu'il vole attend sa place (`seekPending`), et un saut plus
+récent remplace celui qui attendait — pas de file. **Anti-rafale** : la position doit rester stable
+**1 s** (`SEEK_SETTLE_MS`) ; chaque nouveau geste (écart de plus de 5 s, mesuré contre la lecture
+*et* contre la pause, pour qu'un spectateur en pause ne passe pas pour un saut) relance l'attente —
+des appuis sur +10 s répétés ou un défilement de la barre ne déclenchent qu'un lot, à la position
+finale. Un saut vers une zone faite ou en vol ne déclenche rien. **Concurrence** : le lot de saut
+compte dans `running` et peut porter le total à `MAX_CONCURRENT + 1`, jamais au-delà ; s'il n'a pas
+cette place, il attend **en tête de file** (`pump` lance les lots de saut avant tout lot ordinaire).
+Choisi plutôt que de passer devant seulement : attendre qu'une requête d'une autre tâche finisse
+remettrait l'attente qu'on supprime. Coût compté comme tout lot (`bill`). Journal : `seek` (une ligne
+par rafale, au-delà de 30 s ou quand un lot part) porte `fastLane`, `jumps`, `queued` ou `why`
+(`done`, `inflight`, `busy`, `retry-wait`…) ; `seekFirst` porte `seekToFirstMs`, du dernier geste
+reçu à la première réplique écrite dans la zone (provisoire en flux comprise), et `fastLane` dit si
+c'est le lot de saut qui l'a écrite. Rien n'est retraduit : une ligne faite ou en
 vol n'est jamais choisie, et l'écriture en base ne remplit que les lignes vides. Sans spectateur, la
 tâche va au bout. Une tâche par (fichier, langue), partagée entre comptes.
 
@@ -2931,7 +2958,9 @@ dessine lui-même son entrée « génération… » à partir de `/options` et `
 Tests : `subtitleGen-source.test.ts`, `subtitleGen-scheduler.test.ts`, `subtitleGen-validate.test.ts`
 (format lignes, phrase parasite, ` / `, décalage sur les lots réels, casse),
 `subtitleGen-pricing.test.ts`, `subtitleGen-engine.test.ts` (tâche complète, préfixe identique après
-un saut, requêtes en série, premier lot pendant le glossaire, lignes en flux puis validées, lot refusé
+un saut, requêtes en série, lot de saut en parallèle sans doublon ni coût oublié, un seul lot de saut
+à la fois et le dernier saut l'emporte, rafale de 5 sauts à 300 ms → un lot à la dernière position
+1 s après, saut en zone faite ou en vol → rien, premier lot pendant le glossaire, lignes en flux puis validées, lot refusé
 remplacé, casse, reprise après redémarrage, pauses 429/crédit/clé/budget, refus, quota,
 présentation simulée, repli `data/`, suppression seulement du nôtre, clé jamais sortie),
 `subtitleGen-routes.test.ts`, `subtitleGen-proxy.test.ts`, `trackLabel.test.ts`,

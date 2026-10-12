@@ -774,7 +774,13 @@ playback, by an online AI (DECISIONS.md §69). Server side: `src/lib/subtitleGen
   translation upper-cased by code, with the target language's rules; other cues are left as the model
   wrote them. Anthropic gets an explicit cache breakpoint on the last prefix block; OpenAI and
   Gemini cache identical prefixes on their own. Requests of one job are sequential; at most three
-  run at once across jobs.
+  run at once across jobs. One exception: the **seek batch**. When a viewer's position jumps into a
+  zone whose cue at position − 10 s is neither done nor in flight, and has stayed there for 1 s
+  (each new jump restarts the wait, so repeated +10 s presses or scrubbing trigger one batch at the
+  final position), 8 cues are requested at once beside the job's running batch, with the same
+  prefix (already cached). At most one per job; a later jump replaces one waiting for its turn. It
+  may take the total to four requests, never more, and otherwise goes first in line. Before it, a
+  jump into an untranslated zone took 6.1 s to be covered in production.
 - **Priority.** Viewers who polled in the last 30 s come first, from their position minus 10 s,
   until they have five minutes translated ahead; then ahead of them, then the beginning.
 - **Delivery.** The player polls `/api/subtitle-gen/jobs/<id>/poll` about every 2 s with the last
@@ -785,7 +791,8 @@ playback, by an online AI (DECISIONS.md §69). Server side: `src/lib/subtitleGen
 - **Cost and limits.** Tokens are billed by category (input, cache write, cache read, output) from a
   per-model price table; a monthly budget and 50 new generations per account per day bound the spend.
 - **Log.** `data/logs/subtitle-gen.log`: `start`, `source`, `first` (click-to-first-line and
-  request-to-first-line delays), `seek`, `batch` (periodic
+  request-to-first-line delays), `seek` (`fastLane`, `jumps`), `seekFirst` (`seekToFirstMs`, from
+  the last jump to the first cue written in its zone), `batch` (periodic
   summary), `retry` (with the cause of a rejected batch, e.g. `drift`), `pause`, `refusal`, `kept`,
   `done` (tokens, output tokens per cue, cache read rate, cost, duration),
   `present`, `cleanup`. Never the key, never subtitle text.

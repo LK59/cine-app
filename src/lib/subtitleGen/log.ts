@@ -5,7 +5,7 @@ import { LOG_DIR, appendJsonLine } from "@/lib/logFile";
  * `data/logs/subtitle-gen.log` — une ligne JSON par événement, tourné à 5 Mo comme les autres
  * (`logFile.ts`), lu par le panneau Activité (source `subtitleGen`).
  *
- * `start`, `first`, `seek`, `batch` (résumé périodique, pas une ligne par lot), `retry`, `pause`,
+ * `start`, `first`, `seek` (avec `fastLane`), `seekFirst` (`seekToFirstMs`), `batch` (résumé périodique, pas une ligne par lot), `retry`, `pause`,
  * `refusal`, `kept`, `source`, `done`, `present`, `cleanup`. **Jamais la clé, jamais le texte des
  * sous-titres** : ce journal se lit à plusieurs, et un sous-titre est l'œuvre de quelqu'un d'autre.
  * Les champs qui pourraient en porter sont retirés ici, quoi que l'appelant passe.

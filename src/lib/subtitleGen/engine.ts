@@ -5,7 +5,7 @@ import { genAvailable, genSettings, providerFor, ProviderError, type GenSettings
 import { GLOSSARY_SCHEMA, GLOSSARY_USER, batchSystem, batchUser, glossarySystem, parseGlossary, sourceBlock, stablePrefix, type Glossary } from "./prompts";
 import { LineSplitter, maxLinesFor, parseReply, parseReplyLine, validateBatch } from "./validate";
 import { matchSourceCase } from "./textCase";
-import { nextBatch, activeViewers, type Plan, type Viewer } from "./scheduler";
+import { nextBatch, activeViewers, anchorIndex, seekBatch, type Plan, type Viewer } from "./scheduler";
 import { cuesDb, jobsDb, sameFile, spendDb, type JobRow } from "./store";
 import { fetchSourceCues, isFullTrack, sourceHash, type SourceCandidate } from "./source";
 import { readFinal, writeFinal } from "./files";
@@ -21,8 +21,11 @@ import { twoLetter } from "./languages";
  *   et **une seule par tâche** : chaque requête d'une tâche relit le même préfixe en cache (consignes,
  *   glossaire, texte source complet), et un cache n'est lisible qu'une fois la première réponse
  *   commencée ; deux requêtes parallèles sur le même préfixe paieraient chacune l'écriture. Seule
- *   exception : le premier lot part pendant la préparation du glossaire, pour afficher vite ; les
- *   suivants attendent le glossaire, qui est ensuite figé (le changer casserait le préfixe).
+ *   exceptions : le premier lot part pendant la préparation du glossaire, pour afficher vite ; les
+ *   suivants attendent le glossaire, qui est ensuite figé (le changer casserait le préfixe). Et le
+ *   **lot de saut** (`settleSeek`) : 8 répliques à la position d'un spectateur qui vient de sauter
+ *   dans une zone vide, en parallèle du lot en cours — le cache est déjà écrit à ce stade, il relit
+ *   le même préfixe à 0,1×. Au plus un par tâche ; il peut porter le total à `MAX_CONCURRENT + 1`.
  * - **Priorité aux spectateurs** : `nextBatch` (scheduler.ts) choisit le passage ; entre tâches,
  *   celle dont un spectateur manque d'avance passe d'abord.
  * - **En flux** : chaque ligne `id|traduction` est écrite dès qu'elle arrive, **provisoire** tant
@@ -46,6 +49,20 @@ const PRESENT_DELAYS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
 const PRESENT_REFRESH_AFTER = 5 * 60_000;
 const PRESENT_GIVE_UP_AFTER = 45 * 60_000;
 const BATCH_LOG_EVERY = 60_000;
+/**
+ * Un saut ne déclenche son lot qu'une fois la position stable une seconde : le lecteur sonde à chaque
+ * saut (`noteSeek`, generation.ts), et des appuis répétés sur +10 s ou un défilement de la barre en
+ * enverraient un par geste. Chaque nouveau saut relance l'attente ; seule la position finale compte.
+ */
+let SEEK_SETTLE_MS = 1_000;
+/**
+ * Un écart plus grand que celui-ci est un geste du spectateur — +10 s compris —, pas le bruit du
+ * sondage. Mesuré contre les deux hypothèses (lecture en cours, pause) : en pause la position ne bouge
+ * pas, et l'écart à la position « attendue » grandirait de tout l'intervalle de sondage (10 s).
+ */
+const SEEK_NOISE_S = 5;
+/** Au-delà, la rafale est un saut au sens du journal : le seuil qu'avait la ligne `seek` avant le lot de saut. */
+const SEEK_LOG_S = 30;
 
 interface JobCues {
   starts: number[];
@@ -79,8 +96,16 @@ interface EngineState {
   transient: Map<string, { attempt: number; until: number }>;
   stats: Map<string, Stats>;
   lastPlanViewer: Map<string, string>;
-  /** Tâches dont le glossaire est en cours : seul le premier lot peut partir sans lui. */
+  /** Tâches dont le glossaire est en cours : seul le premier lot (et un lot de saut) peut partir sans lui. */
   awaitingGlossary: Set<string>;
+  /** Tâches dont un lot de saut est en vol — au plus un par tâche. */
+  seekLanes: Set<string>;
+  /** Le saut qui attend son lot (un autre en vol, ou la concurrence pleine) : le dernier l'emporte. */
+  seekPending: Map<string, SeekIntent>;
+  /** La rafale de sauts en cours de chaque spectateur (`tâche\0spectateur`), jusqu'à une seconde de calme. */
+  seekBursts: Map<string, SeekBurst>;
+  /** La zone d'un lot de saut décidé, jusqu'à sa première ligne écrite (`seekFirst`). */
+  seekWatch: Map<string, { at: number; from: number; to: number }>;
   rr: number;
   started: boolean;
   timers: Set<ReturnType<typeof setTimeout>>;
@@ -104,6 +129,10 @@ function freshState(): EngineState {
     stats: new Map(),
     lastPlanViewer: new Map(),
     awaitingGlossary: new Set(),
+    seekLanes: new Set(),
+    seekPending: new Map(),
+    seekBursts: new Map(),
+    seekWatch: new Map(),
     rr: 0,
     started: false,
     timers: new Set(),
@@ -154,8 +183,8 @@ function loadCues(jobId: string): JobCues {
 // ─── Spectateurs ──────────────────────────────────────────────────────────────
 
 /**
- * Un sondage du lecteur : la position la plus récente fait foi. Un saut (écart de plus de 30 s
- * avec la position attendue) est journalisé, rien de plus — la requête en cours n'est pas annulée.
+ * Un sondage du lecteur : la position la plus récente fait foi. Un saut ne fait jamais annuler la
+ * requête en cours ; une fois la position stable, il peut faire partir un lot de saut (`settleSeek`).
  */
 export function noteViewer(jobId: string, key: string, position: number | undefined, now = Date.now()): void {
   if (typeof position !== "number" || !Number.isFinite(position) || position < 0) return;
@@ -165,11 +194,105 @@ export function noteViewer(jobId: string, key: string, position: number | undefi
   const before = viewers.get(key);
   if (before) {
     const expected = before.position + (now - before.seenAt) / 1000;
-    if (Math.abs(position - expected) > 30) logGen("seek", { job: jobId, from: Math.round(before.position), to: Math.round(position) });
+    const jump = Math.min(Math.abs(position - expected), Math.abs(position - before.position));
+    if (jump > SEEK_NOISE_S) noteSeek(jobId, key, before.position, position, now);
   }
   viewers.set(key, { key, position, seenAt: now });
   jobsDb.update(jobId, { last_position: position });
   kick();
+}
+
+interface SeekIntent {
+  viewer: string;
+  /** Quand le saut a été reçu : le départ de `seekToFirstMs`. */
+  at: number;
+  from: number;
+  to: number;
+}
+
+interface SeekBurst {
+  /** La position d'avant le premier geste de la rafale. */
+  from: number;
+  to: number;
+  /** Le dernier geste reçu : l'attente d'une seconde court de là, et `seekToFirstMs` aussi. */
+  at: number;
+  jumps: number;
+  seq: number;
+}
+
+function noteSeek(jobId: string, viewer: string, from: number, to: number, at: number): void {
+  const s = S();
+  const k = `${jobId}\u0000${viewer}`;
+  const burst = s.seekBursts.get(k) ?? { from, to, at, jumps: 0, seq: 0 };
+  burst.to = to;
+  burst.at = at;
+  burst.jumps++;
+  const seq = ++burst.seq;
+  s.seekBursts.set(k, burst);
+  later(SEEK_SETTLE_MS, () => settleSeek(jobId, viewer, seq));
+}
+
+/**
+ * Le saut, une fois la position stable : la ligne `seek` du journal, et le lot de saut s'il le faut.
+ * Mesuré en prod (8.43.1, 12/10/2026) : un saut dans une zone non traduite était couvert en 6,1 s —
+ * le lot de 40 en cours devait finir avant que la zone du saut passe en tête, une requête à la fois
+ * par tâche. Le lot de saut part à côté de lui, sans l'annuler (ses lignes serviront).
+ */
+function settleSeek(jobId: string, viewer: string, seq: number): void {
+  const s = S();
+  const k = `${jobId}\u0000${viewer}`;
+  const burst = s.seekBursts.get(k);
+  // Un geste plus récent a relancé l'attente : c'est son minuteur qui décidera.
+  if (!burst || burst.seq !== seq) return;
+  s.seekBursts.delete(k);
+  // Le dernier saut l'emporte : celui qui attendait sa place est oublié, celui-ci décide.
+  s.seekPending.delete(jobId);
+  const outcome = seekLane(jobId, { viewer, at: burst.at, from: burst.from, to: burst.to });
+  const fastLane = outcome === "launched" || outcome === "queued";
+  // Pas de lot pour ce saut : la zone d'un saut précédent ne doit plus être mesurée en son nom.
+  if (!fastLane) s.seekWatch.delete(jobId);
+  // Deux appuis sur +10 s vers une zone faite ne sont pas un saut pour le journal ; un lot parti, si.
+  if (!fastLane && Math.abs(burst.to - burst.from) <= SEEK_LOG_S) return;
+  logGen("seek", {
+    job: jobId,
+    from: Math.round(burst.from),
+    to: Math.round(burst.to),
+    jumps: burst.jumps,
+    fastLane,
+    ...(outcome === "queued" ? { queued: true } : fastLane ? {} : { why: outcome }),
+  });
+}
+
+/**
+ * Lancer le lot de saut de cette tâche, le mettre en attente, ou dire pourquoi il n'a pas lieu :
+ * `done` (la zone est faite), `inflight` (un lot la porte déjà), `end`, `busy`, `retry-wait`,
+ * `not-running`. La position relue est la plus récente du spectateur, pas celle du saut.
+ */
+function seekLane(jobId: string, intent: SeekIntent, now = Date.now()): "launched" | "queued" | string {
+  const s = S();
+  const job = jobsDb.get(jobId);
+  if (!job || job.status !== "running" || job.total === 0) return "not-running";
+  if (s.busy.has(jobId)) return "busy";
+  const wait = s.transient.get(jobId);
+  if (wait && wait.until > now) return "retry-wait";
+  const cues = loadCues(jobId);
+  const inflight = s.inflight.get(jobId) ?? new Set<number>();
+  const position = s.viewers.get(jobId)?.get(intent.viewer)?.position ?? intent.to;
+  const plan = seekBatch({ starts: cues.starts, ends: cues.ends, done: cues.done, inflight }, position);
+  if (!plan) {
+    const anchor = anchorIndex(cues.starts, cues.ends, position);
+    return anchor >= cues.starts.length ? "end" : cues.done[anchor] ? "done" : "inflight";
+  }
+  s.seekWatch.set(jobId, { at: intent.at, from: plan.from, to: plan.from + plan.count });
+  // Un seul lot de saut par tâche, et un seul au-delà de la concurrence : sinon il attend, en tête de
+  // file (`pump` le lance avant tout lot ordinaire) — et un saut plus récent le remplace.
+  if (s.seekLanes.has(jobId) || s.running >= MAX_CONCURRENT + 1) {
+    s.seekPending.set(jobId, intent);
+    return "queued";
+  }
+  s.seekPending.delete(jobId);
+  void track(runBatch(job, plan, true));
+  return "launched";
 }
 
 export function viewersOf(jobId: string, now = Date.now()): Viewer[] {
@@ -260,6 +383,12 @@ export function kick(): void {
 
 function pump(): void {
   const s = S();
+  // Les lots de saut en attente d'abord : ils passent devant la file (et peuvent la dépasser d'un).
+  for (const [jobId, intent] of [...s.seekPending]) {
+    if (s.seekLanes.has(jobId) || s.running >= MAX_CONCURRENT + 1) continue;
+    s.seekPending.delete(jobId);
+    seekLane(jobId, intent);
+  }
   while (s.running < MAX_CONCURRENT) {
     const choice = choose();
     if (!choice) return;
@@ -318,17 +447,23 @@ class Transient extends Error {
 }
 class Stop extends Error {}
 
-async function runBatch(job: JobRow, plan: Plan): Promise<void> {
+/**
+ * Un lot. `seekLane` : le lot de saut, compté à part de `batchCounts` — le lot ordinaire de la tâche
+ * continue (et le suivant repart de la position du spectateur, après les lignes du lot de saut,
+ * marquées en vol comme les autres).
+ */
+async function runBatch(job: JobRow, plan: Plan, seekLane = false): Promise<void> {
   const s = S();
   const ids = Array.from({ length: plan.count }, (_, i) => plan.from + i);
   let inflight = s.inflight.get(job.id);
   if (!inflight) s.inflight.set(job.id, (inflight = new Set()));
   for (const i of ids) inflight.add(i);
-  batchCounts.set(job.id, countBatches(job.id) + 1);
+  if (seekLane) s.seekLanes.add(job.id);
+  else batchCounts.set(job.id, countBatches(job.id) + 1);
   s.running++;
   if (plan.viewer && s.lastPlanViewer.get(job.id) !== `${plan.viewer}:${plan.from}`) s.lastPlanViewer.set(job.id, `${plan.viewer}:${plan.from}`);
   try {
-    await translateIds(job, ids, 0);
+    await translateIds(job, ids, 0, seekLane);
     s.transient.delete(job.id);
   } catch (error) {
     if (error instanceof Transient) {
@@ -348,7 +483,8 @@ async function runBatch(job: JobRow, plan: Plan): Promise<void> {
     }
   } finally {
     for (const i of ids) inflight.delete(i);
-    batchCounts.set(job.id, Math.max(0, countBatches(job.id) - 1));
+    if (seekLane) s.seekLanes.delete(job.id);
+    else batchCounts.set(job.id, Math.max(0, countBatches(job.id) - 1));
     s.running--;
     flushStats(job.id);
     const fresh = jobsDb.get(job.id);
@@ -362,7 +498,7 @@ async function runBatch(job: JobRow, plan: Plan): Promise<void> {
  * source. Les erreurs passagères et de configuration remontent ; les refus et réponses invalides
  * se règlent ici.
  */
-async function translateIds(job: JobRow, ids: number[], tries: number): Promise<void> {
+async function translateIds(job: JobRow, ids: number[], tries: number, seekLane = false): Promise<void> {
   const cues = loadCues(job.id);
   const open = ids.filter((i) => !cues.done[i]);
   if (open.length === 0) return;
@@ -397,6 +533,7 @@ async function translateIds(job: JobRow, ids: number[], tries: number): Promise<
     if (cuesDb.writeProvisional(job.id, [{ idx: parsed.i, text }]) > 0) {
       streamed.add(parsed.i);
       noteFirst(job.id, 1, startedAt, true);
+      noteSeekFirst(job.id, [parsed.i], startedAt, true, seekLane);
     }
   });
 
@@ -445,25 +582,25 @@ async function translateIds(job: JobRow, ids: number[], tries: number): Promise<
   }
 
   if (verdict?.ok) {
-    record(job, open.map((id) => ({ idx: id, text: matchSourceCase(cues.sources[id], verdict.texts.get(id)!, job.target), kept: false })), startedAt);
+    record(job, open.map((id) => ({ idx: id, text: matchSourceCase(cues.sources[id], verdict.texts.get(id)!, job.target), kept: false })), startedAt, seekLane);
     return;
   }
   // Un lot refusé se dit — le décalage surtout, qui passait inaperçu avant le détecteur.
   if (problem !== "refusal") logGen("retry", { job: job.id, cause: problem, attempt: tries + 1, count: open.length, streamed: streamed.size });
-  if (tries < 1 && problem !== "refusal") return translateIds(job, open, tries + 1);
+  if (tries < 1 && problem !== "refusal") return translateIds(job, open, tries + 1, seekLane);
   if (open.length > 1) {
     const half = Math.ceil(open.length / 2);
-    await translateIds(job, open.slice(0, half), 0);
-    await translateIds(job, open.slice(half), 0);
+    await translateIds(job, open.slice(0, half), 0, seekLane);
+    await translateIds(job, open.slice(half), 0, seekLane);
     return;
   }
   // Une ligne qui résiste à tout garde son texte d'origine : mieux vaut une réplique dans la langue
   // du film qu'un trou — et le journal le dit.
   logGen("kept", { job: job.id, index: open[0], why: problem });
-  record(job, [{ idx: open[0], text: cues.sources[open[0]], kept: true }]);
+  record(job, [{ idx: open[0], text: cues.sources[open[0]], kept: true }], Date.now(), seekLane);
 }
 
-function record(job: JobRow, entries: { idx: number; text: string; kept: boolean }[], startedAt = Date.now()): void {
+function record(job: JobRow, entries: { idx: number; text: string; kept: boolean }[], startedAt = Date.now(), seekLane = false): void {
   const cues = loadCues(job.id);
   const { written } = cuesDb.write(job.id, entries);
   for (const e of entries) {
@@ -474,6 +611,21 @@ function record(job: JobRow, entries: { idx: number; text: string; kept: boolean
   st.batches++;
   st.lines += written;
   noteFirst(job.id, written, startedAt, false);
+  if (written > 0) noteSeekFirst(job.id, entries.map((e) => e.idx), startedAt, false, seekLane);
+}
+
+/**
+ * La première ligne écrite dans la zone d'un lot de saut décidé : `seekToFirstMs` va du saut reçu à
+ * l'écriture — le pendant de `first` pour un saut, à comparer aux 6,1 s d'avant le lot de saut.
+ * `fastLane` dit qui l'a écrite (un lot ordinaire peut gagner, si le lot de saut attendait sa place).
+ */
+function noteSeekFirst(jobId: string, idxs: number[], startedAt: number, streamed: boolean, seekLane: boolean): void {
+  const s = S();
+  const watch = s.seekWatch.get(jobId);
+  if (!watch || !idxs.some((i) => i >= watch.from && i < watch.to)) return;
+  s.seekWatch.delete(jobId);
+  const now = Date.now();
+  logGen("seekFirst", { job: jobId, seekToFirstMs: now - watch.at, requestToFirstMs: now - startedAt, streamed, fastLane: seekLane });
 }
 
 /**
@@ -648,6 +800,8 @@ async function finish(job: JobRow): Promise<void> {
   });
   S().cues.delete(job.id);
   S().viewers.delete(job.id);
+  S().seekPending.delete(job.id);
+  S().seekWatch.delete(job.id);
   void track(presentTick());
 }
 
@@ -850,6 +1004,11 @@ export function resetEngineForTests(): void {
 /** Les attentes entre essais passagers, raccourcies par les tests. */
 export function setTransientDelaysForTests(delays: number[] | null): void {
   TRANSIENT_DELAYS = delays ?? [2_000, 5_000, 15_000, 30_000];
+}
+
+/** L'attente de stabilité d'un saut, raccourcie par les tests (`null` : 1 s). */
+export function setSeekSettleForTests(ms: number | null): void {
+  SEEK_SETTLE_MS = ms ?? 1_000;
 }
 
 /** Reste-t-il du travail en vol ou programmé ? Pour les tests. */

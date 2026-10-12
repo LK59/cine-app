@@ -27,7 +27,7 @@ vi.mock("@/lib/clients/jellyfin", () => ({
 
 import { getDb } from "@/lib/db";
 import { setProviderFactoryForTests, ProviderError, type TranslationCall, type TranslationReply } from "@/lib/subtitleGen/providers";
-import { cleanupPresented, engineBusy, noteViewer, presentTick, resetEngineForTests, setTransientDelaysForTests, startEngine, startForTests, whenIdle } from "@/lib/subtitleGen/engine";
+import { cleanupPresented, engineBusy, noteViewer, presentTick, resetEngineForTests, setSeekSettleForTests, setTransientDelaysForTests, startEngine, startForTests, whenIdle } from "@/lib/subtitleGen/engine";
 import { adminSummary, createOrJoin, genOptions, pollJob, resume } from "@/lib/subtitleGen/service";
 import { cuesDb, jobsDb, quotaDb } from "@/lib/subtitleGen/store";
 import { sourceHash } from "@/lib/subtitleGen/source";
@@ -153,6 +153,7 @@ beforeEach(() => {
   resetEngineForTests();
   startForTests();
   setTransientDelaysForTests([0, 0, 0, 0]);
+  setSeekSettleForTests(null);
   const db = getDb();
   db.exec("DELETE FROM subtitle_gen_jobs; DELETE FROM subtitle_gen_cues; DELETE FROM subtitle_gen_spend; DELETE FROM subtitle_gen_quota;");
   streams = baseStreams();
@@ -601,4 +602,148 @@ describe("la présentation à Jellyfin", () => {
 it("écrit dans un dossier jetable", () => {
   expect(env.dir.startsWith(os.tmpdir())).toBe(true);
   expect(fs.existsSync(path.join(env.dir, "cine.db"))).toBe(true);
+});
+
+describe("le lot de saut", () => {
+  // Mesuré en prod le 12/10/2026 (8.43.1) : un saut dans une zone non traduite couvert en 6,1 s, le
+  // lot de 40 en cours devant finir d'abord. Le lot de saut part à côté de lui.
+  const logLines = () => logText().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const until = async (cond: () => boolean) => {
+    for (let k = 0; k < 400 && !cond(); k++) await new Promise((r) => setTimeout(r, 5));
+    expect(cond()).toBe(true);
+  };
+  const batchStarting = (i: number) => batchCalls().filter((c) => idsOf(c)[0] === i);
+
+  /**
+   * Une tâche partie à 100 s (premier lot 4-11, fait) dont le lot ordinaire suivant (12-51) reste en
+   * vol jusqu'à `release(12)` ; `holdFirstIds` retient aussi les lots qui commencent par ces ids.
+   */
+  async function jobWithHeldBatch(holdFirstIds: number[] = []) {
+    const releases = new Map<number, () => void>();
+    const held = new Map<number, Promise<void>>();
+    for (const i of [12, ...holdFirstIds]) held.set(i, new Promise<void>((r) => releases.set(i, r)));
+    behavior = async (call) => {
+      if (call.schemaName === "subtitle_batch") {
+        const wait = held.get(idsOf(call)[0]);
+        if (wait) await wait;
+      }
+      return translateAll(call);
+    };
+    const created = await createOrJoin(caller, { itemId: ITEM, target: "fr", position: 100 }, "emma:s1");
+    if (!created.ok) throw new Error("refus");
+    await until(() => batchStarting(12).length === 1);
+    return { jobId: created.jobId, release: (i: number) => releases.get(i)!() };
+  }
+
+  it("part tout de suite, en parallèle du lot en cours, au même préfixe, sans rien traduire deux fois", async () => {
+    setSeekSettleForTests(20);
+    const { jobId, release } = await jobWithHeldBatch();
+    noteViewer(jobId, "emma:s1", 2000);
+    // 2000 s − 10 s → réplique 80 ; 8 répliques, pendant que 12-51 est toujours en vol.
+    await until(() => batchStarting(80).length === 1);
+    expect(idsOf(batchStarting(80)[0])).toEqual([80, 81, 82, 83, 84, 85, 86, 87]);
+    await until(() => cuesDb.all(jobId).filter((c) => c.idx >= 80 && c.idx < 88).every((c) => c.text !== null && !c.provisional));
+    expect(maxConcurrentBatches).toBe(2);
+    // Le même préfixe que le lot en cours : le cache écrit par lui est relu.
+    const prefix = (c: TranslationCall) => JSON.stringify([c.system, ...c.stable]);
+    expect(prefix(batchStarting(80)[0])).toBe(prefix(batchStarting(12)[0]));
+    const seek = logLines().find((l) => l.kind === "seek" && l.job === jobId);
+    expect(seek).toMatchObject({ fastLane: true, from: 100, to: 2000, jumps: 1 });
+    const first = logLines().find((l) => l.kind === "seekFirst" && l.job === jobId);
+    expect(first).toMatchObject({ fastLane: true, streamed: true });
+    expect(first.seekToFirstMs).toBeGreaterThanOrEqual(20);
+    release(12);
+    await settle();
+    const job = jobsDb.get(jobId)!;
+    expect(job.status).toBe("done");
+    // Le lot ordinaire n'a pas été annulé, et aucune réplique n'a été demandée deux fois.
+    const all = batchCalls().flatMap(idsOf);
+    expect(new Set(all).size).toBe(all.length);
+    expect(all.length).toBe(N);
+    // Le coût compté normalement : chaque appel facturé, cache compris.
+    expect(job.requests).toBe(calls.length);
+    const expected = (job.input_tokens * 0.1 + job.cache_write_tokens * 0.125 + job.cache_read_tokens * 0.01 + job.output_tokens * 0.5) / 1e6;
+    expect(job.cost_usd).toBeCloseTo(expected, 10);
+  });
+
+  it("un seul lot de saut à la fois par tâche : le suivant attend, et le dernier saut l'emporte", async () => {
+    setSeekSettleForTests(20);
+    const { jobId, release } = await jobWithHeldBatch([80]);
+    noteViewer(jobId, "emma:s1", 2000);
+    await until(() => batchStarting(80).length === 1);
+    noteViewer(jobId, "emma:s1", 2800);
+    await until(() => logLines().filter((l) => l.kind === "seek" && l.job === jobId).length === 2);
+    noteViewer(jobId, "emma:s1", 2400);
+    await until(() => logLines().filter((l) => l.kind === "seek" && l.job === jobId).length === 3);
+    const seeks = logLines().filter((l) => l.kind === "seek" && l.job === jobId);
+    expect(seeks[1]).toMatchObject({ fastLane: true, queued: true, to: 2800 });
+    expect(seeks[2]).toMatchObject({ fastLane: true, queued: true, to: 2400 });
+    await new Promise((r) => setTimeout(r, 30));
+    // Rien de plus n'est parti : un lot ordinaire et un lot de saut en vol, pas deux lots de saut.
+    expect(batchCalls()).toHaveLength(3);
+    release(80);
+    // Le lot de saut suivant part à la dernière position (2390 s → réplique 96), pas à 2800 (112).
+    await until(() => batchStarting(96).length === 1);
+    expect(idsOf(batchStarting(96)[0])).toHaveLength(8);
+    expect(batchStarting(112)).toHaveLength(0);
+    expect(maxConcurrentBatches).toBe(2);
+    release(12);
+    await settle();
+    const all = batchCalls().flatMap(idsOf);
+    expect(new Set(all).size).toBe(all.length);
+    expect(jobsDb.get(jobId)!.status).toBe("done");
+  });
+
+  it("une rafale de sauts : un seul lot, à la dernière position, une seconde après le dernier", async () => {
+    const { jobId, release } = await jobWithHeldBatch();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const base = Date.now();
+      // Cinq appuis espacés de 300 ms : 1500, 1700, 1900, 2100, 2300 s.
+      for (let k = 0; k < 5; k++) {
+        if (k > 0) await vi.advanceTimersByTimeAsync(300);
+        noteViewer(jobId, "emma:s1", 1500 + 200 * k, base + 300 * k);
+      }
+      await vi.advanceTimersByTimeAsync(999);
+      expect(batchCalls()).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(batchCalls()).toHaveLength(3);
+      // 2300 s − 10 s → réplique 92 ; aucune des positions intermédiaires (60, 68, 76, 84).
+      expect(idsOf(batchCalls()[2])).toEqual([92, 93, 94, 95, 96, 97, 98, 99]);
+      for (const i of [60, 68, 76, 84]) expect(batchStarting(i)).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(50);
+    } finally {
+      vi.useRealTimers();
+    }
+    const seeks = logLines().filter((l) => l.kind === "seek" && l.job === jobId);
+    expect(seeks).toHaveLength(1);
+    expect(seeks[0]).toMatchObject({ fastLane: true, from: 100, to: 2300, jumps: 5 });
+    release(12);
+    await settle();
+    const all = batchCalls().flatMap(idsOf);
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("un saut vers une zone faite ou déjà en vol ne lance rien", async () => {
+    setSeekSettleForTests(20);
+    const { jobId, release } = await jobWithHeldBatch();
+    // 160 s − 10 s → réplique 6, faite par le premier lot.
+    noteViewer(jobId, "emma:s1", 160);
+    await until(() => logLines().some((l) => l.kind === "seek" && l.job === jobId));
+    // 700 s − 10 s → réplique 28, dans le lot 12-51 en vol.
+    noteViewer(jobId, "emma:s1", 700);
+    await until(() => logLines().filter((l) => l.kind === "seek" && l.job === jobId).length === 2);
+    // Deux appuis sur +10 s vers une zone en vol : ni lot, ni ligne `seek`.
+    noteViewer(jobId, "emma:s1", 710);
+    noteViewer(jobId, "emma:s1", 720);
+    await new Promise((r) => setTimeout(r, 60));
+    const seeks = logLines().filter((l) => l.kind === "seek" && l.job === jobId);
+    expect(seeks).toHaveLength(2);
+    expect(seeks[0]).toMatchObject({ fastLane: false, why: "done" });
+    expect(seeks[1]).toMatchObject({ fastLane: false, why: "inflight" });
+    expect(batchCalls()).toHaveLength(2);
+    expect(logLines().some((l) => l.kind === "seekFirst" && l.job === jobId)).toBe(false);
+    release(12);
+    await settle();
+  });
 });

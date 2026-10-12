@@ -11,6 +11,7 @@
  *
  * Un saut ne coûte rien de perdu : la requête en cours continue (ses lignes serviront), et le lot
  * suivant part de la nouvelle position — la plus récente fait foi, parce qu'elle seule est lue ici.
+ * Un saut dans une zone vide n'attend pas ce lot suivant : `seekBatch` en décide un petit à côté.
  * Rien n'est jamais retraduit : une ligne faite ou en vol n'est jamais choisie.
  */
 
@@ -48,8 +49,11 @@ export interface PlanInput {
 export interface Plan {
   from: number;
   count: number;
-  /** `viewer` : pour un spectateur en manque d'avance ; `ahead` : devant eux ; `fill` : les trous. */
-  why: "viewer" | "ahead" | "fill";
+  /**
+   * `viewer` : pour un spectateur en manque d'avance ; `ahead` : devant eux ; `fill` : les trous ;
+   * `seek` : le lot de saut (`seekBatch`), parti à côté du lot en cours.
+   */
+  why: "viewer" | "ahead" | "fill" | "seek";
   viewer?: string;
 }
 
@@ -60,16 +64,18 @@ export function anchorIndex(starts: readonly number[], ends: readonly number[], 
   return starts.length;
 }
 
-function open(input: PlanInput, i: number): boolean {
+type Coverage = Pick<PlanInput, "starts" | "done" | "inflight">;
+
+function open(input: Coverage, i: number): boolean {
   return !input.done[i] && !input.inflight.has(i);
 }
 
-function firstOpen(input: PlanInput, from: number): number {
+function firstOpen(input: Coverage, from: number): number {
   for (let i = Math.max(0, from); i < input.starts.length; i++) if (open(input, i)) return i;
   return -1;
 }
 
-function run(input: PlanInput, from: number, size: number): number {
+function run(input: Coverage, from: number, size: number): number {
   let n = 0;
   while (from + n < input.starts.length && n < size && open(input, from + n)) n++;
   return n;
@@ -111,4 +117,19 @@ export function nextBatch(input: PlanInput): Plan | null {
   const gap = firstOpen(input, 0);
   if (gap === -1) return null;
   return { from: gap, count: run(input, gap, size(false)), why: "fill" };
+}
+
+/**
+ * Le lot de saut (DECISIONS.md §69) : un spectateur vient de sauter dans une zone où rien n'est fait
+ * ni en vol à partir de sa position moins 10 s — un petit lot de 8 part tout de suite à cette
+ * position, sans attendre que le lot de 40 en cours finisse (6,1 s mesurées en prod le 12/10/2026).
+ * `null` dès que la réplique d'ancrage est faite ou déjà demandée : le saut est couvert, ou le sera
+ * par le lot qui la porte, et rien n'est jamais demandé deux fois. Le reste du lot s'arrête à la
+ * première ligne faite ou en vol, comme `run`.
+ */
+export function seekBatch(input: Pick<PlanInput, "starts" | "ends" | "done" | "inflight">, position: number): Plan | null {
+  const anchor = anchorIndex(input.starts, input.ends, position);
+  if (anchor >= input.starts.length) return null;
+  if (!open(input, anchor)) return null;
+  return { from: anchor, count: run(input, anchor, SMALL_BATCH), why: "seek" };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { BATCH, LEAD_S, SMALL_BATCH, nextBatch, type PlanInput } from "@/lib/subtitleGen/scheduler";
+import { BATCH, LEAD_S, SMALL_BATCH, nextBatch, seekBatch, type PlanInput } from "@/lib/subtitleGen/scheduler";
 
 /**
  * L'ordonnanceur (DECISIONS.md §69) : priorité absolue aux spectateurs, à tour de rôle, la
@@ -84,5 +84,27 @@ describe("nextBatch", () => {
 
   it("ne rend rien quand tout est fait", () => {
     expect(nextBatch(input({ done: new Uint8Array(N).fill(1) }))).toBeNull();
+  });
+});
+
+describe("seekBatch", () => {
+  // Position 600 s − 10 s → réplique 98 (588-592 s).
+  it("prend 8 répliques à partir de la position moins 10 s quand la zone est vide", () => {
+    expect(seekBatch(input(), 600)).toEqual({ from: 98, count: SMALL_BATCH, why: "seek" });
+  });
+
+  it("ne lance rien si la réplique d'ancrage est faite ou déjà en vol", () => {
+    const done = new Uint8Array(N);
+    done[98] = 1;
+    expect(seekBatch(input({ done }), 600)).toBeNull();
+    expect(seekBatch(input({ inflight: new Set([98]) }), 600)).toBeNull();
+  });
+
+  it("s'arrête avant une ligne en vol, sans jamais la redemander", () => {
+    expect(seekBatch(input({ inflight: new Set([101]) }), 600)).toEqual({ from: 98, count: 3, why: "seek" });
+  });
+
+  it("rien au-delà de la dernière réplique", () => {
+    expect(seekBatch(input(), 100_000)).toBeNull();
   });
 });
