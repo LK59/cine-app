@@ -1554,7 +1554,7 @@ export function CinemaClient() {
                 <CinemaSeriesRow
                   label={t("cinema.spotlight")}
                   rowKey="spotlight-row-series"
-                  showNewBadge={false}
+                  showNewBadge="reason"
                   rowIndex={1}
                   items={seriesSpotlightRow}
                   cardWidthClassName={CARD_WIDTH}
@@ -1612,7 +1612,7 @@ export function CinemaClient() {
                 <CinemaSeriesRow
                   label={t("cinema.recentlyAdded")}
                   rowKey="recent-series"
-                  showNewBadge={false}
+                  showNewBadge="reason"
                   rowIndex={RAIL_COUNT}
                   items={series.recentlyAdded}
                   onSeeAll={openSeeAll}

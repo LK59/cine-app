@@ -6,6 +6,7 @@ import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { CinemaSeriesCard } from "@/components/cinema/CinemaSeriesCard";
 import { ROW_CONTAINMENT } from "@/lib/rowContainment";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
+import type { NewBadgeMode } from "@/lib/cinemaRails";
 
 // Series-typed mirror of CinemaRow — see its own doc comment (edge fade mask, staggered entrance
 // capped at 6 rows).
@@ -32,7 +33,7 @@ export const CinemaSeriesRow = memo(function CinemaSeriesRow({
   rowIndex?: number;
   items: CinemaSeries[];
   cardWidthClassName: string;
-  showNewBadge?: boolean;
+  showNewBadge?: NewBadgeMode;
   onFocusItem: (item: CinemaSeries) => void;
   onSelectItem: (item: CinemaSeries) => void;
   /** Ouvre la grille complète de cette rangée, avec ses tris et ses filtres. */

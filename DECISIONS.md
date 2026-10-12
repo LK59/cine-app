@@ -3364,3 +3364,5 @@ vu), `cinema-series-arrival-route.test.ts` (rangée et bannière, vu par compte,
 de séries, Jellyfin muet).
 
 **Décidé le 12/10/2026.**
+
+**Sur les rangées de nouveautés (12/10/2026).** « Récemment ajoutés » et « À la une » coupaient la pastille (`showNewBadge={false}` : écrire « Nouveau » sur chaque carte d'une rangée de nouveautés ne dit rien) — or c'est là que remonte une série pour un épisode. Elles passent en mode `"reason"` (`NewBadgeMode`) : une série remontée y dit « Nouvel épisode » ou « Nouvelle saison », un film ou une série elle-même nouvelle reste sans pastille. Bureau et téléphone par le même `CinemaNewBadge`.

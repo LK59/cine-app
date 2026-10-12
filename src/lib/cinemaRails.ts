@@ -52,6 +52,12 @@ const BADGE_KEYS = {
  * est là (DECISIONS.md §75) — `arrival` vient du catalogue, décidé par `seriesFreshness`. Une série
  * sans `arrival` (catalogue gardé d'avant ce champ) garde « Nouveau » plutôt que rien.
  */
+/**
+ * Une pastille partout (`true`), nulle part (`false`), ou seulement la raison d'une série remontée
+ * (`"reason"`) — sur les rangées qui sont elles-mêmes « ce qui est nouveau ». Voir `CinemaNewBadge`.
+ */
+export type NewBadgeMode = boolean | "reason";
+
 export function newBadgeKey(
   addedAt: string | null,
   arrival?: SeriesArrival,

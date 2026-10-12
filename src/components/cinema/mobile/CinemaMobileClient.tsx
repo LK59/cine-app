@@ -39,7 +39,7 @@ import {
   titleSheetKey,
 } from "@/lib/cinemaRoute";
 import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
-import { uniqueById, type SeriesArrival } from "@/lib/cinemaRails";
+import { uniqueById, type NewBadgeMode, type SeriesArrival } from "@/lib/cinemaRails";
 import { BROWSE_ALL, browseSheetKey } from "@/lib/cinemaBrowse";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
@@ -769,7 +769,7 @@ export function CinemaMobileClient() {
         {/* La bannière montre les reprises (DECISIONS.md §52) : « À la une » juste dessous — la
             sélection complétée par les ajouts, sans ce que la bannière montre déjà. */}
         {heroContinuing && (
-          <PosterRow label={t("cinema.spotlight")} items={spotlightRow} itemId={itemId} onSelect={openHero} showNewBadge={false} />
+          <PosterRow label={t("cinema.spotlight")} items={spotlightRow} itemId={itemId} onSelect={openHero} showNewBadge="reason" />
         )}
 
         {/* Reprendre / À suivre, commun aux onglets : films et épisodes mêlés, le dernier lu d'abord.
@@ -941,7 +941,7 @@ function PosterRowInner<T extends { title: string; posterUrl: string | null; add
    * l'appelant, elle était neuve à chaque rendu et défaisait le `memo` de chaque rangée de genre.
    */
   seeAll?: string;
-  showNewBadge?: boolean;
+  showNewBadge?: NewBadgeMode;
 }) {
   // Les affiches glissent quand les données fraîches remplacent celles du cache — voir
   // `CATALOGUE_FLIP`, la même règle que les rangées du bureau.
@@ -964,7 +964,7 @@ function PosterRowInner<T extends { title: string; posterUrl: string | null; add
           className={`${POSTER_WIDTH} pressable relative shrink-0 overflow-hidden rounded-lg`}
         >
           <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized sizes="(max-width: 640px) 112px, 128px" />
-          {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} arrival={item.arrival} />}
+          {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} arrival={item.arrival} reasonOnly={showNewBadge === "reason"} />}
         </TapButton>
       ))}
     </MobileRow>
@@ -1100,7 +1100,7 @@ const MobileTabRows = memo(function MobileTabRows({
         items={recentlyAdded}
         itemId={itemId}
         onSelect={onSelect}
-        showNewBadge={false}
+        showNewBadge="reason"
         seeAll={BROWSE_ALL}
       />
 

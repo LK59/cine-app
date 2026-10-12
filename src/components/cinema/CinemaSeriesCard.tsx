@@ -5,6 +5,7 @@ import { PosterImage } from "@/components/PosterImage";
 import { prefetchTitleSheet } from "@/lib/prefetch";
 import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
+import type { NewBadgeMode } from "@/lib/cinemaRails";
 
 const TV_NAV_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink";
@@ -31,7 +32,7 @@ export function CinemaSeriesCard({
   onFocusItem: (item: CinemaSeries) => void;
   onSelectItem: (item: CinemaSeries) => void;
   // Off on the rails that are themselves about what's new — see CinemaNewBadge.
-  showNewBadge?: boolean;
+  showNewBadge?: NewBadgeMode;
 }) {
   return (
     <button
@@ -60,7 +61,7 @@ export function CinemaSeriesCard({
         // poster sized for the slot rather than the shared grid default.
         sizes={"(max-width: 640px) 96px, (max-width: 768px) 112px, (max-width: 1024px) 128px, 144px"}
       />
-      {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} arrival={item.arrival} />}
+      {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} arrival={item.arrival} reasonOnly={showNewBadge === "reason"} />}
     </button>
   );
 }
