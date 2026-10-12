@@ -39,7 +39,7 @@ import {
   titleSheetKey,
 } from "@/lib/cinemaRoute";
 import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
-import { uniqueById } from "@/lib/cinemaRails";
+import { uniqueById, type SeriesArrival } from "@/lib/cinemaRails";
 import { BROWSE_ALL, browseSheetKey } from "@/lib/cinemaBrowse";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
@@ -923,7 +923,7 @@ const CONTINUE_CONTAINMENT = {
  * (`items` vient de la charge utile SWR, `itemId` est hors composant, les rappels sont
  * `useCallback`), donc React saute simplement le sous-arbre.
  */
-function PosterRowInner<T extends { title: string; posterUrl: string | null; addedAt: string | null; backdropUrl?: string | null }>({
+function PosterRowInner<T extends { title: string; posterUrl: string | null; addedAt: string | null; arrival?: SeriesArrival; backdropUrl?: string | null }>({
   label,
   items,
   itemId,
@@ -964,7 +964,7 @@ function PosterRowInner<T extends { title: string; posterUrl: string | null; add
           className={`${POSTER_WIDTH} pressable relative shrink-0 overflow-hidden rounded-lg`}
         >
           <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized sizes="(max-width: 640px) 112px, 128px" />
-          {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} />}
+          {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} arrival={item.arrival} />}
         </TapButton>
       ))}
     </MobileRow>

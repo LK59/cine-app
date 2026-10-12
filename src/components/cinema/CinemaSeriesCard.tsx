@@ -60,7 +60,7 @@ export function CinemaSeriesCard({
         // poster sized for the slot rather than the shared grid default.
         sizes={"(max-width: 640px) 96px, (max-width: 768px) 112px, (max-width: 1024px) 128px, 144px"}
       />
-      {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} />}
+      {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} arrival={item.arrival} />}
     </button>
   );
 }

@@ -4,7 +4,8 @@ import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
-import { cachedSeries, cachedJellyfinSeriesAdmin, cachedJellyfinFirstEpisodes, cachedJellyfinSeasons } from "@/lib/server-cache";
+import { cachedSeries, cachedJellyfinSeriesAdmin, cachedJellyfinFirstEpisodes, cachedJellyfinSeasons, cachedJellyfinRecentEpisodes, cachedJellyfinPlayedAmong } from "@/lib/server-cache";
+import { latestArrivals, seriesFreshness } from "@/lib/seriesArrival";
 import { matchSeries } from "@/lib/catalogueMembers";
 import { cataloguePoster, seriesBackdrop } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
@@ -53,8 +54,17 @@ export interface CinemaSeries {
   seasonCount?: number;
   imdbRating: string | null;
   genres: string[];
-  // Same role as the movie payload's own field — the "Nouveau" badge and the recently-added rail.
+  /**
+   * Same role as the movie payload's own field — the badge, the recently-added rail, the new-arrivals
+   * banner, the grid's "recent" sort. For a series it is the date of the latest thing this account can
+   * watch there and hasn't: max(the series' own arrival, its latest episode's) — DECISIONS.md §75.
+   */
   addedAt: string | null;
+  /**
+   * What `addedAt` names when it is recent — the badge's words (« Nouvelle série / saison / Nouvel
+   * épisode »). Absent when there is nothing new to say, and in a catalogue kept from before it.
+   */
+  arrival?: "series" | "season" | "episode";
 }
 
 export interface CinemaSeriesWire {
@@ -94,7 +104,8 @@ async function toCinemaSeries(
   jellyfinItem: { Id: string; BackdropImageTags?: string[]; ImageTags?: { Primary?: string } },
   locale: Locale,
   firstEpisode: CinemaSeries["firstEpisode"],
-  seasonCount: number | undefined
+  seasonCount: number | undefined,
+  freshness: Pick<CinemaSeries, "addedAt" | "arrival">
 ): Promise<CinemaSeries> {
   // Independent lookups (different upstreams, different cache keys) — run concurrently rather
   // than one after the other, halving the cold-cache latency per series that hasn't been seen
@@ -127,7 +138,8 @@ async function toCinemaSeries(
     imdbRating,
     // Sous leur nom commun : « Horreur » et « Horror » ne font qu'un genre — voir `genres.ts`.
     genres: canonicalGenres(s.genres),
-    addedAt: s.added ?? null,
+    addedAt: freshness.addedAt,
+    ...(freshness.arrival ? { arrival: freshness.arrival } : {}),
     ...(firstEpisode ? { firstEpisode } : {}),
     ...(seasonCount ? { seasonCount } : {}),
   };
@@ -145,12 +157,14 @@ async function toCinemaSeries(
  */
 export async function GET(req: Request) {
   try {
-    const [series, jellyfinSeries, firstEpisodes, seasons] = await Promise.all([
+    const [series, jellyfinSeries, firstEpisodes, seasons, recentEpisodes] = await Promise.all([
       cachedSeries(),
       cachedJellyfinSeriesAdmin(),
       // Deux ornements : sans eux, la fiche attend sa liste d'épisodes comme avant.
       cachedJellyfinFirstEpisodes().catch(() => []),
       cachedJellyfinSeasons().catch(() => []),
+      // Un troisième : sans lui, chaque série garde sa propre date, comme avant le 12/10/2026 (§75).
+      cachedJellyfinRecentEpisodes().catch(() => []),
     ]);
     // Les saisons non vides de chaque série, par numéro : une saison sans épisode n'est pas une
     // saison qu'on peut regarder, et la liste de la fiche ne la montre pas.
@@ -168,36 +182,65 @@ export async function GET(req: Request) {
 
     // La règle du catalogue, commune à tout ce qui dit « dans la bibliothèque » (`catalogueMembers`).
     const matched = matchSeries(series, jellyfinSeries);
-    const downloaded = matched.map((x) => x.s);
+
+    // Le compte de la requête : ses tags bloqués (§54), et ce qu'il a déjà vu (§75).
+    const { hidden, signature, jfId } = await hiddenForRequest(req, matched, (x) => x.jfItem.Tags, (x) => x.s.id);
+
+    // La date de chaque série pour ce compte (DECISIONS.md §75). Le catalogue est commun, mais « déjà
+    // vu » appartient au compte : décidé ici, où l'identité est connue, plutôt que sur l'appareil, qui
+    // n'a aucun état « vu » par épisode en main. Une requête pour toute la liste, pas une par carte ;
+    // un Jellyfin qui ne répond pas laisse remonter — on ne cache pas un épisode sur une supposition.
+    const arrivals = latestArrivals(recentEpisodes);
+    const latestIds = matched.map(({ jfItem }) => arrivals.get(jfItem.Id)?.episodeId).filter((id): id is string => !!id);
+    const seen: Set<string> = jfId && latestIds.length > 0 ? await cachedJellyfinPlayedAmong(jfId, latestIds).catch(() => new Set<string>()) : new Set<string>();
+    const now = Date.now();
+    const freshnessOf = (s: SonarrSeries, jfItem: { Id: string; DateCreated?: string }) => {
+      const latest = arrivals.get(jfItem.Id);
+      return seriesFreshness({
+        sonarrAddedAt: s.added ?? null,
+        libraryAddedAt: jfItem.DateCreated,
+        latest,
+        seenLatest: latest ? seen.has(latest.episodeId) : false,
+        now,
+      });
+    };
 
     const locale = localeOf(req);
-    const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem, locale, firstBySeries.get(jfItem.Id), seasonsBySeries.get(jfItem.Id)?.size)));
+    const cinemaSeries = await Promise.all(
+      matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem, locale, firstBySeries.get(jfItem.Id), seasonsBySeries.get(jfItem.Id)?.size, freshnessOf(s, jfItem)))
+    );
 
-    const bySonarrId = new Map<number, CinemaSeries>();
     // Des identifiants, pas des titres : un film à trois genres n'a pas à être écrit trois
     // fois. Voir `cinemaPayload` — le client reconstruit la forme complète à l'arrivée.
     const rows: Record<string, number[]> = {};
     const genreSet = new Set<string>();
 
     for (const cs of cinemaSeries) {
-      bySonarrId.set(cs.sonarrId, cs);
       for (const g of cs.genres) {
         genreSet.add(g);
         (rows[g] ??= []).push(cs.sonarrId);
       }
     }
 
-    const spotlight = downloaded
-      .filter((s) => bySonarrId.has(s.id) && s.added && s.added !== "0001-01-01T00:00:00Z")
-      .sort((a, b) => new Date(b.added!).getTime() - new Date(a.added!).getTime())
-      .slice(0, 10)
-      .map((s) => bySonarrId.get(s.id)!);
+    // Les nouveautés de la bannière : la même date que la rangée — celle du dernier épisode pour une
+    // série qui en reçoit (§75). Elle lisait l'ajout dans Sonarr, et une saison qui arrivait n'y
+    // apparaissait jamais.
+    const spotlight = recentlyAddedRail(cinemaSeries, 10);
 
     // La graine est la date, mais les thèmes éligibles ne sont pas les mêmes que pour les films —
     // une collection de séries n'a ni les mêmes genres ni les mêmes décennies en quantité. Les deux
     // rangées peuvent donc porter des thèmes différents le même jour, et c'est très bien : chacune
     // parle de ce qu'elle contient.
-    const top10OfTheDay = dailyTop10(cinemaSeries, undefined, (item) => item.sonarrId, dailyTop10Db.forKind("series"));
+    //
+    // Classé sur la date de la série dans Sonarr, la même pour tous : le palmarès départage ses
+    // ex-aequo par la date, et celle de §75 dépend du compte — deux comptes auraient lu deux top 10.
+    const sonarrAdded = new Map(matched.map(({ s }) => [s.id, s.added ?? null]));
+    const top10OfTheDay = dailyTop10(
+      cinemaSeries.map((cs) => ({ ...cs, addedAt: sonarrAdded.get(cs.sonarrId) ?? null })),
+      undefined,
+      (item) => item.sonarrId,
+      dailyTop10Db.forKind("series")
+    );
 
     const payload: CinemaSeriesWire = {
       genres: [...genreSet].sort(),
@@ -213,8 +256,9 @@ export async function GET(req: Request) {
     // Une entrée par langue — voir la route des films.
     // Sans ce que les tags bloqués du compte lui cachent (DECISIONS.md §54) : construit une fois en
     // entier — le classement du jour est gardé par sorte, pas par compte —, puis retiré.
-    const { hidden, signature } = await hiddenForRequest(req, matched, (x) => x.jfItem.Tags, (x) => x.s.id);
-    return cachedJson(req, `cinema-series:${locale}:${signature}`, withoutHidden(payload, hidden, (item) => item.sonarrId));
+    // Une entrée par compte depuis §75 : les dates dépendent de ce qu'il a vu. Bornée par le nombre
+    // de comptes — une clé par ensemble « vu » grandirait sans fin.
+    return cachedJson(req, `cinema-series:${locale}:${signature}:${jfId ?? ""}`, withoutHidden(payload, hidden, (item) => item.sonarrId));
   } catch (err) {
     // Une panne amont se nomme, elle ne sort pas en 500 nu — voir `upstreamFailure`.
     return upstreamFailure(err, "cinema-series");

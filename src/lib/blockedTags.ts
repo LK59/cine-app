@@ -110,12 +110,14 @@ export async function hiddenForRequest<M>(
   matched: readonly M[],
   tagsOf: (entry: M) => readonly string[] | undefined,
   idOf: (entry: M) => number,
-): Promise<{ hidden: Set<number>; signature: string }> {
+): Promise<{ hidden: Set<number>; signature: string; jfId: string | null }> {
   const session = await verifySessionFull(sessionTokenOf(req));
-  const blocked = session?.jfId ? await blockedTagsOf(session.jfId) : [];
-  if (blocked.length === 0) return { hidden: new Set(), signature: "" };
+  // Le compte aussi : le catalogue des séries en tire ce que ce compte a déjà vu (§75), sans relire la session.
+  const jfId = session?.jfId ?? null;
+  const blocked = jfId ? await blockedTagsOf(jfId) : [];
+  if (blocked.length === 0) return { hidden: new Set(), signature: "", jfId };
   const hidden = new Set(matched.filter((entry) => carriesBlockedTag(tagsOf(entry), blocked)).map(idOf));
-  return { hidden, signature: [...blocked].sort().join(",") };
+  return { hidden, signature: [...blocked].sort().join(","), jfId };
 }
 
 /**

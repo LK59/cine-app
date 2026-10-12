@@ -102,7 +102,7 @@ export const CinemaSimilarRow = memo(function CinemaSimilarRow({
             className="relative w-24 shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 outline-none transition-transform hover:scale-105 focus-visible:scale-105 sm:w-28 md:w-32"
           >
             <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized sizes="120px" />
-            <CinemaNewBadge addedAt={item.addedAt} />
+            <CinemaNewBadge addedAt={item.addedAt} arrival={"arrival" in item ? item.arrival : undefined} />
           </button>
         ))}
       </div>
