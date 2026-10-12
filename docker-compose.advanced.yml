@@ -12,6 +12,7 @@
 # This uses the pre-built image published on GitHub Container Registry — no
 # build step, no source checkout needed. To update later:
 #   docker compose pull && docker compose up -d
+# To pin a version or roll back, replace `latest` with a commit SHA tag (DEPLOYMENT.md, step 13).
 
 networks:
   media_net:
@@ -32,7 +33,9 @@ services:
       # is the only one believed — see DEPLOYMENT.md, step 10.
       # - TRUSTED_PROXIES=nginx-proxy-manager
     volumes:
-      # Persistent app data: SQLite database, watchlist, push subscriptions, etc.
+      # Persistent app data — the only state of this installation: SQLite database and its daily
+      # backups, generated secrets (config/secrets.json), logs (logs/), generated subtitles
+      # (subtitles/), problem-report screenshots (reports/), image cache (image-cache/).
       - ./data:/app/data
 
       # Optimized-image cache (posters, backdrops, logos). Optional since 8.11: without this
@@ -71,11 +74,10 @@ services:
     networks:
       - media_net
     restart: unless-stopped
-    # A ceiling, so that a leak restarts this container instead of starving the host. Measured on
-    # the reference deployment after ten hours: about 134 MB of process memory. Nothing heavy runs
-    # here (transcoding is Jellyfin's, remuxing happens in the browser), so 2 GB is roughly 15x
-    # real use; under it Node caps its own heap and a leak ends in a clean exit that `restart`
-    # recovers from.
+    # A ceiling, so that a leak restarts this container instead of starving the host. Process
+    # memory normally stays in the low hundreds of megabytes: nothing heavy runs here (transcoding
+    # is Jellyfin's, remuxing happens in the browser). Under this ceiling Node caps its own heap,
+    # and a leak ends in a clean exit that `restart` recovers from.
     mem_limit: 2g
     # No privilege to gain along the way and no kernel capability: the process already runs as an
     # ordinary account, listens on an unprivileged port and writes only its own files. Not

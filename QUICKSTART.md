@@ -71,14 +71,17 @@ the server's IP address (`http://192.168.1.10:8096`). `localhost` would mean the
 2. **Administrator account.** A local account for the management area — it works even when
    Jellyfin is down. Its password is stored hashed.
 3. **Jellyfin**, 4. **TMDB**, 5. **Radarr / Sonarr** — paste, press **Test connection**, then
-   **Next**. Each step is saved as you go.
-6. **Extras** — fill what you have, skip the rest; they can be added any time later.
+   **Next**. Each step is saved as you go. The Jellyfin step also asks whether a file the browser
+   cannot play may be handed to Jellyfin to convert (on by default).
+6. **Extras** — Jellyseerr, qBittorrent, Bazarr, Jackett, ratings, playback and language: fill
+   what you have, skip the rest; they can be added any time later.
 7. **Deployment options** — informational: the lines to add to the compose file for a time zone or
    a media folder, if you want them.
 8. **Finish.** Until you click it, the assistant reopens on every visit; you can leave and come back.
 
 Then sign in with a Jellyfin account to watch, or open **Management** with the administrator
-account. Every setting stays editable in **Management → Settings → Service connections**.
+account. Every setting stays editable in **Management → Settings → Server settings**, and a change
+there applies without restarting.
 
 ## Already have a `.env`?
 
@@ -90,7 +93,7 @@ already configured through `.env` (Jellyfin, TMDB and Radarr or Sonarr set) skip
 
 ## Forgot the administrator password?
 
-Change it any time in **Management → Settings → Service connections**. If it is lost:
+Change it any time in **Management → Settings → Server settings**. If it is lost:
 
 ```sh
 docker exec -it cine-app node server-boot/reset-admin-password.mjs
@@ -124,16 +127,22 @@ docker compose up -d
 ## Secrets
 
 The session secret and the push-notification keys are generated on first launch and kept in
-`data/config/secrets.json` inside the volume. A value set in `.env` always wins.
+`data/config/secrets.json` inside the volume — keep that file in your backups: without it every
+session ends and notifications must be turned on again. A value set in `.env` always wins.
 
 ## Optional additions
 
 Every optional line is already in the compose file above, commented. The assistant's last step,
 and **Management → Settings → Server settings**, list the others (photo gallery, library
 sub-folders, poster preparation, trusted reverse proxy) with the exact lines to add. The same page
-holds the defaults for accounts: home layout, and tags blocked on new Jellyfin accounts.
+holds the defaults for accounts (home layout, tags blocked on new Jellyfin accounts), who sees the
+Chromecast button, and **Generated subtitles**: with an Anthropic, OpenAI or Google API key, viewers
+can have a full subtitle of a title translated into another language while it plays. Without a key
+the feature does not appear; a monthly budget (5 US dollars by default) caps what it can spend —
+see [DEPLOYMENT.md](DEPLOYMENT.md#generated-subtitles).
 
-Updating: `docker compose pull && docker compose up -d`.
+Updating: `docker compose pull && docker compose up -d`. Logs are kept in `logs/` inside the
+volume (`docker exec cine-app tail -n 50 /app/data/logs/server.log`).
 
 Reverse proxy (declare it in `TRUSTED_PROXIES`), HTTPS, resource limits and hardening:
 [DEPLOYMENT.md](DEPLOYMENT.md), with the

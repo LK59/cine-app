@@ -5,7 +5,8 @@ GitHub Container Registry.
 
 **You do not need to clone this repository, and you do not need Node, npm or a build toolchain on
 your server.** The published image already contains the built application. All you need is Docker,
-a folder, and two configuration files.
+a folder, and two configuration files — or one, since `.env` is optional: everything it holds can
+also be entered in the application.
 
 Everything below assumes a Linux host with Docker Engine and the Compose plugin. Roughly 20
 minutes end to end, most of it spent collecting API keys.
@@ -42,9 +43,10 @@ minutes end to end, most of it spent collecting API keys.
 | **Architecture** | `linux/amd64` |
 | **Listens on** | port `3000` inside the container |
 | **Runs as** | uid `1001`, gid `1001` (user `cineapp`), not root |
-| **Writes to** | one volume: `/app/data` (SQLite database, logs, backups, image cache) |
+| **Writes to** | one volume: `/app/data` — SQLite database and its daily backups, generated secrets, logs, image cache, generated subtitles, problem-report screenshots |
 | **Reads** | your media folder, read-only and optional — used for disk statistics only |
 | **Containers** | one. There is no separate database, cache or worker container to run |
+| **Health check** | `GET /api/ping` — answers when the server is up and can read its database |
 
 Cine App is a **front end**, not a media stack. It does not download, transcode, index or store
 anything itself: it talks to the services you already run. At minimum it needs Jellyfin (identity
@@ -138,7 +140,9 @@ tedious part, and having all of them in front of you makes the next step a singl
 <img src="docs/screenshots/deploy-jellyfin-apikey.png" width="70%">
 -->
 
-You also need one secret of your own. Generate it now:
+**No secret to invent.** `SESSION_SECRET`, which signs and encrypts sessions, and the Web Push key
+pair are generated on first launch when `.env` leaves them empty, and kept in
+`data/config/secrets.json`. To use your own session secret instead:
 
 ```bash
 openssl rand -hex 32
@@ -146,10 +150,10 @@ openssl rand -hex 32
 docker run --rm node:24-alpine node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-That string goes into `SESSION_SECRET`. It signs and encrypts sessions; **the server refuses to
-start while it is empty, shorter than 16 characters, or one of the published example values**,
-deliberately — a forged admin session is not something to warn about in a log nobody reads.
-Changing it later signs everyone out, which is harmless but worth knowing.
+A value set in `.env` always wins over the generated one. **The server refuses to start when that
+value is shorter than 16 characters or one of the published example values**, deliberately — a
+forged admin session is not something to warn about in a log nobody reads. Changing the secret
+later, or losing `secrets.json`, signs everyone out.
 
 ---
 
@@ -162,12 +166,26 @@ nano .env
 `.env.example` is annotated section by section; the tables below are the summary. Anything you
 leave empty simply disables the feature that needed it.
 
+<a id="settings-in-the-app"></a>
+**`.env` or the application.** Every variable below except the deployment options (secrets, admin
+account, `TRUSTED_PROXIES`, `TZ`, media paths, the gallery, poster-preparation tuning) can also be
+set in **Management → Settings → Server settings**. The order is: the value set in the application,
+then `.env`, then the default. A change made in the application applies without a restart (poster
+preparation from the next start); the page shows which values come from `.env`, and **Back to the
+.env value** hands control back to the file. A change to `.env` takes effect when the container is
+recreated (`docker compose up -d`).
+
+**The first-launch assistant.** When `.env` does not already set Jellyfin, TMDB and Radarr or
+Sonarr, the first visit opens an assistant at `/setup` that creates the administrator account and
+asks for those services ([QUICKSTART.md](QUICKSTART.md)). An installation configured through `.env`
+skips it; `SETUP_COMPLETE=true` skips it explicitly. Until the assistant's administrator account
+exists, anyone who can reach the app can create it: run it straight after the first start.
+
 ### Required
 
 | Variable | Value |
 |---|---|
-| `SESSION_SECRET` | The random string you just generated. The app will not start without it. |
-| `APP_ADMIN_USER` / `APP_ADMIN_PASSWORD` | Local admin account, independent from Jellyfin. Your way in during setup and the day Jellyfin is down. Set a strong password; leaving it empty disables the account. The old example value `change-me` stops the startup. |
+| `APP_ADMIN_USER` / `APP_ADMIN_PASSWORD` | Local admin account, independent from Jellyfin. Your way in during setup and the day Jellyfin is down. Optional when the assistant created one (set here, it replaces it). With neither, only Jellyfin accounts can sign in. The old example value `change-me` stops the startup. |
 | `JELLYFIN_URL` | Internal URL, reachable **from inside the container** — e.g. `http://jellyfin:8096`. Not the address in your browser's bar. |
 | `JELLYFIN_API_KEY` | The key created in step 4. |
 | `TMDB_API_KEY` | Metadata, artwork, cast, Discover, recommendations. |
@@ -186,15 +204,22 @@ leave empty simply disables the feature that needed it.
 
 | Variable | What it adds |
 |---|---|
-| `JELLYSEERR_URL` / `JELLYSEERR_API_KEY` | Requests. Without it, the request buttons disappear from the interface. Each Jellyfin user must also be imported into Jellyseerr — see [step 11](#11-first-login). |
+| `SESSION_SECRET` | Generated on first launch when empty — see [step 4](#4-collect-your-api-keys). |
+| `JELLYSEERR_URL` / `JELLYSEERR_API_KEY` | Requests. Without it, the request buttons disappear from the interface. Jellyfin accounts are imported into Jellyseerr automatically — see [step 11](#11-first-login). |
 | `QBITTORRENT_URL` / `QBITTORRENT_USERNAME` / `QBITTORRENT_PASSWORD` | Live torrent monitoring in the management interface. |
 | `BAZARR_URL` / `BAZARR_API_KEY` | Subtitle management. |
 | `JACKETT_URL` / `JACKETT_API_KEY` | Indexer status. |
 | `OMDB_API_KEY` | IMDb rating badges on cards. |
 | `MDBLIST_API_KEY` | IMDb / Rotten Tomatoes / Metacritic / Letterboxd / Trakt on detail pages. |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push notifications — see [step 12](#12-optional-features). |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push notifications. The key pair is generated on first launch when empty — see [step 12](#12-optional-features). |
+| `RADARR_QUALITY_PROFILE` / `SONARR_QUALITY_PROFILE` | Quality profile given to titles added from the app (its numeric ID). Empty: the first profile the service lists. Easier to pick from the list in *Server settings*. |
 | `PLAYER_ENABLED` | In-app playback. Default `true` — see [step 12](#12-optional-features). |
 | `PLAYER_SERVER_FALLBACK` | Whether a file the browser cannot play is handed to Jellyfin. Default `true`; `false` guarantees no playback can start a transcode. |
+| `PLAYER_AUTO_FRAME` | Enlarge the picture over black bars baked into the file. Default `true`; needs Jellyfin's trickplay images. |
+| `CHROMECAST_FOR_EVERYONE` | Who sees the Chromecast button: every account (`true`, default) or administrators only (`false`) — see [step 12](#chromecast-and-airplay). |
+| `CAST_RECEIVER_APP_ID` | The receiver application a Chromecast opens. Empty: Google's Default Media Receiver. |
+| `SUBTITLE_GEN_*` | Generated subtitles: provider, API key, model, monthly budget, prices — see [step 12](#generated-subtitles). Without a key the feature does not exist. |
+| `POSTER_PREWARM` / `POSTER_PREWARM_WIDTHS` / `POSTER_PREWARM_LOCALES` | Prepare the catalogue's posters in the background (default on; widths `384,750`; languages `fr` plus `APP_LANGUAGE`). Read at startup. |
 | `CLARA_GALLERY_ENABLED` | An optional enriched person page, with a public slideshow. Needs a photo folder mounted; off by default — see [step 12](#12-optional-features). |
 | `TRUSTED_PROXIES` | The reverse proxy whose `X-Forwarded-For` the app may believe — see [step 10](#10-put-it-behind-a-reverse-proxy). Empty keeps the older behaviour. |
 | `NEW_ACCOUNT_BLOCKED_TAGS` | Jellyfin tags blocked automatically on every account created after the first start, e.g. a tag reserving some titles to a few accounts. Also settable in *Server settings → Default settings*. |
@@ -274,8 +299,8 @@ To pin a version instead of following `latest`, replace the tag with a commit SH
 
 | Mount | Required | What it holds |
 |---|---|---|
-| `./data:/app/data` | **Yes** | SQLite database, lists, push subscriptions, logs, daily backups. Lose it and you lose every list and every setting. |
-| `./data/image-cache:/app/.next/cache/images` | **Strongly recommended** | Optimised posters, backdrops and logos. Without it, every redeploy starts from an empty cache and the server re-encodes the whole library again. |
+| `./data:/app/data` | **Yes** | SQLite database, lists, settings made in the app, push subscriptions, generated secrets, logs, daily backups, generated subtitles. Lose it and you lose every list and every setting. |
+| `./data/image-cache:/app/.next/cache/images` | Optional | Optimised posters, backdrops and logos. Without this line the app links the same folder (`data/image-cache`) at startup, so the cache survives updates either way; the line is kept so older installs see no change. |
 | the media mount | Optional | Read-only, used for disk/size statistics. Remove the line if you do not want them. |
 | the gallery mount | Optional | Only if `CLARA_GALLERY_ENABLED=true`. |
 
@@ -330,6 +355,29 @@ your own network's name **in both places**.
 2. Use LAN IPs in `.env` and drop the `networks:` blocks entirely.
 3. `network_mode: host` — works, but gives up container isolation and the `ports` mapping.
 
+### Limits and hardening
+
+```yaml
+    mem_limit: 2g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+```
+
+`mem_limit` is a ceiling against a leak, well above normal use (nothing heavy runs in this
+container: transcoding is Jellyfin's, remuxing happens in the browser). The process needs no
+capability and no privilege. The container cannot be `read_only`: startup rewrites
+`.next/static`. The health check reports `healthy` once the server answers and can read its
+database; Docker does not restart an `unhealthy` container by itself — read the status in
+`docker compose ps` or with a monitoring tool.
+
 ### Exposing the port
 
 ```yaml
@@ -374,14 +422,15 @@ Watch the first start:
 docker compose logs -f cine-app
 ```
 
-A healthy start prints the Next.js banner and `Ready in …`. Then `Ctrl-C` to stop following — the
-container keeps running.
+A healthy start prints a few `[démarrage]` lines (secrets read from `data/config/secrets.json`,
+poster cache linked), the Next.js banner and `Ready in …`. Then `Ctrl-C` to stop following — the
+container keeps running. A refusal is printed as `[démarrage] refusé : …` and the process exits.
 
 | What you see instead | What it means |
 |---|---|
-| `SESSION_SECRET est vide.` (or `…est la valeur d'exemple publiée.`, or `…fait N caractères — 16 au moins.`) followed by `Posez-en un dans .env (openssl rand -hex 32) — sans lui, une session administrateur peut être forgée.`, and an immediate exit | Step 4 was skipped, or the secret is too short. The message is in French. This is intentional. |
+| `SESSION_SECRET est la valeur d'exemple publiée.` (or `…fait N caractères — 16 au moins.`, or `…est vide.`) followed by `Posez-en un dans .env (openssl rand -hex 32) — sans lui, une session administrateur peut être forgée.`, and an immediate exit | The secret set in `.env` is an example value or too short — set a proper one, or empty the line to have one generated. `…est vide.` means the generated one could not be written: see the data-folder row below. The message is in French. This is intentional. |
 | `APP_ADMIN_PASSWORD est la valeur d'exemple publiée.` and an immediate exit | The admin password was left at `change-me`. Choose one, or leave it empty to disable the local admin account. |
-| `DATA_DIR (/app/data) ne peut pas être écrit (EACCES).` and an immediate exit | Step 7 was skipped, or the ownership does not match `user:`. |
+| `DATA_DIR (/app/data) ne peut pas être écrit (EACCES). Donnez le dossier au compte du conteneur (chown -R 1001:1001 data).` and an immediate exit | Step 7 was skipped, or the ownership does not match `user:`. |
 | `network media_net declared as external, but could not be found` | The network name in the compose file does not match `docker network ls`. |
 | The container restarts in a loop | `docker compose logs --tail=50 cine-app` has the reason; the loop itself is `restart: unless-stopped` doing its job. |
 
@@ -394,6 +443,8 @@ container keeps running.
 ```bash
 docker compose ps
 ```
+
+With the health check of step 6, the status reads `healthy` about a minute after the start.
 
 **Can it reach your services?** Open `http://<server>:3000/status` — this page is deliberately
 public, no login required, precisely so it can be read when logging in is what fails. Signed out,
@@ -457,8 +508,8 @@ In NPM, the proxy host's **Advanced** tab; in plain nginx, the `server` or `http
 large_client_header_buffers 4 32k;
 ```
 
-Measured on this deployment, the limit is crossed somewhere between 8 KB and 10 KB, and normal
-traffic is nowhere near it — this is a safety margin, not a hard requirement. **Traefik and Caddy
+In practice the limit is crossed somewhere between 8 KB and 10 KB, and normal traffic is nowhere
+near it — this is a safety margin, not a hard requirement. **Traefik and Caddy
 have far higher defaults and need nothing.**
 
 No WebSockets are used. The live download messages arrive as server-sent events on `/api/sse`,
@@ -477,6 +528,14 @@ TRUSTED_PROXIES=nginx-proxy-manager
 ```
 
 Restart after changing it. Left empty, the last `X-Forwarded-For` entry is used as before.
+
+**Forward the original scheme and host, and leave the app's own headers alone.** Two features write
+absolute addresses from `X-Forwarded-Proto` and `X-Forwarded-Host` (falling back to `Host`): casting
+to a television, which fetches the stream itself, and the optional gallery's public slideshow.
+Most proxies send them by default. The app also sets its own `Content-Security-Policy` — which
+allows exactly the Google Cast sender scripts the Chromecast button loads — and answers the CORS
+preflight (`OPTIONS`) a Chromecast sends for the stream; a proxy that replaces that header or
+answers `OPTIONS` itself breaks casting.
 
 **Cap the request body.** Problem reports accept screenshots up to 100 MB in total, and the app
 refuses larger bodies — but only once the proxy has received them. A proxy with no limit
@@ -501,12 +560,16 @@ carries a Jellyfin identity, and playback, resume points, watched state and play
 are all built on it. Jellyfin administrators become Cine App administrators; everyone else logs in
 as a regular user.
 
-**The local admin account** (`APP_ADMIN_USER` / `APP_ADMIN_PASSWORD`) exists for setup and for the
-day Jellyfin is unreachable. It has no Jellyfin identity, so nothing depending on one works under
+**The local admin account** — the one the first-launch assistant created, or the one set by
+`APP_ADMIN_USER` / `APP_ADMIN_PASSWORD` — exists for setup and for the day Jellyfin is unreachable. It has no Jellyfin identity, so nothing depending on one works under
 it — starting a film, chapters, scrub previews, playback preferences. It therefore lands on
 `/gestion` rather than on Cinema, which is what it is for.
 
 Nothing to create, invite or provision: every Jellyfin account on your server can already log in.
+
+A forgotten password for the assistant's account is reset from the shell:
+`docker exec -it cine-app node server-boot/reset-admin-password.mjs` (it asks twice, without
+echoing). An account set in `.env` is changed there instead.
 
 **With Jellyseerr:** a Jellyfin account Jellyseerr does not know yet is imported the first time it
 signs in or makes a request — creating the account in Jellyfin is enough. If Jellyseerr still
@@ -517,15 +580,16 @@ rather than filed under the API key, which Jellyseerr would treat as its adminis
 
 ## 12. Optional features
 
-Each of these is a variable in `.env` followed by `docker compose up -d`. Keys are read at runtime
-— no rebuild, ever.
+Each of these is a setting in **Management → Settings → Server settings**, applied at once, or a
+variable in `.env` followed by `docker compose up -d`. Nothing ever needs a rebuild.
 
 ### Web Push notifications
 
 Notifies a user when a title they requested becomes available. Works on installed PWAs, including
 iOS Safari.
 
-Generate a VAPID key pair once — they are just two secret strings, not tied to a machine:
+The VAPID key pair is generated on first launch and kept in `data/config/secrets.json`; nothing to
+do unless you want to bring your own. To generate one — two secret strings, not tied to a machine:
 
 ```bash
 docker run --rm node:24-alpine sh -lc \
@@ -574,6 +638,60 @@ file playable.
 The playback log (`data/logs/player.log`) records every handover with its reason, so you can see
 what your library actually needs before deciding. See [DOC-TECH.md](DOC-TECH.md).
 
+### Chromecast and AirPlay
+
+The player offers AirPlay on Apple devices and, on Chrome and Edge (computer or Android), a
+Chromecast button marked *beta*. The page becomes a remote control; the television fetches a stream
+Jellyfin prepares, through a signed address valid six hours for that one title. When the page goes
+quiet (phone locked, tab closed), the server keeps the resume point from what the television
+fetches.
+
+```env
+CHROMECAST_FOR_EVERYONE=true   # the default; false shows the button to administrators only
+CAST_RECEIVER_APP_ID=          # empty: Google's Default Media Receiver, nothing to register
+```
+
+What it needs from the deployment: the address the app is reached at must be reachable **from the
+television**, and the reverse proxy must forward `X-Forwarded-Proto` / `X-Forwarded-Host` and leave
+the app's `Content-Security-Policy` and CORS answers alone ([step 10](#10-put-it-behind-a-reverse-proxy)).
+Casting goes through Jellyfin's own negotiation, so it can cost Jellyfin a transcode; with
+`PLAYER_SERVER_FALLBACK=false` the Chromecast button is not offered.
+
+### Generated subtitles
+
+When a title has a full text subtitle in one language and the viewer wants another, the player can
+have it translated by an online AI while the film plays, starting from where the viewer is. Set it
+up in **Management → Settings → Server settings → Generated subtitles**, or in `.env`:
+
+```env
+SUBTITLE_GEN_PROVIDER=anthropic   # anthropic | openai | google
+SUBTITLE_GEN_API_KEY=…            # the provider's API key
+SUBTITLE_GEN_MODEL=               # empty: the provider's default model
+SUBTITLE_GEN_BUDGET_USD=5         # monthly ceiling, all accounts together
+SUBTITLE_GEN_PRICE_INPUT=         # USD per million tokens; empty: the app's price table
+SUBTITLE_GEN_PRICE_OUTPUT=
+SUBTITLE_GEN_ENABLED=true         # false turns it off while keeping the key
+```
+
+- **Without a key the feature does not exist**: no button, no route announces it. The key stays on
+  the server — never sent to a browser, never written to a log.
+- **Cost.** The provider bills per token. With the default model, a feature film costs on the order
+  of a few cents. Every request's tokens are counted at the model's price; the monthly budget
+  pauses running jobs and refuses new ones once reached. A model the price table does not know
+  needs both prices filled in, or the feature does not start. Spending and jobs are shown on the
+  same settings page.
+- **Limits.** Each account may start 50 generations a day; joining, resuming or redoing a job does
+  not count.
+- **Where the files go.** The finished subtitle is kept in `data/subtitles/`, then handed to
+  Jellyfin through its subtitle upload API (`POST /Videos/{id}/Subtitles`, with the Jellyfin API
+  key), which writes it next to the video as an ordinary external subtitle that every Jellyfin
+  client sees. **Jellyfin needs write access to its media folders for that.** If the upload keeps
+  failing, the app serves its own copy from `data/subtitles/` instead. A name already taken by
+  another subtitle is never overwritten.
+- **Source.** Only text subtitles (SRT, ASS, WebVTT…) already in the file or next to it; image-based
+  subtitles (PGS, VobSub) cannot be translated, and nothing is transcribed from the audio.
+- Each job is logged in `data/logs/subtitle-gen.log` (never the key, never the text).
+
 ### The Clara Galle gallery
 
 ```env
@@ -607,7 +725,8 @@ docker compose up -d
 ```
 
 Database migrations run at startup and are idempotent; there is no separate step. Your `.env`,
-your data and your image cache are untouched.
+your data and your image cache are untouched. Open tabs pick up the new version by themselves the
+next time nothing is playing.
 
 **After an update, diff the templates** to see whether anything new appeared:
 
@@ -628,9 +747,34 @@ docker compose up -d
 
 **Reclaiming space** after several updates: `docker image prune`.
 
+### Building the image yourself
+
+Only if you run modified sources. Clone the repository, replace `image:` in your compose file with:
+
+```yaml
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_REF: ${BUILD_REF:-}
+```
+
+then build and start:
+
+```bash
+BUILD_REF=$(tools/build-ref.sh) docker compose build && docker compose up -d && docker builder prune -f --max-used-space 15GB
+```
+
+`BUILD_REF` names the build — the short commit, with `-dirty` when tracked files differ — in the
+settings page and on every log line; without it the build names itself with a timestamp. The build
+runs the test suite first and stops on a failure. The dependency install is cached between builds:
+an internal `manifest` stage resets the version in `package.json` / `package-lock.json` before
+`npm install`, so a version bump alone does not reinstall everything. Each build still leaves a few
+hundred megabytes of BuildKit cache that nothing else removes; the `prune` keeps it bounded.
+
 ### After changing `.env`
 
-Configuration is read by the server process at startup:
+`.env` is read when the container starts (settings changed in the application apply at once):
 
 ```bash
 docker compose up -d
@@ -659,7 +803,9 @@ tar czf cine-app-$(date +%F).tar.gz data .env docker-compose.yml
 docker compose start
 ```
 
-`data/image-cache` can be excluded — it rebuilds itself, at the cost of some re-encoding.
+`data/image-cache` can be excluded — it rebuilds itself, at the cost of some re-encoding. Keep
+`data/config/secrets.json`: without it every session ends and notification subscriptions stop
+working. `data/subtitles/` holds the generated subtitles.
 
 To restore: put `data` and `.env` back in place, check the ownership (`sudo chown -R 1001:1001
 data`), and `docker compose up -d`.
@@ -670,12 +816,17 @@ data`), and `docker compose up -d`.
 
 **Read the right log.** `docker logs` dies with the container, which is recreated on every deploy
 — an error someone hit yesterday evening may already be gone. The app writes its own, inside the
-volume, rotated at 5 MB, one JSON object per line:
+volume, one JSON object per line, rotated at 5 MB with a bounded number of archives (all of them
+together stay under about 1.5 GB). The *Activity* page of the management area reads them too.
 
 ```bash
-docker exec cine-app tail -n 50 /app/data/logs/server.log   # server errors, with stack traces
+docker exec cine-app tail -n 50 /app/data/logs/server.log   # server errors (and browsers'), with stack traces
 docker exec cine-app tail -n 50 /app/data/logs/player.log   # what each viewer's player reported
 ```
+
+The others: `auth.log` (sign-ins, refusals, sign-outs), `startup.log` (each opening of the
+cinema), `notifications.log` (every push sent, and its outcome), `subtitle-gen.log` (generated
+subtitles), `bench.log` / `bench-player.log` (the device test bench).
 
 | Symptom | Where to look |
 |---|---|
@@ -690,7 +841,11 @@ docker exec cine-app tail -n 50 /app/data/logs/player.log   # what each viewer's
 | Push notifications never arrive | All three `VAPID_*` set, HTTPS, permission granted in the browser *and* the OS. On iOS, install to the Home Screen first. |
 | Client-side navigation fails but reloads work | The nginx header buffer — step 10. |
 | Disk statistics read zero | The media mount, and the uid that has to read it — [File permissions](#file-permissions). |
-| Everyone signed out at once | `SESSION_SECRET` changed. Sessions are signed with it. |
+| Everyone signed out at once | `SESSION_SECRET` changed, or `data/config/secrets.json` was lost. Sessions are signed with it. |
+| `unhealthy` in `docker compose ps` | The server does not answer `/api/ping` or cannot read its database: `server.log` and `docker compose logs`. |
+| Chromecast finds the television but nothing plays | The television cannot reach the app's address, or the proxy drops `X-Forwarded-*`, replaces the CSP or answers `OPTIONS` — step 10. `player.log` has the Cast error code. |
+| *Generate subtitles* is not offered | No `SUBTITLE_GEN_API_KEY`, `SUBTITLE_GEN_ENABLED=false`, or the title has no full text subtitle to start from. |
+| Generated subtitles never appear in Jellyfin | Jellyfin cannot write next to the video (read-only media folder): the app keeps serving its own copy. `subtitle-gen.log` says why. |
 
 **Asking the container itself.** It has every service URL and key in its environment, which makes
 it the right place to test a hypothesis:
@@ -723,5 +878,6 @@ dashboard.
 ## Related documentation
 
 - **[README.md](README.md)** — what the two interfaces do, feature by feature.
-- **[DOC-TECH.md](DOC-TECH.md)** — the in-browser player: the three playback paths, the remuxer,
-  audio delivery and diagnostics.
+- **[QUICKSTART.md](QUICKSTART.md)** — the minimal deployment with the first-launch assistant.
+- **[DOC-TECH.md](DOC-TECH.md)** — the in-browser player: the native path and the server-side
+  player behind it, the remuxer, audio delivery, generated subtitles and diagnostics.

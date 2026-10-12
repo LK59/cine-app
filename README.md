@@ -4,13 +4,13 @@ Self-hosted PWA that turns a Radarr / Sonarr / Bazarr / Jackett / qBittorrent / 
 Jellyseerr stack into **two interfaces on one container**: a Netflix-style front end everyone in
 the household uses, and a management dashboard for whoever runs the box.
 
-> ### 🚀 [**Quick start → QUICKSTART.md**](QUICKSTART.md) — one compose file, a first-launch assistant, no `.env` required
+> ### [**Quick start → QUICKSTART.md**](QUICKSTART.md) — one compose file, a first-launch assistant, no `.env` required
 >
-> ### 📦 [**Deployment guide → DEPLOYMENT.md**](DEPLOYMENT.md)
+> ### [**Deployment guide → DEPLOYMENT.md**](DEPLOYMENT.md)
 >
 > Step-by-step installation from the published Docker image: prerequisites, API keys, `.env`,
 > compose file, reverse proxy, first login, updates, backups and troubleshooting. No source
-> checkout, no build toolchain — one container and two configuration files.
+> checkout, no build toolchain — one container, a compose file and an optional `.env`.
 
 ## The two interfaces
 
@@ -237,6 +237,12 @@ In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now w
 - **Black bars baked into the file** are measured once per file on the server, from the trickplay
   thumbnails Jellyfin already has, and the picture is enlarged to the nearest edge of the screen —
   black is cropped, never picture. It needs trickplay images; `PLAYER_AUTO_FRAME=false` turns it off.
+- **Generated subtitles** (optional, off without an API key): when a title has a full text subtitle
+  in one language, a viewer can ask for another; an online AI (Anthropic, OpenAI or Google, chosen
+  by the administrator) translates it while the film plays, starting where the viewer is. The
+  finished file is handed to Jellyfin, so every client sees it afterwards. A monthly budget and a
+  daily limit per account bound the cost — see
+  [DEPLOYMENT.md](DEPLOYMENT.md#generated-subtitles).
 
 **[Full technical documentation → DOC-TECH.md](DOC-TECH.md)** — the two paths, how the remuxer
 reconstructs decode times, how random access points are verified, how audio is delivered or
@@ -628,9 +634,10 @@ can be revoked immediately rather than only on expiry. A few things are worth kn
   opened are left alone — deliberately: nobody clicking that button expects to lose Jellyfin
   with it.
 
-`SESSION_SECRET` must be set. The server refuses to start rather than logging a line nobody reads
-when it is empty or absent, shorter than 16 characters, or one of the published example values;
-generate one with `openssl rand -hex 32`. Likewise, `APP_ADMIN_PASSWORD` left at the old example
+`SESSION_SECRET` is generated on first launch when `.env` leaves it empty, and kept in
+`data/config/secrets.json`. A value set in `.env` wins; the server refuses to start rather than
+logging a line nobody reads when that value is shorter than 16 characters or one of the published
+example values (`openssl rand -hex 32` makes a good one). Likewise, `APP_ADMIN_PASSWORD` left at the old example
 value `change-me` stops the startup (empty is allowed: it disables the local admin account).
 
 ---
@@ -679,7 +686,7 @@ build:
 then:
 
 ```sh
-BUILD_REF=$(tools/build-ref.sh) docker compose up -d --build
+BUILD_REF=$(tools/build-ref.sh) docker compose build && docker compose up -d && docker builder prune -f --max-used-space 15GB
 ```
 
 `BUILD_REF` names the build: it is shown next to the version in the settings page (« Version 8.1
@@ -697,12 +704,14 @@ single source file changed. The dev stack runs `next dev` against the bind-mount
 in its own container, on its own port, with its own build directory, so the two never overwrite
 each other's output.
 
-When a real build *is* needed, three things keep it cheap: `.dockerignore` excludes `data/` (633 MB
-of runtime state that used to be copied into the build context and into a layer); `npm install`
-and `next build` use BuildKit cache mounts, so npm's download cache and Next's compiler cache
-survive between builds and are updated in place. Together, a rebuild after a source change
-transfers 61 kB of context instead of 676 MB, in about 35 seconds instead of a minute and a half.
-The build cache does accumulate — `docker builder prune` reclaims it.
+When a real build *is* needed, three things keep it cheap: `.dockerignore` excludes `data/` (the
+runtime state, which used to be copied into the build context and into a layer); the `manifest`
+stage hands `npm install` a `package.json` / `package-lock.json` whose version is reset to 0.0.0,
+so the version bump before each release does not invalidate the dependency layer; and npm's
+download cache is a BuildKit cache mount, updated in place. Next's own compiler cache is
+deliberately *not* reused: a build fed the previous one once shipped fresh JavaScript with a stale
+stylesheet. Each build still adds a few hundred megabytes of build cache that nothing else removes
+— hence the `docker builder prune` above.
 
 One caveat: the development port is plain HTTP, and several browser APIs are restricted to secure
 contexts. The ordinary path — remux into MediaSource, native `<video>` — works there. WebCodecs
@@ -724,6 +733,8 @@ docker exec cine-app tail -n 50 /app/data/logs/player.log   # what each viewer's
 
 Both are one JSON object per line, rotated at 5 MB, and live in the `data` volume — which matters,
 because `docker logs` dies with the container, and the container is recreated on every deploy.
+Beside them: `auth.log`, `startup.log`, `notifications.log`, `subtitle-gen.log` and the test bench's
+`bench.log` — all listed in [DEPLOYMENT.md](DEPLOYMENT.md#15-troubleshooting).
 
 ---
 
@@ -733,15 +744,15 @@ because `docker logs` dies with the container, and the container is recreated on
 |---|---|
 | **README.md** *(this file)* | What the two interfaces are and what they do |
 | **[DEPLOYMENT.md](DEPLOYMENT.md)** | Installing and running it, step by step, from the published image |
-| **[DOC-TECH.md](DOC-TECH.md)** | The in-browser player: the three playback paths, the remuxer, audio, diagnostics |
+| **[QUICKSTART.md](QUICKSTART.md)** | The minimal deployment and the first-launch assistant |
+| **[DOC-TECH.md](DOC-TECH.md)** | The in-browser player: the native path and the server player behind it, the remuxer, audio, generated subtitles, diagnostics |
 | **[PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md)** | A non-technical presentation of the player, in French |
 | **[CLAUDE.md](CLAUDE.md)** | Architecture and conventions, for anyone working on the code |
 | **[DECISIONS.md](DECISIONS.md)** | Rules decided in one shared function, their callers and tests |
-| **[`tools/truehd-wasm/`](tools/truehd-wasm/)** | Reproducible build of the committed TrueHD WebAssembly decoder: pinned FFmpeg, checked SHA-256 |
+| **[`tools/truehd-wasm/`](tools/truehd-wasm/)**, **[`tools/aac-wasm/`](tools/aac-wasm/)** | Reproducible builds of the committed TrueHD and AAC WebAssembly decoders: pinned FFmpeg, checked SHA-256 |
 | **`.env.example`** | Every configuration variable, annotated in place |
 | **`docker-compose.example.yml`** | The minimal deployment: one service, one volume, no `.env` |
 | **`docker-compose.advanced.yml`** | The advanced deployment template, annotated in place |
-| **`QUICKSTART.md`** | The first-launch assistant and what each service is for |
 
 ## Third-party code
 
