@@ -62,7 +62,7 @@ export function glossarySystem(target: string): string {
     DATA_RULE,
     "Read all the lines and return:",
     "- source_language: the ISO 639-1 code of the language the lines are really written in (not the target);",
-    `- register: one sentence on the tone and register to use in ${englishName(target)};`,
+    `- register: one sentence on the tone and register to use in ${englishName(target)}, always in its standard, region-neutral variety;`,
     "- characters: up to 40 entries 'Name: who they are' for recurring names, nicknames and places, keeping proper names untranslated unless an official translation exists;",
     `- address_forms: up to 40 entries 'A -> B: form' saying which characters address each other formally or informally in ${englishName(target)} (for example tu/vous, du/Sie, tú/usted), when the language makes the distinction;`,
     "- terms: up to 40 entries 'source term -> translation' for recurring expressions, titles or jargon that must stay consistent.",
@@ -105,6 +105,10 @@ export function batchSystem(target: string, sourceLanguage?: string | null): str
     DATA_RULE,
     'The whole subtitle is given below as "SOURCE SUBTITLE LINES". Use it to know who speaks, what is referred to, and how characters address each other.',
     `Translate only the ids the user message asks for, into natural, idiomatic ${language} that reads well as a subtitle: concise, faithful to meaning, tone and register, not word for word.`,
+    // Le glossaire avait choisi seul un « espagnol rioplatense » pour un épisode (« Tenés una
+    // audición, loco », 12/10/2026) : un spectateur d'Espagne ou du Mexique lit une variante qu'il
+    // n'a pas demandée. La langue cible est un code sans région, donc sa forme standard.
+    `Write the standard, region-neutral variety of ${language} that any of its readers understands: no regional forms (for example no Rioplatense "vos", no Brazilian-only or Quebec-only usage), even where the glossary suggests one.`,
     "Exactly one output line per requested id. Never merge two subtitles, never split one, never skip one, never add one.",
     `At most two lines per subtitle (or as many as the source subtitle has), written "${LINE_BREAK}" between them. Keep a leading '-' for lines spoken by two people.`,
     "Sound descriptions in brackets or parentheses (for example [door slams]) are translated and keep their brackets. Keep the ♪ signs and translate the lyrics between them.",

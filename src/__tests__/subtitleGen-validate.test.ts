@@ -223,3 +223,10 @@ describe("batchSystem", () => {
     expect(batchSystem("de", "fr")).not.toContain("only a name, a sound");
   });
 });
+
+describe("variante de la langue cible", () => {
+  // « Tenés una audición, loco » (12/10/2026) : le glossaire avait choisi seul le rioplatense.
+  it("impose la variante standard, sans forme régionale", () => {
+    expect(batchSystem("es", "en")).toContain("standard, region-neutral variety of Spanish");
+  });
+});
