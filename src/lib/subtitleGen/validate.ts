@@ -120,14 +120,13 @@ export function fitLines(text: string, max: number): string {
 // ─── Le décalage ──────────────────────────────────────────────────────────────
 
 /**
- * La longueur d'une réplique telle qu'on la lit : sans balises, sauts de ligne comptés comme une
- * espace. Une longueur, pas un contenu : la casse n'y change rien.
+ * La longueur d'une réplique : ses caractères visibles hors balises et hors espaces. Une longueur,
+ * pas un contenu : la casse n'y change rien. Les espaces ne comptent pas parce que des sous-titres
+ * passés par l'OCR coupent les mots (« U n f in ish ed bus in ess ») : comptées, elles gonflaient la
+ * source et le détecteur a refait 10 lots sains d'un même épisode (12/10/2026).
  */
 function visibleLength(text: string): number {
-  return text
-    .replace(/<[^>]*>|\{[^}]*\}/g, "")
-    .replace(/\s+/g, " ")
-    .trim().length;
+  return text.replace(/<[^>]*>|\{[^}]*\}/g, "").replace(/\s+/g, "").length;
 }
 
 /** Seuils du détecteur, calibrés sur les 12 lots réels du banc (voir `detectDrift`). */
