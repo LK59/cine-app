@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack, useRouteBehind, personBehind, markSheetLeaving, useSheetLeaving } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack, useRouteBehind, personBehind, markSheetLeaving, useSheetLeaving, useSheetOrigins, behindIsSameTitleSheet, behindOrigins, readCinemaRoute } from "@/lib/cinemaRoute";
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/cinema");
@@ -289,14 +289,14 @@ describe("useRouteBehind", () => {
     expect(result.current).toBeNull(); // la grille, pas une fiche
 
     act(() => openLibraryTitle("movie", 2));
-    expect(result.current).toEqual({ film: 1, serie: null, tab: "movies", person: null });
+    expect(result.current).toMatchObject({ film: 1, serie: null, tab: "movies", person: null });
   });
 
   it("carries the tab, since each one resolves only its own ids", () => {
     const { result } = renderHook(() => useRouteBehind());
     act(() => openLibraryTitle("series", 50));
     act(() => openLibraryTitle("movie", 42));
-    expect(result.current).toEqual({ film: null, serie: 50, tab: "series", person: null });
+    expect(result.current).toMatchObject({ film: null, serie: 50, tab: "series", person: null });
   });
 
   // useSyncExternalStore exige une identité stable entre deux changements ; l'objet vient de
@@ -470,5 +470,74 @@ describe("useSheetLeaving", () => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
     expect(result.current).toBe(false);
+  });
+});
+
+/**
+ * Le cran d'ouverture de chaque fiche (DECISIONS.md §74) — l'identité qui manquait à la pile.
+ *
+ * Sans lui, la même actrice ouverte depuis une série puis rouverte depuis un de ses films était
+ * une seule instance React, et l'état d'un geste passait d'une entrée à l'autre (blocage iPhone,
+ * 8.45.0). Les crans ici sont des profondeurs d'historique : la première entrée empilée est 1.
+ */
+describe("useSheetOrigins", () => {
+  it("série → actrice → film → même actrice : deux crans pour la même actrice", () => {
+    const { result } = renderHook(() => ({ origins: useSheetOrigins(), behind: useRouteBehind() }));
+    act(() => openLibraryTitle("series", 41));
+    expect(result.current.origins).toEqual({ title: 1, person: null, discover: null });
+    act(() => cinemaNavigate({ person: 7 }));
+    // La série reste la même fiche sous l'actrice : elle garde son cran.
+    expect(result.current.origins).toEqual({ title: 1, person: 2, discover: null });
+    act(() => openLibraryTitle("movie", 603));
+    expect(result.current.origins).toEqual({ title: 3, person: null, discover: null });
+    expect(behindOrigins(result.current.behind).person).toBe(2);
+    act(() => cinemaNavigate({ person: 7 }));
+    expect(result.current.origins).toEqual({ title: 3, person: 4, discover: null });
+  });
+
+  it("série → actrice → la même série : une autre fiche, la première est dessous", () => {
+    const { result } = renderHook(() => ({ origins: useSheetOrigins(), behind: useRouteBehind() }));
+    act(() => openLibraryTitle("series", 41));
+    act(() => cinemaNavigate({ person: 7 }));
+    act(() => openLibraryTitle("series", 41));
+    expect(result.current.origins.title).toBe(3);
+    expect(behindIsSameTitleSheet(result.current.behind, readCinemaRoute(), result.current.origins)).toBe(false);
+  });
+
+  it("une fiche TMDB posée sur un film : c'est le même film dessous, pas un second", () => {
+    const { result } = renderHook(() => ({ origins: useSheetOrigins(), behind: useRouteBehind() }));
+    act(() => cinemaNavigate({ film: 603 }));
+    act(() => cinemaNavigate({ discover: 99, discoverType: "movie" }));
+    expect(result.current.origins).toEqual({ title: 1, person: null, discover: 2 });
+    expect(behindIsSameTitleSheet(result.current.behind, readCinemaRoute(), result.current.origins)).toBe(true);
+  });
+
+  it("un `replace` qui ne change pas la fiche ne la rouvre pas", () => {
+    const { result } = renderHook(() => useSheetOrigins());
+    act(() => cinemaNavigate({ film: 603 }));
+    act(() => cinemaNavigate({ episodes: true }));
+    act(() => cinemaNavigate({ film: 603, episodes: false }, "replace"));
+    expect(result.current.title).toBe(1);
+  });
+
+  it("un retour retrouve les crans de l'entrée", async () => {
+    const { result } = renderHook(() => useSheetOrigins());
+    act(() => openLibraryTitle("series", 41));
+    act(() => cinemaNavigate({ person: 7 }));
+    act(() => openLibraryTitle("movie", 603));
+    act(() => cinemaNavigate({ person: 7 }));
+    const arrived = new Promise<void>((r) => window.addEventListener("popstate", () => r(), { once: true }));
+    window.history.go(-2);
+    await act(async () => {
+      await arrived;
+    });
+    expect(result.current).toEqual({ title: 1, person: 2, discover: null });
+  });
+
+  it("une entrée sans crans (lien direct, historique d'avant) : crans inconnus, mêmes clés qu'avant", () => {
+    window.history.replaceState(null, "", "/#film=603&decouverte=9");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    const { result } = renderHook(() => useSheetOrigins());
+    expect(result.current).toEqual({ title: 0, person: null, discover: 0 });
   });
 });

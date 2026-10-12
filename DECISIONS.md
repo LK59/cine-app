@@ -3251,3 +3251,55 @@ langue vide → français, routes réservées), `news-proxy.test.ts`, `news-deci
 empêche la fenêtre, chronomètre, continuation du titre), `NewsDialog.test.tsx` (fusion et intertitres, les
 quatre fermetures et leur mesure, défilement, touches gardées, télécommande, aperçu muet, `NewsGate`, « Voir
 plus » → la bonne section), `decisions-partagees.test.ts` (une seule décision, un seul montage).
+
+## 74. Une fiche est une entrée de la pile : son identité est son cran d'ouverture, pas son titre
+
+**Règle.** Rouvrir une fiche déjà présente dans la pile (la même personne depuis un de ses films, la
+même série depuis la filmographie d'un de ses acteurs) **empile une nouvelle fiche** : une nouvelle
+entrée d'historique, et une nouvelle instance React. Le retour retrouve l'ancienne telle qu'on l'avait
+laissée. Chaque fiche porte le cran (la profondeur d'historique) où elle a été **ouverte**
+(`SheetOrigins` : un cran par étage — titre de bibliothèque, personne, découverte), écrit dans
+`history.state` par `cinemaNavigate` : une fiche nommée par un `push` est ouverte à ce cran ; sinon elle
+hérite du cran de l'entrée d'où l'on part (une fiche de bibliothèque sous une personne ou une fiche TMDB
+reste la même fiche, avec son défilement et ses titres similaires). Un `replace` qui la renomme à
+l'identique ne l'ouvre pas. L'entrée recouverte (`SheetRef`, `useRouteBehind`) emporte ses crans.
+
+Écarté : revenir à la fiche existante en dépilant ce qui est au-dessus. Le geste est une ouverture —
+on touche une affiche, une carte monte — et le retour doit ramener au film d'où l'on a rouvert l'actrice,
+pas sauter deux crans plus bas.
+
+**Le défaut (iPhone, 8.45.0).** Série → actrice → un de ses films → la même actrice, fermée au doigt, puis
+le film fermé : écran sombre, plus rien ne répond. La coquille rendait la fiche personne sous la clé
+de l'acteur seul ; l'actrice du cran 2 (sous le film) et celle du cran 4 étaient donc une seule instance.
+Le geste l'avait jetée hors de l'écran (`dismissed`, `translateY(hauteur)`, pointeurs coupés) ; elle
+redevenait fiche du dessous avec cet état, puis fiche du dessus au cran 2 : invisible, transparente aux
+pointeurs, au-dessus d'une série rendue inerte par sa présence et d'un accueil inerte. Même cause pour un
+film absent de la bibliothèque (fiche découverte), et la même clé par titre seul existait pour les fiches
+de bibliothèque (série → acteur → la même série).
+
+**Et un état de geste ne contredit plus l'adresse.** `useSwipeToDismiss(…, { addressed: true })` : une
+fiche jetée au doigt que l'adresse nomme encore une seconde plus tard (`ADDRESS_GRACE_MS`) — la fermeture
+n'a pas eu lieu, par exemple refusée par `cinemaClose` parce qu'un retour était déjà en vol — revient en
+place. Ce que l'adresse décrit est dessiné et touchable ; le voile d'une fiche n'existe qu'avec elle.
+
+**Les fonctions.** `cinemaRoute.ts` : `nextOrigins` (le calcul, dans `cinemaNavigate`), `useSheetOrigins`,
+`behindOrigins`, `behindIsSameTitleSheet` (l'entrée recouverte montre-t-elle *la même fiche* : même titre
+**et** même cran), `personSheetKey` / `titleSheetKey` / `discoverSheetKey`. Une entrée sans crans (lien
+direct, historique écrit avant) lit `UNKNOWN_ORIGIN` partout : mêmes clés qu'avant.
+
+**Les appelants.** `PlayerShell` (fiche personne dessus ou dessous, fiche découverte), `CinemaMobileClient`
+(pile du téléphone et sa garde « jamais derrière elle-même »), `CinemaClient` (piles films et séries du
+bureau, même garde, même fonction). `useSwipeToDismiss` avec `addressed` : `PlayerPersonSheet`,
+`PlayerDiscoverSheet`, `CinemaMobileDetail`, `useSheetGrip` (fiches du bureau au toucher). Les prototypes
+d'animation (`IntroLots`) gardent l'ancien comportement : leur fermeture ne passe pas par l'adresse.
+
+**Ce qui diffère à dessein.** Le téléphone dessine l'actrice du cran 2 sous le film ; le bureau ne la
+dessine pas (sa sortie est un fondu). Rouvrir la même actrice au-dessus d'un film démonte l'instance du
+cran 2 (un seul emplacement) : elle est remontée sous le film une fois l'actrice du cran 4 sortie.
+
+**Tests.** `sheet-stack-reopen.test.tsx` (la vraie coquille, la vraie fiche personne, l'historique de
+jsdom : la séquence signalée, par la croix, par une fiche découverte, la même actrice depuis deux films,
+deux fermetures dans la même image, un retour du navigateur pendant la sortie — quatre échouaient avant),
+`cinemaRoute.test.tsx` (`useSheetOrigins` : crans, même série rouverte, fiche TMDB posée sur un film,
+`replace`, retour, entrée ancienne), `useSwipeToDismiss.test.tsx` (l'adresse l'emporte),
+`sheet-stack-under-discover.test.ts` (les deux piles passent par `behindIsSameTitleSheet`).

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePointerCapture } from "@/lib/usePointerCapture";
 
 // Drag-down-to-close for a full-screen sheet, driven from one grab handle (here: the banner
@@ -80,11 +80,46 @@ export const NOT_THE_HANDLE = {
   onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
 } as const;
 
-export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
+/**
+ * Le temps au bout duquel une fiche jetée au doigt mais toujours nommée par l'adresse revient.
+ *
+ * Bien au-delà d'une fermeture réelle : le retour arrive au tour suivant, la sortie dure
+ * `SHEET_OUT_MS + SHEET_UNMOUNT_SLACK_MS` (400 ms), et la fiche est alors démontée.
+ */
+export const ADDRESS_GRACE_MS = 1000;
+
+export function useSwipeToDismiss(
+  onDismiss: () => void,
+  {
+    /**
+     * La fiche se ferme en changeant l'adresse (`cinemaClose`) — c'est vrai de toutes les fiches du
+     * cinéma (DECISIONS.md §74).
+     *
+     * Le geste jette la carte hors de l'écran et coupe ses pointeurs *avant* que l'adresse ne bouge,
+     * et ne la remettait jamais en place : son état disait « fermée » pour toujours. Si la fermeture
+     * n'a pas lieu (un retour déjà en vol, que `cinemaClose` refuse de doubler), ou si cette
+     * instance resservait plus tard, l'adresse nommait une fiche invisible et sourde — un écran
+     * sombre où plus rien ne répond. Ce que dit l'adresse l'emporte : toujours la même une seconde
+     * après le geste, la fiche n'a pas été fermée, et elle revient.
+     */
+    addressed = false,
+  }: { addressed?: boolean } = {}
+): SwipeToDismiss {
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [touched, setTouched] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  /** L'adresse au moment où le geste a fermé la fiche — voir `addressed`. */
+  const dismissedAt = useRef<string | null>(null);
+  useEffect(() => {
+    if (!dismissed || !addressed) return;
+    const timer = window.setTimeout(() => {
+      if (window.location.hash !== dismissedAt.current) return;
+      setDismissed(false);
+      setOffset(0);
+    }, ADDRESS_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [dismissed, addressed]);
   const active = useRef(false);
   const startY = useRef(0);
   const startedAt = useRef(0);
@@ -137,6 +172,7 @@ export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
       // Carries on off the bottom instead of snapping back first — the close animation is the
       // continuation of the gesture, not a separate thing that happens after it.
       setOffset(window.innerHeight);
+      dismissedAt.current = window.location.hash;
       setDismissed(true);
       onDismiss();
     } else {

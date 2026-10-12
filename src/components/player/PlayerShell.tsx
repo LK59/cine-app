@@ -3,7 +3,18 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
-import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind, useRouteBehind, personBehind } from "@/lib/cinemaRoute";
+import {
+  cinemaClose,
+  cinemaNavigate,
+  useCinemaRoute,
+  useSheetBehind,
+  useRouteBehind,
+  personBehind,
+  useSheetOrigins,
+  behindOrigins,
+  personSheetKey,
+  discoverSheetKey,
+} from "@/lib/cinemaRoute";
 import { SHEET_OUT_MS, SHEET_UNMOUNT_SLACK_MS } from "@/lib/sheetMotion";
 import { preloadQuietly } from "@/lib/prefetch";
 import { useExitDelay } from "@/lib/useExitDelay";
@@ -161,19 +172,34 @@ export function PlayerShell() {
   // sans lui, elle se viderait de son contenu avant de s'en aller.
   const lastPerson = useLastValue(route.person);
   /**
+   * La clé de la fiche du dessus : la personne **et** le cran où elle a été ouverte (DECISIONS.md
+   * §74), retenue comme l'identifiant le temps de la sortie.
+   */
+  const origins = useSheetOrigins();
+  const lastPersonKey = useLastValue(route.person !== null ? personSheetKey(route.person, origins.person) : null);
+  /**
    * Qui est la fiche personne, et à quel étage.
    *
    * `personTop` quand elle est l'écran du dessus, `personUnder` quand un film la recouvre — et
-   * `personId` les réunit, parce que c'est le même acteur et que ce doit être le même nœud.
+   * `personId` les réunit. Ce n'est le même nœud que si c'est la même **entrée** de la pile : la
+   * clé porte le cran d'ouverture. L'actrice ouverte depuis la série puis rouverte depuis un de ses
+   * films sont deux fiches ; sous une seule clé, la seconde héritait de l'état de geste de la
+   * première et inversement — refermée au doigt, elle revenait au-dessus de la série invisible et
+   * sourde aux pointeurs (iPhone, 8.45.0).
    */
   const personTop = person.render && lastPerson !== null ? lastPerson : null;
   const personId = personTop ?? personUnder;
+  const personKey =
+    personTop !== null ? lastPersonKey : personUnder !== null ? personSheetKey(personUnder, behindOrigins(behind).person) : null;
   const lastDiscover = useLastValue(route.discover);
   // Le type suit l'identifiant : sans lui, une fiche de série en train de sortir repassait sur
   // « film » — l'adresse ayant repris sa valeur par défaut — et allait rechercher le mauvais
   // titre pendant son animation.
   const [lastDiscoverType, setLastDiscoverType] = useState(route.discoverType);
   if (route.discover !== null && route.discoverType !== lastDiscoverType) setLastDiscoverType(route.discoverType);
+  const lastDiscoverKey = useLastValue(
+    route.discover !== null ? discoverSheetKey(route.discoverType, route.discover, origins.discover) : null
+  );
 
   // Les trois panneaux arrivent en chargement différé (voir plus haut) : la toute première
   // ouverture payait donc un aller-retour réseau, ce qui, sur données mobiles, se sent comme un
@@ -268,8 +294,9 @@ export function PlayerShell() {
           /* Un autre acteur est une autre fiche — même raison que le `key` du lecteur sur son
              film : `arrivedByBack` n'est lu qu'au montage, le défilement et le focus sont ceux de
              la fiche précédente, et une fermeture lancée juste avant l'échange continuerait de
-             courir sur la suivante. */
-          key={personId}
+             courir sur la suivante. Et le même acteur à un autre cran de la pile est lui aussi une
+             autre fiche (DECISIONS.md §74) : d'où le cran dans `personKey`. */
+          key={personKey ?? personId}
           tmdbId={personId}
           leaving={personTop !== null && person.leaving}
           underneath={personTop === null}
@@ -281,7 +308,7 @@ export function PlayerShell() {
           dessous, et un film pas encore là ouvert depuis une filmographie n'affichait rien. */}
       {personTop === null && discover.render && lastDiscover !== null && (
         <PlayerDiscoverSheet
-          key={`${lastDiscoverType}:${lastDiscover}`}
+          key={lastDiscoverKey ?? `${lastDiscoverType}:${lastDiscover}`}
           tmdbId={lastDiscover}
           mediaType={lastDiscoverType}
           leaving={discover.leaving}

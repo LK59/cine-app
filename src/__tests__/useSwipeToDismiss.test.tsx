@@ -235,3 +235,61 @@ describe("useSwipeToDismiss", () => {
     });
   });
 });
+
+/**
+ * Une fiche jetée au doigt que l'adresse nomme encore revient (DECISIONS.md §74).
+ *
+ * Le geste coupe la carte et ses pointeurs avant que l'adresse ne bouge. Si elle ne bouge pas —
+ * un retour déjà en vol, que `cinemaClose` refuse de doubler —, l'état du geste disait « fermée »
+ * pour toujours, sur une fiche que l'adresse dessinait encore : invisible, sourde, l'écran bloqué.
+ */
+describe("useSwipeToDismiss — l'adresse l'emporte", () => {
+  const fling = (result: { current: ReturnType<typeof useSwipeToDismiss> }) => {
+    act(() => result.current.handlers.onPointerDown(pointer(100)));
+    act(() => result.current.handlers.onPointerMove(pointer(100 + THRESHOLD + 20)));
+    act(() => result.current.handlers.onPointerUp(pointer(100 + THRESHOLD + 20)));
+  };
+
+  it("revient en place si l'adresse n'a pas bougé une seconde après", () => {
+    vi.useFakeTimers();
+    try {
+      window.history.replaceState(null, "", "/#film=1");
+      const { result } = renderHook(() => useSwipeToDismiss(() => {}, { addressed: true }));
+      fling(result);
+      expect(result.current.dismissed).toBe(true);
+      act(() => void vi.advanceTimersByTime(999));
+      expect(result.current.dismissed).toBe(true);
+      act(() => void vi.advanceTimersByTime(1));
+      expect(result.current.dismissed).toBe(false);
+      expect(result.current.offset).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reste fermée quand l'adresse a bougé — la fermeture a eu lieu", () => {
+    vi.useFakeTimers();
+    try {
+      window.history.replaceState(null, "", "/#film=1");
+      const { result } = renderHook(() => useSwipeToDismiss(() => window.history.replaceState(null, "", "/"), { addressed: true }));
+      fling(result);
+      act(() => void vi.advanceTimersByTime(2000));
+      expect(result.current.dismissed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ne touche à rien sans l'option — les prototypes d'animation gardent leur geste", () => {
+    vi.useFakeTimers();
+    try {
+      window.history.replaceState(null, "", "/#film=1");
+      const { result } = renderHook(() => useSwipeToDismiss(() => {}));
+      fling(result);
+      act(() => void vi.advanceTimersByTime(2000));
+      expect(result.current.dismissed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -114,7 +114,7 @@ export function PlayerDiscoverSheet({
   const requestClose = exit.requestClose;
   // Le même geste que sur les fiches de la bibliothèque, qui l'avaient et pas celle-ci : on tire
   // la bannière vers le bas pour refermer.
-  const swipe = useSwipeToDismiss(requestClose);
+  const swipe = useSwipeToDismiss(requestClose, { addressed: true });
   // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
   // `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());

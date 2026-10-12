@@ -364,7 +364,7 @@ const GRIP_RETURN_MS = 280;
  * mangerait des clics au profit d'un geste que personne ne ferait.
  */
 export function useSheetGrip(onDismiss: () => void, enabled: boolean) {
-  const swipe = useSwipeToDismiss(onDismiss);
+  const swipe = useSwipeToDismiss(onDismiss, { addressed: true });
   /**
    * Le temps du retour, le style reste posé.
    *

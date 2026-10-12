@@ -21,7 +21,19 @@ import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
-import { useCinemaRoute, useRouteBehind, sheetIsBehind, readCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
+import {
+  useCinemaRoute,
+  useRouteBehind,
+  sheetIsBehind,
+  readCinemaRoute,
+  cinemaNavigate,
+  cinemaClose,
+  openLibraryTitle,
+  useSheetOrigins,
+  behindOrigins,
+  behindIsSameTitleSheet,
+  titleSheetKey,
+} from "@/lib/cinemaRoute";
 import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
 import { closeUncoversGrid, coversGrid, gridCardInFocus, gridIsTop } from "@/lib/cinemaGridTop";
 import { uniqueById } from "@/lib/cinemaRails";
@@ -1035,25 +1047,30 @@ export function CinemaClient() {
 
   const noop = useCallback(() => {}, []);
   const behind = useRouteBehind();
+  /**
+   * Le cran d'ouverture de chaque fiche (DECISIONS.md §74) : la moitié de sa clé, et ce qui dit si
+   * l'entrée recouverte montre la fiche courante (une fiche TMDB ou personne posée dessus — la même
+   * fiche, à ne pas dessiner deux fois) ou une autre fiche du même titre (série → acteur → la même
+   * série — deux entrées de la pile, la première dessous).
+   */
+  const origins = useSheetOrigins();
+  const underIsOther = !behindIsSameTitleSheet(behind, route, origins);
+  const underOrigin = behindOrigins(behind).title;
   const movieStack = useMemo(() => {
     if (!selectedItem) return [];
     // Sans condition sur l'onglet de l'entrée recouverte : un film ouvert depuis « Reprendre »
     // sur l'onglet Séries porte `tab=series`, et la fiche du dessous n'était alors jamais
     // redessinée — le retour la remontait de zéro. Le bureau résout par champ, pas par onglet.
-    const under =
-      behind && behind.film !== null && behind.film !== route.film
-        ? moviesById.get(behind.film) ?? null
-        : null;
-    return under ? [under, selectedItem] : [selectedItem];
-  }, [selectedItem, behind, moviesById, route.film]);
+    const under = behind && behind.film !== null && underIsOther ? moviesById.get(behind.film) ?? null : null;
+    const top = { item: selectedItem, origin: origins.title };
+    return under ? [{ item: under, origin: underOrigin }, top] : [top];
+  }, [selectedItem, behind, moviesById, underIsOther, underOrigin, origins.title]);
   const seriesStack = useMemo(() => {
     if (!seriesSelectedItem) return [];
-    const under =
-      behind && behind.serie !== null && behind.serie !== route.serie
-        ? seriesById.get(behind.serie) ?? null
-        : null;
-    return under ? [under, seriesSelectedItem] : [seriesSelectedItem];
-  }, [seriesSelectedItem, behind, seriesById, route.serie]);
+    const under = behind && behind.serie !== null && underIsOther ? seriesById.get(behind.serie) ?? null : null;
+    const top = { item: seriesSelectedItem, origin: origins.title };
+    return under ? [{ item: under, origin: underOrigin }, top] : [top];
+  }, [seriesSelectedItem, behind, seriesById, underIsOther, underOrigin, origins.title]);
 
   // Goes through leaveCinema rather than a bare router.push: playback has to survive the exit
   // (see the helper), and its fallback covers a click landing mid-redeploy.
@@ -1686,12 +1703,12 @@ export function CinemaClient() {
         />
       )}
 
-      {movieStack.map((film, i) => {
+      {movieStack.map(({ item: film, origin }, i) => {
           // Voir CinemaMobileClient : une fiche TMDB recouvre la pile sans la remplacer.
           const top = !sheetAbove && i === movieStack.length - 1;
           return (
             <CinemaMovieDetail
-              key={film.radarrId}
+              key={titleSheetKey("movie", film.radarrId, origin)}
               item={film}
               underneath={!top}
               onClose={top ? closeDetail : noop}
@@ -1699,11 +1716,11 @@ export function CinemaClient() {
             />
           );
         })}
-      {seriesStack.map((serie, i) => {
+      {seriesStack.map(({ item: serie, origin }, i) => {
           const top = !sheetAbove && i === seriesStack.length - 1;
           return (
             <CinemaSeriesDetail
-              key={serie.sonarrId}
+              key={titleSheetKey("series", serie.sonarrId, origin)}
               item={serie}
               underneath={!top}
               onClose={top ? closeSeriesDetail : noop}

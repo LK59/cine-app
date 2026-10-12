@@ -127,6 +127,81 @@ export interface SheetRef {
    * découvrait l'écran de recherche, deux crans plus bas.
    */
   person: number | null;
+  /**
+   * Le cran où chacune de ces fiches a été ouverte — voir `SheetOrigins`. Absent d'une entrée
+   * écrite avant le 12/10/2026 : lu alors comme `UNKNOWN_ORIGIN`.
+   */
+  origins?: SheetOrigins;
+}
+
+/**
+ * Le cran de la pile (la profondeur d'historique) où chaque fiche affichée a été **ouverte**
+ * (DECISIONS.md §74).
+ *
+ * C'est l'identité d'une fiche, et l'identifiant du titre ou de la personne n'y suffit pas : la
+ * même actrice ouverte depuis une série (cran 2) puis rouverte depuis un de ses films (cran 4) est
+ * deux fiches, deux entrées de la pile. Rendues sous la même clé React, elles partageaient une
+ * instance — donc l'état d'un geste : refermée au doigt au cran 4, la carte restait jetée hors de
+ * l'écran et transparente aux pointeurs, et c'est dans cet état qu'elle redevenait la fiche du
+ * dessus au cran 2. Un écran sombre, une série inerte dessous, plus rien ne répondait (iPhone,
+ * 8.45.0).
+ *
+ * Le cran d'ouverture, et non le cran courant : une fiche de bibliothèque recouverte par une
+ * personne ou une fiche TMDB reste *la même* fiche (elle est encore dans l'adresse, l'entrée
+ * suivante ne fait que poser quelque chose dessus), et doit garder son instance, son défilement et
+ * sa rangée de titres similaires. Une fiche est ouverte quand l'appel le dit (le champ est écrit
+ * par la navigation) ; sinon elle hérite du cran de l'entrée d'où l'on part.
+ */
+export interface SheetOrigins {
+  title: number | null;
+  person: number | null;
+  discover: number | null;
+}
+
+/**
+ * Le cran d'une fiche dont l'entrée ne dit rien (lien direct, entrée d'avant le 12/10/2026).
+ *
+ * Le même pour toutes : deux fiches du même titre sans cran connu gardent alors la même clé, ce qui
+ * est exactement le comportement d'avant — rien ne change pour un historique déjà écrit.
+ */
+const UNKNOWN_ORIGIN = 0;
+
+/** La clé React d'une fiche personne : la personne *et* son entrée dans la pile. */
+export function personSheetKey(tmdbId: number, origin: number | null | undefined): string {
+  return `person:${tmdbId}@${origin ?? UNKNOWN_ORIGIN}`;
+}
+
+/** La clé React d'une fiche de bibliothèque. Le type compte : un film et une série peuvent partager un numéro. */
+export function titleSheetKey(type: "movie" | "movies" | "series", id: number, origin: number | null | undefined): string {
+  return `${type === "series" ? "series" : "movie"}:${id}@${origin ?? UNKNOWN_ORIGIN}`;
+}
+
+/** La clé React d'une fiche découverte. */
+export function discoverSheetKey(type: "movie" | "series", tmdbId: number, origin: number | null | undefined): string {
+  return `${type}:${tmdbId}@${origin ?? UNKNOWN_ORIGIN}`;
+}
+
+/** Les crans de l'entrée recouverte, connus ou non. */
+export function behindOrigins(behind: SheetRef | null): SheetOrigins {
+  return behind?.origins ?? { title: UNKNOWN_ORIGIN, person: UNKNOWN_ORIGIN, discover: UNKNOWN_ORIGIN };
+}
+
+/**
+ * L'entrée recouverte montre-t-elle **la même fiche** de bibliothèque que l'entrée courante ?
+ *
+ * Même titre et même cran d'ouverture : c'est la fiche encore dans l'adresse sous une fiche TMDB ou
+ * personne — la dessiner « dessous » en ferait deux fois la même. Même titre mais ouvert à un autre
+ * cran (série → actrice → la même série) : deux fiches, la recouverte est bien dessous.
+ */
+export function behindIsSameTitleSheet(
+  behind: SheetRef | null,
+  route: Pick<CinemaRoute, "film" | "serie">,
+  origins: SheetOrigins
+): boolean {
+  if (behind === null) return false;
+  const sameTitle =
+    (route.film !== null && behind.film === route.film) || (route.serie !== null && behind.serie === route.serie);
+  return sameTitle && behindOrigins(behind).title === origins.title;
 }
 
 /**
@@ -151,9 +226,52 @@ function hasSheet(route: CinemaRoute): boolean {
 }
 
 /** La fiche que cette route affiche, réduite à ce qu'il faut pour la retrouver. */
-function sheetRef(route: CinemaRoute): SheetRef | null {
+function sheetRef(route: CinemaRoute, origins: SheetOrigins): SheetRef | null {
   if (route.film === null && route.serie === null && route.person === null) return null;
-  return { film: route.film, serie: route.serie, tab: route.tab, person: route.person };
+  return { film: route.film, serie: route.serie, tab: route.tab, person: route.person, origins };
+}
+
+/** Ce qui identifie la fiche de chaque étage dans une route — `null` quand l'étage est vide. */
+function sheetValues(route: CinemaRoute): Record<keyof SheetOrigins, string | null> {
+  return {
+    title: route.film !== null ? `f${route.film}` : route.serie !== null ? `s${route.serie}` : null,
+    person: route.person !== null ? String(route.person) : null,
+    discover: route.discover !== null ? `${route.discoverType}:${route.discover}` : null,
+  };
+}
+
+/** L'appel nomme-t-il une fiche à cet étage — c'est-à-dire en ouvre-t-il une ? */
+function patchOpens(patch: Partial<CinemaRoute>, floor: keyof SheetOrigins): boolean {
+  if (floor === "title") return (patch.film ?? null) !== null || (patch.serie ?? null) !== null;
+  if (floor === "person") return (patch.person ?? null) !== null;
+  return (patch.discover ?? null) !== null;
+}
+
+/**
+ * Les crans de la route qu'on écrit, à partir de ceux de l'entrée d'où l'on part.
+ *
+ * Une fiche nommée par un `push` est ouverte à ce cran-ci, même si elle était déjà affichée sous
+ * un autre étage — c'est le cas même du défaut : rouvrir une personne ou une série qui est déjà
+ * dans la pile empile une **nouvelle** fiche, avec sa propre clé, et le retour retrouve l'ancienne
+ * intacte. Un `replace` qui la renomme à l'identique ne l'ouvre pas.
+ */
+function nextOrigins(
+  current: CinemaRoute,
+  next: CinemaRoute,
+  patch: Partial<CinemaRoute>,
+  from: SheetOrigins,
+  depth: number,
+  mode: "push" | "replace"
+): SheetOrigins {
+  const was = sheetValues(current);
+  const now = sheetValues(next);
+  const floor = (f: keyof SheetOrigins): number | null => {
+    if (now[f] === null) return null;
+    const opened = patchOpens(patch, f) && (mode === "push" || now[f] !== was[f]);
+    if (opened || now[f] !== was[f]) return depth;
+    return from[f] ?? UNKNOWN_ORIGIN;
+  };
+  return { title: floor("title"), person: floor("person"), discover: floor("discover") };
 }
 
 function readNumber(params: URLSearchParams, key: string): number | null {
@@ -314,7 +432,8 @@ let cachedBehind: SheetRef | null = null;
 function readBehindSheet(): SheetRef | null {
   const value = readBehind();
   const next = typeof value === "object" && value !== null ? value : null;
-  const key = next ? `${next.film}:${next.serie}:${next.tab}:${next.person}` : "";
+  const o = next?.origins;
+  const key = next ? `${next.film}:${next.serie}:${next.tab}:${next.person}:${o?.title}:${o?.person}:${o?.discover}` : "";
   if (key !== cachedBehindKey) {
     cachedBehindKey = key;
     cachedBehind = next;
@@ -351,6 +470,42 @@ function currentDepth(): number {
   return typeof depth === "number" ? depth : 0;
 }
 
+/** Les crans d'ouverture de l'entrée courante — voir `SheetOrigins`. */
+const ORIGIN_KEY = "cinemaSheetOrigins";
+
+function readOrigins(): SheetOrigins {
+  const state = window.history.state as Record<string, unknown> | null;
+  const value = state?.[ORIGIN_KEY] as Partial<SheetOrigins> | undefined;
+  const route = getSnapshot();
+  // Une fiche affichée sans cran connu (lien direct, entrée ancienne) : `UNKNOWN_ORIGIN`.
+  const pick = (stored: number | null | undefined, shown: boolean) =>
+    shown ? (typeof stored === "number" ? stored : UNKNOWN_ORIGIN) : null;
+  return {
+    title: pick(value?.title, route.film !== null || route.serie !== null),
+    person: pick(value?.person, route.person !== null),
+    discover: pick(value?.discover, route.discover !== null),
+  };
+}
+
+let cachedOriginsKey: string | null = null;
+let cachedOrigins: SheetOrigins = { title: null, person: null, discover: null };
+const NO_ORIGINS: SheetOrigins = { title: null, person: null, discover: null };
+
+function readOriginsSnapshot(): SheetOrigins {
+  const next = readOrigins();
+  const key = `${next.title}:${next.person}:${next.discover}`;
+  if (key !== cachedOriginsKey) {
+    cachedOriginsKey = key;
+    cachedOrigins = next;
+  }
+  return cachedOrigins;
+}
+
+/** Les crans d'ouverture des fiches de l'entrée courante — de quoi leur donner leur clé. */
+export function useSheetOrigins(): SheetOrigins {
+  return useSyncExternalStore(subscribe, readOriginsSnapshot, () => NO_ORIGINS);
+}
+
 // `push` for opening a screen (Back should close it); `replace` for changing something about the
 // screen you're already on, like the Films/Séries tab — a filter shouldn't cost a Back press.
 export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "replace" = "push"): void {
@@ -376,6 +531,8 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
   if (mode === "push" && serialized === serialize(getSnapshot())) return;
   const url = `${window.location.pathname}${window.location.search}${serialized}`;
   const depth = currentDepth();
+  const current = getSnapshot();
+  const origins = readOrigins();
   // Spread whatever Next put in history.state rather than replacing it — its router reads its own
   // keys back on popstate.
   const state = {
@@ -385,10 +542,11 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
     // savoir. Un `replace` ne change pas ce qui est en dessous, donc il garde la valeur en place.
     [BEHIND_KEY]:
       mode === "push"
-        ? hasSheet(getSnapshot())
-          ? sheetRef(getSnapshot()) ?? true
+        ? hasSheet(current)
+          ? sheetRef(current, origins) ?? true
           : false
         : (window.history.state?.[BEHIND_KEY] ?? false),
+    [ORIGIN_KEY]: nextOrigins(current, next, patch, origins, mode === "push" ? depth + 1 : depth, mode),
   };
   // Une navigation volontaire n'est jamais un retour : le drapeau retombe avant que qui que ce
   // soit ne se monte.

@@ -358,7 +358,7 @@ export function PlayerPersonSheet({
   const closeAfterSlideStarts = useCallback(() => {
     requestAnimationFrame(() => requestAnimationFrame(() => requestClose()));
   }, [requestClose]);
-  const swipe = useSwipeToDismiss(closeAfterSlideStarts);
+  const swipe = useSwipeToDismiss(closeAfterSlideStarts, { addressed: true });
   // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
   // `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());

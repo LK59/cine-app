@@ -144,7 +144,7 @@ export function CinemaMobileDetail({
   const similar = useCinemaSimilar(item, mediaType);
   // Grab the banner and pull the sheet away — see the hook. Only the artwork above the title is
   // a handle; everything from the Lire button down scrolls as usual.
-  const swipe = useSwipeToDismiss(requestClose);
+  const swipe = useSwipeToDismiss(requestClose, { addressed: true });
   /**
    * Le geste liquide des boutons de la fiche (DECISIONS.md §45, 04/10/2026), par délégation.
    *

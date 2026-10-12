@@ -26,7 +26,18 @@ import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY
 import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
-import { accountScreenOpen, useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
+import {
+  accountScreenOpen,
+  useCinemaRoute,
+  useRouteBehind,
+  cinemaNavigate,
+  cinemaClose,
+  openLibraryTitle,
+  useSheetOrigins,
+  behindOrigins,
+  behindIsSameTitleSheet,
+  titleSheetKey,
+} from "@/lib/cinemaRoute";
 import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
 import { uniqueById } from "@/lib/cinemaRails";
 import { BROWSE_ALL, browseSheetKey } from "@/lib/cinemaBrowse";
@@ -376,6 +387,8 @@ export function CinemaMobileClient() {
   const noop = useCallback(() => {}, []);
   const closeSheet = useCallback(() => cinemaClose({ film: null, serie: null }), []);
   const behind = useRouteBehind();
+  // Le cran où chaque fiche de l'adresse a été ouverte — l'autre moitié de leur clé (§74).
+  const origins = useSheetOrigins();
   const behindSelected = useMemo(() => {
     if (!behind || !selected) return null;
     /**
@@ -411,16 +424,23 @@ export function CinemaMobileClient() {
      * numéro chez Radarr et chez Sonarr, et comparer les seuls nombres supprimerait une fiche du
      * dessous parfaitement légitime.
      */
-    if (target.type === selected.mediaType && id === itemId(selected.item)) return null;
+    /**
+     * …mais une fiche peut être derrière *une autre fiche du même titre* (DECISIONS.md §74) : série →
+     * actrice → la même série. La seconde est ouverte à un autre cran, c'est une autre entrée de la
+     * pile, et la première est bien dessous — sous l'actrice. Ce qui les distingue est le cran
+     * d'ouverture, qui fait aussi leur clé.
+     */
+    if (target.type === selected.mediaType && id === itemId(selected.item) && behindIsSameTitleSheet(behind, route, origins)) return null;
     const item = (target.type === "series" ? byIdSeries : byIdMovies)?.get(id);
-    return item ? { item, mediaType: target.type } : null;
-  }, [behind, mediaType, byIdMovies, byIdSeries, selected]);
+    return item ? { item, mediaType: target.type, origin: behindOrigins(behind).title } : null;
+  }, [behind, mediaType, byIdMovies, byIdSeries, selected, route, origins]);
 
   /** La pile, du dessous vers le dessus. Une seule fiche la plupart du temps. */
-  const stack = useMemo(
-    () => (selected ? (behindSelected ? [behindSelected, selected] : [selected]) : []),
-    [selected, behindSelected]
-  );
+  const stack = useMemo(() => {
+    if (!selected) return [];
+    const top = { ...selected, origin: origins.title };
+    return behindSelected ? [behindSelected, top] : [top];
+  }, [selected, behindSelected, origins.title]);
   // Same rail as desktop: watchlist ∩ library, so every card is playable (see the hook).
   const myListMovies = useCinemaMyList("movie", movies);
   const myListSeries = useCinemaMyList("series", series);
@@ -832,7 +852,9 @@ export function CinemaMobileClient() {
               // Le type dans la clé : un film et une série peuvent porter le même numéro chez Radarr
               // et chez Sonarr, et une clé commune faisait réutiliser l'instance de l'un pour
               // l'autre — son état, son geste, sa sortie en cours (règle 1 des fiches).
-              key={`${entry.mediaType}:${itemId(entry.item)}`}
+              // Et le cran d'ouverture : le même titre rouvert plus haut dans la pile est une autre
+              // fiche (DECISIONS.md §74).
+              key={titleSheetKey(entry.mediaType, itemId(entry.item), entry.origin)}
               item={entry.item}
               mediaType={entry.mediaType}
               underneath={!top}
