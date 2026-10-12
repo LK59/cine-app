@@ -234,6 +234,13 @@ In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now w
   bitrate. This is the only case where a playback can cost your server CPU, which is why it can be
   turned off entirely (`PLAYER_SERVER_FALLBACK=false`) — a file the browser cannot play then ends
   on a plain error naming the reason, and nothing ever starts a transcode.
+- **Slow connections** adapt on their own (setting *Quality: Automatic*, the default): when the
+  measured link cannot carry the file — no picture after 10–20 s at opening, or repeated stalls
+  caused by the network during playback — a lighter transcode (HEVC, or H.264 where HEVC is not
+  supported; 720p up to 2.5 Mbit/s, 1080p above, SDR) is prepared on the server in the background
+  and the player switches to it at the same position. The viewer only sees « Slow connection… »
+  and a short notice. A dropped connection is never treated as a slow one, and *Quality: Original*
+  turns the whole thing off. It needs the server-side player and Jellyfin's permission to transcode.
 - **Black bars baked into the file** are measured once per file on the server, from the trickplay
   thumbnails Jellyfin already has, and the picture is enlarged to the nearest edge of the screen —
   black is cropped, never picture. It needs trickplay images; `PLAYER_AUTO_FRAME=false` turns it off.

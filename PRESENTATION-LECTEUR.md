@@ -114,8 +114,12 @@ et l'appareil restitue l'Atmos s'il en est capable. Pour le TrueHD Atmos, le lec
 
 ## Limites
 
-- **Pas de qualité adaptative.** Le fichier est lu tel quel : le lecteur est fait pour un réseau
-  local ou une bonne connexion.
+- **Qualité adaptative par paliers, pas en continu.** Sur une connexion trop lente pour le fichier,
+  le lecteur passe de lui-même à une version allégée préparée par le serveur (HEVC ou H.264, 720p ou
+  1080p, SDR), au même endroit du film : quelques secondes d'interruption, pas un changement
+  invisible comme chez les services qui encodent chaque film à l'avance en plusieurs qualités. Sur
+  iPhone et iPad, Safari impose de recharger la page pour ce passage, puis un toucher sur Lecture.
+  Réglage dans le menu ⋮ : Qualité automatique (par défaut) ou originale.
 - **Anciens `.avi`** (MPEG-4 ASP, MP3) : aucun navigateur ne les décode, ils passent par le lecteur
   du serveur.
 - **Hauteur Atmos du TrueHD** : non restituée, voir plus haut.
