@@ -4,6 +4,7 @@ import type { PlayerEventKind } from "@/lib/playerLog";
 import { APP_BUILD, APP_VERSION } from "@/lib/appBuild";
 import { isIPadPosingAsMac } from "@/lib/deviceLabel";
 import { flushUnsentLines, keepUnsentLine, newLineId, shouldKeep } from "@/lib/unsentLines";
+import { timelineFields } from "@/lib/playbackTimeline";
 
 /**
  * Tells the server what the player did, so a silent step down stops being an invisible one.
@@ -24,7 +25,10 @@ export function reportPlayback(kind: PlayerEventKind, fields: Record<string, unk
     // `touch` à côté de la signature : sans lui, l'activité nomme un iPad « Mac » (`deviceLabel`).
     // Ici et non dans chaque lecteur : les deux écrivent `agent`, et passent tous deux par ici.
     const touch = typeof fields.agent === "string" && isIPadPosingAsMac() ? { touch: true } : {};
-    const sent = { build: APP_BUILD, version: APP_VERSION, ...fields, ...touch };
+    // La chronologie des deux dernières minutes, sur les lignes qui racontent une panne et sur le
+    // bilan (`playbackTimeline.ts`, §77) : ajoutée ici, comme `build`, pour qu'aucun appelant ne
+    // puisse l'oublier — et sans envoyer une ligne de plus.
+    const sent = { build: APP_BUILD, version: APP_VERSION, ...fields, ...touch, ...timelineFields(kind, fields) };
     // L'identifiant qui permet à la route de reconnaître un renvoi déjà reçu (`unsentLines.ts`).
     const lineId = newLineId();
     const body = JSON.stringify({ kind, fields: { ...sent, lineId } });

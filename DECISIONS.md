@@ -3404,3 +3404,67 @@ identiques ; téléviseur sans cookie : même contenu signé, mêmes en-têtes C
 segments jamais compressés ; `q=0` respecté).
 
 **Décidé le 12/10/2026.**
+
+## 77. « Connexion trop lente » : une cause dite seulement quand les mesures la prouvent
+
+Relevé le 12/10/2026 : Augustine, Edge sous Windows, *The Rookie* S08E18. Le PC recevait ~40 Ko/s
+(≈ 0,3 Mbit/s) derrière la même box que son iPhone, qui avait joué le même épisode 25 min sans une
+attente (3,9 Mbit/s demandés). Le lecteur natif a renoncé à 35 s (« aucune image », chemin non décidé),
+le lecteur serveur a échoué trois fois (« pas de première image en 20 s »), et l'écran disait « Le
+chargement prend trop de temps. Réessaie. » — vrai, sans le pourquoi. Le passage au serveur ne pouvait
+rien : il demandait le même débit au même lien.
+
+**Règle.** Au moment où l'un des deux lecteurs allait de toute façon renoncer (natif : 35 s sans image ;
+serveur : chien de garde de 20 s), on regarde ce que le lien a réellement livré, mesuré côté navigateur
+pendant l'attente. Les trois conditions ensemble, sinon rien ne change :
+- au moins **10 s de réception** (des en-têtes au dernier octet, union des requêtes parallèles — l'attente
+  d'un serveur qui prépare sa réponse n'est pas comptée, ce qui ne peut qu'avantager le lien) ;
+- au moins **256 Kio reçus** — en dessous, c'est une coupure, qui garde son écran « connexion perdue » ;
+- un débit **sous la moitié** du besoin : poids / durée du fichier pour le natif, débits vidéo + son du
+  flux négocié pour le serveur.
+Alors : écran « Connexion trop lente pour ce film (≈0,3 Mbit/s reçus, il en faut environ 4). Réessaie
+quand la connexion sera meilleure. » avec Réessayer, et la ligne `fallback`/`error` porte
+`reason: "connexion trop lente"`, `recvMbps`, `needMbps`, `measuredS`, `bytes` (et `serverCanCarry` côté
+natif). Le natif ne passe la main au serveur que si la version la plus réduite que celui-ci sait demander
+(`CRAWL`, 1,5 Mbit/s) passe par le lien mesuré — et le serveur demande alors ce débit (`capForSlowLink`,
+par titre, dix minutes) ; sinon l'écran, sans relais.
+
+**La mesure.** Natif : un compteur armé tant qu'aucune image n'est prête (`armOpeningMeter`, réarmé à
+chaque reconstruction) ; pendant ce temps seulement, `HttpByteSource` lit le corps au fil de l'eau
+(`readCounted`, les mêmes octets qu'`arrayBuffer()`, toujours recopiés dans un tampon à soi). Hors
+ouverture le compteur n'existe pas et la lecture est celle d'avant. Serveur : `xhrSetup` d'hls.js ajoute
+des écouteurs (`meterXhr`) sans toucher aux siens ; Safari lit son HLS lui-même et n'en dit rien — pas
+de mesure, ancien comportement. Rien de tout cela ne lève (« A check that runs on someone else's error
+path must not become the error »).
+
+**Ce qui en est montré.** Le panneau d'infos techniques (menu ⋮) des deux lecteurs : débit reçu, débit
+demandé, verdict (suffisante / trop lente / pas encore mesurée) par le même critère, en direct, et figé
+au moment d'un échec. `stall` et `stop` natifs portent `diag.linkVerdict` et `diag.linkS` à côté de
+`diag.recvMbps` / `diag.linkMbps` / `diag.needMbps` qui y étaient déjà ; le bilan du lecteur serveur porte
+les mêmes noms sous `diag.*`. Panneau Activité : ces séances sont comptées à part (`Seance.slowLinks`,
+étiquette « connexion trop lente »), hors `failuresOf` — le lien du spectateur n'accuse pas le fichier
+dans le diagnostic « fichier ou appareil » — et la raison se lit telle quelle sur la séance.
+
+**Ajouts du même chantier, mesure et journal seulement.**
+- *Démarrage du lecteur serveur* (`ServerStartup`) : `startup.*` sur `start` (négociation), `error` et
+  `stop` — liste maître et variante (ms, Ko), premier segment demandé, reçu (ms, Ko, Mb/s), tampon,
+  première image, depuis la demande ; `startup.stage` (`liste` / `segment` / `décodage` / `image`) dit où
+  en était un échec. hls.js : ses événements et leurs `stats` ; Safari : les entrées de ressources du flux.
+- *Chronologie* (`PlaybackTimeline`) : toutes les 5 s, en mémoire, un échantillon compact (position,
+  secondes depuis le départ, Mb/s reçus sur 5 s, tampon devant, réserve, état L/A/P/S/H) dans un anneau de
+  24 ; `reportPlayback` le joint en un champ `timeline` aux lignes `stall`, `error`, `fallback`,
+  `rebuild`, `network`, `stop` — **aucune ligne de plus** (la décision du 08/10 sur les points `reserve`
+  tient). La route le garde hors du plafond de 40 champs, borné à 1 000 caractères. Le détail d'une
+  séance l'affiche en tableau.
+
+**Porteurs.** `slowLinkVerdict`, `LinkMeter`, `readLink` (`src/lib/slowLink.ts`) ; `ServerStartup`
+(`src/lib/serverStartup.ts`) ; `PlaybackTimeline`, `timelineFields` (`src/lib/playbackTimeline.ts`).
+**Appelants.** `ExperimentalPlayerHost` (`giveUpOnOpening`, l'écran, le panneau), `HttpByteSource`
+(`fetchWithRetries`), `PlayerHost` / `ActivePlayer` (chien de garde, `xhrSetup`, bilan, panneau),
+`reportPlayback`, `playerLog.clean`, `activity/seances.ts`, `playbackDiagnosis` (`diag.link*`).
+**Tests.** `slowLink.test.ts`, `ExperimentalPlayerHost.test.tsx` (« le lien, mesuré » : connexion
+normale inchangée, lente validée sans relais, relais avec débit réduit, mesure impossible, rien reçu,
+coupure), `PlayerHost-connexion-lente.test.tsx`, `activity-connexion-lente.test.ts`,
+`playbackTimeline.test.ts`.
+
+**Décidé le 12/10/2026.**

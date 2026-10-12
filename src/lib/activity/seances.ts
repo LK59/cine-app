@@ -9,6 +9,7 @@
 import { deviceLabel } from "@/lib/deviceLabel";
 import type { LogRecord } from "@/lib/activity/logReader";
 import { isServerFailureRestart, isServerRestart, serverStartWhyLabel } from "@/lib/serverPlayerLog";
+import { SLOW_LINK_REASON } from "@/lib/slowLink";
 
 export interface Seance {
   id: string;
@@ -70,6 +71,13 @@ export interface Seance {
   stalls: number;
   /** Les replis qui échouent. Une diffusion vers la télévision (AirPlay) n'en est pas un. */
   fallbacks: number;
+  /**
+   * Les ouvertures arrêtées par une connexion trop lente, validée par ses mesures (DECISIONS.md
+   * §77) — repli ou erreur portant ce motif. Comptées à part, comme les diffusions : le lien du
+   * spectateur ne dit rien du fichier, et ces séances ne doivent pas l'accuser dans le diagnostic
+   * « fichier ou appareil ». Absent d'une séance gardée avant ce champ (alertes, signalements).
+   */
+  slowLinks?: number;
   /**
    * Les passages au lecteur serveur pour diffuser — « diffusion demandée ». Comptés à part : ils
    * faisaient accuser un appareil dans le diagnostic « fichier ou appareil », sept envois vers la
@@ -152,6 +160,7 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     backgroundRebuilds: 0,
     stalls: 0,
     fallbacks: 0,
+    slowLinks: 0,
     casts: 0,
     onTv: false,
     castTarget: null,
@@ -182,6 +191,13 @@ export function lineLateByMs(r: { kind?: unknown; lateByMs?: unknown; resent?: u
   if (r.kind !== "stop" && r.resent !== true) return null;
   const late = num(r.lateByMs);
   return late !== null && late > 0 ? late : null;
+}
+
+/** Une connexion trop lente : un incident du lien, pas du fichier — voir `Seance.slowLinks`. */
+function noteSlowLink(s: Seance, r: LogRecord): void {
+  s.slowLinks = (s.slowLinks ?? 0) + 1;
+  // Le motif tel que la ligne l'écrit : les chiffres restent sur la ligne (frise, détail).
+  s.incidents.push({ kind: "slowLink", t: r._t, reason: str(r.reason) ?? SLOW_LINK_REASON });
 }
 
 function absorb(s: Seance, r: LogRecord): void {
@@ -239,6 +255,10 @@ function absorb(s: Seance, r: LogRecord): void {
         s.casts += 1;
         break;
       }
+      if (reason === SLOW_LINK_REASON) {
+        noteSlowLink(s, r);
+        break;
+      }
       s.fallbacks += 1;
       s.incidents.push({ kind: "fallback", t: r._t, reason });
       break;
@@ -247,6 +267,10 @@ function absorb(s: Seance, r: LogRecord): void {
       if (str(r.target)) s.castTarget = str(r.target);
       break;
     case "error":
+      if (reason === SLOW_LINK_REASON) {
+        noteSlowLink(s, r);
+        break;
+      }
       s.errors += 1;
       s.incidents.push({ kind: "error", t: r._t, reason });
       break;

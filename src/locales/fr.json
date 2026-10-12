@@ -345,6 +345,7 @@
       "rebuild": "{n} reconstruction|{n} reconstructions",
       "stall": "{n} blocage|{n} blocages",
       "slowSeek": "{n} saut lent|{n} sauts lents",
+      "slowLink": "{n} connexion trop lente|{n} connexions trop lentes",
       "ladder": "{n} relance après erreur|{n} relances après erreur",
       "restart": "{n} relance|{n} relances",
       "lost": "fin perdue",
@@ -355,6 +356,22 @@
       "identicalRetry": "{n} reprise identique|{n} reprises identiques"
     },
     "seance": {
+      "ring": {
+        "title": "Les deux minutes d'avant (un point toutes les 5 s)",
+        "wall": "Instant",
+        "pos": "Position",
+        "recv": "Mb/s reçus",
+        "ahead": "Tampon (secondes)",
+        "reserve": "Réserve (Mo)",
+        "state": "État",
+        "states": {
+          "L": "lecture",
+          "A": "attente",
+          "P": "pause",
+          "S": "saut",
+          "H": "arrière-plan"
+        }
+      },
       "watched": "{d} regardé",
       "legacy": "reconstituée",
       "serverPlayer": "Lecteur serveur",
@@ -1598,6 +1615,11 @@
     "stillLoading": "Le chargement est toujours en cours, ne fermez pas le lecteur…",
     "reconnecting": "Reconnexion…",
     "loadingTooLong": "Le chargement prend trop de temps. Réessaie.",
+    "slowLink": {
+      "title": "Connexion trop lente",
+      "detail": "≈{recv} Mbit/s reçus, il en faut environ {need} pour ce film. Réessaie quand la connexion sera meilleure.",
+      "message": "Connexion trop lente pour ce film (≈{recv} Mbit/s reçus, il en faut environ {need}). Réessaie quand la connexion sera meilleure."
+    },
     "unsupportedBrowser": "Ce navigateur ne peut pas lire ce flux.",
     "playbackInterruptedCheckConnection": "La lecture a été interrompue. Vérifie ta connexion et réessaie.",
     "playbackInterrupted": "La lecture a été interrompue. Réessaie.",
@@ -1606,6 +1628,13 @@
       "title": "Infos de lecture",
       "network": "Réseau",
       "estimatedBitrate": "Débit estimé",
+      "linkReceived": "Débit reçu",
+      "linkNeeded": "Débit demandé par le film",
+      "linkVerdict": "Connexion",
+      "linkOk": "suffisante",
+      "linkSlow": "trop lente",
+      "linkUnknown": "pas encore mesurée",
+      "linkFrozen": "mesurée au moment de l'échec",
       "reason": "Raison",
       "container": "Conteneur",
       "video": "Vidéo",

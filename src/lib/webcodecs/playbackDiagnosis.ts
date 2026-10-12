@@ -23,6 +23,7 @@
 
 import { MIN_WAIT_MS } from "@/lib/playerSessionTally";
 import { trace } from "./trace";
+import { readLink, linkVerdictWord, type LinkMeasure } from "@/lib/slowLink";
 
 /** Les intervalles notés. */
 export type DiagKind =
@@ -92,6 +93,12 @@ interface Session {
   lagMaxMs: number;
   /** Le débit moyen du fichier, en bits par seconde — ce que la chaîne doit tenir. */
   needBps: number | null;
+  /**
+   * La réception de la séance : l'union des intervalles où des octets arrivaient (des en-têtes au
+   * dernier octet), et ce qu'ils ont apporté — le débit d'acheminement réel, sans l'attente du
+   * serveur (§77). Tenue à l'arrivée, comme `totals`.
+   */
+  recv: { ms: number; bytes: number; coveredUntil: number };
   video: HTMLVideoElement | null;
   waitStartedAt: number | null;
   waitLead: number | null;
@@ -165,6 +172,7 @@ export function diagBegin(id: string): void {
       serverMaxMs: null,
       lagMaxMs: 0,
       needBps: null,
+      recv: { ms: 0, bytes: 0, coveredUntil: 0 },
       video: null,
       waitStartedAt: null,
       waitLead: null,
@@ -314,6 +322,10 @@ export function diagRequest(sentAt: number, headersAt: number, endAt: number, by
     const session = current;
     if (!session) return;
     record(session, "net", sentAt, endAt, bytes, headersAt - sentAt);
+    const recv = session.recv;
+    recv.bytes += bytes;
+    recv.ms += Math.max(0, endAt - Math.max(headersAt, recv.coveredUntil));
+    recv.coveredUntil = Math.max(recv.coveredUntil, endAt);
     session.firstBytes.push(headersAt - sentAt);
     if (session.firstBytes.length > 2000) session.firstBytes.splice(0, 1000);
     session.slowestMs = Math.max(session.slowestMs, endAt - sentAt);
@@ -396,6 +408,73 @@ function bytesIn(intervals: Interval[], from: number, to: number): number {
     total += length > 0 ? (i.bytes * (Math.min(i.to, to) - Math.max(i.from, from))) / length : i.bytes;
   }
   return total;
+}
+
+/** L'union des intervalles de réception (des en-têtes au dernier octet) des requêtes dans [from, to]. */
+function receivingMs(intervals: Interval[], from: number, to: number): number {
+  const spans = intervals
+    .filter((i) => i.kind === "net" && i.to > from && i.from + (i.firstByteMs ?? 0) < to)
+    .map((i) => [Math.max(i.from + (i.firstByteMs ?? 0), from), Math.min(i.to, to)] as const)
+    .sort((a, b) => a[0] - b[0]);
+  let total = 0;
+  let end = -Infinity;
+  for (const [a, b] of spans) {
+    if (b <= end) continue;
+    total += b - Math.max(a, end);
+    end = b;
+  }
+  return total;
+}
+
+/**
+ * Ce que le lien a livré pendant qu'il livrait, sur les `windowMs` dernières millisecondes — la
+ * mesure du verdict « connexion trop lente » (§77) en pleine lecture, pour le panneau technique.
+ */
+export function diagLinkMeasure(windowMs = STALL_WINDOW_MS): LinkMeasure | null {
+  try {
+    const session = current;
+    if (!session) return null;
+    const to = now();
+    const from = Math.max(session.startedAt, to - windowMs);
+    return { bytes: bytesIn(session.intervals, from, to), receivingMs: receivingMs(session.intervals, from, to) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pour la chronologie (`playbackTimeline.ts`) : les Mb/s reçus par le lecteur sur les `windowMs`
+ * dernières millisecondes (octets des requêtes au prorata, horloge murale — la réserve en mémoire
+ * a sa propre colonne), la réserve devant la tête en Mo, et l'attente en cours.
+ */
+export function diagRecentMbps(windowMs: number): number | null {
+  try {
+    const session = current;
+    if (!session) return null;
+    const to = now();
+    const from = Math.max(session.startedAt, to - windowMs);
+    return mbps(bytesIn(session.intervals, from, to), to - from);
+  } catch {
+    return null;
+  }
+}
+
+export function diagReserveAheadMB(): number | null {
+  return current?.reserve?.aheadChunks ?? null;
+}
+
+export function diagWaiting(): boolean {
+  return current?.waitStartedAt != null;
+}
+
+/** Le débit moyen du fichier de la séance, s'il est connu. */
+export function diagNeedBps(): number | null {
+  return current?.needBps ?? null;
+}
+
+/** Le verdict du lien et le temps de réception qui le fonde, pour `diag.*`. */
+function linkFacts(measure: LinkMeasure, needBps: number | null): Record<string, string | number> {
+  return { linkVerdict: linkVerdictWord(readLink(measure, needBps)), linkS: Math.round(measure.receivingMs / 100) / 10 };
 }
 
 function mbps(bytes: number, ms: number): number | null {
@@ -546,6 +625,8 @@ export function diagStallFacts(lead: number | null, windowMs = STALL_WINDOW_MS):
       facts.slowestMs = Math.round(Math.max(...recent.map((i) => i.to - i.from)));
     }
     if (session.needBps !== null) facts.needMbps = Math.round((session.needBps / 1e6) * 10) / 10;
+    // Le verdict du lien sur la fenêtre (§77) — `recvMbps`, `linkMbps` et `needMbps` y sont déjà.
+    Object.assign(facts, linkFacts({ bytes: w.bytes, receivingMs: receivingMs(session.intervals, from, to) }, session.needBps));
     if (framed.length >= 2) {
       const first = framed[0];
       const last = framed[framed.length - 1];
@@ -634,6 +715,8 @@ export function diagSessionFacts(): Record<string, string | number | boolean> {
     if (session.serverMaxMs !== null) facts.serverMaxMs = session.serverMaxMs;
     if (session.failedRequests > 0) facts.reqFailed = session.failedRequests;
     if (session.needBps !== null) facts.needMbps = Math.round((session.needBps / 1e6) * 10) / 10;
+    // Le verdict du lien sur toute la séance (§77), d'après la réception seule.
+    Object.assign(facts, linkFacts({ bytes: session.recv.bytes, receivingMs: session.recv.ms }, session.needBps));
     for (const verdict of ["réseau", "calcul", "décodeur", "autre"] as const) {
       if (session.waits[verdict] === 0) continue;
       const key = verdict === "réseau" ? "Net" : verdict === "calcul" ? "Cpu" : verdict === "décodeur" ? "Decoder" : "Other";

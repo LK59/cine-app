@@ -46,7 +46,7 @@ const UNCONSTRAINED = 100_000_000;
  * tel quel, et le seul service qu'on puisse rendre est un flux que le lien peut porter.
  */
 const THREE_G = 6_400_000;
-const CRAWL = 1_500_000;
+export const CRAWL = 1_500_000;
 
 /**
  * `downlink` sature à 10 Mbps.
@@ -66,7 +66,7 @@ const DOWNLINK_SATURATION_MBPS = 10;
  * place pour les en-têtes, la variabilité, et le fait qu'un tampon qui se remplit tout juste au
  * rythme de la lecture ne se remplit jamais.
  */
-const USABLE_SHARE = 0.75;
+export const USABLE_SHARE = 0.75;
 
 /**
  * Le plafond à envoyer, d'après ce que le navigateur dit du lien.

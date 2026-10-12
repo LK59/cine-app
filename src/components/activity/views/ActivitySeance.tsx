@@ -6,7 +6,7 @@ import { AudioLines, ChevronDown, ChevronRight, Clock, FastForward, Hourglass, L
 import { fetcher } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
-import { JsonBlock, Poster, SeanceFlags, Steps, Tile, clock, describeLine, fullDate, hours, kindDot, kindTone, secs } from "@/components/activity/parts";
+import { JsonBlock, Poster, SeanceFlags, Steps, Tile, TimelineTable, clock, describeLine, fullDate, hours, kindDot, kindTone, secs } from "@/components/activity/parts";
 import type { Seance } from "@/lib/activity/seances";
 import { ActivityLink, goTo } from "@/components/activity/nav";
 import { SeanceFrise } from "@/components/activity/SeanceFrise";
@@ -111,6 +111,7 @@ function Step({ line, start }: { line: Record<string, unknown>; start: number })
       {open && (
         <div className="space-y-2 pb-3 sm:pl-[8.5rem]">
           {typeof steps === "string" && <Steps text={steps} />}
+          {typeof (rest as { timeline?: unknown }).timeline === "string" && <TimelineTable text={(rest as { timeline: string }).timeline} />}
           <JsonBlock value={rest} />
         </div>
       )}

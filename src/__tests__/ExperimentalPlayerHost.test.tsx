@@ -243,6 +243,7 @@ vi.mock("@/lib/webcodecs/remuxPlayback", () => ({
 import { noteWatching } from "@/lib/resumeRewind";
 import { resetIntroClocks } from "@/lib/playbackIntro";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
+import { capForSlowLink, forgetSlowLinks, meterOpeningRequest } from "@/lib/slowLink";
 
 const onFallback = vi.fn();
 
@@ -2742,5 +2743,135 @@ describe("le Chromecast", () => {
     await untilSettled(() => expect(screen.getByTestId("controls")).toBeTruthy());
     await settle();
     expect(screen.queryByText("chromecast")).toBeNull();
+  });
+});
+
+/**
+ * « Connexion trop lente » (DECISIONS.md §77) — 12/10/2026, Edge d'Augustine : ~40 Ko/s pour un
+ * épisode qui demande ~3,9 Mbit/s, « aucune image après 35 s » puis trois échecs du lecteur serveur.
+ * Le minuteur d'abandon regarde maintenant ce que le lien a livré ; sans preuve, rien ne change.
+ */
+describe("une ouverture qui traîne : le lien, mesuré", () => {
+  // 3,9 Mbit/s demandés : 1,17 Go pour 40 minutes.
+  const slowInfo = () => info({ sizeBytes: 1_170_000_000, runtimeSeconds: 2400 });
+  const logged = (kind: string) =>
+    (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .filter((entry) => entry.kind === kind);
+
+  /** Une ouverture qui ne finit jamais, et un lien qui livre `bytesPerSecond` jusqu'à l'abandon. */
+  async function openOver(bytesPerSecond: number) {
+    vi.useFakeTimers();
+    nextProbe = () => new Promise(() => {}) as never;
+    mount();
+    await act(async () => void vi.advanceTimersByTime(500));
+    const request = meterOpeningRequest();
+    expect(request).not.toBeNull();
+    request!.headers();
+    for (let t = 0; t < 36; t++) {
+      await act(async () => void vi.advanceTimersByTime(1000));
+      if (bytesPerSecond > 0) request!.received(bytesPerSecond);
+    }
+  }
+
+  beforeEach(() => forgetSlowLinks());
+
+  it("une connexion normale : le même renoncement qu'avant, sans un mot de plus", async () => {
+    serverFallback = true;
+    swr = { data: slowInfo(), error: undefined };
+    await openOver(2_000_000);
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(onFallback).toHaveBeenCalledWith("aucune image après 35 s");
+    const line = logged("fallback")[0].fields;
+    expect(line.reason).toBe("aucune image après 35 s");
+    expect(line.recvMbps).toBeUndefined();
+    expect(capForSlowLink("item-1", 100_000_000)).toBe(100_000_000);
+    // La chronologie (§77) part avec la ligne de panne : un point toutes les 5 s, plus celui de l'instant.
+    expect(typeof line.timeline).toBe("string");
+    expect((line.timeline as string).split(";").length).toBeGreaterThanOrEqual(7);
+    // Et rien d'autre n'est parti pendant ces 35 s que la ligne elle-même.
+    expect(logged("reserve")).toHaveLength(0);
+  });
+
+  it("≈0,3 Mbit/s : l'écran le dit, avec Réessayer, et le lecteur serveur n'est pas appelé pour rien", async () => {
+    serverFallback = true;
+    swr = { data: slowInfo(), error: undefined };
+    await openOver(40_000);
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(screen.getByText("detail")).toBeTruthy();
+    // L'écran d'erreur ordinaire, et sa proposition de passer au lecteur serveur, ne sont pas là.
+    expect(screen.queryByText("switchToStable")).toBeNull();
+    const line = logged("error")[0].fields;
+    expect(line).toMatchObject({ reason: "connexion trop lente", path: "non décidé", needMbps: 3.9, serverCanCarry: false });
+    expect(line.recvMbps).toBeCloseTo(0.32, 1);
+    expect(line.measuredS).toBeGreaterThanOrEqual(30);
+    expect(line.bytes).toBeGreaterThan(1_000_000);
+
+    // Réessayer rouvre le lecteur, au même endroit, et l'écran s'en va.
+    await act(async () => void fireEvent.click(screen.getByRole("button", { name: /retry/ })));
+    await act(async () => void vi.advanceTimersByTime(10));
+    expect(probes).toHaveLength(2);
+    expect(screen.queryByText("detail")).toBeNull();
+  });
+
+  it("assez de débit pour la version réduite : le relais au lecteur serveur, avec ce débit", async () => {
+    serverFallback = true;
+    swr = { data: slowInfo(), error: undefined };
+    // 1,8 Mbit/s : moins de la moitié de 3,9, mais au-dessus du plancher du serveur.
+    await openOver(225_000);
+    expect(onFallback).toHaveBeenCalledWith("connexion trop lente");
+    expect(logged("fallback")[0].fields).toMatchObject({ reason: "connexion trop lente", serverCanCarry: true });
+    expect(capForSlowLink("item-1", 100_000_000)).toBe(1_500_000);
+  });
+
+  it("sans lecteur serveur, la même lenteur a le même écran", async () => {
+    serverFallback = false;
+    swr = { data: slowInfo(), error: undefined };
+    await openOver(225_000);
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(screen.getByText("detail")).toBeTruthy();
+  });
+
+  it("mesure impossible (poids ou durée du fichier inconnus) : l'ancien comportement", async () => {
+    serverFallback = true;
+    swr = { data: info(), error: undefined };
+    await openOver(40_000);
+    expect(onFallback).toHaveBeenCalledWith("aucune image après 35 s");
+    expect(screen.queryByText("detail")).toBeNull();
+  });
+
+  it("rien reçu du tout : pas une lenteur — l'ancien comportement", async () => {
+    serverFallback = true;
+    swr = { data: slowInfo(), error: undefined };
+    await openOver(0);
+    expect(onFallback).toHaveBeenCalledWith("aucune image après 35 s");
+  });
+
+  it("une coupure garde son écran « connexion perdue », lente ou pas", async () => {
+    serverFallback = true;
+    swr = { data: slowInfo(), error: undefined };
+    vi.useFakeTimers();
+    nextProbe = () => new Promise(() => {}) as never;
+    mount();
+    await act(async () => void vi.advanceTimersByTime(500));
+    const request = meterOpeningRequest()!;
+    request.headers();
+    for (let t = 0; t < 20; t++) {
+      await act(async () => void vi.advanceTimersByTime(1000));
+      request.received(40_000);
+    }
+    Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
+    act(() => probes[0].onError("plus de réseau", "network"));
+    await act(async () => void vi.advanceTimersByTime(60_000));
+    expect(screen.getByText("connectionLost")).toBeTruthy();
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(logged("error")).toHaveLength(0);
+  });
+
+  it("une fois l'image là, plus rien n'est compté", async () => {
+    mount();
+    await untilSettled(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    expect(meterOpeningRequest()).toBeNull();
   });
 });

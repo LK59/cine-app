@@ -44,6 +44,7 @@ export function acknowledgeSeance(s: Seance, clearedAt: number): Seance {
     stalls: 0,
     rebuilds: 0,
     fallbacks: 0,
+    slowLinks: 0,
     errors: 0,
     slowSeeks: 0,
     incidents: [],

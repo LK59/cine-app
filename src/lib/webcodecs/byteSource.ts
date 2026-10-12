@@ -1,6 +1,7 @@
 import { noteUnauthorized, SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { trace } from "./trace";
 import { diagInterval, diagNow, diagRequest, diagRequestFailed } from "./playbackDiagnosis";
+import { meterOpeningRequest, readCounted } from "@/lib/slowLink";
 // Random access over a media file, for the native player's remuxer.
 //
 // The demuxer needs to jump around a file that can be 40 GB: read the header, jump to the end
@@ -661,6 +662,8 @@ export class HttpByteSource implements ByteSource {
               attemptControl.abort();
             }, SEEK_FIRST_BYTE_MS)
           : null;
+      // Suivie si une ouverture du lecteur natif est en cours — voir `meterOpeningRequest`.
+      const metered = meterOpeningRequest();
       try {
         const sentAt = performance.now();
         const res = await fetch(this.url, {
@@ -693,7 +696,11 @@ export class HttpByteSource implements ByteSource {
         if (res.status !== 206) throw new Error(`Le serveur a refusé la plage demandée (statut ${res.status}).`);
         this.checkTotal(res);
         const headersAt = performance.now();
-        const bytes = new Uint8Array(await res.arrayBuffer());
+        metered?.headers();
+        // Pendant une ouverture seulement, le corps est lu au fil de l'eau pour compter ce qui
+        // arrive (« connexion trop lente », DECISIONS.md §77) — les mêmes octets. Hors ouverture,
+        // `metered` est nul et rien ne change.
+        const bytes = metered ? await readCounted(res, metered) : new Uint8Array(await res.arrayBuffer());
         this.networkBytes += bytes.byteLength;
         const endAt = performance.now();
         this.note(sentAt, headersAt, endAt, bytes.byteLength, res);
@@ -714,6 +721,7 @@ export class HttpByteSource implements ByteSource {
         if (muted) trace(`réseau : aucun octet en ${SEEK_FIRST_BYTE_MS / 1000} s après un saut, plage ${start}-${end} redemandée`);
         else if (attempt === 0) trace(`réseau : plage ${start}-${end} refusée, nouvelle tentative`);
       } finally {
+        metered?.end();
         if (firstByteTimer !== null) clearTimeout(firstByteTimer);
         own.removeEventListener("abort", forward);
       }

@@ -345,6 +345,7 @@
       "rebuild": "{n} Neuaufbau|{n} Neuaufbauten",
       "stall": "{n} Hänger|{n} Hänger",
       "slowSeek": "{n} langsamer Sprung|{n} langsame Sprünge",
+      "slowLink": "{n}× Verbindung zu langsam|{n}× Verbindung zu langsam",
       "ladder": "{n} Neustart nach einem Fehler|{n} Neustarts nach Fehlern",
       "restart": "{n} Neustart|{n} Neustarts",
       "lost": "Ende verloren",
@@ -355,6 +356,22 @@
       "identicalRetry": "{n} identischer Wiederholungsversuch|{n} identische Wiederholungsversuche"
     },
     "seance": {
+      "ring": {
+        "title": "Die zwei Minuten davor (ein Punkt alle 5 s)",
+        "wall": "Zeitpunkt",
+        "pos": "Position",
+        "recv": "Mb/s empfangen",
+        "ahead": "Puffer (s)",
+        "reserve": "Reserve (MB)",
+        "state": "Zustand",
+        "states": {
+          "L": "Wiedergabe",
+          "A": "Warten",
+          "P": "Pause",
+          "S": "Sprung",
+          "H": "Hintergrund"
+        }
+      },
       "watched": "{d} geschaut",
       "legacy": "rekonstruiert",
       "serverPlayer": "Server-Player",
@@ -1598,6 +1615,11 @@
     "stillLoading": "Wird noch geladen, Player nicht schließen…",
     "reconnecting": "Verbindung wird wiederhergestellt…",
     "loadingTooLong": "Das dauert zu lange. Versuch's erneut.",
+    "slowLink": {
+      "title": "Verbindung zu langsam",
+      "detail": "≈{recv} Mbit/s empfangen, dieser Film braucht etwa {need}. Versuch's erneut, wenn die Verbindung besser ist.",
+      "message": "Verbindung zu langsam für diesen Film (≈{recv} Mbit/s empfangen, er braucht etwa {need}). Versuch's erneut, wenn die Verbindung besser ist."
+    },
     "unsupportedBrowser": "Dieser Browser kann diesen Stream nicht abspielen.",
     "playbackInterruptedCheckConnection": "Die Wiedergabe wurde unterbrochen. Prüfe deine Verbindung und versuch's erneut.",
     "playbackInterrupted": "Die Wiedergabe wurde unterbrochen. Versuch's erneut.",
@@ -1606,6 +1628,13 @@
       "title": "Wiedergabe-Infos",
       "network": "Netzwerk",
       "estimatedBitrate": "Geschätzte Bitrate",
+      "linkReceived": "Empfangene Bitrate",
+      "linkNeeded": "Bitrate, die der Film braucht",
+      "linkVerdict": "Verbindung",
+      "linkOk": "ausreichend",
+      "linkSlow": "zu langsam",
+      "linkUnknown": "noch nicht gemessen",
+      "linkFrozen": "zum Zeitpunkt des Fehlers gemessen",
       "reason": "Grund",
       "container": "Container",
       "video": "Video",

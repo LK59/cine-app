@@ -938,6 +938,18 @@ screen with its automatic retry, and the retry asks for the description again un
 (`infoAttempt`) without touching the opening position (`PlayerLifecycle.retryOpening`). A server
 answer, even an error, still goes through the usual refusal path.
 
+**A connection too slow for the film is said, with its figures — only once measured** (12/10/2026,
+DECISIONS.md §77). When the native player gives up after 35 s without a picture, or the server player's
+20 s watchdog fires, `slowLinkVerdict` (`src/lib/slowLink.ts`) looks at what the link actually
+delivered while bytes were arriving: at least 10 s of reception, at least 256 KiB received (less is a
+cut, which keeps its « connection lost » screen), and less than half of what the stream needs (the
+file's size over its duration natively; video + audio bitrate of the negotiated stream on the server).
+Then the screen reads `Connection too slow for this film (≈0.3 Mbit/s received, it needs about 4). Try
+again when the connection is better.` with Retry, the line says `reason: "connexion trop lente"` with
+`recvMbps`, `needMbps`, `measuredS`, `bytes`, and the native player hands over to the server player
+only if its lowest bitrate (1.5 Mbit/s) fits the measured link — asking for that lower bitrate.
+Anything not proven keeps the old screen and the old reason, word for word.
+
 Sent to the trace instead, because the viewer saw nothing and has nothing to do: refused segment
 retried, refused seek retried, recovery abandoned after N attempts (the remuxer's index back-off
 routinely reaches the position just afterwards) and the ladder's next rung, pipeline rebuilt, sound

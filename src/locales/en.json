@@ -345,6 +345,7 @@
       "rebuild": "{n} rebuild|{n} rebuilds",
       "stall": "{n} stall|{n} stalls",
       "slowSeek": "{n} slow seek|{n} slow seeks",
+      "slowLink": "{n} connection too slow|{n} connections too slow",
       "ladder": "{n} restart after an error|{n} restarts after errors",
       "restart": "{n} restart|{n} restarts",
       "lost": "end lost",
@@ -355,6 +356,22 @@
       "identicalRetry": "{n} identical retry|{n} identical retries"
     },
     "seance": {
+      "ring": {
+        "title": "The two minutes before (one point every 5 s)",
+        "wall": "Time",
+        "pos": "Position",
+        "recv": "Mb/s received",
+        "ahead": "Buffer (s)",
+        "reserve": "Reserve (MB)",
+        "state": "State",
+        "states": {
+          "L": "playing",
+          "A": "waiting",
+          "P": "paused",
+          "S": "seeking",
+          "H": "background"
+        }
+      },
       "watched": "{d} watched",
       "legacy": "reconstructed",
       "serverPlayer": "Server player",
@@ -1598,6 +1615,11 @@
     "stillLoading": "Still loading, don't close the player…",
     "reconnecting": "Reconnecting…",
     "loadingTooLong": "This is taking too long. Try again.",
+    "slowLink": {
+      "title": "Connection too slow",
+      "detail": "≈{recv} Mbit/s received, this film needs about {need}. Try again when the connection is better.",
+      "message": "Connection too slow for this film (≈{recv} Mbit/s received, it needs about {need}). Try again when the connection is better."
+    },
     "unsupportedBrowser": "This browser can't play this stream.",
     "playbackInterruptedCheckConnection": "Playback was interrupted. Check your connection and try again.",
     "playbackInterrupted": "Playback was interrupted. Try again.",
@@ -1606,6 +1628,13 @@
       "title": "Playback info",
       "network": "Network",
       "estimatedBitrate": "Estimated bitrate",
+      "linkReceived": "Received bitrate",
+      "linkNeeded": "Bitrate the film needs",
+      "linkVerdict": "Connection",
+      "linkOk": "fast enough",
+      "linkSlow": "too slow",
+      "linkUnknown": "not measured yet",
+      "linkFrozen": "measured when it failed",
       "reason": "Reason",
       "container": "Container",
       "video": "Video",

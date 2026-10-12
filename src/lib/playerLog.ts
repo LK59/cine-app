@@ -1,3 +1,4 @@
+import { TIMELINE_MAX_CHARS } from "@/lib/playbackTimeline";
 import path from "node:path";
 import { LOG_DIR, appendJsonLine, logGenerations } from "@/lib/logFile";
 
@@ -140,6 +141,13 @@ function clean(fields: Record<string, unknown>): Record<string, string | number 
    */
   let keptDiag = 0;
   const keep = (key: string, value: unknown): void => {
+    // La chronologie des deux dernières minutes (`playbackTimeline.ts`, §77) : un seul champ, une
+    // chaîne compacte, hors du plafond des quarante — elle ne doit ni chasser les faits de la ligne
+    // ni être chassée par eux. Bornée à part, comme `steps`.
+    if (key === "timeline") {
+      if (typeof value === "string" && value) out[key] = value.slice(-TIMELINE_MAX_CHARS);
+      return;
+    }
     const diag = key.startsWith("diag.");
     // 28 : le banc d'essai ajoute `bench` en tête des lignes, et une ligne `stall` en portait déjà
     // 24 — la dernière, `steps`, la plus précieuse, serait tombée.

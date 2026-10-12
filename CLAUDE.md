@@ -158,6 +158,12 @@ bitrate, time the remuxer waited for bytes, time spent building segments, re-enc
 appending, main-thread long tasks, what `navigator.connection` says (Wi-Fi or cellular on Android),
 and each wait classified *réseau* / *calcul* / *décodeur*. It exists because a phone waited fifty
 times an episode while a Mac on the same router never did, and nothing said which of the three it was.
+Since 2026-10-12 (DECISIONS §77) a give-up that the measured link explains says so: `reason:
+"connexion trop lente"` with `recvMbps`/`needMbps`/`measuredS`/`bytes` (only when ≥ 10 s of reception
+delivered < half the stream's bitrate); server-player `start`/`error`/`stop` carry `startup.*` (lists,
+first segment, picture, ms from the request, and `startup.stage` on a failure); `stall`, `error`,
+`fallback`, `rebuild`, `network` and `stop` carry `timeline`, the last two minutes sampled every 5 s in
+memory (`pos,s,Mb/s,ahead,reserveMB,state;…`, `playbackTimeline.ts`) — no extra line is ever sent for it.
 `data/logs/auth.log` (since 2026-09-24) records sign-ins, refusals, sign-outs, closed sessions and
 refused tokens, with device and address; `data/logs/notifications.log` records every push sent,
 with what happened to it per account (delivered, failed, subscription removed, turned off). Both are

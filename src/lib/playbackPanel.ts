@@ -1,4 +1,5 @@
 import type { PlaybackPanelData, PanelSection } from "@/components/PlaybackInfoPanel";
+import type { LinkReading } from "@/lib/slowLink";
 
 /** La fonction de traduction, passée plutôt qu'appelée : ces constructeurs restent purs. */
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
@@ -24,6 +25,22 @@ function section(title: string, rows: { label: string; value: string | null }[])
   return { title, rows: rows.filter((r) => r.value !== null).map((r) => ({ label: r.label, value: r.value! })) };
 }
 
+/**
+ * Le lien vers cet appareil (§77) : le débit réellement reçu, ce que le flux demande, et le verdict
+ * par le critère même de l'abandon — en direct, ou figé au moment d'un échec. Rien quand il n'y a
+ * aucune mesure (Safari lit son HLS lui-même et n'en dit rien).
+ */
+function linkRows(link: LinkReading | null | undefined, t: Translate): { label: string; value: string | null }[] {
+  if (!link || (link.recvBps === null && link.verdict === "unknown" && !link.frozen)) return [];
+  const verdict =
+    link.verdict === "ok" ? t("player.info.linkOk") : link.verdict === "slow" ? t("player.info.linkSlow") : t("player.info.linkUnknown");
+  return [
+    { label: t("player.info.linkReceived"), value: link.recvBps !== null ? formatBitrate(Math.max(link.recvBps, 1)) : "—" },
+    { label: t("player.info.linkNeeded"), value: link.needBps !== null ? formatBitrate(link.needBps) : null },
+    { label: t("player.info.linkVerdict"), value: link.frozen ? `${verdict} · ${t("player.info.linkFrozen")}` : verdict },
+  ];
+}
+
 export interface JellyfinPlayback {
   playMethod: "DirectPlay" | "DirectStream" | "Transcode";
   transcodeReasons: string[];
@@ -45,7 +62,8 @@ export function describeJellyfinPlayback(
   info: JellyfinPlayback,
   networkBitrate: number | null,
   fallbackReason: string | null | undefined,
-  t: Translate
+  t: Translate,
+  link?: LinkReading | null
 ): Omit<PlaybackPanelData, "report"> {
   const headline =
     info.playMethod === "DirectPlay"
@@ -98,6 +116,7 @@ export function describeJellyfinPlayback(
           value: info.playMethod === "Transcode" ? t("player.info.serverTranscodeYes") : t("player.info.serverTranscodeNo"),
         },
         { label: t("player.info.estimatedBitrate"), value: networkBitrate ? formatBitrate(networkBitrate) : null },
+        ...linkRows(link, t),
       ]),
     ],
   };
@@ -112,6 +131,8 @@ export interface RemuxPlayback {
   subtitleTrackCount: number;
   currentAudioCodec: string | null;
   diagnostics: Record<string, string>;
+  /** Le lien vers cet appareil — voir `linkRows`. */
+  link?: LinkReading | null;
 }
 
 /** Les deux lignes de diagnostic qui parlent du son plutôt que du transport. */
@@ -148,6 +169,7 @@ export function describeRemuxPlayback(info: RemuxPlayback, t: Translate): Omit<P
       ]),
       section(t("player.info.sections.stream"), [
         { label: t("player.info.serverTranscode"), value: t("player.info.serverTranscodeNo") },
+        ...linkRows(info.link, t),
         ...Object.entries(info.diagnostics)
           .filter(([label]) => !AUDIO_ROWS.includes(label))
           .map(([label, value]) => ({ label, value })),

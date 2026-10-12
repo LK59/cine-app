@@ -31,11 +31,39 @@ import { useT, useLocale } from "@/components/TranslationProvider";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import { NATIVE_PATH } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset, traceRecent } from "@/lib/webcodecs/trace";
-import { diagBegin, diagEnd, diagSessionFacts, diagWaitEnded, diagWaitStarted } from "@/lib/webcodecs/playbackDiagnosis";
+import {
+  diagBegin,
+  diagEnd,
+  diagLinkMeasure,
+  diagNeedBps,
+  diagRecentMbps,
+  diagReserveAheadMB,
+  diagSessionFacts,
+  diagWaitEnded,
+  diagWaitStarted,
+  diagWaiting,
+} from "@/lib/webcodecs/playbackDiagnosis";
+import { PlaybackTimeline, TIMELINE_EVERY_MS, bufferedAhead, elementState, registerTimeline } from "@/lib/playbackTimeline";
 import { BackgroundWatch } from "@/lib/backgroundReturn";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
+import {
+  SLOW_LINK_REASON,
+  armOpeningMeter,
+  disarmOpeningMeter,
+  fileNeedBps,
+  noteSlowLink,
+  serverCanCarry,
+  slowLinkFields,
+  slowLinkFigures,
+  slowLinkVerdict,
+  frozenReading,
+  readLink,
+  type LinkMeter,
+  type LinkReading,
+  type SlowLink,
+} from "@/lib/slowLink";
 import type { StableTakeover } from "@/lib/useStableFallback";
 import { useChromecast, useChromecastAllowed } from "@/lib/chromecast/useChromecast";
 import { chromecastSnapshot, requestChromecastSession } from "@/lib/chromecast/framework";
@@ -510,6 +538,18 @@ export function ExperimentalPlayerHost({
   // source of truth for the same fact.
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   /**
+   * La connexion trop lente qui a arrêté l'ouverture, avec ses chiffres pour l'écran (§77). Ne vaut
+   * que tant que l'erreur affichée est la sienne : toute reconstruction efface `runtimeError`, et
+   * l'écran redevient l'ordinaire sans qu'il faille penser à vider celui-ci.
+   */
+  const [slowLink, setSlowLink] = useState<SlowLink | null>(null);
+  /** Le compteur de l'ouverture en cours — voir l'effet qui l'arme, avant celui du pipeline. */
+  const openingMeterRef = useRef<LinkMeter | null>(null);
+  /** Le débit moyen du fichier, d'après sa description — ce que le lien doit tenir. */
+  const needBpsRef = useRef<number | null>(null);
+  /** Le lien tel que le panneau technique le montre en direct (§77) — lu avec les diagnostics. */
+  const [linkLive, setLinkLive] = useState<LinkReading | null>(null);
+  /**
    * Steps aside for the stable player, once, without asking.
    *
    * A viewer cannot act on "the browser refused an operation on the buffer", and a button that
@@ -586,7 +626,8 @@ export function ExperimentalPlayerHost({
    * renoncer si tôt est le refus du sélecteur de chemin, et se tromper dans ce sens-là donne un
    * film qui joue par le serveur au lieu d'une erreur — jamais l'inverse.
    */
-  const fallToStable = useCallback((reason: string, takeover?: StableTakeover) => {
+  // `extra` : des faits de plus pour la ligne — les mesures d'une connexion trop lente (§77).
+  const fallToStable = useCallback((reason: string, takeover?: StableTakeover, extra?: Record<string, unknown>) => {
     if (!lifecycle.stepAside()) return;
     // La ligne `fallback` dit comment la séance a fini ici : pas de bilan « perdu » en plus.
     clearUnsentStop(sessionId);
@@ -594,7 +635,7 @@ export function ExperimentalPlayerHost({
     const path = pathRef.current ?? "non décidé";
     if (serverFallbackRef.current === false) {
       trace(`abandon : aucun lecteur serveur sur cette installation — ${reason}`);
-      reportPlayback("error", { ...file, reason, path, ...tally.backgroundFacts(Date.now()) });
+      reportPlayback("error", { ...file, reason, path, ...extra, ...tally.backgroundFacts(Date.now()) });
       setRuntimeError(reason);
       // L'écran de coupure promettait une reprise qui ne viendra plus : l'erreur prend sa place, au
       // lieu de rester cachée dessous (relu le 27/09/2026).
@@ -619,6 +660,7 @@ export function ExperimentalPlayerHost({
       ...file,
       reason,
       path,
+      ...extra,
       ...(handover ? { takeover: handover } : {}),
       ...(handover?.cast ? { cast: true } : {}),
       watched: watched.seconds(now),
@@ -1388,6 +1430,8 @@ export function ExperimentalPlayerHost({
    * quand la cause est « le serveur média est arrêté », c'est la seule chose que le spectateur ait
    * besoin de savoir : il n'y a rien à réessayer tout de suite, et rien de cassé chez lui.
    */
+  /** L'erreur affichée est-elle celle d'une connexion trop lente ? Voir `slowLink`. */
+  const slowShown = slowLink !== null && runtimeError === SLOW_LINK_REASON;
   const error =
     runtimeError ??
     info?.refusedReason ??
@@ -1705,6 +1749,28 @@ export function ExperimentalPlayerHost({
     diagBegin(sessionId);
     return () => diagEnd(sessionId);
   }, [sessionId]);
+  /**
+   * La chronologie des deux dernières minutes (§77) : un échantillon toutes les 5 s, en mémoire,
+   * joint par `reportPlayback` aux lignes de panne et au bilan. Déclarée après l'arrêt et la mesure
+   * ci-dessus : au démontage, la ligne `stop` part encore avec elle.
+   */
+  useEffect(() => {
+    const timeline = new PlaybackTimeline(() => {
+      const video = videoElRef.current;
+      return {
+        pos: video && Number.isFinite(video.currentTime) && video.currentTime > 0 ? video.currentTime : positionRef.current,
+        recvMbps: diagRecentMbps(TIMELINE_EVERY_MS),
+        aheadS: bufferedAhead(video),
+        reserveMB: diagReserveAheadMB(),
+        state: elementState(video, diagWaiting()),
+      };
+    }).start();
+    const unregister = registerTimeline(sessionId, timeline);
+    return () => {
+      timeline.stop();
+      unregister();
+    };
+  }, [sessionId]);
 
   const { stop: stopPlaybackNow, resume: resumePlaybackSession, savePaused } = usePlaybackSession(
     // La cible d'un saut en cours plutôt que la position d'avant — voir `stopFields`.
@@ -1835,12 +1901,35 @@ export function ExperimentalPlayerHost({
         // A panel that silently shows nothing is worse than one that shows why.
         setDiagnostics({ "Diagnostic indisponible": error instanceof Error ? error.message : "erreur" });
       }
+      // Le lien (§77) : pendant l'ouverture, le compteur qui suit chaque octet ; ensuite, les
+      // trente dernières secondes de requêtes du moteur. `readLink` ne lève pas.
+      const need = needBpsRef.current ?? diagNeedBps();
+      setLinkLive(readLink(!ready && openingMeterRef.current ? openingMeterRef.current.measure() : diagLinkMeasure(), need));
     };
     read(); // straight away, not after the first tick
     const id = setInterval(read, 500);
     return () => clearInterval(id);
-  }, [showInfo, error, stuck]);
+  }, [showInfo, error, stuck, ready]);
 
+
+  /**
+   * Ce que le lien livre pendant l'ouverture — de quoi dire, au moment de renoncer, si c'est lui
+   * (« connexion trop lente », DECISIONS.md §77).
+   *
+   * Armé tant qu'aucune image n'est prête, et réarmé à chaque reconstruction (`openedAt`) : la
+   * fenêtre mesurée est celle du minuteur d'abandon. Déclaré *avant* l'effet du pipeline, pour être
+   * armé quand la source envoie ses premières requêtes (les effets partent dans l'ordre). Désarmé à
+   * la première image : une lecture en cours ne passe jamais par le compteur.
+   */
+  useEffect(() => {
+    if (ready) return;
+    const meter = armOpeningMeter();
+    openingMeterRef.current = meter;
+    return () => disarmOpeningMeter(meter);
+  }, [ready, openedAt]);
+  useEffect(() => {
+    needBpsRef.current = fileNeedBps(info?.sizeBytes, info?.runtimeSeconds);
+  }, [info]);
 
   // Sets up the whole pipeline once the file's description has arrived. Everything it can refuse
   // is refused here, with the reason, rather than deeper down where the message would be opaque.
@@ -2598,6 +2687,57 @@ export function ExperimentalPlayerHost({
     return () => clearTimeout(id);
   }, [warning]);
 
+  /**
+   * Renoncer à une ouverture qui n'a rien montré en 35 s — et dire pourquoi quand on le sait.
+   *
+   * Sans mesure qui le prouve, rien ne change : le relais au lecteur serveur, sous le motif « aucune
+   * image après 35 s ». Quand le lien a livré, pendant au moins dix secondes de réception, moins de
+   * la moitié de ce que le fichier demande (`slowLinkVerdict`), la cause est nommée au journal avec
+   * ses chiffres — et le lecteur serveur ne reçoit le film que s'il peut aider, c'est-à-dire si sa
+   * version la plus réduite passe par ce lien ; il la demande alors (`noteSlowLink`). Sinon,
+   * l'écran le dit au spectateur, avec « Réessayer » : passer la main aurait ajouté vingt secondes
+   * d'attente avant le même échec (Edge d'Augustine, 12/10/2026).
+   *
+   * La mesure ne lève jamais ; si elle échouait quand même, c'est l'ancien renoncement qui part.
+   */
+  const giveUpOnOpening = useCallback(() => {
+    let slow: SlowLink | null = null;
+    try {
+      slow = slowLinkVerdict(openingMeterRef.current?.measure(), needBpsRef.current);
+    } catch {
+      slow = null;
+    }
+    if (!slow) {
+      fallToStable(`aucune image après ${GIVE_UP_AFTER_MS / 1000} s`);
+      return;
+    }
+    const fields = slowLinkFields(slow);
+    const carry = serverFallbackRef.current !== false && serverCanCarry(slow);
+    trace(
+      `connexion trop lente : ${fields.recvMbps} Mb/s reçus sur ${fields.measuredS} s de réception, ` +
+        `${fields.needMbps} Mb/s demandés — ${carry ? "relais au lecteur serveur, débit réduit" : "le lecteur serveur ne passerait pas non plus"}`
+    );
+    if (carry) {
+      noteSlowLink(itemId, slow);
+      fallToStable(SLOW_LINK_REASON, undefined, { ...fields, serverCanCarry: true });
+      return;
+    }
+    // Le même renoncement que sans lecteur serveur (`fallToStable`), avec son propre écran.
+    if (!lifecycle.stepAside()) return;
+    clearUnsentStop(sessionId);
+    reportPlayback("error", {
+      ...describeFileRef.current(),
+      reason: SLOW_LINK_REASON,
+      path: pathRef.current ?? "non décidé",
+      ...fields,
+      serverCanCarry: false,
+      ...tally.backgroundFacts(Date.now()),
+    });
+    setSlowLink(slow);
+    setRuntimeError(SLOW_LINK_REASON);
+    setNetworkLost(null);
+  }, [fallToStable, itemId, lifecycle, sessionId, tally]);
+
   // A player that never starts is the one failure a viewer cannot wait out: nothing on screen
   // changes, so there is nothing to react to. On a timer rather than derived from the clock, so
   // stepping aside happens on its own account and not in the middle of a render.
@@ -2612,12 +2752,9 @@ export function ExperimentalPlayerHost({
     // plus tard, au lecteur serveur qui échouait de la même façon, et le titre y restait pour
     // toute la séance (relevé le 23/09/2026).
     if (ready || runtimeError || networkLost || error) return;
-    const id = setTimeout(
-      () => fallToStable(`aucune image après ${GIVE_UP_AFTER_MS / 1000} s`),
-      Math.max(0, openedAt + GIVE_UP_AFTER_MS - Date.now())
-    );
+    const id = setTimeout(giveUpOnOpening, Math.max(0, openedAt + GIVE_UP_AFTER_MS - Date.now()));
     return () => clearTimeout(id);
-  }, [ready, runtimeError, networkLost, error, openedAt, fallToStable]);
+  }, [ready, runtimeError, networkLost, error, openedAt, giveUpOnOpening]);
 
 
   // Below the threshold nothing is shown, and a resume that takes a moment reads as instant
@@ -3039,7 +3176,38 @@ export function ExperimentalPlayerHost({
         />
       )}
 
-      {error && !networkLost && !isMini && (
+      {/* La connexion trop lente (§77) : ce n'est pas ce lecteur qui renonce, c'est le lien qui ne
+          porte pas le film — ni l'autre lecteur, qui n'est donc pas proposé. Les chiffres sont
+          ceux qui ont décidé, et « Réessayer » rouvre au même endroit. */}
+      {slowShown && slowLink && !networkLost && !isMini && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center">
+          <WifiOff className="text-amber-400" size={32} />
+          <div>
+            <p className="text-base font-medium text-white">{t("player.slowLink.title")}</p>
+            <p className="mt-1 max-w-md text-sm leading-6 text-slate-300">
+              {t("player.slowLink.detail", slowLinkFigures(slowLink, uiLocale))}
+            </p>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setSlowLink(null);
+                retryAfterNetwork(positionRef.current, "réessai demandé après une connexion trop lente", true);
+              }}
+              className="btn-primary inline-flex items-center gap-2"
+            >
+              <RotateCw size={16} />
+              {t("player.experimental.retry")}
+            </button>
+            <button type="button" onClick={handleClose} className="btn btn-ghost px-4 py-2">
+              {t("common.close")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && !slowShown && !networkLost && !isMini && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center">
           <AlertTriangle className="text-amber-400" size={32} />
           {/* Deux écrans, un seul gabarit. Là où un lecteur serveur existe, cet écran est une
@@ -3106,6 +3274,8 @@ export function ExperimentalPlayerHost({
                   ? tracks.audio.find((a) => a.number === currentAudio)?.codecId.replace("A_", "") ?? "?"
                   : null,
               diagnostics,
+              // Figé au moment d'une connexion trop lente : ce sont ces chiffres-là qui ont décidé.
+              link: slowShown && slowLink ? frozenReading(slowLink) : linkLive,
             },
             t
           ),

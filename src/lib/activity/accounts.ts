@@ -111,7 +111,8 @@ function nowPlayingFrom(session: JellyfinSession | undefined): NowPlaying | null
 
 /** Les incidents d'une séance, comptés ensemble. */
 export function problemsOf(s: Seance): number {
-  return s.stalls + s.rebuilds + s.fallbacks + s.errors + s.slowSeeks;
+  // Une connexion trop lente (§77) est un problème vécu par le spectateur — son lien, pas le fichier.
+  return s.stalls + s.rebuilds + s.fallbacks + s.errors + s.slowSeeks + (s.slowLinks ?? 0);
 }
 
 function serverRecordsSince(since: number): LogRecord[] {

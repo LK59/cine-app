@@ -15,6 +15,22 @@ import { restoreRememberedVolume } from "@/lib/rememberedVolume";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { useViewportResizing } from "@/lib/useViewportResizing";
 import { pickMaxBitrate } from "@/lib/networkBitrate";
+import { ServerStartup, resourceEntries } from "@/lib/serverStartup";
+import { PlaybackTimeline, TIMELINE_EVERY_MS, bufferedAhead, elementState, registerTimeline } from "@/lib/playbackTimeline";
+import {
+  LinkMeter,
+  SLOW_LINK_REASON,
+  capForSlowLink,
+  frozenReading,
+  linkVerdictWord,
+  meterXhr,
+  readLink,
+  slowLinkFields,
+  slowLinkFigures,
+  slowLinkVerdict,
+  streamNeedBps,
+  type LinkReading,
+} from "@/lib/slowLink";
 import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
@@ -54,6 +70,9 @@ import { touchHintHeaders } from "@/lib/deviceLabel";
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 import { useServerIntroPicture } from "@/lib/introEnd";
+
+/** Les adresses du flux du lecteur serveur, pour les entrées de ressources de Safari (§77). */
+const STREAM_PREFIX = "/api/jellyfin/stream/";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
 
@@ -592,6 +611,17 @@ function ActivePlayer({
   // encoded/is streaming at. Only meaningful on the hls.js path (Transcode/DirectStream on
   // Chrome/Firefox); native Safari HLS has no equivalent and this just stays null there.
   const [networkBitrate, setNetworkBitrate] = useState<number | null>(null);
+  /**
+   * Le lien mesuré (§77) : le compteur des requêtes d'hls.js de la négociation en cours, le débit du
+   * flux négocié, et la lecture figée au moment d'un échec par connexion trop lente. Le panneau
+   * technique les montre ; le bilan `stop` en porte le verdict.
+   */
+  const linkMeterRef = useRef<LinkMeter | null>(null);
+  /** Les étapes du démarrage de la négociation en cours (§77) — pour la ligne `stop`. */
+  const startupRef = useRef<ServerStartup | null>(null);
+  const streamNeedRef = useRef<number | null>(null);
+  const [linkFailure, setLinkFailure] = useState<LinkReading | null>(null);
+  const [linkLive, setLinkLive] = useState<LinkReading | null>(null);
   // True once loading/reconnecting has been ongoing for >3s — drives the "still loading, don't
   // close the player" reassurance line for heavy flows (a 4K track switch can legitimately take
   // 15-20s across the grace delay, codec ladder and reload escalation).
@@ -680,6 +710,14 @@ function ActivePlayer({
   const [externalSubtitleTracks, setExternalSubtitleTracks] = useState<ExternalSubtitleTrack[]>([]);
   const [playbackInfo, setPlaybackInfo] = useState<PlaybackInfoSummary | null>(null);
   const [showPlaybackInfo, setShowPlaybackInfo] = useState(false);
+  // Le lien en direct dans le panneau technique (§77), lu seulement quand il est ouvert.
+  useEffect(() => {
+    if (!showPlaybackInfo) return;
+    const read = () => setLinkLive(readLink(linkMeterRef.current?.measure(), streamNeedRef.current));
+    read();
+    const id = setInterval(read, 1000);
+    return () => clearInterval(id);
+  }, [showPlaybackInfo]);
   const playMethod = playbackInfo?.playMethod ?? "Transcode";
 
   const { stop: stopPlaybackNow, resume: resumePlaybackSession, savePaused } = usePlaybackSession(
@@ -737,7 +775,21 @@ function ActivePlayer({
     (why: ServerStopWhy, consume: boolean) => {
       const now = Date.now();
       const video = videoRef.current;
-      return serverStopFields(logContext.current, why, lastKnownTime.current, consume ? watched.take(now) : watched.seconds(now), {
+      // Le lien de la séance (§77), sous les mêmes noms que le bilan du lecteur natif (`diag.*`) —
+      // rien quand hls.js n'a rien compté (Safari, lecture directe).
+      const link = readLink(linkMeterRef.current?.measure(), streamNeedRef.current);
+      const linkDiag =
+        link.recvBps !== null
+          ? {
+              diag: {
+                linkMbps: Math.round((link.recvBps / 1e6) * 10) / 10,
+                ...(link.needBps !== null ? { needMbps: Math.round((link.needBps / 1e6) * 10) / 10 } : {}),
+                linkVerdict: linkVerdictWord(link),
+                linkS: Math.round((linkMeterRef.current?.measure().receivingMs ?? 0) / 100) / 10,
+              },
+            }
+          : {};
+      return { ...linkDiag, ...(startupRef.current?.fields(true) ?? {}), ...serverStopFields(logContext.current, why, lastKnownTime.current, consume ? watched.take(now) : watched.seconds(now), {
         ...sleepTimerLogFields(sleepTimerStore.get()),
         duration: video?.duration,
         ended: video?.ended ?? false,
@@ -746,7 +798,7 @@ function ActivePlayer({
         restarts: restartsRef.current,
         error: errorRef.current,
         ...(sessionPlayedRef.current ? {} : { gaveUpAfterMs: now - sessionStartedAtRef.current }),
-      });
+      }) };
     },
     [watched]
   );
@@ -877,6 +929,29 @@ function ActivePlayer({
       reportStopRef.current("unmount");
     };
   }, []);
+  /**
+   * La chronologie des deux dernières minutes (§77) : un échantillon toutes les 5 s, en mémoire —
+   * débit d'après ce que hls.js reçoit (rien en HLS natif), tampon devant d'après `buffered`. Jointe
+   * par `reportPlayback` aux lignes de panne et au bilan. Une par séance : l'épisode suivant en
+   * ouvre une autre. Déclarée après l'arrêt au démontage, qui part donc encore avec elle.
+   */
+  useEffect(() => {
+    const timeline = new PlaybackTimeline(() => {
+      const video = videoRef.current;
+      return {
+        pos: video && Number.isFinite(video.currentTime) && video.currentTime > 0 ? video.currentTime : lastKnownTime.current,
+        recvMbps: linkMeterRef.current?.recentMbps(TIMELINE_EVERY_MS) ?? null,
+        aheadS: bufferedAhead(video),
+        reserveMB: null,
+        state: elementState(video),
+      };
+    }).start();
+    const unregister = registerTimeline(logSession.current.id, timeline);
+    return () => {
+      timeline.stop();
+      unregister();
+    };
+  }, [itemId]);
 
   // (Re)starts playback, optionally at a specific audio track / resume point.
   // Jellyfin only ever transcodes ONE audio stream into the HLS output (unlike
@@ -968,6 +1043,8 @@ function ActivePlayer({
       const hlsModule = nativeHls ? null : import("hls.js");
       hlsModule?.catch(() => {});
 
+      // Les étapes du démarrage, comptées depuis cette demande (§77) — voir `ServerStartup`.
+      const startup = new ServerStartup(performance.now());
       const res = await fetch("/api/jellyfin/playback/start", {
         method: "POST",
         // L'indice tactile : cette négociation annonce la séance à Jellyfin, sous le nom de
@@ -975,7 +1052,9 @@ function ActivePlayer({
         headers: { "Content-Type": "application/json", ...touchHintHeaders() },
         body: JSON.stringify({
           itemId,
-          maxBitrate: pickMaxBitrate(),
+          // Abaissé seulement quand le lecteur natif vient de mesurer, pour ce titre, une connexion
+          // trop lente (§77) — sans quoi le serveur redemandait le même débit au même lien.
+          maxBitrate: capForSlowLink(itemId, pickMaxBitrate()),
           audioStreamIndex: opts?.audioStreamIndex,
           startTicks: opts?.resumeAt ? Math.floor(opts.resumeAt * 10_000_000) : undefined,
           codecSupport,
@@ -1054,6 +1133,8 @@ function ActivePlayer({
       // ce qui n'ouvre pas la séance — compte au bilan, par motif.
       const cause = opts?.cause;
       if (cause && isServerRestart(cause.why)) restartsRef.current[cause.why] = (restartsRef.current[cause.why] ?? 0) + 1;
+      startup.negotiated();
+      startupRef.current = startup;
       reportPlayback("start", {
         ...serverStartFields(
           logContext.current,
@@ -1067,6 +1148,7 @@ function ActivePlayer({
         ),
         // Une reprise de l'échelle audio rejoue la négociation : la ligne dit laquelle.
         ...(nativeErrorRetryCount.current > 0 ? { retry: nativeErrorRetryCount.current } : {}),
+        ...startup.fields(),
       });
 
       setPlaySession({ itemId, playSessionId: data.playSessionId, mediaSourceId: data.mediaSourceId });
@@ -1136,6 +1218,8 @@ function ActivePlayer({
           if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
           loadWatchdog.current = null;
           nativeErrorRetryCount.current = 0;
+          if (nativeHls || data.isDirectPlay) startup.fromResources(resourceEntries(), STREAM_PREFIX);
+          startup.picture();
           // Une marche qui se charge a trouvé le coupable : retenu pour le reste de cette ouverture
           // seulement (voir AUDIO_FALLBACK_RUNGS et `learnedExclusions`).
           if (opts?.disableAudioCodecs?.length) {
@@ -1155,11 +1239,36 @@ function ActivePlayer({
       // where the manifest/segment request itself hangs (through our own stream proxy) without
       // ever firing a native error OR an hls.js fatal — nothing to recover from, so this just
       // turns a silent infinite spinner into an actionable error with a retry button.
+      //
+      // Avant de dire « trop long », on regarde ce que le lien a livré pendant ces vingt secondes
+      // (hls.js seulement : c'est lui qui fait les requêtes et peut les compter — Safari lit son HLS
+      // lui-même, sans rien en dire). Une connexion trop lente, validée par ses chiffres, est nommée
+      // au journal et à l'écran (§77) ; sans preuve, tout reste comme avant.
+      const linkMeter = new LinkMeter();
+      const needBps = streamNeedBps(data.playbackInfo);
+      linkMeterRef.current = linkMeter;
+      streamNeedRef.current = needBps;
+      setLinkFailure(null);
       loadWatchdog.current = setTimeout(() => {
-        reportPlayback("error", serverFailureFields(logContext.current, "pas de première image en 20 s"));
+        let slow: ReturnType<typeof slowLinkVerdict> = null;
+        try {
+          slow = slowLinkVerdict(linkMeter.measure(), needBps);
+        } catch {
+          slow = null;
+        }
+        // Où en était le démarrage — la liste, un segment, son décodage, l'image (§77).
+        if (nativeHls || data.isDirectPlay) startup.fromResources(resourceEntries(), STREAM_PREFIX);
+        const stages = startup.fields(true);
+        if (slow) {
+          reportPlayback("error", serverFailureFields(logContext.current, SLOW_LINK_REASON, { ...slowLinkFields(slow), ...stages }));
+          setLinkFailure(frozenReading(slow));
+          setError(t("player.slowLink.message", slowLinkFigures(slow, locale)));
+        } else {
+          reportPlayback("error", serverFailureFields(logContext.current, "pas de première image en 20 s", stages));
+          setError(t('player.loadingTooLong'));
+        }
         setReconnecting(false);
         setLoading(false);
-        setError(t('player.loadingTooLong'));
       }, 20_000);
 
       // Subtitles always come from the PlaybackInfo response as external VTT tracks (rendered
@@ -1266,6 +1375,9 @@ function ActivePlayer({
         backBufferLength: 90,
         maxBufferLength: 30,
         maxMaxBufferLength: 90,
+        // Compter ce que le lien livre, pour le chien de garde ci-dessus (§77) : des écouteurs de
+        // plus sur chaque requête, rien d'autre — `meterXhr` ne lève jamais.
+        xhrSetup: (xhr: XMLHttpRequest) => meterXhr(linkMeter, xhr),
       });
       // Dernier recours : l'import de hls.js est lui aussi un await, et l'instance vient d'être
       // construite. Sans ce garde elle s'écrirait par-dessus celle d'un appel plus récent, qui
@@ -1279,7 +1391,14 @@ function ActivePlayer({
       // A successfully buffered fragment means the stream is healthy again — reset both
       // counters so a later, unrelated blip gets its own full retry budget instead of
       // inheriting an exhausted one from an earlier, already-recovered outage.
+      // Les étapes du démarrage (§77), d'après hls.js lui-même : les deux listes, le premier
+      // segment demandé, reçu, puis accepté par le tampon. Seule la première fois compte.
+      hls.on(Hls.Events.MANIFEST_LOADED, (_e, d) => startup.master(d?.stats));
+      hls.on(Hls.Events.LEVEL_LOADED, (_e, d) => startup.variant(d?.stats));
+      hls.on(Hls.Events.FRAG_LOADING, () => startup.fragAsked());
+      hls.on(Hls.Events.FRAG_LOADED, (_e, d) => startup.fragLoaded(d?.frag?.stats, d?.payload?.byteLength));
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        startup.buffered();
         networkRetryCount.current = 0;
         mediaRetryCount.current = 0;
         setReconnecting(false);
@@ -2367,7 +2486,7 @@ function ActivePlayer({
           data={
             playbackInfo
               ? {
-                  ...describeJellyfinPlayback(playbackInfo, networkBitrate, fallbackReason, t),
+                  ...describeJellyfinPlayback(playbackInfo, networkBitrate, fallbackReason, t, linkFailure ?? linkLive),
                   // Le même rapport copiable que le lecteur natif : c'est ce qui manquait ici,
                   // et c'est justement la lecture dont on a le plus de mal à rapporter l'état.
                   report: {

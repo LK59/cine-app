@@ -345,6 +345,7 @@
       "rebuild": "{n} reconstrucción|{n} reconstrucciones",
       "stall": "{n} bloqueo|{n} bloqueos",
       "slowSeek": "{n} salto lento|{n} saltos lentos",
+      "slowLink": "{n} conexión demasiado lenta|{n} conexiones demasiado lentas",
       "ladder": "{n} reinicio tras un error|{n} reinicios tras errores",
       "restart": "{n} reinicio|{n} reinicios",
       "lost": "final perdido",
@@ -355,6 +356,22 @@
       "identicalRetry": "{n} reintento idéntico|{n} reintentos idénticos"
     },
     "seance": {
+      "ring": {
+        "title": "Los dos minutos anteriores (un punto cada 5 s)",
+        "wall": "Instante",
+        "pos": "Posición",
+        "recv": "Mb/s recibidos",
+        "ahead": "Búfer (s)",
+        "reserve": "Reserva (MB)",
+        "state": "Estado",
+        "states": {
+          "L": "reproducción",
+          "A": "espera",
+          "P": "pausa",
+          "S": "salto",
+          "H": "segundo plano"
+        }
+      },
       "watched": "{d} vistos",
       "legacy": "reconstruida",
       "serverPlayer": "Reproductor del servidor",
@@ -1598,6 +1615,11 @@
     "stillLoading": "Sigue cargando, no cierres el reproductor…",
     "reconnecting": "Reconectando…",
     "loadingTooLong": "Esto está tardando demasiado. Inténtalo de nuevo.",
+    "slowLink": {
+      "title": "Conexión demasiado lenta",
+      "detail": "≈{recv} Mbit/s recibidos, esta película necesita unos {need}. Vuelve a intentarlo cuando la conexión mejore.",
+      "message": "Conexión demasiado lenta para esta película (≈{recv} Mbit/s recibidos, necesita unos {need}). Vuelve a intentarlo cuando la conexión mejore."
+    },
     "unsupportedBrowser": "Este navegador no puede reproducir este flujo.",
     "playbackInterruptedCheckConnection": "La reproducción se interrumpió. Comprueba tu conexión e inténtalo de nuevo.",
     "playbackInterrupted": "La reproducción se interrumpió. Inténtalo de nuevo.",
@@ -1606,6 +1628,13 @@
       "title": "Información de reproducción",
       "network": "Red",
       "estimatedBitrate": "Tasa de bits estimada",
+      "linkReceived": "Velocidad recibida",
+      "linkNeeded": "Velocidad que necesita la película",
+      "linkVerdict": "Conexión",
+      "linkOk": "suficiente",
+      "linkSlow": "demasiado lenta",
+      "linkUnknown": "aún sin medir",
+      "linkFrozen": "medida en el momento del fallo",
       "reason": "Motivo",
       "container": "Contenedor",
       "video": "Vídeo",

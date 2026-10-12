@@ -6,6 +6,7 @@
 // avec les données, jamais contre `Date.now()` pendant le rendu : un rendu doit être pur, et deux
 // affichages des mêmes données doivent dire la même chose.
 
+import { parseTimeline } from "@/lib/playbackTimeline";
 import { useState } from "react";
 import { AlertTriangle, Check, ChevronRight, Film, MonitorSmartphone, Tv, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
@@ -218,6 +219,7 @@ export function SeanceFlags({ s }: { s: Seance }) {
   if (s.rebuilds) flags.push({ label: t("activity.flags.rebuild", { n: s.rebuilds }), tone: "bg-amber-500/15 text-amber-300" });
   if (s.stalls) flags.push({ label: t("activity.flags.stall", { n: s.stalls }), tone: "bg-amber-500/15 text-amber-300" });
   if (s.slowSeeks) flags.push({ label: t("activity.flags.slowSeek", { n: s.slowSeeks }), tone: "bg-amber-500/15 text-amber-300" });
+  if (s.slowLinks) flags.push({ label: t("activity.flags.slowLink", { n: s.slowLinks }), tone: "bg-amber-500/15 text-amber-300" });
   // Les relances du lecteur serveur : celles qui suivent une panne (échelle de repli) en ambre, les
   // gestes du spectateur (piste, « Réessayer ») en gris — l'une n'est pas l'autre (10/10/2026).
   const restarts = s.restarts ?? [];
@@ -327,6 +329,47 @@ export function Steps({ text }: { text: string }) {
           {step.trim()}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * La chronologie des deux dernières minutes d'une ligne (`timeline`, `playbackTimeline.ts`, §77) :
+ * un échantillon toutes les 5 s — l'instant, la position du film, le débit reçu, le tampon devant,
+ * la réserve en mémoire, l'état. Le plus récent en bas : c'est là que la panne arrive.
+ */
+export function TimelineTable({ text }: { text: string }) {
+  const t = useT();
+  const samples = parseTimeline(text);
+  if (!samples.length) return null;
+  const cell = (v: number | null, digits = 1) => (v === null ? "—" : v.toFixed(digits));
+  return (
+    <div className="mt-2 overflow-x-auto rounded-lg bg-black/30 p-2">
+      <p className="mb-1 text-[11px] text-slate-500">{t("activity.seance.ring.title")}</p>
+      <table className="w-full font-mono text-[11px] text-slate-300">
+        <thead className="text-slate-500">
+          <tr>
+            <th className="pr-3 text-left font-normal">{t("activity.seance.ring.wall")}</th>
+            <th className="pr-3 text-left font-normal">{t("activity.seance.ring.pos")}</th>
+            <th className="pr-3 text-right font-normal">{t("activity.seance.ring.recv")}</th>
+            <th className="pr-3 text-right font-normal">{t("activity.seance.ring.ahead")}</th>
+            <th className="pr-3 text-right font-normal">{t("activity.seance.ring.reserve")}</th>
+            <th className="text-left font-normal">{t("activity.seance.ring.state")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {samples.map((s, i) => (
+            <tr key={i} className={s.state === "A" ? "text-amber-300" : undefined}>
+              <td className="pr-3">+{clock(s.wall / 1000)}</td>
+              <td className="pr-3">{clock(s.pos)}</td>
+              <td className="pr-3 text-right">{cell(s.recvMbps)}</td>
+              <td className="pr-3 text-right">{cell(s.aheadS)}</td>
+              <td className="pr-3 text-right">{cell(s.reserveMB, 0)}</td>
+              <td>{t(`activity.seance.ring.states.${s.state}`)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

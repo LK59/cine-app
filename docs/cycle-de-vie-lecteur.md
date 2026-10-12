@@ -143,7 +143,7 @@ stockée.
 | Réseau perdu | `networkLost` posé ; nouvel essai programmé si `online`. `ready` peut rester vrai si la coupure a eu lieu en plein film |
 | Arrière-plan | `visibilityState === "hidden"`, `hiddenAtRef`. Au retour : `holdOnReturnRef` (2,5 s) puis la vérification de source perdue |
 | Bloqué | ouverture depuis plus de 20 s → message « toujours en train de chercher » |
-| Abandon | ouverture depuis plus de 35 s → `fallToStable("aucune image après 35 s")` |
+| Abandon | ouverture depuis plus de 35 s → `giveUpOnOpening` : `fallToStable("aucune image après 35 s")`, sauf connexion trop lente prouvée (DECISIONS.md §77) — relais à débit réduit si le serveur peut passer, sinon écran « connexion trop lente » (`stepAside`, `runtimeError`, Réessayer = `retryAfterNetwork` par le spectateur) |
 | Fin | `ended` vrai, `lifecycle.isEnded()` vrai (arrêt Jellyfin déjà envoyé) |
 | Passé la main | `steppedAside` vrai ; avec lecteur serveur, l'hôte est démonté ; sans lui, `runtimeError` posé et écran d'erreur |
 | Fermeture | `closing` vrai, arrêt déjà parti (`lifecycle.claimStop`) ; `close(openId)` 200 ms plus tard |
@@ -186,7 +186,7 @@ stockée.
 | `onError(msg)` sinon | — | `fallToStable` | Passé la main |
 | Retour au premier plan | `path === "remux"`, `lost`, `lifecycle.rebuildAt === null`, `lifecycle.spendRebuild` | ligne `rebuild` (`hiddenMs`), `restart`, en pause si retenu ou si le film était fini ; revérifié 400 ms plus tard | Reconstruction |
 | `networkLost` et en ligne | recul 0,8 s × 2ⁿ, plafond 30 s | `restart(networkLost.at)` | Reconstruction |
-| Minuteur d'abandon | pas prêt, pas d'erreur, pas de réseau perdu | après 35 s : `fallToStable` | Passé la main |
+| Minuteur d'abandon | pas prêt, pas d'erreur, pas de réseau perdu | après 35 s : `giveUpOnOpening` — `fallToStable`, ou l'écran « connexion trop lente » si le lien mesuré pendant l'ouverture l'explique (§77) | Passé la main / écran |
 | Changement de piste (menu) | `"rebuild"` | image figée, `lifecycle.keepPaused = paused`, `restart(intendedPosition())` | Changement de piste |
 | Saut (commandes) | — | `noteSeekRequest` : cible notée, réécrit `lifecycle.rebuildAt` si une reconstruction attend ; le déplacement lui-même est écrit sur l'élément par `PlayerControls` | Saut |
 | `ended` | — | arrêt Jellyfin, `lifecycle.isEnded()`, cache de reprise oublié | Fin |
