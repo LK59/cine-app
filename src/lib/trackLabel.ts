@@ -266,6 +266,9 @@ export interface SubtitleTrackFacts extends NamedTrack {
   isHearingImpaired?: boolean;
   /** Un fichier posé à côté du film plutôt qu'une piste du conteneur. */
   isExternal?: boolean;
+  /** Traduit par l'application (DECISIONS.md §69) — fini, ou en cours (`isGenerating`). */
+  isGenerated?: boolean;
+  isGenerating?: boolean;
 }
 
 export interface SubtitleLabelOptions {
@@ -275,9 +278,19 @@ export interface SubtitleLabelOptions {
   malentendants: string;
   externe: string;
   piste: (n: number) => string;
+  /**
+   * « généré » et « génération… » : à la place du type, pour un sous-titre traduit par l'application.
+   * Facultatifs pour les appelants qui n'en montrent pas ; à défaut, le type ordinaire.
+   */
+  genere?: string;
+  generation?: string;
 }
 
 function typeSousTitre(track: SubtitleTrackFacts, options: SubtitleLabelOptions): string {
+  // Un sous-titre traduit est un sous-titre complet ; ce qu'il faut savoir de lui, c'est qu'une
+  // machine l'a écrit — « Français — généré » plutôt que « Français — Complets ».
+  if (track.isGenerating && options.generation) return options.generation;
+  if (track.isGenerated && options.genere) return options.genere;
   // Les malentendants avant les forcés : une piste peut porter les deux drapeaux, et c'est la
   // description des sons qui change le plus ce qu'on voit à l'écran.
   if (track.isHearingImpaired || titleSaysHearingImpaired(track.name)) return options.malentendants;
@@ -306,7 +319,7 @@ export function labelSubtitleTracks(
      * sa langue n'a en revanche aucune raison d'annoncer d'où elle vient.
      */
     if ((compte.get(bases[i]) ?? 0) === 1) return { number: track.number, label: bases[i] };
-    const detail = track.isExternal ? options.externe : discriminant(track, { ...options, canaux: () => "" });
+    const detail = track.isExternal && !track.isGenerated && !track.isGenerating ? options.externe : discriminant(track, { ...options, canaux: () => "" });
     return { number: track.number, label: `${bases[i]} (${detail})` };
   });
 }

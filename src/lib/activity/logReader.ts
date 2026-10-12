@@ -17,9 +17,10 @@ import { playerLogFile, benchPlayerLogFile, PLAYER_LOG_KEEP, BENCH_PLAYER_LOG_KE
 import { SERVER_LOG_FILE, SERVER_LOG_KEEP } from "@/lib/logger";
 import { BENCH_LOG, BENCH_LOG_KEEP } from "@/lib/playerBench/benchLog";
 import { AUTH_LOG, NOTIFICATIONS_LOG, EVENT_LOG_KEEP } from "@/lib/eventLogs";
+import { SUBTITLE_GEN_LOG, SUBTITLE_GEN_LOG_KEEP } from "@/lib/subtitleGen/log";
 
-export type LogSource = "player" | "server" | "auth" | "notifications" | "bench" | "benchPlayer";
-export const LOG_SOURCES: LogSource[] = ["player", "server", "auth", "notifications", "bench", "benchPlayer"];
+export type LogSource = "player" | "server" | "auth" | "notifications" | "bench" | "benchPlayer" | "subtitleGen";
+export const LOG_SOURCES: LogSource[] = ["player", "server", "auth", "notifications", "bench", "benchPlayer", "subtitleGen"];
 
 function generationsOf(source: LogSource): string[] {
   switch (source) {
@@ -35,6 +36,8 @@ function generationsOf(source: LogSource): string[] {
       return logGenerations(BENCH_LOG(), BENCH_LOG_KEEP);
     case "benchPlayer":
       return logGenerations(benchPlayerLogFile(), BENCH_PLAYER_LOG_KEEP);
+    case "subtitleGen":
+      return logGenerations(SUBTITLE_GEN_LOG(), SUBTITLE_GEN_LOG_KEEP);
   }
 }
 

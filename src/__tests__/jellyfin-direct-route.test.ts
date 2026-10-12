@@ -43,6 +43,13 @@ vi.mock("@/lib/server-cache", () => ({ cachedMovies: () => mockFilms() }));
 const mockLogo = vi.fn(async (_id: number, _type: string): Promise<string | null> => null);
 vi.mock("@/lib/title-logo", () => ({ getTitleLogoFor: (id: number, type: string) => mockLogo(id, type) }));
 
+/**
+ * Les sous-titres générés (DECISIONS.md §69) : doublés — la base des tâches a sa propre suite.
+ * Par défaut aucun ; un test pose ce que la route doit marquer ou ajouter.
+ */
+const mockGenerated = vi.fn(() => ({ ours: new Set<number>(), fallbacks: [] as { language: string; url: string }[] }));
+vi.mock("@/lib/subtitleGen/direct", () => ({ generatedForDirect: () => mockGenerated() }));
+
 const validId = "c".repeat(32);
 
 function fakeReq(): NextRequest {
@@ -403,5 +410,33 @@ describe("la langue de tournage", () => {
 
     mockNaming.mockResolvedValue({ Name: "Un épisode", Type: "Episode" });
     expect((await (await get()).json()).originalLanguage).toBeNull();
+  });
+});
+
+describe("les sous-titres générés (§69)", () => {
+  it("marque `generated` le fichier voisin reconnu comme le nôtre, et lui seul", async () => {
+    mockGenerated.mockReturnValueOnce({ ours: new Set([7]), fallbacks: [] });
+    mockGetSources.mockResolvedValue(
+      mediaSource({
+        subtitles: [
+          { Type: "Subtitle", Index: 6, Codec: "subrip", IsExternal: true, Language: "eng" },
+          { Type: "Subtitle", Index: 7, Codec: "subrip", IsExternal: true, Language: "fra" },
+        ],
+      })
+    );
+    const body = await (await get()).json();
+    expect(body.externalSubtitles.map((e: { id: number; generated?: boolean }) => [e.id, e.generated ?? false])).toEqual([
+      [-7, false],
+      [-8, true],
+    ]);
+  });
+
+  it("ajoute la copie de l'application à la suite, en négatif, quand Jellyfin n'a pas pu la recevoir", async () => {
+    mockGenerated.mockReturnValueOnce({ ours: new Set(), fallbacks: [{ language: "fr", url: "/api/subtitle-gen/files/x.vtt" }] });
+    mockGetSources.mockResolvedValue(mediaSource({ subtitles: [{ Type: "Subtitle", Index: 6, Codec: "subrip", IsExternal: true, Language: "eng" }] }));
+    const body = await (await get()).json();
+    const added = body.externalSubtitles.at(-1);
+    expect(added).toEqual({ id: -8, language: "fr", title: null, url: "/api/subtitle-gen/files/x.vtt", generated: true });
+    expect(new Set(body.externalSubtitles.map((e: { id: number }) => e.id)).size).toBe(body.externalSubtitles.length);
   });
 });

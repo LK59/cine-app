@@ -60,6 +60,16 @@ export async function register() {
     const { startPosterPrewarm } = await import("./lib/posterPrewarm");
     startPosterPrewarm();
 
+    // Les sous-titres générés (DECISIONS.md §69) : les tâches en cours reprennent là où elles
+    // étaient — lignes acquises gardées — et les fichiers finis continuent vers Jellyfin. Gardé :
+    // une base illisible ne doit pas empêcher le serveur de démarrer.
+    try {
+      const { startEngine } = await import("./lib/subtitleGen/engine");
+      startEngine();
+    } catch (error) {
+      console.error("subtitle-gen: démarrage", error);
+    }
+
     // Non-blocking cache warmup — fire and forget, never delays startup
     setTimeout(() => {
       import("./lib/server-cache").then(async ({ cachedMovies, cachedSeries }) => {

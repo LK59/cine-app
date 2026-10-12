@@ -290,6 +290,27 @@ describe("labelSubtitleTracks", () => {
     const [a] = labelSubtitleTracks([st({ number: 9 })], stOptions);
     expect(a.label).toBe("Piste 9 — Complets");
   });
+  // Les sous-titres traduits par l'application (DECISIONS.md §69) : « Français — généré » et, tant
+  // que la tâche court, « Français — génération… » — même forme, une seule fonction.
+  it("nomme un sous-titre généré, fini ou en cours", () => {
+    const options = { ...stOptions, genere: "généré", generation: "génération…" };
+    const etiquettes = labelSubtitleTracks(
+      [st({ number: -12, language: "fra", isExternal: true, isGenerated: true }), st({ number: -13, language: "deu", isGenerating: true })],
+      options
+    );
+    expect(etiquettes.map((e) => e.label)).toEqual(["Français — généré", "Allemand — génération…"]);
+  });
+
+  it("départage un généré d'un fichier voisin de la même langue sans le dire « externe »", () => {
+    const options = { ...stOptions, genere: "généré" };
+    const [a] = labelSubtitleTracks([st({ number: -12, language: "fra", isExternal: true, isGenerated: true })], options);
+    expect(a.label).toBe("Français — généré");
+  });
+
+  it("retombe sur le type ordinaire pour un appelant qui ne fournit pas le mot", () => {
+    const [a] = labelSubtitleTracks([st({ number: -12, language: "fra", isGenerated: true })], stOptions);
+    expect(a.label).toBe("Français — Complets");
+  });
 });
 
 /**

@@ -117,6 +117,9 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // « J'ai fini l'accueil » : n'éteint que le marqueur de l'appelant.
   "POST /api/onboarding",
   "DELETE /api/auth/sessions",
+  // Générer des sous-titres (DECISIONS.md §69) : lancer ou rejoindre une tâche. La dépense est
+  // bornée par la route elle-même — 50 lancements par jour et par compte, budget mensuel global.
+  "POST /api/subtitle-gen/jobs",
 ]);
 
 /**
@@ -135,6 +138,10 @@ const GUEST_ALLOWED_PATTERNS: RegExp[] = [
   /^(PUT|DELETE) \/api\/reports\/\d+$/,
   /^POST \/api\/reports\/\d+\/(messages|status)$/,
   /^DELETE \/api\/reports\/\d+\/images\/\d+$/,
+  // Le sondage d'une tâche de sous-titres (la position du spectateur, pour la priorité) et sa
+  // reprise après une pause. Identifiant de 32 caractères hexadécimaux, rien d'autre : l'annulation
+  // (`/api/subtitle-gen/admin/...`) reste à l'administrateur.
+  /^POST \/api\/subtitle-gen\/jobs\/[0-9a-f]{32}\/(poll|resume)$/,
 ];
 
 function isAllowedForEveryone(method: string, pathname: string): boolean {
@@ -192,6 +199,8 @@ const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/sse\/?$/,
   /^\/api\/status\/?$/,
   /^\/api\/jellyfin\/items\/?$/,
+  // Le panneau des sous-titres générés : dépense du mois, tâches de tous les comptes (§69).
+  /^\/api\/subtitle-gen\/admin(\/|$)/,
 ];
 
 function isAdminOnlyRead(pathname: string): boolean {

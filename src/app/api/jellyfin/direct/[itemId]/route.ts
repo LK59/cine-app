@@ -12,9 +12,10 @@ import { localeOf, type Locale } from "@/lib/i18n";
 import { userPrefsDb } from "@/lib/db";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { FILE_MISSING, HttpError } from "@/lib/http";
-
-/** What Jellyfin can hand back as WebVTT. Anything else is a picture and has nothing to read. */
-const TEXT_SUBTITLE_FORMATS = new Set(["srt", "subrip", "ass", "ssa", "vtt", "webvtt", "mov_text"]);
+// What Jellyfin can hand back as WebVTT — one list, shared with the subtitle generator's choice of
+// source (DECISIONS.md §69). Anything else is a picture and has nothing to read.
+import { TEXT_SUBTITLE_FORMATS } from "@/lib/subtitleGen/source";
+import { generatedForDirect } from "@/lib/subtitleGen/direct";
 
 // Containers the experimental player's demuxer understands. Matroska is 99.7% of this library;
 // anything else is refused with a reason rather than half-played.
@@ -52,6 +53,11 @@ export interface ExternalSubtitle {
   title: string | null;
   /** Through this app's own proxy, which asks Jellyfin for it as WebVTT. */
   url: string;
+  /**
+   * Traduit par l'application (DECISIONS.md §69) : le lecteur l'étiquette « Français — généré »
+   * (`trackLabel.ts`). Absent pour tout autre sous-titre.
+   */
+  generated?: boolean;
 }
 
 /**
@@ -285,6 +291,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
 
   // Text only, and external only: an image subtitle has nothing to read, and an embedded text
   // track is already found by whichever pipeline opens the file.
+  //
+  // Les sous-titres générés (DECISIONS.md §69) : celui que Jellyfin liste et que l'application a
+  // fait poser porte `generated` ; une copie de `data/` n'est ajoutée que si l'envoi à Jellyfin a
+  // échoué pour de bon — numérotée à la suite, en négatif elle aussi.
+  const generated = generatedForDirect(itemId, source, streams);
   const externalSubtitles: ExternalSubtitle[] = streams
     .filter((s) => s.Type === "Subtitle" && s.IsExternal && TEXT_SUBTITLE_FORMATS.has((s.Codec ?? "").toLowerCase()))
     .map((s) => ({
@@ -292,7 +303,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
       language: s.Language ?? null,
       title: s.DisplayTitle ?? null,
       url: `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${encodeURIComponent(source.Id ?? itemId)}&index=${s.Index}`,
+      ...(generated.ours.has(s.Index) ? { generated: true } : {}),
     }));
+  const lowest = Math.min(-1, ...externalSubtitles.map((e) => e.id));
+  generated.fallbacks.forEach((f, k) => {
+    externalSubtitles.push({ id: lowest - 1 - k, language: f.language, title: null, url: f.url, generated: true });
+  });
 
   const payload: DirectPlayInfo = {
     // The same static endpoint DirectPlay already uses: the proxy forwards Range headers for it,
