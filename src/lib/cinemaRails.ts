@@ -38,6 +38,29 @@ export function isRecentlyAdded(addedAt: string | null, now: number = Date.now()
   return t !== null && now - t <= NEW_BADGE_DAYS * DAY_MS;
 }
 
+/** Ce que la date d'une série désigne : la série elle-même, une saison qui s'ouvre, ou un épisode (§74). */
+export type SeriesArrival = "series" | "season" | "episode";
+
+const BADGE_KEYS = {
+  series: "cinema.newSeriesBadge",
+  season: "cinema.newSeasonBadge",
+  episode: "cinema.newEpisodeBadge",
+} as const;
+
+/**
+ * Ce que dit la pastille d'une carte, ou rien. Un film dit « Nouveau » ; une série dit pourquoi elle
+ * est là (DECISIONS.md §74) — `arrival` vient du catalogue, décidé par `seriesFreshness`. Une série
+ * sans `arrival` (catalogue gardé d'avant ce champ) garde « Nouveau » plutôt que rien.
+ */
+export function newBadgeKey(
+  addedAt: string | null,
+  arrival?: SeriesArrival,
+  now: number = Date.now()
+): "cinema.newBadge" | (typeof BADGE_KEYS)[SeriesArrival] | null {
+  if (!isRecentlyAdded(addedAt, now)) return null;
+  return arrival ? BADGE_KEYS[arrival] : "cinema.newBadge";
+}
+
 export function recentlyAddedRail<T extends RailItem>(items: T[], limit = 20): T[] {
   return items
     .filter((i) => addedTime(i.addedAt) !== null)

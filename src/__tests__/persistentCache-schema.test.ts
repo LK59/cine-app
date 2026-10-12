@@ -41,6 +41,8 @@ const FINGERPRINTS: Record<number, string> = {
   9: "2b85279160c0cf39",
   // 08/10/2026 : `items` dans la forme lue du catalogue (un titre sans genre reste trouvable).
   10: "acde65cfde61b089",
+  // 12/10/2026 : `arrival` des séries — la date du dernier épisode et ce que dit la pastille (§74).
+  11: "a9fe8553ed9f4fcc",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

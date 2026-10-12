@@ -3251,3 +3251,64 @@ langue vide → français, routes réservées), `news-proxy.test.ts`, `news-deci
 empêche la fenêtre, chronomètre, continuation du titre), `NewsDialog.test.tsx` (fusion et intertitres, les
 quatre fermetures et leur mesure, défilement, touches gardées, télécommande, aperçu muet, `NewsGate`, « Voir
 plus » → la bonne section), `decisions-partagees.test.ts` (une seule décision, un seul montage).
+
+
+## 74. Une série remonte avec son dernier épisode — et sa pastille dit pourquoi
+
+Demandé le 12/10/2026 : une série datait de son ajout dans Sonarr et rien d'autre ; *Ted Lasso*,
+ajoutée en avril, recevait sa saison 4 sans jamais reparaître dans « Récemment ajoutés », quand Jellyfin,
+lui, la remontait.
+
+**Règle.** La date d'une série (`addedAt` du catalogue) est, **pour le compte qui demande**, la plus
+tardive de : sa date propre (la plus tardive de l'ajout dans Sonarr et de l'entrée de la série dans
+Jellyfin — une série demandée il y a un an dont les premiers fichiers arrivent aujourd'hui est une série
+nouvelle), et l'entrée dans Jellyfin (`DateCreated`) de son épisode le plus récent — **sauf si ce compte
+l'a déjà vu** (`UserData.Played` de Jellyfin), ou s'il est entré hors de la fenêtre de « récent »
+(`NEW_BADGE_DAYS`, trente jours, inchangée). Une série jamais commencée remonte : elle n'a pas vu cet
+épisode (choix de Louis). Cette date sert partout où « récent » parle d'une série : la rangée « Récemment
+ajoutés », la bannière des nouveautés (`spotlight`), la pastille, le tri « récents » de la grille complète
+(`cinemaBrowse`). **Le palmarès du jour garde la date Sonarr**, la même pour tous : il départage ses
+ex-aequo par la date, et deux comptes auraient lu deux top 10.
+
+**La pastille** (`arrival`, absente quand rien n'est récent) : « Nouvelle série » si la série elle-même
+est dans la fenêtre — quoi qu'il soit arrivé depuis ; sinon « Nouvelle saison » si le dernier ajout ouvre
+une saison, « Nouvel épisode » sinon. Le dernier ajout est le lot des épisodes de la série entrés dans le
+jour qui précède le plus récent (`ARRIVAL_BATCH_MS` : une saison s'importe en moins d'une heure, un épisode
+hebdomadaire arrive seul) ; il ouvre une saison s'il porte l'épisode 1 d'une saison au-delà de la première,
+ou plusieurs épisodes d'une telle saison sans qu'aucun ne soit entré avant le lot. La saison 1 ouvre une
+série, les spéciaux (saison 0) n'ouvrent rien. Les films gardent « Nouveau ». Même forme pour les quatre.
+
+**La source et son coût.** Jellyfin, parce que c'est ce qui est réellement jouable. Il n'a pas de filtre
+« créé après » : `getRecentEpisodesAdmin` lit les épisodes triés par `DateCreated` décroissant, par pages
+de 500, jusqu'à la première qui sort de la fenêtre — une lecture pour toute la bibliothèque, jamais une
+par série. Mesuré le 12/10/2026 (7 535 épisodes) : 1 925 dans les trente jours (plusieurs séries entières
+importées), quatre pages, 520 ms et 1,7 Mo ; une semaine ordinaire tient dans la première page (≈ 90 ms).
+La bibliothèque entière d'un appel coûtait 660 ms et 6,4 Mo. Gardée dix minutes, projetée sur cinq champs
+(`cachedJellyfinRecentEpisodes`). Sonarr était écarté : l'historique des imports sur trente jours coûtait
+2 s et 2,8 Mo, et sa date de fichier ne suit pas un fichier remplacé — ni Jellyfin d'ailleurs : un fichier
+réencodé ou amélioré reçoit un nouveau `DateCreated` (*Wonka*, 12/10), ce que le « déjà vu » rattrape pour
+qui l'avait regardé (Jellyfin garde le vu d'un épisode à travers le remplacement de son fichier).
+
+**Où se décide le « déjà vu ».** Dans la route du catalogue des séries, qui connaît le compte
+(`hiddenForRequest` rend son `jfId`) : l'appareil n'a aucun état « vu » par épisode en main, et le
+catalogue est commun et figé. Un appel Jellyfin par compte pour toute la liste des derniers épisodes
+(`getPlayedAmong`, `Ids=`, 150 ms mesurés pour quarante éléments, gardé deux minutes) ; s'il échoue, rien
+n'est tenu pour vu et la série remonte. La réponse préparée (`cachedJson`) a donc une entrée par compte —
+bornée par le nombre de comptes, pas par les ensembles « vu ». Conséquence assumée du catalogue figé : un
+épisode qu'on vient de finir garde sa pastille jusqu'au prochain chargement du catalogue.
+
+**Porteurs.** `latestArrivals` / `seriesFreshness` (`src/lib/seriesArrival.ts`) — la décision, seule ;
+`newBadgeKey` (`cinemaRails.ts`) — les mots de la pastille ; `getRecentEpisodesAdmin` / `getPlayedAmong`
+(client Jellyfin) ; `cachedJellyfinRecentEpisodes` / `cachedJellyfinPlayedAmong` (`server-cache.ts`).
+
+**Appelants.** `GET /api/cinema/series` ; `CinemaNewBadge`, commun au bureau (`CinemaSeriesCard`,
+`CinemaSimilarRow`) et au téléphone (`PosterRow` de `CinemaMobileClient`) — aucune vue ne refait la
+décision, elles lisent `addedAt` et `arrival`. `PERSISTED_CACHE_SCHEMA` 11.
+
+**Tests.** `seriesArrival.test.ts` (série ancienne + épisode récent → « Nouvel épisode » ; E01 d'une
+saison 2 → « Nouvelle saison » ; série récente → « Nouvelle série » ; déjà vu → ne remonte pas ; jamais
+commencée → remonte ; hors fenêtre → ne remonte pas ; pagination arrêtée à la fenêtre ; un appel pour le
+vu), `cinema-series-arrival-route.test.ts` (rangée et bannière, vu par compte, coût indépendant du nombre
+de séries, Jellyfin muet).
+
+**Décidé le 12/10/2026.**

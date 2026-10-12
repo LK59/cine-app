@@ -508,6 +508,53 @@ export const jellyfin = {
       { headers }
     ).then((res) => res.Items),
 
+  /**
+   * Les épisodes entrés dans la bibliothèque depuis `sinceMs`, les plus récents d'abord — de quoi
+   * dater chaque série de son dernier épisode (DECISIONS.md §74) sans une requête par série.
+   *
+   * Jellyfin n'a pas de filtre « créé après » : on lit par pages de 500, triées par `DateCreated`,
+   * jusqu'à la première page qui dépasse la limite. Mesuré le 12/10/2026 sur 7 535 épisodes : 1 925
+   * dans les trente derniers jours (plusieurs séries entières importées d'un coup), quatre pages,
+   * 520 ms et 1,7 Mo — contre 660 ms et 6,4 Mo pour la bibliothèque entière d'un seul appel. Une
+   * semaine ordinaire tient dans la première page (≈ 90 ms).
+   */
+  getRecentEpisodesAdmin: async (sinceMs: number) => {
+    const PAGE = 500;
+    const out: JellyfinItem[] = [];
+    // Borné : une bibliothèque réimportée en entier ne doit pas tourner sans fin.
+    for (let start = 0; start < 20_000; start += PAGE) {
+      const res = await fetchJson<{ Items: JellyfinItem[] }>(
+        `${cfg.url}/Items?IncludeItemTypes=Episode&Recursive=true&SortBy=DateCreated,SortName&SortOrder=Descending&Fields=DateCreated&EnableImages=false&EnableUserData=false&EnableTotalRecordCount=false&StartIndex=${start}&Limit=${PAGE}`,
+        { headers }
+      );
+      const items = res.Items ?? [];
+      let reachedOlder = false;
+      for (const item of items) {
+        const t = item.DateCreated ? Date.parse(item.DateCreated) : NaN;
+        if (Number.isFinite(t) && t < sinceMs) {
+          reachedOlder = true;
+          break;
+        }
+        out.push(item);
+      }
+      if (reachedOlder || items.length < PAGE) break;
+    }
+    return out;
+  },
+
+  /**
+   * Parmi ces épisodes, ceux que ce compte a vus — un appel pour toute la liste (`Ids=`), lu par
+   * compte : c'est l'état « vu » de Jellyfin, qui suit l'épisode même quand son fichier est remplacé.
+   */
+  getPlayedAmong: async (userId: string, itemIds: readonly string[]) => {
+    if (itemIds.length === 0) return new Set<string>();
+    const res = await fetchJson<{ Items: JellyfinItem[] }>(
+      `${cfg.url}/Users/${idSegment(userId)}/Items?Ids=${itemIds.map((id) => idSegment(id)).join(",")}&Fields=UserData&EnableImages=false&EnableTotalRecordCount=false`,
+      { headers }
+    );
+    return new Set((res.Items ?? []).filter((item) => item.UserData?.Played).map((item) => item.Id));
+  },
+
   markPlayed: async (userId: string, itemId: string) =>
     fetchJson<void>(`${cfg.url}/Users/${idSegment(userId)}/PlayedItems/${idSegment(itemId)}`, { method: "POST", headers }),
 

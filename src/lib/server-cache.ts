@@ -5,6 +5,9 @@ import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { qbittorrent } from "@/lib/clients/qbittorrent";
 import { jellyfin, JellyfinItem } from "@/lib/clients/jellyfin";
 import { kvCacheDb } from "@/lib/db";
+import { createHash } from "node:crypto";
+import { NEW_BADGE_DAYS } from "@/lib/cinemaRails";
+import type { RecentEpisode } from "@/lib/seriesArrival";
 
 // ─── TTL constants ───────────────────────────────────────────────────────────
 
@@ -329,6 +332,39 @@ export const cachedJellyfinFirstEpisodes = (opts?: { forceRefresh?: boolean }) =
 // Les saisons de la bibliothèque, pour leur nombre — voir `getSeasonsAdmin`.
 export const cachedJellyfinSeasons = (opts?: { forceRefresh?: boolean }) =>
   withCache("jf:seasons:admin", TTL.LONG, () => jellyfin.getSeasonsAdmin(), opts);
+
+/**
+ * Les épisodes entrés dans la fenêtre de « récent », projetés sur ce que `latestArrivals` lit
+ * (DECISIONS.md §74) — 1 925 épisodes et 1,7 Mo de réponse un jour d'imports massifs, quelques
+ * dizaines d'octets chacun une fois réduits. Dix minutes et non deux comme la bibliothèque : la
+ * lecture peut coûter une demi-seconde, et un épisode qui remonte dix minutes après son arrivée ne
+ * manque à personne.
+ */
+export const cachedJellyfinRecentEpisodes = (opts?: { forceRefresh?: boolean }) =>
+  withCache("jf:recent-episodes:admin:v1", TTL.VERY_LONG, async (): Promise<RecentEpisode[]> => {
+    const since = Date.now() - NEW_BADGE_DAYS * 86_400_000;
+    const items = await jellyfin.getRecentEpisodesAdmin(since);
+    return items
+      .filter((item) => item.SeriesId && item.DateCreated)
+      .map((item) => ({
+        id: item.Id,
+        seriesId: item.SeriesId!,
+        season: item.ParentIndexNumber ?? null,
+        episode: item.IndexNumber ?? null,
+        createdAt: item.DateCreated!,
+      }));
+  }, opts);
+
+/**
+ * Lesquels de ces épisodes ce compte a vus — une requête par compte et par liste, pas par carte.
+ * Deux minutes, comme le catalogue : un épisode qu'on vient de finir cesse d'être « nouveau » au
+ * prochain chargement du catalogue.
+ */
+export const cachedJellyfinPlayedAmong = (userId: string, itemIds: readonly string[]) => {
+  const ids = [...itemIds].sort();
+  const digest = createHash("sha1").update(ids.join(",")).digest("base64url").slice(0, 16);
+  return withCache(`jf:played-among:${userId}:${digest}`, TTL.LONG, () => jellyfin.getPlayedAmong(userId, ids));
+};
 
 // « Vu » et « Favoris » : deux requêtes ciblées par personne, courtes et exactes — voir la note
 // du client Jellyfin sur pourquoi elles ne passent pas par un balayage de la bibliothèque.
