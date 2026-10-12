@@ -70,8 +70,19 @@ export function setSimulatedLink(next: { mbps?: number; cut?: boolean; cutForMs?
   emit();
 }
 
+// Le même objet tant que rien n'a changé : `useSyncExternalStore` compare les instantanés par
+// identité, et un objet neuf à chaque lecture faisait redessiner la page de test en boucle
+// (erreur React #185 à l'ouverture du lot « Connexion simulée », 12/10/2026).
+let snapshot: (SimState & { active: boolean }) | null = null;
+let snapshotOf: SimState | null = null;
+
 export function simulatedLink(): SimState & { active: boolean } {
-  return { ...state, active: simulatorActive() };
+  const active = simulatorActive();
+  if (snapshot === null || snapshotOf !== state || snapshot.active !== active) {
+    snapshotOf = state;
+    snapshot = { ...state, active };
+  }
+  return snapshot;
 }
 
 /** Les Mbit/s réellement livrés sur les `ms` dernières millisecondes (horloge murale). */

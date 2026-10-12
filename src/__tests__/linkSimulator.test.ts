@@ -52,3 +52,17 @@ describe("le simulateur de connexion", () => {
     expect(() => simulateRequestGate()).not.toThrow();
   });
 });
+
+// Erreur React #185 à l'ouverture du lot « Connexion simulée » (12/10/2026) : l'instantané lu par
+// `useSyncExternalStore` était un objet neuf à chaque appel, et la page se redessinait en boucle.
+describe("simulatedLink, instantané stable", () => {
+  it("rend le même objet tant que rien ne change, un autre après un réglage", async () => {
+    const sim = await import("@/lib/linkSimulator");
+    const a = sim.simulatedLink();
+    expect(sim.simulatedLink()).toBe(a);
+    sim.setSimulatedLink({ mbps: 3 });
+    const b = sim.simulatedLink();
+    expect(b).not.toBe(a);
+    expect(sim.simulatedLink()).toBe(b);
+  });
+});
