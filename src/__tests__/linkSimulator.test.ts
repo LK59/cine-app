@@ -66,3 +66,21 @@ describe("simulatedLink, instantané stable", () => {
     expect(sim.simulatedLink()).toBe(b);
   });
 });
+
+// « À 1 Mbit/s tout se lit » (Louis, 12/10/2026) : bridées requête par requête, les lectures en
+// parallèle cumulaient leur débit. Un seul lien : deux réponses simultanées se partagent le débit.
+describe("un seul lien pour toutes les requêtes", () => {
+  it("deux transferts lancés ensemble prennent le temps de deux, pas d'un", async () => {
+    vi.useFakeTimers();
+    const sim = await import("@/lib/linkSimulator");
+    sim.setSimulatedLink({ mbps: 8 }); // 1 Mo/s
+    const now = performance.now();
+    let done = 0;
+    void sim.simulateTransfer(1_000_000, now).then(() => done++);
+    void sim.simulateTransfer(1_000_000, now).then(() => done++);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(done).toBe(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(done).toBe(2);
+  });
+});

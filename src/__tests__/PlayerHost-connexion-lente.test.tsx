@@ -521,6 +521,17 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
     expect(reported.find((r) => r.kind === "start")!.fields).toMatchObject({ lighterCarried: true, lighterTier: 1 });
   });
 
+  // Un appareil restait au lecteur serveur tant qu'on relançait vite (12/10/2026) : chaque séance
+  // héritée repoussait les deux minutes. Seule une vraie bascule réarme la mémoire.
+  it("une séance seulement héritée ne réarme pas la mémoire des deux minutes", async () => {
+    forgetLighterCarry();
+    playback.session = { itemId: "film", openId: 1, resumeAt: 0, title: "Film", lighter: { targetBps: 2_500_000, tier: 1 } };
+    await mounted();
+    await picture();
+    cleanup();
+    expect(carriedLighter()).toBeNull();
+  });
+
   it("une séance allégée qui s'arrête est retenue deux minutes", async () => {
     switchedTo({ targetBps: 2_500_000, tier: 1 });
     await mounted();

@@ -135,10 +135,27 @@ export function simulateRequestGate(): void {
  * (`performance.now()`) : attendre ce qu'il aurait fallu à ce débit. Une coupure survenue pendant le
  * transfert le fait échouer.
  */
+/**
+ * L'instant où le lien simulé sera libre. Un seul lien pour toutes les requêtes : bridée requête par
+ * requête, chaque réponse avait le débit choisi pour elle seule, et les quatre à six lectures en
+ * parallèle du lecteur natif cumulaient quatre à six fois ce débit (« à 1 Mbit/s tout se lit », Louis,
+ * 12/10/2026 — mesuré 4,2 Mbit/s reçus pour 1 réglé).
+ */
+let linkFreeAt = 0;
+
 export async function simulateTransfer(bytes: number, headersAt: number, signal?: AbortSignal | null): Promise<void> {
   const due = (bytes * 8 * 1000) / state.bps;
-  const spent = performance.now() - headersAt;
-  await sleep(due - spent, signal);
+  // La réponse occupe le lien après celles déjà en file : au plus tôt quand ses en-têtes sont arrivés.
+  const start = Math.max(headersAt, linkFreeAt);
+  const end = start + due;
+  linkFreeAt = end;
+  try {
+    await sleep(end - performance.now(), signal);
+  } catch (error) {
+    // Abandonnée (saut, fermeture) : elle rend la place qu'elle tenait si personne n'est passé après.
+    if (linkFreeAt === end) linkFreeAt = Math.max(start, performance.now());
+    throw error;
+  }
   if (cutNow()) throw new TypeError("coupure simulée");
   delivered.push([Date.now(), bytes]);
   if (delivered.length > 2000) delivered.splice(0, 1000);
@@ -197,6 +214,7 @@ export function throttledHlsLoader<T extends new (config: never) => unknown>(Bas
 
 /** Pour les tests. */
 export function resetLinkSimulator(): void {
+  linkFreeAt = 0;
   armed = false;
   state = { bps: 50_000_000, cut: false, cutUntil: 0 };
   delivered.length = 0;

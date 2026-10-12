@@ -678,6 +678,12 @@ function ActivePlayer({
   /** Le même, lu par le bilan (`reportStop`) : seule une séance réellement allégée est retenue. */
   const negotiatedStepRef = useRef<LighterStep | null>(null);
   /**
+   * Vrai quand le palier en cours n'est qu'hérité (règle des deux minutes) et qu'aucune bascule n'a
+   * eu lieu dans cette séance : elle ne réarme pas la mémoire. Sinon chaque séance héritée repoussait
+   * les deux minutes, et un appareil restait au lecteur serveur tant qu'on relançait vite (12/10/2026).
+   */
+  const carriedOnlyRef = useRef(false);
+  /**
    * Le palier choisi pour ce titre par une bascule — ici, ou au relais du lecteur natif (`lighter` du
    * relais) — et que chaque négociation de ce titre redemande (réessai, piste audio).
    */
@@ -951,7 +957,7 @@ function ActivePlayer({
       // retrouvé de quoi porter la lecture classique pendant qu'elle jouait. Une séance ordinaire du
       // lecteur serveur ne retient rien.
       const step = negotiatedStepRef.current;
-      if (step && !lighterClearedRef.current && !logContext.current.bench) rememberLighter(step);
+      if (step && !carriedOnlyRef.current && !lighterClearedRef.current && !logContext.current.bench) rememberLighter(step);
       reportPlayback("stop", stopFields(why, true));
       if (logContext.current.session) clearUnsentStop(logContext.current.session);
     },
@@ -1197,6 +1203,7 @@ function ActivePlayer({
       if (allowed && switchStepRef.current?.itemId !== itemId && sessionLighterRef.current) {
         switchStepRef.current = { itemId, step: sessionLighterRef.current };
         lighterCarried = true;
+        carriedOnlyRef.current = true;
         slowLogRef.current.note(`allégée ${(sessionLighterRef.current.targetBps / 1e6).toFixed(1)} Mb/s palier ${sessionLighterRef.current.tier} (moins de 2 min après une séance allégée)`);
       }
       const step = allowed && switchStepRef.current?.itemId === itemId ? switchStepRef.current.step : null;
@@ -2389,6 +2396,7 @@ function ActivePlayer({
       over: () => false,
       switchTo: (step, resumeAt, cause, _held, reading) => {
         switchStepRef.current = { itemId, step };
+        carriedOnlyRef.current = false;
         switchedAtRef.current = Date.now();
         setSwitchNotice(true);
         startPlayback({

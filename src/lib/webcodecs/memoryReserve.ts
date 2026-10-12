@@ -5,6 +5,7 @@ import { diagReserve } from "./playbackDiagnosis";
 import { trace } from "./trace";
 import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { coverageFrom } from "@/lib/resumeCache/coverage";
+import { simulateTransfer, simulatorActive } from "@/lib/linkSimulator";
 
 /**
  * La réserve d'avance en mémoire : pendant une lecture, prendre de l'avance quand le lien le permet,
@@ -474,7 +475,11 @@ export class MemoryReserve {
       }
       const total = Number(res.headers.get("Content-Range")?.split("/")[1]);
       if (res.status !== 206 || total !== size) throw new Error(`réponse ${res.status}`);
+      const headersAt = performance.now();
       const bytes = new Uint8Array(await res.arrayBuffer());
+      // Le simulateur de la page de test (§78) bride aussi la réserve : elle seule, à plein débit,
+      // portait la lecture d'un lien simulé à 1 Mbit/s. Hors simulateur, rien n'est pris ici.
+      if (simulatorActive()) await simulateTransfer(bytes.byteLength, headersAt, control.signal);
       if (bytes.byteLength !== end - start + 1) throw new Error("longueur inattendue");
       // Pas dans les mesures réseau du lecteur (`diagRequest`) : une plage de 8 Mio bridée n'y dit rien
       // de ce que le lecteur a attendu, et y faussait la requête la plus lente et les premiers octets.
