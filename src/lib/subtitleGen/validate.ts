@@ -22,7 +22,14 @@ export interface ReplyLine {
 
 export type BatchVerdict =
   | { ok: true; texts: Map<number, string> }
-  | { ok: false; problem: string; /** Les lignes fautives, quand la faute est dans des lignes. */ bad: number[] };
+  | {
+      ok: false;
+      problem: string;
+      /** Les lignes fautives, quand la faute est dans des lignes. */
+      bad: number[];
+      /** Pour un décalage seulement : la réponse, que le second essai comparera (`sameShape`). */
+      texts?: Map<number, string>;
+    };
 
 const words = (s: string) => s.split(/\s+/).filter((w) => /\p{L}/u.test(w)).length;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -240,6 +247,24 @@ export function validateBatch(requested: RequestedLine[], items: readonly ReplyL
   if (comparable >= 3 && unchanged * 2 >= comparable) return { ok: false, problem: "langue-source", bad: [] };
   if (bad.length > 0) return { ok: false, problem: "lignes", bad };
   const sources = sourceOf ?? ((id: number) => wanted.get(id)?.source);
-  if (detectDrift(texts, sources)) return { ok: false, problem: "drift", bad: [] };
+  if (detectDrift(texts, sources)) return { ok: false, problem: "drift", bad: [], texts };
   return { ok: true, texts };
+}
+
+/**
+ * Deux réponses ont-elles la même forme, réplique par réplique (longueurs à ±25 % en médiane) ?
+ * Un vrai décalage est un accident : deux essais ne glissent pas de la même façon. Deux réponses
+ * signalées « décalées » mais de même forme disent que c'est la source qui trompe le détecteur
+ * (répliques très courtes, OCR) — mesuré le 12/10/2026 : 30 lots refaits sur *Kompromat*, sain.
+ */
+export function sameShape(a: ReadonlyMap<number, string>, b: ReadonlyMap<number, string>): boolean {
+  const diffs: number[] = [];
+  for (const [id, ta] of a) {
+    const tb = b.get(id);
+    if (tb === undefined) return false;
+    diffs.push(Math.abs(Math.log(Math.max(1, visibleLength(ta)) / Math.max(1, visibleLength(tb)))));
+  }
+  if (diffs.length === 0 || diffs.length !== b.size) return false;
+  diffs.sort((x, y) => x - y);
+  return diffs[diffs.length >> 1] < Math.log(1.25);
 }

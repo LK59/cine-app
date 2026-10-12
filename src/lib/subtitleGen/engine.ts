@@ -3,7 +3,7 @@ import { config } from "@/lib/config";
 import { logError } from "@/lib/logger";
 import { genAvailable, genSettings, providerFor, ProviderError, type GenSettings, type TranslationProvider, type Usage } from "./providers";
 import { GLOSSARY_SCHEMA, GLOSSARY_USER, batchSystem, batchUser, glossarySystem, parseGlossary, sourceBlock, stablePrefix, type Glossary } from "./prompts";
-import { LineSplitter, fitLines, maxLinesFor, parseReply, parseReplyLine, validateBatch } from "./validate";
+import { LineSplitter, fitLines, maxLinesFor, parseReply, parseReplyLine, sameShape, validateBatch } from "./validate";
 import { matchSourceCase } from "./textCase";
 import { nextBatch, activeViewers, anchorIndex, seekBatch, type Plan, type Viewer } from "./scheduler";
 import { cuesDb, jobsDb, sameFile, spendDb, type JobRow } from "./store";
@@ -498,7 +498,7 @@ async function runBatch(job: JobRow, plan: Plan, seekLane = false): Promise<void
  * source. Les erreurs passagères et de configuration remontent ; les refus et réponses invalides
  * se règlent ici.
  */
-async function translateIds(job: JobRow, ids: number[], tries: number, seekLane = false): Promise<void> {
+async function translateIds(job: JobRow, ids: number[], tries: number, seekLane = false, previousDrift?: Map<number, string>): Promise<void> {
   const cues = loadCues(job.id);
   const open = ids.filter((i) => !cues.done[i]);
   if (open.length === 0) return;
@@ -585,9 +585,17 @@ async function translateIds(job: JobRow, ids: number[], tries: number, seekLane 
     record(job, open.map((id) => ({ idx: id, text: matchSourceCase(cues.sources[id], verdict.texts.get(id)!, job.target), kept: false })), startedAt, seekLane);
     return;
   }
+  // Deuxième alerte de décalage sur les mêmes lignes, et une réponse de même forme que la première :
+  // c'est la source qui trompe le détecteur, pas le modèle qui glisse — voir `sameShape`.
+  const driftTexts = verdict && !verdict.ok && verdict.problem === "drift" ? verdict.texts : undefined;
+  if (driftTexts && previousDrift && sameShape(previousDrift, driftTexts)) {
+    logGen("retry", { job: job.id, cause: "drift-accepted", attempt: tries + 1, count: open.length });
+    record(job, open.map((id) => ({ idx: id, text: matchSourceCase(cues.sources[id], driftTexts.get(id)!, job.target), kept: false })), startedAt, seekLane);
+    return;
+  }
   // Un lot refusé se dit — le décalage surtout, qui passait inaperçu avant le détecteur.
   if (problem !== "refusal") logGen("retry", { job: job.id, cause: problem, attempt: tries + 1, count: open.length, streamed: streamed.size });
-  if (tries < 1 && problem !== "refusal") return translateIds(job, open, tries + 1, seekLane);
+  if (tries < 1 && problem !== "refusal") return translateIds(job, open, tries + 1, seekLane, driftTexts);
   if (open.length > 1) {
     const half = Math.ceil(open.length / 2);
     await translateIds(job, open.slice(0, half), 0, seekLane);

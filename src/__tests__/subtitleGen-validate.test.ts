@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import fixture from "./fixtures/subtitleGen/drift-bench-2026-10-12.json";
-import { DRIFT, LineSplitter, detectDrift, fitLines, parseReply, parseReplyLine, validateBatch, type ReplyLine } from "@/lib/subtitleGen/validate";
+import { DRIFT, LineSplitter, detectDrift, fitLines, sameShape, parseReply, parseReplyLine, validateBatch, type ReplyLine } from "@/lib/subtitleGen/validate";
 import { batchUser, idsAsked, oneLine, sourceBlock } from "@/lib/subtitleGen/prompts";
 import { isAllCaps, matchSourceCase } from "@/lib/subtitleGen/textCase";
 
@@ -192,5 +192,22 @@ describe("la casse de la source", () => {
     expect(isAllCaps("I'M GOING HOME, Joe")).toBe(true); // 13 capitales sur 15 lettres
     expect(isAllCaps("I'm going HOME")).toBe(false);
     expect(isAllCaps("<i>hello</i>")).toBe(false);
+  });
+});
+
+// Une deuxième alerte de décalage n'est acceptée que si les deux réponses ont la même forme :
+// un vrai glissement est un accident qui ne se répète pas à l'identique (12/10/2026, *Kompromat*).
+describe("sameShape", () => {
+  const m = (texts: string[]) => new Map(texts.map((t, i) => [i, t]));
+  it("reconnaît deux réponses de même forme, mots différents", () => {
+    expect(sameShape(m(["Bonjour à toi.", "Non.", "Je reviens tout de suite, attends-moi."]), m(["Salut à toi.", "Non !", "Je reviens tout de suite, attends."]))).toBe(true);
+  });
+  it("distingue une réponse décalée d'une réponse alignée", () => {
+    const aligned = m(["Non.", "Je reviens tout de suite, attends-moi là.", "Oui.", "On se retrouve demain matin devant la gare."]);
+    const shifted = m(["Je reviens tout de suite, attends-moi là.", "Oui.", "On se retrouve demain matin devant la gare.", "D'accord."]);
+    expect(sameShape(aligned, shifted)).toBe(false);
+  });
+  it("refuse deux réponses qui ne couvrent pas les mêmes lignes", () => {
+    expect(sameShape(m(["a", "b"]), new Map([[0, "a"], [5, "b"]]))).toBe(false);
   });
 });
