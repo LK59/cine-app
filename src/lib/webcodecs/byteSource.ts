@@ -1,7 +1,7 @@
 import { noteUnauthorized, SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { trace } from "./trace";
 import { diagInterval, diagNow, diagRequest, diagRequestFailed } from "./playbackDiagnosis";
-import { meterOpeningRequest, readCounted } from "@/lib/slowLink";
+import { meterOpeningRequest } from "@/lib/slowLink";
 // Random access over a media file, for the native player's remuxer.
 //
 // The demuxer needs to jump around a file that can be 40 GB: read the header, jump to the end
@@ -697,10 +697,13 @@ export class HttpByteSource implements ByteSource {
         this.checkTotal(res);
         const headersAt = performance.now();
         metered?.headers();
-        // Pendant une ouverture seulement, le corps est lu au fil de l'eau pour compter ce qui
-        // arrive (« connexion trop lente », DECISIONS.md §77) — les mêmes octets. Hors ouverture,
-        // `metered` est nul et rien ne change.
-        const bytes = metered ? await readCounted(res, metered) : new Uint8Array(await res.arrayBuffer());
+        // Le corps se lit d'un bloc, comme toujours : pendant une ouverture, le morceau est compté
+        // une fois arrivé (« connexion trop lente », DECISIONS.md §77). Une lecture au fil de l'eau
+        // (`readCounted`) mesurait aussi le morceau en cours, mais changeait la réception des octets
+        // de toutes les ouvertures, Safari compris, pour la précision d'un verdict que les morceaux
+        // finis donnent déjà — gardée prête, non branchée (12/10/2026).
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        metered?.received(bytes.byteLength);
         this.networkBytes += bytes.byteLength;
         const endAt = performance.now();
         this.note(sentAt, headersAt, endAt, bytes.byteLength, res);

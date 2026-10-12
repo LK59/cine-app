@@ -620,3 +620,35 @@ describe("HttpByteSource — session expirée", () => {
     source.close();
   });
 });
+
+// « Connexion trop lente » (DECISIONS.md §77) : pendant une ouverture mesurée, la réception des
+// octets ne change pas — corps lu d'un bloc, compté une fois arrivé. Une lecture au fil de l'eau
+// (`readCounted`) existe mais n'est pas branchée : ce test échoue si quelqu'un la rebranche sans
+// l'avoir validée sur les vrais moteurs.
+describe("HttpByteSource pendant une ouverture mesurée", () => {
+  it("lit d'un bloc et compte chaque morceau arrivé", async () => {
+    const { armOpeningMeter, disarmOpeningMeter } = await import("@/lib/slowLink");
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      if (init?.method === "HEAD") return { ok: true, headers: { get: (n: string) => (n === "Content-Length" ? String(SIZE) : null) } };
+      const [, from, to] = /bytes=(\d+)-(\d+)/.exec(init?.headers?.Range ?? "")!.map(Number);
+      return {
+        status: 206,
+        headers: { get: () => `bytes ${from}-${to}/${SIZE}` },
+        get body(): never {
+          throw new Error("le corps ne doit pas être lu en flux");
+        },
+        arrayBuffer: async () => new Uint8Array(to - from + 1).buffer,
+      };
+    });
+    const meter = armOpeningMeter();
+    try {
+      const source = await HttpByteSource.open("/film.mkv");
+      const bytes = await source.read(0, 16);
+      expect(bytes.byteLength).toBe(16);
+      await settle();
+      expect(meter.measure().bytes).toBeGreaterThanOrEqual(CHUNK);
+    } finally {
+      disarmOpeningMeter(meter);
+    }
+  });
+});

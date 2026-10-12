@@ -268,6 +268,11 @@ export function meterOpeningRequest(): MeteredRequest | null {
 }
 
 /**
+ * NON BRANCHÉE (12/10/2026) : `HttpByteSource` lit d'un bloc et compte le morceau une fois arrivé.
+ * Gardée pour le jour où le lecteur natif aura besoin du débit au fil de l'eau (qualité adaptée au
+ * réseau, traitement progressif des octets) — à valider alors sur les vrais moteurs (WebKit iOS
+ * surtout : annulation, erreurs en plein corps, mémoire) avant de la brancher. Voir DECISIONS §77.
+ *
  * Lit un corps de réponse en comptant ce qui arrive — les mêmes octets qu'`arrayBuffer()`, dans le
  * même ordre. Un corps sans lecteur de flux (navigateur ancien, double de test) est lu d'un bloc :
  * on perd la mesure, pas la lecture.

@@ -3468,3 +3468,5 @@ coupure), `PlayerHost-connexion-lente.test.tsx`, `activity-connexion-lente.test.
 `playbackTimeline.test.ts`.
 
 **Décidé le 12/10/2026.**
+
+**Mesure sans toucher à la réception (12/10/2026, choix de Louis).** La première version lisait le corps des réponses au fil de l'eau pendant chaque ouverture (`readCounted`) : même octets, mais un chemin de réception neuf pour toutes les ouvertures, Safari iOS compris, jamais validé sur appareil. `HttpByteSource` lit de nouveau d'un bloc (`arrayBuffer()`, comme avant §77) et compte chaque morceau une fois arrivé ; le morceau encore en vol n'apporte que son temps, ce qui ne peut qu'abaisser la mesure d'au plus un morceau — sans effet sur le verdict d'un lien comme celui du 12/10 (morceaux de 1 Mio en 2, 7, 14, 25 s). `readCounted` reste dans `slowLink.ts`, testée, non branchée.
