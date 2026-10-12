@@ -1,5 +1,6 @@
 "use client";
 
+import { onRealHover } from "@/lib/pointerHover";
 import { HeroBackdrop } from "@/components/cinema/HeroBackdrop";
 import { useMissingTitleNotice } from "@/lib/useMissingTitleNotice";
 import { ActionSheet } from "@/components/ActionSheet";
@@ -219,7 +220,7 @@ const ContinueCard = memo(function ContinueCard({
       {...menu}
       onClick={() => onOpen(entry)}
       onFocus={focus}
-      onMouseEnter={focus}
+      onMouseEnter={onRealHover(focus)}
       // Ni loupe ni sélection sous un doigt qui appuie longuement : c'est le geste du menu.
       className={`group relative ${CONTINUE_CARD_WIDTH} shrink-0 select-none overflow-visible rounded-lg text-left transition-transform duration-200 [-webkit-touch-callout:none] hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >

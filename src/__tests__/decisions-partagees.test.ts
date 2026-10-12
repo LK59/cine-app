@@ -1041,3 +1041,20 @@ describe("une seule recherche de ligne pour les sous-titres tenus en mémoire", 
     expect(host).not.toMatch(/— généré|— génération/);
   });
 });
+
+describe("un survol ne désigne une affiche que si le pointeur a bougé", () => {
+  // DECISIONS.md §71. Cinq cartes prêtent la bannière au survol ; une seule nue, et la carte qui
+  // glisse sous une souris immobile (ou sous le curseur laissé au bord par Silk) reprend la bannière
+  // à celle qui a le focus.
+  it.each([
+    "src/components/cinema/CinemaCard.tsx",
+    "src/components/cinema/CinemaSeriesCard.tsx",
+    "src/components/cinema/CinemaTop10Card.tsx",
+    "src/components/cinema/CinemaDiscoveryRow.tsx",
+    "src/components/cinema/CinemaClient.tsx",
+  ])("%s passe par `onRealHover`", (f) => {
+    const src = lire(f);
+    expect(src).toMatch(/onMouseEnter=\{[^}]*onRealHover\(/);
+    expect(src).not.toMatch(/onMouseEnter=\{(\(\) => onFocusItem|onFocusItem\}|focus\})/);
+  });
+});

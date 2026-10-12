@@ -1,5 +1,6 @@
 "use client";
 
+import { onRealHover } from "@/lib/pointerHover";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
 import { useTap } from "@/lib/useTap";
@@ -58,7 +59,7 @@ export function CinemaTop10Card({
       type="button"
       {...(rowKey ? { "data-tv-card": true, "data-tv-row": rowKey, "data-tv-col": index } : {})}
       onFocus={onFocusItem}
-      onMouseEnter={onFocusItem}
+      onMouseEnter={onFocusItem ? onRealHover(onFocusItem) : undefined}
       {...tap}
       data-sheet-backdrop={backdropUrl || undefined}
       aria-label={`${rank}. ${title}`}

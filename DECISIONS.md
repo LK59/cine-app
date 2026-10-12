@@ -3045,3 +3045,62 @@ Tests : `subtitleGen-client.test.ts`, `subtitleGen-generatedCues.test.ts`,
 `subtitleGen-generation.test.ts`, `PlayerControls-subtitleGen.test.tsx`, `trackLabel.test.ts`
 (« sous-titres générés »), `ExperimentalPlayerHost.test.tsx` (« générer des sous-titres »),
 `decisions-partagees.test.ts` (« une seule recherche de ligne »).
+
+## 71. Télécommande : une seule sélection — le focus — et rien qui la contredise
+
+**Règle.** Dans le cinéma du bureau, ce qui est choisi est **l'élément qui a le focus du document**,
+et rien d'autre. La grille aux flèches (`useTvGridNav`) n'a pas de sélection à elle : à chaque touche
+elle relit `document.activeElement`, et quand elle bouge elle donne le vrai focus
+(`focus({ preventScroll: true })`, puis son propre défilement). Un focus posé par quelqu'un d'autre —
+la navigation spatiale de Silk sur Fire TV, la tabulation — est donc adopté sans rien faire : la
+rangée, la colonne et la bannière (qui suit `onFocus`) en repartent. Trois choses pouvaient pourtant
+contredire cette sélection, et ne le peuvent plus :
+
+- **le défilement au bord** (`installEdgeScroll`, Fire TV) continuait sous un curseur immobile. En
+  mode immersif de Silk, le curseur reste, invisible, là où on l'a laissé — au bord, puisque c'est
+  ainsi qu'on fait défiler au curseur — et la rangée ou le panneau repartait sous chaque flèche :
+  « je ne peux pas aller vers le haut », « au 3e film ça ne fonctionne plus », « si tu switches entre
+  les 2 modes ça fonctionne » (Timothé, 11/10/2026). Toute touche, et tout focus déplacé sans appui
+  du pointeur, l'arrêtent ; seul un mouvement vers une *autre* position le réarme ; un mouvement au
+  centre exact de l'élément focalisé ne compte pas ; la boucle s'arrête au bout du défilement ;
+- **le survol sans mouvement** : une carte qui glisse sous une souris immobile recevait
+  `mouseenter` et prenait la bannière à celle qui avait le focus (au bureau aussi, souris posée sur
+  les rangées pendant qu'on navigue au clavier). `onRealHover` / `hoverDesignates`
+  (`pointerHover.ts`) : un survol désigne si la souris a bougé depuis moins de 150 ms, ou s'il arrive
+  à une position encore jamais vue (les deux ordres `mouseenter` / `mousemove` sont couverts), ou si
+  l'on ne sait rien du pointeur ;
+- **le focus dans l'intitulé d'une rangée** (« Voir tout ») — là où la navigation spatiale de
+  Chromium le pose en montant depuis les affiches — était lu comme « hors de la grille » : → et ↓
+  renvoyaient à la première affiche de l'accueil, ↑ ne faisait rien. La rangée est adoptée : ↓ ← →
+  vont à son affiche la plus proche en largeur, ↑ à la rangée du dessus, ou à la bannière.
+
+**Ce qu'on sait de la navigation spatiale de Chromium** (mesuré le 12/10/2026, Chromium 15x lancé
+avec `--enable-spatial-navigation`, page de reproduction sous Playwright) : la page reçoit la flèche
+**d'abord**, et un `preventDefault` suffit à arrêter la navigation spatiale — aucun double pas ; sans
+lui, elle déplace le focus vers un élément *visible* dans la direction et y pose un `mouseover` (pas
+de `mousemove`) ; vers une affiche hors de l'écran, elle fait défiler la rangée par petits pas sans
+déplacer le focus ; ↑ depuis une affiche va au « Voir tout » de sa rangée. Que Silk soit exactement
+celle-là n'est pas établi : c'est ce que dit le relevé ci-dessous.
+
+**Le relevé** (`installRemoteDiag`, `startup.log`, `kind: "télécommande"`) : un par mode de Silk
+(`mode: "curseur" | "spatial"`), trois par onglet au plus, deux du même mode. Chaque touche porte
+`before` / `after` (le focus avant et après, une affiche décrite par sa rangée et sa colonne, jamais
+son titre) et `gridMoved` ; `focusMoves` liste les focus déplacés sans touche ni appui reçus par la
+page ; `pointerAtFocus` compte les mouvements tombés au centre de l'élément focalisé ; `edgeScrolls`,
+les départs du défilement au bord.
+
+**Porteurs.** `useTvGridNav` (`tvGridMoveCount`, adoption de la rangée), `installEdgeScroll` et
+`installRemoteDiag` (`fireTv.ts`), `onRealHover` / `hoverDesignates` / `trackPointer`
+(`pointerHover.ts`, suivi posé par `RemoteControlSupport`).
+
+**Appelants.** `CinemaCard`, `CinemaSeriesCard`, `CinemaTop10Card`, `CinemaDiscoveryRow`, la carte
+de Reprendre de `CinemaClient` (`onMouseEnter={onRealHover(…)}`).
+
+**Volontairement à part.** Le téléphone et l'iPad n'ont ni survol ni grille aux flèches : la carte
+centrée au doigt (`useCentredCard`) pose le focus sans défiler et ne passe pas par ici. La bannière
+(`HeroBannerControls`) garde ses propres flèches. La touche Retour n'est toujours pas traduite.
+
+Tests : `firetv-spatial-nav.test.tsx` (la scène de Timothé rejouée : curseur laissé au bord, focus
+déplacé sans touche, ← ×3 puis →, ↑ ; « Voir tout » ; survol immobile), `fireTv.test.ts` (relevé par
+mode, bornes, focus avant / après), `remote-diag-route.test.ts`, `useTvGridNav.test.tsx`,
+`decisions-partagees.test.ts` (« un survol ne désigne une affiche que si le pointeur a bougé »).

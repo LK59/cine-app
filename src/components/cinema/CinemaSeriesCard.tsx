@@ -1,5 +1,6 @@
 "use client";
 
+import { onRealHover } from "@/lib/pointerHover";
 import { PosterImage } from "@/components/PosterImage";
 import { prefetchTitleSheet } from "@/lib/prefetch";
 import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
@@ -39,7 +40,7 @@ export function CinemaSeriesCard({
       data-tv-row={rowKey}
       data-tv-col={index}
       onFocus={() => onFocusItem(item)}
-      onMouseEnter={() => onFocusItem(item)}
+      onMouseEnter={onRealHover(() => onFocusItem(item))}
       // Ce que la fiche va demander part dès l'appui — voir `prefetchTitleSheet`.
       onPointerDown={() => prefetchTitleSheet({ kind: "series", sonarrId: item.sonarrId, jellyfinItemId: item.jellyfinItemId })}
       onClick={() => onSelectItem(item)}

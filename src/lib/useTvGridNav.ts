@@ -64,7 +64,25 @@ function getRows(): HTMLElement[][] {
  * du panneau. Un déplacement à l'intérieur d'une rangée garde le comportement discret : on ne
  * veut pas que chaque flèche gauche/droite fasse sauter la page.
  */
+/**
+ * Combien de fois la grille a déplacé le focus elle-même — lu par le relevé de télécommande des
+ * Fire TV (`installRemoteDiag`), pour distinguer une flèche que la grille a servie d'un focus que
+ * Silk a déplacé de son côté. La grille n'a pas d'autre « sélection » que le focus du document :
+ * ce compteur ne dit que *qui* l'a déplacé.
+ */
+let gridMoves = 0;
+export function tvGridMoveCount(): number {
+  return gridMoves;
+}
+
+/** Un focus posé par la grille hors des affiches (bannière, rail) : compté comme les autres. */
+function grant(el: HTMLElement): void {
+  gridMoves += 1;
+  el.focus();
+}
+
 function focusCard(el: HTMLElement, movedRow = false): void {
+  gridMoves += 1;
   // `preventScroll` : le navigateur amène de lui-même un élément focalisé sous les yeux, avec
   // ses propres règles — qui se disputeraient celles d'en dessous.
   el.focus({ preventScroll: true });
@@ -74,6 +92,28 @@ function focusCard(el: HTMLElement, movedRow = false): void {
     return;
   }
   el.scrollIntoView({ behavior: scrollBehavior(), inline: "nearest", block: "nearest" });
+}
+
+/** Au-dessus de la première rangée : la bannière d'abord, puis la bascule Films / Séries. */
+function escapeUp(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[data-tv-escape-up="hero"]') ?? document.querySelector<HTMLElement>("[data-tv-escape-up]");
+}
+
+/** L'affiche de la rangée la plus proche, en largeur, d'un élément de son intitulé. */
+function nearestInRow(row: HTMLElement[], from: HTMLElement): HTMLElement {
+  const box = from.getBoundingClientRect();
+  const x = box.left + box.width / 2;
+  let best = row[0];
+  let distance = Number.POSITIVE_INFINITY;
+  for (const card of row) {
+    const r = card.getBoundingClientRect();
+    const d = Math.abs(r.left + r.width / 2 - x);
+    if (d < distance) {
+      best = card;
+      distance = d;
+    }
+  }
+  return best;
 }
 
 // `enabled` lets a caller pause the hook without unmounting it (e.g. Cinema Mode's detail
@@ -98,6 +138,35 @@ export function useTvGridNav(enabled = true) {
       const active = document.activeElement as HTMLElement | null;
       const activeRowIdx = active ? rows.findIndex((r) => r.includes(active)) : -1;
 
+      // Le focus est dans une rangée, mais pas sur une affiche — « Voir tout », dans l'intitulé.
+      // La navigation spatiale de Silk (Fire TV, 12/10/2026) l'y pose d'elle-même en montant
+      // depuis les affiches, et la tabulation aussi ; la branche ci-dessous, qui ne connaît que
+      // « dans la grille » ou « nulle part », renvoyait alors → et ↓ sur la toute première affiche
+      // de l'accueil, et ↑ ne faisait rien. La rangée est adoptée : ↓ ← → entrent dans ses
+      // affiches (la plus proche en largeur), ↑ remonte à la rangée d'au-dessus — ou à la bannière.
+      if (activeRowIdx === -1 && active) {
+        const root = active.closest<HTMLElement>("[data-tv-rowroot]");
+        const ownerIdx = root ? rows.findIndex((r) => root.contains(r[0])) : -1;
+        if (ownerIdx !== -1) {
+          const anchor = nearestInRow(rows[ownerIdx], active);
+          if (e.key !== "ArrowUp") {
+            e.preventDefault();
+            focusCard(anchor);
+          } else if (ownerIdx > 0) {
+            e.preventDefault();
+            const target = rows[ownerIdx - 1];
+            focusCard(target[Math.min(rows[ownerIdx].indexOf(anchor), target.length - 1)], true);
+          } else {
+            const up = escapeUp();
+            if (up) {
+              e.preventDefault();
+              grant(up);
+            }
+          }
+          return;
+        }
+      }
+
       // Nothing focused in the grid yet — Down/Right from wherever the user was jumps straight
       // into the first card, so the very first press already does something useful.
       if (activeRowIdx === -1) {
@@ -114,7 +183,7 @@ export function useTvGridNav(enabled = true) {
         const hero = nowhere ? document.querySelector<HTMLElement>('[data-tv-escape-up="hero"]') : null;
         if (hero && (e.key === "ArrowUp" || e.key === "ArrowLeft")) {
           e.preventDefault();
-          hero.focus();
+          grant(hero);
         }
         return;
       }
@@ -136,7 +205,7 @@ export function useTvGridNav(enabled = true) {
           rail?.querySelector<HTMLElement>("button");
         if (!entry) return;
         e.preventDefault();
-        entry.focus();
+        grant(entry);
       } else if (e.key === "ArrowRight" && colIdx < row.length - 1) {
         e.preventDefault();
         focusCard(row[colIdx + 1]);
@@ -148,11 +217,10 @@ export function useTvGridNav(enabled = true) {
         // Top row: nowhere left to go within the grid — hand off to whatever wants to sit
         // above it. La bannière d'abord (`data-tv-escape-up="hero"` : ses commandes, ou la pastille
         // « ‹ À la une » sur un aperçu — 08/10/2026), puis la bascule Films / Séries.
-        const escapeTarget =
-          document.querySelector<HTMLElement>('[data-tv-escape-up="hero"]') ?? document.querySelector<HTMLElement>("[data-tv-escape-up]");
+        const escapeTarget = escapeUp();
         if (escapeTarget) {
           e.preventDefault();
-          escapeTarget.focus();
+          grant(escapeTarget);
         }
       } else if (e.key === "ArrowDown" && activeRowIdx < rows.length - 1) {
         e.preventDefault();

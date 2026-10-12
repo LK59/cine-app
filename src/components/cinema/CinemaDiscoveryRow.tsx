@@ -1,5 +1,6 @@
 "use client";
 
+import { onRealHover } from "@/lib/pointerHover";
 import { memo, useRef } from "react";
 import { Plus } from "lucide-react";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
@@ -72,7 +73,7 @@ export const CinemaDiscoveryRow = memo(function CinemaDiscoveryRow({
             data-tv-row={rowKey}
             data-tv-col={i}
             onFocus={onFocusItem}
-            onMouseEnter={onFocusItem}
+            onMouseEnter={onRealHover(onFocusItem)}
             onClick={() => onSelectItem(item)}
             title={item.title}
             className={`${cardWidthClassName} relative shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition duration-200 hover:z-10 hover:scale-105 hover:shadow-xl hover:shadow-black/60 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}

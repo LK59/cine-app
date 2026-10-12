@@ -61,8 +61,8 @@ export function logStartupTiming(fields: {
 
 /**
  * Ce qu'une télécommande de Fire TV envoie vraiment (10/10/2026) — voir `installRemoteDiag`
- * (fireTv.ts). Une ligne par onglet, dans le journal des ouvertures : les premières touches et le
- * curseur, pour savoir si Silk navigue au curseur ou aux flèches au lieu de le supposer.
+ * (fireTv.ts). Une ligne par mode de Silk (trois par onglet au plus), dans le journal des
+ * ouvertures : les premières touches et le curseur, pour savoir si Silk navigue au curseur ou aux flèches au lieu de le supposer.
  */
 export function logRemoteDiag(fields: { user: string; device: string | null } & Record<string, unknown>): void {
   try {
