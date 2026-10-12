@@ -1,0 +1,38 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { NextRequest } from "next/server";
+
+// La route d'arrêt, marquée `late` (DECISIONS.md §78) : une position gardée sur l'appareil pendant une
+// coupure, rendue par la règle des bilans perdus — jamais un arrêt de séance.
+
+vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
+vi.mock("@/lib/session", () => ({ verifySessionFull: async () => ({ u: "louis", jfId: "jf-1", jfToken: "tok" }) }));
+const reportPlaybackStopped = vi.fn(async () => {});
+vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: { reportPlaybackStopped } }));
+vi.mock("@/lib/db", () => ({ sessionDb: { jfDevice: () => null }, maintenanceDb: { get: () => null } }));
+vi.mock("@/lib/config", () => ({ config: { get player() { return { enabled: true }; } } }));
+vi.mock("@/lib/castProgress", () => ({ castProgressRelay: () => ({ notePageReport: vi.fn(), noteCastSegment: vi.fn() }) }));
+const recoverLostPosition = vi.fn(async (..._args: unknown[]) => "avancée de 27 s");
+vi.mock("@/lib/lostStopPosition", () => ({ recoverLostPosition: (...args: unknown[]) => recoverLostPosition(...args) }));
+
+const itemId = "0123456789abcdef0123456789abcdef";
+const req = (body: Record<string, unknown>) =>
+  ({ cookies: { get: () => ({ value: "t" }) }, json: async () => body, headers: new Headers() }) as unknown as NextRequest;
+
+beforeEach(() => vi.clearAllMocks());
+
+describe("une position renvoyée après une coupure", () => {
+  it("passe par la règle des bilans perdus, sans arrêter de séance", async () => {
+    const { POST } = await import("@/app/api/jellyfin/playback/stop/route");
+    const res = await POST(req({ itemId, positionTicks: 2421 * 10_000_000, late: true, lateByMs: 60_000 }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ result: "avancée de 27 s" });
+    expect(recoverLostPosition).toHaveBeenCalledWith("jf-1", { why: "lost", itemId, at: 2421, lateByMs: 60_000 }, expect.any(Number));
+    expect(reportPlaybackStopped).not.toHaveBeenCalled();
+  });
+
+  it("refusée sans titre valide ou sans position", async () => {
+    const { POST } = await import("@/app/api/jellyfin/playback/stop/route");
+    expect((await POST(req({ itemId: "../x", positionTicks: 10, late: true, lateByMs: 1 }))).status).toBe(400);
+    expect((await POST(req({ itemId, positionTicks: 0, late: true, lateByMs: 1 }))).status).toBe(400);
+  });
+});

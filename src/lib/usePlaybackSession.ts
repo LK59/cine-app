@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useMemo } from "react";
 import { PLAYBACK_CLIENTS, type PlaybackClient } from "@/lib/playbackClients";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { noteMaintenanceState } from "@/lib/useMaintenance";
+import { clearUnsentPosition, flushUnsentPositions, saveUnsentPosition } from "@/lib/unsentPosition";
 
 interface PlaybackSessionInfo {
   itemId: string;
@@ -49,10 +50,20 @@ function report(
     keepalive: true,
   })
     .then(async (res) => {
+      // La position n'est pas passée (serveur qui redémarre, Jellyfin injoignable) : gardée sur
+      // l'appareil, renvoyée plus tard (`unsentPosition.ts`, §78). Passée : la copie gardée, plus
+      // ancienne, s'efface, et ce qui attendait pour d'autres titres part derrière.
+      if (res.status >= 500) {
+        saveUnsentPosition(info.itemId, positionTicks / TICKS_PER_SECOND);
+      } else if (res.ok) {
+        clearUnsentPosition(info.itemId);
+        void flushUnsentPositions(Date.now(), info.itemId);
+      }
       // Le battement rapporte l'état d'exploitation : le sondage ralentit pendant un film.
       if (path === "progress" && res.ok) noteMaintenanceState(((await res.json().catch(() => null)) as { maintenance?: unknown } | null)?.maintenance);
     })
-    .catch(() => undefined);
+    // Pas de réponse : la coupure. La position reste sur l'appareil jusqu'au retour du réseau.
+    .catch(() => saveUnsentPosition(info.itemId, positionTicks / TICKS_PER_SECOND));
 }
 
 /**

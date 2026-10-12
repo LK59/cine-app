@@ -1617,11 +1617,12 @@
     "loadingTooLong": "This is taking too long. Try again.",
     "slowLink": {
       "hint": "Slow connection…",
-      "notice": "Connection too slow for this film (≈{recv} Mbit/s received, it needs about {need}).",
-      "lighter": "Lighter version",
-      "title": "Connection too slow",
-      "detail": "≈{recv} Mbit/s received, this film needs about {need}. Try again when the connection is better.",
-      "message": "Connection too slow for this film (≈{recv} Mbit/s received, it needs about {need}). Try again when the connection is better."
+      "popup": "Your connection seems slow",
+      "popupStutter": "Your connection seems slow, which is causing stuttering.",
+      "failed": "Can't play: the connection is too slow.",
+      "lighter": "Lighter version (reduced quality)",
+      "unstable": "Connection lost or unstable…",
+      "subtitlesGenerating": "Subtitles are still being generated: not available in the lighter version. They will be once generation is finished."
     },
     "unsupportedBrowser": "This browser can't play this stream.",
     "playbackInterruptedCheckConnection": "Playback was interrupted. Check your connection and try again.",
@@ -1638,6 +1639,8 @@
       "linkSlow": "too slow",
       "linkUnknown": "not measured yet",
       "linkFrozen": "measured when it failed",
+      "linkLighter": "Lighter version",
+      "linkLighterValue": "step {tier} · {rate}",
       "reason": "Reason",
       "container": "Container",
       "video": "Video",

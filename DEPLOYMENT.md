@@ -633,7 +633,8 @@ transcode**. Nothing is then handed to Jellyfin: a file the browser cannot carry
 playback error naming the reason, and the per-account "previous player" option — which selects the
 same server-side player — is neither offered nor honoured. Reach for it if your Jellyfin server has
 no hardware transcoding and no CPU to spare; leave it on otherwise, since it is what makes every
-file playable.
+file playable. The « lighter version » offered on a slow connection is such a transcode: it exists only
+when this player is enabled and the account's Jellyfin policy allows video transcoding.
 
 The playback log (`data/logs/player.log`) records every handover with its reason, so you can see
 what your library actually needs before deciding. See [DOC-TECH.md](DOC-TECH.md).

@@ -71,12 +71,6 @@ function prefersReducedMotion(): boolean {
  */
 export const COVER_HOLD_MS = 1200;
 
-/** Un message de l'ouverture qui propose des choix — voir `notice`. */
-export interface IntroNotice {
-  text: string;
-  actions: { label: string; onClick: () => void; primary?: boolean }[];
-}
-
 export function PlaybackIntro({
   phase,
   startedAt,
@@ -85,7 +79,6 @@ export function PlaybackIntro({
   fallbackName,
   caption,
   note = null,
-  notice = null,
   settings = PLAYBACK_INTRO,
   reduced: reducedProp,
   imageShown = false,
@@ -119,11 +112,6 @@ export function PlaybackIntro({
   caption: string[];
   /** Un mot sous la ligne de chargement, quand l'attente devient longue. */
   note?: string | null;
-  /**
-   * Un message qui demande une réponse, à la place du mot (la connexion trop lente, DECISIONS.md §77) :
-   * une phrase et ses boutons. Le chargement continue derrière — l'ouverture ne décide rien.
-   */
-  notice?: IntroNotice | null;
   settings?: PlaybackIntroSettings;
   /** Forcé par le banc ; sinon la préférence « Réduire les animations » de l'appareil. */
   reduced?: boolean;
@@ -366,35 +354,10 @@ export function PlaybackIntro({
           </div>
           {/* Le mot d'une attente longue : sous la ligne, jamais dessus, discret, en fondu — une
               légende de l'ouverture plutôt qu'une pastille posée par-dessus (10/10/2026). */}
-          {notice ? (
-            // Le message chiffré d'une connexion trop lente (§77) : sous la ligne, comme le mot, mais
-            // avec ses choix. Seuls ses boutons prennent un appui ; ce sont de vrais boutons, atteints
-            // au clavier et à la télécommande (Tab, flèches de la navigation spatiale, OK).
-            <div className="mt-1 flex max-w-[min(86vw,26rem)] animate-fade-in flex-col items-center gap-3" role="status" data-playback-intro-notice="">
-              <p className="text-center text-sm leading-snug text-white">{notice.text}</p>
-              {notice.actions.length > 0 && (
-                <div className="flex flex-wrap justify-center gap-2" style={{ pointerEvents: "auto" }}>
-                  {notice.actions.map((action) => (
-                    <button
-                      key={action.label}
-                      type="button"
-                      onClick={action.onClick}
-                      className={`rounded-full px-4 py-1.5 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-white ${
-                        action.primary ? "bg-white text-black" : "player-pill text-white"
-                      }`}
-                    >
-                      {action.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            note && (
-              <p className="mt-1 max-w-[min(80vw,22rem)] animate-fade-in text-center text-xs leading-snug text-muted" data-playback-intro-note="">
-                {note}
-              </p>
-            )
+          {note && (
+            <p className="mt-1 max-w-[min(80vw,22rem)] animate-fade-in text-center text-xs leading-snug text-muted" data-playback-intro-note="">
+              {note}
+            </p>
           )}
         </div>
       </div>

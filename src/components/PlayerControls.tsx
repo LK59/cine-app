@@ -199,6 +199,8 @@ interface PlayerControlsProps {
    * navigateur et n'en ont pas l'usage.
    */
   onChromeEdges?: (edges: ChromeEdges | null) => void;
+  /** Un menu s'ouvre ou se ferme : la fenêtre d'une connexion lente ne se pose jamais dessus (§78). */
+  onMenuChange?: (open: boolean) => void;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -337,6 +339,7 @@ export function PlayerControls({
   dialogue,
   subtitleGeneration,
   onChromeEdges,
+  onMenuChange,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -460,6 +463,11 @@ export function PlayerControls({
   // Démonté (fermeture, passage au mini-lecteur), il n'y a plus de commandes à éviter.
   useEffect(() => () => onChromeEdges?.(null), [onChromeEdges]);
   const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "subtitleGen" | "subtitleGenOther" | "more">(null);
+  // Dit à l'hôte (§78), comme les bords des commandes ; refermé au démontage.
+  useEffect(() => {
+    onMenuChange?.(menu !== null);
+  }, [menu, onMenuChange]);
+  useEffect(() => () => onMenuChange?.(false), [onMenuChange]);
   /** « Auto · 203 nits », « Natif », « 400 nits » — le réglage de luminosité HDR, en mots. */
   const hdrCapLabel = (choice: HdrCapChoice): string =>
     choice === "auto"

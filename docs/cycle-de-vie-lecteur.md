@@ -83,6 +83,7 @@ Deux règles de montage, qui définissent ce qu'est « la même lecture » :
 | Lecteur serveur : chargement | `playSession` posé, `loading` jusqu'à `loadeddata` ; chien de garde de 20 s |
 | Lecteur serveur : lecture | `!loading && !error` |
 | Relais natif → serveur (échec) | l'élément est dans `handedOver` ; `takeover.cast` absent |
+| Relais natif → serveur (version allégée, §78) | `lighterNow(takeover, session)` — un choix, hors `handedOver` — ou `session.lighter` (règle des deux minutes, posé par `play`/`advance`) |
 | Relais natif → serveur (diffusion) | `castingNow(takeover, session)`, ou `carried` après un épisode suivant |
 | Diffusion active | `castActive` / `castActiveRef`, posés par l'écoute de la route AirPlay — possible dans n'importe quelle séance serveur, pas seulement une diffusion demandée depuis le lecteur natif |
 | Retour de diffusion | `returning` posé, `takeover` nul : le lecteur natif remonte à la position rendue, en pause si la TV s'est arrêtée d'elle-même |
@@ -143,7 +144,7 @@ stockée.
 | Réseau perdu | `networkLost` posé ; nouvel essai programmé si `online`. `ready` peut rester vrai si la coupure a eu lieu en plein film |
 | Arrière-plan | `visibilityState === "hidden"`, `hiddenAtRef`. Au retour : `holdOnReturnRef` (2,5 s) puis la vérification de source perdue |
 | Bloqué | ouverture depuis plus de 20 s → message « toujours en train de chercher » |
-| Abandon | ouverture depuis plus de 35 s → `giveUpOnOpening` : `fallToStable("aucune image après 35 s")`, sauf connexion trop lente prouvée (DECISIONS.md §77) — relais à débit réduit si le serveur peut passer, sinon écran « connexion trop lente » (`stepAside`, `runtimeError`, Réessayer = `retryAfterNetwork` par le spectateur). Inchangé quand le message chiffré de la « Lecture du lien » était affiché |
+| Abandon | ouverture depuis plus de 35 s (comptées depuis `measureEpoch` : le retour au premier plan remet la mesure à zéro) → `giveUpOnOpening` : `fallToStable("aucune image après 35 s")`, sauf connexion trop lente prouvée (DECISIONS.md §77, §78) — écran « Lecture impossible : la connexion est trop lente. » (`stepAside`, `runtimeError`), Version allégée (`lifecycle.reclaim` puis `fallToStable` avec un relais `lighter`), Réessayer (`retryAfterNetwork` par le spectateur), Fermer. Plus de relais automatique. Reporté tant que des tentatives réseau échouent (`networkUnstable`) |
 | Fin | `ended` vrai, `lifecycle.isEnded()` vrai (arrêt Jellyfin déjà envoyé) |
 | Passé la main | `steppedAside` vrai ; avec lecteur serveur, l'hôte est démonté ; sans lui, `runtimeError` posé et écran d'erreur |
 | Fermeture | `closing` vrai, arrêt déjà parti (`lifecycle.claimStop`) ; `close(openId)` 200 ms plus tard |
@@ -187,7 +188,10 @@ stockée.
 | Retour au premier plan | `path === "remux"`, `lost`, `lifecycle.rebuildAt === null`, `lifecycle.spendRebuild` | ligne `rebuild` (`hiddenMs`), `restart`, en pause si retenu ou si le film était fini ; revérifié 400 ms plus tard | Reconstruction |
 | `networkLost` et en ligne | recul 0,8 s × 2ⁿ, plafond 30 s | `restart(networkLost.at)` | Reconstruction |
 | Minuteur d'abandon | pas prêt, pas d'erreur, pas de réseau perdu | après 35 s : `giveUpOnOpening` — `fallToStable`, ou l'écran « connexion trop lente » si le lien mesuré pendant l'ouverture l'explique (§77) | Passé la main / écran |
-| Lecture du lien (chaque seconde) | pas prêt, pas d'erreur, pas de réseau perdu | `openingLinkState` : indice « Connexion lente… », puis message chiffré (`slowSignal`, daté par `openedAt`, noté à la trace) — rien n'est abandonné ; « Version allégée » → `fallToStable(SLOW_LINK_LIGHTER_REASON)`, « Fermer » → `handleClose` (§77) | Inchangé / Passé la main / Fermeture |
+| Lecture du lien (chaque seconde) | pas prêt, pas d'erreur, pas de réseau perdu, page visible | `openingAdvice` (§78) : indice, puis fenêtre « lente » ou « moyenne » (`slowSignal`, daté par `openedAt`, noté au fil `slowLog`) — rien n'est abandonné ; Version allégée → `fallToStable(SLOW_LINK_LIGHTER_REASON, relais lighter)`, Réessayer → `retryAfterNetwork`, Fermer → la fenêtre seulement | Inchangé / Passé la main / Reconstruction |
+| Saut sans image (chaque seconde) | prêt ; `seekWaitRef` posé par `seeking`, effacé par `playing` (ou `pause` posé) | après 10 s, `openingAdvice` sur la mesure depuis le saut (`seekSignal`) ; à 35 s, lenteur prouvée → l'écran du renoncement (§78) | Inchangé / écran |
+| Saccades | `waiting` compté (ni saut, ni ouverture) | 5 s → `diagCurrentWait` ; fin d'attente → `diagWaitEnded` ; réseau + lien sous le besoin → `StutterWatch` → fenêtre des saccades ; réduite ou cachée → due au retour (`pendingStutterRef`) ; Version allégée → `fallToStable(SLOW_LINK_STUTTER_REASON, relais lighter à la position)` | Inchangé / Passé la main |
+| Tentatives réseau (`networkTrouble`) | une plage réessaie, ou hors ligne | `unstable` : « Connexion perdue ou instable… » sous la ligne ou la roue ; aucune fenêtre ; le renoncement attend | Inchangé |
 | Changement de piste (menu) | `"rebuild"` | image figée, `lifecycle.keepPaused = paused`, `restart(intendedPosition())` | Changement de piste |
 | Saut (commandes) | — | `noteSeekRequest` : cible notée, réécrit `lifecycle.rebuildAt` si une reconstruction attend ; le déplacement lui-même est écrit sur l'élément par `PlayerControls` | Saut |
 | `ended` | — | arrêt Jellyfin, `lifecycle.isEnded()`, cache de reprise oublié | Fin |
@@ -442,7 +446,7 @@ banc ou une touche média y arriveraient, et le code le traite (`wantedAudioRef`
 | Ligne | Hôte natif | Lecteur serveur |
 |---|---|---|
 | `start` | une par pipeline (chaque reconstruction en écrit une, avec `rebuild`) | une par négociation |
-| `stop` | fermeture, épisode suivant, `pagehide`, démontage ; jamais après une bascule ; `why: "lost"` renvoyé au lancement suivant si iOS a tué la page | fermeture, épisode suivant — pas au démontage, pas d'arrêt perdu récupéré |
+| `stop` | fermeture, épisode suivant, `pagehide`, démontage ; jamais après une bascule ; `why: "lost"` renvoyé au lancement suivant si iOS a tué la page | fermeture, épisode suivant — pas au démontage, pas d'arrêt perdu récupéré ; une séance allégée y est retenue deux minutes (`rememberLighter`) |
 | `fallback` | bascule vers le serveur (`takeover`, `cast`, `watched`) | fin de diffusion (`cast: true`) |
 | `error` | bascule impossible (pas de lecteur serveur) | refus de négociation, reconnexion Jellyfin, pas d'image en 20 s, erreur pendant une diffusion |
 | `rebuild` | source perdue, retour d'arrière-plan (`hiddenMs`) — **pas** pour un changement de piste, le plafond HDR ni un nouvel essai réseau | — |
@@ -454,6 +458,10 @@ banc ou une touche média y arriveraient, et le code le traite (`wantedAudioRef`
 Trous connus côté serveur : aucune ligne quand les nouveaux essais hls.js ou l'échelle audio sont
 épuisés, ni pour l'escalade par rechargement WebKit, le bouton Réessayer ou le retour de
 diffusion.
+
+Les deux lecteurs, connexion lente (§78) : `slowLink` et `slowChoice` sur les lignes qui partent de toute
+façon (`opening`, `fallback`, `error`, `stop`, et `start` du serveur), jamais une ligne de plus ; une
+position que Jellyfin n'a pas reçue attend sur l'appareil (`unsentPosition.ts`).
 
 Les deux lecteurs : le bilan `stop` porte `identicalRetries` et `retryMotif` quand une reprise
 automatique en a rejoué une déjà échouée sans lecture entre-temps (registre des tentatives,

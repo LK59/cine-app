@@ -47,6 +47,16 @@ describe("une connexion trop lente, au panneau Activité", () => {
     expect(s.incidents).toEqual([expect.objectContaining({ kind: "slowLink", reason })]);
   });
 
+  it("§78 : la version allégée choisie sur des saccades, et l'écran de lenteur après un saut — rangés de même", () => {
+    const stutter = "connexion trop lente (saccades, version allégée demandée)";
+    const [s] = buildSeances(lines("augustine", EDGE, [{ ...slowFallback, reason: stutter, slowChoice: "allégée", lighterTier: 1, lighterMbps: 1.5 }]));
+    expect(s.slowLinks).toBe(1);
+    expect(failuresOf(s)).toBe(0);
+    const [r] = buildSeances(lines("augustine", EDGE, [{ ...slowError, afterSeek: true }]));
+    expect(r.slowLinks).toBe(1);
+    expect(failuresOf(r)).toBe(0);
+  });
+
   it("n'accuse pas le titre : chez un seul et lente, le titre ne figure pas au diagnostic", () => {
     const records = [...lines("augustine", EDGE, [slowError]), ...lines("louis", IPHONE, [])];
     expect(diagnoseTitles(buildSeances(records)).find((d) => d.itemId === "rookie")).toBeUndefined();

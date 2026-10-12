@@ -169,3 +169,37 @@ describe("audioNeedsReencode et chosenAudioStream", () => {
     expect(chosenAudioStream({ MediaStreams: streams }, undefined)?.Index).toBe(3);
   });
 });
+
+describe("la version allégée (DECISIONS.md §78)", () => {
+  const chrome = { video: { "mp4/h264": true, "mp4/hevc": true, "mp4/hevc10": true }, audio: { aac: true, ac3: true } };
+  const h264Only = { video: { "mp4/h264": true }, audio: { aac: true } };
+  const hevc8Only = { video: { "mp4/h264": true, "mp4/hevc": true }, audio: { aac: true } };
+
+  it("absente, le profil est exactement celui d'avant", () => {
+    const plain = buildDeviceProfile(chrome, 100_000_000);
+    expect(buildDeviceProfile(chrome, 100_000_000, {})).toEqual(plain);
+    expect(JSON.stringify(plain)).not.toContain("Width");
+  });
+
+  it("HEVC si l'appareil lit le HEVC 10 bits, SDR seulement, 720p au plus jusqu'à 2,5 Mbit/s, 1080p au-dessus", () => {
+    const low = buildDeviceProfile(chrome, 2_500_000, { lighter: { targetBps: 2_500_000 } });
+    expect(low.TranscodingProfiles[0].VideoCodec).toBe("hevc,h264");
+    for (const profile of low.CodecProfiles.filter((p) => p.Type === "Video")) {
+      expect(profile.Conditions).toEqual(
+        expect.arrayContaining([
+          { Condition: "EqualsAny", Property: "VideoRangeType", Value: "SDR", IsRequired: false },
+          { Condition: "LessThanEqual", Property: "Width", Value: "1280", IsRequired: false },
+        ])
+      );
+    }
+    const high = buildDeviceProfile(chrome, 5_000_000, { lighter: { targetBps: 5_000_000 } });
+    expect(JSON.stringify(high.CodecProfiles)).toContain('"Value":"1920"');
+  });
+
+  it("H.264 sinon — et aussi avec un HEVC 8 bits seul (le maître de Jellyfin annonce Main10 pour une source 10 bits)", () => {
+    expect(buildDeviceProfile(h264Only, 1_500_000, { lighter: { targetBps: 1_500_000 } }).TranscodingProfiles[0].VideoCodec).toBe("h264");
+    expect(buildDeviceProfile(hevc8Only, 1_500_000, { lighter: { targetBps: 1_500_000 } }).TranscodingProfiles[0].VideoCodec).toBe("h264");
+    // H.264 à 4 Mbit/s : encore 720p.
+    expect(JSON.stringify(buildDeviceProfile(h264Only, 4_000_000, { lighter: { targetBps: 4_000_000 } }).CodecProfiles)).toContain('"Value":"1280"');
+  });
+});

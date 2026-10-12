@@ -39,6 +39,7 @@ import {
   diagRecentMbps,
   diagReserveAheadMB,
   diagSessionFacts,
+  diagCurrentWait,
   diagWaitEnded,
   diagWaitStarted,
   diagWaiting,
@@ -51,14 +52,11 @@ import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import {
   SLOW_LINK_LIGHTER_REASON,
   SLOW_LINK_REASON,
+  SLOW_LINK_STUTTER_REASON,
   armOpeningMeter,
   disarmOpeningMeter,
   fileNeedBps,
-  noteSlowLink,
-  openingLinkState,
-  serverCanCarry,
   slowLinkFields,
-  slowLinkFigures,
   slowLinkVerdict,
   frozenReading,
   readLink,
@@ -148,6 +146,22 @@ function aacRouteFacts(): Record<string, unknown> {
 }
 import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from "@/lib/hostSeek";
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
+import { SlowLinkPopup } from "@/components/player/SlowLinkPopup";
+import {
+  LONG_STALL_MS,
+  PLAYBACK_MEASURE_WINDOW_MS,
+  SlowLog,
+  StutterWatch,
+  mbps,
+  measuredBps,
+  nextLighter,
+  noteLighter,
+  openingAdvice,
+  playbackLinkSlow,
+  type OpeningPopup,
+} from "@/lib/slowLinkPolicy";
+import { networkUnstable, subscribeNetworkTrouble } from "@/lib/networkTrouble";
+import { saveUnsentPosition } from "@/lib/unsentPosition";
 import { finishIntro, formatResumeClock, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 import { useIntroPlaybackStarted } from "@/lib/introEnd";
 
@@ -180,6 +194,13 @@ const STUCK_AFTER_MS = 20000;
  * failure a viewer cannot wait out, because nothing on screen ever changes.
  */
 const GIVE_UP_AFTER_MS = 35000;
+
+/**
+ * Un saut sans image depuis dix secondes est traité comme une ouverture (§78, choix de Louis) : un
+ * saut qui arrive en deux ou trois secondes n'a rien à dire, et un saut ordinaire sur un lien
+ * correct se pose bien avant.
+ */
+const SEEK_AS_OPENING_MS = 10_000;
 
 /**
  * How long a passing notice stays on screen.
@@ -310,6 +331,29 @@ function jellyfinAudioIndex(
   const ordinal = fileTracks.findIndex((t) => t.number === trackNumber);
   if (ordinal < 0) return undefined;
   return jellyfinTracks[ordinal]?.index;
+}
+
+/**
+ * Le sous-titre choisi, en index Jellyfin — pour que la version allégée le rallume (§78). Un fichier à
+ * côté porte son index dans son adresse (`&index=`) ; une piste du conteneur, par son rang parmi
+ * celles que Jellyfin liste dans le même ordre (comme `jellyfinAudioIndex`). `null` : aucun sous-titre,
+ * ou un qu'on ne sait pas nommer — mieux vaut pas de sous-titre qu'un sous-titre dans une autre langue.
+ */
+function jellyfinSubtitleIndex(
+  current: number | null,
+  fileTracks: PlayerTrack[],
+  embedded: number[] | undefined,
+  externals: { id: number; url: string }[]
+): number | null {
+  if (current === null) return null;
+  const external = externals.find((e) => e.id === current);
+  if (external) {
+    const match = /[?&]index=(\d+)/.exec(external.url);
+    return match ? Number(match[1]) : null;
+  }
+  if (!embedded || embedded.length !== fileTracks.length) return null;
+  const ordinal = fileTracks.findIndex((t) => t.number === current);
+  return ordinal >= 0 ? embedded[ordinal] ?? null : null;
 }
 
 /** Les raisons de pause que le serveur nomme ; toute autre se dit « en attente ». */
@@ -546,23 +590,51 @@ export function ExperimentalPlayerHost({
    */
   const [slowLink, setSlowLink] = useState<SlowLink | null>(null);
   /**
-   * Ce que l'ouverture dit du lien pendant qu'elle charge (§77) : l'indice « Connexion lente… » (sous
-   * la moitié du besoin), puis le message chiffré avec « Version allégée » et « Fermer » (sous le
-   * quart, preuves du verdict réunies). Pour cette ouverture-ci (`at` = son `openedAt`) : daté plutôt
-   * que remis à zéro, une reconstruction le rend caduc sans qu'un effet ait à le vider.
+   * Ce que l'ouverture dit du lien pendant qu'elle charge (§78, `openingAdvice`) : l'indice
+   * « Connexion lente… », puis la fenêtre « Votre connexion semble lente » (très lente, ou moyenne
+   * après 20 s). Pour cette ouverture-ci (`at` = son `openedAt`) : daté plutôt que remis à zéro, une
+   * reconstruction le rend caduc sans qu'un effet ait à le vider.
    */
-  const [slowSignal, setSlowSignal] = useState<{ at: number; hint: boolean; notice: SlowLink | null }>({ at: 0, hint: false, notice: null });
-  /**
-   * Pour le journal : quand le message chiffré a paru (ms depuis le montage) et ce que le spectateur
-   * en a fait — porté par les lignes `opening`, `stop` et celles du renoncement, jamais par une ligne
-   * de plus.
-   */
-  const slowNoticeRef = useRef<{ at: number | null; choice: "allégée" | "fermer" | null }>({ at: null, choice: null });
-  const slowNoticeFields = useCallback(
-    (): Record<string, string | number | null> =>
-      slowNoticeRef.current.at === null ? {} : { slowNoticeAt: slowNoticeRef.current.at, slowChoice: slowNoticeRef.current.choice },
-    []
+  const [slowSignal, setSlowSignal] = useState<{ at: number; hint: boolean; popup: OpeningPopup | null; recvBps: number | null; needBps: number | null }>(
+    { at: 0, hint: false, popup: null, recvBps: null, needBps: null }
   );
+  /** La fenêtre de l'ouverture fermée par le spectateur — pour cette ouverture (`openedAt`) seulement. */
+  const popupDismissedRef = useRef<number | null>(null);
+  /**
+   * Le fil de ce que la lenteur a fait paraître et des choix faits (§78) — porté par les lignes
+   * `opening`, `stall`, `stop`, et celles du renoncement ou du relais, jamais par une ligne de plus.
+   */
+  const [slowLog] = useState(() => new SlowLog());
+  const slowFields = useCallback((): Record<string, string> => slowLog.fields(), [slowLog]);
+  /** Les saccades en pleine lecture (§78) : quand proposer la version allégée, deux fois au plus. */
+  const [stutter] = useState(() => new StutterWatch());
+  /** La fenêtre des saccades, avec la mesure qui l'a fait paraître. */
+  const [stutterPopup, setStutterPopup] = useState<{ recvBps: number | null; needBps: number | null } | null>(null);
+  /** « Connexion perdue ou instable… » : des tentatives échouent, ou le navigateur est hors ligne. */
+  const [unstable, setUnstable] = useState(() => networkUnstable());
+  /**
+   * Le début de la mesure de l'ouverture : `openedAt`, ou le retour au premier plan s'il est venu
+   * après — une mesure prise en arrière-plan ne vaut rien (minuteurs bridés, réseau mis en veille),
+   * et aucun verdict ne se prononce sur elle (§78). Le compteur est réarmé à cet instant.
+   */
+  const [measureEpoch, setMeasureEpoch] = useState(0);
+  /** La page est-elle visible ? Aucune fenêtre ne se montre sur une page cachée (§78). */
+  const [pageVisible, setPageVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
+  /** Un menu des commandes est ouvert : aucune fenêtre par-dessus (§78). */
+  const [menuOpen, setMenuOpen] = useState(false);
+  /**
+   * Un saut sans image depuis plus de 10 s est traité comme une ouverture (§78) : indice, fenêtres,
+   * et l'écran du renoncement à 35 s si la lenteur est prouvée. `at` : l'instant du saut.
+   */
+  const [seekSignal, setSeekSignal] = useState<{ at: number; hint: boolean; popup: OpeningPopup | null; recvBps: number | null; needBps: number | null } | null>(null);
+  /** Le saut en attente de son image — posé par les écouteurs du pipeline, lu par la lecture du lien. */
+  const seekWaitRef = useRef<number | null>(null);
+  /** La fenêtre de saut fermée par le spectateur — pour ce saut (`at`) seulement. */
+  const seekDismissedRef = useRef<number | null>(null);
+  /** Une fenêtre des saccades due pendant que le lecteur était réduit ou caché : montrée au retour. */
+  const pendingStutterRef = useRef<"long" | "repeated" | null>(null);
+  /** Propose la fenêtre des saccades — posée par un effet plus bas, appelée par les écouteurs du pipeline. */
+  const offerStutterRef = useRef<(kind: "long" | "repeated") => void>(() => {});
   /** Le compteur de l'ouverture en cours — voir l'effet qui l'arme, avant celui du pipeline. */
   const openingMeterRef = useRef<LinkMeter | null>(null);
   /** Le débit moyen du fichier, d'après sa description — ce que le lien doit tenir. */
@@ -1534,8 +1606,8 @@ export function ExperimentalPlayerHost({
         ...describeFileRef.current(),
         path: "remux",
         firstMoveMs: movedAt - introStartedAt,
-        // Le message chiffré d'une connexion trop lente, s'il a paru pendant cette ouverture (§77).
-        ...slowNoticeFields(),
+        // Ce que la lenteur a fait paraître pendant cette ouverture, et les choix faits (§78).
+        ...slowFields(),
         steps: traceRecent(Date.now() - introStartedAt + 300).slice(-60).join(" | "),
       });
     };
@@ -1544,22 +1616,30 @@ export function ExperimentalPlayerHost({
       window.clearTimeout(timer);
       send();
     };
-  }, [introPlaying, introEligible, introStartedAt, slowNoticeFields]);
-  // L'indice « Connexion lente… » et le message chiffré (§77) : ceux de cette ouverture-ci, tant
-  // qu'aucune image n'est là ni aucune erreur.
+  }, [introPlaying, introEligible, introStartedAt, slowFields]);
+  // L'indice « Connexion lente… » et la fenêtre de l'ouverture (§78) : ceux de cette ouverture-ci,
+  // tant qu'aucune image n'est là ni aucune erreur. « Connexion perdue ou instable… » passe avant :
+  // une coupure n'est pas une lenteur.
   const slowCurrent = slowSignal.at === openedAt && openingFor !== null && !ready && !runtimeError && !networkLost;
-  const slowHintShown = slowCurrent && slowSignal.hint;
-  const slowNotice = slowCurrent ? slowSignal.notice : null;
+  const unstableShown = unstable && openingFor !== null && !ready && !runtimeError && !networkLost;
+  const slowHintShown = slowCurrent && slowSignal.hint && !unstableShown;
+  const openingPopup = slowCurrent && !unstableShown ? slowSignal.popup : null;
   // Une erreur, la connexion perdue, l'attente devenue anormale (le rapport doit se lire), le
   // mini-lecteur : l'ouverture s'efface à l'instant et l'écran d'avant se montre, inchangé — sauf
-  // l'attente longue quand le message chiffré d'une connexion trop lente l'explique déjà (§77) : il
-  // reste, avec ses choix, jusqu'au renoncement des 35 s.
+  // l'attente longue quand la fenêtre d'une connexion lente l'explique déjà (§78) : l'ouverture
+  // reste, la fenêtre par-dessus, jusqu'au renoncement des 35 s.
   const introPhase: IntroPhase =
     !introEligible || isMini ? "gone" : introPlaying
         ? "picture"
-        : error || networkLost || (stuck && !slowNotice) || (startingFor !== null && startingFor >= STUCK_AFTER_MS)
+        : error || networkLost || (stuck && !openingPopup) || (startingFor !== null && startingFor >= STUCK_AFTER_MS)
           ? "gone"
           : "waiting";
+  /**
+   * La version allégée existe-t-elle ici (§78) ? Un lecteur serveur sur l'installation, et le droit de
+   * transcoder la vidéo pour ce compte (`lighterAllowed` de la description, lu chez Jellyfin). Sinon le
+   * bouton n'est nulle part, et chaque fenêtre ne propose que Réessayer et Fermer.
+   */
+  const lighterAllowed = serverFallback !== false && info?.lighterAllowed !== false;
   // Le calque couvre-t-il le lecteur ? L'ouverture entière dès l'appui, jusqu'au film qui bouge
   // (`introPlaying`), ou `COVER_HOLD_MS` sur une image décodée qui ne part pas — voir `PlaybackIntro`.
   // Il tient lieu de roue : les deux ne se montrent jamais ensemble.
@@ -1632,11 +1712,11 @@ export function ExperimentalPlayerHost({
         diag: diagSessionFacts(),
         // La minuterie de veille choisie, ou celle qui a arrêté le film (`sleepTimer.ts`).
         ...sleepTimerLogFields(sleepTimerStore.get()),
-        // Le message chiffré d'une connexion trop lente et le choix fait (§77), s'il a paru.
-        ...slowNoticeFields(),
+        // Ce que la lenteur a fait paraître pendant la séance, et les choix faits (§78).
+        ...slowFields(),
       };
     },
-    [tally, watched, intendedPosition, slowNoticeFields]
+    [tally, watched, intendedPosition, slowFields]
   );
   const reportStop = useCallback(
     (why: "close" | "next" | "page" | "unmount") => {
@@ -1957,7 +2037,8 @@ export function ExperimentalPlayerHost({
     const meter = armOpeningMeter();
     openingMeterRef.current = meter;
     return () => disarmOpeningMeter(meter);
-  }, [ready, openedAt]);
+    // `measureEpoch` : réarmé au retour du premier plan — voir sa déclaration (§78).
+  }, [ready, openedAt, measureEpoch]);
   useEffect(() => {
     needBpsRef.current = fileNeedBps(info?.sizeBytes, info?.runtimeSeconds);
   }, [info]);
@@ -2319,7 +2400,9 @@ export function ExperimentalPlayerHost({
         setPlaying(false);
         background.notePaused(Date.now(), { visible: document.visibilityState === "visible", ended: element.ended });
         tally.waitEnded(Date.now());
-        diagWaitEnded();
+        endWait(diagWaitEnded());
+        // Un saut posé en pause a son image : il n'attend plus rien (§78).
+        if (element.paused && !element.seeking) seekWaitRef.current = null;
         pausedAt = Date.now();
         if (!session.bench) noteWatching(itemId);
       };
@@ -2336,17 +2419,46 @@ export function ExperimentalPlayerHost({
         if (playedOnce && !element.seeking && !seeks.pending()) {
           tally.waitStarted(Date.now());
           diagWaitStarted(leadAt(element));
+          // Un blocage qui dure : à 5 s, la fenêtre des saccades s'il tient au réseau (§78).
+          if (longWaitTimer !== null) clearTimeout(longWaitTimer);
+          longWaitTimer = setTimeout(() => {
+            longWaitTimer = null;
+            const wait = diagCurrentWait();
+            if (wait && networkStall(wait.verdict)) offerStutterRef.current("long");
+          }, LONG_STALL_MS);
         }
+      };
+      /**
+       * Les blocages en pleine lecture, pour la fenêtre des saccades (§78) : réseau d'après le
+       * diagnostic, sous un débit mesuré inférieur au besoin, jamais pendant une coupure (elle a son
+       * message), jamais page cachée. Ceux d'un saut n'y entrent jamais : `onWaiting` ne les compte pas.
+       */
+      let longWaitTimer: ReturnType<typeof setTimeout> | null = null;
+      const networkStall = (verdict: string) =>
+        verdict === "réseau" &&
+        document.visibilityState !== "hidden" &&
+        !networkUnstable() &&
+        playbackLinkSlow(diagLinkMeasure(PLAYBACK_MEASURE_WINDOW_MS), needBpsRef.current);
+      const endWait = (wait: { verdict: string; ms: number } | null) => {
+        if (longWaitTimer !== null) clearTimeout(longWaitTimer);
+        longWaitTimer = null;
+        if (wait && stutter.waitEnded(Date.now(), wait.ms, networkStall(wait.verdict))) offerStutterRef.current("repeated");
       };
       const onPlaying = () => {
         trace(`élément : repart à ${element.currentTime.toFixed(2)} s`);
         playedOnce = true;
+        // L'image est là : un saut qui l'attendait n'attend plus (§78).
+        seekWaitRef.current = null;
         tally.waitEnded(Date.now());
-        diagWaitEnded();
+        endWait(diagWaitEnded());
       };
       const onSeeking = () => {
         tally.waitAbandoned();
         diagWaitEnded(false);
+        if (longWaitTimer !== null) clearTimeout(longWaitTimer);
+        longWaitTimer = null;
+        // Un saut en pleine lecture attend son image : traité comme une ouverture au-delà de 10 s (§78).
+        if (playedOnce) seekWaitRef.current = Date.now();
       };
       const onEnded = () => {
         setPlaying(false);
@@ -2495,6 +2607,9 @@ export function ExperimentalPlayerHost({
           trace(`réseau : lecture interrompue — ${message}`);
           lifecycle.noteNetworkLost();
           reportPlayback("network", { ...describeFileRef.current(), reason: message, at: positionRef.current });
+          // La position de la coupure, gardée sur l'appareil : si rien ne repasse avant la fermeture,
+          // elle part au retour du réseau ou au lancement suivant (`unsentPosition.ts`, §78).
+          if (everReadyRef.current && !session.bench) saveUnsentPosition(itemId, positionRef.current);
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
           setPlaying(false);
           return;
@@ -2630,8 +2745,8 @@ export function ExperimentalPlayerHost({
   // comme `tally`, `seeks` et `background` —, et pour `itemId` et `session.bench`,
   // fixés pour toute la vie de ce lecteur — sa clé est `itemId:openId` (voir PlayerHost). Même
   // chose pour `watched`, créé une fois au montage (`useState`) et jamais remplacé (la réserve lit
-  // le temps regardé, 28/09/2026).
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench]);
+  // le temps regardé, 28/09/2026). `stutter` aussi (les saccades, §78) : créé une fois au montage.
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -2724,10 +2839,9 @@ export function ExperimentalPlayerHost({
    * Sans mesure qui le prouve, rien ne change : le relais au lecteur serveur, sous le motif « aucune
    * image après 35 s ». Quand le lien a livré, pendant au moins dix secondes de réception, moins de
    * la moitié de ce que le fichier demande (`slowLinkVerdict`), la cause est nommée au journal avec
-   * ses chiffres — et le lecteur serveur ne reçoit le film que s'il peut aider, c'est-à-dire si sa
-   * version la plus réduite passe par ce lien ; il la demande alors (`noteSlowLink`). Sinon,
-   * l'écran le dit au spectateur, avec « Réessayer » : passer la main aurait ajouté vingt secondes
-   * d'attente avant le même échec (Edge d'Augustine, 12/10/2026).
+   * ses chiffres, et l'écran le dit : « Lecture impossible : la connexion est trop lente. », avec
+   * Version allégée · Réessayer · Fermer (§78). Plus de relais silencieux au lecteur serveur dans ce
+   * cas : c'est le spectateur qui choisit la version allégée (Louis, 12/10/2026).
    *
    * La mesure ne lève jamais ; si elle échouait quand même, c'est l'ancien renoncement qui part.
    */
@@ -2739,36 +2853,25 @@ export function ExperimentalPlayerHost({
       slow = null;
     }
     if (!slow) {
-      fallToStable(`aucune image après ${GIVE_UP_AFTER_MS / 1000} s`, undefined, slowNoticeFields());
+      fallToStable(`aucune image après ${GIVE_UP_AFTER_MS / 1000} s`, undefined, slowFields());
       return;
     }
-    // Les chiffres, et — s'il a paru — quand le message chiffré a été montré (§77).
-    const fields = { ...slowLinkFields(slow), ...slowNoticeFields() };
-    const carry = serverFallbackRef.current !== false && serverCanCarry(slow);
-    trace(
-      `connexion trop lente : ${fields.recvMbps} Mb/s reçus sur ${fields.measuredS} s de réception, ` +
-        `${fields.needMbps} Mb/s demandés — ${carry ? "relais au lecteur serveur, débit réduit" : "le lecteur serveur ne passerait pas non plus"}`
-    );
-    if (carry) {
-      noteSlowLink(itemId, slow);
-      fallToStable(SLOW_LINK_REASON, undefined, { ...fields, serverCanCarry: true });
-      return;
-    }
-    // Le même renoncement que sans lecteur serveur (`fallToStable`), avec son propre écran.
     if (!lifecycle.stepAside()) return;
+    slowLog.noteAt("écran trop lente", Date.now() - openedAt, slow.recvBps, slow.needBps);
+    const fields = { ...slowLinkFields(slow), ...slowFields() };
+    trace(`connexion trop lente : ${fields.recvMbps} Mb/s reçus sur ${fields.measuredS} s de réception, ${fields.needMbps} Mb/s demandés — écran`);
     clearUnsentStop(sessionId);
     reportPlayback("error", {
       ...describeFileRef.current(),
       reason: SLOW_LINK_REASON,
       path: pathRef.current ?? "non décidé",
       ...fields,
-      serverCanCarry: false,
       ...tally.backgroundFacts(Date.now()),
     });
     setSlowLink(slow);
     setRuntimeError(SLOW_LINK_REASON);
     setNetworkLost(null);
-  }, [fallToStable, itemId, lifecycle, sessionId, tally, slowNoticeFields]);
+  }, [fallToStable, lifecycle, sessionId, tally, slowFields, slowLog, openedAt]);
 
   // A player that never starts is the one failure a viewer cannot wait out: nothing on screen
   // changes, so there is nothing to react to. On a timer rather than derived from the clock, so
@@ -2784,76 +2887,313 @@ export function ExperimentalPlayerHost({
     // plus tard, au lecteur serveur qui échouait de la même façon, et le titre y restait pour
     // toute la séance (relevé le 23/09/2026).
     if (ready || runtimeError || networkLost || error) return;
-    const id = setTimeout(giveUpOnOpening, Math.max(0, openedAt + GIVE_UP_AFTER_MS - Date.now()));
+    let id: ReturnType<typeof setTimeout>;
+    // Ni pendant que des tentatives échouent (§78) : c'est une coupure, pas une lenteur — elle finit
+    // par l'arrivée des octets, ou par l'écran « connexion perdue » ; le renoncement attend son issue.
+    const tick = () => {
+      if (networkUnstable()) {
+        id = setTimeout(tick, 1000);
+        return;
+      }
+      giveUpOnOpening();
+    };
+    // Depuis le début de la mesure : une ouverture passée en arrière-plan repart de son retour (§78).
+    id = setTimeout(tick, Math.max(0, Math.max(openedAt, measureEpoch) + GIVE_UP_AFTER_MS - Date.now()));
     return () => clearTimeout(id);
-  }, [ready, runtimeError, networkLost, error, openedAt, giveUpOnOpening]);
+  }, [ready, runtimeError, networkLost, error, openedAt, measureEpoch, giveUpOnOpening]);
 
   /**
-   * Le lien, lu chaque seconde pendant l'ouverture (DECISIONS.md §77) — mesure et affichage seulement :
-   * informer tôt, ne jamais abandonner tôt.
+   * Le lien, lu chaque seconde pendant l'ouverture (DECISIONS.md §78, `openingAdvice`) — mesure et
+   * affichage seulement : informer tôt, ne jamais abandonner tôt.
    *
    * Dès cinq secondes de réception sous la moitié du besoin, « Connexion lente… » sous la ligne de
-   * chargement. Sous le quart, preuves du verdict réunies (10 s, 256 Kio), le message chiffré et ses
-   * deux choix, chiffres tenus à jour tant que le débit reste sous la moitié ; au-dessus, tout se
-   * retire. Le chargement continue derrière : la première image arrivée, le film part seul et le
-   * message s'en va avec l'ouverture ; sans image ni choix, le renoncement des 35 s, inchangé. Chaque
-   * changement est noté dans la trace (que la ligne `opening` et les lignes de panne emportent), sans
-   * ligne de plus.
+   * chargement. Sous le quart, preuves du verdict réunies (10 s, 256 Kio), la fenêtre « Votre
+   * connexion semble lente » (Version allégée · Réessayer · Fermer) ; entre le quart et la moitié,
+   * la même fenêtre au bout de 20 s sans image (Version allégée · Fermer). Le chargement continue
+   * derrière : la première image arrivée, le film part seul et tout s'en va. Chaque apparition va au
+   * fil `slowLink` (porté par les lignes qui partent de toute façon) et à la trace, sans ligne de plus.
    *
    * Mêmes conditions que le minuteur d'abandon : rien pendant une coupure (son écran attend le réseau),
-   * rien sous une erreur. Le compteur ne fait aucune requête : un bon réseau ne voit aucune différence.
+   * rien sous une erreur, rien pendant des tentatives qui échouent (« Connexion perdue ou instable… »).
+   * Le compteur ne fait aucune requête : un bon réseau ne voit aucune différence.
    */
   useEffect(() => {
     if (ready || runtimeError || networkLost || error) return;
     let hinted = false;
-    let noticed = false;
+    let popup: OpeningPopup | null = null;
     const id = setInterval(() => {
       const meter = openingMeterRef.current;
-      if (!meter) return;
+      // Page cachée : aucune mesure ne vaut (§78) — elle reprendra de zéro au retour.
+      if (!meter || document.visibilityState === "hidden") return;
       let measure: ReturnType<LinkMeter["measure"]> | null = null;
       try {
         measure = meter.measure();
       } catch {
         measure = null;
       }
-      const state = openingLinkState(measure, needBpsRef.current, noticed);
-      const mbps = () =>
-        measure && measure.receivingMs > 0 ? Math.round(((measure.bytes * 8) / measure.receivingMs / 1000) * 100) / 100 : null;
-      if (state.hint !== hinted) {
-        trace(
-          state.hint
-            ? `connexion lente : indice affiché — ${mbps()} Mb/s reçus sur ${Math.round((measure?.receivingMs ?? 0) / 100) / 10} s de réception`
-            : `connexion lente : indice retiré — ${mbps()} Mb/s reçus`
-        );
+      // Depuis le début de la mesure (`measureEpoch`, §78) ; le fil, lui, date depuis la demande.
+      const elapsed = Date.now() - Math.max(openedAt, measureEpoch);
+      const advice = openingAdvice(measure, needBpsRef.current, elapsed, {
+        popup,
+        dismissed: popupDismissedRef.current === openedAt,
+        unstable: networkUnstable(),
+      });
+      if (advice.hint !== hinted) {
+        slowLog.noteAt(advice.hint ? "indice" : "indice retiré", elapsed, advice.recvBps, advice.needBps);
+        trace(`connexion lente : indice ${advice.hint ? "affiché" : "retiré"} — ${measuredBps(measure) ?? "?"} b/s reçus`);
       }
-      if ((state.notice !== null) !== noticed) {
-        trace(state.notice ? `connexion trop lente : message affiché — ${mbps()} Mb/s reçus` : `connexion trop lente : message retiré — ${mbps()} Mb/s reçus`);
-        if (state.notice && slowNoticeRef.current.at === null) slowNoticeRef.current.at = Date.now() - mountedAtRef.current;
+      if (advice.popup !== popup) {
+        slowLog.noteAt(advice.popup ? `fenêtre ${advice.popup}` : "fenêtre retirée", elapsed, advice.recvBps, advice.needBps);
+        trace(`connexion lente : fenêtre ${advice.popup ?? "retirée"}`);
       }
-      // Un rendu par changement — et chaque seconde tant que le message montre des chiffres.
-      if (state.hint !== hinted || state.notice !== null || noticed) setSlowSignal({ at: openedAt, hint: state.hint, notice: state.notice });
-      hinted = state.hint;
-      noticed = state.notice !== null;
+      if (advice.hint !== hinted || advice.popup !== popup) {
+        setSlowSignal({ at: openedAt, hint: advice.hint, popup: advice.popup, recvBps: advice.recvBps, needBps: advice.needBps });
+      }
+      hinted = advice.hint;
+      popup = advice.popup;
     }, 1000);
     return () => clearInterval(id);
-  }, [ready, runtimeError, networkLost, error, openedAt]);
+  }, [ready, runtimeError, networkLost, error, openedAt, measureEpoch, slowLog]);
 
-  /** « Fermer » depuis le message chiffré : la fermeture ordinaire, le choix noté au bilan. */
-  const chooseClose = useCallback(() => {
-    if (slowNoticeRef.current.at !== null) slowNoticeRef.current.choice = "fermer";
-    trace("connexion trop lente : fermé depuis le message");
+  /** La première image après que la lenteur a fait paraître quelque chose : notée au fil (§78). */
+  const pictureNotedRef = useRef(false);
+  useEffect(() => {
+    if (!ready || pictureNotedRef.current || slowLog.empty) return;
+    pictureNotedRef.current = true;
+    slowLog.noteAt("image", Date.now() - openedAt);
+  }, [ready, slowLog, openedAt]);
+
+  /**
+   * « Connexion perdue ou instable… » (§78) : des tentatives échouent (`networkTrouble`). Dit sous la
+   * ligne de chargement, ou sous la roue d'une attente en pleine lecture — jamais sur un film qui
+   * joue. Noté au fil quand il se voit.
+   */
+  useEffect(
+    () =>
+      subscribeNetworkTrouble((value) => {
+        setUnstable(value);
+        if (!readyRef.current || diagWaiting()) slowLog.noteAt(value ? "instable" : "instable fini", Date.now() - mountedAtRef.current);
+      }),
+    [slowLog]
+  );
+
+  /**
+   * Le relais d'une version allégée (§78) : un choix, pas un échec (`lighter`, hors `handedOver`), qui
+   * garde ce que le spectateur avait choisi — position, piste audio, sous-titre — et dit si une
+   * génération de sous-titres était en cours (le lecteur serveur le signale, brièvement). Avant la
+   * première image, la position est celle de l'ouverture : `positionRef` la tient dès que le pipeline
+   * est parti, et une fenêtre de lenteur ne paraît qu'après des octets reçus, donc après lui.
+   */
+  const lighterTakeover = useCallback(
+    (atOpening: boolean): StableTakeover => ({
+      ...(atOpening
+        ? { resumeAt: positionRef.current, audioStreamIndex: jellyfinAudioIndex(tracks.audio, info?.audio, wantedAudioRef.current ?? currentAudio ?? -1) }
+        : takeoverNowRef.current() ?? { resumeAt: positionRef.current }),
+      lighter: true,
+      subtitleStreamIndex: generationView.entries.some((e) => e.track.number === currentSubtitle)
+        ? null
+        : jellyfinSubtitleIndex(currentSubtitle, tracks.subtitles, info?.embeddedSubtitleIndexes, externals),
+      ...(generationView.entries.length > 0 ? { subtitleGenerating: true } : {}),
+    }),
+    [tracks.audio, tracks.subtitles, info?.audio, info?.embeddedSubtitleIndexes, currentAudio, currentSubtitle, generationView, externals]
+  );
+
+  /** La version allégée demandée : le palier, noté pour le lecteur serveur qui va le lire (§78). */
+  const lighterStep = useCallback((recvBps: number | null, needBps: number | null) => nextLighter(recvBps, needBps, null), []);
+
+  /**
+   * « Version allégée » depuis la fenêtre de l'ouverture (ou d'un saut traité comme une ouverture), ou
+   * depuis l'écran du renoncement : le lecteur serveur, au palier calculé (moitié du débit mesuré,
+   * plancher 1,5 Mbit/s), à la position de l'ouverture ou du saut, avec la piste et le sous-titre.
+   */
+  const chooseOpeningLighter = useCallback(
+    (from: "ouverture" | "saut" | "écran") => {
+      const reading = from === "écran" ? slowLink : from === "saut" ? seekSignal : slowSignal;
+      const recv = reading?.recvBps ?? null;
+      const need = reading?.needBps ?? null;
+      const step = lighterStep(recv, need);
+      if (!step) return;
+      slowLog.choose("allégée", Date.now() - openedAt);
+      slowLog.note(`allégée ${(step.targetBps / 1e6).toFixed(1)} Mb/s palier ${step.tier}`);
+      noteLighter(itemId, step);
+      trace(`connexion lente : version allégée demandée (${from}) — ${step.targetBps} b/s, palier ${step.tier}`);
+      // L'écran avait passé la main ; le choix la reprend pour la donner au lecteur serveur.
+      if (from === "écran") lifecycle.reclaim();
+      const takeover = lighterTakeover(!everReadyRef.current);
+      fallToStable(SLOW_LINK_LIGHTER_REASON, everReadyRef.current ? { ...takeover, resumeAt: intendedPosition() } : takeover, {
+        ...(recv !== null && need !== null ? { recvMbps: Math.round((recv / 1e6) * 100) / 100, needMbps: Math.round((need / 1e6) * 10) / 10 } : {}),
+        lighterMbps: Math.round(step.targetBps / 1e5) / 10,
+        lighterTier: step.tier,
+        ...slowFields(),
+      });
+    },
+    [slowLink, seekSignal, slowSignal, lighterStep, slowLog, openedAt, itemId, lifecycle, fallToStable, slowFields, lighterTakeover, intendedPosition]
+  );
+
+  /** « Réessayer » depuis la fenêtre de l'ouverture ou d'un saut : une ouverture neuve, au même endroit. */
+  const chooseOpeningRetry = useCallback(() => {
+    slowLog.choose("réessayer", Date.now() - openedAt);
+    seekWaitRef.current = null;
+    setSeekSignal(null);
+    retryAfterNetwork(everReadyRef.current ? intendedPosition() : positionRef.current, "réessai demandé (connexion lente)", true);
+  }, [slowLog, openedAt, retryAfterNetwork, intendedPosition]);
+
+  /** « Fermer » sur la fenêtre de l'ouverture ou d'un saut : la fenêtre seulement — le chargement continue. */
+  const dismissOpeningPopup = useCallback(() => {
+    slowLog.choose("fermer", Date.now() - openedAt);
+    if (seekSignal?.popup) {
+      seekDismissedRef.current = seekSignal.at;
+      setSeekSignal({ ...seekSignal, popup: null });
+      return;
+    }
+    popupDismissedRef.current = openedAt;
+    setSlowSignal((current) => ({ ...current, popup: null }));
+  }, [slowLog, openedAt, seekSignal]);
+
+  /** « Fermer » sur l'écran du renoncement : le lecteur. */
+  const closeFromScreen = useCallback(() => {
+    slowLog.choose("fermer", Date.now() - openedAt);
     handleClose();
-  }, [handleClose]);
+  }, [slowLog, openedAt, handleClose]);
 
-  /** « Version allégée » : le lecteur serveur, au débit que ce lien porte (`noteSlowLink`, §77). */
-  const chooseLighter = useCallback(() => {
-    const slow = slowSignal.notice;
-    if (!slow) return;
-    slowNoticeRef.current.choice = "allégée";
-    trace("connexion trop lente : version allégée demandée");
-    noteSlowLink(itemId, slow);
-    fallToStable(SLOW_LINK_LIGHTER_REASON, undefined, { ...slowLinkFields(slow), serverCanCarry: true, ...slowNoticeFields() });
-  }, [slowSignal.notice, itemId, fallToStable, slowNoticeFields]);
+  /**
+   * Les saccades en pleine lecture (§78) : un blocage de plus de 5 s, ou le 3e de plus d'une seconde
+   * en trois minutes, causés par le réseau (`playbackDiagnosis`) et sous un débit mesuré inférieur au
+   * besoin. Appelée par les écouteurs du pipeline, par une référence (ils sont posés une fois).
+   */
+  useEffect(() => {
+    offerStutterRef.current = (kind) => {
+      const now = Date.now();
+      if (kind === "long" && !stutter.longWait(now, true)) return;
+      // Réduit, ou la page cachée : aucune fenêtre. Elle est due — montrée au retour si la condition
+      // tient toujours (voir l'effet du retour, plus bas).
+      if (isMini || document.visibilityState === "hidden") {
+        pendingStutterRef.current = kind;
+        return;
+      }
+      stutter.shown();
+      const measure = diagLinkMeasure(PLAYBACK_MEASURE_WINDOW_MS);
+      const recvBps = measuredBps(measure);
+      const needBps = needBpsRef.current;
+      slowLog.note(`fenêtre saccades (${kind === "long" ? "blocage > 5 s" : "3e blocage > 1 s"}) à ${Math.round(positionRef.current)} s (${mbps(recvBps)}/${mbps(needBps)})`);
+      trace(`saccades : fenêtre affichée (${kind})`);
+      setStutterPopup({ recvBps, needBps });
+    };
+  }, [stutter, slowLog, isMini]);
+
+  /**
+   * Le retour au premier plan, ou du mini-lecteur (§78). Une ouverture encore en cours repart de zéro
+   * pour sa mesure (`measureEpoch`) ; une fenêtre des saccades due entre-temps se montre si le lien
+   * mesuré est toujours sous le besoin, et s'oublie sinon.
+   */
+  useEffect(() => {
+    const onVisibility = () => {
+      const visible = document.visibilityState !== "hidden";
+      setPageVisible(visible);
+      if (!visible) return;
+      if (!readyRef.current) {
+        setMeasureEpoch(Date.now());
+        // Ce qu'on disait d'après la mesure d'avant le départ ne vaut plus : on repart de rien.
+        setSlowSignal((current) => ({ ...current, hint: false, popup: null }));
+        slowLog.noteAt("mesure reprise au retour", Date.now() - mountedAtRef.current);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [slowLog]);
+  useEffect(() => {
+    if (isMini || !pageVisible) return;
+    const pending = pendingStutterRef.current;
+    if (!pending) return;
+    pendingStutterRef.current = null;
+    // Pas pendant ce rendu : par une tâche, comme tout ce qui ouvre une fenêtre.
+    const id = setTimeout(() => {
+      if (playbackLinkSlow(diagLinkMeasure(PLAYBACK_MEASURE_WINDOW_MS), needBpsRef.current) && !networkUnstable()) offerStutterRef.current(pending);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [isMini, pageVisible]);
+
+  /**
+   * Un saut traité comme une ouverture (§78) : 10 s après le saut sans image, le lien mesuré depuis
+   * le saut (`diagLinkMeasure` sur ce seul intervalle) dit, par la même règle que l'ouverture
+   * (`openingAdvice`), l'indice et les fenêtres ; à 35 s, la lenteur prouvée (`slowLinkVerdict`)
+   * montre l'écran « Lecture impossible : la connexion est trop lente. ». Rien d'autre ne change dans
+   * le cycle du saut : le moteur continue ses reprises, et l'image arrivée retire tout. Sans lenteur
+   * prouvée à 35 s, rien — le moteur a ses propres rattrapages.
+   */
+  useEffect(() => {
+    if (!ready || runtimeError || networkLost || error) return;
+    let shown: { at: number; hint: boolean; popup: OpeningPopup | null } | null = null;
+    const id = setInterval(() => {
+      const at = seekWaitRef.current;
+      const now = Date.now();
+      if (at === null || now - at < SEEK_AS_OPENING_MS || document.visibilityState === "hidden") {
+        if (shown) {
+          shown = null;
+          setSeekSignal(null);
+        }
+        return;
+      }
+      const elapsed = now - at;
+      const measure = diagLinkMeasure(elapsed);
+      if (elapsed >= GIVE_UP_AFTER_MS && !networkUnstable()) {
+        const slow = slowLinkVerdict(measure, needBpsRef.current);
+        if (slow) {
+          seekWaitRef.current = null;
+          setSeekSignal(null);
+          if (!lifecycle.stepAside()) return;
+          slowLog.note(`écran trop lente après un saut à ${Math.round(positionRef.current)} s (${mbps(slow.recvBps)}/${mbps(slow.needBps)})`);
+          const fields = { ...slowLinkFields(slow), ...slowFields() };
+          reportPlayback("error", { ...describeFileRef.current(), reason: SLOW_LINK_REASON, path: "remux", afterSeek: true, ...fields, ...tally.backgroundFacts(now) });
+          setSlowLink(slow);
+          setRuntimeError(SLOW_LINK_REASON);
+          return;
+        }
+      }
+      const advice = openingAdvice(measure, needBpsRef.current, elapsed, {
+        popup: shown?.popup ?? null,
+        dismissed: seekDismissedRef.current === at,
+        unstable: networkUnstable(),
+      });
+      if (shown && shown.at === at && shown.hint === advice.hint && shown.popup === advice.popup) return;
+      if (advice.hint && !shown?.hint) slowLog.note(`indice après un saut, +${(elapsed / 1000).toFixed(1)} s (${mbps(advice.recvBps)}/${mbps(advice.needBps)})`);
+      if (advice.popup && advice.popup !== shown?.popup) slowLog.note(`fenêtre ${advice.popup} après un saut, +${(elapsed / 1000).toFixed(1)} s (${mbps(advice.recvBps)}/${mbps(advice.needBps)})`);
+      shown = { at, hint: advice.hint, popup: advice.popup };
+      setSeekSignal({ at, hint: advice.hint, popup: advice.popup, recvBps: advice.recvBps, needBps: advice.needBps });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [ready, runtimeError, networkLost, error, lifecycle, slowLog, slowFields, tally]);
+
+  /** « Version allégée » sur la fenêtre des saccades : le lecteur serveur, à la position courante. */
+  const chooseStutterLighter = useCallback(() => {
+    const step = lighterStep(stutterPopup?.recvBps ?? null, stutterPopup?.needBps ?? null);
+    if (!step) return;
+    slowLog.choose("allégée", Date.now() - mountedAtRef.current);
+    slowLog.note(`allégée ${(step.targetBps / 1e6).toFixed(1)} Mb/s palier ${step.tier}`);
+    noteLighter(itemId, step);
+    stutter.closed(Date.now());
+    setStutterPopup(null);
+    fallToStable(SLOW_LINK_STUTTER_REASON, lighterTakeover(false), {
+      lighterMbps: Math.round(step.targetBps / 1e5) / 10,
+      lighterTier: step.tier,
+      ...slowFields(),
+    });
+  }, [stutterPopup, lighterStep, slowLog, itemId, stutter, fallToStable, slowFields, lighterTakeover]);
+
+  /** « Réessayer » sur la fenêtre des saccades, quand il n'y a pas de version allégée : une reconstruction sur place. */
+  const chooseStutterRetry = useCallback(() => {
+    slowLog.choose("réessayer", Date.now() - mountedAtRef.current);
+    stutter.closed(Date.now());
+    setStutterPopup(null);
+    restart(intendedPosition(), "réessai demandé (saccades)", true);
+  }, [slowLog, stutter, restart, intendedPosition]);
+
+  /** « Fermer » sur la fenêtre des saccades : la fenêtre seulement. */
+  const dismissStutter = useCallback(() => {
+    slowLog.choose("fermer", Date.now() - mountedAtRef.current);
+    stutter.closed(Date.now());
+    setStutterPopup(null);
+  }, [slowLog, stutter]);
 
   // Below the threshold nothing is shown, and a resume that takes a moment reads as instant
   // rather than as a flash of spinner drawing attention to itself.
@@ -2876,7 +3216,9 @@ export function ExperimentalPlayerHost({
   const waitingWord =
     waitingFor === null || waitingFor < WORD_AFTER_MS
       ? null
-      : slowHintShown
+      : unstable
+        ? t("player.slowLink.unstable")
+        : slowHintShown || (ready && seekSignal?.hint)
         ? t("player.slowLink.hint")
         : waitingFor >= STILL_WORKING_AFTER_MS
           ? t("player.experimental.stillWorking")
@@ -3168,28 +3510,16 @@ export function ExperimentalPlayerHost({
           )}
           // Un mot seulement quand l'attente devient vraiment longue : l'ouverture se suffit, et
           // « Analyse du fichier… » à trois secondes y serait du bruit.
-          // Le message chiffré d'une connexion trop lente (§77), avec ses choix : le chargement continue.
-          // « Version allégée » seulement là où le lecteur serveur peut passer (`serverCanCarry`).
-          notice={
-            slowNotice && !isMini
-              ? {
-                  text: t("player.slowLink.notice", slowLinkFigures(slowNotice, uiLocale)),
-                  actions: [
-                    ...(serverFallback !== false && serverCanCarry(slowNotice)
-                      ? [{ label: t("player.slowLink.lighter"), onClick: chooseLighter, primary: true }]
-                      : []),
-                    { label: t("common.close"), onClick: chooseClose },
-                  ],
-                }
-              : null
-          }
-          // L'indice d'une connexion lente (§77) passe avant : il dit pourquoi, dès qu'on le sait.
+          // « Connexion perdue ou instable… » d'abord (une coupure), puis l'indice d'une connexion lente
+          // (§78) : ils disent pourquoi, dès qu'on le sait.
           note={
-            slowHintShown
-              ? t("player.slowLink.hint")
-              : openingFor !== null && openingFor >= STILL_WORKING_AFTER_MS
-                ? t("player.experimental.stillWorking")
-                : null
+            unstableShown
+              ? t("player.slowLink.unstable")
+              : slowHintShown
+                ? t("player.slowLink.hint")
+                : openingFor !== null && openingFor >= STILL_WORKING_AFTER_MS
+                  ? t("player.experimental.stillWorking")
+                  : null
           }
           onClose={handleClose}
           closeLabel={t("common.close")}
@@ -3298,31 +3628,33 @@ export function ExperimentalPlayerHost({
         />
       )}
 
-      {/* La connexion trop lente (§77) : ce n'est pas ce lecteur qui renonce, c'est le lien qui ne
-          porte pas le film — ni l'autre lecteur, qui n'est donc pas proposé. Les chiffres sont
-          ceux qui ont décidé, et « Réessayer » rouvre au même endroit. */}
+      {/* « Lecture impossible : la connexion est trop lente. » (§78) — le lien ne porte pas le film. Pas
+          de chiffres (ils sont au journal et au panneau technique). Version allégée si le lecteur
+          serveur existe et qu'un palier reste possible ; Réessayer rouvre au même endroit ; Fermer
+          ferme le lecteur. */}
       {slowShown && slowLink && !networkLost && !isMini && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center">
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center" data-slow-link-screen="">
           <WifiOff className="text-amber-400" size={32} />
-          <div>
-            <p className="text-base font-medium text-white">{t("player.slowLink.title")}</p>
-            <p className="mt-1 max-w-md text-sm leading-6 text-slate-300">
-              {t("player.slowLink.detail", slowLinkFigures(slowLink, uiLocale))}
-            </p>
-          </div>
+          <p className="max-w-md text-base font-medium text-white">{t("player.slowLink.failed")}</p>
           <div className="mt-1 flex flex-wrap items-center justify-center gap-3">
+            {lighterAllowed && lighterStep(slowLink.recvBps, slowLink.needBps) && (
+              <button type="button" onClick={() => chooseOpeningLighter("écran")} className="btn-primary inline-flex items-center gap-2">
+                {t("player.slowLink.lighter")}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
+                slowLog.choose("réessayer", Date.now() - openedAt);
                 setSlowLink(null);
                 retryAfterNetwork(positionRef.current, "réessai demandé après une connexion trop lente", true);
               }}
-              className="btn-primary inline-flex items-center gap-2"
+              className="btn btn-ghost inline-flex items-center gap-2 px-4 py-2"
             >
               <RotateCw size={16} />
               {t("player.experimental.retry")}
             </button>
-            <button type="button" onClick={handleClose} className="btn btn-ghost px-4 py-2">
+            <button type="button" onClick={closeFromScreen} className="btn btn-ghost px-4 py-2">
               {t("common.close")}
             </button>
           </div>
@@ -3405,6 +3737,36 @@ export function ExperimentalPlayerHost({
         }}
       />
 
+      {/* La fenêtre d'une connexion lente (§78) : à l'ouverture, après un saut sans image, ou sur des
+          saccades. Jamais réduite, page cachée, sous un menu ouvert, sur l'écran de fin ni sous une
+          erreur ; au-dessus des commandes du bas, jamais sur la croix. */}
+      {(() => {
+        if (isMini || !pageVisible || menuOpen || endScreen || ended || error || networkLost || runtimeError) return null;
+        const popup = openingPopup
+          ? { kind: openingPopup, from: "ouverture" as const, reading: slowSignal }
+          : ready && seekSignal?.popup
+            ? { kind: seekSignal.popup, from: "saut" as const, reading: seekSignal }
+            : ready && stutterPopup
+              ? { kind: "saccades" as const, from: "lecture" as const, reading: stutterPopup }
+              : null;
+        if (!popup) return null;
+        const canLighten = lighterAllowed && lighterStep(popup.reading.recvBps, popup.reading.needBps) !== null;
+        const lighter = { label: t("player.slowLink.lighter"), primary: true, onClick: () => (popup.from === "lecture" ? chooseStutterLighter() : chooseOpeningLighter(popup.from)) };
+        const retry = { label: t("player.experimental.retry"), onClick: popup.from === "lecture" ? chooseStutterRetry : chooseOpeningRetry };
+        const close = { label: t("common.close"), onClick: popup.from === "lecture" ? dismissStutter : dismissOpeningPopup };
+        // Très lente : Allégée · Réessayer · Fermer. Moyenne et saccades : Allégée · Fermer. Sans palier
+        // possible (plancher atteint, ou pas de version allégée ici) : Réessayer · Fermer.
+        const actions = !canLighten ? [retry, close] : popup.kind === "lente" ? [lighter, retry, close] : [lighter, close];
+        return (
+          <SlowLinkPopup
+            text={popup.kind === "saccades" ? t("player.slowLink.popupStutter") : t("player.slowLink.popup")}
+            actions={actions}
+            onBack={close.onClick}
+            liftPx={chromeEdges?.bottom ?? 0}
+          />
+        );
+      })()}
+
       {isMini ? (
         <MiniPlayerChrome
           title={title}
@@ -3444,6 +3806,7 @@ export function ExperimentalPlayerHost({
             // Le logo du titre, à la place du titre écrit — voir `PlayerTitle` (09/10/2026).
             logoUrl={info?.logoUrl ?? null}
             onChromeEdges={setChromeEdges}
+            onMenuChange={setMenuOpen}
             onClose={handleClose}
             onMinimize={() => playback.minimize()}
             // Straight from the container the player is reading, not from Jellyfin's view of the

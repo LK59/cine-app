@@ -205,3 +205,31 @@ describe("PlaybackProvider — la minuterie de veille", () => {
     expect(sleepTimerStore.get().mode).toBe("off");
   });
 });
+
+describe("la règle des deux minutes (DECISIONS.md §78)", () => {
+  it("une lecture lancée moins de 2 min après une séance allégée — quel que soit le titre — porte son palier ; après, non ; l'épisode suivant aussi", async () => {
+    const { rememberLighter, forgetLighterCarry } = await import("@/lib/slowLinkPolicy");
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => usePlayback(), { wrapper });
+      act(() => result.current.play({ itemId: "1", title: "Sans" }));
+      expect(result.current.session?.lighter).toBeUndefined();
+      rememberLighter({ targetBps: 2_500_000, tier: 1 });
+      act(() => result.current.play({ itemId: "2", title: "Autre titre" }));
+      expect(result.current.session?.lighter).toEqual({ targetBps: 2_500_000, tier: 1 });
+      act(() => result.current.advance({ itemId: "3", title: "Épisode suivant" }));
+      expect(result.current.session?.lighter).toEqual({ targetBps: 2_500_000, tier: 1 });
+      act(() => void vi.advanceTimersByTime(2 * 60_000 + 1));
+      act(() => result.current.play({ itemId: "4", title: "Trop tard" }));
+      expect(result.current.session?.lighter).toBeUndefined();
+      // Le lien rétabli efface la mémoire : la suivante, même dans les 2 min, est native.
+      rememberLighter({ targetBps: 2_500_000, tier: 1 });
+      forgetLighterCarry();
+      act(() => result.current.play({ itemId: "5", title: "Rétabli" }));
+      expect(result.current.session?.lighter).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+      forgetLighterCarry();
+    }
+  });
+});

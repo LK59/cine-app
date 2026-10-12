@@ -7,7 +7,7 @@ import { usePlaybackSession, stopOrphanSession } from "@/lib/usePlaybackSession"
 import { refreshAfterPlayback } from "@/lib/swr";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { useStableFallback, takeoverFor, castCarriedTo, castingNow, chromecastNow, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, castCarriedTo, castingNow, lighterNow, chromecastNow, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
 import { ChromecastPlayer } from "@/components/player/ChromecastPlayer";
 import { publishHandedOver } from "@/lib/playerBench/bridge";
 import { PlayerControls, type Track } from "@/components/PlayerControls";
@@ -20,24 +20,45 @@ import { PlaybackTimeline, TIMELINE_EVERY_MS, bufferedAhead, elementState, regis
 import {
   LinkMeter,
   SLOW_LINK_REASON,
-  capForSlowLink,
   frozenReading,
   linkVerdictWord,
   meterXhr,
-  openingLinkState,
   readLink,
   slowLinkFields,
-  slowLinkFigures,
-  serverCanCarry,
   slowLinkVerdict,
   streamNeedBps,
-  noteSlowLink,
   type LinkReading,
   type SlowLink,
 } from "@/lib/slowLink";
+import {
+  LONG_STALL_MS,
+  LinkRecovery,
+  PLAYBACK_MEASURE_WINDOW_MS,
+  RECOVERY_WINDOW_MS,
+  SlowLog,
+  StutterWatch,
+  capForLighter,
+  forgetLighterCarry,
+  lighterFor,
+  mbps,
+  measuredBps,
+  nextLighter,
+  noteLighter,
+  openingAdvice,
+  playbackLinkSlow,
+  rememberLighter,
+  type OpeningPopup,
+} from "@/lib/slowLinkPolicy";
+import { SlowLinkPopup } from "@/components/player/SlowLinkPopup";
 
-/** Ni indice ni message : l'état ordinaire d'un chargement (§77). */
-const NO_LINK_SIGNAL: { hint: boolean; notice: SlowLink | null } = { hint: false, notice: null };
+/** Ni indice ni fenêtre : l'état ordinaire d'un chargement (§78). */
+type LinkSignal = { hint: boolean; popup: OpeningPopup | null; recvBps: number | null; needBps: number | null };
+const NO_LINK_SIGNAL: LinkSignal = { hint: false, popup: null, recvBps: null, needBps: null };
+
+/** Un saut sans image depuis dix secondes est traité comme une ouverture (§78) — comme chez le natif. */
+const SEEK_AS_OPENING_MS = 10_000;
+/** Et le renoncement d'un saut, comme celui de l'ouverture du natif : 35 s, et seulement sur une lenteur prouvée. */
+const SEEK_GIVE_UP_MS = 35_000;
 import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
@@ -74,7 +95,8 @@ import { positionBucket, retrySignature } from "@/lib/retryLedger";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
-import { PlaybackIntro, type IntroNotice, type IntroPhase } from "@/components/player/PlaybackIntro";
+import type { ChromeEdges } from "@/lib/subtitleStyle";
+import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 import { useServerIntroPicture } from "@/lib/introEnd";
 
@@ -313,9 +335,12 @@ export function PlayerHost() {
   // Une page rechargée par le lecteur serveur (piste WebKit, escalade de l'échelle audio) revient
   // à lui : le rechargement a effacé le relais qui l'avait choisi — voir `reloadedOnServer`.
   const reloadedOnServer = session.reloadedOnServer === session.itemId;
+  // La version allégée (§78) : choisie pour cette lecture (`lighterNow`), ou héritée d'une séance
+  // allégée arrêtée il y a moins de deux minutes (`session.lighter`, posé à l'ouverture).
+  const lighter = lighterNow(takeover, session) || session.lighter !== undefined;
   const useNative =
     !serverFallback ||
-    (!legacy && !handedOver.includes(session.itemId) && !carried && !castingNow(takeover, session) && !reloadedOnServer);
+    (!legacy && !handedOver.includes(session.itemId) && !carried && !castingNow(takeover, session) && !reloadedOnServer && !lighter);
   if (useNative) {
     return (
       <ExperimentalPlayerHost
@@ -399,14 +424,11 @@ function ServerPlayerIntro({
   videoRef,
   onCoverChange,
   note,
-  notice,
   onClose,
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
   /** Le mot d'une attente longue (« toujours en cours… »), dit sous la ligne de l'ouverture. */
   note?: string | null;
-  /** Le message chiffré d'une connexion trop lente et ses choix (§77) — voir `PlaybackIntro`. */
-  notice?: IntroNotice | null;
   /** Le calque couvre-t-il le lecteur — l'hôte en tait la roue et le fil de ses commandes. */
   onCoverChange?: (covering: boolean) => void;
   allowed: boolean;
@@ -448,7 +470,6 @@ function ServerPlayerIntro({
       fallbackName={session.title}
       caption={introCaption({ ...session.introArt, resumeSeconds }, t)}
       note={note ?? null}
-      notice={notice ?? null}
       onClose={onClose}
       closeLabel={t("common.close")}
       className="absolute inset-0 z-[25]"
@@ -639,12 +660,75 @@ function ActivePlayer({
   const [linkFailure, setLinkFailure] = useState<LinkReading | null>(null);
   const [linkLive, setLinkLive] = useState<LinkReading | null>(null);
   /**
-   * Ce que l'ouverture dit du lien pendant le chargement (§77, hls.js seulement) : l'indice
-   * « Connexion lente… », puis le message chiffré avec « Version allégée » et « Fermer ».
+   * Ce que l'ouverture dit du lien pendant le chargement (§78, hls.js seulement, `openingAdvice`) :
+   * l'indice « Connexion lente… », puis la fenêtre « Votre connexion semble lente ».
    */
-  const [linkSignal, setLinkSignal] = useState<{ hint: boolean; notice: SlowLink | null }>(NO_LINK_SIGNAL);
-  /** Pour le journal : quand le message a paru (ms depuis le début de la séance), et le choix fait. */
-  const slowNoticeRef = useRef<{ at: number | null; choice: "allégée" | "fermer" | null }>({ at: null, choice: null });
+  const [linkSignal, setLinkSignal] = useState<LinkSignal>(NO_LINK_SIGNAL);
+  /** La fenêtre de l'ouverture fermée par le spectateur : pour cette négociation (sa génération). */
+  const popupDismissedRef = useRef<number | null>(null);
+  /**
+   * Le fil de ce que la lenteur a fait paraître et des choix faits (§78), porté par les lignes `start`,
+   * `error` et `stop` — un par séance (l'épisode suivant en ouvre un autre).
+   */
+  const slowLogRef = useRef(new SlowLog());
+  /** Les saccades en pleine lecture (§78) — une par séance. */
+  const stutterRef = useRef(new StutterWatch());
+  const [stutterPopup, setStutterPopup] = useState<{ recvBps: number | null; needBps: number | null } | null>(null);
+  /** Une fenêtre des saccades due pendant que le lecteur était réduit ou caché : montrée au retour. */
+  const pendingStutterRef = useRef(false);
+  /** Propose la fenêtre des saccades — posée par un effet plus bas, appelée par les écouteurs de l'élément. */
+  const offerStutterRef = useRef<() => void>(() => {});
+  /** Le saut qui attend son image, posé par les écouteurs de l'élément (§78). */
+  const seekWaitRef = useRef<number | null>(null);
+  /** Le début de la mesure du chargement, et le chien de garde à réarmer au retour du premier plan (§78). */
+  const measureStartRef = useRef(0);
+  const watchdogFireRef = useRef<(() => void) | null>(null);
+  /** L'échec de chargement qu'une connexion trop lente explique : l'écran propose la version allégée. */
+  const [slowFailure, setSlowFailure] = useState<SlowLink | null>(null);
+  /** Un saut sans image depuis 10 s, traité comme une ouverture (§78). */
+  const [seekSignal, setSeekSignal] = useState<(LinkSignal & { at: number }) | null>(null);
+  const seekDismissedRef = useRef<number | null>(null);
+  /** Le palier de version allégée de la négociation en cours (§78), pour le panneau et le bilan. */
+  const [lighterStep, setLighterStep] = useState<{ targetBps: number; tier: number } | null>(null);
+  /**
+   * Pendant une lecture allégée, la capacité du lien comparée au besoin du fichier d'origine (§78) :
+   * rétablie, la mémoire des deux minutes s'efface. Le besoin d'origine vient de la négociation.
+   */
+  const recoveryRef = useRef(new LinkRecovery());
+  const classicNeedRef = useRef<number | null>(null);
+  const lighterClearedRef = useRef(false);
+  /** La version allégée est-elle permise à ce compte (réponse de la négociation, §78) ? */
+  const [lighterAllowed, setLighterAllowed] = useState(true);
+  /** Ce flux passe-t-il par hls.js — le seul qui mesure (§78) ? Safari et la lecture directe : non. */
+  const [hlsJs, setHlsJs] = useState(false);
+  /** Une coupure en cours — hls.js réessaie, ou le navigateur est hors ligne : jamais une lenteur (§78). */
+  const unstableRef = useRef(false);
+  /** Les commandes : leur hauteur (la fenêtre se pose au-dessus) et leurs menus (aucune fenêtre dessus). */
+  const [chromeEdges, setChromeEdges] = useState<ChromeEdges | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [pageVisible, setPageVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
+  /**
+   * Le palier hérité de la règle des deux minutes (`session.lighter`, §78), lu par `startPlayback` —
+   * dont les dépendances sont figées. Tenu à jour avant l'effet qui négocie (déclaré plus bas).
+   */
+  const sessionLighterRef = useRef(session.lighter);
+  /** Le sous-titre du relais allégé, à rallumer une fois (`takeSubtitleCarry`). */
+  const subtitleCarryRef = useRef<number | null>(
+    (() => {
+      const handover = takeoverFor(takeover, session);
+      return handover?.lighter && typeof handover.subtitleStreamIndex === "number" ? handover.subtitleStreamIndex : null;
+    })()
+  );
+  const takeSubtitleCarry = useCallback(() => {
+    const value = subtitleCarryRef.current;
+    subtitleCarryRef.current = null;
+    return value;
+  }, []);
+  useEffect(() => {
+    sessionLighterRef.current = session.lighter;
+  }, [session]);
+  /** Une génération de sous-titres était en cours au passage en allégée : dit brièvement (§78). */
+  const [subtitleGenNotice, setSubtitleGenNotice] = useState(() => takeoverFor(takeover, session)?.subtitleGenerating === true);
   // True once loading/reconnecting has been ongoing for >3s — drives the "still loading, don't
   // close the player" reassurance line for heavy flows (a 4K track switch can legitimately take
   // 15-20s across the grace delay, codec ladder and reload escalation).
@@ -711,6 +795,10 @@ function ActivePlayer({
       sessionPlayedRef.current = false;
       sessionStartedAtRef.current = Date.now();
       handedOverRef.current = false;
+      slowLogRef.current = new SlowLog();
+      stutterRef.current = new StutterWatch();
+      recoveryRef.current = new LinkRecovery();
+      lighterClearedRef.current = false;
     }
     // `cast` ne se lit plus « séance ouverte pour diffuser » seulement : une route établie depuis
     // les commandes de la vidéo compte aussi, pour les lignes qui suivent (arrêt compris).
@@ -720,6 +808,8 @@ function ActivePlayer({
   const [recapSkip, setRecapSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  /** Le film est allé au bout : aucune fenêtre de lenteur sur l'écran de fin (§78). */
+  const [filmEnded, setFilmEnded] = useState(false);
   // Le temps joué, porté par ses lignes `stop` et de fin de diffusion — voir `WatchedClock`.
   const [watched] = useState(() => new WatchedClock());
   useEffect(() => {
@@ -822,8 +912,9 @@ function ActivePlayer({
         error: errorRef.current,
         ...(sessionPlayedRef.current ? {} : { gaveUpAfterMs: now - sessionStartedAtRef.current }),
       }),
-      // Le message chiffré d'une connexion trop lente et le choix fait (§77), s'il a paru.
-      ...(slowNoticeRef.current.at !== null ? { slowNoticeAt: slowNoticeRef.current.at, slowChoice: slowNoticeRef.current.choice } : {}) };
+      // Ce que la lenteur a fait paraître et les choix faits (§78), et la mémoire allégée effacée.
+      ...slowLogRef.current.fields(),
+      ...(lighterClearedRef.current ? { lighterCleared: true } : {}) };
     },
     [watched]
   );
@@ -835,6 +926,10 @@ function ActivePlayer({
   /** Envoie le bilan et efface sa copie gardée sur l'appareil — une seule fois par séance. */
   const reportStop = useCallback(
     (why: ServerStopWhy) => {
+      // Une séance allégée qui s'arrête est retenue deux minutes (§78) — sauf si le lien a retrouvé de
+      // quoi porter la lecture classique pendant qu'elle jouait.
+      const step = lighterFor(logContext.current.itemId);
+      if (step && !lighterClearedRef.current && !logContext.current.bench) rememberLighter(step);
       reportPlayback("stop", stopFields(why, true));
       if (logContext.current.session) clearUnsentStop(logContext.current.session);
     },
@@ -1071,6 +1166,21 @@ function ActivePlayer({
       const hlsModule = nativeHls ? null : import("hls.js");
       hlsModule?.catch(() => {});
 
+      // La version allégée (§78) : le palier de ce titre, ou celui qu'hérite une lecture lancée moins de
+      // deux minutes après une séance allégée (`session.lighter`) — noté pour ce titre, la mesure
+      // continue et le palier suivant en part.
+      let lighterCarried = false;
+      if (!lighterFor(itemId) && sessionLighterRef.current) {
+        noteLighter(itemId, sessionLighterRef.current);
+        lighterCarried = true;
+        slowLogRef.current.note(`allégée ${(sessionLighterRef.current.targetBps / 1e6).toFixed(1)} Mb/s palier ${sessionLighterRef.current.tier} (moins de 2 min après une séance allégée)`);
+      }
+      const cap = capForLighter(itemId, pickMaxBitrate());
+      setLighterStep(cap.step);
+      // L'instant de la demande : les fenêtres de l'ouverture et le résultat d'une version allégée en partent.
+      const startedAt = performance.now();
+      const startedAtWall = Date.now();
+
       // Les étapes du démarrage, comptées depuis cette demande (§77) — voir `ServerStartup`.
       const startup = new ServerStartup(performance.now());
       const res = await fetch("/api/jellyfin/playback/start", {
@@ -1080,9 +1190,11 @@ function ActivePlayer({
         headers: { "Content-Type": "application/json", ...touchHintHeaders() },
         body: JSON.stringify({
           itemId,
-          // Abaissé seulement quand le lecteur natif vient de mesurer, pour ce titre, une connexion
-          // trop lente (§77) — sans quoi le serveur redemandait le même débit au même lien.
-          maxBitrate: capForSlowLink(itemId, pickMaxBitrate()),
+          // Abaissé seulement en version allégée (§78) : le palier de ce titre, demandé par le
+          // spectateur ou hérité d'une séance allégée de moins de deux minutes — le serveur en tire
+          // le codec (HEVC ou H.264), le SDR et la largeur maximale. Sans palier, la demande d'avant.
+          maxBitrate: cap.maxBitrate,
+          ...(cap.step ? { lighter: true } : {}),
           audioStreamIndex: opts?.audioStreamIndex,
           startTicks: opts?.resumeAt ? Math.floor(opts.resumeAt * 10_000_000) : undefined,
           codecSupport,
@@ -1176,8 +1288,15 @@ function ActivePlayer({
         ),
         // Une reprise de l'échelle audio rejoue la négociation : la ligne dit laquelle.
         ...(nativeErrorRetryCount.current > 0 ? { retry: nativeErrorRetryCount.current } : {}),
+        // La version allégée (§78) : débit demandé, palier, et s'il vient de la règle des deux minutes.
+        ...(cap.step ? { lighterMbps: Math.round(cap.step.targetBps / 1e5) / 10, lighterTier: cap.step.tier, ...(lighterCarried ? { lighterCarried: true } : {}) } : {}),
         ...startup.fields(),
+        ...slowLogRef.current.fields(),
       });
+      // Le besoin du fichier d'origine en pleine qualité : ce que le lien doit retrouver pour que la
+      // lecture suivante revienne au lecteur natif (`LinkRecovery`, §78).
+      setLighterAllowed(data.lighterAllowed !== false);
+      classicNeedRef.current = typeof data.sourceBitrateBps === "number" && data.sourceBitrateBps > 0 ? data.sourceBitrateBps : null;
 
       setPlaySession({ itemId, playSessionId: data.playSessionId, mediaSourceId: data.mediaSourceId });
       /**
@@ -1251,6 +1370,8 @@ function ActivePlayer({
           nativeErrorRetryCount.current = 0;
           if (nativeHls || data.isDirectPlay) startup.fromResources(resourceEntries(), STREAM_PREFIX);
           startup.picture();
+          // Le résultat d'une version allégée (§78) : l'image, et en combien de temps depuis la demande.
+          if (cap.step) slowLogRef.current.note(`image en ${Math.round(performance.now() - startedAt)} ms (allégée palier ${cap.step.tier})`);
           // Une marche qui se charge a trouvé le coupable : retenu pour le reste de cette ouverture
           // seulement (voir AUDIO_FALLBACK_RUNGS et `learnedExclusions`).
           if (opts?.disableAudioCodecs?.length) {
@@ -1280,52 +1401,70 @@ function ActivePlayer({
       linkMeterRef.current = linkMeter;
       streamNeedRef.current = needBps;
       setLinkFailure(null);
-      loadWatchdog.current = setTimeout(() => {
+      setSlowFailure(null);
+      setHlsJs(!nativeHls && !data.isDirectPlay);
+      measureStartRef.current = startedAtWall;
+      const fireWatchdog = () => {
         if (linkWatch.current) clearInterval(linkWatch.current);
         linkWatch.current = null;
         setLinkSignal(NO_LINK_SIGNAL);
         let slow: ReturnType<typeof slowLinkVerdict> = null;
         try {
-          slow = slowLinkVerdict(linkMeter.measure(), needBps);
+          // Jamais pendant une coupure (hls.js réessaie, ou le navigateur est hors ligne) : une coupure
+          // n'est pas une lenteur, et n'appelle jamais la version allégée (§78). Sur le compteur
+          // courant — réarmé au retour du premier plan, jamais une mesure d'arrière-plan.
+          slow = unstableRef.current ? null : slowLinkVerdict(linkMeterRef.current?.measure(), needBps);
         } catch {
           slow = null;
         }
         // Où en était le démarrage — la liste, un segment, son décodage, l'image (§77).
         if (nativeHls || data.isDirectPlay) startup.fromResources(resourceEntries(), STREAM_PREFIX);
         const stages = startup.fields(true);
+        if (cap.step) slowLogRef.current.note(`échec (allégée palier ${cap.step.tier}) : pas d'image en 20 s`);
         if (slow) {
-          reportPlayback("error", serverFailureFields(logContext.current, SLOW_LINK_REASON, { ...slowLinkFields(slow), ...stages }));
+          slowLogRef.current.noteAt("écran trop lente", Date.now() - startedAtWall, slow.recvBps, slow.needBps);
+          reportPlayback("error", serverFailureFields(logContext.current, SLOW_LINK_REASON, { ...slowLinkFields(slow), ...stages, ...slowLogRef.current.fields() }));
           setLinkFailure(frozenReading(slow));
-          setError(t("player.slowLink.message", slowLinkFigures(slow, locale)));
+          setSlowFailure(slow);
+          // « Lecture impossible : la connexion est trop lente. » — sans chiffres (§78).
+          setError(t("player.slowLink.failed"));
         } else {
-          reportPlayback("error", serverFailureFields(logContext.current, "pas de première image en 20 s", stages));
+          reportPlayback("error", serverFailureFields(logContext.current, "pas de première image en 20 s", { ...stages, ...slowLogRef.current.fields() }));
           setError(t('player.loadingTooLong'));
         }
         setReconnecting(false);
         setLoading(false);
-      }, 20_000);
-      // Chaque seconde du chargement, le lien mesuré (§77 — hls.js seulement : Safari lit son HLS
+      };
+      watchdogFireRef.current = fireWatchdog;
+      loadWatchdog.current = setTimeout(fireWatchdog, 20_000);
+      // Chaque seconde du chargement, le lien mesuré (§78 — hls.js seulement : Safari lit son HLS
       // lui-même et la lecture directe n'est pas comptée ; rien n'y change). Informer tôt, ne jamais
-      // abandonner tôt : l'indice, puis le message chiffré et ses choix, pendant que le chargement
-      // continue ; le chien de garde des 20 s reste seul à renoncer. Aucune requête, rien sous une
-      // erreur déjà à l'écran ; arrêté avec le chien de garde, à la première image, à la négociation
+      // abandonner tôt : l'indice, puis la fenêtre et ses choix, pendant que le chargement continue ; le
+      // chien de garde des 20 s reste seul à renoncer. Aucune requête, rien sous une erreur, rien
+      // pendant une coupure ; arrêté avec le chien de garde, à la première image, à la négociation
       // suivante et au démontage.
       if (!nativeHls && !data.isDirectPlay) {
-        let hinted = false;
-        let noticed = false;
+        let shown: LinkSignal = NO_LINK_SIGNAL;
         linkWatch.current = setInterval(() => {
           if (generation !== playbackGeneration.current || errorRef.current) return;
           let measure: ReturnType<LinkMeter["measure"]> | null = null;
           try {
-            measure = linkMeter.measure();
+            measure = linkMeterRef.current?.measure() ?? null;
           } catch {
             measure = null;
           }
-          const state = openingLinkState(measure, needBps, noticed);
-          if (state.notice && slowNoticeRef.current.at === null) slowNoticeRef.current.at = Date.now() - sessionStartedAtRef.current;
-          if (state.hint !== hinted || state.notice !== null || noticed) setLinkSignal({ hint: state.hint, notice: state.notice });
-          hinted = state.hint;
-          noticed = state.notice !== null;
+          const elapsed = Date.now() - measureStartRef.current;
+          const advice = openingAdvice(measure, needBps, elapsed, {
+            popup: shown.popup,
+            dismissed: popupDismissedRef.current === generation,
+            unstable: unstableRef.current,
+          });
+          if (advice.hint !== shown.hint) slowLogRef.current.noteAt(advice.hint ? "indice" : "indice retiré", elapsed, advice.recvBps, advice.needBps);
+          if (advice.popup !== shown.popup) slowLogRef.current.noteAt(advice.popup ? `fenêtre ${advice.popup}` : "fenêtre retirée", elapsed, advice.recvBps, advice.needBps);
+          if (advice.hint !== shown.hint || advice.popup !== shown.popup) {
+            shown = { hint: advice.hint, popup: advice.popup, recvBps: advice.recvBps, needBps: advice.needBps };
+            setLinkSignal(shown);
+          }
         }, 1000);
       }
 
@@ -1366,7 +1505,21 @@ function ActivePlayer({
       }));
       setExternalSubtitleTracks(tracks);
       setSubtitleTracks(tracks.map((st) => ({ id: st.index, label: st.label })));
-      setCurrentSubtitleId(null);
+      // Le sous-titre que le lecteur natif montrait, rallumé une fois quand la version allégée prend
+      // le relais (§78) — seulement s'il existe dans ce flux ; sinon aucun, comme avant.
+      const carriedSubtitle = takeSubtitleCarry();
+      const wantedSubtitle = carriedSubtitle !== null && tracks.some((st) => st.index === carriedSubtitle) ? carriedSubtitle : null;
+      setCurrentSubtitleId(wantedSubtitle);
+      if (wantedSubtitle !== null) {
+        video.addEventListener(
+          "loadeddata",
+          () => {
+            const position = tracks.findIndex((st) => st.index === wantedSubtitle);
+            for (let i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode = i === position ? "showing" : "disabled";
+          },
+          { once: true }
+        );
+      }
 
       // A play() rejected with NotAllowedError is iOS's autoplay policy, not a media failure:
       // the reload-based WebKit track switch lands on a fresh page that has no user activation
@@ -1435,7 +1588,8 @@ function ActivePlayer({
         maxMaxBufferLength: 90,
         // Compter ce que le lien livre, pour le chien de garde ci-dessus (§77) : des écouteurs de
         // plus sur chaque requête, rien d'autre — `meterXhr` ne lève jamais.
-        xhrSetup: (xhr: XMLHttpRequest) => meterXhr(linkMeter, xhr),
+        // Le compteur courant : réarmé au retour du premier plan pendant le chargement (§78).
+        xhrSetup: (xhr: XMLHttpRequest) => meterXhr(linkMeterRef.current ?? linkMeter, xhr),
       });
       // Dernier recours : l'import de hls.js est lui aussi un await, et l'instance vient d'être
       // construite. Sans ce garde elle s'écrirait par-dessus celle d'un appel plus récent, qui
@@ -1617,6 +1771,10 @@ function ActivePlayer({
     // entier. Sans cela, l'échelle déjà épuisée qui a conduit à cet écran faisait retomber le
     // moindre nouvel échec directement dessus, sans un seul des essais de repli.
     nativeErrorRetryCount.current = 0;
+    if (!slowLogRef.current.empty) slowLogRef.current.choose("réessayer", Date.now() - sessionStartedAtRef.current);
+    stutterRef.current.closed(Date.now());
+    setStutterPopup(null);
+    setSeekSignal(null);
     startPlayback({
       ...lastPlaybackOpts.current,
       resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
@@ -1625,22 +1783,60 @@ function ActivePlayer({
   }, [startPlayback]);
 
   /**
-   * « Version allégée », sur le message d'une connexion trop lente (§77) : une négociation neuve, au
-   * débit que ce lien porte (`noteSlowLink` → `capForSlowLink`), même position, mêmes pistes. La ligne
-   * `start` le dit (`why: "lighter"`, et les chiffres en `trigger`).
+   * « Version allégée » (§78) — sur une fenêtre de l'ouverture, d'un saut ou des saccades, ou sur
+   * l'écran du renoncement : une négociation neuve au palier suivant (`nextLighter` : moitié du débit
+   * mesuré, ou moitié du palier en cours s'il y en a un, plancher 1,5 Mbit/s), même position, mêmes
+   * pistes. La ligne `start` le dit (`why: "lighter"`, palier et débit).
    */
-  const chooseLighter = useCallback(() => {
-    const slow = linkSignal.notice;
-    if (!slow) return;
-    slowNoticeRef.current.choice = "allégée";
-    noteSlowLink(itemId, slow);
-    const f = slowLinkFields(slow);
-    startPlayback({
-      ...lastPlaybackOpts.current,
-      resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
-      cause: { why: "lighter", trigger: `${f.recvMbps} Mb/s reçus, ${f.needMbps} demandés` },
-    });
-  }, [linkSignal.notice, itemId, startPlayback]);
+  const chooseLighter = useCallback(
+    (reading: { recvBps: number | null; needBps: number | null } | null) => {
+      const step = nextLighter(reading?.recvBps ?? null, reading?.needBps ?? null, lighterFor(itemId));
+      if (!step) return;
+      slowLogRef.current.choose("allégée", Date.now() - sessionStartedAtRef.current);
+      slowLogRef.current.note(`allégée ${(step.targetBps / 1e6).toFixed(1)} Mb/s palier ${step.tier}`);
+      noteLighter(itemId, step);
+      stutterRef.current.closed(Date.now());
+      setStutterPopup(null);
+      setSeekSignal(null);
+      startPlayback({
+        ...lastPlaybackOpts.current,
+        resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
+        cause: { why: "lighter", trigger: `palier ${step.tier}, ${mbps(step.targetBps)} Mb/s (${mbps(reading?.recvBps)} reçus)` },
+      });
+    },
+    [itemId, startPlayback]
+  );
+
+  /** Un palier de plus est-il possible ici ? Le lecteur serveur existe déjà ; reste le droit de transcoder. */
+  const canLighten = useCallback(
+    (reading: { recvBps: number | null; needBps: number | null } | null) =>
+      lighterAllowed && nextLighter(reading?.recvBps ?? null, reading?.needBps ?? null, lighterStep) !== null,
+    [lighterAllowed, lighterStep]
+  );
+
+  /** « Fermer » sur une fenêtre : la fenêtre seulement — le chargement ou la lecture continue (§78). */
+  const dismissPopup = useCallback((from: "ouverture" | "saut" | "lecture") => {
+    slowLogRef.current.choose("fermer", Date.now() - sessionStartedAtRef.current);
+    if (from === "lecture") {
+      stutterRef.current.closed(Date.now());
+      setStutterPopup(null);
+    } else if (from === "saut") {
+      setSeekSignal((current) => {
+        if (current) seekDismissedRef.current = current.at;
+        return current ? { ...current, popup: null } : current;
+      });
+    } else {
+      popupDismissedRef.current = playbackGeneration.current;
+      setLinkSignal((current) => ({ ...current, popup: null }));
+    }
+  }, []);
+
+  /** La notification d'une génération de sous-titres interrompue par le passage en allégée : brève (§78). */
+  useEffect(() => {
+    if (!subtitleGenNotice) return;
+    const id = setTimeout(() => setSubtitleGenNotice(false), 6000);
+    return () => clearTimeout(id);
+  }, [subtitleGenNotice]);
 
   // Always toggles the native <track> elements rendered from externalSubtitleTracks below —
   // regardless of PlayMethod, since subtitles are now uniformly external VTT (see startPlayback).
@@ -1987,13 +2183,20 @@ function ActivePlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const onPlay = () => setPlaying(true);
+    const onPlay = () => {
+      setPlaying(true);
+      setFilmEnded(false);
+    };
     const onPause = () => setPlaying(false);
+    // Le film fini : aucune fenêtre de lenteur sur l'écran de fin (§78).
+    const onEnded = () => setFilmEnded(true);
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
+    video.addEventListener("ended", onEnded);
     return () => {
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("ended", onEnded);
     };
   }, [videoKey]);
 
@@ -2055,36 +2258,78 @@ function ActivePlayer({
     if (!video) return;
     let playedOnce = false;
     let seekSince: number | null = null;
+    /**
+     * Les saccades (§78), hls.js seulement — c'est lui qui compte ses octets. Une attente est du
+     * réseau quand le tampon était vide en son début (moins d'une seconde devant : sinon c'est le
+     * décodeur) et que la capacité mesurée sur 30 s est sous le besoin du flux ; jamais pendant une
+     * coupure, jamais page cachée. Les attentes d'un saut ne comptent jamais.
+     */
+    let waitStart: { at: number; ahead: number | null } | null = null;
+    let longTimer: ReturnType<typeof setTimeout> | null = null;
+    const networkStall = (ahead: number | null) =>
+      hlsRef.current !== null &&
+      (ahead === null || ahead < 1) &&
+      document.visibilityState !== "hidden" &&
+      !unstableRef.current &&
+      playbackLinkSlow(linkMeterRef.current?.recentMeasure(PLAYBACK_MEASURE_WINDOW_MS), streamNeedRef.current);
+    const endWait = (now: number) => {
+      if (longTimer !== null) clearTimeout(longTimer);
+      longTimer = null;
+      const started = waitStart;
+      waitStart = null;
+      if (started && stutterRef.current.waitEnded(now, now - started.at, networkStall(started.ahead))) offerStutterRef.current();
+    };
     const onPlaying = () => {
       const now = Date.now();
       playedOnce = true;
       sessionPlayedRef.current = true;
       tallyRef.current.waitEnded(now);
+      endWait(now);
+      seekWaitRef.current = null;
       if (seekSince !== null) {
         tallyRef.current.seekArrived(now - seekSince);
         seekSince = null;
       }
     };
     const onWaiting = () => {
-      if (playedOnce && !video.seeking && seekSince === null) tallyRef.current.waitStarted(Date.now());
+      if (playedOnce && !video.seeking && seekSince === null) {
+        tallyRef.current.waitStarted(Date.now());
+        const ahead = bufferedAhead(video);
+        waitStart = { at: Date.now(), ahead };
+        if (longTimer !== null) clearTimeout(longTimer);
+        longTimer = setTimeout(() => {
+          longTimer = null;
+          if (waitStart && networkStall(waitStart.ahead) && stutterRef.current.longWait(Date.now(), true)) offerStutterRef.current();
+        }, LONG_STALL_MS);
+      }
     };
     const onSeeking = () => {
       if (!playedOnce) return;
       tallyRef.current.waitAbandoned();
+      if (longTimer !== null) clearTimeout(longTimer);
+      longTimer = null;
+      waitStart = null;
       seekSince ??= Date.now();
+      // Un saut attend son image : au-delà de 10 s, traité comme une ouverture (§78).
+      seekWaitRef.current ??= Date.now();
     };
     const onSeeked = () => {
       if (seekSince === null || !video.paused) return;
       tallyRef.current.seekArrived(Date.now() - seekSince);
       seekSince = null;
+      seekWaitRef.current = null;
     };
-    const onPause = () => tallyRef.current.waitEnded(Date.now());
+    const onPause = () => {
+      tallyRef.current.waitEnded(Date.now());
+      endWait(Date.now());
+    };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("seeking", onSeeking);
     video.addEventListener("seeked", onSeeked);
     video.addEventListener("pause", onPause);
     return () => {
+      if (longTimer !== null) clearTimeout(longTimer);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("seeking", onSeeking);
@@ -2092,6 +2337,122 @@ function ActivePlayer({
       video.removeEventListener("pause", onPause);
     };
   }, [videoKey]);
+
+  /** La coupure en cours, lue par les rappels figés (§78). */
+  useEffect(() => {
+    unstableRef.current = reconnecting || isOffline;
+  }, [reconnecting, isOffline]);
+
+  /**
+   * La fenêtre des saccades (§78) : pas plus de deux par séance (`StutterWatch`). Réduit ou page
+   * cachée, elle est due et se montre au retour si la condition tient toujours.
+   */
+  useEffect(() => {
+    offerStutterRef.current = () => {
+      if (mode === "mini" || document.visibilityState === "hidden") {
+        pendingStutterRef.current = true;
+        return;
+      }
+      stutterRef.current.shown();
+      const recvBps = measuredBps(linkMeterRef.current?.recentMeasure(PLAYBACK_MEASURE_WINDOW_MS));
+      const needBps = streamNeedRef.current;
+      slowLogRef.current.note(`fenêtre saccades à ${Math.round(lastKnownTime.current)} s (${mbps(recvBps)}/${mbps(needBps)})`);
+      setStutterPopup({ recvBps, needBps });
+    };
+  }, [mode]);
+  useEffect(() => {
+    const onVisibility = () => {
+      const visible = document.visibilityState !== "hidden";
+      setPageVisible(visible);
+      // Revenu pendant le chargement (§78) : ce qui a été mesuré en arrière-plan ne vaut rien
+      // (minuteurs bridés, réseau en veille). La mesure repart de zéro, et le chien de garde avec elle :
+      // aucun verdict sur une mesure d'arrière-plan.
+      if (visible && linkWatch.current && loadWatchdog.current && watchdogFireRef.current) {
+        linkMeterRef.current = new LinkMeter();
+        measureStartRef.current = Date.now();
+        clearTimeout(loadWatchdog.current);
+        loadWatchdog.current = setTimeout(watchdogFireRef.current, 20_000);
+        slowLogRef.current.noteAt("mesure reprise au retour", Date.now() - sessionStartedAtRef.current);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+  useEffect(() => {
+    if (mode === "mini" || !pageVisible || !pendingStutterRef.current) return;
+    pendingStutterRef.current = false;
+    const id = setTimeout(() => {
+      if (!unstableRef.current && playbackLinkSlow(linkMeterRef.current?.recentMeasure(PLAYBACK_MEASURE_WINDOW_MS), streamNeedRef.current) && stutterRef.current.longWait(Date.now(), true)) {
+        offerStutterRef.current();
+      }
+    }, 0);
+    return () => clearTimeout(id);
+  }, [mode, pageVisible]);
+
+  /**
+   * Un saut traité comme une ouverture (§78, hls.js) : 10 s sans image après le saut, le lien mesuré
+   * depuis le saut dit l'indice et les fenêtres (`openingAdvice`) ; à 35 s, la lenteur prouvée montre
+   * l'écran « Lecture impossible : la connexion est trop lente. ». Le reste du saut ne change pas.
+   */
+  useEffect(() => {
+    let shown: (LinkSignal & { at: number }) | null = null;
+    const id = setInterval(() => {
+      const at = seekWaitRef.current;
+      const now = Date.now();
+      if (at === null || now - at < SEEK_AS_OPENING_MS || hlsRef.current === null || errorRef.current || document.visibilityState === "hidden") {
+        if (shown) {
+          shown = null;
+          setSeekSignal(null);
+        }
+        return;
+      }
+      const elapsed = now - at;
+      const measure = linkMeterRef.current?.recentMeasure(elapsed) ?? null;
+      if (elapsed >= SEEK_GIVE_UP_MS && !unstableRef.current) {
+        const slow = slowLinkVerdict(measure, streamNeedRef.current);
+        if (slow) {
+          seekWaitRef.current = null;
+          shown = null;
+          setSeekSignal(null);
+          slowLogRef.current.note(`écran trop lente après un saut à ${Math.round(lastKnownTime.current)} s (${mbps(slow.recvBps)}/${mbps(slow.needBps)})`);
+          reportPlayback("error", serverFailureFields(logContext.current, SLOW_LINK_REASON, { ...slowLinkFields(slow), afterSeek: true, ...slowLogRef.current.fields() }));
+          setLinkFailure(frozenReading(slow));
+          setSlowFailure(slow);
+          setError(t("player.slowLink.failed"));
+          return;
+        }
+      }
+      const advice = openingAdvice(measure, streamNeedRef.current, elapsed, {
+        popup: shown?.popup ?? null,
+        dismissed: seekDismissedRef.current === at,
+        unstable: unstableRef.current,
+      });
+      if (shown && shown.at === at && shown.hint === advice.hint && shown.popup === advice.popup) return;
+      if (advice.popup && advice.popup !== shown?.popup) slowLogRef.current.note(`fenêtre ${advice.popup} après un saut, +${(elapsed / 1000).toFixed(1)} s (${mbps(advice.recvBps)}/${mbps(advice.needBps)})`);
+      shown = { at, hint: advice.hint, popup: advice.popup, recvBps: advice.recvBps, needBps: advice.needBps };
+      setSeekSignal(shown);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [t]);
+
+  /**
+   * Pendant une version allégée, le lien retrouve-t-il de quoi porter la lecture classique (§78,
+   * `LinkRecovery`) ? Sa capacité sur les 10 dernières secondes contre 110 % du besoin du fichier
+   * d'origine ; tenue 10 s, la mémoire des deux minutes s'efface : la lecture suivante revient au
+   * lecteur natif. Le film en cours reste allégé jusqu'à sa fin.
+   */
+  useEffect(() => {
+    if (!lighterStep) return;
+    const id = setInterval(() => {
+      if (lighterClearedRef.current) return;
+      const recovery = recoveryRef.current;
+      if (!recovery.check(Date.now(), linkMeterRef.current?.recentMeasure(RECOVERY_WINDOW_MS), classicNeedRef.current)) return;
+      lighterClearedRef.current = true;
+      forgetLighterCarry();
+      slowLogRef.current.note(`lien rétabli : ${mbps(recovery.capacityBps)} Mb/s de capacité pour ${mbps(classicNeedRef.current)} en lecture classique`);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [lighterStep]);
 
   // Bad-connection badge: a real stall mid-playback ('waiting' firing after the video has
   // already played at least once — excludes ordinary startup buffering) is logged with a
@@ -2461,7 +2822,14 @@ function ActivePlayer({
                   >
                     {t('player.quit')}
                   </button>
-                  <button type="button" onClick={handleRetry} className="btn-primary inline-flex justify-center">
+                  {/* « Lecture impossible : la connexion est trop lente. » (§78) : la version allégée — le
+                      palier suivant —, si elle est permise et qu'un palier reste possible. */}
+                  {slowFailure && canLighten(slowFailure) && (
+                    <button type="button" onClick={() => chooseLighter(slowFailure)} className="btn-primary inline-flex justify-center">
+                      {t("player.slowLink.lighter")}
+                    </button>
+                  )}
+                  <button type="button" onClick={handleRetry} className={slowFailure && canLighten(slowFailure) ? "btn btn-ghost px-4 py-2" : "btn-primary inline-flex justify-center"}>
                     {t('common.retry')}
                   </button>
                 </div>
@@ -2490,7 +2858,9 @@ function ActivePlayer({
                   ? t('player.offline')
                   : loadingLong
                     ? t('player.stillLoading')
-                    : t('player.reconnecting')}
+                    : hlsJs
+                      ? t("player.slowLink.unstable")
+                      : t('player.reconnecting')}
               </div>
             </div>
           )}
@@ -2523,30 +2893,13 @@ function ActivePlayer({
         resumeSeconds={initialResumeAt ?? null}
         videoRef={videoRef}
         onCoverChange={setIntroCovering}
-        // Le message chiffré d'une connexion trop lente (§77), avec ses choix — le chargement continue.
-        // « Version allégée » seulement si la version la plus réduite passe par ce lien.
-        notice={
-          !isOffline && loading && !error && linkSignal.notice
-            ? {
-                text: t("player.slowLink.notice", slowLinkFigures(linkSignal.notice, locale)),
-                actions: [
-                  ...(serverCanCarry(linkSignal.notice) ? [{ label: t("player.slowLink.lighter"), onClick: chooseLighter, primary: true }] : []),
-                  {
-                    label: t("common.close"),
-                    onClick: () => {
-                      slowNoticeRef.current.choice = "fermer";
-                      handleClose();
-                    },
-                  },
-                ],
-              }
-            : null
-        }
         // L'indice d'une connexion lente (§77) passe avant « toujours en cours » : il dit pourquoi.
         note={
           isOffline
             ? t("player.offline")
-            : loading && linkSignal.hint
+            : reconnecting && hlsJs
+              ? t("player.slowLink.unstable")
+              : loading && linkSignal.hint
               ? t("player.slowLink.hint")
               : loading && loadingLong
                 ? t("player.stillLoading")
@@ -2556,6 +2909,46 @@ function ActivePlayer({
         }
         onClose={handleClose}
       />
+      {/* La fenêtre d'une connexion lente (§78), comme chez le natif : à l'ouverture, après un saut sans
+          image, sur des saccades. Jamais réduite, page cachée, sous un menu ouvert, sur un film fini ni
+          sous une erreur ; au-dessus des commandes du bas, jamais sur la croix. */}
+      {(() => {
+        if (isMini || !pageVisible || menuOpen || error || needsReauth || castInterrupted || filmEnded) return null;
+        const popup =
+          loading && linkSignal.popup
+            ? { kind: linkSignal.popup, from: "ouverture" as const, reading: linkSignal }
+            : !loading && seekSignal?.popup
+              ? { kind: seekSignal.popup, from: "saut" as const, reading: seekSignal }
+              : !loading && stutterPopup
+                ? { kind: "saccades" as const, from: "lecture" as const, reading: stutterPopup }
+                : null;
+        if (!popup) return null;
+        const lighten = canLighten(popup.reading);
+        const lighter = { label: t("player.slowLink.lighter"), primary: true, onClick: () => chooseLighter(popup.reading) };
+        const retry = { label: t("common.retry"), onClick: handleRetry };
+        const close = { label: t("common.close"), onClick: () => dismissPopup(popup.from) };
+        const actions = !lighten ? [retry, close] : popup.kind === "lente" ? [lighter, retry, close] : [lighter, close];
+        return (
+          <SlowLinkPopup
+            text={popup.kind === "saccades" ? t("player.slowLink.popupStutter") : t("player.slowLink.popup")}
+            actions={actions}
+            onBack={close.onClick}
+            liftPx={chromeEdges?.bottom ?? 0}
+          />
+        );
+      })()}
+      {/* Une génération de sous-titres était en cours au passage en allégée (§78) : dit brièvement, en
+          bas à gauche, et retiré seul. */}
+      {subtitleGenNotice && !isMini && (
+        <div
+          className="pointer-events-none absolute z-40 max-w-[min(80vw,22rem)] animate-fade-in rounded-2xl bg-black/75 px-3 py-2 text-xs leading-snug text-white shadow-lg ring-1 ring-white/10"
+          style={{ left: "max(1rem, env(safe-area-inset-left))", bottom: "max(1rem, calc(env(safe-area-inset-bottom) + 0.75rem))" }}
+          role="status"
+          data-subtitle-gen-notice=""
+        >
+          {t("player.slowLink.subtitlesGenerating")}
+        </div>
+      )}
       {!isMini && (
         <PlayerControls
           key={videoKey}
@@ -2575,6 +2968,8 @@ function ActivePlayer({
           hidden={!!error || needsReauth}
           loading={loading}
           openingQuiet={introCovering}
+          onChromeEdges={setChromeEdges}
+          onMenuChange={setMenuOpen}
           introSkip={introSkip}
           recapSkip={recapSkip}
           creditsStart={creditsStart}
@@ -2594,7 +2989,7 @@ function ActivePlayer({
           data={
             playbackInfo
               ? {
-                  ...describeJellyfinPlayback(playbackInfo, networkBitrate, fallbackReason, t, linkFailure ?? linkLive),
+                  ...describeJellyfinPlayback(playbackInfo, networkBitrate, fallbackReason, t, { ...(linkFailure ?? linkLive ?? readLink(null, null)), lighter: lighterStep }),
                   // Le même rapport copiable que le lecteur natif : c'est ce qui manquait ici,
                   // et c'est justement la lecture dont on a le plus de mal à rapporter l'état.
                   report: {

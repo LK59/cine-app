@@ -1,3 +1,4 @@
+import { noteFetchRetrying, noteFetchSettled } from "@/lib/networkTrouble";
 import { noteUnauthorized, SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { trace } from "./trace";
 import { diagInterval, diagNow, diagRequest, diagRequestFailed } from "./playbackDiagnosis";
@@ -641,6 +642,21 @@ export class HttpByteSource implements ByteSource {
    * ranges at all, and asking again would only download a forty-gigabyte film four times.
    */
   private async fetchWithRetries(start: number, end: number, own: AbortSignal): Promise<Uint8Array> {
+    // Ce morceau réessaie-t-il ? Dit à l'hôte (`networkTrouble`, §78) et retiré quoi qu'il arrive.
+    let retrying = false;
+    try {
+      return await this.fetchAttempts(start, end, own, () => {
+        if (!retrying) {
+          retrying = true;
+          noteFetchRetrying();
+        }
+      });
+    } finally {
+      if (retrying) noteFetchSettled();
+    }
+  }
+
+  private async fetchAttempts(start: number, end: number, own: AbortSignal, noteRetrying: () => void): Promise<Uint8Array> {
     let last: unknown;
     for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
       if (attempt > 0) {
@@ -721,6 +737,9 @@ export class HttpByteSource implements ByteSource {
         if (error instanceof SessionEnded) throw error;
         last = error;
         diagRequestFailed();
+        // Une autre tentative suit : « Connexion perdue ou instable… » (§78), jusqu'à ce que ce morceau
+        // arrive, soit abandonné, ou laisse la place à l'écran « connexion perdue ».
+        if (attempt < FETCH_ATTEMPTS - 1) noteRetrying();
         if (muted) trace(`réseau : aucun octet en ${SEEK_FIRST_BYTE_MS / 1000} s après un saut, plage ${start}-${end} redemandée`);
         else if (attempt === 0) trace(`réseau : plage ${start}-${end} refusée, nouvelle tentative`);
       } finally {

@@ -1,3 +1,4 @@
+import { videoTranscodingAllowed } from "@/lib/transcodePolicy";
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { playerMarkers } from "@/lib/episodeMarkers";
@@ -95,6 +96,16 @@ export interface DirectPlayInfo {
     frameRate?: number | null;
   } | null;
   audio: DirectPlayAudioTrack[];
+  /**
+   * Les index Jellyfin des sous-titres du conteneur, dans l'ordre du fichier — pour que la version
+   * allégée (DECISIONS.md §78) garde le sous-titre choisi, comme `audio` garde la piste.
+   */
+  embeddedSubtitleIndexes?: number[];
+  /**
+   * La « version allégée » est-elle possible pour ce compte (§78) ? Un lecteur serveur sur cette
+   * installation et le droit de transcoder la vidéo dans la politique Jellyfin du compte.
+   */
+  lighterAllowed?: boolean;
   /**
    * La langue de tournage, quand on la tient d'une source sûre — pour la mention « (VO) ».
    *
@@ -279,7 +290,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
    * « (VO) » disparaît simplement.
    */
   const tmdbId = Number(naming?.ProviderIds?.Tmdb ?? "");
-  const [originalLanguage, logoUrl] = await Promise.all([
+  const [originalLanguage, logoUrl, transcodingAllowed] = await Promise.all([
     Number.isFinite(tmdbId) && tmdbId > 0
       ? cachedMovies()
           .then((films) => originalLanguageCode(films.find((f) => f.tmdbId === tmdbId)?.originalLanguage?.name))
@@ -287,6 +298,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
       : Promise.resolve(null),
     // Dans la langue de qui regarde, comme le catalogue — le même logo que sur la fiche.
     playerLogo(session.jfId, naming, localeOf(req)),
+    // La version allégée est un transcodage : permis au compte, ou pas proposée (§78).
+    config.player.serverFallback ? videoTranscodingAllowed(session.jfId) : Promise.resolve(false),
   ]);
 
   // Text only, and external only: an image subtitle has nothing to read, and an embedded text
@@ -342,6 +355,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
         isDefault: s.IsDefault ?? false,
         profile: s.Profile ?? null,
       })),
+    embeddedSubtitleIndexes: streams.filter((s) => s.Type === "Subtitle" && !s.IsExternal).map((s) => s.Index),
+    lighterAllowed: config.player.serverFallback && transcodingAllowed,
     originalLanguage,
     refusedReason,
     externalSubtitles,

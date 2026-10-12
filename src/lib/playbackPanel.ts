@@ -38,6 +38,11 @@ function linkRows(link: LinkReading | null | undefined, t: Translate): { label: 
     { label: t("player.info.linkReceived"), value: link.recvBps !== null ? formatBitrate(Math.max(link.recvBps, 1)) : "—" },
     { label: t("player.info.linkNeeded"), value: link.needBps !== null ? formatBitrate(link.needBps) : null },
     { label: t("player.info.linkVerdict"), value: link.frozen ? `${verdict} · ${t("player.info.linkFrozen")}` : verdict },
+    // Le palier de version allégée en cours (§78) — le débit demandé à Jellyfin, pas le reçu.
+    {
+      label: t("player.info.linkLighter"),
+      value: link.lighter ? t("player.info.linkLighterValue", { tier: link.lighter.tier, rate: formatBitrate(link.lighter.targetBps) }) : null,
+    },
   ];
 }
 

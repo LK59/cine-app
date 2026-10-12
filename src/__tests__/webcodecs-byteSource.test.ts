@@ -652,3 +652,31 @@ describe("HttpByteSource pendant une ouverture mesurée", () => {
     }
   });
 });
+
+describe("« Connexion perdue ou instable… » (DECISIONS.md §78)", () => {
+  it("dit à l'hôte qu'un morceau réessaie, et le retire quand il arrive — sans rien changer aux octets reçus", async () => {
+    const { networkUnstable, resetNetworkTrouble, subscribeNetworkTrouble } = await import("@/lib/networkTrouble");
+    resetNetworkTrouble();
+    const seen: boolean[] = [];
+    const stop = subscribeNetworkTrouble((v) => seen.push(v));
+    let calls = 0;
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      if (init?.method === "HEAD") return { ok: true, headers: { get: (n: string) => (n === "Content-Length" ? String(SIZE) : null) } };
+      const range = init?.headers?.Range ?? "";
+      const [, from, to] = /bytes=(\d+)-(\d+)/.exec(range)!.map(Number);
+      calls += 1;
+      // Les deux premières plages échouent une fois (la socket tombe), puis répondent.
+      if (calls <= 2) throw new TypeError("Failed to fetch");
+      return { status: 206, headers: { get: () => `bytes ${from}-${to}/${SIZE}` }, arrayBuffer: async () => new Uint8Array(to - from + 1).fill(7).buffer };
+    });
+    const source = await HttpByteSource.open("/film.mkv");
+    const bytes = await source.read(0, 4);
+    await settle();
+    expect(Array.from(bytes)).toEqual([7, 7, 7, 7]);
+    expect(seen[0]).toBe(true);
+    expect(networkUnstable()).toBe(false);
+    expect(seen[seen.length - 1]).toBe(false);
+    stop();
+    source.close();
+  });
+});

@@ -1617,11 +1617,12 @@
     "loadingTooLong": "Le chargement prend trop de temps. Réessaie.",
     "slowLink": {
       "hint": "Connexion lente…",
-      "notice": "Connexion trop lente pour ce film (≈{recv} Mbit/s reçus, il en faut environ {need}).",
-      "lighter": "Version allégée",
-      "title": "Connexion trop lente",
-      "detail": "≈{recv} Mbit/s reçus, il en faut environ {need} pour ce film. Réessaie quand la connexion sera meilleure.",
-      "message": "Connexion trop lente pour ce film (≈{recv} Mbit/s reçus, il en faut environ {need}). Réessaie quand la connexion sera meilleure."
+      "popup": "Votre connexion semble lente",
+      "popupStutter": "Votre connexion semble lente, ce qui provoque des saccades.",
+      "failed": "Lecture impossible : la connexion est trop lente.",
+      "lighter": "Version allégée (qualité réduite)",
+      "unstable": "Connexion perdue ou instable…",
+      "subtitlesGenerating": "Sous-titres en cours de génération : indisponibles dans la version allégée. Ils le seront une fois la génération terminée."
     },
     "unsupportedBrowser": "Ce navigateur ne peut pas lire ce flux.",
     "playbackInterruptedCheckConnection": "La lecture a été interrompue. Vérifie ta connexion et réessaie.",
@@ -1638,6 +1639,8 @@
       "linkSlow": "trop lente",
       "linkUnknown": "pas encore mesurée",
       "linkFrozen": "mesurée au moment de l'échec",
+      "linkLighter": "Version allégée",
+      "linkLighterValue": "palier {tier} · {rate}",
       "reason": "Raison",
       "container": "Conteneur",
       "video": "Vidéo",

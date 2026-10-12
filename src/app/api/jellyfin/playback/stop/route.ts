@@ -8,6 +8,7 @@ import { config } from "@/lib/config";
 import { reportPlayback } from "@/lib/playbackReport";
 import { castProgressRelay } from "@/lib/castProgress";
 import { playbackDevice } from "@/lib/playbackDevice";
+import { recoverLostPosition } from "@/lib/lostStopPosition";
 
 export async function POST(req: NextRequest) {
   if (!config.player.enabled) {
@@ -27,6 +28,26 @@ export async function POST(req: NextRequest) {
   const mediaSourceId = body?.mediaSourceId as string | undefined;
   const positionTicks = Number(body?.positionTicks) || 0;
   const client = isPlaybackClient(body?.client) ? body.client : PLAYBACK_CLIENTS.stable;
+
+  /**
+   * Une position restée sur l'appareil pendant une coupure, envoyée après coup (`unsentPosition.ts`,
+   * DECISIONS.md §78) : plus aucune séance Jellyfin à arrêter, seulement une position à rendre — par
+   * la règle des bilans perdus, qui n'avance jamais qu'une position, et seulement si rien n'a été lu
+   * depuis (`recoverLostPosition`).
+   */
+  if (body?.late === true) {
+    const lateByMs = Number(body?.lateByMs);
+    if (!isJellyfinId(itemId) || !(positionTicks > 0) || !Number.isFinite(lateByMs) || lateByMs < 0) {
+      return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+    }
+    const result = await recoverLostPosition(
+      session.jfId,
+      { why: "lost", itemId, at: positionTicks / 10_000_000, lateByMs },
+      Date.now()
+    ).catch(() => null);
+    if (result === null) return NextResponse.json({ error: "Jellyfin injoignable" }, { status: 502 });
+    return NextResponse.json({ result });
+  }
 
   if (!isJellyfinId(itemId) || !playSessionId || !mediaSourceId) {
     return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });

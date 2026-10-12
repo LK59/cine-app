@@ -3407,6 +3407,10 @@ segments jamais compressés ; `q=0` respecté).
 
 ## 77. « Connexion trop lente » : une cause dite seulement quand les mesures la prouvent
 
+> Le verdict mesuré reste ; ce qu'on en fait à l'écran — message chiffré, relais automatique au
+> lecteur serveur — est remplacé par §78 (fenêtres sans chiffres, version allégée choisie par le
+> spectateur).
+
 Relevé le 12/10/2026 : Augustine, Edge sous Windows, *The Rookie* S08E18. Le PC recevait ~40 Ko/s
 (≈ 0,3 Mbit/s) derrière la même box que son iPhone, qui avait joué le même épisode 25 min sans une
 attente (3,9 Mbit/s demandés). Le lecteur natif a renoncé à 35 s (« aucune image », chemin non décidé),
@@ -3508,3 +3512,92 @@ mesuré » : bon réseau sans indice ni requête de plus ; < 10 % → indice à 
 allégée » ; « Fermer » ; 35 % → indice seul ; débit qui remonte ; coupure totale),
 `PlayerHost-connexion-lente.test.tsx` (« pendant le chargement », Safari compris),
 `activity-connexion-lente.test.ts`.
+
+## 78. La connexion lente : dite tôt, une version allégée proposée, jamais confondue avec une coupure
+
+Prolonge §77 (le verdict mesuré) d'après les exigences de Louis du 12/10/2026. Ce qui change : la
+lenteur est **proposée** au spectateur au lieu d'être décidée pour lui — plus aucun relais silencieux
+vers le lecteur serveur quand la cause mesurée est le lien —, **sans aucun chiffre à l'écran** (ils vont
+au journal et au panneau technique), et une coupure (plus aucun octet) n'est jamais traitée en lenteur.
+
+**Règles** (`src/lib/slowLinkPolicy.ts`, une seule copie pour les deux lecteurs) :
+- *Ouverture* (`openingAdvice`, lue chaque seconde) — débit = moyenne de toute la réception de
+  l'ouverture (une ouverture dure 35 s au plus : sa moyenne est la moyenne récente ; une fenêtre de 10 s
+  oscillerait, le natif comptant ses morceaux de 1 Mio une fois arrivés, 28 s chacun à 0,3 Mbit/s).
+  Indice « Connexion lente… » : 5 s de réception, < 50 % du besoin. Fenêtre « lente » : 10 s, 256 Kio,
+  < 25 % — Version allégée (qualité réduite) · Réessayer · Fermer. Fenêtre « moyenne » : 25–50 %, 20 s
+  sans image — Version allégée · Fermer. Renoncement : natif 35 s, serveur son chien de garde de 20 s ;
+  lenteur prouvée (`slowLinkVerdict`) → écran « Lecture impossible : la connexion est trop lente. »
+  (Version allégée · Réessayer · Fermer, ce dernier ferme le lecteur) ; sinon l'ancien motif et l'ancien
+  comportement. La première image retire tout.
+- *Saut* — 10 s sans image après un saut : les règles de l'ouverture, mesure prise depuis le saut ; à
+  35 s, l'écran si la lenteur est prouvée. Le cycle du saut lui-même ne change pas.
+- *Lecture* (`StutterWatch`) — un blocage visible de plus de 5 s, ou le 3e de plus d'1 s en 3 min (la
+  fenêtre du budget de reconstructions), classés *réseau* par `playbackDiagnosis` (serveur : tampon vide
+  au début de l'attente) **et** un débit mesuré sous le besoin (30 s de réception, la fenêtre de la ligne
+  `stall` — à 1–2 Mbit/s un morceau met 4 à 8 s, 10 s n'en verraient parfois aucun). Jamais une attente
+  de calcul ou de décodeur, jamais une attente de saut. Fenêtre « … ce qui provoque des saccades. »
+  (Version allégée · Fermer), deux au plus par séance, la seconde 3 min après la fermeture de la première.
+  Jamais d'erreur tant que la lecture continue.
+- *Coupure* — une plage qui réessaie (`HttpByteSource`, 4 tentatives à 200 / 600 / 1 500 ms, inchangées)
+  le dit à l'hôte (`networkTrouble.ts`, une notification, rien sur les octets) : « Connexion perdue ou
+  instable… » sous la ligne, ou sous la roue d'une attente visible ; ni indice ni fenêtre, et le
+  renoncement attend l'issue des tentatives. Toutes épuisées : l'écran « connexion perdue » existant
+  (Réessayer, Fermer). Côté hls.js, « Reconnexion… » devient ce même message ; Safari inchangé.
+- *Fenêtres* (`SlowLinkPopup`) — non bloquantes, verre des menus (`nav-glass`, `player-menu`), aucun
+  bouton pré-sélectionné, Retour (Échap, Retour de la télécommande) ferme la fenêtre et pas le lecteur,
+  posées au-dessus des commandes du bas (`onChromeEdges`), jamais sur la croix. Aucune réduite, page
+  cachée, sous un menu ouvert (`onMenuChange`), sur l'écran de fin ou sous une erreur ; une fenêtre de
+  saccades due pendant ce temps se montre au retour si le lien est toujours lent. Une mesure prise en
+  arrière-plan ne vaut rien : une ouverture revenue au premier plan repart de zéro (`measureEpoch` ;
+  serveur : compteur et chien de garde réarmés).
+- *Version allégée* (`nextLighter`) — cible = moitié du débit mesuré, plancher 1,5 Mbit/s, toujours sous
+  le besoin ; échec suivant (pas d'image dans son délai, saccades) : `max(1,5, min(précédent / 2,
+  mesuré / 2))` ; au plancher, plus de palier (Réessayer · Fermer). Exemples : 30/5 → 2,5 ; 16/10 → 5 ;
+  0,3 → 1,5. HEVC si l'appareil lit le HEVC 10 bits (le maître de Jellyfin annonce le profil de la
+  source, Main10, pour une sortie Main 8 bits), sinon H.264 ; SDR ; 720p jusqu'à 2,5 Mbit/s en HEVC
+  (4,5 en H.264), 1080p au-dessus, jamais plus (`lighterMaxWidth`, condition `Width` du profil —
+  `MaxWidth` dans le corps de PlaybackInfo est ignoré). Natif : `fallToStable` avec un relais `lighter`
+  (hors `handedOver` : la lecture suivante repart sur le natif), position, piste audio et sous-titre
+  gardés ; une génération de sous-titres en cours est signalée brièvement en bas à gauche. Serveur :
+  renégociation `why: "lighter"`.
+- *Existence* — seulement avec un lecteur serveur (`PLAYER_SERVER_FALLBACK`) et le transcodage vidéo
+  permis au compte (`Policy.EnableVideoPlaybackTranscoding`, `transcodePolicy.ts`, relu toutes les 2 min) ;
+  sinon le bouton est absent partout.
+- *D'une lecture à l'autre* — le film reste allégé jusqu'à sa fin. Une lecture lancée moins de 2 min
+  après une séance allégée, quel que soit le titre, démarre allégée au dernier palier (`carriedLighter`,
+  posé par `PlaybackProvider` à `play`/`advance` ; mémoire de page et `sessionStorage`, jamais
+  persistante — pas un apprentissage par appareil). Sauf si, pendant la lecture allégée, la *capacité*
+  du lien (débit pendant la réception, sur 10 s) a tenu 110 % du besoin du fichier d'origine pendant
+  10 s (`LinkRecovery`) : la mémoire s'efface, la suivante revient au natif.
+- *Position* — un battement ou un arrêt que Jellyfin ne reçoit pas garde la position sur l'appareil
+  (`unsentPosition.ts`) ; un rapport accepté pour ce titre l'efface ; le reste part au retour du réseau,
+  au lancement et chaque minute, par la route d'arrêt marquée `late`, qui n'avance jamais qu'une
+  position (`recoverLostPosition`, la règle des bilans perdus).
+
+**Mesuré sur la prod (12/10/2026, i7-8700, QSV).** Jellyfin réduit seul la résolution aux bas débits,
+mais pas de façon monotone en H.264 (3 Mbit/s → 1080p, 4–5 → 720p, 8–10 → 1440p pour un 4K) ; le son
+prend une part fixe (AAC 384k à 1,5 Mbit/s). H.264 : `h264_qsv`, 1,5 M → 720p, 1er segment 1,84 s ;
+2,5 M (1080p) → 720p, 1,31 s ; 5 M (4K DV) → 720p, 1,42 s. HEVC : `hevc_qsv`, Main 8 bits, `hvc1`,
+`tonemap_opencl` : 1,5 M → 720p, 1,44 s ; 5 M → 1080p, 1,75 s ; 2,5 M (1080p) → 720p, 1,35 s.
+
+**Journal** — aucune ligne de plus : `slowLink` (fil borné : quoi, `+s` depuis la demande ou `à s` du
+film, débit mesuré / besoin) et `slowChoice` sur `opening`, `fallback`, `error`, `stop`, `start` du
+serveur ; `lighterMbps`, `lighterTier`, `lighterCarried`, `lighterCleared`. Activité : tout motif qui
+commence par « connexion trop lente » est rangé avec les connexions lentes (`isSlowLinkReason`), jamais
+contre le fichier. Panneau technique : débit reçu, besoin, verdict, palier en cours.
+
+**Porteurs.** `slowLinkPolicy.ts`, `networkTrouble.ts`, `unsentPosition.ts`, `transcodePolicy.ts`,
+`SlowLinkPopup`, `buildDeviceProfile` (`lighter`), `LinkMeter.recentMeasure`, `diagCurrentWait`,
+`PlayerLifecycle.reclaim`. **Appelants.** `ExperimentalPlayerHost`, `PlayerHost` / `ActivePlayer`,
+`PlaybackProvider`, `usePlaybackSession`, `HttpByteSource`, routes `direct`, `playback/start`,
+`playback/stop`. **Tests.** `slowLinkPolicy.test.ts`, `ExperimentalPlayerHost.test.tsx` (« §78 », « les
+saccades »), `PlayerHost-connexion-lente.test.tsx`, `deviceProfile.test.ts`, `unsentPosition.test.ts`,
+`playback-stop-late.test.ts`, `networkTrouble.test.ts`, `webcodecs-byteSource.test.ts`,
+`PlaybackProvider.test.tsx`, `transcodePolicy.test.ts`, `activity-connexion-lente.test.ts`.
+
+**Différent exprès.** Le serveur renonce à 20 s (son chien de garde), le natif à 35 s : la fenêtre
+« moyenne » des 20 s n'a donc pas le temps de paraître côté serveur — l'écran la remplace. Safari en HLS
+natif ne mesure rien : inchangé. La fenêtre des saccades ne se retire pas seule : le spectateur la ferme.
+
+**Décidé le 12/10/2026.**

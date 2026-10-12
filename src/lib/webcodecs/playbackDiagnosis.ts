@@ -657,16 +657,16 @@ export function diagWaitStarted(lead: number | null): void {
  * secondes qui l'ont précédée et sa propre durée — le tampon s'est vidé avant qu'elle commence.
  * Les attentes trop brèves pour se voir ne sont pas comptées, comme dans `SessionTally`.
  */
-export function diagWaitEnded(counted = true): void {
+export function diagWaitEnded(counted = true): { verdict: Verdict; ms: number } | null {
   try {
     const session = current;
-    if (!session || session.waitStartedAt === null) return;
+    if (!session || session.waitStartedAt === null) return null;
     const started = session.waitStartedAt;
     const lead = session.waitLead;
     session.waitStartedAt = null;
     session.waitLead = null;
     const end = now();
-    if (!counted || end - started < MIN_WAIT_MS) return;
+    if (!counted || end - started < MIN_WAIT_MS) return null;
     const w = windowOf(session, Math.max(session.startedAt, started - BEFORE_WAIT_MS), end);
     const verdict = verdictOf(w, lead);
     session.waits[verdict] += 1;
@@ -681,8 +681,28 @@ export function diagWaitEnded(counted = true): void {
           `envois ${Math.round(w.appendMs)} ms, tâches longues ${Math.round(w.longTaskMs)} ms`
       );
     }
+    return { verdict, ms: end - started };
   } catch {
     /* une mesure n'est pas une lecture */
+    return null;
+  }
+}
+
+/**
+ * L'attente en cours, classée comme elle le serait si elle finissait maintenant — pour la fenêtre
+ * des saccades (§78), qui n'attend pas la fin d'un blocage de plus de cinq secondes pour le dire.
+ * `null` hors attente. Ne compte rien : seule `diagWaitEnded` fait le bilan.
+ */
+export function diagCurrentWait(): { verdict: Verdict; ms: number } | null {
+  try {
+    const session = current;
+    if (!session || session.waitStartedAt === null) return null;
+    const started = session.waitStartedAt;
+    const end = now();
+    const w = windowOf(session, Math.max(session.startedAt, started - BEFORE_WAIT_MS), end);
+    return { verdict: verdictOf(w, session.waitLead), ms: end - started };
+  } catch {
+    return null;
   }
 }
 

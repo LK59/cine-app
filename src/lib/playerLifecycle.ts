@@ -319,6 +319,18 @@ export class PlayerLifecycle {
   }
 
   /**
+   * Le spectateur reprend la main depuis l'écran « Lecture impossible : la connexion est trop
+   * lente » pour demander la version allégée (DECISIONS.md §78) : l'écran avait passé la main
+   * (`stepAside`), le choix la rend — le temps que `fallToStable` la passe, cette fois au lecteur
+   * serveur. Jamais pendant la fermeture.
+   */
+  reclaim(): boolean {
+    if (this.closing) return false;
+    this.steppedAside = false;
+    return true;
+  }
+
+  /**
    * La ligne `stop` peut-elle partir ? Vrai une seule fois — et jamais après avoir passé la main :
    * la ligne `fallback` a déjà raconté la fin de la séance ici, le lecteur serveur prend la suite.
    */

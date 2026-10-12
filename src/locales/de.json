@@ -1617,11 +1617,12 @@
     "loadingTooLong": "Das dauert zu lange. Versuch's erneut.",
     "slowLink": {
       "hint": "Langsame Verbindung…",
-      "notice": "Verbindung zu langsam für diesen Film (≈{recv} Mbit/s empfangen, er braucht etwa {need}).",
-      "lighter": "Leichtere Version",
-      "title": "Verbindung zu langsam",
-      "detail": "≈{recv} Mbit/s empfangen, dieser Film braucht etwa {need}. Versuch's erneut, wenn die Verbindung besser ist.",
-      "message": "Verbindung zu langsam für diesen Film (≈{recv} Mbit/s empfangen, er braucht etwa {need}). Versuch's erneut, wenn die Verbindung besser ist."
+      "popup": "Deine Verbindung scheint langsam zu sein",
+      "popupStutter": "Deine Verbindung scheint langsam zu sein, deshalb ruckelt es.",
+      "failed": "Wiedergabe nicht möglich: Die Verbindung ist zu langsam.",
+      "lighter": "Leichtere Version (geringere Qualität)",
+      "unstable": "Verbindung verloren oder instabil…",
+      "subtitlesGenerating": "Untertitel werden noch erstellt: in der leichteren Version nicht verfügbar. Sie sind es, sobald die Erstellung abgeschlossen ist."
     },
     "unsupportedBrowser": "Dieser Browser kann diesen Stream nicht abspielen.",
     "playbackInterruptedCheckConnection": "Die Wiedergabe wurde unterbrochen. Prüfe deine Verbindung und versuch's erneut.",
@@ -1638,6 +1639,8 @@
       "linkSlow": "zu langsam",
       "linkUnknown": "noch nicht gemessen",
       "linkFrozen": "zum Zeitpunkt des Fehlers gemessen",
+      "linkLighter": "Leichtere Version",
+      "linkLighterValue": "Stufe {tier} · {rate}",
       "reason": "Grund",
       "container": "Container",
       "video": "Video",

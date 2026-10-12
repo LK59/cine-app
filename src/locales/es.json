@@ -1617,11 +1617,12 @@
     "loadingTooLong": "Esto está tardando demasiado. Inténtalo de nuevo.",
     "slowLink": {
       "hint": "Conexión lenta…",
-      "notice": "Conexión demasiado lenta para esta película (≈{recv} Mbit/s recibidos, necesita unos {need}).",
-      "lighter": "Versión ligera",
-      "title": "Conexión demasiado lenta",
-      "detail": "≈{recv} Mbit/s recibidos, esta película necesita unos {need}. Vuelve a intentarlo cuando la conexión mejore.",
-      "message": "Conexión demasiado lenta para esta película (≈{recv} Mbit/s recibidos, necesita unos {need}). Vuelve a intentarlo cuando la conexión mejore."
+      "popup": "Tu conexión parece lenta",
+      "popupStutter": "Tu conexión parece lenta, lo que provoca tirones.",
+      "failed": "No se puede reproducir: la conexión es demasiado lenta.",
+      "lighter": "Versión ligera (calidad reducida)",
+      "unstable": "Conexión perdida o inestable…",
+      "subtitlesGenerating": "Subtítulos en generación: no disponibles en la versión ligera. Lo estarán cuando termine la generación."
     },
     "unsupportedBrowser": "Este navegador no puede reproducir este flujo.",
     "playbackInterruptedCheckConnection": "La reproducción se interrumpió. Comprueba tu conexión e inténtalo de nuevo.",
@@ -1638,6 +1639,8 @@
       "linkSlow": "demasiado lenta",
       "linkUnknown": "aún sin medir",
       "linkFrozen": "medida en el momento del fallo",
+      "linkLighter": "Versión ligera",
+      "linkLighterValue": "nivel {tier} · {rate}",
       "reason": "Motivo",
       "container": "Contenedor",
       "video": "Vídeo",

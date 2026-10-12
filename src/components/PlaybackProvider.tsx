@@ -7,6 +7,8 @@ import { isAwaitingFresh } from "@/lib/persistentCache";
 import { setWatchingFullScreen } from "@/lib/playbackBusy";
 import { flushOrphanStops } from "@/lib/unsentStop";
 import { flushUnsentLines } from "@/lib/unsentLines";
+import { flushUnsentPositions } from "@/lib/unsentPosition";
+import { carriedLighter } from "@/lib/slowLinkPolicy";
 import { sleepTimerStore } from "@/lib/sleepTimer";
 import { introAllowedFor, introKey, preloadIntroArt, resolveIntroArt, startIntroClock, type IntroCacheReader, type PlaybackIntroArt } from "@/lib/playbackIntro";
 
@@ -67,6 +69,12 @@ export interface PlaybackSession {
    * L'épisode suivant, ou toute nouvelle séance, repart par l'aiguillage ordinaire.
    */
   reloadedOnServer?: string;
+  /**
+   * Le palier de version allégée hérité d'une séance allégée qui s'est arrêtée il y a moins de deux
+   * minutes (DECISIONS.md §78, `carriedLighter`) — posé à l'ouverture et à l'épisode suivant, jamais
+   * ailleurs. Présent, la lecture part directement au lecteur serveur à ce débit.
+   */
+  lighter?: { targetBps: number; tier: number };
   /** Resolves the episode after `currentItemId`, if any — recomputed on every advance so the
    *  "next up" prompt keeps working after auto-advancing more than once in a row. Lost across a
    *  reload-based track switch (the page context it closed over doesn't survive) — an accepted,
@@ -143,6 +151,8 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     const flush = () => {
       void flushOrphanStops();
       void flushUnsentLines();
+      // Les positions qu'une coupure a gardées sur l'appareil (§78).
+      void flushUnsentPositions();
     };
     flush();
     const timer = setInterval(flush, 60_000);
@@ -270,7 +280,9 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     openCounter += 1;
     const introArt = prepareIntro(s, openCounter);
     // Absent plutôt que nul quand rien n'est trouvé : la séance garde la forme que ses lecteurs connaissent.
-    setSession({ ...s, openId: openCounter, ...(introArt ? { introArt } : {}) });
+    // La règle des deux minutes (§78) : décidée ici, une fois, pour toute la séance.
+    const lighter = carriedLighter();
+    setSession({ ...s, openId: openCounter, ...(introArt ? { introArt } : {}), ...(lighter ? { lighter } : {}) });
     setMode("full");
   }, [prepareIntro]);
 
@@ -305,7 +317,10 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     // en cours est lue par la référence que l'effet plus haut tient à jour.
     const current = currentSessionRef.current;
     const introArt = current ? prepareIntro({ ...current, itemId: next.itemId, resumeAt: 0 }, current.openId) : null;
-    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt: 0, introArt } : prev));
+    // L'épisode suivant d'une séance allégée en hérite par la même règle (§78) : l'arrêt de l'épisode
+    // vient d'être rapporté, et il a retenu son palier.
+    const lighter = carriedLighter() ?? undefined;
+    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt: 0, introArt, lighter } : prev));
   }, [prepareIntro]);
 
   // Resumes into a WebKit reload-based track switch — see PLAYER_RELOAD_INTENT_KEY. Runs once on

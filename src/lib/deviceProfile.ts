@@ -1,3 +1,4 @@
+import { lighterMaxWidth } from "@/lib/slowLinkPolicy";
 import type { CodecSupport } from "@/lib/codecSupport";
 
 export interface JellyfinDeviceProfile {
@@ -94,6 +95,18 @@ export interface DeviceProfileOptions {
    * recours de l'échelle (`forceAudioTranscode`), pour un son dont on ne sait rien.
    */
   reencodeAudio?: "stereo" | "surround";
+  /**
+   * La « version allégée » (DECISIONS.md §78) : HEVC si l'appareil le lit jusqu'en 10 bits, sinon
+   * H.264 ; SDR seulement (Jellyfin ramène le HDR par mappage de tons) ; une largeur maximale
+   * (`lighterMaxWidth`) par une condition `Width` du profil de chaque codec vidéo — Jellyfin écrit
+   * alors `MaxWidth` dans son adresse et réduit l'image (vérifié le 12/10/2026 ; `MaxWidth` dans le
+   * corps ou la requête de PlaybackInfo est ignoré). Absente, le profil est celui d'avant, à l'octet.
+   *
+   * HEVC seulement avec le 10 bits : pour une source 10 bits, le maître de Jellyfin annonce le profil
+   * de la *source* (`hvc1.2.4…`, Main10) alors que la sortie est en Main 8 bits — un appareil sans
+   * Main10 qui s'y fierait refuserait à tort (relevé du 12/10/2026).
+   */
+  lighter?: { targetBps: number };
 }
 
 export function buildDeviceProfile(
@@ -111,6 +124,11 @@ export function buildDeviceProfile(
     .filter(([, supported]) => supported)
     .map(([codec]) => codec);
 
+  // La version allégée (§78) : le codec de sortie et la largeur maximale, décidés ici une fois.
+  const lighterHevc = hevc10 && videoCodecs.includes("hevc");
+  const lighter = options.lighter
+    ? { codecs: lighterHevc ? "hevc,h264" : "h264", maxWidth: lighterMaxWidth(options.lighter.targetBps, lighterHevc) }
+    : null;
   const directPlayProfiles: JellyfinDeviceProfile["DirectPlayProfiles"] =
     videoCodecs.length && audioCodecs.length
       ? [{ Container: "mp4,m4v", Type: "Video", VideoCodec: videoCodecs.join(","), AudioCodec: audioCodecs.join(",") }]
@@ -137,7 +155,7 @@ export function buildDeviceProfile(
         // Verified against a real server: leaving AudioCodec hardcoded to "aac" here made
         // Jellyfin re-encode already-browser-compatible AC3/EAC3 audio for no reason on every
         // container-only remux.
-        VideoCodec: (videoCodecs.length ? videoCodecs : ["h264"]).join(","),
+        VideoCodec: lighter ? lighter.codecs : (videoCodecs.length ? videoCodecs : ["h264"]).join(","),
         AudioCodec: options.reencodeAudio ? "aac" : (audioCodecs.length ? audioCodecs : ["aac"]).join(","),
         Protocol: "hls",
         Context: "Streaming",
@@ -149,10 +167,11 @@ export function buildDeviceProfile(
         Type: "Video" as const,
         Codec: codec,
         Conditions: [
-          { Condition: "EqualsAny", Property: "VideoRangeType", Value: SAFE_VIDEO_RANGES, IsRequired: false },
+          { Condition: "EqualsAny", Property: "VideoRangeType", Value: lighter ? "SDR" : SAFE_VIDEO_RANGES, IsRequired: false },
           ...(codec === "hevc" && !hevc10
             ? [{ Condition: "LessThanEqual", Property: "VideoBitDepth", Value: "8", IsRequired: false }]
             : []),
+          ...(lighter ? [{ Condition: "LessThanEqual", Property: "Width", Value: String(lighter.maxWidth), IsRequired: false }] : []),
         ],
       })),
       // Voir `reencodeAudio` : une source qui ne passe pas cette condition ne peut être ni lue

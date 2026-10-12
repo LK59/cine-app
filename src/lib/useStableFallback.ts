@@ -62,6 +62,19 @@ export interface StableTakeover {
    * l'épisode suivant (`castCarriedTo` le recopie tel quel).
    */
   castTarget?: "chromecast";
+  /**
+   * La « version allégée » demandée par le spectateur (DECISIONS.md §78) : un choix, pas un échec —
+   * comme la diffusion, le titre n'entre pas dans `handedOver`, et la prochaine lecture repart sur le
+   * lecteur natif (sauf la règle des deux minutes, `carriedLighter`).
+   */
+  lighter?: boolean;
+  /**
+   * Le sous-titre choisi, en index Jellyfin, que le lecteur serveur rallume (§78) ; `null` : aucun.
+   * Absent : le lecteur serveur garde son défaut, comme avant.
+   */
+  subtitleStreamIndex?: number | null;
+  /** Une génération de sous-titres était en cours au passage : le lecteur serveur le dit, brièvement. */
+  subtitleGenerating?: boolean;
 }
 
 /**
@@ -87,6 +100,11 @@ export function takeoverFor(takeover: StableTakeover | null | undefined, session
 /** Cette lecture-ci est-elle en diffusion ? Seul le relais de sa séance le dit — voir `stepAside`. */
 export function castingNow(takeover: StableTakeover | null | undefined, session: unknown): boolean {
   return takeoverFor(takeover, session)?.cast === true;
+}
+
+/** Cette lecture-ci est-elle passée en version allégée (§78) ? Seul le relais de sa séance le dit. */
+export function lighterNow(takeover: StableTakeover | null | undefined, session: unknown): boolean {
+  return takeoverFor(takeover, session)?.lighter === true;
 }
 
 /**
@@ -205,7 +223,8 @@ export function useStableFallback(): StableFallback {
     // passait pour illisible jusqu'au rechargement de l'app dès qu'on fermait le lecteur pendant
     // une diffusion au lieu de la rendre : chaque relance partait au lecteur serveur
     // (*Ted Lasso*, 25/09/2026).
-    if (resumeInto?.cast) {
+    // La version allégée aussi (§78) : un choix du spectateur, pour cette lecture seulement.
+    if (resumeInto?.cast || resumeInto?.lighter) {
       setReason(why);
       setTakeover(resumeInto);
       setReturning(null);

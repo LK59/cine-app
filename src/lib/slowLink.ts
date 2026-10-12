@@ -15,8 +15,6 @@
 // Mesure seulement, sur le chemin même qui va mal : rien ici ne lève (« A check that runs on
 // someone else's error path must not become the error », CLAUDE.md).
 
-import { CRAWL, USABLE_SHARE } from "@/lib/networkBitrate";
-
 /**
  * Le motif écrit au journal (`reason` des lignes `fallback` et `error`). Stable : le panneau
  * Activité le reconnaît pour ranger ces séances du côté du réseau, pas du fichier (`seances.ts`).
@@ -29,6 +27,9 @@ export const SLOW_LINK_REASON = "connexion trop lente";
  * panneau Activité le range au même endroit (`isSlowLinkReason`).
  */
 export const SLOW_LINK_LIGHTER_REASON = `${SLOW_LINK_REASON} (version allégée demandée)`;
+
+/** La version allégée choisie en pleine lecture, sur la fenêtre des saccades (§78). Même préfixe. */
+export const SLOW_LINK_STUTTER_REASON = `${SLOW_LINK_REASON} (saccades, version allégée demandée)`;
 
 /** Un motif de journal qui accuse le lien, pas le fichier : le verdict, ou la version allégée demandée. */
 export function isSlowLinkReason(reason: string | null | undefined): boolean {
@@ -57,13 +58,6 @@ export const MIN_RECEIVED_BYTES = 256 * 1024;
  * absorbe aussi ce qu'une moyenne cache — un passage plus lourd que le reste, les en-têtes.
  */
 export const SLOW_SHARE = 0.5;
-
-/**
- * Le débit le plus bas que le lecteur serveur sache demander à Jellyfin (`CRAWL`, networkBitrate.ts).
- * Sous lui, même la version réduite ne passe pas : lui confier le film ne ferait qu'ajouter une
- * attente de 20 s avant le même échec.
- */
-export const LOWEST_SERVER_BPS = CRAWL;
 
 /** Une connexion lente, validée : les chiffres qui l'ont décidée partent avec elle. */
 export interface SlowLink {
@@ -105,7 +99,7 @@ export function slowLinkVerdict(measure: LinkMeasure | null | undefined, needBps
   }
 }
 
-// --- pendant l'ouverture : l'indice, puis le message chiffré ---------------------------------------
+// --- pendant l'ouverture : les seuils de l'indice et des fenêtres (décidées dans slowLinkPolicy.ts) ---
 
 /**
  * Le temps de réception avant de *dire* qu'un lien semble lent (l'indice « Connexion lente… » sous
@@ -119,55 +113,12 @@ export const HINT_MEASURED_MS = 5_000;
 /**
  * « Très en dessous du besoin » : moins du quart du débit moyen du fichier — quatre secondes de réseau
  * pour chaque seconde de film. Avec les preuves du verdict (10 s de réception, 256 Kio), l'ouverture
- * montre alors le message chiffré, « Version allégée » et « Fermer » — sans rien abandonner : le
- * chargement continue derrière, et le renoncement reste celui des 35 s / 20 s (informer tôt, ne
- * jamais abandonner tôt). Le cas réel du 12/10/2026 (Edge d'Augustine : morceaux de 1 Mio arrivés à
- * 2, 7, 14 et 25 s, ≈ 0,3 Mbit/s reçus pour 3,9 demandés) est sous 10 % dès dix secondes : la marge
- * jusqu'à 25 % est large. Entre 25 % et 50 %, l'indice seul — une connexion moyenne a le temps de se
- * rattraper.
+ * montre la fenêtre « Votre connexion semble lente » (Version allégée · Réessayer · Fermer) sans rien
+ * abandonner (`openingAdvice`, slowLinkPolicy.ts, DECISIONS.md §78). Le cas réel du 12/10/2026 (Edge
+ * d'Augustine : ≈ 0,3 Mbit/s reçus pour 3,9 demandés) est sous 10 % dès dix secondes : la marge
+ * jusqu'à 25 % est large. Entre 25 % et 50 %, la fenêtre attend 20 s sans image.
  */
 export const NOTICE_SHARE = 0.25;
-
-/** Ce que le lien dit pendant l'ouverture : l'indice, et le message chiffré avec ses chiffres. */
-export interface OpeningLink {
-  /** Au moins 5 s de réception, des octets reçus, et moins de la moitié du besoin. */
-  hint: boolean;
-  /** Le message chiffré : les preuves du verdict (10 s, 256 Kio) sous le quart du besoin. */
-  notice: SlowLink | null;
-}
-
-/**
- * Lu chaque seconde pendant une ouverture. Ne lève jamais ; sans besoin connu, sans mesure, ou sans
- * un octet reçu, rien (un lien qui n'a rien livré n'est pas « lent » : une coupure a son propre
- * écran, et un serveur qui prépare sa réponse n'est pas la faute du lien).
- *
- * `noticeShown` : le message est déjà à l'écran. Il y reste, chiffres à jour, tant que le débit est
- * sous la moitié du besoin — il ne clignote pas autour du quart —, et s'efface au-dessus.
- */
-export function openingLinkState(
-  measure: LinkMeasure | null | undefined,
-  needBps: number | null | undefined,
-  noticeShown = false
-): OpeningLink {
-  try {
-    if (!measure || typeof needBps !== "number" || !Number.isFinite(needBps) || needBps <= 0) return { hint: false, notice: null };
-    const { bytes, receivingMs } = measure;
-    if (!Number.isFinite(bytes) || !Number.isFinite(receivingMs) || !(bytes > 0)) return { hint: false, notice: null };
-    if (receivingMs < HINT_MEASURED_MS) return { hint: false, notice: null };
-    const recvBps = (bytes * 8) / (receivingMs / 1000);
-    if (!(recvBps < SLOW_SHARE * needBps)) return { hint: false, notice: null };
-    const slow = slowLinkVerdict(measure, needBps);
-    const notice = slow && (noticeShown || slow.recvBps < NOTICE_SHARE * needBps) ? slow : null;
-    return { hint: true, notice };
-  } catch {
-    return { hint: false, notice: null };
-  }
-}
-
-/** Le lecteur serveur peut-il aider ? Seulement si sa version la plus réduite passe par ce lien. */
-export function serverCanCarry(slow: SlowLink): boolean {
-  return slow.recvBps >= LOWEST_SERVER_BPS;
-}
 
 /** Les champs de la ligne de journal : chiffres arrondis, lisibles avec `jq`. */
 export function slowLinkFields(slow: SlowLink): Record<string, number> {
@@ -176,27 +127,6 @@ export function slowLinkFields(slow: SlowLink): Record<string, number> {
     needMbps: Math.round((slow.needBps / 1e6) * 10) / 10,
     measuredS: Math.round(slow.measuredMs / 100) / 10,
     bytes: Math.round(slow.bytes),
-  };
-}
-
-/**
- * Les deux chiffres du message, dans la langue du spectateur : « ≈0,3 Mbit/s reçus, il en faut
- * environ 4 ». Le reçu garde une décimale sous 10 (jamais « 0 » : au moins 0,1) ; le besoin est
- * arrondi à l'unité dès 2 Mbit/s — « environ 3,9 » ne dit rien de plus que « environ 4 ».
- */
-export function slowLinkFigures(slow: SlowLink, locale: string): { recv: string; need: string } {
-  const recv = slow.recvBps / 1e6;
-  const need = slow.needBps / 1e6;
-  const format = (value: number, digits: number) => {
-    try {
-      return new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value);
-    } catch {
-      return value.toFixed(digits);
-    }
-  };
-  return {
-    recv: format(recv < 10 ? Math.max(0.1, Math.round(recv * 10) / 10) : Math.round(recv), 1),
-    need: format(need >= 2 ? Math.round(need) : Math.round(need * 10) / 10, 1),
   };
 }
 
@@ -268,6 +198,36 @@ export class LinkMeter {
         }
       },
     };
+  }
+
+  /**
+   * Ce que le lien a livré pendant les `windowMs` dernières millisecondes : les octets arrivés dans la
+   * fenêtre, et l'union des intervalles de réception qui y tombent. Pour la lecture du lecteur serveur
+   * (hls.js compte ses octets au fil de l'eau) : le débit *récent*, que la moyenne de toute la séance
+   * noierait après une heure de film.
+   */
+  recentMeasure(windowMs: number): LinkMeasure {
+    try {
+      const at = this.clock();
+      const from = at - windowMs;
+      let bytes = 0;
+      for (let i = this.arrivals.length - 1; i >= 0 && this.arrivals[i][0] > from; i--) bytes += this.arrivals[i][1];
+      const spans = this.requests
+        .filter((r) => r.headersAt !== null)
+        .map((r) => [Math.max(r.headersAt as number, from), r.endAt ?? at] as const)
+        .filter(([a, b]) => b > a)
+        .sort((x, y) => x[0] - y[0]);
+      let receivingMs = 0;
+      let end = -Infinity;
+      for (const [a, b] of spans) {
+        if (b <= end) continue;
+        receivingMs += b - Math.max(a, end);
+        end = b;
+      }
+      return { bytes, receivingMs };
+    } catch {
+      return { bytes: 0, receivingMs: 0 };
+    }
   }
 
   /** Les Mb/s arrivés sur les `ms` dernières millisecondes (horloge murale) — pour la chronologie. */
@@ -379,44 +339,6 @@ export async function readCounted(res: Response, metered: MeteredRequest): Promi
 
 // --- ce que le lecteur serveur en retient ---------------------------------------------------------
 
-/**
- * Le débit mesuré par le lecteur natif, gardé pour le lecteur serveur qui prend le relais du même
- * titre : sans lui, le serveur négociait le débit du fichier (`pickMaxBitrate` ne voit pas ce lien,
- * Chrome plafonnant `downlink` à 10 Mbit/s) et échouait de la même façon vingt secondes plus tard.
- * Par titre et pour dix minutes : le temps du relais et de quelques « Réessayer », pas davantage —
- * un lien qui se rétablit ne doit pas brider le film suivant.
- */
-const HINT_TTL_MS = 10 * 60_000;
-const hints = new Map<string, { recvBps: number; at: number }>();
-
-export function noteSlowLink(itemId: string, slow: SlowLink, now = Date.now()): void {
-  try {
-    hints.set(itemId, { recvBps: slow.recvBps, at: now });
-  } catch {
-    /* rien */
-  }
-}
-
-/**
- * Le plafond à demander pour ce titre : celui de `pickMaxBitrate`, abaissé à ce que le lien mesuré
- * peut porter (la même part réservée que `pickMaxBitrate`, jamais sous `CRAWL`) — et inchangé sans
- * mesure récente pour ce titre, c'est-à-dire dans tous les cas ordinaires.
- */
-export function capForSlowLink(itemId: string, maxBitrate: number, now = Date.now()): number {
-  try {
-    const hint = hints.get(itemId);
-    if (!hint || now - hint.at > HINT_TTL_MS) return maxBitrate;
-    return Math.min(maxBitrate, Math.max(CRAWL, Math.round(hint.recvBps * USABLE_SHARE)));
-  } catch {
-    return maxBitrate;
-  }
-}
-
-/** Pour les tests. */
-export function forgetSlowLinks(): void {
-  hints.clear();
-}
-
 /** Le débit moyen d'un fichier, d'après son poids et sa durée — ce que le lecteur natif doit tenir. */
 export function fileNeedBps(sizeBytes: number | null | undefined, seconds: number | null | undefined): number | null {
   if (typeof sizeBytes !== "number" || typeof seconds !== "number") return null;
@@ -474,6 +396,8 @@ export interface LinkReading {
   needBps: number | null;
   verdict: "ok" | "slow" | "unknown";
   frozen: boolean;
+  /** Le palier de version allégée en cours (§78) : débit demandé à Jellyfin et rang. */
+  lighter?: { targetBps: number; tier: number } | null;
 }
 
 /** Le verdict d'une mesure en cours. « ok » demande autant de preuves que « trop lente ». */

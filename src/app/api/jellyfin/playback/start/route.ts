@@ -1,3 +1,4 @@
+import { videoTranscodingAllowed } from "@/lib/transcodePolicy";
 import { publicOrigin } from "@/lib/publicOrigin";
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
@@ -142,6 +143,11 @@ export async function POST(req: NextRequest) {
    * est un PCE, et les quatre essais finissaient sur le même refus. Celui-ci ne copie plus rien.
    */
   const forceAudioTranscode = body?.forceAudioTranscode === true;
+  /**
+   * La « version allégée » (DECISIONS.md §78) : HEVC ou H.264, SDR, 1080p au plus, au débit demandé —
+   * le profil le décide (`buildDeviceProfile`, `lighter`). Absente, le profil est l'ordinaire.
+   */
+  const lighter = body?.lighter === true;
   const disableAudioCodecs = Array.isArray(body?.disableAudioCodecs)
     ? (body.disableAudioCodecs as unknown[]).filter((c): c is string => typeof c === "string" && /^[a-z0-9]{1,16}$/.test(c))
     : [];
@@ -168,7 +174,7 @@ export async function POST(req: NextRequest) {
         startTicks,
         deviceProfile: castTarget
           ? buildChromecastProfile(maxBitrate, { reencodeAudio })
-          : buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast, reencodeAudio }),
+          : buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast, reencodeAudio, ...(lighter ? { lighter: { targetBps: maxBitrate } } : {}) }),
       });
     let info = await negotiate(forceAudioTranscode ? "stereo" : undefined);
     // Un son que Jellyfin copierait et que le navigateur refuserait — l'AAC à PCE, voir
@@ -335,7 +341,7 @@ export async function POST(req: NextRequest) {
     // Best-effort: a failed "now playing" report shouldn't block playback itself.
     // Same for intro/credits timestamps — 404s for movies and unanalyzed
     // episodes, which just means no skip-intro / next-up prompt for this item.
-    const [, timestamps, naming] = await Promise.all([
+    const [, timestamps, naming, transcodingAllowed] = await Promise.all([
       bench
         ? Promise.resolve()
         : jellyfin
@@ -345,6 +351,8 @@ export async function POST(req: NextRequest) {
       jellyfin.getEpisodeTimestamps(itemId).catch(() => null),
       // Alongside the others, so naming the film costs nothing on the way to its first frame.
       jellyfin.getItemNaming(session.jfId, itemId).catch(() => null),
+      // La version allégée est un transcodage vidéo : permis au compte, ou pas proposée (§78).
+      config.player.serverFallback ? videoTranscodingAllowed(session.jfId) : Promise.resolve(false),
     ]);
 
     /**
@@ -403,6 +411,13 @@ export async function POST(req: NextRequest) {
       /** L'adresse que l'élément reçoit, et que le téléviseur ira chercher s'il la prend. */
       castUrl,
       isDirectPlay,
+      /**
+       * Le débit du fichier d'origine, en pleine qualité (§78) : ce que le lien doit retrouver, pendant
+       * une version allégée, pour que la lecture suivante revienne au lecteur natif.
+       */
+      /** La « version allégée » est-elle possible pour ce compte (§78) ? */
+      lighterAllowed: transcodingAllowed,
+      sourceBitrateBps: typeof source.Bitrate === "number" && source.Bitrate > 0 ? source.Bitrate : null,
       subtitleTracks,
       audioTracks,
       /**

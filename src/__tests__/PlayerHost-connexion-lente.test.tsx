@@ -20,7 +20,11 @@ vi.mock("@/components/PlaybackInfoPanel", () => ({ PlaybackInfoPanel: () => null
 vi.mock("@/components/ExperimentalPlayerHost", () => ({ ExperimentalPlayerHost: () => <div data-testid="natif" /> }));
 vi.mock("@/components/PlayerControls", () => ({
   VOLUME_STORAGE_KEY: "volume",
-  PlayerControls: () => <div data-testid="commandes" />,
+  PlayerControls: (props: { currentSubtitleId?: number | null; onMenuChange?: (open: boolean) => void }) => (
+    <div data-testid="commandes" data-subtitle={String(props.currentSubtitleId ?? "")}>
+      {props.onMenuChange && <button onClick={() => props.onMenuChange!(true)}>menu:ouvrir</button>}
+    </div>
+  ),
 }));
 const playback = {
   session: null as null | Record<string, unknown>,
@@ -34,11 +38,15 @@ vi.mock("@/components/PlaybackProvider", () => ({
   usePlayback: () => playback,
   PLAYER_RELOAD_INTENT_KEY: "reload-intent",
 }));
-vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy: true }) }));
+/** La préférence « lecteur serveur » du compte : vraie ici, sauf pour les tests de l'aiguillage (§78). */
+let legacy = true;
+vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy }) }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
+/** Le relais du lecteur natif, quand un test en simule un (version allégée, §78). */
+let stableTakeover: Record<string, unknown> | null = null;
 vi.mock("@/lib/useStableFallback", async (original) => ({
   ...(await original<typeof import("@/lib/useStableFallback")>()),
-  useStableFallback: () => ({ handedOver: [], negotiating: false, reason: null, takeover: null, stepAside: vi.fn(), stepBack: vi.fn(), returning: null }),
+  useStableFallback: () => ({ handedOver: [], negotiating: false, reason: null, takeover: stableTakeover, stepAside: vi.fn(), stepBack: vi.fn(), returning: null }),
 }));
 const reported: { kind: string; fields: Record<string, unknown> }[] = [];
 vi.mock("@/lib/reportPlayback", () => ({ reportPlayback: (kind: string, fields: Record<string, unknown>) => void reported.push({ kind, fields }) }));
@@ -95,10 +103,11 @@ vi.mock("hls.js", () => {
 });
 
 import { PlayerHost } from "@/components/PlayerHost";
-import { forgetSlowLinks, noteSlowLink, slowLinkVerdict } from "@/lib/slowLink";
+import { carriedLighter, forgetLighterCarry, forgetLighters, noteLighter } from "@/lib/slowLinkPolicy";
 
-const reponse = {
+const reponse: Record<string, unknown> & { playbackInfo: Record<string, unknown> & { video: Record<string, unknown> & { bitRate: number } }; subtitleTracks: unknown[] } = {
   playSessionId: "seance-jf",
+  sourceBitrateBps: 16_000_000,
   mediaSourceId: "source",
   isDirectPlay: false,
   manifestUrl: "/api/jellyfin/stream/film/master.m3u8",
@@ -140,7 +149,10 @@ beforeEach(() => {
   fake.stopLoad.mockClear();
   nativeHls = false;
   reported.length = 0;
-  forgetSlowLinks();
+  stableTakeover = null;
+  legacy = true;
+  forgetLighters();
+  forgetLighterCarry();
 });
 afterEach(() => {
   cleanup();
@@ -200,7 +212,7 @@ describe("le chien de garde des 20 s", () => {
   it("≈0,3 Mbit/s pour 3,9 demandés : la cause, nommée, avec ses chiffres", async () => {
     await mounted();
     await trickle(40_000, 21);
-    expect(document.body.textContent).toContain("player.slowLink.message");
+    expect(document.body.textContent).toContain("player.slowLink.failed");
     expect(document.body.textContent).not.toContain("player.loadingTooLong");
     const line = reported.find((r) => r.kind === "error")!.fields;
     expect(line).toMatchObject({ reason: "connexion trop lente", needMbps: 3.9, path: "serveur" });
@@ -224,10 +236,17 @@ describe("le débit demandé à Jellyfin", () => {
     expect(startBodies[0].maxBitrate).toBe(100_000_000);
   });
 
-  it("abaissé pour le titre dont le lecteur natif vient de mesurer la lenteur", async () => {
-    noteSlowLink("film", slowLinkVerdict({ bytes: (1_800_000 * 20) / 8, receivingMs: 20_000 }, 3_900_000)!);
+  it("abaissé au palier de version allégée de ce titre, avec la largeur de son barème", async () => {
+    noteLighter("film", { targetBps: 2_500_000, tier: 1 });
     await mounted();
-    expect(startBodies[0].maxBitrate).toBe(1_500_000);
+    expect(startBodies[0]).toMatchObject({ maxBitrate: 2_500_000, lighter: true });
+    expect(reported.find((r) => r.kind === "start")!.fields).toMatchObject({ lighterMbps: 2.5, lighterTier: 1 });
+  });
+
+  it("sans palier, la demande d'avant à l'octet : ni plafond abaissé, ni largeur", async () => {
+    await mounted();
+    expect(startBodies[0].lighter).toBeUndefined();
+    expect(reported.find((r) => r.kind === "start")!.fields.lighterMbps).toBeUndefined();
   });
 });
 
@@ -257,79 +276,117 @@ describe("les étapes du démarrage et la chronologie, sur les lignes du lecteur
 });
 
 /**
- * Dire la lenteur pendant le chargement, sans jamais abandonner plus tôt (DECISIONS.md §77,
- * 12/10/2026) : l'indice, puis le message chiffré et ses choix ; le chien de garde des 20 s seul renonce.
+ * Dire la lenteur pendant le chargement et la lecture, sans jamais abandonner plus tôt (DECISIONS.md §78) :
+ * l'indice, la fenêtre « Votre connexion semble lente » et ses choix, la version allégée palier par palier.
  */
-describe("pendant le chargement : l'indice et le message chiffré", () => {
+describe("pendant le chargement : l'indice et la fenêtre (§78)", () => {
   const errors = () => reported.filter((r) => r.kind === "error");
-  const notice = () => document.querySelector<HTMLElement>("[data-playback-intro-notice]");
-  const noticeButton = (label: string) => Array.from(notice()!.querySelectorAll("button")).find((b) => b.textContent === label);
+  const popup = () => document.querySelector<HTMLElement>("[data-slow-link-popup]");
+  const popupButtons = () => Array.from(popup()?.querySelectorAll("button") ?? []).map((b) => b.textContent);
+  const popupButton = (label: string) => Array.from(popup()!.querySelectorAll("button")).find((b) => b.textContent === label)!;
+  const negotiated = async (count: number) => {
+    for (let i = 0; i < 50 && startBodies.length < count; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(startBodies).toHaveLength(count);
+  };
 
-  it("un bon lien : ni indice ni message — « trop long » à 20 s, comme avant", async () => {
+  it("bon réseau : ni indice ni fenêtre — « trop long » à 20 s, comme avant", async () => {
     await mounted();
     const seen = await trickle(2_000_000, 21);
     expect(seen).not.toContain("player.slowLink.hint");
+    expect(popup()).toBeNull();
     expect(errors()).toHaveLength(1);
     expect(errors()[0].fields.reason).toBe("pas de première image en 20 s");
   });
 
-  it("≈0,3 Mbit/s : l'indice dès 5 s, le message chiffré vers 10 s sans « Version allégée », le renoncement à 20 s inchangé", async () => {
+  it("A1 + A2 : ≈0,3 Mbit/s — l'indice dès 5 s, la fenêtre vers 10 s (Allégée · Réessayer · Fermer), puis l'écran à 20 s", async () => {
     await mounted();
     const seen = await trickle(40_000, 9);
     expect(seen.slice(0, 4)).not.toContain("player.slowLink.hint");
     expect(seen.slice(5)).toEqual(Array(4).fill("player.slowLink.hint"));
     await trickle(40_000, 3);
-    expect(notice()?.textContent).toContain("player.slowLink.notice");
-    expect(noticeButton("player.slowLink.lighter")).toBeUndefined();
-    expect(noticeButton("common.close")).toBeTruthy();
-    // Rien d'abandonné : pas de ligne, une seule négociation.
+    expect(popup()!.textContent).toContain("player.slowLink.popup");
+    expect(popup()!.textContent).not.toMatch(/\d/);
+    expect(popupButtons()).toEqual(["player.slowLink.lighter", "common.retry", "common.close"]);
     expect(errors()).toHaveLength(0);
     expect(startBodies).toHaveLength(1);
     await trickle(40_000, 9);
     expect(errors()).toHaveLength(1);
     expect(errors()[0].fields.reason).toBe("connexion trop lente");
-    expect(document.body.textContent).toContain("player.slowLink.message");
+    expect(document.body.textContent).toContain("player.slowLink.failed");
+    // L'écran : Version allégée, Réessayer, Quitter.
+    expect(screenLabels()).toEqual(expect.arrayContaining(["player.slowLink.lighter", "common.retry", "player.quit"]));
     cleanup();
     const stop = reported.find((r) => r.kind === "stop")!.fields;
-    expect(stop.slowNoticeAt).toBeTypeOf("number");
-    expect(stop.slowChoice).toBeNull();
+    expect(stop.slowLink).toContain("fenêtre lente");
+    expect(stop.slowChoice).toBe("aucun");
   });
 
-  it("« Version allégée » : une négociation neuve, au débit que le lien porte", async () => {
-    // 16 Mbit/s demandés ; 2 Mbit/s reçus — sous le quart, au-dessus du plancher.
+  it("« Version allégée » : une négociation neuve au palier (moitié du mesuré, plancher 1,5), 720p au plus", async () => {
     reponse.playbackInfo.video.bitRate = 15_600_000;
     try {
       await mounted();
+      // 2 Mbit/s reçus pour 16 demandés : palier 1 = 1,5 (moitié de 2 → 1, plancher).
       await trickle(250_000, 12);
-      expect(errors()).toHaveLength(0);
-      await act(async () => void fireEvent.click(noticeButton("player.slowLink.lighter")!));
-      for (let i = 0; i < 50 && startBodies.length < 2; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
-      expect(startBodies).toHaveLength(2);
-      expect(startBodies[1].maxBitrate as number).toBeLessThan(2_000_000);
-      expect(startBodies[1].maxBitrate as number).toBeGreaterThanOrEqual(1_500_000);
+      await act(async () => void fireEvent.click(popupButton("player.slowLink.lighter")));
+      await negotiated(2);
+      expect(startBodies[1]).toMatchObject({ maxBitrate: 1_500_000, lighter: true });
       const start = reported.filter((r) => r.kind === "start")[1].fields;
-      expect(start.why).toBe("lighter");
+      expect(start).toMatchObject({ why: "lighter", lighterMbps: 1.5, lighterTier: 1 });
     } finally {
       reponse.playbackInfo.video.bitRate = 3_500_000;
     }
   });
 
-  it("« Fermer » : la fermeture ordinaire, le choix noté au bilan", async () => {
+  it("dégressif : la version allégée échoue encore — palier suivant ; au plancher, plus que Réessayer · Fermer", async () => {
+    reponse.playbackInfo.video.bitRate = 15_600_000;
+    try {
+      // Un premier palier à 5 Mbit/s, déjà en cours ; le lien mesure 2 → max(1,5, min(2,5, 1)) = 1,5.
+      noteLighter("film", { targetBps: 5_000_000, tier: 1 });
+      await mounted();
+      await trickle(250_000, 12);
+      await act(async () => void fireEvent.click(popupButton("player.slowLink.lighter")));
+      await negotiated(2);
+      expect(startBodies[1]).toMatchObject({ maxBitrate: 1_500_000 });
+      expect(reported.filter((r) => r.kind === "start")[1].fields).toMatchObject({ lighterTier: 2 });
+    } finally {
+      reponse.playbackInfo.video.bitRate = 3_500_000;
+    }
+    forgetLighters();
+    cleanup();
+    fake.config = null;
+    noteLighter("film", { targetBps: 1_500_000, tier: 3 });
     await mounted();
     await trickle(40_000, 12);
-    await act(async () => void fireEvent.click(noticeButton("common.close")!));
-    const stop = reported.find((r) => r.kind === "stop")!.fields;
-    expect(stop).toMatchObject({ why: "close", slowChoice: "fermer" });
-    await act(async () => void (await vi.advanceTimersByTimeAsync(500)));
-    expect(playback.close).toHaveBeenCalled();
+    expect(popupButtons()).toEqual(["common.retry", "common.close"]);
   });
 
-  it("≈35 % du besoin : l'indice, pas de message", async () => {
+  it("A2 « Fermer » ferme la fenêtre seulement : le chargement continue, elle ne revient pas ; Retour fait de même", async () => {
+    await mounted();
+    await trickle(40_000, 12);
+    await act(async () => void fireEvent.click(popupButton("common.close")));
+    expect(popup()).toBeNull();
+    await trickle(40_000, 3);
+    expect(popup()).toBeNull();
+    expect(playback.close).not.toHaveBeenCalled();
+    expect(startBodies).toHaveLength(1);
+    cleanup();
+    reported.length = 0;
+    fake.config = null;
+    await mounted();
+    await trickle(40_000, 12);
+    await act(async () => void fireEvent.keyDown(window, { key: "Escape" }));
+    expect(popup()).toBeNull();
+    expect(playback.close).not.toHaveBeenCalled();
+  });
+
+  it("A3 : ≈35 % — l'indice ; le chien de garde des 20 s rend le verdict, avec la version allégée", async () => {
     await mounted();
     const seen = await trickle(170_000, 19);
     expect(seen.slice(6)).toEqual(Array(13).fill("player.slowLink.hint"));
-    expect(notice()).toBeNull();
+    expect(popup()).toBeNull();
     expect(errors()).toHaveLength(0);
+    await trickle(170_000, 2);
+    expect(errors()[0].fields.reason).toBe("connexion trop lente");
   });
 
   it("un débit qui remonte : l'indice se retire", async () => {
@@ -340,7 +397,22 @@ describe("pendant le chargement : l'indice et le message chiffré", () => {
     expect(errors()).toHaveLength(0);
   });
 
-  it("Safari (HLS natif, rien de mesuré) : rien ne change", async () => {
+  it("C : hors ligne pendant le chargement — ni indice ni fenêtre, jamais d'allégée ; l'ancien « trop long »", async () => {
+    await mounted();
+    await trickle(40_000, 6);
+    Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
+    act(() => void window.dispatchEvent(new Event("offline")));
+    try {
+      await trickle(40_000, 15);
+      expect(popup()).toBeNull();
+      expect(errors()[0].fields.reason).toBe("pas de première image en 20 s");
+      expect(document.body.textContent).not.toContain("player.slowLink.lighter");
+    } finally {
+      Object.defineProperty(navigator, "onLine", { value: true, writable: true, configurable: true });
+    }
+  });
+
+  it("E : Safari (HLS natif, rien de mesuré) — rien ne change : « Le chargement prend trop de temps. Réessaie. »", async () => {
     nativeHls = true;
     render(<PlayerHost />);
     const seen: (string | null)[] = [];
@@ -349,9 +421,135 @@ describe("pendant le chargement : l'indice et le message chiffré", () => {
       seen.push(introNote());
     }
     expect(seen).not.toContain("player.slowLink.hint");
-    expect(notice()).toBeNull();
+    expect(popup()).toBeNull();
     expect(errors()).toHaveLength(1);
     expect(errors()[0].fields.reason).toBe("pas de première image en 20 s");
     expect(document.body.textContent).toContain("player.loadingTooLong");
+  });
+
+  it("version allégée non permise au compte (politique Jellyfin) : Réessayer · Fermer", async () => {
+    reponse.lighterAllowed = false;
+    try {
+      await mounted();
+      await trickle(40_000, 12);
+      expect(popupButtons()).toEqual(["common.retry", "common.close"]);
+    } finally {
+      delete reponse.lighterAllowed;
+    }
+  });
+});
+
+/** Les libellés des boutons de l'écran d'erreur du lecteur serveur. */
+function screenLabels() {
+  return Array.from(document.querySelectorAll("button")).map((b) => b.textContent);
+}
+
+describe("la lecture allégée : relais, règle des deux minutes, lien rétabli (§78)", () => {
+  const video = () => document.querySelector("video")!;
+  /**
+   * Un segment qui arrive au rythme de hls.js (une progression toutes les 250 ms) à `bytesPerSecond`,
+   * pendant `seconds` secondes : la capacité du lien, mesurée pendant la réception.
+   */
+  async function flow(bytesPerSecond: number, seconds: number) {
+    const xhr = new EventTarget() as EventTarget & { readyState: number };
+    xhr.readyState = 0;
+    fake.config!.xhrSetup!(xhr as unknown as XMLHttpRequest, "/api/jellyfin/stream/film/segment9.mp4");
+    xhr.readyState = 2;
+    xhr.dispatchEvent(new Event("readystatechange"));
+    let loaded = 0;
+    for (let q = 0; q < seconds * 4; q++) {
+      await act(async () => void (await vi.advanceTimersByTimeAsync(250)));
+      loaded += bytesPerSecond / 4;
+      xhr.dispatchEvent(Object.assign(new Event("progress"), { loaded }));
+    }
+  }
+  async function picture() {
+    await act(async () => void fireEvent(video(), new Event("loadeddata")));
+    await act(async () => void fireEvent(video(), new Event("playing")));
+  }
+
+  it("le relais du lecteur natif garde le sous-titre choisi, et dit brièvement qu'une génération ne suivra pas", async () => {
+    reponse.subtitleTracks = [{ index: 7, language: "fre", title: null, isDefault: false, url: "/sous-titre" }];
+    try {
+      stableTakeover = { resumeAt: 600, lighter: true, subtitleStreamIndex: 7, subtitleGenerating: true, owner: playback.session };
+      noteLighter("film", { targetBps: 1_500_000, tier: 1 });
+      await mounted();
+      await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+      expect(document.querySelector("[data-testid=commandes]")!.getAttribute("data-subtitle")).toBe("7");
+      expect(document.querySelector("[data-subtitle-gen-notice]")?.textContent).toBe("player.slowLink.subtitlesGenerating");
+      await act(async () => void (await vi.advanceTimersByTimeAsync(6500)));
+      expect(document.querySelector("[data-subtitle-gen-notice]")).toBeNull();
+      expect(startBodies[0]).toMatchObject({ maxBitrate: 1_500_000, startTicks: 600 * 10_000_000 });
+    } finally {
+      reponse.subtitleTracks = [];
+    }
+  });
+
+  it("l'aiguillage : sans palier hérité, le lecteur natif ; avec, le lecteur serveur ; le relais allégé aussi", async () => {
+    legacy = false;
+    render(<PlayerHost />);
+    expect(document.querySelector("[data-testid=natif]")).not.toBeNull();
+    cleanup();
+    playback.session = { itemId: "film", openId: 2, resumeAt: 0, title: "Film", lighter: { targetBps: 2_500_000, tier: 1 } };
+    render(<PlayerHost />);
+    expect(document.querySelector("[data-testid=natif]")).toBeNull();
+    cleanup();
+    playback.session = { itemId: "film", openId: 3, resumeAt: 0, title: "Film" };
+    stableTakeover = { resumeAt: 0, lighter: true, owner: playback.session };
+    render(<PlayerHost />);
+    expect(document.querySelector("[data-testid=natif]")).toBeNull();
+  });
+
+  it("moins de 2 min après une séance allégée : la lecture part directement au palier hérité (`lighterCarried`)", async () => {
+    playback.session = { itemId: "film", openId: 1, resumeAt: 0, title: "Film", lighter: { targetBps: 2_500_000, tier: 1 } };
+    await mounted();
+    expect(startBodies[0]).toMatchObject({ maxBitrate: 2_500_000, lighter: true });
+    expect(reported.find((r) => r.kind === "start")!.fields).toMatchObject({ lighterCarried: true, lighterTier: 1 });
+  });
+
+  it("une séance allégée qui s'arrête est retenue deux minutes", async () => {
+    noteLighter("film", { targetBps: 2_500_000, tier: 1 });
+    await mounted();
+    await picture();
+    cleanup();
+    expect(carriedLighter()).toEqual({ targetBps: 2_500_000, tier: 1 });
+  });
+
+  it("le lien à 115 % du besoin classique pendant 10 s : la mémoire s'efface — la lecture suivante sera native", async () => {
+    noteLighter("film", { targetBps: 2_500_000, tier: 1 });
+    await mounted();
+    await picture();
+    // 16 Mbit/s en pleine qualité ; 18,4 Mbit/s de capacité (115 %). Les premières secondes d'une
+    // réception lisent un peu bas (le morceau en cours n'a pas encore dit ses octets) : la capacité
+    // passe 110 % vers la 6e seconde, et doit tenir 10 s de plus.
+    await flow(2_300_000, 20);
+    cleanup();
+    expect(carriedLighter()).toBeNull();
+    const stop = reported.find((r) => r.kind === "stop")!.fields;
+    expect(stop.lighterCleared).toBe(true);
+    expect(stop.slowLink).toContain("lien rétabli");
+  });
+
+  it("le lien à 100 % du besoin classique : la mémoire reste — la lecture suivante sera allégée", async () => {
+    noteLighter("film", { targetBps: 2_500_000, tier: 1 });
+    await mounted();
+    await picture();
+    await flow(2_000_000, 30);
+    cleanup();
+    expect(carriedLighter()).toEqual({ targetBps: 2_500_000, tier: 1 });
+  });
+
+  it("B : un blocage réseau de plus de 5 s pendant la lecture — la fenêtre des saccades ; jamais sous un menu ouvert", async () => {
+    await mounted();
+    await picture();
+    await act(async () => void fireEvent(video(), new Event("waiting")));
+    await trickle(250_000, 6);
+    const popup = document.querySelector("[data-slow-link-popup]");
+    expect(popup?.textContent).toContain("player.slowLink.popupStutter");
+    expect(Array.from(popup!.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["player.slowLink.lighter", "common.close"]);
+    // Pas d'erreur : la lecture continue.
+    expect(reported.filter((r) => r.kind === "error")).toHaveLength(0);
+    await act(async () => void fireEvent.click(document.querySelector("[data-testid=commandes] button")!));
+    expect(document.querySelector("[data-slow-link-popup]")).toBeNull();
   });
 });
