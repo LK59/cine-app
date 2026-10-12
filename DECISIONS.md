@@ -2966,6 +2966,13 @@ présentation simulée, repli `data/`, suppression seulement du nôtre, clé jam
 `subtitleGen-routes.test.ts`, `subtitleGen-proxy.test.ts`, `trackLabel.test.ts`,
 `jellyfin-direct-route.test.ts`.
 
+**Ancrage de la demande et langues (12/10/2026).** Chaque demande de lot recopie le texte source de sa
+première et de sa dernière réplique (`batchUser`, `anchor`), et la consigne interdit tout commentaire.
+Mesuré sur 10 lots de 40 répliques (film *A.I.*) : consigne seule, 5 lots commentés (« les ids 305 à
+344 n'existent pas… ») et 4 à refaire ; consigne renforcée, 2 et 2 ; renforcée et ancrée, 0 et 0. Les
+langues cibles passent de 7 à 26 (`TARGET_LANGUAGES`) ; le chinois est le simplifié, `zho` ne
+distinguant pas l'écriture. Le calque des sous-titres porte `dir="auto"` pour l'arabe et l'hébreu.
+
 ## 70. « Générer des sous-titres » dans le lecteur natif : une entrée temporaire, des messages dits comme des sous-titres, une seule recherche de ligne
 
 **Règle.** Le lecteur natif propose, sous les pistes du menu des sous-titres, « Générer des

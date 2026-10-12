@@ -545,7 +545,7 @@ async function translateIds(job: JobRow, ids: number[], tries: number, seekLane 
         system: batchSystem(job.target),
         stable: stablePrefix(current.glossary ? parseGlossary(JSON.parse(current.glossary)) : null, cues.sources),
         cache: true,
-        user: batchUser(previous, open),
+        user: batchUser(previous, open, cues.sources),
         schemaName: "subtitle_batch",
         // ~24 jetons par réplique en lignes (mesuré), 60 au plus pour une longue ; la marge pour le reste.
         maxOutputTokens: Math.max(1024, open.length * 150),

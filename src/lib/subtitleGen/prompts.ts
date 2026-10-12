@@ -107,6 +107,9 @@ export function batchSystem(target: string): string {
     'Follow the glossary for names and for formal/informal address. "Previous translations" are the translations already made for the lines just before: stay consistent with them.',
     `If a line is only a name, a sound, or already ${language}, return it unchanged.`,
     `Output ONLY the translations, one per line, in the form "id|translation", in the requested order, nothing else.`,
+    // Mesuré le 12/10/2026 (10 lots de 40, film A.I.) : sans cette phrase ni l'ancrage de `batchUser`,
+    // 5 lots sur 10 portaient un commentaire (« les ids 305 à 344 n'existent pas… ») et 4 étaient à refaire.
+    "Never write notes, checks, reasoning, apologies or comments: your whole reply is the id|translation lines and nothing else. The requested ids always exist in the source.",
   ].join("\n");
 }
 
@@ -116,16 +119,33 @@ export function batchSystem(target: string): string {
  * identifiants consécutifs s'écrivent en intervalle ; un lot troué (moitié d'un lot dont certaines
  * lignes sont faites) les énumère.
  */
-export function batchUser(previous: { i: number; text: string }[], ids: number[]): string {
+export function batchUser(previous: { i: number; text: string }[], ids: number[], sources?: readonly string[]): string {
   const prev = previous.length > 0 ? `Previous translations (stay consistent):\n${previous.map((p) => `${p.i}|${oneLine(p.text)}`).join("\n")}\n\n` : "";
   const contiguous = ids.every((id, k) => k === 0 || id === ids[k - 1] + 1);
   const ask = ids.length === 1 ? `Translate id ${ids[0]}.` : contiguous ? `Translate ids ${ids[0]} to ${ids[ids.length - 1]}.` : `Translate ids ${ids.join(", ")}.`;
-  return `${prev}${ask}`;
+  return `${prev}${ask}${anchor(ids, sources)}`;
+}
+
+/**
+ * L'ancrage : le texte source de la première et de la dernière réplique demandées, recopié dans la
+ * demande. Sans lui, Haiku doutait que les numéros existent dans un long sous-titre et se mettait à
+ * commenter au lieu de traduire (5 lots sur 10 mesurés) ; avec lui, 0 sur 10 — il voit la zone.
+ * Sur sa propre ligne, après la demande : `idsAsked` lit la ligne de la demande, pas celle-ci.
+ */
+function anchor(ids: number[], sources?: readonly string[]): string {
+  if (!sources || ids.length === 0) return "";
+  const first = sources[ids[0]];
+  const last = sources[ids[ids.length - 1]];
+  if (first === undefined || last === undefined) return "";
+  const one = ids.length === 1;
+  return one
+    ? `\n(1 line: ${ids[0]}|${oneLine(first)})`
+    : `\n(${ids.length} lines, from ${ids[0]}|${oneLine(first)} to ${ids[ids.length - 1]}|${oneLine(last)})`;
 }
 
 /** Les identifiants qu'un message de lot demande — l'inverse de `batchUser`, pour les tests et le banc. */
 export function idsAsked(user: string): number[] {
-  const last = user.trim().split("\n").at(-1) ?? "";
+  const last = [...user.trim().split("\n")].reverse().find((l) => l.startsWith("Translate id")) ?? "";
   const range = /^Translate ids (\d+) to (\d+)\.$/.exec(last);
   if (range) return Array.from({ length: Number(range[2]) - Number(range[1]) + 1 }, (_, k) => Number(range[1]) + k);
   const list = /^Translate ids? ([\d, ]+)\.$/.exec(last);

@@ -2942,6 +2942,10 @@ export function ExperimentalPlayerHost({
             // Un message d'état de génération (« Préparation des sous-titres… ») : même place, même
             // style qu'une réplique, marqué pour qui le cherche — jamais mêlé à une vraie ligne.
             data-subtitle-notice={subtitleIsNotice ? "" : undefined}
+            // Le sens d'écriture vient du texte : une réplique arabe ou hébraïque (pistes du
+            // conteneur, ou générées depuis le 12/10/2026) mettrait sinon sa ponctuation finale du
+            // mauvais côté, la page étant écrite de gauche à droite.
+            dir="auto"
             // Ni taille ni couleur écrites ici : ce lecteur dessine ses lignes lui-même, et il
             // ignorait donc les réglages de sous-titres, qui ne touchaient que les pistes natives.
             // Un réglage qui marche un film sur deux n'est pas un réglage — voir `subtitleStyle`.

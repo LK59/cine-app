@@ -6,9 +6,16 @@ import { normaliseLanguage } from "@/lib/trackPreferences";
  * Une liste fermée, et pas « toute langue qu'Intl connaît » : chacune doit avoir un code ISO 639-2
  * pour le fichier que Jellyfin pose à côté du film (`Film.fra.srt`), et le proposer pour une
  * langue que personne ici ne lit n'aurait servi qu'à dépenser. Les quatre de l'interface d'abord,
- * puis trois voisines courantes dans la bibliothèque.
+ * puis trois voisines courantes dans la bibliothèque ; élargie le 12/10/2026 aux langues que Haiku
+ * traduit bien et que les pistes de la bibliothèque portent déjà (36 langues sur le Ticket d'or).
+ * Le chinois est le simplifié : `zh` et `zho` ne distinguent pas l'écriture, et deux fichiers
+ * `zho` se marcheraient dessus.
  */
-export const TARGET_LANGUAGES = ["fr", "en", "es", "de", "it", "pt", "nl"] as const;
+export const TARGET_LANGUAGES = [
+  "fr", "en", "es", "de", "it", "pt", "nl",
+  "pl", "sv", "da", "no", "fi", "cs", "ro", "el", "tr", "ru", "uk",
+  "ar", "he", "ja", "ko", "zh", "vi", "th", "id",
+] as const;
 export type TargetLanguage = (typeof TARGET_LANGUAGES)[number];
 
 /**
@@ -17,7 +24,11 @@ export type TargetLanguage = (typeof TARGET_LANGUAGES)[number];
  * aussi à nommer notre fichier autrement que ceux de Bazarr (`.fr.srt`) : une collision de nom
  * écraserait un sous-titre qui n'est pas le nôtre.
  */
-const ISO_639_2T: Record<TargetLanguage, string> = { fr: "fra", en: "eng", es: "spa", de: "deu", it: "ita", pt: "por", nl: "nld" };
+const ISO_639_2T: Record<TargetLanguage, string> = {
+  fr: "fra", en: "eng", es: "spa", de: "deu", it: "ita", pt: "por", nl: "nld",
+  pl: "pol", sv: "swe", da: "dan", no: "nor", fi: "fin", cs: "ces", ro: "ron", el: "ell", tr: "tur", ru: "rus", uk: "ukr",
+  ar: "ara", he: "heb", ja: "jpn", ko: "kor", zh: "zho", vi: "vie", th: "tha", id: "ind",
+};
 
 export function isTargetLanguage(code: string | null | undefined): code is TargetLanguage {
   return !!code && (TARGET_LANGUAGES as readonly string[]).includes(code);
@@ -34,6 +45,8 @@ export function twoLetter(code: string | null | undefined): string | null {
 
 /** Le nom anglais d'une langue, pour les consignes données au modèle (« French », « German »). */
 export function englishName(code: string): string {
+  // Le modèle doit savoir quelle écriture : « Chinese » seul laisse le choix (voir TARGET_LANGUAGES).
+  if (code === "zh") return "Simplified Chinese";
   try {
     return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
   } catch {

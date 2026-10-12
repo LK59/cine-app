@@ -79,6 +79,15 @@ describe("le format lignes", () => {
     expect(idsAsked(batchUser([], [4, 6, 9]))).toEqual([4, 6, 9]);
     expect(idsAsked(batchUser([], [7]))).toEqual([7]);
   });
+  // Mesuré le 12/10/2026 : sans ancrage, 5 lots sur 10 commentaient (« ces ids n'existent pas »).
+  it("ancre la demande sur le texte de la première et de la dernière réplique", () => {
+    const sources = ["Zero.", "One.", "Two\nlines.", "Three."];
+    const user = batchUser([], [1, 2, 3], sources);
+    expect(user).toBe("Translate ids 1 to 3.\n(3 lines, from 1|One. to 3|Three.)");
+    expect(idsAsked(user)).toEqual([1, 2, 3]);
+    expect(batchUser([], [2], sources)).toBe("Translate id 2.\n(1 line: 2|Two / lines.)");
+    expect(idsAsked(batchUser([], [2], sources))).toEqual([2]);
+  });
   it("reconvertit ` / ` en saut de ligne, sans toucher à une barre ordinaire", () => {
     expect(parseReplyLine("12|- Elle l'est ? / - Elle m'attend.")).toEqual({ i: 12, text: "- Elle l'est ?\n- Elle m'attend." });
     expect(parseReplyLine("13|Moitié 1/2, TCP/IP")).toEqual({ i: 13, text: "Moitié 1/2, TCP/IP" });
