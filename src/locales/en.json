@@ -322,7 +322,8 @@
         "bench": "Test bench",
         "benchPlayer": "Bench player",
         "auth": "Sign-ins",
-        "notifications": "Notifications"
+        "notifications": "Notifications",
+        "subtitleGen": "Generated subtitles"
       },
       "user": "Account",
       "allUsers": "All accounts",
@@ -1869,7 +1870,9 @@
       "forced": "Forced",
       "full": "Full",
       "sdh": "Hearing impaired",
-      "external": "external"
+      "external": "external",
+      "generated": "generated",
+      "generating": "generating…"
     },
     "onboarding": {
       "skip": "Skip",
@@ -2536,6 +2539,11 @@
       "playback": {
         "title": "Playback",
         "why": "The built-in player plays films in the browser. When a file won't play (a sound or picture the device can't decode), it hands it over to Jellyfin, which converts it on the fly — on by default, recommended. Turned off, those files show a playback error, and the server never converts anything."
+      },
+      "subtitles": {
+        "title": "Generated subtitles",
+        "why": "Translates a full subtitle of the title into the chosen language on demand, during playback, with an online AI. Without a key, the feature appears nowhere.",
+        "help": "The key stays on the server: it is never sent to devices nor written to the logs."
       }
     },
     "fields": {
@@ -2579,7 +2587,14 @@
       "POSTER_PREWARM_TUNING": "Sizes and languages of prepared posters",
       "TRUSTED_PROXIES": "Trusted reverse proxy",
       "RADARR_QUALITY_PROFILE": "Quality profile for additions",
-      "SONARR_QUALITY_PROFILE": "Quality profile for additions"
+      "SONARR_QUALITY_PROFILE": "Quality profile for additions",
+      "SUBTITLE_GEN_ENABLED": "Offer subtitle generation",
+      "SUBTITLE_GEN_PROVIDER": "Provider",
+      "SUBTITLE_GEN_API_KEY": "Provider key",
+      "SUBTITLE_GEN_MODEL": "Model",
+      "SUBTITLE_GEN_BUDGET_USD": "Monthly budget (dollars)",
+      "SUBTITLE_GEN_PRICE_INPUT": "Input price per million tokens (empty: known rate)",
+      "SUBTITLE_GEN_PRICE_OUTPUT": "Output price per million tokens (empty: known rate)"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml, under “environment”:",
@@ -2619,6 +2634,49 @@
       "wrong": "Current password is incorrect.",
       "env": "This account is set by APP_ADMIN_PASSWORD in your .env: change it there, then restart the container.",
       "forgot": "Forgot it: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
+    }
+  },
+  "subtitleGen": {
+    "admin": {
+      "noKey": "No key: subtitle generation is offered nowhere.",
+      "noPrice": "This model's price is unknown: fill in both prices to enable the feature.",
+      "price": "{model} — ${input} input, ${output} output, per million tokens",
+      "spendTitle": "This month's spending",
+      "spend": "${spent} of a ${budget} budget",
+      "usage": "{requests} requests · {rate}% of input read from cache",
+      "jobsTitle": "Jobs",
+      "noJobs": "No jobs yet.",
+      "resume": "Resume",
+      "cancel": "Cancel",
+      "actionFailed": "The action failed.",
+      "progress": "{done}/{total} lines",
+      "viewers": "{n} viewer|{n} viewers",
+      "status": {
+        "preparing": "Preparing",
+        "running": "Running",
+        "paused": "Paused",
+        "done": "Finished",
+        "failed": "Stopped",
+        "stale": "Outdated"
+      },
+      "reasons": {
+        "budget": "budget or credit exhausted",
+        "config": "key or model refused",
+        "unavailable": "provider unreachable",
+        "error": "error",
+        "no-source": "no full subtitle to translate",
+        "exists": "language already present",
+        "cancelled": "cancelled",
+        "file-changed": "video file replaced",
+        "source-changed": "source subtitle changed",
+        "stale": "outdated"
+      },
+      "present": {
+        "pending": "waiting to be sent to Jellyfin",
+        "uploaded": "sent to Jellyfin",
+        "presented": "listed in Jellyfin",
+        "failed": "served by the app (could not be sent to Jellyfin)"
+      }
     }
   }
 }

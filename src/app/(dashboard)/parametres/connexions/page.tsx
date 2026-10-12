@@ -10,6 +10,7 @@ import { useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { AdminPasswordCard } from "@/components/settings/AdminPasswordCard";
 import { DeploymentGuide, SettingsGroupCard, type Draft } from "@/components/settings/SettingsGroupCard";
+import { SubtitleGenCard } from "@/components/settings/SubtitleGenCard";
 import { SETTINGS_BY_KEY, SETTING_GROUPS, type SettingGroup, type SettingView } from "@/lib/settings/schema";
 
 /**
@@ -81,25 +82,20 @@ export default function ConnexionsPage() {
           )}
           {SETTING_GROUPS.filter((g) => g !== "deployment").map((group) => {
             const dirty = Object.keys(draft).some((k) => SETTINGS_BY_KEY.get(k)?.group === group);
-            return (
-              <SettingsGroupCard
-                key={group}
-                group={group}
-                views={views}
-                draft={draft}
-                errors={errors}
-                onDraft={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
-                onReset={reset}
-                footer={
-                  <div className="mt-4 flex justify-end">
-                    <button type="button" onClick={() => save(group)} disabled={!dirty || saving !== null} className="btn btn-primary">
-                      {saving === group ? <Loader2 size={15} className="animate-spin" /> : null}
-                      {saving === group ? t("setup.saving") : t("setup.save")}
-                    </button>
-                  </div>
-                }
-              />
+            const footer = (
+              <div className="mt-4 flex justify-end">
+                <button type="button" onClick={() => save(group)} disabled={!dirty || saving !== null} className="btn btn-primary">
+                  {saving === group ? <Loader2 size={15} className="animate-spin" /> : null}
+                  {saving === group ? t("setup.saving") : t("setup.save")}
+                </button>
+              </div>
             );
+            const onDraft = (k: string, v: string) => setDraft((d) => ({ ...d, [k]: v }));
+            // Les sous-titres générés ont leur carte : modèle prérempli, dépense, tâches (§69).
+            if (group === "subtitles") {
+              return <SubtitleGenCard key={group} views={views} draft={draft} errors={errors} onDraft={onDraft} onReset={reset} footer={footer} />;
+            }
+            return <SettingsGroupCard key={group} group={group} views={views} draft={draft} errors={errors} onDraft={onDraft} onReset={reset} footer={footer} />;
           })}
           <DeploymentGuide />
           <AdminPasswordCard />

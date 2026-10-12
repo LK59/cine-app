@@ -322,7 +322,8 @@
         "bench": "Banc d'essai",
         "benchPlayer": "Lecteur du banc",
         "auth": "Connexions",
-        "notifications": "Notifications"
+        "notifications": "Notifications",
+        "subtitleGen": "Sous-titres générés"
       },
       "user": "Compte",
       "allUsers": "Tous les comptes",
@@ -1869,7 +1870,9 @@
       "forced": "Forcés",
       "full": "Complets",
       "sdh": "Malentendants",
-      "external": "externe"
+      "external": "externe",
+      "generated": "généré",
+      "generating": "génération…"
     },
     "onboarding": {
       "skip": "Passer",
@@ -2536,6 +2539,11 @@
       "playback": {
         "title": "Lecture",
         "why": "Le lecteur intégré lit les films dans le navigateur. Quand un fichier ne passe pas (un son ou une image que l'appareil ne sait pas décoder), il le confie à Jellyfin, qui le convertit à la volée — activé par défaut, conseillé. Désactivé, ces fichiers affichent une erreur de lecture, et le serveur ne convertit jamais rien."
+      },
+      "subtitles": {
+        "title": "Sous-titres générés",
+        "why": "Traduit à la demande, pendant le film, un sous-titre complet du titre vers la langue choisie, par une IA en ligne. Sans clé, la fonction n'apparaît nulle part.",
+        "help": "La clé reste sur le serveur : elle n'est jamais envoyée aux appareils ni écrite dans les journaux."
       }
     },
     "fields": {
@@ -2579,7 +2587,14 @@
       "POSTER_PREWARM_TUNING": "Tailles et langues des affiches préparées",
       "TRUSTED_PROXIES": "Relais de confiance",
       "RADARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
-      "SONARR_QUALITY_PROFILE": "Profil de qualité des ajouts"
+      "SONARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
+      "SUBTITLE_GEN_ENABLED": "Proposer la génération de sous-titres",
+      "SUBTITLE_GEN_PROVIDER": "Fournisseur",
+      "SUBTITLE_GEN_API_KEY": "Clé du fournisseur",
+      "SUBTITLE_GEN_MODEL": "Modèle",
+      "SUBTITLE_GEN_BUDGET_USD": "Budget mensuel (dollars)",
+      "SUBTITLE_GEN_PRICE_INPUT": "Prix en entrée, par million de jetons (vide : tarif connu)",
+      "SUBTITLE_GEN_PRICE_OUTPUT": "Prix en sortie, par million de jetons (vide : tarif connu)"
     },
     "deployHint": {
       "TZ": "Dans docker-compose.yml, sous « environment » :",
@@ -2619,6 +2634,49 @@
       "wrong": "Mot de passe actuel incorrect.",
       "env": "Ce compte est fixé par APP_ADMIN_PASSWORD dans votre .env : changez-le là, puis relancez le conteneur.",
       "forgot": "Mot de passe oublié : docker exec -it cine-app node server-boot/reset-admin-password.mjs"
+    }
+  },
+  "subtitleGen": {
+    "admin": {
+      "noKey": "Aucune clé : la génération de sous-titres n'est proposée nulle part.",
+      "noPrice": "Le prix de ce modèle n'est pas connu : renseignez les deux prix pour activer la fonction.",
+      "price": "{model} — {input} $ en entrée, {output} $ en sortie, par million de jetons",
+      "spendTitle": "Dépense du mois",
+      "spend": "{spent} $ sur un budget de {budget} $",
+      "usage": "{requests} requêtes · {rate} % de l'entrée relue du cache",
+      "jobsTitle": "Tâches",
+      "noJobs": "Aucune tâche pour l'instant.",
+      "resume": "Reprendre",
+      "cancel": "Annuler",
+      "actionFailed": "L'action a échoué.",
+      "progress": "{done}/{total} répliques",
+      "viewers": "{n} spectateur|{n} spectateurs",
+      "status": {
+        "preparing": "Préparation",
+        "running": "En cours",
+        "paused": "En pause",
+        "done": "Terminée",
+        "failed": "Arrêtée",
+        "stale": "Obsolète"
+      },
+      "reasons": {
+        "budget": "budget ou crédit épuisé",
+        "config": "clé ou modèle refusés",
+        "unavailable": "fournisseur injoignable",
+        "error": "erreur",
+        "no-source": "aucun sous-titre complet à traduire",
+        "exists": "la langue existe déjà",
+        "cancelled": "annulée",
+        "file-changed": "fichier vidéo remplacé",
+        "source-changed": "sous-titre source modifié",
+        "stale": "obsolète"
+      },
+      "present": {
+        "pending": "envoi à Jellyfin en attente",
+        "uploaded": "envoyé à Jellyfin",
+        "presented": "présent dans Jellyfin",
+        "failed": "servi par l'application (envoi à Jellyfin impossible)"
+      }
     }
   }
 }

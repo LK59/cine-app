@@ -322,7 +322,8 @@
         "bench": "Prüfstand",
         "benchPlayer": "Prüfstand-Player",
         "auth": "Anmeldungen",
-        "notifications": "Benachrichtigungen"
+        "notifications": "Benachrichtigungen",
+        "subtitleGen": "Generierte Untertitel"
       },
       "user": "Konto",
       "allUsers": "Alle Konten",
@@ -1869,7 +1870,9 @@
       "forced": "Erzwungen",
       "full": "Vollständig",
       "sdh": "Hörgeschädigte",
-      "external": "extern"
+      "external": "extern",
+      "generated": "generiert",
+      "generating": "wird erstellt…"
     },
     "onboarding": {
       "skip": "Überspringen",
@@ -2536,6 +2539,11 @@
       "playback": {
         "title": "Wiedergabe",
         "why": "Der integrierte Player spielt Filme im Browser ab. Wenn eine Datei nicht abspielbar ist (ein Ton oder Bild, das das Gerät nicht dekodieren kann), übergibt er sie an Jellyfin, das sie live umwandelt — standardmäßig aktiv, empfohlen. Ausgeschaltet zeigen diese Dateien einen Wiedergabefehler, und der Server wandelt nie etwas um."
+      },
+      "subtitles": {
+        "title": "Generierte Untertitel",
+        "why": "Übersetzt auf Wunsch, während des Films, einen vollständigen Untertitel des Titels mit einer Online-KI in die gewählte Sprache. Ohne Schlüssel erscheint die Funktion nirgends.",
+        "help": "Der Schlüssel bleibt auf dem Server: Er wird nie an Geräte gesendet und nie in die Protokolle geschrieben."
       }
     },
     "fields": {
@@ -2579,7 +2587,14 @@
       "POSTER_PREWARM_TUNING": "Größen und Sprachen der vorbereiteten Poster",
       "TRUSTED_PROXIES": "Vertrauenswürdiger Reverse-Proxy",
       "RADARR_QUALITY_PROFILE": "Qualitätsprofil für Hinzufügungen",
-      "SONARR_QUALITY_PROFILE": "Qualitätsprofil für Hinzufügungen"
+      "SONARR_QUALITY_PROFILE": "Qualitätsprofil für Hinzufügungen",
+      "SUBTITLE_GEN_ENABLED": "Untertitel-Erstellung anbieten",
+      "SUBTITLE_GEN_PROVIDER": "Anbieter",
+      "SUBTITLE_GEN_API_KEY": "Schlüssel des Anbieters",
+      "SUBTITLE_GEN_MODEL": "Modell",
+      "SUBTITLE_GEN_BUDGET_USD": "Monatsbudget (Dollar)",
+      "SUBTITLE_GEN_PRICE_INPUT": "Eingabepreis pro Million Tokens (leer: bekannter Tarif)",
+      "SUBTITLE_GEN_PRICE_OUTPUT": "Ausgabepreis pro Million Tokens (leer: bekannter Tarif)"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml unter „environment“:",
@@ -2619,6 +2634,49 @@
       "wrong": "Aktuelles Passwort ist falsch.",
       "env": "Dieses Konto wird durch APP_ADMIN_PASSWORD in Ihrer .env festgelegt: dort ändern und den Container neu starten.",
       "forgot": "Vergessen: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
+    }
+  },
+  "subtitleGen": {
+    "admin": {
+      "noKey": "Kein Schlüssel: Die Untertitel-Erstellung wird nirgends angeboten.",
+      "noPrice": "Der Preis dieses Modells ist unbekannt: Beide Preise angeben, um die Funktion zu aktivieren.",
+      "price": "{model} — {input} $ Eingabe, {output} $ Ausgabe, pro Million Tokens",
+      "spendTitle": "Ausgaben dieses Monats",
+      "spend": "{spent} $ von {budget} $ Budget",
+      "usage": "{requests} Anfragen · {rate} % der Eingabe aus dem Cache gelesen",
+      "jobsTitle": "Aufträge",
+      "noJobs": "Noch keine Aufträge.",
+      "resume": "Fortsetzen",
+      "cancel": "Abbrechen",
+      "actionFailed": "Die Aktion ist fehlgeschlagen.",
+      "progress": "{done}/{total} Zeilen",
+      "viewers": "{n} Zuschauer|{n} Zuschauer",
+      "status": {
+        "preparing": "Vorbereitung",
+        "running": "Läuft",
+        "paused": "Pausiert",
+        "done": "Fertig",
+        "failed": "Gestoppt",
+        "stale": "Veraltet"
+      },
+      "reasons": {
+        "budget": "Budget oder Guthaben erschöpft",
+        "config": "Schlüssel oder Modell abgelehnt",
+        "unavailable": "Anbieter nicht erreichbar",
+        "error": "Fehler",
+        "no-source": "kein vollständiger Untertitel zum Übersetzen",
+        "exists": "Sprache bereits vorhanden",
+        "cancelled": "abgebrochen",
+        "file-changed": "Videodatei ersetzt",
+        "source-changed": "Quelluntertitel geändert",
+        "stale": "veraltet"
+      },
+      "present": {
+        "pending": "Übertragung an Jellyfin ausstehend",
+        "uploaded": "an Jellyfin gesendet",
+        "presented": "in Jellyfin vorhanden",
+        "failed": "von der App bereitgestellt (Übertragung an Jellyfin unmöglich)"
+      }
     }
   }
 }
