@@ -330,8 +330,13 @@ export function CinemaHero({
   // actually lands here the browser has usually already cached it. A failed logo falls back to
   // the written title and retries on its own (`useImageRetry`, keyed on its address).
 
+  // `justify-end-safe` : calée en bas, mais jamais au-delà du haut. Un `justify-end` simple faisait
+  // déborder une colonne trop haute *par le haut*, hors de l'écran, où rien ne se voit ni ne se
+  // fait défiler — le logo coupé sur un 13 pouces (12/10/2026). La taille du logo (CinemaLogo,
+  // `SurfaceFit`) évite d'en arriver là ; ceci garde le titre lisible si l'écran est plus court
+  // encore. Même colonne dans CinemaSeriesHero.
   return (
-    <div className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
+    <div className="relative flex h-full max-w-2xl flex-col justify-end-safe gap-3 px-8 pb-10 sm:px-12">
       {/* La clé sur le titre et ce qui le décrit, pas sur la colonne entière : posée sur la colonne,
           elle remontait aussi les commandes à chaque changement de titre, et « Lire » perdait le
           focus — au clavier, → ne marchait qu'une fois, et Entrée après un tour ne faisait rien

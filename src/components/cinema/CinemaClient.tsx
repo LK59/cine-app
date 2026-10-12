@@ -1296,7 +1296,11 @@ export function CinemaClient() {
           // s'efface, son logo glisse jusqu'à sa place dans la fiche.
           data-sheet-hero=""
           className="relative min-h-0 shrink grow-0 animate-fade-in"
-          style={{ flexBasis: HERO_BASIS }}
+          // Un conteneur de taille : le logo du titre se mesure à la hauteur de ce volet (`100cqh`),
+          // pas à celle de la fenêtre — voir `SurfaceFit` dans CinemaLogo (12/10/2026). Sans risque
+          // ici : la hauteur du volet vient de la flexbox, jamais de son contenu, et rien dedans
+          // n'est en position fixe (la containment en ferait son bloc conteneur).
+          style={{ flexBasis: HERO_BASIS, containerType: "size" }}
           // La bannière ne tourne plus sous le clavier — voir `bannerEngaged`.
           onFocusCapture={(e) => setBannerEngaged(focusFromKeyboard(e.target))}
           onBlurCapture={(e) => {

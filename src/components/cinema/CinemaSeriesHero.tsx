@@ -28,8 +28,9 @@ export function CinemaSeriesHero({
   // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
   const info = useHeroInfo("series", item.tmdbId, item);
 
+  // `justify-end-safe` : jamais de débordement par le haut — voir CinemaHero.
   return (
-    <div className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
+    <div className="relative flex h-full max-w-2xl flex-col justify-end-safe gap-3 px-8 pb-10 sm:px-12">
       {/* La clé sur le titre seul, pas sur les commandes — voir CinemaHero. */}
       <div key={item.sonarrId} className="contents">
       {onBack && <HeroBackToSpotlight onBack={onBack} />}

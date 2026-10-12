@@ -53,6 +53,25 @@ describe("le logo d'un titre", () => {
     expect(logo("Vu").style.maxHeight).toBe(measured);
   });
 
+  /**
+   * Un 13 pouces, 768 px de haut (12/10/2026) : 132 px de logo dans un volet de 338 où le reste de
+   * la bannière en prend ~200, et la colonne débordait par le haut de l'écran. La bannière se borne
+   * aussi à la hauteur de son volet ; la fiche, dont la colonne défile, garde son plafond seul.
+   */
+  it("borne le logo de la bannière à la hauteur de son volet, sans toucher la fiche", () => {
+    render(<CinemaLogo src="/volet.png" alt="Volet" surface="hero" />);
+    arrives(logo("Volet"), 500, 168); // ratio ~3 — Weathering With You
+    const hero = logo("Volet").style.maxHeight;
+    expect(hero).toContain("100cqh");
+    expect(hero).toContain("18.5rem");
+    // Le plafond habituel reste là pour un grand écran : 132 × 1,05.
+    expect(hero).toContain("138.6px");
+
+    cleanup();
+    render(<CinemaLogo src="/volet.png" alt="Fiche" surface="sheet" />);
+    expect(logo("Fiche").style.maxHeight).not.toContain("cqh");
+  });
+
   it("s'aligne au bord de sa colonne, et non au centre d'une boîte étirée", () => {
     render(<CinemaLogo src="/b.png" alt="Bord" surface="hero" />);
     expect(logo("Bord").className).toContain("self-start");

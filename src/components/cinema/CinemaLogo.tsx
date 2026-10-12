@@ -38,8 +38,11 @@ function heightFactor(ratio: number | null): number {
 
 /** Les trois surfaces qui portent un logo, et la hauteur qu'elles lui accordent. */
 const SURFACES = {
-  /** La bannière du haut, sur l'écran de parcours. */
-  hero: { compact: 76, roomy: 132, maxWidth: "min(100%, 42rem)" },
+  /**
+   * La bannière du haut, sur l'écran de parcours — bornée aussi par la hauteur de son volet
+   * (`fit`, voir `SurfaceFit`).
+   */
+  hero: { compact: 76, roomy: 132, maxWidth: "min(100%, 42rem)", fit: { reserve: "18.5rem", floor: 48 } },
   /** La fiche plein écran. */
   sheet: { compact: 68, roomy: 120, maxWidth: "min(100%, 32rem)" },
   /** Le téléphone, où la place est comptée dans les deux sens. */
@@ -50,6 +53,27 @@ const SURFACES = {
    */
   player: { compact: 28, roomy: 40, maxWidth: "min(100%, 22rem)" },
 } as const;
+
+/**
+ * Une surface dont la hauteur est comptée : le logo y prend ce que le reste lui laisse.
+ *
+ * La bannière du bureau est une colonne calée en bas d'un volet de 44 % de la hauteur, et tout ce
+ * qui est sous le logo — métadonnées, deux lignes de synopsis, « Lire », les traits du carrousel,
+ * la marge du bas — a une hauteur fixe. Le palier `ROOMY_FROM` ne regardait que la fenêtre : à
+ * 768 px de haut (un 13 pouces, 12/10/2026), 132 px de logo s'ajoutaient à ces ~200 px dans un
+ * volet de 338, et la colonne débordait par le haut, hors de l'écran — la première ligne de
+ * « Weathering With You » coupée, le reste de la bannière écrasé dessous. Le palier ne pouvait
+ * pas être juste : la place laissée au logo dépend de la hauteur du volet, pas d'un seuil.
+ *
+ * Le logo est donc plafonné, en plus, à la hauteur du volet (`100cqh` : le volet est un
+ * conteneur de taille, voir CinemaClient) moins `reserve` — le bloc du dessous plus de quoi
+ * passer sous la bascule Films / Séries. En rem, comme ce bloc : sous la taille de base réduite
+ * des petits portables (globals.css), les deux rétrécissent ensemble. `floor` : en dessous, un
+ * logo n'est plus lisible ; l'écran est alors si court que la colonne cède plutôt que le titre
+ * (`justify-end-safe` sur la colonne). Sur un grand écran, le plafond habituel l'emporte et rien
+ * ne change. Sans conteneur autour, `cqh` vaut la hauteur de la fenêtre : le plafond s'efface.
+ */
+type SurfaceFit = { reserve: string; floor: number };
 
 /** En dessous, la fenêtre est trop courte pour la hauteur généreuse. */
 const ROOMY_FROM = 760;
@@ -122,8 +146,14 @@ export function CinemaLogo({
 
   if (retry.failed) return <>{fallback}</>;
 
-  const { compact, roomy: tall, maxWidth } = SURFACES[surface];
-  const maxHeight = (roomy ? tall : compact) * heightFactor(ratio);
+  const spec = SURFACES[surface];
+  const { compact, roomy: tall, maxWidth } = spec;
+  const capped = (roomy ? tall : compact) * heightFactor(ratio);
+  // Le plafond de la surface reste celui qui égalise l'encombrement ; la place réelle ne s'y
+  // ajoute qu'en limite absolue, sans facteur de forme — un logo empilé (×1,4) n'a pas plus de
+  // place qu'un autre dans le même volet.
+  const fit: SurfaceFit | undefined = "fit" in spec ? spec.fit : undefined;
+  const maxHeight = fit ? `min(${capped}px, max(${fit.floor}px, calc(100cqh - ${fit.reserve})))` : capped;
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
