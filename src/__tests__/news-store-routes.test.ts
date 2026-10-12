@@ -58,23 +58,23 @@ function logLines(): Record<string, unknown>[] {
 beforeEach(() => verify.mockReset());
 
 describe("la page initiale, publiée par la migration", () => {
-  it("base vide : les pages 8.44 puis 8.48 sont publiées, en quatre langues, et un compte qui n'a rien vu les a fusionnées", () => {
+  it("base vide : la 8.44 est publiée, la 8.48 attend en brouillon ; publiée, un compte qui n'a rien vu a les deux fusionnées", () => {
     getDb();
     const pages = newsDb.published();
-    expect(pages.map((p) => p.version)).toEqual([NEWS_848_VERSION, INITIAL_NEWS_VERSION]);
-    const initial = pages.find((p) => p.version === INITIAL_NEWS_VERSION)!;
-    const p848 = pages.find((p) => p.version === NEWS_848_VERSION)!;
+    expect(pages.map((p) => p.version)).toEqual([INITIAL_NEWS_VERSION]);
+    const initial = pages[0];
     expect(initial.seq).toBe(1);
-    expect(p848.seq).toBe(2);
     expect(initial.content.fr.sections[0].entries[0].title).toBe("Améliorer les dialogues");
-    expect(p848.content.fr.sections[0].entries[0].title).toBe("Connexion lente");
-    for (const lang of ["en", "es", "de"] as const) {
-      expect(initial.content[lang]?.sections.length).toBe(2);
-      expect(p848.content[lang]?.sections.length).toBe(1);
-    }
-    // Aucun compte n'a encore de ligne : chacun, existant ou futur, a les deux, la plus récente d'abord.
-    expect(newsFor("un-compte-quelconque").unseen).toEqual([p848.id, initial.id]);
-    expect(newsFor("un-autre").unseen).toEqual([p848.id, initial.id]);
+    for (const lang of ["en", "es", "de"] as const) expect(initial.content[lang]?.sections.length).toBe(2);
+    const draft = newsDb.all().find((p) => p.version === NEWS_848_VERSION)!;
+    expect(draft.status).toBe("draft");
+    expect(draft.content.fr.sections[0].entries[0].title).toBe("Connexion lente");
+    for (const lang of ["en", "es", "de"] as const) expect(draft.content[lang]?.sections.length).toBe(1);
+    // En brouillon, elle ne s'annonce à personne.
+    expect(newsFor("un-compte-quelconque").unseen).toEqual([initial.id]);
+    // Publiée depuis Activité : un compte qui n'a rien vu reçoit les deux, la plus récente d'abord.
+    newsDb.publish(draft.id);
+    expect(newsFor("un-autre").unseen).toEqual([draft.id, initial.id]);
   });
 
   it("second démarrage : rien ne change — ni nouvelle page, ni republication, ni réarmement", () => {
@@ -82,10 +82,11 @@ describe("la page initiale, publiée par la migration", () => {
     const ids = newsDb.published().map((p) => p.id);
     newsDb.markSeen("vu-avant", ids);
     expect(newsFor("vu-avant").unseen).toEqual([]);
+    const before = newsDb.all().length;
     seedInitialNews(db);
     seedInitialNews(db);
-    seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT);
-    expect(newsDb.all()).toHaveLength(2);
+    seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");
+    expect(newsDb.all()).toHaveLength(before);
     expect(newsFor("vu-avant").unseen).toEqual([]);
   });
 

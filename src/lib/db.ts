@@ -489,7 +489,8 @@ function migrate(db: Database.Database): void {
     );
   `);
   seedInitialNews(db);
-  seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT);
+  // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
+  seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
     const now = Date.now();
     db.prepare("INSERT OR IGNORE INTO onboarding (user_name, pending, updated_at) VALUES ('louis', 1, ?)").run(now);
@@ -517,9 +518,27 @@ export function seedInitialNews(db: Database.Database, now = Date.now()): void {
  * Les pages se publient dans l'ordre des appels ; un compte en retard de plusieurs pages les voit
  * fusionnées, chacune sous sa version (§73).
  */
-export function seedNewsPage(db: Database.Database, seed: string, version: string, content: NewsContentByLang, now = Date.now()): void {
+export function seedNewsPage(
+  db: Database.Database,
+  seed: string,
+  version: string,
+  content: NewsContentByLang,
+  now = Date.now(),
+  status: "published" | "draft" = "published"
+): void {
   if (db.prepare("SELECT 1 FROM migrations_done WHERE name = ?").get(seed)) return;
   db.transaction(() => {
+    if (status === "draft") {
+      // Un brouillon n'a ni rang ni date de publication : c'est la publication qui les lui donne.
+      db.prepare("INSERT INTO news_pages (version, content, status, seq, created_at, updated_at, published_at) VALUES (?, ?, 'draft', NULL, ?, ?, NULL)").run(
+        version,
+        JSON.stringify(content),
+        now,
+        now
+      );
+      db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(seed, now);
+      return;
+    }
     const max = (db.prepare("SELECT COALESCE(MAX(seq), 0) AS m FROM news_pages").get() as { m: number }).m;
     db.prepare(
       "INSERT INTO news_pages (version, content, status, seq, created_at, updated_at, published_at) VALUES (?, ?, 'published', ?, ?, ?, ?)"
