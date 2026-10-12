@@ -293,9 +293,9 @@ describe("labelSubtitleTracks", () => {
   // Les sous-titres traduits par l'application (DECISIONS.md §69) : « Français — généré » et, tant
   // que la tâche court, « Français — génération… » — même forme, une seule fonction.
   it("nomme un sous-titre généré, fini ou en cours", () => {
-    const options = { ...stOptions, genere: "généré", generation: "génération…" };
+    const options = { ...stOptions, genere: "généré", enCours: "génération…" };
     const etiquettes = labelSubtitleTracks(
-      [st({ number: -12, language: "fra", isExternal: true, isGenerated: true }), st({ number: -13, language: "deu", isGenerating: true })],
+      [st({ number: -12, language: "fra", isExternal: true, origin: "generated" }), st({ number: -13, language: "deu", origin: "generating" })],
       options
     );
     expect(etiquettes.map((e) => e.label)).toEqual(["Français — généré", "Allemand — génération…"]);
@@ -303,12 +303,12 @@ describe("labelSubtitleTracks", () => {
 
   it("départage un généré d'un fichier voisin de la même langue sans le dire « externe »", () => {
     const options = { ...stOptions, genere: "généré" };
-    const [a] = labelSubtitleTracks([st({ number: -12, language: "fra", isExternal: true, isGenerated: true })], options);
+    const [a] = labelSubtitleTracks([st({ number: -12, language: "fra", isExternal: true, origin: "generated" })], options);
     expect(a.label).toBe("Français — généré");
   });
 
   it("retombe sur le type ordinaire pour un appelant qui ne fournit pas le mot", () => {
-    const [a] = labelSubtitleTracks([st({ number: -12, language: "fra", isGenerated: true })], stOptions);
+    const [a] = labelSubtitleTracks([st({ number: -12, language: "fra", origin: "generated" })], stOptions);
     expect(a.label).toBe("Français — Complets");
   });
 });
@@ -363,5 +363,38 @@ describe("une langue lue dans le titre", () => {
   it("le code l'emporte toujours sur le titre", () => {
     const [a] = labelAudioTracks([piste({ number: 2, language: "eng", name: "French commentary", channels: 2 })], options);
     expect(a.label).toMatch(/^Anglais/);
+  });
+});
+
+// « Générer des sous-titres » (DECISIONS.md §70) : l'entrée temporaire et la piste finale passent
+// par la même forme — langue — type —, le type disant d'où elles viennent.
+describe("labelSubtitleTracks — sous-titres générés", () => {
+  const genOptions = { ...stOptions, genere: "généré", enCours: "génération…" };
+
+  it("nomme l'entrée temporaire et la piste finale par leur origine", () => {
+    const etiquettes = labelSubtitleTracks(
+      [
+        st({ number: -1_000_000, language: "fr", isExternal: true, origin: "generating" }),
+        st({ number: -4, language: "en", isExternal: true, origin: "generated" }),
+      ],
+      genOptions
+    );
+    expect(etiquettes.map((e) => e.label)).toEqual(["Français — génération…", "Anglais — généré"]);
+  });
+
+  it("ne change rien aux autres pistes, ni sans les mots facultatifs", () => {
+    const pistes = [st({ number: 5, language: "fra" }), st({ number: -2, language: "fra", isExternal: true, isForced: true })];
+    expect(labelSubtitleTracks(pistes, genOptions)).toEqual(labelSubtitleTracks(pistes, stOptions));
+    // Un appelant qui ne connaît pas ces mots (le lecteur serveur) lit une piste générée comme une autre.
+    const [g] = labelSubtitleTracks([st({ number: -3, language: "fr", origin: "generated" })], stOptions);
+    expect(g.label).toBe("Français — Complets");
+  });
+
+  it("départage une piste générée d'un fichier ordinaire de même langue sans parenthèse inutile", () => {
+    const etiquettes = labelSubtitleTracks(
+      [st({ number: -2, language: "fr", isExternal: true }), st({ number: -3, language: "fr", isExternal: true, origin: "generated" })],
+      genOptions
+    );
+    expect(etiquettes.map((e) => e.label)).toEqual(["Français — Complets", "Français — généré"]);
   });
 });

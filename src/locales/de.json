@@ -1472,6 +1472,31 @@
       "notThisTrack": "Keine Wirkung auf diese Tonspur",
       "unavailable": "Dialoge lassen sich bei diesem Titel nicht verbessern: Wiedergabe ohne."
     },
+    "subtitleGen": {
+      "generate": "Untertitel generieren",
+      "otherLanguage": "Andere Sprache…",
+      "resume": "Generierung fortsetzen ({language})",
+      "finalizing": "wird abgeschlossen…",
+      "percent": "{n} %",
+      "preparing": "Untertitel werden vorbereitet…",
+      "resuming": "Untertitel-Generierung wird fortgesetzt…",
+      "paused": "Generierung pausiert — {reason}",
+      "reasons": {
+        "budget": "Budget erreicht",
+        "quota": "Tageslimit erreicht",
+        "network": "Verbindung unterbrochen",
+        "config": "Einstellungen prüfen",
+        "other": "wartet"
+      },
+      "errors": {
+        "quota": "Limit von {n} Generierungen pro Tag erreicht.",
+        "quotaToday": "Das heutige Generierungslimit ist erreicht.",
+        "budget": "Das Generierungsbudget ist vorerst aufgebraucht.",
+        "noSource": "Für diesen Titel können keine Untertitel generiert werden: nichts zu transkribieren.",
+        "network": "Generierung nicht möglich: Verbindung unterbrochen.",
+        "failed": "Die Untertitel-Generierung ist fehlgeschlagen."
+      }
+    },
     "speedNormal": "Normal",
     "rewind10": "10s zurück",
     "forward10": "10s vor",

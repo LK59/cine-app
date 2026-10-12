@@ -2886,3 +2886,68 @@ un saut, requêtes en série, reprise après redémarrage, pauses 429/crédit/cl
 présentation simulée, repli `data/`, suppression seulement du nôtre, clé jamais sortie),
 `subtitleGen-routes.test.ts`, `subtitleGen-proxy.test.ts`, `trackLabel.test.ts`,
 `jellyfin-direct-route.test.ts`.
+
+## 70. « Générer des sous-titres » dans le lecteur natif : une entrée temporaire, des messages dits comme des sous-titres, une seule recherche de ligne
+
+**Règle.** Le lecteur natif propose, sous les pistes du menu des sous-titres, « Générer des
+sous-titres » quand `/api/subtitle-gen/options` dit `enabled` et qu'au moins une langue cible n'a ni
+sous-titres (`existing`), ni génération en cours, ni piste générée dans la liste des externes. La
+langue du compte d'abord, d'un geste ; les autres derrière « Autre langue… », nommées par
+`Intl.DisplayNames` comme les pistes (`languageName`). Le choix crée la génération (avec la position)
+et la sélectionne aussitôt.
+
+- **Une entrée temporaire** par génération en cours, numérotée sous −1 000 000 (`isGeneratingTrack`) :
+  ni une piste du fichier (positive) ni un fichier à côté (−1 − index Jellyfin), et négative donc
+  jamais transmise au pipeline. Son étiquette passe par `labelSubtitleTracks` (`origin: "generating"`,
+  « Français — génération… »), son avancement à part, en petit (`Track.detail` : « 42 % », ou
+  « finalisation… » une fois finie mais pas encore présentée par Jellyfin).
+- **Sondée seulement active**, toutes les 2 s (10 s en pause ou entre la fin et la présentation),
+  **toujours avec la position voulue** (`intendedPosition`, la cible d'un saut comprise) et la séance ;
+  pas quand la page est cachée (reprise immédiate au retour) ; tout de suite après un saut. `since`
+  est la dernière révision reçue : un hôte neuf repart de 0, donc une entrée reprise après être sorti
+  du film redemande tout.
+- **Les lignes reçues sont tenues au-dessus des pipelines** (`SubtitleGeneration`, un objet par hôte),
+  insérées triées par début, remplacées par rang (`GeneratedCues`) : une reconstruction ne perd rien.
+- **Les messages d'état sont dessinés comme des sous-titres** — même place, même style, marqués
+  `data-subtitle-notice` — et **seulement dans une zone pas encore traduite** : un instant est
+  « fait » s'il est sur une ligne, ou entre deux lignes **consécutives** de la transcription (rangs
+  `i` et `i + 1`), avant la ligne 0 ou après la dernière (`total − 1`). « Préparation des
+  sous-titres… » (en préparation, ou rien reçu, ou la lecture a rattrapé la traduction), « Reprise de
+  la génération des sous-titres… » (après un saut dans une zone pas faite, jusqu'à la première ligne),
+  « Génération en pause — <raison> » (`budget`, `quota`, `network`, `config`, sinon « en attente »),
+  reprise par le menu (`/resume`). Une vraie ligne qui couvre l'instant l'emporte toujours.
+- **La bascule** : finie, la génération reste en entrée temporaire tant que `presented` est faux.
+  Présentée — ou, à défaut, un `fileUrl` donné depuis une minute (le repli du serveur) —, la liste
+  des externes est relue par un `fetch` nu de `/api/jellyfin/direct/<id>` (jamais la clé SWR du
+  pipeline, qui le reconstruirait, ni la description gardée cinq minutes), au plus toutes les 30 s.
+  Dès qu'elle contient l'entrée `generated: true` de la langue, la piste choisie devient cette entrée,
+  **d'abord sur les lignes déjà en mémoire** (`ExternalSubtitleTrack.fromCues` : aucune seconde sans
+  texte), puis sur le fichier de Jellyfin s'il arrive ; l'entrée temporaire disparaît.
+- **Aucun échec ne touche la lecture.** 429 → « Limite de N générations par jour atteinte » (N lu dans
+  `quota.limit`), 402 budget, 422 rien à transcrire, réseau, génération `failed` : un message passager
+  (`showWarning`), comme un fichier externe introuvable. 409 reprend la génération existante. Un
+  sondage sans réponse est rejoué à la même révision, sans rien dire. `/options` en échec : rien n'est
+  proposé, rien n'est dit.
+- **Une seule recherche de ligne** pour tout ce qui est tenu en mémoire : `cueTextAt`
+  (`externalSubtitles.ts`), bissection non destructive et marche arrière de 32 lignes, utilisée par
+  `ExternalSubtitleTrack` et par `GeneratedCues`.
+
+**Porteurs.** `src/lib/subtitleGen/client.ts` (le contrat des routes, typé ; `SubtitleGenError`) ;
+`generatedCues.ts` (`GeneratedCues`, `covers`) ; `generation.ts` (`SubtitleGeneration` : options,
+demande, activation, sondage, messages, fin) ; `cueTextAt`, `ExternalSubtitleTrack.fromCues`
+(`externalSubtitles.ts`) ; `labelSubtitleTracks` (`origin`, `trackLabel.ts`) ; `ExperimentalPlayerHost`
+(`generationMenu`, `showGeneratedAt`, `noticeText`, `generationErrorText`, la bascule) ; le menu des
+sous-titres de `PlayerControls` (`SubtitleGenerationMenu` ; le bouton des sous-titres apparaît alors
+même pour un film sans aucune piste). Journal : lignes `subtitle-gen` (`demande`, `activation`,
+`première-ligne` avec `ms`, `saut-non-traduit` avec `waitMs`, `pause`, `reprise`, `fin`, `bascule`
+avec `via`, `erreur`, `échec`).
+
+**Volontairement à part.** Le lecteur serveur, AirPlay et le Chromecast ne voient que le fichier
+fini, qui arrive par la liste ordinaire des fichiers externes. Pas de génération proposée pendant un
+banc d'essai. Seule la génération active est sondée : une autre, en cours en arrière-plan, garde
+l'avancement lu à l'ouverture jusqu'à ce qu'on la choisisse.
+
+Tests : `subtitleGen-client.test.ts`, `subtitleGen-generatedCues.test.ts`,
+`subtitleGen-generation.test.ts`, `PlayerControls-subtitleGen.test.tsx`, `trackLabel.test.ts`
+(« sous-titres générés »), `ExperimentalPlayerHost.test.tsx` (« générer des sous-titres »),
+`decisions-partagees.test.ts` (« une seule recherche de ligne »).

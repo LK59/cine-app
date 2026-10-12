@@ -266,9 +266,13 @@ export interface SubtitleTrackFacts extends NamedTrack {
   isHearingImpaired?: boolean;
   /** Un fichier posé à côté du film plutôt qu'une piste du conteneur. */
   isExternal?: boolean;
-  /** Traduit par l'application (DECISIONS.md §69) — fini, ou en cours (`isGenerating`). */
-  isGenerated?: boolean;
-  isGenerating?: boolean;
+  /**
+   * Des sous-titres que CineApp fait générer (DECISIONS.md §70) : `generating` pendant la
+   * génération (l'entrée temporaire du menu), `generated` une fois le fichier posé à côté du film.
+   * Le type les dit à la place de « Complets » : ce qu'on veut savoir d'une telle piste, c'est
+   * qu'elle vient d'une machine — et, pendant la génération, qu'elle n'est pas finie.
+   */
+  origin?: "generating" | "generated";
 }
 
 export interface SubtitleLabelOptions {
@@ -277,20 +281,16 @@ export interface SubtitleLabelOptions {
   complets: string;
   malentendants: string;
   externe: string;
-  piste: (n: number) => string;
-  /**
-   * « généré » et « génération… » : à la place du type, pour un sous-titre traduit par l'application.
-   * Facultatifs pour les appelants qui n'en montrent pas ; à défaut, le type ordinaire.
-   */
+  /** « généré » — facultatif : sans lui, une piste générée se lit comme une autre. */
   genere?: string;
-  generation?: string;
+  /** « génération… » — facultatif, comme `genere`. */
+  enCours?: string;
+  piste: (n: number) => string;
 }
 
 function typeSousTitre(track: SubtitleTrackFacts, options: SubtitleLabelOptions): string {
-  // Un sous-titre traduit est un sous-titre complet ; ce qu'il faut savoir de lui, c'est qu'une
-  // machine l'a écrit — « Français — généré » plutôt que « Français — Complets ».
-  if (track.isGenerating && options.generation) return options.generation;
-  if (track.isGenerated && options.genere) return options.genere;
+  if (track.origin === "generating" && options.enCours) return options.enCours;
+  if (track.origin === "generated" && options.genere) return options.genere;
   // Les malentendants avant les forcés : une piste peut porter les deux drapeaux, et c'est la
   // description des sons qui change le plus ce qu'on voit à l'écran.
   if (track.isHearingImpaired || titleSaysHearingImpaired(track.name)) return options.malentendants;
@@ -319,7 +319,7 @@ export function labelSubtitleTracks(
      * sa langue n'a en revanche aucune raison d'annoncer d'où elle vient.
      */
     if ((compte.get(bases[i]) ?? 0) === 1) return { number: track.number, label: bases[i] };
-    const detail = track.isExternal && !track.isGenerated && !track.isGenerating ? options.externe : discriminant(track, { ...options, canaux: () => "" });
+    const detail = track.isExternal && track.origin === undefined ? options.externe : discriminant(track, { ...options, canaux: () => "" });
     return { number: track.number, label: `${bases[i]} (${detail})` };
   });
 }

@@ -1021,3 +1021,23 @@ describe("une seule lecture des repères d'un épisode", () => {
     expect(src).not.toMatch(/currentTime >= introSkip\.start/);
   });
 });
+
+describe("une seule recherche de ligne pour les sous-titres tenus en mémoire", () => {
+  // DECISIONS.md §70. Les fichiers à côté du film et les lignes d'une génération en cours se cherchent
+  // par la même bissection (`cueTextAt`) : une seconde copie divergerait le jour où l'une est corrigée
+  // — la marche arrière de 8 à 32 lignes l'a déjà été une fois.
+  it.each(["src/lib/webcodecs/externalSubtitles.ts", "src/lib/subtitleGen/generatedCues.ts"])("%s passe par `cueTextAt`", (f) => {
+    expect(lire(f)).toMatch(/cueTextAt\(/);
+  });
+
+  it("la bissection n'est écrite qu'une fois", () => {
+    expect(lire("src/lib/webcodecs/externalSubtitles.ts").match(/low - 32/g)).toHaveLength(1);
+    expect(lire("src/lib/subtitleGen/generatedCues.ts")).not.toMatch(/low - 32|simultaneousText/);
+  });
+
+  it("les étiquettes des pistes générées passent par `trackLabel.ts`", () => {
+    const host = lire("src/components/ExperimentalPlayerHost.tsx");
+    expect(host).toMatch(/genere: t\("player\.trackLabel\.generated"\)/);
+    expect(host).not.toMatch(/— généré|— génération/);
+  });
+});

@@ -59,17 +59,30 @@ vi.mock("@/components/PlayerControls", () => ({
   PlayerControls: (props: {
     loading: boolean;
     audioTracks: { id: number; label: string }[];
-    subtitleTracks: { id: number; label: string }[];
+    subtitleTracks: { id: number; label: string; detail?: string }[];
+    currentSubtitleId?: number | null;
     onChangeAudio: (id: number) => void;
     onChangeSubtitle: (id: number | null) => void;
     onSeekRequest?: (seconds: number) => void;
+    // « Générer des sous-titres » (DECISIONS.md §70) : une ligne par langue proposée, une par reprise.
+    subtitleGeneration?: {
+      targets: { code: string; label: string }[];
+      onGenerate: (code: string) => void;
+      resumable: { code: string; label: string }[];
+      onResume: (code: string) => void;
+    };
     suspended?: boolean;
     subtitleOffset?: { seconds: number; onShift: (delta: number) => void };
     hdrCap?: { current: string | number; autoNits: number | null; onPick: (choice: string | number) => void };
     onClose?: () => void;
     chromecast?: { active: boolean; onRequest: () => void };
   }) => (
-    <div data-testid="controls" data-loading={String(props.loading)} data-suspended={String(!!props.suspended)}>
+    <div
+      data-testid="controls"
+      data-loading={String(props.loading)}
+      data-suspended={String(!!props.suspended)}
+      data-current-subtitle={String(props.currentSubtitleId ?? "")}
+    >
       {props.onClose && <button onClick={props.onClose}>fermer</button>}
       {props.chromecast && <button onClick={props.chromecast.onRequest}>chromecast</button>}
       {/* Un saut demandé depuis les commandes : le signal d'abord, puis l'élément, comme elles. */}
@@ -90,7 +103,13 @@ vi.mock("@/components/PlayerControls", () => ({
         <button key={track.id} onClick={() => props.onChangeAudio(track.id)}>{`audio:${track.label}`}</button>
       ))}
       {props.subtitleTracks.map((track) => (
-        <button key={track.id} onClick={() => props.onChangeSubtitle(track.id)}>{`st:${track.label}`}</button>
+        <button key={track.id} data-detail={track.detail} onClick={() => props.onChangeSubtitle(track.id)}>{`st:${track.label}`}</button>
+      ))}
+      {props.subtitleGeneration?.targets.map((target) => (
+        <button key={target.code} onClick={() => props.subtitleGeneration!.onGenerate(target.code)}>{`gen:${target.code}`}</button>
+      ))}
+      {props.subtitleGeneration?.resumable.map((entry) => (
+        <button key={entry.code} onClick={() => props.subtitleGeneration!.onResume(entry.code)}>{`reprendre:${entry.code}`}</button>
       ))}
       <button onClick={() => props.onChangeSubtitle(null)}>st:aucun</button>
     </div>
@@ -1154,6 +1173,205 @@ describe("les sous-titres posés à côté du film", () => {
     // A subtitle that could not be fetched is not a reason to abandon the film.
     expect(onFallback).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+});
+
+/**
+ * « Générer des sous-titres » (DECISIONS.md §70), vu de l'hôte : l'entrée temporaire, les messages
+ * d'état dessinés comme des sous-titres, la bascule vers la piste finale — et aucun de ses échecs ne
+ * touche à la lecture.
+ */
+describe("générer des sous-titres", () => {
+  type Json = Record<string, unknown>;
+  let gen: {
+    options: Json;
+    create: { status: number; body: unknown };
+    polls: Json[];
+    pollBodies: Json[];
+    createBodies: Json[];
+    externals: Json[];
+  };
+
+  function genServer() {
+    gen = {
+      options: { enabled: true, targets: ["fr", "en"], existing: [], jobs: [], quota: { used: 0, limit: 30 } },
+      create: { status: 200, body: { jobId: "j1", status: "preparing" } },
+      polls: [],
+      pollBodies: [],
+      createBodies: [],
+      externals: [],
+    };
+    const json = (status: number, body: unknown) => ({ ok: status < 300, status, json: async () => body, text: async (): Promise<string> => "" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.startsWith("/api/jellyfin/playback-state/")) return { ok: true, json: async () => viewerState };
+        if (url.startsWith("/api/subtitle-gen/options")) return json(200, gen.options);
+        if (url === "/api/subtitle-gen/jobs") {
+          gen.createBodies.push(JSON.parse(String(init?.body)) as Json);
+          return json(gen.create.status, gen.create.body);
+        }
+        if (/\/api\/subtitle-gen\/jobs\/[^/]+\/poll$/.test(url)) {
+          gen.pollBodies.push({ url, ...(JSON.parse(String(init?.body)) as Json) });
+          const next = gen.polls.length > 1 ? gen.polls.shift()! : gen.polls[0];
+          return json(200, next ?? { status: "preparing", rev: 0, done: 0, total: 0, cues: [] });
+        }
+        if (url.startsWith("/api/jellyfin/direct/")) return json(200, { externalSubtitles: gen.externals });
+        if (url === "/genere.vtt") return { ok: true, status: 200, text: async (): Promise<string> => "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nfichier final" };
+        return { ok: true, status: 200, text: async (): Promise<string> => "", json: async (): Promise<unknown> => ({}) };
+      })
+    );
+  }
+
+  const logged = () =>
+    (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as { body: string }).body) as { kind: string; fields: Record<string, unknown> });
+  const overlay = () => document.querySelector("p[style]") as HTMLElement | null;
+
+  beforeEach(() => genServer());
+
+  it("propose les langues absentes, et rien quand la fonction est coupée", async () => {
+    gen.options = { ...gen.options, existing: ["en"] };
+    mount();
+    await waitFor(() => expect(screen.getByText("gen:fr")).toBeTruthy());
+    expect(screen.queryByText("gen:en")).toBeNull();
+    cleanup();
+
+    genServer();
+    gen.options = { ...gen.options, enabled: false };
+    mount();
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    await settle();
+    expect(screen.queryByText("gen:fr")).toBeNull();
+  });
+
+  it("générer : entrée temporaire choisie, « préparation » dessinée comme un sous-titre, puis la vraie ligne à sa place", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByText("gen:fr")).toBeTruthy());
+    videoElement(600);
+    await act(async () => void fireEvent.click(screen.getByText("gen:fr")));
+
+    await waitFor(() => expect(screen.getByText("st:Français — generating")).toBeTruthy());
+    expect(gen.createBodies[0]).toMatchObject({ itemId: "item-1", target: "fr" });
+    expect(typeof gen.createBodies[0].position).toBe("number");
+    // La langue demandée ne se propose plus.
+    expect(screen.queryByText("gen:fr")).toBeNull();
+    // Choisie d'emblée : le pipeline n'affiche plus sa propre piste.
+    expect(Number(screen.getByTestId("controls").dataset.currentSubtitle)).toBeLessThanOrEqual(-1_000_000);
+    expect(remux.selectSubtitleTrack).toHaveBeenCalledWith(null);
+
+    await waitFor(() => expect(gen.pollBodies.length).toBeGreaterThan(0));
+    expect(gen.pollBodies[0]).toMatchObject({ since: 0 });
+    expect(typeof gen.pollBodies[0].position).toBe("number");
+    await waitFor(() => expect(overlay()?.textContent).toBe("preparing"));
+    expect(overlay()?.hasAttribute("data-subtitle-notice")).toBe(true);
+
+    // Une ligne arrive pour l'instant affiché : elle remplace le message, qui ne revient pas dessus.
+    gen.polls = [{ status: "running", rev: 2, done: 1, total: 10, cues: [{ i: 0, start: 599, end: 602, text: "Ligne traduite" }] }];
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    await waitFor(() => expect(overlay()?.textContent).toBe("Ligne traduite"));
+    expect(overlay()?.hasAttribute("data-subtitle-notice")).toBe(false);
+    await act(async () => void fireEvent(videoElement(600.5), new Event("timeupdate")));
+    expect(overlay()?.textContent).toBe("Ligne traduite");
+
+    await waitFor(() => {
+      const events = logged().filter((l) => l.kind === "subtitle-gen").map((l) => l.fields.event);
+      expect(events).toEqual(expect.arrayContaining(["demande", "activation", "première-ligne"]));
+    });
+    expect(onFallback).not.toHaveBeenCalled();
+  });
+
+  it("en pause : le message dit pourquoi, et la reprise est dans le menu", async () => {
+    gen.polls = [{ status: "paused", reason: "budget", rev: 0, done: 3, total: 10, cues: [] }];
+    mount();
+    await waitFor(() => expect(screen.getByText("gen:fr")).toBeTruthy());
+    videoElement(10);
+    await act(async () => void fireEvent.click(screen.getByText("gen:fr")));
+    await waitFor(() => expect(overlay()?.textContent).toBe("paused"));
+    await waitFor(() => expect(screen.getByText("reprendre:fr")).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText("reprendre:fr")));
+    await waitFor(() =>
+      expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some(([url]) => url === "/api/subtitle-gen/jobs/j1/resume")).toBe(true)
+    );
+  });
+
+  it("de retour sur le film, l'entrée en cours est là ; la choisir redemande tout depuis 0", async () => {
+    gen.options = { ...gen.options, jobs: [{ jobId: "j7", target: "fr", status: "running", done: 40, total: 100 }] };
+    gen.polls = [{ status: "running", rev: 5, done: 41, total: 100, cues: [{ i: 0, start: 1, end: 3, text: "Déjà là" }] }];
+    mount();
+    await waitFor(() => expect(screen.getByText("st:Français — generating")).toBeTruthy());
+    expect(screen.getByText("st:Français — generating").getAttribute("data-detail")).toBe("percent");
+    videoElement(2);
+    await act(async () => void fireEvent.click(screen.getByText("st:Français — generating")));
+    await waitFor(() => expect(gen.pollBodies[0]).toMatchObject({ url: "/api/subtitle-gen/jobs/j7/poll", since: 0 }));
+    await waitFor(() => expect(overlay()?.textContent).toBe("Déjà là"));
+
+    // Une reconstruction ne perd pas les lignes : elles sont tenues au-dessus du pipeline.
+    const rebuilt = fakeRemux();
+    nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
+    remux.lost = true;
+    act(() => probes[0].onError("morte"));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    await untilSettled(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    expect(rebuilt.selectSubtitleTrack).not.toHaveBeenCalledWith(expect.any(Number));
+    await act(async () => void fireEvent(videoElement(2.5), new Event("timeupdate")));
+    expect(overlay()?.textContent).toBe("Déjà là");
+  });
+
+  it("finie et présentée : bascule sur « généré » au même instant, l'entrée temporaire disparaît", async () => {
+    gen.options = { ...gen.options, jobs: [{ jobId: "j1", target: "fr", status: "done", done: 1, total: 1, presented: false }] };
+    gen.polls = [{ status: "done", rev: 1, done: 1, total: 1, cues: [{ i: 0, start: 1, end: 2, text: "en mémoire" }], presented: true }];
+    gen.externals = [{ id: -3, language: "fra", title: null, url: "/genere.vtt", generated: true }];
+    mount();
+    await waitFor(() => expect(screen.getByText("st:Français — generating")).toBeTruthy());
+    // Finie, pas encore présentée : « finalisation… » au lieu du pourcentage.
+    expect(screen.getByText("st:Français — generating").getAttribute("data-detail")).toBe("finalizing");
+    videoElement(1.5);
+    await act(async () => void fireEvent.click(screen.getByText("st:Français — generating")));
+
+    await waitFor(() => expect(screen.getByText("st:Français — generated")).toBeTruthy());
+    expect(screen.queryByText("st:Français — generating")).toBeNull();
+    expect(screen.getByTestId("controls").dataset.currentSubtitle).toBe("-3");
+    // Le fichier de Jellyfin remplace les lignes en mémoire dès qu'il arrive.
+    await waitFor(() => expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some(([url]) => url === "/genere.vtt")).toBe(true));
+    await act(async () => void fireEvent(videoElement(1.5), new Event("timeupdate")));
+    await waitFor(() => expect(overlay()?.textContent).toBe("fichier final"));
+    await waitFor(() =>
+      expect(logged().some((l) => l.kind === "subtitle-gen" && l.fields.event === "bascule" && l.fields.via === "jellyfin")).toBe(true)
+    );
+  });
+
+  it.each([
+    [429, "quota"],
+    [402, "budget"],
+    [422, "noSource"],
+  ])("refus %i : un message passager « %s », la lecture continue", async (status, key) => {
+    gen.create = { status, body: { error: "x" } };
+    mount();
+    await waitFor(() => expect(screen.getByText("gen:fr")).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText("gen:fr")));
+    await waitFor(() => expect(screen.getByText(key)).toBeTruthy());
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(remux.destroy).not.toHaveBeenCalled();
+    expect(screen.getByTestId("controls").dataset.loading).toBe("false");
+    // Toujours proposée : un refus n'est pas une génération en cours.
+    expect(screen.getByText("gen:fr")).toBeTruthy();
+    expect(screen.queryByText(/generating/)).toBeNull();
+  });
+
+  it("choisir une autre piste arrête le sondage et retire le message", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByText("gen:fr")).toBeTruthy());
+    videoElement(600);
+    await act(async () => void fireEvent.click(screen.getByText("gen:fr")));
+    await waitFor(() => expect(overlay()?.textContent).toBe("preparing"));
+    await act(async () => void fireEvent.click(screen.getByText("st:aucun")));
+    expect(overlay()).toBeNull();
+    const polls = gen.pollBodies.length;
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    await settle();
+    expect(gen.pollBodies).toHaveLength(polls);
   });
 });
 
