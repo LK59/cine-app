@@ -3166,3 +3166,88 @@ migration de chaque ancienne taille, valeur marquée jamais retraduite, hauteur 
 tailles, plafond, repos à 6,5 %, montée au-dessus des commandes, placement en haut, même règle pour
 `::cue` et le calque), `PlayerControls.test.tsx` (« ce que les commandes occupent » : bords mesurés,
 `null` une fois cachées puis démontées ; « Normale » cochée par défaut dans « Apparence »).
+
+## 73. Les Nouveautés : une page par version, un numéro vu par compte, une fenêtre au lancement
+
+**Règle.** Chaque page de Nouveautés publiée reçoit un numéro d'ordre croissant (`seq`, à la
+publication — pas l'identifiant : un brouillon commencé avant un autre peut sortir après lui) ; chaque
+compte retient le dernier qu'il a vu (`news_state.seen_seq`). Il reste à voir les pages publiées au-delà.
+La fenêtre s'ouvre au lancement, sur l'accueil du cinéma seul — jamais pendant un film (plein écran ou
+réduit), jamais par-dessus une fiche (y compris ouverte par lien profond : elle attend le retour à
+l'accueil), un panneau ou la grille complète, jamais avant ni par-dessus l'écran d'accueil d'un compte,
+jamais sur l'assistant, la connexion ou la gestion —, après 1,2 s d'accueil seul à l'écran, une fois par
+chargement. Le drapeau s'éteint **à l'affichage** (`POST /api/release-notes/seen`), quelle que soit la fermeture
+ensuite. Deux pages ou plus de retard : empilées dans la même fenêtre, de la plus récente à la plus
+ancienne, chacune sous sa version en intertitre. Un compte jamais croisé reçoit sa ligne à son premier
+passage, réglée juste sous la dernière page : il voit celle-là, pas l'historique fusionné.
+
+« Relancer » redescend le numéro sous la dernière page — pour un compte, ou pour tous —, jamais plus bas :
+un compte en retard de deux pages le reste. Publier allume le drapeau de tous sans rien leur écrire,
+puisque chaque numéro vu est forcément plus bas. Modifier une page publiée ne republie rien et ne
+réarme personne.
+
+**La page initiale vit dans le code.** « 8.44 » (texte validé par Louis le 12/10/2026, traduit une fois
+en en/es/de dans `initialPage.ts`) est publiée par la migration (`seedInitialNews`, db.ts) : toute
+installation l'a à son premier démarrage — l'image publique comprise, une installation neuve aussi —,
+sans geste de l'administrateur et sans appel à un fournisseur d'IA. Un marqueur `migrations_done`
+(`news-seed-8.44`), posé dans la même transaction, l'empêche de revenir : un redémarrage ne la recrée
+pas, ne la republie pas, ne réarme personne, et une page modifiée ou supprimée par l'administrateur n'est
+jamais réécrite. Aucun compte n'a de ligne à ce moment-là : le drapeau est donc allumé pour tous, existants
+comme futurs.
+
+**Le contenu.** Par langue : des sections (titre en petites capitales, entrées icône + titre en gras +
+phrase courte, une pastille facultative), une phrase pour « Optimisations et corrections de bugs », et la
+liste complète, par groupe. Le titre de la section Améliorations et de son entrée viennent du dictionnaire,
+pas du contenu. Une phrase qui commence par une minuscule ou une ponctuation *continue* le titre sur la
+même ligne (« **Le logo du titre dans le lecteur**, en bas à gauche. ») ; sinon elle passe dessous. Une
+langue vide retombe sur le français (`contentFor`). Les icônes sont des noms à nous (`NEWS_ICONS`), traduits
+en icônes lucide côté navigateur seulement : la base ne dépend pas du nom d'un composant.
+
+**« Voir plus ›».** Dans la fenêtre, l'entrée des corrections ne montre que sa phrase ; « Voir plus » ferme
+la fenêtre (`closedBy: "voir-plus"`) et ouvre Compte → Nouveautés (`#nouveautes=corrections:<id>`, la
+page la plus récente) sur la liste complète. Compte → Nouveautés rouvre tout : la dernière page entière,
+puis les précédentes, repliées (dépliée d'office si c'est elle que « Voir plus » vise).
+
+**Mesures.** Au journal des ouvertures (`startup.log`, `kind: "nouveautés"`, avec compte, appareil,
+`build` et `version` comme les autres lignes) : `event: "fenêtre"` (`noteIds`, `shownMs` — page visible
+seulement, `VisibleStopwatch` —, `closedBy` `ok`|`echap`|`dehors`|`voir-plus`, `scrolled`, `auto` — faux
+quand c'est une relance de l'administrateur), `event: "voir-plus"`, `event: "page"` (`shownMs`, `section`
+la plus loin atteinte : `nouveautés`, `corrections`, `historique`). Le dernier affichage de chacun est aussi
+gardé en base pour l'activité. `keepalive`, sans file : `unsentLines` est celle du journal du lecteur (sa
+route, ses identifiants), une mesure perdue ne coûte qu'une ligne, et le drapeau est déjà éteint.
+Limites par compte : 20 mesures et 10 « vu » par minute (`writeLimits`).
+
+**L'activité.** `#activite=nouveautes` (et un résumé sur la vue d'ensemble) : par compte, la dernière
+page vue, quand, combien de temps, fermée comment, défilée, « Voir plus », page consultée ; la synthèse de
+la dernière page (vue par n/total, médiane du temps d'affichage, part « pas lue » sous 2 s, part « Voir
+plus ») ; « Relancer pour tous » et par compte ; l'éditeur — saisie en français, « Traduire » (un seul
+appel au fournisseur des sous-titres générés, mêmes réglages et même clé, sortie structurée qui ne contient
+que les textes dans la forme du français : icônes recopiées, forme différente refusée ; coût ajouté à la
+dépense du mois ; sans clé, saisie manuelle), chaque langue retouchable, aperçu, brouillon puis
+« Publier ».
+
+**Porteurs.** `shouldOfferNews` (decide.ts) — la décision, seule, pour le bureau et le téléphone ;
+`newsDb` / `newsFor` (news/store.ts) ; `seedInitialNews` (db.ts) ; `sanitizeContent` / `contentFor` /
+`continuesTitle` (news/content.ts) ; `VisibleStopwatch` / `sendNewsEvent` / `markNewsSeen` (news/events.ts) ;
+`translateNews` / `rebuild` (news/translate.ts) ; `newsAccounts` / `newsSynthesis` (news/summary.ts) ;
+`accountScreenOpen` (cinemaRoute.ts) — l'activité, les signalements et les Nouveautés, énumérés une fois
+pour `coversGrid`, `heroOffscreen`, `activePanel` / `isOnPanel` et la bannière du téléphone.
+
+**Appelants.** `NewsGate` (monté par `PlayerShell`, commun au bureau et au téléphone) → `NewsDialog` ;
+`PlayerNewsPanel` (Compte → Nouveautés) ; `NewsContentView`, le même dessin pour les deux ;
+`ActivityNews` et le panneau de `ActivityOverview`. Routes : `/api/release-notes`, `/api/release-notes/seen`,
+`/api/release-notes/event` (ouvertes à tout compte, n'écrivent que pour l'appelant) ; `/api/admin/release-notes*`
+(administrateur seul, lecture comprise : `ADMIN_ONLY_READS` et `adminOnly`).
+
+**Volontairement à part.** La fenêtre n'a pas de flou d'arrière-plan : une grande surface (§45, flou
+des grandes surfaces écarté le 26/09) — le reflet, le bord et la teinte du verre liquide sur un fond plus
+franc (`.news-card`). Les touches sont prises en capture sur `window` et arrêtées là : la grille dessous
+écoute aussi les flèches et « / ». Les titres masqués (§54) ne sont mentionnés nulle part : voulu par Louis.
+
+Tests : `news-store-routes.test.ts` (base vide → page publiée et drapeau pour tous, second démarrage sans
+effet, compte qui l'a vue pas réarmé, page supprimée jamais réécrite, fusion, compte neuf = dernière page,
+relance un/tous, mesures au journal, synthèse, éditeur → traduction simulée → publication → drapeau rallumé,
+langue vide → français, routes réservées), `news-proxy.test.ts`, `news-decide.test.ts` (chaque écran qui
+empêche la fenêtre, chronomètre, continuation du titre), `NewsDialog.test.tsx` (fusion et intertitres, les
+quatre fermetures et leur mesure, défilement, touches gardées, télécommande, aperçu muet, `NewsGate`, « Voir
+plus » → la bonne section), `decisions-partagees.test.ts` (une seule décision, un seul montage).

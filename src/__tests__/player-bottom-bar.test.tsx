@@ -9,7 +9,9 @@ let route = {
 };
 let leaving = false;
 let sheetBehind = false;
-vi.mock("@/lib/cinemaRoute", () => ({
+vi.mock("@/lib/cinemaRoute", async (importOriginal) => ({
+  // La vraie règle des écrans poussés depuis le Compte, lue par `playerNav`.
+  accountScreenOpen: (await importOriginal<typeof import("@/lib/cinemaRoute")>()).accountScreenOpen,
   useCinemaRoute: () => route,
   useSheetLeaving: () => leaving,
   useSheetBehind: () => sheetBehind,
@@ -129,7 +131,7 @@ describe("PlayerBottomBar", () => {
 // et le clavier cassait le geste. Il ne monte plus qu'à un appui relâché sur Recherche.
 describe("le second appui sur Recherche", () => {
   const onSearch = () => {
-    route = { ...route, search: true, ...({ activity: null, report: null } as object) };
+    route = { ...route, search: true, ...({ activity: null, report: null, news: null } as object) };
   };
   const searchButton = () => screen.getByText("player.nav.search").closest("button")!;
 

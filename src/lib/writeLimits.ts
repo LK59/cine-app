@@ -33,6 +33,13 @@ export const WRITE_LIMITS = {
   startupTiming: { max: 10, windowMs: 60_000 },
   /** Le relevé de télécommande d'une Fire TV (`installRemoteDiag`) : trois par onglet au plus. */
   remoteDiag: { max: 3, windowMs: 60_000 },
+  /**
+   * Les Nouveautés (DECISIONS.md §73) : une fenêtre, un « Voir plus », une visite de la page — trois
+   * lignes par lancement au plus. Vingt en une minute, c'est une boucle. « Vu » à part : une fois
+   * par fenêtre.
+   */
+  newsEvent: { max: 20, windowMs: 60_000 },
+  newsSeen: { max: 10, windowMs: 60_000 },
   /** Un commentaire se tape à la main : vingt en une minute n'en est plus un. */
   reportMessages: { max: 20, windowMs: 60_000 },
 } as const;
@@ -45,3 +52,5 @@ export const clientErrorAllowed = limiter("clientError");
 export const startupTimingAllowed = limiter("startupTiming");
 export const reportMessageAllowed = limiter("reportMessages");
 export const remoteDiagAllowed = limiter("remoteDiag");
+export const newsEventAllowed = limiter("newsEvent");
+export const newsSeenAllowed = limiter("newsSeen");

@@ -93,6 +93,23 @@ function ReportSection() {
   );
 }
 
+/**
+ * Compte → Nouveautés (DECISIONS.md §73) : la page remplace ce panneau, comme les signalements, et
+ * le retour y ramène. Tout ce que la fenêtre a montré, plus la liste des corrections et l'historique.
+ */
+function NewsSection() {
+  const t = useT();
+  return (
+    <Section icon={Sparkles} title={t("news.title")}>
+      <p className="mb-3 text-xs text-subtle">{t("news.accountHint")}</p>
+      <button type="button" onClick={() => cinemaNavigate({ account: false, news: "1" })} className="btn btn-ghost w-full justify-center sm:w-auto">
+        <Sparkles size={16} />
+        {t("news.open")}
+      </button>
+    </Section>
+  );
+}
+
 export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: boolean; replaced?: boolean; fromTab?: boolean }) {
   const t = useT();
   const router = useRouter();
@@ -154,6 +171,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
         </Group>
 
         <Group title={t("player.account.groups.help")}>
+          <NewsSection />
           <HelpSection />
           <ReportSection />
         </Group>

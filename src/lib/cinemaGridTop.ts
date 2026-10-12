@@ -1,6 +1,6 @@
 "use client";
 
-import type { CinemaRoute } from "@/lib/cinemaRoute";
+import { accountScreenOpen, type CinemaRoute } from "@/lib/cinemaRoute";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 
 /**
@@ -33,8 +33,7 @@ export function coversGrid(route: CinemaRoute): boolean {
     // Ouverts depuis le Compte, avec `account` retiré de l'adresse : oubliés ici, la grille se
     // croyait à l'écran sous eux — les flèches envoyaient le focus sur une affiche cachée et
     // Entrée ouvrait un film invisible (chasse aux défauts du 25/09/2026, DECISIONS §10).
-    route.activity !== null ||
-    route.report !== null
+    accountScreenOpen(route)
   );
 }
 

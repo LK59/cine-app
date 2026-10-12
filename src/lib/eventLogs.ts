@@ -72,6 +72,21 @@ export function logRemoteDiag(fields: { user: string; device: string | null } & 
   }
 }
 
+/**
+ * Les Nouveautés (DECISIONS.md §73) : la fenêtre (combien de temps elle est restée à l'écran, page
+ * visible seulement, et comment elle s'est fermée), « Voir plus », et la page Compte → Nouveautés.
+ * Dans le journal des ouvertures, parce que c'en est un moment : la fenêtre ne s'ouvre qu'au lancement.
+ */
+export type NewsLogEvent = "fenêtre" | "voir-plus" | "page";
+
+export function logNewsEvent(event: NewsLogEvent, fields: { user: string; device: string | null; build: string | null; version: string | null } & Record<string, unknown>): void {
+  try {
+    appendJsonLine(STARTUP_LOG(), { timestamp: new Date().toISOString(), kind: "nouveautés", event, ...fields }, { keep: EVENT_LOG_KEEP });
+  } catch {
+    /* une mesure perdue ne coûte rien à personne */
+  }
+}
+
 export type AuthEvent =
   /** Connexion réussie. */
   | "login"

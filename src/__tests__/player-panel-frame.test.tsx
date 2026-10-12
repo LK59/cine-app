@@ -6,7 +6,8 @@ vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => 
 let mobile = false;
 vi.mock("@/lib/useIsMobile", () => ({ useIsMobile: () => mobile, useIsShortViewport: () => false }));
 vi.mock("@/lib/cinemaRoute", () => ({
-  CLOSE_PANELS: { search: false, list: false, account: false, browse: null, activity: null, report: null },
+  CLOSE_PANELS: { search: false, list: false, account: false, browse: null, activity: null, report: null, news: null },
+  accountScreenOpen: (r: { activity?: string | null; report?: string | null; news?: string | null }) => (r.activity ?? null) !== null || (r.report ?? null) !== null || (r.news ?? null) !== null,
   cinemaClose: vi.fn(),
   cinemaNavigate: vi.fn(),
   useCinemaRoute: () => ({ film: null, serie: null, discover: null, person: null }),

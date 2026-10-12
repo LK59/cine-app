@@ -1641,6 +1641,19 @@
   .glass-pop { animation: fade-in 160ms ease-out both; }
 }
 
+/* La fenêtre des Nouveautés (DECISIONS.md §73) : le reflet, le bord et la teinte du verre liquide,
+   sans flou — une grande surface, et le flou des grandes surfaces a été écarté le 26/09. Un fond plus
+   franc que `glass-sheen` : la carte se lit sur l'accueil assombri, affiches comprises. */
+.news-card {
+  background:
+    linear-gradient(160deg, rgb(255 255 255 / 0.13), rgb(255 255 255 / 0.03) 42%, rgb(255 255 255 / 0.06)),
+    rgb(17 17 21 / 0.9);
+  box-shadow: var(--glass-edge), 0 30px 80px -24px rgb(0 0 0 / 0.8);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .news-card { background: rgb(24 24 28); }
+}
+
 /* Le mini-lecteur : le verre des commandes plein écran, à sa taille, et le même geste. */
 .player-mini .player-pill[data-lit] { box-shadow: var(--glass-edge), var(--glass-lit); }
 

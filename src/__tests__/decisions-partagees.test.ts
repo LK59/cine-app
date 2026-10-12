@@ -1058,3 +1058,28 @@ describe("un survol ne désigne une affiche que si le pointeur a bougé", () => 
     expect(src).not.toMatch(/onMouseEnter=\{(\(\) => onFocusItem|onFocusItem\}|focus\})/);
   });
 });
+
+describe("une seule décision d'ouvrir les Nouveautés", () => {
+  // DECISIONS.md §73. La fenêtre est montée une fois, par la coquille commune au bureau et au
+  // téléphone, et décide par `shouldOfferNews` — aucun des deux cinémas n'en a sa propre copie.
+  const sources = () =>
+    (readdirSync("src", { recursive: true }) as string[])
+      .map((f) => `src/${f}`)
+      .filter((f) => /\.tsx?$/.test(f) && !f.includes("__tests__"));
+
+  it("seul NewsGate appelle shouldOfferNews", () => {
+    expect(sources().filter((f) => f !== "src/lib/news/decide.ts" && /shouldOfferNews\(/.test(lire(f)))).toEqual(["src/components/player/NewsGate.tsx"]);
+  });
+
+  it("seule la coquille du cinéma monte NewsGate", () => {
+    expect(sources().filter((f) => /<NewsGate\b/.test(lire(f)))).toEqual(["src/components/player/PlayerShell.tsx"]);
+  });
+
+  it("les écrans poussés depuis le Compte sont énumérés une fois (`accountScreenOpen`)", () => {
+    for (const f of ["src/lib/cinemaGridTop.ts", "src/lib/heroCarousel.ts", "src/components/player/playerNav.ts", "src/components/cinema/mobile/CinemaMobileClient.tsx"]) {
+      const src = lire(f);
+      expect(src).toContain("accountScreenOpen(");
+      expect(src).not.toMatch(/\.report !== null/);
+    }
+  });
+});

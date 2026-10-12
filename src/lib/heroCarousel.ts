@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { usePrefersReducedMotion } from "@/lib/reducedMotion";
 import { usePageVisible } from "@/lib/usePageVisible";
 import { ROTATE_MS } from "@/lib/useRotatingIndex";
-import type { CinemaRoute } from "@/lib/cinemaRoute";
+import { accountScreenOpen, type CinemaRoute } from "@/lib/cinemaRoute";
 
 /**
  * La bannière du cinéma quand ses données changent sous elle — bureau et téléphone, une seule règle.
@@ -79,7 +79,7 @@ export function reconcileHeroOrder(shown: readonly string[], index: number, offi
  */
 export function heroOffscreen(
   _heroTab: "movies" | "series",
-  route: Pick<CinemaRoute, "tab" | "list" | "account" | "search" | "browse" | "activity" | "report">,
+  route: Pick<CinemaRoute, "tab" | "list" | "account" | "search" | "browse" | "activity" | "report" | "news">,
   playerMode: string
 ): boolean {
   return (
@@ -88,9 +88,9 @@ export function heroOffscreen(
     route.account ||
     route.search ||
     route.browse !== null ||
-    route.activity !== null ||
-    // « Signaler un problème » recouvre l'écran comme l'activité (chasse aux défauts du 25/09/2026).
-    route.report !== null
+    // L'activité, « Signaler un problème », les Nouveautés recouvrent l'écran (chasse aux défauts du
+    // 25/09/2026) — une seule liste, `accountScreenOpen`.
+    accountScreenOpen(route)
   );
 }
 

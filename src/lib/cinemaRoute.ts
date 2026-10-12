@@ -56,6 +56,23 @@ export interface CinemaRoute {
    * signalement. Ouvert depuis le panneau Compte, qu'il remplace, comme l'activité.
    */
   report: string | null;
+  /**
+   * « Nouveautés » (DECISIONS.md §73) : `1` pour la page, `corrections:<id>` pour y arriver sur la
+   * liste « Optimisations et corrections de bugs » d'une page — c'est où mène « Voir plus » depuis
+   * la fenêtre. Ouvert depuis le panneau Compte, qu'il remplace, comme l'activité.
+   */
+  news: string | null;
+}
+
+/**
+ * Un écran poussé depuis le Compte — activité, signalement, Nouveautés — est ouvert.
+ *
+ * Ils remplacent le panneau Compte (`account` retiré de l'adresse), et chaque endroit qui demande
+ * « quelque chose recouvre-t-il la grille ? » devait les énumérer un par un : un oubli laissait les
+ * flèches piloter des affiches invisibles (chasse aux défauts du 25/09/2026). Une seule liste, ici.
+ */
+export function accountScreenOpen(route: Pick<CinemaRoute, "activity" | "report" | "news">): boolean {
+  return route.activity !== null || route.report !== null || route.news !== null;
 }
 
 const EMPTY: CinemaRoute = {
@@ -72,6 +89,7 @@ const EMPTY: CinemaRoute = {
   browse: null,
   activity: null,
   report: null,
+  news: null,
 };
 
 // How many entries this session has pushed. Kept in history.state so a close can tell "I opened
@@ -161,6 +179,7 @@ function parse(hash: string): CinemaRoute {
     browse: params.get("parcourir"),
     activity: params.get("activite"),
     report: params.get("signalement"),
+    news: params.get("nouveautes"),
   };
 }
 
@@ -181,6 +200,7 @@ function serialize(route: CinemaRoute): string {
   if (route.browse) params.set("parcourir", route.browse);
   if (route.activity) params.set("activite", route.activity);
   if (route.report) params.set("signalement", route.report);
+  if (route.news) params.set("nouveautes", route.news);
   const query = params.toString();
   return query ? `#${query}` : "";
 }
@@ -451,7 +471,7 @@ if (typeof window !== "undefined") {
  * laisse pas une fermeture l'oublier — l'activité, ajoutée le 24/09/2026, restait sinon affichée
  * après une croix.
  */
-export const CLOSE_PANELS = { search: false, list: false, account: false, browse: null, activity: null, report: null } satisfies Partial<CinemaRoute>;
+export const CLOSE_PANELS = { search: false, list: false, account: false, browse: null, activity: null, report: null, news: null } satisfies Partial<CinemaRoute>;
 
 export function cinemaClose(fallback: Partial<CinemaRoute>): void {
   if (typeof window === "undefined") return;

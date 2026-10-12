@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { CinemaRoute } from "@/lib/cinemaRoute";
 
 const mockNavigate = vi.fn();
-vi.mock("@/lib/cinemaRoute", () => ({ cinemaNavigate: (...args: unknown[]) => mockNavigate(...args) }));
+vi.mock("@/lib/cinemaRoute", async (importOriginal) => ({
+  // La règle « un écran poussé depuis le Compte est ouvert » reste la vraie (`accountScreenOpen`).
+  accountScreenOpen: (await importOriginal<typeof import("@/lib/cinemaRoute")>()).accountScreenOpen,
+  cinemaNavigate: (...args: unknown[]) => mockNavigate(...args),
+}));
 
 const EMPTY: CinemaRoute = {
   tab: "movies",
@@ -18,6 +22,7 @@ const EMPTY: CinemaRoute = {
   browse: null,
   activity: null,
   report: null,
+  news: null,
 };
 
 beforeEach(() => vi.clearAllMocks());

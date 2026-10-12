@@ -31,12 +31,16 @@ const PlayerAccountPanel = dynamic(() => import("./PlayerAccountPanel").then((m)
 // L'activité des comptes, pour l'administrateur seul : chargée à la première ouverture, jamais
 // avant — personne d'autre ne paie son code.
 const PlayerActivityPanel = dynamic(() => import("./PlayerActivityPanel").then((m) => m.PlayerActivityPanel), { ssr: false, loading: PanelPlaceholder });
+// Compte → Nouveautés (DECISIONS.md §73), ouvert depuis le Compte ou par « Voir plus » de la fenêtre.
+const PlayerNewsPanel = dynamic(() => import("./PlayerNewsPanel").then((m) => m.PlayerNewsPanel), { ssr: false, loading: PanelPlaceholder });
 const PlayerReportPanel = dynamic(() => import("./PlayerReportPanel").then((m) => m.PlayerReportPanel), { ssr: false, loading: PanelPlaceholder });
 const PlayerSearchPanel = dynamic(() => import("./PlayerSearchPanel").then((m) => m.PlayerSearchPanel), { ssr: false, loading: PanelPlaceholder });
 const PlayerDiscoverSheet = dynamic(() => import("./PlayerDiscoverSheet").then((m) => m.PlayerDiscoverSheet), { ssr: false });
 const PlayerPersonSheet = dynamic(() => import("./PlayerPersonSheet").then((m) => m.PlayerPersonSheet), { ssr: false });
 // L'écran d'accueil — chargé à part : la plupart des lancements ne l'affichent pas.
 const PlayerOnboardingGate = dynamic(() => import("./PlayerOnboarding").then((m) => m.PlayerOnboardingGate), { ssr: false });
+// La fenêtre des Nouveautés : la décision est légère, la fenêtre elle-même n'arrive qu'avec elle.
+const NewsGate = dynamic(() => import("./NewsGate").then((m) => m.NewsGate), { ssr: false });
 const PushResumePrompt = dynamic(() => import("./PushResumePrompt").then((m) => m.PushResumePrompt), { ssr: false });
 // Les décodeurs du lecteur, une fois l'écran installé, à chaque démarrage : l'écran d'accueil seul
 // ne concerne qu'un premier lancement, et le 21/09/2026 le décodeur FLAC arrivait par un
@@ -117,6 +121,8 @@ export function PlayerShell() {
   const lastActivity = useLastValue(route.activity);
   const report = useExitDelay(route.report !== null, EXIT_MS);
   const lastReport = useLastValue(route.report);
+  const news = useExitDelay(route.news !== null, EXIT_MS);
+  const lastNews = useLastValue(route.news);
   /**
    * Ces fiches sortent en glissant, sauf quand ce qu'elles recouvrent n'est pas dessiné.
    *
@@ -208,6 +214,7 @@ export function PlayerShell() {
       {isMobile ? <PlayerBottomBar /> : <PlayerRail />}
       <PlayerOnboardingGate />
       <PushResumePrompt />
+      <NewsGate />
       <DecoderWarmup delayMs={DECODER_WARMUP_MS} />
       {/* Montés le temps de leur sortie : l'adresse change avant eux — un retour du navigateur
           suffit — et sans ce sursis ils disparaissaient d'un coup, alors qu'ils arrivent en
@@ -241,6 +248,7 @@ export function PlayerShell() {
         <PlayerActivityPanel key={lastActivity} raw={lastActivity} leaving={activity.leaving} />
       )}
       {report.render && lastReport !== null && <PlayerReportPanel key={lastReport} raw={lastReport} leaving={report.leaving} />}
+      {news.render && lastNews !== null && <PlayerNewsPanel key={lastNews} raw={lastNews} leaving={news.leaving} />}
       {/* Une seule fiche du dessus à la fois. Deux rendues ensemble se recouvraient dans l'ordre
           de montage, et surtout écoutaient Échap toutes les deux — une touche remontait alors de
           deux crans. L'historique garde la précédente, et le retour la rouvre.

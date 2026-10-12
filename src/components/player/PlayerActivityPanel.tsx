@@ -9,6 +9,7 @@ import { ActivityAccount } from "@/components/activity/views/ActivityAccount";
 import { ActivityLogs } from "@/components/activity/views/ActivityLogs";
 import { ReportThread } from "@/components/reports/ReportThread";
 import { ActivitySeance } from "@/components/activity/views/ActivitySeance";
+import { ActivityNews } from "@/components/activity/views/ActivityNews";
 
 // Chargé à l'ouverture seulement : ses gestes, ses matières et sa feuille de style ne concernent
 // que l'administrateur qui l'ouvre.
@@ -30,6 +31,7 @@ export function PlayerActivityPanel({ raw, leaving }: { raw: string; leaving?: b
     view.kind === "logs" ? t("activity.logs.title")
     : view.kind === "report" ? t("report.ui.threadTitle")
     : view.kind === "animations" ? t("player.account.animLab")
+    : view.kind === "news" ? t("news.title")
     : t("activity.title");
   return (
     <PlayerPanelFrame contentWidth="80rem" title={title} back leaving={leaving} scrollKey={`activite:${raw}`}>
@@ -40,6 +42,7 @@ export function PlayerActivityPanel({ raw, leaving }: { raw: string; leaving?: b
         {view.kind === "seance" && <ActivitySeance id={view.id} />}
         {view.kind === "report" && <ReportThread id={view.id} />}
         {view.kind === "animations" && <AnimationLab />}
+        {view.kind === "news" && <ActivityNews />}
       </div>
     </PlayerPanelFrame>
   );

@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import { getDefaultNotificationPreferences, type NotificationCategory } from "@/lib/notifications";
 import { DATA_DIR } from "@/lib/dataDir";
+import { INITIAL_NEWS_CONTENT, INITIAL_NEWS_SEED, INITIAL_NEWS_VERSION } from "@/lib/news/initialPage";
 
 // Réexporté, et défini ailleurs : le journal des erreurs a besoin du chemin et ne doit rien
 // devoir à la base — voir `dataDir.ts`. Une seule écriture de la valeur, ici comme là-bas.
@@ -447,11 +448,71 @@ function migrate(db: Database.Database): void {
   // Une ligne arrivée en flux mais dont le lot n'est pas encore validé (DECISIONS.md §69) : montrée au
   // lecteur, jamais comptée comme faite, remplacée ou effacée selon le verdict du lot entier.
   try { db.exec("ALTER TABLE subtitle_gen_cues ADD COLUMN provisional INTEGER NOT NULL DEFAULT 0"); } catch { /* already exists */ }
+  /**
+   * Les Nouveautés (DECISIONS.md §73) — voir `src/lib/news/`.
+   *
+   * `seq` est l'ordre de publication, nul pour un brouillon : c'est lui qu'un compte compare à sa
+   * dernière page vue, pas l'identifiant — un brouillon commencé avant un autre peut être publié
+   * après lui. `news_state` n'a de ligne que pour un compte qui a ouvert le cinéma depuis : un
+   * compte absent voit la dernière page publiée (`newsDb.stateOf`). Les colonnes de mesure gardent
+   * le dernier affichage de chacun, pour la vue de l'administrateur ; le détail est au journal.
+   */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS news_pages (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      version      TEXT    NOT NULL,
+      content      TEXT    NOT NULL,
+      status       TEXT    NOT NULL DEFAULT 'draft',
+      seq          INTEGER,
+      created_at   INTEGER NOT NULL,
+      updated_at   INTEGER NOT NULL,
+      published_at INTEGER
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_news_pages_seq ON news_pages (seq) WHERE seq IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS news_state (
+      user_name    TEXT    PRIMARY KEY,
+      seen_seq     INTEGER NOT NULL DEFAULT 0,
+      created_at   INTEGER NOT NULL,
+      shown_at     INTEGER,
+      shown_ids    TEXT,
+      shown_ms     INTEGER,
+      closed_by    TEXT,
+      scrolled     INTEGER,
+      auto         INTEGER,
+      see_more_at  INTEGER,
+      page_at      INTEGER,
+      page_ms      INTEGER,
+      page_section TEXT,
+      rearmed_at   INTEGER
+    );
+  `);
+  seedInitialNews(db);
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
     const now = Date.now();
     db.prepare("INSERT OR IGNORE INTO onboarding (user_name, pending, updated_at) VALUES ('louis', 1, ?)").run(now);
     db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES ('onboarding-seed-louis', ?)").run(now);
   }
+}
+
+/**
+ * La page « 8.44 », publiée par le code au démarrage — sur toute installation, l'image publique
+ * comprise, et sur une installation neuve dès son premier démarrage (DECISIONS.md §73).
+ *
+ * Une seule fois : le marqueur `migrations_done` est posé dans la même transaction. Un redémarrage
+ * ne la recrée pas, ne la republie pas et ne réarme personne ; une page modifiée ou supprimée par
+ * l'administrateur n'est jamais réécrite. Aucun compte n'a encore de ligne dans `news_state` à ce
+ * moment-là, et un compte sans ligne voit la dernière page publiée : le drapeau est donc allumé pour
+ * tous les comptes, existants comme futurs, sans rien leur écrire.
+ */
+export function seedInitialNews(db: Database.Database, now = Date.now()): void {
+  if (db.prepare("SELECT 1 FROM migrations_done WHERE name = ?").get(INITIAL_NEWS_SEED)) return;
+  db.transaction(() => {
+    const max = (db.prepare("SELECT COALESCE(MAX(seq), 0) AS m FROM news_pages").get() as { m: number }).m;
+    db.prepare(
+      "INSERT INTO news_pages (version, content, status, seq, created_at, updated_at, published_at) VALUES (?, ?, 'published', ?, ?, ?, ?)"
+    ).run(INITIAL_NEWS_VERSION, JSON.stringify(INITIAL_NEWS_CONTENT), max + 1, now, now, now);
+    db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(INITIAL_NEWS_SEED, now);
+  })();
 }
 
 // ─── User preferences ─────────────────────────────────────────────────────────

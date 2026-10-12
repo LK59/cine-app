@@ -26,7 +26,7 @@ import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY
 import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
-import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
+import { accountScreenOpen, useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
 import { uniqueById } from "@/lib/cinemaRails";
 import { BROWSE_ALL, browseSheetKey } from "@/lib/cinemaBrowse";
@@ -578,8 +578,7 @@ export function CinemaMobileClient() {
       route.browse !== null ||
       route.discover !== null ||
       route.person !== null ||
-      route.activity !== null ||
-      route.report !== null
+      accountScreenOpen(route)
   );
 
   if (typeof document === "undefined") return null;

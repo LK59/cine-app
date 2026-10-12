@@ -34,6 +34,7 @@ describe("cinemaRoute", () => {
       browse: null,
       activity: null,
       report: null,
+      news: null,
     });
 
     act(() => cinemaNavigate({ film: 603 }));
@@ -158,7 +159,16 @@ describe("cinemaRoute", () => {
       browse: null,
       activity: null,
       report: null,
+      news: null,
     });
+  });
+
+  // Compte → Nouveautés (DECISIONS.md §73) : « Voir plus » de la fenêtre y mène, sur une section.
+  it("carries the news page in the hash, its section included", () => {
+    const { result } = renderHook(() => useCinemaRoute());
+    act(() => cinemaNavigate({ news: "corrections:4" }));
+    expect(window.location.hash).toBe("#nouveautes=corrections%3A4");
+    expect(result.current.news).toBe("corrections:4");
   });
 
   // La grille complète est une adresse comme une autre : elle se partage, et le retour ramène à

@@ -19,6 +19,7 @@ import {
   RefreshCw,
   ServerCrash,
   ShieldAlert,
+  Sparkles,
   Users,
   Wrench,
 } from "lucide-react";
@@ -37,6 +38,7 @@ import { DiagnosisPanel } from "@/components/activity/Diagnosis";
 import { DeviceQualityList, Heatmap, TopTitles, AuthList } from "@/components/activity/insights";
 import type { Seance } from "@/lib/activity/seances";
 import { ActivityLink, goTo } from "@/components/activity/nav";
+import { NEWS_ADMIN_KEY, NewsTiles, type NewsAdminData } from "@/components/activity/views/ActivityNews";
 
 interface Overview {
   now: number;
@@ -286,6 +288,28 @@ function AccountRow({ a, now }: { a: AccountSummary; now: number }) {
   );
 }
 
+/** La dernière page de Nouveautés en quatre chiffres ; le détail, la relance et l'écriture dans sa vue. */
+function NewsPanel() {
+  const t = useT();
+  const { data } = useSWR<NewsAdminData>(NEWS_ADMIN_KEY, fetcher, { refreshInterval: 60_000 });
+  if (!data) return null;
+  return (
+    <Panel
+      title={t("news.title")}
+      icon={Sparkles}
+      action={
+        <ActivityLink to={{ kind: "news" }} className="text-xs text-accent-300 hover:underline">
+          {t("activity.news.open")}
+        </ActivityLink>
+      }
+    >
+      <div className="p-3">
+        <NewsTiles s={data.synthesis} />
+      </div>
+    </Panel>
+  );
+}
+
 /** La vue d'ensemble : en direct, à regarder, la semaine, les comptes, le fil des séances. */
 export function ActivityOverview() {
   const t = useT();
@@ -362,6 +386,9 @@ export function ActivityOverview() {
 
       {/* Les signalements qui attendent une réponse. */}
       <ReportsPanel now={now} />
+
+      {/* Les Nouveautés : qui a vu la dernière page, et comment (DECISIONS.md §73). */}
+      <NewsPanel />
 
       {/* Le fichier ou l'appareil : le verdict de chaque titre qui a échoué. */}
       <DiagnosisPanel items={data.household.diagnosis} now={now} days={data.household.days} />

@@ -1,7 +1,7 @@
 "use client";
 
 import { Home, Search, Bookmark, User } from "lucide-react";
-import { cinemaNavigate, type CinemaRoute } from "@/lib/cinemaRoute";
+import { accountScreenOpen, cinemaNavigate, type CinemaRoute } from "@/lib/cinemaRoute";
 import { requestSearchFocus } from "@/lib/searchFocus";
 
 export type PlayerPanel = "home" | "search" | "list" | "account";
@@ -32,7 +32,7 @@ export function activePanel(route: CinemaRoute): PlayerPanel {
   if (route.search) return "search";
   if (route.list) return "list";
   // L'activité s'ouvre depuis le compte et le remplace : c'est toujours l'onglet Compte.
-  if (route.account || route.activity !== null || route.report !== null) return "account";
+  if (route.account || accountScreenOpen(route)) return "account";
   return "home";
 }
 
@@ -64,8 +64,7 @@ export function isOnPanel(panel: PlayerPanel, current: CinemaRoute): boolean {
     current.person !== null ||
     current.browse !== null ||
     // L'activité remplace le panneau Compte : y retourner depuis le rail doit la refermer.
-    current.activity !== null ||
-    current.report !== null;
+    accountScreenOpen(current);
   return activePanel(current) === panel && !covered;
 }
 
@@ -86,6 +85,7 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute, mode: "push"
     browse: null,
     activity: null,
     report: null,
+    news: null,
   } satisfies Partial<CinemaRoute>;
 
   if (panel === "home") {

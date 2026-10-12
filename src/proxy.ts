@@ -120,6 +120,10 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // Générer des sous-titres (DECISIONS.md §69) : lancer ou rejoindre une tâche. La dépense est
   // bornée par la route elle-même — 50 lancements par jour et par compte, budget mensuel global.
   "POST /api/subtitle-gen/jobs",
+  // Les Nouveautés (DECISIONS.md §73) : « la fenêtre s'est affichée » et ses mesures. Les deux
+  // routes n'écrivent que pour l'appelant (son compte vient de la session) et ne renvoient rien.
+  "POST /api/release-notes/seen",
+  "POST /api/release-notes/event",
 ]);
 
 /**
@@ -201,6 +205,9 @@ const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/jellyfin\/items\/?$/,
   // Le panneau des sous-titres générés : dépense du mois, tâches de tous les comptes (§69).
   /^\/api\/subtitle-gen\/admin(\/|$)/,
+  // Les Nouveautés vues de l'activité : l'état de chaque compte, les brouillons (§73). La route le
+  // vérifie aussi (`adminOnly`).
+  /^\/api\/admin\/release-notes(\/|$)/,
 ];
 
 function isAdminOnlyRead(pathname: string): boolean {

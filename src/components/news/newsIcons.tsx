@@ -1,0 +1,43 @@
+import {
+  AudioLines,
+  Battery,
+  Bell,
+  Captions,
+  Cast,
+  GalleryVerticalEnd,
+  Heart,
+  Image as ImageIcon,
+  Palette,
+  Search,
+  ShieldCheck,
+  SkipForward,
+  Smartphone,
+  Sparkles,
+  Subtitles,
+  Tv,
+  Wrench,
+  Zap,
+} from "lucide-react";
+import type { NewsIcon } from "@/lib/news/content";
+
+/** Les icônes au trait des Nouveautés — un nom à nous, une icône lucide (voir `NEWS_ICONS`). */
+export const NEWS_ICON_COMPONENTS: Record<NewsIcon, React.ElementType> = {
+  sparkles: Sparkles,
+  audio: AudioLines,
+  subtitles: Subtitles,
+  next: SkipForward,
+  cast: Cast,
+  logo: ImageIcon,
+  captions: Captions,
+  sheets: GalleryVerticalEnd,
+  speed: Zap,
+  battery: Battery,
+  shield: ShieldCheck,
+  tv: Tv,
+  phone: Smartphone,
+  bell: Bell,
+  search: Search,
+  palette: Palette,
+  wrench: Wrench,
+  heart: Heart,
+};
