@@ -24,9 +24,10 @@ vi.mock("@/lib/clients/jellyfin", () => ({
 }));
 
 import Database from "better-sqlite3";
-import { getDb, seedInitialNews } from "@/lib/db";
+import { getDb, seedInitialNews, seedNewsPage } from "@/lib/db";
 import { newsDb, newsFor } from "@/lib/news/store";
 import { INITIAL_NEWS_CONTENT, INITIAL_NEWS_SEED, INITIAL_NEWS_VERSION } from "@/lib/news/initialPage";
+import { NEWS_848_CONTENT, NEWS_848_SEED, NEWS_848_VERSION } from "@/lib/news/page848";
 import { STARTUP_LOG } from "@/lib/eventLogs";
 import { setProviderFactoryForTests, type TranslationCall } from "@/lib/subtitleGen/providers";
 import { NEWS_TRANSLATION_SCHEMA, rebuild } from "@/lib/news/translate";
@@ -57,27 +58,34 @@ function logLines(): Record<string, unknown>[] {
 beforeEach(() => verify.mockReset());
 
 describe("la page initiale, publiée par la migration", () => {
-  it("base vide : la page 8.44 est publiée, en quatre langues, et le drapeau est allumé pour tous", () => {
+  it("base vide : les pages 8.44 puis 8.48 sont publiées, en quatre langues, et un compte qui n'a rien vu les a fusionnées", () => {
     getDb();
     const pages = newsDb.published();
-    expect(pages).toHaveLength(1);
-    expect(pages[0].version).toBe(INITIAL_NEWS_VERSION);
-    expect(pages[0].seq).toBe(1);
-    expect(pages[0].content.fr.sections[0].entries[0].title).toBe("Améliorer les dialogues");
-    for (const lang of ["en", "es", "de"] as const) expect(pages[0].content[lang]?.sections.length).toBe(2);
-    // Aucun compte n'a encore de ligne : chacun, existant ou futur, l'a à voir.
-    expect(newsFor("un-compte-quelconque").unseen).toEqual([pages[0].id]);
-    expect(newsFor("un-autre").unseen).toEqual([pages[0].id]);
+    expect(pages.map((p) => p.version)).toEqual([NEWS_848_VERSION, INITIAL_NEWS_VERSION]);
+    const initial = pages.find((p) => p.version === INITIAL_NEWS_VERSION)!;
+    const p848 = pages.find((p) => p.version === NEWS_848_VERSION)!;
+    expect(initial.seq).toBe(1);
+    expect(p848.seq).toBe(2);
+    expect(initial.content.fr.sections[0].entries[0].title).toBe("Améliorer les dialogues");
+    expect(p848.content.fr.sections[0].entries[0].title).toBe("Connexion lente");
+    for (const lang of ["en", "es", "de"] as const) {
+      expect(initial.content[lang]?.sections.length).toBe(2);
+      expect(p848.content[lang]?.sections.length).toBe(1);
+    }
+    // Aucun compte n'a encore de ligne : chacun, existant ou futur, a les deux, la plus récente d'abord.
+    expect(newsFor("un-compte-quelconque").unseen).toEqual([p848.id, initial.id]);
+    expect(newsFor("un-autre").unseen).toEqual([p848.id, initial.id]);
   });
 
   it("second démarrage : rien ne change — ni nouvelle page, ni republication, ni réarmement", () => {
     const db = getDb();
-    const id = newsDb.published()[0].id;
-    newsDb.markSeen("vu-avant", [id]);
+    const ids = newsDb.published().map((p) => p.id);
+    newsDb.markSeen("vu-avant", ids);
     expect(newsFor("vu-avant").unseen).toEqual([]);
     seedInitialNews(db);
     seedInitialNews(db);
-    expect(newsDb.all()).toHaveLength(1);
+    seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT);
+    expect(newsDb.all()).toHaveLength(2);
     expect(newsFor("vu-avant").unseen).toEqual([]);
   });
 
@@ -116,10 +124,10 @@ describe("le drapeau par compte", () => {
     const seen = await import("@/app/api/release-notes/seen/route");
     asUser("mathis");
     const before = (await (await GET(req())).json()) as { unseen: number[]; pages: { id: number }[] };
-    expect(before.unseen).toHaveLength(1);
+    expect(before.unseen).toHaveLength(2);
     expect((await seen.POST(req({ ids: before.unseen }))).status).toBe(204);
     expect(((await (await GET(req())).json()) as { unseen: number[] }).unseen).toEqual([]);
-    expect(newsFor("emma").unseen).toHaveLength(1);
+    expect(newsFor("emma").unseen).toHaveLength(2);
   });
 
   it("refuse un visiteur sans session", async () => {
@@ -130,7 +138,7 @@ describe("le drapeau par compte", () => {
     expect((await seen.POST(req({ ids: [1] }))).status).toBe(401);
   });
 
-  it("deux pages de retard : les deux restent à voir, la plus récente d'abord ; un compte neuf ne voit que la dernière", () => {
+  it("deux pages de retard : les deux restent à voir, la plus récente d'abord ; un compte neuf voit au plus les trois dernières", () => {
     newsDb.stateOf("lucas");
     const first = newsDb.published()[0].id;
     newsDb.markSeen("lucas", [first]);
@@ -142,8 +150,8 @@ describe("le drapeau par compte", () => {
     newsDb.publish(a);
     newsDb.publish(b);
     expect(newsFor("en-retard").unseen).toEqual([b, a]);
-    // Arrivé après coup : la dernière seulement, pas l'historique fusionné.
-    expect(newsFor("tout-neuf").unseen).toEqual([b]);
+    // Arrivé après coup : les trois dernières fusionnées (FIRST_VIEW_PAGES), pas tout l'historique.
+    expect(newsFor("tout-neuf").unseen).toEqual([b, a, newsDb.published().find((p) => p.version === NEWS_848_VERSION)!.id]);
     // Republier ne change rien.
     expect(newsDb.publish(b)).toBe(newsDb.latestSeq());
     newsDb.markSeen("en-retard", [b, a]);
@@ -300,5 +308,17 @@ describe("l'éditeur de l'administrateur", () => {
     const admin = await import("@/app/api/admin/release-notes/route");
     expect((await admin.POST(req({ version: "", content: { fr } }))).status).toBe(400);
     expect((await admin.POST(req({ version: "9.1", content: { en: fr } }))).status).toBe(400);
+  });
+});
+
+describe("la page 8.48", () => {
+  it("ne parle ni des titres masqués ni de la fabrication interne, et ses quatre langues ont la même forme", () => {
+    const text = JSON.stringify(NEWS_848_CONTENT).toLowerCase();
+    expect(text).not.toMatch(/titres? masqu|tags? bloqu|hidden title|blocked tag|agent|claude|§/);
+    for (const lang of ["en", "es", "de"] as const) {
+      const c = NEWS_848_CONTENT[lang]!;
+      expect(c.fixes.map((g) => g.items.length)).toEqual(NEWS_848_CONTENT.fr.fixes.map((g) => g.items.length));
+      expect(c.sections.map((s) => s.entries.map((e) => e.icon))).toEqual(NEWS_848_CONTENT.fr.sections.map((s) => s.entries.map((e) => e.icon)));
+    }
   });
 });

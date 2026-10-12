@@ -1,6 +1,9 @@
 import { getDb } from "@/lib/db";
 import { sanitizeByLang, type NewsContentByLang, type NewsPageView, type NewsPayload } from "./content";
 
+/** Combien de pages un compte qui n'a jamais rien vu reçoit, fusionnées (DECISIONS.md §73). */
+export const FIRST_VIEW_PAGES = 3;
+
 /**
  * Les Nouveautés en base (DECISIONS.md §73) : les pages, et où en est chaque compte.
  *
@@ -170,7 +173,11 @@ export const newsDb = {
     const db = getDb();
     const found = db.prepare("SELECT * FROM news_state WHERE user_name = ?").get(user) as StateRaw | undefined;
     if (found) return toState(found);
-    const seen = Math.max(0, newsDb.latestSeq() - 1);
+    // Un compte qui n'a encore rien vu reçoit les dernières pages fusionnées, chacune sous sa version
+    // — au plus `FIRST_VIEW_PAGES`. C'était la dernière seule : à la 8.48 (12/10/2026), les comptes
+    // qui n'avaient pas ouvert l'appli depuis la 8.44 l'auraient perdue. Borné pour qu'une
+    // installation neuve, des mois plus tard, ne reçoive pas tout l'historique d'un coup.
+    const seen = Math.max(0, newsDb.latestSeq() - FIRST_VIEW_PAGES);
     db.prepare("INSERT OR IGNORE INTO news_state (user_name, seen_seq, created_at) VALUES (?, ?, ?)").run(user, seen, now);
     return toState(db.prepare("SELECT * FROM news_state WHERE user_name = ?").get(user) as StateRaw);
   },
