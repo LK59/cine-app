@@ -3470,3 +3470,41 @@ coupure), `PlayerHost-connexion-lente.test.tsx`, `activity-connexion-lente.test.
 **Décidé le 12/10/2026.**
 
 **Mesure sans toucher à la réception (12/10/2026, choix de Louis).** La première version lisait le corps des réponses au fil de l'eau pendant chaque ouverture (`readCounted`) : même octets, mais un chemin de réception neuf pour toutes les ouvertures, Safari iOS compris, jamais validé sur appareil. `HttpByteSource` lit de nouveau d'un bloc (`arrayBuffer()`, comme avant §77) et compte chaque morceau une fois arrivé ; le morceau encore en vol n'apporte que son temps, ce qui ne peut qu'abaisser la mesure d'au plus un morceau — sans effet sur le verdict d'un lien comme celui du 12/10 (morceaux de 1 Mio en 2, 7, 14, 25 s). `readCounted` reste dans `slowLink.ts`, testée, non branchée.
+
+**Dire la lenteur pendant le chargement — informer tôt, ne jamais abandonner tôt (12/10/2026, choix de
+Louis).** Le verdict attendait le renoncement (35 s / 20 s) alors que le lien se savait lent bien avant.
+Pendant l'ouverture, le lien est lu chaque seconde (`openingLinkState`) — mesure et affichage seulement,
+aucune requête de plus, aucun abandon anticipé (une première version renonçait dès 10 s sous le quart du
+besoin ; écartée avant livraison) :
+- *Indice* — dès **5 s de réception** (`HINT_MEASURED_MS`), des octets reçus, et un débit **sous la
+  moitié** du besoin : « Connexion lente… » sous la ligne de chargement de l'ouverture (§60, `note` de
+  `PlaybackIntro`, avant « Toujours en cours… » ; aussi le mot sous la roue quand l'ouverture n'est pas
+  là). Sans chiffres. Retiré dès que le débit remonte.
+- *Message chiffré* — les preuves du verdict (10 s de réception, 256 Kio) **et** un débit **sous le
+  quart** du besoin (`NOTICE_SHARE` ; le cas du 12/10, ≈0,3 Mbit/s pour 3,9, est sous 10 %) : à la place
+  du mot, « Connexion trop lente pour ce film (≈X Mbit/s reçus, il en faut environ Y). » (`notice` de
+  `PlaybackIntro`), chiffres tenus à jour, avec **« Version allégée »** — présent seulement si
+  `serverCanCarry` (≥ `CRAWL`, 1,5 Mbit/s) et qu'il y a un lecteur serveur — et **« Fermer »**. Le
+  chargement continue derrière : la première image arrivée, le film part seul et le message s'en va avec
+  l'ouverture. Montré, il reste tant que le débit est sous la moitié (pas de clignotement autour du
+  quart) et s'efface au-dessus. Côté natif, il garde l'ouverture au-delà de 20 s (`STUCK_AFTER_MS`) : il
+  explique déjà l'attente.
+- *Choix* — « Version allégée » : natif, `noteSlowLink` puis `fallToStable` avec
+  `reason: "connexion trop lente (version allégée demandée)"` (`SLOW_LINK_LIGHTER_REASON`) et les
+  chiffres ; serveur, une négociation neuve au débit abaissé (`start`, `why: "lighter"`, chiffres en
+  `trigger`). « Fermer » : la fermeture ordinaire. Le panneau Activité range le motif allégé avec les
+  connexions trop lentes (`isSlowLinkReason`), jamais comme un échec du fichier.
+- *Renoncement* — inchangé : 35 s (natif) / 20 s (serveur), verdict chiffré, Réessayer, règle de relais,
+  y compris quand le message était affiché.
+- *Journal* — aucune ligne de plus. Natif : apparitions et retraits de l'indice et du message dans la
+  trace ; `slowNoticeAt` (ms depuis le montage) et `slowChoice` (`"allégée"` / `"fermer"` / `null`) sur
+  les lignes `opening`, `stop`, et celles du renoncement ou du relais — seulement quand le message a paru.
+  Serveur : les mêmes champs sur `stop`.
+Serveur : hls.js seulement (Safari HLS natif et la lecture directe ne mesurent rien : inchangés). Rien
+pendant une coupure (« connexion perdue » garde son écran ; le lien n'est plus lu) ni sous une erreur.
+**Tests** : `slowLink.test.ts` (« pendant l'ouverture »), `ExperimentalPlayerHost.test.tsx` (« le lien,
+mesuré » : bon réseau sans indice ni requête de plus ; < 10 % → indice à 5 s, message à ~10 s sans
+« Version allégée », chargement poursuivi, renoncement à 35 s ; première image tardive ; « Version
+allégée » ; « Fermer » ; 35 % → indice seul ; débit qui remonte ; coupure totale),
+`PlayerHost-connexion-lente.test.tsx` (« pendant le chargement », Safari compris),
+`activity-connexion-lente.test.ts`.

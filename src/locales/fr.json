@@ -1616,6 +1616,9 @@
     "reconnecting": "Reconnexion…",
     "loadingTooLong": "Le chargement prend trop de temps. Réessaie.",
     "slowLink": {
+      "hint": "Connexion lente…",
+      "notice": "Connexion trop lente pour ce film (≈{recv} Mbit/s reçus, il en faut environ {need}).",
+      "lighter": "Version allégée",
       "title": "Connexion trop lente",
       "detail": "≈{recv} Mbit/s reçus, il en faut environ {need} pour ce film. Réessaie quand la connexion sera meilleure.",
       "message": "Connexion trop lente pour ce film (≈{recv} Mbit/s reçus, il en faut environ {need}). Réessaie quand la connexion sera meilleure."

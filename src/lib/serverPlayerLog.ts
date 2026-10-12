@@ -40,7 +40,9 @@ export type ServerStartWhy =
   /** La diffusion relancée après une route perdue. */
   | "cast-relaunch"
   /** Un échelon de l'échelle de repli audio, après une erreur de l'élément. */
-  | "ladder";
+  | "ladder"
+  /** « Version allégée », choisie sur le message d'une connexion trop lente (§77) : débit abaissé. */
+  | "lighter";
 
 export const SERVER_START_WHY_LABELS: Record<ServerStartWhy, string> = {
   open: "ouverture",
@@ -51,6 +53,7 @@ export const SERVER_START_WHY_LABELS: Record<ServerStartWhy, string> = {
   retry: "réessayer",
   "cast-relaunch": "relance de la diffusion",
   ladder: "relance après erreur",
+  lighter: "version allégée demandée",
 };
 
 export function isStartWhy(why: unknown): why is ServerStartWhy {

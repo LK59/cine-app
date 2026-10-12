@@ -24,13 +24,20 @@ import {
   frozenReading,
   linkVerdictWord,
   meterXhr,
+  openingLinkState,
   readLink,
   slowLinkFields,
   slowLinkFigures,
+  serverCanCarry,
   slowLinkVerdict,
   streamNeedBps,
+  noteSlowLink,
   type LinkReading,
+  type SlowLink,
 } from "@/lib/slowLink";
+
+/** Ni indice ni message : l'état ordinaire d'un chargement (§77). */
+const NO_LINK_SIGNAL: { hint: boolean; notice: SlowLink | null } = { hint: false, notice: null };
 import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
@@ -67,7 +74,7 @@ import { positionBucket, retrySignature } from "@/lib/retryLedger";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
-import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
+import { PlaybackIntro, type IntroNotice, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 import { useServerIntroPicture } from "@/lib/introEnd";
 
@@ -392,11 +399,14 @@ function ServerPlayerIntro({
   videoRef,
   onCoverChange,
   note,
+  notice,
   onClose,
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
   /** Le mot d'une attente longue (« toujours en cours… »), dit sous la ligne de l'ouverture. */
   note?: string | null;
+  /** Le message chiffré d'une connexion trop lente et ses choix (§77) — voir `PlaybackIntro`. */
+  notice?: IntroNotice | null;
   /** Le calque couvre-t-il le lecteur — l'hôte en tait la roue et le fil de ses commandes. */
   onCoverChange?: (covering: boolean) => void;
   allowed: boolean;
@@ -438,6 +448,7 @@ function ServerPlayerIntro({
       fallbackName={session.title}
       caption={introCaption({ ...session.introArt, resumeSeconds }, t)}
       note={note ?? null}
+      notice={notice ?? null}
       onClose={onClose}
       closeLabel={t("common.close")}
       className="absolute inset-0 z-[25]"
@@ -544,6 +555,11 @@ function ActivePlayer({
   /** La reprise que l'élément n'a pas encore prise — reposée sur le téléviseur s'il la manque. */
   const [castResume] = useState(() => new CastResume());
   const loadWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Le lien lu chaque seconde pendant le chargement (hls.js seulement, §77) : l'indice « Connexion
+   * lente… » et le verdict anticipé. Arrêté partout où le chien de garde l'est.
+   */
+  const linkWatch = useRef<ReturnType<typeof setInterval> | null>(null);
   // Belt-and-braces for the native (non-hls.js) path: iOS's media daemon releases HLS sessions
   // asynchronously, so even with the reload-based track switch a fresh load can race the old
   // session's teardown and get refused (SRC_NOT_SUPPORTED). One automatic, delayed re-attempt
@@ -622,6 +638,13 @@ function ActivePlayer({
   const streamNeedRef = useRef<number | null>(null);
   const [linkFailure, setLinkFailure] = useState<LinkReading | null>(null);
   const [linkLive, setLinkLive] = useState<LinkReading | null>(null);
+  /**
+   * Ce que l'ouverture dit du lien pendant le chargement (§77, hls.js seulement) : l'indice
+   * « Connexion lente… », puis le message chiffré avec « Version allégée » et « Fermer ».
+   */
+  const [linkSignal, setLinkSignal] = useState<{ hint: boolean; notice: SlowLink | null }>(NO_LINK_SIGNAL);
+  /** Pour le journal : quand le message a paru (ms depuis le début de la séance), et le choix fait. */
+  const slowNoticeRef = useRef<{ at: number | null; choice: "allégée" | "fermer" | null }>({ at: null, choice: null });
   // True once loading/reconnecting has been ongoing for >3s — drives the "still loading, don't
   // close the player" reassurance line for heavy flows (a 4K track switch can legitimately take
   // 15-20s across the grace delay, codec ladder and reload escalation).
@@ -798,7 +821,9 @@ function ActivePlayer({
         restarts: restartsRef.current,
         error: errorRef.current,
         ...(sessionPlayedRef.current ? {} : { gaveUpAfterMs: now - sessionStartedAtRef.current }),
-      }) };
+      }),
+      // Le message chiffré d'une connexion trop lente et le choix fait (§77), s'il a paru.
+      ...(slowNoticeRef.current.at !== null ? { slowNoticeAt: slowNoticeRef.current.at, slowChoice: slowNoticeRef.current.choice } : {}) };
     },
     [watched]
   );
@@ -999,6 +1024,9 @@ function ActivePlayer({
       networkRetryTimer.current = null;
       if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
       loadWatchdog.current = null;
+      if (linkWatch.current) clearInterval(linkWatch.current);
+      linkWatch.current = null;
+      setLinkSignal(NO_LINK_SIGNAL);
       networkRetryCount.current = 0;
       mediaRetryCount.current = 0;
       setError(null);
@@ -1217,6 +1245,9 @@ function ActivePlayer({
         () => {
           if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
           loadWatchdog.current = null;
+          if (linkWatch.current) clearInterval(linkWatch.current);
+          linkWatch.current = null;
+          setLinkSignal(NO_LINK_SIGNAL);
           nativeErrorRetryCount.current = 0;
           if (nativeHls || data.isDirectPlay) startup.fromResources(resourceEntries(), STREAM_PREFIX);
           startup.picture();
@@ -1250,6 +1281,9 @@ function ActivePlayer({
       streamNeedRef.current = needBps;
       setLinkFailure(null);
       loadWatchdog.current = setTimeout(() => {
+        if (linkWatch.current) clearInterval(linkWatch.current);
+        linkWatch.current = null;
+        setLinkSignal(NO_LINK_SIGNAL);
         let slow: ReturnType<typeof slowLinkVerdict> = null;
         try {
           slow = slowLinkVerdict(linkMeter.measure(), needBps);
@@ -1270,6 +1304,30 @@ function ActivePlayer({
         setReconnecting(false);
         setLoading(false);
       }, 20_000);
+      // Chaque seconde du chargement, le lien mesuré (§77 — hls.js seulement : Safari lit son HLS
+      // lui-même et la lecture directe n'est pas comptée ; rien n'y change). Informer tôt, ne jamais
+      // abandonner tôt : l'indice, puis le message chiffré et ses choix, pendant que le chargement
+      // continue ; le chien de garde des 20 s reste seul à renoncer. Aucune requête, rien sous une
+      // erreur déjà à l'écran ; arrêté avec le chien de garde, à la première image, à la négociation
+      // suivante et au démontage.
+      if (!nativeHls && !data.isDirectPlay) {
+        let hinted = false;
+        let noticed = false;
+        linkWatch.current = setInterval(() => {
+          if (generation !== playbackGeneration.current || errorRef.current) return;
+          let measure: ReturnType<LinkMeter["measure"]> | null = null;
+          try {
+            measure = linkMeter.measure();
+          } catch {
+            measure = null;
+          }
+          const state = openingLinkState(measure, needBps, noticed);
+          if (state.notice && slowNoticeRef.current.at === null) slowNoticeRef.current.at = Date.now() - sessionStartedAtRef.current;
+          if (state.hint !== hinted || state.notice !== null || noticed) setLinkSignal({ hint: state.hint, notice: state.notice });
+          hinted = state.hint;
+          noticed = state.notice !== null;
+        }, 1000);
+      }
 
       // Subtitles always come from the PlaybackInfo response as external VTT tracks (rendered
       // as <track> elements below), for every PlayMethod — not from hls.js's own
@@ -1566,6 +1624,24 @@ function ActivePlayer({
     });
   }, [startPlayback]);
 
+  /**
+   * « Version allégée », sur le message d'une connexion trop lente (§77) : une négociation neuve, au
+   * débit que ce lien porte (`noteSlowLink` → `capForSlowLink`), même position, mêmes pistes. La ligne
+   * `start` le dit (`why: "lighter"`, et les chiffres en `trigger`).
+   */
+  const chooseLighter = useCallback(() => {
+    const slow = linkSignal.notice;
+    if (!slow) return;
+    slowNoticeRef.current.choice = "allégée";
+    noteSlowLink(itemId, slow);
+    const f = slowLinkFields(slow);
+    startPlayback({
+      ...lastPlaybackOpts.current,
+      resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
+      cause: { why: "lighter", trigger: `${f.recvMbps} Mb/s reçus, ${f.needMbps} demandés` },
+    });
+  }, [linkSignal.notice, itemId, startPlayback]);
+
   // Always toggles the native <track> elements rendered from externalSubtitleTracks below —
   // regardless of PlayMethod, since subtitles are now uniformly external VTT (see startPlayback).
   // video.textTracks is indexed by DOM position, not by Jellyfin's own stream index (`id`
@@ -1642,6 +1718,8 @@ function ActivePlayer({
       networkRetryTimer.current = null;
       if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
       loadWatchdog.current = null;
+      if (linkWatch.current) clearInterval(linkWatch.current);
+      linkWatch.current = null;
       if (nativeErrorRetryTimer.current) clearTimeout(nativeErrorRetryTimer.current);
       nativeErrorRetryTimer.current = null;
     };
@@ -2445,7 +2523,37 @@ function ActivePlayer({
         resumeSeconds={initialResumeAt ?? null}
         videoRef={videoRef}
         onCoverChange={setIntroCovering}
-        note={isOffline ? t("player.offline") : loading && loadingLong ? t("player.stillLoading") : reconnecting ? t("player.reconnecting") : null}
+        // Le message chiffré d'une connexion trop lente (§77), avec ses choix — le chargement continue.
+        // « Version allégée » seulement si la version la plus réduite passe par ce lien.
+        notice={
+          !isOffline && loading && !error && linkSignal.notice
+            ? {
+                text: t("player.slowLink.notice", slowLinkFigures(linkSignal.notice, locale)),
+                actions: [
+                  ...(serverCanCarry(linkSignal.notice) ? [{ label: t("player.slowLink.lighter"), onClick: chooseLighter, primary: true }] : []),
+                  {
+                    label: t("common.close"),
+                    onClick: () => {
+                      slowNoticeRef.current.choice = "fermer";
+                      handleClose();
+                    },
+                  },
+                ],
+              }
+            : null
+        }
+        // L'indice d'une connexion lente (§77) passe avant « toujours en cours » : il dit pourquoi.
+        note={
+          isOffline
+            ? t("player.offline")
+            : loading && linkSignal.hint
+              ? t("player.slowLink.hint")
+              : loading && loadingLong
+                ? t("player.stillLoading")
+                : reconnecting
+                  ? t("player.reconnecting")
+                  : null
+        }
         onClose={handleClose}
       />
       {!isMini && (

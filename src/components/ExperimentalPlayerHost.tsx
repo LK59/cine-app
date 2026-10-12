@@ -49,11 +49,13 @@ import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import {
+  SLOW_LINK_LIGHTER_REASON,
   SLOW_LINK_REASON,
   armOpeningMeter,
   disarmOpeningMeter,
   fileNeedBps,
   noteSlowLink,
+  openingLinkState,
   serverCanCarry,
   slowLinkFields,
   slowLinkFigures,
@@ -543,6 +545,24 @@ export function ExperimentalPlayerHost({
    * l'écran redevient l'ordinaire sans qu'il faille penser à vider celui-ci.
    */
   const [slowLink, setSlowLink] = useState<SlowLink | null>(null);
+  /**
+   * Ce que l'ouverture dit du lien pendant qu'elle charge (§77) : l'indice « Connexion lente… » (sous
+   * la moitié du besoin), puis le message chiffré avec « Version allégée » et « Fermer » (sous le
+   * quart, preuves du verdict réunies). Pour cette ouverture-ci (`at` = son `openedAt`) : daté plutôt
+   * que remis à zéro, une reconstruction le rend caduc sans qu'un effet ait à le vider.
+   */
+  const [slowSignal, setSlowSignal] = useState<{ at: number; hint: boolean; notice: SlowLink | null }>({ at: 0, hint: false, notice: null });
+  /**
+   * Pour le journal : quand le message chiffré a paru (ms depuis le montage) et ce que le spectateur
+   * en a fait — porté par les lignes `opening`, `stop` et celles du renoncement, jamais par une ligne
+   * de plus.
+   */
+  const slowNoticeRef = useRef<{ at: number | null; choice: "allégée" | "fermer" | null }>({ at: null, choice: null });
+  const slowNoticeFields = useCallback(
+    (): Record<string, string | number | null> =>
+      slowNoticeRef.current.at === null ? {} : { slowNoticeAt: slowNoticeRef.current.at, slowChoice: slowNoticeRef.current.choice },
+    []
+  );
   /** Le compteur de l'ouverture en cours — voir l'effet qui l'arme, avant celui du pipeline. */
   const openingMeterRef = useRef<LinkMeter | null>(null);
   /** Le débit moyen du fichier, d'après sa description — ce que le lien doit tenir. */
@@ -1514,6 +1534,8 @@ export function ExperimentalPlayerHost({
         ...describeFileRef.current(),
         path: "remux",
         firstMoveMs: movedAt - introStartedAt,
+        // Le message chiffré d'une connexion trop lente, s'il a paru pendant cette ouverture (§77).
+        ...slowNoticeFields(),
         steps: traceRecent(Date.now() - introStartedAt + 300).slice(-60).join(" | "),
       });
     };
@@ -1522,13 +1544,20 @@ export function ExperimentalPlayerHost({
       window.clearTimeout(timer);
       send();
     };
-  }, [introPlaying, introEligible, introStartedAt]);
+  }, [introPlaying, introEligible, introStartedAt, slowNoticeFields]);
+  // L'indice « Connexion lente… » et le message chiffré (§77) : ceux de cette ouverture-ci, tant
+  // qu'aucune image n'est là ni aucune erreur.
+  const slowCurrent = slowSignal.at === openedAt && openingFor !== null && !ready && !runtimeError && !networkLost;
+  const slowHintShown = slowCurrent && slowSignal.hint;
+  const slowNotice = slowCurrent ? slowSignal.notice : null;
   // Une erreur, la connexion perdue, l'attente devenue anormale (le rapport doit se lire), le
-  // mini-lecteur : l'ouverture s'efface à l'instant et l'écran d'avant se montre, inchangé.
+  // mini-lecteur : l'ouverture s'efface à l'instant et l'écran d'avant se montre, inchangé — sauf
+  // l'attente longue quand le message chiffré d'une connexion trop lente l'explique déjà (§77) : il
+  // reste, avec ses choix, jusqu'au renoncement des 35 s.
   const introPhase: IntroPhase =
     !introEligible || isMini ? "gone" : introPlaying
         ? "picture"
-        : error || networkLost || stuck || (startingFor !== null && startingFor >= STUCK_AFTER_MS)
+        : error || networkLost || (stuck && !slowNotice) || (startingFor !== null && startingFor >= STUCK_AFTER_MS)
           ? "gone"
           : "waiting";
   // Le calque couvre-t-il le lecteur ? L'ouverture entière dès l'appui, jusqu'au film qui bouge
@@ -1603,9 +1632,11 @@ export function ExperimentalPlayerHost({
         diag: diagSessionFacts(),
         // La minuterie de veille choisie, ou celle qui a arrêté le film (`sleepTimer.ts`).
         ...sleepTimerLogFields(sleepTimerStore.get()),
+        // Le message chiffré d'une connexion trop lente et le choix fait (§77), s'il a paru.
+        ...slowNoticeFields(),
       };
     },
-    [tally, watched, intendedPosition]
+    [tally, watched, intendedPosition, slowNoticeFields]
   );
   const reportStop = useCallback(
     (why: "close" | "next" | "page" | "unmount") => {
@@ -2708,10 +2739,11 @@ export function ExperimentalPlayerHost({
       slow = null;
     }
     if (!slow) {
-      fallToStable(`aucune image après ${GIVE_UP_AFTER_MS / 1000} s`);
+      fallToStable(`aucune image après ${GIVE_UP_AFTER_MS / 1000} s`, undefined, slowNoticeFields());
       return;
     }
-    const fields = slowLinkFields(slow);
+    // Les chiffres, et — s'il a paru — quand le message chiffré a été montré (§77).
+    const fields = { ...slowLinkFields(slow), ...slowNoticeFields() };
     const carry = serverFallbackRef.current !== false && serverCanCarry(slow);
     trace(
       `connexion trop lente : ${fields.recvMbps} Mb/s reçus sur ${fields.measuredS} s de réception, ` +
@@ -2736,7 +2768,7 @@ export function ExperimentalPlayerHost({
     setSlowLink(slow);
     setRuntimeError(SLOW_LINK_REASON);
     setNetworkLost(null);
-  }, [fallToStable, itemId, lifecycle, sessionId, tally]);
+  }, [fallToStable, itemId, lifecycle, sessionId, tally, slowNoticeFields]);
 
   // A player that never starts is the one failure a viewer cannot wait out: nothing on screen
   // changes, so there is nothing to react to. On a timer rather than derived from the clock, so
@@ -2756,6 +2788,72 @@ export function ExperimentalPlayerHost({
     return () => clearTimeout(id);
   }, [ready, runtimeError, networkLost, error, openedAt, giveUpOnOpening]);
 
+  /**
+   * Le lien, lu chaque seconde pendant l'ouverture (DECISIONS.md §77) — mesure et affichage seulement :
+   * informer tôt, ne jamais abandonner tôt.
+   *
+   * Dès cinq secondes de réception sous la moitié du besoin, « Connexion lente… » sous la ligne de
+   * chargement. Sous le quart, preuves du verdict réunies (10 s, 256 Kio), le message chiffré et ses
+   * deux choix, chiffres tenus à jour tant que le débit reste sous la moitié ; au-dessus, tout se
+   * retire. Le chargement continue derrière : la première image arrivée, le film part seul et le
+   * message s'en va avec l'ouverture ; sans image ni choix, le renoncement des 35 s, inchangé. Chaque
+   * changement est noté dans la trace (que la ligne `opening` et les lignes de panne emportent), sans
+   * ligne de plus.
+   *
+   * Mêmes conditions que le minuteur d'abandon : rien pendant une coupure (son écran attend le réseau),
+   * rien sous une erreur. Le compteur ne fait aucune requête : un bon réseau ne voit aucune différence.
+   */
+  useEffect(() => {
+    if (ready || runtimeError || networkLost || error) return;
+    let hinted = false;
+    let noticed = false;
+    const id = setInterval(() => {
+      const meter = openingMeterRef.current;
+      if (!meter) return;
+      let measure: ReturnType<LinkMeter["measure"]> | null = null;
+      try {
+        measure = meter.measure();
+      } catch {
+        measure = null;
+      }
+      const state = openingLinkState(measure, needBpsRef.current, noticed);
+      const mbps = () =>
+        measure && measure.receivingMs > 0 ? Math.round(((measure.bytes * 8) / measure.receivingMs / 1000) * 100) / 100 : null;
+      if (state.hint !== hinted) {
+        trace(
+          state.hint
+            ? `connexion lente : indice affiché — ${mbps()} Mb/s reçus sur ${Math.round((measure?.receivingMs ?? 0) / 100) / 10} s de réception`
+            : `connexion lente : indice retiré — ${mbps()} Mb/s reçus`
+        );
+      }
+      if ((state.notice !== null) !== noticed) {
+        trace(state.notice ? `connexion trop lente : message affiché — ${mbps()} Mb/s reçus` : `connexion trop lente : message retiré — ${mbps()} Mb/s reçus`);
+        if (state.notice && slowNoticeRef.current.at === null) slowNoticeRef.current.at = Date.now() - mountedAtRef.current;
+      }
+      // Un rendu par changement — et chaque seconde tant que le message montre des chiffres.
+      if (state.hint !== hinted || state.notice !== null || noticed) setSlowSignal({ at: openedAt, hint: state.hint, notice: state.notice });
+      hinted = state.hint;
+      noticed = state.notice !== null;
+    }, 1000);
+    return () => clearInterval(id);
+  }, [ready, runtimeError, networkLost, error, openedAt]);
+
+  /** « Fermer » depuis le message chiffré : la fermeture ordinaire, le choix noté au bilan. */
+  const chooseClose = useCallback(() => {
+    if (slowNoticeRef.current.at !== null) slowNoticeRef.current.choice = "fermer";
+    trace("connexion trop lente : fermé depuis le message");
+    handleClose();
+  }, [handleClose]);
+
+  /** « Version allégée » : le lecteur serveur, au débit que ce lien porte (`noteSlowLink`, §77). */
+  const chooseLighter = useCallback(() => {
+    const slow = slowSignal.notice;
+    if (!slow) return;
+    slowNoticeRef.current.choice = "allégée";
+    trace("connexion trop lente : version allégée demandée");
+    noteSlowLink(itemId, slow);
+    fallToStable(SLOW_LINK_LIGHTER_REASON, undefined, { ...slowLinkFields(slow), serverCanCarry: true, ...slowNoticeFields() });
+  }, [slowSignal.notice, itemId, fallToStable, slowNoticeFields]);
 
   // Below the threshold nothing is shown, and a resume that takes a moment reads as instant
   // rather than as a flash of spinner drawing attention to itself.
@@ -2778,11 +2876,13 @@ export function ExperimentalPlayerHost({
   const waitingWord =
     waitingFor === null || waitingFor < WORD_AFTER_MS
       ? null
-      : waitingFor >= STILL_WORKING_AFTER_MS
-        ? t("player.experimental.stillWorking")
-        : openingFor !== null
-          ? t("player.experimental.loading")
-          : t("player.experimental.preparing");
+      : slowHintShown
+        ? t("player.slowLink.hint")
+        : waitingFor >= STILL_WORKING_AFTER_MS
+          ? t("player.experimental.stillWorking")
+          : openingFor !== null
+            ? t("player.experimental.loading")
+            : t("player.experimental.preparing");
 
   const report: ReportInput = {
     error,
@@ -3068,7 +3168,29 @@ export function ExperimentalPlayerHost({
           )}
           // Un mot seulement quand l'attente devient vraiment longue : l'ouverture se suffit, et
           // « Analyse du fichier… » à trois secondes y serait du bruit.
-          note={openingFor !== null && openingFor >= STILL_WORKING_AFTER_MS ? t("player.experimental.stillWorking") : null}
+          // Le message chiffré d'une connexion trop lente (§77), avec ses choix : le chargement continue.
+          // « Version allégée » seulement là où le lecteur serveur peut passer (`serverCanCarry`).
+          notice={
+            slowNotice && !isMini
+              ? {
+                  text: t("player.slowLink.notice", slowLinkFigures(slowNotice, uiLocale)),
+                  actions: [
+                    ...(serverFallback !== false && serverCanCarry(slowNotice)
+                      ? [{ label: t("player.slowLink.lighter"), onClick: chooseLighter, primary: true }]
+                      : []),
+                    { label: t("common.close"), onClick: chooseClose },
+                  ],
+                }
+              : null
+          }
+          // L'indice d'une connexion lente (§77) passe avant : il dit pourquoi, dès qu'on le sait.
+          note={
+            slowHintShown
+              ? t("player.slowLink.hint")
+              : openingFor !== null && openingFor >= STILL_WORKING_AFTER_MS
+                ? t("player.experimental.stillWorking")
+                : null
+          }
           onClose={handleClose}
           closeLabel={t("common.close")}
           className="absolute inset-0 z-[15]"

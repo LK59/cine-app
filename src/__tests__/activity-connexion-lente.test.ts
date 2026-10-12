@@ -38,6 +38,15 @@ describe("une connexion trop lente, au panneau Activité", () => {
     expect(r.fallbacks).toBe(0);
   });
 
+  it("« Version allégée » demandée depuis le message de l'ouverture : rangée de même, raison lisible", () => {
+    const reason = "connexion trop lente (version allégée demandée)";
+    const [s] = buildSeances(lines("augustine", EDGE, [{ ...slowFallback, reason, slowChoice: "allégée", slowNoticeAt: 10_400 }]));
+    expect(s.slowLinks).toBe(1);
+    expect(s.fallbacks).toBe(0);
+    expect(failuresOf(s)).toBe(0);
+    expect(s.incidents).toEqual([expect.objectContaining({ kind: "slowLink", reason })]);
+  });
+
   it("n'accuse pas le titre : chez un seul et lente, le titre ne figure pas au diagnostic", () => {
     const records = [...lines("augustine", EDGE, [slowError]), ...lines("louis", IPHONE, [])];
     expect(diagnoseTitles(buildSeances(records)).find((d) => d.itemId === "rookie")).toBeUndefined();

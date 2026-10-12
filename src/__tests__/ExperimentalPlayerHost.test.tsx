@@ -2760,32 +2760,72 @@ describe("une ouverture qui traîne : le lien, mesuré", () => {
       .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
       .filter((entry) => entry.kind === kind);
 
-  /** Une ouverture qui ne finit jamais, et un lien qui livre `bytesPerSecond` jusqu'à l'abandon. */
-  async function openOver(bytesPerSecond: number) {
-    vi.useFakeTimers();
-    nextProbe = () => new Promise(() => {}) as never;
-    mount();
-    await act(async () => void vi.advanceTimersByTime(500));
-    const request = meterOpeningRequest();
-    expect(request).not.toBeNull();
-    request!.headers();
-    for (let t = 0; t < 36; t++) {
+  /** Le mot sous la ligne de chargement de l'ouverture (§60), s'il y en a un. */
+  const introNote = () => document.querySelector("[data-playback-intro-note]")?.textContent ?? null;
+  /** Le message chiffré de l'ouverture (§77), s'il est là. */
+  const notice = () => document.querySelector<HTMLElement>("[data-playback-intro-notice]");
+  /** Ses boutons, par leur libellé (les clés de traduction, ici). */
+  const noticeButtons = () => Array.from(notice()?.querySelectorAll("button") ?? []).map((b) => b.textContent);
+  const noticeButton = (label: string) => Array.from(notice()!.querySelectorAll("button")).find((b) => b.textContent === label)!;
+  /** La requête suivie de l'ouverture en cours — pour continuer à la nourrir après `openOver`. */
+  let request: ReturnType<typeof meterOpeningRequest> = null;
+  /** Encore `seconds` secondes à `rate` octets par seconde. */
+  async function more(rate: number, seconds: number) {
+    for (let t = 0; t < seconds; t++) {
       await act(async () => void vi.advanceTimersByTime(1000));
-      if (bytesPerSecond > 0) request!.received(bytesPerSecond);
+      if (rate > 0) request?.received(rate);
     }
   }
 
-  beforeEach(() => forgetSlowLinks());
+  /**
+   * Une ouverture qui ne finit jamais, et un lien qui livre `rate` octets par seconde (ou ce que la
+   * fonction rend pour la seconde `t`) jusqu'à l'abandon. `seen[t]` : après la seconde `t`, « detail »
+   * si l'écran de la connexion trop lente est là, « notice » si c'est le message chiffré de
+   * l'ouverture, sinon le mot sous la ligne de chargement. `probe` : l'ouverture, si elle doit finir.
+   */
+  async function openOver(rate: number | ((t: number) => number), seconds = 36, probe?: () => unknown) {
+    vi.useFakeTimers();
+    nextProbe = probe ?? ((() => new Promise(() => {})) as never);
+    mount();
+    await act(async () => void vi.advanceTimersByTime(500));
+    request = meterOpeningRequest();
+    expect(request).not.toBeNull();
+    request!.headers();
+    const seen: (string | null)[] = [];
+    for (let t = 0; t < seconds; t++) {
+      await act(async () => void vi.advanceTimersByTime(1000));
+      const bytes = typeof rate === "function" ? rate(t) : rate;
+      if (bytes > 0) request!.received(bytes);
+      seen.push(screen.queryByText("detail") ? "detail" : notice() ? "notice" : introNote());
+    }
+    return seen;
+  }
+
+  beforeEach(() => {
+    forgetSlowLinks();
+    // L'ouverture (§60) doit être là pour porter l'indice : son horloge vit hors de React.
+    resetIntroClocks();
+  });
 
   it("une connexion normale : le même renoncement qu'avant, sans un mot de plus", async () => {
     serverFallback = true;
     swr = { data: slowInfo(), error: undefined };
-    await openOver(2_000_000);
+    const calls = () => (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.length;
+    const seen = await openOver(2_000_000, 34);
+    // Ni indice ni verdict anticipé : le mot ordinaire d'une attente longue, et rien d'envoyé.
+    expect(seen).not.toContain("hint");
+    expect(seen[10]).toBe("stillWorking");
+    expect(onFallback).not.toHaveBeenCalled();
+    const before = calls();
+    await act(async () => void vi.advanceTimersByTime(2000));
     expect(onFallback).toHaveBeenCalledTimes(1);
     expect(onFallback).toHaveBeenCalledWith("aucune image après 35 s");
+    // Une seule requête de plus, la ligne de repli elle-même : la lecture du lien n'en fait aucune.
+    expect(calls() - before).toBe(1);
     const line = logged("fallback")[0].fields;
     expect(line.reason).toBe("aucune image après 35 s");
     expect(line.recvMbps).toBeUndefined();
+    expect(line.early).toBeUndefined();
     expect(capForSlowLink("item-1", 100_000_000)).toBe(100_000_000);
     // La chronologie (§77) part avec la ligne de panne : un point toutes les 5 s, plus celui de l'instant.
     expect(typeof line.timeline).toBe("string");
@@ -2794,25 +2834,137 @@ describe("une ouverture qui traîne : le lien, mesuré", () => {
     expect(logged("reserve")).toHaveLength(0);
   });
 
-  it("≈0,3 Mbit/s : l'écran le dit, avec Réessayer, et le lecteur serveur n'est pas appelé pour rien", async () => {
+  it("≈0,3 Mbit/s : l'indice dès 5 s, le message chiffré vers 10 s, le chargement continue, le renoncement à 35 s inchangé", async () => {
     serverFallback = true;
     swr = { data: slowInfo(), error: undefined };
-    await openOver(40_000);
+    const seen = await openOver(40_000, 12);
+    // Sous la ligne de chargement, « Connexion lente… » dès cinq secondes de réception — pas avant.
+    expect(seen.slice(0, 4)).not.toContain("hint");
+    expect(seen.slice(5, 9)).toEqual(["hint", "hint", "hint", "hint"]);
+    // Puis le message chiffré, moins de 10 % du besoin : sans « Version allégée » (le serveur ne
+    // passerait pas sous 1,5 Mbit/s), avec « Fermer ».
+    expect(seen.slice(10)).toEqual(["notice", "notice"]);
+    expect(notice()!.textContent).toContain("notice");
+    expect(noticeButtons()).toEqual(["close"]);
+    // Rien n'est abandonné : ni ligne, ni relais, et la même ouverture compte toujours ses octets.
+    expect(logged("error")).toHaveLength(0);
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(probes).toHaveLength(1);
+    expect(meterOpeningRequest()).not.toBeNull();
+    // Au-delà de 20 s, le message reste (il explique l'attente), jusqu'au renoncement des 35 s.
+    await more(40_000, 10);
+    expect(notice()).not.toBeNull();
+    await more(40_000, 14);
     expect(onFallback).not.toHaveBeenCalled();
     expect(screen.getByText("detail")).toBeTruthy();
+    expect(notice()).toBeNull();
     // L'écran d'erreur ordinaire, et sa proposition de passer au lecteur serveur, ne sont pas là.
     expect(screen.queryByText("switchToStable")).toBeNull();
+    expect(logged("error")).toHaveLength(1);
     const line = logged("error")[0].fields;
     expect(line).toMatchObject({ reason: "connexion trop lente", path: "non décidé", needMbps: 3.9, serverCanCarry: false });
     expect(line.recvMbps).toBeCloseTo(0.32, 1);
     expect(line.measuredS).toBeGreaterThanOrEqual(30);
     expect(line.bytes).toBeGreaterThan(1_000_000);
+    // Le message a paru vers 10 s ; aucun choix.
+    expect(line.slowNoticeAt).toBeGreaterThanOrEqual(10_000);
+    expect(line.slowNoticeAt).toBeLessThanOrEqual(12_500);
+    expect(line.slowChoice).toBeNull();
 
     // Réessayer rouvre le lecteur, au même endroit, et l'écran s'en va.
     await act(async () => void fireEvent.click(screen.getByRole("button", { name: /retry/ })));
     await act(async () => void vi.advanceTimersByTime(10));
     expect(probes).toHaveLength(2);
     expect(screen.queryByText("detail")).toBeNull();
+  });
+
+  it("la première image arrive malgré tout : le film part seul, et le message s'en va", async () => {
+    serverFallback = true;
+    swr = { data: slowInfo(), error: undefined };
+    let open: (value: unknown) => void = () => {};
+    const seen = await openOver(40_000, 12, () => new Promise((resolve) => (open = resolve)));
+    expect(seen[11]).toBe("notice");
+    await act(async () => open({ path: "remux", start: async () => remux, discard: vi.fn() }));
+    await untilSettled(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    await act(async () => void vi.advanceTimersByTime(1000));
+    expect(notice()).toBeNull();
+    await act(async () => void vi.advanceTimersByTime(40_000));
+    expect(logged("error")).toHaveLength(0);
+    expect(onFallback).not.toHaveBeenCalled();
+  });
+
+  it("« Version allégée » : le relais au lecteur serveur, au débit que le lien porte", async () => {
+    serverFallback = true;
+    // 16 Mbit/s demandés ; 2 Mbit/s reçus — sous le quart, au-dessus du plancher du serveur.
+    swr = { data: info({ sizeBytes: 4_800_000_000, runtimeSeconds: 2400 }), error: undefined };
+    await openOver(250_000, 12);
+    expect(noticeButtons()).toEqual(["lighter", "close"]);
+    // Pas de choix, pas de relais : le message attend le spectateur.
+    expect(onFallback).not.toHaveBeenCalled();
+    await act(async () => void fireEvent.click(noticeButton("lighter")));
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(onFallback).toHaveBeenCalledWith("connexion trop lente (version allégée demandée)");
+    const line = logged("fallback")[0].fields;
+    expect(line).toMatchObject({ reason: "connexion trop lente (version allégée demandée)", serverCanCarry: true, slowChoice: "allégée", needMbps: 16 });
+    expect(line.recvMbps).toBeGreaterThan(1.5);
+    expect(line.recvMbps).toBeLessThan(2.1);
+    expect(line.slowNoticeAt).toBeTypeOf("number");
+    const cap = capForSlowLink("item-1", 100_000_000);
+    expect(cap).toBeLessThan(100_000_000);
+    expect(cap).toBeGreaterThanOrEqual(1_500_000);
+    await act(async () => void vi.advanceTimersByTime(40_000));
+    expect(onFallback).toHaveBeenCalledTimes(1);
+  });
+
+  it("« Fermer » : la fermeture ordinaire, le choix noté au bilan", async () => {
+    serverFallback = true;
+    swr = { data: slowInfo(), error: undefined };
+    await openOver(40_000, 12);
+    await act(async () => void fireEvent.click(noticeButton("close")));
+    await act(async () => void vi.advanceTimersByTime(300));
+    const stop = logged("stop");
+    expect(stop).toHaveLength(1);
+    expect(stop[0].fields).toMatchObject({ why: "close", slowChoice: "fermer" });
+    expect(stop[0].fields.slowNoticeAt).toBeTypeOf("number");
+    await act(async () => void vi.advanceTimersByTime(40_000));
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(logged("error")).toHaveLength(0);
+  });
+
+  it("≈35 % du besoin : l'indice, pas de message chiffré — l'évaluation des 35 s, comme avant", async () => {
+    serverFallback = true;
+    swr = { data: slowInfo(), error: undefined };
+    // 1,36 Mbit/s pour 3,9 : sous la moitié, au-dessus du quart — et sous le plancher du serveur.
+    const seen = await openOver(170_000, 36);
+    // L'indice tant que l'ouverture est là (elle s'efface d'elle-même à 20 s, `STUCK_AFTER_MS`)…
+    expect(seen.slice(6, 18)).toEqual(Array(12).fill("hint"));
+    expect(seen).not.toContain("notice");
+    // …et l'écran seulement au bout des 35 s, pas avant.
+    expect(seen.slice(0, 34)).not.toContain("detail");
+    expect(screen.getByText("detail")).toBeTruthy();
+    const line = logged("error")[0].fields;
+    expect(line).toMatchObject({ reason: "connexion trop lente", serverCanCarry: false });
+    expect(line.slowNoticeAt).toBeUndefined();
+    expect(line.measuredS).toBeGreaterThanOrEqual(30);
+  });
+
+  it("un débit qui remonte : l'indice, puis le message, se retirent", async () => {
+    serverFallback = true;
+    swr = { data: slowInfo(), error: undefined };
+    const seen = await openOver((t) => (t < 7 ? 40_000 : 2_000_000), 12);
+    expect(seen[6]).toBe("hint");
+    expect(seen.slice(8)).not.toContain("hint");
+    expect(logged("error")).toHaveLength(0);
+    expect(onFallback).not.toHaveBeenCalled();
+    // Le message aussi : montré à 10 s, tenu tant que le débit reste sous la moitié du besoin (il ne
+    // clignote pas autour du quart), retiré dès qu'il la passe.
+    cleanup();
+    vi.useRealTimers();
+    const seen2 = await openOver((t) => (t < 12 ? 40_000 : 2_000_000), 18);
+    expect(seen2[11]).toBe("notice");
+    expect(seen2[12]).toBe("notice");
+    expect(seen2.slice(15)).not.toContain("notice");
+    expect(seen2.slice(15)).not.toContain("hint");
   });
 
   it("assez de débit pour la version réduite : le relais au lecteur serveur, avec ce débit", async () => {
@@ -2836,7 +2988,8 @@ describe("une ouverture qui traîne : le lien, mesuré", () => {
   it("mesure impossible (poids ou durée du fichier inconnus) : l'ancien comportement", async () => {
     serverFallback = true;
     swr = { data: info(), error: undefined };
-    await openOver(40_000);
+    const seen = await openOver(40_000);
+    expect(seen).not.toContain("hint");
     expect(onFallback).toHaveBeenCalledWith("aucune image après 35 s");
     expect(screen.queryByText("detail")).toBeNull();
   });
@@ -2844,8 +2997,10 @@ describe("une ouverture qui traîne : le lien, mesuré", () => {
   it("rien reçu du tout : pas une lenteur — l'ancien comportement", async () => {
     serverFallback = true;
     swr = { data: slowInfo(), error: undefined };
-    await openOver(0);
+    const seen = await openOver(0);
+    expect(seen).not.toContain("hint");
     expect(onFallback).toHaveBeenCalledWith("aucune image après 35 s");
+    expect(logged("fallback")[0].fields.early).toBeUndefined();
   });
 
   it("une coupure garde son écran « connexion perdue », lente ou pas", async () => {
@@ -2857,9 +3012,32 @@ describe("une ouverture qui traîne : le lien, mesuré", () => {
     await act(async () => void vi.advanceTimersByTime(500));
     const request = meterOpeningRequest()!;
     request.headers();
-    for (let t = 0; t < 20; t++) {
+    // Lente (l'indice est là), puis coupée avant le verdict anticipé : la coupure a son écran, et le
+    // lien n'est plus lu pendant qu'elle dure.
+    for (let t = 0; t < 8; t++) {
       await act(async () => void vi.advanceTimersByTime(1000));
       request.received(40_000);
+    }
+    expect(introNote()).toBe("hint");
+    Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
+    act(() => probes[0].onError("plus de réseau", "network"));
+    await act(async () => void vi.advanceTimersByTime(60_000));
+    expect(screen.getByText("connectionLost")).toBeTruthy();
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(logged("error")).toHaveLength(0);
+  });
+
+  it("une coupure totale : rien reçu, pas d'indice, l'écran « connexion perdue » inchangé", async () => {
+    serverFallback = true;
+    swr = { data: slowInfo(), error: undefined };
+    vi.useFakeTimers();
+    nextProbe = () => new Promise(() => {}) as never;
+    mount();
+    await act(async () => void vi.advanceTimersByTime(500));
+    meterOpeningRequest()!.headers();
+    for (let t = 0; t < 15; t++) {
+      await act(async () => void vi.advanceTimersByTime(1000));
+      expect(introNote()).not.toBe("hint");
     }
     Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
     act(() => probes[0].onError("plus de réseau", "network"));

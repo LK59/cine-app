@@ -24,6 +24,18 @@ import { CRAWL, USABLE_SHARE } from "@/lib/networkBitrate";
 export const SLOW_LINK_REASON = "connexion trop lente";
 
 /**
+ * Le motif d'un relais *demandé* depuis le message chiffré de l'ouverture (« Version allégée », §77) :
+ * le spectateur a choisi, le lien en est la cause. Commence par `SLOW_LINK_REASON`, pour que le
+ * panneau Activité le range au même endroit (`isSlowLinkReason`).
+ */
+export const SLOW_LINK_LIGHTER_REASON = `${SLOW_LINK_REASON} (version allégée demandée)`;
+
+/** Un motif de journal qui accuse le lien, pas le fichier : le verdict, ou la version allégée demandée. */
+export function isSlowLinkReason(reason: string | null | undefined): boolean {
+  return typeof reason === "string" && reason.startsWith(SLOW_LINK_REASON);
+}
+
+/**
  * Le temps de réception minimal avant de juger : dix secondes pendant lesquelles des octets
  * arrivaient. Assez pour que le démarrage d'une connexion (poignée de main, montée en débit de TCP)
  * et une rafale isolée pèsent peu ; assez court pour tenir dans les deux minuteurs qui décident —
@@ -90,6 +102,65 @@ export function slowLinkVerdict(measure: LinkMeasure | null | undefined, needBps
     return { recvBps, needBps, measuredMs: receivingMs, bytes };
   } catch {
     return null;
+  }
+}
+
+// --- pendant l'ouverture : l'indice, puis le message chiffré ---------------------------------------
+
+/**
+ * Le temps de réception avant de *dire* qu'un lien semble lent (l'indice « Connexion lente… » sous
+ * la ligne de chargement) : cinq secondes. Assez pour que la poignée de main et la montée en débit
+ * de TCP pèsent peu ; assez tôt pour que la spectatrice lise la cause pendant qu'elle attend, au lieu
+ * de la découvrir au bout de 35 s. Un indice n'arrête rien : il se retire de lui-même si le débit
+ * remonte, et un faux positif ne coûte qu'un mot affiché quelques secondes.
+ */
+export const HINT_MEASURED_MS = 5_000;
+
+/**
+ * « Très en dessous du besoin » : moins du quart du débit moyen du fichier — quatre secondes de réseau
+ * pour chaque seconde de film. Avec les preuves du verdict (10 s de réception, 256 Kio), l'ouverture
+ * montre alors le message chiffré, « Version allégée » et « Fermer » — sans rien abandonner : le
+ * chargement continue derrière, et le renoncement reste celui des 35 s / 20 s (informer tôt, ne
+ * jamais abandonner tôt). Le cas réel du 12/10/2026 (Edge d'Augustine : morceaux de 1 Mio arrivés à
+ * 2, 7, 14 et 25 s, ≈ 0,3 Mbit/s reçus pour 3,9 demandés) est sous 10 % dès dix secondes : la marge
+ * jusqu'à 25 % est large. Entre 25 % et 50 %, l'indice seul — une connexion moyenne a le temps de se
+ * rattraper.
+ */
+export const NOTICE_SHARE = 0.25;
+
+/** Ce que le lien dit pendant l'ouverture : l'indice, et le message chiffré avec ses chiffres. */
+export interface OpeningLink {
+  /** Au moins 5 s de réception, des octets reçus, et moins de la moitié du besoin. */
+  hint: boolean;
+  /** Le message chiffré : les preuves du verdict (10 s, 256 Kio) sous le quart du besoin. */
+  notice: SlowLink | null;
+}
+
+/**
+ * Lu chaque seconde pendant une ouverture. Ne lève jamais ; sans besoin connu, sans mesure, ou sans
+ * un octet reçu, rien (un lien qui n'a rien livré n'est pas « lent » : une coupure a son propre
+ * écran, et un serveur qui prépare sa réponse n'est pas la faute du lien).
+ *
+ * `noticeShown` : le message est déjà à l'écran. Il y reste, chiffres à jour, tant que le débit est
+ * sous la moitié du besoin — il ne clignote pas autour du quart —, et s'efface au-dessus.
+ */
+export function openingLinkState(
+  measure: LinkMeasure | null | undefined,
+  needBps: number | null | undefined,
+  noticeShown = false
+): OpeningLink {
+  try {
+    if (!measure || typeof needBps !== "number" || !Number.isFinite(needBps) || needBps <= 0) return { hint: false, notice: null };
+    const { bytes, receivingMs } = measure;
+    if (!Number.isFinite(bytes) || !Number.isFinite(receivingMs) || !(bytes > 0)) return { hint: false, notice: null };
+    if (receivingMs < HINT_MEASURED_MS) return { hint: false, notice: null };
+    const recvBps = (bytes * 8) / (receivingMs / 1000);
+    if (!(recvBps < SLOW_SHARE * needBps)) return { hint: false, notice: null };
+    const slow = slowLinkVerdict(measure, needBps);
+    const notice = slow && (noticeShown || slow.recvBps < NOTICE_SHARE * needBps) ? slow : null;
+    return { hint: true, notice };
+  } catch {
+    return { hint: false, notice: null };
   }
 }
 

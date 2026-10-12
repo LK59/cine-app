@@ -1616,6 +1616,9 @@
     "reconnecting": "Reconnecting…",
     "loadingTooLong": "This is taking too long. Try again.",
     "slowLink": {
+      "hint": "Slow connection…",
+      "notice": "Connection too slow for this film (≈{recv} Mbit/s received, it needs about {need}).",
+      "lighter": "Lighter version",
       "title": "Connection too slow",
       "detail": "≈{recv} Mbit/s received, this film needs about {need}. Try again when the connection is better.",
       "message": "Connection too slow for this film (≈{recv} Mbit/s received, it needs about {need}). Try again when the connection is better."

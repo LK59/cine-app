@@ -9,7 +9,7 @@
 import { deviceLabel } from "@/lib/deviceLabel";
 import type { LogRecord } from "@/lib/activity/logReader";
 import { isServerFailureRestart, isServerRestart, serverStartWhyLabel } from "@/lib/serverPlayerLog";
-import { SLOW_LINK_REASON } from "@/lib/slowLink";
+import { SLOW_LINK_REASON, isSlowLinkReason } from "@/lib/slowLink";
 
 export interface Seance {
   id: string;
@@ -255,7 +255,7 @@ function absorb(s: Seance, r: LogRecord): void {
         s.casts += 1;
         break;
       }
-      if (reason === SLOW_LINK_REASON) {
+      if (isSlowLinkReason(reason)) {
         noteSlowLink(s, r);
         break;
       }
@@ -267,7 +267,7 @@ function absorb(s: Seance, r: LogRecord): void {
       if (str(r.target)) s.castTarget = str(r.target);
       break;
     case "error":
-      if (reason === SLOW_LINK_REASON) {
+      if (isSlowLinkReason(reason)) {
         noteSlowLink(s, r);
         break;
       }

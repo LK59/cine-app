@@ -1616,6 +1616,9 @@
     "reconnecting": "Verbindung wird wiederhergestellt…",
     "loadingTooLong": "Das dauert zu lange. Versuch's erneut.",
     "slowLink": {
+      "hint": "Langsame Verbindung…",
+      "notice": "Verbindung zu langsam für diesen Film (≈{recv} Mbit/s empfangen, er braucht etwa {need}).",
+      "lighter": "Leichtere Version",
       "title": "Verbindung zu langsam",
       "detail": "≈{recv} Mbit/s empfangen, dieser Film braucht etwa {need}. Versuch's erneut, wenn die Verbindung besser ist.",
       "message": "Verbindung zu langsam für diesen Film (≈{recv} Mbit/s empfangen, er braucht etwa {need}). Versuch's erneut, wenn die Verbindung besser ist."

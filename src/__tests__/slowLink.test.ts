@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  HINT_MEASURED_MS,
   LinkMeter,
   MIN_MEASURED_MS,
   MIN_RECEIVED_BYTES,
+  NOTICE_SHARE,
   SLOW_LINK_REASON,
   armOpeningMeter,
   capForSlowLink,
@@ -15,6 +17,7 @@ import {
   meterOpeningRequest,
   meterXhr,
   noteSlowLink,
+  openingLinkState,
   readCounted,
   serverCanCarry,
   slowLinkFields,
@@ -310,5 +313,46 @@ describe("les lignes `stall` et `stop` (diag.*)", () => {
       diag.diagEnd("séance-lien");
       now.mockRestore();
     }
+  });
+});
+
+describe("pendant l'ouverture : l'indice et le message chiffré", () => {
+  const at = (bytesPerSecond: number, seconds: number) => ({ bytes: bytesPerSecond * seconds, receivingMs: seconds * 1000 });
+  const none = { hint: false, notice: null };
+
+  it("rien avant cinq secondes de réception, quel que soit le débit", () => {
+    expect(HINT_MEASURED_MS).toBe(5_000);
+    expect(openingLinkState(at(40_000, 4.9), NEED)).toEqual(none);
+  });
+
+  it("le cas réel (≈0,3 Mbit/s pour 3,9) : l'indice à 5 s, le message chiffré à 10 s", () => {
+    expect(openingLinkState(at(40_000, 5), NEED)).toEqual({ hint: true, notice: null });
+    const ten = openingLinkState(at(40_000, 10), NEED);
+    expect(ten.hint).toBe(true);
+    expect(ten.notice?.recvBps).toBeCloseTo(320_000, -3);
+    expect(ten.notice!.recvBps / NEED).toBeLessThan(0.1);
+  });
+
+  it("entre le quart et la moitié du besoin : l'indice seul — sauf un message déjà montré, qui reste", () => {
+    expect(NOTICE_SHARE).toBe(0.25);
+    expect(openingLinkState(at(170_000, 30), NEED)).toEqual({ hint: true, notice: null });
+    expect(openingLinkState(at(170_000, 30), NEED, true).notice).not.toBeNull();
+  });
+
+  it("au-dessus de la moitié : rien, message montré ou non", () => {
+    expect(openingLinkState(at(250_000, 20), NEED)).toEqual(none);
+    expect(openingLinkState(at(250_000, 20), NEED, true)).toEqual(none);
+  });
+
+  it("rien reçu, pas de besoin connu, ou une mesure absurde : rien", () => {
+    expect(openingLinkState({ bytes: 0, receivingMs: 20_000 }, NEED)).toEqual(none);
+    expect(openingLinkState(at(40_000, 20), null)).toEqual(none);
+    expect(openingLinkState(null, NEED)).toEqual(none);
+    expect(openingLinkState({ bytes: NaN, receivingMs: 20_000 }, NEED)).toEqual(none);
+  });
+
+  it("le message exige les mêmes preuves que le verdict : 256 Kio reçus", () => {
+    // 10 s à 20 Ko/s : 200 Ko, sous le quart, mais pas assez d'octets pour parler de lenteur.
+    expect(openingLinkState(at(20_000, 10), NEED)).toEqual({ hint: true, notice: null });
   });
 });
