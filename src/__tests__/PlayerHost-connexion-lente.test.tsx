@@ -20,11 +20,7 @@ vi.mock("@/components/PlaybackInfoPanel", () => ({ PlaybackInfoPanel: () => null
 vi.mock("@/components/ExperimentalPlayerHost", () => ({ ExperimentalPlayerHost: () => <div data-testid="natif" /> }));
 vi.mock("@/components/PlayerControls", () => ({
   VOLUME_STORAGE_KEY: "volume",
-  PlayerControls: (props: { currentSubtitleId?: number | null; onMenuChange?: (open: boolean) => void }) => (
-    <div data-testid="commandes" data-subtitle={String(props.currentSubtitleId ?? "")}>
-      {props.onMenuChange && <button onClick={() => props.onMenuChange!(true)}>menu:ouvrir</button>}
-    </div>
-  ),
+  PlayerControls: (props: { currentSubtitleId?: number | null }) => <div data-testid="commandes" data-subtitle={String(props.currentSubtitleId ?? "")} />,
 }));
 const playback = {
   session: null as null | Record<string, unknown>,
