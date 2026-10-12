@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, act, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, act, waitFor, configure } from "@testing-library/react";
+
+// Les fiches s'animent sur de vraies minuteries : sous la charge d'un `docker compose build` (le
+// Dockerfile lance la suite), 1 s d'attente par défaut ne suffisait pas toujours (12/10/2026).
+configure({ asyncUtilTimeout: 5000 });
 import { SWRConfig } from "swr";
 import { Suspense, lazy, createElement, type ComponentType } from "react";
 
