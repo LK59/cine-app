@@ -62,3 +62,20 @@ describe("le réglage", () => {
     }
   });
 });
+
+describe("deux onglets", () => {
+  it("« Originale » choisie dans un autre onglet s'applique ici aussi, sans recharger", () => {
+    // Gardé en mémoire une fois lu, le réglage d'un onglet resté ouvert ne voyait jamais celui choisi
+    // dans un autre : il basculait encore en version allégée alors que l'appareil disait « Originale »
+    // (13/10/2026). L'événement `storage` du navigateur le lui apprend.
+    expect(readPlaybackQuality()).toBe("auto");
+    const seen: string[] = [];
+    localStorage.setItem("cine:quality:louis", "original");
+    window.dispatchEvent(new StorageEvent("storage", { key: "cine:quality:louis", newValue: "original", storageArea: localStorage }));
+    seen.push(readPlaybackQuality());
+    localStorage.removeItem("cine:quality:louis");
+    window.dispatchEvent(new StorageEvent("storage", { key: "cine:quality:louis", newValue: null, storageArea: localStorage }));
+    seen.push(readPlaybackQuality());
+    expect(seen).toEqual(["original", "auto"]);
+  });
+});
