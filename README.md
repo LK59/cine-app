@@ -17,13 +17,14 @@ the household uses, and a management dashboard for whoever runs the box.
 | | Address | Who it is for |
 |---|---|---|
 | **[Cinema](#the-cinema-interface)** | `/` | Everyone. Rows of posters, a full-bleed hero, search, personal lists, requests, and in-browser playback. This is the front door. |
-| **[Management](#the-management-interface)** | `/gestion` | The administrator. Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin, Jellyseerr, statistics, settings — the whole stack. |
+| **[Management](#the-management-interface)** | `/gestion` | The administrator. *Infrastructure* — downloads, service status, storage, Radarr, Sonarr, calendar, statistics, imports — and *Configuration* — service connections, playback, generated subtitles, new accounts. |
 
 Both run from the same container, the same session and the same set of API routes. There are only
 ever **two roles**: `admin` and `user`. A `user` can browse, play, keep lists and request titles;
 every write to the underlying services is refused server-side in `src/proxy.ts`, whatever the
-interface happens to show. The management screens are reachable from Cinema through the rail's
-bottom entry, which only an administrator sees.
+interface happens to show. The management screens are reachable from Cinema through
+**Account → Open management**, which only an administrator sees; Management leads back with
+**Back to Cinema**, at the top of its navigation. These are the only two ways across.
 
 `/player` and `/cinema` are the addresses Cinema had before it became the root; both answer `308`
 to `/`, so old links, open tabs and already-installed home-screen shortcuts keep working.
@@ -68,7 +69,7 @@ opens from the content itself.
 | **Search** | One field for the library, TMDB and people | Pressing it while already there is the intent to type |
 | **My list** | To watch · Requests · Watched | |
 | **Account** | Language, playback preferences, notifications, devices | |
-| *Management* | `/gestion` | Administrators only; leaves Cinema rather than opening a panel |
+| *Management* | `/gestion` | Administrators only, from **Account → Open management**; leaves Cinema rather than opening a panel |
 
 On desktop it is a vertical rail on the left, collapsed to icons and expanding on hover. On a
 phone it is a bottom bar with the same four entries. One list describes both, so they cannot
@@ -300,29 +301,38 @@ installed PWA), and installs to the Home Screen as a PWA with Web Push, Apple We
 
 # The Management interface
 
-`/gestion` — the administrator's second interface over the same stack. Everything a Radarr,
-Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin and Jellyseerr install would otherwise be seven
-browser tabs.
+`/gestion` — the administrator's second interface over the same services, reached from Cinema
+through **Account → Open management**. Everything a Radarr, Sonarr, Bazarr, Jackett, qBittorrent,
+Jellyfin and Jellyseerr install would otherwise be seven browser tabs. It wears Cinema's design —
+black, liquid glass, the same cards and pills — and its navigation has two parts:
 
-<!-- CAPTURE : gestion-home-1.png + gestion-home-2.png + gestion-home-mobile.png
-     Three shots of the dashboard home, to sit side by side:
-       1. the top of the page — the rotating hero with its title logo and progress segments
-       2. further down — Continue watching and Recently added, with the IMDb badges visible
-       3. the same page on a phone, sidebar closed
-     Desktop shots at the same width so the two crop to the same height.
-     Then uncomment:
-<img src="docs/screenshots/gestion-home-1.png" height="210"> <img src="docs/screenshots/gestion-home-2.png" height="210"> <img src="docs/screenshots/gestion-home-mobile.png" height="210">
+- **Infrastructure** — what is running: the overview, Movies, Series, Downloads, Calendar,
+  Statistics, Imports, then each service's own page and the health checks.
+- **Configuration** — how the install is set: service connections, playback, generated subtitles,
+  defaults for new accounts, the local administrator, and last, what can only be changed in the
+  compose file (media paths, time zone, trusted proxy, secure cookie), with the line to copy.
+
+Its top entry is **Back to Cinema**. Personal preferences — language, notifications, sessions —
+are not here: they are in Cinema's *Account*, for the administrator as for everyone, and a discreet
+link under Configuration says so.
+
+<!-- CAPTURE : gestion-home-1.png + gestion-home-mobile.png
+     The management overview, desktop and phone: downloads in progress, service status, storage and
+     the activity summary. Then uncomment:
+<img src="docs/screenshots/gestion-home-1.png" height="210"> <img src="docs/screenshots/gestion-home-mobile.png" height="210">
 -->
 
-## Dashboard home
+## Overview
 
-- **Rotating hero banner** — the 10 newest additions across movies and series, TMDB title-logo art
-  when available, auto-advancing every 8 s with a segmented progress bar to jump back
-- **Continue watching** — Jellyfin resume progress with an IMDb rating badge
-- **My list** — quick-glance row of watchlist items marked *À voir*; a title not yet in the library
-  gets an inline *Demander*
-- **Recently added** — separate movie and series rows, with a link to the full library page
-- **TV-remote style keyboard navigation** — arrow keys across every row, Enter to open
+An administrator's dashboard, not a second catalogue — the posters, *Continue watching* and *My
+list* are Cinema's:
+
+- **Downloads in progress** — progress, speed and ETA, with a link to the full qBittorrent view
+- **Service status** — one line per service, its version and figures, or its error
+- **Storage** — movies / series / seeds / other on the media disk
+- **Cinema activity** — active accounts, sessions playing now, reports waiting for an answer and
+  the week's errors, opening Cinema's *Activity* panel
+- **Latest imports** — what Radarr and Sonarr grabbed and imported, and recent requests
 
 ## Library and media management
 
@@ -341,18 +351,6 @@ browser tabs.
 <img src="docs/screenshots/gestion-movie-1.png" height="210"> <img src="docs/screenshots/gestion-movie-2.png" height="210"> <img src="docs/screenshots/gestion-movie-mobile.png" height="210">
 -->
 
-- **Watchlist** — add any title from TMDB, classify with 5 statuses (À voir, Favoris, Vus, À
-  demander, Abandonnés), personal notes, search and sort, IMDb rating badge on every card
-
-<!-- CAPTURE : gestion-watchlist.png + gestion-watchlist-mobile.png
-     The watchlist grid, desktop and phone. Frame a card mid-hover on the desktop shot so the
-     overlay with the 5 status buttons is visible, and try to have both a "Dispo" (green) and an
-     "Attente" (amber) badge in the same view.
-     On the phone shot, the ActionSheet half-open is the more telling frame.
-     Then uncomment:
-<img src="docs/screenshots/gestion-watchlist.png" height="260"> <img src="docs/screenshots/gestion-watchlist-mobile.png" height="260">
--->
-
 - **Natural language search** — `film de guerre de Christopher Nolan`, `série avec Pedro Pascal`,
   `film comédie avec Ryan Gosling`
 
@@ -367,31 +365,13 @@ browser tabs.
 <img src="docs/screenshots/gestion-search-1.png" height="160"> <img src="docs/screenshots/gestion-search-2.png" height="160"> <img src="docs/screenshots/gestion-search-3.png" height="160"> <img src="docs/screenshots/gestion-search-mobile.png" height="160">
 -->
 
-- **Discover** — trending movies and series with genre filters, TMDB search, a *Pour vous* tab
-  based on Jellyfin play history
-- **Recommendations** — personalised rows from recently watched Jellyfin history
 - **Release search modal** — browse and grab releases from Radarr/Sonarr inside the app
-- **Interactive search (movies)** — admin-only, on Watchlist, Discover and Recommendations cards:
-  adds the movie and opens the release search in one step. The movie is added *unmonitored* until
-  a release is actually picked, so an abandoned search does not leave Radarr endlessly re-searching
-  an empty entry
 - **Add to library (series)** — admin-only, adds a series to Sonarr directly; per-season
   interactive search and a one-click automatic search live on the series' own detail page
 - **Remove from Radarr/Sonarr** — with an in-app confirmation, also clearing the matching
   Jellyseerr record so the title can be requested again cleanly
 
-### One card design everywhere
-
-All media grids (Watchlist, Discover, Recommendations) share the same card:
-
-- Poster-only, `aspect-[2/3]`
-- **Desktop** — hover overlay with the 5 status buttons, *Voir la fiche* / *Demander*, and the
-  admin-only *Recherche interactive* (movies) / *Ajouter* (series)
-- **Mobile** — tap for an ActionSheet with a real-time swipe-to-close gesture
-- **IMDb rating badge** — bottom-left, via OMDb
-- **Dispo** (green) — the file is actually downloaded · **Attente** (amber) — monitored but not
-  yet available
-- **Delete confirmation** — an in-app modal, never the browser's
+Lists, discovery and recommendations are Cinema's: Management has no watchlist of its own.
 
 ## Requests and downloads
 
@@ -406,9 +386,10 @@ All media grids (Watchlist, Discover, Recommendations) share the same card:
 - **qBittorrent monitoring** — live torrent list with section separators (En cours / Seed /
   Pausés), progress bars, speed indicators, start/stop/remove
 
-## Calendar, timeline and stats
+## Calendar, imports and stats
 
-- Media release calendar from upcoming Radarr/Sonarr entries, and an activity timeline
+- Media release calendar from upcoming Radarr/Sonarr entries, and **Imports** — what Radarr and
+  Sonarr grabbed and imported, day by day (named apart from Cinema's *Activity* panel)
 - Top actors and directors ranked by number of titles in the library
 - Library and person statistics across movies and series
 - Storage breakdown (movies / series / seeds / other) and a disk saturation forecast
@@ -424,7 +405,7 @@ All media grids (Watchlist, Discover, Recommendations) share the same card:
 
 - **MDBList** — IMDb, Rotten Tomatoes, Metacritic, Letterboxd and Trakt on detail pages, from a
   single API call
-- **OMDb** — IMDb badges on Watchlist cards, the dashboard home and the Radarr/Sonarr grids, cached
+- **OMDb** — IMDb badges on the Radarr/Sonarr grids and detail pages, cached
   24 h server-side; movies read Radarr's own rating data directly, with no extra call
 - **Sort by IMDb rating** on the library pages
 - TMDB vote average on Discover and Recommendations cards
@@ -549,7 +530,7 @@ Cinema reads its own routes, which apply the account's restrictions.
 (*Blocked tags*) hides the tagged titles in Cine App as it does in Jellyfin: from the catalogue, the
 search, the discovery rows, filmographies, sagas and similar titles, and the title's own routes
 answer as if it did not exist. New Jellyfin accounts can receive a set of blocked tags
-automatically: list them in *Server settings → Default settings* (`NEW_ACCOUNT_BLOCKED_TAGS`). Within five
+automatically: list them in *Management → Configuration → New accounts* (`NEW_ACCOUNT_BLOCKED_TAGS`). Within five
 minutes, any account the server has not seen before gets them in its Jellyfin policy, once —
 existing accounts are left untouched, administrators always, and removing the tag by hand later is
 final.

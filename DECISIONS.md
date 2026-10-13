@@ -3768,6 +3768,61 @@ réponses de route et restent hors de ce mécanisme.
 
 **Décidé le 13/10/2026.**
 
+## 81. Répartition des réglages et des deux interfaces
+
+**La règle.** Trois endroits, chacun pour un sujet, et un seul passage dans chaque sens entre les
+deux interfaces :
+- **Compte** (cinéma, tous les comptes) : ce qui est *personnel* — langue, notifications, sessions,
+  sous-titres, interface, Ma liste. L'administrateur règle les siennes là, comme tout le monde.
+- **Compte → Administration** (cinéma, administrateur) : *CineApp et ses utilisateurs* — l'Activité
+  (comptes, séances, signalements, journaux), la maintenance, les Nouveautés, les bancs d'essai.
+- **Gestion** (`/gestion`, administrateur) : l'*installation*, en deux parties —
+  **Infrastructure** (accueil en tableau de bord : téléchargements en cours, état des services,
+  disque, résumé de l'Activité ; puis Films, Séries, Téléchargements, Calendrier, Statistiques,
+  Imports, et les pages des services) et **Configuration** (Connexions, Lecture, Sous-titres
+  générés, Nouveaux comptes, Administrateur, et en dernier Déploiement — ce qui exige de toucher au
+  compose, expliqué avec la ligne à copier).
+- **Les ponts** : « Ouvrir la gestion » dans le panneau Compte ; « Retour au cinéma » en tête de la
+  navigation de la gestion (barre latérale et feuille du téléphone). Aucun autre lien ne traverse,
+  sauf le lien discret « Vos préférences sont dans Compte » sous la Configuration, et le résumé de
+  l'Activité de l'accueil qui ouvre le panneau Activité.
+
+**Pour tout futur réglage.** S'il ne vaut que pour la personne qui le touche → Compte. S'il dit
+comment l'installation se comporte pour tous et peut changer à chaud → schéma des réglages
+(`src/lib/settings/schema.ts`, lu par `config.ts` : réglage de l'application → `.env` → défaut, §48)
+et une carte de la Configuration ; s'il ne prend effet qu'au redémarrage, son libellé le dit. S'il
+demande un volume, un port ou un secret de démarrage → `DEPLOYMENT_GUIDE` (jamais réglable dans
+l'application : `SESSION_SECRET`, `TRUSTED_PROXIES`, `COOKIE_SECURE`, les clés VAPID générées). Une
+couleur ou une apparence n'est pas un réglage d'administrateur : la couleur d'accent a été
+supprimée, le violet du cinéma est fixe (une préférence restée sur un appareil n'est plus lue).
+
+**Pourquoi.** La page « Paramètres » de la gestion mêlait la langue, la couleur d'accent et les
+sessions de l'administrateur aux adresses et clés de l'installation ; les notifications s'y
+réglaient en double avec le Compte jusqu'au 23/09. L'accueil de la gestion refaisait le cinéma en
+moins bien (bannière, Reprendre, Ma liste, affiches récentes) et coûtait un logo TMDB et une note
+IMDb par titre à chaque rafraîchissement. Et « Activité récente » (`/timeline`, les imports de
+Radarr et Sonarr) portait le nom du panneau Activité du cinéma : elle s'appelle **Imports**.
+
+**Porteurs.** `src/components/navItems.ts` (`NAV_GROUPS` avec `part`, `NAV_PARTS`, `activeNavHref`),
+`src/components/gestion/NavBridge.tsx` (`BackToCinema`, `AccountPreferencesLink`),
+`src/components/settings/ConfigurationSection.tsx` (les cartes d'une page de Configuration),
+`src/lib/activity/summary.ts` (`liveAccounts`, `pendingReports`, `activityDigest` — la règle de
+« présent / regarde / en attente », partagée avec `ActivityOverview`).
+
+**Appelants.** `Sidebar`, `MobileNav`, `DashboardClient`, les pages `src/app/(dashboard)/parametres/**`
+(`/parametres/connexions` redirige vers `/parametres`).
+
+**Tests.** `navItems.test.ts` (deux parties, ordre, pont, Imports dans les quatre langues, ni
+langue ni sessions ni accent dans la gestion, plus de thème), `activity-summary.test.ts`,
+`dashboard-route.test.ts` (plus de bannière ni de Reprendre), `design-tokens.test.ts` (étendu à la
+gestion), `settings-couverture.test.ts`, `settings-config.test.ts`.
+
+**Différent exprès.** La gestion reste en français pour ses messages techniques (§80) ; son
+vocabulaire peut parler de services et de déploiement, mais pas de « tableau de bord » à l'écran
+(`vocabulaire.test.ts`) : l'accueil s'appelle « Vue d'ensemble ».
+
+**Décidé le 13/10/2026.**
+
 ---
 
 **Galerie retirée le 13/10/2026, tag `fin-galerie-clara-2026-10-13`.** La page personne enrichie

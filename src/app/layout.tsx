@@ -22,7 +22,6 @@ import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistratio
 import { BuildRefresh } from "@/components/BuildRefresh";
 import { SWRProvider } from "@/components/SWRProvider";
 import { ToastProvider } from "@/components/Toast";
-import { ThemeProvider } from "@/components/ThemeProvider";
 import { TranslationProvider } from "@/components/TranslationProvider";
 import { PlaybackProvider } from "@/components/PlaybackProvider";
 import { LOCALES, LOCALE_COOKIE, loadLocaleDict, type Locale } from "@/lib/i18n";
@@ -151,8 +150,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <style dangerouslySetInnerHTML={{ __html: "html,body{background:#0a0a0c}" }} />
-        {/* Apply saved theme before first paint to avoid flash */}
-        <script dangerouslySetInnerHTML={{ __html: `try{var a=localStorage.getItem("cine-accent")||"violet";document.documentElement.dataset.accent=a;}catch(e){}` }} />
+        {/* Il y avait ici un script qui posait la couleur d'accent choisie avant la première image.
+            La couleur d'accent n'existe plus (13/10/2026, DECISIONS.md §81) : le violet du cinéma
+            partout. Une couleur restée dans le stockage d’un appareil n’est plus lue. */}
         {SPLASH_SCREENS.flatMap((s) =>
           (["portrait", "landscape"] as const).map((orientation) => {
             // iOS veut la taille du fichier en pixels de l'appareil, et dans le sens où il se
@@ -171,7 +171,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body>
         <TranslationProvider initialLocale={lang} initialDict={dict}>
-          <ThemeProvider>
             <SWRProvider account={account}>
               <ToastProvider>
                 <PlaybackProvider>
@@ -213,7 +212,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </PlaybackProvider>
               </ToastProvider>
             </SWRProvider>
-          </ThemeProvider>
           <InstallPrompt />
         </TranslationProvider>
         <ServiceWorkerRegistration />

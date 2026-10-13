@@ -29,12 +29,11 @@
   },
   "nav": {
     "overview": "Resumen",
-    "timeline": "Actividad reciente",
+    "timeline": "Importaciones",
     "calendar": "Calendario",
     "radarr": "Películas · Radarr",
     "sonarr": "Series · Sonarr",
     "qbittorrent": "Descargas",
-    "settings": "Ajustes",
     "stats": "Estadísticas",
     "bazarr": "Subtítulos · Bazarr",
     "jackett": "Indexadores · Jackett",
@@ -52,13 +51,25 @@
       "searchHint": "Película, serie, actor…",
       "downloads": "Descargas"
     },
-    "cinemaMode": "Modo cine",
     "sections": {
-      "library": "Biblioteca",
-      "content": "Contenido",
-      "manage": "Gestión"
+      "services": "Servicios"
     },
-    "tmdb": "TMDB"
+    "tmdb": "TMDB",
+    "parts": {
+      "infrastructure": "Infraestructura",
+      "configuration": "Configuración"
+    },
+    "config": {
+      "connections": "Conexiones",
+      "playback": "Reproducción",
+      "subtitles": "Subtítulos generados",
+      "accounts": "Cuentas nuevas",
+      "admin": "Administrador",
+      "deployment": "Despliegue"
+    },
+    "backToCinema": "Volver al cine",
+    "accountPreferences": "Tus preferencias están en Cuenta",
+    "label": "Navegación de la gestión"
   },
   "common": {
     "loading": "Cargando...",
@@ -143,16 +154,9 @@
     "next": "Siguiente"
   },
   "dashboard": {
-    "resumeWatching": "Continuar viendo",
-    "myList": "Mi lista",
-    "recentlyAdded": "Añadido recientemente a la biblioteca",
-    "seeAll": "Ver todo",
     "activeDownloads": "Descargas activas",
     "waitingSeeds": "Esperando seeds",
     "showMore": "+{n} más — ver todo",
-    "sheetLink": "Ficha",
-    "downloadedTooltip": "Descargado",
-    "pageTitle": "Vista general",
     "pageSubtitle": "Estado de tus servicios en tiempo real",
     "storageTitle": "Almacenamiento",
     "computingStorage": "Calculando…",
@@ -162,12 +166,24 @@
     "storageSeeds": "Semillas — {size}",
     "storageOther": "Otro — {size}",
     "storageUsed": "{pct}% usado",
-    "activityTitle": "Actividad reciente",
-    "noActivity": "Sin actividad reciente.",
     "servicesStatus": "Estado de los servicios",
     "unavailableWord": "no disponible",
     "servicesAllUp": "{n} servicios · todos en línea",
-    "servicesSomeDown": "{n} de {total} fuera de línea"
+    "servicesSomeDown": "{n} de {total} fuera de línea",
+    "importsTitle": "Últimas importaciones",
+    "noImports": "No hay importaciones recientes.",
+    "noDownloads": "No hay descargas en curso.",
+    "open": "Abrir",
+    "activityDigest": {
+      "title": "Actividad del cine",
+      "open": "Abrir la actividad",
+      "active": "Cuentas activas",
+      "playing": "Sesiones en curso",
+      "reports": "Reportes pendientes",
+      "errors": "Errores (7 d)",
+      "errorsDetail": "{server} servidor · {client} navegador · {player} reproductor",
+      "unavailable": "Actividad no disponible."
+    }
   },
   "activity": {
     "news": {
@@ -1103,7 +1119,7 @@
     "emptyHint": "Los estrenos que siguen Radarr y Sonarr aparecen aquí en cuanto se conoce una fecha."
   },
   "timeline": {
-    "pageTitle": "Actividad reciente",
+    "pageTitle": "Importaciones",
     "subtitle": "{n} eventos recientes — Radarr y Sonarr",
     "filters": {
       "all": "Todo ({n})",
@@ -1272,23 +1288,8 @@
     "pending": "Pendiente"
   },
   "settings": {
-    "pageTitle": "Ajustes",
-    "subtitle": "Personaliza la apariencia y las notificaciones",
-    "appearance": {
-      "title": "Apariencia",
-      "subtitle": "Color de acento y modo de visualización",
-      "accentColor": "Color de acento"
-    },
     "security": {
-      "title": "Seguridad",
-      "subtitle": "Sesiones activas en otros dispositivos",
-      "sessionsTitle": "Otros dispositivos conectados",
-      "loading": "Cargando…",
-      "noOtherSessions": "Sin otras sesiones activas",
-      "otherSessions": "{n} sesión activa|{n} sesiones activas",
-      "revokeAll": "Cerrar sesión en todos los demás",
-      "revoked": "Sesión cerrada",
-      "revokeSuccess": "Todas las demás sesiones han sido revocadas."
+      "loading": "Cargando…"
     },
     "app": {
       "title": "Aplicación",
@@ -1307,14 +1308,7 @@
       "debugSearch": "Depurar búsqueda",
       "debugSearchDesc": "Muestra en el modal por qué aparece cada resultado: búsqueda local difusa, búsqueda clásica de TMDb o consulta en lenguaje natural."
     },
-    "notifications": {
-      "subtitle": "Alertas push por dispositivo y categoría",
-      "moved": "Las notificaciones se ajustan en la pestaña Cuenta del cine, para todos los dispositivos.",
-      "open": "Abrir"
-    },
     "language": {
-      "title": "Idioma",
-      "subtitle": "Interfaz, sinopsis y motor de búsqueda",
       "reloadNotice": "Se necesita recargar para aplicar {lang}",
       "apply": "Aplicar"
     },
@@ -2784,17 +2778,12 @@
     "secretsNote": "El secreto de sesión y las claves de notificaciones se generan automáticamente en el primer arranque (data/config/secrets.json). No hay nada que hacer.",
     "done": {
       "title": "Todo listo",
-      "text": "Los ajustes se pueden cambiar en cualquier momento en la gestión, página «Ajustes del servidor».",
+      "text": "Los ajustes se pueden cambiar en cualquier momento en la gestión, en «Configuración».",
       "manage": "Abrir la gestión",
       "cinema": "Iniciar sesión con Jellyfin",
       "finishing": "Finalizando…"
     },
-    "settings": {
-      "title": "Ajustes del servidor",
-      "subtitle": "Direcciones y claves de los servicios, y ajustes por defecto de las cuentas. Un valor fijado aquí sustituye al del .env.",
-      "link": "Ajustes del servidor",
-      "linkHint": "Jellyfin, TMDB, Radarr, Sonarr, los complementos y los ajustes por defecto."
-    },
+    "settings": {},
     "profileFirst": "El primero de la lista",
     "profileUnavailable": "Lista no disponible: compruebe la dirección y la clave y recargue la página.",
     "adminPassword": {
@@ -2867,5 +2856,25 @@
     "loadError": "No se pudieron cargar las novedades.",
     "accountHint": "Lo que ha cambiado en CineApp, versión a versión.",
     "open": "Ver"
+  },
+  "config": {
+    "connections": {
+      "hint": "La dirección y la clave de cada servicio. Un valor fijado aquí sustituye al del .env."
+    },
+    "playback": {
+      "hint": "El reproductor integrado y su recurso al reproductor del servidor. Se aplica sin reiniciar."
+    },
+    "subtitles": {
+      "hint": "Traducción por una IA en línea: proveedor, clave, presupuesto mensual."
+    },
+    "accounts": {
+      "hint": "Lo que recibe una cuenta que no ha elegido nada, y la pantalla de bienvenida que se le ofrece."
+    },
+    "admin": {
+      "hint": "La cuenta de administrador local y las herramientas de diagnóstico."
+    },
+    "deployment": {
+      "hint": "Lo que requiere editar docker-compose.yml o .env y volver a crear el contenedor."
+    }
   }
 }

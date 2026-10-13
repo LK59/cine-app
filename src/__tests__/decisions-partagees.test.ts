@@ -643,7 +643,11 @@ describe("les notifications se règlent à un seul endroit", () => {
   // La gestion et le panneau Compte réglaient les mêmes choix sous des libellés différents
   // (23/09/2026). Il n'en reste qu'un : le panneau Compte.
   it("la gestion ne dessine plus ses propres interrupteurs de notification", () => {
-    const src = lire("src/app/(dashboard)/parametres/page.tsx");
+    // Toutes les pages de la Configuration (DECISIONS.md §81), et leurs cartes communes.
+    const src = ["", "/lecture", "/sous-titres", "/comptes", "/administration", "/deploiement"]
+      .map((p) => lire(`src/app/(dashboard)/parametres${p}/page.tsx`))
+      .concat(lire("src/components/settings/AdminTools.tsx"))
+      .join("\n");
     expect(src).not.toMatch(/NOTIFICATION_CATEGORIES|\/api\/notifications\/settings|\/api\/push\/test/);
   });
 });

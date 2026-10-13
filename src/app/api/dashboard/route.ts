@@ -11,21 +11,20 @@ import { qbittorrent } from "@/lib/clients/qbittorrent";
 import { tmdb } from "@/lib/clients/tmdb";
 import { atMostEvery } from "@/lib/quotaGuard";
 import { omdb } from "@/lib/clients/omdb";
-import { withCacheSafe, cachedMovies, cachedSeries, TTL } from "@/lib/server-cache";
+import { withCacheSafe, TTL } from "@/lib/server-cache";
 import { getDiskStats, type DiskStats } from "@/lib/disk-stats";
 import { classifyError } from "@/lib/api-error";
-import { posterUrl, backdropUrl } from "@/lib/images";
 import { config } from "@/lib/config";
-import { getImdbRating } from "@/lib/imdb-rating";
-import { getTitleLogo } from "@/lib/title-logo";
 import { getJellyseerrPendingCount, getJellyseerrActivityItems } from "@/lib/jellyseerr-scope";
 import type { SessionPayload } from "@/lib/auth";
 
 // Checked before any network call so "not configured" never gets confused
 // with "configured but unreachable" — both would otherwise surface as the
-// same generic connection error. See README > Deployment for the .env vars.
+// same generic connection error. Le nom de la variable reste dans le message (c'est lui qu'on
+// cherche dans `.env`), mais le réglage se fait d'abord dans Configuration → Connexions
+// (DECISIONS.md §48) : renvoyer seulement vers `.env` envoyait l'administrateur au mauvais endroit.
 function notConfigured(envVar: string): Error {
-  return new Error(`Non configuré — définis ${envVar} dans .env (voir README > Deployment)`);
+  return new Error(`Non configuré — ${envVar} (Configuration → Connexions, ou .env)`);
 }
 
 export const dynamic = "force-dynamic";
@@ -50,31 +49,6 @@ export interface ActivityItem {
   href?: string;
 }
 
-export interface ResumeItem {
-  id: string;
-  name: string;
-  subtitle: string | null;
-  type: string;
-  progress: number;
-  positionTicks: number;
-  runtimeTicks: number;
-  imageTag: string | null;
-  cinemaHref: string | null;
-  imdbRating: string | null;
-}
-
-export interface RecentItem {
-  id: number;
-  title: string;
-  year: number;
-  added?: string;
-  hasFile?: boolean;
-  status?: string;
-  posterUrl: string | null;
-  tmdbId?: number;
-  imdbRating: string | null;
-}
-
 export interface TorrentItem {
   hash: string;
   name: string;
@@ -96,24 +70,15 @@ export interface DashboardSection<T> {
   stale: boolean;
 }
 
-export interface HeroItem {
-  id: number;
-  mediaType: "movie" | "series";
-  title: string;
-  overview: string | null;
-  backdropUrl: string | null;
-  logoUrl: string | null;
-  imdbRating: string | null;
-  href: string;
-}
-
+/**
+ * L'accueil de la gestion : ce qui tourne (13/10/2026, DECISIONS.md §81). La bannière, Reprendre,
+ * Ma liste et les ajouts récents en affiches sont partis — c'est le cinéma qui les montre, à tous
+ * les comptes ; ils coûtaient ici une recherche de logo TMDB et de notes IMDb par titre à chaque
+ * rafraîchissement d'un écran d'administration.
+ */
 export interface DashboardPayload {
   services:       DashboardSection<ServiceStatus[]>;
   activity:       DashboardSection<ActivityItem[]>;
-  resume:         DashboardSection<{ items: ResumeItem[] }>;
-  hero:           DashboardSection<HeroItem[]>;
-  recentMovies:   DashboardSection<RecentItem[]>;
-  recentSeries:   DashboardSection<RecentItem[]>;
   torrents:       DashboardSection<TorrentItem[]>;
   disk:           DashboardSection<DiskStats>;
 }
@@ -252,164 +217,6 @@ async function fetchActivity(session: SessionPayload | null): Promise<ActivityIt
 
 // ─── Resume ───────────────────────────────────────────────────────────────────
 
-async function fetchResume(jfId: string): Promise<{ items: ResumeItem[] }> {
-  const [resumeData, movies, series] = await Promise.all([
-    jellyfin.getResumeItems(jfId).catch(() => ({ Items: [] })),
-    cachedMovies().catch(() => []),
-    cachedSeries().catch(() => []),
-  ]);
-  const moviesByTmdb = new Map(movies.map((m) => [m.tmdbId, m]));
-  const seriesByTvdb = new Map(series.map((s) => [s.tvdbId, s]));
-
-  // Jellyfin never puts ProviderIds on Episode items, only on their parent
-  // Series — fetch the series' TVDB id separately (deduped) so episodes in
-  // the resume list can still link to their series' sheet.
-  const episodeSeriesIds = [...new Set(
-    resumeData.Items.filter((i) => i.Type === "Episode" && i.SeriesId).map((i) => i.SeriesId!)
-  )];
-  const seriesTvdbById = new Map<string, number | undefined>();
-  await Promise.all(episodeSeriesIds.map(async (seriesId) => {
-    const providerIds = await jellyfin.getItemProviderIds(jfId, seriesId).catch(() => null);
-    const tvdb = providerIds?.ProviderIds?.Tvdb;
-    if (tvdb) seriesTvdbById.set(seriesId, parseInt(tvdb, 10));
-  }));
-
-  // Series IMDb ratings resolved once, in a single batch — Sonarr's own `ratings` field isn't
-  // IMDb-specific (see getImdbRating), unlike movies, which read Radarr's own free
-  // ratings.imdb.value directly below with no external call at all.
-  const neededSeriesTmdbIds = new Set<number>();
-  for (const item of resumeData.Items) {
-    let seriesEntry: (typeof series)[number] | undefined;
-    if (item.Type === "Series" && item.ProviderIds?.Tvdb) {
-      seriesEntry = seriesByTvdb.get(parseInt(item.ProviderIds.Tvdb, 10));
-    } else if (item.Type === "Episode" && item.SeriesId) {
-      const tvdb = seriesTvdbById.get(item.SeriesId);
-      seriesEntry = tvdb ? seriesByTvdb.get(tvdb) : undefined;
-    }
-    if (seriesEntry?.tmdbId) neededSeriesTmdbIds.add(seriesEntry.tmdbId);
-  }
-  const seriesRatingByTmdb = new Map(
-    await Promise.all([...neededSeriesTmdbIds].map(async (id) => [id, await getImdbRating(id, "series")] as const))
-  );
-
-  const items: ResumeItem[] = resumeData.Items.map((item) => {
-    const pos = item.UserData?.PlaybackPositionTicks ?? 0;
-    const rt = item.RunTimeTicks ?? 0;
-    const progress = rt > 0 ? Math.min((pos / rt) * 100, 99) : 0;
-    let cinemaHref: string | null = null;
-    let imdbRating: string | null = null;
-    if (item.Type === "Movie" && item.ProviderIds?.Tmdb) {
-      const movie = moviesByTmdb.get(parseInt(item.ProviderIds.Tmdb, 10));
-      if (movie) {
-        cinemaHref = `/radarr/${movie.id}`;
-        imdbRating = movie.ratings?.imdb?.value != null ? movie.ratings.imdb.value.toFixed(1) : null;
-      }
-    } else if (item.Type === "Series" && item.ProviderIds?.Tvdb) {
-      const s = seriesByTvdb.get(parseInt(item.ProviderIds.Tvdb, 10));
-      if (s) {
-        cinemaHref = `/sonarr/${s.id}`;
-        imdbRating = s.tmdbId ? seriesRatingByTmdb.get(s.tmdbId) ?? null : null;
-      }
-    } else if (item.Type === "Episode" && item.SeriesId) {
-      const tvdb = seriesTvdbById.get(item.SeriesId);
-      const s = tvdb ? seriesByTvdb.get(tvdb) : undefined;
-      if (s) {
-        cinemaHref = `/sonarr/${s.id}`;
-        imdbRating = s.tmdbId ? seriesRatingByTmdb.get(s.tmdbId) ?? null : null;
-      }
-    }
-    return { id: item.Id, name: item.Type === "Episode" && item.SeriesName ? item.SeriesName : item.Name, subtitle: item.Type === "Episode" ? `S${String(item.ParentIndexNumber ?? 1).padStart(2,"0")}E${String(item.IndexNumber ?? 1).padStart(2,"0")} · ${item.Name}` : null, type: item.Type ?? "Unknown", progress: Math.round(progress), positionTicks: pos, runtimeTicks: rt, imageTag: item.ImageTags?.Primary ?? null, cinemaHref, imdbRating };
-  });
-  return { items };
-}
-
-// ─── Recent movies / series ───────────────────────────────────────────────────
-
-async function fetchRecentMovies(): Promise<RecentItem[]> {
-  const movies = await cachedMovies();
-  return movies
-    .filter((m) => m.added && m.added !== "0001-01-01T00:00:00Z")
-    .sort((a, b) => new Date(b.added!).getTime() - new Date(a.added!).getTime())
-    .slice(0, 8)
-    .map((m) => ({
-      id: m.id,
-      title: m.title,
-      year: m.year,
-      added: m.added,
-      hasFile: m.hasFile,
-      posterUrl: posterUrl(m.images, "thumb"),
-      tmdbId: m.tmdbId,
-      // Radarr already resolves this itself (Skyhook metadata) — free, no OMDb call needed.
-      imdbRating: m.ratings?.imdb?.value != null ? m.ratings.imdb.value.toFixed(1) : null,
-    }));
-}
-
-async function fetchRecentSeries(): Promise<RecentItem[]> {
-  const series = await cachedSeries();
-  const recent = series
-    .filter((s) => s.added && s.added !== "0001-01-01T00:00:00Z")
-    .sort((a, b) => new Date(b.added!).getTime() - new Date(a.added!).getTime())
-    .slice(0, 8);
-  // Unlike Radarr, Sonarr's own `ratings` field isn't IMDb-specific — each lookup goes through
-  // getImdbRating's own 24h persistent cache, so this only ever actually calls OMDb once per
-  // series per day regardless of how often the dashboard itself is refreshed.
-  const ratings = await Promise.all(recent.map((s) => (s.tmdbId ? getImdbRating(s.tmdbId, "series") : Promise.resolve(null))));
-  return recent.map((s, i) => ({
-    id: s.id,
-    title: s.title,
-    year: s.year,
-    added: s.added,
-    status: s.status,
-    posterUrl: posterUrl(s.images, "thumb"),
-    tmdbId: s.tmdbId,
-    imdbRating: ratings[i],
-  }));
-}
-
-// ─── Hero (home banner) ────────────────────────────────────────────────────────
-
-// The 10 newest additions across BOTH movies and series, combined and re-sorted by date —
-// cachedMovies()/cachedSeries() hit the exact same cache entries fetchRecentMovies/
-// fetchRecentSeries already populate, so this costs no extra Radarr/Sonarr call. The only new
-// external calls are the 10 TMDB logo lookups, each individually cached for a week.
-async function fetchHero(): Promise<HeroItem[]> {
-  const [movies, series] = await Promise.all([cachedMovies(), cachedSeries()]);
-
-  const movieCandidates = movies
-    .filter((m) => m.added && m.added !== "0001-01-01T00:00:00Z" && (m.overview || m.images?.length))
-    .map((m) => ({ kind: "movie" as const, item: m, added: m.added! }));
-  const seriesCandidates = series
-    .filter((s) => s.added && s.added !== "0001-01-01T00:00:00Z" && (s.overview || s.images?.length))
-    .map((s) => ({ kind: "series" as const, item: s, added: s.added! }));
-
-  const picks = [...movieCandidates, ...seriesCandidates]
-    .sort((a, b) => new Date(b.added).getTime() - new Date(a.added).getTime())
-    .slice(0, 10);
-
-  return Promise.all(
-    picks.map(async (pick) => {
-      const { kind, item } = pick;
-      const tmdbId = item.tmdbId;
-      const [logoUrl, imdbRating] = await Promise.all([
-        tmdbId ? getTitleLogo(tmdbId, kind === "movie" ? "movie" : "series") : Promise.resolve(null),
-        kind === "movie"
-          ? Promise.resolve(item.ratings?.imdb?.value != null ? item.ratings.imdb.value.toFixed(1) : null)
-          : tmdbId ? getImdbRating(tmdbId, "series") : Promise.resolve(null),
-      ]);
-      return {
-        id: item.id,
-        mediaType: kind,
-        title: item.title,
-        overview: item.overview ?? null,
-        backdropUrl: backdropUrl(item.images, "full"),
-        logoUrl,
-        imdbRating,
-        href: kind === "movie" ? `/radarr/${item.id}` : `/sonarr/${item.id}`,
-      };
-    })
-  );
-}
-
 // ─── Torrents ─────────────────────────────────────────────────────────────────
 
 async function fetchTorrents(): Promise<TorrentItem[]> {
@@ -445,23 +252,16 @@ export async function buildDashboardPayload(
 ): Promise<DashboardPayload> {
   // services/activity now carry Jellyseerr data scoped to whoever's asking (admin vs their own
   // requests only — see jellyseerr-scope.ts), so the cache can no longer be a single shared
-  // entry for every viewer; keyed per-user like the resume cache below already was.
+  // entry for every viewer; keyed per-user.
   const viewerKey = session?.jfId ?? "anon";
-  const [services, activity, hero, recentMovies, recentSeries, torrents] = await Promise.all([
+  const [services, activity, torrents] = await Promise.all([
     withCacheSafe(`dashboard:services:${viewerKey}`, TTL.SHORT,      () => probeServices(session)),
     withCacheSafe(`dashboard:activity:${viewerKey}`, TTL.MEDIUM,     () => fetchActivity(session)),
-    withCacheSafe("dashboard:hero",          TTL.MEDIUM,     fetchHero),
-    withCacheSafe("dashboard:recent:movies", TTL.MEDIUM,     fetchRecentMovies),
-    withCacheSafe("dashboard:recent:series", TTL.MEDIUM,     fetchRecentSeries),
     withCacheSafe("dashboard:torrents",      TTL.VERY_SHORT, fetchTorrents),
   ]);
   const disk = getDiskSection();
 
-  const resume = session?.jfId
-    ? await withCacheSafe(`dashboard:resume:${session.jfId}`, TTL.SHORT, () => fetchResume(session.jfId!))
-    : { data: { items: [] }, available: true, error: null, updatedAt: null, stale: false };
-
-  return { services, activity, resume, hero, recentMovies, recentSeries, torrents, disk };
+  return { services, activity, torrents, disk };
 }
 
 export async function GET(req: NextRequest) {

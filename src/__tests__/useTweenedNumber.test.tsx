@@ -78,6 +78,8 @@ describe("où les nombres défilent", () => {
 
   it("les chiffres de la gestion, quand ce sont des nombres", async () => {
     const src = await lire("src/app/(dashboard)/DashboardClient.tsx");
-    expect(src.match(/typeof value === "number" \? <AnimatedNumber value=\{value\} \/> : value/g)?.length).toBe(2);
+    // Une seule rangée de chiffres depuis le 13/10/2026 : sous le nom du service à toutes les largeurs
+    // (DECISIONS.md §81), là où le téléphone et le bureau avaient chacune la leur.
+    expect(src.match(/typeof value === "number" \? <AnimatedNumber value=\{value\} \/> : value/g)?.length).toBe(1);
   });
 });

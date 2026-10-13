@@ -3,12 +3,12 @@
 import { MIN_FLICK_PX } from "@/lib/useSwipeToDismiss";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { hardNavigate, signOut } from "@/lib/signOut";
-import { enterCinema } from "@/lib/leaveCinema";
-import { LogOut, MonitorPlay, MoreHorizontal, Search, RefreshCw } from "lucide-react";
+import { LogOut, MoreHorizontal, Search, RefreshCw } from "lucide-react";
 import { prefetchRoute } from "@/lib/prefetch";
-import { NAV_GROUPS, NAV_ITEMS, NAV_BAR_HREFS } from "@/components/navItems";
+import { NAV_PARTS, NAV_ITEMS, NAV_BAR_HREFS, activeNavHref } from "@/components/navItems";
+import { AccountPreferencesLink, BackToCinema } from "@/components/gestion/NavBridge";
 import { useT } from "@/components/TranslationProvider";
 import { hardRefreshApp } from "@/lib/pwaRefresh";
 import { AppSignature } from "@/components/AppSignature";
@@ -26,7 +26,7 @@ function SheetSection({
 }) {
   return (
     <div className="mb-4">
-      <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{title}</p>
+      <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-subtle">{title}</p>
       <div className="grid grid-cols-3 gap-1.5">
         {items.map(({ href, label, icon: Icon }) => {
           const active = isActive(href);
@@ -37,13 +37,12 @@ function SheetSection({
               onTouchStart={() => prefetchRoute(href)}
               onMouseEnter={() => prefetchRoute(href)}
               onClick={onClose}
-              className={`flex flex-col items-center gap-1.5 rounded-xl p-3 text-center text-[11px] transition-colors ${
-                active
-                  ? "bg-accent-500/15 text-accent-400 ring-1 ring-accent-500/30"
-                  : "text-slate-300 hover:bg-white/5"
+              aria-current={active ? "page" : undefined}
+              className={`flex flex-col items-center gap-1.5 rounded-2xl p-3 text-center text-[11px] transition-colors ${
+                active ? "bg-white/12 text-white" : "text-muted hover:bg-white/6"
               }`}
             >
-              <Icon size={20} className={active ? "text-accent-400" : "text-slate-400"} />
+              <Icon size={20} strokeWidth={active ? 2.3 : 1.8} className={active ? "text-white" : "text-muted"} />
               <span className="leading-tight">{label}</span>
             </Link>
           );
@@ -55,7 +54,6 @@ function SheetSection({
 
 export function MobileNav() {
   const pathname = usePathname();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -78,10 +76,14 @@ export function MobileNav() {
     return { href, label: MOBILE_LABELS[href] ?? t(item.navKey), icon: item.icon };
   });
 
-  // Les groupes de la feuille, moins ce que la barre du bas montre déjà.
-  const SHEET_GROUPS = NAV_GROUPS.map((group) => ({
-    title: t(group.titleKey),
-    items: group.items
+  // Les deux parties de la feuille (DECISIONS.md §81), chacune à plat, moins ce que la barre du
+  // bas montre déjà. Les sous-groupes de la barre latérale n'y sont pas : sur une grille de trois
+  // colonnes, un intitulé de plus coûte une ligne sans rien apprendre.
+  const SHEET_GROUPS = NAV_PARTS.map((part) => ({
+    key: part.key,
+    title: t(part.titleKey),
+    items: part.groups
+      .flatMap((group) => group.items)
       .filter((i) => !NAV_BAR_HREFS.includes(i.href))
       .map((i) => ({ href: i.href, label: t(i.navKey), icon: i.icon })),
   })).filter((group) => group.items.length > 0);
@@ -195,23 +197,25 @@ export function MobileNav() {
     window.dispatchEvent(new CustomEvent("open-search"));
   }
 
+  const activeHref = activeNavHref(pathname);
   function isActive(href: string) {
-    return pathname === href || pathname.startsWith(href + "/");
+    return activeHref === href;
   }
 
   return (
     <>
-      {/* Bottom bar */}
+      {/* La barre du bas : une pilule de verre qui flotte, comme celle du cinéma (13/10/2026,
+          DECISIONS.md §81). C'était une bande pleine largeur collée au bas de l'écran, fond
+          « glass-panel » et onglet actif en violet : l'autre interface de la même application.
+          Quatre destinations et « Plus » ; la recherche est en tête de la feuille, avec le pont
+          vers le cinéma. Des largeurs à la mesure des mots, et non cinq cases égales :
+          « Téléchargements » ne tient pas dans un cinquième de téléphone. */}
       <nav
-        className="glass-panel fixed inset-x-0 bottom-0 z-40 flex items-stretch border-x-0 border-b-0 md:hidden"
-        // Anchored to the bottom with the home-indicator clearance as padding INSIDE the panel:
-        // the glass still covers that strip, and the icons still sit above it. The previous
-        // version pulled the panel below the viewport with a negative offset and compensated
-        // with twice the padding, which reaches the same place only if the negative calc is
-        // honoured — and doubled the visible gap whenever it wasn't.
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        aria-label={t("nav.label")}
+        className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4 md:hidden"
+        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)" }}
       >
-        <div className="flex w-full items-center justify-around px-1 py-1 [@media(max-height:500px)_and_(orientation:landscape)]:py-0.5">
+        <div className="nav-glass pointer-events-auto flex max-w-full items-center gap-0.5 rounded-full px-1.5 py-1.5 [@media(max-height:500px)_and_(orientation:landscape)]:py-1">
           {PINNED.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
             return (
@@ -220,34 +224,30 @@ export function MobileNav() {
                 href={href}
                 onTouchStart={() => prefetchRoute(href)}
                 onMouseEnter={() => prefetchRoute(href)}
-                className={`flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] rounded-lg transition-colors [@media(max-height:500px)_and_(orientation:landscape)]:flex-row [@media(max-height:500px)_and_(orientation:landscape)]:justify-center [@media(max-height:500px)_and_(orientation:landscape)]:gap-1.5 [@media(max-height:500px)_and_(orientation:landscape)]:py-1 ${
-                  active ? "text-accent-400" : "text-slate-500"
+                aria-current={active ? "page" : undefined}
+                className={`flex h-14 min-w-14 shrink flex-col items-center justify-center gap-0.5 rounded-full px-2.5 transition-colors [@media(max-height:500px)_and_(orientation:landscape)]:h-11 ${
+                  active ? "bg-white/15 text-white" : "text-subtle active:text-muted"
                 }`}
               >
-                <Icon size={20} />
-                <span className="truncate px-0.5 leading-tight [@media(max-height:500px)_and_(orientation:landscape)]:hidden">{label}</span>
+                <Icon size={20} strokeWidth={active ? 2.4 : 1.8} />
+                <span className={`truncate whitespace-nowrap text-[11px] leading-tight ${active ? "font-semibold" : "font-medium"} [@media(max-height:500px)_and_(orientation:landscape)]:sr-only`}>
+                  {label}
+                </span>
               </Link>
             );
           })}
 
-          {/* Search */}
+          {/* Plus */}
           <button
-            onClick={openSearch}
-            className="flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] text-slate-500 rounded-lg transition-colors hover:text-white [@media(max-height:500px)_and_(orientation:landscape)]:flex-row [@media(max-height:500px)_and_(orientation:landscape)]:justify-center [@media(max-height:500px)_and_(orientation:landscape)]:gap-1.5 [@media(max-height:500px)_and_(orientation:landscape)]:py-1"
-          >
-            <Search size={20} />
-            <span className="[@media(max-height:500px)_and_(orientation:landscape)]:hidden">{t('nav.mobile.search')}</span>
-          </button>
-
-          {/* More */}
-          <button
+            type="button"
             onClick={() => setOpen(true)}
-            className={`flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] rounded-lg transition-colors [@media(max-height:500px)_and_(orientation:landscape)]:flex-row [@media(max-height:500px)_and_(orientation:landscape)]:justify-center [@media(max-height:500px)_and_(orientation:landscape)]:gap-1.5 [@media(max-height:500px)_and_(orientation:landscape)]:py-1 ${
-              open ? "text-accent-400" : "text-slate-500"
+            aria-expanded={open}
+            className={`flex h-14 min-w-14 flex-col items-center justify-center gap-0.5 rounded-full px-2.5 transition-colors [@media(max-height:500px)_and_(orientation:landscape)]:h-11 ${
+              open ? "bg-white/15 text-white" : "text-subtle active:text-muted"
             }`}
           >
             <MoreHorizontal size={20} />
-            <span className="[@media(max-height:500px)_and_(orientation:landscape)]:hidden">{t('nav.mobile.more')}</span>
+            <span className="text-[11px] font-medium leading-tight [@media(max-height:500px)_and_(orientation:landscape)]:sr-only">{t("nav.mobile.more")}</span>
           </button>
         </div>
       </nav>
@@ -274,53 +274,43 @@ export function MobileNav() {
         }`}
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div data-sheet-content className="glass-panel rounded-t-2xl border-x-0 border-b-0 overflow-y-auto overscroll-contain" style={{ maxHeight: "85dvh" }}>
+        <div data-sheet-content className="glass-panel overflow-y-auto overscroll-contain rounded-t-2xl border-x-0 border-b-0" style={{ maxHeight: "85dvh" }}>
           {/* Visual drag indicator */}
           <div className="flex cursor-grab justify-center px-4 pt-4 pb-3">
             <div className="h-1 w-12 rounded-full bg-white/30" />
           </div>
           <div className="px-4 pb-4">
 
-          {/* Search bar shortcut */}
+          {/* Le pont vers le cinéma, en tête comme sur la barre latérale (DECISIONS.md §81). */}
+          <BackToCinema className="mb-3" onNavigate={() => setOpen(false)} />
+
           <button
+            type="button"
             onClick={() => { setOpen(false); openSearch(); }}
-            className="mb-4 flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-slate-400 hover:bg-white/10 transition-colors"
+            className="mb-4 flex w-full items-center gap-3 rounded-full bg-white/6 px-4 py-2.5 text-sm text-muted transition-colors hover:bg-white/10"
           >
             <Search size={15} />
             <span className="flex-1 text-left">{t('nav.mobile.searchHint')}</span>
-            <kbd className="rounded-sm bg-white/10 px-1.5 py-0.5 text-[10px] font-medium">⌘K</kbd>
-          </button>
-
-          {/* Cinema Mode's own entry point, matching the sidebar's on desktop: kept out of the
-              section grids below because it doesn't navigate to another page inside this shell —
-              it replaces the shell entirely with a full-screen mode of its own (the phone layout,
-              see CinemaMobileClient). Goes through enterCinema for the same reason the sidebar
-              does — see its comment. */}
-          <button
-            type="button"
-            onClick={() => { setOpen(false); enterCinema(router); }}
-            className="mb-4 flex w-full items-center gap-3 rounded-xl border border-accent-500/30 bg-accent-500/10 px-4 py-3 text-sm font-medium text-accent-400 transition-colors hover:bg-accent-500/20"
-          >
-            <MonitorPlay size={17} />
-            {t("nav.cinemaMode")}
           </button>
 
           {SHEET_GROUPS.map((group) => (
-            <SheetSection key={group.title} title={group.title} items={group.items} isActive={isActive} onClose={() => setOpen(false)} />
+            <SheetSection key={group.key} title={group.title} items={group.items} isActive={isActive} onClose={() => setOpen(false)} />
           ))}
+
+          <AccountPreferencesLink className="mb-4 px-1" onNavigate={() => setOpen(false)} />
 
           {/* Refresh + Logout */}
           <div className="mt-2 flex items-center gap-2">
             <button
               onClick={refresh}
               disabled={refreshing}
-              className="btn btn-ghost flex-1 rounded-xl py-3"
+              className="btn btn-ghost flex-1 rounded-full py-3"
             >
               <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} /> {t('common.refresh')}
             </button>
             <button
               onClick={logout}
-              className="btn btn-ghost flex-1 rounded-xl py-3 text-red-400"
+              className="btn btn-ghost flex-1 rounded-full py-3 text-danger"
             >
               <LogOut size={16} /> {t('nav.logout')}
             </button>

@@ -37,6 +37,7 @@ import { ADMIN_REPORTS_KEY } from "@/components/reports/reportCache";
 import { DiagnosisPanel } from "@/components/activity/Diagnosis";
 import { DeviceQualityList, Heatmap, TopTitles, AuthList } from "@/components/activity/insights";
 import type { Seance } from "@/lib/activity/seances";
+import { liveAccounts, pendingReports } from "@/lib/activity/summary";
 import { ActivityLink, goTo } from "@/components/activity/nav";
 import { NEWS_ADMIN_KEY, NewsTiles, type NewsAdminData } from "@/components/activity/views/ActivityNews";
 
@@ -94,7 +95,7 @@ function ReportsPanel({ now }: { now: number }) {
   const [showDone, setShowDone] = useState(false);
   const { data } = useSWR<{ reports: ReportSummary[]; unread: number }>(ADMIN_REPORTS_KEY, fetcher, { refreshInterval: 30_000 });
   if (!data) return null;
-  const pending = data.reports.filter((r) => r.status === "open" || r.status === "in_progress");
+  const pending = pendingReports(data.reports);
   const done = data.reports.filter((r) => r.status === "resolved" || r.status === "closed");
   const shown = showDone ? done : pending;
   return (
@@ -321,8 +322,8 @@ export function ActivityOverview() {
   if (!data) return <ErrorState message={t("activity.loadError")} onRetry={() => mutate()} />;
 
   const { now, accounts, signals: s, recent } = data;
-  const live = accounts.filter((a) => a.nowPlaying || a.presence.state !== "away");
-  const playingCount = live.filter((a) => a.nowPlaying || a.presence.state === "playing").length;
+  // La règle est partagée avec l'accueil de la gestion (`liveAccounts`, DECISIONS.md §81).
+  const { live, playing: playingCount } = liveAccounts(accounts);
   const alerts = accounts.filter((a) => a.alerts.length);
 
   return (

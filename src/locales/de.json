@@ -29,12 +29,11 @@
   },
   "nav": {
     "overview": "Übersicht",
-    "timeline": "Letzte Aktivität",
+    "timeline": "Importe",
     "calendar": "Kalender",
     "radarr": "Filme · Radarr",
     "sonarr": "Serien · Sonarr",
     "qbittorrent": "Downloads",
-    "settings": "Einstellungen",
     "stats": "Statistiken",
     "bazarr": "Untertitel · Bazarr",
     "jackett": "Indexer · Jackett",
@@ -52,13 +51,25 @@
       "searchHint": "Film, Serie, Schauspieler…",
       "downloads": "Downloads"
     },
-    "cinemaMode": "Kinomodus",
     "sections": {
-      "library": "Bibliothek",
-      "content": "Inhalte",
-      "manage": "Verwaltung"
+      "services": "Dienste"
     },
-    "tmdb": "TMDB"
+    "tmdb": "TMDB",
+    "parts": {
+      "infrastructure": "Infrastruktur",
+      "configuration": "Konfiguration"
+    },
+    "config": {
+      "connections": "Verbindungen",
+      "playback": "Wiedergabe",
+      "subtitles": "Generierte Untertitel",
+      "accounts": "Neue Konten",
+      "admin": "Administrator",
+      "deployment": "Bereitstellung"
+    },
+    "backToCinema": "Zurück zum Kino",
+    "accountPreferences": "Deine Einstellungen sind unter Konto",
+    "label": "Navigation der Verwaltung"
   },
   "common": {
     "loading": "Laden...",
@@ -143,16 +154,9 @@
     "next": "Weiter"
   },
   "dashboard": {
-    "resumeWatching": "Weiterschauen",
-    "myList": "Meine Liste",
-    "recentlyAdded": "Zuletzt zur Bibliothek hinzugefügt",
-    "seeAll": "Alle anzeigen",
     "activeDownloads": "Aktive Downloads",
     "waitingSeeds": "Wartet auf Seeds",
     "showMore": "+{n} weitere — alle anzeigen",
-    "sheetLink": "Details",
-    "downloadedTooltip": "Heruntergeladen",
-    "pageTitle": "Übersicht",
     "pageSubtitle": "Live-Status deiner Dienste",
     "storageTitle": "Speicher",
     "computingStorage": "Wird berechnet…",
@@ -162,12 +166,24 @@
     "storageSeeds": "Seeds — {size}",
     "storageOther": "Sonstiges — {size}",
     "storageUsed": "{pct}% belegt",
-    "activityTitle": "Letzte Aktivität",
-    "noActivity": "Keine kürzliche Aktivität.",
     "servicesStatus": "Dienste-Status",
     "unavailableWord": "nicht verfügbar",
     "servicesAllUp": "{n} Dienste · alle online",
-    "servicesSomeDown": "{n} von {total} offline"
+    "servicesSomeDown": "{n} von {total} offline",
+    "importsTitle": "Neueste Importe",
+    "noImports": "Keine neuen Importe.",
+    "noDownloads": "Keine laufenden Downloads.",
+    "open": "Öffnen",
+    "activityDigest": {
+      "title": "Kino-Aktivität",
+      "open": "Aktivität öffnen",
+      "active": "Aktive Konten",
+      "playing": "Laufende Wiedergaben",
+      "reports": "Offene Meldungen",
+      "errors": "Fehler (7 T.)",
+      "errorsDetail": "{server} Server · {client} Browser · {player} Player",
+      "unavailable": "Aktivität nicht verfügbar."
+    }
   },
   "activity": {
     "news": {
@@ -1103,7 +1119,7 @@
     "emptyHint": "Von Radarr und Sonarr verfolgte Veröffentlichungen erscheinen hier, sobald ein Datum bekannt ist."
   },
   "timeline": {
-    "pageTitle": "Letzte Aktivität",
+    "pageTitle": "Importe",
     "subtitle": "{n} kürzliche Ereignisse — Radarr & Sonarr",
     "filters": {
       "all": "Alle ({n})",
@@ -1272,23 +1288,8 @@
     "pending": "Ausstehend"
   },
   "settings": {
-    "pageTitle": "Einstellungen",
-    "subtitle": "Darstellung und Benachrichtigungen anpassen",
-    "appearance": {
-      "title": "Darstellung",
-      "subtitle": "Akzentfarbe und Anzeigemodus",
-      "accentColor": "Akzentfarbe"
-    },
     "security": {
-      "title": "Sicherheit",
-      "subtitle": "Aktive Sitzungen auf anderen Geräten",
-      "sessionsTitle": "Andere angemeldete Geräte",
-      "loading": "Laden…",
-      "noOtherSessions": "Keine anderen aktiven Sitzungen",
-      "otherSessions": "{n} weitere aktive Sitzung|{n} weitere aktive Sitzungen",
-      "revokeAll": "Alle anderen abmelden",
-      "revoked": "Abgemeldet",
-      "revokeSuccess": "Alle anderen Sitzungen wurden widerrufen."
+      "loading": "Laden…"
     },
     "app": {
       "title": "Anwendung",
@@ -1307,14 +1308,7 @@
       "debugSearch": "Such-Debug",
       "debugSearchDesc": "Zeigt im Modal an, warum jedes Ergebnis erscheint: lokaler Fuzzy, klassische TMDb-Suche oder natürliche Anfrage."
     },
-    "notifications": {
-      "subtitle": "Push-Benachrichtigungen pro Gerät und Kategorie",
-      "moved": "Benachrichtigungen werden im Tab Konto des Kinos eingestellt, für alle Geräte.",
-      "open": "Öffnen"
-    },
     "language": {
-      "title": "Sprache",
-      "subtitle": "Oberfläche, Inhaltsübersichten und Suchmaschine",
       "reloadNotice": "Neustart erforderlich, um {lang} anzuwenden",
       "apply": "Anwenden"
     },
@@ -2784,17 +2778,12 @@
     "secretsNote": "Das Sitzungsgeheimnis und die Benachrichtigungsschlüssel werden beim ersten Start automatisch erzeugt (data/config/secrets.json). Nichts zu tun.",
     "done": {
       "title": "Alles bereit",
-      "text": "Die Einstellungen lassen sich jederzeit in der Verwaltung ändern, Seite „Server-Einstellungen“.",
+      "text": "Die Einstellungen lassen sich jederzeit in der Verwaltung ändern, unter „Konfiguration“.",
       "manage": "Verwaltung öffnen",
       "cinema": "Mit Jellyfin anmelden",
       "finishing": "Wird abgeschlossen…"
     },
-    "settings": {
-      "title": "Server-Einstellungen",
-      "subtitle": "Adressen und Schlüssel der Dienste sowie die Standardeinstellungen der Konten. Ein hier gesetzter Wert ersetzt den aus der .env.",
-      "link": "Server-Einstellungen",
-      "linkHint": "Jellyfin, TMDB, Radarr, Sonarr, die Ergänzungen und die Standardeinstellungen."
-    },
+    "settings": {},
     "profileFirst": "Das erste der Liste",
     "profileUnavailable": "Liste nicht verfügbar: Adresse und Schlüssel prüfen, dann Seite neu laden.",
     "adminPassword": {
@@ -2867,5 +2856,25 @@
     "loadError": "Neuigkeiten konnten nicht geladen werden.",
     "accountHint": "Was sich in CineApp geändert hat, Version für Version.",
     "open": "Ansehen"
+  },
+  "config": {
+    "connections": {
+      "hint": "Adresse und Schlüssel jedes Dienstes. Ein hier gesetzter Wert ersetzt den aus der .env."
+    },
+    "playback": {
+      "hint": "Der integrierte Player und sein Rückgriff auf den Server-Player. Gilt ohne Neustart."
+    },
+    "subtitles": {
+      "hint": "Übersetzung durch eine Online-KI: Anbieter, Schlüssel, Monatsbudget."
+    },
+    "accounts": {
+      "hint": "Was ein Konto erhält, solange es nichts gewählt hat, und der Willkommensbildschirm dafür."
+    },
+    "admin": {
+      "hint": "Das lokale Administratorkonto und die Diagnosewerkzeuge."
+    },
+    "deployment": {
+      "hint": "Was eine Änderung an docker-compose.yml oder .env und das Neuerstellen des Containers erfordert."
+    }
   }
 }

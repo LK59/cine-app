@@ -1,49 +1,61 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { PlayButton } from "@/components/PlayButton";
-import { usePlayback } from "@/components/PlaybackProvider";
-import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { fetcher, TO_WATCH_KEY } from "@/lib/swr";
+import { fetcher } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
-import { LoadingState, EmptyState, ErrorState } from "@/components/StateViews";
-import { Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, Inbox, Image, Star, HardDrive, Clock, Zap, RefreshCw, AlertTriangle, ExternalLink, Play, ChevronRight, CirclePlus } from "lucide-react";
-import { useRole } from "@/lib/useRole";
+import { EmptyState, ErrorState } from "@/components/StateViews";
+import {
+  Film,
+  Tv,
+  Captions,
+  Search,
+  Download,
+  PlayCircle,
+  ListChecks,
+  Inbox,
+  Image,
+  Star,
+  HardDrive,
+  RefreshCw,
+  AlertTriangle,
+  ChevronRight,
+  Zap,
+  Radio,
+  Users,
+  Clapperboard,
+  MessageSquareWarning,
+  ServerCrash,
+  Server,
+  PackageCheck,
+} from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
-import { PosterImage } from "@/components/PosterImage";
-import { MediaCard, CARD_WIDTH } from "@/components/MediaCard";
-import { ImdbBadge } from "@/components/ImdbBadge";
-import { DashboardHero } from "@/components/DashboardHero";
-import { RequestButton } from "@/components/RequestButton";
-import { RequestFlowModal } from "@/components/RequestFlowModal";
-import { Rail } from "@/components/Rail";
-import { CarouselSkeleton } from "@/components/SkeletonCard";
-import { ActionSheet } from "@/components/ActionSheet";
-import { useLongPress } from "@/hooks/useLongPress";
-import { useTvGridNav } from "@/lib/useTvGridNav";
-import type { DashboardPayload, ServiceStatus, ActivityItem, ResumeItem, RecentItem, TorrentItem } from "@/app/api/dashboard/route";
+import { PageHeader } from "@/components/PageHeader";
+import { Panel } from "@/components/activity/parts";
+import type { DashboardPayload, ServiceStatus, ActivityItem, TorrentItem } from "@/app/api/dashboard/route";
 import type { DiskStats } from "@/lib/disk-stats";
-import type { WatchlistItem } from "@/lib/db";
-import { TMDB_IMAGE_BASE } from "@/lib/tmdbImageBase";
-
-import { fmtSize, formatResumeTicks } from "@/lib/format";
+import type { AccountSummary, WeekSignals } from "@/lib/activity/accounts";
+import type { ReportSummary } from "@/lib/reports";
+import { activityDigest } from "@/lib/activity/summary";
+import { ADMIN_REPORTS_KEY } from "@/components/reports/reportCache";
+import { fmtSize } from "@/lib/format";
 import { RelativeTime } from "@/components/RelativeTime";
 import { AnimatedNumber } from "@/lib/useTweenedNumber";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-// ─── Constants ────────────────────────────────────────────────────────────────
+/**
+ * L'accueil de la gestion — un tableau de bord d'administrateur (13/10/2026, DECISIONS.md §81).
+ *
+ * C'était une seconde vitrine du catalogue : bannière tournante, Reprendre, Ma liste, ajouts
+ * récents en affiches. Tout cela est au cinéma, pour tous les comptes ; ici, l'administrateur vient
+ * voir ce qui tourne. Dans l'ordre : ce qui se télécharge, l'état des services, le disque, et le
+ * résumé de l'Activité du cinéma (comptes, séances, signalements, erreurs) — chaque chiffre lu aux
+ * mêmes routes que les pages qui le détaillent, rien de calculé à part.
+ */
 
 // Les genres que le serveur envoie (`ActivityKind`) ; un événement imprévu garde son nom brut.
 const ACTIVITY_KINDS = new Set(["grabbed", "imported", "deleted", "downloadFailed", "request"]);
 
-const SOURCE_COLOR: Record<string, string> = {
-  radarr: "bg-accent-600/15 text-accent-400",
-  sonarr: "bg-sky-600/15 text-sky-400",
-  jellyseerr: "bg-emerald-600/15 text-emerald-400",
-};
+const SOURCE_ICON: Record<string, React.ElementType> = { radarr: Film, sonarr: Tv, jellyseerr: ListChecks };
 
 const SERVICE_META: Record<string, { label: string; icon: React.ElementType; href?: string }> = {
   radarr:       { label: "Radarr",           icon: Film,      href: "/radarr" },
@@ -57,12 +69,15 @@ const SERVICE_META: Record<string, { label: string; icon: React.ElementType; hre
   omdb:         { label: "OMDb (note IMDb)", icon: Star },
 };
 
+/** L'adresse du panneau Activité, dans le cinéma (`#activite=…`, voir `activity/nav.tsx`). */
+const ACTIVITY_HREF = "/#activite=1";
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SectionUnavailable({ label, error }: { label: string; error: string | null }) {
   const t = useT();
   return (
-    <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-400">
+    <div className="flex items-center gap-2 rounded-xl bg-warning/10 px-4 py-3 text-sm text-warning">
       <AlertTriangle size={14} className="shrink-0" />
       <span><strong>{label}</strong> {t('dashboard.unavailableWord')}{error ? ` — ${error}` : ""}</span>
     </div>
@@ -73,423 +88,79 @@ function StaleIndicator({ updatedAt }: { updatedAt: number | null }) {
   const t = useT();
   if (!updatedAt) return null;
   return (
-    <span className="ml-2 text-[11px] text-slate-600" title={t('common.cachedData')}>
+    <span className="text-[11px] font-normal text-subtle" title={t('common.cachedData')}>
       · {t('common.updatedAt')} <RelativeTime date={updatedAt} />
     </span>
   );
 }
 
-const TV_NAV_RING = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink";
-
-function ResumeCard({ item, index }: { item: ResumeItem; index: number }) {
-  const router = useRouter();
-  const t = useT();
-  const playback = usePlayback();
-  const [open, setOpen] = useState(false);
-  const lp = useLongPress(() => setOpen(true));
-  // Zéro et non « rien » : cette carte affiche déjà la position juste au-dessous, donc elle la
-  // connaît. Un champ absent veut dire « je ne sais pas, prends ce dont le serveur se souvient »,
-  // ce qui n'est pas la même chose — voir PlaybackSession.
-  const resumeAt = item.positionTicks > 0 ? item.positionTicks / 10_000_000 : 0;
-  const playLabel =
-    item.positionTicks > 0 ? `${t('common.resume')} - ${formatResumeTicks(item.positionTicks)}` : t('common.play');
-
-  const overlay = (
-    <>
-      {item.imdbRating && <ImdbBadge rating={item.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
-      {/* A dark gradient behind the bar guarantees contrast against any poster art —
-          the previous bar (h-1, bg-black/50) could nearly disappear over a light poster.
-          Track lightened (white/25 vs. black/50) so the unfilled portion reads clearly too,
-          not just the filled one. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/80 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-white/25">
-        <div className="h-full bg-accent-500 shadow-[0_0_4px_rgba(0,0,0,0.6)]" style={{ width: `${item.progress}%` }} />
-      </div>
-    </>
-  );
-
-  /**
-   * Reprendre, et repartir du début. Rien d'autre.
-   *
-   * Il y avait là un bouton « Jellyfin » qui envoyait vers un autre lecteur : la même carte
-   * proposait donc de lire son film à deux endroits différents, dont l'un quittait l'app. Il
-   * reste accessible depuis la feuille d'actions, où on va chercher les sorties de route.
-   *
-   * `mt-auto` cloue la rangée en bas de la carte : les titres font une ou deux lignes selon
-   * l'épisode, et les boutons montaient et descendaient d'une carte à l'autre le long de la
-   * rangée.
-   */
-  const actions = (
-    <div className="mt-auto flex items-center gap-1 px-2 pb-2">
-      <PlayButton
-        itemId={item.id}
-        title={item.name}
-        resumeTicks={item.positionTicks}
-        runtimeTicks={item.runtimeTicks}
-        label={item.positionTicks > 0 ? t('common.resume') : t('common.play')}
-        className="btn btn-primary btn-sm min-w-0 flex-1"
-        iconSize={13}
-      />
-      <PlayButton
-        restart
-        itemId={item.id}
-        title={item.name}
-        resumeTicks={item.positionTicks}
-        variant="icon"
-        iconSize={13}
-        className="btn btn-ghost btn-icon shrink-0 p-1.5"
-      />
+function SkeletonPanels() {
+  return (
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="card h-40 animate-pulse" />
+      ))}
     </div>
   );
-
-  return (
-    <>
-      {/* Whole card opens the sheet on click — the separate "Fiche" text link this replaced
-          is gone, its destination is now just clicking the card. Only when a Radarr/Sonarr
-          mapping actually exists (cinemaHref): a pure-Jellyfin item with no such mapping has
-          nowhere else to navigate to and stays a plain, non-navigating div, same as before. */}
-      <MediaCard
-        href={item.cinemaHref ?? null}
-        posterUrl={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
-        alt={item.name}
-        title={item.name}
-        subtitle={item.subtitle}
-        overlay={overlay}
-        width={CARD_WIDTH.lg}
-        anchorProps={{ ...lp, "data-tv-card": true, "data-tv-row": "resume", "data-tv-col": index }}
-      >
-        {actions}
-      </MediaCard>
-      <ActionSheet
-        open={open}
-        onClose={() => setOpen(false)}
-        title={item.name}
-        subtitle={item.subtitle ?? undefined}
-        actions={[
-          { label: playLabel, icon: <PlayCircle size={16} />, onClick: () => playback.play({ itemId: item.id, title: item.name, resumeAt }) },
-          { label: t('common.openJellyfin'), icon: <Play size={16} />, onClick: () => window.open(`/api/jellyfin/redirect?itemId=${item.id}`, "_blank") },
-          ...(item.cinemaHref ? [{ label: t('common.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(item.cinemaHref!) }] : []),
-        ]}
-      />
-    </>
-  );
 }
 
-function RecentMovieCard({ m, index }: { m: RecentItem; index: number }) {
-  const router = useRouter();
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const lp = useLongPress(() => setOpen(true));
-  return (
-    <>
-      <MediaCard
-        href={`/radarr/${m.id}`}
-        posterUrl={m.posterUrl}
-        alt={m.title}
-        title={m.title}
-        subtitle={<span className="flex items-center gap-1"><Clock size={9} /><RelativeTime date={m.added!} /></span>}
-        width={CARD_WIDTH.md}
-        anchorProps={{ ...lp, "data-tv-card": true, "data-tv-row": "recent-movies", "data-tv-col": index }}
-        overlay={
-          <>
-            {m.imdbRating && <ImdbBadge rating={m.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
-            {m.hasFile && <div className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" title={t('dashboard.downloadedTooltip')} />}
-          </>
-        }
-      />
-      <ActionSheet
-        open={open}
-        onClose={() => setOpen(false)}
-        title={m.title}
-        poster={m.posterUrl}
-        actions={[
-          { label: t('common.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(`/radarr/${m.id}`) },
-        ]}
-      />
-    </>
-  );
-}
-
-function RecentSeriesCard({ s, index }: { s: RecentItem; index: number }) {
-  const router = useRouter();
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const lp = useLongPress(() => setOpen(true));
-  return (
-    <>
-      <MediaCard
-        href={`/sonarr/${s.id}`}
-        posterUrl={s.posterUrl}
-        alt={s.title}
-        title={s.title}
-        subtitle={<span className="flex items-center gap-1"><Clock size={9} /><RelativeTime date={s.added!} /></span>}
-        width={CARD_WIDTH.md}
-        anchorProps={{ ...lp, "data-tv-card": true, "data-tv-row": "recent-series", "data-tv-col": index }}
-        overlay={s.imdbRating ? <ImdbBadge rating={s.imdbRating} className="absolute left-1.5 top-1.5 shadow" /> : null}
-      />
-      <ActionSheet
-        open={open}
-        onClose={() => setOpen(false)}
-        title={s.title}
-        poster={s.posterUrl}
-        actions={[
-          { label: t('common.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(`/sonarr/${s.id}`) },
-        ]}
-      />
-    </>
-  );
-}
-
-function SkeletonSection() {
-  return (
-    <>
-      <div className="mb-3 h-4 w-44 rounded-md bg-slate-800 animate-pulse" />
-      <Rail className="mb-8">
-        <CarouselSkeleton count={4} width="w-36" />
-      </Rail>
-      <div className="mb-3 h-4 w-52 rounded-md bg-slate-800 animate-pulse" />
-      <div className="mb-2 h-3 w-10 rounded-sm bg-slate-800 animate-pulse" />
-      <Rail className="mb-5">
-        <CarouselSkeleton count={6} width="w-28" />
-      </Rail>
-      <div className="mb-2 h-3 w-10 rounded-sm bg-slate-800 animate-pulse" />
-      <Rail className="mb-8">
-        <CarouselSkeleton count={6} width="w-28" />
-      </Rail>
-    </>
-  );
-}
-
-function ResumeSection({ items }: { items: ResumeItem[] }) {
-  const t = useT();
-  if (!items.length) return null;
-  return (
-    <>
-      <h2 className="mb-3 text-sm font-semibold text-white">{t('dashboard.resumeWatching')}</h2>
-      <Rail className="mb-8">
-        {items.map((item, i) => <ResumeCard key={item.id} item={item} index={i} />)}
-      </Rail>
-    </>
-  );
-}
-
-function RecentSection({ movies, series }: { movies: RecentItem[] | null; series: RecentItem[] | null }) {
-  const t = useT();
-  if (!movies?.length && !series?.length) return null;
-  return (
-    <>
-      <h2 className="mb-3 text-sm font-semibold text-white">{t('dashboard.recentlyAdded')}</h2>
-      {movies && movies.length > 0 && (
-        <div className="mb-5">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="flex items-center gap-1.5 text-xs text-slate-500"><Film size={12} /> {t('common.movies')}</p>
-            <Link href="/radarr" className="flex items-center gap-0.5 text-xs text-slate-500 hover:text-slate-300">
-              {t('dashboard.seeAll')} <ChevronRight size={13} />
-            </Link>
-          </div>
-          <Rail>
-            {movies.map((m, i) => <RecentMovieCard key={m.id} m={m} index={i} />)}
-          </Rail>
-        </div>
-      )}
-      {series && series.length > 0 && (
-        <div className="mb-8">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="flex items-center gap-1.5 text-xs text-slate-500"><Tv size={12} /> {t('common.seriesPlural')}</p>
-            <Link href="/sonarr" className="flex items-center gap-0.5 text-xs text-slate-500 hover:text-slate-300">
-              {t('dashboard.seeAll')} <ChevronRight size={13} />
-            </Link>
-          </div>
-          <Rail>
-            {series.map((s, i) => <RecentSeriesCard key={s.id} s={s} index={i} />)}
-          </Rail>
-        </div>
-      )}
-    </>
-  );
-}
-
-function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: WatchlistItem; href: string | null; index: number; imdbRating: string | null }) {
-  const t = useT();
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [requestOpen, setRequestOpen] = useState(false);
-  const [requested, setRequested] = useState(false);
-  const poster = item.posterPath
-    ? item.posterPath.startsWith("http") ? item.posterPath : `${TMDB_IMAGE_BASE}/w342${item.posterPath}`
-    : null;
-  const body = (
-    <>
-      <div className="relative">
-        <PosterImage src={poster} alt={item.title} />
-        {imdbRating && <ImdbBadge rating={imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
-      </div>
-      <div className="p-2">
-        <p className="truncate text-xs font-medium text-white">{item.title}</p>
-        {item.year && <p className="text-[11px] text-slate-500">{item.year}</p>}
-      </div>
-    </>
-  );
-  // Only clickable once the item is actually in the library (Radarr/Sonarr) — a pure "à voir"
-  // wish-list entry with nothing downloaded yet has no sheet of its own to open, same fallback
-  // as ResumeCard for items without a cinemaHref.
-  return href ? (
-    <MediaCard
-      href={href}
-      posterUrl={poster}
-      alt={item.title}
-      title={item.title}
-      subtitle={item.year}
-      width={CARD_WIDTH.md}
-      anchorProps={{ "data-tv-card": true, "data-tv-row": "watchlist", "data-tv-col": index }}
-      overlay={imdbRating ? <ImdbBadge rating={imdbRating} className="absolute left-1.5 top-1.5 shadow" /> : null}
-    />
-  ) : (
-    // Not in the library yet — a static, unclickable poster here was dead weight (nothing to
-    // open). Desktop keeps the hover overlay (real :hover, plus group-focus-within as the Tab-key
-    // fallback) with the same RequestButton as the /watchlist page. Touch devices have no hover
-    // state at all, so that overlay was simply unreachable there — a plain tap on the card opens
-    // a one-action ActionSheet instead (same underlying RequestFlowModal either way). Deliberately
-    // NOT the long-press gesture the resume/recent cards use elsewhere: on a poster image, iOS's
-    // own long-press (save-image / link-preview) gesture fires at the same delay and the two
-    // fought each other.
-    <>
-      <div
-        onClick={() => setSheetOpen(true)}
-        className="group card-solid relative w-28 shrink-0 overflow-hidden touch-manipulation select-none"
-      >
-        {body}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 opacity-0 backdrop-blur-xs transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-          <RequestButton mediaType={item.mediaType} tmdbId={item.tmdbId} title={item.title} />
-        </div>
-      </div>
-      <ActionSheet
-        open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        title={item.title}
-        subtitle={item.year ? String(item.year) : undefined}
-        poster={poster}
-        actions={[
-          {
-            label: requested ? t('common.requested') : t('common.request'),
-            icon: <CirclePlus size={16} />,
-            disabled: requested,
-            onClick: () => setRequestOpen(true),
-          },
-        ]}
-      />
-      {requestOpen && (
-        <RequestFlowModal
-          mediaType={item.mediaType}
-          tmdbId={item.tmdbId}
-          title={item.title}
-          onClose={() => setRequestOpen(false)}
-          onSuccess={() => setRequested(true)}
-        />
-      )}
-    </>
-  );
-}
-
-// Home teaser for the watchlist: a quick-glance row of what's queued up next. « À voir » is the
-// only list left since 2026-09-21, and the page that listed it all went with the others — the
-// cinema's own « Ma liste » is where it lives in full, so there is no « see all » to point at.
-function WatchlistSection() {
-  const t = useT();
-  const { data } = useSWR<{ items: WatchlistItem[] }>(TO_WATCH_KEY, fetcher);
-  const { data: libMap } = useSWR<{
-    movieMap: Record<number, number>;
-    seriesMap: Record<number, number>;
-  }>("/api/library/map", fetcher, { revalidateOnFocus: false });
-  const items = data?.items ?? [];
-
-  const ratingsKey = items.length > 0
-    ? `/api/watchlist/ratings?items=${items.map((i) => `${i.mediaType}:${i.tmdbId}`).join(",")}`
-    : null;
-  const { data: ratingsMap } = useSWR<Record<string, string | null>>(ratingsKey, fetcher, { revalidateOnFocus: false });
-
-  if (items.length === 0) return null;
-
-  return (
-    <>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-white">{t('dashboard.myList')}</h2>
-      </div>
-      <Rail className="mb-8">
-        {items.slice(0, 20).map((item, i) => {
-          const id = item.mediaType === "movie" ? libMap?.movieMap[item.tmdbId] : libMap?.seriesMap[item.tmdbId];
-          const href = id ? (item.mediaType === "movie" ? `/radarr/${id}` : `/sonarr/${id}`) : null;
-          return (
-            <WatchlistTeaserCard
-              key={`${item.mediaType}:${item.tmdbId}`}
-              item={item}
-              href={href}
-              index={i}
-              imdbRating={ratingsMap?.[`${item.mediaType}:${item.tmdbId}`] ?? null}
-            />
-          );
-        })}
-      </Rail>
-    </>
-  );
-}
-
+/** Les téléchargements en cours — une ligne chacun, quatre au plus, la suite chez qBittorrent. */
 function TorrentsSection({ torrents }: { torrents: TorrentItem[] }) {
   const t = useT();
   const active = torrents.filter((item) => ["downloading", "stalledDL", "metaDL", "forcedDL"].includes(item.state));
-  if (!active.length) return null;
   const shown = active.slice(0, 4);
   return (
-    <>
-      <h2 className="mb-3 text-sm font-semibold text-white">{t('dashboard.activeDownloads')}</h2>
-      <div className="mb-8 card divide-y divide-white/5">
-        {shown.map((torrent) => {
-          const pct = Math.round(torrent.progress * 100);
-          const speed = torrent.dlspeed > 0 ? `${fmtSize(torrent.dlspeed)}/s` : null;
-          const eta = torrent.eta > 0 && torrent.eta < 86400 * 7
-            ? torrent.eta < 3600 ? `${Math.ceil(torrent.eta / 60)} min` : `${(torrent.eta / 3600).toFixed(1)} h`
-            : null;
-          return (
-            <div key={torrent.hash} className="p-3">
-              <div className="mb-1.5 flex items-center justify-between gap-3">
-                <p className="truncate text-xs font-medium text-white">{torrent.name}</p>
-                <span className="shrink-0 text-[11px] text-slate-500">{pct}%</span>
+    <Panel
+      title={t('dashboard.activeDownloads')}
+      icon={Download}
+      action={
+        <Link href="/qbittorrent" className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
+          {active.length > 4 ? t('dashboard.showMore', { n: String(active.length - 4) }) : t('dashboard.open')}
+          <ChevronRight size={13} />
+        </Link>
+      }
+    >
+      {active.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-subtle">{t('dashboard.noDownloads')}</p>
+      ) : (
+        <div className="divide-y divide-white/5">
+          {shown.map((torrent) => {
+            const pct = Math.round(torrent.progress * 100);
+            const speed = torrent.dlspeed > 0 ? `${fmtSize(torrent.dlspeed)}/s` : null;
+            const eta = torrent.eta > 0 && torrent.eta < 86400 * 7
+              ? torrent.eta < 3600 ? `${Math.ceil(torrent.eta / 60)} min` : `${(torrent.eta / 3600).toFixed(1)} h`
+              : null;
+            return (
+              <div key={torrent.hash} className="px-4 py-3">
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <p className="truncate text-xs font-medium text-white">{torrent.name}</p>
+                  <span className="shrink-0 text-[11px] tabular-nums text-subtle">{pct}%</span>
+                </div>
+                <div className="mb-1 h-1 w-full rounded-full bg-white/10">
+                  <div className="h-1 rounded-full bg-accent-500 transition-[width]" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-subtle">
+                  {speed && <span className="flex items-center gap-0.5"><Zap size={10} />{speed}</span>}
+                  {eta && <span>ETA {eta}</span>}
+                  {torrent.state === "stalledDL" && <span className="text-warning">{t('dashboard.waitingSeeds')}</span>}
+                </div>
               </div>
-              <div className="mb-1 h-1 w-full rounded-full bg-slate-800">
-                <div className="h-1 rounded-full bg-accent-500 transition-[width]" style={{ width: `${pct}%` }} />
-              </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                {speed && <span className="flex items-center gap-0.5"><Zap size={9} />{speed}</span>}
-                {eta && <span>ETA {eta}</span>}
-                {torrent.state === "stalledDL" && <span className="text-amber-500">{t('dashboard.waitingSeeds')}</span>}
-              </div>
-            </div>
-          );
-        })}
-        {active.length > 4 && (
-          <div className="p-3 text-center">
-            <Link href="/qbittorrent" className="text-xs text-slate-500 hover:text-slate-300">
-              {t('dashboard.showMore', { n: String(active.length - 4) })}
-            </Link>
-          </div>
-        )}
-      </div>
-    </>
+            );
+          })}
+        </div>
+      )}
+    </Panel>
   );
 }
 
 /**
- * L'état de la pile, en un panneau plutôt qu'en neuf briques.
+ * L'état des services, en un panneau plutôt qu'en neuf briques.
  *
  * C'était une grille de tuiles : chacune portait son cadre, son icône encadrée, sa pastille
  * « En ligne » qui passait à la ligne faute de place, et ses chiffres dans une grille à deux
- * colonnes dont les intitulés se coupaient en trois. Comme les lignes d'une grille s'alignent
- * en hauteur, la tuile la plus fournie fixait la hauteur des autres : Bazarr et Jackett étaient
- * aux trois quarts vides. Et rien ne s'alignait d'une tuile à l'autre, alors que ces neuf
- * services disent exactement la même chose — un nom, une version, des chiffres, un état.
- *
- * Donc : une seule surface, une ligne par service, des colonnes qui se répondent d'une ligne à
- * l'autre. L'état tient dans une pastille de couleur, dit une fois en clair par l'en-tête, et
- * la ligne d'un service tombé se colore en entier avec son erreur à la place de ses chiffres.
+ * colonnes dont les intitulés se coupaient en trois. Une seule surface, une ligne par service :
+ * l'état tient dans une pastille de couleur, dit une fois en clair par l'en-tête, et la ligne d'un
+ * service tombé se colore en entier avec son erreur à la place de ses chiffres.
  */
 function ServicesSection({ services }: { services: ServiceStatus[] }) {
   const t = useT();
@@ -497,16 +168,17 @@ function ServicesSection({ services }: { services: ServiceStatus[] }) {
   const down = known.filter((s) => !s.up);
 
   return (
-    <div className="card overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
-        <p className="text-sm font-semibold text-white">{t("dashboard.servicesStatus")}</p>
-        <p className={`text-xs ${down.length > 0 ? "text-red-400" : "text-slate-500"}`}>
+    <Panel
+      title={t("dashboard.servicesStatus")}
+      icon={Server}
+      action={
+        <p className={`text-xs ${down.length > 0 ? "text-danger" : "text-subtle"}`}>
           {down.length === 0
             ? t("dashboard.servicesAllUp", { n: String(known.length) })
             : t("dashboard.servicesSomeDown", { n: String(down.length), total: String(known.length) })}
         </p>
-      </div>
-
+      }
+    >
       <div className="divide-y divide-white/5">
         {known.map((service) => {
           const meta = SERVICE_META[service.name]!;
@@ -517,138 +189,198 @@ function ServicesSection({ services }: { services: ServiceStatus[] }) {
             <Tag
               key={service.name}
               {...(meta.href ? { href: meta.href } : {})}
-              className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
-                service.up ? "" : "bg-red-500/[0.04]"
-              } ${meta.href ? "hover:bg-white/[0.04]" : ""}`}
+              className={`block px-4 py-2.5 transition-colors ${service.up ? "" : "bg-danger/5"} ${meta.href ? "hover:bg-white/4" : ""}`}
             >
-              <span
-                aria-hidden
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${service.up ? "bg-emerald-400" : "bg-red-400"}`}
-              />
-              <Icon size={15} className={`shrink-0 ${service.up ? "text-slate-400" : "text-red-400/80"}`} />
-
-              {/* Largeur fixe à partir de sm : c'est ce qui met les chiffres de neuf services
-                  sur la même colonne, ce qu'une grille de tuiles ne peut pas faire. */}
-              <div className="min-w-0 shrink-0 sm:w-44">
-                <p className="truncate text-[13px] font-medium leading-tight text-white">{meta.label}</p>
-                {service.detail && (
-                  <p className="truncate text-[11px] leading-tight text-slate-500">{service.detail}</p>
-                )}
-              </div>
-
-              {service.up ? (
-                <div className="hidden min-w-0 flex-1 flex-wrap items-baseline gap-x-4 gap-y-0.5 sm:flex">
-                  {entries.map(([label, value]) => (
-                    <span key={label} className="flex items-baseline gap-1.5 whitespace-nowrap">
-                      <span className="text-[13px] font-semibold tabular-nums text-white">{typeof value === "number" ? <AnimatedNumber value={value} /> : value}</span>
-                      <span className="text-[11px] text-slate-500">{label}</span>
-                    </span>
-                  ))}
+              <div className="flex items-center gap-3">
+                <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${service.up ? "bg-success" : "bg-danger"}`} />
+                <Icon size={15} className={`shrink-0 ${service.up ? "text-muted" : "text-danger"}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium leading-tight text-white">
+                    {meta.label}
+                    {service.detail && service.up && <span className="ml-2 text-[11px] font-normal text-subtle">{service.detail}</span>}
+                  </p>
                 </div>
+                <span className="sr-only">{service.up ? t("common.online") : t("common.offline")}</span>
+                {meta.href && <ChevronRight size={14} className="shrink-0 text-subtle" />}
+              </div>
+              {/* Les chiffres sous le nom, sur toutes les largeurs : la carte partage maintenant la
+                  ligne avec une autre au bureau, et une colonne à côté du nom s'y coupait. */}
+              {service.up ? (
+                entries.length > 0 && (
+                  <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-0.5 pl-[2.1rem]">
+                    {entries.map(([label, value]) => (
+                      <span key={label} className="flex items-baseline gap-1.5 whitespace-nowrap">
+                        <span className="text-[13px] font-semibold tabular-nums text-white">{typeof value === "number" ? <AnimatedNumber value={value} /> : value}</span>
+                        <span className="text-[11px] text-subtle">{label}</span>
+                      </span>
+                    ))}
+                  </div>
+                )
               ) : (
-                <p className="min-w-0 flex-1 truncate text-[11px] text-red-400" title={service.detail ?? undefined}>
+                <p className="mt-0.5 truncate pl-[2.1rem] text-[11px] text-danger" title={service.detail ?? undefined}>
                   {service.detail}
                 </p>
               )}
-
-              <span className="ml-auto shrink-0 sr-only">
-                {service.up ? t("common.online") : t("common.offline")}
-              </span>
-              {meta.href && <ChevronRight size={14} className="shrink-0 text-slate-600" />}
             </Tag>
           );
         })}
       </div>
-
-      {/* Sur téléphone les chiffres passent sous leur ligne : les mettre à côté du nom
-          reviendrait à les couper en trois, ce que faisaient les tuiles. */}
-      <div className="divide-y divide-white/5 border-t border-white/5 sm:hidden">
-        {known
-          .filter((s) => s.up && Object.keys(s.stats ?? {}).length > 0)
-          .map((service) => (
-            <div key={service.name} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-2">
-              <span className="w-full text-[10px] font-semibold uppercase tracking-wider text-slate-600">
-                {SERVICE_META[service.name]!.label}
-              </span>
-              {Object.entries(service.stats ?? {}).map(([label, value]) => (
-                <span key={label} className="flex items-baseline gap-1.5 whitespace-nowrap">
-                  <span className="text-[13px] font-semibold tabular-nums text-white">{typeof value === "number" ? <AnimatedNumber value={value} /> : value}</span>
-                  <span className="text-[11px] text-slate-500">{label}</span>
-                </span>
-              ))}
-            </div>
-          ))}
-      </div>
-    </div>
+    </Panel>
   );
 }
 
 function DiskSection({ disk, updatedAt, computing }: { disk: DiskStats; updatedAt: number | null; computing: boolean }) {
   const t = useT();
-  if (disk.disk.total <= 0 && !computing) return null;
+  const other = Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes);
+  const share = (bytes: number) => `${(bytes / disk.disk.total) * 100}%`;
   return (
-    <>
-      <h2 className="mb-3 mt-8 flex items-center gap-2 text-sm font-semibold text-white">
-        {t('dashboard.storageTitle')}
-        {computing && <RefreshCw size={12} className="animate-spin text-slate-500" />}
-        {updatedAt && !computing && <StaleIndicator updatedAt={updatedAt} />}
-      </h2>
-      {computing && disk.disk.total <= 0 ? (
-        <div className="card mb-6 p-4 text-sm text-slate-500">{t('dashboard.computingStorage')}</div>
+    <Panel
+      title={t('dashboard.storageTitle')}
+      icon={HardDrive}
+      action={computing ? <RefreshCw size={12} className="animate-spin text-subtle" /> : <StaleIndicator updatedAt={updatedAt} />}
+    >
+      {disk.disk.total <= 0 ? (
+        <p className="px-4 py-6 text-sm text-subtle">{t('dashboard.computingStorage')}</p>
       ) : (
-        <div className="card mb-6 p-4">
-          <div className="mb-4 flex items-center gap-3">
-            <HardDrive size={16} className="text-accent-400" />
-            <span className="text-sm text-slate-300">{t('dashboard.storageFree', { free: fmtSize(disk.disk.free), total: fmtSize(disk.disk.total) })}</span>
+        <div className="p-4">
+          <p className="mb-3 text-sm text-muted">{t('dashboard.storageFree', { free: fmtSize(disk.disk.free), total: fmtSize(disk.disk.total) })}</p>
+          {/* La légende dessous dit chaque part en clair : la barre n'a pas besoin d'infobulle,
+              qu'un doigt n'aurait de toute façon jamais fait apparaître. */}
+          <div className="mb-1 flex h-3 w-full overflow-hidden rounded-full bg-white/10" aria-hidden>
+            {disk.moviesBytes > 0 && <div className="h-full bg-accent-500" style={{ width: share(disk.moviesBytes) }} />}
+            {disk.tvBytes > 0 && <div className="h-full bg-sky-500" style={{ width: share(disk.tvBytes) }} />}
+            {disk.seedsBytes > 0 && <div className="h-full bg-amber-500" style={{ width: share(disk.seedsBytes) }} />}
+            {other > 0 && <div className="h-full bg-white/30" style={{ width: share(other) }} />}
           </div>
-          <div className="mb-1 flex h-3 w-full overflow-hidden rounded-full bg-slate-800">
-            {disk.moviesBytes > 0 && <div className="h-full bg-accent-500" style={{ width: `${(disk.moviesBytes / disk.disk.total) * 100}%` }} title={t('dashboard.storageFilms', { size: fmtSize(disk.moviesBytes) })} />}
-            {disk.tvBytes > 0 && <div className="h-full bg-sky-500" style={{ width: `${(disk.tvBytes / disk.disk.total) * 100}%` }} title={t('dashboard.storageSeries', { size: fmtSize(disk.tvBytes) })} />}
-            {disk.seedsBytes > 0 && <div className="h-full bg-amber-500" style={{ width: `${(disk.seedsBytes / disk.disk.total) * 100}%` }} title={t('dashboard.storageSeeds', { size: fmtSize(disk.seedsBytes) })} />}
-            {disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes > 0 && <div className="h-full bg-slate-600" style={{ width: `${((disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes) / disk.disk.total) * 100}%` }} title={t('dashboard.storageOther', { size: "" })} />}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400">
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted">
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />{t('dashboard.storageFilms', { size: fmtSize(disk.moviesBytes) })}</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />{t('dashboard.storageSeries', { size: fmtSize(disk.tvBytes) })}</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />{t('dashboard.storageSeeds', { size: fmtSize(disk.seedsBytes) })}</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />{t('dashboard.storageOther', { size: fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes)) })}</span>
-            <span className="ml-auto text-slate-500">{t('dashboard.storageUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-white/30" />{t('dashboard.storageOther', { size: fmtSize(other) })}</span>
+            <span className="ml-auto text-subtle">{t('dashboard.storageUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
           </div>
+          <Link href="/stats" className="mt-3 inline-flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
+            {t('nav.stats')} <ChevronRight size={13} />
+          </Link>
         </div>
       )}
-    </>
+    </Panel>
   );
 }
 
-function ActivitySection({ items }: { items: ActivityItem[] }) {
+interface ActivityOverviewPayload {
+  accounts: AccountSummary[];
+  signals: WeekSignals;
+}
+
+function DigestTile({ icon: Icon, label, value, tone = "default" }: { icon: React.ElementType; label: string; value: React.ReactNode; tone?: "default" | "warn" | "bad" }) {
+  const toneClass = { default: "text-white", warn: "text-warning", bad: "text-danger" }[tone];
+  return (
+    <div className="rounded-xl bg-white/4 px-3 py-2.5">
+      <span className="flex items-center gap-1.5 text-xs text-muted">
+        <Icon size={13} className="shrink-0" />
+        <span className="truncate">{label}</span>
+      </span>
+      <span className={`mt-0.5 block text-xl font-semibold tabular-nums ${toneClass}`}>{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Le résumé de l'Activité du cinéma : les mêmes routes que le panneau (`/api/admin/activity`, la
+ * liste des signalements), les mêmes règles (`activityDigest`), relues chaque minute — le panneau,
+ * lui, se relit toutes les vingt secondes, mais c'est lui qu'on ouvre pour suivre une séance.
+ */
+function ActivityDigestSection() {
+  const t = useT();
+  const { data, error } = useSWR<ActivityOverviewPayload>("/api/admin/activity", fetcher, { refreshInterval: 60_000 });
+  const { data: reports } = useSWR<{ reports: ReportSummary[] }>(ADMIN_REPORTS_KEY, fetcher, { refreshInterval: 60_000 });
+  const digest = data ? activityDigest(data, reports?.reports ?? null) : null;
+  const errorsTotal = digest ? digest.errors.server + digest.errors.client + digest.errors.player : 0;
+
+  return (
+    <Panel
+      title={t("dashboard.activityDigest.title")}
+      icon={Radio}
+      action={
+        <Link href={ACTIVITY_HREF} className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
+          {t("dashboard.activityDigest.open")} <ChevronRight size={13} />
+        </Link>
+      }
+    >
+      {!digest ? (
+        error ? (
+          <p className="px-4 py-6 text-sm text-subtle">{t("dashboard.activityDigest.unavailable")}</p>
+        ) : (
+          <div className="h-32 animate-pulse" />
+        )
+      ) : (
+        <div className="p-3">
+          <div className="grid grid-cols-2 gap-2">
+            <DigestTile icon={Users} label={t("dashboard.activityDigest.active")} value={digest.active} />
+            <DigestTile icon={Clapperboard} label={t("dashboard.activityDigest.playing")} value={digest.playing} />
+            <DigestTile
+              icon={MessageSquareWarning}
+              label={t("dashboard.activityDigest.reports")}
+              value={digest.pendingReports ?? "—"}
+              tone={digest.pendingReports ? "warn" : "default"}
+            />
+            <DigestTile icon={ServerCrash} label={t("dashboard.activityDigest.errors")} value={errorsTotal} tone={errorsTotal > 0 ? "bad" : "default"} />
+          </div>
+          {errorsTotal > 0 && (
+            <p className="mt-2 px-1 text-xs text-subtle">
+              {t("dashboard.activityDigest.errorsDetail", {
+                server: String(digest.errors.server),
+                client: String(digest.errors.client),
+                player: String(digest.errors.player),
+              })}
+              {digest.topServerErrors.length > 0 && ` · ${digest.topServerErrors.map((e) => `${e.scope} ×${e.count}`).join(", ")}`}
+            </p>
+          )}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/** Les derniers imports de Radarr et Sonarr (et les demandes) — le détail est à la page « Imports ». */
+function ImportsSection({ items }: { items: ActivityItem[] }) {
   const t = useT();
   return (
-    <>
-      <h2 className="mb-3 mt-8 text-sm font-semibold text-white">{t('dashboard.activityTitle')}</h2>
+    <Panel
+      title={t('dashboard.importsTitle')}
+      icon={PackageCheck}
+      action={
+        <Link href="/timeline" className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
+          {t('dashboard.open')} <ChevronRight size={13} />
+        </Link>
+      }
+    >
       {items.length === 0 ? (
-        <EmptyState label={t('dashboard.noActivity')} />
+        <EmptyState label={t('dashboard.noImports')} />
       ) : (
-        <div className="card divide-y divide-white/5">
+        <div className="divide-y divide-white/5">
           {items.map((item) => {
+            const Icon = SOURCE_ICON[item.source] ?? Inbox;
             const content = (
-              <div className="flex items-center gap-3 p-3">
-                <div className="rounded-lg bg-white/5 p-2 text-slate-400"><Inbox size={14} /></div>
+              <div className="flex items-center gap-3 px-4 py-2.5">
+                <Icon size={15} className="shrink-0 text-muted" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-white">
-                    {item.title}{item.detail && <span className="text-slate-500"> · {item.detail}</span>}
+                    {item.title}{item.detail && <span className="text-subtle"> · {item.detail}</span>}
                   </p>
-                  <p className="text-xs text-slate-500"><RelativeTime date={item.date} /></p>
+                  <p className="text-xs text-subtle"><RelativeTime date={item.date} /></p>
                 </div>
-                <span className={`badge ${SOURCE_COLOR[item.source]}`}>{ACTIVITY_KINDS.has(item.type) ? t(`activity.${item.type}`) : item.type}</span>
+                <span className="badge shrink-0 text-muted">{ACTIVITY_KINDS.has(item.type) ? t(`activity.${item.type}`) : item.type}</span>
               </div>
             );
             return item.href ? (
-              <Link key={item.id} href={item.href} className="block hover:bg-white/5">{content}</Link>
+              <Link key={item.id} href={item.href} className="block hover:bg-white/4">{content}</Link>
             ) : <div key={item.id}>{content}</div>;
           })}
         </div>
       )}
-    </>
+    </Panel>
   );
 }
 
@@ -660,64 +392,52 @@ export function DashboardClient({ initialData }: { initialData?: DashboardPayloa
     refreshInterval: INTERVALS.FAST,
     fallbackData: initialData,
   });
-  useTvGridNav();
 
   return (
     <div>
-      {data?.hero.available && data.hero.data && data.hero.data.length > 0 && (
-        <DashboardHero items={data.hero.data} />
-      )}
+      <PageHeader title={t('nav.overview')} subtitle={t('dashboard.pageSubtitle')} />
 
-      {isLoading && !data && <SkeletonSection />}
+      {isLoading && !data && <SkeletonPanels />}
       {/* Sans données du serveur, un échec laissait une page vide sous le squelette. */}
       {error && !data && <ErrorState message={t('errors.loadFailed')} onRetry={() => mutate()} />}
 
       {data && (
-        <>
-          {/* Continuer à regarder */}
-          {data.resume.available && data.resume.data && (
-            <ResumeSection items={data.resume.data.items} />
-          )}
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            {/* Téléchargements */}
+            {data.torrents.available && data.torrents.data ? (
+              <TorrentsSection torrents={data.torrents.data} />
+            ) : (
+              <SectionUnavailable label="qBittorrent" error={data.torrents.error} />
+            )}
 
-          {/* Ma liste (« À voir », la seule liste) */}
-          <WatchlistSection />
+            {/* Services */}
+            {data.services.available && data.services.data ? (
+              <ServicesSection services={data.services.data} />
+            ) : (
+              <SectionUnavailable label={t('dashboard.servicesStatus')} error={data.services.error} />
+            )}
 
-          {/* Récemment ajouté */}
-          <RecentSection
-            movies={data.recentMovies.available ? data.recentMovies.data : null}
-            series={data.recentSeries.available ? data.recentSeries.data : null}
-          />
+            {/* Stockage */}
+            {data.disk.available && data.disk.data && (
+              <DiskSection
+                disk={data.disk.data as DiskStats}
+                updatedAt={data.disk.updatedAt}
+                computing={(data.disk.data as DiskStats).computing}
+              />
+            )}
 
-          {/* Téléchargements */}
-          {data.torrents.available && data.torrents.data && !data.torrents.data.length ? null : (
-            data.torrents.available && data.torrents.data
-              ? <TorrentsSection torrents={data.torrents.data} />
-              : <SectionUnavailable label="qBittorrent" error={data.torrents.error} />
-          )}
+            {/* L'Activité du cinéma, en résumé */}
+            <ActivityDigestSection />
+          </div>
 
-          {/* Services */}
-          {data.services.available && data.services.data ? (
-            <ServicesSection services={data.services.data} />
-          ) : (
-            <SectionUnavailable label={t('dashboard.servicesStatus')} error={data.services.error} />
-          )}
-
-          {/* Stockage */}
-          {data.disk.available && data.disk.data && (
-            <DiskSection
-              disk={data.disk.data as DiskStats}
-              updatedAt={data.disk.updatedAt}
-              computing={(data.disk.data as DiskStats).computing}
-            />
-          )}
-
-          {/* Activité */}
+          {/* Les derniers imports */}
           {data.activity.available && data.activity.data ? (
-            <ActivitySection items={data.activity.data} />
+            <ImportsSection items={data.activity.data} />
           ) : (
-            <SectionUnavailable label={t('dashboard.activityTitle')} error={data.activity.error} />
+            <SectionUnavailable label={t('dashboard.importsTitle')} error={data.activity.error} />
           )}
-        </>
+        </div>
       )}
     </div>
   );

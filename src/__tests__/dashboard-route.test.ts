@@ -73,23 +73,15 @@ describe("GET /api/dashboard", () => {
     expect(mockRadarr.getSystemStatus).not.toHaveBeenCalled();
   });
 
-  it("skips the resume section entirely for a session with no jfId", async () => {
-    mockVerifySessionFull.mockResolvedValue({ u: "louis" });
-    const { GET } = await import("@/app/api/dashboard/route");
-    const res = await GET(fakeReq());
-    const body = await res.json();
-    expect(body.resume.data.items).toEqual([]);
-    expect(mockJellyfin.getResumeItems).not.toHaveBeenCalled();
-  });
-
-  it("fetches the resume list for a session with a jfId", async () => {
+  it("ne porte plus la bannière, Reprendre ni les ajouts récents (DECISIONS.md §81)", async () => {
+    // L'accueil de la gestion est un tableau de bord d'administrateur : ces rangées sont au cinéma,
+    // et coûtaient ici un logo TMDB et une note IMDb par titre à chaque rafraîchissement.
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1" });
-    mockJellyfin.getResumeItems.mockResolvedValue({ Items: [] });
     const { GET } = await import("@/app/api/dashboard/route");
-    const res = await GET(fakeReq());
-    const body = await res.json();
-    expect(mockJellyfin.getResumeItems).toHaveBeenCalledWith("jf-1");
-    expect(body.resume.available).toBe(true);
+    const body = await (await GET(fakeReq())).json();
+    expect(Object.keys(body).sort()).toEqual(["activity", "disk", "services", "torrents"]);
+    expect(mockJellyfin.getResumeItems).not.toHaveBeenCalled();
+    expect(mockCachedMovies).not.toHaveBeenCalled();
   });
 
   it("includes disk stats synchronously (not behind withCacheSafe)", async () => {

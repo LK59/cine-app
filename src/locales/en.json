@@ -29,12 +29,11 @@
   },
   "nav": {
     "overview": "Overview",
-    "timeline": "Recent activity",
+    "timeline": "Imports",
     "calendar": "Calendar",
     "radarr": "Movies · Radarr",
     "sonarr": "Series · Sonarr",
     "qbittorrent": "Downloads",
-    "settings": "Settings",
     "stats": "Statistics",
     "bazarr": "Subtitles · Bazarr",
     "jackett": "Indexers · Jackett",
@@ -52,13 +51,25 @@
       "searchHint": "Movie, series, actor…",
       "downloads": "Downloads"
     },
-    "cinemaMode": "Cinema mode",
     "sections": {
-      "library": "Library",
-      "content": "Content",
-      "manage": "Manage"
+      "services": "Services"
     },
-    "tmdb": "TMDB"
+    "tmdb": "TMDB",
+    "parts": {
+      "infrastructure": "Infrastructure",
+      "configuration": "Configuration"
+    },
+    "config": {
+      "connections": "Connections",
+      "playback": "Playback",
+      "subtitles": "Generated subtitles",
+      "accounts": "New accounts",
+      "admin": "Administrator",
+      "deployment": "Deployment"
+    },
+    "backToCinema": "Back to Cinema",
+    "accountPreferences": "Your preferences are in Account",
+    "label": "Management navigation"
   },
   "common": {
     "loading": "Loading...",
@@ -143,16 +154,9 @@
     "next": "Next"
   },
   "dashboard": {
-    "resumeWatching": "Continue watching",
-    "myList": "My list",
-    "recentlyAdded": "Recently added to library",
-    "seeAll": "See all",
     "activeDownloads": "Active downloads",
     "waitingSeeds": "Waiting for seeds",
     "showMore": "+{n} more — see all",
-    "sheetLink": "Details",
-    "downloadedTooltip": "Downloaded",
-    "pageTitle": "Overview",
     "pageSubtitle": "Live status of your services",
     "storageTitle": "Storage",
     "computingStorage": "Computing…",
@@ -162,12 +166,24 @@
     "storageSeeds": "Seeds — {size}",
     "storageOther": "Other — {size}",
     "storageUsed": "{pct}% used",
-    "activityTitle": "Recent activity",
-    "noActivity": "No recent activity.",
     "servicesStatus": "Services status",
     "unavailableWord": "unavailable",
     "servicesAllUp": "{n} services · all online",
-    "servicesSomeDown": "{n} of {total} offline"
+    "servicesSomeDown": "{n} of {total} offline",
+    "importsTitle": "Latest imports",
+    "noImports": "No recent imports.",
+    "noDownloads": "Nothing is downloading.",
+    "open": "Open",
+    "activityDigest": {
+      "title": "Cinema activity",
+      "open": "Open activity",
+      "active": "Active accounts",
+      "playing": "Playing now",
+      "reports": "Pending reports",
+      "errors": "Errors (7 d)",
+      "errorsDetail": "{server} server · {client} browser · {player} player",
+      "unavailable": "Activity unavailable."
+    }
   },
   "activity": {
     "news": {
@@ -1103,7 +1119,7 @@
     "emptyHint": "Releases tracked by Radarr and Sonarr show up here as soon as a date is known."
   },
   "timeline": {
-    "pageTitle": "Recent activity",
+    "pageTitle": "Imports",
     "subtitle": "{n} recent events — Radarr & Sonarr",
     "filters": {
       "all": "All ({n})",
@@ -1272,23 +1288,8 @@
     "pending": "Pending"
   },
   "settings": {
-    "pageTitle": "Settings",
-    "subtitle": "Customise appearance and notifications",
-    "appearance": {
-      "title": "Appearance",
-      "subtitle": "Accent colour and display mode",
-      "accentColor": "Accent colour"
-    },
     "security": {
-      "title": "Security",
-      "subtitle": "Active sessions on other devices",
-      "sessionsTitle": "Other connected devices",
-      "loading": "Loading…",
-      "noOtherSessions": "No other active sessions",
-      "otherSessions": "{n} other active session|{n} other active sessions",
-      "revokeAll": "Log out all others",
-      "revoked": "Logged out",
-      "revokeSuccess": "All other sessions have been revoked."
+      "loading": "Loading…"
     },
     "app": {
       "title": "Application",
@@ -1307,14 +1308,7 @@
       "debugSearch": "Debug search",
       "debugSearchDesc": "Shows in the modal why each result appears: local fuzzy, classic TMDb search or natural language query."
     },
-    "notifications": {
-      "subtitle": "Push alerts by device and by category",
-      "moved": "Notifications are set in the Account tab of the cinema, for every device.",
-      "open": "Open"
-    },
     "language": {
-      "title": "Language",
-      "subtitle": "Interface, synopses and search engine",
       "reloadNotice": "Reload required to apply {lang}",
       "apply": "Apply"
     },
@@ -2784,17 +2778,12 @@
     "secretsNote": "The session secret and notification keys are generated automatically on first launch (data/config/secrets.json). Nothing to do.",
     "done": {
       "title": "All set",
-      "text": "Settings can be changed at any time in management, under “Server settings”.",
+      "text": "Settings can be changed at any time in management, under “Configuration”.",
       "manage": "Open management",
       "cinema": "Sign in with Jellyfin",
       "finishing": "Finishing…"
     },
-    "settings": {
-      "title": "Server settings",
-      "subtitle": "Service addresses and keys, and the default settings for accounts. A value set here overrides the one in .env.",
-      "link": "Server settings",
-      "linkHint": "Jellyfin, TMDB, Radarr, Sonarr, the extras and default settings."
-    },
+    "settings": {},
     "profileFirst": "The first in the list",
     "profileUnavailable": "List unavailable: check the address and key, then reload the page.",
     "adminPassword": {
@@ -2867,5 +2856,25 @@
     "loadError": "Couldn't load what's new.",
     "accountHint": "What changed in CineApp, version by version.",
     "open": "View"
+  },
+  "config": {
+    "connections": {
+      "hint": "The address and key of each service. A value set here overrides the one in .env."
+    },
+    "playback": {
+      "hint": "The built-in player and its fallback to the server player. Applied without a restart."
+    },
+    "subtitles": {
+      "hint": "Translation by an online AI: provider, key, monthly budget."
+    },
+    "accounts": {
+      "hint": "What an account gets until it chooses otherwise, and the welcome screen to offer it."
+    },
+    "admin": {
+      "hint": "The local administrator account and diagnostic tools."
+    },
+    "deployment": {
+      "hint": "What requires editing docker-compose.yml or .env, then recreating the container."
+    }
   }
 }
