@@ -717,6 +717,7 @@ Beside them: `auth.log`, `startup.log`, `notifications.log`, `subtitle-gen.log` 
 | **[DEPLOYMENT.md](DEPLOYMENT.md)** | Installing and running it: compose file, reverse proxy, setup assistant, settings, updates, backups |
 | **[ENV.md](ENV.md)** | Every configuration variable: default, role, and whether the app can set it |
 | **[QUICKSTART.md](QUICKSTART.md)** | The three commands, pointing to the guide |
+| **[ARCHITECTURE.svg](ARCHITECTURE.svg)** | The whole application on one zoomable page: system, interfaces, both players, one playback, caches, logs, security — on a phone, open it then *Raw* |
 | **[DOC-TECH.md](DOC-TECH.md)** | The in-browser player: the native path and the server player behind it, the remuxer, audio, generated subtitles, diagnostics |
 | **[PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md)** | A non-technical presentation of the player, in French |
 | **[CLAUDE.md](CLAUDE.md)** | Architecture and conventions, for anyone working on the code |

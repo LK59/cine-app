@@ -3,6 +3,9 @@
 This document opens with a map of the whole application — both interfaces, the server, the
 player, the caches, the logs and the gate — and then becomes the native player's reference.
 
+**Vue en une page, zoomable : [ARCHITECTURE.svg](ARCHITECTURE.svg)** — the eight zones below on one
+vector drawing, with a legend; on a phone, open it, then tap *Raw* to zoom freely.
+
 ## Application map
 
 The whole application on seven diagrams, from the widest to the finest. Every box names the file,
