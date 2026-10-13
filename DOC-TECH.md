@@ -1,5 +1,614 @@
 # The native player — technical reference
 
+This document opens with a map of the whole application — both interfaces, the server, the
+player, the caches, the logs and the gate — and then becomes the native player's reference.
+
+## Application map
+
+The whole application on seven diagrams, from the widest to the finest. Every box names the file,
+route or function that carries it, so the map doubles as an index into the code; the sections
+below it, and [`DECISIONS.md`](DECISIONS.md), hold the reasons.
+
+1. [The system](#1-the-system) — browser, reverse proxy, container, upstream services
+2. [The two interfaces](#2-the-two-interfaces) — Cinema and Management, roles, first launch
+3. [The player](#3-the-player)
+   - [3a. Choosing a path, and the native pipeline](#3a-choosing-a-path-and-the-native-pipeline)
+   - [3b. The server player and the slow connection](#3b-the-server-player-and-the-slow-connection)
+   - [3c. Casting to a television](#3c-casting-to-a-television)
+4. [The life of one playback](#4-the-life-of-one-playback) — sequence, from *Lire* to the summary
+5. [Data flow and caches](#5-data-flow-and-caches) — SWR, the device cache, the server cache
+6. [Logs and observability](#6-logs-and-observability) — which line goes where, who reads it
+7. [Requests and security](#7-requests-and-security) — `src/proxy.ts`, cast passes, blocked tags
+
+### 1. The system
+
+```mermaid
+flowchart LR
+    subgraph BROWSER["Browser — a tab or an installed PWA"]
+        direction TB
+        CIN["Cinema — /<br/>route group (player)<br/>every Jellyfin account"]
+        GES["Management — /gestion<br/>route group (dashboard)<br/>administrator"]
+        subgraph PLAY["Playback — PlaybackProvider → PlayerHost"]
+            NAT["Native player<br/>ExperimentalPlayerHost<br/>remux → MediaSource → video element"]
+            SRV["Server player<br/>PlayerHost · hls.js or native HLS"]
+            CCP["ChromecastPlayer<br/>a remote control"]
+            MINI["MiniPlayer<br/>reduced, draggable"]
+        end
+        SW["Service worker — public/sw.js<br/>cine-static-BUILD caches, offline.html"]
+        subgraph DEV["Kept on the device"]
+            IDB[("IndexedDB cine-cache<br/>catalogue and feeds, per account, 7 days")]
+            OPFS[("OPFS cine-reprise-2<br/>opening bytes of Reprendre / À suivre")]
+            LS[("localStorage<br/>unsentStop · unsentLines · unsentPosition")]
+        end
+    end
+
+    RP["Reverse proxy<br/>TLS · shared with other sites"]
+
+    subgraph BOX["Container — one image, docker compose"]
+        direction TB
+        BOOT["server-boot/boot.mjs<br/>startup refusals · first-run secrets<br/>static carry-over · x-cine-peer"]
+        GATE{"src/proxy.ts<br/>the single gate"}
+        PAGES["Pages<br/>(player) · (dashboard) · /setup · /login · /status"]
+        API["API routes — src/app/api/**<br/>thin, ~60 lines"]
+        LIB["src/lib<br/>clients/* · server-cache · watched · blockedTags<br/>subtitleGen · news · activity · reports"]
+        JOBS["instrumentation.ts timers<br/>notifications · torrent watch · status · backup<br/>device prune · new-account tags · poster prewarm · subtitle engine"]
+        CFG["config.ts getters<br/>app setting → .env → default"]
+        subgraph DATA["./data — the only writable volume"]
+            DB[("cine.db — SQLite<br/>sessions · watchlist · watched_titles · kv_cache<br/>app_settings · reports · news_pages · subtitle_gen_*")]
+            LOGS[("data/logs/*.log")]
+            IMGC[("data/image-cache")]
+            SEC[("data/config/secrets.json")]
+            REPS[("data/reports/ID/")]
+        end
+    end
+
+    subgraph UP["Upstream services"]
+        JF["Jellyfin<br/>accounts · library · streams<br/>HLS transcode · progress"]
+        ARR["Radarr · Sonarr"]
+        JS["Jellyseerr<br/>requests"]
+        QB["qBittorrent"]
+        BZ["Bazarr<br/>subtitles"]
+        JK["Jackett<br/>indexers"]
+        META["TMDB · OMDb · MDBList<br/>metadata, images, ratings"]
+        AI["AI provider<br/>OpenAI-compatible · Anthropic · Google<br/>generated subtitles"]
+        WP["Web Push services<br/>VAPID"]
+    end
+
+    TV["Television<br/>AirPlay · Chromecast"]
+
+    CIN -->|"pages, /api/*"| RP
+    GES -->|"pages, /api/*"| RP
+    NAT -->|"HTTP ranges on the file"| RP
+    SRV -->|"HLS playlists and segments"| RP
+    RP --> BOOT --> GATE
+    GATE -->|"session checked"| PAGES
+    GATE -->|"session and role checked"| API
+    API --> LIB
+    JOBS --> LIB
+    LIB --> CFG
+    CFG --> DB
+    LIB <--> DB
+    LIB -->|"append, rotate at 5 MB"| LOGS
+    LIB --> JF
+    LIB --> ARR
+    LIB --> JS
+    LIB --> QB
+    LIB --> BZ
+    LIB --> JK
+    LIB --> META
+    LIB --> AI
+    LIB -->|"web-push"| WP
+    WP -.->|"push event"| SW
+    CCP -.->|"Cast load request"| TV
+    SRV -.->|"AirPlay route"| TV
+    TV -->|"stream with a signed castToken, no cookie"| RP
+    CIN --- IDB
+    NAT --- OPFS
+    PLAY --- LS
+```
+
+Everything a viewer sees goes through `src/proxy.ts`; nothing in the browser talks to an upstream
+service directly, and only a television fetches without a session cookie. Configuration and
+secrets live in `data/` beside the database ([DECISIONS §48](DECISIONS.md)), so a fresh install
+needs no `.env`.
+
+### 2. The two interfaces
+
+```mermaid
+flowchart TB
+    LOGIN["/login<br/>Jellyfin account — /api/auth/jellyfin<br/>local administrator — /api/auth/login"]
+    SETUP["/setup — first-launch assistant<br/>welcome · admin · jellyfin · tmdb · library<br/>extras · deployment · finish"]
+    SETUP -->|"setup flag set"| LOGIN
+    LOGIN -->|"Jellyfin session · admin or user"| SHELL
+    LOGIN -->|"local session, no Jellyfin identity"| OV
+
+    subgraph CINEMA["Cinema — / — PlayerShell; address state in the hash (cinemaRoute.ts)"]
+        direction TB
+        SHELL["PlayerShell<br/>PlayerRail on a computer · PlayerBottomBar on a phone<br/>PLAYER_NAV: home · search · list · account"]
+        subgraph HOME["Home — tab=movies | series"]
+            DESK["CinemaClient — computer<br/>CinemaHero follows focus · arrow-key grid"]
+            MOB["CinemaMobileClient — phone<br/>CinemaMobileHero · flick rows"]
+            ROWS["Rows<br/>CinemaRow · CinemaTop10Row · CinemaDiscoveryRow<br/>CinemaSeriesRow · Reprendre / À suivre"]
+            GRID["Full grid — browse=genre or *<br/>CinemaBrowseSheet"]
+        end
+        subgraph SHEETS["Sheets — useSheetMorph, cinemaClose"]
+            MOVIE["Film — film=ID<br/>CinemaMovieDetail · CinemaMobileDetail"]
+            SERIES["Series — serie=ID<br/>CinemaSeriesDetail → CinemaEpisodeBrowser"]
+            TMDB["Not in the library — discover=ID<br/>PlayerDiscoverSheet → request"]
+            PERSON["Person — person=ID<br/>PlayerPersonSheet"]
+        end
+        SEARCH["Search — search=1<br/>PlayerSearchPanel"]
+        LIST["Ma liste — list=1<br/>PlayerListPanel"]
+        subgraph ACCOUNT["Account — account=1 — PlayerAccountPanel"]
+            PREFS["Preferences<br/>interface language · playback languages"]
+            ACC["Account<br/>password · devices and sessions"]
+            NOTIF["Notifications<br/>PushToggle · per-account choices"]
+            DISP["Display<br/>home layout · guided scroll"]
+            HELP["Help<br/>Nouveautés · onboarding · service status<br/>HDR FAQ · storage · report a problem"]
+            subgraph ADMIN["Administration — admin only"]
+                ACT["Activité — activity=…<br/>overview · compte: · seance: · journaux · signalement: · nouveautes"]
+                MAINT["Maintenance<br/>/api/maintenance"]
+                LAB["Lab<br/>device test bench · animations=AnimationLab"]
+                TOG["Management →"]
+            end
+        end
+        NEWS["Nouveautés — news=…<br/>PlayerNewsPanel · NewsGate window at launch"]
+        REPORT["Report — report=…<br/>PlayerReportPanel · ReportWizard"]
+    end
+
+    subgraph MGMT["Management — /gestion — layout: Sidebar / MobileNav"]
+        direction TB
+        BRIDGE["NavBridge<br/>back to the cinema · account preferences"]
+        subgraph INFRA["Infrastructure"]
+            OV["/gestion — overview"]
+            RAD["/radarr · /radarr/ID — films"]
+            SON["/sonarr · /sonarr/ID — series"]
+            QBP["/qbittorrent — downloads"]
+            CAL["/calendar"]
+            STA["/stats"]
+            IMP["/timeline — imports"]
+            subgraph SVC["Services"]
+                SV1["/bazarr · /jackett · /jellyfin · /jellyseerr"]
+                HEALTH["/health — service checks"]
+            end
+        end
+        subgraph CONF["Configuration"]
+            C1["/parametres — connections"]
+            C2["/parametres/lecture — playback"]
+            C3["/parametres/sous-titres — generated subtitles"]
+            C4["/parametres/comptes — new accounts"]
+            C5["/parametres/administration — administrator"]
+            C6["/parametres/deploiement — deployment"]
+        end
+    end
+
+    SHELL --> HOME
+    SHELL --> SEARCH
+    SHELL --> LIST
+    SHELL --> ACCOUNT
+    ROWS -->|"tap a poster"| SHEETS
+    SEARCH --> SHEETS
+    LIST --> SHEETS
+    MOVIE -->|"cast list"| PERSON
+    PERSON --> TMDB
+    HELP --> NEWS
+    HELP --> REPORT
+    TOG -->|"link /gestion"| OV
+    BRIDGE -->|"link /"| SHELL
+    MOVIE -->|"Lire"| PLAYER["Player — section 3"]
+    SERIES -->|"Lire"| PLAYER
+    ROWS -->|"resume"| PLAYER
+```
+
+Two roles, `admin` and `user`. Hiding the administration group and the management link is
+presentation only: a `user` who types `/gestion` gets pages whose reads answer 403
+(`ADMIN_ONLY_READS`, diagram 7). Every cinema screen is a field of the address hash, so Back steps
+out one screen at a time; desktop and phone are two layouts sharing one function per decision
+([DECISIONS §31, §52, §74, §81](DECISIONS.md), [The sheet lifecycle in CLAUDE.md](CLAUDE.md)).
+
+### 3. The player
+
+#### 3a. Choosing a path, and the native pipeline
+
+```mermaid
+flowchart TB
+    PB["PlayButton · useQueuedPlay<br/>resumeAt: a number, or absent = ask the server"] --> PP["PlaybackProvider<br/>setWatchingFullScreen · reload intent"]
+    PP --> PH["PlayerHost<br/>native first · useStableFallback · fallToStable"]
+    PH -->|"default"| EXP["ExperimentalPlayerHost"]
+    EXP --> DI["/api/jellyfin/direct/ID<br/>tracks, streamUrl, logo — prefetched by the sheet"]
+    EXP --> PS["/api/jellyfin/playback-state/ID<br/>position, account preferences"]
+    EXP --> TRK["chooseAudioTrack · chooseSubtitleTrack<br/>picked before the pipeline is built"]
+    TRK --> PROBE["probePlaybackPath → choosePlaybackPath → tryRemux<br/>pathSelector.ts"]
+    PROBE -->|"refusal string<br/>Aucun chemin de lecture… remux : …"| FALL["fallToStable<br/>→ server player, 3b"]
+    PROBE -->|"opened Remuxer"| RPB["RemuxPlayback — remuxPlayback.ts<br/>a file in, a playing video element out"]
+
+    subgraph BYTES["Bytes — byteSource.ts"]
+        HBS["HttpByteSource<br/>1 MiB chunks · 64 MiB cache"]
+        DSK[("OPFS chunks — resumeCache/diskChunks.ts<br/>kept only if ETag, size, Last-Modified match")]
+        RES["MemoryReserve — memoryReserve.ts<br/>8 MiB bursts in RAM, ≤ 5 min ahead<br/>150 MB on iPhone/iPad"]
+        NET["/api/jellyfin/stream/ID/stream.mkv?static=true<br/>HTTP Range, relayed to Jellyfin"]
+    end
+    RPB --> HBS
+    HBS -->|"1 · device"| DSK
+    HBS -->|"2 · reserve"| RES
+    HBS -->|"3 · network"| NET
+    RES -->|"fills in bursts after 1 min watched"| NET
+
+    subgraph DEMUX["Container — mediaFile.ts, the one door"]
+        SNIFF{"Box at offset 0?"}
+        MKV["ebml.ts · matroska.ts<br/>header, tracks, Cues"]
+        MP4["mp4Demux.ts<br/>moov → the same description"]
+        SR["sampleReader.ts · decodeOrder.ts<br/>samples in decode order"]
+    end
+    HBS --> SNIFF
+    SNIFF -->|"EBML"| MKV
+    SNIFF -->|"ftyp / moov …"| MP4
+    MKV --> SR
+    MP4 --> SR
+
+    SR --> RX["Remuxer — remuxer.ts<br/>segments cut on random access points · strayUnits · RASL dropped on a CRA restart"]
+    RX --> VID["Video — samples copied<br/>H.264 · HEVC · AV1 · HDR · Dolby Vision"]
+    RX --> AQ{"Audio — deliveredAudio<br/>can it cross MediaSource as-is?"}
+    AQ -->|"yes"| ACP["Copied bit for bit<br/>AAC · AC-3 · E-AC-3 · FLAC · Opus, per browser"]
+    AQ -->|"no"| ADEC["softwareAudio.ts — decoded in the tab<br/>TrueHD WASM · AAC WASM · mediabunny AC-3 / DTS · FLAC"]
+    ADEC --> AENC["audioTranscode.ts — AudioEncoder<br/>AAC, Apple order, ≤ 6 ch · or Opus"]
+    AQ -->|"no decoder: MP2, MP3, Vorbis, PCM"| FALL
+    VID --> MUX["mp4Muxer.ts · mp4Boxes.ts · mp4SampleEntries.ts<br/>init and media segments — fMP4"]
+    ACP --> MUX
+    AENC --> MUX
+    MUX --> MSE["mseSource.ts · bufferQueue.ts<br/>MediaSource or ManagedMediaSource"]
+    BB["bufferBudget.ts<br/>WebKit 105 MB iPhone/iPad, 304 MB Mac<br/>Chromium 150 MiB · Gecko 150 MiB"] -.->|"fill target in bytes"| MSE
+    MSE --> EL["video element<br/>hardware decode · native HDR"]
+    SEEK["hostSeek.ts · seekLifecycle.ts · seekArrival.ts"] -.-> MSE
+    BG["backgroundReturn.ts — BackgroundWatch<br/>rebuild if the source was closed"] -.-> RPB
+    RPB -.->|"keepOnStop on close"| DSK
+```
+
+No pixel and no copied audio sample passes through JavaScript: the remuxer only rewrites the
+packaging. A refusal is always a named string, which the activity page groups by. Details:
+[Path selection](#path-selection), [The remux pipeline](#the-remux-pipeline),
+[MSE delivery](#mse-delivery), [Audio](#audio), [The lead reserve](#the-lead-reserve-in-memory),
+[DECISIONS §3, §4, §28, §62, §66](DECISIONS.md).
+
+#### 3b. The server player and the slow connection
+
+```mermaid
+flowchart TB
+    subgraph CAUSE["Why the server player plays"]
+        R1["refusal from the native path"]
+        R2["slow link → lighter version"]
+        R3["casting — 3c"]
+    end
+    R1 --> FTS["fallToStable / useStableFallback<br/>same position, same tracks"]
+    R2 --> FTS
+    R3 --> FTS
+    FTS --> SPH["PlayerHost — server player<br/>PLAYER_SERVER_FALLBACK=false: an error screen instead"]
+    SPH --> NEG["POST /api/jellyfin/playback/start<br/>PlaybackInfo with a device profile — deviceProfile.ts"]
+    NEG --> JFN["Jellyfin"]
+    JFN --> ANS{"Jellyfin's answer"}
+    ANS -->|"DirectPlay"| DPL["static file<br/>stream.EXT?static=true"]
+    ANS -->|"DirectStream"| DST["HLS — video copied"]
+    ANS -->|"Transcode"| TRC["HLS — video re-encoded"]
+    DPL --> RELAY
+    DST --> RELAY
+    TRC --> RELAY
+    RELAY["/api/jellyfin/stream/ID/…<br/>playlists compressed — encodePlaylist §76<br/>WebVTT offset fixed — fixVttTimestampMap"]
+    RELAY --> HQ{"playsHlsNatively?"}
+    HQ -->|"WebKit"| NHLS["native HLS in the video element"]
+    HQ -->|"elsewhere"| HJS["hls.js"]
+    NHLS --> SUP["ServerStartup — serverStartup.ts<br/>lists, first segment, picture → startup.*"]
+    HJS --> SUP
+
+    subgraph SLOW["Slow connection — one policy, one executor, both players"]
+        LM["LinkMeter — slowLink.ts<br/>received vs needed bitrate"]
+        POL["slowLinkPolicy.ts<br/>decideOpening · decidePlayback · StutterWatch · nextLighter"]
+        RUN["SlowLinkRunner — slowLinkRunner.ts"]
+        PRE["lighterPrewarm.ts<br/>startPrewarm after 8 s · takePrewarm"]
+        SWI["Switch to the lighter version<br/>HEVC or H.264 · SDR · 720p/1080p<br/>half the measured rate"]
+        RLD["serverReload.ts — shouldReloadDirect<br/>WebKit: reload the page, why=reload-direct"]
+        GIVE["« connexion trop lente »<br/>only when ≥ 10 s measured below half the bitrate"]
+        QUAL["playbackQuality.ts<br/>Automatique / Originale"]
+    end
+    LM --> POL --> RUN
+    QUAL -.-> POL
+    RUN -->|"prewarm"| PRE
+    PRE -->|"first segment ready"| SWI
+    RUN -->|"switch"| SWI
+    SWI -->|"WebKit, native → server"| RLD
+    SWI --> R2
+    RLD --> SPH
+    RUN -->|"nothing left to try"| GIVE
+```
+
+The server player is a safety net, not a second product: it plays what the native path refuses,
+what a slow link cannot carry and what goes to a television. Jellyfin decides between DirectPlay,
+DirectStream and Transcode; every byte still goes through the cine-app relay. Details:
+[User-facing messages](#user-facing-messages), [Slow connection](#slow-connection),
+[DECISIONS §4, §23, §76–§79](DECISIONS.md).
+
+#### 3c. Casting to a television
+
+```mermaid
+flowchart LR
+    EXP["Native player"] -->|"AirPlay picked"| HA["handover — cast: true<br/>never enters handedOver"]
+    EXP -->|"Chromecast picked<br/>chromecast/framework.ts, Chrome and Edge"| HC["handover — castTarget: chromecast"]
+    HA --> SPL["Server player<br/>signed castUrl — castToken.ts<br/>castMasterPlaylist keeps only the HDR copy"]
+    HC --> CCP["ChromecastPlayer<br/>remote control · buildChromecastProfile<br/>H.264 ≤ 4.2, SDR, 1080p"]
+    SPL -->|"AirPlay route — castRoute.ts"| TV["Television"]
+    CCP -->|"Cast load request — chromecast/media.ts"| TV
+    TV -->|"GET playlists, segments, subtitles<br/>castToken, no cookie · OPTIONS preflight"| GATE["src/proxy.ts<br/>castPassFor · castPreflightFor"]
+    GATE --> RELAY["/api/jellyfin/stream relay<br/>CORS * without credentials — castCors.ts"]
+    RELAY --> CPR["CastProgressRelay — castProgress.ts<br/>page silent ≥ 150 s → resume point from segments<br/>90 s without a segment → stop"]
+    CPR --> JFP["Jellyfin progress"]
+    CPR -->|"cast line, serverRelay: true"| PLOG[("player.log")]
+    TV -.->|"route ends"| EXP
+```
+
+A MediaSource stream cannot leave the tab, so a television always gets the server's stream; the
+page becomes a remote control (Chromecast) or hands its element's route over (AirPlay). The server
+keeps the resume point when the page goes quiet. Details: [Path selection](#path-selection)
+(casting paragraphs), [DECISIONS §64](DECISIONS.md).
+
+### 4. The life of one playback
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor V as Viewer
+    participant UI as Sheet / PlayButton
+    participant PP as PlaybackProvider
+    participant P as ExperimentalPlayerHost
+    participant API as cine-app routes
+    participant JF as Jellyfin
+    participant L as player.log
+
+    V->>UI: Lire
+    UI->>PP: play(item, resumeAt)
+    PP->>P: mount — PlayerHost picks the native player
+    par description and state, often prefetched by the sheet
+        P->>API: GET /api/jellyfin/direct/ID
+        P->>API: GET /api/jellyfin/playback-state/ID
+    end
+    P->>P: chooseAudioTrack, chooseSubtitleTrack, openingPosition
+    P->>API: GET stream, Range — header and index, OPFS first
+    API->>JF: relayed range
+    P->>P: probePlaybackPath → RemuxPlayback → init and first segments
+    P->>API: POST /api/jellyfin/playback/playing
+    API->>JF: session announced
+    P->>API: POST /api/player/log — opening, start (session, build, openedFrom)
+    API->>L: append
+    Note over P: first picture — the intro fades into the film
+    loop every 30 s playing, 60 s paused
+        P->>API: POST /api/jellyfin/playback/progress
+        API->>JF: progress
+        API-->>P: maintenance state — presence recorded
+    end
+    opt seek
+        V->>P: seek
+        P->>P: HostSeek — refill from the keyframe before the target
+        P->>API: progress at once, seek line
+    end
+    opt audio track change
+        V->>P: pick a track
+        P->>P: rebuild the pipeline at the same position
+        P->>API: reportNow, audio line with applied
+    end
+    opt page hidden
+        P->>API: progress, not a stop
+        P->>P: unsentStop summary kept in localStorage
+        Note over P: back — BackgroundWatch rebuilds a closed source, rebuild line with hiddenMs
+    end
+    alt refusal, slow link or cast
+        P->>PP: fallToStable — fallback line, server player continues, 3b
+    end
+    V->>P: close, or the film ends
+    P->>API: POST /api/jellyfin/playback/stop
+    API->>JF: stop — marks watched past the threshold
+    P->>API: stop line — watched, waits, seeks, diag.*, timeline
+    API->>L: append
+    P->>P: keepOnStop — keep the restart passage in OPFS
+    PP->>PP: refreshAfterPlayback — after the stop report and once the screen is free
+    PP->>API: revalidate resume, next-up, progress, series episodes, lists
+```
+
+One session id joins every line of a playback; a rebuild rewrites `start` under the same id. A
+page killed by iOS sends its summary at the next launch (`why: "lost"`), and a position Jellyfin
+never received leaves through `unsentPosition`. Details: [Playback reporting](#playback-reporting),
+[Seek lifecycle](#seek-lifecycle), [The playback log](#the-playback-log),
+[DECISIONS §1, §7, §24, §36, §84](DECISIONS.md), and `docs/cycle-de-vie-lecteur.md`.
+
+### 5. Data flow and caches
+
+```mermaid
+flowchart TB
+    subgraph CLIENT["Browser"]
+        direction TB
+        COMP["Screens — useSWR(key)"]
+        SWRP["SWRProvider<br/>persistMiddleware · hydrateFromDisk"]
+        IDB[("IndexedDB cine-cache — persistentCache.ts<br/>PERSISTED_KEYS · one store per account · 7 days<br/>PERSISTED_CACHE_SCHEMA · wiped at sign-out")]
+        subgraph RULES["Revalidation rules — swr.ts"]
+            FROZEN["Catalogue — /api/cinema/movies · /api/cinema/series<br/>no focus revalidation"]
+            LIVE["liveFeedOptions<br/>/api/jellyfin/resume · /api/cinema/next-up<br/>revalidate on focus"]
+            BOOTQ["playerBootstrapOptions<br/>queries the player needs to exist"]
+            FOLLOW["followOnlyOptions<br/>follows a key, never fetches on its own"]
+            PAUSE["isPaused: isWatchingFullScreen<br/>a paused query is dropped, not deferred"]
+        end
+        CONT["useContinueRow<br/>Reprendre drawn from the device<br/>then corrected by sliding — §86"]
+        RAP["refreshAfterPlayback<br/>resume · next-up · progress · series episodes · lists"]
+        REASK["PlaybackProvider<br/>re-asks keys left with neither data nor error"]
+    end
+
+    subgraph SERVER["cine-app server"]
+        direction TB
+        ROUTES["/api/cinema/* · /api/jellyfin/resume<br/>/api/player/lists · /api/player/discover"]
+        HIDE["blockedTags.ts — hiddenForRequest<br/>filtered per account"]
+        WATCH["watched.ts — setWatched · syncWatched<br/>local copy of watched"]
+        SC["server-cache.ts — withCache<br/>TTL · LRU 4 000 + 1 500 stale · swept every 10 min"]
+        MI["cachedMovies · cachedSeries · matchIndex<br/>library matched once per list"]
+        PC["withPersistentCache<br/>kv_cache in cine.db — TMDB projections"]
+        INV["invalidateLibrary · invalidateByPrefix<br/>/api/cache/invalidate · Radarr/Sonarr writes"]
+    end
+
+    COMP --> SWRP
+    SWRP <-->|"read at launch, 150 ms budget · written on each response"| IDB
+    SWRP --> RULES
+    RULES -->|"fetch"| ROUTES
+    IDB --> CONT
+    CONT -->|"network answer arrives"| COMP
+    RAP -->|"mutate"| SWRP
+    REASK -->|"mutate"| SWRP
+    ROUTES --> HIDE
+    ROUTES --> WATCH
+    ROUTES --> SC
+    SC --> MI
+    SC --> PC
+    INV -.->|"drops entries"| SC
+    MI -->|"Radarr · Sonarr · Jellyfin"| UPS["Upstream services"]
+    PC -->|"TMDB · OMDb · MDBList"| UPS
+```
+
+The cinema opens on what the device kept, then the network corrects it; the catalogue is frozen on
+purpose (it changes daily), only the resume and next-up feeds follow focus. While a film fills the
+screen SWR is paused, which is why the player's own queries carry `playerBootstrapOptions` and why
+closing the player revalidates explicitly. Details: CLAUDE.md "Known pitfalls",
+[DECISIONS §7, §27, §29, §51, §55, §86](DECISIONS.md).
+
+### 6. Logs and observability
+
+```mermaid
+flowchart LR
+    subgraph SOURCES["Who writes"]
+        direction TB
+        NATL["Native player<br/>reportPlayback.ts"]
+        SRVL["Server player · ChromecastPlayer<br/>serverPlayerLog.ts fields"]
+        RELAYL["castProgress.ts<br/>server-side cast relay"]
+        CLI["Browser errors — reportClientError<br/>ErrorBoundary · window.onerror · rejections"]
+        SRVE["Server errors — logger.ts logError"]
+        BOOTL["Each cinema launch — startup timing<br/>Fire TV remote diagnosis · Nouveautés events"]
+        AUTHL["Sign-in, refusal, sign-out, refused token<br/>logAuthEvent"]
+        PUSHL["Every push sent — push.ts<br/>logNotificationSent"]
+        BENCHL["Device test bench<br/>BenchRunner"]
+        SGL["Subtitle generation<br/>subtitleGen/log.ts"]
+    end
+
+    subgraph QUEUES["Kept on the device until sent — localStorage"]
+        UL["unsentLines.ts<br/>failed lines, resent with resent: true and lineId"]
+        US["unsentStop.ts<br/>the session summary; sent next launch as why: lost"]
+        UPOS["unsentPosition.ts<br/>a position Jellyfin did not get → stop route, late"]
+    end
+
+    subgraph ROUTES["Routes"]
+        PLR["POST /api/player/log<br/>logPlaybackEvent — 400 detail lines/hour/account"]
+        CER["POST /api/client-error"]
+        STR["POST /api/startup-timing · /api/remote-diag<br/>/api/release-notes/event"]
+        BNR["POST /api/player/bench"]
+    end
+
+    subgraph FILES["data/logs — one JSON object per line, rotated at 5 MB"]
+        PL[("player.log — 5 archives")]
+        BPL[("bench-player.log — line carries bench")]
+        DPL[("dev-player.log — next dev")]
+        SL[("server.log — 3 archives")]
+        STL[("startup.log")]
+        AL[("auth.log")]
+        NL[("notifications.log")]
+        BL[("bench.log")]
+        SGF[("subtitle-gen.log")]
+    end
+
+    subgraph READERS["Who reads"]
+        ACTV["Activité — /api/admin/activity/*<br/>activity/logReader.ts · seances.ts · diagnosis.ts"]
+        REPT["Reports — reportLogs.ts<br/>captureReportLogs freezes a snapshot"]
+        PLAN["Bench plan — /api/player/bench/plan<br/>candidatesFrom recent player.log"]
+        OPS["Operator — tail and jq"]
+    end
+
+    NATL --> PLR
+    SRVL --> PLR
+    NATL -.->|"send failed"| UL
+    NATL -.-> US
+    NATL -.-> UPOS
+    UL -.->|"next successful send"| PLR
+    US -.->|"next launch"| PLR
+    RELAYL --> PL
+    PLR -->|"default"| PL
+    PLR -->|"bench"| BPL
+    PLR -->|"dev server"| DPL
+    CLI --> CER --> SL
+    SRVE --> SL
+    BOOTL --> STR --> STL
+    AUTHL --> AL
+    PUSHL --> NL
+    BENCHL --> BNR --> BL
+    SGL --> SGF
+
+    PL --> ACTV
+    SL --> ACTV
+    AL --> ACTV
+    NL --> ACTV
+    BL --> ACTV
+    BPL --> ACTV
+    SGF --> ACTV
+    PL --> REPT
+    SL --> REPT
+    AL --> REPT
+    NL --> REPT
+    PL --> PLAN
+    STL --> OPS
+```
+
+Player line kinds (`PlayerEventKind`): `opening`, `start`, `fallback`, `network`, `rebuild`,
+`error`, `seek`, `stall`, `audio`, `pause`, `cast`, `reserve`, `subtitle-gen`, `fluidite`, `stop`.
+Every native and server line carries `session` and `build`; incident lines carry `timeline`, and
+`stall`/`stop` carry `diag.*`. Bench and dev lines never reach `player.log`, so they never count as
+a viewer's. Details: [Diagnostics](#diagnostics), [The playback log](#the-playback-log),
+[Device test bench](#device-test-bench), [DECISIONS §42, §82](DECISIONS.md).
+
+### 7. Requests and security
+
+```mermaid
+flowchart TD
+    REQ["Incoming request"] --> PEER["server-boot/boot.mjs<br/>x-cine-peer = socket address<br/>clientAddressOf trusts X-Forwarded-For only from TRUSTED_PROXIES"]
+    PEER --> MATCH{"Covered by the proxy matcher?"}
+    MATCH -->|"ACTIFS_PUBLICS<br/>_next/static, icons, manifest, sw.js, offline.html, splash/"| SERVE["Served without a session"]
+    MATCH -->|"/api/reports* — HORS_PROXY"| RC["reportCaller — reportRequest.ts<br/>crossSiteWrite · session · declared size, 411 if chunked"]
+    MATCH -->|"everything else"| CSW{"crossSiteWrite?<br/>Sec-Fetch-Site, else Origin"}
+    CSW -->|"write from another site"| F403A["403"]
+    CSW -->|"no"| SETUPQ{"setup done?"}
+    SETUPQ -->|"no, a page"| TOSETUP["redirect /setup"]
+    SETUPQ -->|"yes"| LOGINQ{"/login?"}
+    LOGINQ -->|"already signed in"| AWAY["redirect / or /gestion"]
+    LOGINQ -->|"no"| IMGQ{"/_next/image?"}
+    IMGQ -->|"session or loopback"| OK1["pass"]
+    IMGQ -->|"neither"| F401I["401"]
+    IMGQ -->|"no"| PUB{"PUBLIC_PATHS?<br/>publicPaths.ts"}
+    PUB -->|"yes"| OK2["pass"]
+    PUB -->|"no"| MOVED{"MOVED_PATHS?<br/>/player, /cinema"}
+    MOVED -->|"yes"| R308["308 → /"]
+    MOVED -->|"no"| CAST{"castPassFor · castPreflightFor<br/>signed pass for this title, stream or subtitle GET"}
+    CAST -->|"valid"| OK3["pass — no session, a television"]
+    CAST -->|"no"| SESS{"verifySessionFull<br/>signature + SQLite revocation"}
+    SESS -->|"none, /api/*"| F401["401 + x-session-expired: 1<br/>its only emitter"]
+    SESS -->|"none, a page"| TOLOGIN["redirect /login?next="]
+    SESS -->|"valid"| ROLE{"role = user?"}
+    ROLE -->|"write not in GUEST_ALLOWED_MUTATIONS / PATTERNS"| F403B["403"]
+    ROLE -->|"read in ADMIN_ONLY_READS"| F403C["403"]
+    ROLE -->|"allowed, or admin"| JFTOK{"page, and Jellyfin token refused?"}
+    JFTOK -->|"yes"| REVOKE["revoke devices · auth.log token-refused<br/>redirect /login?reason=jellyfin"]
+    JFTOK -->|"no"| NEXT["pass · sliding cookie refresh · session touched"]
+    NEXT --> ROUTE["Route handler"]
+    ROUTE --> ADM["/api/admin/* — adminOnly in the route"]
+    ROUTE --> LIM["Per-account limits<br/>search 120/min · ratings 30/min · player-log detail 400/h"]
+    ROUTE --> TAGS["Blocked tags — blockedTags.ts<br/>catalogue answers filtered · title routes answer as if absent<br/>newAccountTags.ts seeds new accounts"]
+    ROUTE --> JSR["Jellyseerr as the viewer — jellyseerrIdentity.ts<br/>unknown identity → 503, never the API key's admin"]
+```
+
+The interface never enforces a permission: `src/proxy.ts` refuses whatever a `user` should not do,
+and a television is the only caller allowed in without a session, for one title and only for the
+stream and its subtitles. Details: CLAUDE.md "Architecture", [DECISIONS §16, §34, §54, §56, §57, §64](DECISIONS.md).
+
+---
+
 Reference documentation for the playback engine that reads library files **without asking the
 server for anything**: no transcoding, no stream negotiation, no HLS. The browser fetches the
 file — Matroska or MP4 — over HTTP byte ranges and everything else happens in the tab.
@@ -11,6 +620,7 @@ watched and how far — see [Playback reporting](#playback-reporting).
 
 ## Contents
 
+- [Application map](#application-map)
 - [Scope and context](#scope-and-context)
 - [Path selection](#path-selection)
 - [The remux pipeline](#the-remux-pipeline)
