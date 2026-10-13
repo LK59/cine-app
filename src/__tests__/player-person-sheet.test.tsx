@@ -45,7 +45,9 @@ const credits = Array.from({ length: 60 }, (_, i) => ({
 vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),
   fetcher: async (url: string) =>
-    url.includes("/photos")
+    url === "/api/tmdb/person/404"
+      ? Promise.reject(new Error("TMDB injoignable"))
+      : url.includes("/photos")
       ? { photos: [] }
       : url.includes("/enriched")
         ? { photos: [], instagram: null, imdb: "https://www.imdb.com/name/nm1", wikipedia: null, wikiBio: "Bio Wikipédia." }
@@ -144,6 +146,13 @@ afterEach(() => {
 });
 
 describe("PlayerPersonSheet — la filmographie", () => {
+  // Une réponse en erreur ôtait la roue et ne laissait qu'une carte vide, sans un mot — la fiche
+  // découverte, elle, dit l'erreur (13/10/2026).
+  it("dit l'erreur quand la personne ne se charge pas, au lieu d'une carte vide", async () => {
+    draw({ tmdbId: 404 });
+    expect(await screen.findByText("TMDB injoignable")).toBeTruthy();
+  });
+
   it("dessine de quoi remplir l'écran, puis tout le reste", async () => {
     draw({ tmdbId: 1 });
     await screen.findByText("Film 0");

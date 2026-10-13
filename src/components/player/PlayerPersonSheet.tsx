@@ -300,7 +300,7 @@ export function PlayerPersonSheet({
   const short = useIsShortViewport();
   const [expanded, setExpanded] = useState(false);
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
-  const { data, isLoading } = useSWR<PersonPayload>(`/api/tmdb/person/${tmdbId}`, fetcher, {
+  const { data, error, isLoading } = useSWR<PersonPayload>(`/api/tmdb/person/${tmdbId}`, fetcher, {
     revalidateOnFocus: false,
   });
   // Une requête à part, qui ne retarde pas la fiche : la rangée apparaît quand elle arrive.
@@ -554,6 +554,14 @@ export function PlayerPersonSheet({
             <div className="flex justify-center py-16">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
             </div>
+          )}
+
+          {/* Une personne qui ne se charge pas (TMDB injoignable, quota) : la roue s'arrêtait et
+              laissait une carte vide, sans un mot. La même ligne que la fiche découverte. */}
+          {error && !data && (
+            <p className="py-16 text-center text-sm text-danger">
+              {error instanceof Error ? error.message : t("common.unknown")}
+            </p>
           )}
 
           {data && (
