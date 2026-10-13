@@ -461,6 +461,15 @@ export function PlayerControls({
   // Démonté (fermeture, passage au mini-lecteur), il n'y a plus de commandes à éviter.
   useEffect(() => () => onChromeEdges?.(null), [onChromeEdges]);
   const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "subtitleGen" | "subtitleGenOther" | "quality" | "more">(null);
+  // Cachées par un écran d'erreur, les commandes restent montées (le lecteur serveur garde l'élément
+  // pour « Réessayer ») et gardaient leur menu : le nouvel essai les rendait menu ouvert par-dessus le
+  // film qui repart — et un menu ouvert suspend leur disparition, elles ne partaient plus (chasse
+  // aux défauts du 13/10/2026). Refermé au moment où elles se cachent, pendant le rendu.
+  const [menuHiddenSeen, setMenuHiddenSeen] = useState(hidden);
+  if (hidden !== menuHiddenSeen) {
+    setMenuHiddenSeen(hidden);
+    if (hidden) setMenu(null);
+  }
   // « Qualité » (§78) : Automatique ou Originale, par compte et par appareil.
   const quality = usePlaybackQuality();
   /** « Auto · 203 nits », « Natif », « 400 nits » — le réglage de luminosité HDR, en mots. */
@@ -1006,10 +1015,15 @@ export function PlayerControls({
   // fermeture gardait le `playing` du montage — en pause, puisque les contrôles arrivent avant
   // la lecture. Une touche pendant le film montrait donc les contrôles pour de bon, sans jamais
   // relancer leur disparition (relu le 22/09/2026).
-  const suspendedRef = useRef(suspended);
+  // Cachées (`hidden`) comptent comme suspendues : le lecteur serveur cache ses commandes sous son
+  // écran d'erreur mais garde l'élément monté pour « Réessayer », et l'écouteur clavier, posé sur la
+  // fenêtre, survit au `return null`. Espace relançait l'élément en panne sous l'écran — et, retenu
+  // au `keydown`, n'activait plus le bouton « Réessayer » qui avait le focus ; les flèches
+  // déplaçaient la position d'où il allait reprendre (chasse aux défauts du 13/10/2026).
+  const suspendedRef = useRef(suspended || hidden);
   useEffect(() => {
-    suspendedRef.current = suspended;
-  }, [suspended]);
+    suspendedRef.current = suspended || hidden;
+  }, [suspended, hidden]);
   const playingRef = useRef(playing);
   useEffect(() => {
     playingRef.current = playing;
@@ -2790,27 +2804,16 @@ export function PlayerControls({
               onTouchEnd={() => {
                 seekingRef.current = false;
               }}
-              // Same preview/commit split as the mouse/touch handlers above, for arrow-key
-              // seeking — without this, Left/Right looked like it "fought the bar and snapped
-              // back to where it already was": onChange only calls previewSeek (updates the
-              // displayed time, never the real video.currentTime), and with seekingRef never set
-              // for a keyboard press, the very next 'timeupdate' tick (fires ~4x/s during
-              // playback) overwrote that optimistic value straight back to the stale actual
-              // position. keydown marks the same "don't let timeupdate clobber this" window
-              // mouse/touch already get; keyup is this input method's equivalent of
-              // mouseup/touchend, committing the real seek.
+              // ← et → appartiennent au clavier du lecteur (±10 s, l'écouteur de la fenêtre), barre
+              // focalisée comprise : jamais le pas natif de l'input. La barre avait gardé de l'époque
+              // d'avant le jeu fixe un aperçu au `keydown` et une validation au `keyup` — qui, la
+              // fenêtre ayant déjà sauté de dix secondes entre-temps, validait l'ancienne valeur de
+              // l'input (le tic de la position était suspendu par `seekingRef`) : après un clic sur la
+              // barre, qui garde le focus, une flèche ne faisait rien, ou ramenait le film d'où il
+              // venait (chasse aux défauts du 13/10/2026). Retenue ici aussi pour qu'un lecteur
+              // suspendu, dont la fenêtre ignore les touches, ne laisse pas l'input bouger seul.
               onKeyDown={(e) => {
-                if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-                seekingRef.current = true;
-                // Un relâchement hors de la fenêtre n'arrive jamais jusqu'ici.
-                mouseDragRef.current = false;
-                holdControls();
-              }}
-              onKeyUp={(e) => {
-                if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-                seekingRef.current = false;
-                commitSeek(Number((e.target as HTMLInputElement).value));
-                setTimeout(() => showControls(5000), 0);
+                if (e.key === "ArrowLeft" || e.key === "ArrowRight") e.preventDefault();
               }}
               // h-5 (20px), not h-1: the native range control keeps its visual groove thin and
               // vertically centered regardless of the element's own box height, so a taller box
