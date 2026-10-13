@@ -9,6 +9,7 @@ import { PlayerResultCard } from "@/components/player/PlayerResultCard";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { useDecodeAhead } from "@/lib/useDecodeAhead";
 import { useMeasuredCardHeight } from "@/lib/useMeasuredCardHeight";
+import { useLabFlags } from "@/lib/labFlags";
 import { genreLabel } from "@/lib/top10Label";
 import {
   filterTitles,
@@ -186,7 +187,9 @@ function BrowseSheet<T extends BrowsableTitle>({
   // Les affiches des deux écrans suivants sont décodées d'avance : c'est leur arrivée pendant le
   // défilement qui saccadait, et non la grille elle-même. Voir `useDecodeAhead`.
   const gridRef = useRef<HTMLDivElement>(null);
-  useDecodeAhead(gridRef, grid);
+  // Essai de fluidité (Lab → Tests divers) : sans préchargement, la grille ne suit plus ses cartes.
+  const lab = useLabFlags();
+  useDecodeAhead(gridRef, grid, !lab.noDecodeAhead);
   useMeasuredCardHeight(gridRef, grid);
 
   // Le genre traduit, comme la rangée d'où l'on vient : « Comédie » sur l'accueil puis « Comedy »
@@ -207,7 +210,7 @@ function BrowseSheet<T extends BrowsableTitle>({
         {/* Les réglages tiennent sur une ligne qui défile plutôt que sur trois rangs empilés :
             debout, l'en-tête mangeait sinon la moitié de l'écran avant la première affiche. */}
         <div className="relative -mx-1 mb-5">
-          <div className="scrollbar-none flex gap-2 overflow-x-auto px-1 pb-1">
+          <div className={`scrollbar-none flex gap-2 px-1 pb-1 ${lab.filtersNoScroll ? "flex-wrap" : "overflow-x-auto"}`}>
             <input
               type="search"
               value={query}
@@ -276,7 +279,7 @@ function BrowseSheet<T extends BrowsableTitle>({
               </select>
             )}
           </div>
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-(--panel-bg) to-transparent" />
+          {!lab.filtersNoScroll && <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-(--panel-bg) to-transparent" />}
         </div>
 
         {/* La grille se construit encore (ouverture, filtre changé) : un fil fin au-dessus, après

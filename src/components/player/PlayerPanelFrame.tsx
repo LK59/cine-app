@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLabFlags } from "@/lib/labFlags";
 import { createPortal } from "react-dom";
 import { ArrowLeft } from "lucide-react";
 import { CLOSE_PANELS, cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
@@ -98,6 +99,8 @@ export function PlayerPanelFrame({
   children: React.ReactNode;
 }) {
   const t = useT();
+  // Essai de fluidité (Lab → Tests divers) : le fondu sous l'en-tête retiré.
+  const lab = useLabFlags();
   /**
    * De quoi rejouer l'entrée quand on revient sur un onglet qu'on venait de quitter.
    *
@@ -316,12 +319,14 @@ export function PlayerPanelFrame({
             fondu occupe la marge qui séparait l'en-tête du contenu : au repos il ne recouvre que
             du vide, et rien ne bouge ; au défilement, ce qui monte s'y efface. Peint depuis la
             couleur de ce qu'il recouvre, il ne coûte rien au défilement. */}
-        <div
-          aria-hidden
-          // Un pixel au-dessus du bord, rendu par une marge négative (13/10/2026) : collé pile à `top-0`,
-          // l'arrondi de Safari laissait un liseré d'affiche passer entre le haut de la zone et le fondu.
-          className={`pointer-events-none sticky -top-px z-10 -mt-px bg-gradient-to-b from-(--panel-bg) to-transparent ${short ? "h-[calc(0.5rem+1px)]" : "h-[calc(1rem+1px)]"}`}
-        />
+        {!lab.noHeaderFade && (
+          <div
+            aria-hidden
+            // Un pixel au-dessus du bord, rendu par une marge négative (13/10/2026) : collé pile à `top-0`,
+            // l'arrondi de Safari laissait un liseré d'affiche passer entre le haut de la zone et le fondu.
+            className={`pointer-events-none sticky -top-px z-10 -mt-px bg-gradient-to-b from-(--panel-bg) to-transparent ${short ? "h-[calc(0.5rem+1px)]" : "h-[calc(1rem+1px)]"}`}
+          />
+        )}
         <div className="mx-auto w-full" style={{ maxWidth: contentWidth }}>
           {children}
         </div>

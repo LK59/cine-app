@@ -245,7 +245,7 @@ interface GridWarmer {
   pinned: Map<Element, { key: string; image: HTMLImageElement }>;
 }
 
-export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unknown): void {
+export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unknown, enabled = true): void {
   const warmer = useRef<GridWarmer | null>(null);
 
   /**
@@ -265,6 +265,14 @@ export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unkno
   useEffect(() => {
     const root = grid.current;
     if (typeof IntersectionObserver === "undefined") return;
+    // Éteint (essai de fluidité du Lab) : plus aucune carte suivie, plus rien de tenu.
+    if (!enabled) {
+      warmer.current?.observer.disconnect();
+      warmer.current?.kept.clear();
+      warmer.current?.pinned.clear();
+      warmer.current = null;
+      return;
+    }
     let state = warmer.current;
     if (state && state.root !== root) {
       // La grille a été remplacée (vide puis pleine à nouveau) : on repart avec elle.
@@ -332,7 +340,7 @@ export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unkno
      * La liste est mémoïsée par l'appelant sur ses filtres, donc son identité ne change que
      * lorsque son contenu change : c'est exactement la dépendance qu'il fallait.
      */
-  }, [grid, items]);
+  }, [grid, items, enabled]);
 
   // Tout est lâché au démontage, et seulement là.
   useEffect(
