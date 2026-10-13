@@ -40,7 +40,12 @@ export function reportPlayback(kind: PlayerEventKind, fields: Record<string, unk
      * `fetch`, `keepalive` ou non. Une balise est faite pour ça : le navigateur la garde en file
      * après la page. Refusée (charge trop grosse, file pleine), elle retombe sur `fetch`.
      */
-    if (kind === "stop" && typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+    //
+    // Sauf hors ligne (13/10/2026) : le navigateur accepte la balise (`true`) puis la perd, et le
+    // double du bilan (`unsentStop`) est effacé au même instant — la croix pendant une coupure ne
+    // laissait aucun bilan nulle part. Par `fetch`, l'échec se voit et la ligne attend dans la file.
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    if (kind === "stop" && !offline && typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
       if (navigator.sendBeacon("/api/player/log", new Blob([body], { type: "application/json" }))) return;
     }
     void fetch("/api/player/log", {
