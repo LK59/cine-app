@@ -30,3 +30,21 @@ describe("Lab — fluidité de la grille", () => {
     expect(readFileSync("src/components/player/PlayerPanelFrame.tsx", "utf8")).toMatch(/!lab\.noHeaderFade &&/);
   });
 });
+
+// La mesure de fluidité : armée depuis le Lab, branchée sur la grille, envoyée comme une ligne
+// `fluidite` que la route accepte.
+describe("Lab — mesure de fluidité", () => {
+  it("la grille porte la mesure, et le journal accepte la ligne", async () => {
+    expect(readFileSync("src/components/cinema/CinemaBrowseSheet.tsx", "utf8")).toMatch(/useScrollProbe\(gridRef, mediaType, grid\.length\)/);
+    const { isPlayerEventKind } = await import("@/lib/playerLog");
+    expect(isPlayerEventKind("fluidite")).toBe(true);
+  });
+
+  it("armer la mesure la garde sur l'appareil jusqu'à son envoi", async () => {
+    const { armScrollProbe, disarmScrollProbe } = await import("@/lib/scrollProbe");
+    armScrollProbe();
+    expect(localStorage.getItem("cine:lab:probe")).toBe("1");
+    disarmScrollProbe();
+    expect(localStorage.getItem("cine:lab:probe")).toBeNull();
+  });
+});

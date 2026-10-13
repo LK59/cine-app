@@ -2,6 +2,7 @@
 
 import { Toggle } from "@/components/Toggle";
 import { setLabFlag, useLabFlags, type LabFlag } from "@/lib/labFlags";
+import { armScrollProbe, disarmScrollProbe, useScrollProbeState } from "@/lib/scrollProbe";
 
 /**
  * Lot T — essais de fluidité de « Tous les films » (13/10/2026). Chaque interrupteur retire un
@@ -28,6 +29,7 @@ const TRIALS: { flag: LabFlag; title: string; hint: string }[] = [
 
 export function SmoothnessLot() {
   const flags = useLabFlags();
+  const probe = useScrollProbeState();
   return (
     <section className="space-y-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
       <p className="text-sm text-muted">
@@ -44,6 +46,30 @@ export function SmoothnessLot() {
           </li>
         ))}
       </ul>
+      {/* La mesure : armée ici, elle démarre au premier défilement de la grille et s'envoie seule. */}
+      <div className="flex items-start justify-between gap-4 border-t border-white/8 pt-3">
+        <div className="min-w-0">
+          <p className="text-sm text-white">Mesure de 20 secondes</p>
+          <p className="mt-0.5 text-xs text-subtle">
+            {probe === "armed"
+              ? "Armée : ouvrez « Tous les films » et faites votre glissé. L'enregistrement démarre au premier mouvement."
+              : probe === "recording"
+                ? "Enregistrement en cours…"
+                : probe === "sent"
+                  ? "Envoyée au journal. Vous pouvez la réarmer pour un autre essai."
+                  : "Relève chaque image pendant 20 s dans la grille et l'envoie au journal."}
+          </p>
+        </div>
+        {probe === "armed" ? (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={disarmScrollProbe}>
+            Annuler
+          </button>
+        ) : (
+          <button type="button" className="btn btn-primary btn-sm" disabled={probe === "recording"} onClick={armScrollProbe}>
+            Armer
+          </button>
+        )}
+      </div>
     </section>
   );
 }

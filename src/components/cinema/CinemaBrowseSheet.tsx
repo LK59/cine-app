@@ -10,6 +10,7 @@ import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { useDecodeAhead } from "@/lib/useDecodeAhead";
 import { useMeasuredCardHeight } from "@/lib/useMeasuredCardHeight";
 import { useLabFlags } from "@/lib/labFlags";
+import { useScrollProbe } from "@/lib/scrollProbe";
 import { genreLabel } from "@/lib/top10Label";
 import {
   filterTitles,
@@ -191,6 +192,8 @@ function BrowseSheet<T extends BrowsableTitle>({
   const lab = useLabFlags();
   useDecodeAhead(gridRef, grid, !lab.noDecodeAhead);
   useMeasuredCardHeight(gridRef, grid);
+  // La mesure de fluidité du Lab, si elle est armée ; sinon rien.
+  useScrollProbe(gridRef, mediaType, grid.length);
 
   // Le genre traduit, comme la rangée d'où l'on vient : « Comédie » sur l'accueil puis « Comedy »
   // ici, c'étaient deux noms pour la même chose à un appui d'intervalle.

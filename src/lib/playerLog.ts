@@ -70,7 +70,7 @@ export function benchPlayerLogFiles(): string[] {
 }
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
-const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast", "reserve", "pause", "opening", "subtitle-gen"]);
+const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast", "reserve", "pause", "opening", "subtitle-gen", "fluidite"]);
 
 /**
  * `audio` est arrivé le 20/09/2026, et pour une raison qui vaut d'être dite : le changement de
@@ -116,7 +116,7 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  * `via` jellyfin ou repli), `erreur` (`code`), `échec`. Une ligne de détail, sous le budget horaire :
  * une génération en écrit une dizaine.
  */
-export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve" | "pause" | "opening" | "subtitle-gen";
+export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve" | "pause" | "opening" | "subtitle-gen" | "fluidite";
 
 /** Les valeurs de `sleepTimer` qu'une ligne peut porter — celles du menu, et rien d'autre. */
 const SLEEP_TIMER_VALUES = new Set(["15", "30", "60", "90", "episode"]);
