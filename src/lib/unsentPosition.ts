@@ -132,7 +132,8 @@ export async function flushUnsentPositions(now = Date.now(), except?: string): P
             itemId: saved.itemId,
             positionTicks: Math.floor(saved.seconds * 10_000_000),
             late: true,
-            lateByMs: now - saved.savedAt,
+            // Jamais négatif : une horloge reculée faisait refuser la ligne (400) et effacer la position (13/10/2026).
+            lateByMs: Math.max(0, now - saved.savedAt),
           }),
         });
         // Accepté, ou refusé pour de bon (400) : effacé. Sinon (5xx, session absente) : plus tard.

@@ -366,10 +366,15 @@ export function isNetworkFailure(error: unknown): boolean {
  * Waiting for the event costs neither requests nor battery, and a viewer walking between two
  * networks is back within a second or two.
  */
-async function waitForNetwork(signal?: AbortSignal): Promise<void> {
-  if (typeof navigator === "undefined" || navigator.onLine !== false) return;
-  if (signal?.aborted) return;
+/**
+ * Rend vrai quand la patience s'est épuisée sans retour du réseau : l'appareil se dit toujours hors
+ * ligne. L'appelant renonce alors — une seule minute d'attente par morceau, pas une par tentative.
+ */
+async function waitForNetwork(signal?: AbortSignal): Promise<boolean> {
+  if (typeof navigator === "undefined" || navigator.onLine !== false) return false;
+  if (signal?.aborted) return false;
   trace("réseau : hors ligne, la lecture attend le retour");
+  let gaveUp = false;
   await new Promise<void>((resolve) => {
     const done = () => {
       clearTimeout(timer);
@@ -377,13 +382,17 @@ async function waitForNetwork(signal?: AbortSignal): Promise<void> {
       signal?.removeEventListener("abort", done);
       resolve();
     };
-    const timer = setTimeout(done, OFFLINE_PATIENCE_MS);
+    const timer = setTimeout(() => {
+      gaveUp = navigator.onLine === false;
+      done();
+    }, OFFLINE_PATIENCE_MS);
     window.addEventListener("online", done, { once: true });
     // A player closed while waiting is a player nobody is waiting for. Without this the minute
     // ran out on its own, holding a timer and a listener for a film already gone from the screen.
     signal?.addEventListener("abort", done, { once: true });
   });
-  trace("réseau : de retour");
+  trace(gaveUp ? `réseau : toujours hors ligne après ${OFFLINE_PATIENCE_MS / 1000} s` : "réseau : de retour");
+  return gaveUp;
 }
 
 /**
@@ -686,7 +695,17 @@ export class HttpByteSource implements ByteSource {
     let deadlineUsed = false;
     for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
       if (attempt > 0) {
-        await waitForNetwork(own);
+        /**
+         * Une minute hors ligne, et c'est assez (13/10/2026) : la patience était attendue à chaque
+         * nouvelle tentative — trois minutes d'image figée pour un appareil vraiment hors ligne avant
+         * l'écran « connexion perdue », le seul qui propose de reprendre (et qui reprend de lui-même
+         * au retour du réseau). Les tentatives restantes ne feraient qu'échouer à leur tour.
+         */
+        if (await waitForNetwork(own)) {
+          if (this.controller.signal.aborted) throw last ?? new Error("lecture annulée");
+          if (own.aborted) throw new ReadAbandoned();
+          break;
+        }
         await backoff(FETCH_BACKOFF_MS[attempt - 1] ?? 1500, own);
         if (this.controller.signal.aborted) throw last ?? new Error("lecture annulée");
         if (own.aborted) throw new ReadAbandoned();
@@ -759,6 +778,18 @@ export class HttpByteSource implements ByteSource {
         // finis donnent déjà — gardée prête, non branchée (12/10/2026).
         const bytes = new Uint8Array(await res.arrayBuffer());
         if (simulatorActive()) await simulateTransfer(bytes.byteLength, headersAt, attemptControl.signal);
+        /**
+         * Un corps plus court que la plage que la réponse annonce : une réponse coupée qui s'est
+         * terminée « proprement » (13/10/2026). Rendu tel quel, le cache le refusait (mauvaise
+         * longueur) mais la lecture qui l'attendait recevait moins d'octets que demandé — ce que le
+         * démultiplexeur prend pour la fin du fichier. Redemandé, comme un échec réseau. Comparé au
+         * `Content-Range` de *cette* réponse, pas à la taille d'ouverture : un morceau de fin coupé
+         * par une taille corrigée (`checkTotal`) est légitimement plus court que demandé.
+         */
+        const announced = /bytes (\d+)-(\d+)\//.exec(res.headers?.get?.("Content-Range") ?? "");
+        if (announced && bytes.byteLength !== Number(announced[2]) - Number(announced[1]) + 1) {
+          throw new Error(`plage tronquée (${bytes.byteLength} octets sur ${Number(announced[2]) - Number(announced[1]) + 1})`);
+        }
         metered?.received(bytes.byteLength);
         this.networkBytes += bytes.byteLength;
         const endAt = performance.now();

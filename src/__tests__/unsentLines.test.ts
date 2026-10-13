@@ -118,6 +118,21 @@ describe("une ligne qui n'a pas pu partir", () => {
     expect(beacon).toHaveBeenCalled();
     expect(unsentLines()).toEqual([]);
   });
+
+  // 13/10/2026 : la croix pendant une coupure. La balise est acceptée par le navigateur (`true`)
+  // même hors ligne, puis perdue ; et le double du bilan (`unsentStop`) est effacé au même instant.
+  // Le bilan de la séance ne partait donc jamais.
+  it("hors ligne, l'arrêt ne part pas par balise : il passe par `fetch` et attend dans la file", async () => {
+    const beacon = vi.fn(() => true);
+    Object.defineProperty(navigator, "sendBeacon", { value: beacon, configurable: true });
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Load failed"))));
+    reportPlayback("stop", { why: "close", session: "0c0ffee0" });
+    await settle();
+    expect(beacon).not.toHaveBeenCalled();
+    expect(unsentLines()).toEqual([expect.objectContaining({ kind: "stop", fields: expect.objectContaining({ why: "close", session: "0c0ffee0" }) })]);
+    onLine.mockRestore();
+  });
 });
 
 describe("la file", () => {

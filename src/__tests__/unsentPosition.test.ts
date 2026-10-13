@@ -106,4 +106,19 @@ describe("la position d'une coupure", () => {
     saveUnsentPosition("film-3", 0);
     expect(findUnsentPositions()).toEqual([]);
   });
-});
+
+  it("une horloge reculée entre l'écriture et l'envoi ne fait pas perdre la position", async () => {
+    const now = Date.now();
+    saveUnsentPosition("film-4", 1800, now + 3600_000);
+    const sent: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      sent.push(body);
+      // La validation de la route d'arrêt (`late`) : un retard négatif est refusé.
+      return (body.lateByMs as number) < 0 ? { ok: false, status: 400 } : { ok: true, status: 200 };
+    });
+    await flushUnsentPositions(now);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].lateByMs as number).toBeGreaterThanOrEqual(0);
+    expect(sent[0]).toMatchObject({ itemId: "film-4", positionTicks: 1800 * 10_000_000, late: true });
+  });});

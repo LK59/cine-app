@@ -135,6 +135,25 @@ describe("HttpByteSource", () => {
     source.close();
   }, 15000);
 
+  // 13/10/2026 : un corps plus court que ce que son `Content-Range` annonce — une réponse coupée
+  // qui se termine « proprement » — était rendu tel quel à la lecture qui l'attendait. Le cache le
+  // refusait (mauvaise longueur), mais le démultiplexeur recevait moins d'octets que demandé, ce
+  // qu'il lit comme la fin du fichier. La réserve d'avance, elle, refusait déjà une telle plage.
+  it("redemande une plage dont le corps est plus court que son Content-Range", async () => {
+    let truncations = 1;
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      const [, from, to] = /bytes=(\d+)-(\d+)/.exec(init?.headers?.Range ?? "")!.map(Number);
+      const cut = from === 3 * CHUNK && truncations-- > 0;
+      const body = new Uint8Array(cut ? 1000 : to - from + 1).fill(7);
+      return { status: 206, headers: { get: (n: string) => (n === "Content-Range" ? `bytes ${from}-${to}/${SIZE}` : null) }, arrayBuffer: async () => body.buffer };
+    });
+    const source = await HttpByteSource.open("/film.mkv", SIZE);
+    const bytes = await source.read(3 * CHUNK, CHUNK);
+    expect(bytes.length).toBe(CHUNK);
+    expect(truncations).toBeLessThan(0);
+    source.close();
+  }, 15000);
+
   it("gives up at once on a server that does not do ranges at all", async () => {
     // 200 is not a bad moment: asking again would only download a forty-gigabyte film four times.
     stubFetch({ rangeStatus: 200 });
@@ -815,6 +834,38 @@ describe("retour au premier plan : une requête muette est redemandée (13/10/20
       await read;
     } finally {
       vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  // 13/10/2026 : `OFFLINE_PATIENCE_MS` (une minute) était attendue à *chaque* nouvelle tentative —
+  // trois fois de suite pour un même morceau. Un appareil réellement hors ligne gardait l'image figée
+  // trois minutes avant l'écran « connexion perdue », qui seul propose de reprendre.
+  it("hors ligne pour de bon : la lecture renonce après une minute d'attente, pas trois", async () => {
+    const { doc } = fakeDocument();
+    vi.stubGlobal("document", doc);
+    const source = await HttpByteSource.open("/hors-ligne.mkv", SIZE);
+    const windowListeners = new Map<string, Set<() => void>>();
+    vi.stubGlobal("window", {
+      addEventListener: (t: string, f: () => void) => void (windowListeners.get(t) ?? windowListeners.set(t, new Set()).get(t)!).add(f),
+      removeEventListener: (t: string, f: () => void) => void windowListeners.get(t)?.delete(f),
+    });
+    vi.stubGlobal("navigator", { onLine: false });
+    vi.stubGlobal("fetch", () => Promise.reject(new TypeError("Load failed")));
+    vi.useFakeTimers();
+    try {
+      let outcome: unknown = "en attente";
+      const read = source.read(5 * CHUNK, 4).then(
+        () => "lu",
+        (error: unknown) => (outcome = error)
+      );
+      await vi.advanceTimersByTimeAsync(65_000);
+      expect(outcome).toBeInstanceOf(Error);
+      expect((outcome as { network?: boolean }).network).toBe(true);
+      await read;
+    } finally {
+      vi.useRealTimers();
+      source.close();
       vi.unstubAllGlobals();
     }
   });

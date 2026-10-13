@@ -12,7 +12,7 @@ import { getTitleLogoFor } from "@/lib/title-logo";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { userPrefsDb } from "@/lib/db";
 import { isJellyfinId } from "@/lib/jellyfinPath";
-import { FILE_MISSING, HttpError } from "@/lib/http";
+import { FILE_MISSING, HttpError, UPSTREAM_UNREACHABLE, UpstreamUnreachableError } from "@/lib/http";
 // What Jellyfin can hand back as WebVTT — one list, shared with the subtitle generator's choice of
 // source (DECISIONS.md §69). Anything else is a picture and has nothing to read.
 import { TEXT_SUBTITLE_FORMATS } from "@/lib/subtitleGen/source";
@@ -225,12 +225,26 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   ]);
   const source = item?.MediaSources?.[0];
   if (!source) {
-    // Le statut ne change pas — l'hôte du lecteur le lit comme avant. Le code, lui, n'est posé que
-    // quand Jellyfin a répondu : un titre sans source, ou un 404 sur le titre lui-même.
+    // Le code `file_missing` n'est posé que quand Jellyfin a répondu : un titre sans source, ou un
+    // 404 sur le titre lui-même.
     const missing = itemError === null || (itemError instanceof HttpError && itemError.status === 404);
+    if (missing) return NextResponse.json({ error: "Fichier introuvable côté Jellyfin", code: FILE_MISSING }, { status: 404 });
+    /**
+     * Jellyfin injoignable ou en panne : un 502 qui le dit, avec `upstream_unreachable` — pas un 404
+     * « Fichier introuvable » (chasse aux défauts du 13/10/2026).
+     *
+     * Le 404 sans code répondait aussi à une panne : l'hôte du lecteur ne reconnaissait donc pas
+     * `isUpstreamUnreachable`, passait la main au lecteur serveur (« les informations du fichier
+     * n'ont pas pu être récupérées ») — qui a besoin du même Jellyfin, et refaisait la même attente
+     * avant le même échec, sous un message qui parlait d'un fichier disparu. Un 5xx de Jellyfin (son
+     * démarrage, une sauvegarde) est la même panne pour qui regarde ; un autre refus (clé refusée)
+     * reste un 502 sans code — c'est le lecteur serveur, avec ses propres identifiants, qui y répond.
+     */
+    const down =
+      itemError instanceof UpstreamUnreachableError || (itemError instanceof HttpError && itemError.status >= 500);
     return NextResponse.json(
-      { error: "Fichier introuvable côté Jellyfin", ...(missing ? { code: FILE_MISSING } : {}) },
-      { status: 404 }
+      { error: "Jellyfin n'a pas pu décrire ce fichier", ...(down ? { code: UPSTREAM_UNREACHABLE } : {}) },
+      { status: 502 }
     );
   }
 
