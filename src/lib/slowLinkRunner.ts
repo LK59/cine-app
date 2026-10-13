@@ -11,7 +11,7 @@
 //
 // Rien ici ne lève : une erreur dans la décision n'interrompt jamais une lecture.
 
-import { cancelPrewarm, prewarmStatusOf, startPrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { cancelPrewarm, prewarmGone, prewarmStatusOf, startPrewarm, type Prewarm } from "@/lib/lighterPrewarm";
 import {
   EARLY_PREWARM_MS,
   SEEK_AS_OPENING_MS,
@@ -97,6 +97,12 @@ export class SlowLinkRunner {
 
   /** L'état du préchauffage pour la décision (`decideOpening` / `decidePlayback`). */
   status(cause: SwitchCause): PrewarmStatus {
+    // Pris par une renégociation du lecteur serveur, ou abandonné ailleurs : plus le nôtre. Le garder
+    // bloquait le préchauffage suivant (`execute` n'en lance pas tant qu'un est tenu).
+    if (this.held && prewarmGone(this.held.prewarm)) {
+      this.held = null;
+      this.clearEarlyTimer();
+    }
     return prewarmStatusOf(this.held, cause);
   }
 

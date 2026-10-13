@@ -44,7 +44,7 @@ import {
   playbackLinkSlow,
   type LighterStep,
 } from "@/lib/slowLinkPolicy";
-import { cancelPrewarm, carryPrewarmAcrossReload, prewarmFields, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { cancelPrewarm, carryPrewarmAcrossReload, discardTakenPrewarm, prewarmFields, prewarmFits, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
 import { directReloadIntent, reloadLighterOf, reloadPage, shouldReloadDirect, type PlayerReloadIntent } from "@/lib/serverReload";
 import { SlowLinkRunner, type SeekSignal, type SlowLinkHost } from "@/lib/slowLinkRunner";
 import { forgetLighterCarry, readPlaybackQuality, rememberLighter, usePlaybackQuality } from "@/lib/playbackQuality";
@@ -1342,13 +1342,16 @@ function ActivePlayer({
       // même PlaySessionId, mêmes adresses —, et hls.js part à sa position (`startPosition`) : Jellyfin
       // sert le segment déjà produit et poursuit le même ffmpeg (vérifié sur la prod le 12/10/2026 : un
       // seul ffmpeg, segments en moins de 10 ms). Un préchauffage d'un autre palier est arrêté.
+      // Pris, il n'appartient plus qu'à cette négociation : écarté (autre palier, autre piste audio —
+      // `prewarmFits` —, échec, négociation remplacée), il est refermé par `discardTakenPrewarm`.
+      // `cancelPrewarm` ne touche pas un préchauffage pris : la séance restait ouverte chez Jellyfin.
       const warmedCandidate = cap.step ? takePrewarm(itemId) : null;
       let warmed: Prewarm | null = null;
       if (warmedCandidate) {
-        if (warmedCandidate.step.targetBps === cap.step?.targetBps && (await warmedCandidate.ready) && warmedCandidate.data) warmed = warmedCandidate;
-        else cancelPrewarm(warmedCandidate);
+        if (prewarmFits(warmedCandidate, cap.step, opts?.audioStreamIndex) && (await warmedCandidate.ready) && warmedCandidate.data) warmed = warmedCandidate;
+        else discardTakenPrewarm(warmedCandidate);
         if (generation !== playbackGeneration.current) {
-          if (warmed) cancelPrewarm(warmed);
+          if (warmed) discardTakenPrewarm(warmed);
           return;
         }
       }

@@ -20,7 +20,11 @@ vi.mock("@/components/PlaybackInfoPanel", () => ({ PlaybackInfoPanel: () => null
 vi.mock("@/components/ExperimentalPlayerHost", () => ({ ExperimentalPlayerHost: () => <div data-testid="natif" /> }));
 vi.mock("@/components/PlayerControls", () => ({
   VOLUME_STORAGE_KEY: "volume",
-  PlayerControls: (props: { currentSubtitleId?: number | null }) => <div data-testid="commandes" data-subtitle={String(props.currentSubtitleId ?? "")} />,
+  PlayerControls: (props: { currentSubtitleId?: number | null; onChangeAudio?: (id: number) => void }) => (
+    <div data-testid="commandes" data-subtitle={String(props.currentSubtitleId ?? "")}>
+      <button type="button" data-testid="piste-2" onClick={() => props.onChangeAudio?.(2)} />
+    </div>
+  ),
 }));
 const playback = {
   session: null as null | Record<string, unknown>,
@@ -644,6 +648,62 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
     await act(async () => void (await vi.advanceTimersByTimeAsync(61_000)));
     expect(stops()).toHaveLength(1);
     expect(reported.filter((r) => r.kind === "start" && r.fields.why === "lighter")).toHaveLength(0);
+  });
+
+  /** Un blocage réseau de `seconds` secondes, puis l'image qui repart. */
+  async function stallFor(seconds: number) {
+    await act(async () => void fireEvent(video(), new Event("waiting")));
+    await trickle(250_000, seconds);
+    await act(async () => void fireEvent(video(), new Event("playing")));
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+  }
+  const prewarmStops = () =>
+    (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([url, init]) => url === "/api/jellyfin/playback/stop" && JSON.parse(String((init as RequestInit).body)).prewarm === true
+    );
+
+  it("une renégociation (piste audio) pendant qu'un préchauffage d'un autre palier attend : il est refermé chez Jellyfin, et le 3e blocage bascule quand même", async () => {
+    // Séance déjà allégée au palier 1 : le 2e blocage préchauffe le palier 2. Un changement de piste
+    // renégocie le palier 1, prend ce préchauffage, l'écarte (pas le bon palier)… et ne le refermait pas :
+    // `cancelPrewarm` ignore un préchauffage pris. L'exécution le tenait encore « en cours » : plus aucune
+    // bascule de toute la séance (13/10/2026).
+    switchedTo({ targetBps: 5_000_000, tier: 1 });
+    await mounted();
+    await picture();
+    await stallFor(2);
+    await stallFor(2);
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(1);
+    expect(startBodies.find((b) => b.prewarm === true)).toMatchObject({ maxBitrate: 1_500_000 });
+    await act(async () => void fireEvent.click(document.querySelector("[data-testid=piste-2]")!));
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(prewarmStops()).toHaveLength(1);
+    await picture();
+    await stallFor(2);
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    const lighter = reported.filter((r) => r.kind === "start" && r.fields.why === "lighter");
+    expect(lighter).toHaveLength(1);
+    expect(lighter[0].fields).toMatchObject({ lighterTier: 2, lighterMbps: 1.5 });
+  });
+
+  it("un préchauffage fait pour une autre piste audio n'est jamais repris : la bascule renégocie la piste choisie", async () => {
+    // Le 2e blocage préchauffe avec la piste d'alors ; le spectateur change de piste ; le 3e bascule. Le
+    // préchauffage repris tel quel jouait l'ancienne piste sous un menu qui disait la nouvelle.
+    await mounted();
+    await picture();
+    await stallFor(2);
+    await stallFor(2);
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(1);
+    await act(async () => void fireEvent.click(document.querySelector("[data-testid=piste-2]")!));
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    await picture();
+    await stallFor(2);
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    const lighter = reported.filter((r) => r.kind === "start" && r.fields.why === "lighter");
+    expect(lighter).toHaveLength(1);
+    expect(lighter[0].fields.prewarm).toBeUndefined();
+    expect(startBodies.filter((b) => b.prewarm !== true && b.lighter === true).at(-1)).toMatchObject({ audioStreamIndex: 2 });
+    // Le préchauffage écarté est refermé chez Jellyfin.
+    expect(prewarmStops()).toHaveLength(1);
   });
 
   it("B en « Originale » : rien — jamais d'erreur tant que la lecture continue", async () => {
