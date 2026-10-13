@@ -18,7 +18,7 @@ import { createRateLimiter } from "@/lib/rateLimiter";
  */
 export const WRITE_LIMITS = {
   /**
-   * Le lecteur : un `reserve point` toutes les 30 s, plus des rafales d'évènements — un saut, une
+   * Le lecteur : des rafales d'évènements (plus de `reserve point` depuis le 13/10/2026) — un saut, une
    * reconstruction, un changement de piste, un arrêt — et les bilans `lost` au lancement. Une
    * séance chargée écrit une dizaine de lignes par minute ; deux onglets ou deux appareils du
    * même compte, le double. 120 laisse une marge de six.

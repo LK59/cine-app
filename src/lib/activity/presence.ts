@@ -1,7 +1,7 @@
 // Qui a l'application ouverte, et qui regarde quelque chose — en direct, pour l'administrateur.
 //
-// Un signal par minute et par onglet ouvert (`PresencePinger`), plus un au passage en arrière-plan
-// et au retour : de quoi dire « dans l'application », « en lecture » ou « absent » à la minute
+// Un signal par minute et par onglet ouvert (`PresencePinger`) — pendant un film, le battement de
+// lecture (`recordPlaybackBeat`) —, plus un au passage en arrière-plan et au retour : de quoi dire « dans l'application », « en lecture » ou « absent » à la minute
 // près, sans rien mesurer d'autre. Gardé en mémoire seulement : un redémarrage efface tout, et la
 // minute suivante le reconstruit — rien ici ne mérite d'être écrit sur le disque.
 
@@ -31,6 +31,19 @@ export function recordBeat(jti: string, beat: Beat): void {
   if (beats.size > 200) {
     for (const [key, b] of beats) if (beat.at - b.at > 60 * 60 * 1000) beats.delete(key);
   }
+}
+
+/**
+ * Le battement de lecture tient lieu de signal de présence (13/10/2026) : la route de progression
+ * l'enregistre comme `/api/presence`, et `PresencePinger` se tait pendant le film tant que ce
+ * battement passe (`progressBeat.ts`) — 73 signaux par heure de film au relevé du 13/10, pour
+ * dire ce que le battement disait déjà. Il ne connaît pas le titre : celui du signal précédent
+ * pour le même film est gardé (le pinger en envoie un, titre compris, à l'ouverture du film).
+ */
+export function recordPlaybackBeat(jti: string, beat: Omit<Beat, "playing"> & { itemId: string }): void {
+  const { itemId, ...rest } = beat;
+  const previous = beats.get(jti)?.playing;
+  recordBeat(jti, { ...rest, playing: { itemId, title: previous?.itemId === itemId ? previous.title : "" } });
 }
 
 /** La session vient d'être fermée : elle n'est plus dans l'application. */

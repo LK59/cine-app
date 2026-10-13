@@ -3,6 +3,7 @@ import { PLAYBACK_CLIENTS, type PlaybackClient } from "@/lib/playbackClients";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { noteMaintenanceState } from "@/lib/useMaintenance";
 import { clearUnsentPosition, flushUnsentPositions, saveUnsentPosition, unsentPositionsPending } from "@/lib/unsentPosition";
+import { forgetProgressBeat, noteProgressBeat } from "@/lib/progressBeat";
 
 interface PlaybackSessionInfo {
   itemId: string;
@@ -26,8 +27,33 @@ interface PlaybackSessionInfo {
 }
 
 const TICKS_PER_SECOND = 10_000_000;
-const HEARTBEAT_MS = 10_000;
-const PAUSED_HEARTBEAT_MS = 60_000;
+/**
+ * Le battement d'une lecture sans événement : toutes les 30 s (13/10/2026 ; 10 s avant).
+ *
+ * Le relevé du 13/10 comptait ≈ 320 POST de progression par heure de film — le premier poste de
+ * requêtes de l'application pendant une lecture, chacune réveillant la radio d'un téléphone entre
+ * deux rafales de la réserve. Ce qu'il apporte en continu (la position que Jellyfin gardera si tout
+ * s'arrête net) vaut 30 s ; tout ce qui *change* la séance part à l'instant, sans attendre le
+ * battement : pause, reprise, saut (vus par `WATCH_MS`), page cachée, arrêt, épisode suivant (une
+ * autre séance), retour du réseau, changement de piste (`reportNow`).
+ */
+export const HEARTBEAT_MS = 30_000;
+export const PAUSED_HEARTBEAT_MS = 60_000;
+/**
+ * Le pas de la surveillance locale — sans réseau : l'état de pause et la position sont relus chaque
+ * seconde, et un changement part tout de suite au lieu d'attendre le battement.
+ */
+export const WATCH_MS = 1_000;
+/** Un écart de position au-delà du temps écoulé (vitesse ×2 comprise) plus cette marge : un saut. */
+const JUMP_SLACK_SECONDS = 3;
+
+function pageVisible(): boolean {
+  try {
+    return typeof document === "undefined" || document.visibilityState !== "hidden";
+  } catch {
+    return true;
+  }
+}
 
 function report(
   path: "playing" | "progress" | "stop",
@@ -46,7 +72,9 @@ function report(
     // L'indice tactile : c'est sous le libellé de l'appareil que Jellyfin range la séance, et sans
     // lui un iPad s'y nomme « Mac » (`deviceLabel.ts`).
     headers: { "Content-Type": "application/json", ...touchHintHeaders() },
-    body: JSON.stringify({ client: PLAYBACK_CLIENTS.stable, ...info, positionTicks, isPaused }),
+    // `visible` : la route enregistre aussi la présence de l'appelant (`recordPlaybackBeat`) — le
+    // battement tient lieu de signal de présence pendant un film (13/10/2026).
+    body: JSON.stringify({ client: PLAYBACK_CLIENTS.stable, ...info, positionTicks, isPaused, visible: pageVisible() }),
     keepalive: true,
   })
     .then(async (res) => {
@@ -59,8 +87,13 @@ function report(
         clearUnsentPosition(info.itemId);
         void flushUnsentPositions(Date.now(), info.itemId);
       }
-      // Le battement rapporte l'état d'exploitation : le sondage ralentit pendant un film.
-      if (path === "progress" && res.ok) noteMaintenanceState(((await res.json().catch(() => null)) as { maintenance?: unknown } | null)?.maintenance);
+      // Le battement rapporte l'état d'exploitation et tient lieu de présence : tant qu'il passe, le
+      // sondage de maintenance et le signal de présence se taisent pendant le film (`progressBeat.ts`).
+      if (path === "progress" && res.ok) {
+        noteProgressBeat();
+        noteMaintenanceState(((await res.json().catch(() => null)) as { maintenance?: unknown } | null)?.maintenance);
+      }
+      if (path === "stop") forgetProgressBeat();
     })
     // Pas de réponse : la coupure. La position reste sur l'appareil jusqu'au retour du réseau.
     .catch(() => saveUnsentPosition(info.itemId, positionTicks / TICKS_PER_SECOND));
@@ -79,7 +112,8 @@ export function stopOrphanSession(info: Omit<PlaybackSessionInfo, "announce">, p
 }
 
 // Keeps Jellyfin's "now playing" / resume state in sync with an active
-// PlayerHost session: a progress heartbeat every 10s, and a stop report
+// PlayerHost session: a progress heartbeat every 30s (60s paused; pause, resume and seeks at
+// once, see HEARTBEAT_MS), and a stop report
 // (with the final position) on close, unmount, or tab close. Returns a
 // stopNow() the caller can invoke at the exact moment the user closes the
 // player — capturing currentTime right then, rather than whenever React
@@ -96,9 +130,11 @@ export function usePlaybackSession(
   getPositionSeconds: () => number,
   session: PlaybackSessionInfo | null,
   getPaused?: () => boolean
-): { stop: () => Promise<void>; resume: () => void; savePaused: () => void } {
+): { stop: () => Promise<void>; resume: () => void; savePaused: () => void; reportNow: () => void } {
   const sessionRef = useRef(session);
   const stoppedRef = useRef(false);
+  /** Le battement immédiat de la séance en cours — voir `reportNow`. */
+  const sendNowRef = useRef<() => void>(() => {});
   const positionRef = useRef(getPositionSeconds);
   const pausedRef = useRef(getPaused);
 
@@ -137,19 +173,48 @@ export function usePlaybackSession(
     // battement tombé dans cette fenêtre rouvrait chez Jellyfin la séance qu'on venait de clore.
     //
     // En pause, une fois la minute (08/10/2026) : la position ne bouge pas, et 117 battements du
-    // journal tombaient plus de dix minutes après la dernière image d'un film arrêté. Le passage
-    // en pause, et la reprise, partent au battement suivant — dix secondes au plus.
-    let lastSentAt = 0;
+    // journal tombaient plus de dix minutes après la dernière image d'un film arrêté. En lecture,
+    // toutes les 30 s (13/10/2026, `HEARTBEAT_MS`). Le passage en pause, la reprise et un saut
+    // partent à la seconde (`WATCH_MS`) : ils attendaient le battement suivant — dix secondes au
+    // plus jusque-là, trente désormais, ce qui n'aurait plus été acceptable.
+    //
+    // Annoncée à l'instant (`playing`) : le premier battement attend son tour. Sans annonce (le
+    // lecteur serveur, la diffusion) : le premier part dès la première seconde, comme la page
+    // l'a toujours dit à Jellyfin et au relais du serveur (`castProgress.ts`) dans les dix secondes.
+    let lastSentAt = session.announce ? Date.now() : 0;
     let lastPaused: boolean | null = null;
-    const interval = setInterval(() => {
+    let lastPosition: number | null = null;
+    let lastPositionAt = 0;
+    const send = () => {
       if (stoppedRef.current) return;
       const isPaused = paused();
-      const now = Date.now();
-      if (isPaused && lastPaused === true && now - lastSentAt < PAUSED_HEARTBEAT_MS) return;
-      lastSentAt = now;
+      lastSentAt = Date.now();
       lastPaused = isPaused;
       report("progress", session, ticks(), isPaused);
-    }, HEARTBEAT_MS);
+    };
+    sendNowRef.current = send;
+    const interval = setInterval(() => {
+      if (stoppedRef.current) return;
+      const now = Date.now();
+      const isPaused = paused();
+      // Un saut se lit dans la position : elle a reculé, ou avancé plus que le temps écoulé ne le
+      // permet. Relue chaque seconde, sans rien envoyer tant que rien ne change.
+      const position = positionRef.current();
+      let jumped = false;
+      if (lastPosition !== null) {
+        const moved = position - lastPosition;
+        const elapsed = Math.max(0, now - lastPositionAt) / 1000;
+        jumped = moved < -JUMP_SLACK_SECONDS || moved > elapsed * 2 + JUMP_SLACK_SECONDS;
+      }
+      lastPosition = position;
+      lastPositionAt = now;
+      const toggled = lastPaused !== null && isPaused !== lastPaused;
+      const due = now - lastSentAt >= (isPaused ? PAUSED_HEARTBEAT_MS : HEARTBEAT_MS);
+      if (toggled || jumped || due) send();
+    }, WATCH_MS);
+    // Le réseau revient : la position part tout de suite, sans attendre jusqu'à trente secondes —
+    // et avec elle ce que la coupure avait gardé sur l'appareil (`unsentPosition.ts`, dans `report`).
+    const onOnline = () => send();
 
     /**
      * Une page mise de côté n'est pas une page fermée.
@@ -170,6 +235,7 @@ export function usePlaybackSession(
     };
 
     window.addEventListener("pageshow", onShow);
+    window.addEventListener("online", onOnline);
     window.addEventListener("beforeunload", reportStop);
     // iOS never fires beforeunload — closing a tab, swiping the app away or following a link out
     // all end at pagehide instead, so on a phone that was the whole of the final position being
@@ -179,7 +245,9 @@ export function usePlaybackSession(
 
     return () => {
       clearInterval(interval);
+      sendNowRef.current = () => {};
       window.removeEventListener("pageshow", onShow);
+      window.removeEventListener("online", onOnline);
       window.removeEventListener("beforeunload", reportStop);
       window.removeEventListener("pagehide", reportStop);
       document.removeEventListener("visibilitychange", saveNow);
@@ -214,7 +282,7 @@ export function usePlaybackSession(
   /**
    * La position, tout de suite, film en pause — la minuterie de veille vient de l'arrêter.
    *
-   * Le battement suivant l'aurait dite dans dix secondes ; mais quelqu'un qui s'endort laisse le
+   * Le battement suivant l'aurait dite dans une minute (en pause) ; mais quelqu'un qui s'endort laisse le
    * téléphone se verrouiller, et une page mise de côté n'a plus de battement. C'est l'instant où le
    * spectateur s'est endormi qu'il faut retrouver demain, pas celui d'avant.
    */
@@ -224,5 +292,11 @@ export function usePlaybackSession(
     void report("progress", s, Math.floor(positionRef.current() * TICKS_PER_SECOND), true);
   }, []);
 
-  return useMemo(() => ({ stop, resume, savePaused }), [stop, resume, savePaused]);
+  /**
+   * La position, tout de suite — un événement que la surveillance d'une seconde ne voit pas dans la
+   * pause ni dans la position : un changement de piste (13/10/2026). Rien hors séance ni après l'arrêt.
+   */
+  const reportNow = useCallback(() => sendNowRef.current(), []);
+
+  return useMemo(() => ({ stop, resume, savePaused, reportNow }), [stop, resume, savePaused, reportNow]);
 }

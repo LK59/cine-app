@@ -63,10 +63,16 @@ const diagMock: {
   waitEnded: { verdict: string; ms: number } | null;
   link: { bytes: number; receivingMs: number } | null;
 } = { currentWait: null, waitEnded: null, link: null };
+/** Chaque bilan calculé, et s'il l'a été exact — voir « ne réécrit le bilan que s'il a changé ». */
+const sessionFactsCalls: ({ exact?: boolean } | undefined)[] = [];
 vi.mock("@/lib/webcodecs/playbackDiagnosis", async (original) => {
   const real = await original<typeof import("@/lib/webcodecs/playbackDiagnosis")>();
   return {
     ...real,
+    diagSessionFacts: (options?: { exact?: boolean }) => {
+      sessionFactsCalls.push(options);
+      return real.diagSessionFacts(options);
+    },
     diagCurrentWait: () => diagMock.currentWait ?? real.diagCurrentWait(),
     diagWaitEnded: (counted?: boolean) => {
       const result = real.diagWaitEnded(counted);
@@ -94,7 +100,7 @@ const announcedSessions: unknown[] = [];
 vi.mock("@/lib/usePlaybackSession", () => ({
   usePlaybackSession: (_position: unknown, session: unknown) => {
     announcedSessions.push(session);
-    return { stop: stopPlaybackNow, resume: resumePlaybackSession };
+    return { stop: stopPlaybackNow, reportNow: () => {}, resume: resumePlaybackSession };
   },
 }));
 vi.mock("@/components/player/PlayerEndScreen", () => ({
@@ -193,7 +199,7 @@ vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => server
 // La réserve d'avance en mémoire (28/09/2026) : examinée par quand elle démarre et s'arrête.
 const reserveStop = vi.fn(() => ({}));
 const reserveStart = vi.fn((..._args: unknown[]) => ({ stop: reserveStop }));
-vi.mock("@/lib/webcodecs/memoryReserve", () => ({ MemoryReserve: { start: (...args: unknown[]) => reserveStart(...args) } }));
+vi.mock("@/lib/webcodecs/memoryReserve", () => ({ reservePlanFacts: () => ({}), MemoryReserve: { start: (...args: unknown[]) => reserveStart(...args) } }));
 // Ce que l'arrêt garde sur l'appareil (28/09/2026) : examiné par ce qui lui est transmis.
 const keepOnStop = vi.fn(async () => 0);
 vi.mock("@/lib/resumeCache/keepOnStop", () => ({ keepOnStop: (...args: unknown[]) => keepOnStop(...(args as [])) }));
@@ -1857,6 +1863,59 @@ describe("la fin d'une séance, au journal", () => {
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
     expect(kept()).toHaveLength(0);
     expect(logged("stop")).toHaveLength(1);
+  });
+
+  it("ne réécrit le bilan que s'il a changé ; caché, il l'écrit exact et entier (13/10/2026)", async () => {
+    // Relevé du 13/10/2026 : ~2 Ko et un tri médiane/p90 toutes les 30 s, pour une copie presque
+    // jamais lue. En lecture calme : un signe de vie seulement ; au passage en arrière-plan — le
+    // dernier instant d'une page qu'iOS va tuer — le bilan exact.
+    localStorage.clear();
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"] });
+    const { unmount } = mount();
+    for (let i = 0; i < 50 && screen.queryByTestId("controls")?.dataset.loading !== "false"; i++) {
+      await act(async () => void (await vi.advanceTimersByTimeAsync(100)));
+    }
+    expect(screen.getByTestId("controls").dataset.loading).toBe("false");
+    const key = () => Object.keys(localStorage).find((k) => k.startsWith("cine:unsent-stop:"))!;
+    const alive = () => Object.keys(localStorage).find((k) => k.startsWith("cine:unsent-stop-alive:"));
+    expect(localStorage.getItem(key())).not.toBeNull();
+    // Le premier tour réécrit : le lecteur est devenu prêt depuis la copie du montage — un vrai
+    // changement, écrit avec des centiles approchés.
+    act(() => void vi.advanceTimersByTime(30_000));
+    expect(sessionFactsCalls.at(-1)).toEqual({ exact: false });
+    const firstWrite = localStorage.getItem(key());
+    sessionFactsCalls.length = 0;
+
+    // Rien ne change : deux tours de 30 s, aucun bilan recalculé ni réécrit, un signe de vie posé.
+    act(() => void vi.advanceTimersByTime(60_000));
+    expect(sessionFactsCalls).toEqual([]);
+    expect(localStorage.getItem(key())).toBe(firstWrite);
+    expect(alive()).toBeDefined();
+
+    // Arrière-plan : écrit tout de suite, exact, entier.
+    act(() => {
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(sessionFactsCalls).toEqual([{ exact: true }]);
+    const hidden = JSON.parse(localStorage.getItem(key())!).fields;
+    expect(hidden).toMatchObject({ why: "lost", session: expect.any(String), backgrounds: 1 });
+    expect(typeof hidden.diag).toBe("object");
+
+    // De retour cinq secondes plus tard : le bilan a changé (l'absence est finie) — réécrit au tour
+    // suivant, avec des centiles approchés.
+    act(() => void vi.advanceTimersByTime(5_000));
+    act(() => {
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    act(() => void vi.advanceTimersByTime(30_000));
+    expect(sessionFactsCalls.at(-1)).toEqual({ exact: false });
+    expect(JSON.parse(localStorage.getItem(key())!).fields).toMatchObject({ why: "lost", backgrounds: 1, backgroundMs: 5_000 });
+
+    unmount();
+    vi.useRealTimers();
+    expect(Object.keys(localStorage).filter((k) => k.startsWith("cine:unsent-stop"))).toEqual([]);
   });
 
   it("se tait après un repli, que la ligne `fallback` a déjà raconté", async () => {

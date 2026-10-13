@@ -175,4 +175,54 @@ describe("playbackDiagnosis", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it("porte dans le bilan de `stop` ce que disaient `reserve/point` et `arrêt`, cumulé sur les passages de la séance", async () => {
+    // 13/10/2026 : les lignes `point` (34/h) et `arrêt` sont retirées ; leur bilan vit ici.
+    const d = await load();
+    d.diagBegin("s1");
+    const run = (id: number, over: Record<string, number | string>) => ({
+      id, bursts: 0, emptied: 0, emptiedMB: 0, maxAheadMB: 0, maxAheadS: 0, activeMs: 0, fetchedBytes: 0, fetchBusyMs: 0, idle: "", ...over,
+    });
+    const snap = (netChunks: number, r: ReturnType<typeof run>) => ({ netChunks, aheadChunks: 10, allowedChunks: 143, reserveMB: 5, deviceMB: 1, networkMB: 50, run: r });
+    // Premier pipeline : deux rafales, vidée une fois (30 Mo), 2 min de marche.
+    d.diagReserve(snap(40, run(1, { bursts: 2, emptied: 1, emptiedMB: 30, maxAheadMB: 120, maxAheadS: 200, activeMs: 120_000, fetchedBytes: 40e6, fetchBusyMs: 8_000 })));
+    // Une reconstruction : un second passage repart de zéro.
+    d.diagReserve(snap(10, run(2, { bursts: 1, maxAheadMB: 60, maxAheadS: 250, activeMs: 60_000, fetchedBytes: 10e6, fetchBusyMs: 2_000, idle: "au repos — la radio dort" })));
+    const facts = d.diagSessionFacts();
+    expect(facts).toMatchObject({
+      reserveNetMB: 50,
+      reserveBursts: 3,
+      reserveEmptied: 1,
+      reserveEmptiedMB: 30,
+      reserveMaxAheadMB: 120,
+      reserveMaxAheadS: 250,
+      reserveS: 180,
+      reserveFetchMbps: 40,
+      reserveRuns: 2,
+      reserveIdle: "au repos — la radio dort",
+      reserveAheadMB: 10,
+      reserveAllowedMB: 143,
+    });
+    // Une ligne `stall` garde l'instant seulement, comme avant.
+    const stall = d.diagStallFacts(1);
+    expect(stall.reserveAheadMB).toBe(10);
+    expect(stall.reserveBursts).toBeUndefined();
+    d.diagEnd("s1");
+  });
+
+  it("la copie de secours lit ses centiles sur un échantillon ; le vrai bilan les trie en entier", async () => {
+    // 13/10/2026 : `saveUnsentStop` triait jusqu'à 2 000 premiers octets toutes les 30 s (~1,5 ms).
+    const d = await load();
+    d.diagBegin("s1");
+    for (let i = 0; i < 1_500; i++) d.diagRequest(i * 10, i * 10 + (i % 100), i * 10 + 200, 1_000, null);
+    const exact = d.diagSessionFacts();
+    const approx = d.diagSessionFacts({ exact: false });
+    expect(exact.fbMedMs).toBe(50);
+    expect(exact.fbP90Ms).toBe(90);
+    // Un échantillon régulier de 200 valeurs : à une ou deux unités près, et les mêmes clés.
+    expect(Math.abs(Number(approx.fbMedMs) - 50)).toBeLessThanOrEqual(2);
+    expect(Math.abs(Number(approx.fbP90Ms) - 90)).toBeLessThanOrEqual(2);
+    expect(Object.keys(approx).sort()).toEqual(Object.keys(exact).sort());
+    d.diagEnd("s1");
+  });
 });

@@ -65,12 +65,12 @@ describe("logPlaybackEvent", () => {
     // 28/09/2026 : une trentaine de `diag.*` sur une ligne `stop` qui touchait déjà les quarante.
     const { logPlaybackEvent } = await import("@/lib/playerLog");
     const many = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`f${i}`, i]));
-    // Une séance complète en porte jusqu'à 44 (28/09 au soir) : le plafond est à 60.
+    // Une séance complète en porte jusqu'à 44 (28/09 au soir), ~55 avec le bilan de la réserve (13/10) : le plafond est à 70.
     const diag = Object.fromEntries(Array.from({ length: 80 }, (_, i) => [`m${i}`, i]));
     logPlaybackEvent("lucas", "stop", { ...many, diag: { verdict: "réseau", ...diag } });
     const line = lines()[0];
     expect(Object.keys(line).filter((k) => k.startsWith("f"))).toHaveLength(40);
-    expect(Object.keys(line).filter((k) => k.startsWith("diag."))).toHaveLength(60);
+    expect(Object.keys(line).filter((k) => k.startsWith("diag."))).toHaveLength(70);
     expect(line["diag.verdict"]).toBe("réseau");
   });
 

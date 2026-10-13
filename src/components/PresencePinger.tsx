@@ -6,6 +6,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { isPublicPath } from "@/lib/publicPaths";
 import { PRESENCE_EVERY_MS } from "@/lib/activity/presence";
 import { TOUCH_HINT_HEADER, touchHintHeaders } from "@/lib/deviceLabel";
+import { progressBeatFresh } from "@/lib/progressBeat";
 
 /**
  * Dit au serveur, une fois par minute, que l'application est ouverte — et ce qui y joue.
@@ -15,6 +16,13 @@ import { TOUCH_HINT_HEADER, touchHintHeaders } from "@/lib/deviceLabel";
  * arrière-plan et au retour, pour que l'état change à l'instant plutôt qu'à la minute suivante.
  * Sur les pages publiques (connexion), rien : il n'y a personne à annoncer. Un refus (session
  * partie) arrête les signaux jusqu'au prochain changement de page.
+ *
+ * **Pendant un film, le battement de lecture parle pour lui** (13/10/2026) : la route de
+ * progression enregistre la présence de l'appelant (`recordPlaybackBeat`), et le signal de la minute
+ * se tait tant qu'un battement est passé récemment (`progressBeatFresh`) — 73 signaux par heure de
+ * film au relevé du 13/10, pour redire ce que le battement disait. Restent immédiats : l'ouverture
+ * et la fermeture d'un film, le passage en arrière-plan et le retour, la page qui s'en va. Le
+ * battement cessant (lecteur arrêté sur une erreur), la minute reprend d'elle-même.
  */
 export function PresencePinger() {
   const pathname = usePathname();
@@ -54,6 +62,7 @@ export function PresencePinger() {
     sendRef.current = send;
     send();
     const timer = setInterval(() => {
+      if (playing.current && progressBeatFresh()) return;
       if (document.visibilityState === "visible" || playing.current) send();
     }, PRESENCE_EVERY_MS);
     const onVisibility = () => send(document.visibilityState === "visible");

@@ -40,14 +40,14 @@ vi.mock("@/components/PlayerControls", () => ({ VOLUME_STORAGE_KEY: "volume", Pl
 vi.mock("@/lib/useAccountPreferences", () => ({ useAccountPreferencesLoader: () => {} }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
 vi.mock("@/lib/reportPlayback", () => ({ reportPlayback: () => {} }));
-vi.mock("@/lib/unsentStop", () => ({ flushOrphanStops: () => {}, saveUnsentStop: () => {}, clearUnsentStop: () => {} }));
+vi.mock("@/lib/unsentStop", () => ({ flushOrphanStops: () => {}, saveUnsentStop: () => {}, clearUnsentStop: () => {}, touchUnsentStop: () => {} }));
 vi.mock("@/lib/swr", () => ({ refreshAfterPlayback: async () => {} }));
 vi.mock("@/lib/codecSupport", () => ({ detectCodecSupport: async () => ({}) }));
 vi.mock("@/lib/webkitEngine", () => ({ playsHlsNatively: () => true }));
 vi.mock("@/lib/resumePosition", () => ({ resolveResumeAt: async (_id: string, at: number | undefined) => at ?? 0 }));
 vi.mock("@/lib/castRoute", () => ({ castRouteActive: () => false }));
 vi.mock("@/lib/usePlaybackSession", () => ({
-  usePlaybackSession: () => ({ stop: vi.fn(async () => {}), resume: vi.fn() }),
+  usePlaybackSession: () => ({ stop: vi.fn(async () => {}), reportNow: () => {}, resume: vi.fn() }),
   stopOrphanSession: vi.fn(async () => {}),
 }));
 const reloads = vi.fn();

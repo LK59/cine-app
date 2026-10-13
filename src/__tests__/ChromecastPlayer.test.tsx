@@ -21,7 +21,7 @@ const stopNow = vi.fn(async () => {});
 vi.mock("@/lib/usePlaybackSession", () => ({
   usePlaybackSession: (_pos: () => number, info: unknown) => {
     sessionInfo.push(info);
-    return { stop: stopNow, resume: vi.fn(), savePaused: vi.fn() };
+    return { stop: stopNow, reportNow: () => {}, resume: vi.fn(), savePaused: vi.fn() };
   },
   stopOrphanSession: vi.fn(async () => {}),
 }));

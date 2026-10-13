@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
+import { forgetProgressBeat, progressBeatFresh } from "@/lib/progressBeat";
 
 // What Jellyfin is told while a film plays, and — the part that actually decides whether a
 // resume point is right — what it is told at the moment the film stops.
@@ -23,9 +24,10 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
     posted.push({ path: String(url), body: JSON.parse(String(init.body)) });
-    return { ok: true };
+    return { ok: true, status: 200, json: async () => ({ maintenance: null }) };
   });
   hidden("visible");
+  forgetProgressBeat();
 });
 
 afterEach(() => {
@@ -34,18 +36,115 @@ afterEach(() => {
 });
 
 describe("usePlaybackSession", () => {
-  it("bat toutes les dix secondes, à la position que le lecteur donne", () => {
-    let at = 0;
-    renderHook(() => usePlaybackSession(() => at, session));
+  it("bat toutes les trente secondes d'une lecture sans événement, à la position que le lecteur donne (13/10/2026)", () => {
+    // Relevé du 13/10/2026 : ≈ 320 POST de progression par heure de film à 10 s. Une lecture qui
+    // avance seule n'a besoin que d'un point toutes les 30 s.
+    const t0 = Date.now();
+    const at = () => (Date.now() - t0) / 1000;
+    renderHook(() => usePlaybackSession(at, session));
+    // Sans annonce (lecteur serveur, diffusion) : le premier dès la première seconde.
+    act(() => void vi.advanceTimersByTime(1_000));
+    expect(bodies("progress")).toHaveLength(1);
+    act(() => void vi.advanceTimersByTime(29_000));
+    expect(bodies("progress")).toHaveLength(1);
+    act(() => void vi.advanceTimersByTime(1_000));
+    expect(bodies("progress")).toHaveLength(2);
+    expect(bodies("progress")[1]).toMatchObject({ itemId: "film-1", positionTicks: 31 * TICKS, isPaused: false });
+    // Une heure : ~120 battements, plus les 320 d'avant.
+    act(() => void vi.advanceTimersByTime(3_600_000 - 31_000));
+    expect(bodies("progress").length).toBeLessThanOrEqual(121);
+    expect(bodies("progress").length).toBeGreaterThanOrEqual(119);
+  });
+
+  it("annoncée, la séance attend 30 s son premier battement — l'annonce vient de partir", () => {
+    const t0 = Date.now();
+    renderHook(() => usePlaybackSession(() => (Date.now() - t0) / 1000, { ...session, announce: true }));
+    expect(bodies("playing")).toHaveLength(1);
+    act(() => void vi.advanceTimersByTime(29_000));
     expect(bodies("progress")).toHaveLength(0);
+    act(() => void vi.advanceTimersByTime(1_000));
+    expect(bodies("progress")).toHaveLength(1);
+  });
 
-    at = 42;
+  it("pause, reprise et saut partent à la seconde, sans attendre le battement", () => {
+    const t0 = Date.now();
+    let offset = 0;
+    let paused = false;
+    renderHook(() => usePlaybackSession(() => (paused ? 40 : (Date.now() - t0) / 1000 + offset), session, () => paused));
     act(() => void vi.advanceTimersByTime(10_000));
-    expect(bodies("progress")[0]).toMatchObject({ itemId: "film-1", positionTicks: 42 * TICKS });
+    const before = bodies("progress").length;
+    // Pause : partie à la seconde suivante.
+    paused = true;
+    act(() => void vi.advanceTimersByTime(1_000));
+    expect(bodies("progress")).toHaveLength(before + 1);
+    expect(bodies("progress").at(-1)).toMatchObject({ isPaused: true });
+    // Reprise : de même.
+    act(() => void vi.advanceTimersByTime(3_000));
+    paused = false;
+    offset = 40 - (Date.now() - t0) / 1000;
+    act(() => void vi.advanceTimersByTime(1_000));
+    expect(bodies("progress")).toHaveLength(before + 2);
+    expect(bodies("progress").at(-1)).toMatchObject({ isPaused: false });
+    // Un saut de dix minutes en avant : à la seconde, à la nouvelle position.
+    offset += 600;
+    act(() => void vi.advanceTimersByTime(1_000));
+    expect(bodies("progress")).toHaveLength(before + 3);
+    expect(Number(bodies("progress").at(-1)!.positionTicks) / TICKS).toBeGreaterThan(600);
+    // Puis le calme : rien avant le battement.
+    act(() => void vi.advanceTimersByTime(20_000));
+    expect(bodies("progress")).toHaveLength(before + 3);
+  });
 
-    at = 84;
-    act(() => void vi.advanceTimersByTime(10_000));
-    expect(bodies("progress")[1].positionTicks).toBe(84 * TICKS);
+  it("un saut en arrière aussi, même en pause", () => {
+    let at = 300;
+    renderHook(() => usePlaybackSession(() => at, session, () => true));
+    act(() => void vi.advanceTimersByTime(2_000));
+    const before = bodies("progress").length;
+    at = 120;
+    act(() => void vi.advanceTimersByTime(1_000));
+    expect(bodies("progress")).toHaveLength(before + 1);
+    expect(bodies("progress").at(-1)).toMatchObject({ positionTicks: 120 * TICKS, isPaused: true });
+  });
+
+  it("le changement de piste part tout de suite (`reportNow`), et rien hors séance ni après l'arrêt", async () => {
+    const { result } = renderHook(() => usePlaybackSession(() => 77, session));
+    act(() => void vi.advanceTimersByTime(2_000));
+    const before = bodies("progress").length;
+    act(() => result.current.reportNow());
+    expect(bodies("progress")).toHaveLength(before + 1);
+    expect(bodies("progress").at(-1)).toMatchObject({ positionTicks: 77 * TICKS });
+    await act(async () => {
+      await result.current.stop();
+    });
+    act(() => result.current.reportNow());
+    expect(bodies("progress")).toHaveLength(before + 1);
+
+    const idle = renderHook(() => usePlaybackSession(() => 77, null));
+    act(() => idle.result.current.reportNow());
+    expect(bodies("progress")).toHaveLength(before + 1);
+  });
+
+  it("au retour du réseau, la position part sans attendre le battement", () => {
+    renderHook(() => usePlaybackSession(() => 12, session, () => true));
+    act(() => void vi.advanceTimersByTime(2_000));
+    const before = bodies("progress").length;
+    act(() => void window.dispatchEvent(new Event("online")));
+    expect(bodies("progress")).toHaveLength(before + 1);
+  });
+
+  it("dit si la page est visible, et tient lieu de présence tant qu'il passe (13/10/2026)", async () => {
+    const { result } = renderHook(() => usePlaybackSession(() => 5, session));
+    expect(progressBeatFresh()).toBe(false);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(1_000)));
+    expect(bodies("progress")[0]).toMatchObject({ visible: true });
+    expect(progressBeatFresh()).toBe(true);
+    act(() => hidden("hidden"));
+    expect(bodies("progress").at(-1)).toMatchObject({ visible: false });
+    await act(async () => {
+      await result.current.stop();
+    });
+    // La séance close : la présence et le sondage reprennent leur propre rythme.
+    expect(progressBeatFresh()).toBe(false);
   });
 
   it("ne bat plus une fois l'arrêt rapporté, même si le lecteur reste monté", async () => {
@@ -146,37 +245,37 @@ describe("usePlaybackSession", () => {
     // A paused film left on screen for an hour is not an hour of watching.
     let paused = false;
     renderHook(() => usePlaybackSession(() => 10, session, () => paused));
-    act(() => void vi.advanceTimersByTime(10_000));
+    act(() => void vi.advanceTimersByTime(1_000));
     expect(bodies("progress")[0].isPaused).toBe(false);
 
     paused = true;
-    act(() => void vi.advanceTimersByTime(10_000));
+    act(() => void vi.advanceTimersByTime(1_000));
     expect(bodies("progress")[1].isPaused).toBe(true);
   });
 
   it("en pause, ne bat plus qu'une fois la minute, et reprend dès la reprise (08/10/2026)", () => {
     let paused = false;
     renderHook(() => usePlaybackSession(() => 10, session, () => paused));
-    act(() => void vi.advanceTimersByTime(10_000));
+    act(() => void vi.advanceTimersByTime(1_000));
     paused = true;
-    // Le passage en pause part au battement suivant…
-    act(() => void vi.advanceTimersByTime(10_000));
+    // Le passage en pause part à la seconde (13/10/2026 ; au battement suivant avant)…
+    act(() => void vi.advanceTimersByTime(1_000));
     expect(bodies("progress")).toHaveLength(2);
     // … puis plus rien pendant la minute qui suit.
-    act(() => void vi.advanceTimersByTime(50_000));
+    act(() => void vi.advanceTimersByTime(58_000));
     expect(bodies("progress")).toHaveLength(2);
-    act(() => void vi.advanceTimersByTime(10_000));
+    act(() => void vi.advanceTimersByTime(2_000));
     expect(bodies("progress")).toHaveLength(3);
-    // La reprise, au battement suivant.
+    // La reprise, à la seconde.
     paused = false;
-    act(() => void vi.advanceTimersByTime(10_000));
+    act(() => void vi.advanceTimersByTime(1_000));
     expect(bodies("progress")).toHaveLength(4);
     expect(bodies("progress")[3].isPaused).toBe(false);
   });
 
   it("porte le nom du lecteur qui joue vraiment", () => {
     renderHook(() => usePlaybackSession(() => 0, { ...session, client: PLAYBACK_CLIENTS.engine }));
-    act(() => void vi.advanceTimersByTime(10_000));
+    act(() => void vi.advanceTimersByTime(1_000));
     expect(bodies("progress")[0].client).toBe("CineEngine By CineApp");
   });
 
@@ -222,7 +321,7 @@ describe("usePlaybackSession — reprise après l'arrêt", () => {
     expect(bodies("playing")).toHaveLength(openings + 1);
 
     at = 12;
-    act(() => void vi.advanceTimersByTime(10_000));
+    act(() => void vi.advanceTimersByTime(1_000));
     expect(bodies("progress").at(-1)).toMatchObject({ positionTicks: 12 * TICKS });
   });
 

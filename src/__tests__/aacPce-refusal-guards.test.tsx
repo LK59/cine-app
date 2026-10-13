@@ -44,7 +44,7 @@ const announcedSessions: unknown[] = [];
 vi.mock("@/lib/usePlaybackSession", () => ({
   usePlaybackSession: (_position: unknown, session: unknown) => {
     announcedSessions.push(session);
-    return { stop: stopPlaybackNow, resume: resumePlaybackSession };
+    return { stop: stopPlaybackNow, reportNow: () => {}, resume: resumePlaybackSession };
   },
 }));
 vi.mock("@/components/player/PlayerEndScreen", () => ({
@@ -120,7 +120,7 @@ vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => server
 // La réserve d'avance en mémoire (28/09/2026) : examinée par quand elle démarre et s'arrête.
 const reserveStop = vi.fn(() => ({}));
 const reserveStart = vi.fn((..._args: unknown[]) => ({ stop: reserveStop }));
-vi.mock("@/lib/webcodecs/memoryReserve", () => ({ MemoryReserve: { start: (...args: unknown[]) => reserveStart(...args) } }));
+vi.mock("@/lib/webcodecs/memoryReserve", () => ({ reservePlanFacts: () => ({}), MemoryReserve: { start: (...args: unknown[]) => reserveStart(...args) } }));
 // Ce que l'arrêt garde sur l'appareil (28/09/2026) : examiné par ce qui lui est transmis.
 const keepOnStop = vi.fn(async () => 0);
 vi.mock("@/lib/resumeCache/keepOnStop", () => ({ keepOnStop: (...args: unknown[]) => keepOnStop(...(args as [])) }));

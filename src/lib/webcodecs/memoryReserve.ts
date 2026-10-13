@@ -75,14 +75,35 @@ const MAX_BACKOFF_MS = 60_000;
 /** La lecture en avance du lecteur (`PREFETCH_CHUNKS` dans byteSource.ts) : la réserve commence au-delà. */
 const PLAYER_READAHEAD_CHUNKS = 6;
 const TICK_MS = 1000;
-/** Tous les combien une ligne `point` résume la réserve, au journal et dans la trace. */
+/**
+ * Tous les combien la réserve se résume dans la trace (locale), et relève son avance la plus grande
+ * pour le bilan de la séance. Plus rien au journal à ce rythme — voir `point`.
+ */
 const REPORT_EVERY_MS = 30_000;
-/** Au journal, une ligne `point` sans changement de phase au plus toutes les cinq minutes. */
-const LOG_POINT_EVERY_MS = 5 * 60_000;
 
 /** Le débit que la réserve s'autorise, en bits par seconde. */
 export function reserveSpeedBps(): number {
   return SPEED_CAP_MBPS * 1e6;
+}
+
+/**
+ * Ce que la réserve s'autorise sur cet appareil — le plafond en Mo et le débit — pour la ligne
+ * `start` du lecteur (13/10/2026).
+ *
+ * C'était la ligne `reserve/départ`, envoyée à chaque pipeline : deux chiffres que l'appareil donne
+ * d'office (`reserveBudgetBytes`, `SPEED_CAP_MBPS`), une requête de plus à chaque ouverture et à
+ * chaque reconstruction. Ils voyagent maintenant sur la ligne `start` qui part de toute façon. Ne
+ * lève jamais : un journal ne vaut pas un lecteur.
+ */
+export function reservePlanFacts(deps: Pick<ReserveDeps, "budgetBytes"> = browserDeps): { reserveAllowedMB: number; reserveSpeedMbps: number } | Record<string, never> {
+  try {
+    return {
+      reserveAllowedMB: Math.max(0, Math.floor(deps.budgetBytes() / CHUNK_SIZE)),
+      reserveSpeedMbps: Math.round(reserveSpeedBps() / 1e5) / 10,
+    };
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -118,7 +139,12 @@ export interface ReserveContext {
   watched?: () => number;
 }
 
-/** Une ligne `reserve` du journal lecteur. */
+/**
+ * Une ligne `reserve` du journal lecteur — depuis le 13/10/2026, seulement `erreur` (une plage
+ * refusée) et `arrêt` quand la réserve s'arrête d'elle-même (session terminée). Le reste du récit —
+ * départ, points, arrêt ordinaire — est porté par `start` (`reservePlanFacts`) et par le bilan de
+ * `stop` (`diag.reserve*`, `diagReserve`).
+ */
 export type ReserveReport = (fields: Record<string, string | number | boolean>) => void;
 
 export interface ReserveFacts {
@@ -132,7 +158,40 @@ export interface ReserveFacts {
   reserveMB: number;
   deviceMB: number;
   networkMB: number;
+  /**
+   * Le bilan de ce passage de la réserve (une par pipeline : une reconstruction en démarre une
+   * autre), que le diagnostic additionne sur la séance pour la ligne `stop` — ce que disaient les
+   * lignes `point` et `arrêt`, retirées le 13/10/2026.
+   */
+  run: ReserveRun;
 }
+
+/** Ce qu'un passage de la réserve a fait, du départ à maintenant (ou à son arrêt). */
+export interface ReserveRun {
+  /** Identifie le passage : le diagnostic cumule les passages finis quand un nouveau commence. */
+  id: number;
+  /** Rafales lancées. */
+  bursts: number;
+  /** Vidée en arrière-plan : combien de fois, combien de Mo rendus. */
+  emptied: number;
+  emptiedMB: number;
+  /** La plus grande avance relevée (toutes les 30 s et à l'arrêt) : en Mo de réserve, en secondes de film. */
+  maxAheadMB: number;
+  maxAheadS: number;
+  /** Depuis combien de temps elle tourne, en ms. */
+  activeMs: number;
+  /** Octets reçus par ses plages, et le temps où ses requêtes étaient en route — son débit réel. */
+  fetchedBytes: number;
+  fetchBusyMs: number;
+  /** Pourquoi elle ne télécharge pas, au dernier tour — vide si elle téléchargeait. */
+  idle: string;
+}
+
+/** L'arrêt que la réserve décide seule — le seul qui écrive encore une ligne `arrêt`. */
+const SELF_STOP = "session terminée";
+
+/** Le numéro du prochain passage — voir `ReserveRun.id`. */
+let nextRunId = 1;
 
 /** Ce que la réserve attend de son environnement — remplaçable dans les tests. */
 export interface ReserveDeps {
@@ -182,10 +241,13 @@ export class MemoryReserve {
   private burstCounted = false;
   private failures = 0;
   private pausedUntil = 0;
-  /** La dernière ligne `point` écrite au journal — voir `point`. */
-  private loggedPhase: string | null = null;
-  private loggedAt = 0;
-  private loggedPosition: number | null = null;
+  private readonly runId = nextRunId++;
+  /** La plus grande avance relevée — pour le bilan de `stop` (voir `ReserveRun`). */
+  private maxAheadChunks = 0;
+  private maxAheadSeconds = 0;
+  /** Le débit des plages sur toute la vie de la réserve (la fenêtre de `point` est remise à zéro). */
+  private fetchedBytes = 0;
+  private fetchBusyMs = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
   private netChunks = 0;
   /** Vidée en arrière-plan : combien de fois, combien de Mo. */
@@ -193,6 +255,7 @@ export class MemoryReserve {
   private emptiedChunks = 0;
   private idle = "démarrage";
   private readonly startedAt: number;
+  private stoppedAt: number | null = null;
   private lastReport: number;
   private windowBytes = 0;
   private windowBusyMs = 0;
@@ -219,8 +282,9 @@ export class MemoryReserve {
 
   static start(ctx: ReserveContext, report: ReserveReport = () => {}, deps: ReserveDeps = browserDeps): MemoryReserve {
     const reserve = new MemoryReserve(ctx, report, deps);
+    // Dans la trace seulement : la ligne `reserve/départ` n'est plus envoyée (13/10/2026) — son
+    // plafond et son débit voyagent sur `start` (`reservePlanFacts`).
     trace(`réserve en mémoire : jusqu'à ${reserve.allowed} Mo, ${Math.round(reserve.speedBps / 1e5) / 10} Mb/s au plus`);
-    reserve.emit("départ", { allowedMB: reserve.allowed, speedMbps: Math.round(reserve.speedBps / 1e5) / 10 });
     reserve.timer = setInterval(() => reserve.tick(), TICK_MS);
     // Rendue dès que la page est cachée, sans attendre le tour suivant : iOS suspend les minuteries
     // d'une page en arrière-plan, et ce tour-là pouvait ne jamais venir — la mémoire restait tenue
@@ -470,7 +534,7 @@ export class MemoryReserve {
       const sentAt = performance.now();
       const res = await this.deps.fetch(this.ctx.source.streamUrl, { headers: { Range: `bytes=${start}-${end}` }, signal: control.signal });
       if (res.status === 401 && res.headers.get(SESSION_EXPIRED_HEADER) === "1") {
-        this.stop("session terminée");
+        this.stop(SELF_STOP);
         return;
       }
       const total = Number(res.headers.get("Content-Range")?.split("/")[1]);
@@ -486,6 +550,8 @@ export class MemoryReserve {
       const endAt = performance.now();
       this.windowBytes += bytes.byteLength;
       this.windowBusyMs += endAt - sentAt;
+      this.fetchedBytes += bytes.byteLength;
+      this.fetchBusyMs += endAt - sentAt;
       this.failures = 0;
       // Arrêtée ou cachée entre-temps : rien n'est gardé.
       if (this.stopped || control.signal.aborted || this.deps.hidden()) return;
@@ -513,10 +579,29 @@ export class MemoryReserve {
     }
   }
 
-  /** Le résumé, toutes les `REPORT_EVERY_MS` : au journal et dans la trace. */
+  /** L'avance relevée entre dans le bilan : la plus grande de la séance. */
+  private noteAhead(ahead: { chunks: number; seconds: number }): void {
+    this.maxAheadChunks = Math.max(this.maxAheadChunks, ahead.chunks);
+    this.maxAheadSeconds = Math.max(this.maxAheadSeconds, ahead.seconds);
+  }
+
+  /**
+   * Le résumé, toutes les `REPORT_EVERY_MS` : dans la trace (locale), et l'avance relevée pour le
+   * bilan. **Plus rien au journal** (13/10/2026).
+   *
+   * Les lignes `point` partaient au changement de phase (rafale ↔ repos) ou toutes les cinq minutes
+   * depuis le 08/10 ; le relevé du 13/10 en comptait encore 34 par heure de film — plus de la moitié
+   * des ~59 envois horaires du journal du lecteur, chacun réveillant la radio entre deux rafales —
+   * et rien ne les lisait : ni la page Activité, ni le banc, ni le plan du banc. Ce qu'elles
+   * disaient de durable (rafales, Mo rendus en arrière-plan, avance la plus grande, débit des
+   * plages, temps de marche, ce qu'elle attendait) part dans le bilan de `stop`
+   * (`diag.reserve*`) ; la chronologie de deux minutes (`timeline`, §77) porte déjà la réserve
+   * échantillon par échantillon sur chaque ligne d'incident.
+   */
   private point(): void {
     this.lastReport = this.deps.now();
     const ahead = this.aheadSpan();
+    this.noteAhead(ahead);
     const facts = this.facts();
     const fetchMbps = this.windowBusyMs > 0 ? Math.round(((this.windowBytes * 8) / (this.windowBusyMs / 1000) / 1e6) * 10) / 10 : 0;
     const windowMB = Math.round(this.windowBytes / 1e5) / 10;
@@ -528,40 +613,6 @@ export class MemoryReserve {
         `, lecteur : ${facts.reserveMB} Mo lus de la réserve, ${facts.networkMB} du réseau` +
         (this.idle ? ` — en attente : ${this.idle}` : "")
     );
-    // Au journal, une ligne seulement quand elle dit du neuf (08/10/2026) : un changement de phase
-    // (rafale ↔ repos), ou cinq minutes écoulées — jamais page cachée ni position immobile (une
-    // pause). Les lignes `point` faisaient 84 % des envois du journal du lecteur, dont 1 347 en
-    // phase de repos, celle qui existe pour laisser dormir la radio. La trace, locale, garde son
-    // résumé toutes les trente secondes ; les totaux de `stop` et de `stall` (`diag.*`) sont
-    // inchangés.
-    const position = Math.round(this.seconds() * 10) / 10;
-    const phase = this.refilling ? "rafale" : "repos";
-    const now = this.deps.now();
-    const news = phase !== this.loggedPhase || now - this.loggedAt >= LOG_POINT_EVERY_MS;
-    if (this.deps.hidden() || position === this.loggedPosition || !news) {
-      diagReserve(facts);
-      return;
-    }
-    this.loggedPhase = phase;
-    this.loggedAt = now;
-    this.loggedPosition = position;
-    this.emit("point", {
-      position,
-      aheadMB: ahead.chunks,
-      aheadS: Math.round(ahead.seconds),
-      allowedMB: this.allowed,
-      leadS: Math.round(this.ctx.lead() * 10) / 10,
-      windowMB,
-      fetchMbps,
-      netMB: facts.netChunks,
-      reserveMB: facts.reserveMB,
-      deviceMB: facts.deviceMB,
-      networkMB: facts.networkMB,
-      emptiedMB: this.emptiedChunks,
-      phase,
-      bursts: this.bursts,
-      ...(this.idle ? { idle: this.idle } : {}),
-    });
     diagReserve(facts);
   }
 
@@ -575,6 +626,18 @@ export class MemoryReserve {
       reserveMB: mb(source.reserveBytes),
       deviceMB: mb(source.deviceBytes),
       networkMB: mb(source.networkBytes),
+      run: {
+        id: this.runId,
+        bursts: this.bursts,
+        emptied: this.emptied,
+        emptiedMB: this.emptiedChunks,
+        maxAheadMB: this.maxAheadChunks,
+        maxAheadS: Math.round(this.maxAheadSeconds),
+        activeMs: Math.max(0, (this.stoppedAt ?? this.deps.now()) - this.startedAt),
+        fetchedBytes: this.fetchedBytes,
+        fetchBusyMs: Math.round(this.fetchBusyMs),
+        idle: this.idle,
+      },
     };
   }
 
@@ -595,7 +658,10 @@ export class MemoryReserve {
   stop(why = "fin de lecture", keep = false): ReserveFacts {
     if (this.stopped) return this.facts();
     const ahead = this.aheadSpan();
+    this.noteAhead(ahead);
     this.stopped = true;
+    this.stoppedAt = this.deps.now();
+    this.idle = `arrêtée — ${why}`;
     if (this.timer) clearInterval(this.timer);
     try {
       this.unlistenHidden();
@@ -614,6 +680,11 @@ export class MemoryReserve {
       `réserve en mémoire arrêtée (${why}) : ${final.netChunks} Mo téléchargés, ${ahead.chunks} en réserve (${ahead.seconds.toFixed(0)} s) ; ` +
         `le lecteur a lu ${final.reserveMB} Mo de la réserve, ${final.deviceMB} de l'appareil, ${final.networkMB} du réseau`
     );
+    // Au journal seulement quand elle s'arrête d'elle-même (13/10/2026) : la session partie
+    // (`fetchRangeNow`, 401 marqué). Un arrêt par son hôte — reconstruction (`remplacée`, `fin du
+    // pipeline`, que la ligne `rebuild` dit déjà) ou fin de lecture (que `stop` dit) — n'apprenait
+    // rien que le bilan de `stop` ne porte désormais (`diag.reserve*`).
+    if (why !== SELF_STOP) return final;
     this.emit("arrêt", {
       why,
       durationS: Math.round((this.deps.now() - this.startedAt) / 1000),

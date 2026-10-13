@@ -136,4 +136,20 @@ describe("le nom du client, et l'état de pause", () => {
       "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", 5, "Transcode", "CineApp", false, NO_DEVICE
     );
   });
+
+  it("enregistre la présence de l'appelant, titre gardé du signal d'ouverture (13/10/2026)", async () => {
+    // Pendant un film, le battement tient lieu de signal de présence : `PresencePinger` se tait.
+    const presence = await import("@/lib/activity/presence");
+    presence.__testing.reset();
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jfToken: "tok", jti: "jti-7" });
+    mockJellyfin.reportPlaybackProgress.mockResolvedValue(undefined);
+    const item = "0123456789abcdef0123456789abcdef";
+    // Le signal d'ouverture du pinger, avec le titre.
+    presence.recordBeat("jti-7", { user: "louis", jfId: "jf-1", at: Date.now() - 200_000, visible: true, playing: { itemId: item, title: "Le Film" }, device: "Mac · Safari" });
+    const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
+    await POST(fakeReq({ itemId: item, playSessionId: "s", mediaSourceId: "m", positionTicks: 5, visible: true }, "t", { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15" }));
+    // Le signal d'ouverture, vieux de 200 s, aurait expiré (150 s) : le battement le renouvelle.
+    expect(presence.presenceOf("louis")).toMatchObject({ state: "playing", playing: { itemId: item, title: "Le Film" } });
+    expect(presence.presenceOf("louis").devices).toEqual(["Mac · Safari"]);
+  });
 });

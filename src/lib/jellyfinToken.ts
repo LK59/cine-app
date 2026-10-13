@@ -47,7 +47,7 @@ function who(session: SessionPayload): string {
 
 /**
  * Jellyfin vient de refuser le jeton de cette session. Écrit une fois par session : un film
- * rapporte sa position toutes les dix secondes, et c'est le même fait.
+ * rapporte sa position toutes les trente secondes, et c'est le même fait.
  */
 export function markJellyfinTokenDead(
   session: SessionPayload,

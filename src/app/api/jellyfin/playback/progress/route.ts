@@ -9,6 +9,8 @@ import { reportPlayback } from "@/lib/playbackReport";
 import { castProgressRelay } from "@/lib/castProgress";
 import { playbackDevice } from "@/lib/playbackDevice";
 import { maintenanceDb } from "@/lib/db";
+import { recordPlaybackBeat } from "@/lib/activity/presence";
+import { requestDeviceLabel } from "@/lib/deviceLabel";
 
 export async function POST(req: NextRequest) {
   if (!config.player.enabled) {
@@ -38,6 +40,24 @@ export async function POST(req: NextRequest) {
   }
 
   const { jfId, jfToken } = session;
+  /**
+   * La présence de l'appelant, comme `/api/presence` l'enregistre (13/10/2026) : pendant un film,
+   * c'est ce battement qui la porte, et le signal de présence se tait (`progressBeat.ts`). Avant
+   * l'appel à Jellyfin, et quel qu'en soit le sort : la page est ouverte et joue, même si Jellyfin
+   * refuse la position. Une mémoire, jamais une erreur.
+   */
+  try {
+    recordPlaybackBeat(session.jti, {
+      user: session.jfUser ?? session.u,
+      jfId,
+      at: Date.now(),
+      visible: body?.visible !== false,
+      itemId,
+      device: requestDeviceLabel(req),
+    });
+  } catch {
+    /* la présence ne vaut pas une position */
+  }
   // La page parle pour ce titre : le relais du serveur se tait (`castProgress.ts`, DECISIONS.md §64).
   castProgressRelay().notePageReport(jfId, itemId);
   // L'appareil de la connexion et son vrai nom, plus un appareil fantôme par compte — `playbackDevice.ts`.

@@ -141,7 +141,9 @@ and since 2026-09-24 `evictions` / `evictionsAhead` (ranges ManagedMediaSource d
 heard through `bufferedchange` — the player's own removals are not counted; one ahead of the head
 is read again at once). A `seek` line carries `ranges`, the
 element's buffered ranges when the viewer asked, and its trace the two buffers separately. A page iOS kills in the background never gets to send
-it, so the summary is kept in `localStorage` while the session lives (`src/lib/unsentStop.ts`)
+it, so the summary is kept in `localStorage` while the session lives (`src/lib/unsentStop.ts`;
+exact on every trip to the background and at `pagehide`, otherwise rewritten — with sampled
+percentiles — only when it changed, a 15-byte sign of life in between, since 2026-10-13)
 and sent on the next launch as `why: "lost"` with `lateByMs`; the weekly reading keeps the last
 line per `session`. Since 2026-10-01 any other line that fails to send (no response, or a 5xx — a
 restart, a dropped network) waits in a bounded `localStorage` queue (`src/lib/unsentLines.ts`) and
@@ -338,10 +340,15 @@ removed for the devices' sake. **A view is never written as-is** (`exactBytes`):
 `subarray` of an 8 MiB range as the whole 8 MiB — 7 GB on an iPhone after two sessions; the store moved
 to `cine-reprise-2`, wiping the old folder. A chunk read back at the wrong size is deleted, and
 `overQuota` stops adding titles once the browser's *measured* usage passes the ceiling. The next
-episode's 16 MiB opening is written a minute before the end. `player.log` gets `reserve` lines
-(`départ`, `point` at each burst/rest change or every 5 min at most, never paused or hidden (08/10/2026; it was every 30 s, 84 % of all player-log posts) — MB and seconds held ahead, MB the player read from the reserve, the
-device and the network, what was fetched and at what rate, `idle` —, `erreur`, `arrêt`), and `diag.*`
-on `stall`/`stop` carries the same totals. None of it is load-bearing: any chunk may vanish (system
+episode's 16 MiB opening is written a minute before the end. `player.log` gets **no running
+`reserve` lines any more** (2026-10-13, DECISIONS §84): `point` (34 posts per hour of film, read by
+nothing) and the ordinary `arrêt` are gone, `départ` rides on `start` (`reserveAllowedMB`,
+`reserveSpeedMbps`), and the session's reserve summary is in `stop`'s `diag.reserve*` — summed over
+every pipeline of the session: `reserveNetMB`, `reserveBursts`, `reserveEmptied`/`reserveEmptiedMB`,
+`reserveMaxAheadMB`/`reserveMaxAheadS`, `reserveS`, `reserveFetchMbps`, `reserveRuns`, `reserveIdle`,
+plus the instant (`reserveAheadMB`, `readReserveMB`/`readDeviceMB`/`readNetworkMB`) also on `stall`.
+Only `reserve/erreur` and an `arrêt` the reserve decides itself (session gone) are still written; the
+local trace keeps its 30 s summary. None of it is load-bearing: any chunk may vanish (system
 eviction, « Vider le cache » in the Account panel) and is read from the network instead.
 `PlayerHost` chooses between the native player and the legacy server-transcoding one;
 `fallToStable` hands over rather than closing — unless `PLAYER_SERVER_FALLBACK=false`, where there
@@ -500,8 +507,14 @@ dictionaries' values.
 - **Background traffic during a film was measured and trimmed (2026-10-08)** — about 780 small
   requests an hour, one every 4.6 s, kept the radio awake between `MemoryReserve` bursts. The
   progress heartbeat now beats every 60 s while paused, and its response carries the maintenance
-  state (`noteMaintenanceState`), so `useMaintenance` polls at 60 s instead of 15 s while a film
-  fills the screen (outside a film it stays at 15 s, so the restart notice arrives before a deploy).
+  state (`noteMaintenanceState`). **Since 2026-10-13 (DECISIONS §84)** it beats every 30 s while
+  playing without events — pause, resume, seeks (watched every second, no network), track changes
+  (`reportNow`), hiding the page, closing, the next episode and the network coming back still go at
+  once — and it carries presence too (`recordPlaybackBeat`): while a beat succeeded in the last 90 s
+  (`progressBeat.ts`), `PresencePinger`'s minute and `useMaintenance`'s poll are silent during a film
+  and resume on their own if it stops (outside a film: 15 s maintenance, 60 s presence, unchanged).
+  Measured on 13/10: ~59 player-log posts and ~320 heartbeats an hour of film, plus 73 presence and
+  60 maintenance requests.
   **Trickplay tiles stay prewarmed at the player's mount** (`PlayerControls`): fetching them on the
   first touch of the seek bar saved ~2.4 MB per opening and left one to two seconds without a
   preview — it was reverted the same day; do not try it again without a better idea.

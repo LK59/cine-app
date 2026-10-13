@@ -2,7 +2,7 @@
  * La position d'une diffusion, déduite par le serveur quand la page s'est tue — DECISIONS.md §64.
  *
  * Une diffusion vit sur le téléviseur, mais sa reprise est rapportée à Jellyfin par la page qui l'a
- * lancée (`usePlaybackSession`, toutes les dix secondes). Que cette page se taise — un iPhone
+ * lancée (`usePlaybackSession`, toutes les 30 s depuis le 13/10/2026 — dix secondes avant). Que cette page se taise — un iPhone
  * verrouillé qui suspend son JavaScript, iOS qui tue l'application, un ordinateur mis en veille, un
  * onglet fermé — et le film continue sur la télé sans que rien ne soit plus gardé : on reprenait
  * ensuite à l'instant où la page s'était tue, une heure plus tôt parfois.
@@ -46,6 +46,7 @@ export const CAST_BUFFER_MARGIN_SECONDS = 30;
 // 150 s et non 60 (chasse aux bugs du 11/10/2026) : une page EN PAUSE ne bat qu'une fois la
 // minute, sur un minuteur de 10 s — 60 à 70 s entre deux battements (`usePlaybackSession`). À 60 s,
 // une page ouverte passait pour muette jusqu'à 10 s par minute, et le relais parlait par-dessus.
+// Depuis le 13/10/2026 : 30 s en lecture, 60 s (à la seconde près) en pause — toujours sous 150 s.
 export const PAGE_FRESH_MS = 150_000;
 /** Au plus un rapport par diffusion dans cet intervalle. */
 export const REPORT_EVERY_MS = 30_000;

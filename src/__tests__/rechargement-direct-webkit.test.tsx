@@ -45,7 +45,7 @@ vi.mock("@/lib/useAccountPreferences", () => ({ useAccountPreferencesLoader: () 
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
 const reported: { kind: string; fields: Record<string, unknown> }[] = [];
 vi.mock("@/lib/reportPlayback", () => ({ reportPlayback: (kind: string, fields: Record<string, unknown>) => void reported.push({ kind, fields }) }));
-vi.mock("@/lib/unsentStop", () => ({ flushOrphanStops: () => {}, saveUnsentStop: () => {}, clearUnsentStop: () => {} }));
+vi.mock("@/lib/unsentStop", () => ({ flushOrphanStops: () => {}, saveUnsentStop: () => {}, clearUnsentStop: () => {}, touchUnsentStop: () => {} }));
 vi.mock("@/lib/swr", () => ({ refreshAfterPlayback: async () => {} }));
 vi.mock("@/lib/codecSupport", () => ({ detectCodecSupport: async () => ({}) }));
 /** WebKit (HLS natif) par défaut ; hls.js quand un test le dit. */
@@ -54,7 +54,7 @@ vi.mock("@/lib/webkitEngine", () => ({ playsHlsNatively: () => nativeHls }));
 vi.mock("@/lib/resumePosition", () => ({ resolveResumeAt: async (_id: string, at: number | undefined) => at ?? 0 }));
 vi.mock("@/lib/castRoute", () => ({ castRouteActive: () => false }));
 vi.mock("@/lib/usePlaybackSession", () => ({
-  usePlaybackSession: () => ({ stop: vi.fn(async () => {}), resume: vi.fn() }),
+  usePlaybackSession: () => ({ stop: vi.fn(async () => {}), reportNow: () => {}, resume: vi.fn() }),
   stopOrphanSession: vi.fn(async () => {}),
 }));
 const reloads = vi.fn();

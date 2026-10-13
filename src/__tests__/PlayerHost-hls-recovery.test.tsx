@@ -54,7 +54,7 @@ vi.mock("@/lib/webkitEngine", () => ({ playsHlsNatively: () => false }));
 vi.mock("@/lib/resumePosition", () => ({ resolveResumeAt: async (_id: string, at: number | undefined) => at ?? 0 }));
 vi.mock("@/lib/castRoute", () => ({ castRouteActive: () => false }));
 vi.mock("@/lib/usePlaybackSession", () => ({
-  usePlaybackSession: () => ({ stop: async () => {}, resume: () => {} }),
+  usePlaybackSession: () => ({ stop: async () => {}, reportNow: () => {}, resume: () => {} }),
   stopOrphanSession: async () => {},
 }));
 

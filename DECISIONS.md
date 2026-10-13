@@ -1302,7 +1302,9 @@ par cet instant.
 c'est la lecture qui replace. La file des lignes en attente (`src/lib/unsentLines.ts`) et celle des
 bilans (`src/lib/unsentStop.ts`) restent deux : un bilan est réécrit toutes les 30 s tant que la
 séance vit et n'est déclaré perdu qu'après deux minutes de silence ; une ligne ordinaire est écrite
-une fois, et n'entre en file que sur un échec d'envoi.
+une fois, et n'entre en file que sur un échec d'envoi. Depuis le 13/10/2026 (§84), le bilan n'est
+plus réécrit toutes les 30 s que s'il a changé — un signe de vie (`touchUnsentStop`) le garde frais
+entre deux — et son `lateByMs` part de ce dernier signe de vie.
 
 **Trouvé le 01/10/2026** : un redémarrage du conteneur à 19:47:06 a emporté un point de réserve
 d'une séance en cours ; seul le bilan avait un filet.
@@ -3974,3 +3976,68 @@ et contrastes, chaque surface porte le violet, **aucun violet hors d'une liste d
 la main**, jamais de texte blanc sur `brand`), `cinemaDetailMenu.test.ts`.
 
 **Seule exception : le logo de l'application reste violet (Louis, 13/10/2026).** Icônes PWA (`public/icon-*.png`, SVG), favicon, écrans de lancement et logo de la page de connexion (qui affiche `icon-512.png`) gardent le clap violet : c'est la marque. Tout le reste de l'interface suit l'accent blanc neutre.
+
+---
+
+## 84. Pendant un film, un seul battement — et rien au journal qui ne soit lu
+
+**Règle.** Pendant une lecture, le navigateur ne parle au serveur que lorsque quelque chose arrive,
+plus un battement de progression toutes les **30 s** en lecture sans événement (60 s en pause). Tout
+événement part à l'instant : pause, reprise, saut (relus chaque seconde, sans réseau), changement de
+piste (`reportNow`), page cachée, `pagehide`, fermeture, épisode suivant (une nouvelle séance), retour
+du réseau (`online`, et la file `unsentPosition`). Ce battement **porte la présence** (la route de
+progression l'enregistre, `recordPlaybackBeat`) **et l'état de maintenance** (`noteMaintenanceState`) :
+tant qu'un battement a réussi depuis moins de 90 s (`progressBeatFresh`), `PresencePinger` ne fait plus
+son signal de la minute pendant le film et `/api/maintenance` n'est plus interrogée sous un film plein
+écran ; le battement cessant, les deux reprennent d'eux-mêmes. Hors film, rien ne change (présence à la
+minute, maintenance à 15 s), et les signaux immédiats de la présence (ouverture et fermeture d'un film,
+arrière-plan, `pagehide`) restent.
+
+Au journal du lecteur, **la réserve d'avance n'écrit plus en marche** : ni `reserve/point`, ni
+`reserve/départ`, ni l'`arrêt` ordinaire. Son plafond et son débit voyagent sur `start`
+(`reserveAllowedMB`, `reserveSpeedMbps`) ; son bilan sur `stop`, sous `diag.*`, cumulé sur tous les
+pipelines de la séance (`reserveNetMB`, `reserveBursts`, `reserveEmptied`, `reserveEmptiedMB`,
+`reserveMaxAheadMB`, `reserveMaxAheadS`, `reserveS`, `reserveFetchMbps`, `reserveRuns`, `reserveIdle`).
+Restent `reserve/erreur` et l'`arrêt` que la réserve décide seule (session partie). Le bilan de secours
+(`unsentStop`) est écrit exact et entier à chaque passage en arrière-plan et à `pagehide` ; entre deux,
+il n'est réécrit — centiles lus sur un échantillon de 200 valeurs — que s'il a changé (un événement, ou
+deux minutes de plus regardées), un signe de vie de quelques octets sinon. Les `steps` des `opening` et
+`seek` réussis, et toutes les lignes d'incident, restent tels quels.
+
+**Pourquoi.** Relevé du 13/10/2026, par heure de film : ≈ 320 POST de progression (battement de 10 s),
+73 `/api/presence`, 60 `/api/maintenance`, ≈ 59 envois au journal du lecteur (≈ 40 Ko), dont 34
+`reserve/point` que rien ne lisait — ni la page Activité, ni le banc, ni le plan du banc — et des
+`départ`/`arrêt` qui redisaient `start` et `stop.diag.reserve*`. Chaque requête réveille la radio d'un
+téléphone entre deux rafales de la réserve. Et toutes les 30 s, `saveUnsentStop` triait jusqu'à 2 000
+valeurs (médiane, 90e centile, ~1,5 ms) et réécrivait ~2 Ko dans `localStorage` pour une copie qui ne
+sert qu'à une page tuée. Estimation après : ~120 battements, 0 présence, 0 maintenance, ~25 envois au
+journal par heure de film.
+
+**Porteurs.** `usePlaybackSession` (`HEARTBEAT_MS`, `WATCH_MS`, `reportNow`) ; `progressBeat.ts`
+(`noteProgressBeat`, `progressBeatFresh`, `forgetProgressBeat`) ; `recordPlaybackBeat`
+(`src/lib/activity/presence.ts`) appelé par `/api/jellyfin/playback/progress` ; `maintenanceFedByPlayback`
+(`useMaintenance.ts`) ; `MemoryReserve` (`reservePlanFacts`, `ReserveRun`) et `diagReserve` /
+`diagSessionFacts({ exact })` (`playbackDiagnosis.ts`) ; `touchUnsentStop` (`unsentStop.ts`).
+
+**Appelants.** `ExperimentalPlayerHost` (ligne `start`, bilan de secours, `reportNow` aux changements de
+piste), `PlayerHost` (`reportNow` aux changements de piste), `ChromecastPlayer` (le même battement),
+`PresencePinger`, `useMaintenance`.
+
+**Tests.** `usePlaybackSession.test.ts` (30 s sans événement, ~120 par heure ; pause, reprise, sauts à la
+seconde ; `reportNow` ; `online` ; `visible` et fraîcheur du battement), `battement-presence-maintenance.test.tsx`
+(présence et maintenance muettes tant que le battement passe, reprises quand il cesse, inchangées hors
+film), `playback-progress-route.test.ts` (présence enregistrée, titre gardé), `webcodecs-memoryReserve.test.ts`
+(ni départ, ni point, ni arrêt ordinaire ; l'arrêt pour session partie reste), `webcodecs-playbackDiagnosis.test.ts`
+(bilan cumulé sur deux pipelines, centiles approchés), `unsentStop.test.ts` (signe de vie, bilan perdu
+entier), `ExperimentalPlayerHost.test.tsx` (« ne réécrit le bilan que s'il a changé »).
+
+**Différent exprès.** Le relais du serveur pour une diffusion (`castProgress.ts`) ne change pas : la page
+qui bat toutes les 30 s (60 s en pause) reste « vivante » sous `PAGE_FRESH_MS` (150 s), et la séance
+d'un lecteur sans annonce (lecteur serveur, diffusion) envoie son premier battement dès la première
+seconde, comme avant dans les dix. L'Activité ne lit aucun battement pour dire une séance terminée : la
+présence expire à 150 s (`PRESENCE_TTL_MS`), au-dessus des 60 s du battement en pause. Le prix
+accepté : pendant un film, l'avis de redémarrage arrive en 30 s au plus (10 s avant), et une page
+plantée en plein écran sans passer en arrière-plan perd au plus 30 s de position et deux minutes de
+`watched` dans son bilan perdu.
+
+**Décidé le 13/10/2026.**

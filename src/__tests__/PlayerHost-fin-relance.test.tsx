@@ -89,7 +89,7 @@ const seancesAnnoncees: unknown[] = [];
 vi.mock("@/lib/usePlaybackSession", () => ({
   usePlaybackSession: (_position: unknown, session: unknown) => {
     seancesAnnoncees.push(session);
-    return { stop: stopNow, resume: resumeNow };
+    return { stop: stopNow, reportNow: () => {}, resume: resumeNow };
   },
   stopOrphanSession: (...args: unknown[]) => stopOrphanSession(...(args as [])),
 }));

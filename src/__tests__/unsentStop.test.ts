@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // Le compte de la page, tel que l'hydratation l'a reçu — voir `persistedCacheAccount`.
 let account: string | null = "louis";
 vi.mock("@/lib/persistentCache", () => ({ persistedCacheAccount: () => account }));
-import { saveUnsentStop, clearUnsentStop, findOrphanStops, flushOrphanStops, ORPHAN_AFTER_MS } from "@/lib/unsentStop";
+import { saveUnsentStop, clearUnsentStop, touchUnsentStop, findOrphanStops, flushOrphanStops, ORPHAN_AFTER_MS } from "@/lib/unsentStop";
 import { reportPlayback } from "@/lib/reportPlayback";
 
 /**
@@ -103,5 +103,49 @@ describe("un appareil partagé", () => {
     account = "timeo";
     findOrphanStops(8 * 24 * 3600_000);
     expect(localStorage.length).toBe(0);
+  });
+
+  describe("un signe de vie au lieu d'une réécriture (13/10/2026)", () => {
+    // Le bilan entier (~2 Ko, centiles triés) n'est plus réécrit toutes les 30 s : la séance vivante
+    // ne pose que l'heure tant qu'il n'a pas changé.
+    it("garde le bilan frais sans le réécrire", () => {
+      saveUnsentStop("abcd1234", { itemId: "x", watched: 60 }, 0);
+      const written = localStorage.getItem("cine:unsent-stop:abcd1234");
+      for (let at = 30_000; at <= 10 * 60_000; at += 30_000) touchUnsentStop("abcd1234", at);
+      expect(localStorage.getItem("cine:unsent-stop:abcd1234")).toBe(written);
+      expect(findOrphanStops(10 * 60_000 + ORPHAN_AFTER_MS - 1)).toEqual([]);
+    });
+
+    it("perdu, il part entier, daté de son dernier signe de vie", () => {
+      saveUnsentStop("abcd1234", { itemId: "x", watched: 60, diag: { fbMedMs: 50 } }, 0);
+      touchUnsentStop("abcd1234", 300_000);
+      const [found] = findOrphanStops(300_000 + ORPHAN_AFTER_MS + 5000);
+      expect(found.fields).toEqual({
+        build: expect.any(String),
+        version: expect.any(String),
+        itemId: "x",
+        watched: 60,
+        diag: { fbMedMs: 50 },
+        why: "lost",
+        lateByMs: ORPHAN_AFTER_MS + 5000,
+      });
+    });
+
+    it("sans bilan, aucun signe de vie n'est posé ; l'arrêt efface les deux", () => {
+      touchUnsentStop("rien", 1000);
+      expect(localStorage.length).toBe(0);
+      saveUnsentStop("abcd1234", { itemId: "x" }, 0);
+      touchUnsentStop("abcd1234", 1000);
+      clearUnsentStop("abcd1234");
+      expect(localStorage.length).toBe(0);
+    });
+
+    it("envoyé, il emporte son signe de vie", async () => {
+      saveUnsentStop("aaaa", { itemId: "a" }, 0);
+      touchUnsentStop("aaaa", 1000);
+      vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200 })));
+      await flushOrphanStops(1000 + ORPHAN_AFTER_MS + 1);
+      expect(localStorage.length).toBe(0);
+    });
   });
 });

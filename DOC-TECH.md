@@ -881,12 +881,17 @@ being correct for this player alone.
 - **Start is announced** (`/api/jellyfin/playback/playing`). The stable player does not need it:
   negotiating its stream says as much. This one negotiates nothing, and without the announcement it
   reported progress for a session the server had never heard of.
-- **A heartbeat every ten seconds while playing, every minute while paused** (08/10/2026: a film
-  left paused kept sending one every ten seconds; a pause or a resume is reported by the next beat,
-  ten seconds at most), at the position the player itself provides — never `video.currentTime`,
-  which drops to zero during a track reload and would overwrite the resume point with 0. The
-  heartbeat's response also carries the maintenance state, so the separate maintenance poll slows
-  to once a minute while a film fills the screen (`noteMaintenanceState`).
+- **A heartbeat every thirty seconds while playing without events, every minute while paused**
+  (2026-10-13, DECISIONS §84; ten seconds before — ~320 posts an hour of film). Everything that
+  changes the session goes at once: a pause, a resume or a seek (the pause state and the position
+  are read every second, without the network), a track change (`reportNow`), hiding the page,
+  closing, the next episode (a new session) and the network coming back (`online`). At the
+  position the player itself provides — never `video.currentTime`, which drops to zero during a
+  track reload and would overwrite the resume point with 0. The heartbeat's response carries the
+  maintenance state (`noteMaintenanceState`) and the route records the caller's presence
+  (`recordPlaybackBeat`): while a beat succeeded in the last 90 s (`progressBeat.ts`), the
+  maintenance poll and `PresencePinger`'s minute are silent during a film, and resume on their own
+  if it stops.
 - **The end is reported** on unmount, on `beforeunload` **and on `pagehide`** — iOS never sends the
   first. Going to the background records a **progress** report, not a stop: putting an app away is
   not closing a film.
@@ -1046,7 +1051,7 @@ unwitnessed.
 | `audio` | A track change: both tracks described, copied or re-encoded, `applied`, how long, and `steps` |
 | `cast` | Server player only: a television has actually taken the route |
 | `subtitle-gen` | Native player, « Générer des sous-titres » (§70). `event`: `demande` (with `at`), `activation`, `première-ligne` (`ms` since the click), `saut-non-traduit` (`waitMs` from a seek into an untranslated zone to its first line), `pause` (`reason`), `reprise`, `fin`, `bascule` (`via` `jellyfin` or `repli`), `erreur` (`code`), `échec` |
-| `reserve` | The lead reserve in memory (`MemoryReserve`, below). `event`: `départ` (`allowedMB`, `speedMbps`), `point` every 30 s (`aheadMB` / `aheadS` held ahead of the head, `leadS` of the browser buffer, `windowMB` / `fetchMbps` fetched since the last point, `reserveMB` / `deviceMB` / `networkMB` the player read from each, `emptiedMB` given back when the page was hidden, and `idle` — why it is not fetching), `erreur`, `arrêt` |
+| `reserve` | The lead reserve in memory (`MemoryReserve`, below). Since 2026-10-13 (DECISIONS §84) only `event` `erreur` (a refused range) and `arrêt` when the reserve stops on its own (session gone). Older logs also hold `départ` (now `reserveAllowedMB` / `reserveSpeedMbps` on `start`), `point` and the ordinary `arrêt` (now `stop`'s `diag.reserve*`, see *Supply diagnosis*) |
 | `stop` | The session's summary. `why` (`close`, `next`, `page`, `unmount`, or `lost` — see below), `watched` seconds, `ended`, `rebuild`; `waits` / `waitedMs` / `longestWaitMs` — stops of 250 ms or more mid-playback, excluding opening and seeks (`stall` only fires at 5 s); `seeks` / `seekWaitMs`; `audioSwitches`; `backgrounds` / `backgroundMs` / `backgroundRebuilds` — times the page went to the background, for how long, and how many returns found the source closed by the platform and rebuilt (each also written as a `rebuild` line, reason "source fermée en arrière-plan", with `hiddenMs`); `recoveries`, `frozenNudges`, `escalations` when any; `audioSync` and `frames` (presented / dropped); `diag.*`, the session's supply diagnosis with every wait classified. The server player writes `why` and `at` |
 
 Each line carries the time, **the account taken from the session** (never from the request body:
@@ -1057,8 +1062,11 @@ player, a **`session`** id. A rebuild rewrites `start` (with `rebuild` > 0), so 
 
 **A stop that could not be sent.** A page iOS kills in the background never receives `pagehide`:
 before this, about one session in fourteen had no `stop`. While a session lives, its summary is
-kept in `localStorage` (`src/lib/unsentStop.ts`), rewritten every 30 s and when the page is hidden,
-and removed once the real `stop` leaves. A summary left untouched for two minutes is sent on the
+kept in `localStorage` (`src/lib/unsentStop.ts`) — written exactly whenever the page is hidden and at
+`pagehide`; otherwise checked every 30 s and rewritten (percentiles from a 200-value sample) only when
+something changed — an event, or two more minutes watched — with a 15-byte sign of life
+(`touchUnsentStop`) in between (2026-10-13: it was ~2 KB and a sort of up to 2 000 values every
+30 s) — and removed once the real `stop` leaves. A summary with no sign of life for two minutes is sent on the
 next launch (and every minute after) as `why: "lost"` with `lateByMs`, and removed only once the
 server accepts it — the app also opens on the login screen, where it would be refused. A tab woken
 after being declared lost still sends its real `stop`: keep the last line per `session`. The
@@ -1114,10 +1122,15 @@ has in flight, and the player's readahead skips what the reserve has in flight (
 `PARALLEL` (2) at most, paced at `reserveSpeedBps` (50 Mb/s); never more than `MAX_AHEAD_SECONDS`
 (five minutes) ahead; what the head passes is dropped. It fills **in bursts**: up to capacity, then
 nothing until it has fallen to `REFILL_BELOW` (half) — a radio stays awake seconds after each
-transfer, so wake-ups, not bytes, cost energy (`bursts` on the `arrêt` line, `phase` on `point`). A `point` line goes to the log at each change of
-phase and every five minutes at most, never while paused, hidden or with the position unchanged —
-sent every 30 s, it was 84 % of all player-log posts (08/10/2026); the local trace and the totals on
-`stall`/`stop` are unchanged. Its size is
+transfer, so wake-ups, not bytes, cost energy (`diag.reserveBursts` on `stop`). It writes no running
+line to the log any more (2026-10-13): `point` lines were 84 % of all player-log posts at one every
+30 s, still 34 an hour of film after being cut to phase changes (08/10/2026), and nothing read them.
+The session's summary — summed over every pipeline of the session — is on `stop` under `diag.*`:
+`reserveNetMB` fetched, `reserveBursts`, `reserveEmptied` / `reserveEmptiedMB` given back in the
+background, `reserveMaxAheadMB` / `reserveMaxAheadS`, `reserveS` running, `reserveFetchMbps`,
+`reserveRuns` (more than one pipeline), `reserveIdle` (why it was not fetching at the end); its limits
+are on `start` (`reserveAllowedMB`, `reserveSpeedMbps`); the two-minute `timeline` carries it sample by
+sample on every incident line; the local trace keeps its 30 s summary. Its size is
 `reserveBudgetBytes`: 150 MB on iPhone and iPad — Safari does not expose device memory and kills a page
 that takes too much, the threshold unpublished — and by `navigator.deviceMemory` elsewhere (100 MB at
 ≤ 2 GB, 200 at 4, 500 at 8, 300 unknown). Chunks are copied, not viewed: a `subarray` would keep its

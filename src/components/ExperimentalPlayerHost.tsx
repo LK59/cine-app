@@ -98,6 +98,12 @@ const NEXT_EPISODE_WARMUP_SECONDS = 60;
  * demande se limite elle-même à une toutes les 30 s) : préparé une minute avant, il était jugé
  * périmé au moment d'ouvrir, et redemandé (relu le 24/09/2026).
  */
+/**
+ * La copie de secours du bilan (`unsentStop`) est réécrite quand la séance a gagné ce temps regardé
+ * sans autre événement — ce qu'un plantage en plein écran perdrait au plus de `watched` (13/10/2026).
+ */
+const UNSENT_STOP_WATCHED_STEP_S = 120;
+
 function warmNextNear(nextId: string | null, position: number, duration: number, creditsStart: number | null): void {
   if (!nextId || !(duration > 0)) return;
   const endsAt = creditsStart !== null && creditsStart > 0 && creditsStart < duration ? creditsStart : duration;
@@ -132,10 +138,10 @@ import { registerBenchBridge } from "@/lib/playerBench/bridge";
 import { seekArrived } from "@/lib/webcodecs/seekArrival";
 import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
 import { positionBucket, retryMotif, retrySignature } from "@/lib/retryLedger";
-import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
+import { saveUnsentStop, clearUnsentStop, touchUnsentStop } from "@/lib/unsentStop";
 import { forgetResumeCache, openDiskChunks, openingFacts, type FileIdentity } from "@/lib/resumeCache/diskChunks";
 import { keepOnStop } from "@/lib/resumeCache/keepOnStop";
-import { MemoryReserve } from "@/lib/webcodecs/memoryReserve";
+import { MemoryReserve, reservePlanFacts } from "@/lib/webcodecs/memoryReserve";
 import { PlayerLifecycle } from "@/lib/playerLifecycle";
 import { notePceCopyWorked, pceDecisionFacts, takePceCopyRefusal } from "@/lib/webcodecs/aacPceProbe";
 import { takeAacDecodeRoute } from "@/lib/webcodecs/softwareAudio";
@@ -1691,7 +1697,8 @@ export function ExperimentalPlayerHost({
    * l'appareil au cas où elle ne pourrait pas partir (voir unsentStop.ts).
    */
   const stopFields = useCallback(
-    (why: "close" | "next" | "page" | "unmount" | "lost") => {
+    // `exact: false` : la copie de secours gardée en pleine lecture — voir `diagSessionFacts`.
+    (why: "close" | "next" | "page" | "unmount" | "lost", options: { exact?: boolean } = {}) => {
       const now = Date.now();
       const facts = stopFactsRef.current;
       return {
@@ -1713,7 +1720,7 @@ export function ExperimentalPlayerHost({
         ...syncFacts(remuxRef.current, videoElRef.current ?? lastVideoElRef.current),
         // Réseau, calcul, décodeur : ce qui a retenu la chaîne, et chaque attente classée. Aplati en
         // `diag.*`, sous son propre plafond de champs (playerLog.ts).
-        diag: diagSessionFacts(),
+        diag: diagSessionFacts(options),
         // La minuterie de veille choisie, ou celle qui a arrêté le film (`sleepTimer.ts`).
         ...sleepTimerLogFields(sleepTimerStore.get()),
         // Ce que la lenteur a fait paraître pendant la séance, et les choix faits (§78).
@@ -1745,18 +1752,51 @@ export function ExperimentalPlayerHost({
     [stopFields, sessionId, lifecycle, session.bench]
   );
   /**
-   * Le bilan gardé sur l'appareil, réécrit tant que la séance vit.
+   * Le bilan gardé sur l'appareil, tenu à jour tant que la séance vit.
    *
-   * Toutes les 30 s, et à chaque passage en arrière-plan — le dernier instant où une page qu'iOS
-   * va tuer peut encore écrire quoi que ce soit. Jamais une fois l'arrêt parti ou la main passée.
+   * **Exact et entier à chaque passage en arrière-plan et à `pagehide`** — le dernier instant où une
+   * page qu'iOS va tuer peut encore écrire quoi que ce soit : c'est cette copie-là qu'un iPhone tué
+   * enverra (`why: "lost"`). Jamais une fois l'arrêt parti ou la main passée.
+   *
+   * Entre deux, toutes les 30 s, **réécrit seulement s'il a changé** (13/10/2026). Il l'était à
+   * chaque fois : ~2 Ko dans `localStorage` (une écriture synchrone sur le disque, sous iOS), et
+   * `diagSessionFacts` — médiane et 90e centile triés sur jusqu'à 2 000 valeurs, ~1,5 ms au relevé
+   * du 13/10 —, pour une copie qui ne sert qu'à une page tuée sans être passée en arrière-plan (un
+   * plantage en plein écran). « Changé » : un événement de la séance (attente, saut, piste,
+   * reconstruction, erreur, fin, lenteur) ou deux minutes de plus regardées ; la copie est alors
+   * écrite avec des centiles approchés (`exact: false`). Sinon, un signe de vie seulement
+   * (`touchUnsentStop`, une quinzaine d'octets), pour que la séance ne passe pas pour perdue.
    */
   useEffect(() => {
-    const save = () => {
-      if (!lifecycle.keepsUnsentStop()) return;
-      saveUnsentStop(sessionId, stopFields("lost"));
+    /** Ce qui, en changeant, mérite une réécriture — sans rien calculer de coûteux. */
+    const signature = () => {
+      const now = Date.now();
+      const facts = stopFactsRef.current;
+      return JSON.stringify([
+        pathRef.current,
+        facts.ready,
+        facts.ended,
+        facts.error,
+        facts.audio,
+        facts.rebuilds,
+        tally.summary(now),
+        slowFields(),
+        Math.floor(watched.seconds(now) / UNSENT_STOP_WATCHED_STEP_S),
+      ]);
     };
-    save();
-    const timer = setInterval(save, 30_000);
+    let savedSignature: string | null = null;
+    const save = (exact: boolean) => {
+      if (!lifecycle.keepsUnsentStop()) return;
+      saveUnsentStop(sessionId, stopFields("lost", { exact }));
+      savedSignature = signature();
+    };
+    const refresh = () => {
+      if (!lifecycle.keepsUnsentStop()) return;
+      if (signature() !== savedSignature) save(false);
+      else touchUnsentStop(sessionId);
+    };
+    save(true);
+    const timer = setInterval(refresh, 30_000);
     /**
      * Écrit dans la trace, et plus seulement compté : l'état de l'élément au départ et au retour.
      * Une panne de décodage juste après un déverrouillage ne se distinguait pas d'une panne en
@@ -1777,7 +1817,7 @@ export function ExperimentalPlayerHost({
         // voir `BackgroundWatch.hide`.
         background.hide(Date.now(), element);
         trace(`arrière-plan — ${state()}`);
-        save();
+        save(true);
       } else {
         const away = tally.shown(Date.now());
         trace(`retour au premier plan après ${(away / 1000).toFixed(1)} s — ${state()}`);
@@ -1810,6 +1850,10 @@ export function ExperimentalPlayerHost({
       event.target.pause();
     };
     const onGesture = () => background.noteGesture(Date.now());
+    // Le dernier instant d'une page qui s'en va : la copie exacte. Une fermeture ordinaire a déjà
+    // envoyé son arrêt (`reportStop("page")`) et `keepsUnsentStop` est alors faux — rien n'est écrit.
+    const onPageHide = () => save(true);
+    window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibility);
     document.addEventListener("play", onPlay, true);
     document.addEventListener("pointerdown", onGesture, true);
@@ -1817,12 +1861,13 @@ export function ExperimentalPlayerHost({
     return () => {
       clearInterval(timer);
       if (settleTimer) clearTimeout(settleTimer);
+      window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener("play", onPlay, true);
       document.removeEventListener("pointerdown", onGesture, true);
       document.removeEventListener("keydown", onGesture, true);
     };
-  }, [sessionId, stopFields, tally, lifecycle, background]);
+  }, [sessionId, stopFields, tally, lifecycle, background, watched, slowFields]);
   useEffect(() => {
     const onPageHide = () => reportStop("page");
     // Une page rendue depuis le cache du navigateur (retour arrière) reprend le film : voir
@@ -1887,7 +1932,7 @@ export function ExperimentalPlayerHost({
     };
   }, [sessionId]);
 
-  const { stop: stopPlaybackNow, resume: resumePlaybackSession, savePaused } = usePlaybackSession(
+  const { stop: stopPlaybackNow, resume: resumePlaybackSession, savePaused, reportNow: reportPositionNow } = usePlaybackSession(
     // La cible d'un saut en cours plutôt que la position d'avant — voir `stopFields`.
     intendedPosition,
     // The native player reads the file directly, so there is no Jellyfin transcode session — but
@@ -2211,6 +2256,9 @@ export function ExperimentalPlayerHost({
         ...aacRouteFacts(),
         // Écrit seulement quand il est actif : la ligne de tout autre compte ne change pas.
         ...(openedDialogue !== "off" ? { dialogue: openedDialogue } : {}),
+        // Ce que la réserve d'avance s'autorise sur cet appareil — c'était la ligne `reserve/départ`,
+        // une requête de plus à chaque pipeline (13/10/2026, `reservePlanFacts`).
+        ...reservePlanFacts(),
       });
     };
 
@@ -3223,6 +3271,9 @@ export function ExperimentalPlayerHost({
 
   /** Un changement de piste audio — les commandes et le banc d'essai, par le même chemin. */
   const changeAudioTrack = (id: number) => {
+    // La position part à Jellyfin tout de suite : un changement de piste est un événement de la
+    // séance, il n'attend pas le battement de 30 s (13/10/2026, `usePlaybackSession`).
+    reportPositionNow();
     // Une piste que ce chemin ne portera jamais n'est pas un échec à signaler : c'est
     // un fichier pour le lecteur qui, lui, sait la porter. La question est posée avant
     // que le menu bouge et avant qu'un seul tampon soit touché — voir `canCarryAudio`.
@@ -3712,7 +3763,11 @@ export function ExperimentalPlayerHost({
               detail: subtitleDetails.get(track.number),
             }))}
             currentSubtitleId={currentSubtitle}
-            onChangeSubtitle={(id) => chooseSubtitle(id, externals)}
+            onChangeSubtitle={(id) => {
+              // Comme la piste audio : à l'instant, pas au battement suivant.
+              reportPositionNow();
+              chooseSubtitle(id, externals);
+            }}
             // « Générer des sous-titres » (DECISIONS.md §70) : lecteur natif seulement, et seulement
             // s'il reste une langue à demander ou une génération à reprendre.
             subtitleGeneration={

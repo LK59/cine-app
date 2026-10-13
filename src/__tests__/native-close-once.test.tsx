@@ -19,7 +19,7 @@ vi.mock("@/components/MiniPlayer", () => ({
 }));
 const stopPlaybackNow = vi.fn(() => Promise.resolve());
 vi.mock("@/lib/usePlaybackSession", () => ({
-  usePlaybackSession: () => ({ stop: stopPlaybackNow, resume: vi.fn() }),
+  usePlaybackSession: () => ({ stop: stopPlaybackNow, reportNow: () => {}, resume: vi.fn() }),
 }));
 vi.mock("@/components/player/PlayerEndScreen", () => ({ PlayerEndScreen: () => null }));
 
@@ -48,7 +48,7 @@ vi.mock("@/lib/swr", async (original) => ({
   refreshAfterPlayback: (...a: unknown[]) => refreshAfterPlayback(...(a as [])),
 }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
-vi.mock("@/lib/webcodecs/memoryReserve", () => ({ MemoryReserve: { start: () => ({ stop: vi.fn() }) } }));
+vi.mock("@/lib/webcodecs/memoryReserve", () => ({ reservePlanFacts: () => ({}), MemoryReserve: { start: () => ({ stop: vi.fn() }) } }));
 vi.mock("@/lib/resumeCache/keepOnStop", () => ({ keepOnStop: vi.fn(async () => 0) }));
 
 function fakeRemux() {

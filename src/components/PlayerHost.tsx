@@ -965,7 +965,7 @@ function ActivePlayer({
   }, [showPlaybackInfo]);
   const playMethod = playbackInfo?.playMethod ?? "Transcode";
 
-  const { stop: stopPlaybackNow, resume: resumePlaybackSession, savePaused } = usePlaybackSession(
+  const { stop: stopPlaybackNow, resume: resumePlaybackSession, savePaused, reportNow: reportPositionNow } = usePlaybackSession(
     useCallback(() => lastKnownTime.current, []),
     // Named as this app rather than as its engine: this player hands the file to Jellyfin, which
     // is what the server's own dashboard should show.
@@ -1936,6 +1936,9 @@ function ActivePlayer({
 
   const changeAudio = useCallback(
     (id: number) => {
+      // La position à Jellyfin tout de suite, avant la renégociation : le battement ne part plus
+      // que toutes les 30 s (13/10/2026, `usePlaybackSession`).
+      reportPositionNow();
       const video = videoRef.current;
       // La position connue, pas celle de l'élément : pendant un chargement, il est encore à 0, et
       // changer de piste à ce moment relançait le film depuis le début (23/09/2026).
@@ -1980,7 +1983,7 @@ function ActivePlayer({
       }
       startPlayback({ audioStreamIndex: id, resumeAt, cause: { why: "audio" } });
     },
-    [startPlayback, itemId, title, reloadCarryNow]
+    [startPlayback, itemId, title, reloadCarryNow, reportPositionNow]
   );
 
   /**
@@ -2051,13 +2054,14 @@ function ActivePlayer({
   const changeSubtitle = useCallback((id: number | null) => {
     const video = videoRef.current;
     if (!video) return;
+    reportPositionNow();
     const position = id === null ? -1 : externalSubtitleTracks.findIndex((t) => t.index === id);
     subtitleSwitchesRef.current += 1;
     for (let i = 0; i < video.textTracks.length; i++) {
       video.textTracks[i].mode = i === position ? "showing" : "disabled";
     }
     setCurrentSubtitleId(id);
-  }, [externalSubtitleTracks]);
+  }, [externalSubtitleTracks, reportPositionNow]);
 
   // Kicks off async playback setup (fetch + hls.js wiring) on mount — real effect work, not a
   // simple state derivation, so it can't move to render.

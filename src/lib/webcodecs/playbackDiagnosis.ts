@@ -109,11 +109,55 @@ interface Session {
   downlinkMin: number | null;
   battery: { level: number; charging: boolean } | null;
   /** Ce que le tampon d'avance sur l'appareil a fait — voir `diagReserve`. */
-  reserve: { netChunks: number; aheadChunks: number; allowedChunks: number; reserveMB: number; deviceMB: number; networkMB: number } | null;
+  reserve: ReserveSnapshot | null;
+  /** Les passages de la réserve déjà finis dans la séance (une reconstruction en démarre un autre), cumulés. */
+  reserveDone: ReserveTotals;
   cleanup: (() => void)[];
 }
 
 let current: Session | null = null;
+
+/** Ce que `MemoryReserve.facts()` rend — `run` absent dans les tests anciens et les appelants qui ne le connaissent pas. */
+interface ReserveSnapshot {
+  netChunks: number;
+  aheadChunks: number;
+  allowedChunks: number;
+  reserveMB: number;
+  deviceMB: number;
+  networkMB: number;
+  run?: ReserveRunFacts;
+}
+
+interface ReserveRunFacts {
+  id: number;
+  bursts: number;
+  emptied: number;
+  emptiedMB: number;
+  maxAheadMB: number;
+  maxAheadS: number;
+  activeMs: number;
+  fetchedBytes: number;
+  fetchBusyMs: number;
+  idle: string;
+}
+
+/** La somme des passages finis — voir `Session.reserveDone`. */
+interface ReserveTotals {
+  runs: number;
+  netChunks: number;
+  bursts: number;
+  emptied: number;
+  emptiedMB: number;
+  maxAheadMB: number;
+  maxAheadS: number;
+  activeMs: number;
+  fetchedBytes: number;
+  fetchBusyMs: number;
+}
+
+function emptyReserveTotals(): ReserveTotals {
+  return { runs: 0, netChunks: 0, bursts: 0, emptied: 0, emptiedMB: 0, maxAheadMB: 0, maxAheadS: 0, activeMs: 0, fetchedBytes: 0, fetchBusyMs: 0 };
+}
 
 function now(): number {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -183,6 +227,7 @@ export function diagBegin(id: string): void {
       downlinkMin: null,
       battery: null,
       reserve: null,
+      reserveDone: emptyReserveTotals(),
       cleanup: [],
     };
     current = session;
@@ -345,26 +390,70 @@ export function diagRequestFailed(): void {
  * tient devant la tête, ce qu'elle peut tenir, et d'où le lecteur a lu — la réserve, l'appareil (le
  * minimum de démarrage), le réseau.
  */
-export function diagReserve(facts: { netChunks: number; aheadChunks: number; allowedChunks: number; reserveMB: number; deviceMB: number; networkMB: number }): void {
+export function diagReserve(facts: ReserveSnapshot): void {
   try {
-    if (current) current.reserve = { ...facts };
+    const session = current;
+    if (!session) return;
+    // Un nouveau passage (la reconstruction en a démarré un autre) : le précédent est cumulé, pour
+    // que le bilan de `stop` dise toute la séance et non le dernier pipeline seulement.
+    const previous = session.reserve;
+    if (previous?.run && facts.run && previous.run.id !== facts.run.id) foldReserveRun(session.reserveDone, previous);
+    session.reserve = { ...facts, run: facts.run ? { ...facts.run } : undefined };
   } catch {
     /* une mesure n'est pas une lecture */
   }
 }
 
-function reserveFacts(session: Session): Record<string, number> {
+function foldReserveRun(totals: ReserveTotals, snapshot: ReserveSnapshot): void {
+  const run = snapshot.run;
+  if (!run) return;
+  totals.runs += 1;
+  totals.netChunks += snapshot.netChunks;
+  totals.bursts += run.bursts;
+  totals.emptied += run.emptied;
+  totals.emptiedMB += run.emptiedMB;
+  totals.maxAheadMB = Math.max(totals.maxAheadMB, run.maxAheadMB);
+  totals.maxAheadS = Math.max(totals.maxAheadS, run.maxAheadS);
+  totals.activeMs += run.activeMs;
+  totals.fetchedBytes += run.fetchedBytes;
+  totals.fetchBusyMs += run.fetchBusyMs;
+}
+
+/**
+ * La réserve sous `diag.*`. `whole` : le bilan de la séance (ligne `stop`), qui porte depuis le
+ * 13/10/2026 ce que disaient les lignes `reserve/point` et `reserve/arrêt`, retirées — rafales, Mo
+ * rendus en arrière-plan, plus grande avance, temps de marche, débit des plages, ce qu'elle
+ * attendait — cumulé sur tous les passages de la séance. Sans lui (une ligne `stall`) : l'instant
+ * seulement, comme avant.
+ */
+function reserveFacts(session: Session, whole = false): Record<string, string | number> {
   const r = session.reserve;
-  return r
-    ? {
-        reserveNetMB: r.netChunks,
-        reserveAheadMB: r.aheadChunks,
-        reserveAllowedMB: r.allowedChunks,
-        readReserveMB: r.reserveMB,
-        readDeviceMB: r.deviceMB,
-        readNetworkMB: r.networkMB,
-      }
-    : {};
+  if (!r) return {};
+  const facts: Record<string, string | number> = {
+    reserveNetMB: r.netChunks,
+    reserveAheadMB: r.aheadChunks,
+    reserveAllowedMB: r.allowedChunks,
+    readReserveMB: r.reserveMB,
+    readDeviceMB: r.deviceMB,
+    readNetworkMB: r.networkMB,
+  };
+  if (!whole || !r.run) return facts;
+  // Les passages finis, plus celui en cours.
+  const totals = { ...session.reserveDone };
+  foldReserveRun(totals, r);
+  // `reserveNetMB` : la séance entière. Jusqu'au 13/10/2026, celui du dernier pipeline seulement —
+  // une reconstruction remettait le compte à zéro.
+  facts.reserveNetMB = totals.netChunks;
+  facts.reserveBursts = totals.bursts;
+  facts.reserveEmptied = totals.emptied;
+  facts.reserveEmptiedMB = totals.emptiedMB;
+  facts.reserveMaxAheadMB = totals.maxAheadMB;
+  facts.reserveMaxAheadS = totals.maxAheadS;
+  facts.reserveS = Math.round(totals.activeMs / 1000);
+  if (totals.fetchBusyMs > 0) facts.reserveFetchMbps = mbps(totals.fetchedBytes, totals.fetchBusyMs) ?? 0;
+  if (totals.runs > 1) facts.reserveRuns = totals.runs;
+  if (r.run.idle) facts.reserveIdle = r.run.idle;
+  return facts;
 }
 
 /** Le fichier de la séance : son poids et sa durée, pour le débit qu'il demande. */
@@ -706,8 +795,32 @@ export function diagCurrentWait(): { verdict: Verdict; ms: number } | null {
   }
 }
 
-/** Le bilan de la séance, pour la ligne `stop` — sous `diag`. */
-export function diagSessionFacts(): Record<string, string | number | boolean> {
+/**
+ * Au plus tant de valeurs triées pour la médiane et le 90e centile d'une copie de secours — voir
+ * `diagSessionFacts`.
+ */
+const APPROX_SAMPLE = 200;
+
+/** Un échantillon régulier d'au plus `APPROX_SAMPLE` valeurs, pris sur toute la séance. */
+function strided(values: number[]): number[] {
+  if (values.length <= APPROX_SAMPLE) return values;
+  const step = values.length / APPROX_SAMPLE;
+  const out: number[] = [];
+  for (let i = 0; i < APPROX_SAMPLE; i++) out.push(values[Math.floor(i * step)]);
+  return out;
+}
+
+/**
+ * Le bilan de la séance, pour la ligne `stop` — sous `diag`.
+ *
+ * `exact: false` — la copie de secours que `unsentStop` garde en pleine lecture (13/10/2026) : la
+ * médiane et le 90e centile des premiers octets sont lus sur un échantillon régulier de 200 valeurs
+ * au lieu de trier jusqu'à 2 000 (le relevé du 13/10 mesurait ~1,5 ms par appel, toutes les 30 s,
+ * pour une copie qui n'est presque jamais lue). La vraie ligne `stop`, et la copie écrite au passage
+ * en arrière-plan — celle qu'un iPhone tué enverra —, restent exactes.
+ */
+export function diagSessionFacts(options: { exact?: boolean } = {}): Record<string, string | number | boolean> {
+  const exact = options.exact !== false;
   try {
     const session = current;
     if (!session) return {};
@@ -728,8 +841,9 @@ export function diagSessionFacts(): Record<string, string | number | boolean> {
       lagMaxMs: session.lagMaxMs,
       slowestMs: Math.round(session.slowestMs),
     };
-    const fbMed = median(session.firstBytes);
-    const fbP90 = percentile(session.firstBytes, 0.9);
+    const firstBytes = exact ? session.firstBytes : strided(session.firstBytes);
+    const fbMed = median(firstBytes);
+    const fbP90 = percentile(firstBytes, 0.9);
     if (fbMed !== null) facts.fbMedMs = fbMed;
     if (fbP90 !== null) facts.fbP90Ms = fbP90;
     if (session.serverMaxMs !== null) facts.serverMaxMs = session.serverMaxMs;
@@ -758,7 +872,7 @@ export function diagSessionFacts(): Record<string, string | number | boolean> {
     } catch {
       /* rien */
     }
-    return { ...facts, ...reserveFacts(session), ...connectionFacts(session) };
+    return { ...facts, ...reserveFacts(session, true), ...connectionFacts(session) };
   } catch {
     return {};
   }

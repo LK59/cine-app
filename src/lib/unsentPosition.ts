@@ -6,7 +6,7 @@ import { persistedCacheAccount } from "@/lib/persistentCache";
  * La position d'un titre que Jellyfin n'a pas reçue, gardée sur l'appareil jusqu'à ce qu'elle passe
  * (DECISIONS.md §78).
  *
- * Les battements (toutes les 10 s) et l'arrêt d'une lecture partent vers Jellyfin et, s'ils
+ * Les battements (toutes les 30 s depuis le 13/10/2026, et à chaque événement) et l'arrêt d'une lecture partent vers Jellyfin et, s'ils
  * échouaient, se perdaient (`usePlaybackSession` avalait l'erreur). Une coupure en plein film, puis
  * la croix pendant qu'elle dure : l'arrêt ne partait pas, et la reprise suivante repartait du
  * dernier battement passé — ou de la position d'ouverture. Le bilan gardé pour une page tuée

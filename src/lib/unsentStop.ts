@@ -23,7 +23,17 @@ import { persistedCacheAccount } from "@/lib/persistentCache";
  */
 
 const PREFIX = "cine:unsent-stop:";
-/** Deux minutes sans mise à jour : la séance vivante réécrit toutes les 30 s au plus. */
+/**
+ * « La séance vit encore » : un horodatage seul, à côté du bilan (13/10/2026).
+ *
+ * Le bilan entier (~2 Ko, et ses centiles triés) était réécrit toutes les 30 s pour la seule raison
+ * de rester frais. Il ne l'est plus que lorsqu'il a changé (voir `ExperimentalPlayerHost`) ; entre
+ * deux, la séance vivante pose ici l'heure — une quinzaine d'octets —, et c'est la plus récente des
+ * deux qui dit si le bilan est en plan. Le préfixe diffère de `PREFIX` dès son treizième caractère :
+ * la recherche des bilans ne le confond pas avec l'un d'eux.
+ */
+const ALIVE_PREFIX = "cine:unsent-stop-alive:";
+/** Deux minutes sans signe de vie : la séance vivante en donne un toutes les 30 s au plus. */
 export const ORPHAN_AFTER_MS = 2 * 60_000;
 
 interface Saved {
@@ -53,11 +63,35 @@ export function saveUnsentStop(session: string, fields: Record<string, unknown>,
   }
 }
 
+/**
+ * La séance vit, son bilan n'a pas changé : seule l'heure est posée — voir `ALIVE_PREFIX`. Rien si
+ * aucun bilan n'a encore été gardé (il n'y aurait rien à garder frais).
+ */
+export function touchUnsentStop(session: string, now = Date.now()): void {
+  try {
+    if (localStorage.getItem(PREFIX + session) === null) return;
+    localStorage.setItem(ALIVE_PREFIX + session, String(now));
+  } catch {
+    // Pas de stockage : la séance se passera de filet.
+  }
+}
+
 export function clearUnsentStop(session: string): void {
   try {
     localStorage.removeItem(PREFIX + session);
+    localStorage.removeItem(ALIVE_PREFIX + session);
   } catch {
     // Rien à faire.
+  }
+}
+
+/** Le dernier signe de vie d'une séance : son bilan, ou l'heure posée depuis, la plus récente. */
+function lastAlive(key: string, savedAt: number): number {
+  try {
+    const touched = Number(localStorage.getItem(ALIVE_PREFIX + key.slice(PREFIX.length)));
+    return Number.isFinite(touched) && touched > savedAt ? touched : savedAt;
+  } catch {
+    return savedAt;
   }
 }
 
@@ -82,13 +116,17 @@ export function findOrphanStops(now = Date.now(), account: string | null = persi
       // Illisible : on ne le gardera pas indéfiniment.
       if (!saved || typeof saved.savedAt !== "number" || !saved.fields) {
         localStorage.removeItem(key);
+        localStorage.removeItem(ALIVE_PREFIX + key.slice(PREFIX.length));
         continue;
       }
-      if (now - saved.savedAt < ORPHAN_AFTER_MS) continue;
+      // Vivante tant que la séance donne signe de vie, même sans réécrire son bilan.
+      const aliveAt = lastAlive(key, saved.savedAt);
+      if (now - aliveAt < ORPHAN_AFTER_MS) continue;
       // Trop vieux, même pour ce compte (08/10/2026) : un bilan refusé chaque minute depuis une
       // semaine ne passera plus — il repartait pourtant à chaque tour, sans fin.
       if (now - saved.savedAt > OTHER_ACCOUNT_KEEP_MS) {
         localStorage.removeItem(key);
+        localStorage.removeItem(ALIVE_PREFIX + key.slice(PREFIX.length));
         continue;
       }
       // Le bilan d'un autre compte n'est pas le nôtre : il attend que ce compte revienne.
@@ -96,7 +134,8 @@ export function findOrphanStops(now = Date.now(), account: string | null = persi
         if (now - saved.savedAt > OTHER_ACCOUNT_KEEP_MS) localStorage.removeItem(key);
         continue;
       }
-      found.push({ key, fields: { ...saved.fields, why: "lost", lateByMs: now - saved.savedAt } });
+      // En retard depuis son dernier signe de vie : c'est là que la séance s'est tue (§42).
+      found.push({ key, fields: { ...saved.fields, why: "lost", lateByMs: now - aliveAt } });
     }
   } catch {
     // Stockage indisponible.
@@ -132,9 +171,11 @@ async function sendOrphans(now: number): Promise<void> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind: "stop", fields }),
       });
-      if (res.ok) localStorage.removeItem(key);
-      // 400 : le serveur ne veut pas de cette ligne, et ne la voudra jamais.
-      else if (res.status === 400) localStorage.removeItem(key);
+      if (res.ok || res.status === 400) {
+        // 400 : le serveur ne veut pas de cette ligne, et ne la voudra jamais.
+        localStorage.removeItem(key);
+        localStorage.removeItem(ALIVE_PREFIX + key.slice(PREFIX.length));
+      }
       // Tout autre refus (session absente, trop de lignes, serveur qui redémarre) vaut pour les
       // suivantes aussi : le tour s'arrête là, comme celui de `unsentLines` (08/10/2026).
       else return;

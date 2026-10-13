@@ -8,6 +8,7 @@ import {
   RANGE_CHUNKS,
   SEEK_SETTLE_MS,
   reserveBudgetBytes,
+  reservePlanFacts,
   reserveSpeedBps,
   type ReserveDeps,
 } from "@/lib/webcodecs/memoryReserve";
@@ -134,8 +135,9 @@ describe("la réserve d'avance en mémoire", () => {
     hidden = true;
     await pump(reserve, 1);
     expect(source.reserveIndices).toEqual([]);
-    reserve.stop();
-    expect(report.mock.calls.at(-1)![0]).toMatchObject({ event: "arrêt", emptied: 1 });
+    // Dans le bilan (`stop.diag.reserveEmptied*`), plus dans une ligne `arrêt` (13/10/2026).
+    expect(reserve.stop().run).toMatchObject({ emptied: 1 });
+    expect(report).not.toHaveBeenCalled();
   });
 
   it("ne dépasse jamais sa part de mémoire", async () => {
@@ -190,8 +192,7 @@ describe("la réserve d'avance en mémoire", () => {
     await pump(reserve, 6);
     expect(fetched.length).toBeGreaterThan(afterFirst);
     expect(source.reserveIndices.length).toBe(16);
-    reserve.stop();
-    expect(report.mock.calls.at(-1)![0]).toMatchObject({ event: "arrêt", bursts: 2 });
+    expect(reserve.stop().run).toMatchObject({ bursts: 2 });
   });
 
   it("jamais plus de cinq minutes de film devant la tête", async () => {
@@ -225,23 +226,42 @@ describe("la réserve d'avance en mémoire", () => {
     reserve.stop();
   });
 
-  it("raconte la lecture au journal : départ, point toutes les trente secondes, arrêt", async () => {
+  it("n'écrit plus ni départ, ni point, ni arrêt ordinaire : son récit va dans le bilan de la séance", async () => {
+    // Relevé du 13/10/2026 : 34 lignes `reserve/point` par heure de film, lues par personne ;
+    // `départ` et `arrêt` redisaient ce que `start` et `stop.diag.reserve*` portent.
     const report = vi.fn();
     const { reserve } = await start(undefined, undefined, report);
-    await pump(reserve, 3, 10_000);
+    await pump(reserve, 4, 10_000);
     clock += 1_000;
     lead = 2;
     await reserve.settleForTests();
-    reserve.stop("fin de lecture");
-    const events = report.mock.calls.map(([fields]) => fields.event);
-    expect(events).toEqual(["départ", "point", "arrêt"]);
-    // 150 Mo en morceaux de 1 Mio ; 50 Mb/s au plus.
-    expect(report.mock.calls[0][0]).toMatchObject({ allowedMB: 143, speedMbps: 50 });
-    const point = report.mock.calls[1][0];
-    expect(point).toMatchObject({ idle: `avance du navigateur sous ${MIN_LEAD_SECONDS} s` });
-    expect(point.windowMB).toBeGreaterThan(0);
-    expect(point.aheadMB).toBeGreaterThan(0);
-    expect(report.mock.calls[2][0]).toMatchObject({ why: "fin de lecture", netMB: fetched.length });
+    const final = reserve.stop("fin de lecture");
+    expect(report).not.toHaveBeenCalled();
+    // Ce que `point` et `arrêt` disaient, et que le bilan porte désormais.
+    expect(final.netChunks).toBe(fetched.length);
+    expect(final.run.bursts).toBeGreaterThanOrEqual(1);
+    expect(final.run.maxAheadMB).toBeGreaterThan(0);
+    expect(final.run.maxAheadS).toBeGreaterThan(0);
+    expect(final.run.activeMs).toBe(41_000);
+    expect(final.run.fetchedBytes).toBe(fetched.length * CHUNK_SIZE);
+    expect(final.run.idle).toBe("arrêtée — fin de lecture");
+    // `départ` : sur la ligne `start`. 150 Mo en morceaux de 1 Mio ; 50 Mb/s au plus.
+    expect(reservePlanFacts({ budgetBytes: () => 150e6 })).toEqual({ reserveAllowedMB: 143, reserveSpeedMbps: 50 });
+  });
+
+  it("dit encore son arrêt quand elle le décide seule — la session partie", async () => {
+    const report = vi.fn();
+    const source = (await HttpByteSource.open(URL, FILE.length)).withoutReadahead();
+    const expired = (async () =>
+      ({ status: 401, headers: { get: (name: string) => (name === "x-session-expired" ? "1" : null) } }) as unknown as Response) as typeof fetch;
+    const reserve = MemoryReserve.start(
+      { source, file: parsed, video: { currentTime: 0, seeking: false } as unknown as HTMLVideoElement, lead: () => 30, delay: () => 0 },
+      report,
+      { ...deps(), fetch: expired }
+    );
+    await pump(reserve, 2);
+    expect(report.mock.calls.map(([fields]) => fields.event)).toEqual(["arrêt"]);
+    expect(report.mock.calls[0][0]).toMatchObject({ why: "session terminée" });
   });
 
   it("arrêtée, elle rend toute sa mémoire", async () => {

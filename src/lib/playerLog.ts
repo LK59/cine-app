@@ -96,11 +96,12 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  * qu'un téléviseur resté en chargement ne se distinguait pas d'un téléviseur qui jouait.
  */
 /**
- * `reserve` (28/09/2026) : la réserve d'avance en mémoire (`MemoryReserve`), de quoi suivre une
- * lecture Mo par Mo — `event` : `départ` (plafond, débit permis), `point` (toutes les 30 s : ce qui est
- * en réserve en Mo et en secondes d'avance, ce que le lecteur a lu de la réserve, de l'appareil et du
- * réseau, ce que la réserve a téléchargé et à quel débit, ce qu'elle a rendu en arrière-plan, et
- * `idle`, pourquoi elle attend), `erreur`, `arrêt`.
+ * `reserve` (28/09/2026) : la réserve d'avance en mémoire (`MemoryReserve`). Depuis le 13/10/2026,
+ * `event` : `erreur` (une plage refusée) et `arrêt` seulement quand elle s'arrête d'elle-même (la
+ * session partie). `départ` est passé sur `start` (`reserveAllowedMB`, `reserveSpeedMbps`) ; `point`
+ * (34 envois par heure de film au relevé du 13/10, lus par personne) et l'`arrêt` ordinaire, dans le
+ * bilan de `stop` (`diag.reserve*` : rafales, Mo rendus, plus grande avance, temps de marche, débit,
+ * attente). Le type reste accepté : les lignes d'avant, et `erreur`.
  */
 /**
  * `pause` (02/10/2026) : une pause que le spectateur n'a pas faite — la minuterie de veille
@@ -157,8 +158,10 @@ function clean(fields: Record<string, unknown>): Record<string, string | number 
     // une borne de disque ; il n'a jamais voulu choisir quels faits d'une ligne honnête écrire.
     // `diag.*` : 60 depuis le 28/09 au soir — une séance complète (attentes des quatre sortes,
     // batterie, réserve d'avance, connexion) en porte jusqu'à 44, et les derniers arrivés — la
-    // connexion — tombaient en silence.
-    if ((diag ? keptDiag : kept) >= (diag ? 60 : 40) || key.length > 40) return;
+    // connexion — tombaient en silence. 70 depuis le 13/10/2026 : le bilan de la réserve d'avance
+    // (rafales, Mo rendus, plus grande avance, temps de marche, débit, attente — neuf de plus) y est
+    // venu des lignes `reserve/point` et `arrêt`, retirées ; au plus ~55, la marge reste.
+    if ((diag ? keptDiag : kept) >= (diag ? 70 : 40) || key.length > 40) return;
     if (typeof value === "number" && Number.isFinite(value)) out[key] = Math.round(value * 1000) / 1000;
     else if (typeof value === "boolean") out[key] = value;
     // `steps` is the one long field: the device's own timeline of a track change, which is the
