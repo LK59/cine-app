@@ -286,12 +286,40 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
 
     mockGetSources.mockRejectedValue(new HttpError("Bad Gateway", 502));
     res = await get();
-    expect(res.status).toBe(404);
-    expect((await res.json()).code).toBeUndefined();
+    expect(res.status).toBe(502);
+    expect((await res.json()).code).not.toBe(FILE_MISSING);
 
     mockGetSources.mockRejectedValue(new TypeError("fetch failed"));
     res = await get();
     expect((await res.json()).code).toBeUndefined();
+  });
+
+  // 13/10/2026 : Jellyfin injoignable répondait le même 404 « Fichier introuvable » sans code —
+  // l'hôte du lecteur, qui ne voyait pas `upstream_unreachable`, passait la main au lecteur serveur
+  // (qui a besoin du même Jellyfin) au lieu d'afficher « la bibliothèque ne répond pas ».
+  it("Jellyfin injoignable ou en panne : 502 et `upstream_unreachable`, que l'hôte reconnaît", async () => {
+    const { HttpError, UpstreamUnreachableError } = await import("@/lib/http");
+    const { isUpstreamUnreachable } = await import("@/lib/upstreamError");
+    const asClientError = async (res: Response) => {
+      const body = (await res.json()) as { error?: string; code?: string };
+      return Object.assign(new Error(body.error), { code: body.code });
+    };
+
+    mockGetSources.mockRejectedValue(new UpstreamUnreachableError("jellyfin:8096 ne répond pas (ECONNREFUSED)", "ECONNREFUSED"));
+    let res = await get();
+    expect(res.status).toBe(502);
+    expect(isUpstreamUnreachable(await asClientError(res))).toBe(true);
+
+    mockGetSources.mockRejectedValue(new HttpError("503 Service Unavailable", 503));
+    res = await get();
+    expect(res.status).toBe(502);
+    expect(isUpstreamUnreachable(await asClientError(res))).toBe(true);
+
+    // Un refus qui n'est pas une panne (clé refusée) : 502, mais sans le code — le lecteur serveur y répond.
+    mockGetSources.mockRejectedValue(new HttpError("401 Unauthorized", 401));
+    res = await get();
+    expect(res.status).toBe(502);
+    expect(isUpstreamUnreachable(await asClientError(res))).toBe(false);
   });
 });
 
