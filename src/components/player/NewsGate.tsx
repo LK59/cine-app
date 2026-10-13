@@ -27,6 +27,12 @@ export function NewsGate() {
   const [phase, setPhase] = useState<"waiting" | "open" | "done">("waiting");
   const [pathname] = useState(() => (typeof window === "undefined" ? "" : window.location.pathname));
 
+  // Un compte neuf passe son écran d'accueil d'abord, et voit les nouveautés au lancement suivant
+  // (`shouldOfferNews`). Cet écran fini ne relit pas `/api/onboarding` : une relecture plus tard
+  // dans la séance (retour du réseau) répondait `pending: false`, et la fenêtre surgissait au milieu
+  // de cette même séance (13/10/2026). Vu « à faire » une fois, ce chargement n'en montre pas.
+  if (onboarding?.pending && phase === "waiting") setPhase("done");
+
   const eligible =
     phase === "waiting" &&
     shouldOfferNews({ unseen: data ? data.unseen.length : null, onboardingPending: onboarding?.pending, playback: mode, route, pathname });

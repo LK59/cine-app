@@ -197,6 +197,32 @@ describe("NewsGate", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  // « Ses réglages d'abord, les nouveautés au lancement suivant » (decide.ts). L'écran d'accueil
+  // terminé ne relit pas `/api/onboarding` ; une relecture plus tard dans la séance (retour du
+  // réseau) répondait `pending: false`, et la fenêtre surgissait au milieu de cette même séance.
+  it("après l'écran d'accueil d'un nouveau compte, attend le lancement suivant", async () => {
+    let relire: () => Promise<unknown> = async () => undefined;
+    function Relecture() {
+      const { mutate } = useSWRConfig();
+      relire = () => mutate("/api/onboarding");
+      return null;
+    }
+    onboardingPending = true;
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <NewsGate />
+        <Relecture />
+      </SWRConfig>
+    );
+    await act(() => new Promise((r) => setTimeout(r, 300)));
+    onboardingPending = false;
+    await act(async () => {
+      await relire();
+    });
+    await act(() => new Promise((r) => setTimeout(r, 1600)));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("rien à voir : rien", async () => {
     payload = { pages: [P2, P1], unseen: [], relaunched: false };
     drawGate();
