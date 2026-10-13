@@ -187,6 +187,12 @@ export async function writeEntries(entries: PersistedEntry[]): Promise<boolean> 
  */
 export async function clearPersistedCache(): Promise<void> {
   pendingWrites.clear();
+  // La page n'a plus de compte : une réponse encore en vol pendant que la déconnexion attend le
+  // serveur (plus d'une seconde sur un réseau lent) se réécrivait sinon sous le compte qui part,
+  // une seconde après cet effacement — sa reprise restait sur l'appareil (13/10/2026).
+  currentAccount = null;
+  if (writeTimer) clearTimeout(writeTimer);
+  writeTimer = null;
   const db = await openDb();
   if (!db) return;
   try {
