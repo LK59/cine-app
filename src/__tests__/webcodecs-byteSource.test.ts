@@ -838,6 +838,38 @@ describe("retour au premier plan : une requête muette est redemandée (13/10/20
     }
   });
 
+  // 13/10/2026 : `OFFLINE_PATIENCE_MS` (une minute) était attendue à *chaque* nouvelle tentative —
+  // trois fois de suite pour un même morceau. Un appareil réellement hors ligne gardait l'image figée
+  // trois minutes avant l'écran « connexion perdue », qui seul propose de reprendre.
+  it("hors ligne pour de bon : la lecture renonce après une minute d'attente, pas trois", async () => {
+    const { doc } = fakeDocument();
+    vi.stubGlobal("document", doc);
+    const source = await HttpByteSource.open("/hors-ligne.mkv", SIZE);
+    const windowListeners = new Map<string, Set<() => void>>();
+    vi.stubGlobal("window", {
+      addEventListener: (t: string, f: () => void) => void (windowListeners.get(t) ?? windowListeners.set(t, new Set()).get(t)!).add(f),
+      removeEventListener: (t: string, f: () => void) => void windowListeners.get(t)?.delete(f),
+    });
+    vi.stubGlobal("navigator", { onLine: false });
+    vi.stubGlobal("fetch", () => Promise.reject(new TypeError("Load failed")));
+    vi.useFakeTimers();
+    try {
+      let outcome: unknown = "en attente";
+      const read = source.read(5 * CHUNK, 4).then(
+        () => "lu",
+        (error: unknown) => (outcome = error)
+      );
+      await vi.advanceTimersByTimeAsync(65_000);
+      expect(outcome).toBeInstanceOf(Error);
+      expect((outcome as { network?: boolean }).network).toBe(true);
+      await read;
+    } finally {
+      vi.useRealTimers();
+      source.close();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("sans retour au premier plan, rien ne change : pas d'échéance courte", async () => {
     const { doc } = fakeDocument();
     vi.stubGlobal("document", doc);
