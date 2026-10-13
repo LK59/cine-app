@@ -1,6 +1,6 @@
 {
   "name": "cine-app",
-  "version": "8.48.5",
+  "version": "8.49.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
