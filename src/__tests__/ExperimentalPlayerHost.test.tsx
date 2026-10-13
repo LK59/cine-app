@@ -133,6 +133,8 @@ vi.mock("@/components/PlayerControls", () => ({
       data-current-subtitle={String(props.currentSubtitleId ?? "")}
     >
       {props.onClose && <button onClick={props.onClose}>fermer</button>}
+      {/* Le bouton où le focus doit entrer à l'ouverture — voir `usePlayerFocus`. */}
+      <button data-player-nav="playpause">lecture/pause</button>
       {props.chromecast && <button onClick={props.chromecast.onRequest}>chromecast</button>}
       {/* Un saut demandé depuis les commandes : le signal d'abord, puis l'élément, comme elles. */}
       <button
@@ -550,6 +552,23 @@ describe("l'attente", () => {
     expect(screen.queryByText("player.experimental.stillWorking")).toBeNull();
   });
 
+  it("fait entrer le focus dans le lecteur, sur lecture/pause, au lieu de le laisser sur la fiche dessous", async () => {
+    // Chasse aux défauts du 13/10/2026 : seul le lecteur serveur déplaçait le focus. Dans le lecteur
+    // natif, il restait sur le bouton « Lecture » de la fiche, montée sous le film — et Entrée (le centre
+    // d'une télécommande), que le clavier du lecteur laisse au bouton focalisé, l'actionnait.
+    const underneath = document.createElement("button");
+    underneath.textContent = "Lecture (fiche)";
+    document.body.appendChild(underneath);
+    underneath.focus();
+    try {
+      mount();
+      await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+      await waitFor(() => expect((document.activeElement as HTMLElement | null)?.dataset.playerNav).toBe("playpause"));
+    } finally {
+      underneath.remove();
+    }
+  });
+
   it("efface une reprise en attente au moment où le pipeline se déclare prêt", async () => {
     // A resume the previous pipeline was waiting for died with it. Left behind, it is a spinner
     // on the controls that nothing will ever answer.
@@ -630,6 +649,27 @@ describe("une coupure réseau", () => {
     await act(async () => void vi.advanceTimersByTime(60_000));
     expect(onFallback).not.toHaveBeenCalled();
     expect(screen.getByText("connectionLost")).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it("ne pose pas le rapport « le chargement n'aboutit pas » sur l'écran de coupure", async () => {
+    // Chasse aux défauts du 13/10/2026 : la coupure pendant l'ouverture laisse l'horloge de
+    // l'ouverture courir, et passé vingt secondes le rapport d'attente (« Échec : aucun message, et
+    // le chargement n'aboutit pas ») montait en bas de l'écran, par-dessus « Connexion perdue » et ses
+    // boutons — deux messages contraires à la fois, ce que la roue s'était déjà vu interdire.
+    Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
+    const offline = Object.assign(new Error("Failed to fetch"), { network: true });
+    nextProbe = () => {
+      throw offline;
+    };
+    vi.useFakeTimers();
+    mount();
+    await act(async () => {});
+    expect(screen.getByText("connectionLost")).toBeTruthy();
+
+    await act(async () => void vi.advanceTimersByTime(60_000));
+    expect(screen.getByText("connectionLost")).toBeTruthy();
+    expect(screen.queryByTestId("report")).toBeNull();
     vi.useRealTimers();
   });
 

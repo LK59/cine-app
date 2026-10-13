@@ -13,6 +13,7 @@ import { publishHandedOver } from "@/lib/playerBench/bridge";
 import { PlayerControls, type Track } from "@/components/PlayerControls";
 import { restoreRememberedVolume } from "@/lib/rememberedVolume";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
+import { usePlayerFocus } from "@/lib/usePlayerFocus";
 import { useViewportResizing } from "@/lib/useViewportResizing";
 import { pickMaxBitrate } from "@/lib/networkBitrate";
 import { ServerStartup, resourceEntries } from "@/lib/serverStartup";
@@ -2890,23 +2891,8 @@ function ActivePlayer({
   // PlayerControls' own "don't steal Space from a focused button" guard swallow Space too,
   // since SOME button still technically had focus, just the wrong one. Poll instead, until the
   // button actually exists (or mode changes away from full).
-  useEffect(() => {
-    if (mode !== "full") return;
-    let attempts = 0;
-    const id = setInterval(() => {
-      attempts += 1;
-      const btn = containerRef.current?.querySelector<HTMLButtonElement>('[data-player-nav="playpause"]');
-      if (btn) {
-        btn.focus();
-        clearInterval(id);
-      } else if (attempts > 40) {
-        // ~10s cap — a fatal load error keeps `loading` true forever with no button to ever
-        // find, so this has to give up eventually rather than poll indefinitely.
-        clearInterval(id);
-      }
-    }, 250);
-    return () => clearInterval(id);
-  }, [mode]);
+  // Commun aux deux lecteurs depuis le 13/10/2026 : `usePlayerFocus`.
+  usePlayerFocus(containerRef, mode === "full");
 
   function toggleMiniPlay() {
     const video = videoRef.current;
@@ -3132,7 +3118,10 @@ function ActivePlayer({
       />
       {/* Les messages brefs de la version allégée (§78), en bas à gauche, au-dessus des commandes, retirés
           seuls : la bascule, et une génération de sous-titres qui ne suivra pas. */}
-      {!isMini && (switchNotice || subtitleGenNotice || awaitingTap) && (
+      {/* Jamais sur l'écran d'erreur ni sur celui de la reconnexion : une négociation allégée refusée
+          laissait « Passage en vidéo allégée… » posé sur « Quitter · Réessayer », et « Touchez Lecture »
+          y désignait un bouton que l'écran venait de cacher (chasse aux défauts du 13/10/2026). */}
+      {!isMini && !error && !needsReauth && (switchNotice || subtitleGenNotice || awaitingTap) && (
         <div
           className="subtitle-lift pointer-events-none absolute z-40 flex max-w-[min(80vw,22rem)] flex-col gap-2"
           style={{
