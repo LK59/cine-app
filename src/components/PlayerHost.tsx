@@ -1637,6 +1637,10 @@ function ActivePlayer({
           runner.execute(action, "ouverture", resumeAt ?? 0, slow);
           return;
         }
+        // Un écran, pas une bascule : un préchauffage lancé pendant le chargement ne servira pas — arrêté
+        // chez Jellyfin, comme le natif quand il renonce (`execute` : `screen` / `giveUp`). Il tournait
+        // derrière l'écran jusqu'à la fermeture du lecteur (13/10/2026).
+        runner.drop(slow ? "écran final" : "renoncement sans lenteur prouvée");
         if (slow) {
           slowLogRef.current.noteAt("écran trop lente", Date.now() - startedAtWall, slow.recvBps, slow.needBps);
           reportPlayback("error", serverFailureFields(logContext.current, SLOW_LINK_REASON, { ...slowLinkFields(slow), ...stages, quality: autoLighterRef.current ? "auto" : "original", ...slowLogRef.current.fields() }));

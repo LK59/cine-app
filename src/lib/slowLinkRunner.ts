@@ -150,6 +150,13 @@ export class SlowLinkRunner {
     try {
       const host = this.host();
       const log = host.log();
+      if (action.kind === "none") {
+        // « Originale » choisie pendant qu'un préchauffage se préparait : plus aucune bascule ne le
+        // reprendra (`decide*` ne rend plus que `none`). Tenu, il restait ouvert chez Jellyfin jusqu'à la
+        // fermeture du lecteur — la bascule armée avait coupé l'annulation à la minute (13/10/2026).
+        if (this.held && !host.auto()) this.drop("qualité Originale");
+        return;
+      }
       if (action.kind === "prewarm") {
         if (this.held || host.over()) return;
         const prewarm = startPrewarm({ itemId: host.itemId, step: action.step, startSeconds: at, audioStreamIndex: host.audioStreamIndex() });

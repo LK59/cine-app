@@ -413,6 +413,22 @@ describe("pendant le chargement : indice, préchauffage, bascule (§78)", () => 
     }
   });
 
+  it("le chien de garde renonce sans lenteur prouvée : le préchauffage lancé à 8 s est arrêté chez Jellyfin", async () => {
+    // ~12 Ko/s : sous la moitié du besoin dès 5 s (indice, préchauffage à 8 s), mais moins de 256 Kio en
+    // 20 s — pas de verdict. L'écran « trop long » restait affiché devant un transcodage préchauffé que
+    // rien n'arrêtait avant la fermeture du lecteur (le natif, lui, le laisse tomber en renonçant).
+    await mounted();
+    await trickle(12_000, 21);
+    await settleAll();
+    expect(prewarmBodies()).toHaveLength(1);
+    expect(errors()).toHaveLength(1);
+    expect(errors()[0].fields.reason).toBe("pas de première image en 20 s");
+    const stops = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([url, init]) => url === "/api/jellyfin/playback/stop" && JSON.parse(String((init as RequestInit).body)).prewarm === true
+    );
+    expect(stops).toHaveLength(1);
+  });
+
   it("la première image arrive : le préchauffage est arrêté chez Jellyfin (aucun transcodage orphelin)", async () => {
     await mounted();
     await trickle(40_000, 9);
@@ -724,6 +740,32 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
     expect(lighter[0].fields.prewarm).toBeUndefined();
     expect(startBodies.filter((b) => b.prewarm !== true && b.lighter === true).at(-1)).toMatchObject({ audioStreamIndex: 2 });
     // Le préchauffage écarté est refermé chez Jellyfin.
+    expect(prewarmStops()).toHaveLength(1);
+  });
+
+  it("« Originale » choisie pendant qu'un préchauffage de saccades se prépare : il est arrêté chez Jellyfin, aucune bascule", async () => {
+    // La règle de bascule a joué (blocage de plus de 5 s) : le préchauffage part, la bascule l'attend.
+    // Le spectateur choisit « Originale » dans le menu. Prêt, le préchauffage n'était plus jamais ni
+    // repris ni refermé — un transcodage tenu chez Jellyfin jusqu'à la fermeture du lecteur.
+    const realFetch = fetch as unknown as (url: string, init?: RequestInit) => Promise<unknown>;
+    let release: () => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        if (String(url).includes("/hls1/main/")) return new Promise((resolve) => (release = () => resolve({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(1000) })));
+        return realFetch(url, init);
+      })
+    );
+    await mounted();
+    await picture();
+    await act(async () => void fireEvent(video(), new Event("waiting")));
+    await trickle(250_000, 6);
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(1);
+    await act(async () => writePlaybackQuality("original"));
+    release();
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(reported.filter((r) => r.kind === "start" && r.fields.why === "lighter")).toHaveLength(0);
     expect(prewarmStops()).toHaveLength(1);
   });
 
