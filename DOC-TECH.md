@@ -50,9 +50,8 @@ image; here the file leaves the disk as it is. That is why in-app playback (`PLA
 by default: the ordinary path costs the server nothing beyond serving bytes.
 
 **The safety net is optional.** `PLAYER_SERVER_FALLBACK=false` removes the server-side player from
-the install: `PlayerHost` then mounts this one unconditionally, the per-account legacy option is
-neither offered nor honoured (enforced in `/api/jellyfin/direct/[itemId]`, not only hidden), and
-`fallToStable` stops handing over — it writes the reason to the log as an `error` and puts it on
+the install: `PlayerHost` then mounts this one unconditionally, there is no lighter version for a
+slow link (see [User-facing messages](#user-facing-messages)), and `fallToStable` stops handing over — it writes the reason to the log as an `error` and puts it on
 screen. Giving up then means a plain playback error rather than a transcode. While the flag's
 answer is still in flight it counts as "there is one": the only caller that can give up that early
 is the path selector's refusal, and being wrong in that direction plays the film through the
@@ -181,7 +180,7 @@ or cares which container it reads.
 
 ### `byteSource` — HTTP range reads
 
-Range reads in **1 MiB chunks**, cached (48 chunks, ~48 MiB). Elements known to be small (Tracks,
+Range reads in **1 MiB chunks**, cached (64 chunks, ~64 MiB). Elements known to be small (Tracks,
 Cues) are read in one request and addressed in memory by absolute offset, because parsing a
 container field by field otherwise means one read per field — 129 000 of them for a film with
 15 000 index points.
@@ -247,8 +246,32 @@ host reads, so a request still in flight is taken over rather than repeated; the
 kept for 30 s, used once, and forgotten whenever a player closes — a resume position must not be
 carried across a viewing. See `DECISIONS.md`, « Ce que Lire trouve déjà prêt ».
 
-Retries: 4 attempts, with 60 s of patience while the network is offline. An abandoned read is never
-retried.
+Retries: 4 attempts per chunk, 200 / 600 / 1 500 ms apart, each with a 25 s deadline
+(`REQUEST_TIMEOUT_MS`: a socket left hanging by a Wi-Fi → mobile switch never errors on its own). An
+abandoned read is never retried. Three further rules:
+
+- **One minute offline per chunk, not per attempt** (`OFFLINE_PATIENCE_MS`, 13/10/2026). While the
+  browser says it is offline, a retry waits for `online` instead of spending attempts; when that
+  minute runs out still offline, the chunk gives up at once and the « connection lost » screen
+  appears. The patience used to apply before each of the three retries: three minutes of frozen
+  picture on a device really offline.
+- **A silent request is asked again after 5 s** (`SEEK_FIRST_BYTE_MS`), once per chunk: on the first
+  attempt while a seek waits for its picture, and for 15 s after the page returns to the foreground
+  (`WAKE_FIRST_BYTE_WINDOW_MS`, 13/10/2026), requests already in flight included. The connection
+  from before a screen lock is often dead, and a request posted on it waited the full 25 s while the
+  lead ran out — a phone locked two minutes during a pause stalled 5 s after its return. Playback
+  continues on its lead meanwhile; on a link that is really slow, this changes nothing. Such a
+  re-request is the ordinary relaunch of a seek or a wake-up, not a failed attempt: it never says
+  « Connexion perdue ou instable… ».
+- **A body shorter than its `Content-Range` is a failure** (13/10/2026). A cut response that ended
+  cleanly used to be handed to the read that awaited it, fewer bytes than asked, which the demuxer
+  read as the end of the file. It is now retried like any network failure (the lead reserve already
+  refused such a range). Compared with *this* response's range, not the size at open: an end chunk
+  cut short by a corrected size is legitimately shorter.
+
+The body is still read in one piece and counted once arrived — the slow-link measure (below) counts
+finished chunks; a streaming reader (`readCounted`, `slowLink.ts`) is kept, tested and not wired, since
+it changed how every opening receives its bytes for a precision the finished chunks already give.
 
 ### `ebml` / `matroska` — header and index
 
@@ -957,7 +980,8 @@ rebuild — `fallToStable` natively, a renegotiation on the server player).
 | Opening | same, from 8 s | the lighter version is **pre-warmed** in the background (negotiation + first segment) |
 | Opening | < 25 % with proofs (10 s, 256 KiB) from 10 s, or 25–50 % at 20 s, still no picture | **switch** to the lighter version, reusing the pre-warmed transcode; brief notice « Passage en vidéo allégée en raison d'une connexion lente. » |
 | Seek | no picture 10 s after a seek made while playing (never one made while paused; the timer runs only while a seek waits) | the opening rules, timed from the seek |
-| Playback | a network wait > 5 s, or the 3rd > 1 s within 3 min, measured link under the need | pre-warm at the current position, switch when ready |
+| Playback | the 2nd network wait > 1 s | pre-warm at the current position, never a switch; dropped (Jellyfin transcode stopped) if no switch follows within 60 s (`EARLY_PREWARM_MS`) |
+| Playback | a network wait > 5 s, or the 3rd > 1 s within 3 min, measured link under the need | switch, at the position of that moment, reusing the pre-warm (made then if none is ready) |
 | Give-up (35 s native, 20 s server watchdog) | slowness proven, no switch possible (« Originale », not allowed, floor reached) | screen « Lecture impossible : la connexion est trop lente. » — Réessayer · Fermer |
 | Retries in progress | a range attempt failed and another follows (`networkTrouble.ts`), or offline | « Connexion perdue ou instable… »; never a pre-warm or a switch; all attempts failed → the « connexion perdue » screen (Réessayer, Fermer) |
 
@@ -986,16 +1010,62 @@ bench. The film keeps playing lighter to its end; a playback started within 2 mi
 session starts lighter too (`carriedLighter`, the **only** memory of the lighter version: page and
 `sessionStorage`, tied to the account, Automatique only), unless the link's capacity reached 110 % of the
 original file's need for 10 s meanwhile (`LinkRecovery`); choosing Originale erases it. Audio track,
-subtitle and position cross over; the step itself travels on the native player's handover.
+subtitle and position cross over; the step itself travels on the native player's handover. The Quality
+setting chosen in one tab applies to the other open tabs (the `storage` event clears the value each
+tab kept).
+
+**A pre-warm belongs to whoever takes it, and serves only what it was made for** (13/10/2026). Taken by
+the server player (`takePrewarm`), it is that player's alone: ready when its segment arrives even if it
+was taken while still in progress, closed by `discardTakenPrewarm` if discarded — never left open at
+Jellyfin. It is reused only if it fits (`prewarmFits`): same step **and same audio track**, which is
+written into the transcode's address. A seek left without a picture reuses only a pre-warm made at its
+own position (within 1 s); otherwise it is closed and made again there — on the server player, the
+position of a seek is the element's target, since the known position does not move until a picture
+arrives. A pre-warm that will no longer serve is also closed when the server player's watchdog gives
+up, and as soon as a decision returns `none` under « Originale ».
+
+**On WebKit, a lighter switch reloads the page at once** (`serverReload.ts`, 12/10/2026). Safari cannot
+open a second native HLS session in a page that already served a player (the same reason as the reload
+in `changeAudio`): every lighter switch on an iPhone tried native HLS in the page, failed with code 4 in
+under two seconds, climbed three rungs of the audio ladder, then reached the last-resort reload, which
+worked — about ten seconds lost each time. `shouldReloadDirect` (in `PlayerHost`'s `handOver`) now
+reloads straight away when the handover carries a lighter step, on WebKit with native HLS
+(`playsHlsNatively`); ordinary handovers keep their in-page path, which works there. The reload intent
+(`sessionStorage`) carries position, audio track, `attempt: 1` and `carry`: the step, the subtitle,
+the log session it continues, the reason for the handover and the moment of the decision. A pre-warm
+that is ready crosses the reload (`carryPrewarmAcrossReload`, 60 s at most, same `PlaySessionId`,
+same URLs); one that is not is stopped. Never for a cast, the bench, a playback opened directly on
+the server player, or hls.js; once per session. When the browser refuses to start the reloaded page
+without a gesture (`NotAllowedError`), it says « Version allégée prête. Touchez Lecture pour
+reprendre. » under a clean paused state. The same carry lets
+`audio-reload` and `retry-reload` keep the step: a lighter session stays lighter after a track change,
+even once the two-minute memory has expired (`reloadedLighter`); a step only inherited stays inherited
+and re-arms nothing. Log: `start` `why: "reload-direct"`, `reloadGapMs` (decision → first picture) on
+the summary.
+
+**The technical panel says what is delivered.** For any playback the server transcodes, a « Diffusé »
+section (`describeJellyfinPlayback`, `playbackPanel.ts`): codec and range announced by the master
+playlist (hls.js: its levels, read from the raw attributes since its `videoRange` defaults to SDR;
+Safari: read by the route from the master it already fetches, `masterVariantFacts`, no extra request),
+the decoded size (`videoWidth × videoHeight`, followed on `resize`), and the bitrate Jellyfin targets
+(`VideoBitrate` + `AudioBitrate` of its address). Nothing is guessed: unknown means no line. « Fichier »
+becomes « Fichier d'origine » with the source's range; the title reads « Version allégée » with the
+cause and the bitrate, and a note gives the position of the switch or says the step was inherited from
+the previous playback. The cause and the position travel across a reload in the intent. The server
+stream's need (`streamNeedBps`) is that targeted bitrate when Jellyfin transcodes — Jellyfin's
+`MediaStreams` describe the source, so a lighter session used to be judged against the original
+bitrate, and its next step decided against the wrong figure.
 
 A position Jellyfin did not receive (a failed heartbeat or stop) is kept on the device
-(`unsentPosition.ts`) and sent when a report gets through again or at the next launch, through the stop
+(`unsentPosition.ts`, one key per account and title — a shared device's other account no longer erases
+it) and sent when a report gets through again or at the next launch, through the stop
 route marked `late`, which only ever advances a position (`recoverLostPosition`).
 
-**Link simulator** (admin, « Tests animations » panel, lot S): pick a film, play it in the real player
+**Link simulator** (admin, Account → Administration → Lab → « Tests divers », lot S « Connexion simulée »): pick a film, play it in the real player
 under a hand-set throughput (0.2–50 Mbit/s), total cut or 5 s cut, with a live thread of what the player
-did. Throttling happens in the browser only (`linkSimulator.ts`: `HttpByteSource` and an hls.js loader),
-armed by that page in the current tab; elsewhere `simulatorActive()` is false and none of its branches
+did. Throttling happens in the browser only (`linkSimulator.ts`: `HttpByteSource`, the lead reserve and
+an hls.js loader, all sharing one simulated link — throttled request by request, the native player's
+parallel reads added up to several times the chosen rate), armed by that page in the current tab; elsewhere `simulatorActive()` is false and none of its branches
 run.
 
 Sent to the trace instead, because the viewer saw nothing and has nothing to do: refused segment
@@ -1050,8 +1120,11 @@ unwitnessed.
 | `stall` | The element says it is playing and the clock has covered under a second in 5 s — once per stall, at most one a minute. Position, `readyState`/`networkState`/`seeking`, source state, video and audio ranges near the head, lead, whether a read is running, `recoveryStreak`/`frozenNudges`/`recoveries`, ms since the last append, `streaming` (ManagedMediaSource only), `diag.*` for the 30 s before it (see *Supply diagnosis* below), and `steps`: the last 20 s of trace. Emitted by `MseSource.watchForStall` on the watchdog tick |
 | `audio` | A track change: both tracks described, copied or re-encoded, `applied`, how long, and `steps` |
 | `cast` | Server player only: a television has actually taken the route |
+| `opening` | Native player, once per opened session: what the source did from the press until six seconds after the film moved (`firstMoveMs`, `steps`) — a short second load right after the opening left nothing anywhere else |
+| `pause` | The sleep timer stopped the film (`why: "veille"`) |
 | `subtitle-gen` | Native player, « Générer des sous-titres » (§70). `event`: `demande` (with `at`), `activation`, `première-ligne` (`ms` since the click), `saut-non-traduit` (`waitMs` from a seek into an untranslated zone to its first line), `pause` (`reason`), `reprise`, `fin`, `bascule` (`via` `jellyfin` or `repli`), `erreur` (`code`), `échec` |
 | `reserve` | The lead reserve in memory (`MemoryReserve`, below). Since 2026-10-13 (DECISIONS §84) only `event` `erreur` (a refused range) and `arrêt` when the reserve stops on its own (session gone). Older logs also hold `départ` (now `reserveAllowedMB` / `reserveSpeedMbps` on `start`), `point` and the ordinary `arrêt` (now `stop`'s `diag.reserve*`, see *Supply diagnosis*) |
+| `fluidite` | Not the player: the Lab's grid smoothness measure (`scrollProbe.ts`) — 20 s of frames recorded on the device from the first scroll of the full grid, one line, then disarmed. It led to the grid being built of whole-row chunks (DECISIONS §85) |
 | `stop` | The session's summary. `why` (`close`, `next`, `page`, `unmount`, or `lost` — see below), `watched` seconds, `ended`, `rebuild`; `waits` / `waitedMs` / `longestWaitMs` — stops of 250 ms or more mid-playback, excluding opening and seeks (`stall` only fires at 5 s); `seeks` / `seekWaitMs`; `audioSwitches`; `backgrounds` / `backgroundMs` / `backgroundRebuilds` — times the page went to the background, for how long, and how many returns found the source closed by the platform and rebuilt (each also written as a `rebuild` line, reason "source fermée en arrière-plan", with `hiddenMs`); `recoveries`, `frozenNudges`, `escalations` when any; `audioSync` and `frames` (presented / dropped); `diag.*`, the session's supply diagnosis with every wait classified. The server player writes `why` and `at` |
 
 Each line carries the time, **the account taken from the session** (never from the request body:
@@ -1070,7 +1143,25 @@ something changed — an event, or two more minutes watched — with a 15-byte s
 next launch (and every minute after) as `why: "lost"` with `lateByMs`, and removed only once the
 server accepts it — the app also opens on the login screen, where it would be refused. A tab woken
 after being declared lost still sends its real `stop`: keep the last line per `session`. The
-`stop` itself leaves through `navigator.sendBeacon`, which the browser keeps queued after the page.
+`stop` itself leaves through `navigator.sendBeacon`, which the browser keeps queued after the page —
+except offline, where a beacon is accepted and then lost while the kept copy is erased at the same
+instant: it then goes through `fetch`, and a failure puts it in the queue of unsent lines
+(`unsentLines.ts`) like any other line (13/10/2026).
+
+**What a slow link and the server player add to the lines** — no extra line, fields on the existing
+ones: `slowLink`, a bounded thread of events, in French, with their time and measure
+(`<event> +12.3 s (recv/need)`: hint, pre-warm, switch, screen, « instable »), and `slowChoice`, on `opening`, `fallback`, `error`, `stop`
+and the server's `start`; `lighterMbps` / `lighterTier` / `lighterCarried` / `lighterReloaded` /
+`lighterCleared`, `switch.*` (cause, position before and after), `prewarm.*` (rate, step, state,
+codecs, resolution, delay, `carried` across a reload), `switchGapMs`, `reloadGapMs` and `quality`. A
+give-up the measured link explains carries `reason: "connexion trop lente"` with `recvMbps`, `needMbps`,
+`measuredS`, `bytes`; the Activity page files every reason starting with those words under slow
+connections, never against the file. Every server-player `start` says why it negotiated (`why`:
+`open`, `handover`, `audio`, `audio-reload`, `retry`, `cast-relaunch`, `ladder`, `retry-reload`,
+`reload-direct`, `lighter`), and its `start`, `error` and `stop` carry `startup.*` (lists, first segment,
+picture, ms from the request; `startup.stage` on a failure). `stall`, `error`, `fallback`, `rebuild`,
+`network` and `stop` carry `timeline`: the last two minutes sampled every 5 s in memory
+(`pos,s,Mb/s,ahead,reserveMB,state;…`, `playbackTimeline.ts`).
 
 Three guardrails, since a browser decides what gets written: fields are **bounded** (40 at most,
 plus 40 `diag.*`; 500 characters each — 4 000 for `steps` —, objects flattened one level and no deeper), the file **rotates** at 5 MB keeping five generations (`player.log.1` newest … `.5`), and a
@@ -1280,7 +1371,7 @@ or computer to be tested, and it plays real films through the real player while 
 
 | Limitation | Detail |
 |---|---|
-| **No adaptive quality** | The file is read as it is — for a local network |
+| **No adaptive bitrate on the native path** | The file is read as it is. A link too slow for it is handed to the server player's lighter version (a Jellyfin transcode, see [User-facing messages](#user-facing-messages)), never switched back to the original during that film; Safari's native HLS on the server player measures nothing |
 | **TrueHD is decoded here** | Since 2026-09-21: FFmpeg's decoder compiled to WebAssembly (`tools/truehd-wasm`), run on the main thread in quarter-second batches with a yield between them (Turbopack does not compile a TypeScript worker), fed one Matroska block per call (FFmpeg's parser loses sync mid-stream), re-encoded like DTS. 52 tracks in the library — 50 TrueHD Atmos 7.1, 2 TrueHD 5.1 — 35 films whose VO or VF exists only in TrueHD. Validated against `ffmpeg astats` to 0.01 dB on every channel (`truehd-bench.spec.ts`); at most 88 ms of silence after a seek. Atmos objects are not rendered: the 7.1 presentation is, as on the server player |
 | **False keyframes cost one seek in eighty** | On the affected file only; a few seconds of frames nobody sees are re-read |
 | **ASS/SSA without styling** | Dialogue only — see [Subtitles](#subtitles) |
@@ -1320,6 +1411,9 @@ Everything is in `src/lib/webcodecs/` unless stated otherwise.
 | `bufferQueue.ts` | One operation at a time per buffer |
 | `playbackGuard.ts` | The element's clock: pause, resume, landing, resumed start |
 | `mseSource.ts` | MediaSource, buffers, filling, seeks, recovery |
+| `bufferBudget.ts` | The fill target in bytes, per engine (WebKit's per-buffer cap) |
+| `seekLifecycle.ts`, `seekArrival.ts` | A seek's state, and the two rules of arrival — see [Seek lifecycle](#seek-lifecycle) |
+| `memoryReserve.ts` | The lead reserve in memory — see [The lead reserve](#the-lead-reserve-in-memory) |
 | `pathSelector.ts` | Which path, and why |
 
 ### Audio, subtitles, capabilities
@@ -1341,9 +1435,34 @@ Everything is in `src/lib/webcodecs/` unless stated otherwise.
 | `src/lib/playbackClients.ts` | The two names the app plays under |
 | `src/lib/playerLog.ts` | The playback log: writing, bounds, rotation |
 | `src/lib/reportPlayback.ts` | What the browser sends to it |
+| `src/lib/unsentStop.ts`, `src/lib/unsentLines.ts`, `src/lib/unsentPosition.ts` | What could not leave: a session's summary, other log lines, a position Jellyfin did not receive |
+| `src/lib/progressBeat.ts` | Whether the playback heartbeat just got through — read by presence and the maintenance poll (DECISIONS §84) |
+| `playbackDiagnosis.ts`, `src/lib/playbackTimeline.ts` | `diag.*` on `stall`/`stop`; the two-minute `timeline` on incident lines |
 | `trace.ts` | The timestamped account |
 | `src/lib/pictureFrame.ts`, `src/app/api/player/frame/[itemId]` | Where the picture sits in the frame, measured from trickplay thumbnails |
 | `src/lib/frameFit.ts` | The enlargement to the nearest screen edge, and its hook |
 | `src/lib/chromecast/` | Chromecast: who can send (`eligible`), Google's kit and the shared state (`framework`), the load request (`media`), the receiver application (`receiverAppId`), the hooks (`useChromecast`) |
 | `src/components/player/ChromecastPlayer.tsx` | The remote control a Chromecast handover mounts |
 | `src/lib/castCors.ts`, `src/lib/castProgress.ts` | CORS for a cast pass; the resume point kept by the server when the page goes quiet |
+| `src/lib/playbackPanel.ts` | The technical panel's description, « Diffusé » included |
+| `src/lib/scrollProbe.ts` | The Lab's grid smoothness measure (`fluidite` line) |
+
+### Slow connection
+
+All in `src/lib/`. DECISIONS §77–§79.
+
+| File | Role |
+|---|---|
+| `slowLink.ts` | The measured verdict (`slowLinkVerdict`), the opening's link reading, `readCounted` (kept, not wired) |
+| `slowLinkPolicy.ts` | The one state machine: `openingAdvice`, `decideOpening`, `decidePlayback`, `StutterWatch`, `nextLighter`, `lighterMaxWidth`, `LinkRecovery`, `SlowLog` |
+| `slowLinkRunner.ts` | The one executor for both players: the pre-warm held, the final screen, the seek watch |
+| `lighterPrewarm.ts` | Pre-warming the lighter version, taking it over (`takePrewarm`, `prewarmFits`), carrying it across a reload |
+| `src/app/api/jellyfin/playback/start`, `…/stop`, `prewarmSessions.ts` | Negotiation marked `prewarm`; stopping only a session registered as one for that account |
+| `serverReload.ts` | The WebKit reloads that reopen the server player, and what their intent carries (`shouldReloadDirect`, `reloadedLighter`) |
+| `networkTrouble.ts` | « Connexion perdue ou instable… »: a range being retried, told to the host |
+| `transcodePolicy.ts` | Whether the account's Jellyfin policy allows video transcoding |
+| `playbackQuality.ts` | The Quality setting (Automatique / Originale) and the two-minute memory (`carriedLighter`) |
+| `linkSimulator.ts`, `slowLinkMonitor.ts` | The Lab's link simulator and its live thread; inert elsewhere |
+
+Removed: `SlowLinkPopup.tsx` (12/10/2026 — nothing is offered any more, the switch is automatic) and
+`useLegacyPlayer.ts` (13/10/2026 — no per-account choice of the server player).
