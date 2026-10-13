@@ -1476,13 +1476,15 @@ catalogue, relu au réseau, n'a pas : un message (« pas encore disponible ») e
 
 **Porteur.** `matchMovies`, `matchSeries`, `catalogueMembers` (`src/lib/catalogueMembers.ts`) ;
 le rapprochement par dossier dans `findJellyfinMovieByTmdb` / `findJellyfinSeriesByTvdb`
-(`folderKey`, `src/lib/server-cache.ts`) ; `useMissingTitleNotice` côté écran.
+(`folderKey`, `src/lib/server-cache.ts`) ; `useRepairUnresolvedSheet` côté écran — le message est dit à sa
+conclusion, après la relecture du catalogue (un crochet à part, `useMissingTitleNotice`, concluait
+avant elle et rendait « indisponible » un titre importé pendant la séance ; retiré le 13/10/2026).
 
 **Appelants.** `/api/cinema/movies`, `/api/cinema/series`, `/api/search`, `playableLibrary` (et
 par elle `/api/player/discover`, `/api/player/lists`, `/api/player/title`, `/api/tmdb/person`,
 `playerRequests`), `CinemaMobileClient` et `CinemaClient`.
 
-**Tests.** `catalogue-members.test.ts`, `missing-title-notice.test.tsx`, et les tests des routes.
+**Tests.** `catalogue-members.test.ts`, `repair-unresolved-refresh.test.tsx`, `decisions-partagees.test.ts`, et les tests des routes.
 
 **Voulu.** Jellyfin injoignable : la première moitié de la règle seule — un titre qui ne s'ouvre
 pas vaut mieux qu'une bibliothèque qui disparaît des recherches. Le message attend la relecture

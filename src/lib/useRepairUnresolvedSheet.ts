@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useSWRConfig } from "swr";
 import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
+import { useToast } from "@/components/Toast";
+import { useT } from "@/components/TranslationProvider";
 
 /**
  * Le temps laissé au catalogue pour démentir avant qu'on efface l'adresse.
@@ -41,6 +43,8 @@ export function useRepairUnresolvedSheet(
   catalogueKey: string
 ): void {
   const { mutate } = useSWRConfig();
+  const toast = useToast();
+  const t = useT();
   /**
    * Le titre dont la relecture a répondu — et elle seule autorise à conclure.
    *
@@ -59,6 +63,13 @@ export function useRepairUnresolvedSheet(
     if (requested === null || resolved || !catalogueReady) return;
     if (answered === requested) {
       const timer = setTimeout(() => {
+        // Le message de §47 vient d'ici, à la conclusion, et de nulle part ailleurs. Il avait son
+        // propre crochet (`useMissingTitleNotice`, 05/10/2026), monté avant celui-ci : sur un
+        // catalogue déjà relu, il effaçait l'adresse dans le même rendu, avant que la relecture
+        // ne parte — le titre importé pendant la séance (« Voir » d'une notification « Disponible »,
+        // Ma liste, une filmographie) redevenait « indisponible », exactement le cas que cette
+        // relecture répare depuis le 29/09.
+        toast.info(t("cinema.titleUnavailable"));
         cinemaNavigate({ film: null, serie: null, episodes: false }, "replace");
       }, GRACE_MS);
       return () => clearTimeout(timer);
@@ -90,6 +101,8 @@ export function useRepairUnresolvedSheet(
       cancelled = true;
       clearTimeout(poll);
     };
+    // Les fonctions du message et de traduction ne changent pas ce qu'on attend.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requested, resolved, catalogueReady, answered, catalogueKey, mutate]);
 }
 

@@ -7,6 +7,9 @@ const cinemaNavigate = vi.fn();
 vi.mock("@/lib/cinemaRoute", () => ({ cinemaNavigate: (...a: unknown[]) => cinemaNavigate(...a) }));
 let fullScreen = false;
 vi.mock("@/lib/playbackBusy", () => ({ isWatchingFullScreen: () => fullScreen }));
+const info = vi.fn();
+vi.mock("@/components/Toast", () => ({ useToast: () => ({ info, success: vi.fn(), error: vi.fn() }) }));
+vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
 
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { MOVIES_CATALOGUE_KEY } from "@/lib/swr";
@@ -56,6 +59,7 @@ const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   cinemaNavigate.mockClear();
+  info.mockClear();
   fullScreen = false;
 });
 afterEach(() => {
@@ -64,6 +68,32 @@ afterEach(() => {
 });
 
 describe("useRepairUnresolvedSheet relit le catalogue avant de conclure", () => {
+  // Le message « indisponible » (§47) avait son propre crochet, monté avant celui-ci : sur un
+  // catalogue déjà relu, il effaçait l'adresse aussitôt, avant la relecture — un titre importé
+  // pendant la séance était annoncé indisponible et sa fiche ne s'ouvrait jamais (13/10/2026).
+  it("un titre arrivé depuis le chargement : aucun message « indisponible »", async () => {
+    const { ui } = setup([[1, 2], [1, 2, X]]);
+    const { rerender } = render(ui(null));
+    await tick(50);
+    rerender(ui(X));
+    await tick(5000);
+    expect(info).not.toHaveBeenCalled();
+    expect(cinemaNavigate).not.toHaveBeenCalled();
+  });
+
+  it("un titre toujours absent après la relecture : le message, puis l'adresse effacée", async () => {
+    const { ui } = setup([[1, 2]]);
+    const { rerender } = render(ui(null));
+    await tick(50);
+    rerender(ui(X));
+    await tick(50);
+    // Pas avant la conclusion : la relecture pourrait encore le démentir.
+    expect(info).not.toHaveBeenCalled();
+    await tick(2500);
+    expect(info).toHaveBeenCalledWith("cinema.titleUnavailable");
+    expect(cinemaNavigate).toHaveBeenCalledWith({ film: null, serie: null, episodes: false }, "replace");
+  });
+
   it("un titre arrivé depuis le chargement s'ouvre, et l'adresse reste", async () => {
     const { fetcher, ui } = setup([[1, 2], [1, 2, X]]);
     const { rerender, getByTestId } = render(ui(null));
