@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import useSWR from "swr";
 import { FlaskConical, Play } from "lucide-react";
 import { fetcher } from "@/lib/swr";
@@ -17,7 +17,7 @@ import type { BenchRunSummary } from "@/app/api/player/bench/route";
  * qu'on veut éprouver. Les films sont proposés par le journal du lecteur (voir `plan.ts`), cochés
  * d'office, et chacun peut être retiré ou ajouté.
  */
-export function BenchSection() {
+export function BenchSection({ extraAction }: { extraAction?: ReactNode } = {}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const { data: plan } = useSWR<{ candidates: BenchCandidate[]; suggested: string[] }>(open ? "/api/player/bench/plan" : null, fetcher);
@@ -47,15 +47,22 @@ export function BenchSection() {
     <section className="border-t border-white/8 py-6 [@media(max-height:500px)]:py-4">
       <h3 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
         <FlaskConical size={16} className="text-subtle" />
-        {t("bench.title")}
+        {extraAction ? t("player.account.lab") : t("bench.title")}
       </h3>
-      <p className="mb-3 text-xs text-subtle">{t("bench.hint")}</p>
-      {!open ? (
-        <button type="button" onClick={() => setOpen(true)} className="btn btn-ghost w-full justify-center sm:w-auto">
-          <FlaskConical size={16} />
-          {t("bench.prepare")}
-        </button>
-      ) : !plan ? (
+      <p className="mb-3 text-xs text-subtle">{extraAction ? t("player.account.labHint") : t("bench.hint")}</p>
+      {/* La ligne de boutons reste quand le banc est préparé : les tests divers voisins restent à un geste. */}
+      {(!open || extraAction) && (
+        <div className={`flex flex-wrap gap-2${open ? " mb-4" : ""}`}>
+          {!open && (
+            <button type="button" onClick={() => setOpen(true)} className="btn btn-ghost w-full justify-center sm:w-auto">
+              <FlaskConical size={16} />
+              {extraAction ? t("bench.prepareShort") : t("bench.prepare")}
+            </button>
+          )}
+          {extraAction}
+        </div>
+      )}
+      {!open ? null : !plan ? (
         <p className="text-sm text-muted">{t("bench.loading")}</p>
       ) : plan.candidates.length === 0 ? (
         <p className="text-sm text-muted">{t("bench.empty")}</p>

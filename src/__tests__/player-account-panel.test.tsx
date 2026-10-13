@@ -199,9 +199,11 @@ describe("PlayerAccountPanel — l'ordre de la page", () => {
       "player.account.help.hdrTitle",
       "player.account.storage",
       "player.account.report",
-      "player.account.reportMine",
     ];
     expect(order.map((key) => text.findIndex((t) => t.startsWith(key)))).toEqual(order.map((_, i) => i));
+    // Signaler et « Mes signalements » sur la même ligne (13/10/2026).
+    expect(text.at(-1)).toContain("player.account.reportNew");
+    expect(text.at(-1)).toContain("player.account.reportMine");
   });
 
   it("rassemble l'outillage de l'administrateur à la fin, dans l'ordre voulu, et la déconnexion après tout le reste", () => {
@@ -217,10 +219,13 @@ describe("PlayerAccountPanel — l'ordre de la page", () => {
     expect(titles).toEqual([
       "player.account.activity",
       "player.account.maintenance",
-      "bench.title",
-      "player.account.animLab",
+      "player.account.lab",
       "player.nav.manage",
     ]);
+    // Le banc d'essai et les tests divers sur la même ligne « Lab » (13/10/2026).
+    const lab = within(cardOf("player.account.groups.admin")).getByText("player.account.lab").closest("section")!;
+    expect(within(lab).getByText("bench.prepareShort")).toBeTruthy();
+    expect(within(lab).getByText("player.account.openAnimLab")).toBeTruthy();
   });
 
   // Trois champs ouverts en permanence occupaient un écran de téléphone pour un geste annuel.

@@ -127,7 +127,7 @@
     "allQualities": "Alle Qualitäten",
     "notDownloaded": "Nicht heruntergeladen",
     "installPrompt": {
-      "title": "Cine App installieren",
+      "title": "CineApp installieren",
       "body": "Füge die App zum Home-Bildschirm hinzu, um Benachrichtigungen und einen schnelleren Start zu aktivieren.",
       "steps": "Tippe auf Teilen, dann auf \"Zum Home-Bildschirm\".",
       "dismiss": "Später"
@@ -883,13 +883,13 @@
       "tmdb": "TMDB",
       "multiSource": "Multi-Quelle",
       "system": "System",
-      "jellyfinApi": "Jellyfin-API (Cine App)"
+      "jellyfinApi": "Jellyfin-API (CineApp)"
     },
     "capabilitiesTitle": "Was gerade funktioniert",
     "basedOn": "Basiert auf",
     "capabilities": {
       "watchJellyfin": "Ansehen über Jellyfin",
-      "watchCineApp": "Ansehen über Cine App",
+      "watchCineApp": "Ansehen über CineApp",
       "auth": "Authentifizierung",
       "movieLibrary": "Filmverwaltung",
       "seriesLibrary": "Serienverwaltung",
@@ -1938,16 +1938,16 @@
       "activity": "Kontoaktivität",
       "activityHint": "Wer da ist, wer was schaut, die Sitzungen und Protokolle aller.",
       "openActivity": "Aktivität öffnen",
-      "animLab": "Animationstests",
+      "animLab": "Verschiedene Tests",
       "animLabHint": "Schaltflächen über Bildern mit verschiedenen Druckgesten und Unschärfen, zum Vergleichen auf diesem Gerät.",
-      "openAnimLab": "Tests öffnen",
+      "openAnimLab": "Verschiedene Tests",
       "notifReportReply": "Antwort auf eine Meldung",
       "notifReportReplyHint": "Wenn eine deiner Meldungen eine Antwort bekommt oder ihren Status ändert.",
       "notifReportNew": "Neue Meldungen",
       "notifReportNewHint": "Wenn jemand ein Problem meldet, einen Vorschlag macht oder eine Meldung kommentiert.",
       "report": "Problem melden",
       "reportHint": "Ein Problem oder eine Idee? Beschreiben Sie es in wenigen Schritten und verfolgen Sie hier die Antwort.",
-      "reportNew": "Problem melden",
+      "reportNew": "Melden",
       "reportMine": "Meine Meldungen",
       "storage": "Speicher auf diesem Gerät",
       "storageHint": "Der Anfang laufender Filme und Serien wird hier gespeichert, damit sie sofort starten. Leeren löscht nichts anderes: alles kommt von selbst zurück.",
@@ -1960,7 +1960,9 @@
       "home": {
         "continueHero": "Laufende Titel im Startseiten-Banner zeigen",
         "continueHeroHint": "Was du gerade schaust, steht oben auf der Startseite; ist es wenig, ergänzen Titel aus „Im Fokus“."
-      }
+      },
+      "lab": "Lab",
+      "labHint": "Der Wiedergabe-Prüfstand öffnet echte Filme auf diesem Gerät und testet sie wie ein Zuschauer (Fenster sichtbar lassen). Verschiedene Tests vergleichen Gesten, Materialien und Animationen."
     },
     "browse": {
       "seeAll": "Alle anzeigen",
@@ -2306,7 +2308,8 @@
       "x-beyond-end": "Sprung über das Ende hinaus",
       "x-reopen": "Schließen und sofort wieder öffnen"
     },
-    "depthExtreme": "Extrem"
+    "depthExtreme": "Extrem",
+    "prepareShort": "Wiedergabe-Prüfstand"
   },
   "report": {
     "zones": {

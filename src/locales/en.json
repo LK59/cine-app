@@ -127,7 +127,7 @@
     "allQualities": "All qualities",
     "notDownloaded": "Not downloaded",
     "installPrompt": {
-      "title": "Install Cine App",
+      "title": "Install CineApp",
       "body": "Add the app to your Home Screen to enable notifications and faster launches.",
       "steps": "Tap Share, then \"Add to Home Screen\".",
       "dismiss": "Later"
@@ -883,13 +883,13 @@
       "tmdb": "TMDB",
       "multiSource": "Multi-source",
       "system": "System",
-      "jellyfinApi": "Jellyfin API (Cine App)"
+      "jellyfinApi": "Jellyfin API (CineApp)"
     },
     "capabilitiesTitle": "What's working right now",
     "basedOn": "Based on",
     "capabilities": {
       "watchJellyfin": "Watch via Jellyfin",
-      "watchCineApp": "Watch via Cine App",
+      "watchCineApp": "Watch via CineApp",
       "auth": "Authentication",
       "movieLibrary": "Movie management",
       "seriesLibrary": "Series management",
@@ -1938,16 +1938,16 @@
       "activity": "Account activity",
       "activityHint": "Who's here, who's watching what, everyone's sessions and logs.",
       "openActivity": "Open activity",
-      "animLab": "Animation tests",
+      "animLab": "Miscellaneous tests",
       "animLabHint": "Buttons over images, with several press gestures and blurs, to compare on this device.",
-      "openAnimLab": "Open the tests",
+      "openAnimLab": "Miscellaneous tests",
       "notifReportReply": "Reply to a report",
       "notifReportReplyHint": "When one of your reports gets a reply or changes status.",
       "notifReportNew": "New reports",
       "notifReportNewHint": "When someone reports a problem, makes a suggestion or comments on a report.",
       "report": "Report a problem",
       "reportHint": "Something wrong, or an idea? Describe it in a few steps, then follow the answer here.",
-      "reportNew": "Report a problem",
+      "reportNew": "Report",
       "reportMine": "My reports",
       "storage": "Storage on this device",
       "storageHint": "The beginning of films and series you are watching is kept here so they start instantly. Clearing it removes nothing else: it all comes back on its own.",
@@ -1960,7 +1960,9 @@
       "home": {
         "continueHero": "Show what I'm watching in the home banner",
         "continueHeroHint": "What you're watching leads the home screen; when there's little, Spotlight titles fill in."
-      }
+      },
+      "lab": "Lab",
+      "labHint": "The playback test bench opens real films on this device and tries them like a viewer (keep the window visible). Miscellaneous tests compare gestures, materials and animations."
     },
     "browse": {
       "seeAll": "See all",
@@ -2306,7 +2308,8 @@
       "x-beyond-end": "Seek past the end",
       "x-reopen": "Close and reopen at once"
     },
-    "depthExtreme": "Extreme"
+    "depthExtreme": "Extreme",
+    "prepareShort": "Playback test bench"
   },
   "report": {
     "zones": {

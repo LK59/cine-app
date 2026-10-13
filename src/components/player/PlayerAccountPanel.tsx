@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, ListChecks, HardDrive, Rows3, MoveVertical } from "lucide-react";
+import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { hardNavigate, signOut } from "@/lib/signOut";
@@ -105,16 +105,17 @@ function ReportRows() {
   const { mine } = useReportBadge();
   return (
     <>
+      {/* Signaler et suivre ses signalements : une seule ligne, deux boutons (Louis, 13/10/2026). */}
       <Row icon={MessageSquareWarning} title={t("player.account.report")} hint={t("player.account.reportHint")}>
-        <button type="button" onClick={() => cinemaNavigate({ account: false, report: "nouveau" })} className="btn btn-ghost btn-sm">
-          {t("player.account.open")}
-        </button>
-      </Row>
-      <Row icon={ListChecks} title={t("player.account.reportMine")}>
-        <button type="button" onClick={() => cinemaNavigate({ account: false, report: "liste" })} className="btn btn-ghost btn-sm">
-          {t("news.open")}
-          {mine > 0 && <span className="rounded-full bg-accent-500 px-1.5 text-[11px] font-semibold text-white">{mine}</span>}
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" onClick={() => cinemaNavigate({ account: false, report: "nouveau" })} className="btn btn-ghost btn-sm">
+            {t("player.account.reportNew")}
+          </button>
+          <button type="button" onClick={() => cinemaNavigate({ account: false, report: "liste" })} className="btn btn-ghost btn-sm">
+            {t("player.account.reportMine")}
+            {mine > 0 && <span className="rounded-full bg-accent-500 px-1.5 text-[11px] font-semibold text-white">{mine}</span>}
+          </button>
+        </div>
       </Row>
     </>
   );
@@ -229,20 +230,17 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
               </button>
             </Section>
             <MaintenanceSection />
-            <BenchSection />
-            {/* Le banc des gestes et des matières, pour juger à l'œil sur l'appareil qu'on tient
-                (04/10/2026). Il s'ouvre comme l'activité, à la place de ce panneau. */}
-            <Section icon={Sparkles} title={t("player.account.animLab")}>
-              <p className="mb-3 text-xs text-subtle">{t("player.account.animLabHint")}</p>
-              <button
-                type="button"
-                onClick={() => cinemaNavigate({ account: false, activity: "animations" })}
-                className="btn btn-ghost w-full justify-center sm:w-auto"
-              >
-                <Sparkles size={16} />
-                {t("player.account.openAnimLab")}
-              </button>
-            </Section>
+            {/* Le banc d'essai du lecteur et les tests divers (gestes, matières — 04/10/2026) : une seule
+                ligne « Lab », deux boutons (Louis, 13/10/2026). Les tests s'ouvrent comme l'activité, à la
+                place de ce panneau ; le banc se prépare ici, sous la ligne. */}
+            <BenchSection
+              extraAction={
+                <button type="button" onClick={() => cinemaNavigate({ account: false, activity: "animations" })} className="btn btn-ghost w-full justify-center sm:w-auto">
+                  <Sparkles size={16} />
+                  {t("player.account.openAnimLab")}
+                </button>
+              }
+            />
             <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>
               <a href="/gestion" className="btn btn-ghost w-full justify-center sm:w-auto">
                 <SlidersHorizontal size={16} />
@@ -633,7 +631,7 @@ function SessionsSection() {
 function OnboardingRow() {
   const t = useT();
   return (
-    <Row icon={Sparkles} title={t("player.account.redoOnboarding")}>
+    <Row icon={DoorOpen} title={t("player.account.redoOnboarding")}>
       <button type="button" onClick={openOnboarding} className="btn btn-ghost btn-sm">
         {t("player.account.open")}
       </button>

@@ -127,7 +127,7 @@
     "allQualities": "Todas las calidades",
     "notDownloaded": "No descargado",
     "installPrompt": {
-      "title": "Instalar Cine App",
+      "title": "Instalar CineApp",
       "body": "Añade la app a tu pantalla de inicio para activar las notificaciones y un inicio más rápido.",
       "steps": "Toca Compartir y luego \"Añadir a pantalla de inicio\".",
       "dismiss": "Más tarde"
@@ -883,13 +883,13 @@
       "tmdb": "TMDB",
       "multiSource": "Múltiple fuente",
       "system": "Sistema",
-      "jellyfinApi": "API de Jellyfin (Cine App)"
+      "jellyfinApi": "API de Jellyfin (CineApp)"
     },
     "capabilitiesTitle": "Qué funciona ahora mismo",
     "basedOn": "Basado en",
     "capabilities": {
       "watchJellyfin": "Ver vía Jellyfin",
-      "watchCineApp": "Ver vía Cine App",
+      "watchCineApp": "Ver vía CineApp",
       "auth": "Autenticación",
       "movieLibrary": "Gestión de películas",
       "seriesLibrary": "Gestión de series",
@@ -1938,16 +1938,16 @@
       "activity": "Actividad de las cuentas",
       "activityHint": "Quién está, quién ve qué, las sesiones y registros de cada uno.",
       "openActivity": "Abrir la actividad",
-      "animLab": "Pruebas de animación",
+      "animLab": "Pruebas varias",
       "animLabHint": "Botones sobre imágenes, con varios gestos de pulsación y desenfoques, para comparar en este dispositivo.",
-      "openAnimLab": "Abrir las pruebas",
+      "openAnimLab": "Pruebas varias",
       "notifReportReply": "Respuesta a un reporte",
       "notifReportReplyHint": "Cuando uno de tus reportes recibe una respuesta o cambia de estado.",
       "notifReportNew": "Nuevos reportes",
       "notifReportNewHint": "Cuando alguien reporta un problema, hace una sugerencia o comenta un reporte.",
       "report": "Informar de un problema",
       "reportHint": "¿Un problema o una idea? Descríbelo en unos pasos y sigue la respuesta aquí.",
-      "reportNew": "Informar de un problema",
+      "reportNew": "Informar",
       "reportMine": "Mis informes",
       "storage": "Almacenamiento en este dispositivo",
       "storageHint": "El inicio de las películas y series en curso se guarda aquí para que empiecen al instante. Vaciarlo no borra nada más: todo vuelve por sí solo.",
@@ -1960,7 +1960,9 @@
       "home": {
         "continueHero": "Mostrar lo que estoy viendo en el banner del inicio",
         "continueHeroHint": "Lo que estás viendo encabeza el inicio; si hay poco, los títulos destacados completan."
-      }
+      },
+      "lab": "Lab",
+      "labHint": "El banco de pruebas de reproducción abre películas reales en este dispositivo y las prueba como un espectador (mantén la ventana visible). Las pruebas varias comparan gestos, materiales y animaciones."
     },
     "browse": {
       "seeAll": "Ver todo",
@@ -2306,7 +2308,8 @@
       "x-beyond-end": "Salto más allá del final",
       "x-reopen": "Cerrar y reabrir al instante"
     },
-    "depthExtreme": "Extrema"
+    "depthExtreme": "Extrema",
+    "prepareShort": "Banco de pruebas de reproducción"
   },
   "report": {
     "zones": {
