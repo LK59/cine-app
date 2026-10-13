@@ -37,7 +37,7 @@ vi.mock("@/components/ExperimentalPlayerHost", () => ({
   },
 }));
 vi.mock("@/components/PlayerControls", () => ({ VOLUME_STORAGE_KEY: "volume", PlayerControls: () => <div data-testid="commandes" /> }));
-vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy: false }) }));
+vi.mock("@/lib/useAccountPreferences", () => ({ useAccountPreferencesLoader: () => {} }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
 vi.mock("@/lib/reportPlayback", () => ({ reportPlayback: () => {} }));
 vi.mock("@/lib/unsentStop", () => ({ flushOrphanStops: () => {}, saveUnsentStop: () => {}, clearUnsentStop: () => {} }));

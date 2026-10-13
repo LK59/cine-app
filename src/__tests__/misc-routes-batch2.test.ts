@@ -9,7 +9,8 @@ const mockPushDb = { getByUser: vi.fn(), remove: vi.fn() };
 const mockUserPrefsDb = {
   getLang: vi.fn(),
   setLang: vi.fn(),
-  getLegacyPlayer: vi.fn(() => ({ enabled: false })),
+  // Plus appelées depuis le 13/10/2026 ; gardées en espions pour le prouver.
+  getLegacyPlayer: vi.fn(() => ({ enabled: true })),
   setLegacyPlayer: vi.fn(),
   getGuidedScroll: vi.fn(() => true),
   setGuidedScroll: vi.fn(),
@@ -198,27 +199,17 @@ describe("/api/user/preferences", () => {
     expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
   });
 
-  it("PUT lets any account ask for the legacy player", async () => {
+  // Le lecteur legacy par compte a disparu le 13/10/2026 : la réponse ne le mentionne plus, et une
+  // demande qui le porte encore n'écrit rien (elle tombe sur la validation de la langue).
+  it("ne connaît plus la préférence « lecteur legacy »", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "someone", jfId: "jf-2", role: "user" });
-    const { PUT } = await import("@/app/api/user/preferences/route");
-    const res = await PUT(fakeReq({ body: { legacyPlayer: true } }));
-    expect(res.status).toBe(200);
-    expect(mockUserPrefsDb.setLegacyPlayer).toHaveBeenCalledWith("jf-2", true);
-  });
-
-  it("PUT brings an account back to the native player", async () => {
-    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", role: "admin" });
-    const { PUT } = await import("@/app/api/user/preferences/route");
-    const res = await PUT(fakeReq({ body: { legacyPlayer: false } }));
-    expect(res.status).toBe(200);
-    expect(mockUserPrefsDb.setLegacyPlayer).toHaveBeenCalledWith("jf-1", false);
-  });
-
-  it("GET dit qu'un compte neuf est sur le lecteur natif", async () => {
-    // The default is the whole point of this change: nobody opts into anything to get it.
-    mockVerifySessionFull.mockResolvedValue({ u: "neuf", jfId: "jf-9" });
-    const { GET } = await import("@/app/api/user/preferences/route");
-    expect((await (await GET(fakeReq())).json()).legacyPlayer).toEqual({ enabled: false });
+    const { GET, PUT } = await import("@/app/api/user/preferences/route");
+    expect((await GET(fakeReq())).status).toBe(200);
+    expect("legacyPlayer" in (await (await GET(fakeReq())).json())).toBe(false);
+    expect((await PUT(fakeReq({ body: { legacyPlayer: true } }))).status).toBe(400);
+    expect(mockUserPrefsDb.getLegacyPlayer).not.toHaveBeenCalled();
+    expect(mockUserPrefsDb.setLegacyPlayer).not.toHaveBeenCalled();
+    expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
   });
 
   it("PUT keeps handling a plain language change", async () => {

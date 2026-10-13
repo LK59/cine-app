@@ -10,15 +10,12 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const userId = session.jfId ?? session.u;
   const lang = userPrefsDb.getLang(userId, config.app.language);
-  // Reported to every caller, but only ever true for an admin who turned it on: the PUT below
-  // refuses to set it for anyone else, so a non-admin can't end up with it enabled.
-  const legacyPlayer = userPrefsDb.getLegacyPlayer(userId);
   const guidedScroll = userPrefsDb.getGuidedScroll(userId);
   // La disposition de l'accueil (DECISIONS.md §52) : ce que le compte a choisi (`null` = rien),
   // et ce que le serveur donne par défaut — l'écran du Compte montre les deux.
   const own = userPrefsDb.getHomeLayout(userId);
   const homeDefaults = { continueHero: config.home.continueHero };
-  return NextResponse.json({ lang, legacyPlayer, guidedScroll, homeOwn: own, homeDefaults });
+  return NextResponse.json({ lang, guidedScroll, homeOwn: own, homeDefaults });
 }
 
 export async function PUT(req: NextRequest) {
@@ -28,18 +25,11 @@ export async function PUT(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const userId = session.jfId ?? session.u;
 
-  // The experimental player is its own update: it has no locale to write, and it is one flag
-  // rather than two now — converting HDR on the GPU was a consent gate for the fallback, and the
-  // native path carries HDR through untouched.
-  //
-  // No longer admin-only, either. The setting was opened to every account, and leaving this
-  // check behind meant the toggle appeared for everyone and answered 403 to all but one of them.
-  if (typeof body?.legacyPlayer === "boolean") {
-    userPrefsDb.setLegacyPlayer(userId, body.legacyPlayer);
-    return NextResponse.json({ ok: true, legacyPlayer: { enabled: body.legacyPlayer } });
-  }
+  // `legacyPlayer` n'est plus accepté (13/10/2026) : le lecteur legacy par compte a disparu. Une
+  // demande qui le porte encore tombe sur la validation de la langue ci-dessous (400), sans rien
+  // écrire.
 
-  // Le défilement guidé (DECISIONS.md §50) : une mise à jour à elle seule, comme la précédente.
+  // Le défilement guidé (DECISIONS.md §50) : une mise à jour à elle seule.
   if (typeof body?.guidedScroll === "boolean") {
     userPrefsDb.setGuidedScroll(userId, body.guidedScroll);
     return NextResponse.json({ ok: true, guidedScroll: body.guidedScroll });

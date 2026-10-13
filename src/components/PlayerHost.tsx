@@ -58,7 +58,7 @@ import { pushSlowLinkEvent } from "@/lib/slowLinkMonitor";
 type LinkSignal = { hint: boolean; recvBps: number | null; needBps: number | null };
 const NO_LINK_SIGNAL: LinkSignal = { hint: false, recvBps: null, needBps: null };
 import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
-import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
+import { useAccountPreferencesLoader } from "@/lib/useAccountPreferences";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
@@ -257,9 +257,12 @@ export function PlayerHost() {
   const t = useT();
   const playback = usePlayback();
   const { session, mode } = playback;
-  const { legacy } = useLegacyPlayer();
+  // Les préférences du compte (langue, défilement guidé, disposition de l'accueil) : ce composant,
+  // monté sur toutes les pages, en porte le chargeur. Le lecteur n'en dépend plus — le choix
+  // « lecteur legacy » d'un compte a disparu le 13/10/2026, le natif ouvre toujours.
+  useAccountPreferencesLoader();
   // Whether this install has a server-side player at all. When it does not, nothing below can
-  // hand a file to Jellyfin: neither the account option, nor a refusal by the native path.
+  // hand a file to Jellyfin: a refusal by the native path ends on a playback error instead.
   const serverFallback = usePlayerServerFallback();
   // Set by the experimental player's own "switch to the stable player" button. Deliberately not
   // persisted: it applies to this session only, so the option in settings stays the source of
@@ -336,16 +339,10 @@ export function PlayerHost() {
   // Waited for rather than assumed. Whichever player is assumed while the answer is in flight
   // mounts and *starts* — and for the server-side one that means negotiating a stream and
   // warming a transcode, which was then thrown away a round trip later. One request, once per
-  // session, against an abandoned transcode on every playback.
-  //
-  // Attention : ce `return null` s'applique à une séance **en cours**, pas seulement à un
-  // démarrage. Sur une adresse publique — la page d'état, qu'on peut ouvrir depuis le panneau
-  // Compte avec un film réduit —, `useLegacyPlayer` ne pose plus sa question. Il faut donc qu'il
-  // se souvienne de la réponse, sans quoi cette ligne coupe la lecture ; c'est le cache SWR, qui
-  // n'appartient à aucun montage, qui la porte. Une version qui la retenait dans l'instance du
-  // hook (clé nulle + `keepPreviousData`) a tué le film en production. Couvert par
-  // `useLegacyPlayer-public-path.test.tsx`, qui remonte le hook au lieu de le re-rendre.
-  if (legacy === undefined || serverFallback === undefined) return null;
+  // session, against an abandoned transcode on every playback. (La configuration publique est
+  // gardée sur l'appareil et répond aussi sur une adresse publique : ce `return null` ne coupe pas
+  // une séance en cours.)
+  if (serverFallback === undefined) return null;
 
   /**
    * Le lecteur natif reprend là où la diffusion s'est arrêtée, et non là où la séance s'est
@@ -359,8 +356,8 @@ export function PlayerHost() {
   const back = returningFor(returning, session);
   const playing = back !== null ? { ...session, resumeAt: back, ...(returnsPaused(returning, session) ? { startPaused: true } : {}) } : session;
 
-  // Sans lecteur serveur, il n'y a pas d'aiguillage : le choix du compte comme le repli
-  // automatique désignent tous deux un lecteur qui n'existe pas sur cette installation. Un
+  // Sans lecteur serveur, il n'y a pas d'aiguillage : le repli automatique désignerait un lecteur
+  // qui n'existe pas sur cette installation. Un
   // fichier que le navigateur ne sait pas porter finit sur une erreur de lecture, pas sur un
   // transcodage — c'est tout l'objet du réglage.
   const carried = castCarriedTo(takeover, session);
@@ -373,7 +370,7 @@ export function PlayerHost() {
   const lighter = lighterNow(takeover, session) || (session.lighter !== undefined && !session.bench);
   const useNative =
     !serverFallback ||
-    (!legacy && !handedOver.includes(session.itemId) && !carried && !castingNow(takeover, session) && !reloadedOnServer && !lighter);
+    (!handedOver.includes(session.itemId) && !carried && !castingNow(takeover, session) && !reloadedOnServer && !lighter);
   if (useNative) {
     return (
       <ExperimentalPlayerHost

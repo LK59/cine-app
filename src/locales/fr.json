@@ -1318,12 +1318,6 @@
       "reloadNotice": "Rechargement nécessaire pour appliquer {lang}",
       "apply": "Appliquer"
     },
-    "legacyPlayer": {
-      "title": "Lecteur legacy",
-      "subtitle": "Repasser par le serveur pour la lecture",
-      "enable": "Utiliser le lecteur legacy",
-      "enableDesc": "Par défaut, les films sont lus directement dans le navigateur, sans rien demander au serveur. Cette option repasse par l'ancien chemin : le serveur négocie le flux et transcode si nécessaire. Plus lent à démarrer et coûteux pour le serveur, mais c'est le chemin éprouvé — à activer si vous rencontrez un problème de lecture."
-    },
     "onboarding": {
       "title": "Écran d'accueil",
       "hint": "Le proposer à un compte au prochain lancement de l'application. Il s'éteint quand la personne va jusqu'au bout.",

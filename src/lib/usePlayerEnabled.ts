@@ -16,8 +16,7 @@ export interface PublicPlayerConfig {
  * `playerBootstrapOptions` n'est pas décoratif ici : `PlayerHost` lit `usePlayerServerFallback`
  * pour savoir *quel* lecteur monter, donc c'est une requête dont le lecteur a besoin **pour
  * exister**. Sans elle, un film qui prend l'écran met SWR en pause, la requête est abandonnée —
- * pas différée, abandonnée — et l'écran reste sans lecteur. Même piège que
- * `useLegacyPlayer`, qui la porte pour la même raison.
+ * pas différée, abandonnée — et l'écran reste sans lecteur.
  *
  * C'est aussi ce qui répare un défaut observé : après le rechargement que WebKit impose pour
  * changer de piste, la fiche derrière le film se montait pendant la pause, sa requête de
@@ -54,7 +53,7 @@ export function usePlayerEnabledState(): boolean | undefined {
  * Y a-t-il un lecteur serveur vers qui se tourner quand le navigateur renonce ?
  *
  * Répond `undefined` tant qu'on ne sait pas, et l'appelant est censé attendre plutôt que
- * supposer — exactement comme `useLegacyPlayer`, et pour la même raison : celui des deux lecteurs
+ * supposer : celui des deux lecteurs
  * qu'on suppose se monte et *démarre*, et pour le lecteur serveur cela veut dire négocier un flux
  * et lancer un transcodage, jeté un aller-retour plus tard.
  */

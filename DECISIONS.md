@@ -147,8 +147,18 @@ la piste d'avant au lieu de céder le film (`revertFailedSwitch`).
 `playableAudio`) passe la main au serveur. Reconstruire en cours de film sur un autre lecteur est
 plus fragile que de confier le fichier à Jellyfin, qui le lit toujours.
 
+**Plus de lecteur serveur choisi par compte (13/10/2026).** La préférence « lecteur legacy »
+(`legacyPlayer`, réglage de `/parametres`), qui envoyait toutes les lectures d'un compte au lecteur
+serveur, a disparu : le natif est toujours le premier chemin. Aucun compte ne l'avait activée en
+production ce jour-là. La colonne `user_preferences.legacy_player` reste en base sans être lue ni
+écrite ; la route `direct` ne refuse plus personne pour elle ; `PUT /api/user/preferences` ignore
+`legacyPlayer` (400, rien d'écrit). Le chargeur des préférences (`useAccountPreferencesLoader`,
+ex-`useLegacyPlayer`) reste monté par `PlayerHost`, qui ne l'attend plus. Le repli automatique
+(`PLAYER_SERVER_FALLBACK`) n'est pas touché.
+
 **Tests.** `webcodecs-pathSelector.test.ts`, `ExperimentalPlayerHost.test.tsx` (« un fichier que
-le chemin natif ne porte pas »).
+le chemin natif ne porte pas »), `lecteur-legacy-retire.test.ts`, `jellyfin-direct-route.test.ts`,
+`misc-routes-batch2.test.ts`.
 
 ## 5. Le nom d'une piste
 

@@ -10,7 +10,6 @@ import { originalLanguageCode } from "@/lib/originalLanguage";
 import { displayTitle, type NamedItem } from "@/lib/displayTitle";
 import { getTitleLogoFor } from "@/lib/title-logo";
 import { localeOf, type Locale } from "@/lib/i18n";
-import { userPrefsDb } from "@/lib/db";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { FILE_MISSING, HttpError, UPSTREAM_UNREACHABLE, UpstreamUnreachableError } from "@/lib/http";
 // What Jellyfin can hand back as WebVTT — one list, shared with the subtitle generator's choice of
@@ -195,18 +194,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session?.jfId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
-  // Gated on the same per-user flag the UI toggles, checked server-side. It only ever refuses
-  // now: this is the ordinary path, and the flag exists for the account that has asked to be
-  // sent back to the server-side player instead.
-  //
-  // Honoured only where that player exists. With PLAYER_SERVER_FALLBACK off there is nothing to
-  // send anyone back to, so a preference left over from before — or set through the API — would
-  // refuse the only playback this install has. The interface stops offering the option in that
-  // case; this is the same rule, enforced where it counts.
-  if (config.player.serverFallback) {
-    const prefs = userPrefsDb.getLegacyPlayer(session.jfId ?? session.u);
-    if (prefs.enabled) return NextResponse.json({ error: "Lecteur legacy demandé pour ce compte" }, { status: 403 });
-  }
+  // Plus de refus « lecteur legacy demandé pour ce compte » (13/10/2026) : le choix par compte a
+  // disparu, le lecteur natif est le chemin de chacun. Une colonne `legacy_player` restée à 1 en
+  // base n'est plus lue — elle aurait refusé la seule lecture que l'interface propose encore.
 
   // Fetched together: the timestamps 404 for films and for episodes nobody has analysed, which
   // simply means no skip-intro and no next-up prompt for this one.

@@ -25,6 +25,8 @@ vi.mock("@/lib/clients/jellyfin", () => ({
     getItemNaming: (...a: unknown[]) => mockNaming(...a),
   },
 }));
+// L'ancienne lecture de la préférence « lecteur legacy », gardée en espion : la route ne doit plus
+// l'appeler (13/10/2026).
 const mockPrefs = vi.fn();
 vi.mock("@/lib/db", () => ({ userPrefsDb: { getLegacyPlayer: (...a: unknown[]) => mockPrefs(...a) } }));
 
@@ -242,19 +244,14 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
     expect(body.creditsStart).toBeNull();
   });
 
-  it("turns away an account that has asked for the legacy player", async () => {
-    // The gate only ever refuses now: this is the ordinary path, and the flag exists for whoever
-    // has asked to be sent back to the server-side player instead.
-    mockPrefs.mockReturnValue({ enabled: true });
-    expect((await get()).status).toBe(403);
-  });
-
-  it("ignores that preference where there is no server-side player to send anyone to", async () => {
-    // Refusing here would refuse the only playback the install has: with PLAYER_SERVER_FALLBACK
-    // off, the account option is neither offered nor honoured.
-    serverFallback = false;
+  // Le lecteur legacy par compte a disparu le 13/10/2026 : une colonne `legacy_player` restée à 1
+  // en base ne refuse plus rien, qu'il y ait un lecteur serveur ou non — et n'est même plus lue.
+  it("ignore une préférence « lecteur legacy » restée en base", async () => {
     mockPrefs.mockReturnValue({ enabled: true });
     expect((await get()).status).toBe(200);
+    serverFallback = false;
+    expect((await get()).status).toBe(200);
+    expect(mockPrefs).not.toHaveBeenCalled();
   });
 
   it("refuses a malformed id, an unauthenticated caller, and a missing file", async () => {

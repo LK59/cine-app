@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, CircleCheckBig, Globe, Loader2, LogOut, Palette, RefreshCw, History, Settings, Shield, Smartphone } from "lucide-react";
+import { Bell, CircleCheckBig, Globe, Loader2, LogOut, Palette, RefreshCw, Settings, Shield, Smartphone } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
@@ -16,7 +16,6 @@ import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 import { hardRefreshApp } from "@/lib/pwaRefresh";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
-import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 
 export default function ParametresPage() {
   const { accent, setAccent } = useTheme();
@@ -159,10 +158,8 @@ export default function ParametresPage() {
           <PwaUpdateCard />
         </section>
 
-        {/* Open to everyone: the remux path is the ordinary way this player reads a file now,
-            not an experiment to keep behind the admin account. Still off until each person
-            turns it on, and still refused server-side for anyone who hasn't. */}
-        <LegacyPlayerSection />
+        {/* Le choix « lecteur legacy » par compte a disparu le 13/10/2026 : le lecteur natif est
+            toujours le chemin par défaut, et le repli vers le lecteur serveur reste automatique. */}
 
         {role === "admin" && (
           <section>
@@ -362,71 +359,6 @@ function PwaUpdateCard() {
         {refreshing ? t('settings.app.checking') : t('settings.app.updateButton')}
       </button>
     </div>
-  );
-}
-
-// The opt-out, back to playback through the server. Off by default, and the server enforces
-// that independently of this UI — the route that serves a file to the native player refuses an
-// account that has asked to be sent back.
-//
-// Renders nothing where that player does not exist (PLAYER_SERVER_FALLBACK off): a switch whose
-// two positions do the same thing is worse than no switch. The route applies the same rule, so
-// hiding it here is presentation, not enforcement.
-function LegacyPlayerSection() {
-  const t = useT();
-  const toast = useToast();
-  const serverFallback = usePlayerServerFallback();
-  const { data, mutate } = useSWR<{ legacyPlayer?: { enabled: boolean } }>("/api/user/preferences", fetcher);
-  const enabled = data?.legacyPlayer?.enabled ?? false;
-
-  async function update(next: boolean) {
-    // Optimistic, then reconciled with what the server actually stored.
-    await mutate(
-      async () => {
-        const res = await fetch("/api/user/preferences", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ legacyPlayer: next }),
-        });
-        // Le reste des préférences gardé tel quel : cette clé est partagée (disposition de
-        // l'accueil, défilement guidé), et la remplacer par le seul `legacyPlayer` effaçait les
-        // choix de la page Compte → Interface jusqu'au rechargement (08/10/2026).
-        if (res.ok) {
-          const legacyPlayer = (await res.json()).legacyPlayer;
-          return { ...(data ?? {}), legacyPlayer };
-        }
-        // Revenir en arrière, et le dire : l'interrupteur retombait sans un mot.
-        toast.error(t("common.error"));
-        return { ...(data ?? {}), legacyPlayer: { enabled } };
-      },
-      { optimisticData: (current) => ({ ...(current ?? {}), legacyPlayer: { enabled: next } }), revalidate: false }
-    );
-  }
-
-  if (serverFallback === false) return null;
-
-  return (
-    <section>
-      <div className="mb-4 flex items-center gap-3">
-        <div className="text-slate-500">
-          <History size={18} />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-white">{t("settings.legacyPlayer.title")}</h2>
-          <p className="text-xs text-slate-500">{t("settings.legacyPlayer.subtitle")}</p>
-        </div>
-      </div>
-
-      <div className="card space-y-5 p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-white">{t("settings.legacyPlayer.enable")}</p>
-            <p className="mt-1 text-xs leading-5 text-slate-500">{t("settings.legacyPlayer.enableDesc")}</p>
-          </div>
-          <Toggle checked={enabled} onChange={update} />
-        </div>
-      </div>
-    </section>
   );
 }
 

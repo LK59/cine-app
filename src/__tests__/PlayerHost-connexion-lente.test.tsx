@@ -38,15 +38,19 @@ vi.mock("@/components/PlaybackProvider", () => ({
   usePlayback: () => playback,
   PLAYER_RELOAD_INTENT_KEY: "reload-intent",
 }));
-/** La préférence « lecteur serveur » du compte : vraie ici, sauf pour les tests de l'aiguillage (§78). */
-let legacy = true;
-vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy }) }));
+/**
+ * Les titres que le natif a passés au lecteur serveur : « film » ici, pour l'ouvrir directement, sauf
+ * pour les tests de l'aiguillage (§78). (Jusqu'au 13/10/2026, la préférence « lecteur legacy » du
+ * compte jouait ce rôle ; elle a disparu.)
+ */
+let handed: string[] = ["film"];
+vi.mock("@/lib/useAccountPreferences", () => ({ useAccountPreferencesLoader: () => {} }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
 /** Le relais du lecteur natif, quand un test en simule un (version allégée, §78). */
 let stableTakeover: Record<string, unknown> | null = null;
 vi.mock("@/lib/useStableFallback", async (original) => ({
   ...(await original<typeof import("@/lib/useStableFallback")>()),
-  useStableFallback: () => ({ handedOver: [], negotiating: false, reason: null, takeover: stableTakeover, stepAside: vi.fn(), stepBack: vi.fn(), returning: null }),
+  useStableFallback: () => ({ handedOver: handed, negotiating: false, reason: null, takeover: stableTakeover, stepAside: vi.fn(), stepBack: vi.fn(), returning: null }),
 }));
 const reported: { kind: string; fields: Record<string, unknown> }[] = [];
 vi.mock("@/lib/reportPlayback", () => ({ reportPlayback: (kind: string, fields: Record<string, unknown>) => void reported.push({ kind, fields }) }));
@@ -156,7 +160,7 @@ beforeEach(() => {
   nativeHls = false;
   reported.length = 0;
   stableTakeover = null;
-  legacy = true;
+  handed = ["film"];
   forgetLighterCarry();
   forgetPrewarm();
 });
@@ -274,7 +278,7 @@ describe("le débit demandé à Jellyfin", () => {
   });
 
   it("le banc d'essai n'hérite jamais du palier : il reste au lecteur natif", async () => {
-    legacy = false;
+    handed = [];
     playback.session = { itemId: "film", openId: 1, resumeAt: 0, title: "Film", bench: true, lighter: { targetBps: 2_500_000, tier: 1 } };
     render(<PlayerHost />);
     expect(document.querySelector("[data-testid=natif]")).not.toBeNull();
@@ -520,7 +524,7 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
   });
 
   it("l'aiguillage : sans palier hérité, le lecteur natif ; avec, le lecteur serveur ; le relais allégé aussi", async () => {
-    legacy = false;
+    handed = [];
     render(<PlayerHost />);
     expect(document.querySelector("[data-testid=natif]")).not.toBeNull();
     cleanup();

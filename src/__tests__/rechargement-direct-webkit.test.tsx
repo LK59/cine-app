@@ -41,8 +41,7 @@ vi.mock("@/components/PlayerControls", () => ({
     return <div data-testid="commandes" />;
   },
 }));
-let legacy = false;
-vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy }) }));
+vi.mock("@/lib/useAccountPreferences", () => ({ useAccountPreferencesLoader: () => {} }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
 const reported: { kind: string; fields: Record<string, unknown> }[] = [];
 vi.mock("@/lib/reportPlayback", () => ({ reportPlayback: (kind: string, fields: Record<string, unknown>) => void reported.push({ kind, fields }) }));
@@ -85,7 +84,6 @@ beforeEach(() => {
   reloads.mockClear();
   native.onFallback = null;
   controls.onChangeAudio = null;
-  legacy = false;
   nativeHls = true;
   writePlaybackQuality("auto");
   forgetLighterCarry();
@@ -253,9 +251,10 @@ describe("ailleurs, rien ne change", () => {
     expect(starts()[0]).toMatchObject({ why: "handover", lighterMbps: 1.5 });
   });
 
+  // L'ouverture directe au lecteur serveur passait par la préférence « lecteur legacy » du compte,
+  // disparue le 13/10/2026 ; il en reste une — la version allégée héritée d'une séance récente.
   it("WebKit, ouverture directe au lecteur serveur (aucune lecture native avant) : la lecture dans la page, sans rechargement", async () => {
-    legacy = true;
-    page(film);
+    page({ ...film, lighter: STEP });
     await waitFor(() => expect(starts()).toHaveLength(1));
     expect(starts()[0].why).toBe("open");
     expect(reloads).not.toHaveBeenCalled();
@@ -265,7 +264,6 @@ describe("ailleurs, rien ne change", () => {
 
 describe("tout rechargement emporte le palier allégé en cours", () => {
   it("changer de piste audio sur une séance allégée : l'intention porte le palier, et dit qu'il n'est qu'hérité", async () => {
-    legacy = true;
     page({ ...film, lighter: STEP });
     await waitFor(() => expect(controls.onChangeAudio).not.toBeNull());
     await waitFor(() => expect(starts()).toHaveLength(1));

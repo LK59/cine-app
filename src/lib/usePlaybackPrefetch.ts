@@ -3,8 +3,7 @@
 import { useEffect } from "react";
 import { fetchDirectInfo } from "@/lib/directInfo";
 import { clearFileMissing, isFileMissing, markFileMissing } from "@/lib/missingFiles";
-import { usePlayerEnabled, usePlayerServerFallback } from "@/lib/usePlayerEnabled";
-import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
+import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
 
 /**
@@ -21,20 +20,15 @@ import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
  *   fichier, et un fichier remplacé entre-temps s'ouvrait sur ses anciens octets (30/09/2026) ;
  * - l'état du spectateur, gardé trente secondes et pris une seule fois — voir `playbackPrefetch.ts`.
  *
- * Seulement quand c'est le lecteur natif qui ouvrira : le lecteur serveur ne lit ni l'une ni
- * l'autre, et la route `direct` refuse un compte qui l'a choisi.
+ * Toujours, depuis le 13/10/2026 : le lecteur natif est le chemin de chaque ouverture. Le choix
+ * « lecteur legacy » d'un compte, qui envoyait toutes ses lectures au lecteur serveur (lequel ne lit
+ * ni l'une ni l'autre), a disparu — il n'y a plus de réponse à attendre avant de préparer.
  */
 export function usePlaybackPrefetch(itemId: string | null | undefined): void {
   const enabled = usePlayerEnabled();
-  const serverFallback = usePlayerServerFallback();
-  const { legacy } = useLegacyPlayer();
-  // La même règle que `PlayerHost` : sans lecteur serveur, tout va au natif ; sinon, le compte
-  // décide. Une réponse pas encore arrivée ne prépare rien — mieux vaut rien qu'une requête pour
-  // un lecteur qui ne s'ouvrira pas.
-  const native = serverFallback === false || (serverFallback === true && legacy === false);
 
   useEffect(() => {
-    if (!enabled || !native || !itemId) return;
+    if (!enabled || !itemId) return;
     prefetchPlaybackState(itemId);
     // Un échec n'est pas gardé (`fetchDirectInfo`) : l'hôte reposera la question. Et sa nature est
     // retenue : si Jellyfin a répondu que le fichier n'existe plus, la fiche grise son bouton Lire —
@@ -45,5 +39,5 @@ export function usePlaybackPrefetch(itemId: string | null | undefined): void {
         if (isFileMissing(error)) markFileMissing(itemId);
       }
     );
-  }, [enabled, native, itemId]);
+  }, [enabled, itemId]);
 }

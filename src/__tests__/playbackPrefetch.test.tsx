@@ -11,7 +11,6 @@ import { render, cleanup, waitFor } from "@testing-library/react";
  * un film là où il en était *avant* qu'on le regarde.
  */
 
-let legacy: boolean | undefined = false;
 let serverFallback: boolean | undefined = true;
 let enabled = true;
 vi.mock("@/lib/usePlayerEnabled", () => ({
@@ -19,7 +18,6 @@ vi.mock("@/lib/usePlayerEnabled", () => ({
   usePlayerEnabledState: () => enabled,
   usePlayerServerFallback: () => serverFallback,
 }));
-vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy }) }));
 
 import {
   prefetchPlaybackState,
@@ -46,7 +44,6 @@ beforeEach(() => {
   fetchMock.mockClear();
   vi.stubGlobal("fetch", fetchMock);
   resumeSeconds = 0;
-  legacy = false;
   serverFallback = true;
   enabled = true;
 });
@@ -153,17 +150,12 @@ describe("usePlaybackPrefetch", () => {
     expect(takePrefetchedPlaybackState("film-a")).not.toBeNull();
   });
 
-  it("ne demande rien pour un compte qui lit par le serveur, ni tant qu'on ne le sait pas", async () => {
-    legacy = true;
-    const { rerender } = render(<Sheet itemId="film-b" />);
-    legacy = undefined;
-    rerender(<Sheet itemId="film-b" />);
-    await new Promise((r) => setTimeout(r, 10));
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("prépare quand même le lecteur natif d'une installation sans lecteur serveur", async () => {
-    legacy = true;
+  // Le lecteur legacy par compte a disparu le 13/10/2026 : le natif ouvre toujours, avec ou sans
+  // lecteur serveur derrière lui, et sans attendre de savoir s'il y en a un.
+  it("prépare le lecteur natif, qu'il y ait un lecteur serveur ou non, et sans attendre de le savoir", async () => {
+    serverFallback = undefined;
+    render(<Sheet itemId="film-b" />);
+    await waitFor(() => expect(calls(directInfoKey("film-b"))).toBe(1));
     serverFallback = false;
     render(<Sheet itemId="film-c" />);
     await waitFor(() => expect(calls(directInfoKey("film-c"))).toBe(1));

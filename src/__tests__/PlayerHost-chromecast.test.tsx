@@ -29,7 +29,7 @@ vi.mock("@/components/player/ChromecastPlayer", () => ({
 
 const playback = { session: null as null | Record<string, unknown>, mode: "full", close: vi.fn(), advance: vi.fn(), minimize: vi.fn(), expand: vi.fn() };
 vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => playback, PLAYER_RELOAD_INTENT_KEY: "reload-intent" }));
-vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy: false }) }));
+vi.mock("@/lib/useAccountPreferences", () => ({ useAccountPreferencesLoader: () => {} }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
 let takeover: unknown = null;
 vi.mock("@/lib/useStableFallback", async (original) => ({

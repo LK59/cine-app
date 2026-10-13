@@ -1,17 +1,20 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, cleanup, waitFor } from "@testing-library/react";
-import { SWRConfig } from "swr";
+import useSWR, { SWRConfig } from "swr";
 import { SWRProvider } from "@/components/SWRProvider";
-import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
+import { fetcher, followOnlyOptions } from "@/lib/swr";
+import { useAccountPreferencesLoader } from "@/lib/useAccountPreferences";
 import { setWatchingFullScreen } from "@/lib/playbackBusy";
 
 /**
  * Ce que ce banc protège, et ce qu'une première version ne protégeait pas.
  *
- * `PlayerHost` ne rend **rien** tant que la réponse « ancien lecteur ? » est inconnue — son
- * `return null` — et cela vaut pour une séance en cours, pas seulement pour un démarrage. Sur une
- * adresse publique, `useLegacyPlayer` ne pose plus la question : il doit donc s'en souvenir.
+ * Le chargeur des préférences du compte (`useAccountPreferencesLoader`, monté par `PlayerHost` sur
+ * toutes les pages) se tait sur une adresse publique : il doit donc se souvenir de la réponse, que
+ * le défilement guidé et la disposition de l'accueil suivent. Il s'appelait `useLegacyPlayer`, et
+ * `PlayerHost` attendait sa réponse pour exister — le choix « ancien lecteur » a disparu le
+ * 13/10/2026, mais la réponse doit toujours survivre à un remontage.
  *
  * La première version de ce banc se contentait de **re-rendre** l'arbre avec une autre valeur de
  * `usePathname`, et elle passait — la réponse était retenue par `keepPreviousData`, un état porté
@@ -27,9 +30,11 @@ import { setWatchingFullScreen } from "@/lib/playbackBusy";
 const pathname = vi.hoisted(() => ({ current: "/" }));
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.current }));
 
+/** Le chargeur, et un suiveur comme `useGuidedScroll` : ce que la page voit des préférences. */
 function Probe() {
-  const { legacy } = useLegacyPlayer();
-  return <span data-testid="legacy">{String(legacy)}</span>;
+  useAccountPreferencesLoader();
+  const { data } = useSWR<{ guidedScroll?: boolean }>("/api/user/preferences", fetcher, followOnlyOptions);
+  return <span data-testid="legacy">{String(data?.guidedScroll)}</span>;
 }
 
 /**
@@ -59,7 +64,7 @@ beforeEach(() => {
   setWatchingFullScreen(true);
   global.fetch = vi.fn(async () => ({
     ok: true,
-    json: async () => ({ legacyPlayer: { enabled: true } }),
+    json: async () => ({ guidedScroll: true }),
   })) as unknown as typeof fetch;
 });
 
@@ -69,13 +74,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("useLegacyPlayer sur un chemin public, séance en cours", () => {
+describe("useAccountPreferencesLoader sur un chemin public, séance en cours", () => {
   /**
    * Le test qui échouait en production pendant que son prédécesseur passait.
    *
    * Un remontage : nouvelle instance de hook, donc plus rien de ce que l'ancienne retenait. Si la
-   * réponse ne vit que dans l'instance, elle est perdue ici — `legacy` repasse à `undefined`,
-   * `PlayerHost` rend `null`, et le film s'arrête au moment où l'on ouvre la page d'état.
+   * réponse ne vit que dans l'instance, elle est perdue ici — et du temps où `PlayerHost` l'attendait,
+   * le film s'arrêtait au moment où l'on ouvre la page d'état.
    */
   it("connaît encore la réponse après un remontage sur une adresse publique", async () => {
     const first = mount();
@@ -123,7 +128,7 @@ describe("useLegacyPlayer sur un chemin public, séance en cours", () => {
    * Le revers de la pause, et le piège de la clé constante : une clé qui changeait déclenchait une
    * revalidation d'elle-même en quittant `/login`. Une clé en pause ne redemande rien quand la
    * pause se lève — il a fallu le demander explicitement, sans quoi la valeur restait indéfinie
-   * après la connexion et le bouton Lire ne faisait rien du tout.
+   * après la connexion (et, tant que le lecteur l'attendait, le bouton Lire ne faisait rien).
    */
   it("demande la réponse en arrivant sur l'application depuis la connexion", async () => {
     pathname.current = "/login";

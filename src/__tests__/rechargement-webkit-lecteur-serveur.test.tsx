@@ -27,7 +27,7 @@ vi.mock("@/components/PlayerControls", () => ({
   PlayerControls: () => <div data-testid="commandes" />,
 }));
 // Un compte qui n'a pas choisi le lecteur stable : sans relais, c'est le natif qui s'ouvre.
-vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy: false }) }));
+vi.mock("@/lib/useAccountPreferences", () => ({ useAccountPreferencesLoader: () => {} }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
 vi.mock("@/lib/reportPlayback", () => ({ reportPlayback: () => {} }));
 vi.mock("@/lib/unsentStop", () => ({ flushOrphanStops: () => {}, saveUnsentStop: () => {}, clearUnsentStop: () => {} }));

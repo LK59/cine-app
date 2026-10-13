@@ -10,7 +10,7 @@ import { fetcher, followOnlyOptions } from "@/lib/swr";
  * défaut.
  *
  * Rangée avec la langue dans les préférences du compte (`/api/user/preferences`). La clé est déjà
- * chargée au démarrage par `useLegacyPlayer`, toujours monté et porteur du chargeur : on la suit
+ * chargée au démarrage par `useAccountPreferencesLoader` (monté par `PlayerHost`), toujours monté et porteur du chargeur : on la suit
  * sans la redemander (`followOnlyOptions` — voir le piège `revalidators[0]` de CLAUDE.md). Avant
  * sa réponse, la dernière valeur connue sur cet appareil, pour qu'un compte qui l'a coupé ne voie
  * pas l'accueil se caler une seconde au lancement.

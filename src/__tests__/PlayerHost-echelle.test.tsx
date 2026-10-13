@@ -42,12 +42,15 @@ vi.mock("@/components/PlaybackProvider", () => ({
   usePlayback: () => playback,
   PLAYER_RELOAD_INTENT_KEY: "reload-intent",
 }));
-vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy: true }) }));
+vi.mock("@/lib/useAccountPreferences", () => ({ useAccountPreferencesLoader: () => {} }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
+// Le lecteur serveur s'ouvre parce que le natif lui a passé ces titres (`handedOver`) : le choix
+// « lecteur legacy » par compte, qui l'ouvrait d'office, a disparu le 13/10/2026.
+const SERVEUR = vi.hoisted(() => ["film", "ep-1", "ep-2"]);
 vi.mock("@/lib/useStableFallback", async (original) => ({
   ...(await original<typeof import("@/lib/useStableFallback")>()),
   useStableFallback: () => ({
-    handedOver: [],
+    handedOver: SERVEUR,
     negotiating: false,
     reason: null,
     takeover: null,

@@ -2,25 +2,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor } from "@testing-library/react";
 import useSWR, { SWRConfig } from "swr";
-import { fetcher } from "@/lib/swr";
-import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
+import { fetcher, followOnlyOptions } from "@/lib/swr";
+import { useAccountPreferencesLoader } from "@/lib/useAccountPreferences";
 
 function Ordinary() {
   const { data } = useSWR<unknown>("/api/cinema/movies", fetcher);
   return <span data-testid="ordinaire">{data === undefined ? "rien" : "servi"}</span>;
 }
 
+/** Le chargeur des préférences du compte, et un suiveur comme `useGuidedScroll`. */
 function Probe() {
-  const { legacy } = useLegacyPlayer();
-  return <span data-testid="legacy">{legacy === undefined ? "inconnu" : String(legacy)}</span>;
+  useAccountPreferencesLoader();
+  const { data } = useSWR<{ guidedScroll?: boolean }>("/api/user/preferences", fetcher, followOnlyOptions);
+  return <span data-testid="legacy">{data?.guidedScroll === undefined ? "inconnu" : String(data.guidedScroll)}</span>;
 }
 
 /**
  * Un film qui occupe l'écran ne doit pas empêcher de savoir comment le lire.
  *
  * `SWRProvider` suspend toute requête pendant une lecture plein écran — pour taire les sondages de
- * la page invisible derrière. Ça attrapait aussi la préférence « ancien lecteur », sans laquelle
- * PlayerHost ne rend rien du tout ; et comme la séance est rouverte dès le montage après le
+ * la page invisible derrière. Ça attrapait aussi les préférences du compte — dont la préférence
+ * « ancien lecteur », disparue le 13/10/2026, sans laquelle PlayerHost ne rendait rien du tout ; et comme la séance est rouverte dès le montage après le
  * rechargement que WebKit impose pour changer de piste audio, l'écran était déclaré occupé avant
  * que la réponse n'arrive. Elle n'arrivait plus jamais : plus de lecteur, plus de bouton Lire,
  * une recherche vide, et rien dans l'interface pour en sortir.
@@ -36,7 +38,7 @@ function renderPaused() {
 beforeEach(() => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => ({ ok: true, json: async () => ({ legacyPlayer: { enabled: true } }) }))
+    vi.fn(async () => ({ ok: true, json: async () => ({ guidedScroll: true }) }))
   );
 });
 
@@ -49,7 +51,7 @@ describe("l'amorçage du lecteur sous pause globale", () => {
     expect(fetch).toHaveBeenCalledWith("/api/user/preferences");
   });
 
-  it("ne reste jamais sur « inconnu », qui est l'état où PlayerHost ne rend rien", async () => {
+  it("ne reste jamais sur « inconnu »", async () => {
     const view = renderPaused();
     await waitFor(() => expect(view.getByTestId("legacy").textContent).not.toBe("inconnu"));
   });

@@ -1318,12 +1318,6 @@
       "reloadNotice": "Se necesita recargar para aplicar {lang}",
       "apply": "Aplicar"
     },
-    "legacyPlayer": {
-      "title": "Reproductor antiguo",
-      "subtitle": "Volver a reproducir a través del servidor",
-      "enable": "Usar el reproductor antiguo",
-      "enableDesc": "De forma predeterminada, las películas se reproducen directamente en el navegador, sin pedir nada al servidor. Esta opción vuelve al camino anterior: el servidor negocia el flujo y transcodifica cuando hace falta. Arranca más lento y cuesta al servidor, pero es el camino probado: actívalo si tienes algún problema de reproducción."
-    },
     "onboarding": {
       "title": "Pantalla de bienvenida",
       "hint": "Proponerla a una cuenta la próxima vez que se abra la aplicación. Se desactiva cuando la persona llega al final.",

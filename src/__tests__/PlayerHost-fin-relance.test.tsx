@@ -47,17 +47,19 @@ vi.mock("@/components/PlaybackProvider", () => ({
   usePlayback: () => playback,
   PLAYER_RELOAD_INTENT_KEY: "reload-intent",
 }));
-// Le compte a choisi le lecteur stable : c'est lui qui s'ouvre, sans passer par le natif.
-vi.mock("@/lib/useLegacyPlayer", () => ({ useLegacyPlayer: () => ({ legacy: true }) }));
+vi.mock("@/lib/useAccountPreferences", () => ({ useAccountPreferencesLoader: () => {} }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
 
 /** L'état des relais — une diffusion en cours, quand un test le demande. */
 let relais: { takeover: unknown } = { takeover: null };
 const stepBack = vi.fn();
+// Le lecteur serveur s'ouvre parce que le natif lui a passé ces titres (`handedOver`) : le choix
+// « lecteur legacy » par compte, qui l'ouvrait d'office, a disparu le 13/10/2026.
+const SERVEUR = vi.hoisted(() => ["film", "ep-1", "ep-2"]);
 vi.mock("@/lib/useStableFallback", async (original) => ({
   ...(await original<typeof import("@/lib/useStableFallback")>()),
   useStableFallback: () => ({
-    handedOver: [],
+    handedOver: SERVEUR,
     negotiating: false,
     reason: null,
     takeover: relais.takeover,

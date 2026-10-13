@@ -10,7 +10,7 @@ import { useServerHomeLayout } from "@/lib/usePlayerEnabled";
  * serveur. Réglée dans Compte → Interface, à côté du défilement guidé.
  *
  * Rangée dans les préférences du compte (`/api/user/preferences`), déjà chargées au démarrage par
- * `useLegacyPlayer` : suivies sans être redemandées (`followOnlyOptions`, voir le piège
+ * `useAccountPreferencesLoader` : suivies sans être redemandées (`followOnlyOptions`, voir le piège
  * `revalidators[0]` de CLAUDE.md). Avant leur réponse, la dernière disposition vue sur cet
  * appareil — sans quoi un compte qui a choisi l'autre verrait l'accueil changer de forme une
  * seconde après le lancement —, puis celle du serveur.

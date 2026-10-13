@@ -40,9 +40,10 @@ The Cinema interface is the application: `/` serves it, management lives at `/ge
 addresses the player used to have — `/cinema`, then `/player` — answer a permanent redirect to `/`.
 
 **Two players coexist.** The server-side one (Jellyfin/HLS) remains, and takes over when this one
-declines: a file it cannot remux, a browser that refuses the codec, or an account that asked for
-the legacy player in its settings. `PlayerHost` owns that switch, and `fallToStable` hands over
-rather than closing.
+declines: a file it cannot remux, a browser that refuses the codec, or a link too slow for the
+file (the lighter version). There is no per-account opt-out to it any more (removed 13/10/2026):
+the native player is always tried first. `PlayerHost` owns that switch, and `fallToStable` hands
+over rather than closing.
 
 The design goal is the cost model. A server transcode is expensive, starts slowly and degrades the
 image; here the file leaves the disk as it is. That is why in-app playback (`PLAYER_ENABLED`) is on

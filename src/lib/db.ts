@@ -250,7 +250,9 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_capability_checks_time ON capability_checks (checked_at);
   `);
 
-  // Per-user opt-out, back to the server-side player.
+  // Per-user opt-out, back to the server-side player. N'est plus lue ni écrite depuis le 13/10/2026 :
+  // le lecteur legacy par compte a disparu (aucun compte ne l'avait activé en production ce jour-là).
+  // Gardée pour ne pas recopier la table.
   //
   // A new column rather than a reinterpretation of the old one, which meant the opposite: the
   // people who had opted into the new player are exactly the people who must not be sent back to
@@ -567,14 +569,6 @@ export const userPrefsDb = {
     `).run(userId, lang, Date.now());
   },
 
-  /** Whether this account has asked to go back to playback through the server. Off by default. */
-  getLegacyPlayer(userId: string): { enabled: boolean } {
-    const row = getDb()
-      .prepare("SELECT legacy_player FROM user_preferences WHERE user_id = ?")
-      .get(userId) as { legacy_player: number | null } | undefined;
-    return { enabled: row?.legacy_player === 1 };
-  },
-
   /** Le défilement guidé (calage sur une rangée ou une page) : activé tant que le compte ne l'a pas coupé. */
   getGuidedScroll(userId: string): boolean {
     const row = getDb()
@@ -617,16 +611,6 @@ export const userPrefsDb = {
         guided_scroll = excluded.guided_scroll,
         updated_at = excluded.updated_at
     `).run(userId, on ? 1 : 0, Date.now());
-  },
-
-  setLegacyPlayer(userId: string, enabled: boolean): void {
-    getDb().prepare(`
-      INSERT INTO user_preferences (user_id, lang, legacy_player, updated_at)
-      VALUES (?, NULL, ?, ?)
-      ON CONFLICT (user_id) DO UPDATE SET
-        legacy_player = excluded.legacy_player,
-        updated_at = excluded.updated_at
-    `).run(userId, enabled ? 1 : 0, Date.now());
   },
 };
 
