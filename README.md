@@ -4,13 +4,11 @@ Self-hosted PWA that turns a Radarr / Sonarr / Bazarr / Jackett / qBittorrent / 
 Jellyseerr stack into **two interfaces on one container**: a Netflix-style front end everyone in
 the household uses, and a management dashboard for whoever runs the box.
 
-> ### [**Quick start → QUICKSTART.md**](QUICKSTART.md) — one compose file, a first-launch assistant, no `.env` required
+> ### [**Install → DEPLOYMENT.md**](DEPLOYMENT.md)
 >
-> ### [**Deployment guide → DEPLOYMENT.md**](DEPLOYMENT.md)
->
-> Step-by-step installation from the published Docker image: prerequisites, API keys, `.env`,
-> compose file, reverse proxy, first login, updates, backups and troubleshooting. No source
-> checkout, no build toolchain — one container, a compose file and an optional `.env`.
+> Copy one compose file, start it, put it behind your reverse proxy, then follow the setup
+> assistant in the browser. No source checkout, no build toolchain, no `.env` required.
+> Every variable, for those who want one: [ENV.md](ENV.md).
 
 ## The two interfaces
 
@@ -249,7 +247,7 @@ In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now w
   by the administrator) translates it while the film plays, starting where the viewer is. The
   finished file is handed to Jellyfin, so every client sees it afterwards. A monthly budget and a
   daily limit per account bound the cost — see
-  [DEPLOYMENT.md](DEPLOYMENT.md#generated-subtitles).
+  [DEPLOYMENT.md](DEPLOYMENT.md#5-settings-in-the-app).
 
 **[Full technical documentation → DOC-TECH.md](DOC-TECH.md)** — the two paths, how the remuxer
 reconstructs decode times, how random access points are verified, how audio is delivered or
@@ -474,25 +472,28 @@ naming the services behind; signed in, it shows every capability.
 
 # Deployment
 
-**→ [DEPLOYMENT.md](DEPLOYMENT.md) is the complete guide.** What follows is the shape of it.
-
-You need Docker, an existing media stack, API keys for the services you want to connect, and
-ideally a shared Docker network. You do **not** need to clone this repository or install Node:
-the image published on GHCR contains the built app.
+**→ [DEPLOYMENT.md](DEPLOYMENT.md) is the installation guide.** In short:
 
 ```bash
-curl -O https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
-docker compose -f docker-compose.example.yml up -d
-# then open http://<server>:3000 — a first-launch assistant asks for the rest
+mkdir cine-app && cd cine-app
+curl -o docker-compose.yml https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
+docker compose up -d
+# then open http://<server>:3000 — the setup assistant asks for the rest
 ```
 
-No `.env` is required: the assistant asks for an administrator account, then Jellyfin, TMDB and
-Radarr/Sonarr, and generates the secrets — see [QUICKSTART.md](QUICKSTART.md). An existing `.env`
-keeps working. For a shared network, a media folder and hardening, start from
-`docker-compose.advanced.yml` instead.
+You need Docker, a running Jellyfin, Radarr and/or Sonarr, and a free TMDB key. You do **not**
+clone this repository, install Node or write an `.env`: the assistant creates the administrator
+account, asks for Jellyfin, TMDB and Radarr/Sonarr, and the secrets are generated on first launch.
+Everything else is set later in **Management → Configuration**.
 
-The app listens on port `3000` inside Docker; put a reverse proxy in front of it. Updating is
-`docker compose pull && docker compose up -d` — migrations run at startup.
+The app listens on port `3000`; put an HTTPS reverse proxy in front of it (the guide has Nginx
+Proxy Manager, Caddy and Traefik examples). Updating is `docker compose pull && docker compose up
+-d` — migrations run at startup.
+
+An `.env` remains possible, as a fallback or to keep the configuration as code: the value set in
+the app wins, then `.env`, then the default. [ENV.md](ENV.md) lists every variable and says which
+ones the app can set, which belong to the compose file, and which never go in the app.
+`docker-compose.advanced.yml` is the annotated template for that style of deployment.
 
 `docker-compose.yml` is intentionally git-ignored: keep your production compose local to your
 server, and commit changes to `docker-compose.example.yml` (minimal) or `docker-compose.advanced.yml`
@@ -513,10 +514,11 @@ username and password. The session carries a Jellyfin identity, which is what pe
 play history, watched state, playback preferences and recommendations are all built on. Jellyfin
 administrators are administrators here; everyone else is a regular user.
 
-**The local admin account** (`APP_ADMIN_USER` / `APP_ADMIN_PASSWORD`) is independent from Jellyfin
-— for setup, and for the day Jellyfin is unreachable. It has no Jellyfin identity, so nothing
-depending on one works under it, and it lands on `/gestion` rather than on Cinema. It is optional:
-leaving `APP_ADMIN_PASSWORD` empty disables it.
+**The local admin account** is created by the setup assistant (its password stored hashed) and is
+independent from Jellyfin — for setup, and for the day Jellyfin is unreachable. It has no Jellyfin
+identity, so nothing depending on one works under it, and it lands on `/gestion` rather than on
+Cinema. A deployment managed as code can fix it in `.env` instead (`APP_ADMIN_USER` /
+`APP_ADMIN_PASSWORD`, see [ENV.md](ENV.md)), which replaces the assistant's.
 
 Permissions are never enforced by the interface. `src/proxy.ts` refuses every write a `user`
 should not make, whatever the screen happens to show; hiding a button is presentation, not
@@ -598,7 +600,7 @@ can be revoked immediately rather than only on expiry. A few things are worth kn
   server records the address of each connection itself and believes `X-Forwarded-For` only when the
   connection comes from a proxy listed in `TRUSTED_PROXIES` (a container name, an address or a
   network). Without it, any container on the same Docker network could claim a different address
-  on every attempt. See [DEPLOYMENT.md](DEPLOYMENT.md).
+  on every attempt. See [DEPLOYMENT.md](DEPLOYMENT.md#3-put-it-behind-a-reverse-proxy).
 - **Signing your other devices out affects Cine App only.** The Jellyfin sessions those logins
   opened are left alone — deliberately: nobody clicking that button expects to lose Jellyfin
   with it.
@@ -703,7 +705,7 @@ docker exec cine-app tail -n 50 /app/data/logs/player.log   # what each viewer's
 Both are one JSON object per line, rotated at 5 MB, and live in the `data` volume — which matters,
 because `docker logs` dies with the container, and the container is recreated on every deploy.
 Beside them: `auth.log`, `startup.log`, `notifications.log`, `subtitle-gen.log` and the test bench's
-`bench.log` — all listed in [DEPLOYMENT.md](DEPLOYMENT.md#15-troubleshooting).
+`bench.log` — all listed in [DEPLOYMENT.md](DEPLOYMENT.md#7-troubleshooting).
 
 ---
 
@@ -712,14 +714,15 @@ Beside them: `auth.log`, `startup.log`, `notifications.log`, `subtitle-gen.log` 
 | Document | What it covers |
 |---|---|
 | **README.md** *(this file)* | What the two interfaces are and what they do |
-| **[DEPLOYMENT.md](DEPLOYMENT.md)** | Installing and running it, step by step, from the published image |
-| **[QUICKSTART.md](QUICKSTART.md)** | The minimal deployment and the first-launch assistant |
+| **[DEPLOYMENT.md](DEPLOYMENT.md)** | Installing and running it: compose file, reverse proxy, setup assistant, settings, updates, backups |
+| **[ENV.md](ENV.md)** | Every configuration variable: default, role, and whether the app can set it |
+| **[QUICKSTART.md](QUICKSTART.md)** | The three commands, pointing to the guide |
 | **[DOC-TECH.md](DOC-TECH.md)** | The in-browser player: the native path and the server player behind it, the remuxer, audio, generated subtitles, diagnostics |
 | **[PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md)** | A non-technical presentation of the player, in French |
 | **[CLAUDE.md](CLAUDE.md)** | Architecture and conventions, for anyone working on the code |
 | **[DECISIONS.md](DECISIONS.md)** | Rules decided in one shared function, their callers and tests |
 | **[`tools/truehd-wasm/`](tools/truehd-wasm/)**, **[`tools/aac-wasm/`](tools/aac-wasm/)** | Reproducible builds of the committed TrueHD and AAC WebAssembly decoders: pinned FFmpeg, checked SHA-256 |
-| **`.env.example`** | Every configuration variable, annotated in place |
+| **`.env.example`** | Every configuration variable, commented out — optional, described in ENV.md |
 | **`docker-compose.example.yml`** | The minimal deployment: one service, one volume, no `.env` |
 | **`docker-compose.advanced.yml`** | The advanced deployment template, annotated in place |
 

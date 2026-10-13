@@ -15,8 +15,9 @@
 # and a separate build directory so the two never overwrite each other's compiled output.
 #
 # Install node_modules first (see README, Development): the working tree is mounted as it is.
-# The media paths and the `user:` below are the reference host's — adapt them to your
-# own machine, as in docker-compose.example.yml.
+# It reads the same .env as docker-compose.advanced.yml (ENV.md) and shares ./data with it. The
+# media path and the `user:` below are examples — adapt them to your own machine (DEPLOYMENT.md,
+# appendix: file permissions).
 
 networks:
   media_net:

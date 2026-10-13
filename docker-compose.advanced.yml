@@ -1,18 +1,16 @@
-# The advanced deployment: a shared Docker network, a media folder, an .env file and hardening.
-# For the minimal one (no .env, first-launch assistant), see docker-compose.example.yml.
-#
-# Copy this file to docker-compose.yml, then adapt paths, network name and timezone.
+# CineApp — the advanced deployment: a shared Docker network, a bind-mounted ./data, a media
+# folder, an .env file and hardening. For the minimal one (named volume, no .env, setup
+# assistant), see docker-compose.example.yml. Guide: DEPLOYMENT.md (appendix). Variables: ENV.md.
 #
 #   cp docker-compose.advanced.yml docker-compose.yml
-#   nano docker-compose.yml
+#   cp .env.example .env                       # every line commented: uncomment what you set
+#   mkdir -p data && sudo chown -R 1001:1001 data
 #
-# Cine App must be able to reach your media services from inside the container.
-# Recommended: attach it to the same external Docker network as Radarr/Sonarr/etc.
+# Then adapt the network name, the time zone and the media path below. The setup assistant still
+# opens on first launch unless .env already sets Jellyfin, TMDB and Radarr or Sonarr.
 #
-# This uses the pre-built image published on GitHub Container Registry — no
-# build step, no source checkout needed. To update later:
-#   docker compose pull && docker compose up -d
-# To pin a version or roll back, replace `latest` with a commit SHA tag (DEPLOYMENT.md, step 13).
+# Updating: docker compose pull && docker compose up -d
+# Pinning or rolling back: replace `latest` with a commit tag (ghcr.io/lk59/cine-app:<sha>).
 
 networks:
   media_net:
@@ -29,8 +27,9 @@ services:
     environment:
       # Adapt to your timezone.
       - TZ=Europe/Paris
-      # Behind a reverse proxy on the same network, name it here (or in .env) so its X-Forwarded-For
-      # is the only one believed — see DEPLOYMENT.md, step 10.
+      # Behind an HTTPS reverse proxy (DEPLOYMENT.md, step 3): secure cookies, and the proxy's
+      # container name, the only one believed about visitors' addresses. Here or in .env.
+      # - COOKIE_SECURE=true
       # - TRUSTED_PROXIES=nginx-proxy-manager
     volumes:
       # Persistent app data — the only state of this installation: SQLite database and its daily

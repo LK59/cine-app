@@ -1,29 +1,61 @@
-# CineApp — the minimal deployment. Save as docker-compose.yml, run `docker compose up -d`, then
-# open http://<server>:3000: a first-launch assistant asks for the rest (see QUICKSTART.md).
-# No .env needed; secrets are generated on first launch.
+# CineApp — the minimal deployment.
+#
+#   1. Save this file as docker-compose.yml in an empty folder.
+#   2. docker compose up -d
+#   3. Open http://<server>:3000 — the setup assistant asks for everything else.
+#
+# No .env is needed: secrets are generated on first launch, and every setting is made in the app.
+# Each optional line below is commented, with what it is for. Guide: DEPLOYMENT.md. Variables: ENV.md.
 services:
   cine-app:
-    image: ghcr.io/lk59/cine-app:latest
-    container_name: cine-app   # the name the commands in QUICKSTART.md use
-    ports:
-      - "3000:3000"            # the address you will open: http://<server>:3000
-    volumes:
-      - cine-data:/app/data    # everything the app keeps: database, generated secrets, logs
+    image: ghcr.io/lk59/cine-app:latest   # or a commit tag (ghcr.io/lk59/cine-app:<sha>) to pin a version
+    container_name: cine-app              # the name the commands in the guide use
     restart: unless-stopped
-    # Optional — uncomment what you need:
-    # environment:
-    #   - TZ=Europe/Paris                # time zone for logs and schedules
-    #   - MEDIA_ROOT=/mnt/media/video    # storage statistics in the management area
-    #   - TRUSTED_PROXIES=nginx-proxy-manager   # your reverse proxy's container name (DEPLOYMENT.md)
-    # volumes:                           # (add to the list above, not a second key)
-    #   - /path/to/media:/mnt/media/video:ro
+
+    # Direct access: http://<server>:3000. Change the left number if 3000 is taken ("3005:3000").
+    # Behind a reverse proxy on the same Docker network, delete these two lines (nothing published)
+    # and point the proxy at http://cine-app:3000.
+    ports:
+      - "3000:3000"
+
+    # The Docker network your reverse proxy (and ideally Jellyfin, Radarr…) is attached to, so they
+    # reach each other by container name. Uncomment here and in `networks:` at the bottom.
     # networks:
-    #   - media_net                      # reach Jellyfin, Radarr… by container name
+    #   - proxy
+
+    volumes:
+      # Everything the app keeps: database, settings, generated secrets, logs. The only state.
+      - cine-data:/app/data
+      # Variant: a folder next to this file instead of a named volume (replace the line above).
+      # Create it first, owned by the container's user: mkdir data && sudo chown 1001:1001 data
+      # - ./data:/app/data
+
+      # Optional, read-only: your media, for Management → Statistics and the storage card only.
+      # Mount the root Radarr and Sonarr see at /mnt/media/video; movies/, tv/ and downloads/seeds/
+      # inside it are found on their own (other layouts: MEDIA_ROOT and *_PATH in ENV.md).
+      # - /path/to/media:/mnt/media/video:ro
+
+    environment:
+      - TZ=Etc/UTC                        # your time zone (e.g. Europe/Paris), for logs and schedules
+      # Behind an HTTPS reverse proxy (DEPLOYMENT.md, step 3):
+      # - COOKIE_SECURE=true              # session cookies over HTTPS only — never while testing over http://
+      # - TRUSTED_PROXIES=nginx-proxy-manager   # the proxy's container name: the only one believed about visitors' addresses
+
+    # Optional: a memory ceiling, so a leak restarts this container instead of starving the host.
+    # mem_limit: 2g
+
+    # "healthy" in `docker compose ps` once the server answers and can read its database.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
 volumes:
   cine-data:
-    name: cine-app-data      # a fixed name, so the backup commands below work as written
+    name: cine-app-data                   # a fixed name, used by the backup commands in the guide
 
-# networks:                  # only if you uncommented `networks` above
-#   media_net:
-#     external: true         # the name of the Docker network your media services share
+# networks:
+#   proxy:
+#     external: true                      # an existing network (`docker network ls`); use its real name
