@@ -3874,7 +3874,9 @@ un compte désactivé ou créé doit se voir à la relecture suivante.
 ## 83. L'accent est blanc neutre ; la couleur ne dit qu'un état
 
 **La règle.** L'interface n'a plus de couleur à elle : ce qui est principal, sélectionné, en cours,
-mis en avant ou focalisé est **blanc**, façon Apple TV — boutons principaux (fond blanc, texte noir,
+mis en avant ou focalisé est **blanc**, façon Apple TV (les états personnels — vu, dans ma liste,
+reprise, compteurs — sont passés au violet de la marque le même jour : voir « Option B » plus bas) —
+boutons principaux (fond blanc, texte noir,
 grisé d'un cran au survol et à l'appui), barres de progression (Reprendre, épisodes, lecteur,
 mini-lecteur, téléchargements, jauges), pastilles et compteurs (fond blanc, chiffre noir),
 interrupteurs activés (rail blanc, pastille noire), puces retenues, cases et curseurs natifs
@@ -3911,5 +3913,35 @@ Le badge rouge « Nouveau » et les couleurs des sites liés depuis une fiche pe
 étaient (§ « une couleur par état »). Le laboratoire d'animations garde ses matières d'essai.
 
 **Décidé le 13/10/2026.**
+
+**Option B : blanc = action, violet de marque = état personnel, couleurs = états système (Louis,
+13/10/2026, le même jour).** Tout blanc, « vu » ne se distinguait plus de « marquer vu », ni une
+barre de reprise d'une barre de téléchargement. La règle devient à trois termes :
+- **Blanc** : ce qu'on *fait* — boutons principaux, focus, onglets et puces retenus, interrupteurs,
+  liens, la pilule des barres de navigation. Inchangé.
+- **Violet de la marque** (celui du logo) : ce qui est *à moi* — la coche et l'état « Vu » (cartes,
+  fiches, épisodes, menus des fiches), « Dans ma liste » (bouton `btn-mine`, icônes, pastille du
+  menu), les barres de progression de reprise (cartes Reprendre, bannière, fiches, épisodes, ligne
+  « Reprendre » du menu) et la partie lue de la barre du lecteur et du mini-lecteur, les pastilles
+  de compteur (signalements, réponses non lues, Activité). Le téléchargement en cours, une jauge,
+  un graphique ne sont pas « à moi » et restent blancs ou à leurs teintes.
+- **Rouge, orange, vert** : `danger`, `warning`, `success`, et rien d'autre — « Vu » en vert dans
+  les fiches de la gestion passe au violet, « déjà dans la liste » aussi.
+
+Deux teintes, deux jetons (`globals.css`, `@theme`) : `brand` = `rgb(155 140 255)`, le violet du
+logo, pour une coche, une icône ou une barre posée sur le noir (7,2:1 sur `ink`) ; `brand-strong` =
+`rgb(110 90 230)` pour un fond plein sous un texte ou une icône blanche (4,9:1 — `brand` sous du
+blanc ne fait que 2,8:1). La pastille d'état du menu des fiches (`MENU_BADGE_ACTIVE`) est un fond
+`brand-strong` à icône blanche à elle : lisible au repos comme sous le sélecteur blanc, où la ligne
+devient noire. La barre « Reprendre » d'une ligne de menu est `brand-strong` pour la même raison ;
+celle du bouton principal blanc, un voile `brand/35`. La pastille qu'on saisit sur la barre du
+lecteur reste blanche : c'est une action. `btn-on` reste le voile blanc d'une option retenue
+(onglets, vues) ; `btn-mine` est son pendant pour un état personnel.
+
+Porteurs : `ProgressFill` (toutes les barres de reprise des cartes, de la bannière et des épisodes),
+`MENU_BADGE_ACTIVE` (`detailMenu.ts`), `PlayButton`, `btn-mine` et `.player-seek` (`globals.css`),
+`NavDot`. Tests : `design-tokens.test.ts` (« le violet de la marque dit ce qui est à moi » : teintes
+et contrastes, chaque surface porte le violet, **aucun violet hors d'une liste de fichiers tenue à
+la main**, jamais de texte blanc sur `brand`), `cinemaDetailMenu.test.ts`.
 
 **Seule exception : le logo de l'application reste violet (Louis, 13/10/2026).** Icônes PWA (`public/icon-*.png`, SVG), favicon, écrans de lancement et logo de la page de connexion (qui affiche `icon-512.png`) gardent le clap violet : c'est la marque. Tout le reste de l'interface suit l'accent blanc neutre.

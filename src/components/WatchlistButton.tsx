@@ -84,9 +84,9 @@ export function WatchlistButton({
       data-watchlist-toggle
       // Ce bouton était resté en dehors du système : `rounded` au lieu de `rounded-lg`, un fond
       // deux fois plus discret et un texte deux tons plus sombre que ses voisins. Posé entre
-      // « Marquer vu » et « Bande-annonce », il avait l'air désactivé. `btn-on` est la façon dont
-      // le reste de l'app dit « c'est l'option retenue » — ici, « ce titre est dans la liste ».
-      className={`btn btn-ghost ${inList ? "btn-on" : ""} ${size === "sm" ? "btn-icon" : ""} ${className}`}
+      // « Marquer vu » et « Bande-annonce », il avait l'air désactivé. `btn-mine` est la façon dont
+      // l'app dit « c'est à moi » — ici, « ce titre est dans ma liste » (§83, option B).
+      className={`btn btn-ghost ${inList ? "btn-mine" : ""} ${size === "sm" ? "btn-icon" : ""} ${className}`}
     >
       <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={iconSize} />} offIcon={<Bookmark size={iconSize} />} />
       {/* Le libellé court : la rangée d'actions d'une fiche en porte déjà quatre autres, et

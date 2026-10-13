@@ -438,7 +438,7 @@ export function GlobalSearch() {
                       ><Film size={12} /></button>
                       <button
                         onClick={() => toggleWatchlist(r)}
-                        className={`btn btn-ghost btn-icon p-1.5 ${inList ? "btn-on" : ""}`}
+                        className={`btn btn-ghost btn-icon p-1.5 ${inList ? "btn-mine" : ""}`}
                         title={inList ? t('search.removeFromList') : t('search.addToList')}
                       >
                         {inList ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}
@@ -540,7 +540,7 @@ export function GlobalSearch() {
                       </button>
                       <button
                         onClick={() => toggleWatchlist(r)}
-                        className={`btn btn-ghost btn-icon p-1.5 ${inList ? "btn-on" : ""}`}
+                        className={`btn btn-ghost btn-icon p-1.5 ${inList ? "btn-mine" : ""}`}
                         title={inList ? t('search.removeFromList') : t('search.addToList')}
                       >
                         {inList ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}

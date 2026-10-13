@@ -10,5 +10,5 @@
  * recalcule autour pendant qu'elle joue. « Réduire les animations » la ramène à rien.
  */
 export function ProgressFill({ percent }: { percent: number }) {
-  return <div className="progress-fill h-full bg-accent-500" style={{ width: `${percent}%` }} />;
+  return <div className="progress-fill h-full bg-brand" style={{ width: `${percent}%` }} />;
 }

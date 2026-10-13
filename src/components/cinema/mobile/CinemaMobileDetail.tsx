@@ -608,7 +608,7 @@ export function CinemaMobileDetail({
               devient un marque-page coché se lit d'un coup d'œil, et le libellé dit l'état. */}
           {canJoinWatchlist(tmdbId) && (
             <button type="button" onClick={toggleInList} aria-pressed={inList} data-liquid-pan="icon" className="flex w-16 flex-col items-center gap-1.5">
-              <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={22} className="text-accent-400" />} offIcon={<Plus size={22} className="text-white" />} />
+              <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={22} className="text-brand" />} offIcon={<Plus size={22} className="text-white" />} />
               <span className="text-center text-xs leading-tight text-muted">
                 {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
               </span>
@@ -624,7 +624,7 @@ export function CinemaMobileDetail({
             data-liquid-pan="icon"
             className={`flex w-16 flex-col items-center gap-1.5 ${watchedKnown ? "" : "opacity-40"}`}
           >
-            <ToggleGlyph on={watched} onIcon={<CircleCheck size={22} className="text-accent-400" />} offIcon={<Check size={22} className="text-white" />} />
+            <ToggleGlyph on={watched} onIcon={<CircleCheck size={22} className="text-brand" />} offIcon={<Check size={22} className="text-white" />} />
             <span className="text-center text-xs leading-tight text-muted">
               {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
             </span>
@@ -706,8 +706,8 @@ export function CinemaMobileDetail({
                       </span>
                     )}
                     {episode.watched && (
-                      <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent-500/90">
-                        <Check size={10} className="text-ink" />
+                      <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-strong">
+                        <Check size={10} className="text-white" />
                       </span>
                     )}
                     <CinemaEpisodeProgress

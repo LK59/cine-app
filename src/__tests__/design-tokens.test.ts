@@ -205,3 +205,97 @@ describe("l'accent est blanc neutre", () => {
     expect(whiteOnWhite("text-white hover:bg-white/10 focus-visible:bg-white focus-visible:text-ink")).toEqual([]);
   });
 });
+
+// Option B, validée par Louis le 13/10/2026 (DECISIONS.md §83) : le blanc reste aux actions, et le
+// violet du logo dit ce qui est *à moi* — vu, dans ma liste, où j'en suis, ce qui m'attend. Deux
+// fautes à garder : le violet qui se répand hors de ces états (un copier-coller suffit, et la
+// règle ne veut plus rien dire), et un texte blanc sur le violet clair, illisible à 2,8:1.
+describe("le violet de la marque dit ce qui est à moi", () => {
+  const theme = readFileSync("src/app/globals.css", "utf8");
+  const rgbOf = (name: string) => {
+    const m = theme.match(new RegExp(`--color-${name}:\\s*rgb\\((\\d+) (\\d+) (\\d+)\\)`));
+    expect(m, name).not.toBeNull();
+    return [Number(m![1]), Number(m![2]), Number(m![3])];
+  };
+  const luminance = (rgb: number[]) => {
+    const [r, g, b] = rgb.map((c) => {
+      const s = c / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a: number[], b: number[]) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const INK = [10, 10, 12];
+  const WHITE = [255, 255, 255];
+
+  it("le violet est celui du logo, et se lit sur le noir", () => {
+    expect(rgbOf("brand")).toEqual([155, 140, 255]);
+    expect(contrast(rgbOf("brand"), INK)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("la teinte appuyée porte un texte blanc lisible", () => {
+    expect(contrast(rgbOf("brand-strong"), WHITE)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // Chaque surface « à moi » passe par le violet — et par la pièce commune quand il y en a une.
+  it.each([
+    ["src/components/cinema/ProgressFill.tsx", /\bbg-brand\b/], // Reprendre : cartes, bannière, épisodes
+    ["src/components/cinema/detailMenu.ts", /\bbg-brand-strong\b/], // « Vu », « Dans ma liste » des menus des fiches
+    ["src/components/PlayButton.tsx", /\bbg-brand-strong\b/], // la barre de « Reprendre » d'une ligne de menu
+    ["src/components/player/NavDot.tsx", /\bbg-brand\b/], // la pastille d'un onglet
+    ["src/components/player/PlayerAccountPanel.tsx", /\bbg-brand-strong\b/], // les compteurs
+    ["src/components/reports/ReportParts.tsx", /\bbg-brand\b/], // un signalement non lu
+    ["src/components/WatchlistButton.tsx", /\bbtn-mine\b/], // dans ma liste
+    ["src/components/cinema/CinemaEpisodeBrowser.tsx", /\bbg-brand-strong\b/], // la coche d'un épisode vu
+    ["src/components/cinema/mobile/CinemaMobileDetail.tsx", /\bbg-brand-strong\b/],
+  ])("%s porte le violet", (path, pattern) => {
+    expect(readFileSync(path, "utf8")).toMatch(pattern);
+  });
+
+  it("la partie lue du lecteur est violette, et `btn-mine` aussi", () => {
+    expect(theme).toMatch(/\.player-seek::-webkit-slider-runnable-track \{[^}]*var\(--color-brand\) 0 var\(--played/);
+    expect(theme).toMatch(/\.player-seek::-moz-range-track \{[^}]*var\(--color-brand\) 0 var\(--played/);
+    expect(theme).toMatch(/@utility btn-mine \{\s*@apply bg-brand-strong\/\d+ text-white;/);
+  });
+
+  function everySource(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return name === "__tests__" || name === "animlab" ? [] : everySource(path);
+      return /\.tsx?$/.test(name) ? [path] : [];
+    });
+  }
+  const BRAND = /(?:^|[\s"'`:])((?:bg|text|ring|border|fill|stroke|from|to|via|outline|decoration)-brand(?:-strong)?(?:\/\d+)?)(?=[\s"'`]|$)/g;
+  const uses = everySource("src").flatMap((path) =>
+    [...readFileSync(path, "utf8").matchAll(BRAND)].map((m) => ({ path, cls: m[1] })),
+  );
+
+  // Les seuls fichiers où le violet a droit de cité : le logo (le clap), et les états personnels.
+  // Un nouvel emploi ajoute sa ligne ici — et dit, en la justifiant, que c'est bien « à moi ».
+  const ALLOWED = [
+    "src/components/Sidebar.tsx", "src/components/player/PlayerRail.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx", // le logo
+    "src/components/cinema/ProgressFill.tsx", "src/components/PlayButton.tsx", "src/components/cinema/detailMenu.ts",
+    "src/components/cinema/CinemaEpisodeBrowser.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx", "src/components/player/PlayerListAdd.tsx",
+    "src/components/player/NavDot.tsx", "src/components/player/PlayerAccountPanel.tsx", "src/components/reports/ReportParts.tsx",
+    "src/app/(dashboard)/radarr/[id]/page.tsx", "src/app/(dashboard)/sonarr/[id]/page.tsx", // « Vu » dans la gestion
+  ];
+
+  it("pas de violet ailleurs", () => {
+    expect(uses.length).toBeGreaterThan(10);
+    expect(uses.filter((u) => !ALLOWED.includes(u.path)).map((u) => `${u.path}: ${u.cls}`)).toEqual([]);
+  });
+
+  it("jamais de texte blanc sur le violet clair", () => {
+    const bad = everySource("src").flatMap((path) =>
+      readFileSync(path, "utf8")
+        .split(/["'`]|\$\{|\}/)
+        .filter((chunk) => /(?:^|\s)bg-brand(?:\/(?:[5-9]\d|100))?(?:\s|$)/.test(chunk) && /(?:^|\s)text-white(?:\s|$)/.test(chunk))
+        .map((chunk) => `${path}: ${chunk.trim()}`),
+    );
+    expect(bad).toEqual([]);
+  });
+});

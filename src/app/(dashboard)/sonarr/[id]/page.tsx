@@ -498,7 +498,7 @@ export default function SonarrSeriesDetailPage() {
                 <span key={g} className="badge bg-white/10 text-muted backdrop-blur-xs">{g}</span>
               ))}
               {jfItem && (
-                <span className={`badge ${isWatched ? "bg-success/25 text-success" : "bg-white/10 text-muted"}`}>
+                <span className={`badge ${isWatched ? "bg-brand-strong/30 text-brand" : "bg-white/10 text-muted"}`}>
                   {isWatched ? t('sonarr.seriesWatched') : t('sonarr.seriesNotWatched')}
                 </span>
               )}
@@ -541,7 +541,7 @@ export default function SonarrSeriesDetailPage() {
         )}
         {!isReadOnly && jfItem && (
           <button
-            className={`btn-ghost px-3 ${isWatched ? "text-success" : "text-muted"}`}
+            className={`btn-ghost px-3 ${isWatched ? "text-brand" : "text-muted"}`}
             onClick={toggleWatched}
             disabled={togglingWatched}
           >

@@ -313,7 +313,7 @@ export function PlayerDiscoverSheet({
             onClick={() => void setStatus(inList ? null : "to_watch")}
             className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-60"
           >
-            <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={16} />} offIcon={<Bookmark size={16} />} />
+            <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={16} className="text-brand" />} offIcon={<Bookmark size={16} />} />
             {inList ? t("player.discover.inList") : t("player.discover.addToList")}
           </button>
 
@@ -324,7 +324,7 @@ export function PlayerDiscoverSheet({
             aria-pressed={watchedState.watched}
             className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-60"
           >
-            <ToggleGlyph on={watchedState.watched} onIcon={<Eye size={16} />} offIcon={<EyeOff size={16} />} />
+            <ToggleGlyph on={watchedState.watched} onIcon={<Eye size={16} className="text-brand" />} offIcon={<EyeOff size={16} />} />
             {watchedState.watched ? t("player.discover.watched") : t("player.discover.markWatched")}
           </button>
 
