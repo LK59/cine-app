@@ -104,6 +104,7 @@ export function SettingsGroupCard({
                   onChange={(e) => onDraft(def.key, e.target.value)}
                 />
               )}
+              {def.restart && <p className="mt-1 text-xs text-subtle">{t("setup.restartNote")}</p>}
               {def.kind === "secret" && view?.set && !draft[def.key] && (
                 <p className="mt-1 text-xs text-subtle">{view.hint ? t("setup.secretSet", { hint: view.hint }) : t("setup.secretSetNoHint")}</p>
               )}

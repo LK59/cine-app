@@ -31,6 +31,11 @@ export interface SettingDef {
   options?: readonly string[];
   /** Exemple montré dans le champ. */
   placeholder?: string;
+  /**
+   * Lu au démarrage seulement : la carte dit « au prochain démarrage » sous le champ. Tout le reste
+   * est relu à chaque accès (`config.ts`) et s'applique sans redémarrer.
+   */
+  restart?: true;
 }
 
 export const SETTINGS: readonly SettingDef[] = [
@@ -70,8 +75,6 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "SUBTITLE_GEN_PRICE_INPUT", group: "subtitles", kind: "number", need: "optional", fallback: "", inApp: true },
   { key: "SUBTITLE_GEN_PRICE_OUTPUT", group: "subtitles", kind: "number", need: "optional", fallback: "", inApp: true },
   // ── L'application ──
-  { key: "APP_LANGUAGE", group: "app", kind: "select", need: "optional", fallback: "en", inApp: true, options: ["fr", "en", "es", "de"] },
-  { key: "COOKIE_SECURE", group: "app", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   { key: "PLAYER_ENABLED", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "PLAYER_SERVER_FALLBACK", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
@@ -88,13 +91,18 @@ export const SETTINGS: readonly SettingDef[] = [
   // découvrir, la première rangée sert à reprendre. `HOME_BROWSE_BUTTON` a disparu le 13/10/2026 :
   // le bouton « Tous les films / séries » est toujours affiché ; une valeur restée en base ou dans
   // `.env` n'est plus lue.
+  // La langue d'un compte qui n'en a choisi aucune (et de l'écran de connexion) : un réglage par
+  // défaut des comptes, rangé avec eux dans Configuration → Nouveaux comptes (§81).
+  { key: "APP_LANGUAGE", group: "defaults", kind: "select", need: "optional", fallback: "en", inApp: true, options: ["fr", "en", "es", "de"] },
   { key: "HOME_CONTINUE_HERO", group: "defaults", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   { key: "NEW_ACCOUNT_BLOCKED_TAGS", group: "defaults", kind: "text", need: "optional", fallback: "", inApp: true, placeholder: "prive" },
-  // Lu au démarrage seulement : son libellé le dit (« au prochain démarrage »).
-  { key: "POSTER_PREWARM", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  // Lu au démarrage seulement (`instrumentation.ts` lance la tâche) : `restart` le fait dire.
+  { key: "POSTER_PREWARM", group: "app", kind: "boolean", need: "optional", fallback: "true", inApp: true, restart: true },
   { key: "VAPID_SUBJECT", group: "app", kind: "text", need: "optional", fallback: "mailto:admin@example.com", inApp: true, placeholder: "mailto:admin@example.com" },
   // ── Le déploiement : guidé, pas réglable ici ──
   { key: "TRUSTED_PROXIES", group: "deployment", kind: "text", need: "optional", fallback: "", inApp: false, placeholder: "nginx-proxy-manager" },
+  // Jamais dans l'application (§81) : comment le conteneur est servi, ce que seul le déploiement sait.
+  { key: "COOKIE_SECURE", group: "deployment", kind: "boolean", need: "optional", fallback: "false", inApp: false },
   { key: "TZ", group: "deployment", kind: "text", need: "optional", fallback: "", inApp: false, placeholder: "Europe/Paris" },
   { key: "MEDIA_ROOT", group: "deployment", kind: "text", need: "optional", fallback: "/mnt/media/video", inApp: false, placeholder: "/mnt/media/video" },
   { key: "APP_ADMIN_USER", group: "deployment", kind: "text", need: "optional", fallback: "admin", inApp: false },
@@ -137,6 +145,7 @@ export const DEPLOYMENT_GUIDE: readonly DeploymentGuideEntry[] = [
   },
   { id: "APP_ADMIN_USER", keys: ["APP_ADMIN_USER", "APP_ADMIN_PASSWORD"], snippet: "APP_ADMIN_USER=admin\nAPP_ADMIN_PASSWORD=…" },
   { id: "TRUSTED_PROXIES", keys: ["TRUSTED_PROXIES"], snippet: "    environment:\n      - TRUSTED_PROXIES=nginx-proxy-manager" },
+  { id: "COOKIE_SECURE", keys: ["COOKIE_SECURE"], snippet: "    environment:\n      - COOKIE_SECURE=true" },
 ];
 
 /** Générés au premier lancement (`server-boot/firstRunSecrets.mjs`) : ni affichés, ni à fournir. */

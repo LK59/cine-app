@@ -39,8 +39,12 @@ export const config = {
     get sessionSecret() {
       return envOnly("SESSION_SECRET", "change-me-in-production");
     },
+    // Jamais réglable dans l'application (13/10/2026, DECISIONS.md §81) : il dit comment le
+    // conteneur est servi — derrière un relais HTTPS ou non —, ce que seul le déploiement sait, et
+    // une valeur fausse posée d'ici empêchait toute connexion (cookie refusé en HTTP), page de
+    // réglage comprise. Une valeur restée en base n'est plus lue.
     get cookieSecure() {
-      return optional("COOKIE_SECURE", "false") === "true";
+      return envOnly("COOKIE_SECURE", "false") === "true";
     },
     get language() {
       return optional("APP_LANGUAGE", "en");
@@ -139,8 +143,11 @@ export const config = {
   network: {
     // Les relais dont on croit `X-Forwarded-For` : adresses, réseaux ou noms de conteneur, séparés
     // par des virgules. Vide : le dernier maillon de l'en-tête, comme avant — voir `trustedProxy.ts`.
+    // Déploiement seulement (§81) : il décide de qui l'on croit l'adresse, donc des limites de
+    // connexion. Il passait par `optional` sans être réglable nulle part — une ligne en base aurait
+    // suffi à le changer.
     get trustedProxies() {
-      return optional("TRUSTED_PROXIES", "");
+      return envOnly("TRUSTED_PROXIES", "");
     },
   },
   accounts: {

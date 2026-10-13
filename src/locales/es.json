@@ -2753,7 +2753,7 @@
       "TZ": "Zona horaria",
       "MEDIA_ROOT": "Carpeta de medios (estadísticas de almacenamiento)",
       "APP_ADMIN_USER": "Cuenta de administrador definida en el .env",
-      "POSTER_PREWARM": "Preparar los carteles de antemano (en el próximo arranque)",
+      "POSTER_PREWARM": "Preparar los carteles de antemano",
       "MEDIA_PATHS": "Subcarpetas de la biblioteca",
       "POSTER_PREWARM_TUNING": "Tamaños e idiomas de los carteles preparados",
       "RADARR_QUALITY_PROFILE": "Perfil de calidad de las altas",
@@ -2772,7 +2772,8 @@
       "APP_ADMIN_USER": "Opcional: una cuenta de administrador fijada en el .env sustituye a la creada aquí.",
       "MEDIA_PATHS": "Solo si sus carpetas difieren de la estructura habitual de Radarr, Sonarr y qBittorrent bajo la carpeta de medios — para las estadísticas de almacenamiento:",
       "POSTER_PREWARM_TUNING": "Opcional: los anchos preparados (384 y 750 por defecto) y los idiomas de los carteles (francés e idioma por defecto):",
-      "TRUSTED_PROXIES": "Detrás de un proxy inverso: el nombre de su contenedor (o su dirección), para que solo él pueda indicar la dirección de los visitantes:"
+      "TRUSTED_PROXIES": "Detrás de un proxy inverso: el nombre de su contenedor (o su dirección), para que solo él pueda indicar la dirección de los visitantes:",
+      "COOKIE_SECURE": "Servida en HTTPS detrás de un proxy inverso: las cookies de sesión solo viajan entonces por HTTPS. Se fija en el despliegue — un valor erróneo impediría cualquier inicio de sesión, incluida esta página:"
     },
     "copy": "Copiar",
     "copied": "Copiado",
@@ -2798,7 +2799,8 @@
       "wrong": "La contraseña actual no es correcta.",
       "env": "Esta cuenta la fija APP_ADMIN_PASSWORD en su .env: cámbiela allí y reinicie el contenedor.",
       "forgot": "Si la olvidó: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
-    }
+    },
+    "restartNote": "Se aplica en el próximo arranque del contenedor."
   },
   "subtitleGen": {
     "admin": {

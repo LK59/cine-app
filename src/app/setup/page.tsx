@@ -46,6 +46,9 @@ const STEP_CARDS: Partial<Record<Step, StepCard[]>> = {
     { group: "jackett" },
     { group: "ratings" },
     { group: "playback", keys: ["PLAYER_ENABLED", "PLAYER_AUTO_FRAME"] },
+    // La langue par défaut est un réglage des comptes depuis le 13/10/2026 (§81) : la même étape
+    // la propose, à côté de ce que publie l'application.
+    { group: "defaults", keys: ["APP_LANGUAGE"] },
     { group: "app" },
   ],
 };

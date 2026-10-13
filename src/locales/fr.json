@@ -2753,7 +2753,7 @@
       "TZ": "Fuseau horaire",
       "MEDIA_ROOT": "Dossier des médias (statistiques de stockage)",
       "APP_ADMIN_USER": "Compte administrateur défini dans le .env",
-      "POSTER_PREWARM": "Préparer les affiches à l'avance (au prochain démarrage)",
+      "POSTER_PREWARM": "Préparer les affiches à l'avance",
       "MEDIA_PATHS": "Sous-dossiers de la bibliothèque",
       "POSTER_PREWARM_TUNING": "Tailles et langues des affiches préparées",
       "RADARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
@@ -2772,7 +2772,8 @@
       "APP_ADMIN_USER": "Facultatif : un compte administrateur fixé par le .env remplace celui créé ici.",
       "MEDIA_PATHS": "Seulement si votre arborescence diffère de celle de Radarr, Sonarr et qBittorrent sous le dossier des médias — pour les statistiques de stockage :",
       "POSTER_PREWARM_TUNING": "Facultatif : les largeurs préparées (384 et 750 par défaut) et les langues des affiches (français et langue par défaut) :",
-      "TRUSTED_PROXIES": "Derrière un relais inverse : son nom de conteneur (ou son adresse), pour que lui seul puisse fournir l'adresse des visiteurs :"
+      "TRUSTED_PROXIES": "Derrière un relais inverse : son nom de conteneur (ou son adresse), pour que lui seul puisse fournir l'adresse des visiteurs :",
+      "COOKIE_SECURE": "Servie en HTTPS derrière un relais inverse : les cookies de session ne partent alors qu'en HTTPS. À poser au déploiement — une valeur fausse empêcherait toute connexion, y compris à cette page :"
     },
     "copy": "Copier",
     "copied": "Copié",
@@ -2798,7 +2799,8 @@
       "wrong": "Mot de passe actuel incorrect.",
       "env": "Ce compte est fixé par APP_ADMIN_PASSWORD dans votre .env : changez-le là, puis relancez le conteneur.",
       "forgot": "Mot de passe oublié : docker exec -it cine-app node server-boot/reset-admin-password.mjs"
-    }
+    },
+    "restartNote": "Prend effet au prochain démarrage du conteneur."
   },
   "subtitleGen": {
     "admin": {

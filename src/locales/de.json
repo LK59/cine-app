@@ -2753,7 +2753,7 @@
       "TZ": "Zeitzone",
       "MEDIA_ROOT": "Medienordner (Speicherstatistik)",
       "APP_ADMIN_USER": "In der .env festgelegtes Administratorkonto",
-      "POSTER_PREWARM": "Poster im Voraus vorbereiten (ab dem nächsten Start)",
+      "POSTER_PREWARM": "Poster im Voraus vorbereiten",
       "MEDIA_PATHS": "Unterordner der Bibliothek",
       "POSTER_PREWARM_TUNING": "Größen und Sprachen der vorbereiteten Poster",
       "RADARR_QUALITY_PROFILE": "Qualitätsprofil für Hinzufügungen",
@@ -2772,7 +2772,8 @@
       "APP_ADMIN_USER": "Optional: Ein in der .env festgelegtes Administratorkonto ersetzt das hier angelegte.",
       "MEDIA_PATHS": "Nur wenn Ihre Ordner von der üblichen Struktur von Radarr, Sonarr und qBittorrent unter dem Medienordner abweichen — für die Speicherstatistik:",
       "POSTER_PREWARM_TUNING": "Optional: die vorbereiteten Breiten (standardmäßig 384 und 750) und die Postersprachen (Französisch und Standardsprache):",
-      "TRUSTED_PROXIES": "Hinter einem Reverse-Proxy: sein Containername (oder seine Adresse), damit nur er die Adressen der Besucher angeben darf:"
+      "TRUSTED_PROXIES": "Hinter einem Reverse-Proxy: sein Containername (oder seine Adresse), damit nur er die Adressen der Besucher angeben darf:",
+      "COOKIE_SECURE": "Über HTTPS hinter einem Reverse-Proxy ausgeliefert: Sitzungs-Cookies werden dann nur über HTTPS gesendet. Bei der Bereitstellung setzen — ein falscher Wert würde jede Anmeldung verhindern, auch auf dieser Seite:"
     },
     "copy": "Kopieren",
     "copied": "Kopiert",
@@ -2798,7 +2799,8 @@
       "wrong": "Aktuelles Passwort ist falsch.",
       "env": "Dieses Konto wird durch APP_ADMIN_PASSWORD in Ihrer .env festgelegt: dort ändern und den Container neu starten.",
       "forgot": "Vergessen: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
-    }
+    },
+    "restartNote": "Wirkt ab dem nächsten Start des Containers."
   },
   "subtitleGen": {
     "admin": {

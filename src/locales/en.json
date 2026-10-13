@@ -2753,7 +2753,7 @@
       "TZ": "Time zone",
       "MEDIA_ROOT": "Media folder (storage statistics)",
       "APP_ADMIN_USER": "Administrator account defined in .env",
-      "POSTER_PREWARM": "Prepare posters in advance (from the next start)",
+      "POSTER_PREWARM": "Prepare posters in advance",
       "MEDIA_PATHS": "Library sub-folders",
       "POSTER_PREWARM_TUNING": "Sizes and languages of prepared posters",
       "RADARR_QUALITY_PROFILE": "Quality profile for additions",
@@ -2772,7 +2772,8 @@
       "APP_ADMIN_USER": "Optional: an administrator account set in .env replaces the one created here.",
       "MEDIA_PATHS": "Only if your folders differ from the usual Radarr, Sonarr and qBittorrent layout under the media folder — for storage statistics:",
       "POSTER_PREWARM_TUNING": "Optional: the widths prepared (384 and 750 by default) and the poster languages (French and the default language):",
-      "TRUSTED_PROXIES": "Behind a reverse proxy: its container name (or address), so that only it can supply visitors' addresses:"
+      "TRUSTED_PROXIES": "Behind a reverse proxy: its container name (or address), so that only it can supply visitors' addresses:",
+      "COOKIE_SECURE": "Served over HTTPS behind a reverse proxy: session cookies are then only sent over HTTPS. Set it at deployment — a wrong value would block every sign-in, this page included:"
     },
     "copy": "Copy",
     "copied": "Copied",
@@ -2798,7 +2799,8 @@
       "wrong": "Current password is incorrect.",
       "env": "This account is set by APP_ADMIN_PASSWORD in your .env: change it there, then restart the container.",
       "forgot": "Forgot it: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
-    }
+    },
+    "restartNote": "Takes effect the next time the container starts."
   },
   "subtitleGen": {
     "admin": {
