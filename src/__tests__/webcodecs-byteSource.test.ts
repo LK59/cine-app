@@ -716,3 +716,124 @@ describe("un saut relancé faute de premier octet n'est pas une coupure (§78)",
     }
   });
 });
+
+describe("retour au premier plan : une requête muette est redemandée (13/10/2026)", () => {
+  type Doc = { visibilityState: string; addEventListener: (t: string, f: () => void) => void; removeEventListener: (t: string, f: () => void) => void };
+  function fakeDocument(): { doc: Doc; wake: () => void; hide: () => void } {
+    const listeners = new Set<() => void>();
+    const doc: Doc = {
+      visibilityState: "visible",
+      addEventListener: (_t, f) => void listeners.add(f),
+      removeEventListener: (_t, f) => void listeners.delete(f),
+    };
+    const fire = (state: string) => {
+      doc.visibilityState = state;
+      for (const f of listeners) f();
+    };
+    return { doc, wake: () => fire("visible"), hide: () => fire("hidden") };
+  }
+
+  /** Les `mutedFirst` premières demandes de chaque plage restent muettes, jusqu'à leur abandon (la lecture en avance compte à part). */
+  function stubMuted(mutedFirst: number) {
+    const perRange = new Map<number, number>();
+    const counter = { of: (chunk: number) => perRange.get(chunk * CHUNK) ?? 0 };
+    vi.stubGlobal("fetch", (_url: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      if (init?.method === "HEAD") return Promise.resolve({ ok: true, headers: { get: (n: string) => (n === "Content-Length" ? String(SIZE) : null) } });
+      const [, from, to] = /bytes=(\d+)-(\d+)/.exec(init?.headers?.Range ?? "")!.map(Number);
+      const n = (perRange.get(from) ?? 0) + 1;
+      perRange.set(from, n);
+      if (n <= mutedFirst) {
+        return new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("coupée", "AbortError"))));
+      }
+      return Promise.resolve({ status: 206, headers: { get: () => `bytes ${from}-${to}/${SIZE}` }, arrayBuffer: async () => new Uint8Array(to - from + 1).fill(9).buffer });
+    });
+    return counter;
+  }
+
+  it("une requête posée juste après le retour, muette 5 s, est redemandée sans attendre les 25 s", async () => {
+    const { doc, wake, hide } = fakeDocument();
+    vi.stubGlobal("document", doc);
+    const source = await HttpByteSource.open("/retour.mkv", SIZE);
+    const counter = stubMuted(1);
+    vi.useFakeTimers();
+    try {
+      hide();
+      wake();
+      const read = source.read(3 * CHUNK, 4);
+      await vi.advanceTimersByTimeAsync(5_100);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(Array.from(await read)).toEqual([9, 9, 9, 9]);
+      expect(counter.of(3)).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+      source.close();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("une requête déjà en vol pendant l'arrière-plan reçoit l'échéance au retour", async () => {
+    const { doc, wake, hide } = fakeDocument();
+    vi.stubGlobal("document", doc);
+    const source = await HttpByteSource.open("/en-vol.mkv", SIZE);
+    const counter = stubMuted(1);
+    vi.useFakeTimers();
+    try {
+      const read = source.read(2 * CHUNK, 4);
+      hide();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(counter.of(2)).toBe(1);
+      wake();
+      await vi.advanceTimersByTimeAsync(5_100);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(Array.from(await read)).toEqual([9, 9, 9, 9]);
+      expect(counter.of(2)).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+      source.close();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("une fois par morceau : sur un lien vraiment lent, pas de relance en boucle", async () => {
+    const { doc, wake } = fakeDocument();
+    vi.stubGlobal("document", doc);
+    const source = await HttpByteSource.open("/lent.mkv", SIZE);
+    const counter = stubMuted(99);
+    vi.useFakeTimers();
+    try {
+      wake();
+      const read = source.read(4 * CHUNK, 4).catch(() => null);
+      await vi.advanceTimersByTimeAsync(5_100);
+      // La relance part après sa pause ordinaire.
+      await vi.advanceTimersByTimeAsync(3_000);
+      const afterDeadline = counter.of(4);
+      expect(afterDeadline).toBe(2);
+      // La relance n'a plus d'échéance courte : rien de neuf avant l'échéance ordinaire.
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(counter.of(4)).toBe(afterDeadline);
+      source.close();
+      await read;
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("sans retour au premier plan, rien ne change : pas d'échéance courte", async () => {
+    const { doc } = fakeDocument();
+    vi.stubGlobal("document", doc);
+    const source = await HttpByteSource.open("/ordinaire.mkv", SIZE);
+    const counter = stubMuted(99);
+    vi.useFakeTimers();
+    try {
+      const read = source.read(1 * CHUNK, 4).catch(() => null);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(counter.of(1)).toBe(1);
+      source.close();
+      await read;
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+});

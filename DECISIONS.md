@@ -3668,6 +3668,8 @@ ne mesure rien : inchangé. Le préchauffage n'est pas bridé par le simulateur 
 
 **Rechargement direct limité aux bascules allégées (12/10/2026, choix de Louis).** `shouldReloadDirect` ne recharge que si le relais porte un palier allégé : les replis ordinaires du lecteur natif vers le serveur sur WebKit gardent leur passage dans la page (5 des 6 replis de « Ruby » sur iPhone y ont marché), les bascules allégées sur iPhone y échouaient toutes (code 4 ×3).
 
+**Retour au premier plan : échéance du premier octet (13/10/2026).** `HttpByteSource` pose l'échéance de 5 s du saut (`SEEK_FIRST_BYTE_MS`) aux requêtes muettes pendant les 15 s qui suivent un retour au premier plan (`WAKE_FIRST_BYTE_WINDOW_MS`), y compris celles déjà en vol, une fois par morceau. Cas réel : iPhone, écran verrouillé 2 min, ~13 s sans un octet au retour, l'avance de 21 s épuisée, 5 s de blocage. La relance se fait pendant que la lecture continue sur son avance ; sur un lien vraiment lent, elle ne change rien. Tests : `webcodecs-byteSource.test.ts` (« retour au premier plan »).
+
 ## 79. La connexion lente s'exécute à un seul endroit pour les deux lecteurs
 
 **La règle.** Ce que `slowLinkPolicy.ts` décide (§78) est exécuté par **une** classe, `SlowLinkRunner`

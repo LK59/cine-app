@@ -169,6 +169,19 @@ const SEEK_PREFETCH_CHUNKS = 2;
  */
 const SEEK_FIRST_BYTE_MS = 5000;
 
+/**
+ * Au retour au premier plan, la même échéance du premier octet, pendant ce temps.
+ *
+ * 13/10/2026, iPhone d'Augustine : pause, écran verrouillé deux minutes, retour — la lecture repart
+ * sur ses 21 s d'avance, mais aucun octet n'arrive pendant ~13 s (la connexion d'avant le
+ * verrouillage est souvent morte, et une requête posée dessus attend l'échéance ordinaire de 25 s) :
+ * l'avance s'épuise, 5 s de blocage. Une requête muette 5 s est redemandée — sur une connexion
+ * neuve si l'ancienne est morte —, pendant que la lecture continue sur son avance : rien à
+ * l'écran. Une fois par morceau, comme après un saut : sur un lien vraiment lent, redemander en
+ * boucle ne ferait que recommencer. Les requêtes déjà en vol au retour y passent aussi.
+ */
+const WAKE_FIRST_BYTE_WINDOW_MS = 15_000;
+
 /** Au-delà, l'avance entière reprend d'elle-même : un saut qui n'aboutit pas ne la bride pas. */
 const SEEK_FOCUS_MS = 8000;
 
@@ -533,6 +546,15 @@ export class HttpByteSource implements ByteSource {
   private focusUntil = 0;
   /** Le dernier morceau qu'une lecture a demandé : d'où l'avance repart quand le saut aboutit. */
   private lastDemanded = -1;
+  /** Jusqu'à quand un retour au premier plan surveille le premier octet — `WAKE_FIRST_BYTE_WINDOW_MS`. */
+  private wakeUntil = 0;
+  /** Les tentatives en vol sans en-têtes encore : un retour au premier plan leur pose l'échéance. */
+  private readonly silentAttempts = new Set<() => void>();
+  private readonly onVisibility = () => {
+    if (document.visibilityState !== "visible") return;
+    this.wakeUntil = performance.now() + WAKE_FIRST_BYTE_WINDOW_MS;
+    for (const arm of this.silentAttempts) arm();
+  };
   private window: {
     since: number;
     requests: number;
@@ -551,6 +573,7 @@ export class HttpByteSource implements ByteSource {
     lastOpened.delete(url);
     lastOpened.set(url, this);
     while (lastOpened.size > 4) lastOpened.delete(lastOpened.keys().next().value!);
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", this.onVisibility);
   }
 
   // The length has to come from the server before anything else can be parsed. HEAD is tried
@@ -659,6 +682,8 @@ export class HttpByteSource implements ByteSource {
 
   private async fetchAttempts(start: number, end: number, own: AbortSignal, noteRetrying: () => void): Promise<Uint8Array> {
     let last: unknown;
+    // L'échéance du premier octet, une fois par morceau (saut ou retour au premier plan).
+    let deadlineUsed = false;
     for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
       if (attempt > 0) {
         await waitForNetwork(own);
@@ -672,13 +697,22 @@ export class HttpByteSource implements ByteSource {
       const forward = () => attemptControl.abort();
       own.addEventListener("abort", forward, { once: true });
       let muted = false;
-      const firstByteTimer =
-        attempt === 0 && performance.now() < this.focusUntil
-          ? setTimeout(() => {
-              muted = true;
-              attemptControl.abort();
-            }, SEEK_FIRST_BYTE_MS)
-          : null;
+      let firstByteTimer: ReturnType<typeof setTimeout> | null = null;
+      let deadlineWhy = "après un saut";
+      const armDeadline = (why: string) => {
+        if (firstByteTimer !== null || deadlineUsed) return;
+        deadlineUsed = true;
+        deadlineWhy = why;
+        firstByteTimer = setTimeout(() => {
+          muted = true;
+          attemptControl.abort();
+        }, SEEK_FIRST_BYTE_MS);
+      };
+      if (attempt === 0 && performance.now() < this.focusUntil) armDeadline("après un saut");
+      else if (performance.now() < this.wakeUntil) armDeadline("au retour au premier plan");
+      // Encore muette quand la page revient au premier plan : l'échéance part de ce retour.
+      const armOnWake = () => armDeadline("au retour au premier plan");
+      this.silentAttempts.add(armOnWake);
       // Suivie si une ouverture du lecteur natif est en cours — voir `meterOpeningRequest`.
       const metered = meterOpeningRequest();
       try {
@@ -696,6 +730,7 @@ export class HttpByteSource implements ByteSource {
         });
         // Des en-têtes : la requête parle, elle n'est plus muette.
         if (firstByteTimer !== null) clearTimeout(firstByteTimer);
+        this.silentAttempts.delete(armOnWake);
         // 206 is the expected answer; a 200 means the server ignored the Range and sent the whole
         // file, which for a 40 GB movie must not be treated as a successful chunk read.
         if (res.status === 200) {
@@ -747,11 +782,12 @@ export class HttpByteSource implements ByteSource {
         // qu'un saut a relancée faute de premier octet (`muted`) : c'est la relance ordinaire d'un saut,
         // pas une tentative en échec — la dire « instable » mentait après chaque saut un peu lent.
         if (attempt < FETCH_ATTEMPTS - 1 && !muted) noteRetrying();
-        if (muted) trace(`réseau : aucun octet en ${SEEK_FIRST_BYTE_MS / 1000} s après un saut, plage ${start}-${end} redemandée`);
+        if (muted) trace(`réseau : aucun octet en ${SEEK_FIRST_BYTE_MS / 1000} s ${deadlineWhy}, plage ${start}-${end} redemandée`);
         else if (attempt === 0) trace(`réseau : plage ${start}-${end} refusée, nouvelle tentative`);
       } finally {
         metered?.end();
         if (firstByteTimer !== null) clearTimeout(firstByteTimer);
+        this.silentAttempts.delete(armOnWake);
         own.removeEventListener("abort", forward);
       }
     }
@@ -1186,6 +1222,8 @@ export class HttpByteSource implements ByteSource {
     // fichier puis refermée entre-temps, venait d'y laisser.
     if (this.controller.signal.aborted) return;
     this.controller.abort();
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", this.onVisibility);
+    this.silentAttempts.clear();
     // Chaque morceau a son propre interrupteur : la fermeture les coupe tous.
     for (const own of this.inflightControllers.values()) own.abort();
     this.inflightControllers.clear();
