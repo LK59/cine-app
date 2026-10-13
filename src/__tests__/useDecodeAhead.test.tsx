@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render } from "@testing-library/react";
 import { useRef } from "react";
-import { useDecodeAhead } from "@/lib/useDecodeAhead";
+import { PINNED_FIRST, useDecodeAhead } from "@/lib/useDecodeAhead";
 
 /**
  * Le décodage anticipé des affiches : ce que le banc du 20/09/2026 a désigné comme la vraie cause
@@ -248,12 +248,65 @@ describe("useDecodeAhead, dans un panneau qui défile", () => {
     // On descend toute la grille…
     for (let i = 0; i < 200; i++) dernier.cb([{ isIntersecting: true, target: tile(i) }]);
     expect(decodes).toHaveLength(200);
-    // …puis on remonte : la première affiche a été lâchée depuis longtemps, elle se rechauffe.
-    dernier.cb([{ isIntersecting: true, target: tile(0) }]);
+    // …puis on remonte : une affiche passée depuis longtemps a été lâchée, elle se rechauffe. (Pas
+    // l'une des premières, tenues à part — voir le test suivant.)
+    dernier.cb([{ isIntersecting: true, target: tile(40) }]);
     expect(decodes).toHaveLength(201);
-    expect(decodes[200]).toBe("/0.png");
+    expect(decodes[200]).toBe("/40.png");
     // Et la plus récente, elle, est encore tenue.
     dernier.cb([{ isIntersecting: true, target: tile(199) }]);
     expect(decodes).toHaveLength(201);
+  });
+
+  /**
+   * « Tous les films » accrochait encore en arrivant **tout en haut** (13/10/2026), jamais « Toutes
+   * les séries » : un lancer vers le haut atterrit sur le premier écran plus vite que l'avance ne
+   * décode, et ses affiches avaient été lâchées par la borne. Elles restent tenues désormais.
+   */
+  it("tient les affiches du premier écran, même après toute la grille parcourue", () => {
+    const srcs = Array.from({ length: 300 }, (_, i) => `/${i}.png`);
+    const r = render(<Panneau srcs={srcs} />);
+    const tiles = new Map([...r.container.querySelectorAll<HTMLElement>("[data-testid]")].map((el) => [el.dataset.testid!, el]));
+    const tile = (i: number) => tiles.get(`p${i}`)!;
+    for (let i = 0; i < 300; i++) dernier.cb([{ isIntersecting: true, target: tile(i) }]);
+    expect(decodes).toHaveLength(300);
+    // On remonte jusqu'en haut : rien du premier écran (vingt cartes, un téléphone en montre moins)
+    // n'est redemandé. En dur et non par `PINNED_FIRST` : le test doit échouer sans le correctif.
+    expect(PINNED_FIRST).toBeGreaterThanOrEqual(20);
+    for (let i = 19; i >= 0; i--) dernier.cb([{ isIntersecting: true, target: tile(i) }]);
+    expect(decodes).toHaveLength(300);
+  });
+
+  it("lâche les affiches tenues d'une carte qui n'est plus en tête après un tri", () => {
+    function Triee({ liste }: { liste: string[] }) {
+      const grid = useRef<HTMLDivElement>(null);
+      useDecodeAhead(grid, liste);
+      return (
+        <div style={{ overflowY: "auto" }}>
+          <div ref={grid}>
+            {liste.map((s) => (
+              <div key={s} data-testid={s}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- voir le banc ci-dessus. */}
+                <img src={s} alt="" />
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    const liste = Array.from({ length: 200 }, (_, i) => `/${i}.png`);
+    const r = render(<Triee liste={liste} />);
+    const premiere = r.getByTestId("/0.png");
+    dernier.cb([{ isIntersecting: true, target: premiere }]);
+    // Le tri envoie la première carte en fin de liste : elle redevient une carte comme les autres,
+    // soumise à la borne — passer cent cinquante autres affiches (dont les nouvelles premières, tenues
+    // à part) la fait lâcher.
+    const triee = [...liste.slice(1), liste[0]];
+    r.rerender(<Triee liste={triee} />);
+    dernier.cb([{ isIntersecting: false, target: premiere }]);
+    for (let i = 1; i <= 150; i++) dernier.cb([{ isIntersecting: true, target: r.getByTestId(`/${i}.png`) }]);
+    const avant = decodes.length;
+    dernier.cb([{ isIntersecting: true, target: premiere }]);
+    expect(decodes).toHaveLength(avant + 1);
   });
 });

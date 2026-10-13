@@ -42,6 +42,25 @@ const AHEAD_PX = 3000;
 const KEPT = 90;
 
 /**
+ * Les premières cartes de la grille restent tenues tant qu'elle est ouverte, hors de `KEPT`
+ * (13/10/2026).
+ *
+ * « Tous les films » accrochait encore légèrement **en arrivant tout en haut**, jamais « Toutes les
+ * séries ». Le haut de la grille est le seul endroit où l'on *atterrit* : un lancer vers le haut, ou
+ * l'appui sur la barre d'état d'iOS, parcourt des milliers de pixels en une fraction de seconde et
+ * s'arrête net sur le premier écran — plus vite que l'avance de 3 000 px ne peut décoder. Or ses
+ * affiches, chauffées à l'ouverture, ont été lâchées depuis longtemps par la borne de `KEPT` : après
+ * quatre-vingt-dix autres, elles ne sont plus tenues, et sur un iPhone les 825 affiches décodées
+ * (≈ 0,7 Mo chacune en w342, plus d'un demi-gigaoctet) ne tiennent pas en mémoire — le navigateur
+ * les a oubliées. Elles se redécodent donc à l'instant de l'atterrissage. Les séries (≈ 170, 120 Mo)
+ * restent dans la mémoire du navigateur : d'où l'asymétrie, la même que celle du 21/09.
+ *
+ * Vingt-huit, le premier écran du plus grand affichage (`FIRST_SCREEN_CARDS` de la grille, 7 × 4) :
+ * ≈ 20 Mo tenus, pour l'écran où l'on revient toujours.
+ */
+export const PINNED_FIRST = 28;
+
+/**
  * Le conteneur qui défile vraiment — celui qui doit servir de racine à l'observateur.
  *
  * La grille défile dans le corps de son panneau, pas dans la page. Un observateur sans racine
@@ -81,6 +100,12 @@ function warmLike(img: HTMLImageElement, kept: Map<string, HTMLImageElement>, li
     kept.set(key, held);
     return;
   }
+  kept.set(key, warmImage(img, src, srcset));
+  if (kept.size > limit) kept.delete(kept.keys().next().value!);
+}
+
+/** L'image de chauffe elle-même : les mêmes `src`, `srcset` et `sizes` que l'affiche, décodée. */
+function warmImage(img: HTMLImageElement, src: string, srcset: string): HTMLImageElement {
   const chauffe = new Image();
   const sizes = img.getAttribute("sizes");
   if (sizes) chauffe.sizes = sizes;
@@ -91,8 +116,30 @@ function warmLike(img: HTMLImageElement, kept: Map<string, HTMLImageElement>, li
   // adresse est notée : l'affiche qui la chargera s'affichera sans fondu (`revealLoaded`).
   const decoded = chauffe.decode?.();
   if (decoded) decoded.then(() => noteWarmed(chauffe.currentSrc || chauffe.src)).catch(() => {});
-  kept.set(key, chauffe);
-  if (kept.size > limit) kept.delete(kept.keys().next().value!);
+  return chauffe;
+}
+
+/**
+ * Tenir l'affiche d'une des premières cartes — voir `PINNED_FIRST`. Rangée à part de `kept`, sous la
+ * carte et non sous l'adresse : seule une liste qui change (un tri, un filtre) la fait lâcher.
+ */
+function pinLike(
+  card: Element,
+  img: HTMLImageElement,
+  pinned: Map<Element, { key: string; image: HTMLImageElement }>,
+  kept: Map<string, HTMLImageElement>
+): boolean {
+  const src = img.getAttribute("src");
+  if (!src) return false;
+  const srcset = img.getAttribute("srcset") ?? "";
+  const key = `${srcset}|${src}`;
+  if (pinned.get(card)?.key === key) return true;
+  // Déjà décodée — tenue par la borne, ou par une autre des premières cartes : reprise, pas redemandée.
+  let image = kept.get(key);
+  if (image) kept.delete(key);
+  else for (const held of pinned.values()) if (held.key === key) image = held.image;
+  pinned.set(card, { key, image: image ?? warmImage(img, src, srcset) });
+  return true;
 }
 
 /** Le conteneur qui défile : lui-même s'il défile, sinon son premier ancêtre qui le fait. */
@@ -193,6 +240,9 @@ interface GridWarmer {
   followed: Set<Element>;
   /** Les cartes dans la marge en ce moment. */
   near: Set<Element>;
+  /** Les `PINNED_FIRST` premières cartes de la liste affichée, et leurs affiches tenues. */
+  first: Set<Element>;
+  pinned: Map<Element, { key: string; image: HTMLImageElement }>;
 }
 
 export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unknown): void {
@@ -225,6 +275,8 @@ export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unkno
     if (!state) {
       const kept = new Map<string, HTMLImageElement>();
       const near = new Set<Element>();
+      const first = new Set<Element>();
+      const pinned = new Map<Element, { key: string; image: HTMLImageElement }>();
       const observer = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
@@ -234,15 +286,23 @@ export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unkno
             }
             near.add(entry.target);
             const img = entry.target.querySelector("img");
-            if (img) warmLike(img, kept, KEPT);
+            if (!img) continue;
+            // Une des premières cartes : tenue à part, jamais lâchée par la borne — voir `PINNED_FIRST`.
+            if (first.has(entry.target) && pinLike(entry.target, img, pinned, kept)) continue;
+            warmLike(img, kept, KEPT);
           }
         },
         // Chaque carte reste suivie : elle se rechauffe à chaque fois qu'elle rentre dans la marge,
         // en descendant comme en remontant.
         { root: scrollingAncestor(root), rootMargin: `${AHEAD_PX}px 0px` }
       );
-      state = warmer.current = { root, observer, kept, followed: new Set(), near };
+      state = warmer.current = { root, observer, kept, followed: new Set(), near, first, pinned };
     }
+    // Les premières cartes de *cette* liste ; l'affiche tenue d'une carte qui ne l'est plus est
+    // lâchée. Chauffées seulement quand elles approchent : un tri fait loin du haut ne télécharge rien.
+    state.first.clear();
+    for (let i = 0; i < root.children.length && i < PINNED_FIRST; i++) state.first.add(root.children[i]);
+    for (const card of state.pinned.keys()) if (!state.first.has(card)) state.pinned.delete(card);
     for (const card of state.followed) {
       if (card.parentElement === root) continue;
       state.observer.unobserve(card);
@@ -256,7 +316,9 @@ export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unkno
     }
     for (const card of state.near) {
       const img = card.querySelector("img");
-      if (img) warmLike(img, state.kept, KEPT);
+      if (!img) continue;
+      if (state.first.has(card) && pinLike(card, img, state.pinned, state.kept)) continue;
+      warmLike(img, state.kept, KEPT);
     }
     /**
      * **La liste elle-même, et non son nombre d'éléments.**
@@ -277,6 +339,7 @@ export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unkno
     () => () => {
       warmer.current?.observer.disconnect();
       warmer.current?.kept.clear();
+      warmer.current?.pinned.clear();
       warmer.current = null;
     },
     []
