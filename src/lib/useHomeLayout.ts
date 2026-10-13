@@ -14,9 +14,13 @@ import { useServerHomeLayout } from "@/lib/usePlayerEnabled";
  * `revalidators[0]` de CLAUDE.md). Avant leur réponse, la dernière disposition vue sur cet
  * appareil — sans quoi un compte qui a choisi l'autre verrait l'accueil changer de forme une
  * seconde après le lancement —, puis celle du serveur.
+ *
+ * Une seule variante depuis le 13/10/2026 : le bouton « Tous les films / séries » est toujours
+ * affiché, son option (`browseButton`) a disparu. Une colonne `home_browse_button` restée en base,
+ * ou un ancien miroir qui la porte, ne sont plus lus.
  */
-export type HomeLayout = { browseButton: boolean; continueHero: boolean };
-export type HomeLayoutChoice = { browseButton: boolean | null; continueHero: boolean | null };
+export type HomeLayout = { continueHero: boolean };
+export type HomeLayoutChoice = { continueHero: boolean | null };
 
 const KEY = "/api/user/preferences";
 const MIRROR = "cine:home-layout";
@@ -25,10 +29,7 @@ type Prefs = { homeOwn?: HomeLayoutChoice; homeDefaults?: HomeLayout };
 
 /** Le choix du compte s'il en a fait un, celui du serveur sinon — pour chaque variante. */
 export function resolveHomeLayout(own: HomeLayoutChoice | undefined, defaults: HomeLayout): HomeLayout {
-  return {
-    browseButton: own?.browseButton ?? defaults.browseButton,
-    continueHero: own?.continueHero ?? defaults.continueHero,
-  };
+  return { continueHero: own?.continueHero ?? defaults.continueHero };
 }
 
 /** À la déconnexion : le miroir est rangé par appareil, et le compte suivant l'aurait lu. */
@@ -44,7 +45,7 @@ function lastKnown(): HomeLayout | null {
   try {
     const raw = window.localStorage.getItem(MIRROR);
     const v = raw ? (JSON.parse(raw) as Partial<HomeLayout>) : null;
-    return v && typeof v.browseButton === "boolean" && typeof v.continueHero === "boolean" ? (v as HomeLayout) : null;
+    return v && typeof v.continueHero === "boolean" ? { continueHero: v.continueHero } : null;
   } catch {
     return null;
   }
@@ -55,16 +56,15 @@ export function useHomeLayout(): HomeLayout {
   const { data } = useSWR<Prefs>(KEY, fetcher, followOnlyOptions);
   const known = data?.homeDefaults !== undefined;
   const layout = known ? resolveHomeLayout(data?.homeOwn, data.homeDefaults!) : null;
-  const browseButton = layout?.browseButton;
   const continueHero = layout?.continueHero;
   useEffect(() => {
-    if (browseButton === undefined || continueHero === undefined) return;
+    if (continueHero === undefined) return;
     try {
-      window.localStorage.setItem(MIRROR, JSON.stringify({ browseButton, continueHero }));
+      window.localStorage.setItem(MIRROR, JSON.stringify({ continueHero }));
     } catch {
       /* navigation privée : la réponse du compte suffit */
     }
-  }, [browseButton, continueHero]);
+  }, [continueHero]);
   // Le miroir lu une fois, au montage : relu à chaque rendu, il coûtait un `localStorage` et un
   // `JSON.parse` à chaque survol et à chaque tour de la bannière, tant que la réponse du compte
   // n'était pas arrivée — et pour toujours si elle n'arrivait jamais (08/10/2026).
@@ -77,14 +77,14 @@ export function useHomeLayout(): HomeLayout {
 export function useHomeLayoutChoice(): { own: HomeLayoutChoice; defaults: HomeLayout } {
   const server = useServerHomeLayout();
   const { data } = useSWR<Prefs>(KEY, fetcher, followOnlyOptions);
-  return { own: data?.homeOwn ?? { browseButton: null, continueHero: null }, defaults: data?.homeDefaults ?? server };
+  return { own: { continueHero: data?.homeOwn?.continueHero ?? null }, defaults: data?.homeDefaults ?? server };
 }
 
 /** Choisit une variante pour ce compte, ou rend la main au serveur (`null`). L'accueil suit tout de suite. */
 export async function setHomeLayoutChoice(key: keyof HomeLayout, value: boolean | null): Promise<void> {
   const apply = (current?: Prefs): Prefs => ({
     ...(current ?? {}),
-    homeOwn: { ...(current?.homeOwn ?? { browseButton: null, continueHero: null }), [key]: value },
+    homeOwn: { ...(current?.homeOwn ?? { continueHero: null }), [key]: value },
   });
   await globalMutate(
     KEY,

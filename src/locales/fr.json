@@ -1846,7 +1846,7 @@
     },
     "account": {
       "language": "Langue",
-      "playback": "Lecture",
+      "playback": "Langues de lecture",
       "audioLanguage": "Langue audio préférée",
       "subtitleLanguage": "Langue des sous-titres",
       "subtitleMode": "Affichage des sous-titres",
@@ -1964,8 +1964,6 @@
       "guidedScroll": "Défilement guidé",
       "guidedScrollHint": "Sur ordinateur, l'accueil se cale sur une rangée entière et les fiches sur une page entière. Coupé, la page défile librement.",
       "home": {
-        "browseButton": "Afficher le bouton « Tous les films / séries »",
-        "browseButtonHint": "En haut de l'accueil, le catalogue entier à un geste.",
         "continueHero": "Afficher mes reprises dans la bannière d'accueil",
         "continueHeroHint": "Ce que vous regardez passe en tête de l'accueil ; s'il y en a peu, les titres « À la une » complètent."
       }
@@ -2756,7 +2754,6 @@
       "PLAYER_AUTO_FRAME": "Agrandir l'image au-dessus des bandes noires",
       "CAST_RECEIVER_APP_ID": "Récepteur Chromecast (identifiant d'application, vide = celui de Google)",
       "CHROMECAST_FOR_EVERYONE": "Diffusion Chromecast pour tous les comptes (sinon administrateurs seulement)",
-      "HOME_BROWSE_BUTTON": "Bouton « Tous les films / séries » en haut de l'accueil",
       "HOME_CONTINUE_HERO": "Afficher les reprises dans la bannière d'accueil",
       "NEW_ACCOUNT_BLOCKED_TAGS": "Tags bloqués des nouveaux comptes (séparés par des virgules)",
       "VAPID_SUBJECT": "Contact des notifications (mailto:…)",
@@ -2872,6 +2869,6 @@
     "empty": "Aucune nouveauté pour l'instant.",
     "loadError": "Impossible de charger les nouveautés.",
     "accountHint": "Ce qui a changé dans CineApp, version par version.",
-    "open": "Voir les nouveautés"
+    "open": "Voir"
   }
 }

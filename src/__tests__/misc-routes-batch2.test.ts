@@ -13,7 +13,7 @@ const mockUserPrefsDb = {
   setLegacyPlayer: vi.fn(),
   getGuidedScroll: vi.fn(() => true),
   setGuidedScroll: vi.fn(),
-  getHomeLayout: vi.fn(() => ({ browseButton: null, continueHero: true })),
+  getHomeLayout: vi.fn(() => ({ continueHero: true })),
   setHomeLayout: vi.fn(),
 };
 const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn(), listOthers: vi.fn(() => []) };
@@ -36,7 +36,7 @@ vi.mock("@/lib/webPush", () => ({
   sendWebPush: (...a: unknown[]) => mockSendWebPush(...a),
   shouldRemovePushSubscription: (...a: unknown[]) => mockShouldRemovePushSubscription(...a),
 }));
-vi.mock("@/lib/config", () => ({ config: { app: { language: "fr", cookieSecure: false }, home: { browseButton: true, continueHero: false } } }));
+vi.mock("@/lib/config", () => ({ config: { app: { language: "fr", cookieSecure: false }, home: { continueHero: false } } }));
 vi.mock("@/lib/i18n", () => ({ LOCALE_COOKIE: "cine-lang", LOCALES: ["fr", "en", "es", "de"] }));
 const mockTmdb = { getMovie: vi.fn(), getTv: vi.fn() };
 const mockOmdb = { isEnabled: vi.fn(() => true), getRating: vi.fn() };
@@ -186,11 +186,14 @@ describe("/api/user/preferences", () => {
     mockVerifySessionFull.mockResolvedValue({ u: "emma", jfId: "jf-4", role: "user" });
     const { GET, PUT } = await import("@/app/api/user/preferences/route");
     const body = await (await GET(fakeReq())).json();
-    expect(body.homeOwn).toEqual({ browseButton: null, continueHero: true });
-    expect(body.homeDefaults).toEqual({ browseButton: true, continueHero: false });
+    expect(body.homeOwn).toEqual({ continueHero: true });
+    expect(body.homeDefaults).toEqual({ continueHero: false });
     expect((await PUT(fakeReq({ body: { home: { continueHero: null, browseButton: false } } }))).status).toBe(200);
     expect(mockUserPrefsDb.setHomeLayout).toHaveBeenCalledWith("jf-4", "continueHero", null);
-    expect(mockUserPrefsDb.setHomeLayout).toHaveBeenCalledWith("jf-4", "browseButton", false);
+    // Le bouton « Tous » est toujours affiché depuis le 13/10/2026 : son ancienne préférence n'est
+    // plus écrite, et seule elle ne vaut rien.
+    expect(mockUserPrefsDb.setHomeLayout).not.toHaveBeenCalledWith("jf-4", "browseButton", expect.anything());
+    expect((await PUT(fakeReq({ body: { home: { browseButton: false } } }))).status).toBe(400);
     expect((await PUT(fakeReq({ body: { home: { continueHero: "oui" } } }))).status).toBe(400);
     expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
   });

@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   // La disposition de l'accueil (DECISIONS.md §52) : ce que le compte a choisi (`null` = rien),
   // et ce que le serveur donne par défaut — l'écran du Compte montre les deux.
   const own = userPrefsDb.getHomeLayout(userId);
-  const homeDefaults = { browseButton: config.home.browseButton, continueHero: config.home.continueHero };
+  const homeDefaults = { continueHero: config.home.continueHero };
   return NextResponse.json({ lang, legacyPlayer, guidedScroll, homeOwn: own, homeDefaults });
 }
 
@@ -48,7 +48,9 @@ export async function PUT(req: NextRequest) {
   // La disposition de l'accueil : un booléen choisit, `null` rend la main au serveur.
   if (body?.home && typeof body.home === "object") {
     const changed: Record<string, boolean | null> = {};
-    for (const key of ["browseButton", "continueHero"] as const) {
+    // `browseButton` n'est plus accepté (13/10/2026) : le bouton est toujours affiché. Un vieux
+    // client qui l'envoie seul reçoit un 400 sans que rien ne soit écrit.
+    for (const key of ["continueHero"] as const) {
       const value = body.home[key];
       if (value === null || typeof value === "boolean") {
         userPrefsDb.setHomeLayout(userId, key, value);

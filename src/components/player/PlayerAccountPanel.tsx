@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, ListChecks, HardDrive, Rows3 } from "lucide-react";
+import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, ListChecks, HardDrive, Rows3, MoveVertical } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { hardNavigate, signOut } from "@/lib/signOut";
@@ -38,16 +37,21 @@ import { fmtSize } from "@/lib/format";
  * qui manquait vraiment — changer son mot de passe, que personne ne pouvait faire depuis
  * l'application.
  */
-function Section({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
+function Section({ icon: Icon, title, children }: { icon?: React.ElementType; title?: string; children: React.ReactNode }) {
   return (
     // `py-6` debout, moins couché : cinq sections à six rems d'écart font descendre
     // « Déconnexion » très loin sur un écran de 390 px. Le filet ne sépare plus que deux sections
     // d'une même carte — la première n'en a pas (voir `Group`).
     <section className="border-t border-white/8 py-6 first:border-t-0 [@media(max-height:500px)]:py-4">
-      <h3 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
-        <Icon size={16} className="text-subtle" />
-        {title}
-      </h3>
+      {/* Sans titre quand la section est seule dans son groupe (Notifications) : le titre du
+          groupe le dit déjà, et deux « Notifications » l'un sous l'autre se lisaient comme un
+          oubli (13/10/2026). */}
+      {title && Icon && (
+        <h3 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
+          <Icon size={16} className="text-subtle" />
+          {title}
+        </h3>
+      )}
       {children}
     </section>
   );
@@ -64,7 +68,30 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   return (
     <div className="mt-9 first:mt-0 [@media(max-height:500px)]:mt-6">
       <h2 className="mb-2.5 px-1 text-xs font-medium uppercase tracking-wide text-subtle">{title}</h2>
-      <div className="rounded-2xl bg-white/4 px-4 ring-1 ring-inset ring-white/8 sm:px-5">{children}</div>
+      <div data-group-card="" className="rounded-2xl bg-white/4 px-4 ring-1 ring-inset ring-white/8 sm:px-5">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Une ligne d'une carte : icône, titre, éventuelle aide dessous, le geste à droite.
+ *
+ * La forme de toute l'Aide et de l'Interface depuis le 13/10/2026 : l'Aide empilait des sections
+ * titrées, des boutons pleine largeur et une carte de trois lignes posée dans la carte du groupe —
+ * une boîte dans la boîte, et cinq façons de dire « ouvrir ». Toutes les lignes ont maintenant le
+ * même dessin, le même filet entre elles, et la même place pour leur bouton.
+ */
+function Row({ icon: Icon, title, hint, children }: { icon: React.ElementType; title: React.ReactNode; hint?: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <div data-row="" className="flex items-center justify-between gap-4 border-t border-white/8 py-3.5 first:border-t-0">
+      <div className="min-w-0">
+        <p className="flex items-center gap-2.5 text-sm text-white">
+          <Icon size={16} className="shrink-0 text-subtle" />
+          <span className="min-w-0">{title}</span>
+        </p>
+        {hint && <p className="mt-0.5 pl-[26px] text-xs text-subtle">{hint}</p>}
+      </div>
+      {children && <div className="flex shrink-0 items-center">{children}</div>}
     </div>
   );
 }
@@ -73,24 +100,23 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
  * « Signaler un problème » — pour tout le monde. L'assistant et la liste remplacent ce panneau,
  * comme l'activité : le retour y ramène. La pastille dit qu'une réponse attend.
  */
-function ReportSection() {
+function ReportRows() {
   const t = useT();
   const { mine } = useReportBadge();
   return (
-    <Section icon={MessageSquareWarning} title={t("player.account.report")}>
-      <p className="mb-3 text-xs text-subtle">{t("player.account.reportHint")}</p>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <button type="button" onClick={() => cinemaNavigate({ account: false, report: "nouveau" })} className="btn btn-primary w-full justify-center sm:w-auto">
-          <MessageSquareWarning size={16} />
-          {t("player.account.reportNew")}
+    <>
+      <Row icon={MessageSquareWarning} title={t("player.account.report")} hint={t("player.account.reportHint")}>
+        <button type="button" onClick={() => cinemaNavigate({ account: false, report: "nouveau" })} className="btn btn-ghost btn-sm">
+          {t("player.account.open")}
         </button>
-        <button type="button" onClick={() => cinemaNavigate({ account: false, report: "liste" })} className="btn btn-ghost w-full justify-center sm:w-auto">
-          <ListChecks size={16} />
-          {t("player.account.reportMine")}
+      </Row>
+      <Row icon={ListChecks} title={t("player.account.reportMine")}>
+        <button type="button" onClick={() => cinemaNavigate({ account: false, report: "liste" })} className="btn btn-ghost btn-sm">
+          {t("news.open")}
           {mine > 0 && <span className="rounded-full bg-accent-500 px-1.5 text-[11px] font-semibold text-white">{mine}</span>}
         </button>
-      </div>
-    </Section>
+      </Row>
+    </>
   );
 }
 
@@ -98,22 +124,19 @@ function ReportSection() {
  * Compte → Nouveautés (DECISIONS.md §73) : la page remplace ce panneau, comme les signalements, et
  * le retour y ramène. Tout ce que la fenêtre a montré, plus la liste des corrections et l'historique.
  */
-function NewsSection() {
+function NewsRow() {
   const t = useT();
   return (
-    <Section icon={Sparkles} title={t("news.title")}>
-      <p className="mb-3 text-xs text-subtle">{t("news.accountHint")}</p>
-      <button type="button" onClick={() => cinemaNavigate({ account: false, news: "1" })} className="btn btn-ghost w-full justify-center sm:w-auto">
-        <Sparkles size={16} />
+    <Row icon={Sparkles} title={t("news.title")} hint={t("news.accountHint")}>
+      <button type="button" onClick={() => cinemaNavigate({ account: false, news: "1" })} className="btn btn-ghost btn-sm">
         {t("news.open")}
       </button>
-    </Section>
+    </Row>
   );
 }
 
 export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: boolean; replaced?: boolean; fromTab?: boolean }) {
   const t = useT();
-  const router = useRouter();
   const { data: me } = useSWR<{ username: string; jfUser: string | null; role: string }>("/api/auth/me", fetcher);
   // La connexion locale (celle de l'administrateur) n'a pas de compte Jellyfin derrière elle :
   // ni préférences de lecture, ni mot de passe à changer de ce côté. Le dire une fois vaut mieux
@@ -137,16 +160,29 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
       // connaît — c'est lui qu'on tape pour se connecter.
       subtitle={displayName(me?.jfUser || me?.username)}
     >
-      {/* Quatre groupes, et plus douze sections à plat (23/09/2026) : les réglages de la personne,
-          son compte, l'aide, puis l'outillage de l'administrateur — qui était intercalé au milieu,
-          entre les appareils connectés et l'écran d'accueil. « Se déconnecter » ferme la page,
-          seul, là où on le cherche. */}
+      {/* L'ordre du 13/10/2026, décidé par Louis : les langues d'abord (celle de l'application,
+          puis celles de la lecture), le compte, les notifications, l'interface, l'aide à plat,
+          puis l'outillage de l'administrateur. « Se déconnecter » ferme la page, seul, là où on le
+          cherche. */}
       <div className="mx-auto w-full max-w-2xl">
         <Group title={t("player.account.groups.preferences")}>
           <LanguageSection />
-          <DisplaySection />
           {hasJellyfin && <PlaybackSection />}
-          <Section icon={Bell} title={t("player.account.notifications")}>
+        </Group>
+
+        <Group title={t("player.account.groups.account")}>
+          {hasJellyfin ? (
+            <PasswordSection />
+          ) : (
+            <Section icon={KeyRound} title={t("player.account.password")}>
+              <p className="text-sm text-muted">{t("player.account.localAccountHint")}</p>
+            </Section>
+          )}
+          <SessionsSection />
+        </Group>
+
+        <Group title={t("player.account.notifications")}>
+          <Section>
             <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div>
                 <p className="text-sm text-white">{t("player.account.notificationsLabel")}</p>
@@ -159,22 +195,18 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
           </Section>
         </Group>
 
-        <Group title={t("player.account.groups.account")}>
-          {hasJellyfin ? (
-            <PasswordSection />
-          ) : (
-            <Section icon={KeyRound} title={t("player.account.password")}>
-              <p className="text-sm text-muted">{t("player.account.localAccountHint")}</p>
-            </Section>
-          )}
-          <SessionsSection />
-          <StorageSection />
+        <Group title={t("player.account.display")}>
+          <DisplayRows />
         </Group>
 
+        {/* Toute l'aide au même niveau : une ligne par chose, sans section ni carte dans la carte. */}
         <Group title={t("player.account.groups.help")}>
-          <NewsSection />
-          <HelpSection />
-          <ReportSection />
+          <NewsRow />
+          <OnboardingRow />
+          <StatusRow />
+          <HdrFaqRow />
+          <StorageRow />
+          <ReportRows />
         </Group>
 
         {/* Montré à l'administrateur seulement : rien n'est bloqué au-delà de l'affichage — le
@@ -196,13 +228,6 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
                 {badge.admin > 0 && <span className="rounded-full bg-accent-500 px-1.5 text-[11px] font-semibold text-white">{badge.admin}</span>}
               </button>
             </Section>
-            <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>
-              <a href="/gestion" className="btn btn-ghost w-full justify-center sm:w-auto">
-                <SlidersHorizontal size={16} />
-                {t("player.account.openManage")}
-              </a>
-            </Section>
-
             <MaintenanceSection />
             <BenchSection />
             {/* Le banc des gestes et des matières, pour juger à l'œil sur l'appareil qu'on tient
@@ -217,6 +242,12 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
                 <Sparkles size={16} />
                 {t("player.account.openAnimLab")}
               </button>
+            </Section>
+            <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>
+              <a href="/gestion" className="btn btn-ghost w-full justify-center sm:w-auto">
+                <SlidersHorizontal size={16} />
+                {t("player.account.openManage")}
+              </a>
             </Section>
           </Group>
         )}
@@ -292,49 +323,35 @@ function LanguageSection() {
 }
 
 /**
- * L'interface du compte : le défilement guidé (`guidedScroll.ts`) et la disposition de l'accueil
- * (`useHomeLayout.ts`, DECISIONS.md §52). La section s'appelait « Affichage » tant qu'elle ne
- * portait que le défilement ; la disposition y a sa place, puisqu'elle change la même chose — la
- * façon dont on parcourt l'accueil.
+ * L'interface du compte : la disposition de l'accueil (`useHomeLayout.ts`, DECISIONS.md §52) et le
+ * défilement guidé (`guidedScroll.ts`, §50), en deux lignes de la carte du groupe.
+ *
+ * « Afficher le bouton « Tous les films / séries » » a disparu le 13/10/2026 : le bouton est
+ * toujours là, sur le bureau comme sur le téléphone.
  */
-function DisplaySection() {
+function DisplayRows() {
   const t = useT();
   const toast = useToast();
   const on = useGuidedScroll();
   const home = useHomeLayoutChoice();
   const fail = () => toast.error(t("common.error"));
+  const fallback = home.defaults.continueHero;
+  const checked = home.own.continueHero ?? fallback;
   return (
-    <Section icon={Rows3} title={t("player.account.display")}>
-      <div className="divide-y divide-white/10 rounded-xl border border-white/10 bg-white/5">
-        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-          <div>
-            <p className="text-sm text-white">{t("player.account.guidedScroll")}</p>
-            <p className="mt-0.5 text-xs text-subtle">{t("player.account.guidedScrollHint")}</p>
-          </div>
-          <Toggle checked={on} ariaLabel={t("player.account.guidedScroll")} onChange={(next) => void setGuidedScroll(next).catch(fail)} />
-        </div>
-        {(["browseButton", "continueHero"] as const).map((key) => {
-          const own = home.own[key];
-          const fallback = home.defaults[key];
-          const checked = own ?? fallback;
-          return (
-            <div key={key} className="flex items-center justify-between gap-4 px-4 py-3.5">
-              <div className="min-w-0">
-                <p className="text-sm text-white">{t(`player.account.home.${key}`)}</p>
-                <p className="mt-0.5 text-xs text-subtle">{t(`player.account.home.${key}Hint`)}</p>
-              </div>
-              <Toggle
-                checked={checked}
-                ariaLabel={t(`player.account.home.${key}`)}
-                // Revenir sur la valeur du serveur, c'est la suivre à nouveau : un compte n'a pas à
-                // figer un choix qu'il n'a jamais voulu différent.
-                onChange={(next) => void setHomeLayoutChoice(key, next === fallback ? null : next).catch(fail)}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </Section>
+    <>
+      <Row icon={Rows3} title={t("player.account.home.continueHero")} hint={t("player.account.home.continueHeroHint")}>
+        <Toggle
+          checked={checked}
+          ariaLabel={t("player.account.home.continueHero")}
+          // Revenir sur la valeur du serveur, c'est la suivre à nouveau : un compte n'a pas à
+          // figer un choix qu'il n'a jamais voulu différent.
+          onChange={(next) => void setHomeLayoutChoice("continueHero", next === fallback ? null : next).catch(fail)}
+        />
+      </Row>
+      <Row icon={MoveVertical} title={t("player.account.guidedScroll")} hint={t("player.account.guidedScrollHint")}>
+        <Toggle checked={on} ariaLabel={t("player.account.guidedScroll")} onChange={(next) => void setGuidedScroll(next).catch(fail)} />
+      </Row>
+    </>
   );
 }
 
@@ -482,9 +499,10 @@ function PasswordSection() {
 /**
  * Ce que l'application garde sur cet appareil, et de quoi le vider (28/09/2026) — voir
  * `clearDeviceCache`. La taille est celle que le navigateur annonce pour le site entier ; elle
- * n'apparaît pas quand il ne la donne pas.
+ * n'apparaît pas quand il ne la donne pas. Rangé dans l'Aide depuis le 13/10/2026 : c'est un geste
+ * de dépannage, pas un réglage du compte.
  */
-function StorageSection() {
+function StorageRow() {
   const t = useT();
   const toast = useToast();
   const [usage, setUsage] = useState<number | null>(null);
@@ -512,15 +530,20 @@ function StorageSection() {
   }
 
   return (
-    <Section icon={HardDrive} title={t("player.account.storage")}>
-      <p className="mb-3 text-xs text-subtle">{t("player.account.storageHint")}</p>
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
-        <p className="text-sm text-muted">{usage !== null && usage > 0 ? t("player.account.storageUsed", { size: fmtSize(usage) }) : "\u00a0"}</p>
-        <button type="button" onClick={() => void clear()} disabled={clearing} className="btn btn-ghost shrink-0">
-          {t("player.account.storageClear")}
-        </button>
-      </div>
-    </Section>
+    <Row
+      icon={HardDrive}
+      title={t("player.account.storage")}
+      hint={
+        <>
+          {t("player.account.storageHint")}
+          {usage !== null && usage > 0 && <span className="mt-0.5 block text-muted">{t("player.account.storageUsed", { size: fmtSize(usage) })}</span>}
+        </>
+      }
+    >
+      <button type="button" onClick={() => void clear()} disabled={clearing} className="btn btn-ghost btn-sm">
+        {t("player.account.storageClear")}
+      </button>
+    </Row>
   );
 }
 
@@ -604,19 +627,54 @@ function SessionsSection() {
 }
 
 /**
- * L'aide : revoir l'accueil, l'état des services, les problèmes connus — une carte, trois lignes.
+ * L'écran d'accueil, à revoir quand on veut — sans toucher au marqueur du compte : c'est le bouton
+ * de fin de l'accueil qui l'éteint, pas son ouverture.
+ */
+function OnboardingRow() {
+  const t = useT();
+  return (
+    <Row icon={Sparkles} title={t("player.account.redoOnboarding")}>
+      <button type="button" onClick={openOnboarding} className="btn btn-ghost btn-sm">
+        {t("player.account.open")}
+      </button>
+    </Row>
+  );
+}
+
+/**
+ * L'état des services, pour tout le monde.
  *
- * C'étaient trois sections à elles seules, dont une fiche Firefox dépliée pour tout le monde en
- * permanence. Le problème connu se replie maintenant sous sa ligne : il reste là pour qui le
- * cherche, sans occuper l'écran de ceux qu'il ne concerne pas.
+ * La page est publique — c'est tout l'intérêt d'une page d'état : elle doit répondre le jour où le
+ * reste ne répond plus, y compris avant d'être connecté. `from=compte` dit à la page par où l'on
+ * est entré, pour que son « Retour » ramène ici et non à la connexion.
  *
- * Il n'y en a qu'un pour l'instant, et il est réel : Firefox sous Linux n'affiche pas encore le
+ * `Link` et non `<a>` : un `<a>` nu est une navigation de document, donc le déchargement de la
+ * page — et avec elle la séance de lecture, qui ne vit qu'en mémoire. Aller voir si le serveur va
+ * bien coupait le film qu'on regardait, mini-lecteur compris. En navigation client, le film
+ * continue pendant qu'on lit l'état des services.
+ */
+function StatusRow() {
+  const t = useT();
+  return (
+    <Row icon={Activity} title={t("player.account.status")} hint={t("player.account.statusHint")}>
+      <Link href="/status?from=compte" aria-label={t("player.account.openStatus")} className="btn btn-ghost btn-sm">
+        {t("player.account.open")}
+      </Link>
+    </Row>
+  );
+}
+
+/**
+ * Une question fréquente, repliée sous sa ligne : elle reste là pour qui la cherche, sans occuper
+ * l'écran de ceux qu'elle ne concerne pas.
+ *
+ * Il n'y en a qu'une pour l'instant, et elle est réelle : Firefox sous Linux n'affiche pas encore le
  * HDR correctement, les films sortent gris et délavés. Firefox sait le faire — l'option existe,
  * elle est simplement désactivée par défaut le temps que le travail se termine. Aucune détection :
  * la fiche nomme Firefox et non « votre navigateur », et quelqu'un qui la lit sur un téléphone
  * comprend en une seconde que ça ne le concerne pas.
  */
-function HelpSection() {
+function HdrFaqRow() {
   const t = useT();
   const toast = useToast();
   const [copied, setCopied] = useState(false);
@@ -635,88 +693,45 @@ function HelpSection() {
   }
 
   return (
-    // Première du groupe Aide, donc en haut de sa carte : la même marge que les autres sections.
-    <section className="py-4">
-      <ul className="flex flex-col divide-y divide-white/5 rounded-xl border border-white/10 bg-white/5 px-4">
-        {/* L'écran d'accueil, à revoir quand on veut — sans toucher au marqueur du compte :
-            c'est le bouton de fin de l'accueil qui l'éteint, pas son ouverture. */}
-        <li className="flex items-center justify-between gap-4 py-3">
-          <p className="flex items-center gap-2.5 text-sm text-white">
-            <Sparkles size={16} className="shrink-0 text-subtle" />
-            {t("player.account.redoOnboarding")}
-          </p>
-          <button type="button" onClick={openOnboarding} className="btn btn-ghost btn-sm shrink-0">
-            {t("player.account.open")}
-          </button>
-        </li>
-        {/* L'état des services, pour tout le monde.
-
-            La page est publique — c'est tout l'intérêt d'une page d'état : elle doit répondre le
-            jour où le reste ne répond plus, y compris avant d'être connecté. `from=compte` dit à
-            la page par où l'on est entré, pour que son « Retour » ramène ici et non à la
-            connexion.
-
-            `Link` et non `<a>` : un `<a>` nu est une navigation de document, donc le déchargement
-            de la page — et avec elle la séance de lecture, qui ne vit qu'en mémoire. Aller voir si
-            le serveur va bien coupait le film qu'on regardait, mini-lecteur compris. En navigation
-            client, le film continue pendant qu'on lit l'état des services. */}
-        <li className="flex items-center justify-between gap-4 py-3">
-          <div className="min-w-0">
-            <p className="flex items-center gap-2.5 text-sm text-white">
-              <Activity size={16} className="shrink-0 text-subtle" />
-              {t("player.account.status")}
-            </p>
-            <p className="mt-0.5 pl-[26px] text-xs text-subtle">{t("player.account.statusHint")}</p>
-          </div>
-          <Link href="/status?from=compte" aria-label={t("player.account.openStatus")} className="btn btn-ghost btn-sm shrink-0">
-            {t("player.account.open")}
-          </Link>
-        </li>
-        <li className="py-3">
-          <details className="group">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-              <span className="flex min-w-0 items-center gap-2.5 text-sm text-white">
-                <LifeBuoy size={16} className="shrink-0 text-subtle" />
-                <span className="min-w-0">{t("player.account.help.hdrTitle")}</span>
+    // La même ligne que les autres — même filet, même marge —, dont le chevron tient la place du
+    // bouton. `details` garde le dépliage au clavier et au toucher sans rien à écrire.
+    <details data-row="" className="group border-t border-white/8 py-3.5 first:border-t-0">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
+        <span className="flex min-w-0 items-center gap-2.5 text-sm text-white">
+          <LifeBuoy size={16} className="shrink-0 text-subtle" />
+          <span className="min-w-0">{t("player.account.help.hdrTitle")}</span>
+        </span>
+        <ChevronDown size={16} className="shrink-0 text-subtle transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="mt-3 pl-[26px]">
+        <p className="mt-1.5 text-xs leading-5 text-muted">{t("player.account.help.hdrIntro")}</p>
+        <ol className="mt-3 space-y-2 text-xs leading-5 text-muted">
+          <li className="flex gap-2.5">
+            <span className="shrink-0 text-subtle">1.</span>
+            <span>{t("player.account.help.hdrStep1")}</span>
+          </li>
+          <li className="flex gap-2.5">
+            <span className="shrink-0 text-subtle">2.</span>
+            <span className="min-w-0">
+              {t("player.account.help.hdrStep2")}
+              <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                <code className="break-all rounded bg-black/40 px-2 py-1 font-mono text-[11px] text-white">{FIREFOX_HDR_PREF}</code>
+                <button type="button" onClick={copyPref} className="btn btn-ghost btn-sm shrink-0">
+                  {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+                  {copied ? t("player.account.help.copied") : t("player.account.help.copy")}
+                </button>
               </span>
-              <ChevronDown size={16} className="shrink-0 text-subtle transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="mt-3 pl-[26px]">
-              <p className="mt-1.5 text-xs leading-5 text-muted">{t("player.account.help.hdrIntro")}</p>
-              <ol className="mt-3 space-y-2 text-xs leading-5 text-muted">
-                <li className="flex gap-2.5">
-                  <span className="shrink-0 text-subtle">1.</span>
-                  <span>{t("player.account.help.hdrStep1")}</span>
-                </li>
-                <li className="flex gap-2.5">
-                  <span className="shrink-0 text-subtle">2.</span>
-                  <span className="min-w-0">
-                    {t("player.account.help.hdrStep2")}
-                    <span className="mt-1.5 flex flex-wrap items-center gap-2">
-                      <code className="break-all rounded bg-black/40 px-2 py-1 font-mono text-[11px] text-white">
-                        {FIREFOX_HDR_PREF}
-                      </code>
-                      <button type="button" onClick={copyPref} className="btn btn-ghost btn-sm shrink-0">
-                        {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
-                        {copied ? t("player.account.help.copied") : t("player.account.help.copy")}
-                      </button>
-                    </span>
-                  </span>
-                </li>
-                <li className="flex gap-2.5">
-                  <span className="shrink-0 text-subtle">3.</span>
-                  <span>{t("player.account.help.hdrStep3")}</span>
-                </li>
-              </ol>
-              {/* La phrase qui compte le plus : sans elle, on conclut que le lecteur est cassé. */}
-              <p className="mt-3 border-t border-white/10 pt-3 text-xs leading-5 text-subtle">
-                {t("player.account.help.hdrNote")}
-              </p>
-            </div>
-          </details>
-        </li>
-      </ul>
-    </section>
+            </span>
+          </li>
+          <li className="flex gap-2.5">
+            <span className="shrink-0 text-subtle">3.</span>
+            <span>{t("player.account.help.hdrStep3")}</span>
+          </li>
+        </ol>
+        {/* La phrase qui compte le plus : sans elle, on conclut que le lecteur est cassé. */}
+        <p className="mt-3 border-t border-white/10 pt-3 text-xs leading-5 text-subtle">{t("player.account.help.hdrNote")}</p>
+      </div>
+    </details>
   );
 }
 

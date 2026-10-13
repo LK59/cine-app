@@ -45,6 +45,8 @@ const FINGERPRINTS: Record<number, string> = {
   11: "a9fe8553ed9f4fcc",
   // 13/10/2026 : `claraGallery` retiré de la configuration publique (galerie abandonnée).
   12: "0a905ddd1ad81cd1",
+  // 13/10/2026 : `homeBrowseButton` retiré de la configuration publique (bouton « Tous » toujours là).
+  13: "99b76d283eadc8b9",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

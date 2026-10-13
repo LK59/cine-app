@@ -1846,7 +1846,7 @@
     },
     "account": {
       "language": "Idioma",
-      "playback": "Reproducción",
+      "playback": "Idiomas de reproducción",
       "audioLanguage": "Idioma de audio preferido",
       "subtitleLanguage": "Idioma de los subtítulos",
       "subtitleMode": "Mostrar subtítulos",
@@ -1964,8 +1964,6 @@
       "guidedScroll": "Desplazamiento guiado",
       "guidedScrollHint": "En el ordenador, el inicio se ajusta a una fila entera y las fichas a una página entera. Desactivado, la página se desplaza libremente.",
       "home": {
-        "browseButton": "Mostrar el botón «Todas las películas / series»",
-        "browseButtonHint": "Arriba del inicio, todo el catálogo a un toque.",
         "continueHero": "Mostrar lo que estoy viendo en el banner del inicio",
         "continueHeroHint": "Lo que estás viendo encabeza el inicio; si hay poco, los títulos destacados completan."
       }
@@ -2756,7 +2754,6 @@
       "PLAYER_AUTO_FRAME": "Ampliar la imagen sobre las bandas negras",
       "CAST_RECEIVER_APP_ID": "Receptor de Chromecast (ID de aplicación, vacío = el de Google)",
       "CHROMECAST_FOR_EVERYONE": "Chromecast para todas las cuentas (si no, solo administradores)",
-      "HOME_BROWSE_BUTTON": "Botón «Todas las películas / series» arriba del inicio",
       "HOME_CONTINUE_HERO": "Mostrar lo que se está viendo en el banner del inicio",
       "NEW_ACCOUNT_BLOCKED_TAGS": "Etiquetas bloqueadas para cuentas nuevas (separadas por comas)",
       "VAPID_SUBJECT": "Contacto de las notificaciones (mailto:…)",
@@ -2872,6 +2869,6 @@
     "empty": "Todavía no hay novedades.",
     "loadError": "No se pudieron cargar las novedades.",
     "accountHint": "Lo que ha cambiado en CineApp, versión a versión.",
-    "open": "Ver las novedades"
+    "open": "Ver"
   }
 }

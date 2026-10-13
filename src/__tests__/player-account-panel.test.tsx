@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 
 let payload: Record<string, unknown> = { username: "louis", jfUser: null };
 vi.mock("swr", () => ({ default: () => ({ data: payload }) }));
@@ -143,10 +143,13 @@ describe("PlayerAccountPanel — la porte vers l'état des services", () => {
   });
 });
 
-// La réorganisation du 23/09/2026 : quatre groupes au lieu de douze sections à plat, l'outillage de
-// l'administrateur rassemblé à la fin au lieu d'être intercalé, « Se déconnecter » en dernier.
+// L'ordre du 13/10/2026 (DECISIONS.md §7 quater) : langues, compte, notifications, interface, aide
+// à plat, puis l'outillage de l'administrateur ; « Se déconnecter » après tout le reste.
 describe("PlayerAccountPanel — l'ordre de la page", () => {
   const groups = () => screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+  const cardOf = (title: string) => screen.getByRole("heading", { level: 2, name: title }).nextElementSibling as HTMLElement;
+  const follows = (a: string, b: string) =>
+    Boolean(screen.getByText(a).compareDocumentPosition(screen.getByText(b)) & Node.DOCUMENT_POSITION_FOLLOWING);
 
   it("range la page en groupes, sans l'administration pour un compte ordinaire", () => {
     payload = { username: "sarah", jfUser: "sarah", role: "user" };
@@ -154,17 +157,70 @@ describe("PlayerAccountPanel — l'ordre de la page", () => {
     expect(groups()).toEqual([
       "player.account.groups.preferences",
       "player.account.groups.account",
+      "player.account.notifications",
+      "player.account.display",
       "player.account.groups.help",
     ]);
   });
 
-  it("rassemble l'outillage de l'administrateur à la fin, et la déconnexion après tout le reste", () => {
+  it("met la langue de l'application avant les langues de lecture, et le mot de passe avant les appareils", () => {
+    payload = { username: "sarah", jfUser: "sarah", role: "user" };
+    render(<PlayerAccountPanel />);
+    expect(follows("player.account.language", "player.account.playback")).toBe(true);
+    expect(follows("player.account.password", "player.account.devices")).toBe(true);
+    // Le cache de l'appareil a quitté le groupe Compte pour l'Aide.
+    expect(within(cardOf("player.account.groups.account")).queryByText("player.account.storage")).toBeNull();
+    expect(within(cardOf("player.account.groups.help")).getByText("player.account.storage")).toBeTruthy();
+  });
+
+  it("l'Interface : les reprises dans la bannière, puis le défilement guidé — et plus d'option pour le bouton « Tous »", () => {
+    payload = { username: "sarah", jfUser: "sarah", role: "user" };
+    render(<PlayerAccountPanel />);
+    const card = cardOf("player.account.display");
+    const titles = within(card).getAllByRole("switch", { hidden: true }).map((s) => s.getAttribute("aria-label"));
+    expect(titles).toEqual(["player.account.home.continueHero", "player.account.guidedScroll"]);
+    expect(screen.queryByText("player.account.home.browseButton")).toBeNull();
+  });
+
+  // Tout au même niveau : une liste de lignes de même dessin, sans section ni carte dans la carte.
+  it("met toute l'aide à plat, dans l'ordre voulu", () => {
+    payload = { username: "sarah", jfUser: "sarah", role: "user" };
+    render(<PlayerAccountPanel />);
+    const card = cardOf("player.account.groups.help");
+    expect(card.querySelector("section")).toBeNull();
+    expect(card.querySelector("ul, .rounded-xl")).toBeNull();
+    const rows = Array.from(card.children);
+    expect(rows.every((r) => r.hasAttribute("data-row"))).toBe(true);
+    const text = rows.map((r) => r.textContent ?? "");
+    const order = [
+      "news.title",
+      "player.account.redoOnboarding",
+      "player.account.status",
+      "player.account.help.hdrTitle",
+      "player.account.storage",
+      "player.account.report",
+      "player.account.reportMine",
+    ];
+    expect(order.map((key) => text.findIndex((t) => t.startsWith(key)))).toEqual(order.map((_, i) => i));
+  });
+
+  it("rassemble l'outillage de l'administrateur à la fin, dans l'ordre voulu, et la déconnexion après tout le reste", () => {
     payload = { username: "louis", jfUser: "louis", role: "admin" };
     render(<PlayerAccountPanel />);
     expect(groups().at(-1)).toBe("player.account.groups.admin");
     const admin = screen.getByText("player.account.groups.admin");
     const logout = screen.getByText("player.account.signOutAction");
     expect(admin.compareDocumentPosition(logout) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const titles = within(cardOf("player.account.groups.admin"))
+      .getAllByRole("heading", { level: 3 })
+      .map((h) => h.textContent);
+    expect(titles).toEqual([
+      "player.account.activity",
+      "player.account.maintenance",
+      "bench.title",
+      "player.account.animLab",
+      "player.nav.manage",
+    ]);
   });
 
   // Trois champs ouverts en permanence occupaient un écran de téléphone pour un geste annuel.

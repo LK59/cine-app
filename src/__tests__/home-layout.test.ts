@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { continueHeroTitles, continueTargets, heroSource, myListGoesLate, HERO_LIMIT_PHONE } from "@/lib/homeLayout";
 import { continueOrder } from "@/lib/continueOrder";
 import { heroContinueFacts } from "@/lib/cinemaContinueLabel";
@@ -82,14 +83,13 @@ describe("heroContinueFacts — le bouton court et ce qu'il reste au-dessus", ()
 });
 
 describe("resolveHomeLayout — le compte d'abord, le serveur à défaut", () => {
-  const server = { browseButton: true, continueHero: false };
+  const server = { continueHero: false };
   it("suit le serveur tant que le compte n'a rien choisi", () => {
-    expect(resolveHomeLayout({ browseButton: null, continueHero: null }, server)).toEqual(server);
+    expect(resolveHomeLayout({ continueHero: null }, server)).toEqual(server);
     expect(resolveHomeLayout(undefined, server)).toEqual(server);
   });
-  it("prend le choix du compte, variante par variante", () => {
-    expect(resolveHomeLayout({ browseButton: false, continueHero: null }, server)).toEqual({ browseButton: false, continueHero: false });
-    expect(resolveHomeLayout({ browseButton: null, continueHero: true }, server)).toEqual({ browseButton: true, continueHero: true });
+  it("prend le choix du compte", () => {
+    expect(resolveHomeLayout({ continueHero: true }, server)).toEqual({ continueHero: true });
   });
 });
 
@@ -111,5 +111,22 @@ describe("myListGoesLate — « Ma liste » descend quand elle est presque vide"
     expect(myListGoesLate(0)).toBe(true);
     expect(myListGoesLate(1)).toBe(true);
     expect(myListGoesLate(2)).toBe(false);
+  });
+});
+
+// Le bouton « Tous les films / séries » est toujours affiché depuis le 13/10/2026 : l'option qui le
+// masquait a disparu. Lu dans la source, comme `decisions-partagees.test.ts` — la faute à attraper
+// est une condition qui revient sur l'un des deux accueils seulement.
+describe("le bouton « Tous les films / séries »", () => {
+  for (const file of ["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"]) {
+    it(`est rendu sans condition dans ${file.split("/").pop()}`, () => {
+      const source = readFileSync(file, "utf8");
+      expect(source).toMatch(/<CinemaBrowseAllButton mediaType=\{mediaType\} compact \/>/);
+      expect(source).not.toMatch(/&&\s*(\(\s*<div[^>]*>\s*)?<CinemaBrowseAllButton/);
+      expect(source).not.toMatch(/browseButton/);
+    });
+  }
+  it("n'est plus une variante de la disposition", () => {
+    expect(Object.keys(resolveHomeLayout(undefined, { continueHero: false }))).toEqual(["continueHero"]);
   });
 });

@@ -1215,13 +1215,12 @@ export function CinemaClient() {
 
       <CinemaModeToggle mode={mediaType} onChange={setMediaType} />
       {/* « Tous les films / séries » en haut à droite, en rond comme sur téléphone (08/10/2026) ;
-          l'aide du clavier se range à sa gauche. */}
-      {homeLayout.browseButton && (
-        <div className="fixed right-4 z-10" style={{ top: "max(1rem, env(safe-area-inset-top))" }}>
-          <CinemaBrowseAllButton mediaType={mediaType} compact />
-        </div>
-      )}
-      <CinemaShortcutsGuide besideButton={homeLayout.browseButton} />
+          l'aide du clavier se range à sa gauche. Toujours là depuis le 13/10/2026 : l'option qui
+          le masquait n'était choisie par personne et doublait chaque écran d'un cas à tenir. */}
+      <div className="fixed right-4 z-10" style={{ top: "max(1rem, env(safe-area-inset-top))" }}>
+        <CinemaBrowseAllButton mediaType={mediaType} compact />
+      </div>
+      <CinemaShortcutsGuide />
 
       {/* La recherche est rendue par la coquille du lecteur (PlayerShell), pas ici : c'est le
           même moteur que la recherche globale, elle trouve aussi les personnes et les titres

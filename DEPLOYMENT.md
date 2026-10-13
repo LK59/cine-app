@@ -222,7 +222,7 @@ exists, anyone who can reach the app can create it: run it straight after the fi
 | `POSTER_PREWARM` / `POSTER_PREWARM_WIDTHS` / `POSTER_PREWARM_LOCALES` | Prepare the catalogue's posters in the background (default on; widths `384,750`; languages `fr` plus `APP_LANGUAGE`). Read at startup. |
 | `TRUSTED_PROXIES` | The reverse proxy whose `X-Forwarded-For` the app may believe — see [step 10](#10-put-it-behind-a-reverse-proxy). Empty keeps the older behaviour. |
 | `NEW_ACCOUNT_BLOCKED_TAGS` | Jellyfin tags blocked automatically on every account created after the first start, e.g. a tag reserving some titles to a few accounts. Also settable in *Server settings → Default settings*. |
-| `HOME_BROWSE_BUTTON` / `HOME_CONTINUE_HERO` | Default home layout: the *Browse all* button (default `true`) and a banner showing what an account is watching first (default `false`). Each account can override both in *Account → Interface*. |
+| `HOME_CONTINUE_HERO` | Default home layout: a banner showing what an account is watching first (default `false`). Each account can override it in *Account → Interface*. |
 
 ### Storage paths
 

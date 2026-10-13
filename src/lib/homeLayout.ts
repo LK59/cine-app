@@ -1,11 +1,11 @@
 // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).
 //
-// Deux variantes d'une installation à l'autre, décidées ici une fois pour le bureau et le
+// Une variante d'une installation à l'autre, décidée ici une fois pour le bureau et le
 // téléphone — deux écrans qui décident la même chose finissent par diverger :
-//  - `HOME_BROWSE_BUTTON` : « Tous les films » / « Toutes les séries » en tête de l'accueil ;
 //  - `HOME_CONTINUE_HERO` : la bannière montre ce qu'on regarde — Reprendre, À suivre — et
 //    « À la une » descend à la place de la rangée Reprendre.
-// Coupées, l'accueil est celui d'origine. Une fourche du code aurait fait deux applications à
+// Coupée, l'accueil est celui d'origine. (`HOME_BROWSE_BUTTON` a disparu le 13/10/2026 : le bouton
+// « Tous les films / séries » est toujours affiché.) Une fourche du code aurait fait deux applications à
 // maintenir pour deux rangées échangées.
 
 import type { ContinueEntry, ContinueEpisode, ContinueMovie } from "@/lib/continueOrder";

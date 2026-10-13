@@ -25,7 +25,6 @@ export async function GET(req: NextRequest) {
     // offers the account option that selects it.
     playerServerFallback: config.player.serverFallback,
     // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).
-    homeBrowseButton: config.home.browseButton,
     homeContinueHero: config.home.continueHero,
     ...(session ? { configured: configuredServices(config) } : {}),
   });

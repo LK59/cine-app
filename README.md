@@ -109,10 +109,9 @@ A row with nothing in it hides itself rather than showing an empty shelf.
 
 A **Browse all** button (top right) opens the whole library as one grid — sortable, and filtered by
 genre, decade and duration, with genres that only differ by language (« Horror », « Horreur »)
-grouped under one name. Two layout choices are server settings with a per-account override in
-*Account → Interface*: the Browse all button (on by default, `HOME_BROWSE_BUTTON`) and a banner
-that shows what you are watching first, completed by the latest additions (off by default,
-`HOME_CONTINUE_HERO`).
+grouped under one name. One layout choice is a server setting with a per-account override in
+*Account → Interface*: a banner that shows what you are watching first, completed by the latest
+additions (off by default, `HOME_CONTINUE_HERO`).
 
 <!-- CAPTURE : cinema-rows.png
      Mid-scroll on the home screen: three or four complete rows stacked, including the Top 10

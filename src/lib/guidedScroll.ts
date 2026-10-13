@@ -6,7 +6,7 @@ import { fetcher, followOnlyOptions } from "@/lib/swr";
 /**
  * Le défilement guidé de l'interface ordinateur : l'accueil se cale sur une rangée entière, une
  * fiche film ou série sur l'une de ses deux pages (`snap-y snap-mandatory`). Une préférence du
- * compte, réglée dans Compte → Affichage (demandé le 06/10/2026, DECISIONS.md §50) ; activé par
+ * compte, réglée dans Compte → Interface (demandé le 06/10/2026, DECISIONS.md §50) ; activé par
  * défaut.
  *
  * Rangée avec la langue dans les préférences du compte (`/api/user/preferences`). La clé est déjà

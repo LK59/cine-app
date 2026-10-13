@@ -650,10 +650,10 @@ export function CinemaMobileClient() {
         <CinemaModeToggle placement="inline" mode={mediaType} onChange={setMediaType} />
         {/* À droite, le catalogue entier à un geste (DECISIONS.md §52). La loupe qui était là
             ouvrait la même recherche que l'onglet « Recherche » de la barre du bas, toujours à
-            portée de pouce : retirée le 08/10/2026. Une case vide si l'option est coupée — la
-            bascule reste au centre. */}
+            portée de pouce : retirée le 08/10/2026. Toujours affiché depuis le 13/10/2026 : l'option
+            qui le masquait a disparu. */}
         <div className="ml-auto flex items-center">
-          {homeLayout.browseButton && <CinemaBrowseAllButton mediaType={mediaType} compact />}
+          <CinemaBrowseAllButton mediaType={mediaType} compact />
         </div>
         {/* Le nouvel onglet se construit : un fil fin sous la barre, le temps que ses rangées
             arrivent (`shownTab`). Rien ne clignote si c'est immédiat — il n'apparaît qu'après

@@ -369,8 +369,17 @@ lancement ; l'administrateur le rallume depuis Paramètres.
 il n'y a rien ; « quand l'audio n'est pas dans ma langue » seulement pour un compte qui n'avait
 réglé aucune langue.
 
+**L'ordre du panneau Compte (13/10/2026).** Préférences (langue de l'application, langues de
+lecture) ; Compte (mot de passe, appareils connectés) ; Notifications ; Interface (reprises dans la
+bannière, défilement guidé) ; Aide ; Administration (Activité, Maintenance, Banc d'essai, Tests
+animations, Ouvrir la gestion) ; puis « Se déconnecter » et la signature. **L'Aide est à plat** :
+une seule liste de lignes de même dessin (`Row` — icône, titre, aide, geste à droite), sans section
+ni carte dans la carte du groupe — Nouveautés, Revoir l'écran d'accueil, État des services, les
+questions fréquentes dépliables, Vider le cache de l'appareil (venu de Compte), Signaler un problème,
+Mes signalements.
+
 **Tests.** `PlayerOnboarding.test.tsx`, `onboarding-db-routes.test.ts`,
-`player-notification-choices.test.tsx`.
+`player-notification-choices.test.tsx`, `player-account-panel.test.tsx` (ordre, Aide à plat).
 
 ## 8. Pastilles de qualité
 
@@ -1584,7 +1593,7 @@ alors en plein téléchargement, l'a retirée de Sonarr en laissant ses torrents
 
 **Règle.** L'accueil du cinéma, la fiche film et la fiche série de l'interface ordinateur se calent
 sur une rangée ou une page entière (`snap-y snap-mandatory`) tant que le compte ne l'a pas coupé
-(Compte → Affichage). Une préférence du compte, rangée avec la langue (`user_preferences.guided_scroll`,
+(Compte → Interface). Une préférence du compte, rangée avec la langue (`user_preferences.guided_scroll`,
 NULL = activé), suivie depuis la clé `/api/user/preferences` déjà chargée au démarrage, avec la
 dernière valeur connue de l'appareil avant la réponse.
 
@@ -1592,7 +1601,7 @@ dernière valeur connue de l'appareil avant la réponse.
 d'écrire les classes du conteneur.
 
 **Appelants.** `CinemaClient` (volet des rangées), `CinemaMovieDetail`, `CinemaSeriesDetail` ;
-l'interrupteur dans `PlayerAccountPanel` (`DisplaySection`).
+l'interrupteur dans `PlayerAccountPanel` (`DisplayRows`).
 
 **Voulu.** L'interface téléphone n'a pas de calage vertical et ne lit pas ce réglage. Coupé, la
 navigation au clavier reste juste : elle fait défiler jusqu'au début de la rangée ou de la page.
@@ -1645,14 +1654,17 @@ ne change) ; la première lecture de « Ma liste » d'un compte y copie ce que J
 
 ## 52. La disposition de l'accueil, un réglage et non une fourche
 
-**Règle.** Deux options de l'accueil. Le serveur donne la valeur par défaut (gestion → Réglages
+**Règle.** Une option de l'accueil. Le serveur donne la valeur par défaut (gestion → Réglages
 serveur → Réglages par défaut, ou `.env`) ; chaque compte la remplace dans Compte → Interface, à
 côté du défilement guidé (`user_preferences`, `NULL` = suivre le serveur ; revenir à la valeur du
 serveur la suit de nouveau). L'écran du compte ne montre que l'interrupteur.
-- `HOME_BROWSE_BUTTON` (activé par défaut) : « Tous les films » / « Toutes les séries », en rond en
-  haut à droite (l'aide du clavier se range à sa gauche au bureau). Sur téléphone, la barre du haut
-  porte le logo (et le nom s'il y a la place), la bascule au centre, ce bouton à droite — la loupe
-  qui y était doublait l'onglet « Recherche » de la barre du bas (retirée le 08/10/2026).
+- **Le bouton « Tous les films » / « Toutes les séries » est toujours affiché** (13/10/2026 —
+  l'option `HOME_BROWSE_BUTTON` et la préférence de compte `browseButton` ont disparu ; la colonne
+  `home_browse_button` reste en base sans être lue, une valeur restée dans `.env` ou dans les réglages
+  n'est plus lue non plus, et `PUT /api/user/preferences` ignore `home.browseButton`). En rond en
+  haut à droite (l'aide du clavier se range toujours à sa gauche au bureau). Sur téléphone, la barre
+  du haut porte le logo (et le nom s'il y a la place), la bascule au centre, ce bouton à droite — la
+  loupe qui y était doublait l'onglet « Recherche » de la barre du bas (retirée le 08/10/2026).
 - `HOME_CONTINUE_HERO` (**coupé par défaut** depuis le 08/10/2026) : la bannière montre d'abord les
   reprises (huit au plus au bureau, cinq sur téléphone — `HERO_LIMIT_PHONE`), complétées par
   « À la une » jusqu'à cinq (`HERO_MIN`) ; une rangée « À la une » au moins de cinq titres la suit
@@ -1697,7 +1709,7 @@ en tête. Une copie du dépôt (une image `:alt`) aurait fait deux applications 
 **Tests.** `home-layout.test.ts`, `heroCarousel.test.ts`, `cinema-next-up-route.test.ts`,
 `misc-simple-routes.test.ts`, `misc-routes-batch2.test.ts`, `persistentCache-schema.test.ts`.
 
-**Décidé le 07/10/2026, revu le 08/10/2026.**
+**Décidé le 07/10/2026, revu le 08/10/2026 et le 13/10/2026 (bouton toujours affiché).**
 
 ## 53. Un genre, un nom
 

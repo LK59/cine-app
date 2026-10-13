@@ -7,7 +7,6 @@ import { fetcher, playerBootstrapOptions } from "@/lib/swr";
 export interface PublicPlayerConfig {
   playerEnabled: boolean;
   playerServerFallback: boolean;
-  homeBrowseButton?: boolean;
   homeContinueHero?: boolean;
 }
 
@@ -67,9 +66,9 @@ export function usePlayerServerFallback(): boolean | undefined {
 /**
  * La disposition de l'accueil que le **serveur** donne par défaut (DECISIONS.md §52). Un compte
  * peut la remplacer : l'accueil lit `useHomeLayout`, qui tient compte des deux. Tant qu'on ne sait
- * pas, les valeurs par défaut de l'image : le bouton, et la bannière des nouveautés.
+ * pas, la valeur par défaut de l'image : la bannière des nouveautés.
  */
-export function useServerHomeLayout(): { browseButton: boolean; continueHero: boolean } {
+export function useServerHomeLayout(): { continueHero: boolean } {
   const { data } = usePublicPlayerConfig();
-  return { browseButton: data?.homeBrowseButton ?? true, continueHero: data?.homeContinueHero ?? false };
+  return { continueHero: data?.homeContinueHero ?? false };
 }

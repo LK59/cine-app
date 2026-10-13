@@ -130,10 +130,6 @@ export const config = {
     },
   },
   home: {
-    // « Tous les films » / « Toutes les séries » en tête de l'accueil, à côté de la bascule.
-    get browseButton() {
-      return optional("HOME_BROWSE_BUTTON", "true") === "true";
-    },
     // La bannière du haut montre d'abord Reprendre / À suivre, complétée par « À la une » s'il y en a
     // peu ; « À la une » descend à la place de la rangée Reprendre.
     get continueHero() {

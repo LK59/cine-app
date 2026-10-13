@@ -6,8 +6,8 @@ import { useT } from "@/components/TranslationProvider";
 // TV-remote-style legend, browse screen only — CinemaMovieDetail intentionally shows nothing
 // but its own backdrop/menu (see its doc comment), so this never renders there. Purely
 // informational, never focusable/interactive itself.
-/** `besideButton` : le bouton « Tous les films » occupe le coin — la légende se range à sa gauche. */
-export function CinemaShortcutsGuide({ besideButton = false }: { besideButton?: boolean }) {
+/** Le bouton « Tous les films » occupe toujours le coin (13/10/2026) — la légende se range à sa gauche. */
+export function CinemaShortcutsGuide() {
   const t = useT();
 
   return (
@@ -18,7 +18,7 @@ export function CinemaShortcutsGuide({ besideButton = false }: { besideButton?: 
       // be driving the screen with anyway.
       // Le coin haut-droit est de nouveau libre : la loupe qui l'occupait a rejoint le rail, à
       // gauche, avec le reste de la navigation.
-      className={`fixed z-10 hidden items-center gap-3 rounded-full px-4 py-2 text-xs text-muted player-bar md:flex ${besideButton ? "right-16" : "right-4"}`}
+      className="fixed right-16 z-10 hidden items-center gap-3 rounded-full px-4 py-2 text-xs text-muted player-bar md:flex"
       style={{ top: "max(1rem, env(safe-area-inset-top))" }}
     >
       <span className="flex items-center gap-1">
