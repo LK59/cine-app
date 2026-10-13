@@ -97,7 +97,7 @@ const BROWSE_EXIT_MS = 200;
 
 // The phone counterpart to CinemaClient. Deliberately a separate component rather than responsive
 // classes on that one: the desktop screen is a split-pane, keyboard-driven, hover-preview design
-// (a hero that follows focus, arrow-key grid nav, a dwell-triggered trailer) — none of which has
+// (a hero that follows focus, arrow-key grid nav) — none of which has
 // a meaning on touch. This is the Netflix-mobile shape instead: one scrolling column, a poster
 // hero with its actions inline, and rows you flick through. Desktop is untouched.
 /**

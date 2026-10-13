@@ -47,7 +47,7 @@ const CinemaMobileClient = dynamic(
 
 // Two genuinely different screens rather than one responsive layout — see CinemaMobileClient's
 // own doc comment. Splitting at the route means a phone never downloads the desktop screen's
-// bundle (YouTube IFrame API, TV grid navigation, the split-pane hero) or vice versa.
+// bundle (TV grid navigation, the split-pane hero) or vice versa.
 export default function PlayerPage() {
   const isMobile = useIsMobile();
   // « Reprendre » et « À suivre » qui démarrent instantanément : leurs octets d'ouverture gardés sur

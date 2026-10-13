@@ -1826,9 +1826,17 @@ argument).
 **Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`, `CinemaHero`,
 `CinemaSeriesHero`.
 
-**Tests.** `titleExtras.test.ts`, `sheetFacts.test.ts`, `useQueuedPlay.test.tsx`.
+**YouTube : la fenêtre du bouton, et rien d'autre (13/10/2026).** `trailerKey` ne sert qu'au bouton
+« Bande-annonce » des fiches, qui ouvre `TrailerModal` (un cadre `youtube-nocookie`). La bande-annonce
+de fond de la bannière du bureau — déjà éteinte, mais dont le code restait — est supprimée :
+`CinemaTrailerBackdrop`, `loadYoutubeIframeApi` (l'API iframe `YT.Player`). La CSP ne garde que
+`frame-src https://www.youtube-nocookie.com` : `www.youtube.com` sort de `script-src`, `connect-src`
+et `frame-src`, `img.youtube.com` d'`img-src` et `connect-src`. Le type du catalogue ne change pas.
 
-**Décidé le 08/10/2026.**
+**Tests.** `titleExtras.test.ts`, `sheetFacts.test.ts`, `useQueuedPlay.test.tsx`,
+`youtube-fenetre-seule.test.ts`.
+
+**Décidé le 08/10/2026, revu le 13/10/2026.**
 
 ## 56. Les nouveaux comptes reçoivent d'office les tags bloqués
 

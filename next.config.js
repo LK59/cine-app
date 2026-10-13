@@ -110,31 +110,31 @@ const nextConfig = {
               // chemin natif, pas seulement sur le repli — sans eux, un film joue sans son.
               // Le mot-clé CSP3 autorise WebAssembly *sans* rouvrir eval().
               //
-              // www.youtube.com : loadYoutubeIframeApi.ts:82 injecte <script src=…/iframe_api>.
+              // Aucun hôte YouTube depuis le 13/10/2026 : l'API iframe (bande-annonce de fond) a été
+              // retirée ; la seule vidéo YouTube restante est le cadre de TrailerModal (frame-src).
               //
               // www.gstatic.com : le kit d'émission Chromecast (`src/lib/chromecast/framework.ts`,
               // DECISIONS.md §64), chargé seulement là où une diffusion est possible ; il charge
               // lui-même son module (`cast_framework.js`) depuis le même hôte — chemins dans `CAST_KIT_SOURCES`.
-              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.youtube.com " + CAST_KIT_SOURCES,
+              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' " + CAST_KIT_SOURCES,
               // React écrit des attributs style= ; seul 'unsafe-inline' les couvre. Les polices
               // next/font sont auto-hébergées sous /_next/static, donc 'self'.
               "style-src 'self' 'unsafe-inline'",
               "font-src 'self'",
               // image.tmdb.org et artworks.thetvdb.com sont les hôtes de remotePatterns (F-009),
-              // mais la CSP couvre en plus les <img> nus que l'optimiseur ne voyait pas :
-              // img.youtube.com pour les vignettes de bande-annonce (person/[id]/page.tsx:282),
-              // et le remotePoster de Radarr/Sonarr (radarr/page.tsx:434, sonarr/page.tsx:444),
-              // qui retombe sur ces deux mêmes hôtes.
+              // mais la CSP couvre en plus les <img> nus que l'optimiseur ne voyait pas : le
+              // remotePoster de Radarr/Sonarr (radarr/page.tsx:434, sonarr/page.tsx:444), qui
+              // retombe sur ces deux mêmes hôtes. (img.youtube.com retiré le 13/10/2026 : plus
+              // aucune vignette de bande-annonce n'est affichée.)
               // blob: depuis le 24/09/2026, et pour une seule chose : l'aperçu des captures jointes
               // à un signalement, lu dans le fichier choisi (URL.createObjectURL) avant tout envoi.
               // Toujours sans data: — rien dans le dépôt n'en sert en image.
-              "img-src 'self' blob: https://image.tmdb.org https://artworks.thetvdb.com https://img.youtube.com",
+              "img-src 'self' blob: https://image.tmdb.org https://artworks.thetvdb.com",
               // blob: n'est pas une commodité : le lecteur natif attache son MediaSource par
               // URL.createObjectURL (mseSource.ts:240,244). Sans lui, plus aucun film ne démarre.
               "media-src 'self' blob:",
-              // Les trois hôtes d'images et celui du script YouTube reparaissent ici, et ce
-              // n'est pas une redondance avec img-src/script-src : le service worker hérite de
-              // cette politique (elle est servie avec /sw.js), et son gestionnaire fetch
+              // Les hôtes d'images reparaissent ici, et ce n'est pas une redondance avec img-src :
+              // le service worker hérite de cette politique (elle est servie avec /sw.js), et son gestionnaire fetch
               // n'exclut que le *chemin* /api/ (sw.js:32). Toute image distante est donc
               // interceptée puis rejouée en fetch() (sw.js:87), et un fetch relève de
               // connect-src, pas d'img-src. Mesuré : ~2630 violations sur un parcours complet
@@ -142,13 +142,15 @@ const nextConfig = {
               //
               // 'self' couvre le reste : /api/sse (SSENotifier.tsx:91) et les GET par plages du
               // lecteur natif (byteSource.ts:185,235, en-tête Range sur /api/jellyfin/stream).
-              // www.gstatic.com pour la même raison que www.youtube.com : le service worker rejoue en
-              // fetch() le script du kit Chromecast qu'il intercepte.
-              "connect-src 'self' https://image.tmdb.org https://artworks.thetvdb.com https://img.youtube.com https://www.youtube.com " + CAST_KIT_SOURCES,
-              // Deux hôtes : youtube-nocookie pour TrailerModal.tsx, www.youtube.com pour les cadres
-              // que crée l'API iframe (la carte vidéo de la page VIP, qui l'utilisait aussi, est
-              // partie avec la galerie le 13/10/2026).
-              "frame-src https://www.youtube-nocookie.com https://www.youtube.com",
+              // www.gstatic.com pour la même raison : le service worker rejoue en fetch() le script du
+              // kit Chromecast qu'il intercepte.
+              "connect-src 'self' https://image.tmdb.org https://artworks.thetvdb.com " + CAST_KIT_SOURCES,
+              // Un seul hôte : le cadre de TrailerModal.tsx, la fenêtre du bouton « Bande-annonce »
+              // des fiches — le seul usage de YouTube que l'application garde (13/10/2026). Les
+              // cadres que créait l'API iframe (bande-annonce de fond) sont partis avec elle ; seuls
+              // les cadres que notre page crée relèvent d'ici, pas ceux que l'embed ouvre lui-même.
+              // Vérifié : l'embed youtube-nocookie répond 200, sans redirection vers www.youtube.com.
+              "frame-src https://www.youtube-nocookie.com",
               // blob: est obligatoire ici, et pour deux raisons plutôt qu'une : hls.js
               // construit son démultiplexeur depuis un Blob (injectWorker,
               // hls.js/dist/hls.js:15931, et PlayerHost.tsx ne désactive pas enableWorker), et

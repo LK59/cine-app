@@ -1237,10 +1237,9 @@ export function CinemaClient() {
           overlapping text/labels (an earlier -mt-16 overlap trick pulled row labels into literal
           collision with the hero's own synopsis/cast line). */}
       <div className="absolute inset-0 overflow-hidden">
-        {/* Le visuel du titre retenu, en fondu enchaîné — voir `HeroBackdrop`. La bande-annonce
-            de fond qui prenait le relais ici est désactivée sur grand écran, à la demande :
-            retirée plutôt que mise en pause, ce qui garantit que l'API YouTube n'est jamais
-            chargée ; il faudra refaire ce qui l'alimentait pour la rallumer. */}
+        {/* Le visuel du titre retenu, en fondu enchaîné — voir `HeroBackdrop`. Plus de bande-annonce
+            de fond (décision du 13/10/2026) : son composant et le chargeur de l'API iframe YouTube
+            sont supprimés, la CSP ne laisse plus passer que le cadre de la fenêtre « Bande-annonce ». */}
         <DebouncedHeroBackdrop src={activeHeroItem?.backdropUrl ?? null} heroKey={activeHeroKey} />
         <div className="absolute inset-0 bg-linear-to-r from-ink/85 via-ink/35 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-1/4 bg-linear-to-b from-transparent to-ink" />

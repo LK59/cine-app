@@ -294,8 +294,8 @@ export function HeroBackToSpotlight({ onBack }: { onBack: () => void }) {
   );
 }
 
-// Text only — the backdrop image/gradients (and, once focus dwells long enough, the trailer
-// video that takes over from them — see CinemaTrailerBackdrop) live in CinemaClient now, as one
+// Text only — the backdrop image/gradients live in CinemaClient now (no trailer video takes over
+// from them any more: the background trailer was removed on 13/10/2026), as one
 // continuous full-screen background layer shared with the rows pane beneath (see its own doc
 // comment for why: keeping the image scoped to just this component's box was exactly what
 // produced a hard seam where the hero "ended"). On a hovered or focused card it is a passive
