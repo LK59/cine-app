@@ -70,6 +70,12 @@ export interface SlowLinkHost {
   seekSignal(signal: SeekSignal | null): void;
 }
 
+/**
+ * L'écart toléré entre la position d'un préchauffage et celle qu'un saut attend : une seconde, le jeu des
+ * arrondis — au-delà, c'est un autre endroit du film (voir `seekTick`).
+ */
+const SEEK_PREWARM_SLACK_S = 1;
+
 export class SlowLinkRunner {
   /** Le préchauffage de la version allégée en cours (`lighterPrewarm.ts`), et pour quoi. */
   held: { prewarm: Prewarm; cause: SwitchCause } | null = null;
@@ -262,6 +268,14 @@ export class SlowLinkRunner {
       const measure = host.seekMeasure(elapsed);
       const needBps = host.needBps();
       if (elapsed >= SEEK_GIVE_UP_MS && !slowLinkVerdict(measure, needBps)) return;
+      // Un préchauffage fait pour une autre position — un saut précédent, ou le 2e blocage d'avant le
+      // saut — ne sert plus : la bascule partait de SA position (`held.prewarm.startSeconds`), et un
+      // spectateur qui avait sauté de 1000 à 3000 s pendant l'attente revenait à 1000 s (13/10/2026). Il
+      // est refermé ; le préchauffage suivant se fait à la position demandée.
+      const position = host.position();
+      if (this.held && this.held.cause !== "ouverture" && !(Math.abs(this.held.prewarm.startSeconds - position) <= SEEK_PREWARM_SLACK_S)) {
+        this.drop("saut ailleurs");
+      }
       const { advice, action } = decideOpening({
         measure,
         needBps,
@@ -272,7 +286,7 @@ export class SlowLinkRunner {
         currentStep: host.currentStep(),
         giveUpMs: SEEK_GIVE_UP_MS,
       });
-      this.execute(action, "saut", host.position(), advice.recvBps !== null ? advice : action.kind === "screen" ? action.slow : advice);
+      this.execute(action, "saut", position, advice.recvBps !== null ? advice : action.kind === "screen" ? action.slow : advice);
       // Le délai du renoncement : ce saut a eu sa décision.
       if (elapsed >= SEEK_GIVE_UP_MS || action.kind === "switch") return this.seekDone();
       if (this.shown && this.shown.at === at && this.shown.hint === advice.hint) return;

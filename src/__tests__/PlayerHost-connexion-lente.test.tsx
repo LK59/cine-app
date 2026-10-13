@@ -575,6 +575,27 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
     expect(reported.filter((r) => r.kind === "error")).toHaveLength(0);
   });
 
+  it("un saut en lecture resté 10 s sans image : préchauffé et basculé à la position DEMANDÉE, pas à celle d'avant le saut", async () => {
+    // Pendant un saut, l'élément n'a plus d'image (`readyState` < HAVE_CURRENT_DATA) : `timeupdate` ne
+    // met plus à jour la position connue, qui reste celle d'avant le saut. Le préchauffage et la
+    // bascule partaient de là — le spectateur sautait à 50 min et se retrouvait à 16 (13/10/2026).
+    await mounted();
+    await picture();
+    await trickle(250_000, 1);
+    Object.defineProperty(video(), "paused", { value: false, configurable: true });
+    Object.defineProperty(video(), "seeking", { value: true, configurable: true });
+    Object.defineProperty(video(), "currentTime", { value: 3000, configurable: true, writable: true });
+    await act(async () => void fireEvent(video(), new Event("seeking")));
+    await trickle(40_000, 12);
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    const prewarms = startBodies.filter((b) => b.prewarm === true);
+    expect(prewarms).toHaveLength(1);
+    expect(prewarms[0].startTicks).toBe(3000 * 10_000_000);
+    const lighter = reported.filter((r) => r.kind === "start" && r.fields.why === "lighter");
+    expect(lighter).toHaveLength(1);
+    expect(lighter[0].fields.at).toBe(3000);
+  });
+
   it("le lien à 115 % du besoin classique pendant 10 s : la mémoire s'efface — la lecture suivante sera native", async () => {
     switchedTo({ targetBps: 2_500_000, tier: 1 });
     await mounted();

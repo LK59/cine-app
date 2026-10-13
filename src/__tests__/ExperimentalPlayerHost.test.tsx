@@ -36,6 +36,7 @@ const cancelPrewarmSpy = vi.fn((p?: FakePrewarm | null) => {
 });
 vi.mock("@/lib/lighterPrewarm", async (original) => ({
   prewarmStatusOf: (await original<typeof import("@/lib/lighterPrewarm")>()).prewarmStatusOf,
+  prewarmGone: (await original<typeof import("@/lib/lighterPrewarm")>()).prewarmGone,
   startPrewarm: (options: { itemId: string; step: { targetBps: number; tier: number }; startSeconds: number }) => {
     let resolve: (ok: boolean) => void = () => {};
     const prewarm: FakePrewarm = { ...options, state: "running", startedAt: 0, readyAt: null, ready: new Promise<boolean>((r) => (resolve = r)) };

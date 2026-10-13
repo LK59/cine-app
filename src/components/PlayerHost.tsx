@@ -2611,7 +2611,13 @@ function ActivePlayer({
       unstable: () => unstableRef.current,
       auto: () => autoLighterRef.current,
       currentStep: () => negotiatedStepRef.current,
-      position: () => lastKnownTime.current,
+      // Pendant un saut, la cible du saut : la position connue ne bouge plus (`timeupdate` l'ignore tant
+      // que l'élément n'a pas d'image), et un saut resté sans image se préchauffait puis basculait à la
+      // position d'avant le saut — le spectateur revenait en arrière de tout ce qu'il avait sauté (13/10/2026).
+      position: () => {
+        const video = videoRef.current;
+        return video?.seeking && Number.isFinite(video.currentTime) ? video.currentTime : lastKnownTime.current;
+      },
       seekSignal: setSeekSignal,
     } satisfies SlowLinkHost);
   }, [runner, itemId, startPlayback, t, noteLighterOrigin]);
