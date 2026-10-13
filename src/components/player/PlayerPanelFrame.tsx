@@ -260,7 +260,9 @@ export function PlayerPanelFrame({
       }}
     >
       <header
-        className={`flex shrink-0 ${GUTTER}`}
+        // Une marge noire sous le titre, au moins égale au débord du fondu (6 px) : sans elle, le
+        // fondu remonté sur l'en-tête rognait le bas du sous-titre (« 800 titres », 13/10/2026).
+        className={`flex shrink-0 ${short ? "pb-1.5" : "pb-2"} ${GUTTER}`}
         // Un téléphone couché n'a que ~400 px de haut : un titre de trois rem et deux rems de
         // marge en mangeaient le quart avant la première affiche.
         style={{ paddingTop: `calc(${short ? "0.75rem" : "1.5rem"} + env(safe-area-inset-top))` }}
