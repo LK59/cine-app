@@ -50,7 +50,13 @@ export function useMeasuredCardHeight(grid: RefObject<HTMLElement | null>, items
         (parseFloat(style.borderTopWidth) || 0) -
         (parseFloat(style.borderBottomWidth) || 0);
       if (!(height > 0)) return;
-      root.style.setProperty("--card-h", `${height}px`);
+      // Rien d'écrit quand rien n'a changé (13/10/2026) : la première carte revient dans le champ à
+      // chaque remontée en haut, l'observateur se réveille, et réécrire la variable sur la grille
+      // faisait recalculer le style de ses huit cents cartes au moment même où la rangée des filtres
+      // reparaît — l'à-coup que Louis sent là, et seulement dans les grandes grilles.
+      const value = `${height}px`;
+      if (root.style.getPropertyValue("--card-h") === value && root.hasAttribute("data-card-h")) return;
+      root.style.setProperty("--card-h", value);
       root.setAttribute("data-card-h", "");
     };
     measure();

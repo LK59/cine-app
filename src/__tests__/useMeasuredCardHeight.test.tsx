@@ -69,6 +69,22 @@ describe("useMeasuredCardHeight", () => {
     expect(grid.style.getPropertyValue("--card-h")).toBe("288px");
   });
 
+  // La première carte revient dans le champ à chaque remontée : réécrire la même valeur faisait
+  // recalculer le style des huit cents cartes au moment où la rangée des filtres reparaît.
+  it("n'écrit rien sur la grille quand la hauteur n'a pas changé", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () => ({ height: 236.75, width: 109, top: 0, left: 0, right: 109, bottom: 236.75, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect
+    );
+    const { container } = render(<Grille n={5} />);
+    const grid = container.querySelector(".player-grid") as HTMLElement;
+    const setProperty = vi.spyOn(grid.style, "setProperty");
+    const setAttribute = vi.spyOn(grid, "setAttribute");
+    callback?.();
+    callback?.();
+    expect(setProperty).not.toHaveBeenCalled();
+    expect(setAttribute).not.toHaveBeenCalled();
+  });
+
   it("ne pose rien tant que la carte n'a pas de hauteur", () => {
     const { container } = render(<Grille n={3} />);
     const grid = container.querySelector(".player-grid") as HTMLElement;

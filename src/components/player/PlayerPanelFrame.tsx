@@ -318,7 +318,9 @@ export function PlayerPanelFrame({
             couleur de ce qu'il recouvre, il ne coûte rien au défilement. */}
         <div
           aria-hidden
-          className={`pointer-events-none sticky top-0 z-10 bg-gradient-to-b from-(--panel-bg) to-transparent ${short ? "h-2" : "h-4"}`}
+          // Un pixel au-dessus du bord, rendu par une marge négative (13/10/2026) : collé pile à `top-0`,
+          // l'arrondi de Safari laissait un liseré d'affiche passer entre le haut de la zone et le fondu.
+          className={`pointer-events-none sticky -top-px z-10 -mt-px bg-gradient-to-b from-(--panel-bg) to-transparent ${short ? "h-[calc(0.5rem+1px)]" : "h-[calc(1rem+1px)]"}`}
         />
         <div className="mx-auto w-full" style={{ maxWidth: contentWidth }}>
           {children}
