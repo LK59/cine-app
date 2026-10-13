@@ -254,6 +254,42 @@ export async function withPersistentCache<T>(key: string, requestedTtlMs: number
   return p;
 }
 
+/**
+ * Comme `withCache`, mais une valeur expirée depuis moins de `maxStaleMs` est rendue **tout de
+ * suite**, et la relecture part en arrière-plan (13/10/2026).
+ *
+ * Pour une réponse lente dont l'âge de quelques dizaines de secondes ne change rien à ce qu'on en
+ * tire : l'appelant n'attend la source que la toute première fois, ou après un long silence. Une
+ * relecture qui échoue garde l'ancienne valeur (le repli de `withCache`) et ne lève rien ici.
+ */
+export async function withBackgroundRefresh<T>(key: string, ttlMs: number, maxStaleMs: number, fn: () => Promise<T>): Promise<T> {
+  const hit = store.get(key) as Entry<T> | undefined;
+  if (hit && Date.now() < hit.exp) {
+    touch(key, hit);
+    return hit.v;
+  }
+  const stale = staleStore.get(key) as StaleEntry<T> | undefined;
+  if (stale && Date.now() - stale.fetchedAt < maxStaleMs) {
+    // `forceRefresh` saute l'entrée expirée ; la garde anti-ruée de `withCache` partage la relecture.
+    withCache(key, ttlMs, fn, { forceRefresh: true }).catch(() => {});
+    return stale.v;
+  }
+  return withCache(key, ttlMs, fn);
+}
+
+/**
+ * Les appareils Jellyfin, pour le panneau Activité (13/10/2026).
+ *
+ * `/Devices` répond en **780 à 990 ms** sur ce serveur (mesuré depuis le conteneur, trois passages,
+ * 93 Ko) — la vue d'ensemble l'attendait à chaque ouverture et à chaque relecture de vingt secondes,
+ * la fiche d'un compte aussi : c'était l'essentiel du temps d'ouverture de l'Activité. Ils ne servent
+ * qu'à dater le dernier passage d'un compte chez Jellyfin (`serverSeenAt`), que l'alerte « Jellyfin
+ * ne le voit plus » ne compare qu'à un jour d'écart, et à la liste des appareils d'une fiche : une
+ * minute d'âge n'y change rien. Au-delà de dix minutes sans personne pour les lire, on attend une
+ * réponse fraîche plutôt que de montrer un état ancien.
+ */
+export const cachedJellyfinDevices = () => withBackgroundRefresh("jf:devices", 60_000, 10 * 60_000, () => jellyfin.getDevices());
+
 // ─── Invalidation ─────────────────────────────────────────────────────────────
 
 /**

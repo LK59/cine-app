@@ -23,6 +23,7 @@ import { buildSeances, type Seance } from "@/lib/activity/seances";
 import { isChunkLoadError } from "@/lib/chunkError";
 import { clearedDiagnosis, withoutCleared } from "@/lib/activity/diagnosisCleared";
 import { acknowledgeSeances, afterClear, alertsClearedAt } from "@/lib/activity/alertsCleared";
+import { cachedJellyfinDevices } from "@/lib/server-cache";
 
 /**
  * Une « erreur » de navigateur qui n'en est pas une : la page était ouverte pendant un
@@ -142,8 +143,11 @@ export async function listAccounts(now = Date.now(), clearedAt = alertsClearedAt
     jellyfin.getUsers().catch(() => [] as JellyfinUser[]),
     jellyfin.getSessions().catch(() => [] as JellyfinSession[]),
     // Sans les appareils, on retombe sur la seule date du compte — l'alerte d'hier, rien de pire.
+    // Gardés une minute et relus en arrière-plan (`cachedJellyfinDevices`) : Jellyfin met 0,8 à 1 s
+    // à les rendre, et la vue d'ensemble l'attendait à chaque relecture (13/10/2026). Les comptes et
+    // les lectures en cours, eux, restent demandés à chaque fois — c'est le direct.
     Promise.resolve()
-      .then(() => jellyfin.getDevices())
+      .then(() => cachedJellyfinDevices())
       .catch(() => null),
   ]);
   const appSessions = sessionDb.summaryByUser();
@@ -350,9 +354,11 @@ export async function accountDetail(id: string, now = Date.now(), clearedAt = al
   const name = user.Name;
   const lower = name.toLowerCase();
 
-  const [sessions, devices, resume, recentMovies, recentEpisodes, favorites, playedMovies, playedEpisodes, requests] = await Promise.all([
+  // Tout en parallèle, « À suivre » compris : il partait après les neuf autres, 50 ms de plus en
+  // série (13/10/2026). Les appareils viennent du cache d'une minute — voir `listAccounts`.
+  const [sessions, devices, resume, recentMovies, recentEpisodes, favorites, playedMovies, playedEpisodes, requests, nextUp] = await Promise.all([
     part(jellyfin.getSessions()),
-    part(jellyfin.getDevices()),
+    part(cachedJellyfinDevices()),
     part(jellyfin.getResumeItems(id).then((r) => (r.Items as JellyfinItemLike[]).map(mediaEntry))),
     part(jellyfin.getRecentlyPlayed(id, "Movie", 25).then((r) => (r.Items as JellyfinItemLike[]).map(mediaEntry))),
     part(jellyfin.getRecentlyPlayed(id, "Episode", 25).then((r) => (r.Items as JellyfinItemLike[]).map(mediaEntry))),
@@ -360,8 +366,8 @@ export async function accountDetail(id: string, now = Date.now(), clearedAt = al
     part(jellyfin.getPlayedCount(id, "Movie").then((r) => r.TotalRecordCount)),
     part(jellyfin.getPlayedCount(id, "Episode").then((r) => r.TotalRecordCount)),
     part(requestsOf(id)),
+    part(jellyfin.getNextUpGlobal(id, 12).then((items) => (items as unknown as JellyfinItemLike[]).map(mediaEntry))),
   ]);
-  const nextUp = await part(jellyfin.getNextUpGlobal(id, 12).then((items) => (items as unknown as JellyfinItemLike[]).map(mediaEntry)));
 
   const historyStart = now - ACCOUNT_HISTORY_DAYS * DAY;
   // Ses séances restent toutes listées ; celles d'avant l'effacement ne colorent plus rien.

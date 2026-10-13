@@ -74,7 +74,8 @@ the first segment and a seek. The second answers "why is it slow" without guessi
 that launching is bound by bytes, not by CPU, and its header carries the numbers measured on this
 library. The other three survey rather than prove: `audit.spec.ts` asks every file in a
 library the player's questions, `subs.spec.ts` lists its subtitle codecs, and `raps.spec.ts`
-measures what a seek costs in one file. Four guard the AAC decisions (DECISIONS §62):
+measures what a seek costs in one file. `activite-bench.spec.ts` times the Activity overview's
+work on the real logs, mounted read-only (DECISIONS §82). Four guard the AAC decisions (DECISIONS §62):
 `aac-regress-bench.spec.ts` writes, per track, the decision and the hash of the audio init and first
 segments — run it on the code before and after an audio change, with `AAC_UA` set to a WebKit and a
 Chromium user agent, and only the tracks meant to change may differ; `aac-census-bench.spec.ts`

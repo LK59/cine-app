@@ -3830,3 +3830,40 @@ vocabulaire peut parler de services et de déploiement, mais pas de « tableau d
 `/api/news/clara`, `/api/vip/[id]`), son option `CLARA_GALLERY_ENABLED` et son montage sont
 supprimés ; toute personne ouvre la fiche ordinaire. La version de format du cache sur l'appareil
 passe à 12 (`claraGallery` quittait la configuration publique). Le tag garde le dernier état complet.
+
+---
+
+## 82. L'Activité : le direct relu à chaque appel, seuls les appareils Jellyfin gardés une minute
+
+**La règle.** La vue d'ensemble de l'Activité (`/api/admin/activity`, relue toutes les vingt
+secondes page ouverte, et par le résumé de l'accueil de la gestion) relit **à chaque appel** ce qui
+vit : les comptes et les lectures en cours chez Jellyfin (`/Users`, `/Sessions`), la présence, les
+séances du journal du lecteur (lu par sa fin, `logReader.ts`), les signalements. **Seule** la liste
+des appareils Jellyfin passe par un cache — `cachedJellyfinDevices` (`server-cache.ts`) : gardée une
+minute, puis rendue telle quelle pendant qu'une relecture part en arrière-plan
+(`withBackgroundRefresh`), et attendue de nouveau après dix minutes sans lecture. La fiche d'un
+compte lit la même.
+
+**Pourquoi.** Mesuré le 13/10/2026 depuis le conteneur : `/Devices` répond en 780 à 990 ms (93 Ko),
+`/Users` en 95 à 185 ms, `/Sessions` en 5 à 20 ms ; le calcul sur les journaux réels (13 300 lignes
+du lecteur sur trente jours, 1 291 séances) coûte 35 à 52 ms à chaud, 266 ms à froid — une fois par
+démarrage (`activite-bench.spec.ts`). L'ouverture attendait donc surtout les appareils, qui ne servent
+qu'à dater le dernier passage d'un compte chez Jellyfin : l'alerte « Jellyfin ne le voit plus » ne
+compare qu'à un jour d'écart, et la fiche affiche une date absolue — une minute d'âge n'y change rien.
+Les statistiques de la semaine et du foyer ne sont **pas** mises en cache : elles se recalculent en
+moins de 50 ms, et un cache invalidé par la taille des journaux serait vidé à chaque ligne d'un
+spectateur en train de regarder — de la complexité pour rien, et le risque d'un chiffre périmé.
+
+**Porteurs.** `withBackgroundRefresh`, `cachedJellyfinDevices` (`src/lib/server-cache.ts`).
+
+**Appelants.** `listAccounts` et `accountDetail` (`src/lib/activity/accounts.ts`).
+
+**Tests.** `activity-direct-serveur.test.ts` (une séance qui démarre puis s'arrête se voit à l'appel
+suivant, trois appels pour une seule liste d'appareils ; le contrat de `withBackgroundRefresh`),
+`activity-overview-direct.test.tsx` (la page ouverte montre la séance démarrée puis arrêtée à la
+relecture suivante, sans recharger).
+
+**Différent exprès.** Les comptes (`/Users`) restent lus à chaque appel bien qu'ils coûtent 100 ms :
+un compte désactivé ou créé doit se voir à la relecture suivante.
+
+**Décidé le 13/10/2026.**
