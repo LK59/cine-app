@@ -7,7 +7,7 @@ import { cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { NEWS_KEY } from "@/lib/news/events";
 import { NEWS_SHOW_DELAY_MS, shouldOfferNews } from "@/lib/news/decide";
-import type { NewsPayload } from "@/lib/news/content";
+import type { NewsPageView, NewsPayload } from "@/lib/news/content";
 import { NewsDialog } from "@/components/news/NewsDialog";
 
 /**
@@ -37,13 +37,26 @@ export function NewsGate() {
     return () => clearTimeout(timer);
   }, [eligible]);
 
-  if (phase !== "open" || !data) return null;
-  const pages = data.pages.filter((p) => data.unseen.includes(p.id));
+  /**
+   * Les pages montrées, figées à l'ouverture.
+   *
+   * La fenêtre éteint le drapeau dès qu'elle s'affiche (`markNewsSeen`) ; une relecture de la clé
+   * pendant qu'on lit — `revalidateOnReconnect`, un passage du Wi-Fi au réseau mobile — répond
+   * alors `unseen: []`. Recalculées sur cette réponse, les pages devenaient vides et la fenêtre
+   * disparaissait sous les yeux, sans fermeture : ni `closedBy` ni `shownMs` au journal (13/10/2026).
+   */
+  const [shown, setShown] = useState<{ pages: NewsPageView[]; auto: boolean } | null>(null);
+  if (phase === "open" && shown === null && data) {
+    setShown({ pages: data.pages.filter((p) => data.unseen.includes(p.id)), auto: !data.relaunched });
+  }
+
+  if (phase !== "open" || !shown) return null;
+  const pages = shown.pages;
   if (pages.length === 0) return null;
   return (
     <NewsDialog
       pages={pages}
-      auto={!data.relaunched}
+      auto={shown.auto}
       onClose={(by) => {
         setPhase("done");
         if (by === "voir-plus") cinemaNavigate({ news: `corrections:${pages[0].id}` });
