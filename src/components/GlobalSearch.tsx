@@ -1,8 +1,6 @@
 "use client";
 
 import { departmentLabel } from "@/lib/personDepartment";
-import { useClaraGalleryEnabled } from "@/lib/usePlayerEnabled";
-import { isVip as isVipPerson } from "@/lib/vip-persons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -178,7 +176,6 @@ export function GlobalSearch() {
   const router = useRouter();
   const { role } = useRole();
   const t = useT();
-  const claraGallery = useClaraGalleryEnabled();
   const toast = useToast();
   const [searchDebug, setSearchDebug] = useState(false);
 
@@ -459,7 +456,6 @@ export function GlobalSearch() {
               <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('search.people')}</p>
               {persons.map((p, i) => {
                 const idx = libraryResults.length + i;
-                const isVip = isVipPerson(p.id) && claraGallery;
                 return (
                   <button
                     key={`person-${p.id}`}
@@ -467,7 +463,7 @@ export function GlobalSearch() {
                     onMouseEnter={() => setCursor(idx)}
                     onClick={() => { setOpen(false); router.push(`/person/${p.id}`); }}
                   >
-                    <div className={`h-10 w-10 shrink-0 overflow-hidden rounded-full bg-slate-800 ${isVip ? "ring-2 ring-yellow-400 ring-offset-1 ring-offset-slate-900 shadow-[0_0_8px_rgba(250,204,21,0.4)]" : ""}`}>
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-slate-800">
                       {p.profilePath
                         // eslint-disable-next-line @next/next/no-img-element -- deliberate: a 40px TMDB profile picture in a live-search dropdown. Optimizing it server-side would add a round-trip to a list that rerenders on every keystroke.
                         ? <img src={p.profilePath} alt={p.name} className="h-full w-full object-cover" />
@@ -475,7 +471,7 @@ export function GlobalSearch() {
                       }
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className={`truncate text-sm font-medium ${isVip ? "text-yellow-400" : "text-white"}`}>{p.name}</p>
+                      <p className="truncate text-sm font-medium text-white">{p.name}</p>
                       <p className="truncate text-xs text-slate-500">{[departmentLabel(t, p.department), p.knownFor.slice(0, 2).join(", ")].filter(Boolean).join(" · ")}</p>
                       {p.libraryTitles.length > 0 && (
                         <div className="mt-0.5 flex flex-wrap gap-1">
@@ -487,7 +483,7 @@ export function GlobalSearch() {
                     </div>
                     {p.libraryCount > 0
                       ? <span className="shrink-0 text-xs font-medium text-accent-400">{t('search.libraryCount', { n: p.libraryCount })}</span>
-                      : <User size={12} className={`shrink-0 ${isVip ? "text-yellow-400" : "text-slate-500"}`} />
+                      : <User size={12} className="shrink-0 text-slate-500" />
                     }
                   </button>
                 );

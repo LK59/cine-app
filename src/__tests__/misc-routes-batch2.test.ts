@@ -47,7 +47,6 @@ vi.mock("@/lib/server-cache", () => ({
   cachedMovies: vi.fn(async () => []),
   cachedSeries: vi.fn(async () => []),
 }));
-vi.mock("@/lib/vip-persons", () => ({ VIP_PERSONS: { 1: { id: 1, name: "Clara", bio: "..." } } }));
 
 function fakeReq(opts: { params?: Record<string, string>; body?: unknown; cookie?: string } = {}): NextRequest {
   return {
@@ -240,21 +239,6 @@ describe("/api/user/preferences", () => {
     const res = await PUT(fakeReq({ body: { lang: "es" } }));
     expect(mockUserPrefsDb.setLang).toHaveBeenCalledWith("louis", "es");
     expect(res.cookies.get("cine-lang")?.value).toBe("es");
-  });
-});
-
-describe("GET /api/vip/[id]", () => {
-  it("returns 404 for an unknown vip id", async () => {
-    const { GET } = await import("@/app/api/vip/[id]/route");
-    const res = await GET(new Request("http://x"), { params: Promise.resolve({ id: "999" }) });
-    expect(res.status).toBe(404);
-  });
-
-  it("returns the full vip record including bio for a known id", async () => {
-    const { GET } = await import("@/app/api/vip/[id]/route");
-    const res = await GET(new Request("http://x"), { params: Promise.resolve({ id: "1" }) });
-    const body = await res.json();
-    expect(body).toEqual({ id: 1, name: "Clara", bio: "..." });
   });
 });
 

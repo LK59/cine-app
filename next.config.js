@@ -145,8 +145,9 @@ const nextConfig = {
               // www.gstatic.com pour la même raison que www.youtube.com : le service worker rejoue en
               // fetch() le script du kit Chromecast qu'il intercepte.
               "connect-src 'self' https://image.tmdb.org https://artworks.thetvdb.com https://img.youtube.com https://www.youtube.com " + CAST_KIT_SOURCES,
-              // Deux hôtes : youtube-nocookie pour TrailerModal.tsx:48, www.youtube.com pour la
-              // carte vidéo de person/[id]/page.tsx:288 et pour les cadres que crée l'API iframe.
+              // Deux hôtes : youtube-nocookie pour TrailerModal.tsx, www.youtube.com pour les cadres
+              // que crée l'API iframe (la carte vidéo de la page VIP, qui l'utilisait aussi, est
+              // partie avec la galerie le 13/10/2026).
               "frame-src https://www.youtube-nocookie.com https://www.youtube.com",
               // blob: est obligatoire ici, et pour deux raisons plutôt qu'une : hls.js
               // construit son démultiplexeur depuis un Blob (injectWorker,

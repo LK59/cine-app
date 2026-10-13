@@ -131,11 +131,6 @@ export const DEPLOYMENT_GUIDE: readonly DeploymentGuideEntry[] = [
       "    environment:\n      - MOVIES_PATH=/mnt/media/video/movies\n      - TV_PATH=/mnt/media/video/tv\n      - SEEDS_PATH=/mnt/media/video/downloads/seeds\n      - SEED_MOVIES_PATH=/mnt/media/video/downloads/seeds/movies\n      - SEED_TV_PATH=/mnt/media/video/downloads/seeds/tv\n      - CROSS_SEED_PATH=/mnt/media/video/downloads/seeds/cross-seed-links",
   },
   {
-    id: "CLARA_GALLERY",
-    keys: ["CLARA_GALLERY_ENABLED"],
-    snippet: "    volumes:\n      - /path/to/photos:/app/gallery/clara:ro\n    environment:\n      - CLARA_GALLERY_ENABLED=true",
-  },
-  {
     id: "POSTER_PREWARM_TUNING",
     keys: ["POSTER_PREWARM_WIDTHS", "POSTER_PREWARM_LOCALES"],
     snippet: "    environment:\n      - POSTER_PREWARM_WIDTHS=384,750\n      - POSTER_PREWARM_LOCALES=fr,en",

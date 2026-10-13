@@ -51,14 +51,6 @@ services:
       # this file too.
       - /path/to/your/media:${MEDIA_ROOT:-/mnt/media/video}:ro
 
-      # Optional Clara Galle gallery.
-      # Enable only if CLARA_GALLERY_ENABLED=true in .env.
-      # The folder must contain:
-      #   - JPG / PNG / WebP photos
-      #   - clarabanner.jpg, used as the page banner
-      #   - optionally favicon.jpeg, the public slideshow's icon
-      # - /path/to/your/clara/photos:/app/gallery/clara:ro
-
     # If your media folders aren't world-readable (e.g. mode 770 owned by your own
     # user/group), the container's default user won't be able to read them — stats
     # will silently under-report. Set this to "<container-uid>:<your-gid>" (keep the

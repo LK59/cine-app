@@ -133,7 +133,7 @@ session ends and notifications must be turned on again. A value set in `.env` al
 ## Optional additions
 
 Every optional line is already in the compose file above, commented. The assistant's last step,
-and **Management → Settings → Server settings**, list the others (photo gallery, library
+and **Management → Settings → Server settings**, list the others (library
 sub-folders, poster preparation, trusted reverse proxy) with the exact lines to add. The same page
 holds the defaults for accounts (home layout, tags blocked on new Jellyfin accounts), who sees the
 Chromecast button, and **Generated subtitles**: with an Anthropic, OpenAI or Google API key, viewers

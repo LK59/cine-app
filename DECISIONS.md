@@ -1531,7 +1531,7 @@ démarre sans rien préparer sur l'hôte ; le modèle annoté devient `docker-co
 route publique de création du compte se ferme dès qu'un compte existe ou que l'assistant est
 terminé ; celle de la langue, une fois l'assistant terminé.
 
-Chaque variable de `.env.example` est réglable, guidée (`DEPLOYMENT_GUIDE` : la galerie, les
+Chaque variable de `.env.example` est réglable, guidée (`DEPLOYMENT_GUIDE` : les
 sous-dossiers de la bibliothèque, les tailles des affiches, le compte fixé par le `.env`) ou générée
 (`GENERATED_SECRETS`) ; `settings-couverture.test.ts` échoue sinon. Le lecteur et son relais vers
 Jellyfin sont activés par défaut ; le relais se montre à l'étape Jellyfin de l'assistant, pour
@@ -3737,3 +3737,11 @@ message du serveur, détail technique compris. Les signalements gardent leurs pr
 réponses de route et restent hors de ce mécanisme.
 
 **Décidé le 13/10/2026.**
+
+---
+
+**Galerie retirée le 13/10/2026, tag `fin-galerie-clara-2026-10-13`.** La page personne enrichie
+(galerie de photos, diaporama public, actualités), ses routes (`/api/gallery/clara/*`,
+`/api/news/clara`, `/api/vip/[id]`), son option `CLARA_GALLERY_ENABLED` et son montage sont
+supprimés ; toute personne ouvre la fiche ordinaire. La version de format du cache sur l'appareil
+passe à 12 (`claraGallery` quittait la configuration publique). Le tag garde le dernier état complet.

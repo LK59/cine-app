@@ -60,7 +60,6 @@ export const GENRE_ALIASES: Record<string, string[]> = {
 };
 
 export const PERSON_NAME_HINTS = [
-  "clara galle",
   "nuno gallego",
   "christopher nolan",
   "leonardo dicaprio",

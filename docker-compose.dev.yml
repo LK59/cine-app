@@ -15,7 +15,7 @@
 # and a separate build directory so the two never overwrite each other's compiled output.
 #
 # Install node_modules first (see README, Development): the working tree is mounted as it is.
-# The media and gallery paths and the `user:` below are the reference host's — adapt them to your
+# The media paths and the `user:` below are the reference host's — adapt them to your
 # own machine, as in docker-compose.example.yml.
 
 networks:
@@ -42,8 +42,6 @@ services:
 
       # Same read-only media mounts as production, so the app sees the same library.
       - /mnt/media/video:/mnt/media/video:ro
-      # Optional Clara gallery photos; set CLARA_GALLERY_DIR in .env to your folder.
-      - ${CLARA_GALLERY_DIR:-./gallery}:/app/gallery/clara:ro
     ports:
       # Which address the port is published on: loopback unless DEV_BIND says otherwise.
       # A bare "3001:3000" publishes on every interface — on a host whose only address is public,

@@ -169,7 +169,7 @@ One field, and it does not ask you to pick a category first: it searches the lib
 people at once, and separates the answers afterwards. A title already here plays; a title that is
 not can be requested from the same result card. Recent searches are kept and can be cleared.
 
-Natural-language queries work — `film de guerre de Christopher Nolan`, `série avec Clara Galle`,
+Natural-language queries work — `film de guerre de Christopher Nolan`, `série avec Pedro Pascal`,
 `comédie avec Ryan Gosling`.
 
 <!-- CAPTURE : cinema-search.png
@@ -354,7 +354,7 @@ browser tabs.
 <img src="docs/screenshots/gestion-watchlist.png" height="260"> <img src="docs/screenshots/gestion-watchlist-mobile.png" height="260">
 -->
 
-- **Natural language search** — `film de guerre de Christopher Nolan`, `série avec Clara Galle`,
+- **Natural language search** — `film de guerre de Christopher Nolan`, `série avec Pedro Pascal`,
   `film comédie avec Ryan Gosling`
 
 <!-- CAPTURE : gestion-search-1.png + gestion-search-2.png + gestion-search-3.png + gestion-search-mobile.png
@@ -465,24 +465,6 @@ All media grids (Watchlist, Discover, Recommendations) share the same card:
      Phone, portrait.
      Then uncomment:
 <img src="docs/screenshots/gestion-mobile-nav.png" height="320">
--->
-
-### Optional: the Clara Galle gallery page
-
-An enriched page for one actress — full-screen photo gallery, detailed biography, external links.
-Off by default; it needs `CLARA_GALLERY_ENABLED=true` (read at startup — a restart, no rebuild) and
-a photo folder mounted read-only at `/app/gallery/clara`, containing JPG/PNG/WebP files, a
-`clarabanner.jpg` used as the page banner and optionally a `favicon.jpeg`. It also opens a public
-slideshow at `/api/gallery/clara/random`, meant for sharing. See
-[DEPLOYMENT.md](DEPLOYMENT.md#12-optional-features).
-
-<!-- CAPTURE : clara-1.png … clara-4.png
-     Four shots of the gallery page: the banner at the top, the biography, the photo grid, and
-     one photo open full-screen. Two by two.
-     Optional — this page only exists when the feature is enabled.
-     Then uncomment:
-<img src="docs/screenshots/clara-1.png" width="49%"> <img src="docs/screenshots/clara-2.png" width="49%">
-<img src="docs/screenshots/clara-3.png" width="49%"> <img src="docs/screenshots/clara-4.png" width="49%">
 -->
 
 ---

@@ -168,7 +168,7 @@ leave empty simply disables the feature that needed it.
 
 <a id="settings-in-the-app"></a>
 **`.env` or the application.** Every variable below except the deployment options (secrets, admin
-account, `TRUSTED_PROXIES`, `TZ`, media paths, the gallery, poster-preparation tuning) can also be
+account, `TRUSTED_PROXIES`, `TZ`, media paths, poster-preparation tuning) can also be
 set in **Management → Settings → Server settings**. The order is: the value set in the application,
 then `.env`, then the default. A change made in the application applies without a restart (poster
 preparation from the next start); the page shows which values come from `.env`, and **Back to the
@@ -220,7 +220,6 @@ exists, anyone who can reach the app can create it: run it straight after the fi
 | `CAST_RECEIVER_APP_ID` | The receiver application a Chromecast opens. Empty: Google's Default Media Receiver. |
 | `SUBTITLE_GEN_*` | Generated subtitles: provider, API key, model, monthly budget, prices — see [step 12](#generated-subtitles). Without a key the feature does not exist. |
 | `POSTER_PREWARM` / `POSTER_PREWARM_WIDTHS` / `POSTER_PREWARM_LOCALES` | Prepare the catalogue's posters in the background (default on; widths `384,750`; languages `fr` plus `APP_LANGUAGE`). Read at startup. |
-| `CLARA_GALLERY_ENABLED` | An optional enriched person page, with a public slideshow. Needs a photo folder mounted; off by default — see [step 12](#12-optional-features). |
 | `TRUSTED_PROXIES` | The reverse proxy whose `X-Forwarded-For` the app may believe — see [step 10](#10-put-it-behind-a-reverse-proxy). Empty keeps the older behaviour. |
 | `NEW_ACCOUNT_BLOCKED_TAGS` | Jellyfin tags blocked automatically on every account created after the first start, e.g. a tag reserving some titles to a few accounts. Also settable in *Server settings → Default settings*. |
 | `HOME_BROWSE_BUTTON` / `HOME_CONTINUE_HERO` | Default home layout: the *Browse all* button (default `true`) and a banner showing what an account is watching first (default `false`). Each account can override both in *Account → Interface*. |
@@ -294,7 +293,6 @@ To pin a version instead of following `latest`, replace the tag with a commit SH
       - ./data:/app/data
       - ./data/image-cache:/app/.next/cache/images
       - /path/to/your/media:${MEDIA_ROOT:-/mnt/media/video}:ro
-      # - /path/to/your/clara/photos:/app/gallery/clara:ro
 ```
 
 | Mount | Required | What it holds |
@@ -302,7 +300,6 @@ To pin a version instead of following `latest`, replace the tag with a commit SH
 | `./data:/app/data` | **Yes** | SQLite database, lists, settings made in the app, push subscriptions, generated secrets, logs, daily backups, generated subtitles. Lose it and you lose every list and every setting. |
 | `./data/image-cache:/app/.next/cache/images` | Optional | Optimised posters, backdrops and logos. Without this line the app links the same folder (`data/image-cache`) at startup, so the cache survives updates either way; the line is kept so older installs see no change. |
 | the media mount | Optional | Read-only, used for disk/size statistics. Remove the line if you do not want them. |
-| the gallery mount | Optional | Only if `CLARA_GALLERY_ENABLED=true`. |
 
 **Only edit the left-hand side of the media mount** — your host path. The right-hand side reads
 `MEDIA_ROOT` from `.env`, so the container path and the statistics paths can never drift apart.
@@ -529,9 +526,9 @@ TRUSTED_PROXIES=nginx-proxy-manager
 
 Restart after changing it. Left empty, the last `X-Forwarded-For` entry is used as before.
 
-**Forward the original scheme and host, and leave the app's own headers alone.** Two features write
-absolute addresses from `X-Forwarded-Proto` and `X-Forwarded-Host` (falling back to `Host`): casting
-to a television, which fetches the stream itself, and the optional gallery's public slideshow.
+**Forward the original scheme and host, and leave the app's own headers alone.** Casting to a
+television writes absolute addresses from `X-Forwarded-Proto` and `X-Forwarded-Host` (falling back
+to `Host`), since the television fetches the stream itself.
 Most proxies send them by default. The app also sets its own `Content-Security-Policy` — which
 allows exactly the Google Cast sender scripts the Chromecast button loads — and answers the CORS
 preflight (`OPTIONS`) a Chromecast sends for the stream; a proxy that replaces that header or
@@ -693,23 +690,6 @@ SUBTITLE_GEN_ENABLED=true         # false turns it off while keeping the key
 - **Source.** Only text subtitles (SRT, ASS, WebVTT…) already in the file or next to it; image-based
   subtitles (PGS, VobSub) cannot be translated, and nothing is transcribed from the audio.
 - Each job is logged in `data/logs/subtitle-gen.log` (never the key, never the text).
-
-### The Clara Galle gallery
-
-```env
-CLARA_GALLERY_ENABLED=true
-```
-
-An enriched page for one actress, off by default. Mount the photos read-only at
-`/app/gallery/clara` (the commented line in the compose template): JPG/PNG/WebP files, a
-`clarabanner.jpg` used as the page banner, and optionally a `favicon.jpeg`. While it is off, every
-`/api/gallery/clara` address answers `404`.
-
-Enabling it makes two addresses public, with no login — a slideshow meant for sharing,
-`/api/gallery/clara/random`, and the photos it shows, `/api/gallery/clara/<file>`. The list of all
-files still needs a session. The slideshow writes absolute links (link previews require them),
-built from the `X-Forwarded-Proto` and `X-Forwarded-Host` headers (falling back to `Host`): your
-reverse proxy must forward them, or the links carry the wrong scheme or host.
 
 ### Media statistics
 

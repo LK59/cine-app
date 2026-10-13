@@ -69,7 +69,7 @@ describe("parseNaturalQuery (FR)", () => {
   });
 
   it("detects series type from 'serie'", () => {
-    const result = parseNaturalQuery("serie avec Clara Galle", "all");
+    const result = parseNaturalQuery("serie avec Pedro Pascal", "all");
     expect(result.mediaType).toBe("series");
     expect(result.enabled).toBe(true);
   });
@@ -116,7 +116,7 @@ describe("parseNaturalQueryEN", () => {
   });
 
   it("detects series type", () => {
-    const result = parseNaturalQueryEN("series with Clara Galle", "all");
+    const result = parseNaturalQueryEN("series with Pedro Pascal", "all");
     expect(result.mediaType).toBe("series");
   });
 
@@ -139,7 +139,7 @@ describe("parseNaturalQueryES", () => {
   });
 
   it("detects series type", () => {
-    const result = parseNaturalQueryES("serie con Clara Galle", "all");
+    const result = parseNaturalQueryES("serie con Pedro Pascal", "all");
     expect(result.mediaType).toBe("series");
   });
 
@@ -167,12 +167,12 @@ describe("parseNaturalQueryDE", () => {
   });
 
   it("detects series type", () => {
-    const result = parseNaturalQueryDE("serie mit Clara Galle", "all");
+    const result = parseNaturalQueryDE("serie mit Pedro Pascal", "all");
     expect(result.mediaType).toBe("series");
   });
 
   it("detects series type from a compound word", () => {
-    const result = parseNaturalQueryDE("krimiserie mit Clara Galle", "all");
+    const result = parseNaturalQueryDE("krimiserie mit Pedro Pascal", "all");
     expect(result.mediaType).toBe("series");
   });
 

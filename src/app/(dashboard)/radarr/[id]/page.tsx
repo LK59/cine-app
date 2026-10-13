@@ -1,7 +1,5 @@
 "use client";
 
-import { useClaraGalleryEnabled } from "@/lib/usePlayerEnabled";
-import { isVip as isVipPerson } from "@/lib/vip-persons";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
@@ -97,7 +95,6 @@ export default function RadarrMovieDetailPage() {
   const { isReadOnly, jfId } = useRole();
   const toast = useToast();
   const t = useT();
-  const claraGallery = useClaraGalleryEnabled();
   const [selectedActor, setSelectedActor] = useState<{ tmdbId: number; name: string; photoUrl: string | null } | null>(null);
   const [showCollection, setShowCollection] = useState(false);
 
@@ -662,24 +659,19 @@ export default function RadarrMovieDetailPage() {
         <Collapsible title={t('radarr.tabCasting')} badge={info.tmdb.cast.length} icon={<Film size={15} className="text-accent-400" />}>
           <Rail>
             {info.tmdb.cast.map((actor) => {
-              const isVip = isVipPerson(actor.tmdbId) && claraGallery;
               return (
                 <button
                   key={actor.tmdbId}
                   className="w-20 shrink-0 snap-start text-center touch-manipulation"
-                  onClick={() => isVip ? router.push(`/person/${actor.tmdbId}`) : setSelectedActor({ tmdbId: actor.tmdbId, name: actor.name, photoUrl: actor.photoUrl })}
+                  onClick={() => setSelectedActor({ tmdbId: actor.tmdbId, name: actor.name, photoUrl: actor.photoUrl })}
                 >
-                  <div className={`mb-1.5 aspect-square overflow-hidden rounded-full bg-slate-800 transition-shadow ${
-                    isVip
-                      ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_12px_rgba(250,204,21,0.5)]"
-                      : "ring-0 hover:ring-2 hover:ring-accent-500"
-                  }`}>
+                  <div className="mb-1.5 aspect-square overflow-hidden rounded-full bg-slate-800 transition-shadow ring-0 hover:ring-2 hover:ring-accent-500">
                     {actor.photoUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={actor.photoUrl} alt={actor.name} className="h-full w-full object-cover" />
                     )}
                   </div>
-                  <p className={`truncate text-xs ${isVip ? "text-yellow-400 font-medium" : "text-slate-300"}`}>{actor.name}</p>
+                  <p className="truncate text-xs text-slate-300">{actor.name}</p>
                   <p className="truncate text-[11px] text-slate-500">{actor.character}</p>
                 </button>
               );

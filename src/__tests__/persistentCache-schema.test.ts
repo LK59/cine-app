@@ -43,6 +43,8 @@ const FINGERPRINTS: Record<number, string> = {
   10: "acde65cfde61b089",
   // 12/10/2026 : `arrival` des séries — la date du dernier épisode et ce que dit la pastille (§75).
   11: "a9fe8553ed9f4fcc",
+  // 13/10/2026 : `claraGallery` retiré de la configuration publique (galerie abandonnée).
+  12: "0a905ddd1ad81cd1",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

@@ -154,14 +154,6 @@ export const config = {
       return optional("NEW_ACCOUNT_BLOCKED_TAGS", "");
     },
   },
-  gallery: {
-    // La galerie Clara Galle, option personnelle de l'installation de référence. Lue au
-    // démarrage, fermée par défaut : elle était figée dans l'image au moment du build, par défaut
-    // ouverte, si bien que l'image publiée l'avait activée quoi que dise le `.env` (22/09/2026).
-    get clara() {
-      return envOnly("CLARA_GALLERY_ENABLED", "false") === "true";
-    },
-  },
   jellyseerr: {
     get url() {
       return optional("JELLYSEERR_URL", "http://jellyseerr:5055");

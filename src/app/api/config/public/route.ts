@@ -24,8 +24,6 @@ export async function GET(req: NextRequest) {
     // before it mounts a player at all — which of the two it mounts depends on it — and before it
     // offers the account option that selects it.
     playerServerFallback: config.player.serverFallback,
-    // L'option galerie : lue au démarrage du serveur, et non plus figée dans l'image.
-    claraGallery: config.gallery.clara,
     // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).
     homeBrowseButton: config.home.browseButton,
     homeContinueHero: config.home.continueHero,
