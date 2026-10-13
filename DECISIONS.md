@@ -3911,3 +3911,5 @@ Le badge rouge « Nouveau » et les couleurs des sites liés depuis une fiche pe
 étaient (§ « une couleur par état »). Le laboratoire d'animations garde ses matières d'essai.
 
 **Décidé le 13/10/2026.**
+
+**Seule exception : le logo de l'application reste violet (Louis, 13/10/2026).** Icônes PWA (`public/icon-*.png`, SVG), favicon, écrans de lancement et logo de la page de connexion (qui affiche `icon-512.png`) gardent le clap violet : c'est la marque. Tout le reste de l'interface suit l'accent blanc neutre.
