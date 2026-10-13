@@ -20,7 +20,11 @@ vi.mock("@/components/PlaybackInfoPanel", () => ({ PlaybackInfoPanel: () => null
 vi.mock("@/components/ExperimentalPlayerHost", () => ({ ExperimentalPlayerHost: () => <div data-testid="natif" /> }));
 vi.mock("@/components/PlayerControls", () => ({
   VOLUME_STORAGE_KEY: "volume",
-  PlayerControls: (props: { currentSubtitleId?: number | null }) => <div data-testid="commandes" data-subtitle={String(props.currentSubtitleId ?? "")} />,
+  PlayerControls: (props: { currentSubtitleId?: number | null; onChangeAudio?: (id: number) => void }) => (
+    <div data-testid="commandes" data-subtitle={String(props.currentSubtitleId ?? "")}>
+      <button type="button" data-testid="piste-2" onClick={() => props.onChangeAudio?.(2)} />
+    </div>
+  ),
 }));
 const playback = {
   session: null as null | Record<string, unknown>,
@@ -409,6 +413,22 @@ describe("pendant le chargement : indice, préchauffage, bascule (§78)", () => 
     }
   });
 
+  it("le chien de garde renonce sans lenteur prouvée : le préchauffage lancé à 8 s est arrêté chez Jellyfin", async () => {
+    // ~12 Ko/s : sous la moitié du besoin dès 5 s (indice, préchauffage à 8 s), mais moins de 256 Kio en
+    // 20 s — pas de verdict. L'écran « trop long » restait affiché devant un transcodage préchauffé que
+    // rien n'arrêtait avant la fermeture du lecteur (le natif, lui, le laisse tomber en renonçant).
+    await mounted();
+    await trickle(12_000, 21);
+    await settleAll();
+    expect(prewarmBodies()).toHaveLength(1);
+    expect(errors()).toHaveLength(1);
+    expect(errors()[0].fields.reason).toBe("pas de première image en 20 s");
+    const stops = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([url, init]) => url === "/api/jellyfin/playback/stop" && JSON.parse(String((init as RequestInit).body)).prewarm === true
+    );
+    expect(stops).toHaveLength(1);
+  });
+
   it("la première image arrive : le préchauffage est arrêté chez Jellyfin (aucun transcodage orphelin)", async () => {
     await mounted();
     await trickle(40_000, 9);
@@ -571,6 +591,27 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
     expect(reported.filter((r) => r.kind === "error")).toHaveLength(0);
   });
 
+  it("un saut en lecture resté 10 s sans image : préchauffé et basculé à la position DEMANDÉE, pas à celle d'avant le saut", async () => {
+    // Pendant un saut, l'élément n'a plus d'image (`readyState` < HAVE_CURRENT_DATA) : `timeupdate` ne
+    // met plus à jour la position connue, qui reste celle d'avant le saut. Le préchauffage et la
+    // bascule partaient de là — le spectateur sautait à 50 min et se retrouvait à 16 (13/10/2026).
+    await mounted();
+    await picture();
+    await trickle(250_000, 1);
+    Object.defineProperty(video(), "paused", { value: false, configurable: true });
+    Object.defineProperty(video(), "seeking", { value: true, configurable: true });
+    Object.defineProperty(video(), "currentTime", { value: 3000, configurable: true, writable: true });
+    await act(async () => void fireEvent(video(), new Event("seeking")));
+    await trickle(40_000, 12);
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    const prewarms = startBodies.filter((b) => b.prewarm === true);
+    expect(prewarms).toHaveLength(1);
+    expect(prewarms[0].startTicks).toBe(3000 * 10_000_000);
+    const lighter = reported.filter((r) => r.kind === "start" && r.fields.why === "lighter");
+    expect(lighter).toHaveLength(1);
+    expect(lighter[0].fields.at).toBe(3000);
+  });
+
   it("le lien à 115 % du besoin classique pendant 10 s : la mémoire s'efface — la lecture suivante sera native", async () => {
     switchedTo({ targetBps: 2_500_000, tier: 1 });
     await mounted();
@@ -644,6 +685,88 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
     await act(async () => void (await vi.advanceTimersByTimeAsync(61_000)));
     expect(stops()).toHaveLength(1);
     expect(reported.filter((r) => r.kind === "start" && r.fields.why === "lighter")).toHaveLength(0);
+  });
+
+  /** Un blocage réseau de `seconds` secondes, puis l'image qui repart. */
+  async function stallFor(seconds: number) {
+    await act(async () => void fireEvent(video(), new Event("waiting")));
+    await trickle(250_000, seconds);
+    await act(async () => void fireEvent(video(), new Event("playing")));
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+  }
+  const prewarmStops = () =>
+    (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([url, init]) => url === "/api/jellyfin/playback/stop" && JSON.parse(String((init as RequestInit).body)).prewarm === true
+    );
+
+  it("une renégociation (piste audio) pendant qu'un préchauffage d'un autre palier attend : il est refermé chez Jellyfin, et le 3e blocage bascule quand même", async () => {
+    // Séance déjà allégée au palier 1 : le 2e blocage préchauffe le palier 2. Un changement de piste
+    // renégocie le palier 1, prend ce préchauffage, l'écarte (pas le bon palier)… et ne le refermait pas :
+    // `cancelPrewarm` ignore un préchauffage pris. L'exécution le tenait encore « en cours » : plus aucune
+    // bascule de toute la séance (13/10/2026).
+    switchedTo({ targetBps: 5_000_000, tier: 1 });
+    await mounted();
+    await picture();
+    await stallFor(2);
+    await stallFor(2);
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(1);
+    expect(startBodies.find((b) => b.prewarm === true)).toMatchObject({ maxBitrate: 1_500_000 });
+    await act(async () => void fireEvent.click(document.querySelector("[data-testid=piste-2]")!));
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(prewarmStops()).toHaveLength(1);
+    await picture();
+    await stallFor(2);
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    const lighter = reported.filter((r) => r.kind === "start" && r.fields.why === "lighter");
+    expect(lighter).toHaveLength(1);
+    expect(lighter[0].fields).toMatchObject({ lighterTier: 2, lighterMbps: 1.5 });
+  });
+
+  it("un préchauffage fait pour une autre piste audio n'est jamais repris : la bascule renégocie la piste choisie", async () => {
+    // Le 2e blocage préchauffe avec la piste d'alors ; le spectateur change de piste ; le 3e bascule. Le
+    // préchauffage repris tel quel jouait l'ancienne piste sous un menu qui disait la nouvelle.
+    await mounted();
+    await picture();
+    await stallFor(2);
+    await stallFor(2);
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(1);
+    await act(async () => void fireEvent.click(document.querySelector("[data-testid=piste-2]")!));
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    await picture();
+    await stallFor(2);
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    const lighter = reported.filter((r) => r.kind === "start" && r.fields.why === "lighter");
+    expect(lighter).toHaveLength(1);
+    expect(lighter[0].fields.prewarm).toBeUndefined();
+    expect(startBodies.filter((b) => b.prewarm !== true && b.lighter === true).at(-1)).toMatchObject({ audioStreamIndex: 2 });
+    // Le préchauffage écarté est refermé chez Jellyfin.
+    expect(prewarmStops()).toHaveLength(1);
+  });
+
+  it("« Originale » choisie pendant qu'un préchauffage de saccades se prépare : il est arrêté chez Jellyfin, aucune bascule", async () => {
+    // La règle de bascule a joué (blocage de plus de 5 s) : le préchauffage part, la bascule l'attend.
+    // Le spectateur choisit « Originale » dans le menu. Prêt, le préchauffage n'était plus jamais ni
+    // repris ni refermé — un transcodage tenu chez Jellyfin jusqu'à la fermeture du lecteur.
+    const realFetch = fetch as unknown as (url: string, init?: RequestInit) => Promise<unknown>;
+    let release: () => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        if (String(url).includes("/hls1/main/")) return new Promise((resolve) => (release = () => resolve({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(1000) })));
+        return realFetch(url, init);
+      })
+    );
+    await mounted();
+    await picture();
+    await act(async () => void fireEvent(video(), new Event("waiting")));
+    await trickle(250_000, 6);
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(1);
+    await act(async () => writePlaybackQuality("original"));
+    release();
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(reported.filter((r) => r.kind === "start" && r.fields.why === "lighter")).toHaveLength(0);
+    expect(prewarmStops()).toHaveLength(1);
   });
 
   it("B en « Originale » : rien — jamais d'erreur tant que la lecture continue", async () => {

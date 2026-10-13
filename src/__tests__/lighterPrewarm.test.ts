@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("@/lib/codecSupport", () => ({ detectCodecSupport: async () => ({ video: { "mp4/hevc10": true }, audio: {} }) }));
 vi.mock("@/lib/webkitEngine", () => ({ playsHlsNatively: () => false }));
 
-import { PREWARM_CARRY_MS, cancelPrewarm, carryPrewarmAcrossReload, forgetPrewarm, prewarmFields, prewarmStatusOf, segmentAt, startPrewarm, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { PREWARM_CARRY_MS, cancelPrewarm, carryPrewarmAcrossReload, discardTakenPrewarm, prewarmFits, forgetPrewarm, prewarmFields, prewarmStatusOf, segmentAt, startPrewarm, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
 
 const START = {
   playSessionId: "ps-1",
@@ -133,6 +133,51 @@ describe("le préchauffage", () => {
     expect(await prewarm.ready).toBe(false);
     await Promise.resolve();
     expect(calls.filter((c) => c.url === "/api/jellyfin/playback/stop")).toHaveLength(1);
+  });
+
+  it("pris par le lecteur serveur avant d'être prêt (bascule au délai du renoncement) : prêt quand le segment arrive, et sa séance n'est pas refermée", async () => {
+    // Sur un lien à 0,3 Mbit/s, le segment préchauffé met des dizaines de secondes : la bascule des 35 s le
+    // prend en cours. Il se résolvait « en échec » dès son segment reçu (son état n'était plus `running`) :
+    // le lecteur serveur renégociait un second ffmpeg, et la séance du préchauffage restait ouverte chez
+    // Jellyfin — rien ne l'arrêtait plus (13/10/2026).
+    let release: () => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+        if (String(url) === "/api/jellyfin/playback/start") return { ok: true, status: 200, json: async () => START };
+        if (String(url).includes("master.m3u8")) return { ok: true, text: async () => MASTER };
+        if (String(url).includes("main.m3u8")) return { ok: true, text: async () => VARIANT };
+        if (String(url).includes("/hls1/main/")) return new Promise((resolve) => (release = () => resolve({ ok: true, arrayBuffer: async () => new ArrayBuffer(10) })));
+        return { ok: true, status: 200, json: async () => ({}) };
+      })
+    );
+    const prewarm = startPrewarm({ itemId: "film", step: { targetBps: 1_500_000, tier: 1 }, startSeconds: 0 });
+    for (let i = 0; i < 40 && !calls.some((c) => c.url.includes("/hls1/main/")); i++) await Promise.resolve();
+    expect(calls.some((c) => c.url.includes("/hls1/main/"))).toBe(true);
+    const taken = takePrewarm("film");
+    expect(taken).toBe(prewarm);
+    release();
+    expect(await prewarm.ready).toBe(true);
+    expect(calls.filter((c) => c.url === "/api/jellyfin/playback/stop")).toHaveLength(0);
+  });
+
+  it("pris puis écarté par le lecteur serveur (autre palier, autre piste) : sa séance est refermée chez Jellyfin, une fois", async () => {
+    const prewarm = startPrewarm({ itemId: "film", step: { targetBps: 1_500_000, tier: 2 }, startSeconds: 0, audioStreamIndex: 1 });
+    await prewarm.ready;
+    const taken = takePrewarm("film")!;
+    expect(prewarmFits(taken, { targetBps: 5_000_000, tier: 1 }, 1)).toBe(false);
+    expect(prewarmFits(taken, { targetBps: 1_500_000, tier: 2 }, 2)).toBe(false);
+    expect(prewarmFits(taken, { targetBps: 1_500_000, tier: 2 }, 1)).toBe(true);
+    // `cancelPrewarm` ne touche jamais un préchauffage pris (il peut être en lecture).
+    cancelPrewarm(taken);
+    expect(calls.filter((c) => c.url === "/api/jellyfin/playback/stop")).toHaveLength(0);
+    discardTakenPrewarm(taken);
+    discardTakenPrewarm(taken);
+    await Promise.resolve();
+    expect(calls.filter((c) => c.url === "/api/jellyfin/playback/stop")).toHaveLength(1);
+    // Plus tenu par personne : la décision n'attend plus un préchauffage qui n'existe plus.
+    expect(prewarmStatusOf({ prewarm: taken, cause: "lecture" }, "lecture")).toBe("none");
   });
 
   it("l'état pour la décision : aucun, en cours, prêt, en échec — et « en cours » s'il est tenu pour une autre cause", () => {

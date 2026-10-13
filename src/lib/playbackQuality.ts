@@ -57,6 +57,26 @@ export function writePlaybackQuality(quality: PlaybackQuality): void {
   for (const listener of listeners) listener();
 }
 
+/**
+ * Un autre onglet a changé le réglage : la valeur gardée en mémoire ici ne vaut plus. Sans cela, un
+ * onglet resté ouvert gardait « Automatique » — et basculait en version allégée — alors que l'appareil
+ * disait « Originale » depuis l'autre onglet (13/10/2026). `storage` n'arrive qu'aux *autres* onglets ;
+ * celui qui écrit passe par `writePlaybackQuality`. « Originale » y efface aussi la mémoire des deux
+ * minutes de cet onglet, comme `writePlaybackQuality`.
+ */
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    try {
+      if (event.key !== null && !event.key.startsWith(PREFIX)) return;
+      cached = null;
+      if (readPlaybackQuality() === "original") forgetLighterCarry();
+      for (const listener of listeners) listener();
+    } catch {
+      /* un réglage relu plus tard */
+    }
+  });
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);

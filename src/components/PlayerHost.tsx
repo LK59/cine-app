@@ -44,7 +44,7 @@ import {
   playbackLinkSlow,
   type LighterStep,
 } from "@/lib/slowLinkPolicy";
-import { cancelPrewarm, carryPrewarmAcrossReload, prewarmFields, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { cancelPrewarm, carryPrewarmAcrossReload, discardTakenPrewarm, prewarmFields, prewarmFits, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
 import { directReloadIntent, reloadLighterOf, reloadPage, shouldReloadDirect, type PlayerReloadIntent } from "@/lib/serverReload";
 import { SlowLinkRunner, type SeekSignal, type SlowLinkHost } from "@/lib/slowLinkRunner";
 import { forgetLighterCarry, readPlaybackQuality, rememberLighter, usePlaybackQuality } from "@/lib/playbackQuality";
@@ -1342,13 +1342,16 @@ function ActivePlayer({
       // même PlaySessionId, mêmes adresses —, et hls.js part à sa position (`startPosition`) : Jellyfin
       // sert le segment déjà produit et poursuit le même ffmpeg (vérifié sur la prod le 12/10/2026 : un
       // seul ffmpeg, segments en moins de 10 ms). Un préchauffage d'un autre palier est arrêté.
+      // Pris, il n'appartient plus qu'à cette négociation : écarté (autre palier, autre piste audio —
+      // `prewarmFits` —, échec, négociation remplacée), il est refermé par `discardTakenPrewarm`.
+      // `cancelPrewarm` ne touche pas un préchauffage pris : la séance restait ouverte chez Jellyfin.
       const warmedCandidate = cap.step ? takePrewarm(itemId) : null;
       let warmed: Prewarm | null = null;
       if (warmedCandidate) {
-        if (warmedCandidate.step.targetBps === cap.step?.targetBps && (await warmedCandidate.ready) && warmedCandidate.data) warmed = warmedCandidate;
-        else cancelPrewarm(warmedCandidate);
+        if (prewarmFits(warmedCandidate, cap.step, opts?.audioStreamIndex) && (await warmedCandidate.ready) && warmedCandidate.data) warmed = warmedCandidate;
+        else discardTakenPrewarm(warmedCandidate);
         if (generation !== playbackGeneration.current) {
-          if (warmed) cancelPrewarm(warmed);
+          if (warmed) discardTakenPrewarm(warmed);
           return;
         }
       }
@@ -1634,6 +1637,10 @@ function ActivePlayer({
           runner.execute(action, "ouverture", resumeAt ?? 0, slow);
           return;
         }
+        // Un écran, pas une bascule : un préchauffage lancé pendant le chargement ne servira pas — arrêté
+        // chez Jellyfin, comme le natif quand il renonce (`execute` : `screen` / `giveUp`). Il tournait
+        // derrière l'écran jusqu'à la fermeture du lecteur (13/10/2026).
+        runner.drop(slow ? "écran final" : "renoncement sans lenteur prouvée");
         if (slow) {
           slowLogRef.current.noteAt("écran trop lente", Date.now() - startedAtWall, slow.recvBps, slow.needBps);
           reportPlayback("error", serverFailureFields(logContext.current, SLOW_LINK_REASON, { ...slowLinkFields(slow), ...stages, quality: autoLighterRef.current ? "auto" : "original", ...slowLogRef.current.fields() }));
@@ -2608,7 +2615,13 @@ function ActivePlayer({
       unstable: () => unstableRef.current,
       auto: () => autoLighterRef.current,
       currentStep: () => negotiatedStepRef.current,
-      position: () => lastKnownTime.current,
+      // Pendant un saut, la cible du saut : la position connue ne bouge plus (`timeupdate` l'ignore tant
+      // que l'élément n'a pas d'image), et un saut resté sans image se préchauffait puis basculait à la
+      // position d'avant le saut — le spectateur revenait en arrière de tout ce qu'il avait sauté (13/10/2026).
+      position: () => {
+        const video = videoRef.current;
+        return video?.seeking && Number.isFinite(video.currentTime) ? video.currentTime : lastKnownTime.current;
+      },
       seekSignal: setSeekSignal,
     } satisfies SlowLinkHost);
   }, [runner, itemId, startPlayback, t, noteLighterOrigin]);

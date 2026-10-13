@@ -11,7 +11,7 @@
 //
 // Rien ici ne lève : une erreur dans la décision n'interrompt jamais une lecture.
 
-import { cancelPrewarm, prewarmStatusOf, startPrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { cancelPrewarm, prewarmGone, prewarmStatusOf, startPrewarm, type Prewarm } from "@/lib/lighterPrewarm";
 import {
   EARLY_PREWARM_MS,
   SEEK_AS_OPENING_MS,
@@ -70,6 +70,12 @@ export interface SlowLinkHost {
   seekSignal(signal: SeekSignal | null): void;
 }
 
+/**
+ * L'écart toléré entre la position d'un préchauffage et celle qu'un saut attend : une seconde, le jeu des
+ * arrondis — au-delà, c'est un autre endroit du film (voir `seekTick`).
+ */
+const SEEK_PREWARM_SLACK_S = 1;
+
 export class SlowLinkRunner {
   /** Le préchauffage de la version allégée en cours (`lighterPrewarm.ts`), et pour quoi. */
   held: { prewarm: Prewarm; cause: SwitchCause } | null = null;
@@ -97,6 +103,12 @@ export class SlowLinkRunner {
 
   /** L'état du préchauffage pour la décision (`decideOpening` / `decidePlayback`). */
   status(cause: SwitchCause): PrewarmStatus {
+    // Pris par une renégociation du lecteur serveur, ou abandonné ailleurs : plus le nôtre. Le garder
+    // bloquait le préchauffage suivant (`execute` n'en lance pas tant qu'un est tenu).
+    if (this.held && prewarmGone(this.held.prewarm)) {
+      this.held = null;
+      this.clearEarlyTimer();
+    }
     return prewarmStatusOf(this.held, cause);
   }
 
@@ -138,6 +150,13 @@ export class SlowLinkRunner {
     try {
       const host = this.host();
       const log = host.log();
+      if (action.kind === "none") {
+        // « Originale » choisie pendant qu'un préchauffage se préparait : plus aucune bascule ne le
+        // reprendra (`decide*` ne rend plus que `none`). Tenu, il restait ouvert chez Jellyfin jusqu'à la
+        // fermeture du lecteur — la bascule armée avait coupé l'annulation à la minute (13/10/2026).
+        if (this.held && !host.auto()) this.drop("qualité Originale");
+        return;
+      }
       if (action.kind === "prewarm") {
         if (this.held || host.over()) return;
         const prewarm = startPrewarm({ itemId: host.itemId, step: action.step, startSeconds: at, audioStreamIndex: host.audioStreamIndex() });
@@ -256,6 +275,14 @@ export class SlowLinkRunner {
       const measure = host.seekMeasure(elapsed);
       const needBps = host.needBps();
       if (elapsed >= SEEK_GIVE_UP_MS && !slowLinkVerdict(measure, needBps)) return;
+      // Un préchauffage fait pour une autre position — un saut précédent, ou le 2e blocage d'avant le
+      // saut — ne sert plus : la bascule partait de SA position (`held.prewarm.startSeconds`), et un
+      // spectateur qui avait sauté de 1000 à 3000 s pendant l'attente revenait à 1000 s (13/10/2026). Il
+      // est refermé ; le préchauffage suivant se fait à la position demandée.
+      const position = host.position();
+      if (this.held && this.held.cause !== "ouverture" && !(Math.abs(this.held.prewarm.startSeconds - position) <= SEEK_PREWARM_SLACK_S)) {
+        this.drop("saut ailleurs");
+      }
       const { advice, action } = decideOpening({
         measure,
         needBps,
@@ -266,7 +293,7 @@ export class SlowLinkRunner {
         currentStep: host.currentStep(),
         giveUpMs: SEEK_GIVE_UP_MS,
       });
-      this.execute(action, "saut", host.position(), advice.recvBps !== null ? advice : action.kind === "screen" ? action.slow : advice);
+      this.execute(action, "saut", position, advice.recvBps !== null ? advice : action.kind === "screen" ? action.slow : advice);
       // Le délai du renoncement : ce saut a eu sa décision.
       if (elapsed >= SEEK_GIVE_UP_MS || action.kind === "switch") return this.seekDone();
       if (this.shown && this.shown.at === at && this.shown.hint === advice.hint) return;

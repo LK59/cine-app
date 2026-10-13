@@ -149,9 +149,7 @@ export function startPrewarm(options: { itemId: string; step: LighterStep; start
       }
       if (data.isDirectPlay) {
         // Rien à transcoder : rien à chauffer (n'arrive pas à ces débits, mais ne coûte rien).
-        prewarm.state = "ready";
-        prewarm.readyAt = now();
-        return settle(true);
+        return settleReady(prewarm, settle);
       }
       const masterUrl = String(data.castUrl ?? data.manifestUrl ?? "");
       const base = typeof location !== "undefined" ? location.href : "http://localhost/";
@@ -167,19 +165,58 @@ export function startPrewarm(options: { itemId: string; step: LighterStep; start
       // Le segment lui-même, en entier : c'est sa demande qui fait partir ffmpeg chez Jellyfin.
       const seg = await fetch(segment.url, { signal });
       await seg.arrayBuffer();
-      if (prewarm.state !== "running") return settle(false);
-      prewarm.state = "ready";
-      prewarm.readyAt = now();
-      settle(true);
+      settleReady(prewarm, settle);
     } catch {
       // Annulé : `cancelPrewarm` a déjà refermé la séance — une seule fois.
       if (prewarm.state === "cancelled") return settle(false);
-      if (prewarm.state === "running") prewarm.state = "failed";
+      // Pris en cours par le lecteur serveur (`used`) puis en échec : il n'en fera rien
+      // (`discardTakenPrewarm` ne refermera pas une seconde fois une séance déjà refermée ici).
+      if (prewarm.state === "running" || prewarm.state === "used") prewarm.state = "failed";
       if (prewarm.data) void stopAtJellyfin(prewarm);
       settle(false);
     }
   })();
   return prewarm;
+}
+
+/**
+ * Le segment est là. Un préchauffage pris en cours par le lecteur serveur (`used` — la bascule au délai
+ * du renoncement n'attend pas qu'il soit prêt) l'est aussi : il se résolvait « en échec » parce que son
+ * état n'était plus `running`, le lecteur serveur le laissait tomber sans pouvoir l'arrêter
+ * (`cancelPrewarm` ignore un préchauffage pris) et renégociait — deux ffmpeg, dont un que rien ne
+ * refermait (13/10/2026). Seul un abandon (`cancelled`) le fait échouer.
+ */
+function settleReady(prewarm: Prewarm, settle: (ok: boolean) => void): void {
+  if (prewarm.state === "cancelled" || prewarm.state === "failed") return settle(false);
+  if (prewarm.state === "running") prewarm.state = "ready";
+  prewarm.readyAt = now();
+  settle(true);
+}
+
+/**
+ * Le préchauffage pris convient-il à la négociation que le lecteur serveur allait faire ? Même palier, et
+ * même piste audio : la piste est gravée dans l'adresse du transcodage. Un préchauffage du 2e blocage
+ * suivi d'un changement de piste, repris au 3e, jouait l'ancienne piste sous un menu qui disait la
+ * nouvelle (13/10/2026). Dans le doute, non : la négociation d'avant le préchauffage.
+ */
+export function prewarmFits(prewarm: Prewarm, step: LighterStep | null | undefined, audioStreamIndex: number | undefined): boolean {
+  if (!step || prewarm.step.targetBps !== step.targetBps) return false;
+  return (prewarm.audioStreamIndex ?? null) === (audioStreamIndex ?? null);
+}
+
+/**
+ * Le lecteur serveur a pris ce préchauffage (`takePrewarm`) et n'en fera rien — autre palier, autre
+ * piste, échec, ou négociation remplacée entre-temps : sa séance est refermée chez Jellyfin. Le seul
+ * chemin d'arrêt d'un préchauffage pris ; `cancelPrewarm` ne le touche jamais, puisqu'un préchauffage
+ * pris peut être en lecture. Une seule fois.
+ */
+export function discardTakenPrewarm(prewarm: Prewarm | null | undefined): void {
+  if (!prewarm) return;
+  if (prewarm.state !== "used") return cancelPrewarm(prewarm);
+  prewarm.state = "cancelled";
+  if (current === prewarm) current = null;
+  prewarm.abort.abort();
+  if (prewarm.data) void stopAtJellyfin(prewarm);
 }
 
 /** Le préchauffage de ce titre, pris par le lecteur serveur qui va le lire — une seule fois. */
@@ -292,11 +329,20 @@ export function cancelPrewarm(prewarm: Prewarm | null = current): void {
  * Ce que la décision (`decideOpening` / `decidePlayback`) doit savoir du préchauffage tenu par l'hôte
  * pour une cause : aucun, en cours, prêt ou en échec. Un préchauffage tenu pour une autre cause compte
  * « en cours » : il occupe la place (un seul à la fois).
+ *
+ * Un préchauffage pris par un autre (`used`) ou abandonné (`cancelled`) n'est plus là : « aucun ». Compté
+ * « en cours », il bloquait toute bascule pour le reste de la séance — la décision attendait un
+ * préchauffage qu'une renégociation avait pris puis écarté (13/10/2026). `SlowLinkRunner.status` le lâche.
  */
 export function prewarmStatusOf(held: { prewarm: Prewarm; cause: SwitchCause } | null | undefined, cause: SwitchCause): PrewarmStatus {
-  if (!held) return "none";
+  if (!held || prewarmGone(held.prewarm)) return "none";
   if (held.cause !== cause) return "running";
   return held.prewarm.state === "ready" ? "ready" : held.prewarm.state === "failed" ? "failed" : "running";
+}
+
+/** Ce préchauffage n'est plus à celui qui le tient : pris par le lecteur serveur, ou abandonné. */
+export function prewarmGone(prewarm: Prewarm): boolean {
+  return prewarm.state === "used" || prewarm.state === "cancelled";
 }
 
 /** Les paramètres de la séance Jellyfin, lus dans l'adresse qu'elle a donnée. */
