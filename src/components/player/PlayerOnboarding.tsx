@@ -312,9 +312,10 @@ export function PlayerOnboarding({
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0"
+        // Un halo d'accent, blanc depuis le 13/10/2026 : à 22 % il devenait un projecteur, d'où 8 %.
         style={{
           background:
-            "radial-gradient(60% 45% at 50% 0%, color-mix(in srgb, var(--color-accent-500) 22%, transparent), transparent 70%)",
+            "radial-gradient(60% 45% at 50% 0%, color-mix(in srgb, var(--color-accent-500) 8%, transparent), transparent 70%)",
         }}
       />
 

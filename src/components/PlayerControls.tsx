@@ -2892,7 +2892,7 @@ function SubtitleStyleGroup<T extends string | number>({
             onClick={() => onPick(option.value)}
             aria-pressed={current === option.value}
             className={`rounded-full px-2.5 py-1 text-xs ${
-              current === option.value ? "bg-accent-600 text-white" : "bg-white/10 text-white/70 hover:bg-white/20"
+              current === option.value ? "bg-accent-600 text-ink" : "bg-white/10 text-white/70 hover:bg-white/20"
             }`}
           >
             {option.label}

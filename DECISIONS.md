@@ -3794,7 +3794,8 @@ et une carte de la Configuration ; s'il ne prend effet qu'au redémarrage, son l
 demande un volume, un port ou un secret de démarrage → `DEPLOYMENT_GUIDE` (jamais réglable dans
 l'application : `SESSION_SECRET`, `TRUSTED_PROXIES`, `COOKIE_SECURE`, les clés VAPID générées). Une
 couleur ou une apparence n'est pas un réglage d'administrateur : la couleur d'accent a été
-supprimée, le violet du cinéma est fixe (une préférence restée sur un appareil n'est plus lue).
+supprimée, l'accent est fixe (une préférence restée sur un appareil n'est plus lue) — violet ce
+jour-là, blanc neutre depuis (§83).
 
 **Pourquoi.** La page « Paramètres » de la gestion mêlait la langue, la couleur d'accent et les
 sessions de l'administrateur aux adresses et clés de l'installation ; les notifications s'y
@@ -3865,5 +3866,48 @@ relecture suivante, sans recharger).
 
 **Différent exprès.** Les comptes (`/Users`) restent lus à chaque appel bien qu'ils coûtent 100 ms :
 un compte désactivé ou créé doit se voir à la relecture suivante.
+
+**Décidé le 13/10/2026.**
+
+---
+
+## 83. L'accent est blanc neutre ; la couleur ne dit qu'un état
+
+**La règle.** L'interface n'a plus de couleur à elle : ce qui est principal, sélectionné, en cours,
+mis en avant ou focalisé est **blanc**, façon Apple TV — boutons principaux (fond blanc, texte noir,
+grisé d'un cran au survol et à l'appui), barres de progression (Reprendre, épisodes, lecteur,
+mini-lecteur, téléchargements, jauges), pastilles et compteurs (fond blanc, chiffre noir),
+interrupteurs activés (rail blanc, pastille noire), puces retenues, cases et curseurs natifs
+(`accent-color` hérité depuis `html`), anneaux de focus, liens et icônes mis en avant. Le rouge,
+l'orange et le vert ne disent qu'un **état** : `danger`, `warning`, `success`. Les couleurs de séries
+des graphiques et les catégories du journal (bleu des sauts, violet des séances servies par le
+serveur) ne sont pas des états et gardent leurs teintes.
+
+**Comment.** Au niveau des jetons : l'échelle `--accent-*` reste nommée ainsi — ses centaines
+d'emplois ne bougent pas —, mais elle est un gris pur, et 400 à 600 sont du blanc plein. Seuls les
+endroits où un texte blanc était posé sur un fond d'accent plein ont changé (`text-ink`) ; un fond
+d'accent translucide (`/15`, `/22`) sous un texte blanc reste lisible et n'a pas bougé. Là où l'accent
+se posait sur le sélecteur blanc des fiches (barre de « Reprendre » d'une ligne de menu, pastille
+d'une action accomplie), il suit désormais la couleur du texte (`bg-current`). Les icônes de
+l'application et les écrans de lancement sont redessinés en blanc sur gris neutre, depuis
+`public/icon-flat.svg`.
+
+**Le verre de la gestion, en sourdine.** Le même jour : dans la gestion (`.gestion-liquid`, et les
+fenêtres ouvertes depuis elle — `body:has(.gestion-liquid)`), `--glass-fill` devient un voile plat à
+peine plus clair que le noir et `--glass-edge` un liseré fin d'un seul trait, sans reflet en haut.
+Le reflet et le bord brillant du verre de §45 sont faits pour des pilules posées sur une image qui
+bouge ; sur des dizaines de cartes alignées, ils devenaient un effet. Le cinéma garde son verre.
+
+**Porteurs.** `src/app/globals.css` (`:root` de l'accent, `btn-primary`, `chip-on`, `accent-color`,
+le verre de la gestion), `src/components/Toggle.tsx`, `MENU_BADGE_ACTIVE` (`detailMenu.ts`).
+
+**Tests.** `design-tokens.test.ts` : chaque teinte de l'échelle est un gris pur, 400 à 600 sont
+blancs, et aucun fond d'accent ou blanc à 50 % et plus ne porte un texte blanc ou clair dans la même
+chaîne de classes — variantes comprises (`hover:bg-accent-600` sur un `text-white` de base).
+
+**Différent exprès.** `btn-on` (l'option retenue d'un bouton discret : « dans ma liste ») reste un
+voile blanc à 22 % et non un blanc plein : plein, il se lirait comme l'action principale de l'écran.
+Le badge rouge « Nouveau » et les couleurs des sites liés depuis une fiche personne restent ce qu'ils
+étaient (§ « une couleur par état »). Le laboratoire d'animations garde ses matières d'essai.
 
 **Décidé le 13/10/2026.**

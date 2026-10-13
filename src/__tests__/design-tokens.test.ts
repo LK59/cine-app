@@ -8,7 +8,7 @@ import { join } from "path";
  * Relevé le 23/09/2026 sur les écrans du cinéma et du lecteur : neuf opacités de blanc et six gris
  * pleins pour le texte secondaire, six arrondis, trois rouges d'erreur — et des teintes de
  * l'accent (`accent-200`, `accent-300`) que le thème ne définit pas, donc que Tailwind n'émet
- * pas : le badge « en cours » d'une demande prenait la couleur de son parent au lieu du violet.
+ * pas : le badge « en cours » d'une demande prenait la couleur de son parent au lieu de l'accent.
  *
  * Aucune de ces fautes ne se voit dans un test de comportement, et chacune revient par un simple
  * copier-coller. Ces tests lisent donc la source, comme `decisions-partagees.test.ts`.
@@ -130,5 +130,78 @@ describe("les contrôles natifs sont sombres", () => {
   it("le document déclare son thème sombre au navigateur", () => {
     const css = readFileSync("src/app/globals.css", "utf8");
     expect(css).toMatch(/html\s*\{[^}]*color-scheme:\s*dark/);
+  });
+});
+
+// L'accent est blanc depuis le 13/10/2026 (DECISIONS.md §83) : blanc neutre façon Apple TV, et la
+// couleur réservée aux états. Deux fautes ne doivent pas revenir, et aucune ne se voit ailleurs
+// qu'à l'œil : une teinte glissée dans l'échelle (le violet revenu par un copier-coller), et un
+// texte blanc posé sur un fond d'accent — invisible, puisque ce fond est maintenant blanc.
+describe("l'accent est blanc neutre", () => {
+  const theme = readFileSync("src/app/globals.css", "utf8");
+  const scale = [...theme.matchAll(/--accent-(\d+):\s*(\d+)\s+(\d+)\s+(\d+)\s*;/g)].map((m) => ({
+    step: m[1],
+    rgb: [Number(m[2]), Number(m[3]), Number(m[4])],
+  }));
+
+  it("chaque teinte de l'échelle est un gris pur", () => {
+    expect(scale.length).toBeGreaterThanOrEqual(6);
+    expect(scale.filter(({ rgb: [r, g, b] }) => r !== g || g !== b).map((x) => x.step)).toEqual([]);
+  });
+
+  it("les teintes pleines de l'accent sont blanches", () => {
+    const solid = scale.filter((x) => ["400", "500", "600"].includes(x.step));
+    expect(solid.map((x) => x.rgb[0])).toEqual([255, 255, 255]);
+  });
+
+  // Chaque morceau de chaîne entre guillemets, accents graves ou `${…}` : une branche de ternaire
+  // n'est pas mêlée à l'autre. Dans un morceau, chaque fond d'accent (ou blanc) à 50 % et plus est
+  // confronté au texte qui s'affiche avec lui : celui des mêmes variantes (`focus-visible:bg-white
+  // focus-visible:text-ink`), sinon celui sans variante (`hover:bg-white` sur un `text-white` de
+  // base devient blanc sur blanc au survol).
+  const SOLID_BG = /^bg-(?:accent-(?:400|500|600)|white)(?:\/(?:[5-9]\d|100))?$/;
+  const LIGHT_TEXT = /^text-(?:white|accent-\d+|slate-[1-3]00|muted|subtle)$/;
+  const TEXT = /^text-(?:white|black|ink|current|accent-\d+|slate-\d+|muted|subtle|danger|warning|success|[a-z]+-\d{3})(?:\/[\d[\].]+)?$/;
+
+  function whiteOnWhite(chunk: string): string[] {
+    const tokens = chunk.split(/[\s;]+/).filter(Boolean).map((token) => {
+      const parts = token.split(":");
+      return { variants: parts.slice(0, -1).join(":"), utility: parts[parts.length - 1] };
+    });
+    const textFor = (variants: string) =>
+      tokens.filter((t) => TEXT.test(t.utility) && t.variants === variants).map((t) => t.utility);
+    return tokens
+      .filter((t) => SOLID_BG.test(t.utility))
+      .flatMap((bg) => {
+        const own = textFor(bg.variants);
+        const shown = own.length ? own : textFor("");
+        return shown.filter((text) => LIGHT_TEXT.test(text)).map((text) => `${bg.variants ? bg.variants + ":" : ""}${bg.utility} + ${text}`);
+      });
+  }
+
+  function everySource(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return name === "__tests__" ? [] : everySource(path);
+      return /\.(tsx?|css)$/.test(name) ? [path] : [];
+    });
+  }
+
+  it("aucun texte blanc sur un fond d'accent ou blanc", () => {
+    const bad = everySource("src").flatMap((path) =>
+      readFileSync(path, "utf8")
+        .split(/["'`]|\$\{|\}/)
+        .flatMap((chunk) => whiteOnWhite(chunk).map((pair) => `${path}: ${pair}`)),
+    );
+    expect(bad).toEqual([]);
+  });
+
+  it("le test reconnaît la faute qu'il garde", () => {
+    expect(whiteOnWhite("rounded-full bg-accent-500 px-1.5 text-white")).toHaveLength(1);
+    expect(whiteOnWhite("@apply btn bg-accent-600/90 text-slate-100")).toHaveLength(1);
+    expect(whiteOnWhite("text-white hover:bg-white")).toHaveLength(1);
+    expect(whiteOnWhite("bg-accent-500/22 text-white")).toEqual([]);
+    expect(whiteOnWhite("bg-accent-500 text-ink")).toEqual([]);
+    expect(whiteOnWhite("text-white hover:bg-white/10 focus-visible:bg-white focus-visible:text-ink")).toEqual([]);
   });
 });

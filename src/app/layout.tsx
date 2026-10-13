@@ -151,8 +151,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <style dangerouslySetInnerHTML={{ __html: "html,body{background:#0a0a0c}" }} />
         {/* Il y avait ici un script qui posait la couleur d'accent choisie avant la première image.
-            La couleur d'accent n'existe plus (13/10/2026, DECISIONS.md §81) : le violet du cinéma
-            partout. Une couleur restée dans le stockage d’un appareil n’est plus lue. */}
+            La couleur d'accent n'existe plus (13/10/2026, DECISIONS.md §81) : un accent fixe
+            partout — blanc neutre depuis le même jour (§83). Une couleur restée dans le stockage d’un appareil n’est plus lue. */}
         {SPLASH_SCREENS.flatMap((s) =>
           (["portrait", "landscape"] as const).map((orientation) => {
             // iOS veut la taille du fichier en pixels de l'appareil, et dans le sens où il se

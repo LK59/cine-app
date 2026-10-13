@@ -198,7 +198,7 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
                 className={`min-h-[80px] p-1 border-b border-r border-white/4 ${!day.inMonth ? "opacity-30" : ""}`}
               >
                 <div className={`mb-1 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium ${
-                  isToday ? "bg-accent-500 text-white" : "text-muted"
+                  isToday ? "bg-accent-500 text-ink" : "text-muted"
                 }`}>
                   {Number(day.date.slice(8))}
                 </div>

@@ -23,12 +23,14 @@ export function Toggle({
     >
       <span
         className={`relative inline-block h-5 w-9 shrink-0 rounded-full border border-white/10 backdrop-blur-xs transition-colors ${
-          checked ? "bg-accent-600/80" : "bg-white/10"
+          checked ? "bg-accent-600" : "bg-white/10"
         }`}
       >
+        {/* Activé, le rail est blanc (accent neutre, 13/10/2026) : la pastille passe au noir, sans
+            quoi elle disparaissait dans son rail. */}
         <span
-          className={`absolute left-0.5 top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-            checked ? "translate-x-4" : "translate-x-0"
+          className={`absolute left-0.5 top-0.5 h-3.5 w-3.5 rounded-full transition-[transform,background-color] ${
+            checked ? "translate-x-4 bg-ink" : "translate-x-0 bg-white"
           }`}
         />
       </span>

@@ -33,7 +33,7 @@ function EntryIcon({ icon: Icon }: { icon: React.ElementType }) {
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="ml-1.5 inline-block translate-y-[-1px] rounded-full bg-accent-500/20 px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-accent-300">
+    <span className="ml-1.5 inline-block translate-y-[-1px] rounded-full bg-accent-500/20 px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-accent-400">
       {children}
     </span>
   );
@@ -93,7 +93,7 @@ export function NewsContentView({
                 <button
                   type="button"
                   onClick={onSeeMore}
-                  className="-mx-2 mt-1.5 inline-flex items-center gap-0.5 rounded-lg px-2 py-1 text-[14px] font-medium text-accent-300 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-accent-400"
+                  className="-mx-2 mt-1.5 inline-flex items-center gap-0.5 rounded-lg px-2 py-1 text-[14px] font-medium text-accent-400 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-accent-400"
                 >
                   {t("news.seeMore")}
                   <ChevronRight size={15} aria-hidden />

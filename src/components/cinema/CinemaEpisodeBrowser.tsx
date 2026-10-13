@@ -251,7 +251,7 @@ export function CinemaEpisodeBrowser({
                   )}
                   {ep.watched && (
                     <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent-500/90">
-                      <Check size={12} className="text-white" />
+                      <Check size={12} className="text-ink" />
                     </span>
                   )}
                   <CinemaEpisodeProgress resumeTicks={ep.resumeTicks} runtimeTicks={ep.runtimeTicks} watched={ep.watched} />

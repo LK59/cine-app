@@ -33,10 +33,15 @@ describe("le menu d'une fiche en mode cinéma", () => {
     expect(MENU_ROW.split(/\s+/)).not.toContain("bg-white");
   });
 
-  /** L'accent ne marque plus « où l'on est » : il ne dit plus qu'un état déjà acquis. */
-  it("garde l'accent pour l'état, et le blanc pour le repère de position", () => {
+  /**
+   * Le fond ne marque plus « où l'on est » : il ne dit qu'un état déjà acquis. L'accent est blanc
+   * depuis le 13/10/2026 (DECISIONS.md §83) — un fond d'accent fixe se fondait dans le sélecteur
+   * blanc —, alors l'état se dit par une pastille plus appuyée, de la couleur de sa ligne.
+   */
+  it("garde une pastille appuyée pour l'état, et le blanc pour le repère de position", () => {
     expect(MENU_ROW_INACTIVE).not.toContain("accent");
-    expect(MENU_BADGE_ACTIVE).toContain("accent");
+    expect(MENU_BADGE_ACTIVE).toContain("bg-current/35");
+    expect(MENU_BADGE_ACTIVE).not.toContain("accent");
     expect(MENU_BADGE).not.toContain("accent");
   });
 

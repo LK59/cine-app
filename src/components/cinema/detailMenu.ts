@@ -50,10 +50,12 @@ export const MENU_BADGE =
  * La pastille d'une action déjà accomplie : dans ma liste, déjà vu.
  *
  * L'accent est porté par le fond, jamais par l'icône : l'icône hérite de la couleur de sa ligne
- * et reste donc lisible aussi bien au repos que sous le sélecteur.
+ * et reste donc lisible aussi bien au repos que sous le sélecteur. Le fond suit lui aussi le texte
+ * (`bg-current`), plus appuyé que celui de `MENU_BADGE` : l'accent est blanc depuis le 13/10/2026,
+ * et un fond d'accent fixe se serait fondu dans le sélecteur blanc.
  */
 export const MENU_BADGE_ACTIVE =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-500/35 ring-1 ring-accent-400/40 " +
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-current/35 ring-1 ring-current/40 " +
   "transition-[color,background-color,box-shadow] duration-200 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";
 
 /**

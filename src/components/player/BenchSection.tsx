@@ -92,7 +92,7 @@ export function BenchSection({ extraAction }: { extraAction?: ReactNode } = {}) 
                 key={d}
                 type="button"
                 onClick={() => setDepth(d)}
-                className={`rounded-full px-3 py-1.5 text-xs ${depth === d ? "bg-accent-500 text-white" : "bg-white/10 text-muted"}`}
+                className={`rounded-full px-3 py-1.5 text-xs ${depth === d ? "bg-accent-500 text-ink" : "bg-white/10 text-muted"}`}
               >
                 {t(d === "full" ? "bench.depthFull" : d === "quick" ? "bench.depthQuick" : "bench.depthExtreme")}
               </button>

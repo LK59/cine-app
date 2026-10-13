@@ -123,7 +123,7 @@ export function PlayButton({
 
   const defaultClass =
     variant === "icon"
-      ? "rounded-full bg-accent-600/80 p-1.5 text-white hover:bg-accent-600"
+      ? "rounded-full bg-accent-600/80 p-1.5 text-ink hover:bg-accent-600"
       : variant === "primary"
         ? "btn-primary relative overflow-hidden"
         : variant === "row"
@@ -132,7 +132,7 @@ export function PlayButton({
              recalcule par élément et par image, et cette pastille est celle des cartes — il y en a
              des rangées entières à l'écran pendant qu'on fait défiler. Ce qu'il apportait, un fond
              qui tient sur n'importe quelle affiche, l'opacité le donne déjà. */
-          : "flex items-center gap-1.5 rounded-lg bg-accent-600/85 px-3 py-1.5 text-xs text-white hover:bg-accent-600";
+          : "flex items-center gap-1.5 rounded-lg bg-accent-600/85 px-3 py-1.5 text-xs text-ink hover:bg-accent-600";
 
   return (
     <button
@@ -153,7 +153,9 @@ export function PlayButton({
       title={label}
     >
       {variant === "primary" && progressPct !== null && (
-        <span className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${progressPct}%` }} />
+        // Un voile sombre : le bouton principal est blanc depuis le 13/10/2026, et le voile blanc
+        // d'avant n'y laissait plus rien voir.
+        <span className="absolute inset-y-0 left-0 bg-black/15" style={{ width: `${progressPct}%` }} />
       )}
       {/* Où l'on en est, dans le bouton qui reprend — et nulle part ailleurs.
           Une barre posée au-dessus, dans la colonne, flottait entre le titre et le synopsis sans
@@ -161,7 +163,9 @@ export function PlayButton({
           repos comme sous le sélecteur blanc, puisqu'elle porte sa propre couleur. */}
       {variant === "row" && progressPct !== null && (
         <span className="absolute inset-x-0 bottom-0 h-[3px] overflow-hidden rounded-b-lg bg-current/15">
-          <span className="block h-full bg-accent-500" style={{ width: `${progressPct}%` }} />
+          {/* De la couleur du texte, comme son rail : blanche au repos, noire sous le sélecteur
+              blanc — l'accent, blanc lui aussi, y disparaissait. */}
+          <span className="block h-full bg-current" style={{ width: `${progressPct}%` }} />
         </span>
       )}
       {variant === "row" ? (

@@ -325,9 +325,11 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0"
+        // Des halos d'accent, blanc depuis le 13/10/2026 : aux 24 et 14 % du violet ils devenaient
+        // des projecteurs, d'où 8 et 5 %.
         style={{
           background:
-            "radial-gradient(60% 40% at 50% 0%, color-mix(in srgb, var(--color-accent-500) 24%, transparent), transparent 70%), radial-gradient(50% 35% at 85% 100%, color-mix(in srgb, var(--color-accent-400) 14%, transparent), transparent 70%)",
+            "radial-gradient(60% 40% at 50% 0%, color-mix(in srgb, var(--color-accent-500) 8%, transparent), transparent 70%), radial-gradient(50% 35% at 85% 100%, color-mix(in srgb, var(--color-accent-400) 5%, transparent), transparent 70%)",
         }}
       />
       <div className="relative mx-auto w-full max-w-xl">
