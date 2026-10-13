@@ -1345,6 +1345,13 @@
   .player-grid-fluid > * { contain-intrinsic-size: auto 295px; }
 }
 
+/* La grille complète suppose la hauteur qu'elle a mesurée sur une vraie carte, et non une
+   constante (13/10/2026) : une rangée jamais rendue, plus haute de 5 à 22 px que ses cartes, se
+   tassait en entrant dans le champ, et sans ancrage du défilement dans WebKit tout le dessous
+   sautait d'autant — sur « Tous les films », en remontant. Après les paliers ci-dessus, et plus
+   précis qu'eux. Voir `useMeasuredCardHeight`. */
+.player-grid[data-card-h] > * { contain-intrinsic-size: auto var(--card-h); }
+
 /* « Tous les films », « Toutes les séries » : l'affiche grossit doucement sous le pointeur
    (07/10/2026). Au pointeur fin seulement — un doigt n'a pas de survol, et la carte garde alors
    son seul enfoncement (`pressable`). Chaque carte porte `content-visibility`, donc une

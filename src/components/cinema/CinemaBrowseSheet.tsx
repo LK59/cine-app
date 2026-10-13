@@ -8,6 +8,7 @@ import { PANEL_WIDE } from "@/components/player/panelWidth";
 import { PlayerResultCard } from "@/components/player/PlayerResultCard";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { useDecodeAhead } from "@/lib/useDecodeAhead";
+import { useMeasuredCardHeight } from "@/lib/useMeasuredCardHeight";
 import { genreLabel } from "@/lib/top10Label";
 import {
   filterTitles,
@@ -98,6 +99,9 @@ const BrowseGrid = memo(function BrowseGrid<T extends BrowsableTitle>({
           // Cette grille ne montre qu'une sorte à la fois : l'étiquette répéterait « Film »
           // six cent soixante-dix fois, pour un `backdrop-filter` par carte. Voir `showKind`.
           showKind={false}
+          // Cartes d'une seule hauteur, supposée exacte pour celles jamais rendues : sans quoi une
+          // rangée se tassait en entrant dans le champ en remontant. Voir `useMeasuredCardHeight`.
+          uniform
           openId={libraryIdOf(item)}
           onOpenId={open}
         />
@@ -183,6 +187,7 @@ function BrowseSheet<T extends BrowsableTitle>({
   // défilement qui saccadait, et non la grille elle-même. Voir `useDecodeAhead`.
   const gridRef = useRef<HTMLDivElement>(null);
   useDecodeAhead(gridRef, grid);
+  useMeasuredCardHeight(gridRef, grid);
 
   // Le genre traduit, comme la rangée d'où l'on vient : « Comédie » sur l'accueil puis « Comedy »
   // ici, c'étaient deux noms pour la même chose à un appui d'intervalle.

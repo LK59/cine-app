@@ -30,6 +30,7 @@ export const PlayerResultCard = memo(function PlayerResultCard({
   openId,
   onOpenId,
   showKind = true,
+  uniform = false,
 }: {
   kind: ResultKind;
   title: string;
@@ -55,6 +56,13 @@ export const PlayerResultCard = memo(function PlayerResultCard({
    * qu'il y a derrière bouge. C'est-à-dire pendant tout un défilement.
    */
   showKind?: boolean;
+  /**
+   * Toutes les cartes de la même hauteur : deux lignes de titre et la ligne de l'année réservées,
+   * même vides (13/10/2026). Pour la grille complète, dont les cartes jamais rendues comptent pour
+   * une hauteur supposée — une carte plus courte que prévu se tassait en entrant dans le champ, et
+   * tout ce qui suivait sautait. Voir `useMeasuredCardHeight`.
+   */
+  uniform?: boolean;
 }) {
   const t = useT();
   const Icon = kind === "movie" ? Film : kind === "series" ? Tv : User;
@@ -126,10 +134,19 @@ export const PlayerResultCard = memo(function PlayerResultCard({
         )}
       </div>
 
-      <p className="mt-2 line-clamp-2 text-[13px] font-medium leading-snug text-white">
+      {/* `min-h-[2.75em]` : deux lignes de `leading-snug` (2 × 1,375). */}
+      <p className={`mt-2 line-clamp-2 text-[13px] font-medium leading-snug text-white${uniform ? " min-h-[2.75em]" : ""}`}>
         {title}
       </p>
-      {subtitle && <p className="mt-0.5 truncate text-[11px] text-subtle">{subtitle}</p>}
+      {subtitle ? (
+        <p className="mt-0.5 truncate text-[11px] text-subtle">{subtitle}</p>
+      ) : (
+        uniform && (
+          <p aria-hidden className="mt-0.5 truncate text-[11px] text-subtle">
+            {"\u00a0"}
+          </p>
+        )
+      )}
     </button>
   );
 });
