@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Bell, BellOff, Loader2, CircleCheckBig, CircleX } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
+import { useErrorText } from "@/lib/useErrorText";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
 
@@ -51,6 +52,7 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
   const [sub, setSub] = useState<PushSubscription | null>(null);
   const swReg = useRef<ServiceWorkerRegistration | null>(null);
   const t = useT();
+  const errorText = useErrorText();
   const toast = useToast();
 
   const detect = useCallback(async () => {
@@ -144,9 +146,9 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
       onSubscribed?.();
     } catch (error) {
       setState("unsubscribed");
-      toast.error(error instanceof Error ? error.message : t('common.error'));
+      toast.error(errorText(error));
     }
-  }, [toast, t, onSubscribed]);
+  }, [toast, onSubscribed, errorText]);
 
   const unsubscribe = useCallback(async () => {
     setState("loading");
@@ -162,9 +164,9 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
       setState("unsubscribed");
     } catch (error) {
       setState("subscribed");
-      toast.error(error instanceof Error ? error.message : t('common.error'));
+      toast.error(errorText(error));
     }
-  }, [sub, toast, t]);
+  }, [sub, toast, errorText]);
 
   if (state === "unsupported") return (
     <div className="flex items-center gap-2 text-sm text-slate-500">

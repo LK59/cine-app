@@ -9,6 +9,7 @@ import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack, useRouteBehind, useSheetBehind } from "@/lib/cinemaRoute";
 import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
 import { useT } from "@/components/TranslationProvider";
+import { useErrorText } from "@/lib/useErrorText";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { useTitleWatched } from "@/lib/useTitleWatched";
 import { useIsMobile } from "@/lib/useIsMobile";
@@ -65,6 +66,7 @@ export function PlayerDiscoverSheet({
   leaving?: boolean;
 }) {
   const t = useT();
+  const errorText = useErrorText();
   const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const [showSynopsis, setShowSynopsis] = useState(false);
@@ -250,7 +252,7 @@ export function PlayerDiscoverSheet({
 
       {error && !data && (
         <p className="px-4 py-10 text-center text-sm text-danger">
-          {error instanceof Error ? error.message : t("common.unknown")}
+          {errorText(error, t("errors.loadFailed"))}
         </p>
       )}
 
@@ -398,7 +400,7 @@ export function PlayerDiscoverSheet({
 
       {error && !data && (
         <div className="absolute inset-0 flex items-center justify-center px-8 text-center">
-          <p className="text-sm text-danger">{error instanceof Error ? error.message : t("common.unknown")}</p>
+          <p className="text-sm text-danger">{errorText(error, t("errors.loadFailed"))}</p>
         </div>
       )}
 

@@ -5,6 +5,7 @@ import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
 import { noteWatchlistChange } from "@/lib/watchlistCache";
 import { useT } from "@/components/TranslationProvider";
+import { useErrorText } from "@/lib/useErrorText";
 import type { WatchlistStatus } from "@/lib/db";
 
 interface WatchlistPayload {
@@ -41,6 +42,7 @@ export function canJoinWatchlist(tmdbId: number | null | undefined): tmdbId is n
 export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) {
   const toast = useToast();
   const t = useT();
+  const errorText = useErrorText();
   const [addedStatus, setAddedStatus] = useState<WatchlistStatus | null>(initialStatus);
   // Tracks the initialStatus value already reconciled into addedStatus below, so the
   // adjustment only runs once per actual change instead of on every render.
@@ -80,7 +82,7 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
       toast.success(t("watchlist.addedToast"));
     } catch (error) {
       setAddedStatus(previous);
-      toast.error(error instanceof Error ? error.message : t("watchlist.addFailed"));
+      toast.error(errorText(error, t("watchlist.addFailed")));
     } finally {
       setWriting(false);
     }
@@ -100,7 +102,7 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
       toast.success(t("watchlist.removedToast"));
     } catch (error) {
       setAddedStatus(previous);
-      toast.error(error instanceof Error ? error.message : t("watchlist.addFailed"));
+      toast.error(errorText(error, t("watchlist.addFailed")));
     } finally {
       setWriting(false);
     }

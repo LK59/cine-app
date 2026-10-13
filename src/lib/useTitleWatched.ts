@@ -5,6 +5,7 @@ import { mutate as globalMutate } from "swr";
 import { apiAction } from "@/lib/apiAction";
 import { revalidateWatchState } from "@/lib/swr";
 import { useT } from "@/components/TranslationProvider";
+import { useErrorText } from "@/lib/useErrorText";
 import { useToast } from "@/components/Toast";
 
 /**
@@ -20,6 +21,7 @@ export function useTitleWatched(
   key: string
 ) {
   const t = useT();
+  const errorText = useErrorText();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -43,7 +45,7 @@ export function useTitleWatched(
       void revalidateWatchState(null);
     } catch (error) {
       void globalMutate(key);
-      toast.error(error instanceof Error && error.message ? error.message : t("common.unknown"));
+      toast.error(errorText(error));
     } finally {
       setBusy(false);
     }

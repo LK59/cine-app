@@ -6,7 +6,7 @@ const apiAction = vi.fn();
 vi.mock("@/lib/apiAction", () => ({ apiAction: (...a: unknown[]) => apiAction(...a) }));
 const toastError = vi.fn();
 vi.mock("@/components/Toast", () => ({ useToast: () => ({ success: vi.fn(), error: toastError, info: vi.fn() }) }));
-vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
+vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr", setLocale: () => {} }) }));
 vi.mock("@/lib/watchlistCache", () => ({ noteWatchlistChange: vi.fn(), refreshWatchlistViews: vi.fn() }));
 
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";

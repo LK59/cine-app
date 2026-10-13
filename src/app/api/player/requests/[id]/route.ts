@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { resolveJellyseerrIdentity } from "@/lib/jellyseerrIdentity";
@@ -21,12 +22,12 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   if (!config.jellyseerr.apiKey) {
-    return NextResponse.json({ error: "Les demandes ne sont pas disponibles" }, { status: 503 });
+    return NextResponse.json(errorBody("Les demandes ne sont pas disponibles", "requests_unavailable"), { status: 503 });
   }
 
   const id = Number.parseInt((await props.params).id, 10);
   if (!Number.isFinite(id) || id <= 0) {
-    return NextResponse.json({ error: "Demande introuvable" }, { status: 400 });
+    return NextResponse.json(errorBody("Demande introuvable", "request_not_found"), { status: 400 });
   }
 
   const identity = await resolveJellyseerrIdentity(session);
@@ -38,5 +39,5 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     notFound = !outcome.ok;
     return outcome;
   }, "player-request-cancel");
-  return notFound ? NextResponse.json({ error: "Demande introuvable" }, { status: 404 }) : response;
+  return notFound ? NextResponse.json(errorBody("Demande introuvable", "request_not_found"), { status: 404 }) : response;
 }

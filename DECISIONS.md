@@ -3706,3 +3706,34 @@ palier.
 n'a pas de `giveUp` : son chien de garde des 20 s renonce lui-même.
 
 **Décidé le 12/10/2026.**
+
+## 80. Les refus du serveur s'affichent par leur code, dans la langue du compte
+
+**La règle.** Une route qu'un spectateur atteint répond `{ error, code }` : `error` en français pour le
+journal et l'administration, `code` pris dans `API_ERROR_CODES` (`src/lib/apiErrorCodes.ts`, qui reprend
+`upstream_unreachable` et `file_missing`). L'écran ne cite jamais `error.message` lui-même : il passe
+par `apiErrorText` (`src/lib/apiErrorText.ts`, ou le crochet `useErrorText`) — code connu →
+`errors.codes.<code>` ; sans code, le message n'est cité qu'à un compte en français, les autres lisent le
+repli de l'écran ou `errors.generic`. Côté serveur, `HttpError` porte un `code` que `withErrorHandling`
+renvoie ; les refus de Jellyseerr à une demande sont nommés par `withRequestRefusalCode`
+(`requestRefusal.ts` : 409 déjà demandé, 403 « quota », autre 4xx refus ; un 401 reste sans code).
+
+**Pourquoi.** « Le nouveau mot de passe est identique à l'actuel », « Jellyseerr ne reconnaît pas encore
+ce compte », « 409 Conflict: {…} » arrivaient tels quels aux comptes en anglais, espagnol et allemand
+(chasse aux bugs du 13/10/2026).
+
+**Appelants.** `usePlayerTitleActions`, `useAddToWatchlist`, `useTitleWatched`, `useJellyfinItemState`,
+`PlayerAccountPanel`, `NotificationChoices`, `PlayerOnboarding`, `PushToggle`, `PlayerPersonSheet`,
+`PlayerDiscoverSheet`, la négociation de `PlayerHost`, et `errorMessage` (`upstreamError.ts` : catalogue
+des deux accueils, informations du fichier du lecteur natif), qui garde « la bibliothèque ne répond pas ».
+
+**Tests.** `apiErrorText.test.ts` : route → `apiAction` → texte, pour un compte en anglais (mot de passe
+identique ou refusé, demande déjà faite, quota, compte non reconnu, Ma liste) ; un message sans code ne
+laisse passer aucun français ; chaque code a son texte dans les quatre langues.
+
+**Différent exprès.** Les écrans de gestion (`/gestion`, administrateur, en français) citent toujours le
+message du serveur, détail technique compris. Les signalements gardent leurs propres codes
+(`reportErrorText`). Les raisons internes du lecteur (refus du remux, écran d'erreur natif) ne sont pas des
+réponses de route et restent hors de ce mécanisme.
+
+**Décidé le 13/10/2026.**

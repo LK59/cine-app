@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -21,7 +22,7 @@ function requireJellyfin(session: { jfId?: string; jfToken?: string } | null) {
 export async function GET(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   const creds = requireJellyfin(session);
-  if (!creds) return NextResponse.json({ error: "Compte Jellyfin requis" }, { status: 403 });
+  if (!creds) return NextResponse.json(errorBody("Compte Jellyfin requis", "jellyfin_account_required"), { status: 403 });
 
   return withErrorHandling(async () => {
     const user = await jellyfin.getUserConfiguration(creds.userId, creds.token);
@@ -41,10 +42,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   const creds = requireJellyfin(session);
-  if (!creds) return NextResponse.json({ error: "Compte Jellyfin requis" }, { status: 403 });
+  if (!creds) return NextResponse.json(errorBody("Compte Jellyfin requis", "jellyfin_account_required"), { status: 403 });
 
   const body = (await req.json().catch(() => null)) as Partial<PlayerPreferences> | null;
-  if (!body) return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+  if (!body) return NextResponse.json(errorBody("Paramètres invalides", "invalid_request"), { status: 400 });
 
   return withErrorHandling(async () => {
     const user = await jellyfin.getUserConfiguration(creds.userId, creds.token);

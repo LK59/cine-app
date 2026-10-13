@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { watchlistDb, type WatchlistStatus } from "@/lib/db";
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
   // Un corps illisible levait hors de tout `catch` : un 500 au lieu d'un 400 (26/09/2026).
   const body = await req.json().catch(() => null);
   const entry = readWatchlistEntry(body);
-  if (typeof entry === "string") return NextResponse.json({ error: entry }, { status: 400 });
+  if (typeof entry === "string") return NextResponse.json(errorBody(entry, "invalid_request"), { status: 400 });
 
   const item = watchlistDb.upsert({ userId, ...entry, status: "to_watch", note: null });
 
@@ -82,11 +83,11 @@ export async function DELETE(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
   if (!body?.tmdbId || !body?.mediaType) {
-    return NextResponse.json({ error: "tmdbId et mediaType sont requis" }, { status: 400 });
+    return NextResponse.json(errorBody("tmdbId et mediaType sont requis", "invalid_request"), { status: 400 });
   }
   const { tmdbId, mediaType } = body;
   const existing = watchlistDb.get(userId, mediaType, tmdbId);
-  if (!existing) return NextResponse.json({ error: "Introuvable" }, { status: 404 });
+  if (!existing) return NextResponse.json(errorBody("Introuvable", "not_in_list"), { status: 404 });
 
   const ok = watchlistDb.remove(userId, existing.id);
   return NextResponse.json({ ok });

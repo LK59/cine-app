@@ -8,7 +8,7 @@ const toastError = vi.fn();
 vi.mock("@/components/Toast", () => ({
   useToast: () => ({ success: toastSuccess, error: toastError, info: vi.fn() }),
 }));
-vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
+vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key, useLocale: () => ({ locale: "fr", setLocale: () => {} }) }));
 
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import type { WatchlistStatus } from "@/lib/db";

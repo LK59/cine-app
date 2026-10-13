@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { notificationPrefsDb } from "@/lib/db";
@@ -24,7 +25,7 @@ export async function PUT(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const preferences = body?.preferences as Partial<Record<NotificationCategory, boolean>> | undefined;
   if (!preferences || typeof preferences !== "object") {
-    return NextResponse.json({ error: "Préférences invalides" }, { status: 400 });
+    return NextResponse.json(errorBody("Préférences invalides", "invalid_request"), { status: 400 });
   }
 
   // Un compte ordinaire règle ce qu'il peut recevoir, pas les annonces de téléchargement, qui ne

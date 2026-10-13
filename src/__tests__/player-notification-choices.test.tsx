@@ -7,7 +7,7 @@ import { SWRConfig } from "swr";
 // Avant, un compte ordinaire ne pouvait que tout couper.
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
-vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ["fr", vi.fn()] }));
+vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr", setLocale: vi.fn() }) }));
 const errorToast = vi.fn();
 vi.mock("@/components/Toast", () => ({ useToast: () => ({ error: errorToast, success: vi.fn() }) }));
 vi.mock("@/components/PushToggle", () => ({ PushToggle: () => <div /> }));

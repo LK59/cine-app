@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
@@ -90,12 +91,12 @@ export async function DELETE(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
   if (!session?.jfId) {
-    return NextResponse.json({ error: "Compte Jellyfin requis" }, { status: 403 });
+    return NextResponse.json(errorBody("Compte Jellyfin requis", "jellyfin_account_required"), { status: 403 });
   }
   const body = await req.json().catch(() => null);
   const itemId = body?.itemId;
   if (!isJellyfinId(itemId)) {
-    return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+    return NextResponse.json(errorBody("Paramètres invalides", "invalid_request"), { status: 400 });
   }
   try {
     await jellyfin.resetPlaybackPosition(session.jfId, itemId);

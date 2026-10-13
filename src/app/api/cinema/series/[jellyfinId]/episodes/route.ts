@@ -1,4 +1,5 @@
 import { firstEpisodeOf } from "@/lib/nextEpisode";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinI
   const { jellyfinId } = await props.params;
   // Interpolé tel quel dans `/Shows/{id}/Episodes` par le client, avec la clé d'administration :
   // un `?` tronquerait le chemin et laisserait réécrire la query string.
-  if (!isJellyfinId(jellyfinId)) return NextResponse.json({ error: "Identifiant invalide" }, { status: 400 });
+  if (!isJellyfinId(jellyfinId)) return NextResponse.json(errorBody("Identifiant invalide", "invalid_request"), { status: 400 });
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
   if (!session?.jfId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });

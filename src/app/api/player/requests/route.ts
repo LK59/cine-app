@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
+import { withRequestRefusalCode } from "@/lib/requestRefusal";
 import { HttpError } from "@/lib/http";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -37,14 +39,14 @@ export async function POST(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   if (!config.jellyseerr.apiKey) {
-    return NextResponse.json({ error: "Les demandes ne sont pas disponibles" }, { status: 503 });
+    return NextResponse.json(errorBody("Les demandes ne sont pas disponibles", "requests_unavailable"), { status: 503 });
   }
 
   const body = await req.json().catch(() => null);
   const type = body?.type === "series" ? "series" : body?.type === "movie" ? "movie" : null;
   const tmdbId = Number(body?.tmdbId);
   if (!type || !Number.isFinite(tmdbId) || tmdbId <= 0) {
-    return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+    return NextResponse.json(errorBody("Paramètres invalides", "invalid_request"), { status: 400 });
   }
 
   return withErrorHandling(async () => {
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
     // Jamais au nom de l'administrateur de Jellyseerr pour un compte ordinaire — voir la route
     // jumelle `/api/jellyseerr/requests` (audit du 08/10/2026).
     if (session.role !== "admin" && !identity.cookie && identity.userId == null) {
-      throw new HttpError("Jellyseerr ne reconnaît pas encore ce compte. Réessaie dans un instant.", 503);
+      throw new HttpError("Jellyseerr ne reconnaît pas encore ce compte. Réessaie dans un instant.", 503, "request_identity_pending");
     }
     let seasons: number[] | undefined;
     if (type === "series") {
@@ -76,7 +78,10 @@ export async function POST(req: NextRequest) {
       identity.cookie ? undefined : identity.userId ?? undefined,
       identity.cookie,
       seasons
-    );
+    ).catch((err: unknown) => {
+      // Déjà demandé, quota, droits : un refus que l'écran doit pouvoir dire — `withRequestRefusalCode`.
+      throw withRequestRefusalCode(err);
+    });
 
     // Ce qui permettra de prévenir cette personne — et elle seule — quand le fichier arrivera,
     // sans avoir à redemander à Jellyseerr de qui était la demande.

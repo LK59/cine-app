@@ -6,6 +6,7 @@ import { fetcher, progressKey, revalidateWatchState } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
+import { useErrorText } from "@/lib/useErrorText";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
 
 /**
@@ -34,6 +35,7 @@ export function useJellyfinItemState(
   swrOptions?: SWRConfiguration
 ) {
   const t = useT();
+  const errorText = useErrorText();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   // La clé vient de `progressKey` et non d'un gabarit recopié : c'est elle que
@@ -104,12 +106,12 @@ export function useJellyfinItemState(
         void revalidateWatchState(itemId);
       } catch (err) {
         void mutate(data, { revalidate: false });
-        toast.error(err instanceof Error ? err.message : t("common.unknown"));
+        toast.error(errorText(err));
       } finally {
         setBusy(false);
       }
     },
-    [itemId, kind, data, busy, mutate, toast, t]
+    [itemId, kind, data, busy, mutate, toast, t, errorText]
   );
 
   return {

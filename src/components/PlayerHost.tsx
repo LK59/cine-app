@@ -6,6 +6,8 @@ import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession, stopOrphanSession } from "@/lib/usePlaybackSession";
 import { refreshAfterPlayback } from "@/lib/swr";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
+import { apiErrorText } from "@/lib/apiErrorText";
+import { withCode } from "@/lib/upstreamError";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useStableFallback, takeoverFor, castCarriedTo, castingNow, lighterNow, chromecastNow, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
 import { ChromecastPlayer } from "@/components/player/ChromecastPlayer";
@@ -1424,7 +1426,9 @@ function ActivePlayer({
         setError(
           body?.code === UPSTREAM_UNREACHABLE
             ? t("player.libraryUnreachable")
-            : body?.error || "Lecture impossible pour le moment."
+            // Le texte de la route, traduit par son code — jamais du français à un compte qui ne
+            // le lit pas (`apiErrorText`, 13/10/2026).
+            : apiErrorText(withCode(new Error(body?.error ?? ""), body?.code), t, locale, t("errors.playbackUnavailable"))
         );
         setLoading(false);
         return;

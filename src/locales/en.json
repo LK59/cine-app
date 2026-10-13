@@ -1543,7 +1543,30 @@
     "pageCrashed": "An error occurred",
     "pageError": "Something went wrong on this page.",
     "retry": "Try again",
-    "loadFailed": "Couldn't load this data."
+    "loadFailed": "Couldn't load this data.",
+    "generic": "Something went wrong. Please try again.",
+    "fileInfoFailed": "Couldn't get this file's details.",
+    "playbackUnavailable": "Playback isn't possible right now.",
+    "codes": {
+      "upstream_unreachable": "The service isn't responding right now. Try again in a few minutes.",
+      "file_missing": "This file is no longer in the library.",
+      "invalid_request": "Invalid request.",
+      "jellyfin_account_required": "A Jellyfin account is required.",
+      "password_required": "Enter your current and new password.",
+      "password_too_short": "The password must be at least 8 characters long.",
+      "same_password": "The new password is the same as the current one.",
+      "wrong_password": "Your current password is incorrect.",
+      "requests_unavailable": "Requests aren't available.",
+      "request_identity_pending": "Your account isn't ready for requests yet. Try again in a moment.",
+      "request_seasons_required": "Select at least one season.",
+      "request_duplicate": "This title has already been requested.",
+      "request_quota": "You've reached your request limit. Try again later.",
+      "request_refused": "This request was refused.",
+      "request_not_found": "Request not found.",
+      "title_not_found": "Title not found.",
+      "not_in_list": "This title isn't in your list.",
+      "service_unavailable": "This service isn't available right now."
+    }
   },
   "sse": {
     "downloadStartedTitle": "Download started",

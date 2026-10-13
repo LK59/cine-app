@@ -11,7 +11,7 @@ vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),
   fetcher: async () => payload,
 }));
-vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
+vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key, useLocale: () => ({ locale: "fr", setLocale: () => {} }) }));
 const toastSuccess = vi.fn();
 vi.mock("@/components/Toast", () => ({ useToast: () => ({ success: toastSuccess, error: vi.fn() }) }));
 const mockAction = vi.fn(async () => ({}));

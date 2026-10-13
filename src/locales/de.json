@@ -1543,7 +1543,30 @@
     "pageCrashed": "Ein Fehler ist aufgetreten",
     "pageError": "Auf dieser Seite ist etwas schiefgelaufen.",
     "retry": "Erneut versuchen",
-    "loadFailed": "Diese Daten konnten nicht geladen werden."
+    "loadFailed": "Diese Daten konnten nicht geladen werden.",
+    "generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
+    "fileInfoFailed": "Die Dateiinformationen konnten nicht abgerufen werden.",
+    "playbackUnavailable": "Wiedergabe ist gerade nicht möglich.",
+    "codes": {
+      "upstream_unreachable": "Der Dienst antwortet gerade nicht. Versuche es in ein paar Minuten erneut.",
+      "file_missing": "Diese Datei ist nicht mehr in der Bibliothek.",
+      "invalid_request": "Ungültige Anfrage.",
+      "jellyfin_account_required": "Ein Jellyfin-Konto ist erforderlich.",
+      "password_required": "Gib dein aktuelles und dein neues Passwort ein.",
+      "password_too_short": "Das Passwort muss mindestens 8 Zeichen lang sein.",
+      "same_password": "Das neue Passwort ist identisch mit dem aktuellen.",
+      "wrong_password": "Das aktuelle Passwort ist falsch.",
+      "requests_unavailable": "Anfragen sind nicht verfügbar.",
+      "request_identity_pending": "Dein Konto ist noch nicht für Anfragen bereit. Versuche es gleich noch einmal.",
+      "request_seasons_required": "Wähle mindestens eine Staffel aus.",
+      "request_duplicate": "Dieser Titel wurde bereits angefragt.",
+      "request_quota": "Du hast dein Anfragelimit erreicht. Versuche es später erneut.",
+      "request_refused": "Diese Anfrage wurde abgelehnt.",
+      "request_not_found": "Anfrage nicht gefunden.",
+      "title_not_found": "Titel nicht gefunden.",
+      "not_in_list": "Dieser Titel ist nicht in deiner Liste.",
+      "service_unavailable": "Dieser Dienst ist gerade nicht verfügbar."
+    }
   },
   "sse": {
     "downloadStartedTitle": "Download gestartet",

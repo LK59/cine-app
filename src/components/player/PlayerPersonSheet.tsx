@@ -13,6 +13,7 @@ import { getDateLocale } from "@/lib/i18n";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack } from "@/lib/cinemaRoute";
 import { useT, useLocale } from "@/components/TranslationProvider";
+import { useErrorText } from "@/lib/useErrorText";
 import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
 import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
@@ -296,6 +297,7 @@ export function PlayerPersonSheet({
   underneath?: boolean;
 }) {
   const t = useT();
+  const errorText = useErrorText();
   const isMobile = useIsMobile();
   const short = useIsShortViewport();
   const [expanded, setExpanded] = useState(false);
@@ -560,7 +562,7 @@ export function PlayerPersonSheet({
               laissait une carte vide, sans un mot. La même ligne que la fiche découverte. */}
           {error && !data && (
             <p className="py-16 text-center text-sm text-danger">
-              {error instanceof Error ? error.message : t("common.unknown")}
+              {errorText(error, t("errors.loadFailed"))}
             </p>
           )}
 

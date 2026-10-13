@@ -6,6 +6,7 @@ import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { useT } from "@/components/TranslationProvider";
+import { useErrorText } from "@/lib/useErrorText";
 import { useToast } from "@/components/Toast";
 import { Toggle } from "@/components/Toggle";
 import { ADMIN_NOTIFICATION_CATEGORIES, VIEWER_NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notifications";
@@ -132,6 +133,7 @@ const CHOICE_LABELS: Record<NotificationCategory, [string, string]> = {
 
 export function NotificationChoices({ admin = false }: { admin?: boolean }) {
   const t = useT();
+  const errorText = useErrorText();
   const toast = useToast();
   const { data, mutate } = useSWR<{ preferences: Record<NotificationCategory, boolean> }>("/api/notifications/settings", fetcher);
 
@@ -147,7 +149,7 @@ export function NotificationChoices({ admin = false }: { admin?: boolean }) {
       await mutate(next, { revalidate: false });
     } catch (error) {
       await mutate(before, { revalidate: false });
-      toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
+      toast.error(errorText(error));
     }
   }
 

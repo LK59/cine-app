@@ -11,6 +11,7 @@ import { hardNavigate, signOut } from "@/lib/signOut";
 import { LOCALES, LOCALE_LABELS, getDateLocale, type Locale } from "@/lib/i18n";
 import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { useLocale, useT } from "@/components/TranslationProvider";
+import { useErrorText } from "@/lib/useErrorText";
 import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
@@ -339,6 +340,7 @@ function DisplaySection() {
 
 function PlaybackSection() {
   const t = useT();
+  const errorText = useErrorText();
   const toast = useToast();
   const { data, mutate } = useSWR<PlayerPreferences>("/api/player/account/preferences", fetcher, {
     revalidateOnFocus: false,
@@ -353,7 +355,7 @@ function PlaybackSection() {
       await mutate();
       toast.success(t("player.account.saved"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("common.unknown"));
+      toast.error(errorText(err));
     } finally {
       setSaving(false);
     }
@@ -389,6 +391,7 @@ function PlaybackSection() {
 
 function PasswordSection() {
   const t = useT();
+  const errorText = useErrorText();
   const toast = useToast();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -416,7 +419,7 @@ function PasswordSection() {
       setConfirm("");
       setOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("common.unknown"));
+      toast.error(errorText(err));
     } finally {
       setSaving(false);
     }
@@ -523,6 +526,7 @@ function StorageSection() {
 
 function SessionsSection() {
   const t = useT();
+  const errorText = useErrorText();
   const { locale } = useLocale();
   const toast = useToast();
   const [sessions, setSessions] = useState<OtherSession[] | null>(null);
@@ -549,7 +553,7 @@ function SessionsSection() {
       setSessions([]);
       toast.success(t("player.account.devicesRevoked"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("common.unknown"));
+      toast.error(errorText(err));
     } finally {
       setRevoking(false);
     }
@@ -742,6 +746,7 @@ function formatDay(ms: number, locale: string): string {
  */
 function MaintenanceSection() {
   const t = useT();
+  const errorText = useErrorText();
   const { locale } = useLocale();
   const toast = useToast();
   const { data, mutate } = useSWR<MaintenanceState>(MAINTENANCE_KEY, fetcher);
@@ -764,7 +769,7 @@ function MaintenanceSection() {
             : t("player.account.maintenanceOffDone")
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("common.unknown"));
+      toast.error(errorText(err));
     } finally {
       setBusy(null);
     }

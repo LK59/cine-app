@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { hiddenTmdbKeysFor } from "@/lib/blockedTags";
 import { verifySessionFull } from "@/lib/session";
 import { SESSION_COOKIE } from "@/lib/auth";
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const locale = getTmdbLocale(req.cookies.get("cine-lang")?.value);
   const tmdb = createTmdbClient(locale);
   const personId = Number(params.id);
-  if (!personId) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+  if (!personId) return NextResponse.json(errorBody("Invalid ID", "invalid_request"), { status: 400 });
   if (!tmdb.isEnabled()) return NextResponse.json({ credits: [] });
 
   return withErrorHandling(async () => {

@@ -66,9 +66,15 @@ export const UPSTREAM_TIMEOUT_MS = 5000;
 
 export class HttpError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /**
+   * Ce que l'écran doit dire de ce refus, s'il le sait (`apiErrorCodes.ts`). Le message, lui, reste
+   * celui du journal : `withErrorHandling` envoie les deux.
+   */
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.status = status;
+    if (code) this.code = code;
   }
 }
 

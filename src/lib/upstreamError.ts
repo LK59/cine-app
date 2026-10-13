@@ -1,4 +1,6 @@
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
+import { apiErrorText } from "@/lib/apiErrorText";
+import type { Locale } from "@/lib/i18n";
 
 /**
  * Le code d'une réponse, porté par l'erreur qu'on lève.
@@ -34,7 +36,9 @@ export function isUpstreamUnreachable(error: unknown): boolean {
  * Le repli reste au choix de l'appelant, parce que « impossible de lire ce fichier » et « le
  * catalogue n'a pas pu être chargé » ne sont pas la même phrase quand la cause, elle, est autre.
  */
-export function errorMessage(error: unknown, t: (key: string) => string, fallback: string): string {
+export function errorMessage(error: unknown, t: (key: string) => string, fallback: string, locale: Locale): string {
   if (isUpstreamUnreachable(error)) return t("player.libraryUnreachable");
-  return (error instanceof Error && error.message) || fallback;
+  // Le reste comme toute autre erreur de route : un code traduit, jamais un message français à un
+  // compte qui ne lit pas le français (`apiErrorText`, 13/10/2026).
+  return apiErrorText(error, t, locale, fallback);
 }

@@ -511,6 +511,7 @@ export function ExperimentalPlayerHost({
   onFallback: (reason: string, takeover?: StableTakeover, sessionId?: string) => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   // Pour les phrases écrites depuis le pipeline : ses gestionnaires sont construits par un effet
   // qu'il ne faut pas reconstruire au changement de langue — ils lisent la traduction par ici.
   const tRef = useRef(t);
@@ -1521,7 +1522,7 @@ export function ExperimentalPlayerHost({
   const error =
     runtimeError ??
     info?.refusedReason ??
-    (infoError && !isNetworkFailure(infoError) ? errorMessage(infoError, t, "Impossible de récupérer les informations du fichier.") : null);
+    (infoError && !isNetworkFailure(infoError) ? errorMessage(infoError, t, t("errors.fileInfoFailed"), locale) : null);
   // The server's own name for it, which is the only one that knows an episode is an episode.
   // Whatever the caller passed stands until it arrives, so the title never blinks in empty.
   const title = info?.title ?? openedAs;

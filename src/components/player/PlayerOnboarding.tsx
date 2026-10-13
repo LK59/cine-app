@@ -11,6 +11,7 @@ import { LanguageLens } from "@/components/LanguageLens";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { useLocale, useT } from "@/components/TranslationProvider";
+import { useErrorText } from "@/lib/useErrorText";
 import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices } from "./accountControls";
@@ -130,6 +131,7 @@ export function PlayerOnboarding({
   onDone: () => void;
 }) {
   const t = useT();
+  const errorText = useErrorText();
   const toast = useToast();
   const { locale, setLocale } = useLocale();
   const { data: me } = useSWR<{ username: string; jfUser: string | null }>("/api/auth/me", fetcher);
@@ -244,7 +246,7 @@ export function PlayerOnboarding({
           // dédoublonnage.
           void globalMutate("/api/player/account/preferences");
         } catch (error) {
-          toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
+          toast.error(errorText(error));
           setBusy(false);
           return;
         }
@@ -256,7 +258,7 @@ export function PlayerOnboarding({
       try {
         await apiAction("/api/onboarding", { method: "POST" });
       } catch (error) {
-        toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
+        toast.error(errorText(error));
         setBusy(false);
         return;
       }

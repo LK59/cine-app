@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { enrichRequests } from "@/lib/jellyseerr-enrich";
 import { withErrorHandling } from "@/lib/api-helpers";
@@ -6,6 +7,7 @@ import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { pendingRequestDb } from "@/lib/db";
 import { resolveJellyseerrIdentity } from "@/lib/jellyseerrIdentity";
+import { withRequestRefusalCode } from "@/lib/requestRefusal";
 
 export async function GET(req: NextRequest) {
   const filter = (req.nextUrl.searchParams.get("filter") as "pending" | "approved" | "all") || "pending";
@@ -38,10 +40,10 @@ export async function POST(req: NextRequest) {
   const seasons = Array.isArray(body?.seasons) ? (body.seasons as number[]) : undefined;
 
   if (!mediaType || !mediaId) {
-    return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+    return NextResponse.json(errorBody("Paramètres invalides", "invalid_request"), { status: 400 });
   }
   if (mediaType === "tv" && (!seasons || seasons.length === 0)) {
-    return NextResponse.json({ error: "Sélectionne au moins une saison" }, { status: 400 });
+    return NextResponse.json(errorBody("Sélectionne au moins une saison", "request_seasons_required"), { status: 400 });
   }
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -65,7 +67,7 @@ export async function POST(req: NextRequest) {
    * réessaie plus tard. L'administrateur, lui, *est* le propriétaire de la clé.
    */
   if (session?.role !== "admin" && !identity.cookie && identity.userId == null) {
-    return NextResponse.json({ error: "Jellyseerr ne reconnaît pas encore ce compte. Réessaie dans un instant." }, { status: 503 });
+    return NextResponse.json(errorBody("Jellyseerr ne reconnaît pas encore ce compte. Réessaie dans un instant.", "request_identity_pending"), { status: 503 });
   }
 
   return withErrorHandling(async () => {
@@ -75,7 +77,10 @@ export async function POST(req: NextRequest) {
       identity.cookie ? undefined : identity.userId ?? undefined,
       identity.cookie,
       seasons,
-    );
+    ).catch((err: unknown) => {
+      // Déjà demandé, quota, droits : un refus que l'écran doit pouvoir dire — `withRequestRefusalCode`.
+      throw withRequestRefusalCode(err);
+    });
     trackForAvailability();
     return result;
   });

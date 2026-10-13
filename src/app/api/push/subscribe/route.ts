@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { pushDb } from "@/lib/db";
@@ -20,12 +21,12 @@ export async function POST(req: NextRequest) {
   const auth     = body?.keys?.auth as string | undefined;
 
   if (!endpoint || !p256dh || !auth || typeof p256dh !== "string" || typeof auth !== "string") {
-    return NextResponse.json({ error: "Subscription invalide" }, { status: 400 });
+    return NextResponse.json(errorBody("Subscription invalide", "invalid_request"), { status: 400 });
   }
   // Seulement vers un service push connu : le serveur fait un POST vers cette adresse — voir
   // `isAllowedPushEndpoint`.
   if (!isAllowedPushEndpoint(endpoint) || p256dh.length > 200 || auth.length > 100) {
-    return NextResponse.json({ error: "Subscription invalide" }, { status: 400 });
+    return NextResponse.json(errorBody("Subscription invalide", "invalid_request"), { status: 400 });
   }
 
   // Les autres abonnements Apple du compte ne sont plus effacés ici. L'effacement visait les

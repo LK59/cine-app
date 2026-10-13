@@ -81,7 +81,7 @@ import { useCinemaMyList, useCinemaMyListPending } from "@/lib/useCinemaMyList";
 import { CinemaSkeletonCards, isRowPending } from "@/components/cinema/CinemaRowSkeleton";
 import { heroOffscreen, heroSignature, resolveHeroCarousel, upcomingImages, useDecodeAhead, useHeroOrder } from "@/lib/heroCarousel";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaNextUpPayload, CinemaNextUpItem } from "@/app/api/cinema/next-up/route";
@@ -345,6 +345,7 @@ export function CinemaClient() {
   // Le calage sur une rangée ou une page entière, réglable par appareil (`guidedScroll.ts`).
   const guidedScroll = useGuidedScroll();
   const t = useT();
+  const { locale } = useLocale();
 
   // Films/Séries — default left/movies, matching what's asked for. Series data is fetched lazily
   // (SWR key is null until this is actually "series") rather than always alongside movies: the
@@ -1128,7 +1129,7 @@ export function CinemaClient() {
   if (catalogueErrorView(moviesError, movies) === "plein") {
     return createPortal(
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
-        <p className="max-w-sm text-sm text-danger">{errorMessage(moviesError, t, t("common.unknown"))}</p>
+        <p className="max-w-sm text-sm text-danger">{errorMessage(moviesError, t, t("errors.loadFailed"), locale)}</p>
         {exitButton}
       </div>,
       document.body
@@ -1424,7 +1425,7 @@ export function CinemaClient() {
               )}
 
               {catalogueErrorView(moviesError, movies) === "ligne" && (
-                <p className="px-8 text-sm text-danger sm:px-12">{errorMessage(moviesError, t, t("common.unknown"))}</p>
+                <p className="px-8 text-sm text-danger sm:px-12">{errorMessage(moviesError, t, t("errors.loadFailed"), locale)}</p>
               )}
 
               {/* « Reprendre » n'existe qu'une fois, dans l'onglet affiché : c'est la même rangée
@@ -1564,7 +1565,7 @@ export function CinemaClient() {
               )}
               {/* Une ligne dans les deux cas : le volet des séries vit dans l'écran des films. */}
               {catalogueErrorView(seriesError, series) !== null && (
-                <p className="px-8 text-sm text-danger sm:px-12">{seriesError.message || t("common.unknown")}</p>
+                <p className="px-8 text-sm text-danger sm:px-12">{errorMessage(seriesError, t, t("errors.loadFailed"), locale)}</p>
               )}
               {series && series.spotlight.length === 0 && (
                 <p className="px-8 text-sm text-muted sm:px-12">{t("cinema.empty")}</p>

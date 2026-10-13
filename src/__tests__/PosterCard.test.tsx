@@ -8,6 +8,7 @@ const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn() }) }));
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string, vars?: Record<string, unknown>) => (vars ? `${key}:${JSON.stringify(vars)}` : key),
+  useLocale: () => ({ locale: "fr", setLocale: () => {} }),
 }));
 vi.mock("@/components/Toast", () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }),

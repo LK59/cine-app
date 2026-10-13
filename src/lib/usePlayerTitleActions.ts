@@ -5,6 +5,7 @@ import { mutate } from "swr";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
+import { useErrorText } from "@/lib/useErrorText";
 import type { WatchlistStatus } from "@/lib/db";
 import { noteWatchlistChange, refreshWatchlistViews } from "@/lib/watchlistCache";
 
@@ -31,6 +32,7 @@ export interface PlayerTitleRef {
  */
 export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
   const t = useT();
+  const errorText = useErrorText();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -76,13 +78,13 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
         );
         return true;
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : t("common.unknown"));
+        toast.error(errorText(err));
         return false;
       } finally {
         setBusy(false);
       }
     },
-    [ref, busy, toast, t]
+    [ref, busy, toast, t, errorText]
   );
 
   const request = useCallback(async () => {
@@ -97,11 +99,11 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
       refreshWatchlistViews();
       void mutate("/api/player/requests");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("common.unknown"));
+      toast.error(errorText(err));
     } finally {
       setBusy(false);
     }
-  }, [ref, busy, toast, t]);
+  }, [ref, busy, toast, t, errorText]);
 
   const cancelRequest = useCallback(
     async (requestId: number) => {
@@ -113,12 +115,12 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
         refreshWatchlistViews();
         void mutate("/api/player/requests");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : t("common.unknown"));
+        toast.error(errorText(err));
       } finally {
         setBusy(false);
       }
     },
-    [busy, toast, t]
+    [busy, toast, t, errorText]
   );
 
   return { busy, setStatus, request, cancelRequest };

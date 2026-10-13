@@ -62,7 +62,7 @@ vi.mock("swr", () => ({
 
 // ---- L'environnement ------------------------------------------------------------------------
 
-vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
+vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr", setLocale: () => {} }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "closed", play: vi.fn() }) }));
 vi.mock("@/lib/useWarmSeriesCatalogue", () => ({ useWarmSeriesCatalogue: () => false }));

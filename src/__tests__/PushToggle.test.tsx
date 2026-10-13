@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string) => key,
+  useLocale: () => ({ locale: "fr", setLocale: () => {} }),
 }));
 const toastError = vi.fn();
 vi.mock("@/components/Toast", () => ({

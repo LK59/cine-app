@@ -53,7 +53,7 @@ import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
 import { CinemaTop10Card } from "@/components/cinema/CinemaTop10Card";
 import { useCinemaMyList, useCinemaMyListPending } from "@/lib/useCinemaMyList";
 import { CinemaSkeletonCards, isRowPending } from "@/components/cinema/CinemaRowSkeleton";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import { CinemaMobileDetail } from "@/components/cinema/mobile/CinemaMobileDetail";
 import { CinemaMobileHero } from "@/components/cinema/mobile/CinemaMobileHero";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
@@ -164,6 +164,7 @@ function sheetTarget(
 
 export function CinemaMobileClient() {
   const t = useT();
+  const { locale } = useLocale();
   const playback = usePlayback();
   // Qui dit, quand rien ne démarre, que rien n'a démarré — voir `usePlaySeriesNextEpisode`.
   const playSeries = usePlaySeriesNextEpisode(playback);
@@ -705,7 +706,7 @@ export function CinemaMobileClient() {
         {/* Une ligne, avec ou sans catalogue : le téléphone n'a pas d'écran plein d'erreur. Celle de
             l'onglet affiché : l'erreur des séries n'était jamais lue — un onglet Séries en échec ne
             montrait que l'en-tête, et celle des films s'affichait sur les deux (08/10/2026). */}
-        {shownErrorView !== null && <p className="px-4 pt-6 text-sm text-danger">{errorMessage(shownError, t, t("common.unknown"))}</p>}
+        {shownErrorView !== null && <p className="px-4 pt-6 text-sm text-danger">{errorMessage(shownError, t, t("errors.loadFailed"), locale)}</p>}
         {!loading && payload && payload.spotlight.length === 0 && (
           <p className="px-4 pt-6 text-sm text-muted">{t("cinema.empty")}</p>
         )}

@@ -34,6 +34,11 @@ export async function withErrorHandling<T>(fn: () => Promise<T>, scope = "api"):
     if (err instanceof UpstreamUnreachableError) {
       return NextResponse.json({ error: message, code: UPSTREAM_UNREACHABLE }, { status });
     }
+    // Un refus nommé par la route (`HttpError` avec un code) : l'écran le traduit, le journal
+    // garde la phrase française — voir `apiErrorCodes.ts`.
+    if (err instanceof HttpError && err.code) {
+      return NextResponse.json({ error: message, code: err.code }, { status });
+    }
     return NextResponse.json({ error: message }, { status });
   }
 }

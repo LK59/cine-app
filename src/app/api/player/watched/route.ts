@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId } from "@/lib/jellyfinPath";
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
-  if (typeof body?.watched !== "boolean") return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+  if (typeof body?.watched !== "boolean") return NextResponse.json(errorBody("Paramètres invalides", "invalid_request"), { status: 400 });
 
   let type: WatchedType | null = body.type === "movie" || body.type === "series" ? body.type : null;
   let tmdbId = typeof body.tmdbId === "number" && Number.isInteger(body.tmdbId) && body.tmdbId > 0 ? body.tmdbId : null;
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     const title = (await libraryIndex())?.byJellyfinId.get(body.itemId as string);
     if (title) ({ type, tmdbId } = title);
   }
-  if (!type || !tmdbId) return NextResponse.json({ error: "Titre introuvable" }, { status: 404 });
+  if (!type || !tmdbId) return NextResponse.json(errorBody("Titre introuvable", "title_not_found"), { status: 404 });
 
   const text = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : undefined);
   try {

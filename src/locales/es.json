@@ -1543,7 +1543,30 @@
     "pageCrashed": "Se produjo un error",
     "pageError": "Algo salió mal en esta página.",
     "retry": "Intentar de nuevo",
-    "loadFailed": "No se pudieron cargar estos datos."
+    "loadFailed": "No se pudieron cargar estos datos.",
+    "generic": "Se ha producido un error. Inténtalo de nuevo.",
+    "fileInfoFailed": "No se pudo obtener la información del archivo.",
+    "playbackUnavailable": "No se puede reproducir en este momento.",
+    "codes": {
+      "upstream_unreachable": "El servicio no responde en este momento. Inténtalo de nuevo en unos minutos.",
+      "file_missing": "Este archivo ya no está en la biblioteca.",
+      "invalid_request": "Solicitud no válida.",
+      "jellyfin_account_required": "Se necesita una cuenta de Jellyfin.",
+      "password_required": "Introduce tu contraseña actual y la nueva.",
+      "password_too_short": "La contraseña debe tener al menos 8 caracteres.",
+      "same_password": "La nueva contraseña es igual a la actual.",
+      "wrong_password": "La contraseña actual es incorrecta.",
+      "requests_unavailable": "Las solicitudes no están disponibles.",
+      "request_identity_pending": "Tu cuenta aún no está lista para las solicitudes. Inténtalo de nuevo en un momento.",
+      "request_seasons_required": "Selecciona al menos una temporada.",
+      "request_duplicate": "Este título ya se ha solicitado.",
+      "request_quota": "Has alcanzado tu límite de solicitudes. Inténtalo más tarde.",
+      "request_refused": "Esta solicitud ha sido rechazada.",
+      "request_not_found": "No se encontró la solicitud.",
+      "title_not_found": "No se encontró el título.",
+      "not_in_list": "Este título no está en tu lista.",
+      "service_unavailable": "Este servicio no está disponible en este momento."
+    }
   },
   "sse": {
     "downloadStartedTitle": "Descarga iniciada",

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { playableLibrary, playableId } from "@/lib/playerLibrary";
@@ -75,11 +76,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
   const type = params.type === "series" ? "series" : params.type === "movie" ? "movie" : null;
   const tmdbId = Number.parseInt(params.tmdbId, 10);
   if (!type || !Number.isFinite(tmdbId) || tmdbId <= 0) {
-    return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+    return NextResponse.json(errorBody("Paramètres invalides", "invalid_request"), { status: 400 });
   }
 
   const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get(LOCALE_COOKIE)?.value));
-  if (!tmdb.isEnabled()) return NextResponse.json({ error: "TMDB non configuré" }, { status: 503 });
+  if (!tmdb.isEnabled()) return NextResponse.json(errorBody("TMDB non configuré", "service_unavailable"), { status: 503 });
 
   return withErrorHandling(async () => {
     const userId = session.jfId ?? session.u ?? null;

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorBody } from "@/lib/apiErrorCodes";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { SESSION_COOKIE } from "@/lib/auth"
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
   const session = await verifySessionFull(token);
 
   if (!session?.jfId) {
-    return NextResponse.json({ error: "Compte Jellyfin requis" }, { status: 403 });
+    return NextResponse.json(errorBody("Compte Jellyfin requis", "jellyfin_account_required"), { status: 403 });
   }
 
   const body = await req.json().catch(() => null);
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
   // Écrit avec la clé d'administration : un identifiant qui n'en est pas un est refusé ici,
   // avant tout appel (`jellyfinIdSegment` le refuserait aussi, mais en 502).
   if (!isJellyfinId(itemId) || typeof played !== "boolean") {
-    return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+    return NextResponse.json(errorBody("Paramètres invalides", "invalid_request"), { status: 400 });
   }
 
   try {
