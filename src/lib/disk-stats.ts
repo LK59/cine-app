@@ -1,5 +1,6 @@
 import { exec } from "child_process";
 import { promisify } from "util";
+import fs from "fs/promises";
 import { MEDIA_ROOT, MOVIES_PATH, TV_PATH, SEEDS_PATH } from "@/lib/media-paths";
 
 const execAsync = promisify(exec);
@@ -16,6 +17,11 @@ export interface DiskStats {
   computedAt: number;
   computing: boolean;
   error: string | null;
+  /**
+   * Le dossier des médias (`MEDIA_ROOT`) n'existe pas dans le conteneur : il n'est pas monté. La
+   * carte Stockage le dit, au lieu de chiffres vides (13/10/2026).
+   */
+  mediaMissing?: boolean;
 }
 
 // ─── Internal state ───────────────────────────────────────────────────────────
@@ -65,13 +71,40 @@ async function dfStatsAsync(path: string): Promise<{ total: number; used: number
     // by one. That only "worked" here by accident, for however long the mount's name stayed
     // long enough to trigger the wrap.
     const { stdout } = await execAsync(`df -B1 -P "${path}" 2>/dev/null | tail -1`, { timeout: 5_000 });
-    const parts = stdout.trim().split(/\s+/);
-    return { total: parseInt(parts[1]), used: parseInt(parts[2]), free: parseInt(parts[3]) };
+    return parseDfLine(stdout);
   } catch { return { total: -1, used: -1, free: -1 }; }
+}
+
+const UNKNOWN_DISK = { total: -1, used: -1, free: -1 };
+
+/**
+ * La dernière ligne de `df -B1 -P`. Sur un chemin absent, `df` n'écrit que son en-tête, et
+ * `tail -1` le rendait : « 1-blocks » se lisait 1 octet, « Used » et « Available » NaN — la carte
+ * Stockage d'une installation sans dossier de médias affichait « — libres sur 1.0 B » (13/10/2026).
+ * Tout ce qui n'est pas trois nombres est « inconnu ».
+ */
+export function parseDfLine(stdout: string): { total: number; used: number; free: number } {
+  const parts = stdout.trim().split(/\s+/);
+  const [total, used, free] = [parts[1], parts[2], parts[3]].map((p) => (p !== undefined && /^\d+$/.test(p) ? Number(p) : NaN));
+  if (!Number.isFinite(total) || !Number.isFinite(used) || !Number.isFinite(free) || total <= 0) return UNKNOWN_DISK;
+  return { total, used, free };
+}
+
+/** Le dossier des médias existe-t-il dans le conteneur ? Sans lui, il n'y a rien à mesurer. */
+async function mediaRootPresent(): Promise<boolean> {
+  try {
+    return (await fs.stat(MEDIA_ROOT)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 async function computeAsync(): Promise<void> {
   try {
+    if (!(await mediaRootPresent())) {
+      cached = { moviesBytes: 0, tvBytes: 0, seedsBytes: 0, disk: UNKNOWN_DISK, computedAt: Date.now(), computing: false, error: null, mediaMissing: true };
+      return;
+    }
     const [movieInodes, tvInodes, seedInodes, disk] = await Promise.all([
       findInodeSizesAsync(MOVIES_PATH),
       findInodeSizesAsync(TV_PATH),

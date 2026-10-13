@@ -1,5 +1,5 @@
 import { deleteOverride, readOverride, writeOverride } from "./store";
-import { SETTINGS, SETTINGS_BY_KEY, missingRequired, type SettingSource, type SettingView } from "./schema";
+import { SETTINGS, SETTINGS_BY_KEY, missingRequired, urlProblem, type SettingSource, type SettingView } from "./schema";
 import { ADMIN_HASH_KEY, ADMIN_USER_KEY, MIN_ADMIN_PASSWORD, hashAdminPassword, verifyAdminPassword } from "../../../server-boot/adminAccount.mjs";
 
 export { MIN_ADMIN_PASSWORD };
@@ -14,12 +14,22 @@ const SETUP_DONE_KEY = "__SETUP_DONE";
 
 const envValue = (key: string) => process.env[key] ?? "";
 
-/** La valeur d'un réglage : application, sinon `.env`, sinon défaut — la règle de `config.ts`. */
+/**
+ * La valeur d'un réglage : application, sinon `.env`, sinon défaut — la règle de `config.ts`. Une
+ * option de déploiement (`inApp: false`) se lit dans l'environnement seul, comme `config.ts` la lit
+ * (`envOnly`) : une ligne restée en base n'est plus appliquée, elle ne doit pas non plus s'afficher
+ * (§81) — la page Déploiement dit ce qui est posé.
+ */
 export function settingValue(key: string): string {
-  return readOverride(key) ?? process.env[key] ?? SETTINGS_BY_KEY.get(key)?.fallback ?? "";
+  const def = SETTINGS_BY_KEY.get(key);
+  const env = process.env[key];
+  if (def && !def.inApp) return env ?? def.fallback;
+  return readOverride(key) ?? env ?? def?.fallback ?? "";
 }
 
 export function settingSource(key: string): SettingSource {
+  const def = SETTINGS_BY_KEY.get(key);
+  if (def && !def.inApp) return process.env[key] !== undefined && process.env[key] !== "" ? "env" : "default";
   if (readOverride(key) !== null) return "app";
   if (process.env[key] !== undefined && process.env[key] !== "") return "env";
   return "default";
@@ -125,12 +135,8 @@ export function settingProblem(key: string, value: string): string | null {
   if (def.kind === "number" && value !== "" && !/^\d{1,6}([.,]\d{1,4})?$/.test(value)) return "invalid";
   if (def.kind === "profile" && value !== "" && !/^[1-9]\d{0,8}$/.test(value)) return "invalid";
   if (def.kind === "url" && value !== "") {
-    try {
-      const url = new URL(value);
-      if (url.protocol !== "http:" && url.protocol !== "https:") return "invalid-url";
-    } catch {
-      return "invalid-url";
-    }
+    const problem = urlProblem(value);
+    if (problem) return problem;
   }
   return null;
 }

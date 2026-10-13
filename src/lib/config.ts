@@ -166,8 +166,10 @@ export const config = {
     },
   },
   qbittorrent: {
+    // Sans adresse par défaut (13/10/2026) : `http://gluetun:8080` était celle d'une installation
+    // particulière, et toute autre l'interrogeait sans l'avoir demandé. Vide = non configuré.
     get url() {
-      return optional("QBITTORRENT_URL", "http://gluetun:8080");
+      return optional("QBITTORRENT_URL", "");
     },
     get username() {
       return optional("QBITTORRENT_USERNAME", "admin");

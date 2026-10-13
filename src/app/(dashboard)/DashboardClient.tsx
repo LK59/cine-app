@@ -71,6 +71,9 @@ const SERVICE_META: Record<string, { label: string; icon: React.ElementType; hre
 
 /** L'adresse du panneau Activité, dans le cinéma (`#activite=…`, voir `activity/nav.tsx`). */
 const ACTIVITY_HREF = "/#activite=1";
+/** Configuration → Connexions, où se branche un service ; et Déploiement, pour le dossier des médias. */
+const CONNECTIONS_HREF = "/parametres";
+const DEPLOYMENT_HREF = "/parametres/deploiement";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -164,7 +167,12 @@ function TorrentsSection({ torrents }: { torrents: TorrentItem[] }) {
  */
 function ServicesSection({ services }: { services: ServiceStatus[] }) {
   const t = useT();
-  const known = services.filter((s) => SERVICE_META[s.name]);
+  // Un service non configuré n'est ni « en ligne » ni « hors ligne » (13/10/2026) : une installation
+  // neuve lisait « 9 sur 9 hors ligne », chaque ligne en rouge. Il est nommé à part, sous la liste,
+  // avec le chemin vers Configuration → Connexions.
+  const all = services.filter((s) => SERVICE_META[s.name]);
+  const known = all.filter((s) => s.configured !== false);
+  const unconfigured = all.filter((s) => s.configured === false);
   const down = known.filter((s) => !s.up);
 
   return (
@@ -173,7 +181,9 @@ function ServicesSection({ services }: { services: ServiceStatus[] }) {
       icon={Server}
       action={
         <p className={`text-xs ${down.length > 0 ? "text-danger" : "text-subtle"}`}>
-          {down.length === 0
+          {known.length === 0
+            ? t("dashboard.servicesNoneConfigured")
+            : down.length === 0
             ? t("dashboard.servicesAllUp", { n: String(known.length) })
             : t("dashboard.servicesSomeDown", { n: String(down.length), total: String(known.length) })}
         </p>
@@ -224,6 +234,29 @@ function ServicesSection({ services }: { services: ServiceStatus[] }) {
             </Tag>
           );
         })}
+        {unconfigured.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-xs text-subtle" data-testid="services-not-configured">
+            <span>{t("dashboard.servicesNotConfigured", { list: unconfigured.map((s) => SERVICE_META[s.name]!.label).join(", ") })}</span>
+            <Link href={CONNECTIONS_HREF} className="inline-flex items-center gap-0.5 font-medium text-muted hover:text-white">
+              {t("dashboard.configure")} <ChevronRight size={12} />
+            </Link>
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+/** qBittorrent non configuré : la place des téléchargements le dit, sans l'allure d'une panne. */
+function TorrentsNotConfigured() {
+  const t = useT();
+  return (
+    <Panel title={t("dashboard.activeDownloads")} icon={Download}>
+      <div className="px-4 py-6 text-sm text-subtle">
+        <p>{t("dashboard.torrentsNotConfigured")}</p>
+        <Link href={CONNECTIONS_HREF} className="mt-2 inline-flex items-center gap-0.5 text-xs font-medium text-muted hover:text-white">
+          {t("dashboard.configure")} <ChevronRight size={12} />
+        </Link>
       </div>
     </Panel>
   );
@@ -239,7 +272,16 @@ function DiskSection({ disk, updatedAt, computing }: { disk: DiskStats; updatedA
       icon={HardDrive}
       action={computing ? <RefreshCw size={12} className="animate-spin text-subtle" /> : <StaleIndicator updatedAt={updatedAt} />}
     >
-      {disk.disk.total <= 0 ? (
+      {disk.mediaMissing || (disk.disk.total <= 0 && !computing) ? (
+        // Sans dossier de médias, `df` ne mesurait rien et la carte disait « — libres sur 1.0 B »
+        // (installation neuve, 13/10/2026) : un état vide qui dit quoi faire.
+        <div className="px-4 py-6 text-sm text-subtle">
+          <p>{t('dashboard.storageNoMedia')}</p>
+          <Link href={DEPLOYMENT_HREF} className="mt-2 inline-flex items-center gap-0.5 text-xs font-medium text-muted hover:text-white">
+            {t('dashboard.storageHowTo')} <ChevronRight size={12} />
+          </Link>
+        </div>
+      ) : disk.disk.total <= 0 ? (
         <p className="px-4 py-6 text-sm text-subtle">{t('dashboard.computingStorage')}</p>
       ) : (
         <div className="p-4">
@@ -405,7 +447,9 @@ export function DashboardClient({ initialData }: { initialData?: DashboardPayloa
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             {/* Téléchargements */}
-            {data.torrents.available && data.torrents.data ? (
+            {data.torrents.notConfigured ? (
+              <TorrentsNotConfigured />
+            ) : data.torrents.available && data.torrents.data ? (
               <TorrentsSection torrents={data.torrents.data} />
             ) : (
               <SectionUnavailable label="qBittorrent" error={data.torrents.error} />

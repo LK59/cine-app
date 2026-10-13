@@ -53,7 +53,7 @@ export const SETTINGS: readonly SettingDef[] = [
   // ── Ce qui enrichit ──
   { key: "JELLYSEERR_URL", group: "jellyseerr", kind: "url", need: "optional", fallback: "http://jellyseerr:5055", inApp: true, placeholder: "http://jellyseerr:5055" },
   { key: "JELLYSEERR_API_KEY", group: "jellyseerr", kind: "secret", need: "optional", fallback: "", inApp: true },
-  { key: "QBITTORRENT_URL", group: "qbittorrent", kind: "url", need: "optional", fallback: "http://gluetun:8080", inApp: true, placeholder: "http://qbittorrent:8080" },
+  { key: "QBITTORRENT_URL", group: "qbittorrent", kind: "url", need: "optional", fallback: "", inApp: true, placeholder: "http://qbittorrent:8080" },
   { key: "QBITTORRENT_USERNAME", group: "qbittorrent", kind: "text", need: "optional", fallback: "admin", inApp: true },
   { key: "QBITTORRENT_PASSWORD", group: "qbittorrent", kind: "secret", need: "optional", fallback: "", inApp: true },
   { key: "BAZARR_URL", group: "bazarr", kind: "url", need: "optional", fallback: "http://bazarr:6767", inApp: true, placeholder: "http://bazarr:6767" },
@@ -179,4 +179,19 @@ export function missingRequired(valueOf: (key: string) => string): string[] {
   const missing = SETTINGS.filter((s) => s.need === "required" && !valueOf(s.key).trim()).map((s) => s.key);
   if (!valueOf("RADARR_API_KEY").trim() && !valueOf("SONARR_API_KEY").trim()) missing.push("RADARR_API_KEY|SONARR_API_KEY");
   return missing;
+}
+
+/**
+ * Une adresse de service est-elle utilisable ? `null` si oui, `"invalid-url"` sinon — vide comprise.
+ * La même règle pour l'enregistrement (`settingProblem`) et pour « Tester la connexion » : le test
+ * disait « Injoignable » d'une adresse sans `http://` que l'enregistrement refusait déjà comme
+ * « Adresse invalide » (13/10/2026).
+ */
+export function urlProblem(value: string): "invalid-url" | null {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "http:" || url.protocol === "https:" ? null : "invalid-url";
+  } catch {
+    return "invalid-url";
+  }
 }

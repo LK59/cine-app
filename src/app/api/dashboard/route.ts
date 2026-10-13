@@ -17,14 +17,16 @@ import { classifyError } from "@/lib/api-error";
 import { config } from "@/lib/config";
 import { getJellyseerrPendingCount, getJellyseerrActivityItems } from "@/lib/jellyseerr-scope";
 import type { SessionPayload } from "@/lib/auth";
+import { qbittorrentConfigured } from "@/lib/services";
 
 // Checked before any network call so "not configured" never gets confused
 // with "configured but unreachable" — both would otherwise surface as the
 // same generic connection error. Le nom de la variable reste dans le message (c'est lui qu'on
 // cherche dans `.env`), mais le réglage se fait d'abord dans Configuration → Connexions
 // (DECISIONS.md §48) : renvoyer seulement vers `.env` envoyait l'administrateur au mauvais endroit.
+class NotConfigured extends Error {}
 function notConfigured(envVar: string): Error {
-  return new Error(`Non configuré — ${envVar} (Configuration → Connexions, ou .env)`);
+  return new NotConfigured(`Non configuré — ${envVar} (Configuration → Connexions, ou .env)`);
 }
 
 export const dynamic = "force-dynamic";
@@ -34,6 +36,12 @@ export const dynamic = "force-dynamic";
 export interface ServiceStatus {
   name: string;
   up: boolean;
+  /**
+   * `false` : rien n'est réglé pour ce service (ni dans l'application, ni dans `.env`). Ce n'est pas
+   * une panne : la vue d'ensemble le montre à part, discrètement, sans le compter « hors ligne » —
+   * une installation neuve affichait « 9 sur 9 hors ligne » (13/10/2026).
+   */
+  configured?: boolean;
   detail?: string;
   stats?: Record<string, number | string>;
 }
@@ -68,6 +76,8 @@ export interface DashboardSection<T> {
   error: string | null;
   updatedAt: number | null;
   stale: boolean;
+  /** Le service derrière cette section n'est pas configuré : rien n'a été demandé. */
+  notConfigured?: boolean;
 }
 
 /**
@@ -141,7 +151,7 @@ async function probeServices(session: SessionPayload | null): Promise<ServiceSta
       return { detail: `v${status.version}`, stats: { "Demandes en attente": pendingCount } };
     }),
     probe("qbittorrent", async () => {
-      if (!config.qbittorrent.password) throw notConfigured("QBITTORRENT_PASSWORD");
+      if (!qbittorrentConfigured(config.qbittorrent)) throw notConfigured("QBITTORRENT_URL, QBITTORRENT_PASSWORD");
       const [transfer, torrents] = await Promise.all([qbittorrent.getTransferInfo(), qbittorrent.getTorrents()]);
       const downloading = torrents.filter((t) => /downloading|dl$/i.test(t.state)).length;
       const fmt = (b: number) => `${(b / 1024 / 1024).toFixed(1)} MB/s`;
@@ -172,6 +182,7 @@ async function probe(
     const { detail, stats } = await fn();
     return { name, up: true, detail, stats };
   } catch (err) {
+    if (err instanceof NotConfigured) return { name, up: false, configured: false, detail: err.message };
     const e = classifyError(err);
     // Prefer the specific technical detail (e.g. "définis RADARR_API_KEY...")
     // over the generic classified label so the user knows exactly what to fix.
@@ -198,12 +209,15 @@ const SONARR_KINDS: Record<string, ActivityKind> = {
 };
 
 async function fetchActivity(session: SessionPayload | null): Promise<ActivityItem[]> {
+  // Un service non configuré n'est pas interrogé (13/10/2026) : ses adresses par défaut l'étaient
+  // à chaque rafraîchissement, pour une liste vide.
+  const none = { records: [] };
   const [rH, sH, jsRequests] = await Promise.all([
-    radarr.getHistory(15).catch(() => ({ records: [] })),
-    sonarr.getHistory(15).catch(() => ({ records: [] })),
+    config.radarr.apiKey ? radarr.getHistory(15).catch(() => none) : none,
+    config.sonarr.apiKey ? sonarr.getHistory(15).catch(() => none) : none,
     // Admin sees everyone's requests (with who asked, matching the requester name shown below);
     // anyone else only sees their own — same reasoning as the pending-count widget above.
-    getJellyseerrActivityItems(session, 15),
+    config.jellyseerr.apiKey ? getJellyseerrActivityItems(session, 15) : [],
   ]);
   const items: ActivityItem[] = [];
   for (const r of rH.records) {
@@ -258,10 +272,15 @@ export async function buildDashboardPayload(
   // requests only — see jellyseerr-scope.ts), so the cache can no longer be a single shared
   // entry for every viewer; keyed per-user.
   const viewerKey = session?.jfId ?? "anon";
+  // qBittorrent non configuré : pas d'appel, et la section le dit (au lieu d'un encart « indisponible »
+  // qui ressemblait à une panne). Relu à chaque fois : un réglage fait dans l'application s'applique aussitôt.
+  const torrentsSection: Promise<DashboardSection<TorrentItem[]>> = qbittorrentConfigured(config.qbittorrent)
+    ? withCacheSafe("dashboard:torrents", TTL.VERY_SHORT, fetchTorrents)
+    : Promise.resolve({ data: null, available: false, error: null, updatedAt: null, stale: false, notConfigured: true });
   const [services, activity, torrents] = await Promise.all([
     withCacheSafe(`dashboard:services:${viewerKey}`, TTL.SHORT,      () => probeServices(session)),
     withCacheSafe(`dashboard:activity:${viewerKey}`, TTL.MEDIUM,     () => fetchActivity(session)),
-    withCacheSafe("dashboard:torrents",      TTL.VERY_SHORT, fetchTorrents),
+    torrentsSection,
   ]);
   const disk = getDiskSection();
 

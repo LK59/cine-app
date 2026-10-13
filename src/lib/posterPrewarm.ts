@@ -22,6 +22,7 @@ import { getTitleArt } from "@/lib/title-art";
 import { cataloguePoster } from "@/lib/images";
 import { LOCALES, type Locale } from "@/lib/i18n";
 import { readOverride } from "@/lib/settings/store";
+import { config } from "@/lib/config";
 
 /**
  * Les largeurs préparées par défaut. Relevées dans le journal du relais le 25/09/2026 sur 8 329
@@ -195,8 +196,19 @@ const done = new Set<string>();
  * L'environnement du préchauffage, avec l'interrupteur réglé dans l'application s'il l'a été
  * (DECISIONS.md §48) — lu au démarrage, d'où « au prochain démarrage » dans son libellé.
  */
-function prewarmEnv(): Record<string, string | undefined> {
-  return { ...process.env, POSTER_PREWARM: readOverride("POSTER_PREWARM") ?? process.env.POSTER_PREWARM };
+/**
+ * Les réglages tels que l'installation les donne : l'interrupteur et la langue se règlent dans
+ * l'application (§48 : application → `.env` → défaut), les largeurs et les langues forcées restent
+ * des options de déploiement. La langue était lue dans `process.env` seul : une installation qui
+ * l'avait choisie à l'assistant (sans `.env`) préparait les affiches d'une autre langue que la
+ * sienne (13/10/2026). Elle passe donc par l'accesseur de `config`, comme partout ailleurs.
+ */
+export function prewarmEnv(): Record<string, string | undefined> {
+  return {
+    ...process.env,
+    POSTER_PREWARM: readOverride("POSTER_PREWARM") ?? process.env.POSTER_PREWARM,
+    APP_LANGUAGE: config.app.language,
+  };
 }
 
 export function startPosterPrewarm(settings: PrewarmSettings = prewarmSettings(prewarmEnv())): boolean {

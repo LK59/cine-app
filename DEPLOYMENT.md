@@ -240,18 +240,22 @@ assistant reopens where you stopped, until you press **Finish**.
 | **2 · Jellyfin** | Its address and API key (*Jellyfin → Dashboard → API Keys → +*), and optionally the public address used by the *Open in Jellyfin* links. Below, one playback choice: hand files the browser cannot play over to Jellyfin, which converts them — on by default. |
 | **3 · TMDB** | The API key (*themoviedb.org → Settings → API*). |
 | **4 · Library** | Radarr and/or Sonarr: address and API key (*Settings → General → API Key*). At least one. |
-| **5 · Extras** | Optional, all of it: Jellyseerr (requests), qBittorrent (download progress), Bazarr, Jackett, OMDb and MDBList (ratings), the built-in player and black-bar framing, the default language, poster preparation, the notification contact. Fill what you have; the rest can wait. |
+| **5 · Extras** | Optional, all of it: Jellyseerr (requests), qBittorrent (download progress), Bazarr, Jackett, OMDb and MDBList (ratings), the built-in player and black-bar framing, the default language, poster preparation, the notification contact. Fill what you have; the rest can wait. A service left empty is not configured: the app never contacts it. Chromecast, generated subtitles and what new accounts receive are set later, in **Management → Configuration**. |
 | **6 · Deployment** | Nothing to fill: the options that live in the compose file (time zone, media folder, reverse proxy, HTTPS), each with the line to copy. |
 | **7 · Finish** | Refused while Jellyfin, TMDB or Radarr/Sonarr is missing. Then **Open management**, or **Sign in with Jellyfin** to go to the cinema. |
 
-**Press *Test connection* before *Next*.** *Next* only checks that the required fields are filled;
-the test is what tells you the address and key work. Its answers:
+**_Next_ tests the connection.** On the Jellyfin, TMDB and Library screens, and for every extra
+you filled in, *Next* saves the screen and then runs the same test as the *Test connection* button.
+When a test fails, the screen stays, says which service failed and why, and offers **Continue
+anyway** — useful when a service is not started yet; you can fix it later in **Configuration →
+Connections**. The answers:
 
 | Answer | What to check |
 |---|---|
 | *Connected — …* (the server's name and version) | Nothing: it works. |
 | *Refused: the key or password is wrong.* | The key. The address is right, since the service answered. |
-| *Unreachable: check the address from inside the container.* | The address: `localhost`, a missing `http://`, a container on another Docker network, a stopped service. |
+| *Invalid address (http:// or https://).* | The address must start with `http://` or `https://`. |
+| *Unreachable: check the address from inside the container.* | The address: `localhost`, a container on another Docker network, a stopped service. |
 | *No answer within 6 seconds.* | A firewall, or an address that leads nowhere. |
 
 <!-- CAPTURE : deploy-jellyfin-apikey.png
@@ -313,7 +317,7 @@ at once, without a restart, unless the field says otherwise.
 | **Generated subtitles** | Provider, key, model and monthly budget for AI-translated subtitles, with the month's spending and the jobs. |
 | **New accounts** | What an account gets until it chooses otherwise: language, home banner, Jellyfin tags blocked automatically on new accounts. And the welcome screen, offered again to everyone or removed. |
 | **Administrator** | The local administrator's password, a search diagnostic, and the installed version. |
-| **Deployment** | What only the compose file can set — time zone, media folders, reverse proxy, HTTPS, an administrator fixed by `.env` — with the line to copy. Recreate the container after adding one. |
+| **Deployment** | What only the compose file can set — time zone, media folders, reverse proxy, HTTPS, an administrator fixed by `.env` — with the line to copy. Recreate the container after adding one. It also says whether `TRUSTED_PROXIES` (with its value) and `COOKIE_SECURE` are set in the running container. |
 
 Each field says where its value comes from: *Default value*, *From .env*, or *Set here*. The
 order and every variable are in [ENV.md](ENV.md).

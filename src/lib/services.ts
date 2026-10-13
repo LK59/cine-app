@@ -35,8 +35,11 @@ export const SERVICE_ENV: Record<ServiceKey, string[]> = {
 export type ConfiguredServices = Record<ServiceKey, boolean>;
 
 /**
- * L'adresse ne suffit pas : elle a une valeur par défaut pour chaque service, si bien qu'elle est
- * toujours renseignée. C'est le secret qui dit si quelqu'un a réellement branché quelque chose.
+ * L'adresse ne suffit pas : elle a une valeur par défaut pour la plupart des services, si bien
+ * qu'elle est toujours renseignée. C'est le secret qui dit si quelqu'un a réellement branché
+ * quelque chose. qBittorrent demande les deux : son adresse n'a plus de valeur par défaut depuis
+ * le 13/10/2026 (`http://gluetun:8080`, l'adresse d'une installation particulière, était
+ * interrogée par toutes les autres — voir `serviceConfigured.ts`).
  */
 export function configuredServices(config: {
   radarr: { apiKey: string };
@@ -45,7 +48,7 @@ export function configuredServices(config: {
   jackett: { apiKey: string };
   jellyfin: { apiKey: string };
   jellyseerr: { apiKey: string };
-  qbittorrent: { password: string };
+  qbittorrent: { url: string; password: string };
   tmdb: { apiKey: string };
 }): ConfiguredServices {
   return {
@@ -55,7 +58,12 @@ export function configuredServices(config: {
     jackett: !!config.jackett.apiKey,
     jellyfin: !!config.jellyfin.apiKey,
     jellyseerr: !!config.jellyseerr.apiKey,
-    qbittorrent: !!config.qbittorrent.password,
+    qbittorrent: qbittorrentConfigured(config.qbittorrent),
     tmdb: !!config.tmdb.apiKey,
   };
+}
+
+/** qBittorrent n'a pas de clé : une adresse *et* un mot de passe, sans quoi il n'est jamais appelé. */
+export function qbittorrentConfigured(qb: { url?: string; password?: string }): boolean {
+  return !!qb.url?.trim() && !!qb.password;
 }

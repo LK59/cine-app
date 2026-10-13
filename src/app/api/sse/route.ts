@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { cachedTorrents } from "@/lib/server-cache";
 import { logError } from "@/lib/logger";
+import { config } from "@/lib/config";
+import { qbittorrentConfigured } from "@/lib/services";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,6 +35,8 @@ function broadcast(event: string, data: unknown) {
 function startSharedPolling() {
   if (intervalId !== null) return;
   intervalId = setInterval(async () => {
+    // qBittorrent non branché : jamais interrogé (13/10/2026, voir `serviceConfigured.ts`).
+    if (!qbittorrentConfigured(config.qbittorrent)) return;
     try {
       const torrents = await cachedTorrents();
       const currentHashes = new Set(torrents.map((t) => t.hash));

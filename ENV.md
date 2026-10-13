@@ -69,7 +69,7 @@ button. Jellyfin, TMDB and Radarr or Sonarr are asked for by the setup assistant
 | `SONARR_QUALITY_PROFILE` | first profile Sonarr lists | Same as above, for series. |
 | `JELLYSEERR_URL` | `http://jellyseerr:5055` | Requests. Without a key, the request buttons do not appear. |
 | `JELLYSEERR_API_KEY` | — | Jellyseerr → Settings → General → API Key. |
-| `QBITTORRENT_URL` | `http://gluetun:8080` | Download progress. When qBittorrent shares a VPN container's network, use that container's address. |
+| `QBITTORRENT_URL` | — | Download progress, e.g. `http://qbittorrent:8080`. When qBittorrent shares a VPN container's network, use that container's address. Without an address and a password, qBittorrent is never contacted. |
 | `QBITTORRENT_USERNAME` | `admin` | qBittorrent web interface user. |
 | `QBITTORRENT_PASSWORD` | — | qBittorrent web interface password. |
 | `BAZARR_URL` | `http://bazarr:6767` | Subtitle search and management in Management. |

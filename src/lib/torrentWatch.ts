@@ -2,6 +2,8 @@ import { cachedTorrents } from "@/lib/server-cache";
 import { sendPushToAdmins } from "@/lib/push";
 import { logError } from "@/lib/logger";
 import { kvCacheDb } from "@/lib/db";
+import { config } from "@/lib/config";
+import { qbittorrentConfigured } from "@/lib/services";
 
 /**
  * Les notifications « téléchargement démarré / terminé », surveillées par le serveur lui-même.
@@ -176,6 +178,22 @@ function persistTorrentWatch(state: TorrentWatchState, digest: TorrentDigest): v
   lastPersisted = json;
 }
 
+/**
+ * Un passage : la liste des torrents, comparée à la précédente. Rien n'est demandé quand qBittorrent
+ * n'est pas branché (ni adresse ni mot de passe réglés) — relu à chaque passage, pour qu'un réglage
+ * fait dans l'application s'applique sans redémarrer. Une installation sans qBittorrent l'appelait
+ * à l'adresse par défaut toutes les quinze secondes : une erreur au journal à chaque fois, et un
+ * risque de bannissement d'adresse par qBittorrent (13/10/2026).
+ */
+export async function pollTorrentWatch(state: TorrentWatchState, digest: TorrentDigest, now = Date.now()): Promise<void> {
+  if (!qbittorrentConfigured(config.qbittorrent)) return;
+  try {
+    addToDigest(digest, diffTorrents(state, await cachedTorrents()), now);
+  } catch (err) {
+    logError("notifications.torrents", err);
+  }
+}
+
 let timer: ReturnType<typeof setInterval> | null = null;
 
 export function startTorrentWatch(): void {
@@ -188,11 +206,7 @@ export function startTorrentWatch(): void {
     logError("notifications.torrents", err);
   }
   timer = setInterval(async () => {
-    try {
-      addToDigest(digest, diffTorrents(state, await cachedTorrents()), Date.now());
-    } catch (err) {
-      logError("notifications.torrents", err);
-    }
+    await pollTorrentWatch(state, digest);
     // Hors du bloc précédent : un qBittorrent qui ne répond pas ne doit pas retenir un lot prêt.
     const due = takeDueDigest(digest, Date.now());
     try {

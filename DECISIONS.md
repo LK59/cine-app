@@ -1586,6 +1586,21 @@ change dans « Réglages serveur » (ancien mot de passe exigé, autres sessions
 par `server-boot/reset-admin-password.mjs` ; hachage et vérification vivent dans un seul module,
 `server-boot/adminAccount.mjs`, que lisent l'application et la commande.
 
+**Complété le 13/10/2026** (essai d'une installation neuve, sans `.env`). *Un service non configuré
+n'est jamais interrogé* : `serviceConfigured.ts` (côté serveur de `configuredServices`) — le client
+qBittorrent refuse avant tout réseau (`ServiceNotConfiguredError`), le suivi des torrents
+(`pollTorrentWatch`), `/api/sse`, le contrôle d'état (`ifConfigured`) et la vue d'ensemble passent
+leur tour ; l'adresse de qBittorrent n'a plus de défaut (`http://gluetun:8080`, celle d'une
+installation particulière, appelée toutes les quinze secondes par les autres, avec le risque d'un
+bannissement d'adresse). La vue d'ensemble nomme à part ce qui n'est pas configuré, sans le compter
+« hors ligne ». *« Suivant » teste* chaque service renseigné de l'étape (`groupsToTest`,
+`runServiceTest`) et, sur un échec, dit pourquoi et propose « Continuer quand même » ; une adresse
+sans `http://` est « adresse invalide » au test comme à l'enregistrement (`urlProblem`). Une option
+de déploiement (`inApp: false`) se montre telle que l'environnement la donne (`settingValue`), et la
+page Déploiement dit si `TRUSTED_PROXIES` et `COOKIE_SECURE` sont posés. Tests :
+`service-non-configure.test.ts`, `DashboardClient-non-configure.test.tsx`,
+`correctifs-installation-neuve.test.ts`, `setup-ui.test.tsx`.
+
 **Décidé le 05/10/2026.**
 
 ## 49. Annuler une demande

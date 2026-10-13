@@ -1,5 +1,7 @@
 import { config } from "@/lib/config";
 import { HttpError, upstreamSignal, UPSTREAM_TIMEOUT_MS } from "@/lib/http";
+import { qbittorrentConfigured } from "@/lib/services";
+import { ServiceNotConfiguredError } from "@/lib/serviceConfigured";
 
 // Lu à chaque appel, et non recopié au chargement : réglable dans l'application (DECISIONS.md §48).
 const cfg = config.qbittorrent;
@@ -31,6 +33,10 @@ export function extractSessionCookie(res: Response): string | null {
 }
 
 async function login(): Promise<string> {
+  // Jamais de connexion sans adresse ni mot de passe réglés : chaque essai refusé compte pour le
+  // bannissement d'adresse de qBittorrent (cinq échecs, une heure), et le suivi des torrents en
+  // faisait un toutes les quinze secondes sur une installation qui n'avait rien branché (13/10/2026).
+  if (!qbittorrentConfigured(cfg)) throw new ServiceNotConfiguredError("qbittorrent");
   const res = await fetch(`${cfg.url}/api/v2/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", ...originHeaders },
@@ -81,6 +87,8 @@ async function getCookie(forceRefresh = false): Promise<string> {
 }
 
 async function request<T>(path: string, init: RequestInit = {}, _retried = false): Promise<T> {
+  // Avant le cookie mis en cache : un réglage retiré dans l'application arrête les appels aussitôt.
+  if (!qbittorrentConfigured(cfg)) throw new ServiceNotConfiguredError("qbittorrent");
   const cookie = await getCookie();
   const res = await fetch(`${cfg.url}${path}`, {
     ...init,

@@ -183,7 +183,13 @@
       "errors": "Errors (7 d)",
       "errorsDetail": "{server} server · {client} browser · {player} player",
       "unavailable": "Activity unavailable."
-    }
+    },
+    "servicesNoneConfigured": "No service configured",
+    "servicesNotConfigured": "Not configured: {list}",
+    "configure": "Configure",
+    "torrentsNotConfigured": "qBittorrent isn't configured: active downloads will show here once it is connected.",
+    "storageNoMedia": "Mount the media folder to see storage.",
+    "storageHowTo": "How to"
   },
   "activity": {
     "news": {
@@ -2700,11 +2706,12 @@
       },
       "app": {
         "title": "Application",
-        "why": "Default language, secure connection, poster preparation."
+        "why": "Poster preparation and the contact address for notifications."
       },
       "defaults": {
         "title": "Default settings",
-        "why": "What an account sees until it chooses otherwise. Everyone can change it for themselves in Account → Interface."
+        "why": "What an account sees until it chooses otherwise. Everyone can change it for themselves in Account (Language, Interface).",
+        "whyLanguage": "The language of the sign-in page and of every account that has not chosen one. Everyone can change it for themselves in Account → Language."
       },
       "deployment": {
         "title": "Deployment options",
@@ -2801,7 +2808,17 @@
       "env": "This account is set by APP_ADMIN_PASSWORD in your .env: change it there, then restart the container.",
       "forgot": "Forgot it: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
     },
-    "restartNote": "Takes effect the next time the container starts."
+    "restartNote": "Takes effect the next time the container starts.",
+    "later": "Later, in management → Configuration: Chromecast (Playback), generated subtitles, and what new accounts receive (New accounts).",
+    "testBlock": {
+      "title": "The connection test failed:",
+      "hint": "Fix it and press “Next” to try again, or continue: everything can also be set later in Configuration → Connections."
+    },
+    "continueAnyway": "Continue anyway",
+    "deployStatus": {
+      "set": "Set in this container: {value}",
+      "unset": "Not set in this container."
+    }
   },
   "subtitleGen": {
     "admin": {
@@ -2843,7 +2860,8 @@
         "uploaded": "sent to Jellyfin",
         "presented": "listed in Jellyfin",
         "failed": "served by the app (could not be sent to Jellyfin)"
-      }
+      },
+      "usageRequests": "Requests this month: {requests}"
     }
   },
   "news": {

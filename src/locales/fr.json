@@ -183,7 +183,13 @@
       "errors": "Erreurs (7 j)",
       "errorsDetail": "{server} serveur · {client} navigateur · {player} lecteur",
       "unavailable": "Activité indisponible."
-    }
+    },
+    "servicesNoneConfigured": "Aucun service configuré",
+    "servicesNotConfigured": "Non configurés : {list}",
+    "configure": "Configurer",
+    "torrentsNotConfigured": "qBittorrent n'est pas configuré : les téléchargements en cours s'afficheront ici une fois branché.",
+    "storageNoMedia": "Montez le dossier des médias pour voir le stockage.",
+    "storageHowTo": "Comment faire"
   },
   "activity": {
     "news": {
@@ -2700,11 +2706,12 @@
       },
       "app": {
         "title": "Application",
-        "why": "Langue par défaut, connexion sécurisée, préparation des affiches."
+        "why": "La préparation des affiches et l'adresse de contact des notifications."
       },
       "defaults": {
         "title": "Réglages par défaut",
-        "why": "Ce que voit un compte qui n'a rien choisi. Chacun peut le changer pour lui-même dans Compte → Interface."
+        "why": "Ce que voit un compte qui n'a rien choisi. Chacun peut le changer pour lui-même dans Compte (Langue, Interface).",
+        "whyLanguage": "La langue de l'écran de connexion et de chaque compte qui n'en a pas choisi. Chacun peut la changer pour lui-même dans Compte → Langue."
       },
       "deployment": {
         "title": "Options de déploiement",
@@ -2801,7 +2808,17 @@
       "env": "Ce compte est fixé par APP_ADMIN_PASSWORD dans votre .env : changez-le là, puis relancez le conteneur.",
       "forgot": "Mot de passe oublié : docker exec -it cine-app node server-boot/reset-admin-password.mjs"
     },
-    "restartNote": "Prend effet au prochain démarrage du conteneur."
+    "restartNote": "Prend effet au prochain démarrage du conteneur.",
+    "later": "Plus tard, dans la gestion → Configuration : le Chromecast (Lecture), les sous-titres générés, et ce que reçoivent les nouveaux comptes (Nouveaux comptes).",
+    "testBlock": {
+      "title": "Le test de connexion a échoué :",
+      "hint": "Corrigez puis touchez « Suivant » pour réessayer, ou continuez : tout se règle aussi plus tard dans Configuration → Connexions."
+    },
+    "continueAnyway": "Continuer quand même",
+    "deployStatus": {
+      "set": "Posé dans ce conteneur : {value}",
+      "unset": "Pas posé dans ce conteneur."
+    }
   },
   "subtitleGen": {
     "admin": {
@@ -2843,7 +2860,8 @@
         "uploaded": "envoyé à Jellyfin",
         "presented": "présent dans Jellyfin",
         "failed": "servi par l'application (envoi à Jellyfin impossible)"
-      }
+      },
+      "usageRequests": "Requêtes ce mois-ci : {requests}"
     }
   },
   "news": {

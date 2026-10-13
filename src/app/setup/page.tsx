@@ -5,9 +5,10 @@ import useSWR from "swr";
 import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { HelloIntro } from "@/components/setup/HelloIntro";
-import { DeploymentGuide, SettingsGroupCard, type Draft } from "@/components/settings/SettingsGroupCard";
+import { DeploymentGuide, SettingsGroupCard, runServiceTest, testFailureText, type Draft } from "@/components/settings/SettingsGroupCard";
 import { LOCALE_COOKIE, type Locale } from "@/lib/i18n";
-import { SETTINGS_BY_KEY, type SettingGroup, type SettingView } from "@/lib/settings/schema";
+import { SETTINGS_BY_KEY, type SettingGroup, type SettingView, type TestableGroup } from "@/lib/settings/schema";
+import { groupsToTest } from "@/lib/settings/wizardTests";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 
 /**
@@ -29,7 +30,7 @@ const STEPS: Step[] = ["welcome", "admin", "jellyfin", "tmdb", "library", "extra
  * dont il dépend, pour qu'on puisse le couper dès l'assistant (demandé le 05/10/2026) ; le reste
  * du lecteur attend les compléments.
  */
-type StepCard = { group: SettingGroup; keys?: readonly string[] };
+type StepCard = { group: SettingGroup; keys?: readonly string[]; whyKey?: string };
 const STEP_CARDS: Partial<Record<Step, StepCard[]>> = {
   jellyfin: [{ group: "jellyfin" }, { group: "playback", keys: ["PLAYER_SERVER_FALLBACK"] }],
   tmdb: [{ group: "tmdb" }],
@@ -48,7 +49,8 @@ const STEP_CARDS: Partial<Record<Step, StepCard[]>> = {
     { group: "playback", keys: ["PLAYER_ENABLED", "PLAYER_AUTO_FRAME"] },
     // La langue par défaut est un réglage des comptes depuis le 13/10/2026 (§81) : la même étape
     // la propose, à côté de ce que publie l'application.
-    { group: "defaults", keys: ["APP_LANGUAGE"] },
+    // Son texte à elle : celui du groupe renvoie à Compte → Interface, où la langue ne se règle pas.
+    { group: "defaults", keys: ["APP_LANGUAGE"], whyKey: "setup.groups.defaults.whyLanguage" },
     { group: "app" },
   ],
 };
@@ -92,6 +94,9 @@ export default function SetupPage() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
+  // Les services dont le test a échoué à « Suivant » : la raison, et « Continuer quand même ».
+  const [testFailures, setTestFailures] = useState<{ group: TestableGroup; detail: string }[] | null>(null);
+  const [testing, setTesting] = useState(false);
 
   // L'étape atteinte, retrouvée au retour (lue une fois, après le montage : localStorage n'existe pas au rendu serveur).
   useEffect(() => {
@@ -113,6 +118,7 @@ export default function SetupPage() {
     writeStep(next);
     setErrors({});
     setProblem(null);
+    setTestFailures(null);
     window.scrollTo({ top: 0 });
   }
 
@@ -137,6 +143,7 @@ export default function SetupPage() {
     );
     setBusy(true);
     setProblem(null);
+    setTestFailures(null);
     try {
       if (Object.keys(values).length > 0) {
         const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values }) });
@@ -155,8 +162,23 @@ export default function SetupPage() {
         setProblem(t("setup.missing", { list: missing.map((m) => labelOfMissing(m, t)).join(", ") }));
         return;
       }
+      // « Suivant » essaie les clés (13/10/2026) : l'assistant se terminait avec des clés refusées,
+      // le test n'étant qu'un bouton à part. Chaque service renseigné de l'étape est testé avec ce
+      // qui vient d'être enregistré ; un échec dit pourquoi et laisse continuer quand même — une
+      // adresse joignable seulement plus tard (un conteneur pas encore démarré) n'est pas une erreur.
+      const toTest = groupsToTest(groups, fresh?.settings ?? []);
+      if (toTest.length > 0) {
+        setTesting(true);
+        const results = await Promise.all(toTest.map(async (group) => ({ group, ...(await runServiceTest(group, {})) })));
+        const failed = results.filter((r) => !r.ok).map(({ group, detail }) => ({ group, detail }));
+        if (failed.length > 0) {
+          setTestFailures(failed);
+          return;
+        }
+      }
       go(step + 1);
     } finally {
+      setTesting(false);
       setBusy(false);
     }
   }
@@ -266,6 +288,7 @@ export default function SetupPage() {
               key={`${c.group}-${c.keys?.join() ?? ""}`}
               group={c.group}
               keys={c.keys}
+              whyKey={c.whyKey}
               views={views}
               draft={draft}
               errors={errors}
@@ -273,16 +296,18 @@ export default function SetupPage() {
               onReset={reset}
             />
           ))}
+          {current === "extras" && <p className="text-sm text-subtle">{t("setup.later")}</p>}
         </div>
       )}
       {groups && !signedIn && <NeedSignIn />}
 
-      {current === "deployment" && <DeploymentGuide />}
+      {current === "deployment" && <DeploymentGuide views={signedIn ? views : undefined} />}
 
       {current === "finish" && (
         <div>
           <h2 className="mb-2 text-xl font-semibold text-white">{t("setup.steps.finish")}</h2>
           <p className="text-sm text-muted">{t("setup.done.text")}</p>
+          <p className="mt-2 text-sm text-subtle">{t("setup.later")}</p>
           {payload && payload.missing.length > 0 && (
             <p className="mt-3 text-sm text-danger">{t("setup.missing", { list: payload.missing.map((m) => labelOfMissing(m, t)).join(", ") })}</p>
           )}
@@ -290,6 +315,23 @@ export default function SetupPage() {
       )}
 
       {problem && <p className="mt-4 text-sm text-danger">{problem}</p>}
+
+      {testFailures && (
+        <div role="alert" className="mt-4 rounded-xl bg-danger/10 px-4 py-3 text-sm">
+          <p className="mb-1.5 font-medium text-danger">{t("setup.testBlock.title")}</p>
+          <ul className="space-y-1 text-danger">
+            {testFailures.map((f) => (
+              <li key={f.group}>
+                <strong>{t(`setup.groups.${f.group}.title`)}</strong> — {testFailureText(t, f.detail)}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted">{t("setup.testBlock.hint")}</p>
+          <button type="button" onClick={() => go(step + 1)} data-liquid-pan="wide" className="btn settings-glass-btn mt-3 rounded-full text-sm">
+            {t("setup.continueAnyway")} <ArrowRight size={15} />
+          </button>
+        </div>
+      )}
 
       {current !== "welcome" && (
         <nav className="mt-8 flex items-center justify-between gap-3">
@@ -304,7 +346,7 @@ export default function SetupPage() {
           ) : groups ? (
             <button type="button" onClick={() => saveAndNext(groups)} disabled={busy || !signedIn} data-liquid-pan="wide" className="btn btn-primary rounded-full">
               {busy ? <Loader2 size={16} className="animate-spin" /> : null}
-              {busy ? t("setup.saving") : t("setup.next")} {!busy && <ArrowRight size={16} />}
+              {busy ? (testing ? t("setup.testing") : t("setup.saving")) : t("setup.next")} {!busy && <ArrowRight size={16} />}
             </button>
           ) : current === "deployment" ? (
             <button type="button" onClick={() => go(step + 1)} data-liquid-pan="wide" className="btn btn-primary rounded-full">

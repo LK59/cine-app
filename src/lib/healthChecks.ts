@@ -3,6 +3,8 @@ import fs from "fs/promises";
 import { config } from "@/lib/config";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { getDb } from "@/lib/db";
+import { configuredServices, type ServiceKey as ConfigKey } from "@/lib/services";
+import { ServiceNotConfiguredError } from "@/lib/serviceConfigured";
 import { MEDIA_ROOT, MOVIES_PATH, TV_PATH, SEEDS_PATH, SEED_MOVIES_PATH, SEED_TV_PATH, CROSS_SEED_PATH } from "@/lib/media-paths";
 
 export type CheckStatus = "ok" | "degraded" | "down";
@@ -19,6 +21,18 @@ export interface ServiceHealth {
 // ─── Individual service pings ──────────────────────────────────────────────────
 // Shared by the technical /api/health route and the capability engine below, so there's one
 // definition of "is Radarr up" instead of two that can quietly drift apart.
+
+/**
+ * Un service non configuré n'est pas interrogé (13/10/2026, `serviceConfigured.ts`) : le contrôle
+ * tourne chaque minute, et il appelait les adresses par défaut d'une installation qui n'avait rien
+ * branché — `http://gluetun:8080` pour qBittorrent. Le relevé dit « non configuré », sans réseau.
+ */
+export async function ifConfigured(key: ConfigKey, name: string, url: string, ping: () => Promise<ServiceHealth>): Promise<ServiceHealth> {
+  if (!configuredServices(config)[key]) {
+    return { name, url, status: "down", latencyMs: null, version: null, error: new ServiceNotConfiguredError(key).message };
+  }
+  return ping();
+}
 
 // Generic ping for services with X-Api-Key header
 export async function pingWithKey(
@@ -222,14 +236,14 @@ export async function runAllServiceChecks(): Promise<Record<ServiceKey, ServiceH
     jellyfinR, jellyfinApiR, radarrR, sonarrR, jellyseerrR, bazarrR, jackettR, qbittorrentR, tmdbR,
     mdblistR, watchlistDbR, pushConfigR,
   ] = await Promise.all([
-    pingJellyfin(),
-    pingJellyfinApi(),
-    pingWithKey("Radarr", config.radarr.url, "/api/v3/system/status", config.radarr.apiKey, ["version"]),
-    pingWithKey("Sonarr", config.sonarr.url, "/api/v3/system/status", config.sonarr.apiKey, ["version"]),
-    pingJellyseerr(),
-    pingWithKey("Bazarr", config.bazarr.url, "/api/badges/episodes", config.bazarr.apiKey),
-    pingReachable("Jackett", config.jackett.url, "/UI/Dashboard"),
-    pingReachable("qBittorrent", config.qbittorrent.url, "/"),
+    ifConfigured("jellyfin", "Jellyfin", config.jellyfin.url, pingJellyfin),
+    ifConfigured("jellyfin", "Jellyfin API", config.jellyfin.url, pingJellyfinApi),
+    ifConfigured("radarr", "Radarr", config.radarr.url, () => pingWithKey("Radarr", config.radarr.url, "/api/v3/system/status", config.radarr.apiKey, ["version"])),
+    ifConfigured("sonarr", "Sonarr", config.sonarr.url, () => pingWithKey("Sonarr", config.sonarr.url, "/api/v3/system/status", config.sonarr.apiKey, ["version"])),
+    ifConfigured("jellyseerr", "Jellyseerr", config.jellyseerr.url, pingJellyseerr),
+    ifConfigured("bazarr", "Bazarr", config.bazarr.url, () => pingWithKey("Bazarr", config.bazarr.url, "/api/badges/episodes", config.bazarr.apiKey)),
+    ifConfigured("jackett", "Jackett", config.jackett.url, () => pingReachable("Jackett", config.jackett.url, "/UI/Dashboard")),
+    ifConfigured("qbittorrent", "qBittorrent", config.qbittorrent.url, () => pingReachable("qBittorrent", config.qbittorrent.url, "/")),
     pingTmdb(),
     pingMdblist(),
     pingWatchlistDb(),

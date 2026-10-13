@@ -33,8 +33,15 @@ export function SettingsGroupCard({
   errors,
   footer,
   keys,
+  whyKey,
 }: {
   group: SettingGroup;
+  /**
+   * Le texte d'explication, quand la carte n'en montre qu'une partie : l'assistant ne montre des
+   * réglages par défaut que la langue, et le texte du groupe renvoyait à Compte → Interface, où
+   * elle ne se règle pas (13/10/2026).
+   */
+  whyKey?: string;
   /** Seulement ces réglages du groupe (l'assistant montre le relais du lecteur à part, avec Jellyfin). */
   keys?: readonly string[];
   views: Map<string, SettingView>;
@@ -62,7 +69,7 @@ export function SettingsGroupCard({
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${NEED_TONE[need]}`}>{t(`setup.need.${need}`)}</span>
         )}
       </header>
-      <p className={`${help ? "mb-1" : "mb-4"} text-sm text-muted`}>{t(`setup.groups.${group}.why`)}</p>
+      <p className={`${help ? "mb-1" : "mb-4"} text-sm text-muted`}>{t(whyKey ?? `setup.groups.${group}.why`)}</p>
       {help && <p className="mb-4 text-xs text-subtle">{help}</p>}
 
       <div className="space-y-4">
@@ -178,26 +185,44 @@ function ProfileSelect({ id, service, value, onChange }: { id: string; service: 
   );
 }
 
+/**
+ * Le test d'un service, tel que le serveur le fait (`/api/settings/test`) : le bouton « Tester la
+ * connexion » et le « Suivant » de l'assistant le partagent. `values` : ce qui est en cours de
+ * saisie ; vide, les réglages enregistrés.
+ */
+export async function runServiceTest(group: TestableGroup, values: Draft): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const res = await fetch("/api/settings/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ group, values }),
+    });
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; detail?: string } | null;
+    return { ok: !!body?.ok, detail: body?.detail ?? `http-${res.status}` };
+  } catch {
+    return { ok: false, detail: "unreachable" };
+  }
+}
+
+/**
+ * Ce qu'un échec veut dire, en clair. Une adresse sans `http://` se disait « Injoignable » au test
+ * alors que l'enregistrement la refusait comme « Adresse invalide » (13/10/2026) : le même
+ * message des deux côtés.
+ */
+export function testFailureText(t: (key: string, vars?: Record<string, string>) => string, detail: string): string {
+  if (detail === "invalid-url") return t("setup.errors.invalid-url");
+  return detail === "unauthorized" || detail === "unreachable" || detail === "timeout" ? t(`setup.testFail.${detail}`) : t("setup.testFail.other", { detail });
+}
+
 /** « Tester la connexion » avec les valeurs en cours de saisie — un secret vide reprend celui enregistré. */
 function ConnectionTest({ group, draft }: { group: TestableGroup; draft: Draft }) {
   const t = useT();
   const [state, setState] = useState<"idle" | "running" | { ok: boolean; detail: string }>("idle");
   async function run() {
     setState("running");
-    try {
-      const res = await fetch("/api/settings/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ group, values: draft }),
-      });
-      const body = (await res.json().catch(() => null)) as { ok?: boolean; detail?: string } | null;
-      setState({ ok: !!body?.ok, detail: body?.detail ?? `http-${res.status}` });
-    } catch {
-      setState({ ok: false, detail: "unreachable" });
-    }
+    setState(await runServiceTest(group, draft));
   }
-  const failure = (detail: string) =>
-    detail === "unauthorized" || detail === "unreachable" || detail === "timeout" ? t(`setup.testFail.${detail}`) : t("setup.testFail.other", { detail });
+  const failure = (detail: string) => testFailureText(t, detail);
   return (
     <div className="mt-4 flex flex-wrap items-center gap-3">
       <button type="button" onClick={run} disabled={state === "running"} data-liquid-pan="wide" className="btn btn-ghost settings-glass-btn text-sm">
@@ -218,8 +243,27 @@ function ConnectionTest({ group, draft }: { group: TestableGroup; draft: Draft }
   );
 }
 
+/**
+ * Ce que la page Déploiement dit de l'état actuel : posé ou non dans l'environnement du conteneur.
+ * Seulement ces deux-là — ni l'un ni l'autre n'est un secret, et ce sont ceux qu'un relais mal
+ * déclaré rend invisibles (adresses des visiteurs, cookie refusé). La valeur du relais s'affiche ;
+ * celle du cookie est un booléen.
+ */
+const DEPLOYMENT_STATUS_KEYS = ["TRUSTED_PROXIES", "COOKIE_SECURE"] as const;
+
+function DeploymentStatus({ settingKey, view }: { settingKey: string; view: SettingView | undefined }) {
+  const t = useT();
+  if (!view) return null;
+  const set = view.source === "env" && !!view.value;
+  return (
+    <p className={`mb-1.5 text-xs ${set ? "text-success" : "text-subtle"}`} data-testid={`deploy-status-${settingKey}`}>
+      {set ? t("setup.deployStatus.set", { value: view.value ?? "" }) : t("setup.deployStatus.unset")}
+    </p>
+  );
+}
+
 /** Les options de déploiement : ce qui ne se règle pas ici, et la ligne à ajouter, à copier. */
-export function DeploymentGuide() {
+export function DeploymentGuide({ views }: { views?: Map<string, SettingView> } = {}) {
   const t = useT();
   const [copied, setCopied] = useState<string | null>(null);
   function copy(id: string, snippet: string) {
@@ -237,6 +281,7 @@ export function DeploymentGuide() {
           <div key={entry.id}>
             <p className="mb-1 text-sm font-medium text-white">{t(`setup.fields.${entry.id}`)}</p>
             <p className="mb-1.5 text-xs text-subtle">{t(`setup.deployHint.${entry.id}`)}</p>
+            {views && (DEPLOYMENT_STATUS_KEYS as readonly string[]).includes(entry.id) && <DeploymentStatus settingKey={entry.id} view={views.get(entry.id)} />}
             <div className="relative">
               <pre className="overflow-x-auto rounded-lg bg-black/40 p-3 pr-20 text-xs text-white">{entry.snippet}</pre>
               <button type="button" onClick={() => copy(entry.id, entry.snippet)} className="chip absolute right-2 top-2 text-xs">

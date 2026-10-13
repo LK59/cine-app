@@ -8,7 +8,7 @@ const NOTHING = {
   jackett: { apiKey: "" },
   jellyfin: { apiKey: "" },
   jellyseerr: { apiKey: "" },
-  qbittorrent: { password: "" },
+  qbittorrent: { url: "", password: "" },
   tmdb: { apiKey: "" },
 };
 
@@ -26,8 +26,16 @@ describe("configuredServices", () => {
     expect(configured.sonarr).toBe(false);
   });
 
-  it("uses the password for qBittorrent, which has no key", () => {
-    expect(configuredServices({ ...NOTHING, qbittorrent: { password: "s3cr3t" } }).qbittorrent).toBe(true);
+  it("uses the address and the password for qBittorrent, which has no key", () => {
+    expect(configuredServices({ ...NOTHING, qbittorrent: { url: "http://qb:8080", password: "s3cr3t" } }).qbittorrent).toBe(true);
+  });
+
+  // L'adresse de qBittorrent n'a plus de défaut (13/10/2026) : `http://gluetun:8080` était
+  // interrogée toutes les quinze secondes par une installation qui n'avait jamais branché
+  // qBittorrent. Sans adresse, rien n'est branché, mot de passe ou pas.
+  it("never counts qBittorrent as connected without an address", () => {
+    expect(configuredServices({ ...NOTHING, qbittorrent: { url: "", password: "s3cr3t" } }).qbittorrent).toBe(false);
+    expect(configuredServices({ ...NOTHING, qbittorrent: { url: "  ", password: "s3cr3t" } }).qbittorrent).toBe(false);
   });
 
   // Chaque service doit pouvoir dire quoi poser : un écran « non configuré » sans la marche à

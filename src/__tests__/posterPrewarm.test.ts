@@ -24,11 +24,19 @@ vi.mock("@/lib/title-art", () => ({
     tmdbId === 11 ? { posterByLang: { en: "https://image.tmdb.org/t/p/w342/a-en.jpg" } } : { posterByLang: {} },
 }));
 
+// Les réglages faits dans l'application (§48) : une table en mémoire à la place de la base.
+const overrides = new Map<string, string>();
+vi.mock("@/lib/settings/store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/settings/store")>()),
+  readOverride: (key: string) => overrides.get(key) ?? null,
+}));
+
 import {
   DEFAULT_WIDTHS,
   collectPosterUrls,
   isOptimizable,
   prewarmPosters,
+  prewarmEnv,
   prewarmSettings,
   startPosterPrewarm,
   variantPath,
@@ -46,6 +54,24 @@ describe("les réglages", () => {
     const s = prewarmSettings({ POSTER_PREWARM_WIDTHS: "640, abc, -3", POSTER_PREWARM_LOCALES: "de,xx" });
     expect(s.widths).toEqual([640]);
     expect(s.locales).toEqual(["de"]);
+  });
+
+  // La langue réglée dans l'application l'emporte sur `.env` (§48) : une installation neuve, sans
+  // `.env`, choisit sa langue à l'assistant — la préparation la lisait dans l'environnement seul et
+  // préparait les affiches d'une autre langue (13/10/2026).
+  it("prend la langue réglée dans l'application, avant celle de .env", () => {
+    const before = process.env.APP_LANGUAGE;
+    try {
+      process.env.APP_LANGUAGE = "es";
+      overrides.set("APP_LANGUAGE", "de");
+      expect(prewarmSettings(prewarmEnv()).locales).toEqual(["fr", "de"]);
+      overrides.delete("APP_LANGUAGE");
+      expect(prewarmSettings(prewarmEnv()).locales).toEqual(["fr", "es"]);
+    } finally {
+      overrides.clear();
+      if (before === undefined) delete process.env.APP_LANGUAGE;
+      else process.env.APP_LANGUAGE = before;
+    }
   });
 
   it("retombe sur les valeurs par défaut quand tout est invalide", () => {

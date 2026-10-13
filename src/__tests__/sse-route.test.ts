@@ -25,10 +25,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers();
   mockQbittorrent.getTorrents.mockResolvedValue([]);
+  // qBittorrent branché : sans adresse ni mot de passe, la route ne l'interroge plus (13/10/2026).
+  process.env.QBITTORRENT_URL = "http://qb.test:8080";
+  process.env.QBITTORRENT_PASSWORD = "x";
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  delete process.env.QBITTORRENT_URL;
+  delete process.env.QBITTORRENT_PASSWORD;
 });
 
 describe("GET /api/sse", () => {
@@ -65,6 +70,19 @@ describe("GET /api/sse", () => {
     // non d'ici, où elles n'existaient que tant qu'un onglet de la gestion était ouvert.
     expect(mockSendPushToAll).not.toHaveBeenCalled();
     reader.releaseLock();
+  });
+
+  // Un qBittorrent jamais branché n'est jamais interrogé (13/10/2026) : la route appelait l'adresse
+  // par défaut toutes les six secondes tant qu'un onglet de la gestion était ouvert.
+  it("never asks qBittorrent when no address and password are set", async () => {
+    delete process.env.QBITTORRENT_URL;
+    delete process.env.QBITTORRENT_PASSWORD;
+    const { GET } = await import("@/app/api/sse/route");
+    const { req, abort } = fakeReq();
+    await GET(req);
+    await vi.advanceTimersByTimeAsync(18_000);
+    expect(mockQbittorrent.getTorrents).not.toHaveBeenCalled();
+    abort();
   });
 
   it("removes the client on abort without throwing", async () => {

@@ -21,7 +21,7 @@ vi.mock("@/lib/clients/tmdb", () => ({ tmdb: mockTmdb }));
 vi.mock("@/lib/clients/omdb", () => ({ omdb: mockOmdb }));
 const mockConfig = vi.hoisted(() => ({
   radarr: { apiKey: "" }, sonarr: { apiKey: "" }, bazarr: { apiKey: "" }, jackett: { apiKey: "" },
-  jellyfin: { apiKey: "" }, jellyseerr: { apiKey: "" }, qbittorrent: { password: "" },
+  jellyfin: { apiKey: "" }, jellyseerr: { apiKey: "" }, qbittorrent: { url: "", password: "" },
 }));
 vi.mock("@/lib/config", () => ({ config: mockConfig }));
 vi.mock("@/lib/images", () => ({ posterUrl: () => null }));
@@ -52,6 +52,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockConfig.radarr.apiKey = "";
   mockConfig.sonarr.apiKey = "";
+  mockConfig.qbittorrent.url = "";
+  mockConfig.qbittorrent.password = "";
   mockRadarr.getHistory.mockResolvedValue({ records: [] });
   mockSonarr.getHistory.mockResolvedValue({ records: [] });
   mockJellyseerr.getRequests.mockResolvedValue({ results: [] });
@@ -109,6 +111,35 @@ describe("GET /api/dashboard", () => {
     expect(mockRadarr.getSystemStatus).toHaveBeenCalled();
   });
 
+  // Un service non configuré n'est pas une panne (13/10/2026) : une installation neuve lisait
+  // « 9 sur 9 hors ligne » et un encart jaune « qBittorrent indisponible ».
+  it("dit « non configuré » sans rien interroger, et sépare ce cas d'une panne", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", role: "admin" });
+    mockConfig.radarr.apiKey = "k";
+    mockRadarr.getSystemStatus.mockRejectedValue(new Error("fetch failed"));
+    const { GET } = await import("@/app/api/dashboard/route");
+    const body = await (await GET(fakeReq())).json();
+    const byName = (n: string) => body.services.data.find((s: { name: string }) => s.name === n);
+    expect(byName("sonarr")).toMatchObject({ up: false, configured: false });
+    expect(byName("qbittorrent")).toMatchObject({ up: false, configured: false });
+    // Une vraie panne reste une panne.
+    expect(byName("radarr").up).toBe(false);
+    expect(byName("radarr").configured).toBeUndefined();
+    expect(body.torrents).toMatchObject({ available: false, notConfigured: true, error: null });
+    expect(mockQbittorrent.getTorrents).not.toHaveBeenCalled();
+    expect(mockQbittorrent.getTransferInfo).not.toHaveBeenCalled();
+    expect(mockSonarr.getHistory).not.toHaveBeenCalled();
+  });
+
+  it("ne compte pas qBittorrent configuré sans adresse, même avec un mot de passe", async () => {
+    mockVerifySessionFull.mockResolvedValue(null);
+    mockConfig.qbittorrent.password = "x";
+    const { GET } = await import("@/app/api/dashboard/route");
+    const body = await (await GET(fakeReq())).json();
+    expect(body.torrents.notConfigured).toBe(true);
+    expect(mockQbittorrent.getTorrents).not.toHaveBeenCalled();
+  });
+
   it("includes disk stats synchronously (not behind withCacheSafe)", async () => {
     mockVerifySessionFull.mockResolvedValue(null);
     const { GET } = await import("@/app/api/dashboard/route");
@@ -120,6 +151,7 @@ describe("GET /api/dashboard", () => {
   it("envoie le genre d'un événement, pas un libellé français", async () => {
     // L'écran le traduit (`activity.*`) ; « Importé » s'affichait tel quel dans les quatre langues.
     mockVerifySessionFull.mockResolvedValue({ u: "louis" });
+    mockConfig.radarr.apiKey = "k";
     mockRadarr.getHistory.mockResolvedValue({
       records: [
         { id: 1, date: "2026-09-21T10:00:00Z", eventType: "downloadFolderImported", movie: { id: 3, title: "Dune" } },

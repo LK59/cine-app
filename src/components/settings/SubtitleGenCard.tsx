@@ -97,8 +97,7 @@ export function SubtitleGenCard({
     await mutate();
   }
 
-  const m = data?.month;
-  const readRate = m ? Math.round((m.cacheReadTokens / Math.max(1, m.inputTokens + m.cacheWriteTokens + m.cacheReadTokens)) * 100) : 0;
+  const readRate = data ? cacheReadRate(data.month) : null;
 
   return (
     <div className="space-y-3">
@@ -118,7 +117,11 @@ export function SubtitleGenCard({
             <div>
               <h4 className="text-sm font-semibold text-white">{t("subtitleGen.admin.spendTitle")}</h4>
               <p className="mt-1 text-sm text-muted">{t("subtitleGen.admin.spend", { spent: usd(data.month.cost), budget: usd(data.budgetUsd) })}</p>
-              <p className="text-xs text-subtle">{t("subtitleGen.admin.usage", { requests: data.month.requests, rate: readRate })}</p>
+              <p className="text-xs text-subtle">
+                {readRate === null
+                  ? t("subtitleGen.admin.usageRequests", { requests: data.month.requests || 0 })
+                  : t("subtitleGen.admin.usage", { requests: data.month.requests, rate: readRate })}
+              </p>
             </div>
             <div>
               <h4 className="mb-2 text-sm font-semibold text-white">{t("subtitleGen.admin.jobsTitle")}</h4>
@@ -167,4 +170,17 @@ export function SubtitleGenCard({
       </section>
     </div>
   );
+}
+
+/**
+ * La part de l'entrée relue du cache, en pour cent — `null` sans requête ce mois-ci. Un mois vide
+ * renvoie des sommes nulles (`SUM` sur aucune ligne), et la page disait « NaN % de l'entrée relue
+ * du cache » (installation neuve, 13/10/2026).
+ */
+export function cacheReadRate(month: { inputTokens: number | null; cacheWriteTokens: number | null; cacheReadTokens: number | null; requests: number | null } | null | undefined): number | null {
+  if (!month || !month.requests) return null;
+  const read = month.cacheReadTokens ?? 0;
+  const total = (month.inputTokens ?? 0) + (month.cacheWriteTokens ?? 0) + read;
+  const rate = Math.round((read / Math.max(1, total)) * 100);
+  return Number.isFinite(rate) ? rate : null;
 }

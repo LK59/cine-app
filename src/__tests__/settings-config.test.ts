@@ -82,6 +82,15 @@ describe("ce qui ne se règle jamais dans l'application", () => {
     expect(read()).not.toEqual(fallback);
   });
 
+  // La page Déploiement dit ce qui est posé (13/10/2026) : elle lit la vue du réglage, qui doit
+  // dire ce que `config.ts` applique — l'environnement seul — et non une ligne restée en base.
+  it("montre la valeur de l'environnement, pas une ligne restée en base", () => {
+    store.writeOverride("TRUSTED_PROXIES", "vieille-ligne");
+    expect(setup.settingView("TRUSTED_PROXIES")).toMatchObject({ source: "default", value: "" });
+    process.env.TRUSTED_PROXIES = "proxy-container";
+    expect(setup.settingView("TRUSTED_PROXIES")).toMatchObject({ source: "env", value: "proxy-container" });
+  });
+
   it("et le guide de déploiement explique chacun d'eux", async () => {
     const { DEPLOYMENT_GUIDE, GENERATED_SECRETS } = await import("@/lib/settings/schema");
     const guided = new Set(DEPLOYMENT_GUIDE.flatMap((e) => e.keys));

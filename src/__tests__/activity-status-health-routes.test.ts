@@ -21,13 +21,15 @@ vi.mock("@/lib/clients/tmdb", () => ({ tmdb: mockTmdb }));
 vi.mock("@/lib/clients/omdb", () => ({ omdb: mockOmdb }));
 vi.mock("@/lib/config", () => ({
   config: {
-    jellyfin: { url: "http://jf.local" },
-    jellyseerr: { url: "http://js.local" },
+    // Tout est branché ici : un service non configuré n'est pas interrogé (`ifConfigured`).
+    jellyfin: { url: "http://jf.local", apiKey: "k" },
+    jellyseerr: { url: "http://js.local", apiKey: "k" },
     radarr: { url: "http://radarr.local", apiKey: "k" },
     sonarr: { url: "http://sonarr.local", apiKey: "k" },
     bazarr: { url: "http://bazarr.local", apiKey: "k" },
-    jackett: { url: "http://jackett.local" },
-    qbittorrent: { url: "http://qbit.local" },
+    jackett: { url: "http://jackett.local", apiKey: "k" },
+    qbittorrent: { url: "http://qbit.local", password: "k" },
+    tmdb: { apiKey: "k" },
   },
 }));
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));

@@ -3,7 +3,7 @@ import { config } from "@/lib/config";
 import { statusHistoryDb, type ServiceLatencyStat } from "@/lib/db";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
-import { pingJellyfin, pingJellyseerr, pingReachable, pingWithKey, checkAllStoragePaths, type ServiceHealth, type StoragePathHealth } from "@/lib/healthChecks";
+import { ifConfigured, pingJellyfin, pingJellyseerr, pingReachable, pingWithKey, checkAllStoragePaths, type ServiceHealth, type StoragePathHealth } from "@/lib/healthChecks";
 
 export const dynamic = "force-dynamic";
 
@@ -41,14 +41,15 @@ function forNonAdmin(services: ServiceHealth[], paths: StoragePathHealth[]) {
 export async function GET(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   const [checks, paths] = await Promise.all([
+    // Un service non configuré n'est pas interrogé : son relevé le dit (`ifConfigured`).
     Promise.all([
-      pingJellyfin(),
-      pingWithKey("Radarr",   config.radarr.url,   "/api/v3/system/status", config.radarr.apiKey,   ["version"]),
-      pingWithKey("Sonarr",   config.sonarr.url,   "/api/v3/system/status", config.sonarr.apiKey,   ["version"]),
-      pingJellyseerr(),
-      pingWithKey("Bazarr",   config.bazarr.url,   "/api/badges/episodes",  config.bazarr.apiKey),
-      pingReachable("Jackett",     config.jackett.url,     "/UI/Dashboard"),
-      pingReachable("qBittorrent", config.qbittorrent.url, "/"),
+      ifConfigured("jellyfin",    "Jellyfin",    config.jellyfin.url,    pingJellyfin),
+      ifConfigured("radarr",      "Radarr",      config.radarr.url,      () => pingWithKey("Radarr", config.radarr.url, "/api/v3/system/status", config.radarr.apiKey, ["version"])),
+      ifConfigured("sonarr",      "Sonarr",      config.sonarr.url,      () => pingWithKey("Sonarr", config.sonarr.url, "/api/v3/system/status", config.sonarr.apiKey, ["version"])),
+      ifConfigured("jellyseerr",  "Jellyseerr",  config.jellyseerr.url,  pingJellyseerr),
+      ifConfigured("bazarr",      "Bazarr",      config.bazarr.url,      () => pingWithKey("Bazarr", config.bazarr.url, "/api/badges/episodes", config.bazarr.apiKey)),
+      ifConfigured("jackett",     "Jackett",     config.jackett.url,     () => pingReachable("Jackett", config.jackett.url, "/UI/Dashboard")),
+      ifConfigured("qbittorrent", "qBittorrent", config.qbittorrent.url, () => pingReachable("qBittorrent", config.qbittorrent.url, "/")),
     ]),
     checkAllStoragePaths(),
   ]);

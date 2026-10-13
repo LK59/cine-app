@@ -1,6 +1,6 @@
 import { extractSessionCookie } from "@/lib/clients/qbittorrent";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
-import type { TestableGroup } from "./schema";
+import { SETTINGS_BY_KEY, urlProblem, type TestableGroup } from "./schema";
 
 /**
  * « Tester » un service avec des valeurs (celles en cours de saisie, complétées par les réglages
@@ -35,6 +35,10 @@ function status(res: Response): TestResult | null {
 }
 
 export async function testService(group: TestableGroup, valueOf: (key: string) => string): Promise<TestResult> {
+  // L'adresse d'abord, sans réseau : `fetch` sur « radarr:7878 » échoue comme un hôte absent, et le
+  // test disait « Injoignable » là où l'enregistrement dit « Adresse invalide » (13/10/2026).
+  const urlKey = `${group.toUpperCase()}_URL`;
+  if (SETTINGS_BY_KEY.has(urlKey) && urlProblem(valueOf(urlKey))) return { ok: false, detail: "invalid-url" };
   try {
     switch (group) {
       case "jellyfin": {

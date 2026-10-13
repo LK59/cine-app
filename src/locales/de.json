@@ -183,7 +183,13 @@
       "errors": "Fehler (7 T.)",
       "errorsDetail": "{server} Server · {client} Browser · {player} Player",
       "unavailable": "Aktivität nicht verfügbar."
-    }
+    },
+    "servicesNoneConfigured": "Kein Dienst konfiguriert",
+    "servicesNotConfigured": "Nicht konfiguriert: {list}",
+    "configure": "Konfigurieren",
+    "torrentsNotConfigured": "qBittorrent ist nicht konfiguriert: Laufende Downloads erscheinen hier, sobald es verbunden ist.",
+    "storageNoMedia": "Binde den Medienordner ein, um den Speicher zu sehen.",
+    "storageHowTo": "So geht's"
   },
   "activity": {
     "news": {
@@ -2700,11 +2706,12 @@
       },
       "app": {
         "title": "Anwendung",
-        "why": "Standardsprache, sichere Verbindung, Vorbereitung der Poster."
+        "why": "Die Vorbereitung der Poster und die Kontaktadresse für Benachrichtigungen."
       },
       "defaults": {
         "title": "Standardeinstellungen",
-        "why": "Was ein Konto sieht, solange es nichts anderes wählt. Jeder kann es für sich unter Konto → Oberfläche ändern."
+        "why": "Was ein Konto sieht, solange es nichts anderes wählt. Jeder kann es für sich unter Konto (Sprache, Oberfläche) ändern.",
+        "whyLanguage": "Die Sprache der Anmeldeseite und jedes Kontos, das keine eigene gewählt hat. Jeder kann sie für sich unter Konto → Sprache ändern."
       },
       "deployment": {
         "title": "Bereitstellungsoptionen",
@@ -2801,7 +2808,17 @@
       "env": "Dieses Konto wird durch APP_ADMIN_PASSWORD in Ihrer .env festgelegt: dort ändern und den Container neu starten.",
       "forgot": "Vergessen: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
     },
-    "restartNote": "Wirkt ab dem nächsten Start des Containers."
+    "restartNote": "Wirkt ab dem nächsten Start des Containers.",
+    "later": "Später, in der Verwaltung → Konfiguration: Chromecast (Wiedergabe), generierte Untertitel und was neue Konten erhalten (Neue Konten).",
+    "testBlock": {
+      "title": "Der Verbindungstest ist fehlgeschlagen:",
+      "hint": "Korrigieren und „Weiter“ tippen, um es erneut zu versuchen, oder fortfahren: Alles lässt sich auch später unter Konfiguration → Verbindungen einstellen."
+    },
+    "continueAnyway": "Trotzdem fortfahren",
+    "deployStatus": {
+      "set": "In diesem Container gesetzt: {value}",
+      "unset": "In diesem Container nicht gesetzt."
+    }
   },
   "subtitleGen": {
     "admin": {
@@ -2843,7 +2860,8 @@
         "uploaded": "an Jellyfin gesendet",
         "presented": "in Jellyfin vorhanden",
         "failed": "von der App bereitgestellt (Übertragung an Jellyfin unmöglich)"
-      }
+      },
+      "usageRequests": "Anfragen in diesem Monat: {requests}"
     }
   },
   "news": {

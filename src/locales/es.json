@@ -183,7 +183,13 @@
       "errors": "Errores (7 d)",
       "errorsDetail": "{server} servidor · {client} navegador · {player} reproductor",
       "unavailable": "Actividad no disponible."
-    }
+    },
+    "servicesNoneConfigured": "Ningún servicio configurado",
+    "servicesNotConfigured": "Sin configurar: {list}",
+    "configure": "Configurar",
+    "torrentsNotConfigured": "qBittorrent no está configurado: las descargas en curso aparecerán aquí cuando esté conectado.",
+    "storageNoMedia": "Monta la carpeta de medios para ver el almacenamiento.",
+    "storageHowTo": "Cómo hacerlo"
   },
   "activity": {
     "news": {
@@ -2700,11 +2706,12 @@
       },
       "app": {
         "title": "Aplicación",
-        "why": "Idioma por defecto, conexión segura, preparación de carteles."
+        "why": "La preparación de carteles y la dirección de contacto de las notificaciones."
       },
       "defaults": {
         "title": "Ajustes por defecto",
-        "why": "Lo que ve una cuenta mientras no elija otra cosa. Cada uno puede cambiarlo para sí en Cuenta → Interfaz."
+        "why": "Lo que ve una cuenta mientras no elija otra cosa. Cada uno puede cambiarlo para sí en Cuenta (Idioma, Interfaz).",
+        "whyLanguage": "El idioma de la página de inicio de sesión y de cada cuenta que no haya elegido uno. Cada uno puede cambiarlo para sí en Cuenta → Idioma."
       },
       "deployment": {
         "title": "Opciones de despliegue",
@@ -2801,7 +2808,17 @@
       "env": "Esta cuenta la fija APP_ADMIN_PASSWORD en su .env: cámbiela allí y reinicie el contenedor.",
       "forgot": "Si la olvidó: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
     },
-    "restartNote": "Se aplica en el próximo arranque del contenedor."
+    "restartNote": "Se aplica en el próximo arranque del contenedor.",
+    "later": "Más tarde, en la gestión → Configuración: Chromecast (Reproducción), los subtítulos generados y lo que reciben las cuentas nuevas (Cuentas nuevas).",
+    "testBlock": {
+      "title": "La prueba de conexión ha fallado:",
+      "hint": "Corrígelo y pulsa «Siguiente» para volver a intentarlo, o continúa: todo se puede ajustar más tarde en Configuración → Conexiones."
+    },
+    "continueAnyway": "Continuar de todos modos",
+    "deployStatus": {
+      "set": "Definido en este contenedor: {value}",
+      "unset": "No definido en este contenedor."
+    }
   },
   "subtitleGen": {
     "admin": {
@@ -2843,7 +2860,8 @@
         "uploaded": "enviado a Jellyfin",
         "presented": "presente en Jellyfin",
         "failed": "servido por la aplicación (envío a Jellyfin imposible)"
-      }
+      },
+      "usageRequests": "Solicitudes este mes: {requests}"
     }
   },
   "news": {
