@@ -26,6 +26,6 @@ describe("PlayerPanelFrame — fondu hors de la zone qui défile", () => {
   it("n'a plus d'élément collé en haut du corps", () => {
     const src = readFileSync("src/components/player/PlayerPanelFrame.tsx", "utf8");
     expect(src).not.toMatch(/sticky -?top/);
-    expect(src).toMatch(/absolute inset-x-0 top-0 bg-gradient-to-b from-\(--panel-bg\)/);
+    expect(src).toMatch(/absolute inset-x-0 -top-1\.5 bg-gradient-to-b from-\(--panel-bg\) from-35%/);
   });
 });

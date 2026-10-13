@@ -300,9 +300,14 @@ export function PlayerPanelFrame({
           la zone qui défile ; iOS recale un élément collé avec un temps de retard pendant le
           défilement, et une bande d'affiche passait entre le haut de la zone et lui (13/10/2026,
           vu sur iPhone même décalé d'un pixel). Hors de la zone, il ne bouge plus jamais. */}
+      {/* Il déborde de 6 px vers le haut, sur le bas de l'en-tête (du fond, rien d'autre), plein sur
+          ce débord : la zone qui défile est un calque à part qu'iOS arrondit au pixel de l'écran à
+          sa façon, et un fondu commençant pile à son bord laissait encore une ligne d'affiche
+          passer entre l'en-tête et lui (13/10/2026). Mis sur son propre calque pour être composé
+          avec elle, au même pixel. */}
       <div className="relative z-10 h-0 shrink-0" aria-hidden>
         <div
-          className={`pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-(--panel-bg) to-transparent ${short ? "h-2" : "h-4"}`}
+          className={`pointer-events-none absolute inset-x-0 -top-1.5 bg-gradient-to-b from-(--panel-bg) from-35% to-transparent [transform:translateZ(0)] ${short ? "h-3.5" : "h-[1.375rem]"}`}
         />
       </div>
       {/* Le corps n'a pas d'animation à lui : c'est la racine qui entre et sort (voir plus haut).
