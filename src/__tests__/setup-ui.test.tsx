@@ -94,3 +94,29 @@ describe("l'assistant de premier lancement", () => {
     expect(fetchSpy.mock.calls.some(([u]) => u === "/api/setup/admin")).toBe(false);
   });
 });
+
+describe("le premier écran de l'assistant", () => {
+  // Installation neuve essayée le 13/10/2026 : la langue est déjà allumée, et l'écran n'avait aucun
+  // bouton pour avancer — il fallait deviner qu'on touche la langue déjà choisie.
+  it("offre « Suivant », qui garde la langue en cours et mène au compte administrateur", async () => {
+    const calls: { url: string; body?: string }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, body: init?.body as string | undefined });
+        if (url === "/api/setup/status") return new Response(JSON.stringify({ done: false, needsAdmin: true }), { status: 200 });
+        if (url === "/api/setup/language") return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        return new Response("{}", { status: 401 });
+      }),
+    );
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <SetupPage />
+      </SWRConfig>,
+    );
+    fireEvent.click(await screen.findByText("setup.next"));
+    await screen.findByText("setup.admin.create");
+    expect(JSON.parse(calls.find((c) => c.url === "/api/setup/language")!.body!)).toEqual({ lang: "fr" });
+    expect(localStorage.getItem("cine:setup-step")).toBe("1");
+  });
+});

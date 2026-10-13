@@ -232,6 +232,14 @@ export default function SetupPage() {
         <>
           <HelloIntro current={locale} busy={busy ? locale : null} onChoose={chooseLanguage} />
           <p className="mx-auto mt-8 max-w-md text-center text-sm text-muted">{t("setup.welcome.text")}</p>
+          {/* La langue de l'installation est déjà choisie (anglais par défaut) : sans ce bouton, il
+              fallait deviner qu'on avance en touchant la langue déjà allumée — essai d'une
+              installation neuve du 13/10/2026, un écran sans aucun bouton pour continuer. */}
+          <div className="mt-6 flex justify-center">
+            <button type="button" onClick={() => chooseLanguage(locale)} disabled={busy} data-liquid-pan="wide" className="btn btn-primary rounded-full">
+              {t("setup.next")} <ArrowRight size={16} />
+            </button>
+          </div>
         </>
       )}
 
