@@ -135,6 +135,25 @@ describe("HttpByteSource", () => {
     source.close();
   }, 15000);
 
+  // 13/10/2026 : un corps plus court que ce que son `Content-Range` annonce — une réponse coupée
+  // qui se termine « proprement » — était rendu tel quel à la lecture qui l'attendait. Le cache le
+  // refusait (mauvaise longueur), mais le démultiplexeur recevait moins d'octets que demandé, ce
+  // qu'il lit comme la fin du fichier. La réserve d'avance, elle, refusait déjà une telle plage.
+  it("redemande une plage dont le corps est plus court que son Content-Range", async () => {
+    let truncations = 1;
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      const [, from, to] = /bytes=(\d+)-(\d+)/.exec(init?.headers?.Range ?? "")!.map(Number);
+      const cut = from === 3 * CHUNK && truncations-- > 0;
+      const body = new Uint8Array(cut ? 1000 : to - from + 1).fill(7);
+      return { status: 206, headers: { get: (n: string) => (n === "Content-Range" ? `bytes ${from}-${to}/${SIZE}` : null) }, arrayBuffer: async () => body.buffer };
+    });
+    const source = await HttpByteSource.open("/film.mkv", SIZE);
+    const bytes = await source.read(3 * CHUNK, CHUNK);
+    expect(bytes.length).toBe(CHUNK);
+    expect(truncations).toBeLessThan(0);
+    source.close();
+  }, 15000);
+
   it("gives up at once on a server that does not do ranges at all", async () => {
     // 200 is not a bad moment: asking again would only download a forty-gigabyte film four times.
     stubFetch({ rangeStatus: 200 });

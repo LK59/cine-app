@@ -759,6 +759,18 @@ export class HttpByteSource implements ByteSource {
         // finis donnent déjà — gardée prête, non branchée (12/10/2026).
         const bytes = new Uint8Array(await res.arrayBuffer());
         if (simulatorActive()) await simulateTransfer(bytes.byteLength, headersAt, attemptControl.signal);
+        /**
+         * Un corps plus court que la plage que la réponse annonce : une réponse coupée qui s'est
+         * terminée « proprement » (13/10/2026). Rendu tel quel, le cache le refusait (mauvaise
+         * longueur) mais la lecture qui l'attendait recevait moins d'octets que demandé — ce que le
+         * démultiplexeur prend pour la fin du fichier. Redemandé, comme un échec réseau. Comparé au
+         * `Content-Range` de *cette* réponse, pas à la taille d'ouverture : un morceau de fin coupé
+         * par une taille corrigée (`checkTotal`) est légitimement plus court que demandé.
+         */
+        const announced = /bytes (\d+)-(\d+)\//.exec(res.headers?.get?.("Content-Range") ?? "");
+        if (announced && bytes.byteLength !== Number(announced[2]) - Number(announced[1]) + 1) {
+          throw new Error(`plage tronquée (${bytes.byteLength} octets sur ${Number(announced[2]) - Number(announced[1]) + 1})`);
+        }
         metered?.received(bytes.byteLength);
         this.networkBytes += bytes.byteLength;
         const endAt = performance.now();
