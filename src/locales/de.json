@@ -1019,9 +1019,10 @@
     "movieQualityCount": "{n} Filme",
     "audioLanguages": "Audiosprachen (Filme)",
     "audioLang": {
-      "vfvo": "DE + OV",
-      "vf": "Nur DE",
-      "vo": "Nur OV",
+      "vfvo": "Frz. Synchro + OV",
+      "vf": "Nur frz. Synchro",
+      "vo": "Nur OV (ohne Französisch)",
+      "vofr": "Französisches Original",
       "other": "Sonstiges"
     },
     "videoEncoding": "Videokodierung",

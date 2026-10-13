@@ -1019,9 +1019,10 @@
     "movieQualityCount": "{n} movies",
     "audioLanguages": "Audio languages (movies)",
     "audioLang": {
-      "vfvo": "Dub + Original",
-      "vf": "Dubbed only",
-      "vo": "Original only",
+      "vfvo": "French dub + original",
+      "vf": "French dub only",
+      "vo": "Original only (no French)",
+      "vofr": "French original",
       "other": "Other"
     },
     "videoEncoding": "Video encoding",

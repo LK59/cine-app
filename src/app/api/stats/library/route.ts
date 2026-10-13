@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
-import { langCategory, codecCategory } from "@/lib/statsBuckets";
+import { langCategory, codecCategory, type LangCategory } from "@/lib/statsBuckets";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,8 @@ export interface LibraryStats {
   movies: { total: number; withFile: number };
   series: { total: number; totalEpisodes: number; episodesWithFile: number };
   quality: Record<string, number>;
-  languages: { vf: number; vfvo: number; vo: number; other: number };
+  /** Films seulement ; `vofr` = films français dans leur VO (voir `langCategory`). */
+  languages: Record<LangCategory, number>;
   codecs: { hevc: number; h264: number; other: number };
   hdr: number;
   monthlyMovies: Record<string, number>;
@@ -25,7 +26,7 @@ export async function GET() {
 
   const quality: Record<string, number> = {};
   const monthlyMovies: Record<string, number> = {};
-  const languages = { vf: 0, vfvo: 0, vo: 0, other: 0 };
+  const languages: Record<LangCategory, number> = { vf: 0, vfvo: 0, vo: 0, vofr: 0, other: 0 };
   const codecs = { hevc: 0, h264: 0, other: 0 };
   let hdr = 0;
   let moviesWithFile = 0;
@@ -37,7 +38,8 @@ export async function GET() {
     const q = mf?.quality?.quality?.name;
     if (q) quality[q] = (quality[q] ?? 0) + 1;
     if (mi) {
-      const cat = langCategory(mi.audioLanguages ?? "");
+      // La langue de tournage décide de ce qu'est la VO : un film français en français n'est pas une VF.
+      const cat = langCategory(mi.audioLanguages ?? "", m.originalLanguage?.name);
       languages[cat]++;
       const cc = codecCategory(mi.videoCodec ?? "");
       codecs[cc]++;

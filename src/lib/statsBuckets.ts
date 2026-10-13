@@ -1,3 +1,6 @@
+import { normaliseLanguage } from "@/lib/trackPreferences";
+import { originalLanguageCode } from "@/lib/originalLanguage";
+
 /**
  * Les catégories de la page Statistiques, tirées des noms que Radarr écrit dans `mediaInfo` et
  * `quality`. Sorties de la route et de la page pour qu'un test puisse les confronter aux valeurs
@@ -5,22 +8,42 @@
  * un cas que la page comptait de travers.
  */
 
-/** Une piste française, quelle que soit la forme du code ISO 639-2 : Radarr écrit `fre` (forme
- *  bibliographique) pour la plupart des fichiers, mais `fra` (forme terminologique) quand le
- *  conteneur la porte ainsi. Chercher la seule sous-chaîne `fre` rangeait 3 films « fra » en
- *  « Autre », un « fra/spa » en « Autre » et un « eng/fra » en « VO uniquement ». */
-const FRENCH = new Set(["fre", "fra"]);
+/**
+ * La catégorie de langue d'un film, d'après ses pistes audio **et sa langue de tournage**.
+ *
+ * - `vfvo` : film étranger, doublage français + piste originale ;
+ * - `vf` : film étranger, doublage français sans la piste originale ;
+ * - `vo` : film étranger, piste originale sans doublage français ;
+ * - `vofr` : film français, en français — sa VO ;
+ * - `other` : rien de tout cela (pistes `und`, absentes, ou seulement un doublage tiers).
+ *
+ * Les pistes seules ne suffisent pas (13/10/2026) : « VF uniquement » comptait 89 films français
+ * qui n'ont que leur piste d'origine — de la VO, pas un doublage — et « VF + VO » ne regardait que
+ * l'anglais, si bien qu'un film coréen « fre/kor » passait pour « VF uniquement » et un film
+ * espagnol « fre/eng » (doublages français et anglais, sans l'espagnol) pour « VF + VO ». La langue
+ * de tournage est celle que Radarr tient de TMDB (`originalLanguage.name`, « Korean »…).
+ *
+ * Les codes se comparent normalisés (`normaliseLanguage`) : Radarr écrit `fre` pour la plupart des
+ * fichiers mais `fra` quand le conteneur la porte ainsi, et chercher la sous-chaîne `fre` rangeait
+ * des films ailleurs. Une langue de tournage inconnue (nom absent de `originalLanguageCode`) garde
+ * la règle d'avant, élargie : toute piste non française passe pour l'originale.
+ */
+export type LangCategory = "vfvo" | "vf" | "vo" | "vofr" | "other";
 
-export function langCategory(audioLangs: string): "vf" | "vfvo" | "vo" | "other" {
-  if (!audioLangs) return "other";
-  // Radarr sépare les pistes par « / », parfois entouré d'espaces : on compare des codes entiers
-  // plutôt que des sous-chaînes, pour qu'un code ne soit jamais lu à l'intérieur d'un autre.
-  const codes = audioLangs.toLowerCase().split("/").map((c) => c.trim()).filter(Boolean);
-  const hasFre = codes.some((c) => FRENCH.has(c));
-  const hasEng = codes.includes("eng");
-  if (hasFre && hasEng) return "vfvo";
-  if (hasFre) return "vf";
-  if (hasEng) return "vo";
+export function langCategory(audioLangs: string, originalLanguageName?: string | null): LangCategory {
+  // Radarr sépare les pistes par « / », parfois entouré d'espaces : des codes entiers, jamais des
+  // sous-chaînes. `und` et consorts tombent (normaliseLanguage les rend null).
+  const codes = (audioLangs ?? "")
+    .split("/")
+    .map((c) => normaliseLanguage(c))
+    .filter((c): c is string => c !== null);
+  const hasFrench = codes.includes("fr");
+  const original = originalLanguageCode(originalLanguageName);
+  if (original === "fr") return hasFrench ? "vofr" : "other";
+  const hasOriginal = original ? codes.includes(original) : codes.some((c) => c !== "fr");
+  if (hasFrench && hasOriginal) return "vfvo";
+  if (hasFrench) return "vf";
+  if (hasOriginal) return "vo";
   return "other";
 }
 

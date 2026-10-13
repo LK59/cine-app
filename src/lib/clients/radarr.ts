@@ -37,6 +37,9 @@ export interface RadarrMovie {
    * derniers, et pour les 48 autres langues, que la mention apprend quelque chose.
    */
   originalLanguage?: { id: number; name: string };
+  /** Les autres titres que TMDB connaît au film (« Tren a Busan »…), pour rapprocher un nom de
+   *  release d'une autre langue. Rarement le titre français : voir `titleNames`. */
+  alternateTitles?: { title: string; sourceType?: string }[];
   imdbId?: string;
   added?: string;
   genres?: string[];

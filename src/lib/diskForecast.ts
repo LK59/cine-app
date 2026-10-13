@@ -21,9 +21,12 @@ export interface DiskForecast {
 }
 
 /** Derives a saturation forecast straight from what's already on disk — how many GB got added
- *  per month, from each library file's own mtime (see monthlyGrowth in storage-scan.ts) —
- *  instead of waiting weeks to accumulate a fresh sampling history. Available the moment the
- *  storage scan itself has run once. */
+ *  per month — instead of waiting weeks to accumulate a fresh sampling history. Available the
+ *  moment the storage scan itself has run once.
+ *
+ *  « Ajouté » veut dire importé par Radarr/Sonarr ce mois-là (date d'ajout du fichier), et non
+ *  modifié ce mois-là : un réencodage FileFlows réécrit un fichier existant, souvent en plus
+ *  petit, et comptait comme un ajout entier (`computeMonthlyGrowth`, 13/10/2026). */
 export function computeDiskForecast(): DiskForecast {
   const storage = getStorageStats();
   const disk = getDiskStats();

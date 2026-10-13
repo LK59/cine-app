@@ -587,11 +587,12 @@ export default function StatsPage() {
               <section>
                 <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.audioLanguages')}</h2>
                 <div className="card p-4 space-y-3">
-                  {(["vfvo", "vf", "vo", "other"] as const).map((cat) => {
-                    const count = lib.languages[cat];
+                  {(["vfvo", "vf", "vo", "vofr", "other"] as const).map((cat) => {
+                    // `?? 0` : une réponse d'avant `vofr` (cache SWR) n'a pas la clé.
+                    const count = lib.languages[cat] ?? 0;
                     if (!count) return null;
-                    const labels = { vfvo: t('stats.audioLang.vfvo'), vf: t('stats.audioLang.vf'), vo: t('stats.audioLang.vo'), other: t('stats.audioLang.other') };
-                    const colors = { vfvo: "bg-accent-500", vf: "bg-emerald-500", vo: "bg-sky-500", other: "bg-white/30" };
+                    const labels = { vfvo: t('stats.audioLang.vfvo'), vf: t('stats.audioLang.vf'), vo: t('stats.audioLang.vo'), vofr: t('stats.audioLang.vofr'), other: t('stats.audioLang.other') };
+                    const colors = { vfvo: "bg-accent-500", vf: "bg-emerald-500", vo: "bg-sky-500", vofr: "bg-amber-500", other: "bg-white/30" };
                     return (
                       <HBar key={cat} label={labels[cat]} value={count}
                         max={lib.movies.withFile} color={colors[cat]} fmt={(n) => t('stats.movieQualityCount', { n })} />

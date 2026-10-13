@@ -55,6 +55,23 @@ export interface SonarrEpisode {
   series?: { id: number; title: string; images: { coverType: string; remoteUrl?: string; url?: string }[] };
 }
 
+/**
+ * Un fichier d'épisode tel que Sonarr le tient. `dateAdded` est la date d'import : FileFlows, qui
+ * réencode le fichier en place, change sa taille (relue par Sonarr au scan) et sa date de
+ * modification, mais pas cette date-là (vérifié le 13/10/2026) — c'est elle qui dit quand des octets
+ * sont réellement arrivés dans la bibliothèque.
+ */
+export interface SonarrEpisodeFile {
+  id: number;
+  seriesId: number;
+  seasonNumber: number;
+  /** Relatif au dossier de la série (`SonarrSeries.path`). */
+  relativePath: string;
+  path?: string;
+  size: number;
+  dateAdded?: string;
+}
+
 export interface SonarrRelease {
   guid: string;
   indexerId: number;
@@ -80,6 +97,9 @@ export const sonarr = {
       headers,
       body: JSON.stringify(payload),
     }),
+  // Une série par appel : Sonarr refuse une liste de `seriesId` (n'en lit que le premier).
+  getEpisodeFiles: (seriesId: number) =>
+    fetchJson<SonarrEpisodeFile[]>(`${cfg.url}/api/v3/episodefile?seriesId=${seriesId}`, { headers }),
   getEpisodes: (seriesId: number) =>
     fetchJson<SonarrEpisode[]>(`${cfg.url}/api/v3/episode?seriesId=${seriesId}`, { headers }),
   updateEpisode: (id: number, payload: Record<string, unknown>) =>

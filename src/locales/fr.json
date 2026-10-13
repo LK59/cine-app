@@ -1020,8 +1020,9 @@
     "audioLanguages": "Langues audio (films)",
     "audioLang": {
       "vfvo": "VF + VO",
-      "vf": "VF uniquement",
-      "vo": "VO uniquement",
+      "vf": "VF uniquement (doublage)",
+      "vo": "VO uniquement (sans VF)",
+      "vofr": "VO française",
       "other": "Autre"
     },
     "videoEncoding": "Encodage vidéo",

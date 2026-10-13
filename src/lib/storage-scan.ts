@@ -3,6 +3,10 @@ import path from "path";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { bestTitleMatchScore } from "@/lib/search-natural-query";
 import { qbittorrent } from "@/lib/clients/qbittorrent";
+import { sonarr } from "@/lib/clients/sonarr";
+import { getTitleNames } from "@/lib/titleNames";
+import type { RadarrMovie } from "@/lib/clients/radarr";
+import type { SonarrSeries } from "@/lib/clients/sonarr";
 import { MEDIA_ROOT, MOVIES_PATH, TV_PATH, SEED_MOVIES_PATH, SEED_TV_PATH, CROSS_SEED_PATH } from "@/lib/media-paths";
 
 const VIDEO_EXT = new Set([".mkv", ".mp4", ".avi", ".m4v", ".ts", ".wmv", ".mov"]);
@@ -16,7 +20,7 @@ const YEAR_RE = /^(.*?)[[(.\s](\d{4})[\])]?/;
 // file would mean spawning a process per video and made the scan too slow to be usable.
 const H264_RE = /\b(x264|h\.?264|avc1?)\b/i;
 
-interface FileStat {
+export interface FileStat {
   name: string;
   /** Path relative to MEDIA_ROOT, e.g. "downloads/seeds/tv/Show/Season 01/Show.S01E05.mkv" — lets the UI point to the exact location on disk. */
   relPath: string;
@@ -36,7 +40,7 @@ interface SeedFile extends FileStat {
   tracker?: string;
 }
 
-interface LibraryItem {
+export interface LibraryItem {
   type: "movie" | "series";
   title: string;
   files: FileStat[];
@@ -72,8 +76,9 @@ export interface StorageStats {
     releases: { name: string; relativePath: string; sizeBytes: number; inLibrary: boolean }[];
   }[];
   heaviestH264: { type: "movie" | "series"; title: string; sizeBytes: number }[];
-  /** Library file bytes bucketed by the month they were added (file mtime), oldest first,
-   *  "YYYY-MM" keyed to match the app's other monthly charts. Covers the last 12 months. */
+  /** Octets de la bibliothèque rangés par mois d'**import** (date d'ajout Radarr/Sonarr du fichier,
+   *  sa date de modification à défaut), du plus ancien au plus récent, clés « AAAA-MM » comme les
+   *  autres graphiques mensuels. Douze derniers mois. Voir `computeMonthlyGrowth`. */
   monthlyGrowth: { month: string; bytes: number }[];
 }
 
@@ -230,18 +235,18 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   // English-titled seed release vs. the library's French title) — the plain filename
   // key alone would treat them as two unrelated movies. Reuse the same fuzzy
   // localized/original-title matching used by search, keyed by year to keep it cheap.
-  const hintsByYear = new Map<number, { id: number; title: string; originalTitle?: string }[]>();
+  const hintsByYear = new Map<number, MovieHint[]>();
   for (const m of radarrMovies) {
     const arr = hintsByYear.get(m.year);
-    const hint = { id: m.id, title: m.title, originalTitle: m.originalTitle };
+    const hint = movieHintOf(m);
     if (arr) arr.push(hint);
     else hintsByYear.set(m.year, [hint]);
   }
   function resolveMovieHint(rawTitle: string, year: number) {
-    let best: { id: number; title: string; originalTitle?: string } | null = null;
+    let best: MovieHint | null = null;
     let bestScore = 0;
     for (const c of hintsByYear.get(year) ?? []) {
-      const score = bestTitleMatchScore([c.title, c.originalTitle], rawTitle);
+      const score = bestTitleMatchScore(c.titles, rawTitle);
       if (score > bestScore) { bestScore = score; best = c; }
     }
     return bestScore >= 75 ? best : null;
@@ -367,9 +372,11 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   }
 
   // Les compteurs « hardlinkés x / y » comptent des fichiers, pas des chemins : un même inode lié
-  // sous deux dossiers de la bibliothèque (Sonarr range certains épisodes dans deux séries — 17
-  // ici, « Berlin » S02 et « Berlin and the Lady with an Ermine » S01) était compté deux fois,
-  // et toujours comme « hardlinké » puisque ses deux noms suffisent à porter nlink à 2.
+  // sous deux dossiers de la bibliothèque était compté deux fois, et toujours comme « hardlinké »
+  // puisque ses deux noms suffisent à porter nlink à 2. 17 ici (13/10/2026) : « Berlin (2023) »
+  // S02 et « Le Flambeau » / « Burning Love (FR) » S02, chacun doublé par un dossier que Sonarr ne
+  // suit pas (« Berlin and the Lady with an Ermine », « Le Flambeau ») mais que Jellyfin montre
+  // comme une série à part — Sonarr, lui, n'a qu'une série pour chaque paire.
   for (const item of movieItems) {
     for (const f of item.files) {
       if (libraryInodes.has(`${f.dev}:${f.ino}`)) continue;
@@ -474,7 +481,9 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
 
   notHardlinked.sort((a, b) => b.sizeBytes - a.sizeBytes);
 
-  const monthlyGrowth = computeMonthlyGrowth([...movieItems, ...seriesItems]);
+  const addedAt = await libraryDatesAdded(radarrMovies, sonarrSeries);
+  const monthlyGrowth = computeMonthlyGrowth([...movieItems, ...seriesItems], (item, f) =>
+    addedAt.get(libraryKey(item.type, f.relPath)));
 
   return {
     computedAt: Date.now(),
@@ -491,6 +500,71 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   };
 }
 
+interface MovieHint { id: number; title: string; titles: string[] }
+
+/**
+ * Les noms sous lesquels une release peut désigner ce film : titre Radarr, titre original, titres
+ * alternatifs de Radarr, et le titre du film dans chaque langue de l'interface (`titleNames`, cache
+ * TMDB déjà tenu pour le catalogue — jamais bloquant, il ne lance aucun appel ici qu'il n'aurait
+ * lancé pour le catalogue).
+ *
+ * Le seed « Dernier.train.pour.Busan.2016…AV1-ASKO.mkv » sortait comme orphelin (13/10/2026) alors
+ * que le film est dans la bibliothèque sous « Train to Busan » : ni le titre Radarr, ni l'original
+ * (« 부산행 »), ni aucun des 26 titres alternatifs de Radarr n'est le titre français. C'est une autre
+ * release du même film (autre inode : AV1, 7,9 Go, contre le x265 de 6,9 Go importé) — un doublon,
+ * pas un orphelin. L'année identique reste exigée, et le seuil de 75 aussi.
+ */
+function movieHintOf(m: RadarrMovie): MovieHint {
+  const titles = new Set<string>();
+  const add = (t: string | undefined) => { if (t?.trim()) titles.add(t.trim()); };
+  add(m.title);
+  add(m.originalTitle);
+  for (const a of m.alternateTitles ?? []) add(a.title);
+  const names = getTitleNames(m.tmdbId, "movie");
+  for (const locale of ["fr", "en", "es", "de"] as const) add(names[locale]);
+  return { id: m.id, title: m.title, titles: [...titles] };
+}
+
+/** La clé commune d'un fichier de la bibliothèque, vu du disque ou de Radarr/Sonarr : « movie: » ou
+ *  « series: » puis le chemin sous la racine des films ou des séries (`<dossier>/<chemin relatif>`).
+ *  Radarr et Sonarr voient le disque sous une autre racine (`/media/…`) : seul ce qui suit compte. */
+function libraryKey(type: "movie" | "series", relPathFromMediaRoot: string): string {
+  const root = type === "movie" ? MOVIES_PATH : TV_PATH;
+  return `${type}:${path.relative(root, path.join(MEDIA_ROOT, relPathFromMediaRoot))}`;
+}
+
+const EPISODE_FILES_CONCURRENCY = 6;
+
+/**
+ * La date d'import de chaque fichier de la bibliothèque, selon Radarr (`movieFile.dateAdded`, déjà
+ * dans la liste des films) et Sonarr (`episodefile`, un appel par série : ~170 ici, 1,2 s en
+ * parallèle mesuré le 13/10/2026 ; six à la fois, dans une analyse qui tourne au plus toutes les
+ * 30 minutes). Une série que Sonarr ne rend pas laisse ses fichiers à leur date de modification.
+ */
+async function libraryDatesAdded(movies: RadarrMovie[], series: SonarrSeries[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const put = (key: string, iso: string | undefined) => {
+    const ms = iso ? Date.parse(iso) : NaN;
+    if (Number.isFinite(ms)) out.set(key, ms);
+  };
+  for (const m of movies) {
+    if (m.path && m.movieFile?.relativePath) put(`movie:${path.basename(m.path)}/${m.movieFile.relativePath}`, m.movieFile.dateAdded);
+  }
+  const queue = series.filter((s) => s.path);
+  async function worker() {
+    for (let s = queue.shift(); s; s = queue.shift()) {
+      const folder = path.basename(s.path!);
+      try {
+        for (const f of await sonarr.getEpisodeFiles(s.id)) put(`series:${folder}/${f.relativePath}`, f.dateAdded);
+      } catch {
+        // Sonarr injoignable ou série disparue entre-temps : la date de modification servira.
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: EPISODE_FILES_CONCURRENCY }, worker));
+  return out;
+}
+
 const MONTHLY_GROWTH_MONTHS = 12;
 
 function monthKey(ms: number): string {
@@ -498,11 +572,31 @@ function monthKey(ms: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/** Buckets library file bytes by the month they were added (mtime), for the last
- *  MONTHLY_GROWTH_MONTHS months — including months with zero additions, so callers get a
- *  fixed-length, chronologically contiguous series without having to fill gaps themselves. */
-function computeMonthlyGrowth(items: LibraryItem[]): { month: string; bytes: number }[] {
-  const now = new Date();
+/**
+ * Les octets de la bibliothèque rangés par mois d'arrivée, sur les MONTHLY_GROWTH_MONTHS derniers
+ * mois — mois vides compris, pour une série continue (la prévision de saturation compte un mois
+ * sans ajout pour zéro).
+ *
+ * **Le mois d'arrivée est la date d'import, pas la date de modification** (13/10/2026). FileFlows
+ * réencode en HEVC des fichiers déjà là, souvent plus petits : le fichier réécrit prenait la date du
+ * jour et comptait comme un ajout entier ce mois-là, alors que la bibliothèque, elle, avait
+ * maigri. Relevé sur le disque : en mars 2026, 647 Go de « croissance » étaient 273 fichiers
+ * réencodés, importés des mois plus tôt (2 144 Go comptés pour 1 203 réellement importés) ; en
+ * juillet, 126 Go. Radarr et Sonarr gardent la date d'import d'un fichier qu'ils relisent après
+ * réencodage (161 films vérifiés : taille à jour, date d'ajout inchangée).
+ *
+ * Chaque fichier compte une fois (par inode : un épisode lié sous deux séries est un seul fichier),
+ * à sa taille actuelle. Un remplacement par Radarr/Sonarr (meilleure release) crée un nouveau
+ * fichier daté de son import : il compte entier ce mois-là, et le fichier remplacé, disparu, n'est
+ * plus compté nulle part — la somme des mois reste la taille réelle de la bibliothèque. `addedAt`
+ * rend la date d'import si Radarr/Sonarr connaissent ce chemin ; sinon (aucun de ses chemins
+ * connu), la date de modification sert.
+ */
+export function computeMonthlyGrowth(
+  items: LibraryItem[],
+  addedAt: (item: LibraryItem, f: FileStat) => number | undefined = () => undefined,
+  now = new Date(),
+): { month: string; bytes: number }[] {
   const buckets = new Map<string, number>();
   for (let i = MONTHLY_GROWTH_MONTHS - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -513,21 +607,26 @@ function computeMonthlyGrowth(items: LibraryItem[]): { month: string; bytes: num
   // A hardlinked file can legitimately show up under more than one library path (e.g. the same
   // episode file linked into both a season folder and a "complete series" pack) — (dev, ino)
   // identifies the actual physical file regardless of how many names point at it, so each one
-  // is only ever counted once here.
-  const seenInodes = new Set<string>();
+  // is only ever counted once here. Parmi ses chemins, celui que Radarr/Sonarr connaissent donne
+  // la date : « Berlin and the Lady with an Ermine/… », dossier hors Sonarr lié au même inode que
+  // « Berlin (2023)/Season 2/… », ne doit pas imposer sa date de modification s'il est lu en premier.
+  const files = new Map<string, { size: number; addedAt?: number; mtimeMs: number }>();
   for (const item of items) {
     for (const f of item.files) {
       const inodeKey = `${f.dev}:${f.ino}`;
-      if (seenInodes.has(inodeKey)) continue;
-      seenInodes.add(inodeKey);
-
-      const key = monthKey(f.mtimeMs);
-      // Anything older than the tracked window collapses into "before the chart" — irrelevant
-      // to a recent monthly-growth rate, and Map insertion order would otherwise put it first
-      // instead of dropping it.
-      if (key < oldestKey) continue;
-      if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + f.size);
+      const known = files.get(inodeKey);
+      const date = addedAt(item, f);
+      if (!known) files.set(inodeKey, { size: f.size, addedAt: date, mtimeMs: f.mtimeMs });
+      else if (known.addedAt === undefined && date !== undefined) known.addedAt = date;
     }
+  }
+  for (const f of files.values()) {
+    const key = monthKey(f.addedAt ?? f.mtimeMs);
+    // Anything older than the tracked window collapses into "before the chart" — irrelevant
+    // to a recent monthly-growth rate, and Map insertion order would otherwise put it first
+    // instead of dropping it.
+    if (key < oldestKey) continue;
+    if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + f.size);
   }
 
   return [...buckets.entries()].map(([month, bytes]) => ({ month, bytes }));

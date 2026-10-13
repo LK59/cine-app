@@ -1019,9 +1019,10 @@
     "movieQualityCount": "{n} películas",
     "audioLanguages": "Idiomas de audio (películas)",
     "audioLang": {
-      "vfvo": "Doblado + Original",
-      "vf": "Solo doblado",
-      "vo": "Solo original",
+      "vfvo": "Doblaje francés + original",
+      "vf": "Solo doblaje francés",
+      "vo": "Solo original (sin francés)",
+      "vofr": "Original en francés",
       "other": "Otro"
     },
     "videoEncoding": "Codificación de vídeo",

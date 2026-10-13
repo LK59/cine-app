@@ -45,7 +45,17 @@ describe("GET /api/stats/library", () => {
     ]);
     const { GET } = await import("@/app/api/stats/library/route");
     const body = await (await GET()).json();
-    expect(body.languages).toEqual({ vf: 0, vfvo: 1, vo: 0, other: 0 });
+    expect(body.languages).toEqual({ vf: 0, vfvo: 1, vo: 0, vofr: 0, other: 0 });
+  });
+
+  it("passe la langue de tournage : un film français en français est sa VO, pas une VF", async () => {
+    mockCachedMovies.mockResolvedValue([
+      { hasFile: true, originalLanguage: { id: 2, name: "French" }, movieFile: { mediaInfo: { audioLanguages: "fre" } }, genres: [] },
+      { hasFile: true, originalLanguage: { id: 21, name: "Korean" }, movieFile: { mediaInfo: { audioLanguages: "fre/kor" } }, genres: [] },
+    ]);
+    const { GET } = await import("@/app/api/stats/library/route");
+    const body = await (await GET()).json();
+    expect(body.languages).toEqual({ vf: 0, vfvo: 1, vo: 0, vofr: 1, other: 0 });
   });
 
   it("counts HEVC/h265 and h264 codecs separately", async () => {
