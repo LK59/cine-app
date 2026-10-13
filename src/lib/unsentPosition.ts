@@ -44,29 +44,44 @@ interface Saved {
   account: string | null;
 }
 
+/**
+ * La clé d'un titre **pour un compte**. Par titre seulement (jusqu'au 13/10/2026), un appareil partagé
+ * mélangeait les comptes : le battement accepté d'un second compte sur le même film effaçait la position
+ * que le premier n'avait pas pu envoyer, et l'échec du second l'écrasait de la sienne. Une position
+ * gardée sous l'ancienne clé (`PREFIX + itemId`) est encore lue, envoyée et effacée.
+ */
+function keyFor(itemId: string, account: string | null): string {
+  return account ? `${PREFIX}${itemId}:${account}` : PREFIX + itemId;
+}
+
 export function saveUnsentPosition(itemId: string, seconds: number, now = Date.now()): void {
   try {
     if (!itemId || !(seconds > 0) || !Number.isFinite(seconds)) return;
-    const saved: Saved = { itemId, seconds, savedAt: now, account: persistedCacheAccount() };
-    localStorage.setItem(PREFIX + itemId, JSON.stringify(saved));
+    const account = persistedCacheAccount();
+    const saved: Saved = { itemId, seconds, savedAt: now, account };
+    localStorage.setItem(keyFor(itemId, account), JSON.stringify(saved));
     maybePending = true;
   } catch {
     /* pas de stockage : pas de filet */
   }
 }
 
-/** Un rapport pour ce titre vient d'être accepté : il portait une position plus récente. */
+/** Un rapport pour ce titre vient d'être accepté : il portait une position plus récente — pour ce compte seulement. */
 export function clearUnsentPosition(itemId: string): void {
   try {
-    localStorage.removeItem(PREFIX + itemId);
+    const account = persistedCacheAccount();
+    localStorage.removeItem(keyFor(itemId, account));
+    // L'ancienne clé, si elle est à ce compte (ou à personne).
+    const legacy = JSON.parse(localStorage.getItem(PREFIX + itemId) ?? "null") as Saved | null;
+    if (legacy && (!legacy.account || legacy.account === account)) localStorage.removeItem(PREFIX + itemId);
   } catch {
     /* rien */
   }
 }
 
-export function findUnsentPositions(now = Date.now(), account: string | null = persistedCacheAccount()): Saved[] {
+export function findUnsentPositions(now = Date.now(), account: string | null = persistedCacheAccount()): (Saved & { key: string })[] {
   if (!account) return [];
-  const found: Saved[] = [];
+  const found: (Saved & { key: string })[] = [];
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i);
@@ -87,7 +102,7 @@ export function findUnsentPositions(now = Date.now(), account: string | null = p
       }
       // Celle d'un autre compte attend le retour de ce compte.
       if (saved.account && saved.account !== account) continue;
-      found.push(saved);
+      found.push({ ...saved, key });
     }
   } catch {
     /* stockage indisponible */
@@ -121,7 +136,7 @@ export async function flushUnsentPositions(now = Date.now(), except?: string): P
           }),
         });
         // Accepté, ou refusé pour de bon (400) : effacé. Sinon (5xx, session absente) : plus tard.
-        if (res.ok || res.status === 400) localStorage.removeItem(PREFIX + saved.itemId);
+        if (res.ok || res.status === 400) localStorage.removeItem(saved.key);
         else return;
       } catch {
         return;

@@ -6,10 +6,11 @@ import { renderHook, act } from "@testing-library/react";
 // Jellyfin ne la reçoit pas, effacée dès qu'un rapport plus récent passe, renvoyée au retour du réseau
 // ou au lancement suivant par la route d'arrêt marquée `late`.
 
-vi.mock("@/lib/persistentCache", () => ({ persistedCacheAccount: () => "louis" }));
+let account = "louis";
+vi.mock("@/lib/persistentCache", () => ({ persistedCacheAccount: () => account }));
 
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
-import { findUnsentPositions, flushUnsentPositions, saveUnsentPosition } from "@/lib/unsentPosition";
+import { clearUnsentPosition, findUnsentPositions, flushUnsentPositions, saveUnsentPosition } from "@/lib/unsentPosition";
 
 const session = { itemId: "film-1", playSessionId: "s-1", mediaSourceId: "m-1" };
 let online = true;
@@ -17,6 +18,7 @@ let posted: { url: string; body: Record<string, unknown> }[] = [];
 
 beforeEach(() => {
   localStorage.clear();
+  account = "louis";
   posted = [];
   online = true;
   vi.useFakeTimers();
@@ -75,6 +77,29 @@ describe("la position d'une coupure", () => {
     vi.stubGlobal("fetch", async () => ({ ok: false, status: 503 }));
     await flushUnsentPositions();
     expect(findUnsentPositions()).toEqual([expect.objectContaining({ itemId: "film-2" })]);
+  });
+
+  it("appareil partagé : le même titre regardé par un autre compte n'efface ni n'écrase la position gardée du premier", async () => {
+    // Une clé par titre seulement : le battement accepté de l'autre compte effaçait la position que
+    // le premier n'avait pas pu envoyer, et l'échec de l'autre l'écrasait de la sienne (13/10/2026).
+    saveUnsentPosition("film-9", 1500);
+    account = "lucas";
+    saveUnsentPosition("film-9", 30);
+    clearUnsentPosition("film-9");
+    expect(findUnsentPositions()).toEqual([]);
+    account = "louis";
+    expect(findUnsentPositions()).toEqual([expect.objectContaining({ itemId: "film-9", seconds: 1500, account: "louis" })]);
+    await flushUnsentPositions();
+    expect(posted.filter((p) => p.body.late === true).map((p) => p.body.positionTicks)).toEqual([1500 * 10_000_000]);
+    expect(findUnsentPositions()).toEqual([]);
+  });
+
+  it("une position gardée sous l'ancienne clé (par titre seul) est encore trouvée, envoyée et effacée", async () => {
+    localStorage.setItem("cine:unsent-position:film-8", JSON.stringify({ itemId: "film-8", seconds: 700, savedAt: Date.now(), account: "louis" }));
+    expect(findUnsentPositions()).toEqual([expect.objectContaining({ itemId: "film-8", seconds: 700 })]);
+    await flushUnsentPositions();
+    expect(findUnsentPositions()).toEqual([]);
+    expect(localStorage.getItem("cine:unsent-position:film-8")).toBeNull();
   });
 
   it("rien à garder pour une position nulle", () => {
