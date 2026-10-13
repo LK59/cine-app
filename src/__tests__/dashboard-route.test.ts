@@ -19,12 +19,11 @@ vi.mock("@/lib/clients/jellyseerr", () => ({ jellyseerr: mockJellyseerr }));
 vi.mock("@/lib/clients/qbittorrent", () => ({ qbittorrent: mockQbittorrent }));
 vi.mock("@/lib/clients/tmdb", () => ({ tmdb: mockTmdb }));
 vi.mock("@/lib/clients/omdb", () => ({ omdb: mockOmdb }));
-vi.mock("@/lib/config", () => ({
-  config: {
-    radarr: { apiKey: "" }, sonarr: { apiKey: "" }, bazarr: { apiKey: "" }, jackett: { apiKey: "" },
-    jellyfin: { apiKey: "" }, jellyseerr: { apiKey: "" }, qbittorrent: { password: "" },
-  },
+const mockConfig = vi.hoisted(() => ({
+  radarr: { apiKey: "" }, sonarr: { apiKey: "" }, bazarr: { apiKey: "" }, jackett: { apiKey: "" },
+  jellyfin: { apiKey: "" }, jellyseerr: { apiKey: "" }, qbittorrent: { password: "" },
 }));
+vi.mock("@/lib/config", () => ({ config: mockConfig }));
 vi.mock("@/lib/images", () => ({ posterUrl: () => null }));
 vi.mock("@/lib/disk-stats", () => ({ getDiskStats: () => ({ computedAt: 1, error: null, moviesBytes: 0, tvBytes: 0, seedsBytes: 0, disk: {} }) }));
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
@@ -51,6 +50,8 @@ function fakeReq(cookie = "t"): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockConfig.radarr.apiKey = "";
+  mockConfig.sonarr.apiKey = "";
   mockRadarr.getHistory.mockResolvedValue({ records: [] });
   mockSonarr.getHistory.mockResolvedValue({ records: [] });
   mockJellyseerr.getRequests.mockResolvedValue({ results: [] });
@@ -82,6 +83,30 @@ describe("GET /api/dashboard", () => {
     expect(Object.keys(body).sort()).toEqual(["activity", "disk", "services", "torrents"]);
     expect(mockJellyfin.getResumeItems).not.toHaveBeenCalled();
     expect(mockCachedMovies).not.toHaveBeenCalled();
+  });
+
+  it("compte les films et les séries par le cache partagé avec le cinéma, pas par une liste à chaque passage (13/10/2026)", async () => {
+    // La liste Radarr pèse 4,9 Mo et 320 ms ; cet écran se relit toutes les quinze secondes pour
+    // n'en tirer qu'un nombre. L'état du service, lui, reste demandé à chaque fois.
+    mockConfig.radarr.apiKey = "k";
+    mockConfig.sonarr.apiKey = "k";
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1" });
+    mockRadarr.getSystemStatus.mockResolvedValue({ version: "5" });
+    mockSonarr.getSystemStatus.mockResolvedValue({ version: "4" });
+    mockRadarr.getMissingCount.mockResolvedValue(0);
+    mockRadarr.getQueueCount.mockResolvedValue(0);
+    mockSonarr.getMissingCount.mockResolvedValue(0);
+    mockSonarr.getQueueCount.mockResolvedValue(0);
+    mockCachedMovies.mockResolvedValue([{}, {}, {}]);
+    mockCachedSeries.mockResolvedValue([{}, {}]);
+    const { GET } = await import("@/app/api/dashboard/route");
+    const body = await (await GET(fakeReq())).json();
+    const byName = (n: string) => body.services.data.find((s: { name: string }) => s.name === n);
+    expect(byName("radarr")).toMatchObject({ up: true, stats: { Films: 3 } });
+    expect(byName("sonarr")).toMatchObject({ up: true, stats: { Séries: 2 } });
+    expect(mockRadarr.getMovies).not.toHaveBeenCalled();
+    expect(mockSonarr.getSeries).not.toHaveBeenCalled();
+    expect(mockRadarr.getSystemStatus).toHaveBeenCalled();
   });
 
   it("includes disk stats synchronously (not behind withCacheSafe)", async () => {

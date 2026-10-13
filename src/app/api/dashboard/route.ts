@@ -11,7 +11,7 @@ import { qbittorrent } from "@/lib/clients/qbittorrent";
 import { tmdb } from "@/lib/clients/tmdb";
 import { atMostEvery } from "@/lib/quotaGuard";
 import { omdb } from "@/lib/clients/omdb";
-import { withCacheSafe, TTL } from "@/lib/server-cache";
+import { withCacheSafe, TTL, cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { getDiskStats, type DiskStats } from "@/lib/disk-stats";
 import { classifyError } from "@/lib/api-error";
 import { config } from "@/lib/config";
@@ -89,9 +89,12 @@ async function probeServices(session: SessionPayload | null): Promise<ServiceSta
   return Promise.all([
     probe("radarr", async () => {
       if (!config.radarr.apiKey) throw notConfigured("RADARR_API_KEY");
+      // La liste par le cache partagé avec le cinéma (13/10/2026) : elle pèse 4,9 Mo, 320 ms chez
+      // Radarr et ~33 ms d'analyse ici, redemandée toutes les quinze secondes pour n'en tirer qu'un
+      // nombre. `getSystemStatus`, lui, reste direct : c'est lui qui dit si le service répond.
       const [status, movies, missing, queue] = await Promise.all([
         radarr.getSystemStatus(),
-        radarr.getMovies(),
+        cachedMovies(),
         radarr.getMissingCount().catch(() => 0),
         radarr.getQueueCount().catch(() => 0),
       ]);
@@ -99,9 +102,10 @@ async function probeServices(session: SessionPayload | null): Promise<ServiceSta
     }),
     probe("sonarr", async () => {
       if (!config.sonarr.apiKey) throw notConfigured("SONARR_API_KEY");
+      // Même raison que Radarr : 0,7 Mo et 90 à 130 ms, pour un nombre.
       const [status, series, missing, queue] = await Promise.all([
         sonarr.getSystemStatus(),
-        sonarr.getSeries(),
+        cachedSeries(),
         sonarr.getMissingCount().catch(() => 0),
         sonarr.getQueueCount().catch(() => 0),
       ]);
