@@ -3,7 +3,7 @@
 import { MIN_FLICK_PX } from "@/lib/useSwipeToDismiss";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { hardNavigate, signOut } from "@/lib/signOut";
 import { LogOut, MoreHorizontal, Search, RefreshCw } from "lucide-react";
 import { prefetchRoute } from "@/lib/prefetch";
@@ -12,6 +12,14 @@ import { AccountPreferencesLink, BackToCinema } from "@/components/gestion/NavBr
 import { useT } from "@/components/TranslationProvider";
 import { hardRefreshApp } from "@/lib/pwaRefresh";
 import { AppSignature } from "@/components/AppSignature";
+import { LiquidNavPill, LiquidTabLabel, liquidTabClass } from "@/components/LiquidNavPill";
+import { useIsShortViewport } from "@/lib/useIsMobile";
+
+/** La clé de « Plus » sur la pilule : ce n'est pas une adresse, il ouvre la feuille. */
+const MORE = "more";
+
+/** Le clic qui suit un appui arrive dans cette fenêtre : au-delà, c'est un vrai clic à lui seul. */
+const DOUBLE_FIRE_MS = 700;
 
 function SheetSection({
   title,
@@ -54,6 +62,12 @@ function SheetSection({
 
 export function MobileNav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const short = useIsShortViewport();
+  /** Quand le pointeur a déjà navigué — voir la garde du clic. */
+  const handledAt = useRef(0);
+  /** L'appui en cours a changé de page au contact (et non ouvert « Plus », ou rien). */
+  const navigatedOnDown = useRef(false);
   const [open, setOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -201,55 +215,94 @@ export function MobileNav() {
   function isActive(href: string) {
     return activeHref === href;
   }
+  // La lentille se pose sous « Plus » tant que la feuille est ouverte, sous l'onglet de la page
+  // sinon — et nulle part sur une page que la feuille seule propose (le rail ne ment pas).
+  const lensKey = open ? MORE : PINNED.some((p) => p.href === activeHref) ? activeHref : null;
+
+  // Le geste de la pilule du cinéma (DECISIONS.md §45) : la page change au contact, et un glisser
+  // qui finit sur un autre onglet l'ouvre au relâchement — à la place de la première, pour qu'un
+  // seul retour suffise. Fini sur « Plus », il ouvre la feuille.
+  const onDragSelect = (key: string) => {
+    handledAt.current = Date.now();
+    if (key === MORE) {
+      setOpen(true);
+      return;
+    }
+    if (navigatedOnDown.current) router.replace(key);
+    else router.push(key);
+  };
 
   return (
     <>
-      {/* La barre du bas : une pilule de verre qui flotte, comme celle du cinéma (13/10/2026,
-          DECISIONS.md §81). C'était une bande pleine largeur collée au bas de l'écran, fond
-          « glass-panel » et onglet actif en violet : l'autre interface de la même application.
+      {/* La barre du bas : la pilule du cinéma elle-même (`LiquidNavPill`, DECISIONS.md §45 et
+          §81) — même verre, même lentille qui glisse d'un onglet à l'autre, même geste. Elle n'en
+          avait que l'allure le matin du 13/10/2026 : un onglet allumé, sans lentille ni glisser.
           Quatre destinations et « Plus » ; la recherche est en tête de la feuille, avec le pont
           vers le cinéma. Des largeurs à la mesure des mots, et non cinq cases égales :
           « Téléchargements » ne tient pas dans un cinquième de téléphone. */}
       <nav
         aria-label={t("nav.label")}
+        data-gestion-nav
         className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4 md:hidden"
-        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)" }}
+        style={{ bottom: `calc(env(safe-area-inset-bottom, 0px) + ${short ? "0.5rem" : "0.75rem"})` }}
       >
-        <div className="nav-glass pointer-events-auto flex max-w-full items-center gap-0.5 rounded-full px-1.5 py-1.5 [@media(max-height:500px)_and_(orientation:landscape)]:py-1">
-          {PINNED.map(({ href, label, icon: Icon }) => {
-            const active = isActive(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                onTouchStart={() => prefetchRoute(href)}
-                onMouseEnter={() => prefetchRoute(href)}
-                aria-current={active ? "page" : undefined}
-                className={`flex h-14 min-w-14 shrink flex-col items-center justify-center gap-0.5 rounded-full px-2.5 transition-colors [@media(max-height:500px)_and_(orientation:landscape)]:h-11 ${
-                  active ? "bg-white/15 text-white" : "text-subtle active:text-muted"
-                }`}
-              >
-                <Icon size={20} strokeWidth={active ? 2.4 : 1.8} />
-                <span className={`truncate whitespace-nowrap text-[11px] leading-tight ${active ? "font-semibold" : "font-medium"} [@media(max-height:500px)_and_(orientation:landscape)]:sr-only`}>
-                  {label}
-                </span>
-              </Link>
-            );
-          })}
+        <LiquidNavPill active={lensKey} onDragSelect={onDragSelect} compact={short} className="max-w-full">
+          {() => (
+            <>
+              {PINNED.map(({ href, label, icon: Icon }) => {
+                const active = isActive(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    data-lens={href}
+                    onTouchStart={() => prefetchRoute(href)}
+                    onMouseEnter={() => prefetchRoute(href)}
+                    // Au contact, comme au cinéma : sur téléphone, `click` arrive trois cents
+                    // millisecondes après le doigt.
+                    onPointerDown={(e) => {
+                      navigatedOnDown.current = false;
+                      if (e.pointerType === "mouse" && (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey)) return;
+                      handledAt.current = Date.now();
+                      if (active) return;
+                      navigatedOnDown.current = true;
+                      router.push(href);
+                    }}
+                    // Le clic reste celui du lien pour le clavier et les technologies d'assistance ;
+                    // après un appui, il ferait naviguer une seconde fois.
+                    onClick={(e) => {
+                      if (Date.now() - handledAt.current < DOUBLE_FIRE_MS) e.preventDefault();
+                    }}
+                    // Au doigt, le lien ne prend pas le focus (même raison qu'au cinéma).
+                    onMouseDown={(e) => e.preventDefault()}
+                    aria-current={active ? "page" : undefined}
+                    className={liquidTabClass({ compact: short, on: active, fit: true })}
+                  >
+                    <Icon size={short ? 19 : 20} strokeWidth={active ? 2.4 : 1.8} />
+                    <LiquidTabLabel compact={short} on={active} fit>{label}</LiquidTabLabel>
+                  </Link>
+                );
+              })}
 
-          {/* Plus */}
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            aria-expanded={open}
-            className={`flex h-14 min-w-14 flex-col items-center justify-center gap-0.5 rounded-full px-2.5 transition-colors [@media(max-height:500px)_and_(orientation:landscape)]:h-11 ${
-              open ? "bg-white/15 text-white" : "text-subtle active:text-muted"
-            }`}
-          >
-            <MoreHorizontal size={20} />
-            <span className="text-[11px] font-medium leading-tight [@media(max-height:500px)_and_(orientation:landscape)]:sr-only">{t("nav.mobile.more")}</span>
-          </button>
-        </div>
+              {/* Plus — au clic et non au contact : la feuille et son voile apparaîtraient sous le
+                  doigt, et le clic qui suit tomberait sur le voile, qui la referme. */}
+              <button
+                type="button"
+                data-lens={MORE}
+                onPointerDown={() => {
+                  navigatedOnDown.current = false;
+                }}
+                onClick={() => setOpen(true)}
+                onMouseDown={(e) => e.preventDefault()}
+                aria-expanded={open}
+                className={liquidTabClass({ compact: short, on: open, fit: true })}
+              >
+                <MoreHorizontal size={short ? 19 : 20} strokeWidth={open ? 2.4 : 1.8} />
+                <LiquidTabLabel compact={short} on={open} fit>{t("nav.mobile.more")}</LiquidTabLabel>
+              </button>
+            </>
+          )}
+        </LiquidNavPill>
       </nav>
 
       {/* Overlay — toujours monté, pour fondre avec la feuille au lieu d'apparaître et de

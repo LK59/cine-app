@@ -1455,6 +1455,20 @@ rebond en CSS (`glass-pop`), l'opacité sur la surface elle-même.
 
 **Choisi le 04/10/2026** sur la page « Tests animations », sur iPhone et au bureau.
 
+**La pilule du bas, une seule pièce pour les deux interfaces (13/10/2026).** `LiquidNavPill`
+(`src/components/LiquidNavPill.tsx`) porte le verre (`nav-glass`), la lentille (`nav-lens`), le geste
+(`useLiquidLens`) et l'allure des onglets (`liquidTabClass`, `LiquidTabLabel`) ; la barre du cinéma
+(`PlayerBottomBar`) et celle de la gestion sur téléphone (`MobileNav`) la branchent, et seul ce que
+fait un onglet leur reste. La gestion n'en avait que l'allure (§81) : un onglet allumé, sans lentille
+ni glisser. Même comportement : la page change au contact, un glisser parcourt les onglets et
+navigue au relâchement, à la place de la première page ouverte (`router.replace`), et le clic qui
+suit l'appui est retenu. Différent exprès : « Plus » ouvre sa feuille au clic et non au contact —
+le voile apparaîtrait sous le doigt et prendrait le clic qui la referme — et au relâchement d'un
+glisser ; les onglets de la gestion sont à la mesure de leurs mots (`fit` : « Téléchargements »),
+et sa pilule garde le verre brillant du cinéma sous le verre en sourdine de la gestion (§83,
+`.gestion-liquid .nav-glass`). Tests : `MobileNav-pill.test.tsx` (pièce partagée, contact, glisser,
+« Plus »), `player-bottom-bar.test.tsx` inchangé, `useLiquidLens.test.tsx`.
+
 **Focus à l'ouverture, commun aux deux lecteurs (13/10/2026).** `usePlayerFocus` (`src/lib/usePlayerFocus.ts`) pose le focus sur lecture/pause dans le lecteur natif comme dans le lecteur serveur, et vérifie qu'il est pris (les commandes natives restent `inert` jusqu'à la première image). Avant, seul le lecteur serveur le faisait : sous le lecteur natif, Entrée (le centre d'une télécommande Fire TV) actionnait le bouton « Lecture » de la fiche restée montée dessous. Tests : `ExperimentalPlayerHost.test.tsx`.
 
 ## 46. Le cinéma répond tout de suite, quitte à montrer qu'il travaille

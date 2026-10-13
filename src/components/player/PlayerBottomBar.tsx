@@ -9,7 +9,7 @@ import { PLAYER_NAV, activePanel, isOnPanel, openPanel } from "./playerNav";
 import { requestSearchFocus } from "@/lib/searchFocus";
 import { useReportBadge } from "@/lib/useReportBadge";
 import { NavDot } from "./NavDot";
-import { useLiquidLens } from "@/lib/liquidGlass/useLiquidLens";
+import { LiquidNavPill, LiquidTabLabel, liquidTabClass } from "@/components/LiquidNavPill";
 import type { CinemaRoute } from "@/lib/cinemaRoute";
 import type { PlayerPanel } from "./playerNav";
 
@@ -24,8 +24,8 @@ const AWAY_MS = 280;
 /** Le clic qui suit un appui arrive dans cette fenêtre : au-delà, c'est un vrai clic à lui seul. */
 const DOUBLE_FIRE_MS = 700;
 
-/* La lentille de la barre : `useLiquidLens` (DECISIONS.md §45), commune au rail du bureau et aux
-   bascules Films/Séries. */
+/* La pilule et sa lentille : `LiquidNavPill` (DECISIONS.md §45), commune à la barre du bas de la
+   gestion ; le geste, `useLiquidLens`, l'est aussi au rail du bureau et aux bascules Films/Séries. */
 
 /**
  * La navigation du téléphone.
@@ -71,8 +71,6 @@ export function PlayerBottomBar() {
   const gap = `calc(env(safe-area-inset-bottom, 0px) + ${short ? "0.5rem" : "0.75rem"})`;
   /** Quand le pointeur a déjà fait le travail — voir la garde du clic. */
   const handledAt = useRef(0);
-  const barRef = useRef<HTMLDivElement>(null);
-  const lensRef = useRef<HTMLSpanElement>(null);
   /**
    * Le second appui sur Recherche, armé au contact et tenu jusqu'au relâchement (04/10/2026).
    *
@@ -89,16 +87,10 @@ export function PlayerBottomBar() {
 
   // La lentille : la navigation reste celle d'avant — au contact, par le bouton (`onPointerDown`) ;
   // un glisser qui finit sur un autre onglet l'ouvre au relâchement, à la place du premier.
-  const { moved: lensMoved } = useLiquidLens({
-    barRef,
-    lensRef,
-    active,
-    relayout: short,
-    onDragSelect: (key, navigatedOnDown) => {
-      handledAt.current = Date.now();
-      openPanel(key as PlayerPanel, routeRef.current, navigatedOnDown ? "replace" : "push");
-    },
-  });
+  const onDragSelect = (key: string, navigatedOnDown: boolean) => {
+    handledAt.current = Date.now();
+    openPanel(key as PlayerPanel, routeRef.current, navigatedOnDown ? "replace" : "push");
+  };
 
   return (
     <nav
@@ -135,19 +127,8 @@ export function PlayerBottomBar() {
         visibility: away ? "hidden" : "visible",
       }}
     >
-      <div
-        ref={barRef}
-        // Le verre liquide, et non plus le fond franc de `player-bar` : essayé sur la page « Tests
-        // animations » au-dessus d'une liste qui défile, il est resté fluide sur iPhone — choisi le
-        // 04/10/2026. `pan-y` : un défilement vertical commencé sur la barre fait toujours défiler la
-        // page ; le glisser horizontal est à la lentille.
-        className={`nav-glass relative ${interactive ? "pointer-events-auto" : "pointer-events-none"} flex items-center gap-1 rounded-full ${
-          short ? "px-1.5 py-1" : "px-2 py-1.5"
-        }`}
-        style={{ touchAction: "pan-y" }}
-      >
-        <span ref={lensRef} className="nav-lens" aria-hidden />
-        {PLAYER_NAV.map(({ panel, labelKey, icon: Icon }) => {
+      <LiquidNavPill active={active} onDragSelect={onDragSelect} compact={short} interactive={interactive}>
+        {({ moved: lensMoved }) => PLAYER_NAV.map(({ panel, labelKey, icon: Icon }) => {
           const on = active === panel;
           return (
             <button
@@ -201,23 +182,17 @@ export function PlayerBottomBar() {
               data-nav-item
               data-panel={panel}
               data-lens={panel}
-              /* `player-tab` porte la transition des couleurs *et* du geste : la classe utilitaire
-                 de Tailwind ne décrivait que la couleur, et les deux écriraient `transition`. */
-              className={`player-tab relative flex flex-col items-center justify-center rounded-full ${
-                short ? "h-11 w-14 gap-0" : "h-14 w-16 gap-0.5"
-              } ${on ? "text-white" : "text-subtle active:text-muted"}`}
+              className={liquidTabClass({ compact: short, on })}
             >
               <span className="relative">
                 <Icon size={short ? 19 : 20} strokeWidth={on ? 2.4 : 1.8} />
                 {panel === "account" && badge.any && <NavDot />}
               </span>
-              {/* Sur un écran court, le nom n'est plus affiché mais reste dit : sans lui, le bouton
-                  n'avait aucun nom pour un lecteur d'écran (relu le 24/09/2026). */}
-              <span className={short ? "sr-only" : `text-[10px] ${on ? "font-semibold" : "font-medium"}`}>{t(labelKey)}</span>
+              <LiquidTabLabel compact={short} on={on}>{t(labelKey)}</LiquidTabLabel>
             </button>
           );
         })}
-      </div>
+      </LiquidNavPill>
     </nav>
   );
 }

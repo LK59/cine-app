@@ -27,7 +27,7 @@ const ROOTS = [
   "src/components/reports",
   ...[
     "ActionSheet", "ActorModal", "CapabilityStatus", "Collapsible", "CollectionModal", "DetailSkeleton",
-    "FileTrackChips", "GlobalSearch", "KeyboardShortcutsModal", "MediaCard", "MediaInfoModal", "MediaRatings",
+    "FileTrackChips", "GlobalSearch", "KeyboardShortcutsModal", "LiquidNavPill", "MediaCard", "MediaInfoModal", "MediaRatings",
     "MobileNav", "Modal", "MoreMenu", "PageHeader", "PosterCard", "PosterImage", "Rail", "ReleaseSearchModal",
     "RequestFlowModal", "ServiceNotConfigured", "Sidebar", "SimilarMedia", "SkeletonCard", "StateViews",
     "SubtitleSearchModal", "Toggle", "TorrentDetailModal", "TrailerModal", "WatchlistButton",
@@ -69,8 +69,10 @@ describe("le texte a trois niveaux", () => {
   // 10 px se lit mal sur un téléphone tenu à bout de bras. La barre du bas est la seule
   // exception : ses mots sont posés sous des pictogrammes, à la taille des barres d'onglets du
   // système, et une ligne de plus lui coûterait sa place.
+  // Depuis le 13/10/2026, ces libellés sont écrits une fois, dans la pilule partagée par le cinéma
+  // et la gestion (`LiquidNavPill`).
   it("rien sous 11 px, hors les libellés de la barre du bas", () => {
-    expect(offenders(/text-\[(\d|10)px\]/g, (path) => path.endsWith("PlayerBottomBar.tsx"))).toEqual([]);
+    expect(offenders(/text-\[(\d|10)px\]/g, (path) => path.endsWith("LiquidNavPill.tsx"))).toEqual([]);
   });
 });
 

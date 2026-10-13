@@ -8,6 +8,9 @@ vi.mock("@/lib/signOut", () => ({ signOut: vi.fn() }));
 vi.mock("@/lib/leaveCinema", () => ({ enterCinema: vi.fn() }));
 vi.mock("@/lib/prefetch", () => ({ prefetchRoute: vi.fn() }));
 vi.mock("@/lib/pwaRefresh", () => ({ hardRefreshApp: vi.fn() }));
+// La pilule partagée avec le cinéma se resserre couchée (`useIsShortViewport`) ; jsdom n'a pas de
+// `matchMedia`.
+vi.mock("@/lib/useIsMobile", () => ({ useIsShortViewport: () => false }));
 
 import { MobileNav } from "@/components/MobileNav";
 
