@@ -1628,6 +1628,7 @@
     "quit": "Verlassen",
     "offline": "Du bist offline",
     "stillLoading": "Wird noch geladen, Player nicht schließen…",
+    "compatPrep": "Eine mit diesem Gerät kompatible Version wird vorbereitet…",
     "reconnecting": "Verbindung wird wiederhergestellt…",
     "loadingTooLong": "Das dauert zu lange. Versuch's erneut.",
     "slowLink": {

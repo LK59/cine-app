@@ -314,3 +314,17 @@ describe("après le rechargement direct WebKit", () => {
     expect(sectionNamed(data, "player.info.sections.fileOriginal")).toBeDefined();
   }, 15_000);
 });
+
+// Un fichier que l'appareil ne sait pas lire : le serveur le réencode, et le chargement dit pourquoi
+// il est plus long (13/10/2026 — un téléphone Android refermait au bout de quatre secondes muettes).
+describe("relais pour un fichier que l'appareil ne lit pas", () => {
+  it("« Préparation d'une version compatible… » dès le chargement, puis plus rien une fois l'image là", async () => {
+    page({ itemId: "film", title: "Film", resumeAt: 0 });
+    await waitFor(() => expect(native.onFallback).not.toBeNull());
+    act(() => native.onFallback!("Aucun chemin de lecture disponible pour ce fichier. remux : Vidéo non prise en charge par ce navigateur : video/mp4; codecs=\"hvc1.2.4.L150.90\""));
+    await waitFor(() => expect(document.body.textContent).toContain("player.compatPrep"), { timeout: 6000 });
+    const video = document.querySelector("video")!;
+    act(() => void video.dispatchEvent(new Event("loadeddata")));
+    await waitFor(() => expect(document.body.textContent).not.toContain("player.compatPrep"));
+  }, 15_000);
+});

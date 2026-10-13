@@ -1628,6 +1628,7 @@
     "quit": "Quit",
     "offline": "You're offline",
     "stillLoading": "Still loading, don't close the player…",
+    "compatPrep": "Preparing a version this device can play…",
     "reconnecting": "Reconnecting…",
     "loadingTooLong": "This is taking too long. Try again.",
     "slowLink": {

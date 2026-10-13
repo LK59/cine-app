@@ -1628,6 +1628,7 @@
     "quit": "Salir",
     "offline": "Estás sin conexión",
     "stillLoading": "Sigue cargando, no cierres el reproductor…",
+    "compatPrep": "Preparando una versión compatible con este dispositivo…",
     "reconnecting": "Reconectando…",
     "loadingTooLong": "Esto está tardando demasiado. Inténtalo de nuevo.",
     "slowLink": {

@@ -1628,6 +1628,7 @@
     "quit": "Quitter",
     "offline": "Vous êtes hors ligne",
     "stillLoading": "Le chargement est toujours en cours, ne fermez pas le lecteur…",
+    "compatPrep": "Préparation d'une version compatible avec cet appareil…",
     "reconnecting": "Reconnexion…",
     "loadingTooLong": "Le chargement prend trop de temps. Réessaie.",
     "slowLink": {

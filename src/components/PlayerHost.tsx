@@ -954,6 +954,14 @@ function ActivePlayer({
   useWakeLock(playing);
   const [externalSubtitleTracks, setExternalSubtitleTracks] = useState<ExternalSubtitleTrack[]>([]);
   const [playbackInfo, setPlaybackInfo] = useState<PlaybackInfoSummary | null>(null);
+  /**
+   * Le lecteur natif a passé la main parce que l'appareil ne sait pas lire ce fichier, et le serveur
+   * le réencode : la première image demande une ou deux secondes de plus (13/10/2026 — un téléphone
+   * Android devant un HEVC 4K 10 bits refermait le lecteur au bout de quatre secondes de roue muette).
+   * Dit dès le début du chargement, pas après le délai de « toujours en cours ». Ni la version allégée
+   * (elle a ses propres mots), ni une diffusion.
+   */
+  const compatPrep = loading && !!fallbackReason && !lighterStep && !castSession && playbackInfo?.playMethod === "Transcode";
   const [showPlaybackInfo, setShowPlaybackInfo] = useState(false);
   // Le lien en direct dans le panneau technique (§77), lu seulement quand il est ouvert.
   useEffect(() => {
@@ -3071,7 +3079,7 @@ function ActivePlayer({
           {/* Sous l'ouverture, la pastille n'a pas de place : posée à mi-écran, elle tombait sur la
               ligne de chargement (iPhone de Louis, 10/10/2026). L'ouverture dit le même mot, sous sa
               ligne — voir `note` ci-dessous. */}
-          {!error && !isMini && !introCovering && (isOffline || reconnecting || (loading && loadingLong) || seekSignal?.hint) && (
+          {!error && !isMini && !introCovering && (isOffline || reconnecting || (loading && loadingLong) || seekSignal?.hint || compatPrep) && (
             <div
               className="pointer-events-none absolute inset-x-0 z-30 flex justify-center px-6"
               style={{ top: "calc(50% + 2.5rem)" }}
@@ -3081,6 +3089,8 @@ function ActivePlayer({
                   ? t('player.offline')
                   : seekSignal?.hint
                     ? t("player.slowLink.hint")
+                    : compatPrep
+                    ? t("player.compatPrep")
                     : loadingLong
                     ? t('player.stillLoading')
                     : hlsJs
@@ -3126,6 +3136,8 @@ function ActivePlayer({
               ? t("player.slowLink.unstable")
               : loading && linkSignal.hint
               ? t("player.slowLink.hint")
+              : compatPrep
+              ? t("player.compatPrep")
               : loading && loadingLong
                 ? t("player.stillLoading")
                 : reconnecting
