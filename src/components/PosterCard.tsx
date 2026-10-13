@@ -189,7 +189,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
     <>
       <div className={`group relative flex flex-col select-none touch-manipulation ${carousel ? "w-24 shrink-0" : ""}`}>
         <div
-          className={`relative aspect-2/3 overflow-hidden bg-slate-800 cursor-pointer ${carousel ? "rounded-lg" : "rounded-xl"}`}
+          className={`relative aspect-2/3 overflow-hidden bg-white/10 cursor-pointer ${carousel ? "rounded-lg" : "rounded-xl"}`}
           onClick={handlePosterClick}
         >
           {item.posterUrl ? (
@@ -201,18 +201,18 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
               loading="lazy"
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-slate-600">
+            <div className="flex h-full items-center justify-center text-subtle">
               {mediaType === "movie" ? <Film size={carousel ? 28 : 40} /> : <Tv size={carousel ? 28 : 40} />}
             </div>
           )}
 
           {item.inLibrary && (
-            <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
+            <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-success/90 px-1.5 py-0.5 text-[11px] font-bold text-white">
               <BookCheck size={8} /> {t("recommendations.available")}
             </div>
           )}
           {!item.inLibrary && item.pending && (
-            <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
+            <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-warning/90 px-1.5 py-0.5 text-[11px] font-bold text-white">
               <Clock size={8} /> {t("discover.pending")}
             </div>
           )}
@@ -222,7 +222,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
               disparu, c'est son flou d'arrière-plan — recalculé par carte et par image pendant le
               défilement, pour un fond déjà opaque aux trois quarts. */}
           {item.rating > 0 && (
-            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/75 px-1.5 py-0.5 text-[9px] font-bold text-amber-400">
+            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/75 px-1.5 py-0.5 text-[11px] font-bold text-warning">
               <Star size={7} className="fill-current" /> {item.rating.toFixed(1)}
             </div>
           )}
@@ -247,7 +247,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
               title={t("common.moreOptions")}
               style={{ height: btnSize, width: btnSize }}
               className={`btn btn-icon p-0 ${
-                addedStatus ? `${LIST_META.bgSolid} text-white` : "bg-white/15 text-white/80 hover:bg-white/25"
+                addedStatus ? `${LIST_META.bgSolid} text-white` : "bg-white/15 text-white hover:bg-white/25"
               }`}
             >
               {addedStatus ? (
@@ -262,7 +262,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
                 <Link
                   href={item.libraryHref}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[10px] font-medium text-white hover:bg-white/25 transition-colors"
+                  className="flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[11px] font-medium text-white hover:bg-white/25 transition-colors"
                 >
                   <ExternalLink size={9} /> {t("recommendations.viewSheet")}
                 </Link>
@@ -270,7 +270,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
                 <button
                   onClick={(e) => { e.stopPropagation(); setRequestModalOpen(true); }}
                   disabled={requested || item.pending}
-                  className={`btn btn-ghost btn-sm px-2 py-1 text-[10px] ${requested || item.pending ? "btn-on" : ""}`}
+                  className={`btn btn-ghost btn-sm px-2 py-1 text-[11px] ${requested || item.pending ? "btn-on" : ""}`}
                 >
                   <CirclePlus size={9} />
                   {requested || item.pending ? t("recommendations.requested") : t("recommendations.request")}
@@ -303,8 +303,8 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
         </div>
 
         <div className={carousel ? "mt-1" : "mt-1.5 px-0.5"}>
-          <p className="truncate text-[11px] font-medium text-slate-400 group-hover:text-slate-200 transition-colors">{item.title}</p>
-          {item.year && <p className="text-[10px] text-slate-600">{item.year}</p>}
+          <p className="truncate text-[11px] font-medium text-muted group-hover:text-white transition-colors">{item.title}</p>
+          {item.year && <p className="text-[11px] text-subtle">{item.year}</p>}
         </div>
       </div>
 

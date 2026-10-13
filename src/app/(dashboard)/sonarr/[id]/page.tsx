@@ -487,18 +487,18 @@ export default function SonarrSeriesDetailPage() {
             />
             <div className="flex flex-wrap items-center gap-2">
               {info?.imdbRating && (
-                <span className="flex items-center gap-1 rounded-sm bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400">
+                <span className="flex items-center gap-1 rounded-sm bg-warning/20 px-2 py-0.5 text-xs font-semibold text-warning">
                   <Star size={11} className="fill-current" /> {info.imdbRating}
                 </span>
               )}
               {info?.tmdb?.runtime && (
-                <span className="text-xs text-white/60">{t('sonarr.minPerEp', { n: info.tmdb.runtime })}</span>
+                <span className="text-xs text-muted">{t('sonarr.minPerEp', { n: info.tmdb.runtime })}</span>
               )}
               {info?.tmdb?.genres.slice(0, 3).map((g) => (
-                <span key={g} className="badge bg-white/10 text-white/70 backdrop-blur-xs">{g}</span>
+                <span key={g} className="badge bg-white/10 text-muted backdrop-blur-xs">{g}</span>
               ))}
               {jfItem && (
-                <span className={`badge ${isWatched ? "bg-emerald-500/25 text-emerald-300" : "bg-white/10 text-white/60"}`}>
+                <span className={`badge ${isWatched ? "bg-success/25 text-success" : "bg-white/10 text-muted"}`}>
                   {isWatched ? t('sonarr.seriesWatched') : t('sonarr.seriesNotWatched')}
                 </span>
               )}
@@ -541,7 +541,7 @@ export default function SonarrSeriesDetailPage() {
         )}
         {!isReadOnly && jfItem && (
           <button
-            className={`btn-ghost px-3 ${isWatched ? "text-emerald-400" : "text-slate-400"}`}
+            className={`btn-ghost px-3 ${isWatched ? "text-success" : "text-muted"}`}
             onClick={toggleWatched}
             disabled={togglingWatched}
           >
@@ -604,7 +604,7 @@ export default function SonarrSeriesDetailPage() {
           <button
             key={tab}
             onClick={() => { setActiveTab(tab); haptic(30); }}
-            className={`btn btn-sm flex-1 justify-center capitalize ${activeTab === tab ? "btn-on" : "text-slate-500"}`}
+            className={`btn btn-sm flex-1 justify-center capitalize ${activeTab === tab ? "btn-on" : "text-subtle"}`}
             aria-pressed={activeTab === tab}
           >
             {tab === "infos" ? t('sonarr.tabInfos') : tab === "casting" ? t('sonarr.tabCasting') : t('sonarr.tabSeasons')}
@@ -615,14 +615,14 @@ export default function SonarrSeriesDetailPage() {
       {/* ── Tagline + Overview ──────────────────────────────────── */}
       <div className={activeTab !== "infos" ? "hidden md:block" : ""}>
       {info?.tmdb?.tagline && (
-        <p className="mb-2 text-sm italic text-slate-500">{info.tmdb.tagline}</p>
+        <p className="mb-2 text-sm italic text-subtle">{info.tmdb.tagline}</p>
       )}
-      {overview && <p className="mb-4 max-w-2xl text-sm text-slate-400">{overview}</p>}
+      {overview && <p className="mb-4 max-w-2xl text-sm text-muted">{overview}</p>}
       <ErrorBoundary name="notes"><MediaRatings imdbId={series.imdbId} /></ErrorBoundary>
 
       {/* ── Settings card ──────────────────────────────────────── */}
       {isReadOnly ? (
-        <div className="card mb-6 flex flex-wrap items-center gap-4 p-4 text-sm text-slate-300">
+        <div className="card mb-6 flex flex-wrap items-center gap-4 p-4 text-sm text-muted">
           <span className="badge bg-white/5">{series.monitored ? t('common.monitored') : t('common.notMonitored')}</span>
           {meta?.qualityProfiles?.find((p) => p.id === series.qualityProfileId) && (
             <span className="badge bg-white/5">
@@ -637,7 +637,7 @@ export default function SonarrSeriesDetailPage() {
             onChange={(value) => saveSeries({ monitored: value })}
             label={t('common.monitored')}
           />
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label className="flex items-center gap-2 text-sm text-muted">
             {t('common.qualityProfile')}
             <select
               className="select"
@@ -657,7 +657,7 @@ export default function SonarrSeriesDetailPage() {
           <button
             onClick={() => setShowDeleteConfirm(true)}
             disabled={deletingFromSonarr}
-            className="btn btn-ghost btn-sm ml-auto text-red-400/80"
+            className="btn btn-ghost btn-sm ml-auto text-danger/80"
           >
             <Trash2 size={12} /> {t('sonarr.deleteFromSonarr')}
           </button>
@@ -679,14 +679,14 @@ export default function SonarrSeriesDetailPage() {
                   className="w-20 shrink-0 snap-start text-center touch-manipulation"
                   onClick={() => setSelectedActor({ tmdbId: actor.tmdbId, name: actor.name, photoUrl: actor.photoUrl })}
                 >
-                  <div className="mb-1.5 aspect-square overflow-hidden rounded-full bg-slate-800 transition-shadow ring-0 hover:ring-2 hover:ring-accent-500">
+                  <div className="mb-1.5 aspect-square overflow-hidden rounded-full bg-white/10 transition-shadow ring-0 hover:ring-2 hover:ring-accent-500">
                     {actor.photoUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={actor.photoUrl} alt={actor.name} className="h-full w-full object-cover" />
                     )}
                   </div>
-                  <p className="truncate text-xs text-slate-300">{actor.name}</p>
-                  <p className="truncate text-[11px] text-slate-500">{actor.character}</p>
+                  <p className="truncate text-xs text-muted">{actor.name}</p>
+                  <p className="truncate text-[11px] text-subtle">{actor.character}</p>
                 </button>
               );
             })}
@@ -725,7 +725,7 @@ export default function SonarrSeriesDetailPage() {
                     <div className="flex items-center gap-2 text-sm text-white">
                       {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                       {seasonNumber === 0 ? t('sonarr.seasonSpecial') : t('sonarr.seasonLabel', { n: String(seasonNumber) })}
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-subtle">
                         {t('sonarr.episodesCount', { file: String(fileCount), total: String(seasonEpisodes.length) })}
                       </span>
                     </div>
@@ -793,26 +793,26 @@ export default function SonarrSeriesDetailPage() {
                                     ep.monitored ? (
                                       <CircleCheck size={16} className="text-accent-400" />
                                     ) : (
-                                      <Circle size={16} className="text-slate-600" />
+                                      <Circle size={16} className="text-subtle" />
                                     )
                                   ) : (
                                     <button onClick={() => toggleEpisodeMonitored(ep, !ep.monitored)}>
                                       {ep.monitored ? (
                                         <CircleCheck size={16} className="text-accent-400" />
                                       ) : (
-                                        <Circle size={16} className="text-slate-600" />
+                                        <Circle size={16} className="text-subtle" />
                                       )}
                                     </button>
                                   )}
-                                  <span className="shrink-0 text-slate-500">{ep.episodeNumber}.</span>
-                                  <span className="truncate text-slate-200">{ep.title}</span>
+                                  <span className="shrink-0 text-subtle">{ep.episodeNumber}.</span>
+                                  <span className="truncate text-white">{ep.title}</span>
                                 </div>
                                 {/* Langues, date et état réunis en une seule mention discrète.
                                     Chacun était un objet séparé — deux puces bordées, une date,
                                     un point — soit neuf choses par ligne et dix lignes par
                                     saison. Ce sont des informations qu'on lit *après* le titre,
                                     et elles doivent en avoir l'air. */}
-                                <div className="flex shrink-0 items-center gap-2 text-xs text-slate-500">
+                                <div className="flex shrink-0 items-center gap-2 text-xs text-subtle">
                                   {subs?.subtitles?.length ? (
                                     <span className="hidden sm:inline">
                                       {subs.subtitles.map((x) => x.name).join(" · ")}
@@ -840,7 +840,7 @@ export default function SonarrSeriesDetailPage() {
                                          l'œil ne sait plus où aller. Elle reste visible en
                                          permanence — la cacher au survol la rendrait
                                          introuvable au doigt. */
-                                      className="btn btn-ghost btn-icon text-accent-300"
+                                      className="btn btn-ghost btn-icon text-accent-400"
                                       getNextEpisode={getNextEpisode}
                                     />
                                   )}
@@ -869,7 +869,7 @@ export default function SonarrSeriesDetailPage() {
                             {(download || subs?.subtitles?.length) && (
                               <div className="ml-6 flex flex-wrap items-center gap-2 text-[11px]">
                                 {subs?.subtitles?.length ? (
-                                  <span className="text-slate-500 sm:hidden">
+                                  <span className="text-subtle sm:hidden">
                                     <Captions size={10} className="mr-1 inline" />
                                     {subs.subtitles.map((x) => x.name).join(" · ")}
                                   </span>
@@ -907,13 +907,13 @@ export default function SonarrSeriesDetailPage() {
 
       {showDeleteConfirm && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="w-full max-w-xs rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-xs rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <p className="text-sm font-semibold text-white">{t('sonarr.confirmDeleteSonarr')}</p>
-            <p className="mt-1.5 text-xs text-slate-400">
+            <p className="mt-1.5 text-xs text-muted">
               {t('sonarr.confirmDeleteBody', { title: series.title })}
             </p>
             <div className="mt-4 flex gap-2">
-              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-muted hover:text-white transition-colors">
                 {t('common.cancel')}
               </button>
               <button
@@ -934,10 +934,10 @@ export default function SonarrSeriesDetailPage() {
 }
 
 const JS_STATUS_CLS: Record<number, string> = {
-  2: "bg-amber-500/20 text-amber-400",
+  2: "bg-warning/20 text-warning",
   3: "bg-blue-500/20 text-blue-400",
   4: "bg-sky-500/20 text-sky-400",
-  5: "bg-emerald-500/20 text-emerald-400",
+  5: "bg-success/20 text-success",
 };
 
 function JellyseerrBadge({ status }: { status: number }) {

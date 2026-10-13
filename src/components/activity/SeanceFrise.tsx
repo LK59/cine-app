@@ -35,7 +35,7 @@ export function SeanceFrise({ lines, start, runtime }: { lines: Record<string, u
     <figure className="space-y-2">
       <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2">
         {/* L'axe des positions, en HTML : du texte dans un SVG étiré se déformerait. */}
-        <div className="flex h-44 flex-col justify-between py-0.5 text-right font-mono text-[10px] text-slate-500 sm:h-52">
+        <div className="flex h-44 flex-col justify-between py-0.5 text-right font-mono text-[11px] text-subtle sm:h-52">
           <span>{clock(m.top)}</span>
           <span>{clock(m.top / 2)}</span>
           <span>0:00</span>
@@ -83,12 +83,12 @@ export function SeanceFrise({ lines, start, runtime }: { lines: Record<string, u
           ))}
         </div>
       </div>
-      <div className="flex justify-between pl-14 font-mono text-[10px] text-slate-500">
+      <div className="flex justify-between pl-14 font-mono text-[11px] text-subtle">
         <span>+0:00</span>
         <span>+{clock(m.duration / 2000)}</span>
         <span>+{clock(m.duration / 1000)}</span>
       </div>
-      <figcaption className="flex flex-wrap gap-x-4 gap-y-1 pl-14 text-[11px] text-slate-400">
+      <figcaption className="flex flex-wrap gap-x-4 gap-y-1 pl-14 text-[11px] text-muted">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-0.5 w-4 bg-accent-500" />
           {t("activity.frise.legend.play")}
@@ -101,13 +101,13 @@ export function SeanceFrise({ lines, start, runtime }: { lines: Record<string, u
         )}
         {m.bands.some((b) => b.kind === "wait") && (
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-3 rounded-sm bg-amber-500/40" />
+            <span className="h-2.5 w-3 rounded-sm bg-warning/40" />
             {t("activity.frise.legend.wait")}
           </span>
         )}
         {hasBackground && (
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-3 rounded-sm bg-slate-500/50" />
+            <span className="h-2.5 w-3 rounded-sm bg-white/5" />
             {t("activity.frise.legend.background")}
           </span>
         )}

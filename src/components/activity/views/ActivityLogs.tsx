@@ -50,28 +50,28 @@ function LogLine({ item, source }: { item: LogPage["items"][number]; source: str
         onClick={toggle}
         className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 px-4 py-2 text-left hover:bg-white/[0.03] sm:grid-cols-[auto_7.5rem_6rem_minmax(0,1fr)]"
       >
-        {open ? <ChevronDown size={14} className="mt-0.5 shrink-0 text-slate-500" /> : <ChevronRight size={14} className="mt-0.5 shrink-0 text-slate-500" />}
+        {open ? <ChevronDown size={14} className="mt-0.5 shrink-0 text-subtle" /> : <ChevronRight size={14} className="mt-0.5 shrink-0 text-subtle" />}
         <span className="flex items-center gap-2 sm:contents">
-          <span className="whitespace-nowrap font-mono text-[11px] text-slate-500">{fullDate(item._t)}</span>
-          <span className={`truncate rounded px-1.5 py-0.5 text-center font-mono text-[10px] sm:w-24 ${kindTone(kind, item.level)}`}>{kind}</span>
+          <span className="whitespace-nowrap font-mono text-[11px] text-subtle">{fullDate(item._t)}</span>
+          <span className={`truncate rounded px-1.5 py-0.5 text-center font-mono text-[11px] sm:w-24 ${kindTone(kind, item.level)}`}>{kind}</span>
         </span>
         <span className="col-start-2 min-w-0 text-sm sm:col-start-auto">
           <span className="flex flex-wrap items-baseline gap-x-2">
-            {typeof item.user === "string" && <span className="font-medium text-accent-300">{item.user}</span>}
-            {typeof item.title === "string" && <span className="truncate text-slate-200">{item.title}</span>}
+            {typeof item.user === "string" && <span className="font-medium text-accent-400">{item.user}</span>}
+            {typeof item.title === "string" && <span className="truncate text-white">{item.title}</span>}
           </span>
-          {summary && <span className="block break-words text-xs text-slate-400">{summary}</span>}
+          {summary && <span className="block break-words text-xs text-muted">{summary}</span>}
         </span>
       </button>
       {open && (
         <div className="space-y-2 px-4 pb-3 sm:pl-11">
           {typeof item.session === "string" && source === "player" && (
-            <ActivityLink to={{ kind: "seance", id: item.session }} className="inline-flex items-center gap-1.5 text-xs text-accent-300 hover:underline">
+            <ActivityLink to={{ kind: "seance", id: item.session }} className="inline-flex items-center gap-1.5 text-xs text-accent-400 hover:underline">
               <Clapperboard size={13} />
               {t("activity.logs.openSeance")}
             </ActivityLink>
           )}
-          {missing && <p className="text-xs text-amber-300">{t("activity.logs.rotated")}</p>}
+          {missing && <p className="text-xs text-warning">{t("activity.logs.rotated")}</p>}
           {typeof steps === "string" && <Steps text={steps} />}
           {typeof stack === "string" && <Steps text={stack} />}
           <JsonBlock value={Object.fromEntries(Object.entries(rest).filter(([k]) => !k.startsWith("_")))} />
@@ -112,7 +112,7 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
 
   return (
     <div className="space-y-4">
-      {first && <p className="text-sm text-slate-400">{t("activity.logs.subtitle", { n: first.generations })}</p>}
+      {first && <p className="text-sm text-muted">{t("activity.logs.subtitle", { n: first.generations })}</p>}
 
       <div className="card space-y-3 p-3">
         <div className="flex flex-wrap gap-1">
@@ -126,7 +126,7 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
                 setUser("");
                 setSession("");
               }}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${source === key ? "bg-accent-500/20 text-accent-200" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${source === key ? "bg-accent-500/20 text-accent-100" : "text-muted hover:bg-white/5 hover:text-white"}`}
             >
               {t(`activity.logs.sources.${key}`)}
             </button>
@@ -169,7 +169,7 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
             </button>
           </form>
           {session && (
-            <button type="button" onClick={() => setSession("")} className="rounded bg-accent-500/15 px-2 py-1 text-xs text-accent-200">
+            <button type="button" onClick={() => setSession("")} className="rounded bg-accent-500/15 px-2 py-1 text-xs text-accent-100">
               {t("activity.logs.sessionFilter", { id: session })} ×
             </button>
           )}
@@ -192,7 +192,7 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
               ))}
             </ul>
           ) : (
-            <p className="px-4 py-6 text-center text-sm text-slate-500">{t("activity.logs.empty")}</p>
+            <p className="px-4 py-6 text-center text-sm text-subtle">{t("activity.logs.empty")}</p>
           )}
           {more && (
             <div className="p-3 text-center">
@@ -203,7 +203,7 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
           )}
         </section>
       ) : (
-        <p className="card px-4 py-10 text-center text-sm text-slate-500">{t("activity.logs.empty")}</p>
+        <p className="card px-4 py-10 text-center text-sm text-subtle">{t("activity.logs.empty")}</p>
       )}
     </div>
   );

@@ -77,9 +77,9 @@ export function fullDate(ts: number | null | undefined): string {
 }
 
 const STATE_STYLES = {
-  playing: { dot: "bg-emerald-400", ring: "shadow-[0_0_0_3px_rgba(52,211,153,0.25)]", text: "text-emerald-300" },
+  playing: { dot: "bg-emerald-400", ring: "shadow-[0_0_0_3px_rgba(52,211,153,0.25)]", text: "text-success" },
   app: { dot: "bg-sky-400", ring: "shadow-[0_0_0_3px_rgba(56,189,248,0.2)]", text: "text-sky-300" },
-  away: { dot: "bg-slate-600", ring: "", text: "text-slate-400" },
+  away: { dot: "bg-white/20", ring: "", text: "text-muted" },
 } as const;
 
 /** L'état en une pastille : en lecture, dans l'application, ou absent depuis… */
@@ -145,15 +145,15 @@ export function Tile({
   hint?: React.ReactNode;
   tone?: "default" | "good" | "warn" | "bad";
 }) {
-  const toneClass = { default: "text-white", good: "text-emerald-300", warn: "text-amber-300", bad: "text-rose-300" }[tone];
+  const toneClass = { default: "text-white", good: "text-success", warn: "text-warning", bad: "text-danger" }[tone];
   return (
     <div className="card flex flex-col gap-1 p-4">
-      <span className="flex items-center gap-1.5 text-xs text-slate-400">
+      <span className="flex items-center gap-1.5 text-xs text-muted">
         <Icon size={13} />
         {label}
       </span>
       <span className={`text-2xl font-semibold tabular-nums ${toneClass}`}>{value}</span>
-      {hint && <span className="text-xs text-slate-500">{hint}</span>}
+      {hint && <span className="text-xs text-subtle">{hint}</span>}
     </div>
   );
 }
@@ -176,7 +176,7 @@ export function Panel({
     <section className={`card overflow-hidden ${className}`}>
       <header className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
-          {Icon && <Icon size={15} className="text-slate-400" />}
+          {Icon && <Icon size={15} className="text-muted" />}
           {title}
         </h2>
         {action}
@@ -190,7 +190,7 @@ export function Panel({
 export function Poster({ itemId, tag, kind, className = "h-14 w-10" }: { itemId: string | null; tag?: string | null; kind?: string; className?: string }) {
   if (!itemId) {
     return (
-      <span className={`flex shrink-0 items-center justify-center rounded bg-white/5 text-slate-600 ${className}`}>
+      <span className={`flex shrink-0 items-center justify-center rounded bg-white/5 text-subtle ${className}`}>
         {kind === "episode" ? <Tv size={14} /> : <Film size={14} />}
       </span>
     );
@@ -214,32 +214,32 @@ export function Progress({ position, runtime }: { position: number | null; runti
 export function SeanceFlags({ s }: { s: Seance }) {
   const t = useT();
   const flags: { label: string; tone: string }[] = [];
-  if (s.fallbacks) flags.push({ label: t("activity.flags.fallback", { n: s.fallbacks }), tone: "bg-rose-500/15 text-rose-300" });
-  if (s.errors) flags.push({ label: t("activity.flags.error", { n: s.errors }), tone: "bg-rose-500/15 text-rose-300" });
-  if (s.rebuilds) flags.push({ label: t("activity.flags.rebuild", { n: s.rebuilds }), tone: "bg-amber-500/15 text-amber-300" });
-  if (s.stalls) flags.push({ label: t("activity.flags.stall", { n: s.stalls }), tone: "bg-amber-500/15 text-amber-300" });
-  if (s.slowSeeks) flags.push({ label: t("activity.flags.slowSeek", { n: s.slowSeeks }), tone: "bg-amber-500/15 text-amber-300" });
-  if (s.slowLinks) flags.push({ label: t("activity.flags.slowLink", { n: s.slowLinks }), tone: "bg-amber-500/15 text-amber-300" });
+  if (s.fallbacks) flags.push({ label: t("activity.flags.fallback", { n: s.fallbacks }), tone: "bg-danger/15 text-danger" });
+  if (s.errors) flags.push({ label: t("activity.flags.error", { n: s.errors }), tone: "bg-danger/15 text-danger" });
+  if (s.rebuilds) flags.push({ label: t("activity.flags.rebuild", { n: s.rebuilds }), tone: "bg-warning/15 text-warning" });
+  if (s.stalls) flags.push({ label: t("activity.flags.stall", { n: s.stalls }), tone: "bg-warning/15 text-warning" });
+  if (s.slowSeeks) flags.push({ label: t("activity.flags.slowSeek", { n: s.slowSeeks }), tone: "bg-warning/15 text-warning" });
+  if (s.slowLinks) flags.push({ label: t("activity.flags.slowLink", { n: s.slowLinks }), tone: "bg-warning/15 text-warning" });
   // Les relances du lecteur serveur : celles qui suivent une panne (échelle de repli) en ambre, les
   // gestes du spectateur (piste, « Réessayer ») en gris — l'une n'est pas l'autre (10/10/2026).
   const restarts = s.restarts ?? [];
   const failed = restarts.filter((r) => r.failure).length;
-  if (failed) flags.push({ label: t("activity.flags.ladder", { n: failed }), tone: "bg-amber-500/15 text-amber-300" });
-  if (restarts.length > failed) flags.push({ label: t("activity.flags.restart", { n: restarts.length - failed }), tone: "bg-slate-500/20 text-slate-300" });
+  if (failed) flags.push({ label: t("activity.flags.ladder", { n: failed }), tone: "bg-warning/15 text-warning" });
+  if (restarts.length > failed) flags.push({ label: t("activity.flags.restart", { n: restarts.length - failed }), tone: "bg-white/5 text-muted" });
   // Une reprise qui rejouait une tentative déjà échouée (DECISIONS §67) : en observation, le
   // registre la compte sans l'empêcher — c'est ce chiffre qui dira s'il faut l'activer.
-  if (s.stop?.identicalRetries) flags.push({ label: t("activity.flags.identicalRetry", { n: s.stop.identicalRetries }), tone: "bg-amber-500/15 text-amber-300" });
-  if (s.stop?.why === "lost") flags.push({ label: t("activity.flags.lost"), tone: "bg-slate-500/20 text-slate-300" });
+  if (s.stop?.identicalRetries) flags.push({ label: t("activity.flags.identicalRetry", { n: s.stop.identicalRetries }), tone: "bg-warning/15 text-warning" });
+  if (s.stop?.why === "lost") flags.push({ label: t("activity.flags.lost"), tone: "bg-white/5 text-muted" });
   if (s.player === "serveur") flags.push({ label: t("activity.flags.server"), tone: "bg-violet-500/15 text-violet-300" });
   if (s.onTv) flags.push({ label: t("activity.flags.tv"), tone: "bg-violet-500/15 text-violet-300" });
   // Le téléviseur nommé quand ce n'est pas AirPlay (DECISIONS.md §64) — absent des séances d'avant.
   if (s.onTv && s.castTarget === "chromecast") flags.push({ label: t("activity.flags.chromecast"), tone: "bg-violet-500/15 text-violet-300" });
-  if (s.serverRelay) flags.push({ label: t("activity.flags.serverRelay"), tone: "bg-slate-500/20 text-slate-300" });
+  if (s.serverRelay) flags.push({ label: t("activity.flags.serverRelay"), tone: "bg-white/5 text-muted" });
   if (!flags.length) return null;
   return (
     <span className="flex flex-wrap gap-1">
       {flags.map((f) => (
-        <span key={f.label} className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${f.tone}`}>
+        <span key={f.label} className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${f.tone}`}>
           {f.label}
         </span>
       ))}
@@ -259,10 +259,10 @@ export function SeanceRow({ s, now, showUser = false }: { s: Seance; now: number
       <Poster itemId={s.itemId} kind={s.title.includes(" — S") ? "episode" : "movie"} className="h-12 w-8" />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
-          {showUser && <span className="shrink-0 text-xs font-semibold text-accent-300">{s.user}</span>}
+          {showUser && <span className="shrink-0 text-xs font-semibold text-accent-400">{s.user}</span>}
           <span className="truncate text-sm text-white">{s.title}</span>
         </span>
-        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-subtle">
           <span title={fullDate(s.start)}>{ago(s.start, now, t)}</span>
           {s.device && (
             <span className="inline-flex items-center gap-1">
@@ -275,7 +275,7 @@ export function SeanceRow({ s, now, showUser = false }: { s: Seance; now: number
           <SeanceFlags s={s} />
         </span>
       </span>
-      <ChevronRight size={15} className="shrink-0 text-slate-600 transition-transform group-hover:translate-x-0.5" />
+      <ChevronRight size={15} className="shrink-0 text-subtle transition-transform group-hover:translate-x-0.5" />
     </ActivityLink>
   );
 }
@@ -287,13 +287,13 @@ export function DayBars({ days }: { days: { day: string; seances: number; proble
     <div className="flex h-28 items-end gap-2">
       {days.map((d) => (
         <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day} · ${d.seances} · ${d.problems}`}>
-          <span className="text-[10px] tabular-nums text-slate-500">{d.seances || ""}</span>
+          <span className="text-[11px] tabular-nums text-subtle">{d.seances || ""}</span>
           <div className="relative w-full overflow-hidden rounded-t bg-accent-500/70" style={{ height: `${Math.max(2, (d.seances / max) * 80)}px` }}>
             {d.problems > 0 && (
-              <div className="absolute inset-x-0 bottom-0 bg-amber-400/80" style={{ height: `${Math.min(100, (d.problems / Math.max(1, d.seances)) * 100)}%` }} />
+              <div className="absolute inset-x-0 bottom-0 bg-warning/80" style={{ height: `${Math.min(100, (d.problems / Math.max(1, d.seances)) * 100)}%` }} />
             )}
           </div>
-          <span className="text-[10px] text-slate-500">
+          <span className="text-[11px] text-subtle">
             {new Date(d.day + "T12:00:00").toLocaleDateString(uiLocale(), { weekday: "short" })}
           </span>
         </div>
@@ -305,7 +305,7 @@ export function DayBars({ days }: { days: { day: string; seances: number; proble
 /** Du JSON lisible, repliable — pour le détail d'une ligne de journal. */
 export function JsonBlock({ value }: { value: unknown }) {
   return (
-    <pre className="scrollbar-thin max-h-[60vh] overflow-auto rounded-lg bg-black/40 p-3 text-[11px] leading-relaxed text-slate-300">
+    <pre className="scrollbar-thin max-h-[60vh] overflow-auto rounded-lg bg-black/40 p-3 text-[11px] leading-relaxed text-muted">
       {JSON.stringify(value, null, 2)}
     </pre>
   );
@@ -318,9 +318,9 @@ export function Steps({ text }: { text: string }) {
   const shown = open ? steps : steps.slice(-6);
   const t = useT();
   return (
-    <div className="mt-2 rounded-lg bg-black/30 p-2 font-mono text-[11px] leading-relaxed text-slate-400">
+    <div className="mt-2 rounded-lg bg-black/30 p-2 font-mono text-[11px] leading-relaxed text-muted">
       {steps.length > 6 && (
-        <button type="button" onClick={() => setOpen((v) => !v)} className="mb-1 text-accent-300 hover:underline">
+        <button type="button" onClick={() => setOpen((v) => !v)} className="mb-1 text-accent-400 hover:underline">
           {open ? t("activity.logs.fewerSteps") : t("activity.logs.allSteps", { n: steps.length })}
         </button>
       )}
@@ -345,9 +345,9 @@ export function TimelineTable({ text }: { text: string }) {
   const cell = (v: number | null, digits = 1) => (v === null ? "—" : v.toFixed(digits));
   return (
     <div className="mt-2 overflow-x-auto rounded-lg bg-black/30 p-2">
-      <p className="mb-1 text-[11px] text-slate-500">{t("activity.seance.ring.title")}</p>
-      <table className="w-full font-mono text-[11px] text-slate-300">
-        <thead className="text-slate-500">
+      <p className="mb-1 text-[11px] text-subtle">{t("activity.seance.ring.title")}</p>
+      <table className="w-full font-mono text-[11px] text-muted">
+        <thead className="text-subtle">
           <tr>
             <th className="pr-3 text-left font-normal">{t("activity.seance.ring.wall")}</th>
             <th className="pr-3 text-left font-normal">{t("activity.seance.ring.pos")}</th>
@@ -359,7 +359,7 @@ export function TimelineTable({ text }: { text: string }) {
         </thead>
         <tbody>
           {samples.map((s, i) => (
-            <tr key={i} className={s.state === "A" ? "text-amber-300" : undefined}>
+            <tr key={i} className={s.state === "A" ? "text-warning" : undefined}>
               <td className="pr-3">+{clock(s.wall / 1000)}</td>
               <td className="pr-3">{clock(s.pos)}</td>
               <td className="pr-3 text-right">{cell(s.recvMbps)}</td>
@@ -377,7 +377,7 @@ export function TimelineTable({ text }: { text: string }) {
 /** Un signal d'alerte en tête d'une carte de compte. */
 export function AlertChip({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium text-rose-300">
+    <span className="inline-flex items-center gap-1 rounded bg-danger/15 px-1.5 py-0.5 text-[11px] font-medium text-danger">
       <AlertTriangle size={10} />
       {label}
     </span>
@@ -386,27 +386,27 @@ export function AlertChip({ label }: { label: string }) {
 
 /** La couleur d'un type de ligne : le vert de ce qui commence, le rouge de ce qui casse. */
 export function kindTone(kind: string, level?: unknown): string {
-  if (level === "error" && !["client", "admin"].includes(kind)) return "bg-rose-500/15 text-rose-300";
+  if (level === "error" && !["client", "admin"].includes(kind)) return "bg-danger/15 text-danger";
   switch (kind) {
     case "start":
-      return "bg-emerald-500/15 text-emerald-300";
+      return "bg-success/15 text-success";
     case "stop":
-      return "bg-slate-500/20 text-slate-300";
+      return "bg-white/5 text-muted";
     case "seek":
     case "audio":
       return "bg-sky-500/15 text-sky-300";
     case "stall":
     case "rebuild":
-      return "bg-amber-500/15 text-amber-300";
+      return "bg-warning/15 text-warning";
     case "fallback":
     case "error":
     case "client":
-      return "bg-rose-500/15 text-rose-300";
+      return "bg-danger/15 text-danger";
     case "admin":
     case "cast":
       return "bg-violet-500/15 text-violet-300";
     default:
-      return "bg-white/10 text-slate-300";
+      return "bg-white/10 text-muted";
   }
 }
 
@@ -482,7 +482,7 @@ export function kindDot(kind: string): string {
     case "start":
       return "bg-emerald-400";
     case "stop":
-      return "bg-slate-400";
+      return "bg-white/40";
     case "seek":
     case "audio":
       return "bg-sky-400";
@@ -525,7 +525,7 @@ export function ConfirmButton({ label, confirm, onConfirm, danger = false }: { l
       </button>
     </span>
   ) : (
-    <button type="button" onClick={() => setArmed(true)} className={`btn-ghost px-2.5 py-1 text-xs ${danger ? "text-rose-300" : ""}`}>
+    <button type="button" onClick={() => setArmed(true)} className={`btn-ghost px-2.5 py-1 text-xs ${danger ? "text-danger" : ""}`}>
       {label}
     </button>
   );

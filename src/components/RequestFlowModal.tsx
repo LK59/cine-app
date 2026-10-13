@@ -112,7 +112,7 @@ export function RequestFlowModal({
     return (
       <Modal title={t("modals.request.confirmTitle")} onClose={onClose}>
         <p className="mb-1 truncate text-sm text-white">{title}</p>
-        <p className="mb-4 text-xs text-slate-500">{t("modals.request.confirmBody")}</p>
+        <p className="mb-4 text-xs text-subtle">{t("modals.request.confirmBody")}</p>
         <div className="flex gap-2">
           <button
             onClick={onClose}
@@ -132,13 +132,13 @@ export function RequestFlowModal({
     <Modal title={title} onClose={onClose}>
       {isLoading && <LoadingState label={t("modals.request.loadingSeasons")} />}
       {error && <ErrorState message={t("modals.request.loadError")} />}
-      {data && seasons.length === 0 && <p className="text-sm text-slate-500">{t("modals.request.noSeasons")}</p>}
+      {data && seasons.length === 0 && <p className="text-sm text-subtle">{t("modals.request.noSeasons")}</p>}
       {data && seasons.length > 0 && missing.length === 0 && (
-        <p className="text-sm text-slate-500">{t("modals.request.allCovered")}</p>
+        <p className="text-sm text-subtle">{t("modals.request.allCovered")}</p>
       )}
       {missing.length > 0 && selected && (
         <>
-          <p className="mb-3 text-xs text-slate-500">{t("modals.request.pickSeasons")}</p>
+          <p className="mb-3 text-xs text-subtle">{t("modals.request.pickSeasons")}</p>
           <div className="scrollbar-thin max-h-[50vh] space-y-1.5 overflow-y-auto">
             {seasons.map((s) => {
               const covered = s.status !== null && COVERED_STATUSES.has(s.status);
@@ -146,10 +146,10 @@ export function RequestFlowModal({
               return covered ? (
                 <div
                   key={s.seasonNumber}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-sm text-slate-500"
+                  className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-sm text-subtle"
                 >
                   <span>
-                    {s.name} <span className="text-xs text-slate-600">({t("modals.request.episodeCount", { n: s.episodeCount })})</span>
+                    {s.name} <span className="text-xs text-subtle">({t("modals.request.episodeCount", { n: s.episodeCount })})</span>
                   </span>
                   <span className="text-xs">
                     {s.status === 5 ? t("common.available") : t("modals.request.alreadyRequested")}
@@ -166,7 +166,7 @@ export function RequestFlowModal({
                     onChange={() => toggleSeason(s.seasonNumber)}
                     className="accent-accent-500"
                   />
-                  {s.name} <span className="text-xs text-slate-500">({t("modals.request.episodeCount", { n: s.episodeCount })})</span>
+                  {s.name} <span className="text-xs text-subtle">({t("modals.request.episodeCount", { n: s.episodeCount })})</span>
                 </label>
               );
             })}

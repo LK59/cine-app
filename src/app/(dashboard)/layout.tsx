@@ -9,7 +9,8 @@ import { MainScroll } from "@/components/MainScroll";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="app-viewport flex overflow-hidden">
+    // `gestion-liquid` : les cartes de la gestion prennent le verre du cinéma (globals.css, §81).
+    <div className="app-viewport gestion-liquid flex overflow-hidden bg-ink">
       <Sidebar />
       <MainScroll className="scrollbar-thin flex-1 overflow-y-auto px-4 pb-24 pt-[calc(1rem+env(safe-area-inset-top))] sm:px-6 sm:pb-6 sm:pt-[calc(1.5rem+env(safe-area-inset-top))] md:px-8 [@media(max-height:500px)_and_(orientation:landscape)]:pb-16 [@media(max-height:500px)_and_(orientation:landscape)]:pt-3">
         <ScrollRestorer />

@@ -73,10 +73,10 @@ function AlertsClearControl({ clearedAt, now }: { clearedAt: number; now: number
   return (
     <div className="flex flex-wrap items-center gap-2">
       {clearedAt > 0 && (
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-subtle">
           {t("activity.alerts.clearedOn", { when: ago(clearedAt, now, t) })}
           {" · "}
-          <button type="button" onClick={() => void send("restore")} className="text-accent-300 hover:underline">
+          <button type="button" onClick={() => void send("restore")} className="text-accent-400 hover:underline">
             {t("activity.alerts.restore")}
           </button>
         </span>
@@ -104,7 +104,7 @@ function ReportsPanel({ now }: { now: number }) {
       icon={MessageSquareWarning}
       action={
         done.length > 0 && (
-          <button type="button" onClick={() => setShowDone((v) => !v)} className="text-xs text-accent-300 hover:underline">
+          <button type="button" onClick={() => setShowDone((v) => !v)} className="text-xs text-accent-400 hover:underline">
             {showDone ? t("activity.reports.showPending") : t("activity.reports.showDone", { n: done.length })}
           </button>
         )
@@ -117,7 +117,7 @@ function ReportsPanel({ now }: { now: number }) {
           ))}
         </div>
       ) : (
-        <p className="px-4 py-6 text-sm text-slate-500">{showDone ? t("activity.reports.noneDone") : t("activity.reports.none")}</p>
+        <p className="px-4 py-6 text-sm text-subtle">{showDone ? t("activity.reports.noneDone") : t("activity.reports.none")}</p>
       )}
     </Panel>
   );
@@ -129,7 +129,7 @@ function HouseholdSection({ h, now }: { h: Overview["household"]; now: number })
   const deliveredShare = h.notifications.delivered + h.notifications.failed > 0 ? h.notifications.delivered / (h.notifications.delivered + h.notifications.failed) : null;
   return (
     <div className="space-y-6">
-      <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">{t("activity.household.title", { n: h.days })}</h2>
+      <h2 className="text-xs font-medium uppercase tracking-wide text-subtle">{t("activity.household.title", { n: h.days })}</h2>
       <Panel title={t("activity.quality.title")} icon={MonitorSmartphone}>
         <DeviceQualityList devices={h.devices} />
       </Panel>
@@ -146,7 +146,7 @@ function HouseholdSection({ h, now }: { h: Overview["household"]; now: number })
           title={t("activity.auth.title")}
           icon={KeyRound}
           action={
-            <ActivityLink to={{ kind: "logs", preset: { source: "auth" } }} className="text-xs text-accent-300 hover:underline">
+            <ActivityLink to={{ kind: "logs", preset: { source: "auth" } }} className="text-xs text-accent-400 hover:underline">
               {t("activity.logs.open")}
             </ActivityLink>
           }
@@ -167,7 +167,7 @@ function HouseholdSection({ h, now }: { h: Overview["household"]; now: number })
           title={t("activity.notifs.title")}
           icon={Bell}
           action={
-            <ActivityLink to={{ kind: "logs", preset: { source: "notifications" } }} className="text-xs text-accent-300 hover:underline">
+            <ActivityLink to={{ kind: "logs", preset: { source: "notifications" } }} className="text-xs text-accent-400 hover:underline">
               {t("activity.logs.open")}
             </ActivityLink>
           }
@@ -181,8 +181,8 @@ function HouseholdSection({ h, now }: { h: Overview["household"]; now: number })
             <ul className="divide-y divide-white/5 border-t border-white/5">
               {h.notifications.byCategory.map((c) => (
                 <li key={c.category} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-                  <span className="truncate text-slate-300">{categoryLabel(c.category, t)}</span>
-                  <span className="shrink-0 tabular-nums text-slate-400">{c.count}</span>
+                  <span className="truncate text-muted">{categoryLabel(c.category, t)}</span>
+                  <span className="shrink-0 tabular-nums text-muted">{c.count}</span>
                 </li>
               ))}
             </ul>
@@ -221,21 +221,21 @@ function LiveCard({ a, now }: { a: AccountSummary; now: number }) {
         </span>
         {playing ? (
           <>
-            <span className="mt-1 block truncate text-sm text-slate-200">{playing.title}</span>
+            <span className="mt-1 block truncate text-sm text-white">{playing.title}</span>
             <Progress position={playing.positionSeconds} runtime={playing.runtimeSeconds} />
-            <span className="mt-1 flex flex-wrap gap-x-2 text-xs text-slate-500">
+            <span className="mt-1 flex flex-wrap gap-x-2 text-xs text-subtle">
               <span>
                 {clock(playing.positionSeconds)} / {clock(playing.runtimeSeconds)}
               </span>
-              {playing.paused && <span className="text-amber-300">{t("activity.live.paused")}</span>}
+              {playing.paused && <span className="text-warning">{t("activity.live.paused")}</span>}
               {playing.device && <span>{playing.device}</span>}
               {playing.method && <span>{playing.method}</span>}
             </span>
           </>
         ) : pingTitle ? (
-          <span className="mt-1 block truncate text-sm text-slate-200">{pingTitle}</span>
+          <span className="mt-1 block truncate text-sm text-white">{pingTitle}</span>
         ) : (
-          <span className="mt-1 block text-xs text-slate-500">{a.presence.devices.join(" · ") || t("activity.live.browsing")}</span>
+          <span className="mt-1 block text-xs text-subtle">{a.presence.devices.join(" · ") || t("activity.live.browsing")}</span>
         )}
       </span>
     </ActivityLink>
@@ -250,8 +250,8 @@ function AccountRow({ a, now }: { a: AccountSummary; now: number }) {
       <span className="min-w-0">
         <span className="flex flex-wrap items-center gap-1.5">
           <span className="truncate font-medium text-white">{a.name}</span>
-          {a.admin && <span className="rounded bg-accent-500/15 px-1.5 py-0.5 text-[10px] text-accent-300">{t("activity.accounts.admin")}</span>}
-          {a.disabled && <span className="rounded bg-slate-500/20 px-1.5 py-0.5 text-[10px] text-slate-300">{t("activity.accounts.disabled")}</span>}
+          {a.admin && <span className="rounded bg-accent-500/15 px-1.5 py-0.5 text-[11px] text-accent-400">{t("activity.accounts.admin")}</span>}
+          {a.disabled && <span className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-muted">{t("activity.accounts.disabled")}</span>}
           {a.alerts.map((al) => (
             <AlertChip key={al.kind} label={alertLabel(al, t, now)} />
           ))}
@@ -259,32 +259,32 @@ function AccountRow({ a, now }: { a: AccountSummary; now: number }) {
         <PresenceBadge presence={a.presence} nowPlaying={a.nowPlaying} now={now} seenAt={latest(a.app.lastSeen, a.jellyfin.lastActivity)} />
         {/* Sur téléphone, les quatre colonnes ci-dessous sont masquées : l'essentiel en une ligne,
             pour que la liste dise autre chose qu'une colonne d'« Absent » (06/10/2026). */}
-        <span className="mt-0.5 block truncate text-[11px] text-slate-500 md:hidden">
+        <span className="mt-0.5 block truncate text-[11px] text-subtle md:hidden">
           {t("activity.accounts.weekValue", { n: a.week.seances, d: hours(a.week.watchedSeconds) })}
-          {a.week.problems > 0 && <span className="text-amber-300"> · {t("activity.accounts.problems", { n: a.week.problems })}</span>}
+          {a.week.problems > 0 && <span className="text-warning"> · {t("activity.accounts.problems", { n: a.week.problems })}</span>}
         </span>
       </span>
       <span className="hidden text-xs md:block">
-        <span className="block text-slate-500">{t("activity.accounts.appSeen")}</span>
-        <span className="text-slate-300">{ago(a.app.lastSeen, now, t)}</span>
+        <span className="block text-subtle">{t("activity.accounts.appSeen")}</span>
+        <span className="text-muted">{ago(a.app.lastSeen, now, t)}</span>
       </span>
       <span className="hidden text-xs md:block">
-        <span className="block text-slate-500">{t("activity.accounts.serverSeen")}</span>
-        <span className="text-slate-300">{ago(a.jellyfin.lastActivity, now, t)}</span>
+        <span className="block text-subtle">{t("activity.accounts.serverSeen")}</span>
+        <span className="text-muted">{ago(a.jellyfin.lastActivity, now, t)}</span>
       </span>
       <span className="hidden text-xs md:block">
-        <span className="block text-slate-500">{t("activity.accounts.week")}</span>
-        <span className="text-slate-300">
+        <span className="block text-subtle">{t("activity.accounts.week")}</span>
+        <span className="text-muted">
           {t("activity.accounts.weekValue", { n: a.week.seances, d: hours(a.week.watchedSeconds) })}
         </span>
       </span>
       <span className="hidden text-xs md:block">
-        <span className="block text-slate-500">{t("activity.accounts.sessions")}</span>
-        <span className={a.week.problems ? "text-amber-300" : "text-slate-300"}>
+        <span className="block text-subtle">{t("activity.accounts.sessions")}</span>
+        <span className={a.week.problems ? "text-warning" : "text-muted"}>
           {a.app.sessions} · {t("activity.accounts.problems", { n: a.week.problems })}
         </span>
       </span>
-      <span className="text-slate-600 transition-transform group-hover:translate-x-0.5">›</span>
+      <span className="text-subtle transition-transform group-hover:translate-x-0.5">›</span>
     </ActivityLink>
   );
 }
@@ -299,7 +299,7 @@ function NewsPanel() {
       title={t("news.title")}
       icon={Sparkles}
       action={
-        <ActivityLink to={{ kind: "news" }} className="text-xs text-accent-300 hover:underline">
+        <ActivityLink to={{ kind: "news" }} className="text-xs text-accent-400 hover:underline">
           {t("activity.news.open")}
         </ActivityLink>
       }
@@ -329,7 +329,7 @@ export function ActivityOverview() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted">
           {t("activity.subtitle", { playing: playingCount, app: live.length - playingCount, total: accounts.length })}
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -358,7 +358,7 @@ export function ActivityOverview() {
             ))}
           </div>
         ) : (
-          <p className="px-4 py-6 text-sm text-slate-500">{t("activity.live.nobody")}</p>
+          <p className="px-4 py-6 text-sm text-subtle">{t("activity.live.nobody")}</p>
         )}
       </Panel>
 
@@ -366,7 +366,7 @@ export function ActivityOverview() {
       {alerts.length > 0 && (
         <Panel title={t("activity.alerts.title")} icon={ShieldAlert}>
           {alerts.some((a) => a.alerts.some((al) => al.kind === "tokenStale")) && (
-            <p className="border-b border-white/5 px-4 py-2.5 text-xs leading-relaxed text-slate-500">{t("activity.alerts.tokenStaleHint")}</p>
+            <p className="border-b border-white/5 px-4 py-2.5 text-xs leading-relaxed text-subtle">{t("activity.alerts.tokenStaleHint")}</p>
           )}
           <ul className="divide-y divide-white/5">
             {alerts.map((a) => (
@@ -374,7 +374,7 @@ export function ActivityOverview() {
                 <ActivityLink to={{ kind: "account", id: a.id }} className="flex flex-wrap items-center gap-2 px-4 py-2.5 text-sm hover:bg-white/[0.03]">
                   <span className="font-medium text-white">{a.name}</span>
                   {a.alerts.map((al) => (
-                    <span key={al.kind} className="text-xs text-slate-400">
+                    <span key={al.kind} className="text-xs text-muted">
                       {al.kind === "tokenStale" ? alertLabel(al, t, now) : `${alertLabel(al, t, now)} · ${ago(al.at, now, t)}`}
                     </span>
                   ))}
@@ -396,7 +396,7 @@ export function ActivityOverview() {
 
       {/* 3. La semaine en chiffres. */}
       <div>
-        <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-500">{t("activity.week.title")}</h2>
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-subtle">{t("activity.week.title")}</h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Tile icon={Clapperboard} label={t("activity.week.seances")} value={s.seances} hint={t("activity.week.viewers", { n: s.viewers })} />
           <Tile icon={Clock} label={t("activity.week.watched")} value={hours(s.watchedSeconds)} />
@@ -431,13 +431,13 @@ export function ActivityOverview() {
         <Panel title={t("activity.week.perDay")} icon={Activity} className="lg:col-span-2">
           <div className="p-4">
             <DayBars days={s.perDay} />
-            <p className="mt-3 flex gap-4 text-xs text-slate-500">
+            <p className="mt-3 flex gap-4 text-xs text-subtle">
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-sm bg-accent-500/70" />
                 {t("activity.week.legendSeances")}
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-sm bg-amber-400/80" />
+                <span className="h-2 w-2 rounded-sm bg-warning/80" />
                 {t("activity.week.legendProblems")}
               </span>
             </p>
@@ -449,13 +449,13 @@ export function ActivityOverview() {
             <ul className="divide-y divide-white/5">
               {s.rebuildReasons.map((r) => (
                 <li key={r.reason} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-                  <span className="truncate font-mono text-xs text-slate-300">{r.reason}</span>
-                  <span className="shrink-0 tabular-nums text-slate-400">{r.count}</span>
+                  <span className="truncate font-mono text-xs text-muted">{r.reason}</span>
+                  <span className="shrink-0 tabular-nums text-muted">{r.count}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="px-4 py-6 text-sm text-slate-500">{t("activity.week.noRebuild")}</p>
+            <p className="px-4 py-6 text-sm text-subtle">{t("activity.week.noRebuild")}</p>
           )}
         </Panel>
 
@@ -463,7 +463,7 @@ export function ActivityOverview() {
           title={t("activity.week.serverErrors")}
           icon={ServerCrash}
           action={
-            <ActivityLink to={{ kind: "logs", preset: { source: "server" } }} className="text-xs text-accent-300 hover:underline">
+            <ActivityLink to={{ kind: "logs", preset: { source: "server" } }} className="text-xs text-accent-400 hover:underline">
               {t("activity.logs.open")}
             </ActivityLink>
           }
@@ -472,15 +472,15 @@ export function ActivityOverview() {
             <ul className="divide-y divide-white/5">
               {s.serverErrors.map((e) => (
                 <li key={e.scope} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-                  <ActivityLink to={{ kind: "logs", preset: { source: "server", type: e.scope } }} className="truncate font-mono text-xs text-slate-300 hover:text-white">
+                  <ActivityLink to={{ kind: "logs", preset: { source: "server", type: e.scope } }} className="truncate font-mono text-xs text-muted hover:text-white">
                     {e.scope}
                   </ActivityLink>
-                  <span className="shrink-0 tabular-nums text-slate-400">{e.count}</span>
+                  <span className="shrink-0 tabular-nums text-muted">{e.count}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="px-4 py-6 text-sm text-slate-500">{t("activity.week.noServerError")}</p>
+            <p className="px-4 py-6 text-sm text-subtle">{t("activity.week.noServerError")}</p>
           )}
         </Panel>
       </div>
@@ -501,7 +501,7 @@ export function ActivityOverview() {
         title={t("activity.recent.title")}
         icon={Clapperboard}
         action={
-          <ActivityLink to={{ kind: "logs", preset: {} }} className="text-xs text-accent-300 hover:underline">
+          <ActivityLink to={{ kind: "logs", preset: {} }} className="text-xs text-accent-400 hover:underline">
             {t("activity.logs.open")}
           </ActivityLink>
         }

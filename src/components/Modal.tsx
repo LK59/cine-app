@@ -149,7 +149,7 @@ export function Modal({
     >
       <div
         ref={cardRef}
-        className={`card scrollbar-thin w-full animate-fade-in-scale overflow-y-auto p-5 overscroll-contain rounded-t-2xl sm:rounded-2xl
+        className={`glass-window scrollbar-thin w-full animate-fade-in-scale overflow-y-auto p-5 overscroll-contain rounded-t-2xl sm:rounded-2xl
           max-h-[80dvh] sm:max-h-[85vh] ${wide ? "sm:max-w-3xl" : "sm:max-w-lg"}`}
         onClick={(e) => e.stopPropagation()}
         style={{ touchAction: "auto" }}

@@ -82,7 +82,7 @@ export function ActivityNews() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-2xl text-sm text-slate-400">{t("activity.news.intro")}</p>
+        <p className="max-w-2xl text-sm text-muted">{t("activity.news.intro")}</p>
         <div className="flex flex-wrap items-center gap-2">
           {hasPublished && (
             <ConfirmButton
@@ -122,11 +122,11 @@ export function ActivityNews() {
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="font-medium text-white">{t("news.subtitle", { version: p.version })}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] ${p.status === "published" ? "bg-emerald-500/15 text-emerald-300" : "bg-slate-500/20 text-slate-300"}`}>
+                    <span className={`rounded px-1.5 py-0.5 text-[11px] ${p.status === "published" ? "bg-success/15 text-success" : "bg-white/5 text-muted"}`}>
                       {p.status === "published" ? t("activity.news.published") : t("activity.news.draft")}
                     </span>
                   </span>
-                  <span className="mt-0.5 block text-xs text-slate-500">
+                  <span className="mt-0.5 block text-xs text-subtle">
                     {p.publishedAt ? t("activity.news.publishedAgo", { when: ago(p.publishedAt, data.now, t) }) : t("activity.news.editedAgo", { when: ago(p.updatedAt, data.now, t) })}
                     {" · "}
                     {NEWS_LANGS.filter((l) => l === "fr" || !isEmptyContent(p.content[l] ?? null)).map((l) => l.toUpperCase()).join(" ")}
@@ -158,7 +158,7 @@ export function ActivityNews() {
             ))}
           </ul>
         ) : (
-          <p className="px-4 py-6 text-sm text-slate-500">{t("activity.news.noPage")}</p>
+          <p className="px-4 py-6 text-sm text-subtle">{t("activity.news.noPage")}</p>
         )}
       </Panel>
 
@@ -169,13 +169,13 @@ export function ActivityNews() {
               <span className="min-w-0">
                 <span className="flex flex-wrap items-center gap-1.5">
                   <span className="truncate font-medium text-white">{a.name}</span>
-                  {a.pending && <span className="rounded bg-accent-500/15 px-1.5 py-0.5 text-[10px] text-accent-300">{t("activity.news.pending")}</span>}
+                  {a.pending && <span className="rounded bg-accent-500/15 px-1.5 py-0.5 text-[11px] text-accent-400">{t("activity.news.pending")}</span>}
                 </span>
-                <span className="mt-0.5 block text-xs text-slate-500">
+                <span className="mt-0.5 block text-xs text-subtle">
                   {a.unknown ? t("activity.news.never") : a.seenVersion ? t("activity.news.lastSeen", { version: a.seenVersion }) : t("activity.news.noneSeen")}
                 </span>
                 {/* Sur téléphone, les colonnes sont masquées : l'essentiel en une ligne. */}
-                <span className="mt-0.5 block text-[11px] text-slate-500 md:hidden">{accountLine(a, data.now, t)}</span>
+                <span className="mt-0.5 block text-[11px] text-subtle md:hidden">{accountLine(a, data.now, t)}</span>
               </span>
               <Cell label={t("activity.news.shownAt")} value={a.shownAt ? ago(a.shownAt, data.now, t) : "—"} />
               <Cell label={t("activity.news.shownFor")} value={a.shownMs === null ? "—" : secs(a.shownMs)} warn={a.shownMs !== null && a.shownMs < 2000} />
@@ -216,8 +216,8 @@ function accountLine(a: NewsAccountRow, now: number, t: T): string {
 function Cell({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
   return (
     <span className="hidden text-xs md:block">
-      <span className="block text-slate-500">{label}</span>
-      <span className={warn ? "text-amber-300" : "text-slate-300"}>{value}</span>
+      <span className="block text-subtle">{label}</span>
+      <span className={warn ? "text-warning" : "text-muted"}>{value}</span>
     </span>
   );
 }
@@ -332,7 +332,7 @@ function NewsEditor({
       <div className="space-y-5 p-4">
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs text-slate-400">{t("activity.news.version")}</span>
+            <span className="text-xs text-muted">{t("activity.news.version")}</span>
             <input className="input w-32" value={draft.version} maxLength={20} placeholder="8.45" onChange={(e) => setDraft((d) => ({ ...d, version: e.target.value }))} />
           </label>
           <div className="flex flex-wrap gap-1" role="tablist" aria-label={t("activity.news.language")}>
@@ -343,10 +343,10 @@ function NewsEditor({
                 role="tab"
                 aria-selected={l === lang}
                 onClick={() => setLang(l)}
-                className={`rounded-lg px-3 py-1.5 text-xs ${l === lang ? "bg-white/15 text-white" : "text-slate-400 hover:text-white"}`}
+                className={`rounded-lg px-3 py-1.5 text-xs ${l === lang ? "bg-white/15 text-white" : "text-muted hover:text-white"}`}
               >
                 {LOCALE_LABELS[l]}
-                {l !== "fr" && isEmptyContent(draft.content[l]) && <span className="ml-1 text-slate-500">·</span>}
+                {l !== "fr" && isEmptyContent(draft.content[l]) && <span className="ml-1 text-subtle">·</span>}
               </button>
             ))}
           </div>
@@ -355,8 +355,8 @@ function NewsEditor({
             {busy === "translate" ? t("activity.news.translating") : t("activity.news.translate")}
           </button>
         </div>
-        {!translateAvailable && <p className="text-xs text-slate-500">{t("activity.news.translateUnavailable")}</p>}
-        {lang !== "fr" && empty && <p className="text-xs text-amber-300">{t("activity.news.fallbackFr")}</p>}
+        {!translateAvailable && <p className="text-xs text-subtle">{t("activity.news.translateUnavailable")}</p>}
+        {lang !== "fr" && empty && <p className="text-xs text-warning">{t("activity.news.fallbackFr")}</p>}
 
         {c.sections.map((section, i) => (
           <fieldset key={i} className="space-y-3 rounded-xl border border-white/10 p-3">
@@ -369,7 +369,7 @@ function NewsEditor({
                 aria-label={t("activity.news.sectionTitle")}
                 onChange={(e) => updateSection(i, { title: e.target.value })}
               />
-              <button type="button" onClick={() => setContent({ ...c, sections: c.sections.filter((_, j) => j !== i) })} className="btn-ghost px-2 py-1 text-xs text-rose-300" aria-label={t("activity.news.removeSection")}>
+              <button type="button" onClick={() => setContent({ ...c, sections: c.sections.filter((_, j) => j !== i) })} className="btn-ghost px-2 py-1 text-xs text-danger" aria-label={t("activity.news.removeSection")}>
                 <Trash2 size={13} />
               </button>
             </div>
@@ -394,7 +394,7 @@ function NewsEditor({
         </button>
 
         <fieldset className="space-y-3 rounded-xl border border-white/10 p-3">
-          <legend className="px-1 text-xs text-slate-400">{t("news.fixesTitle")}</legend>
+          <legend className="px-1 text-xs text-muted">{t("news.fixesTitle")}</legend>
           <input
             className="input w-full"
             value={c.fixesSummary}
@@ -414,7 +414,7 @@ function NewsEditor({
                   aria-label={t("activity.news.fixGroup")}
                   onChange={(e) => updateGroup(i, { title: e.target.value })}
                 />
-                <button type="button" onClick={() => setContent({ ...c, fixes: c.fixes.filter((_, j) => j !== i) })} className="btn-ghost px-2 py-1 text-xs text-rose-300" aria-label={t("activity.news.remove")}>
+                <button type="button" onClick={() => setContent({ ...c, fixes: c.fixes.filter((_, j) => j !== i) })} className="btn-ghost px-2 py-1 text-xs text-danger" aria-label={t("activity.news.remove")}>
                   <Trash2 size={13} />
                 </button>
               </div>
@@ -493,7 +493,7 @@ function EntryEditor({
         <input className="input" value={entry.text} maxLength={240} placeholder={t("activity.news.entryText")} aria-label={t("activity.news.entryText")} onChange={(e) => onChange({ text: e.target.value })} />
         <input className="input" value={entry.badge} maxLength={16} placeholder={t("activity.news.entryBadge")} aria-label={t("activity.news.entryBadge")} onChange={(e) => onChange({ badge: e.target.value })} />
       </div>
-      <button type="button" onClick={onRemove} className="btn-ghost px-2 py-1 text-xs text-rose-300" aria-label={t("activity.news.remove")}>
+      <button type="button" onClick={onRemove} className="btn-ghost px-2 py-1 text-xs text-danger" aria-label={t("activity.news.remove")}>
         <Trash2 size={13} />
       </button>
     </div>

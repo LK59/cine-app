@@ -24,8 +24,8 @@ function isoDate(d: Date) {
 }
 
 const SOURCE_STYLE: Record<CalendarEvent["source"], { dot: string; badge: string; labelKey: string }> = {
-  "cinema":        { dot: "bg-emerald-400", badge: "bg-emerald-500/15 text-emerald-400", labelKey: "calendar.sources.cinema" },
-  "upcoming":      { dot: "bg-amber-400",   badge: "bg-amber-500/15 text-amber-400",     labelKey: "calendar.sources.upcoming" },
+  "cinema":        { dot: "bg-emerald-400", badge: "bg-success/15 text-success", labelKey: "calendar.sources.cinema" },
+  "upcoming":      { dot: "bg-amber-400",   badge: "bg-warning/15 text-warning",     labelKey: "calendar.sources.upcoming" },
   "library-movie": { dot: "bg-accent-400",  badge: "bg-accent-500/15 text-accent-400",   labelKey: "calendar.sources.libraryMovie" },
   "library-series":{ dot: "bg-sky-400",     badge: "bg-sky-500/15 text-sky-400",         labelKey: "calendar.sources.librarySeries" },
 };
@@ -102,21 +102,21 @@ function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => v
   const isLibrary = ev.source === "library-movie" || ev.source === "library-series";
   const detail = calendarEventDetail(ev, t);
   return (
-    <div className="mt-3 rounded-xl border border-white/10 bg-slate-900/90 backdrop-blur-xs p-4 flex gap-4 items-start">
-      <div className="h-20 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-800">
+    <div className="mt-3 rounded-xl border border-white/10 bg-surface/90 backdrop-blur-xs p-4 flex gap-4 items-start">
+      <div className="h-20 w-14 shrink-0 overflow-hidden rounded-lg bg-white/10">
         {ev.posterPath
           // eslint-disable-next-line @next/next/no-img-element
           ? <img src={ev.posterPath} alt={ev.title} className="h-full w-full object-cover" />
-          : <div className="flex h-full items-center justify-center"><Film size={16} className="text-slate-600" /></div>
+          : <div className="flex h-full items-center justify-center"><Film size={16} className="text-subtle" /></div>
         }
       </div>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center gap-2">
-          <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
-          <span className="text-xs text-slate-500">{new Date(ev.date + "T12:00:00").toLocaleDateString(getDateLocale(locale), { day: "numeric", month: "long" })}</span>
+          <span className={`rounded-sm px-1.5 py-0.5 text-[11px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
+          <span className="text-xs text-subtle">{new Date(ev.date + "T12:00:00").toLocaleDateString(getDateLocale(locale), { day: "numeric", month: "long" })}</span>
         </div>
         <p className="font-semibold text-white">{calendarEventTitle(ev, t)}</p>
-        {detail && <p className="mt-0.5 text-xs text-slate-400">{detail}</p>}
+        {detail && <p className="mt-0.5 text-xs text-muted">{detail}</p>}
         <div className="mt-3">
           {isLibrary && ev.href
             ? <Link href={ev.href} className="inline-flex items-center gap-1.5 rounded-lg bg-accent-600/20 px-3 py-1.5 text-xs font-medium text-accent-400 hover:bg-accent-600/30">{t('calendar.viewSheet')}</Link>
@@ -139,7 +139,7 @@ function EventPill({ ev, onSelect }: { ev: CalendarEvent; onSelect: (ev: Calenda
   const isLibrary = ev.source === "library-movie" || ev.source === "library-series";
 
   const inner = (
-    <div className={`flex items-center gap-1 rounded-sm px-1 py-0.5 text-[10px] font-medium truncate cursor-pointer ${style.badge} hover:opacity-80`}>
+    <div className={`flex items-center gap-1 rounded-sm px-1 py-0.5 text-[11px] font-medium truncate cursor-pointer ${style.badge} hover:opacity-80`}>
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} />
       <span className="truncate">{calendarEventTitle(ev, t)}</span>
     </div>
@@ -184,7 +184,7 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
       <div className="rounded-xl border border-white/5 bg-white/2 overflow-hidden">
         <div className="grid grid-cols-7 border-b border-white/5">
           {HEADERS.map((h) => (
-            <div key={h} className="py-2 text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{h}</div>
+            <div key={h} className="py-2 text-center text-[11px] font-semibold text-subtle uppercase tracking-wide">{h}</div>
           ))}
         </div>
         <div className="grid grid-cols-7">
@@ -198,7 +198,7 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
                 className={`min-h-[80px] p-1 border-b border-r border-white/4 ${!day.inMonth ? "opacity-30" : ""}`}
               >
                 <div className={`mb-1 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium ${
-                  isToday ? "bg-accent-500 text-white" : "text-slate-400"
+                  isToday ? "bg-accent-500 text-white" : "text-muted"
                 }`}>
                   {Number(day.date.slice(8))}
                 </div>
@@ -209,7 +209,7 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
                   {evs.length > MAX_SHOWN && (
                     <button
                       onClick={() => onSelectEvent(evs[MAX_SHOWN])}
-                      className="btn btn-ghost btn-sm px-1.5 text-[10px]"
+                      className="btn btn-ghost btn-sm px-1.5 text-[11px]"
                     >
                       {t('calendar.moreItems', { n: evs.length - MAX_SHOWN })}
                     </button>
@@ -252,7 +252,7 @@ function ListView({ events, today, dateLocale }: { events: CalendarEvent[]; toda
         });
         return (
           <div key={date}>
-            <h2 className={`mb-2 text-sm font-semibold ${isToday ? "text-accent-400" : "text-slate-400"}`}>
+            <h2 className={`mb-2 text-sm font-semibold ${isToday ? "text-accent-400" : "text-muted"}`}>
               {label}{isToday && ` · ${t('calendar.todaySuffix')}`}
             </h2>
             <div className="card divide-y divide-white/5">
@@ -262,22 +262,22 @@ function ListView({ events, today, dateLocale }: { events: CalendarEvent[]; toda
                 const detail = calendarEventDetail(ev, t);
                 const row = (
                   <div className="flex items-center gap-3 p-3 hover:bg-white/3 transition-colors">
-                    <div className="h-14 w-10 shrink-0 overflow-hidden rounded-sm bg-slate-800">
+                    <div className="h-14 w-10 shrink-0 overflow-hidden rounded-sm bg-white/10">
                       {ev.posterPath
                         // eslint-disable-next-line @next/next/no-img-element
                         ? <img src={ev.posterPath} alt={ev.title} className="h-full w-full object-cover" />
                         : <div className="flex h-full items-center justify-center">
-                            {ev.type === "series" ? <Tv size={12} className="text-slate-600" /> : <Film size={12} className="text-slate-600" />}
+                            {ev.type === "series" ? <Tv size={12} className="text-subtle" /> : <Film size={12} className="text-subtle" />}
                           </div>
                       }
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-white">{calendarEventTitle(ev, t)}</p>
-                      {detail && <p className="truncate text-xs text-slate-500">{detail}</p>}
+                      {detail && <p className="truncate text-xs text-subtle">{detail}</p>}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {!isLibrary && <EventActions ev={ev} compact />}
-                      <span className={`rounded-sm px-2 py-0.5 text-[10px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
+                      <span className={`rounded-sm px-2 py-0.5 text-[11px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
                     </div>
                   </div>
                 );
@@ -405,14 +405,14 @@ export default function CalendarPage() {
         {FILTERS.map(({ key, label, icon }) => (
           <button key={key} onClick={() => setFilter(key)}
             className={`chip ${
-              filter === key ? "border-accent-500/40 bg-accent-500/10 text-accent-400" : "border-white/10 text-slate-500 hover:text-slate-300"
+              filter === key ? "border-accent-500/40 bg-accent-500/10 text-accent-400" : "border-white/10 text-subtle hover:text-muted"
             }`}>
             {icon}{label}
           </button>
         ))}
         <div className="ml-auto flex items-center gap-3">
           {(Object.entries(SOURCE_STYLE) as [CalendarEvent["source"], typeof SOURCE_STYLE["cinema"]][]).map(([src, s]) => (
-            <div key={src} className="flex items-center gap-1 text-[10px] text-slate-500">
+            <div key={src} className="flex items-center gap-1 text-[11px] text-subtle">
               <span className={`h-2 w-2 rounded-full ${s.dot}`} />{t(s.labelKey)}
             </div>
           ))}

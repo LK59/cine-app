@@ -11,13 +11,13 @@ import type { DeviceQuality, Habits } from "@/lib/activity/accounts";
 /** Un tableau sur grand écran, des cartes sur téléphone : un appareil par ligne. */
 export function DeviceQualityList({ devices }: { devices: DeviceQuality[] }) {
   const t = useT();
-  if (!devices.length) return <p className="px-4 py-6 text-sm text-slate-500">{t("activity.quality.none")}</p>;
-  const tone = (share: number) => (share >= 0.3 ? "text-rose-300" : share >= 0.1 ? "text-amber-300" : "text-emerald-300");
+  if (!devices.length) return <p className="px-4 py-6 text-sm text-subtle">{t("activity.quality.none")}</p>;
+  const tone = (share: number) => (share >= 0.3 ? "text-danger" : share >= 0.1 ? "text-warning" : "text-success");
   return (
     <>
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-slate-500">
+          <thead className="text-left text-xs text-subtle">
             <tr className="border-b border-white/5">
               <th className="px-4 py-2 font-medium">{t("activity.quality.device")}</th>
               <th className="px-3 py-2 text-right font-medium">{t("activity.quality.seances")}</th>
@@ -33,20 +33,20 @@ export function DeviceQualityList({ devices }: { devices: DeviceQuality[] }) {
           <tbody className="divide-y divide-white/5 tabular-nums">
             {devices.map((d) => (
               <tr key={d.device}>
-                <td className="px-4 py-2 text-slate-200">{d.device}</td>
-                <td className="px-3 py-2 text-right text-slate-300">{d.seances}</td>
-                <td className="px-3 py-2 text-right text-slate-300">{hours(d.watchedSeconds)}</td>
-                <td className="px-3 py-2 text-right text-slate-300">{secs(d.openMs)}</td>
-                <td className="px-3 py-2 text-right text-slate-300">
+                <td className="px-4 py-2 text-white">{d.device}</td>
+                <td className="px-3 py-2 text-right text-muted">{d.seances}</td>
+                <td className="px-3 py-2 text-right text-muted">{hours(d.watchedSeconds)}</td>
+                <td className="px-3 py-2 text-right text-muted">{secs(d.openMs)}</td>
+                <td className="px-3 py-2 text-right text-muted">
                   {d.waits}
-                  {d.waitedMs > 0 && <span className="text-slate-500"> · {secs(d.waitedMs)}</span>}
+                  {d.waitedMs > 0 && <span className="text-subtle"> · {secs(d.waitedMs)}</span>}
                 </td>
-                <td className="px-3 py-2 text-right text-slate-300">{d.slowSeeks}</td>
-                <td className="px-3 py-2 text-right text-slate-300">
+                <td className="px-3 py-2 text-right text-muted">{d.slowSeeks}</td>
+                <td className="px-3 py-2 text-right text-muted">
                   {d.rebuilds}
-                  {d.stalls > 0 && <span className="text-slate-500"> · {d.stalls}</span>}
+                  {d.stalls > 0 && <span className="text-subtle"> · {d.stalls}</span>}
                 </td>
-                <td className="px-3 py-2 text-right text-slate-300">{d.fallbacks + d.errors}</td>
+                <td className="px-3 py-2 text-right text-muted">{d.fallbacks + d.errors}</td>
                 <td className={`px-4 py-2 text-right font-medium ${tone(d.troubledShare)}`}>{Math.round(d.troubledShare * 100)} %</td>
               </tr>
             ))}
@@ -57,10 +57,10 @@ export function DeviceQualityList({ devices }: { devices: DeviceQuality[] }) {
         {devices.map((d) => (
           <li key={d.device} className="px-4 py-3 text-sm">
             <span className="flex items-center justify-between gap-2">
-              <span className="truncate font-medium text-slate-200">{d.device}</span>
+              <span className="truncate font-medium text-white">{d.device}</span>
               <span className={`shrink-0 text-xs font-medium ${tone(d.troubledShare)}`}>{t("activity.quality.troubledShort", { p: Math.round(d.troubledShare * 100) })}</span>
             </span>
-            <span className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-400">
+            <span className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted">
               <span>{t("activity.quality.nSeances", { n: d.seances })}</span>
               <span>{hours(d.watchedSeconds)}</span>
               <span>
@@ -87,13 +87,13 @@ export function Heatmap({ heatmap }: { heatmap: number[][] }) {
       <div className="grid min-w-[520px] gap-[3px]" style={{ gridTemplateColumns: "2.25rem repeat(24, minmax(0, 1fr))" }}>
         <span />
         {Array.from({ length: 24 }, (_, h) => (
-          <span key={h} className="text-center text-[9px] tabular-nums text-slate-600">
+          <span key={h} className="text-center text-[11px] tabular-nums text-subtle">
             {h % 3 === 0 ? h : ""}
           </span>
         ))}
         {heatmap.map((row, d) => (
           <div key={d} className="contents">
-            <span className="pr-1 text-right text-[10px] leading-4 text-slate-500">{days[d] ?? d}</span>
+            <span className="pr-1 text-right text-[11px] leading-4 text-subtle">{days[d] ?? d}</span>
             {row.map((v, h) => (
               <span
                 key={h}
@@ -111,15 +111,15 @@ export function Heatmap({ heatmap }: { heatmap: number[][] }) {
 
 export function TopTitles({ habits }: { habits: Habits }) {
   const t = useT();
-  if (!habits.topTitles.length) return <p className="px-4 py-6 text-sm text-slate-500">{t("activity.habits.none")}</p>;
+  if (!habits.topTitles.length) return <p className="px-4 py-6 text-sm text-subtle">{t("activity.habits.none")}</p>;
   const max = Math.max(1, ...habits.topTitles.map((x) => x.watchedSeconds));
   return (
     <ul className="divide-y divide-white/5">
       {habits.topTitles.map((x) => (
         <li key={x.title} className="px-4 py-2 text-sm">
           <span className="flex items-center justify-between gap-3">
-            <span className="truncate text-slate-200">{x.title}</span>
-            <span className="shrink-0 text-xs tabular-nums text-slate-500">
+            <span className="truncate text-white">{x.title}</span>
+            <span className="shrink-0 text-xs tabular-nums text-subtle">
               {/* Le temps regardé vient du bilan de séance, qui n'existe que depuis le 23/09/2026 : un
                   « 0 » y serait faux, les séances seules disent la vérité. */}
               {x.watchedSeconds ? `${hours(x.watchedSeconds)} · ` : ""}
@@ -151,10 +151,10 @@ const AUTH_TONE: Record<string, string> = {
   "login-failed": "bg-rose-400",
   "token-refused": "bg-rose-400",
   expired: "bg-amber-400",
-  logout: "bg-slate-500",
+  logout: "bg-white/30",
   "others-closed": "bg-sky-400",
   "closed-by-admin": "bg-sky-400",
-  "devices-pruned": "bg-slate-500",
+  "devices-pruned": "bg-white/30",
   "password-changed": "bg-sky-400",
 };
 
@@ -166,27 +166,27 @@ export function authLabel(e: AuthEvent, t: T): string {
 /** Les connexions : qui, quoi, depuis quel appareil et quelle adresse. */
 export function AuthList({ events, now, showUser = false }: { events: AuthEvent[]; now: number; showUser?: boolean }) {
   const t = useT();
-  if (!events.length) return <p className="px-4 py-6 text-sm text-slate-500">{t("activity.auth.none")}</p>;
+  if (!events.length) return <p className="px-4 py-6 text-sm text-subtle">{t("activity.auth.none")}</p>;
   return (
     <ul className="divide-y divide-white/5">
       {events.map((e, i) => (
         <li key={i} className="flex items-start gap-3 px-4 py-2.5 text-sm">
-          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${AUTH_TONE[e.kind] ?? "bg-slate-500"}`} />
+          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${AUTH_TONE[e.kind] ?? "bg-white/30"}`} />
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-slate-200">
+              <span className="text-white">
                 {showUser && e.user ? `${e.user} — ` : ""}
                 {authLabel(e, t)}
               </span>
-              {typeof e.reason === "string" && e.reason && <span className="font-mono text-[11px] text-slate-500">{e.reason}</span>}
+              {typeof e.reason === "string" && e.reason && <span className="font-mono text-[11px] text-subtle">{e.reason}</span>}
             </span>
-            <span className="block truncate text-xs text-slate-500">
+            <span className="block truncate text-xs text-subtle">
               {[typeof e.device === "string" ? e.device : null, typeof e.ip === "string" ? e.ip : null, typeof e.by === "string" ? t("activity.auth.by", { who: e.by }) : null]
                 .filter(Boolean)
                 .join(" · ")}
             </span>
           </span>
-          <span className="shrink-0 text-xs text-slate-500" title={fullDate(e.at)}>
+          <span className="shrink-0 text-xs text-subtle" title={fullDate(e.at)}>
             {ago(e.at, now, t)}
           </span>
         </li>
@@ -206,17 +206,17 @@ export interface ReceivedNotification {
 /** Ce qu'il en est advenu chez une personne : remise, refusée, abonnement retiré, ou coupée par son choix. */
 function outcomeOf(o: Record<string, unknown>, t: T): { label: string; tone: string } {
   const n = (k: string) => Number(o[k]) || 0;
-  if (n("sent") > 0 && n("failed") + n("removed") === 0) return { label: t("activity.notifs.delivered", { n: n("sent") }), tone: "text-emerald-300" };
-  if (n("sent") > 0) return { label: t("activity.notifs.partial", { ok: n("sent"), ko: n("failed") + n("removed") }), tone: "text-amber-300" };
-  if (n("removed") > 0) return { label: t("activity.notifs.removed"), tone: "text-rose-300" };
-  if (n("failed") > 0) return { label: t("activity.notifs.failed"), tone: "text-rose-300" };
-  if (o.muted === true) return { label: t("activity.notifs.muted"), tone: "text-slate-500" };
-  return { label: t("activity.notifs.noDevice"), tone: "text-slate-500" };
+  if (n("sent") > 0 && n("failed") + n("removed") === 0) return { label: t("activity.notifs.delivered", { n: n("sent") }), tone: "text-success" };
+  if (n("sent") > 0) return { label: t("activity.notifs.partial", { ok: n("sent"), ko: n("failed") + n("removed") }), tone: "text-warning" };
+  if (n("removed") > 0) return { label: t("activity.notifs.removed"), tone: "text-danger" };
+  if (n("failed") > 0) return { label: t("activity.notifs.failed"), tone: "text-danger" };
+  if (o.muted === true) return { label: t("activity.notifs.muted"), tone: "text-subtle" };
+  return { label: t("activity.notifs.noDevice"), tone: "text-subtle" };
 }
 
 export function NotificationList({ items, now }: { items: ReceivedNotification[]; now: number }) {
   const t = useT();
-  if (!items.length) return <p className="px-4 py-6 text-sm text-slate-500">{t("activity.notifs.none")}</p>;
+  if (!items.length) return <p className="px-4 py-6 text-sm text-subtle">{t("activity.notifs.none")}</p>;
   return (
     <ul className="divide-y divide-white/5">
       {items.map((n, i) => {
@@ -224,13 +224,13 @@ export function NotificationList({ items, now }: { items: ReceivedNotification[]
         return (
           <li key={i} className="px-4 py-2.5 text-sm">
             <span className="flex items-center justify-between gap-3">
-              <span className="truncate text-slate-200">{n.title}</span>
-              <span className="shrink-0 text-xs text-slate-500" title={fullDate(n.at)}>
+              <span className="truncate text-white">{n.title}</span>
+              <span className="shrink-0 text-xs text-subtle" title={fullDate(n.at)}>
                 {ago(n.at, now, t)}
               </span>
             </span>
             <span className="flex items-center justify-between gap-3 text-xs">
-              <span className="truncate text-slate-500">{n.body}</span>
+              <span className="truncate text-subtle">{n.body}</span>
               <span className={`shrink-0 ${o.tone}`}>{o.label}</span>
             </span>
           </li>

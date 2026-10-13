@@ -210,7 +210,7 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
             )}
             <div className="min-w-0 pointer-events-none">
               {title && <p className="font-semibold text-white leading-tight truncate">{title}</p>}
-              {subtitle && <p className="mt-0.5 text-sm text-slate-400 truncate">{subtitle}</p>}
+              {subtitle && <p className="mt-0.5 text-sm text-muted truncate">{subtitle}</p>}
             </div>
           </div>
         )}
@@ -220,7 +220,7 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
           {actions.map((action, i) => (
             <div key={i}>
             {action.section && action.section !== actions[i - 1]?.section && (
-              <p className="px-5 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <p className="px-5 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-subtle">
                 {action.section}
               </p>
             )}
@@ -231,15 +231,15 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
               onClick={() => { action.onClick(); onClose(); }}
               className={`flex w-full items-center gap-4 px-5 py-3.5 text-sm font-medium transition-colors active:bg-white/5 disabled:opacity-40 ${
                 action.variant === "danger"
-                  ? "text-red-400"
+                  ? "text-danger"
                   : action.variant === "accent"
                   ? "text-accent-400"
-                  : "text-slate-100"
+                  : "text-white"
               }`}
             >
               {action.icon && (
                 <span className={`w-5 text-center ${
-                  action.variant === "danger" ? "text-red-400" : "text-slate-400"
+                  action.variant === "danger" ? "text-danger" : "text-muted"
                 }`}>
                   {action.icon}
                 </span>

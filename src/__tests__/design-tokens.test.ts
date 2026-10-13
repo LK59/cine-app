@@ -14,9 +14,31 @@ import { join } from "path";
  * copier-coller. Ces tests lisent donc la source, comme `decisions-partagees.test.ts`.
  */
 
-const ROOTS = ["src/components/cinema", "src/components/player"];
+const ROOTS = [
+  "src/components/cinema",
+  "src/components/player",
+  // La gestion prend le design du cinéma depuis le 13/10/2026 (DECISIONS.md §81) : ses pages, le
+  // panneau Activité, les cartes de réglages, et les fenêtres et pièces qu'elle partage. Les gris
+  // « slate » y étaient 650 — le même relevé qu'au cinéma le 23/09, deux ans de retard en moins.
+  "src/app/(dashboard)",
+  "src/components/activity",
+  "src/components/settings",
+  "src/components/gestion",
+  "src/components/reports",
+  ...[
+    "ActionSheet", "ActorModal", "CapabilityStatus", "Collapsible", "CollectionModal", "DetailSkeleton",
+    "FileTrackChips", "GlobalSearch", "KeyboardShortcutsModal", "MediaCard", "MediaInfoModal", "MediaRatings",
+    "MobileNav", "Modal", "MoreMenu", "PageHeader", "PosterCard", "PosterImage", "Rail", "ReleaseSearchModal",
+    "RequestFlowModal", "ServiceNotConfigured", "Sidebar", "SimilarMedia", "SkeletonCard", "StateViews",
+    "SubtitleSearchModal", "Toggle", "TorrentDetailModal", "TrailerModal", "WatchlistButton",
+  ].map((name) => `src/components/${name}.tsx`),
+];
+
+/** Les pages de la gestion et ses pièces — elles gardent leurs couleurs de séries (graphiques). */
+const isGestion = (path: string) => !/src\/components\/(cinema|player)\//.test(path);
 
 function sources(dir: string): string[] {
+  if (/\.tsx?$/.test(dir)) return [dir];
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) return sources(path);
@@ -58,6 +80,11 @@ describe("les surfaces sont neutres", () => {
   it("aucun fond slate", () => {
     expect(offenders(/bg-slate-\d{3}/g)).toEqual([]);
   });
+
+  // Ni bord, ni séparateur, ni anneau, ni dégradé : « aucun slate » veut dire aucun (§81).
+  it("aucun gris slate, nulle part", () => {
+    expect(offenders(/\b(?:border|divide|ring|from|to|via|placeholder|fill|stroke)-slate-\d{3}/g)).toEqual([]);
+  });
 });
 
 describe("les arrondis ont un rôle chacun", () => {
@@ -75,10 +102,14 @@ describe("une couleur par état", () => {
   it("aucune teinte d'état écrite à la main", () => {
     expect(
       offenders(
-        /(?:text|bg|border|ring)-(red|amber|emerald|green|yellow|rose)-\d{3}/g,
+        /(?:text|bg|border|ring)-(red|amber|emerald|green|yellow|rose)-\d{3}(?:\/[\d[\]]+)?/g,
         (path, m) =>
           (path.endsWith("CinemaNewBadge.tsx") && m === "bg-red-600") ||
-          (path.endsWith("PlayerPersonSheet.tsx") && /amber-/.test(m)),
+          (path.endsWith("PlayerPersonSheet.tsx") && /amber-/.test(m)) ||
+          // Dans la gestion, un fond plein est une couleur de série — la part des seeds dans le
+          // disque, une barre de graphique, un point de légende —, pas un état. Les textes, bords
+          // et voiles teintés, eux, disent un état et passent par les jetons.
+          (isGestion(path) && /^bg-[a-z]+-\d{3}$/.test(m)),
       ),
     ).toEqual([]);
   });

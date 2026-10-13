@@ -200,7 +200,7 @@ export default function QbittorrentPage() {
       {torrents && torrents.length > 0 && (
         <div>
           <div className="relative mb-3">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-subtle" />
             <input
               type="text"
               value={query}
@@ -222,7 +222,7 @@ export default function QbittorrentPage() {
                 <option value="seeding">{t('qbittorrent.sectionSeed')}</option>
                 <option value="paused">{t('qbittorrent.sectionPaused')}</option>
               </select>
-              <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+              <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" />
             </div>
 
             {categories.length > 0 && (
@@ -235,7 +235,7 @@ export default function QbittorrentPage() {
                   <option value="all">{t('qbittorrent.filterCategoryAll')}</option>
                   {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
-                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" />
               </div>
             )}
 
@@ -249,7 +249,7 @@ export default function QbittorrentPage() {
                   <option value="all">{t('qbittorrent.filterTrackerAll')}</option>
                   {trackers.map((tr) => <option key={tr} value={tr}>{tr}</option>)}
                 </select>
-                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" />
               </div>
             )}
           </div>
@@ -258,14 +258,14 @@ export default function QbittorrentPage() {
             <EmptyState label={t('qbittorrent.noMatches')} />
           ) : (
           <>
-          <div className="mb-3 flex items-center justify-between gap-3 text-xs text-slate-500">
+          <div className="mb-3 flex items-center justify-between gap-3 text-xs text-subtle">
             <span>
               {t('qbittorrent.showing', { n: String(visibleTorrents.length), total: String(sortedTorrents.length) })}
             </span>
             {hasMore && <span>{t('qbittorrent.batchLoad', { n: String(PAGE_SIZE) })}</span>}
           </div>
 
-          <div className="card divide-y divide-slate-800">
+          <div className="card divide-y divide-white/10">
           {visibleTorrents.map((torrent, i) => {
             const prev = visibleTorrents[i - 1];
             const curPriority = statePriority(torrent.state);
@@ -279,10 +279,10 @@ export default function QbittorrentPage() {
             return (
             <div key={torrent.hash}>
               {sectionLabel && (
-                <div className={`flex items-center gap-2 px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider ${
-                  curPriority === 0 ? "text-accent-400" : curPriority === 1 ? "text-emerald-400" : "text-slate-600"
+                <div className={`flex items-center gap-2 px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider ${
+                  curPriority === 0 ? "text-accent-400" : curPriority === 1 ? "text-success" : "text-subtle"
                 }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${curPriority === 0 ? "bg-accent-400 animate-pulse" : curPriority === 1 ? "bg-emerald-500" : "bg-slate-700"}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${curPriority === 0 ? "bg-accent-400 animate-pulse" : curPriority === 1 ? "bg-emerald-500" : "bg-white/15"}`} />
                   {sectionLabel}
                 </div>
               )}
@@ -292,9 +292,9 @@ export default function QbittorrentPage() {
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-white">{torrent.name}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-subtle">
                   <span>{formatBytes(torrent.size)}</span>
-                  <span className="flex items-center gap-1 text-emerald-400">
+                  <span className="flex items-center gap-1 text-success">
                     <ArrowDown size={12} /> {formatBytes(torrent.dlspeed)}/s
                   </span>
                   <span className="flex items-center gap-1 text-accent-400">
@@ -303,7 +303,7 @@ export default function QbittorrentPage() {
                   {curPriority === 0 && <span>{t('qbittorrent.eta')} {fmtEta(torrent.eta)}</span>}
                   <span className="capitalize">{torrent.state}</span>
                 </div>
-                <div className="mt-2 h-1.5 w-full rounded-full bg-slate-800">
+                <div className="mt-2 h-1.5 w-full rounded-full bg-white/10">
                   {/* Glisse d'un rafraîchissement au suivant (toutes les cinq secondes) au lieu de
                       sauter — une poignée de barres, la largeur suffit. */}
                   <div

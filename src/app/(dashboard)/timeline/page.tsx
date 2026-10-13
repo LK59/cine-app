@@ -34,19 +34,19 @@ function EventRow({ ev, t, dateLocale }: { ev: ImportEvent; t: TFn; dateLocale: 
   return (
     <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/3">
       {/* Poster */}
-      <div className="h-12 w-8 shrink-0 overflow-hidden rounded-sm bg-slate-800">
+      <div className="h-12 w-8 shrink-0 overflow-hidden rounded-sm bg-white/10">
         {ev.posterPath ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={ev.posterPath} alt={ev.title} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full items-center justify-center">
-            <Icon size={12} className="text-slate-600" />
+            <Icon size={12} className="text-subtle" />
           </div>
         )}
       </div>
 
       {/* Event icon */}
-      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${isImport ? "bg-emerald-500/15 text-emerald-400" : "bg-sky-500/15 text-sky-400"}`}>
+      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${isImport ? "bg-success/15 text-success" : "bg-sky-500/15 text-sky-400"}`}>
         {isImport ? <PackageCheck size={13} /> : <Download size={13} />}
       </div>
 
@@ -59,18 +59,18 @@ function EventRow({ ev, t, dateLocale }: { ev: ImportEvent; t: TFn; dateLocale: 
         ) : (
           <p className="truncate text-sm font-medium text-white">{ev.title}</p>
         )}
-        {ev.detail && <p className="truncate text-xs text-slate-500">{ev.detail}</p>}
+        {ev.detail && <p className="truncate text-xs text-subtle">{ev.detail}</p>}
       </div>
 
       {/* Badges + time */}
       <div className="flex shrink-0 items-center gap-2">
-        <span className={`hidden rounded-sm px-1.5 py-0.5 text-[10px] font-medium sm:inline ${ev.source === "radarr" ? "bg-accent-600/15 text-accent-400" : "bg-sky-600/15 text-sky-400"}`}>
+        <span className={`hidden rounded-sm px-1.5 py-0.5 text-[11px] font-medium sm:inline ${ev.source === "radarr" ? "bg-accent-600/15 text-accent-400" : "bg-sky-600/15 text-sky-400"}`}>
           {ev.type === "movie" ? t('timeline.badges.movie') : t('timeline.badges.series')}
         </span>
-        <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${isImport ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-700/60 text-slate-400"}`}>
+        <span className={`rounded-sm px-1.5 py-0.5 text-[11px] font-medium ${isImport ? "bg-success/10 text-success" : "bg-white/10 text-muted"}`}>
           {isImport ? t('timeline.badges.imported') : t('timeline.badges.grabbed')}
         </span>
-        <span className="w-10 text-right text-[11px] text-slate-600">{timeAgo(ev.date, t, dateLocale)}</span>
+        <span className="w-10 text-right text-[11px] text-subtle">{timeAgo(ev.date, t, dateLocale)}</span>
       </div>
     </div>
   );
@@ -120,7 +120,7 @@ export default function TimelinePage() {
               className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                 filter === f
                   ? "border-accent-500/40 bg-accent-500/10 text-accent-400"
-                  : "border-white/10 text-slate-500 hover:text-slate-300"
+                  : "border-white/10 text-subtle hover:text-muted"
               }`}
             >
               {f === "movie" && <Film size={11} />}
@@ -140,7 +140,7 @@ export default function TimelinePage() {
         <div className="space-y-6">
           {groups.map(({ label, items }) => (
             <div key={label}>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-subtle">{label}</p>
               <div className="card divide-y divide-white/5 overflow-hidden">
                 {items.map((ev) => <EventRow key={ev.id} ev={ev} t={t} dateLocale={dateLocale} />)}
               </div>

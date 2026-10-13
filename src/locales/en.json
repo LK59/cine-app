@@ -1069,7 +1069,8 @@
       "forecastStable": "Stable usage — no clear growth trend over the last {months} months",
       "forecastInsufficientData": "Not enough history for a forecast yet — check back in a few days",
       "forecastAdminOnly": "Admins only",
-      "monthlyGrowthLabel": "GB added per month (last 12 months)"
+      "monthlyGrowthLabel": "GB added per month (last 12 months)",
+      "legend": "What do the badges mean?"
     },
     "empty": "Nothing to show yet",
     "emptyHint": "The figures arrive once Radarr, Sonarr and Jellyfin have answered at least once."

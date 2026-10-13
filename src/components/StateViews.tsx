@@ -6,7 +6,7 @@ import { useT } from "@/components/TranslationProvider";
 export function LoadingState({ label }: { label?: string }) {
   const t = useT();
   return (
-    <div className="flex items-center gap-2 py-12 text-sm text-slate-400">
+    <div className="flex items-center gap-2 py-12 text-sm text-muted">
       <Loader2 size={18} className="animate-spin" />
       {label ?? t('common.loading')}
     </div>
@@ -16,7 +16,7 @@ export function LoadingState({ label }: { label?: string }) {
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   const t = useT();
   return (
-    <div className="card flex flex-col items-start gap-3 p-4 text-sm text-red-400 sm:flex-row sm:items-center sm:justify-between">
+    <div className="card flex flex-col items-start gap-3 p-4 text-sm text-danger sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
         <AlertTriangle size={18} className="shrink-0" />
         {message}
@@ -47,10 +47,10 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-slate-500">
-      <span className="text-slate-600">{icon ?? <Inbox size={24} />}</span>
-      <p className="text-slate-400">{label}</p>
-      {hint && <p className="max-w-sm text-xs leading-5 text-slate-600">{hint}</p>}
+    <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-subtle">
+      <span className="text-subtle">{icon ?? <Inbox size={24} />}</span>
+      <p className="text-muted">{label}</p>
+      {hint && <p className="max-w-sm text-xs leading-5 text-subtle">{hint}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
   );

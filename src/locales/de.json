@@ -1069,7 +1069,8 @@
       "forecastStable": "Stabile Nutzung — kein klarer Wachstumstrend über die letzten {months} Monate",
       "forecastInsufficientData": "Noch nicht genug Verlauf für eine Prognose — in ein paar Tagen erneut prüfen",
       "forecastAdminOnly": "Nur für Administratoren",
-      "monthlyGrowthLabel": "GB pro Monat hinzugefügt (letzte 12 Monate)"
+      "monthlyGrowthLabel": "GB pro Monat hinzugefügt (letzte 12 Monate)",
+      "legend": "Was bedeuten die Markierungen?"
     },
     "empty": "Noch nichts anzuzeigen",
     "emptyHint": "Die Zahlen erscheinen, sobald Radarr, Sonarr und Jellyfin mindestens einmal geantwortet haben."

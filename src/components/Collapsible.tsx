@@ -29,11 +29,11 @@ export function Collapsible({
         {icon}
         <span className="flex-1">{title}</span>
         {badge !== undefined && (
-          <span className="text-xs font-normal text-slate-500">({badge})</span>
+          <span className="text-xs font-normal text-subtle">({badge})</span>
         )}
         <ChevronDown
           size={15}
-          className={`shrink-0 text-slate-500 transition-transform duration-200 ${open ? "" : "-rotate-90"}`}
+          className={`shrink-0 text-subtle transition-transform duration-200 ${open ? "" : "-rotate-90"}`}
         />
       </button>
       {open && children}

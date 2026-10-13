@@ -29,9 +29,9 @@ function RequestRow({ r, showActions, onApprove, onDecline }: {
   const t = useT();
 
   const STATUS_LABELS: Record<number, { label: string; className: string }> = {
-    1: { label: t('jellyseerr.statusLabels.1'), className: "bg-amber-500/15 text-amber-400" },
-    2: { label: t('jellyseerr.statusLabels.2'), className: "bg-emerald-500/15 text-emerald-400" },
-    3: { label: t('jellyseerr.statusLabels.3'), className: "bg-red-500/15 text-red-400" },
+    1: { label: t('jellyseerr.statusLabels.1'), className: "bg-warning/15 text-warning" },
+    2: { label: t('jellyseerr.statusLabels.2'), className: "bg-success/15 text-success" },
+    3: { label: t('jellyseerr.statusLabels.3'), className: "bg-danger/15 text-danger" },
     4: { label: t('jellyseerr.statusLabels.4'), className: "bg-blue-500/15 text-blue-400" },
     5: { label: t('jellyseerr.statusLabels.5'), className: "bg-accent-500/15 text-accent-400" },
   };
@@ -49,30 +49,30 @@ function RequestRow({ r, showActions, onApprove, onDecline }: {
           className="shrink-0 rounded-sm object-cover"
         />
       ) : (
-        <div className="h-14 w-10 shrink-0 rounded-sm bg-slate-800" />
+        <div className="h-14 w-10 shrink-0 rounded-sm bg-white/10" />
       )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-white">
           {r.media.title || t('jellyseerr.untitled')}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] uppercase text-slate-500">
+          <span className="text-[11px] uppercase text-subtle">
             {r.media.mediaType === "movie" ? t('jellyseerr.mediaTypeMovie') : t('jellyseerr.mediaTypeSeries')}
           </span>
           {statusInfo && (
             <span className={`badge text-[11px] ${statusInfo.className}`}>{statusInfo.label}</span>
           )}
-          <span className="text-[11px] text-slate-600">{relDate(r.createdAt, t)}</span>
+          <span className="text-[11px] text-subtle">{relDate(r.createdAt, t)}</span>
         </div>
         {!showActions && r.requestedBy.displayName && (
-          <p className="mt-0.5 text-[11px] text-slate-500">
+          <p className="mt-0.5 text-[11px] text-subtle">
             {t('jellyseerr.requestedBy', { name: r.requestedBy.displayName })}
           </p>
         )}
       </div>
       {showActions && (
         <div className="flex shrink-0 items-center gap-1">
-          <button onClick={onApprove} className="btn-ghost px-2 text-emerald-400" title={t('jellyseerr.approve')}>
+          <button onClick={onApprove} className="btn-ghost px-2 text-success" title={t('jellyseerr.approve')}>
             <Check size={14} />
           </button>
           <button onClick={onDecline} className="btn-danger px-2" title={t('jellyseerr.deny')}>
@@ -150,13 +150,13 @@ export default function JellyseerrPage() {
             className={`flex items-center gap-2 rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
               tab === "mine"
                 ? "border-b-2 border-accent-500 text-accent-400"
-                : "text-slate-400 hover:text-slate-200"
+                : "text-muted hover:text-white"
             }`}
           >
             <User size={14} />
             {t('jellyseerr.tabMine')}
             {myRequests.length > 0 && (
-              <span className="ml-1 rounded-full bg-accent-600/30 px-1.5 py-0.5 text-[10px] text-accent-400">
+              <span className="ml-1 rounded-full bg-accent-600/30 px-1.5 py-0.5 text-[11px] text-accent-400">
                 {myRequests.length}
               </span>
             )}
@@ -167,13 +167,13 @@ export default function JellyseerrPage() {
           className={`flex items-center gap-2 rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
             tab === "all"
               ? "border-b-2 border-accent-500 text-accent-400"
-              : "text-slate-400 hover:text-slate-200"
+              : "text-muted hover:text-white"
           }`}
         >
           <ListChecks size={14} />
           {isReadOnly ? t('jellyseerr.tabAll') : t('jellyseerr.tabPending')}
           {tab === "all" && allRequests.length > 0 && (
-            <span className="ml-1 rounded-full bg-accent-600/30 px-1.5 py-0.5 text-[10px] text-accent-400">
+            <span className="ml-1 rounded-full bg-accent-600/30 px-1.5 py-0.5 text-[11px] text-accent-400">
               {allRequests.length}
             </span>
           )}

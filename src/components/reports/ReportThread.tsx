@@ -107,7 +107,7 @@ function LogsSnapshot({ logs }: { logs: ReportLogs }) {
                 <summary className="flex cursor-pointer list-none items-center gap-2">
                   <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${kindDot(String(line.kind ?? line.scope ?? ""))}`} />
                   <span className="shrink-0 tabular-nums text-subtle">{fullDate(Number(line.at))}</span>
-                  <span className="min-w-0 truncate text-slate-300">{describeLine(line, t)}</span>
+                  <span className="min-w-0 truncate text-muted">{describeLine(line, t)}</span>
                 </summary>
                 <div className="mt-2">
                   <JsonBlock value={line} />
@@ -272,7 +272,7 @@ export function ReportThread({ id }: { id: number }) {
           <div className="rounded-xl border border-white/10 bg-white/5 p-4">
             {/* Ouvert par l'administrateur depuis une séance : c'est son message, pas celui de la personne. */}
             {r.openedBy === "admin" && <p className="mb-1 text-[11px] text-muted">{t("report.ui.openedByAdmin")}</p>}
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-100">{r.description}</p>
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-white">{r.description}</p>
             <Images images={topImages} />
           </div>
           <ol className="space-y-3">
@@ -295,7 +295,7 @@ export function ReportThread({ id }: { id: number }) {
                     <p className="mb-0.5 text-[11px] text-muted">
                       {fromAdmin ? t("report.ui.fromAdmin") : m.authorName} · {fullDate(m.createdAt)}
                     </p>
-                    {m.body && <p className="whitespace-pre-wrap break-words text-sm text-slate-100">{m.body}</p>}
+                    {m.body && <p className="whitespace-pre-wrap break-words text-sm text-white">{m.body}</p>}
                     <Images images={r.images.filter((i) => i.messageId === m.id)} />
                   </div>
                 </li>

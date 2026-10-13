@@ -62,7 +62,7 @@ function WriteToViewer({ seanceId, user, onSent }: { seanceId: string; user: str
   };
   return (
     <div className="w-full space-y-2 rounded-xl border border-white/10 p-3">
-      <p className="text-xs text-slate-400">{t("activity.seance.writeHint", { who: user })}</p>
+      <p className="text-xs text-muted">{t("activity.seance.writeHint", { who: user })}</p>
       <textarea
         autoFocus
         value={message}
@@ -94,7 +94,7 @@ function Step({ line, start }: { line: Record<string, unknown>; start: number })
   const { steps, ...rest } = line as { steps?: unknown };
   return (
     <li className="relative pl-8">
-      <span className={`absolute left-[7px] top-3 h-2.5 w-2.5 rounded-full ring-4 ring-slate-950 ${kindDot(kind)}`} />
+      <span className={`absolute left-[7px] top-3 h-2.5 w-2.5 rounded-full ring-4 ring-ink ${kindDot(kind)}`} />
       {/* Sur téléphone, l'instant et le type sur une ligne, le texte en dessous ; en colonnes au-delà. */}
       <button
         type="button"
@@ -102,11 +102,11 @@ function Step({ line, start }: { line: Record<string, unknown>; start: number })
         className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 py-2 text-left sm:grid-cols-[4rem_4.5rem_minmax(0,1fr)_auto]"
       >
         <span className="flex items-center gap-2 sm:contents">
-          <span className="font-mono text-[11px] text-slate-500">+{clock((at - start) / 1000)}</span>
-          <span className={`rounded px-1.5 py-0.5 text-center font-mono text-[10px] sm:w-16 ${kindTone(kind)}`}>{kind}</span>
+          <span className="font-mono text-[11px] text-subtle">+{clock((at - start) / 1000)}</span>
+          <span className={`rounded px-1.5 py-0.5 text-center font-mono text-[11px] sm:w-16 ${kindTone(kind)}`}>{kind}</span>
         </span>
-        <span className="order-3 col-span-2 min-w-0 break-words text-sm text-slate-200 sm:order-none sm:col-span-1">{describeLine(line, t)}</span>
-        {open ? <ChevronDown size={14} className="mt-0.5 shrink-0 text-slate-500" /> : <ChevronRight size={14} className="mt-0.5 shrink-0 text-slate-500" />}
+        <span className="order-3 col-span-2 min-w-0 break-words text-sm text-white sm:order-none sm:col-span-1">{describeLine(line, t)}</span>
+        {open ? <ChevronDown size={14} className="mt-0.5 shrink-0 text-subtle" /> : <ChevronRight size={14} className="mt-0.5 shrink-0 text-subtle" />}
       </button>
       {open && (
         <div className="space-y-2 pb-3 sm:pl-[8.5rem]">
@@ -138,13 +138,13 @@ export function ActivitySeance({ id }: { id: string }) {
         <Poster itemId={s.itemId} className="h-20 w-14 sm:h-24 sm:w-16" />
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold text-white">{s.title}</h1>
-          <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-400">
-            <span className="text-accent-300">{s.user}</span>
+          <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted">
+            <span className="text-accent-400">{s.user}</span>
             <span>{fullDate(s.start)}</span>
             {s.device && <span>{s.device}</span>}
             <span>{s.player === "serveur" ? t("activity.seance.serverPlayer") : t("activity.seance.nativePlayer", { path: s.path ?? "?" })}</span>
           </p>
-          <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-500">
+          <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-subtle">
             {s.container && <span>{s.container}</span>}
             {s.video && <span>{s.video}</span>}
             {s.range && <span>{s.range}</span>}
@@ -173,7 +173,7 @@ export function ActivitySeance({ id }: { id: string }) {
           <Tile icon={Wrench} label={t("activity.seance.incidents")} value={s.rebuilds + s.stalls + s.fallbacks + s.errors} tone={s.rebuilds + s.stalls + s.fallbacks + s.errors ? "warn" : "good"} />
         </div>
       ) : (
-        <p className="card px-4 py-3 text-sm text-slate-400">{s.legacy ? t("activity.seance.legacyHint") : t("activity.seance.noStop")}</p>
+        <p className="card px-4 py-3 text-sm text-muted">{s.legacy ? t("activity.seance.legacyHint") : t("activity.seance.noStop")}</p>
       )}
 
       <section className="card p-4">
@@ -185,7 +185,7 @@ export function ActivitySeance({ id }: { id: string }) {
       <section className="card overflow-hidden">
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 px-4 py-3">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
-            <MessageSquareWarning size={15} className="text-slate-400" />
+            <MessageSquareWarning size={15} className="text-muted" />
             {t("activity.seance.reports", { n: reports.length })}
           </h2>
         </header>

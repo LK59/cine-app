@@ -93,13 +93,13 @@ function CreditCard({ c }: { c: PersonCredit }) {
       overlay={
         <>
         {c.inLibrary && (
-          <div className="absolute right-1.5 top-1.5 rounded-sm bg-emerald-600/90 p-1">
+          <div className="absolute right-1.5 top-1.5 rounded-sm bg-success/90 p-1">
             <BookCheck size={9} className="text-white" />
           </div>
         )}
         <RatingBadge value={c.voteAverage} className="absolute bottom-1.5 left-1.5" />
         {!c.inLibrary && (
-          <div className="absolute inset-0 flex flex-col justify-end bg-linear-to-t from-slate-900/95 via-transparent to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 transition-opacity p-2 gap-1.5">
+          <div className="absolute inset-0 flex flex-col justify-end bg-linear-to-t from-surface/95 via-transparent to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 transition-opacity p-2 gap-1.5">
             <WatchlistButton
               mediaType={c.mediaType === "movie" ? "movie" : "series"}
               tmdbId={c.tmdbId}
@@ -124,8 +124,8 @@ function CreditCard({ c }: { c: PersonCredit }) {
     >
       <div className="flex flex-1 flex-col gap-1 p-2">
         <p className="line-clamp-2 text-xs font-medium leading-snug text-white">{c.title}</p>
-        {c.character && <p className="line-clamp-1 text-[11px] text-slate-500 italic">{c.character}</p>}
-        {c.year && <p className="text-[11px] text-slate-600">{c.year}</p>}
+        {c.character && <p className="line-clamp-1 text-[11px] text-subtle italic">{c.character}</p>}
+        {c.year && <p className="text-[11px] text-subtle">{c.year}</p>}
       </div>
     </MediaCard>
   );
@@ -154,16 +154,16 @@ function ExpandableBio({ text, source }: { text: string; source: "wikipedia" | "
   const truncated = text.length > limit && !expanded;
   return (
     <div>
-      <p className="text-sm leading-relaxed text-slate-300">
+      <p className="text-sm leading-relaxed text-muted">
         {truncated ? text.slice(0, limit).trimEnd() + "…" : text}
       </p>
       <div className="mt-1.5 flex items-center gap-3">
         {text.length > limit && (
-          <button onClick={() => setExpanded((v) => !v)} className="btn btn-ghost btn-sm mt-1 text-accent-300">
+          <button onClick={() => setExpanded((v) => !v)} className="btn btn-ghost btn-sm mt-1 text-accent-400">
             {expanded ? t("person.collapse") : t("person.readMore")}
           </button>
         )}
-        <span className="text-[10px] text-slate-600">{source === "wikipedia" ? t("person.sourceWikipedia") : t("person.sourceTmdb")}</span>
+        <span className="text-[11px] text-subtle">{source === "wikipedia" ? t("person.sourceWikipedia") : t("person.sourceTmdb")}</span>
       </div>
     </div>
   );
@@ -207,13 +207,13 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
 
       <div className="mb-8 flex flex-col gap-6 sm:flex-row sm:gap-8">
         <div className="shrink-0">
-          <div className="h-48 w-32 overflow-hidden rounded-xl bg-slate-800 shadow-xl ring-1 ring-white/10 sm:h-64 sm:w-44">
+          <div className="h-48 w-32 overflow-hidden rounded-xl bg-white/10 shadow-xl ring-1 ring-white/10 sm:h-64 sm:w-44">
             {profileUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={profileUrl} alt={data.name ?? ""} className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full items-center justify-center">
-                <User size={48} className="text-slate-600" />
+                <User size={48} className="text-subtle" />
               </div>
             )}
           </div>
@@ -221,23 +221,23 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
 
         <div className="min-w-0 flex-1">
           <h1 className="mb-1 text-2xl font-bold text-white font-display">{data.name}</h1>
-          <div className="mb-3 flex flex-wrap gap-3 text-sm text-slate-400">
+          <div className="mb-3 flex flex-wrap gap-3 text-sm text-muted">
             {data.knownFor && (
               <span className="flex items-center gap-1.5">
-                <Briefcase size={13} className="text-slate-500" />
+                <Briefcase size={13} className="text-subtle" />
                 {data.knownFor}
               </span>
             )}
             {data.birthday && (
               <span className="flex items-center gap-1.5">
-                <Calendar size={13} className="text-slate-500" />
+                <Calendar size={13} className="text-subtle" />
                 {formatDate(data.birthday)}
                 {data.deathday && ` — ${formatDate(data.deathday)}`}
               </span>
             )}
             {data.placeOfBirth && (
               <span className="flex items-center gap-1.5">
-                <MapPin size={13} className="text-slate-500" />
+                <MapPin size={13} className="text-subtle" />
                 {data.placeOfBirth}
               </span>
             )}
@@ -254,7 +254,7 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
               )}
               {enriched.imdb && (
                 <a href={enriched.imdb} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 transition hover:bg-amber-500/20">
+                  className="flex items-center gap-1.5 rounded-lg border border-warning/20 bg-warning/10 px-2.5 py-1.5 text-xs font-medium text-warning transition hover:bg-warning/20">
                   <Star size={12} /> IMDb
                 </a>
               )}
@@ -274,11 +274,11 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
       {/* Photo strip */}
       {photos.length > 0 && (
         <div className="mb-8">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">{t('person.photos')}</h2>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-subtle">{t('person.photos')}</h2>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {photos.map((src, i) => (
               <button key={src} onClick={() => setLightboxIndex(i)}
-                className="relative h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-800 ring-1 ring-white/10 transition hover:ring-white/30 hover:scale-[1.03]">
+                className="relative h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-white/10 ring-1 ring-white/10 transition hover:ring-white/30 hover:scale-[1.03]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />
               </button>
@@ -291,7 +291,7 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
         <section className="mb-8">
           <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-white">
             <Film size={15} className="text-accent-400" />
-            Films <span className="text-sm font-normal text-slate-500">({movies.length})</span>
+            Films <span className="text-sm font-normal text-subtle">({movies.length})</span>
           </h2>
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8">
             {movies.map((c) => <CreditCard key={`m-${c.tmdbId}`} c={c} />)}
@@ -303,7 +303,7 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
         <section>
           <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-white">
             <Tv size={15} className="text-accent-400" />
-            Séries <span className="text-sm font-normal text-slate-500">({tvShows.length})</span>
+            Séries <span className="text-sm font-normal text-subtle">({tvShows.length})</span>
           </h2>
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8">
             {tvShows.map((c) => <CreditCard key={`t-${c.tmdbId}`} c={c} />)}
@@ -332,7 +332,7 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
           <img src={photos[lightboxIndex].replace("/w342/", "/w780/")} alt=""
             onClick={(e) => e.stopPropagation()}
             className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain shadow-2xl" />
-          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-white/50">{lightboxIndex + 1} / {photos.length}</p>
+          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-subtle">{lightboxIndex + 1} / {photos.length}</p>
         </div>,
         document.body
       )}

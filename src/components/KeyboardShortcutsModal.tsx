@@ -7,7 +7,7 @@ import { useT } from "@/components/TranslationProvider";
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd className="inline-flex items-center rounded-sm bg-white/10 px-1.5 py-0.5 text-[11px] font-mono text-slate-300">
+    <kbd className="inline-flex items-center rounded-sm bg-white/10 px-1.5 py-0.5 text-[11px] font-mono text-muted">
       {children}
     </kbd>
   );
@@ -47,14 +47,14 @@ export function KeyboardShortcutsModal() {
       <div className="space-y-1">
         {SHORTCUTS.map(({ keys, label }) => (
           <div key={label} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-            <span className="text-sm text-slate-300">{label}</span>
+            <span className="text-sm text-muted">{label}</span>
             <div className="flex items-center gap-1">
               {keys.map((k) => <Kbd key={k}>{k}</Kbd>)}
             </div>
           </div>
         ))}
       </div>
-      <p className="mt-4 text-center text-xs text-slate-600">
+      <p className="mt-4 text-center text-xs text-subtle">
         <Keyboard size={11} className="inline mr-1" />
         {t('shortcuts.hint', { key: '?' })}
       </p>

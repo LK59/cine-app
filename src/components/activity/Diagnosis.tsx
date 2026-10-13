@@ -11,11 +11,11 @@ import { ActivityLink } from "@/components/activity/nav";
 import type { TitleDiagnosis, Verdict } from "@/lib/activity/diagnosis";
 
 const VERDICT_TONE: Record<Verdict["kind"], string> = {
-  file: "bg-rose-500/15 text-rose-300",
-  platform: "bg-amber-500/15 text-amber-300",
+  file: "bg-danger/15 text-danger",
+  platform: "bg-warning/15 text-warning",
   device: "bg-sky-500/15 text-sky-300",
-  mixed: "bg-white/10 text-slate-300",
-  alone: "bg-white/10 text-slate-400",
+  mixed: "bg-white/10 text-muted",
+  alone: "bg-white/10 text-muted",
 };
 
 function sentence(d: TitleDiagnosis, t: T): string {
@@ -82,7 +82,7 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-slate-400 hover:bg-white/5 hover:text-white"
+        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-muted hover:bg-white/5 hover:text-white"
       >
         {open ? t("activity.diagnosis.collapse") : t("activity.diagnosis.showAll", { n: items.length })}
         {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -94,7 +94,7 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
       icon={Stethoscope}
       action={
         items.length > 0 ? (
-          <button type="button" disabled={busy} onClick={() => void clear("all")} className="text-xs text-slate-400 hover:text-white disabled:opacity-50">
+          <button type="button" disabled={busy} onClick={() => void clear("all")} className="text-xs text-muted hover:text-white disabled:opacity-50">
             {t("activity.diagnosis.clearAll")}
           </button>
         ) : undefined
@@ -114,7 +114,7 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
                     onClick={() => void clear([d.key])}
                     aria-label={t("activity.diagnosis.clearOne", { title: d.title })}
                     title={t("activity.diagnosis.clearHint")}
-                    className="order-last ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-white/10 hover:text-white disabled:opacity-50"
+                    className="order-last ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-subtle hover:bg-white/10 hover:text-white disabled:opacity-50"
                   >
                     <X size={14} />
                   </button>
@@ -122,14 +122,14 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
                     {t(`activity.diagnosis.verdict.${d.verdict.kind}`)}
                   </span>
                 </div>
-                <p className="text-sm text-slate-300">{sentence(d, t)}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm text-muted">{sentence(d, t)}</p>
+                <p className="text-xs text-subtle">
                   {t("activity.diagnosis.counts", { f: d.failed, n: d.seances, when: ago(d.lastFailure, now, t) })}
                 </p>
                 {d.reasons.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {d.reasons.map((r) => (
-                      <span key={r.reason} className="max-w-full truncate rounded bg-black/30 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+                      <span key={r.reason} className="max-w-full truncate rounded bg-black/30 px-1.5 py-0.5 font-mono text-[11px] text-muted">
                         {r.count > 1 ? `${r.count}× ` : ""}
                         {r.reason}
                       </span>
@@ -146,13 +146,13 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
                         {v.failed ? (
                           <ActivityLink
                             to={{ kind: "seance", id: v.failedSeances[0] }}
-                            className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-[11px] text-rose-200 hover:bg-rose-500/20"
+                            className="inline-flex items-center gap-1.5 rounded-full border border-danger/30 bg-danger/10 px-2 py-0.5 text-[11px] text-danger hover:bg-danger/20"
                           >
                             {label}
-                            <span className="tabular-nums text-rose-300/80">{count}</span>
+                            <span className="tabular-nums text-danger/80">{count}</span>
                           </ActivityLink>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-2 py-0.5 text-[11px] text-emerald-200/80">
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-success/20 bg-success/5 px-2 py-0.5 text-[11px] text-success/80">
                             {label}
                             <span className="tabular-nums">{count}</span>
                           </span>
@@ -167,7 +167,7 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
           {toggle && <li className="flex justify-center px-4 py-2">{toggle}</li>}
         </ul>
       ) : (
-        <p className="px-4 py-6 text-sm text-slate-500">{t("activity.diagnosis.none")}</p>
+        <p className="px-4 py-6 text-sm text-subtle">{t("activity.diagnosis.none")}</p>
       )}
     </Panel>
   );

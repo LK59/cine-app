@@ -9,8 +9,8 @@ import type { ReportSummary } from "@/lib/reports";
 const STATUS_TONE: Record<ReportStatus, string> = {
   draft: "bg-white/10 text-muted",
   open: "bg-sky-500/15 text-sky-300",
-  in_progress: "bg-amber-500/15 text-amber-300",
-  resolved: "bg-emerald-500/15 text-emerald-300",
+  in_progress: "bg-warning/15 text-warning",
+  resolved: "bg-success/15 text-success",
   closed: "bg-white/10 text-subtle",
 };
 
@@ -34,7 +34,7 @@ export function ReportPath({
   const parts = reportPathParts(report, (key) => t(key));
   return (
     <span className={`inline-flex min-w-0 items-center gap-1.5 ${className}`}>
-      {report.suggestion && <Lightbulb size={13} className="shrink-0 text-amber-300" />}
+      {report.suggestion && <Lightbulb size={13} className="shrink-0 text-warning" />}
       <span className={wrap ? "break-words" : "truncate"}>{parts.join(" › ")}</span>
     </span>
   );

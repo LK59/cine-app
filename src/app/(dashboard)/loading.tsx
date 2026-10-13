@@ -8,7 +8,7 @@ import { useT } from "@/components/TranslationProvider";
 export default function DashboardLoading() {
   const t = useT();
   return (
-    <div className="flex items-center gap-2 py-12 text-sm text-slate-400">
+    <div className="flex items-center gap-2 py-12 text-sm text-muted">
       <Loader2 size={18} className="animate-spin" />
       {t("common.loading")}
     </div>

@@ -59,7 +59,7 @@ function Choice({ label, selected, onClick, icon: Icon }: { label: string; selec
     >
       {Icon && <Icon size={17} className="shrink-0 text-muted" />}
       <span className="min-w-0 flex-1">{label}</span>
-      {selected ? <Check size={16} className="shrink-0 text-accent-300" /> : <ChevronRight size={16} className="shrink-0 text-subtle" />}
+      {selected ? <Check size={16} className="shrink-0 text-accent-400" /> : <ChevronRight size={16} className="shrink-0 text-subtle" />}
     </button>
   );
 }
@@ -154,7 +154,7 @@ function TitleStep({ value, onPick }: { value: Draft["item"]; onPick: (item: Non
                 {r.year ?? ""} · {r.kind === "series" ? t("report.ui.series") : t("report.ui.movie")}
               </span>
             </span>
-            {value?.id === r.id && <Check size={16} className="shrink-0 text-accent-300" />}
+            {value?.id === r.id && <Check size={16} className="shrink-0 text-accent-400" />}
           </button>
         ))}
         {/* Le catalogue arrive encore quand on ouvre l'assistant sans être passé par l'accueil : « aucun
@@ -165,7 +165,7 @@ function TitleStep({ value, onPick }: { value: Draft["item"]; onPick: (item: Non
       </div>
       {/* Le titre n'est pas dans la liste (il a disparu, il n'est pas encore arrivé) : on l'écrit. */}
       {!free ? (
-        <button type="button" onClick={() => setFree(true)} className="text-sm text-accent-300 hover:underline">
+        <button type="button" onClick={() => setFree(true)} className="text-sm text-accent-400 hover:underline">
           {t("report.ui.titleFree")}
         </button>
       ) : (
@@ -443,7 +443,7 @@ export function ReportWizard({
                     // eslint-disable-next-line @next/next/no-img-element -- une capture déjà envoyée, servie par notre route
                     <img src={image.url} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <span className="flex h-full items-center justify-center p-1 text-center text-[10px] text-muted">{image.name}</span>
+                    <span className="flex h-full items-center justify-center p-1 text-center text-[11px] text-muted">{image.name}</span>
                   )}
                   <button
                     type="button"

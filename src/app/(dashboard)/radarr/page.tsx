@@ -170,7 +170,7 @@ export default function RadarrPage() {
           <div className="mb-4 space-y-2">
             <div className="flex items-center gap-2">
               <div className="relative flex-1 sm:max-w-xs sm:flex-none">
-                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-subtle" />
                 <input
                   className="input w-full pl-8"
                   placeholder={t('radarr.searchPlaceholder')}
@@ -181,14 +181,14 @@ export default function RadarrPage() {
               <div className="ml-auto flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1">
                 <button
                   onClick={() => setView("grid")}
-                  className={`rounded-sm p-1 transition-colors ${view === "grid" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
+                  className={`rounded-sm p-1 transition-colors ${view === "grid" ? "bg-white/15 text-white" : "text-subtle hover:text-muted"}`}
                   title={t('common.viewGrid')}
                 >
                   <LayoutGrid size={15} />
                 </button>
                 <button
                   onClick={() => setView("list")}
-                  className={`rounded-sm p-1 transition-colors ${view === "list" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
+                  className={`rounded-sm p-1 transition-colors ${view === "list" ? "bg-white/15 text-white" : "text-subtle hover:text-muted"}`}
                   title={t('common.viewList')}
                 >
                   <List size={15} />
@@ -206,7 +206,7 @@ export default function RadarrPage() {
                   <option value="size">{t('common.sortSize')}</option>
                   <option value="rating">{t('common.sortImdbRating')}</option>
                 </select>
-                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" />
               </div>
               <div className="relative shrink-0">
                 <select className="input appearance-none pr-7 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}>
@@ -214,7 +214,7 @@ export default function RadarrPage() {
                   <option value="downloaded">{t('radarr.statusDownloaded')}</option>
                   <option value="missing">{t('radarr.statusMissing')}</option>
                 </select>
-                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" />
               </div>
               {genres.length > 0 && (
                 <div className="relative shrink-0">
@@ -222,7 +222,7 @@ export default function RadarrPage() {
                     <option value="">{t('common.allGenres')}</option>
                     {genres.map((g) => <option key={g} value={g}>{g}</option>)}
                   </select>
-                  <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" />
                 </div>
               )}
               <div className="relative shrink-0">
@@ -234,7 +234,7 @@ export default function RadarrPage() {
                   <option value="1990s">1990s</option>
                   <option value="older">{t('common.decadeBefore1990')}</option>
                 </select>
-                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" />
               </div>
               <div className="relative shrink-0">
                 <select className="input appearance-none pr-7 text-sm" value={qualityFilter} onChange={(e) => setQualityFilter(e.target.value as QualityFilter)}>
@@ -244,7 +244,7 @@ export default function RadarrPage() {
                   <option value="720p">720p</option>
                   <option value="missing">{t('common.notDownloaded')}</option>
                 </select>
-                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" />
               </div>
             </div>
           </div>
@@ -284,18 +284,18 @@ export default function RadarrPage() {
                       }
                     />
                     {(movie.overview || (movie.genres?.length ?? 0) > 0) && (
-                      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-56 -translate-x-1/2 rounded-xl border border-white/10 bg-slate-900/95 p-3 opacity-0 shadow-xl backdrop-blur-xs transition-opacity duration-150 group-hover/card:opacity-100 [@media(hover:hover)]:block">
+                      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-56 -translate-x-1/2 rounded-xl border border-white/10 bg-surface/95 p-3 opacity-0 shadow-xl backdrop-blur-xs transition-opacity duration-150 group-hover/card:opacity-100 [@media(hover:hover)]:block">
                         <p className="mb-0.5 text-xs font-semibold leading-tight text-white">{movie.title}</p>
-                        <p className="mb-2 text-[10px] text-slate-500">{movie.year}</p>
+                        <p className="mb-2 text-[11px] text-subtle">{movie.year}</p>
                         {(movie.genres?.length ?? 0) > 0 && (
                           <div className="mb-2 flex flex-wrap gap-1">
                             {movie.genres!.slice(0, 3).map((g) => (
-                              <span key={g} className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-slate-300">{g}</span>
+                              <span key={g} className="rounded-full bg-white/10 px-1.5 py-0.5 text-[11px] text-muted">{g}</span>
                             ))}
                           </div>
                         )}
                         {movie.overview && (
-                          <p className="line-clamp-3 text-[10px] leading-4 text-slate-400">{movie.overview}</p>
+                          <p className="line-clamp-3 text-[11px] leading-4 text-muted">{movie.overview}</p>
                         )}
                       </div>
                     )}
@@ -304,7 +304,7 @@ export default function RadarrPage() {
               </div>
               <div ref={sentinelRef} className="h-1" />
               {visibleCount < filtered.length && (
-                <p className="py-4 text-center text-xs text-slate-600">{t('radarr.remainingMovies', { n: filtered.length - visibleCount })}</p>
+                <p className="py-4 text-center text-xs text-subtle">{t('radarr.remainingMovies', { n: filtered.length - visibleCount })}</p>
               )}
             </>
           ) : (
@@ -322,24 +322,24 @@ export default function RadarrPage() {
                     <PosterImage src={poster(movie)} alt={movie.title} aspectRatio="" className="h-14 w-10 shrink-0 rounded-sm" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-white">{movie.title}</p>
-                      <p className="text-xs text-slate-500">{movie.year}</p>
+                      <p className="text-xs text-subtle">{movie.year}</p>
                     </div>
                     <div className="hidden items-center gap-3 sm:flex">
                       <ImdbBadge rating={movie.ratings?.imdb?.value} />
-                      <span className={`badge ${movie.hasFile ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"}`}>
+                      <span className={`badge ${movie.hasFile ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
                         {movie.hasFile ? t('radarr.downloaded') : t('radarr.missing')}
                       </span>
                       {movie.sizeOnDisk > 0 && (
-                        <span className="text-xs text-slate-500">{fmtSize(movie.sizeOnDisk)}</span>
+                        <span className="text-xs text-subtle">{fmtSize(movie.sizeOnDisk)}</span>
                       )}
-                      <span className="text-xs text-slate-600">{relDate(movie.added, t)}</span>
+                      <span className="text-xs text-subtle">{relDate(movie.added, t)}</span>
                     </div>
                   </Link>
                 ))}
               </div>
               <div ref={sentinelRef} className="h-1" />
               {visibleCount < filtered.length && (
-                <p className="py-4 text-center text-xs text-slate-600">{t('radarr.remainingMovies', { n: filtered.length - visibleCount })}</p>
+                <p className="py-4 text-center text-xs text-subtle">{t('radarr.remainingMovies', { n: filtered.length - visibleCount })}</p>
               )}
             </>
           )}
@@ -432,7 +432,7 @@ function AddMovieModal({ onClose }: { onClose: () => void }) {
             const isAdded = added.has(movie.tmdbId);
             return (
               <div key={movie.tmdbId} className="card-solid overflow-hidden">
-                <div className="relative aspect-2/3 bg-slate-800">
+                <div className="relative aspect-2/3 bg-white/10">
                   {movie.remotePoster ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -442,19 +442,19 @@ function AddMovieModal({ onClose }: { onClose: () => void }) {
                       loading="lazy"
                     />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-slate-600">
+                    <div className="flex h-full items-center justify-center text-subtle">
                       <Film size={32} />
                     </div>
                   )}
                   {inLibrary && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                      <span className="text-xs font-semibold text-emerald-400">{t('radarr.alreadyAdded')}</span>
+                      <span className="text-xs font-semibold text-success">{t('radarr.alreadyAdded')}</span>
                     </div>
                   )}
                 </div>
                 <div className="p-2">
                   <p className="line-clamp-2 text-xs font-medium leading-snug text-white">{movie.title}</p>
-                  <p className="mb-2 text-[11px] text-slate-500">{movie.year}</p>
+                  <p className="mb-2 text-[11px] text-subtle">{movie.year}</p>
                   <button
                     className="btn-primary w-full text-xs"
                     disabled={adding === movie.tmdbId || inLibrary || isAdded}

@@ -1069,7 +1069,8 @@
       "forecastStable": "Utilisation stable — pas de tendance de croissance nette sur les {months} derniers mois",
       "forecastInsufficientData": "Historique insuffisant pour une prévision — revient dans quelques jours",
       "forecastAdminOnly": "Réservé aux administrateurs",
-      "monthlyGrowthLabel": "Go ajoutés par mois (12 derniers mois)"
+      "monthlyGrowthLabel": "Go ajoutés par mois (12 derniers mois)",
+      "legend": "Que disent les pastilles ?"
     },
     "empty": "Aucune statistique à afficher",
     "emptyHint": "Les chiffres arrivent dès que Radarr, Sonarr et Jellyfin ont répondu au moins une fois."

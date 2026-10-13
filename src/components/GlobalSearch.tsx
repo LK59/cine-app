@@ -133,7 +133,7 @@ function SourceBadge({ source }: { source: string }) {
     radarr:     "bg-accent-600/15 text-accent-400",
     sonarr:     "bg-sky-600/15 text-sky-400",
     tmdb:       "bg-purple-600/15 text-purple-400",
-    jellyfin:   "bg-emerald-600/15 text-emerald-400",
+    jellyfin:   "bg-success/15 text-success",
     jellyseerr: "bg-teal-600/15 text-teal-400",
   };
   const labels: Record<string, string> = {
@@ -141,7 +141,7 @@ function SourceBadge({ source }: { source: string }) {
     jellyfin: "Jellyfin", jellyseerr: "Jellyseerr",
   };
   return (
-    <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${colors[source] ?? "bg-white/10 text-slate-400"}`}>
+    <span className={`rounded-sm px-1.5 py-0.5 text-[11px] font-medium ${colors[source] ?? "bg-white/10 text-muted"}`}>
       {labels[source] ?? source}
     </span>
   );
@@ -149,14 +149,14 @@ function SourceBadge({ source }: { source: string }) {
 
 function ResultPoster({ src, type }: { src: string | null; type: "movie" | "series" }) {
   return (
-    <div className="h-10 w-7 shrink-0 overflow-hidden rounded-sm bg-slate-800">
+    <div className="h-10 w-7 shrink-0 overflow-hidden rounded-sm bg-white/10">
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt="" className="h-full w-full object-cover" />
       ) : type === "movie" ? (
-        <div className="flex h-full items-center justify-center"><Film size={12} className="text-slate-600" /></div>
+        <div className="flex h-full items-center justify-center"><Film size={12} className="text-subtle" /></div>
       ) : (
-        <div className="flex h-full items-center justify-center"><Tv size={12} className="text-slate-600" /></div>
+        <div className="flex h-full items-center justify-center"><Tv size={12} className="text-subtle" /></div>
       )}
     </div>
   );
@@ -380,21 +380,21 @@ export function GlobalSearch() {
       <div className="absolute inset-0 bg-ink/80 backdrop-blur-xs" />
 
       <div
-        className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl"
+        className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Input row */}
         <div className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
-          <Search size={18} className="shrink-0 text-slate-400" />
+          <Search size={18} className="shrink-0 text-muted" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => { setQuery(e.target.value); setCursor(0); }}
             onKeyDown={handleKeyDown}
             placeholder={t('search.placeholder')}
-            className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 outline-hidden"
+            className="flex-1 bg-transparent text-sm text-white placeholder:text-subtle outline-hidden"
           />
-          {remoteLoading && <Loader2 size={14} className="shrink-0 animate-spin text-slate-500" />}
+          {remoteLoading && <Loader2 size={14} className="shrink-0 animate-spin text-subtle" />}
           <button onClick={() => setOpen(false)} aria-label={t('common.close')} className="btn btn-ghost btn-icon shrink-0">
             <X size={16} />
           </button>
@@ -404,7 +404,7 @@ export function GlobalSearch() {
           {/* ── Library results ── */}
           {libraryResults.length > 0 && (
             <div>
-              <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('search.inLibrary')}</p>
+              <p className="px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-subtle">{t('search.inLibrary')}</p>
               {libraryResults.map((r, i) => {
                 const isActive = i === cursor;
                 const wKey = `${r.type}:${r.tmdbId}`;
@@ -420,9 +420,9 @@ export function GlobalSearch() {
                       <button className="block truncate text-left text-sm font-medium text-white hover:text-accent-400" onClick={() => navigate(r.href)}>
                         {r.title}
                       </button>
-                      <p className="text-xs text-slate-500">{r.year}</p>
+                      <p className="text-xs text-subtle">{r.year}</p>
                       {role === "admin" && searchDebug && (
-                        <p className="mt-0.5 text-[10px] text-amber-400/80">
+                        <p className="mt-0.5 text-[11px] text-warning/80">
                           {r.debugOrigin === "local"
                             ? `local fuzzy: score ${Math.round(r.score)}`
                             : remoteData?.debug?.results?.[`${r.type}:${r.tmdbId}`]?.join(" · ") ?? "remote"}
@@ -453,7 +453,7 @@ export function GlobalSearch() {
           {/* ── Persons ── */}
           {persons.length > 0 && (
             <div>
-              <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('search.people')}</p>
+              <p className="px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-subtle">{t('search.people')}</p>
               {persons.map((p, i) => {
                 const idx = libraryResults.length + i;
                 return (
@@ -463,27 +463,27 @@ export function GlobalSearch() {
                     onMouseEnter={() => setCursor(idx)}
                     onClick={() => { setOpen(false); router.push(`/person/${p.id}`); }}
                   >
-                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-slate-800">
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-white/10">
                       {p.profilePath
                         // eslint-disable-next-line @next/next/no-img-element -- deliberate: a 40px TMDB profile picture in a live-search dropdown. Optimizing it server-side would add a round-trip to a list that rerenders on every keystroke.
                         ? <img src={p.profilePath} alt={p.name} className="h-full w-full object-cover" />
-                        : <div className="flex h-full items-center justify-center"><User size={14} className="text-slate-600" /></div>
+                        : <div className="flex h-full items-center justify-center"><User size={14} className="text-subtle" /></div>
                       }
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-white">{p.name}</p>
-                      <p className="truncate text-xs text-slate-500">{[departmentLabel(t, p.department), p.knownFor.slice(0, 2).join(", ")].filter(Boolean).join(" · ")}</p>
+                      <p className="truncate text-xs text-subtle">{[departmentLabel(t, p.department), p.knownFor.slice(0, 2).join(", ")].filter(Boolean).join(" · ")}</p>
                       {p.libraryTitles.length > 0 && (
                         <div className="mt-0.5 flex flex-wrap gap-1">
                           {p.libraryTitles.map((title) => (
-                            <span key={title} className="rounded-sm bg-accent-500/15 px-1.5 py-0.5 text-[10px] text-accent-400">{title}</span>
+                            <span key={title} className="rounded-sm bg-accent-500/15 px-1.5 py-0.5 text-[11px] text-accent-400">{title}</span>
                           ))}
                         </div>
                       )}
                     </div>
                     {p.libraryCount > 0
                       ? <span className="shrink-0 text-xs font-medium text-accent-400">{t('search.libraryCount', { n: p.libraryCount })}</span>
-                      : <User size={12} className="shrink-0 text-slate-500" />
+                      : <User size={12} className="shrink-0 text-subtle" />
                     }
                   </button>
                 );
@@ -494,7 +494,7 @@ export function GlobalSearch() {
           {/* ── TMDb results (not in library) ── */}
           {tmdbResults.length > 0 && (
             <div>
-              <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              <p className="px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-subtle">
                 {t('search.notInLibrary')}
               </p>
               {tmdbResults.slice(0, 6).map((r, i) => {
@@ -512,17 +512,17 @@ export function GlobalSearch() {
                     <ResultPoster src={r.posterPath} type={r.type} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-white">{r.title}</p>
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                      <div className="flex items-center gap-1.5 text-xs text-subtle">
                         {r.year && <span>{r.year}</span>}
                         {r.rating > 0 && (
                           <span className="flex items-center gap-0.5">
-                            <Star size={9} className="text-amber-400" />
+                            <Star size={9} className="text-warning" />
                             {r.rating.toFixed(1)}
                           </span>
                         )}
                       </div>
                       {role === "admin" && searchDebug && (
-                        <p className="mt-0.5 line-clamp-2 text-[10px] text-amber-400/80">
+                        <p className="mt-0.5 line-clamp-2 text-[11px] text-warning/80">
                           {remoteData?.debug?.results?.[`${r.type}:${r.tmdbId}`]?.join(" · ") ?? "tmdb"}
                         </p>
                       )}
@@ -557,19 +557,19 @@ export function GlobalSearch() {
           )}
 
           {showEmpty && (
-            <p className="px-4 py-6 text-center text-sm text-slate-500">{t('search.noResults', { query })}</p>
+            <p className="px-4 py-6 text-center text-sm text-subtle">{t('search.noResults', { query })}</p>
           )}
 
           {!query && (
-            <div className="hidden md:flex items-center justify-between px-4 py-3 text-xs text-slate-500">
+            <div className="hidden md:flex items-center justify-between px-4 py-3 text-xs text-subtle">
               <span>{t('search.keyboardHint')}</span>
               <span>{t('search.shortcutHint')}</span>
             </div>
           )}
 
           {role === "admin" && searchDebug && remoteData?.debug && query && (
-            <div className="border-t border-white/10 px-4 py-3 text-[10px] leading-5 text-slate-500">
-              <p className="font-semibold uppercase tracking-wider text-amber-400/80">{t('search.debug.title')}</p>
+            <div className="border-t border-white/10 px-4 py-3 text-[11px] leading-5 text-subtle">
+              <p className="font-semibold uppercase tracking-wider text-warning/80">{t('search.debug.title')}</p>
               <p>{t('search.debug.normalized')} {remoteData.debug.normalizedQuery}</p>
               <p>
                 {t('search.debug.natural')} {remoteData.debug.natural.enabled ? t('search.debug.yes') : t('search.debug.no')}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { fetcher } from "@/lib/swr";
@@ -27,39 +28,69 @@ function ForecastLine({ forecast }: { forecast: DiskForecast | undefined }) {
   if (!forecast) return null;
 
   if (forecast.trend === "insufficient_data") {
-    return <p className="text-xs text-slate-600">{t('stats.storage.forecastInsufficientData')}</p>;
+    return <p className="text-xs text-subtle">{t('stats.storage.forecastInsufficientData')}</p>;
   }
   if (forecast.trend === "stable") {
-    return <p className="text-xs text-slate-500">{t('stats.storage.forecastStable', { months: String(forecast.monthsUsed) })}</p>;
+    return <p className="text-xs text-subtle">{t('stats.storage.forecastStable', { months: String(forecast.monthsUsed) })}</p>;
   }
   const rate = fmtSize((forecast.growthBytesPerDay ?? 0) * 7);
   const days = forecast.daysUntilFull ?? 0;
   const key = days < 7 ? 'stats.storage.forecastGrowingSoon' : 'stats.storage.forecastGrowing';
-  const color = days < 14 ? "text-red-400" : days < 45 ? "text-amber-400" : "text-slate-400";
+  const color = days < 14 ? "text-danger" : days < 45 ? "text-warning" : "text-muted";
   return <p className={`text-xs ${color}`}>{t(key, { days: String(days), rate })}</p>;
+}
+
+/**
+ * La bulle d'une barre de graphique, sans survol obligatoire (13/10/2026, DECISIONS.md §81).
+ *
+ * Elle n'apparaissait qu'au survol (`group-hover`) : sur un téléphone, ni la taille d'un mois ni
+ * le partage films/séries ne se lisaient nulle part. Chaque barre est maintenant un bouton : un
+ * appui affiche sa bulle (un second la cache, un appui sur une autre la déplace), le clavier
+ * l'obtient au focus, et la souris garde le survol — limité au pointeur fin, pour qu'un doigt ne
+ * laisse pas une bulle « collée » au survol simulé.
+ */
+function useBarTip() {
+  const [selected, setSelected] = useState<string | null>(null);
+  return {
+    barProps: (key: string, label: string) => ({
+      type: "button" as const,
+      "aria-label": label,
+      "aria-pressed": selected === key,
+      onClick: () => setSelected((s) => (s === key ? null : key)),
+    }),
+    tipClass: (key: string) =>
+      selected === key
+        ? "opacity-100"
+        : "opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100 group-focus-visible:opacity-100",
+  };
 }
 
 function MonthlyGrowthChart({ monthlyGrowth }: { monthlyGrowth: { month: string; bytes: number }[] }) {
   const t = useT();
   const max = Math.max(...monthlyGrowth.map((m) => m.bytes), 1);
   const chartH = 60;
+  const tip = useBarTip();
 
   return (
     <div className="mt-3 border-t border-white/5 pt-3">
-      <p className="mb-2 text-[11px] text-slate-500">{t('stats.storage.monthlyGrowthLabel')}</p>
+      <p className="mb-2 text-[11px] text-subtle">{t('stats.storage.monthlyGrowthLabel')}</p>
       <div className="flex items-end gap-1" style={{ height: `${chartH + 16}px` }}>
         {monthlyGrowth.map((m) => {
           const barPx = m.bytes > 0 ? Math.max(2, Math.round((m.bytes / max) * chartH)) : 0;
           return (
-            <div key={m.month} className="group relative flex flex-1 flex-col items-center gap-1">
+            <button
+              key={m.month}
+              {...tip.barProps(m.month, `${monthLabel(m.month, t)} : ${fmtSize(m.bytes)}`)}
+              className="group relative flex flex-1 flex-col items-center gap-1 rounded-sm focus-visible:outline-none"
+            >
               {m.bytes > 0 && (
-                <div className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <span className={`pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-surface px-1.5 py-0.5 text-[11px] text-white shadow-glow transition-opacity ${tip.tipClass(m.month)}`}>
                   {fmtSize(m.bytes)}
-                </div>
+                </span>
               )}
-              <div className="w-full rounded-t-sm bg-accent-500/70" style={{ height: `${barPx}px` }} />
-              <span className="text-[9px] text-slate-600 leading-none">{monthLabel(m.month, t)}</span>
-            </div>
+              <span className="block w-full rounded-t-sm bg-accent-500/70" style={{ height: `${barPx}px` }} />
+              <span className="text-[11px] leading-none text-subtle">{monthLabel(m.month, t)}</span>
+            </button>
           );
         })}
       </div>
@@ -109,8 +140,8 @@ function StatCard({ icon: Icon, label, value, sub, color = "text-accent-400" }: 
       </div>
       <div className="min-w-0">
         <p className="text-2xl font-bold text-white font-display">{value}</p>
-        <p className="text-sm text-slate-400">{label}</p>
-        {sub && <p className="text-xs text-slate-600 mt-0.5">{sub}</p>}
+        <p className="text-sm text-muted">{label}</p>
+        {sub && <p className="text-xs text-subtle mt-0.5">{sub}</p>}
       </div>
     </div>
   );
@@ -122,10 +153,10 @@ function HBar({ label, value, max, color, fmt }: {
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="text-slate-300">{label}</span>
-        <span className="text-slate-500">{fmt ? fmt(value) : value}</span>
+        <span className="text-muted">{label}</span>
+        <span className="text-subtle">{fmt ? fmt(value) : value}</span>
       </div>
-      <div className="h-2 w-full rounded-full bg-slate-800">
+      <div className="h-2 w-full rounded-full bg-white/10">
         <div className={`h-2 rounded-full transition-[width] ${color}`} style={{ width: `${(value / max) * 100}%` }} />
       </div>
     </div>
@@ -137,16 +168,16 @@ function TopPeopleSection({ people }: { people: PeopleStats }) {
   const t = useT();
   const PersonRow = ({ p, i }: { p: PeopleStats["topActors"][number]; i: number }) => (
     <Link href={`/person/${p.tmdbId}`} className="flex items-center gap-3 rounded-lg p-2 hover:bg-white/5 transition-colors">
-      <span className="w-5 shrink-0 text-right text-xs text-slate-600">{i + 1}</span>
+      <span className="w-5 shrink-0 text-right text-xs text-subtle">{i + 1}</span>
       {p.photoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={p.photoUrl} alt={p.name} className="h-8 w-8 shrink-0 rounded-full object-cover" />
       ) : (
-        <div className="h-8 w-8 shrink-0 rounded-full bg-slate-700 flex items-center justify-center text-xs text-slate-400">
+        <div className="h-8 w-8 shrink-0 rounded-full bg-white/15 flex items-center justify-center text-xs text-muted">
           {p.name[0]}
         </div>
       )}
-      <span className="flex-1 truncate text-sm text-slate-300">{p.name}</span>
+      <span className="flex-1 truncate text-sm text-muted">{p.name}</span>
       <span className="shrink-0 text-xs font-semibold text-accent-400">{t('stats.topPeopleCount', { n: p.count })}</span>
     </Link>
   );
@@ -154,13 +185,13 @@ function TopPeopleSection({ people }: { people: PeopleStats }) {
   return (
     <div className="grid gap-5 md:grid-cols-2">
       <div className="card p-5">
-        <h3 className="mb-3 text-sm font-semibold text-slate-300">{t('stats.topActors')}</h3>
+        <h3 className="mb-3 text-sm font-semibold text-muted">{t('stats.topActors')}</h3>
         <div className="space-y-1">
           {people.topActors.map((p, i) => <PersonRow key={p.tmdbId} p={p} i={i} />)}
         </div>
       </div>
       <div className="card p-5">
-        <h3 className="mb-3 text-sm font-semibold text-slate-300">{t('stats.topDirectors')}</h3>
+        <h3 className="mb-3 text-sm font-semibold text-muted">{t('stats.topDirectors')}</h3>
         <div className="space-y-1">
           {people.topDirectors.map((p, i) => <PersonRow key={p.tmdbId} p={p} i={i} />)}
         </div>
@@ -169,19 +200,30 @@ function TopPeopleSection({ people }: { people: PeopleStats }) {
   );
 }
 
-function ListCard({ icon: Icon, iconColor, title, count, emptyLabel, children }: {
+function ListCard({ icon: Icon, iconColor, title, count, emptyLabel, legend, children }: {
   icon: LucideIcon; iconColor: string; title: string; count: number; emptyLabel: string; children: React.ReactNode;
+  /** Ce que veulent dire les pastilles — dit en clair, au doigt comme à la souris, et non plus en infobulle. */
+  legend?: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <div className="card p-4">
-      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
         <Icon size={14} className={iconColor} /> {title}
-        {count > 0 && <span className="ml-auto text-xs font-normal text-slate-600">{count}</span>}
+        {count > 0 && <span className="ml-auto text-xs font-normal text-subtle">{count}</span>}
       </h3>
       {count === 0 ? (
-        <p className="text-xs text-slate-600">{emptyLabel}</p>
+        <p className="text-xs text-subtle">{emptyLabel}</p>
       ) : (
-        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">{children}</div>
+        <>
+          {legend && (
+            <details className="mb-2 text-[11px] text-subtle">
+              <summary className="cursor-pointer select-none">{t('stats.storage.legend')}</summary>
+              <div className="mt-1.5 space-y-1 leading-relaxed">{legend}</div>
+            </details>
+          )}
+          <div className="max-h-72 space-y-2 overflow-y-auto pr-1">{children}</div>
+        </>
       )}
     </div>
   );
@@ -197,13 +239,13 @@ function StorageSection({ storage, onRefresh, forecast, isAdmin }: { storage: St
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
           {t('stats.storage.title')}
-          <span className="rounded-full bg-accent-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-400 ring-1 ring-inset ring-accent-500/30">
+          <span className="rounded-full bg-accent-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-accent-400 ring-1 ring-inset ring-accent-500/30">
             {t('stats.storage.beta')}
           </span>
         </h2>
         <div className="flex items-center gap-3">
           {storage.computedAt > 0 && (
-            <span className="text-xs text-slate-600">{t('stats.storage.lastScan', { time: relativeTimeAbs(storage.computedAt, t) })}</span>
+            <span className="text-xs text-subtle">{t('stats.storage.lastScan', { time: relativeTimeAbs(storage.computedAt, t) })}</span>
           )}
           <button
             onClick={onRefresh}
@@ -218,7 +260,7 @@ function StorageSection({ storage, onRefresh, forecast, isAdmin }: { storage: St
 
       {isAdmin && (
         <div className="card mb-5 p-4">
-          <h3 className="mb-1.5 text-sm font-semibold text-slate-300">{t('stats.storage.forecastTitle')}</h3>
+          <h3 className="mb-1.5 text-sm font-semibold text-muted">{t('stats.storage.forecastTitle')}</h3>
           <ForecastLine forecast={forecast} />
           {forecast && forecast.monthlyGrowth.some((m) => m.bytes > 0) && (
             <MonthlyGrowthChart monthlyGrowth={forecast.monthlyGrowth} />
@@ -234,57 +276,64 @@ function StorageSection({ storage, onRefresh, forecast, isAdmin }: { storage: St
             color="bg-sky-500" fmt={() => t('stats.storage.hardlinkCount', { linked: storage.seriesFiles.hardlinked, total: storage.seriesFiles.total })} />
         </div>
         <StatCard icon={HardDrive} label={t('stats.storage.seedOrphans')} value={fmtSize(storage.seedOrphanBytes)}
-          sub={t('stats.storage.seedOrphanCount', { n: storage.seedOrphans.length })} color="text-rose-400" />
+          sub={t('stats.storage.seedOrphanCount', { n: storage.seedOrphans.length })} color="text-danger" />
       </div>
 
       <div className="mb-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ListCard icon={AlertTriangle} iconColor="text-rose-400" title={t('stats.storage.seedOrphansTitle')}
-          count={storage.seedOrphans.length} emptyLabel={t('stats.storage.seedOrphansEmpty')}>
+        <ListCard icon={AlertTriangle} iconColor="text-danger" title={t('stats.storage.seedOrphansTitle')}
+          count={storage.seedOrphans.length} emptyLabel={t('stats.storage.seedOrphansEmpty')}
+          legend={
+            <>
+              <p><span className="font-medium uppercase text-sky-400">{t('stats.storage.activeSeed')}</span> — {t('stats.storage.activeSeedHint')}</p>
+              <p><span className="font-medium uppercase text-warning">{t('stats.storage.known')}</span> — {t('stats.storage.knownHint')}</p>
+              <p><span className="font-medium uppercase text-danger">{t('stats.storage.trueOrphan')}</span> — {t('stats.storage.trueOrphanHint')}</p>
+            </>
+          }>
           {storage.seedOrphans.map((item, i) => (
             <div key={i} className="text-xs">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-slate-300" title={item.fileName}>
+                <span className="truncate text-muted" title={item.fileName}>
                   {item.title}
-                  {item.trackers.length > 0 && <span className="ml-1.5 text-[10px] text-sky-500">({item.trackers.join(", ")})</span>}
+                  {item.trackers.length > 0 && <span className="ml-1.5 text-[11px] text-sky-500">({item.trackers.join(", ")})</span>}
                 </span>
                 <span className="shrink-0 flex items-center gap-1.5">
                   {item.activeInQbittorrent && (
-                    <span className="rounded bg-sky-500/10 px-1 py-0.5 text-[9px] uppercase tracking-wide text-sky-400" title={t('stats.storage.activeSeedHint')}>
+                    <span className="rounded bg-sky-500/10 px-1 py-0.5 text-[11px] uppercase tracking-wide text-sky-400" title={t('stats.storage.activeSeedHint')}>
                       {t('stats.storage.activeSeed')}
                     </span>
                   )}
                   {item.inCatalog ? (
-                    <span className="rounded bg-amber-500/10 px-1 py-0.5 text-[9px] uppercase tracking-wide text-amber-400" title={t('stats.storage.knownHint')}>
+                    <span className="rounded bg-warning/10 px-1 py-0.5 text-[11px] uppercase tracking-wide text-warning" title={t('stats.storage.knownHint')}>
                       {t('stats.storage.known')}
                     </span>
                   ) : (
-                    <span className="rounded bg-rose-500/10 px-1 py-0.5 text-[9px] uppercase tracking-wide text-rose-400" title={t('stats.storage.trueOrphanHint')}>
+                    <span className="rounded bg-danger/10 px-1 py-0.5 text-[11px] uppercase tracking-wide text-danger" title={t('stats.storage.trueOrphanHint')}>
                       {t('stats.storage.trueOrphan')}
                     </span>
                   )}
-                  <span className="text-slate-500">{fmtSize(item.sizeBytes)}</span>
+                  <span className="text-subtle">{fmtSize(item.sizeBytes)}</span>
                 </span>
               </div>
-              <div className="mt-0.5 pl-2 text-[10px] text-slate-600">
+              <div className="mt-0.5 pl-2 text-[11px] text-subtle">
                 {item.paths.map((p) => (
-                  <div key={p} className="truncate" title={p}>{p}</div>
+                  <div key={p} className="break-all">{p}</div>
                 ))}
               </div>
             </div>
           ))}
         </ListCard>
 
-        <ListCard icon={Copy} iconColor="text-amber-400" title={t('stats.storage.duplicatesTitle')}
+        <ListCard icon={Copy} iconColor="text-warning" title={t('stats.storage.duplicatesTitle')}
           count={storage.duplicates.length} emptyLabel={t('stats.storage.duplicatesEmpty')}>
           {storage.duplicates.map((item, i) => (
             <div key={i} className="text-xs">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-slate-300" title={item.title}>{item.title}</span>
-                <span className="shrink-0 text-amber-400">{t('stats.storage.duplicatesWasted', { n: fmtSize(item.wastedBytes) })}</span>
+                <span className="truncate text-muted" title={item.title}>{item.title}</span>
+                <span className="shrink-0 text-warning">{t('stats.storage.duplicatesWasted', { n: fmtSize(item.wastedBytes) })}</span>
               </div>
-              <div className="mt-0.5 pl-2 text-[10px] text-slate-600">
+              <div className="mt-0.5 pl-2 text-[11px] text-subtle">
                 {item.releases.map((r) => (
-                  <div key={r.relativePath} className="truncate" title={r.relativePath}>
+                  <div key={r.relativePath} className="break-all">
                     {r.name} ({fmtSize(r.sizeBytes)}){r.inLibrary ? "" : ` · ${t('stats.storage.seedCopy')}`}
                   </div>
                 ))}
@@ -296,26 +345,26 @@ function StorageSection({ storage, onRefresh, forecast, isAdmin }: { storage: St
 
       <div className="mb-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card p-4">
-          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
             <Share2 size={14} className="text-sky-400" /> {t('stats.storage.crossSeedTitle')}
           </h3>
           {storage.crossSeedByTracker.length === 0 ? (
-            <p className="text-xs text-slate-600">{t('stats.storage.crossSeedEmpty')}</p>
+            <p className="text-xs text-subtle">{t('stats.storage.crossSeedEmpty')}</p>
           ) : (
             <div className="space-y-3">
               {storage.crossSeedByTracker.map((group) => (
                 <details key={group.tracker} className="group">
-                  <summary className="flex cursor-pointer items-center justify-between gap-2 text-xs text-slate-300 marker:content-none">
+                  <summary className="flex cursor-pointer items-center justify-between gap-2 text-xs text-muted marker:content-none">
                     <span className="font-medium">{group.tracker}</span>
-                    <span className="text-slate-500">{group.files.length} · {fmtSize(group.totalBytes)}</span>
+                    <span className="text-subtle">{group.files.length} · {fmtSize(group.totalBytes)}</span>
                   </summary>
                   <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto pl-2 pr-1">
                     {group.files.map((f, i) => (
                       <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
-                        <span className="truncate text-slate-400" title={f.relativePath}>{f.title}</span>
+                        <span className="truncate text-muted" title={f.relativePath}>{f.title}</span>
                         <span className="shrink-0 flex items-center gap-1.5">
-                          {!f.linkedToLibrary && <span className="text-rose-400">{t('stats.storage.notLinked')}</span>}
-                          <span className="text-slate-600">{fmtSize(f.sizeBytes)}</span>
+                          {!f.linkedToLibrary && <span className="text-danger">{t('stats.storage.notLinked')}</span>}
+                          <span className="text-subtle">{fmtSize(f.sizeBytes)}</span>
                         </span>
                       </div>
                     ))}
@@ -330,19 +379,19 @@ function StorageSection({ storage, onRefresh, forecast, isAdmin }: { storage: St
           count={storage.heaviestH264.length} emptyLabel={t('stats.storage.heavyH264Empty')}>
           {storage.heaviestH264.map((item, i) => (
             <div key={i} className="flex items-center justify-between gap-2 text-xs">
-              <span className="truncate text-slate-300" title={item.title}>{item.title}</span>
+              <span className="truncate text-muted" title={item.title}>{item.title}</span>
               <span className="shrink-0 text-orange-400">{fmtSize(item.sizeBytes)}</span>
             </div>
           ))}
         </ListCard>
       </div>
 
-      <ListCard icon={Link2} iconColor="text-slate-500" title={t('stats.storage.notHardlinkedTitle')}
+      <ListCard icon={Link2} iconColor="text-subtle" title={t('stats.storage.notHardlinkedTitle')}
         count={storage.notHardlinked.length} emptyLabel={t('stats.storage.notHardlinkedEmpty')}>
         {storage.notHardlinked.map((item, i) => (
           <div key={i} className="flex items-center justify-between gap-2 text-xs">
-            <span className="truncate text-slate-400" title={item.fileName}>{item.title}</span>
-            <span className="shrink-0 text-slate-600">{fmtSize(item.sizeBytes)}</span>
+            <span className="truncate text-muted" title={item.fileName}>{item.title}</span>
+            <span className="shrink-0 text-subtle">{fmtSize(item.sizeBytes)}</span>
           </div>
         ))}
       </ListCard>
@@ -360,6 +409,7 @@ export default function StatsPage() {
     "/api/stats/library", fetcher, { refreshInterval: INTERVALS.SLOW }
   );
   const { data: disk } = useSWR<DiskStats>("/api/stats", fetcher, { refreshInterval: INTERVALS.SLOW });
+  const additionsTip = useBarTip();
   // Regular (polling) SWR, not immutable: the route now returns instantly with a possibly-stale
   // or empty result while it recomputes in the background (fire-and-forget, like storage stats),
   // so the client needs to keep checking back until the first computation lands.
@@ -392,7 +442,7 @@ export default function StatsPage() {
     "4K / UHD": "bg-accent-500",
     "1080p": "bg-sky-500",
     "720p": "bg-emerald-500",
-    "SD": "bg-slate-500",
+    "SD": "bg-white/30",
   };
   const maxBucket = Math.max(...Object.values(buckets), 1);
 
@@ -433,11 +483,11 @@ export default function StatsPage() {
             <StatCard icon={Layers} label={t('stats.cards.episodes')}
               value={lib.series.episodesWithFile.toLocaleString()}
               sub={t('stats.episodesOf', { n: lib.series.totalEpisodes.toLocaleString() })}
-              color="text-emerald-400" />
+              color="text-success" />
             <StatCard icon={HardDrive} label={t('stats.cards.storage')}
               value={disk ? fmtSize(disk.moviesBytes + disk.tvBytes) : "—"}
               sub={disk && disk.disk.total > 0 ? t('stats.cards.free', { n: fmtSize(disk.disk.free) }) : undefined}
-              color="text-amber-400" />
+              color="text-warning" />
           </div>
 
           {/* Disk bar */}
@@ -445,7 +495,7 @@ export default function StatsPage() {
             <section className="mb-8">
               <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.diskStorage')}</h2>
               <div className="card p-4">
-                <div className="mb-1 flex h-3 w-full overflow-hidden rounded-full bg-slate-800">
+                <div className="mb-1 flex h-3 w-full overflow-hidden rounded-full bg-white/10">
                   {disk.moviesBytes > 0 && (
                     <div className="h-full bg-accent-500" style={{ width: `${(disk.moviesBytes / disk.disk.total) * 100}%` }}
                       title={`${t('stats.diskLegend.movies')} : ${fmtSize(disk.moviesBytes)}`} />
@@ -459,16 +509,16 @@ export default function StatsPage() {
                       title={`${t('stats.diskLegend.seeds')} : ${fmtSize(disk.seedsBytes)}`} />
                   )}
                   {disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes > 0 && (
-                    <div className="h-full bg-slate-600"
+                    <div className="h-full bg-white/20"
                       style={{ width: `${((disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes) / disk.disk.total) * 100}%` }} />
                   )}
                 </div>
-                <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400">
+                <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted">
                   <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />{t('stats.diskLegend.movies')} — {fmtSize(disk.moviesBytes)}</span>
                   <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />{t('stats.diskLegend.series')} — {fmtSize(disk.tvBytes)}</span>
                   <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />{t('stats.diskLegend.seeds')} — {fmtSize(disk.seedsBytes)}</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />{t('stats.diskLegend.other')} — {fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes))}</span>
-                  <span className="ml-auto text-slate-500">{t('stats.diskUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-white/20" />{t('stats.diskLegend.other')} — {fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes))}</span>
+                  <span className="ml-auto text-subtle">{t('stats.diskUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
                 </div>
                 {isAdmin && (
                   <div className="mt-3 border-t border-white/5 pt-3">
@@ -495,23 +545,27 @@ export default function StatsPage() {
                   const total = mv + sv;
                   const barPx = total > 0 ? Math.max(4, Math.round((total / maxMonthly) * CHART_H)) : 0;
                   return (
-                    <div key={m} className="group relative flex flex-1 flex-col items-center gap-1">
+                    <button
+                      key={m}
+                      {...additionsTip.barProps(m, `${monthLabel(m, t)} : ${mv} ${t('stats.monthlyLegend.movies')}, ${sv} ${t('stats.monthlyLegend.series')}`)}
+                      className="group relative flex flex-1 flex-col items-center gap-1 rounded-sm focus-visible:outline-none"
+                    >
                       {total > 0 && (
-                        <div className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <span className={`pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-surface px-1.5 py-0.5 text-[11px] text-white shadow-glow transition-opacity ${additionsTip.tipClass(m)}`}>
                           {mv > 0 && <span className="text-accent-400">{mv}F </span>}
                           {sv > 0 && <span className="text-sky-400">{sv}S</span>}
-                        </div>
+                        </span>
                       )}
-                      <div className="w-full overflow-hidden rounded-t-sm flex flex-col" style={{ height: `${barPx}px` }}>
-                        {sv > 0 && <div className="w-full bg-sky-500" style={{ flex: sv }} />}
-                        {mv > 0 && <div className="w-full bg-accent-500" style={{ flex: mv }} />}
-                      </div>
-                      <span className="text-[9px] text-slate-600 leading-none">{monthLabel(m, t)}</span>
-                    </div>
+                      <span className="flex w-full flex-col overflow-hidden rounded-t-sm" style={{ height: `${barPx}px` }}>
+                        {sv > 0 && <span className="block w-full bg-sky-500" style={{ flex: sv }} />}
+                        {mv > 0 && <span className="block w-full bg-accent-500" style={{ flex: mv }} />}
+                      </span>
+                      <span className="text-[11px] leading-none text-subtle">{monthLabel(m, t)}</span>
+                    </button>
                   );
                 })}
               </div>
-              <div className="mt-2 flex gap-4 text-xs text-slate-400">
+              <div className="mt-2 flex gap-4 text-xs text-muted">
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" /> {t('stats.monthlyLegend.movies')}</span>
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" /> {t('stats.monthlyLegend.series')}</span>
               </div>
@@ -526,10 +580,10 @@ export default function StatsPage() {
                 <div className="card p-4 space-y-3">
                   {bucketOrder.filter((b) => buckets[b]).map((b) => (
                     <HBar key={b} label={b} value={buckets[b]} max={maxBucket}
-                      color={bucketColors[b] ?? "bg-slate-400"} fmt={(n) => t('stats.movieQualityCount', { n })} />
+                      color={bucketColors[b] ?? "bg-white/40"} fmt={(n) => t('stats.movieQualityCount', { n })} />
                   ))}
                   {Object.entries(buckets).filter(([b]) => !bucketOrder.includes(b)).map(([b, count]) => (
-                    <HBar key={b} label={b} value={count} max={maxBucket} color="bg-slate-400" fmt={(n) => t('stats.movieQualityCount', { n })} />
+                    <HBar key={b} label={b} value={count} max={maxBucket} color="bg-white/40" fmt={(n) => t('stats.movieQualityCount', { n })} />
                   ))}
                 </div>
               </section>
@@ -544,7 +598,7 @@ export default function StatsPage() {
                     const count = lib.languages[cat];
                     if (!count) return null;
                     const labels = { vfvo: t('stats.audioLang.vfvo'), vf: t('stats.audioLang.vf'), vo: t('stats.audioLang.vo'), other: t('stats.audioLang.other') };
-                    const colors = { vfvo: "bg-accent-500", vf: "bg-emerald-500", vo: "bg-sky-500", other: "bg-slate-500" };
+                    const colors = { vfvo: "bg-accent-500", vf: "bg-emerald-500", vo: "bg-sky-500", other: "bg-white/30" };
                     return (
                       <HBar key={cat} label={labels[cat]} value={count}
                         max={lib.movies.withFile} color={colors[cat]} fmt={(n) => t('stats.movieQualityCount', { n })} />
@@ -565,10 +619,10 @@ export default function StatsPage() {
                     color="bg-sky-500" fmt={(n) => t('stats.movieQualityCount', { n })} />
                   {lib.codecs.other > 0 && (
                     <HBar label={t('stats.audioLang.other')} value={lib.codecs.other} max={lib.movies.withFile}
-                      color="bg-slate-500" fmt={(n) => t('stats.movieQualityCount', { n })} />
+                      color="bg-white/30" fmt={(n) => t('stats.movieQualityCount', { n })} />
                   )}
-                  <div className="border-t border-white/5 pt-3 flex items-center gap-3 text-xs text-slate-400">
-                    <Zap size={12} className="text-amber-400" />
+                  <div className="border-t border-white/5 pt-3 flex items-center gap-3 text-xs text-muted">
+                    <Zap size={12} className="text-warning" />
                     <span>{t('stats.hdrCount', { n: lib.hdr, pct: Math.round(lib.hdr / lib.movies.withFile * 100) })}</span>
                   </div>
                 </div>

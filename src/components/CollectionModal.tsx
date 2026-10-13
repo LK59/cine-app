@@ -95,19 +95,19 @@ export function CollectionModal({
   return (
     <Modal title={collectionName} onClose={onClose} wide>
       {isLoading && (
-        <div className="flex items-center gap-2 py-8 text-sm text-slate-400">
+        <div className="flex items-center gap-2 py-8 text-sm text-muted">
           <Loader2 size={16} className="animate-spin" />
           {t('collection.loading')}
         </div>
       )}
 
       {!isLoading && data?.overview && (
-        <p className="mb-5 text-sm text-slate-400 leading-relaxed">{data.overview}</p>
+        <p className="mb-5 text-sm text-muted leading-relaxed">{data.overview}</p>
       )}
 
       {inLibrary.length > 0 && (
         <div className="mb-5">
-          <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-400">
+          <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-success">
             <Library size={13} />
             {t('collection.inLibrary', { n: inLibrary.length, total: parts.length })}
           </h3>
@@ -126,14 +126,14 @@ export function CollectionModal({
       {missing.length > 0 && (
         <div>
           <div className="mb-3 flex items-center justify-between gap-2">
-            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
               <Film size={13} />
               {t('collection.toAdd', { n: missing.length })}
             </h3>
             <button
               onClick={addAllToWatchlist}
               disabled={bulkAdding}
-              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-accent-400 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 text-xs text-subtle hover:text-accent-400 transition-colors disabled:opacity-50"
             >
               {bulkAdding ? <Loader2 size={12} className="animate-spin" /> : <ListPlus size={12} />}
               {t('collection.addAllToWatchlist')}

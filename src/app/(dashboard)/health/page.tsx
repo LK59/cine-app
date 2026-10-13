@@ -22,15 +22,15 @@ interface HealthResponse {
 }
 
 function LatencyBar({ ms }: { ms: number | null }) {
-  if (ms === null) return <span className="text-slate-600 text-xs">—</span>;
+  if (ms === null) return <span className="text-subtle text-xs">—</span>;
   // Bar width is purely informational (capped at 3 s) — color reflects success, not speed
   const width = Math.min(100, (ms / 3000) * 100);
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-20 rounded-full bg-slate-800">
-        <div className="h-full rounded-full bg-slate-500" style={{ width: `${width}%` }} />
+      <div className="h-1.5 w-20 rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-white/30" style={{ width: `${width}%` }} />
       </div>
-      <span className="text-[11px] text-slate-400">{ms} ms</span>
+      <span className="text-[11px] text-muted">{ms} ms</span>
     </div>
   );
 }
@@ -103,9 +103,9 @@ async function runApiCheck(ep: ApiEndpointDef): Promise<ApiEndpointResult> {
 }
 
 function ApiStatusBadge({ status }: { status: ApiEndpointResult["status"] }) {
-  if (status === "pending") return <Loader2 size={14} className="animate-spin text-slate-500" />;
-  if (status === "ok")      return <CircleCheckBig size={14} className="text-emerald-400" />;
-  return                           <CircleX size={14} className="text-red-400" />;
+  if (status === "pending") return <Loader2 size={14} className="animate-spin text-subtle" />;
+  if (status === "ok")      return <CircleCheckBig size={14} className="text-success" />;
+  return                           <CircleX size={14} className="text-danger" />;
 }
 
 function ApiChecksSection() {
@@ -135,13 +135,13 @@ function ApiChecksSection() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-white">{t('health.apiTests.sectionTitle')}</h2>
-          <p className="text-xs text-slate-500 mt-0.5">{t('health.apiTests.sectionSubtitle')}</p>
+          <p className="text-xs text-subtle mt-0.5">{t('health.apiTests.sectionSubtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           {ranAt && results.length > 0 && !running && (
-            <div className="flex items-center gap-2 text-[11px] text-slate-500">
-              <span className="text-emerald-400">{t('health.apiTests.ok', { n: String(okCount) })}</span>
-              {errCount > 0 && <span className="text-red-400">{t('health.apiTests.errors', { n: errCount })}</span>}
+            <div className="flex items-center gap-2 text-[11px] text-subtle">
+              <span className="text-success">{t('health.apiTests.ok', { n: String(okCount) })}</span>
+              {errCount > 0 && <span className="text-danger">{t('health.apiTests.errors', { n: errCount })}</span>}
               <span>· {ranAt}</span>
             </div>
           )}
@@ -157,7 +157,7 @@ function ApiChecksSection() {
       </div>
 
       {results.length === 0 && (
-        <div className="rounded-xl border border-dashed border-white/10 py-10 text-center text-sm text-slate-500">
+        <div className="rounded-xl border border-dashed border-white/10 py-10 text-center text-sm text-subtle">
           {t('health.apiTests.empty')}
         </div>
       )}
@@ -172,11 +172,11 @@ function ApiChecksSection() {
             return (
               <div key={group} className="card overflow-hidden">
                 <div className={`flex items-center gap-2 border-b border-white/5 px-4 py-2.5 ${
-                  groupStatus === "ok" ? "bg-emerald-500/5" : groupStatus === "error" ? "bg-red-500/5" : "bg-slate-800/30"
+                  groupStatus === "ok" ? "bg-success/5" : groupStatus === "error" ? "bg-danger/5" : "bg-white/5"
                 }`}>
-                  {groupStatus === "pending" && <Loader2 size={13} className="animate-spin text-slate-500" />}
-                  {groupStatus === "ok"      && <CircleCheckBig size={13} className="text-emerald-400" />}
-                  {groupStatus === "error"   && <CircleX size={13} className="text-red-400" />}
+                  {groupStatus === "pending" && <Loader2 size={13} className="animate-spin text-subtle" />}
+                  {groupStatus === "ok"      && <CircleCheckBig size={13} className="text-success" />}
+                  {groupStatus === "error"   && <CircleX size={13} className="text-danger" />}
                   <span className="text-sm font-semibold text-white">{t(group)}</span>
                 </div>
                 <div className="divide-y divide-white/5">
@@ -184,12 +184,12 @@ function ApiChecksSection() {
                     <div key={r.route} className="flex items-center gap-3 px-4 py-2.5">
                       <ApiStatusBadge status={r.status} />
                       <div className="min-w-0 flex-1">
-                        <span className="text-sm text-slate-200">{t(r.name)}</span>
-                        <span className="ml-2 font-mono text-[10px] text-slate-600">{r.route}</span>
+                        <span className="text-sm text-white">{t(r.name)}</span>
+                        <span className="ml-2 font-mono text-[11px] text-subtle">{r.route}</span>
                       </div>
                       <div className="shrink-0 text-right">
                         {r.status === "error" && r.error && (
-                          <span className="mr-3 text-[11px] text-red-400">
+                          <span className="mr-3 text-[11px] text-danger">
                             {r.error === "unexpectedResponse" ? t('health.apiTests.unexpectedResponse')
                               : r.error === "internalError" ? t('health.apiTests.internalError')
                               : r.error}
@@ -220,10 +220,10 @@ function StoragePathsSection({ paths }: { paths: StoragePathHealth[] }) {
   return (
     <div className="mt-8">
       <div className="mb-4 flex items-center gap-2">
-        <HardDrive size={16} className="text-slate-500" />
+        <HardDrive size={16} className="text-subtle" />
         <div>
           <h2 className="text-base font-semibold text-white">{t('health.storagePaths.sectionTitle')}</h2>
-          <p className="text-xs text-slate-500 mt-0.5">{t('health.storagePaths.sectionSubtitle')}</p>
+          <p className="text-xs text-subtle mt-0.5">{t('health.storagePaths.sectionSubtitle')}</p>
         </div>
       </div>
 
@@ -232,15 +232,15 @@ function StoragePathsSection({ paths }: { paths: StoragePathHealth[] }) {
           <div key={p.name} className="flex items-center gap-3 px-4 py-2.5">
             <StatusIcon status={p.status} />
             <div className="min-w-0 flex-1">
-              <span className="text-sm text-slate-200">{t(`health.storagePaths.names.${p.name}`)}</span>
-              <span className="ml-2 font-mono text-[10px] text-slate-600">{p.path}</span>
+              <span className="text-sm text-white">{t(`health.storagePaths.names.${p.name}`)}</span>
+              <span className="ml-2 font-mono text-[11px] text-subtle">{p.path}</span>
             </div>
             <div className="shrink-0 text-right text-[11px]">
               {p.status === "ok" && p.entries !== null && (
-                <span className="text-slate-500">{t('health.storagePaths.entries', { n: String(p.entries) })}</span>
+                <span className="text-subtle">{t('health.storagePaths.entries', { n: String(p.entries) })}</span>
               )}
               {p.error && (
-                <span className="text-red-400">
+                <span className="text-danger">
                   {p.error === "notFound" ? t('health.storagePaths.notFound') : p.error === "notReadable" ? t('health.storagePaths.notReadable') : p.error}
                 </span>
               )}
@@ -269,10 +269,10 @@ function LatencyHistorySection({ stats }: { stats: ServiceLatencyStat[] }) {
   return (
     <div className="mt-8">
       <div className="mb-4 flex items-center gap-2">
-        <Activity size={16} className="text-slate-500" />
+        <Activity size={16} className="text-subtle" />
         <div>
           <h2 className="text-base font-semibold text-white">{t("health.latencyHistory.sectionTitle")}</h2>
-          <p className="mt-0.5 text-xs text-slate-500">{t("health.latencyHistory.sectionSubtitle")}</p>
+          <p className="mt-0.5 text-xs text-subtle">{t("health.latencyHistory.sectionSubtitle")}</p>
         </div>
       </div>
 
@@ -280,22 +280,22 @@ function LatencyHistorySection({ stats }: { stats: ServiceLatencyStat[] }) {
         {stats.map((stat) => (
           <div key={stat.service} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
             <div className="min-w-0 flex-1">
-              <span className="text-sm text-slate-200">{stat.service}</span>
-              <span className="ml-2 text-[10px] text-slate-600">
+              <span className="text-sm text-white">{stat.service}</span>
+              <span className="ml-2 text-[11px] text-subtle">
                 {t("health.latencyHistory.samples", { n: String(stat.samples) })}
               </span>
             </div>
             {/* Un service injoignable toute la semaine n'a aucune latence à montrer : la moyenne
                 est alors nulle, et le tiret de LatencyBar le dit mieux qu'un zéro. */}
             <LatencyBar ms={stat.avgMs} />
-            <div className="w-24 shrink-0 text-right text-[11px] tabular-nums text-slate-500">
+            <div className="w-24 shrink-0 text-right text-[11px] tabular-nums text-subtle">
               {stat.maxMs !== null && t("health.latencyHistory.peak", { ms: String(stat.maxMs) })}
             </div>
             <div className="w-24 shrink-0 text-right text-[11px] tabular-nums">
               {stat.failures > 0 ? (
-                <span className="text-amber-400">{t("health.latencyHistory.failures", { n: String(stat.failures) })}</span>
+                <span className="text-warning">{t("health.latencyHistory.failures", { n: String(stat.failures) })}</span>
               ) : (
-                <span className="text-slate-600">{t("health.latencyHistory.noFailure")}</span>
+                <span className="text-subtle">{t("health.latencyHistory.noFailure")}</span>
               )}
             </div>
           </div>
@@ -329,7 +329,7 @@ function TechnicalDetail() {
   return (
     <div>
       <div className="mb-4 flex items-center gap-2">
-        <Wrench size={16} className="text-slate-500" />
+        <Wrench size={16} className="text-subtle" />
         <h2 className="text-base font-semibold text-white">{t('health.technicalTitle')}</h2>
       </div>
 
@@ -363,33 +363,33 @@ function TechnicalDetail() {
                 <div className="mb-3 flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-semibold text-white">{svc.name}</p>
-                    <p className="truncate text-[11px] text-slate-500">{svc.url}</p>
+                    <p className="truncate text-[11px] text-subtle">{svc.url}</p>
                   </div>
                   <StatusIcon status={svc.status} />
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">{t('health.latency')}</span>
+                    <span className="text-xs text-subtle">{t('health.latency')}</span>
                     <LatencyBar ms={svc.latencyMs} />
                   </div>
                   {svc.version && (
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">{t('health.version')}</span>
-                      <span className="text-xs text-slate-300 font-mono">{svc.version}</span>
+                      <span className="text-xs text-subtle">{t('health.version')}</span>
+                      <span className="text-xs text-muted font-mono">{svc.version}</span>
                     </div>
                   )}
                   {svc.error && (
-                    <div className="mt-1 rounded-md bg-red-500/10 px-2.5 py-1.5 text-[11px] text-red-400">
+                    <div className="mt-1 rounded-lg bg-danger/10 px-2.5 py-1.5 text-[11px] text-danger">
                       {svc.error}
                     </div>
                   )}
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">{t('health.status')}</span>
-                    <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
-                      svc.status === "ok"       ? "bg-emerald-500/15 text-emerald-400"
-                      : svc.status === "degraded" ? "bg-amber-500/15 text-amber-400"
-                      : "bg-red-500/15 text-red-400"
+                    <span className="text-xs text-subtle">{t('health.status')}</span>
+                    <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
+                      svc.status === "ok"       ? "bg-success/15 text-success"
+                      : svc.status === "degraded" ? "bg-warning/15 text-warning"
+                      : "bg-danger/15 text-danger"
                     }`}>
                       {svc.status === "ok" ? t('health.statusOnline') : svc.status === "degraded" ? t('health.statusDegraded') : t('health.statusOffline')}
                     </span>

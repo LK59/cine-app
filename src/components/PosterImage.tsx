@@ -99,8 +99,8 @@ export function PosterImage({
     return (
       // Une icône plutôt que « No image », écrit en anglais pour toutes les langues (audit du
       // 08/10/2026) : le titre est dit par `alt`, comme pour une image.
-      <div role="img" aria-label={alt} className={`${aspectRatio} ${className} flex items-center justify-center bg-slate-800/60`}>
-        <ImageOff size={20} className="text-slate-600" aria-hidden="true" />
+      <div role="img" aria-label={alt} className={`${aspectRatio} ${className} flex items-center justify-center bg-white/10`}>
+        <ImageOff size={20} className="text-subtle" aria-hidden="true" />
       </div>
     );
   }
@@ -108,8 +108,8 @@ export function PosterImage({
   return (
     <div ref={track} className={`${aspectRatio} ${className} relative overflow-hidden`}>
       {failed && (
-        <div role="img" aria-label={alt} className="absolute inset-0 flex items-center justify-center bg-slate-800/60">
-          <ImageOff size={20} className="text-slate-600" aria-hidden="true" />
+        <div role="img" aria-label={alt} className="absolute inset-0 flex items-center justify-center bg-white/10">
+          <ImageOff size={20} className="text-subtle" aria-hidden="true" />
         </div>
       )}
       {/* Retiré quand l'image arrive **s'il s'anime**, et par le nœud plutôt que par un rendu.
@@ -118,7 +118,7 @@ export function PosterImage({
           affiche opaque, mais bien en train de tourner — une par carte, pour toujours.
           La variante `subtle`, elle, n'anime rien : la retirer ne gagnait aucune image par seconde
           et coûtait une recherche dans le parent par affiche chargée. Voir `onLoad`. */}
-      <div data-poster-placeholder className={`absolute inset-0 ${subtle ? "bg-slate-800/50" : "skeleton"}`} />
+      <div data-poster-placeholder className={`absolute inset-0 ${subtle ? "bg-white/5" : "skeleton"}`} />
       <Image
         key={retryKey}
         src={src}

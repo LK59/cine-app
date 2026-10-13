@@ -73,10 +73,10 @@ export function MoreMenu({ items, label }: { items: MoreMenuItem[]; label: strin
                 item.onSelect();
               }}
               className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors disabled:opacity-45 ${
-                item.tone === "danger" ? "text-red-300 hover:bg-red-500/10" : "text-slate-200 hover:bg-white/10"
+                item.tone === "danger" ? "text-danger hover:bg-danger/10" : "text-white hover:bg-white/10"
               }`}
             >
-              <span className="shrink-0 text-slate-500">{item.icon}</span>
+              <span className="shrink-0 text-subtle">{item.icon}</span>
               <span className="truncate">{item.label}</span>
             </button>
           ))}

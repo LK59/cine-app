@@ -85,7 +85,7 @@ export function MediaCard({
       {(title || subtitle) && (
         <div className="p-2">
           {title && <p className="truncate text-xs font-medium text-white">{title}</p>}
-          {subtitle && <div className="mt-0.5 text-[11px] text-slate-500">{subtitle}</div>}
+          {subtitle && <div className="mt-0.5 text-[11px] text-subtle">{subtitle}</div>}
         </div>
       )}
       {children}

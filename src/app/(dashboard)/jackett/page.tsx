@@ -56,16 +56,16 @@ export default function JackettPage() {
               <div key={indexer.id} className="flex items-center justify-between p-3">
                 <div>
                   <p className="text-sm font-medium text-white">{indexer.name}</p>
-                  <p className="text-xs text-slate-500">{indexer.type}</p>
+                  <p className="text-xs text-subtle">{indexer.type}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   {state === "ok" && (
-                    <span className="badge bg-emerald-500/15 text-emerald-400">
+                    <span className="badge bg-success/15 text-success">
                       <CircleCheck size={12} /> OK
                     </span>
                   )}
                   {state === "fail" && (
-                    <span className="badge bg-red-500/15 text-red-400">
+                    <span className="badge bg-danger/15 text-danger">
                       <CircleX size={12} /> {t('jackett.testFailed')}
                     </span>
                   )}

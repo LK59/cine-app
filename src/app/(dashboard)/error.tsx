@@ -33,11 +33,11 @@ export default function DashboardError({
 
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
-      <div className="mb-4 rounded-full bg-red-500/10 p-4">
-        <AlertTriangle size={32} className="text-red-400" />
+      <div className="mb-4 rounded-full bg-danger/10 p-4">
+        <AlertTriangle size={32} className="text-danger" />
       </div>
       <h2 className="mb-2 text-lg font-semibold text-white">{t('errors.pageCrashed')}</h2>
-      <p className="mb-6 max-w-sm text-sm text-slate-400">
+      <p className="mb-6 max-w-sm text-sm text-muted">
         {error.message || t('errors.pageError')}
       </p>
       <button

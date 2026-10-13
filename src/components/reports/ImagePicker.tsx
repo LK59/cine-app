@@ -21,7 +21,7 @@ function Thumb({ file, onRemove }: { file: File; onRemove: () => void }) {
         // eslint-disable-next-line @next/next/no-img-element -- un aperçu local, jamais servi
         <img src={url} alt="" className="h-full w-full object-cover" onError={() => setBroken(true)} />
       ) : (
-        <span className="flex h-full w-full items-center justify-center p-1 text-center text-[10px] leading-tight text-muted">{file.name}</span>
+        <span className="flex h-full w-full items-center justify-center p-1 text-center text-[11px] leading-tight text-muted">{file.name}</span>
       )}
       <button
         type="button"

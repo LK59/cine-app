@@ -15,8 +15,8 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   if (!value || value === "—") return null;
   return (
     <div className="flex items-baseline justify-between gap-4 border-b border-white/5 py-2 last:border-0">
-      <span className="shrink-0 text-xs text-slate-500">{label}</span>
-      <span className="text-right text-xs font-medium text-slate-200">{value}</span>
+      <span className="shrink-0 text-xs text-subtle">{label}</span>
+      <span className="text-right text-xs font-medium text-white">{value}</span>
     </div>
   );
 }
@@ -42,11 +42,11 @@ export function MediaInfoModal({
   return (
     <Modal title={t('mediaInfo.title')} onClose={onClose}>
       {!f ? (
-        <p className="text-sm text-slate-400">{t('mediaInfo.noFile')}</p>
+        <p className="text-sm text-muted">{t('mediaInfo.noFile')}</p>
       ) : (
         <div className="space-y-5">
           <section>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-subtle">
               {t('mediaInfo.sectionFile')}
             </p>
             <Row label={t('mediaInfo.path')} value={f.relativePath} />
@@ -56,7 +56,7 @@ export function MediaInfoModal({
           </section>
 
           <section>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-subtle">
               {t('mediaInfo.sectionVideo')}
             </p>
             <Row label={t('mediaInfo.codec')} value={mi?.videoCodec} />
@@ -79,7 +79,7 @@ export function MediaInfoModal({
           </section>
 
           <section>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-subtle">
               {t('mediaInfo.sectionAudio')}
             </p>
             <Row label={t('mediaInfo.codec')} value={mi?.audioCodec} />
@@ -92,7 +92,7 @@ export function MediaInfoModal({
 
           {mi?.subtitles && (
             <section>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-subtle">
                 {t('mediaInfo.sectionSubtitles')}
               </p>
               <Row label={t('mediaInfo.tracks')} value={mi.subtitles} />

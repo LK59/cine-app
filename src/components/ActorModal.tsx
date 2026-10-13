@@ -75,7 +75,7 @@ function PhotoLightbox({ photos, startIndex, onClose }: { photos: string[]; star
         onClick={(e) => e.stopPropagation()}
         className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
       />
-      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-white/50">{idx + 1} / {photos.length}</p>
+      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-subtle">{idx + 1} / {photos.length}</p>
     </div>,
     document.body
   );
@@ -90,16 +90,16 @@ function Biography({ text, source }: { text: string; source: "wikipedia" | "tmdb
   const truncated = text.length > limit && !expanded;
   return (
     <div>
-      <p className="text-sm leading-relaxed text-slate-400">
+      <p className="text-sm leading-relaxed text-muted">
         {truncated ? text.slice(0, limit).trimEnd() + "…" : text}
       </p>
       <div className="mt-1.5 flex items-center justify-between">
         {text.length > limit && (
-          <button onClick={() => setExpanded((v) => !v)} className="btn btn-ghost btn-sm mt-1 text-accent-300">
+          <button onClick={() => setExpanded((v) => !v)} className="btn btn-ghost btn-sm mt-1 text-accent-400">
             {expanded ? t('modals.actor.collapse') : t('modals.actor.readMore')}
           </button>
         )}
-        <span className="ml-auto text-[10px] text-slate-600">
+        <span className="ml-auto text-[11px] text-subtle">
           {source === "wikipedia" ? t('modals.actor.sourceWikipedia') : t('modals.actor.sourceTmdb')}
         </span>
       </div>
@@ -144,7 +144,7 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
       overlay={
         <>
           {isInLib && (
-            <div className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-sm bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+            <div className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-sm bg-success/90 px-1.5 py-0.5 text-[11px] font-semibold text-white">
               <BookCheck size={9} /> {t('modals.actor.libraryBadge')}
             </div>
           )}
@@ -154,8 +154,8 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
     >
       <div className="flex flex-1 flex-col gap-1.5 p-2">
         <p className="line-clamp-2 text-xs font-medium leading-snug text-white">{credit.title}</p>
-        {credit.year && <p className="text-[11px] text-slate-500">{credit.year}</p>}
-        {credit.character && <p className="line-clamp-1 text-[10px] italic text-slate-600">{credit.character}</p>}
+        {credit.year && <p className="text-[11px] text-subtle">{credit.year}</p>}
+        {credit.character && <p className="line-clamp-1 text-[11px] italic text-subtle">{credit.character}</p>}
         {!isInLib && (
           <button onClick={handleAdd} disabled={adding}
             className="btn btn-ghost btn-sm btn-on mt-auto w-full">
@@ -227,31 +227,31 @@ export function ActorModal({
           {photoUrl ? (
             <Image src={photoUrl} alt={name} width={72} height={72} className="rounded-full object-cover ring-2 ring-white/10 shrink-0" />
           ) : (
-            <div className="h-[72px] w-[72px] rounded-full bg-slate-800 ring-2 ring-white/10 shrink-0" />
+            <div className="h-[72px] w-[72px] rounded-full bg-white/10 ring-2 ring-white/10 shrink-0" />
           )}
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-white">{name}</p>
-            {departmentLabel(t, data?.knownFor) && <p className="mb-1 text-xs text-slate-500">{departmentLabel(t, data?.knownFor)}</p>}
+            {departmentLabel(t, data?.knownFor) && <p className="mb-1 text-xs text-subtle">{departmentLabel(t, data?.knownFor)}</p>}
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               {data?.birthday && (
-                <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                  <Calendar size={11} className="shrink-0 text-slate-500" />
+                <span className="flex items-center gap-1.5 text-xs text-muted">
+                  <Calendar size={11} className="shrink-0 text-subtle" />
                   {formatDate(data.birthday, dateLocale)}
                   {age !== null && (
-                    <span className="text-slate-500">
+                    <span className="text-subtle">
                       {data.deathday ? `— ${t('modals.actor.died', { date: formatDate(data.deathday, dateLocale), n: age })}` : `(${t('modals.actor.age', { n: age })})`}
                     </span>
                   )}
                 </span>
               )}
               {data?.placeOfBirth && (
-                <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                  <MapPin size={11} className="shrink-0 text-slate-500" />
+                <span className="flex items-center gap-1.5 text-xs text-muted">
+                  <MapPin size={11} className="shrink-0 text-subtle" />
                   {data.placeOfBirth}
                 </span>
               )}
             </div>
-            <p className="mt-1 text-xs text-slate-500">{credits.length > 0 ? t('modals.actor.works', { n: credits.length }) : ""}</p>
+            <p className="mt-1 text-xs text-subtle">{credits.length > 0 ? t('modals.actor.works', { n: credits.length }) : ""}</p>
           </div>
         </div>
 
@@ -266,7 +266,7 @@ export function ActorModal({
             )}
             {enriched.imdb && (
               <a href={enriched.imdb} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 transition hover:bg-amber-500/20">
+                className="flex items-center gap-1.5 rounded-lg border border-warning/20 bg-warning/10 px-2.5 py-1.5 text-xs font-medium text-warning transition hover:bg-warning/20">
                 <Star size={12} /> IMDb
               </a>
             )}
@@ -282,11 +282,11 @@ export function ActorModal({
         {/* ── Photo strip ── */}
         {photos.length > 0 && (
           <div className="mb-4">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('modals.actor.photos')}</p>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-subtle">{t('modals.actor.photos')}</p>
             <div className="flex gap-2 overflow-x-auto pb-1 [touch-action:pan-x] snap-x snap-mandatory">
               {photos.map((src, i) => (
                 <button key={src} onClick={() => setLightboxIndex(i)}
-                  className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-800 ring-1 ring-white/10 transition hover:ring-white/30 hover:scale-[1.03]">
+                  className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg bg-white/10 ring-1 ring-white/10 transition hover:ring-white/30 hover:scale-[1.03]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />
                 </button>
@@ -297,24 +297,24 @@ export function ActorModal({
 
         {/* ── Biography ── */}
         {bioText && (
-          <div className="mb-5 rounded-lg bg-slate-800/50 p-3">
+          <div className="mb-5 rounded-lg bg-white/5 p-3">
             <Biography text={bioText} source={bioSource} />
           </div>
         )}
 
         {isLoading && (
-          <div className="flex items-center gap-2 py-8 text-sm text-slate-400">
+          <div className="flex items-center gap-2 py-8 text-sm text-muted">
             <Loader2 size={16} className="animate-spin" /> {t('modals.actor.loadingFilmography')}
           </div>
         )}
 
         {!isLoading && credits.length === 0 && (
-          <p className="py-6 text-center text-sm text-slate-500">{t('modals.actor.noCredits')}</p>
+          <p className="py-6 text-center text-sm text-subtle">{t('modals.actor.noCredits')}</p>
         )}
 
         {library.length > 0 && (
           <div className="mb-5">
-            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-400">
+            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-success">
               <BookCheck size={13} /> {t('modals.actor.inLibrary')}
             </h3>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
@@ -327,7 +327,7 @@ export function ActorModal({
 
         {discover.length > 0 && (
           <div>
-            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
               <Film size={13} /> {t('modals.actor.onTmdb')}
             </h3>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">

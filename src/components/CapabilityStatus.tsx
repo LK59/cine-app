@@ -53,15 +53,15 @@ interface PublicStatusResponse {
 }
 
 export const OVERALL_STYLE = {
-  ok:       "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  degraded: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  down:     "text-red-400 bg-red-500/10 border-red-500/20",
+  ok:       "text-success bg-success/10 border-success/20",
+  degraded: "text-warning bg-warning/10 border-warning/20",
+  down:     "text-danger bg-danger/10 border-danger/20",
 };
 
 export function StatusIcon({ status }: { status: CapStatus }) {
-  if (status === "ok")       return <CircleCheckBig size={16} className="text-emerald-400" />;
-  if (status === "degraded") return <AlertTriangle size={16} className="text-amber-400" />;
-  return                            <CircleX size={16} className="text-red-400" />;
+  if (status === "ok")       return <CircleCheckBig size={16} className="text-success" />;
+  if (status === "degraded") return <AlertTriangle size={16} className="text-warning" />;
+  return                            <CircleX size={16} className="text-danger" />;
 }
 
 const CAPABILITY_ICONS: Record<string, React.ElementType> = {
@@ -126,21 +126,21 @@ function CapabilityCard({ cap }: { cap: CapabilityResult }) {
     <div className="card p-2.5">
       <div className="flex items-start justify-between gap-1.5">
         <div className="flex items-center gap-1.5">
-          <Icon size={14} className="shrink-0 text-slate-400" />
+          <Icon size={14} className="shrink-0 text-muted" />
           <p className="text-xs font-medium text-white">{t(`health.capabilities.${cap.id}`)}</p>
         </div>
         <span className={`h-2 w-2 shrink-0 rounded-full ${CAP_DOT[cap.status]}`} />
       </div>
 
       {cap.note && (
-        <p className="mt-1.5 rounded-md bg-amber-500/10 px-2 py-1 text-[10px] text-amber-400">
+        <p className="mt-1.5 rounded-lg bg-warning/10 px-2 py-1 text-[11px] text-warning">
           {t(`health.degradedNote.${cap.note}`)}
         </p>
       )}
 
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="mt-1 flex w-full items-center justify-between rounded-md px-0.5 py-0.5 text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+        className="mt-1 flex w-full items-center justify-between rounded-lg px-0.5 py-0.5 text-[11px] text-subtle hover:text-muted transition-colors"
       >
         <span className="flex items-center gap-1">
           <History size={10} />
@@ -152,7 +152,7 @@ function CapabilityCard({ cap }: { cap: CapabilityResult }) {
       {expanded && (
         <div className="mt-1.5 space-y-1 border-t border-white/5 pt-1.5">
           {cap.incidents7d.length === 0 && (
-            <p className="text-[10px] text-slate-600">{t('health.history.noIncidents')}</p>
+            <p className="text-[11px] text-subtle">{t('health.history.noIncidents')}</p>
           )}
           {cap.incidents7d.map((inc, i) => {
             const startTime = fmtDateTime(inc.start);
@@ -160,20 +160,20 @@ function CapabilityCard({ cap }: { cap: CapabilityResult }) {
             const duration = inc.durationMs ? fmtEta(Math.round(inc.durationMs / 1000)) : null;
             if (inc.type === "maintenance") {
               return (
-                <p key={i} className="text-[10px] text-slate-500">
+                <p key={i} className="text-[11px] text-subtle">
                   {t('health.history.maintenance', { time: startTime })}
                 </p>
               );
             }
             if (inc.type === "ongoing") {
               return (
-                <p key={i} className="text-[10px] text-red-400">
+                <p key={i} className="text-[11px] text-danger">
                   {t('health.history.ongoing', { start: startTime })}
                 </p>
               );
             }
             return (
-              <p key={i} className="text-[10px] text-amber-400">
+              <p key={i} className="text-[11px] text-warning">
                 {t('health.history.incident', { start: startTime, end: endTime ?? "", duration: duration ?? "" })}
               </p>
             );
@@ -271,7 +271,7 @@ export function CapabilitySection() {
               <div className="space-y-6">
                 {sections.map((section) => (
                   <div key={section.id}>
-                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">
                       {t(`health.categories.${section.id}`)}
                     </h3>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">

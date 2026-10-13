@@ -1673,6 +1673,38 @@
   .setup-liquid .settings-glass-btn { background: rgb(28 28 32 / 0.96); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 
+/* ─── La gestion en verre liquide (13/10/2026, DECISIONS.md §81) ─────────────
+   La gestion prend la matière du cinéma : le noir de l'app, et sur ses cartes le reflet, le bord
+   et la teinte du verre de §45 — *sans flou*, comme les cartes des accueils ci-dessus : une page de
+   gestion en aligne des dizaines qui défilent, et le flou des grandes surfaces a été écarté le
+   26/09. `card` gardait un flou xl et un bord gris ; dans `.gestion-liquid`, il devient verre. */
+.gestion-liquid .card,
+.gestion-liquid .settings-card {
+  border: 0;
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: var(--glass-edge), 0 6px 14px rgb(0 0 0 / 0.25);
+}
+.gestion-liquid .settings-card { border-radius: 1.5rem; }
+/* Une fenêtre (`Modal`) : rendue hors de la page (portail), elle porte sa matière elle-même — le
+   bord du verre sur un fond presque opaque, pour que le texte de dessous ne se lise pas à travers
+   le sien. Le cinéma et la gestion partagent les mêmes fenêtres. */
+.glass-window {
+  border: 0;
+  background:
+    linear-gradient(160deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.02) 45%, rgb(255 255 255 / 0.05)),
+    rgb(18 18 22 / 0.94);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow: var(--glass-edge), 0 30px 80px -24px rgb(0 0 0 / 0.8);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .gestion-liquid .card,
+  .gestion-liquid .settings-card,
+  .glass-window { background: rgb(28 28 32 / 0.98); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
 /* Les vignettes de la bannière Reprendre / À suivre sur téléphone (`CinemaMobileHero`,
    DECISIONS.md §52) : atténuées au repos, l'active éclairée et soulevée d'un cran, cerclée de blanc.
    `opacity` et `transform` seulement — rien qui se recalcule en peinture pendant la rotation. */

@@ -19,12 +19,12 @@ export function ServiceNotConfigured({ service }: { service: ServiceKey }) {
   const name = t(`nav.${service}`);
   return (
     <div className="card flex flex-col items-center gap-3 p-10 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-slate-500 ring-1 ring-white/10">
+      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-subtle ring-1 ring-white/10">
         <PlugZap size={22} />
       </span>
-      <p className="text-sm text-slate-300">{t("services.notConfigured", { name })}</p>
-      <p className="max-w-md text-xs leading-6 text-slate-500">{t("services.notConfiguredHint")}</p>
-      <code className="rounded bg-black/40 px-3 py-2 font-mono text-[11px] leading-6 text-slate-300">
+      <p className="text-sm text-muted">{t("services.notConfigured", { name })}</p>
+      <p className="max-w-md text-xs leading-6 text-subtle">{t("services.notConfiguredHint")}</p>
+      <code className="rounded bg-black/40 px-3 py-2 font-mono text-[11px] leading-6 text-muted">
         {SERVICE_ENV[service].join("\n")}
       </code>
     </div>

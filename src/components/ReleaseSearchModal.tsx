@@ -94,7 +94,7 @@ export function ReleaseSearchModal({
               key={release.guid}
               className={`rounded-lg border p-3 ${
                 release.rejected
-                  ? "border-red-500/20 bg-red-500/5"
+                  ? "border-danger/20 bg-danger/5"
                   : "border-white/5 bg-white/5"
               }`}
             >
@@ -103,7 +103,7 @@ export function ReleaseSearchModal({
                   <p className="truncate text-sm text-white" title={release.title}>
                     {release.title}
                   </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
                     <span className="badge bg-accent-600/15 text-accent-400">
                       {release.quality?.quality?.name ?? "?"}
                     </span>
@@ -111,10 +111,10 @@ export function ReleaseSearchModal({
                     <span>{release.indexer}</span>
                     {release.protocol === "torrent" && (
                       <>
-                        <span className="flex items-center gap-1 text-emerald-400">
+                        <span className="flex items-center gap-1 text-success">
                           <ArrowDown size={12} /> {release.seeders ?? 0}
                         </span>
-                        <span className="flex items-center gap-1 text-slate-500">
+                        <span className="flex items-center gap-1 text-subtle">
                           <ArrowUp size={12} /> {release.leechers ?? 0}
                         </span>
                       </>
@@ -122,7 +122,7 @@ export function ReleaseSearchModal({
                     <span>{Math.round(release.age)}j</span>
                   </div>
                   {release.rejected && release.rejections.length > 0 && (
-                    <p className="mt-1.5 flex items-start gap-1 text-xs text-red-400">
+                    <p className="mt-1.5 flex items-start gap-1 text-xs text-danger">
                       <AlertTriangle size={12} className="mt-0.5 shrink-0" />
                       {release.rejections.join(", ")}
                     </p>

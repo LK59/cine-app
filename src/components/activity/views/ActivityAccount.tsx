@@ -60,15 +60,15 @@ type Tab = "seances" | "resume" | "recent" | "watchlist" | "requests" | "devices
 function requestStatus(status: number, t: T): { label: string; tone: string } {
   switch (status) {
     case 1:
-      return { label: t("activity.requests.pending"), tone: "bg-amber-500/15 text-amber-300" };
+      return { label: t("activity.requests.pending"), tone: "bg-warning/15 text-warning" };
     case 2:
       return { label: t("activity.requests.approved"), tone: "bg-sky-500/15 text-sky-300" };
     case 3:
-      return { label: t("activity.requests.declined"), tone: "bg-rose-500/15 text-rose-300" };
+      return { label: t("activity.requests.declined"), tone: "bg-danger/15 text-danger" };
     case 4:
-      return { label: t("activity.requests.failed"), tone: "bg-rose-500/15 text-rose-300" };
+      return { label: t("activity.requests.failed"), tone: "bg-danger/15 text-danger" };
     default:
-      return { label: t("activity.requests.available"), tone: "bg-emerald-500/15 text-emerald-300" };
+      return { label: t("activity.requests.available"), tone: "bg-success/15 text-success" };
   }
 }
 
@@ -92,7 +92,7 @@ function MediaRow({
       <Poster itemId={m.itemId} tag={m.imageTag} kind={m.kind} className="h-14 w-10" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm text-white">{m.title}</span>
-        <span className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-slate-500">
+        <span className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-subtle">
           {m.year && <span>{m.year}</span>}
           {m.positionSeconds != null && (
             <span>
@@ -100,7 +100,7 @@ function MediaRow({
             </span>
           )}
           {m.lastPlayed && <span title={fullDate(m.lastPlayed)}>{ago(m.lastPlayed, now, t)}</span>}
-          {m.played && <span className="text-emerald-300">{t("activity.media.played")}</span>}
+          {m.played && <span className="text-success">{t("activity.media.played")}</span>}
         </span>
         <Progress position={m.positionSeconds} runtime={m.runtimeSeconds} />
         {editing && (
@@ -113,7 +113,7 @@ function MediaRow({
               className="input w-24 py-1 text-xs"
               aria-label={t("activity.media.minutes")}
             />
-            <span className="text-xs text-slate-500">{t("activity.media.minutes")}</span>
+            <span className="text-xs text-subtle">{t("activity.media.minutes")}</span>
             <button
               type="button"
               className="btn-primary px-2.5 py-1 text-xs"
@@ -157,7 +157,7 @@ function MediaRow({
 }
 
 function Empty({ label }: { label: string }) {
-  return <p className="px-4 py-8 text-center text-sm text-slate-500">{label}</p>;
+  return <p className="px-4 py-8 text-center text-sm text-subtle">{label}</p>;
 }
 
 function Unavailable() {
@@ -168,8 +168,8 @@ function Unavailable() {
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 px-4 py-2 text-sm">
-      <span className="text-slate-400">{label}</span>
-      <span className="text-right text-slate-200">{value}</span>
+      <span className="text-muted">{label}</span>
+      <span className="text-right text-white">{value}</span>
     </div>
   );
 }
@@ -224,8 +224,8 @@ export function ActivityAccount({ id }: { id: string }) {
         <div className="min-w-0 flex-1">
           <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold text-white">
             {d.name}
-            {p.admin && <span className="rounded bg-accent-500/15 px-1.5 py-0.5 text-xs font-medium text-accent-300">{t("activity.accounts.admin")}</span>}
-            {p.disabled && <span className="rounded bg-slate-500/20 px-1.5 py-0.5 text-xs text-slate-300">{t("activity.accounts.disabled")}</span>}
+            {p.admin && <span className="rounded bg-accent-500/15 px-1.5 py-0.5 text-xs font-medium text-accent-400">{t("activity.accounts.admin")}</span>}
+            {p.disabled && <span className="rounded bg-white/5 px-1.5 py-0.5 text-xs text-muted">{t("activity.accounts.disabled")}</span>}
           </h1>
           <PresenceBadge presence={d.presence} nowPlaying={playing} now={now} seenAt={latest(p.lastActivity, ...d.appSessions.map((s) => s.lastSeenAt))} />
         </div>
@@ -240,17 +240,17 @@ export function ActivityAccount({ id }: { id: string }) {
       </div>
 
       {playing && (
-        <div className="card flex items-center gap-4 border border-emerald-500/20 p-4">
+        <div className="card flex items-center gap-4 border border-success/20 p-4">
           <Poster itemId={playing.itemId} className="h-16 w-11" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-emerald-300">{t("activity.live.nowWatching")}</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-success">{t("activity.live.nowWatching")}</p>
             <p className="truncate text-white">{playing.title}</p>
             <Progress position={playing.positionSeconds} runtime={playing.runtimeSeconds} />
-            <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-400">
+            <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted">
               <span>
                 {clock(playing.positionSeconds)} / {clock(playing.runtimeSeconds)}
               </span>
-              {playing.paused && <span className="text-amber-300">{t("activity.live.paused")}</span>}
+              {playing.paused && <span className="text-warning">{t("activity.live.paused")}</span>}
               {playing.device && <span>{playing.device}</span>}
               {playing.client && <span>{playing.client}</span>}
               {playing.method && <span>{playing.method}</span>}
@@ -280,12 +280,12 @@ export function ActivityAccount({ id }: { id: string }) {
                 type="button"
                 onClick={() => setTab(key)}
                 className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm transition-colors ${
-                  tab === key ? "border-accent-500 text-white" : "border-transparent text-slate-400 hover:text-slate-200"
+                  tab === key ? "border-accent-500 text-white" : "border-transparent text-muted hover:text-white"
                 }`}
               >
                 <Icon size={14} />
                 {label}
-                {count != null && <span className="rounded-full bg-white/10 px-1.5 text-[10px] tabular-nums">{count}</span>}
+                {count != null && <span className="rounded-full bg-white/10 px-1.5 text-[11px] tabular-nums">{count}</span>}
               </button>
             ))}
           </div>
@@ -340,7 +340,7 @@ export function ActivityAccount({ id }: { id: string }) {
                     )}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm text-white">{w.title}</span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-subtle">
                         {w.year ?? ""} · {w.mediaType === "movie" ? t("activity.media.movie") : t("activity.media.series")} ·{" "}
                         {t("activity.media.added", { when: ago(w.createdAt, now, t) })}
                       </span>
@@ -369,11 +369,11 @@ export function ActivityAccount({ id }: { id: string }) {
                       )}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm text-white">{r.title}</span>
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-subtle">
                           {r.mediaType === "movie" ? t("activity.media.movie") : t("activity.media.series")} · {ago(r.createdAt, now, t)}
                         </span>
                       </span>
-                      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${st.tone}`}>{st.label}</span>
+                      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${st.tone}`}>{st.label}</span>
                     </li>
                   );
                 })}
@@ -390,11 +390,11 @@ export function ActivityAccount({ id }: { id: string }) {
                 <Heatmap heatmap={d.habits.heatmap} />
               </div>
               <div>
-                <h3 className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("activity.habits.top")}</h3>
+                <h3 className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-subtle">{t("activity.habits.top")}</h3>
                 <TopTitles habits={d.habits} />
               </div>
               <div>
-                <h3 className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("activity.habits.seriesInProgress")}</h3>
+                <h3 className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-subtle">{t("activity.habits.seriesInProgress")}</h3>
                 {d.seriesInProgress === null ? (
                   <Unavailable />
                 ) : d.seriesInProgress.length ? (
@@ -431,14 +431,14 @@ export function ActivityAccount({ id }: { id: string }) {
                 {d.errors.map((e) => (
                   <li key={`${e._file}:${e._line}`} className="px-4 py-2.5 text-sm">
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-slate-300">{String(e.scope ?? e.level ?? "?")}</span>
-                      <span className="text-xs text-slate-500" title={fullDate(e._t)}>
+                      <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[11px] text-muted">{String(e.scope ?? e.level ?? "?")}</span>
+                      <span className="text-xs text-subtle" title={fullDate(e._t)}>
                         {ago(e._t, now, t)}
                       </span>
-                      {typeof e.source === "string" && <span className="font-mono text-[10px] text-slate-500">{e.source}</span>}
+                      {typeof e.source === "string" && <span className="font-mono text-[11px] text-subtle">{e.source}</span>}
                     </span>
-                    <span className="mt-1 block break-words text-slate-200">{String(e.message ?? "")}</span>
-                    {typeof e.url === "string" && <span className="block truncate font-mono text-[11px] text-slate-500">{e.url}</span>}
+                    <span className="mt-1 block break-words text-white">{String(e.message ?? "")}</span>
+                    {typeof e.url === "string" && <span className="block truncate font-mono text-[11px] text-subtle">{e.url}</span>}
                   </li>
                 ))}
               </ul>
@@ -455,7 +455,7 @@ export function ActivityAccount({ id }: { id: string }) {
               <Row label={t("activity.account.lastServerActivity")} value={<span title={fullDate(p.lastActivity)}>{ago(p.lastActivity, now, t)}</span>} />
               <Row label={t("activity.account.remoteAccess")} value={p.remoteAccess ? t("activity.yes") : t("activity.no")} />
               <Row label={t("activity.account.playback")} value={p.playback ? t("activity.yes") : t("activity.no")} />
-              <Row label={t("activity.account.invalidLogins")} value={<span className={p.invalidLogins ? "text-amber-300" : ""}>{p.invalidLogins}</span>} />
+              <Row label={t("activity.account.invalidLogins")} value={<span className={p.invalidLogins ? "text-warning" : ""}>{p.invalidLogins}</span>} />
               <Row label={t("activity.account.language")} value={p.lang || t("activity.account.defaultLanguage")} />
               <Row label={t("activity.account.onboarding")} value={p.onboardingPending ? t("activity.account.onboardingPending") : t("activity.account.onboardingDone")} />
             </div>
@@ -480,10 +480,10 @@ export function ActivityAccount({ id }: { id: string }) {
               <ul className="divide-y divide-white/5">
                 {d.appSessions.map((s) => (
                   <li key={s.jti} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                    <Smartphone size={15} className="shrink-0 text-slate-500" />
+                    <Smartphone size={15} className="shrink-0 text-subtle" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-slate-200">{s.device ?? t("activity.account.unknownDevice")}</span>
-                      <span className="text-xs text-slate-500">
+                      <span className="block truncate text-white">{s.device ?? t("activity.account.unknownDevice")}</span>
+                      <span className="text-xs text-subtle">
                         {t("activity.account.sessionDates", { opened: ago(s.createdAt, now, t), seen: ago(s.lastSeenAt, now, t) })}
                       </span>
                     </span>
@@ -504,12 +504,12 @@ export function ActivityAccount({ id }: { id: string }) {
                 {d.devices.map((dev) => (
                   <li key={dev.id} className="px-4 py-2 text-sm">
                     <span className="flex items-center justify-between gap-2">
-                      <span className="truncate text-slate-200">{dev.app}</span>
-                      <span className="shrink-0 text-xs text-slate-500" title={fullDate(dev.lastActivity)}>
+                      <span className="truncate text-white">{dev.app}</span>
+                      <span className="shrink-0 text-xs text-subtle" title={fullDate(dev.lastActivity)}>
                         {ago(dev.lastActivity, now, t)}
                       </span>
                     </span>
-                    <span className="block truncate text-xs text-slate-500">
+                    <span className="block truncate text-xs text-subtle">
                       {dev.name}
                       {dev.version ? ` · ${dev.version}` : ""}
                     </span>
@@ -521,7 +521,7 @@ export function ActivityAccount({ id }: { id: string }) {
             )}
           </Panel>
 
-          <p className="flex items-start gap-2 px-1 text-xs text-slate-500">
+          <p className="flex items-start gap-2 px-1 text-xs text-subtle">
             <LogOut size={13} className="mt-0.5 shrink-0" />
             {t("activity.account.closeHint")}
           </p>

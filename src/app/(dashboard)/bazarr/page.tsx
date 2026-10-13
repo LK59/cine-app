@@ -74,8 +74,8 @@ export default function BazarrPage() {
                     <div className="flex items-center gap-2 text-sm">
                       <Captions size={16} className="shrink-0 text-accent-400" />
                       <div className="min-w-0">
-                        <p className="truncate text-slate-200">{movie.title}</p>
-                        <p className="truncate text-xs text-slate-500">
+                        <p className="truncate text-white">{movie.title}</p>
+                        <p className="truncate text-xs text-subtle">
                           {t('bazarr.missingLangs', { langs: movie.missing_subtitles.map((s) => s.name).join(", ") })}
                         </p>
                       </div>
@@ -127,10 +127,10 @@ export default function BazarrPage() {
                     <div className="flex items-center gap-2 text-sm">
                       <Captions size={16} className="shrink-0 text-accent-400" />
                       <div className="min-w-0">
-                        <p className="truncate text-slate-200">
+                        <p className="truncate text-white">
                           {ep.seriesTitle} · {ep.episode_number}
                         </p>
-                        <p className="truncate text-xs text-slate-500">
+                        <p className="truncate text-xs text-subtle">
                           {t('bazarr.missingLangs', { langs: ep.missing_subtitles.map((s) => s.name).join(", ") })}
                         </p>
                       </div>

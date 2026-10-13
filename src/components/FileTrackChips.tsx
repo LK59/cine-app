@@ -52,14 +52,14 @@ function TrackChip({ track, locale, kind }: { track: FileTrack; locale: string; 
   return (
     <span
       className={`badge inline-flex items-center gap-1.5 ${
-        track.isDefault ? "bg-white/10 text-slate-200" : "bg-white/5 text-slate-300"
+        track.isDefault ? "bg-white/10 text-white" : "bg-white/5 text-muted"
       }`}
       // Le nom que la piste se donne, gardé au survol : il est souvent plus parlant que tout le
       // reste (« FR VFI », « VFQ »), mais trop long et trop irrégulier pour la vignette.
       title={[track.title, track.isDefault ? "Piste par défaut" : null].filter(Boolean).join(" — ") || undefined}
     >
       <span className="capitalize">{name}</span>
-      {marks.length > 0 && <span className="text-[10px] text-slate-500">{marks.join(" · ")}</span>}
+      {marks.length > 0 && <span className="text-[11px] text-subtle">{marks.join(" · ")}</span>}
     </span>
   );
 }

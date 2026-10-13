@@ -79,13 +79,13 @@ export function SubtitleSearchModal({
                   <div className="flex items-center gap-2 text-sm text-white">
                     <Captions size={14} className="text-accent-400" />
                     {c.language}
-                    {c.forced === "True" && <span className="badge bg-amber-500/15 text-amber-400">{t('modals.subtitles.forced')}</span>}
+                    {c.forced === "True" && <span className="badge bg-warning/15 text-warning">{t('modals.subtitles.forced')}</span>}
                     {c.hearing_impaired === "True" && (
                       <span className="badge bg-sky-500/15 text-sky-400">HI</span>
                     )}
                     <span className="badge bg-accent-600/15 text-accent-400">Score {c.score}</span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-slate-500" title={c.release_info?.join(", ")}>
+                  <p className="mt-1 truncate text-xs text-subtle" title={c.release_info?.join(", ")}>
                     {c.provider} · {c.release_info?.join(", ") || t('modals.subtitles.unknownRelease')}
                   </p>
                 </div>

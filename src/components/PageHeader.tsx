@@ -11,7 +11,7 @@ export function PageHeader({
     <div className="mb-6 flex items-center justify-between">
       <div>
         <h1 className="text-xl font-semibold text-white">{title}</h1>
-        {subtitle && <p className="text-sm text-slate-400">{subtitle}</p>}
+        {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
       </div>
       {action}
     </div>
