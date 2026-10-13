@@ -114,6 +114,9 @@ describe("la grille complète branche les deux moitiés", () => {
     expect(sheet).toMatch(/useMeasuredCardHeight\(gridRef, grid\)/);
     expect(sheet).toMatch(/^\s*uniform$/m);
     const css = readFileSync("src/app/globals.css", "utf8");
-    expect(css).toMatch(/\.player-grid\[data-card-h\] > \* \{ contain-intrinsic-size: auto var\(--card-h\); \}/);
+    // Depuis le découpage en paquets (13/10/2026), la hauteur mesurée sert aux paquets — leurs rangées
+    // fois une carte — et à leurs cartes.
+    expect(css).toMatch(/\.grid-chunk \{[^}]*contain-intrinsic-size: auto calc\(var\(--rows, 8\) \* var\(--card-h, var\(--card-h-guess\)\)/);
+    expect(css).toMatch(/\.grid-chunk > \* \{[^}]*contain-intrinsic-size: auto var\(--card-h, var\(--card-h-guess\)\);/);
   });
 });

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 import { noteWarmed } from "@/lib/imageReveal";
+import { GRID_CHUNK_ATTR, ROWS_PER_CHUNK, chunkCardsOf, chunkRowsIn, gridCards } from "@/lib/gridChunks";
 
 /**
  * Décoder les affiches avant qu'on les regarde.
@@ -243,6 +244,34 @@ interface GridWarmer {
   /** Les `PINNED_FIRST` premières cartes de la liste affichée, et leurs affiches tenues. */
   first: Set<Element>;
   pinned: Map<Element, { key: string; image: HTMLImageElement }>;
+  /** Pour chaque paquet dans la marge, les rangées qui y sont — voir `chunkRowsIn`. */
+  rows: Map<Element, [number, number]>;
+}
+
+/** Deux seuils par rangée d'un paquet : la marge se suit à la demi-rangée près. */
+const CHUNK_THRESHOLDS = Array.from({ length: ROWS_PER_CHUNK * 2 + 1 }, (_, i) => i / (ROWS_PER_CHUNK * 2));
+
+/**
+ * Les cartes d'un élément suivi qui sont dans la marge : la carte elle-même, ou — pour un paquet de
+ * rangées — celles de ses rangées qui y sont.
+ *
+ * Un paquet sauté (`content-visibility`) ne met pas ses cartes en page, et l'observateur ne voit
+ * alors aucune d'elles : mesuré dans WebKit (13/10/2026), 24 cartes « proches » au lieu de 45 en haut
+ * de la grille — rien au-delà du paquet affiché, soit plus aucune avance. Le paquet, lui, a toujours
+ * sa boîte : on le suit, et la part de sa hauteur dans la marge dit quelles rangées y sont.
+ */
+function nearCards(target: Element, rows: Map<Element, [number, number]>): Element[] {
+  if (!target.hasAttribute(GRID_CHUNK_ATTR)) return [target];
+  const range = rows.get(target);
+  return range ? chunkCardsOf(target, range) : [];
+}
+
+/** Chauffe une carte — tenue à part si c'est une des premières, voir `PINNED_FIRST`. */
+function warmCard(card: Element, state: GridWarmer): void {
+  const img = card.querySelector("img");
+  if (!img) return;
+  if (state.first.has(card) && pinLike(card, img, state.pinned, state.kept)) return;
+  warmLike(img, state.kept, KEPT);
 }
 
 export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unknown, enabled = true): void {
@@ -285,49 +314,60 @@ export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unkno
       const near = new Set<Element>();
       const first = new Set<Element>();
       const pinned = new Map<Element, { key: string; image: HTMLImageElement }>();
+      const rows = new Map<Element, [number, number]>();
+      const chunked = root.firstElementChild?.hasAttribute(GRID_CHUNK_ATTR) ?? false;
       const observer = new IntersectionObserver(
         (entries) => {
+          const current = warmer.current;
+          if (!current) return;
           for (const entry of entries) {
             if (!entry.isIntersecting) {
               near.delete(entry.target);
+              rows.delete(entry.target);
               continue;
             }
             near.add(entry.target);
-            const img = entry.target.querySelector("img");
-            if (!img) continue;
-            // Une des premières cartes : tenue à part, jamais lâchée par la borne — voir `PINNED_FIRST`.
-            if (first.has(entry.target) && pinLike(entry.target, img, pinned, kept)) continue;
-            warmLike(img, kept, KEPT);
+            if (entry.target.hasAttribute(GRID_CHUNK_ATTR)) {
+              rows.set(entry.target, chunkRowsIn(entry.target, entry.boundingClientRect, entry.intersectionRect));
+            }
+            for (const card of nearCards(entry.target, rows)) warmCard(card, current);
           }
         },
         // Chaque carte reste suivie : elle se rechauffe à chaque fois qu'elle rentre dans la marge,
         // en descendant comme en remontant.
-        { root: scrollingAncestor(root), rootMargin: `${AHEAD_PX}px 0px` }
+        {
+          root: scrollingAncestor(root),
+          rootMargin: `${AHEAD_PX}px 0px`,
+          // Un paquet est suivi rangée par rangée : l'observateur ne parle qu'en franchissant un seuil,
+          // et un seul (0) ne dirait rien des rangées qui entrent dans la marge une fois le paquet entré.
+          ...(chunked ? { threshold: CHUNK_THRESHOLDS } : {}),
+        }
       );
-      state = warmer.current = { root, observer, kept, followed: new Set(), near, first, pinned };
+      state = warmer.current = { root, observer, kept, followed: new Set(), near, first, pinned, rows };
     }
     // Les premières cartes de *cette* liste ; l'affiche tenue d'une carte qui ne l'est plus est
     // lâchée. Chauffées seulement quand elles approchent : un tri fait loin du haut ne télécharge rien.
+    // Les cartes sont au fond des paquets de rangées, pas les enfants de la grille (`gridCards`,
+    // 13/10/2026) : suivre les paquets aurait chauffé vingt-quatre affiches d'un coup, ou aucune.
+    const cards = gridCards(root);
     state.first.clear();
-    for (let i = 0; i < root.children.length && i < PINNED_FIRST; i++) state.first.add(root.children[i]);
+    for (let i = 0; i < cards.length && i < PINNED_FIRST; i++) state.first.add(cards[i]);
     for (const card of state.pinned.keys()) if (!state.first.has(card)) state.pinned.delete(card);
+    // Suivis : les enfants de la grille — les cartes d'une grille d'un seul tenant, les paquets
+    // d'une grille découpée (voir l'observateur plus haut).
     for (const card of state.followed) {
       if (card.parentElement === root) continue;
       state.observer.unobserve(card);
       state.followed.delete(card);
       state.near.delete(card);
+      state.rows.delete(card);
     }
     for (const card of root.children) {
       if (state.followed.has(card)) continue;
       state.followed.add(card);
       state.observer.observe(card);
     }
-    for (const card of state.near) {
-      const img = card.querySelector("img");
-      if (!img) continue;
-      if (state.first.has(card) && pinLike(card, img, state.pinned, state.kept)) continue;
-      warmLike(img, state.kept, KEPT);
-    }
+    for (const target of state.near) for (const card of nearCards(target, state.rows)) warmCard(card, state);
     /**
      * **La liste elle-même, et non son nombre d'éléments.**
      *

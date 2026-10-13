@@ -4049,3 +4049,44 @@ plantée en plein écran sans passer en arrière-plan perd au plus 30 s de posit
 `watched` dans son bilan perdu.
 
 **Décidé le 13/10/2026.**
+
+## 85. La grille complète est faite de paquets de rangées entières
+
+**Règle.** « Tous les films », « Toutes les séries » (`CinemaBrowseSheet`) ne sont plus une seule
+grille CSS : la liste est coupée en paquets de `ROWS_PER_CHUNK` (8) rangées, chacun sa propre grille,
+empilés à l'écart d'une rangée. Le paquet porte `content-visibility: auto` (hauteur supposée : ses
+rangées × la hauteur mesurée d'une carte, plus les écarts), ses cartes aussi. **Un paquet tient
+toujours un nombre entier de rangées** — sinon une rangée incomplète trouerait le milieu de la liste :
+le nombre de colonnes n'est donc plus laissé à `auto-fill`, il est calculé (`gridColumnsFor`, même
+règle que `grid-cols-3 … player-grid-fluid`) et posé sur chaque paquet. Paquets et colonnes viennent
+du même nombre.
+
+**Pourquoi.** Ligne `fluidite` du 13/10/2026 (iPhone de Louis, 8.53.3, 800 films, trois colonnes) :
+978 images en 20 s, 95e centile 30 ms, mais neuf images de 120 à 133 ms, toutes en remontant près du
+haut, sept sur dix avec une rangée passée de rendue à sautée dans la même image. Huit cents cartes
+enfants d'une seule grille : chaque changement d'état relançait la mise en page de toute la grille.
+WebKit (Playwright, 390 × 844, mise en page forcée autour d'un changement d'état) : une rangée coûtait
+1,4 ms à 25 cartes, 2,1 à 212, 3,1 à 800, 10,3 à 3 000 ; en paquets, 1,8 ms à 800 comme 2,0–2,3 à 3 000.
+Sans `content-visibility` sur les cartes, rendre un paquet coûtait 5,6 ms (24 cartes d'un coup) : elles
+le gardent. Géométrie des 800 cartes et captures aux jonctions identiques au pixel près, à 390 et
+1 440 px.
+
+**Porteurs.** `src/lib/gridChunks.ts` (`gridColumnsFor`, `chunkList`, `useGridColumns`, `gridCards`,
+`firstGridCard`, `chunkRowsIn`, `chunkCardsOf`, `GRID_CHUNK_ATTR` dont la valeur est le nombre de
+colonnes) ; `.grid-chunks` / `.grid-chunk` (globals.css).
+
+**Appelants.** `BrowseGrid` ; `useDecodeAhead` (suit les paquets rangée par rangée — un paquet sauté
+ne met pas ses cartes en page et l'observateur n'en voyait aucune : 24 cartes proches au lieu de 45 ;
+`PINNED_FIRST` compte les premières *cartes*, à cheval sur deux paquets) ; `useMeasuredCardHeight`
+(première carte du premier paquet). `usePanelArrowNav` n'a pas changé : il lit `data-nav-item` et la
+géométrie, les paquets lui sont invisibles. `scrollProbe` écoute toujours la racine en capture.
+
+**Tests.** `gridChunks.test.tsx` (colonnes, paquets multiples des colonnes, structure de la feuille à
+390 et 1 100 px, décodage par rangées et cartes tenues à cheval, mesure, flèches d'un paquet à
+l'autre), `useMeasuredCardHeight.test.tsx`, `useDecodeAhead.test.tsx`.
+
+**Différent exprès.** Recherche, Ma liste, filmographie gardent leur grille d'un seul tenant
+(`.player-grid`, cartes en `content-visibility`) : d'autres composants, des listes de quelques
+dizaines à deux cents cartes, où le coût ne se voit pas.
+
+**Décidé le 13/10/2026.**

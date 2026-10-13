@@ -11,6 +11,7 @@ import { useDecodeAhead } from "@/lib/useDecodeAhead";
 import { useMeasuredCardHeight } from "@/lib/useMeasuredCardHeight";
 import { useLabFlags } from "@/lib/labFlags";
 import { useScrollProbe } from "@/lib/scrollProbe";
+import { chunkList, useGridColumns } from "@/lib/gridChunks";
 import { genreLabel } from "@/lib/top10Label";
 import {
   filterTitles,
@@ -85,28 +86,45 @@ const BrowseGrid = memo(function BrowseGrid<T extends BrowsableTitle>({
 }) {
   const kind = mediaType === "series" ? "series" : "movie";
   const open = useCallback((id: number) => openLibraryTitle(kind, id), [kind]);
+  // Des paquets de rangées entières, chacun sa propre grille : voir `gridChunks.ts` (13/10/2026,
+  // neuf images de 120 à 133 ms en remontant « Tous les films » sur l'iPhone de Louis).
+  const columns = useGridColumns(gridRef);
+  const chunks = useMemo(() => chunkList(items, columns), [items, columns]);
+  const template = `repeat(${columns}, minmax(0, 1fr))`;
   return (
-    // `player-grid` : c'est lui qui porte `content-visibility`, et sans lui le navigateur
-    // met en page et dessine les six cent soixante-dix cartes d'un coup — la grille
-    // complète est justement le seul écran où ce nombre est atteint.
-    // `grid-hover-zoom` : l'affiche grossit au survol, au pointeur fin seulement (globals.css).
-    <div ref={gridRef} className="player-grid grid-hover-zoom grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 player-grid-fluid">
-      {items.map((item) => (
-        <PlayerResultCard
-          key={idOf(item)}
-          kind={kind}
-          title={item.title}
-          subtitle={item.year ? String(item.year) : null}
-          poster={posterOf(item)}
-          // Cette grille ne montre qu'une sorte à la fois : l'étiquette répéterait « Film »
-          // six cent soixante-dix fois, pour un `backdrop-filter` par carte. Voir `showKind`.
-          showKind={false}
-          // Cartes d'une seule hauteur, supposée exacte pour celles jamais rendues : sans quoi une
-          // rangée se tassait en entrant dans le champ en remontant. Voir `useMeasuredCardHeight`.
-          uniform
-          openId={libraryIdOf(item)}
-          onOpenId={open}
-        />
+    // `grid-chunks` : la pile des paquets, espacés de l'écart d'une rangée (`gap-y-6`) — rien ne
+    // distingue la jonction de deux paquets de celle de deux rangées.
+    <div ref={gridRef} className="grid-chunks flex flex-col gap-y-6">
+      {chunks.map((chunk, index) => (
+        // `grid-chunk` : le paquet porte `content-visibility`, avec sa hauteur supposée (`--rows` ×
+        // la hauteur mesurée d'une carte, globals.css), et ses cartes chacune la leur ; sans eux le
+        // navigateur met en page et dessine les huit cents cartes d'un coup.
+        // `grid-hover-zoom` : l'affiche grossit au survol, au pointeur fin seulement (globals.css).
+        <div
+          key={index}
+          // Le nombre de colonnes, que le décodage anticipé lit pour retrouver les rangées.
+          data-grid-chunk={columns}
+          className="grid-chunk grid-hover-zoom grid gap-x-3 gap-y-6"
+          style={{ gridTemplateColumns: template, "--rows": Math.ceil(chunk.length / columns) } as React.CSSProperties}
+        >
+          {chunk.map((item) => (
+            <PlayerResultCard
+              key={idOf(item)}
+              kind={kind}
+              title={item.title}
+              subtitle={item.year ? String(item.year) : null}
+              poster={posterOf(item)}
+              // Cette grille ne montre qu'une sorte à la fois : l'étiquette répéterait « Film »
+              // six cent soixante-dix fois, pour un `backdrop-filter` par carte. Voir `showKind`.
+              showKind={false}
+              // Cartes d'une seule hauteur, supposée exacte pour les paquets jamais rendus : sans quoi
+              // une rangée se tassait en entrant dans le champ en remontant. Voir `useMeasuredCardHeight`.
+              uniform
+              openId={libraryIdOf(item)}
+              onOpenId={open}
+            />
+          ))}
+        </div>
       ))}
     </div>
   );

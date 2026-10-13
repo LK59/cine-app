@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, type RefObject } from "react";
+import { firstGridCard } from "@/lib/gridChunks";
 
 /**
  * La hauteur supposée des cartes d'une grille, prise sur une vraie carte (13/10/2026).
  *
- * Chaque carte de `.player-grid` porte `content-visibility: auto` : tant qu'elle n'a jamais été
- * mise en page, elle compte pour la hauteur écrite dans la feuille de style (228 px sur
- * téléphone). Or une carte réelle en mesurait 206 (titre sur une ligne) ou 223 (sur deux) —
+ * Chaque carte de `.player-grid` portait `content-visibility: auto` — chaque paquet de rangées
+ * depuis le 13/10/2026 (`gridChunks.ts`), qui suppose ses rangées fois cette hauteur : tant qu'elle
+ * n'a jamais été mise en page, elle compte pour la hauteur écrite dans la feuille de style (228 px
+ * sur téléphone). Or une carte réelle en mesurait 206 (titre sur une ligne) ou 223 (sur deux) —
  * jamais 228. Une rangée jamais rendue se tasse donc de 5 ou 22 px **à l'instant où elle entre
  * dans le champ**, et WebKit n'a pas d'ancrage du défilement : tout ce qui est dessous saute
  * d'autant, sous le doigt.
@@ -34,7 +36,8 @@ import { useEffect, type RefObject } from "react";
 export function useMeasuredCardHeight(grid: RefObject<HTMLElement | null>, items: unknown): void {
   useEffect(() => {
     const root = grid.current;
-    const first = root?.firstElementChild;
+    // La première carte, au fond de son paquet si la grille en a (`gridChunks.ts`, 13/10/2026).
+    const first = root ? firstGridCard(root) : null;
     if (!root || !(first instanceof HTMLElement) || typeof ResizeObserver === "undefined") return;
     const measure = () => {
       // Une carte sautée (hors du champ) mesure ce qu'on lui suppose : la relire n'apprendrait rien,

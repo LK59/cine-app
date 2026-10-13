@@ -1345,21 +1345,62 @@
   .player-grid-fluid > * { contain-intrinsic-size: auto 295px; }
 }
 
-/* La grille complète suppose la hauteur qu'elle a mesurée sur une vraie carte, et non une
-   constante (13/10/2026) : une rangée jamais rendue, plus haute de 5 à 22 px que ses cartes, se
-   tassait en entrant dans le champ, et sans ancrage du défilement dans WebKit tout le dessous
-   sautait d'autant — sur « Tous les films », en remontant. Après les paliers ci-dessus, et plus
-   précis qu'eux. Voir `useMeasuredCardHeight`. */
-.player-grid[data-card-h] > * { contain-intrinsic-size: auto var(--card-h); }
+/* La grille complète, en paquets de rangées (13/10/2026, `gridChunks.ts`). Sur l'iPhone de Louis,
+   « Tous les films » (800 cartes, chacune en `content-visibility: auto`, toutes enfants d'une seule
+   grille) marquait des images de 120 à 133 ms en remontant près du haut, à l'instant où une rangée
+   passait de sautée à rendue : la mise en page de toute la grille, refaite pour trois cartes.
+   Chaque paquet — huit rangées — est maintenant sa propre grille, et porte lui aussi
+   `content-visibility` : une rangée qui change d'état ne refait plus que la mise en page de son
+   paquet (24 cartes sur un téléphone), et un paquet entier sauté ne compte plus que pour un
+   élément dans la pile. Les cartes gardent le leur : sans lui, rendre un paquet mettait en page
+   ses vingt-quatre cartes d'un coup. Mesuré dans WebKit (Playwright, 390 × 844, mise en page forcée
+   autour d'un changement d'état, moyenne de 60) : une rangée de la grille d'un seul tenant coûtait
+   1,13 ms à 25 cartes, 1,58 à 212, 2,78 à 800 ; en paquets, 1,73 ms pour un paquet à 800 cartes
+   comme à 3 000 (2,13), 1,53 pour une rangée dans un paquet — et 5,55 ms si les cartes n'avaient
+   plus de `content-visibility` à elles.
+
+   Sa hauteur supposée : ses rangées (`--rows`, posé par la grille) fois la hauteur mesurée d'une
+   carte (`--card-h`, `useMeasuredCardHeight`), plus les écarts. Une constante par palier tant que
+   rien n'est mesuré — les mêmes valeurs que les cartes de `.player-grid`. Mesurée sur une vraie
+   carte, et non supposée : une rangée plus haute de 5 à 22 px que ses cartes se tassait en entrant
+   dans le champ, et sans ancrage du défilement dans WebKit tout le dessous sautait d'autant. */
+.grid-chunks { --card-h-guess: 228px; }
+@media (min-width: 640px) {
+  .grid-chunks { --card-h-guess: 274px; }
+}
+@media (min-width: 768px) {
+  .grid-chunks { --card-h-guess: 286px; }
+}
+@media (min-width: 1024px) {
+  .grid-chunks { --card-h-guess: 307px; }
+}
+@media (min-width: 1280px) {
+  .grid-chunks { --card-h-guess: 295px; }
+}
+.grid-chunk {
+  content-visibility: auto;
+  contain-intrinsic-size: auto calc(var(--rows, 8) * var(--card-h, var(--card-h-guess)) + (var(--rows, 8) - 1) * 1.5rem);
+}
+.grid-chunk > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--card-h, var(--card-h-guess));
+}
 
 /* « Tous les films », « Toutes les séries » : l'affiche grossit doucement sous le pointeur
    (07/10/2026). Au pointeur fin seulement — un doigt n'a pas de survol, et la carte garde alors
-   son seul enfoncement (`pressable`). Chaque carte porte `content-visibility`, donc une
-   containment de dessin qui découpe tout ce qui dépasse d'elle : l'affiche agrandie y aurait été
-   rognée sur les bords. Une marge intérieure de 6 px, rendue par une marge négative, lui laisse
-   la place sans rien déplacer dans la grille (4 % d'une affiche de 240 px : 5 px de chaque côté). */
+   son seul enfoncement (`pressable`). Chaque paquet de rangées porte `content-visibility` (avant
+   le 13/10/2026, chaque carte), donc une containment de dessin qui découpe tout ce qui dépasse de
+   lui : l'affiche agrandie y aurait été rognée sur les bords. Une marge intérieure de 6 px, rendue
+   par une marge négative — sur la carte et sur le paquet —, lui laisse la place sans rien déplacer
+   dans la grille (4 % d'une affiche de 240 px : 5 px de chaque côté). */
 @media (hover: hover) and (pointer: fine) {
   .grid-hover-zoom > * {
+    padding: 6px;
+    margin: -6px;
+  }
+  /* Le paquet porte la containment de dessin, désormais : sans la même marge, l'affiche agrandie
+     de la première colonne ou de la première rangée d'un paquet était rognée à son bord. */
+  .grid-chunk.grid-hover-zoom {
     padding: 6px;
     margin: -6px;
   }
