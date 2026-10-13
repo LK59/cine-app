@@ -120,4 +120,23 @@ describe("searchCinemaLibrary — le titre remplacé", () => {
     const r = searchCinemaLibrary("what's in a name", [prenom], [], "fr");
     expect(r.map((x) => x.item.title)).toEqual(["Le Prénom"]);
   });
+
+  // Un nombre de quatre chiffres était toujours lu comme une année de sortie, et retiré du titre :
+  // « 1917 » (sorti en 2019) ne trouvait rien, « Blade Runner 2049 » non plus — l'écran de
+  // signalement, qui n'a que cette recherche-là, ne pouvait pas les nommer.
+  it("trouve un titre qui contient un nombre en forme d'année", () => {
+    const lib = [
+      movie(20, "1917", 2019, ["War"], "8.2"),
+      movie(21, "Blade Runner 2049", 2017, ["Science Fiction"], "8.0"),
+      movie(22, "2001 : L'Odyssée de l'espace", 1968, ["Science Fiction"], "8.3"),
+      movie(23, "Les Évadés", 1994, ["Drama"], "9.3"),
+    ];
+    expect(searchCinemaLibrary("1917", lib, [], "fr").map((x) => x.item.title)).toEqual(["1917"]);
+    expect(searchCinemaLibrary("blade runner 2049", lib, [], "fr").map((x) => x.item.title)).toEqual(["Blade Runner 2049"]);
+    expect(searchCinemaLibrary("2001 l'odyssée de l'espace", lib, [], "fr").map((x) => x.item.title)).toEqual([
+      "2001 : L'Odyssée de l'espace",
+    ]);
+    // L'année reste un filtre quand aucun titre ne la porte.
+    expect(searchCinemaLibrary("1994", lib, [], "fr").map((x) => x.item.title)).toEqual(["Les Évadés"]);
+  });
 });
