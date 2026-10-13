@@ -1436,6 +1436,8 @@ rebond en CSS (`glass-pop`), l'opacité sur la surface elle-même.
 
 **Choisi le 04/10/2026** sur la page « Tests animations », sur iPhone et au bureau.
 
+**Focus à l'ouverture, commun aux deux lecteurs (13/10/2026).** `usePlayerFocus` (`src/lib/usePlayerFocus.ts`) pose le focus sur lecture/pause dans le lecteur natif comme dans le lecteur serveur, et vérifie qu'il est pris (les commandes natives restent `inert` jusqu'à la première image). Avant, seul le lecteur serveur le faisait : sous le lecteur natif, Entrée (le centre d'une télécommande Fire TV) actionnait le bouton « Lecture » de la fiche restée montée dessous. Tests : `ExperimentalPlayerHost.test.tsx`.
+
 ## 46. Le cinéma répond tout de suite, quitte à montrer qu'il travaille
 
 **Règle.** Un geste a sa réponse visible dans l'image qui suit ; ce qui coûte se construit derrière,
