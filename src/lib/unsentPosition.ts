@@ -44,11 +44,22 @@ interface Saved {
   account: string | null;
 }
 
+/**
+ * Une clé par compte *et* par titre (13/10/2026). Il n'y en avait qu'une par titre : sur un iPad
+ * partagé, le même film regardé par un autre compte effaçait (un battement accepté) ou écrasait (un
+ * battement en échec) la position que le premier n'avait pas encore pu rendre à Jellyfin. Les clés
+ * d'avant (titre seul) se lisent toujours : chacune porte son compte.
+ */
+function keyFor(itemId: string, account: string | null): string {
+  return PREFIX + (account ? `${account}:` : "") + itemId;
+}
+
 export function saveUnsentPosition(itemId: string, seconds: number, now = Date.now()): void {
   try {
     if (!itemId || !(seconds > 0) || !Number.isFinite(seconds)) return;
-    const saved: Saved = { itemId, seconds, savedAt: now, account: persistedCacheAccount() };
-    localStorage.setItem(PREFIX + itemId, JSON.stringify(saved));
+    const account = persistedCacheAccount();
+    const saved: Saved = { itemId, seconds, savedAt: now, account };
+    localStorage.setItem(keyFor(itemId, account), JSON.stringify(saved));
     maybePending = true;
   } catch {
     /* pas de stockage : pas de filet */
@@ -58,15 +69,25 @@ export function saveUnsentPosition(itemId: string, seconds: number, now = Date.n
 /** Un rapport pour ce titre vient d'être accepté : il portait une position plus récente. */
 export function clearUnsentPosition(itemId: string): void {
   try {
-    localStorage.removeItem(PREFIX + itemId);
+    const account = persistedCacheAccount();
+    localStorage.removeItem(keyFor(itemId, account));
+    // Une clé d'avant (titre seul) : effacée seulement si elle est à ce compte.
+    const legacy = PREFIX + itemId;
+    const saved = JSON.parse(localStorage.getItem(legacy) ?? "null") as Saved | null;
+    if (saved && (!saved.account || saved.account === account)) localStorage.removeItem(legacy);
   } catch {
     /* rien */
   }
 }
 
 export function findUnsentPositions(now = Date.now(), account: string | null = persistedCacheAccount()): Saved[] {
+  return findKept(now, account).map(({ saved }) => saved);
+}
+
+/** Les positions en attente pour ce compte, avec la clé sous laquelle chacune est gardée. */
+function findKept(now: number, account: string | null): { key: string; saved: Saved }[] {
   if (!account) return [];
-  const found: Saved[] = [];
+  const found: { key: string; saved: Saved }[] = [];
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i);
@@ -87,7 +108,7 @@ export function findUnsentPositions(now = Date.now(), account: string | null = p
       }
       // Celle d'un autre compte attend le retour de ce compte.
       if (saved.account && saved.account !== account) continue;
-      found.push(saved);
+      found.push({ key, saved });
     }
   } catch {
     /* stockage indisponible */
@@ -105,9 +126,9 @@ export async function flushUnsentPositions(now = Date.now(), except?: string): P
   if (flushing) return;
   flushing = true;
   try {
-    const found = findUnsentPositions(now);
+    const found = findKept(now, persistedCacheAccount());
     maybePending = found.length > 0;
-    for (const saved of found) {
+    for (const { key, saved } of found) {
       if (saved.itemId === except) continue;
       try {
         const res = await fetch("/api/jellyfin/playback/stop", {
@@ -117,11 +138,15 @@ export async function flushUnsentPositions(now = Date.now(), except?: string): P
             itemId: saved.itemId,
             positionTicks: Math.floor(saved.seconds * 10_000_000),
             late: true,
-            lateByMs: now - saved.savedAt,
+            // Jamais négatif : une horloge reculée depuis l'écriture (réglage, synchronisation)
+            // donnait un retard négatif, que la route refuse d'un 400 — lu plus bas comme « refusée
+            // pour de bon », et la position gardée pendant la coupure était effacée (13/10/2026).
+            // Même borne que les lignes renvoyées (`unsentLines`).
+            lateByMs: Math.max(0, now - saved.savedAt),
           }),
         });
         // Accepté, ou refusé pour de bon (400) : effacé. Sinon (5xx, session absente) : plus tard.
-        if (res.ok || res.status === 400) localStorage.removeItem(PREFIX + saved.itemId);
+        if (res.ok || res.status === 400) localStorage.removeItem(key);
         else return;
       } catch {
         return;

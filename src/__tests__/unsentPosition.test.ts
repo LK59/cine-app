@@ -6,10 +6,11 @@ import { renderHook, act } from "@testing-library/react";
 // Jellyfin ne la reçoit pas, effacée dès qu'un rapport plus récent passe, renvoyée au retour du réseau
 // ou au lancement suivant par la route d'arrêt marquée `late`.
 
-vi.mock("@/lib/persistentCache", () => ({ persistedCacheAccount: () => "louis" }));
+const who = vi.hoisted(() => ({ account: "louis" }));
+vi.mock("@/lib/persistentCache", () => ({ persistedCacheAccount: () => who.account }));
 
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
-import { findUnsentPositions, flushUnsentPositions, saveUnsentPosition } from "@/lib/unsentPosition";
+import { clearUnsentPosition, findUnsentPositions, flushUnsentPositions, saveUnsentPosition } from "@/lib/unsentPosition";
 
 const session = { itemId: "film-1", playSessionId: "s-1", mediaSourceId: "m-1" };
 let online = true;
@@ -75,6 +76,43 @@ describe("la position d'une coupure", () => {
     vi.stubGlobal("fetch", async () => ({ ok: false, status: 503 }));
     await flushUnsentPositions();
     expect(findUnsentPositions()).toEqual([expect.objectContaining({ itemId: "film-2" })]);
+  });
+
+  // 13/10/2026 : l'horloge de l'appareil corrigée en arrière entre l'écriture et l'envoi (réglage
+  // manuel, fuseau, synchronisation) donnait un `lateByMs` négatif ; la route le refusait d'un 400,
+  // lu comme « refusée pour de bon » — et la position gardée pendant la coupure était effacée.
+  it("une horloge reculée entre l'écriture et l'envoi ne fait pas perdre la position", async () => {
+    const now = Date.now();
+    saveUnsentPosition("film-4", 1800, now + 3600_000);
+    const sent: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      sent.push(body);
+      // La validation de la route d'arrêt (`late`) : un retard négatif est refusé.
+      return (body.lateByMs as number) < 0 ? { ok: false, status: 400 } : { ok: true, status: 200 };
+    });
+    await flushUnsentPositions(now);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].lateByMs as number).toBeGreaterThanOrEqual(0);
+    expect(sent[0]).toMatchObject({ itemId: "film-4", positionTicks: 1800 * 10_000_000, late: true });
+  });
+
+  // 13/10/2026 : une clé par titre seulement, malgré « une clé par titre et par compte ». Sur un iPad
+  // partagé, le même film regardé par un autre compte effaçait (rapport accepté) ou écrasait
+  // (rapport en échec) la position que le premier n'avait pas encore pu rendre à Jellyfin.
+  it("deux comptes sur un même appareil : la position de l'un ne s'efface pas sous l'autre", () => {
+    try {
+      who.account = "louis";
+      saveUnsentPosition("film-5", 2400);
+      who.account = "sarah";
+      // Le même film, chez l'autre compte : un battement accepté, puis un qui échoue.
+      clearUnsentPosition("film-5");
+      saveUnsentPosition("film-5", 30);
+      expect(findUnsentPositions(Date.now(), "louis")).toEqual([expect.objectContaining({ itemId: "film-5", seconds: 2400, account: "louis" })]);
+      expect(findUnsentPositions(Date.now(), "sarah")).toEqual([expect.objectContaining({ itemId: "film-5", seconds: 30, account: "sarah" })]);
+    } finally {
+      who.account = "louis";
+    }
   });
 
   it("rien à garder pour une position nulle", () => {
