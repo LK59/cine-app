@@ -50,7 +50,9 @@ function toCinemaEpisode(item: import("@/lib/clients/jellyfin").JellyfinItem): C
     title: item.Name,
     overview: item.Overview ?? null,
     thumbnailUrl: item.ImageTags?.Primary ? `/api/jellyfin/image?itemId=${item.Id}&tag=${item.ImageTags.Primary}` : null,
-    runtimeMinutes: item.RunTimeTicks ? Math.round(item.RunTimeTicks / 10_000_000 / 60) : null,
+    // Une minute au moins : un bonus de moins de trente secondes arrondissait à 0, et les listes
+    // d'épisodes (`runtimeMinutes && …`) affichaient alors un « 0 » nu à côté du titre.
+    runtimeMinutes: item.RunTimeTicks ? Math.max(1, Math.round(item.RunTimeTicks / 10_000_000 / 60)) : null,
     runtimeTicks: item.RunTimeTicks ?? null,
     watched: item.UserData?.Played ?? false,
     resumeTicks: item.UserData?.PlaybackPositionTicks ?? null,
