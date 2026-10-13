@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import Link from "next/link";
 import { useState } from "react";
 import { fetcher } from "@/lib/swr";
 import { LoadingState } from "@/components/StateViews";
@@ -8,7 +9,7 @@ import { useT } from "@/components/TranslationProvider";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { fmtEta, fmtTime, fmtDateTime } from "@/lib/format";
 import {
-  CircleCheckBig, AlertTriangle, CircleX, RefreshCw,
+  CircleCheckBig, AlertTriangle, CircleX, RefreshCw, ChevronRight,
   PlayCircle, MonitorPlay, KeyRound, Film, Tv, Captions, Search, Send, Download,
   CirclePlus, Compass, ChevronDown, History,
   CalendarDays, Sparkles, BarChart3, Radio, RotateCcw, Star, UserRound, Globe, Bell,
@@ -38,6 +39,8 @@ interface CapabilityResult {
   id: string;
   status: CapStatus;
   note: string | null;
+  /** `false` : un service dont elle dépend n'est pas configuré — ni en panne ni comptée. */
+  configured?: false;
   dependsOn: CapabilityDep[];
   softDependsOn: CapabilityDep[];
   uptime7d: number;
@@ -122,8 +125,25 @@ function CapabilityCard({ cap }: { cap: CapabilityResult }) {
   const [expanded, setExpanded] = useState(false);
   const Icon = CAPABILITY_ICONS[cap.id] ?? Film;
 
+  // Non configurée (13/10/2026) : ni pastille rouge, ni disponibilité sur sept jours — elle n'existe
+  // pas sur cette installation, elle n'a donc ni panne ni historique à raconter.
+  if (cap.configured === false) {
+    return (
+      <div className="card p-2.5" data-testid={`capability-${cap.id}`} data-configured="false">
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <Icon size={14} className="shrink-0 text-subtle" />
+            <p className="text-xs font-medium text-muted">{t(`health.capabilities.${cap.id}`)}</p>
+          </div>
+          <span className="h-2 w-2 shrink-0 rounded-full border border-white/20" />
+        </div>
+        <p className="mt-1 px-0.5 py-0.5 text-[11px] text-subtle">{t('health.statusNotConfigured')}</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="card p-2.5">
+    <div className="card p-2.5" data-testid={`capability-${cap.id}`}>
       <div className="flex items-start justify-between gap-1.5">
         <div className="flex items-center gap-1.5">
           <Icon size={14} className="shrink-0 text-muted" />
@@ -184,7 +204,11 @@ function CapabilityCard({ cap }: { cap: CapabilityResult }) {
   );
 }
 
-export function CapabilitySection() {
+/**
+ * `configureHref` : où se branche un service — donné par la gestion (Configuration → Connexions),
+ * jamais par la page d'état publique, qui n'a pas de lien d'administration à offrir.
+ */
+export function CapabilitySection({ configureHref }: { configureHref?: string } = {}) {
   const t = useT();
   // `INTERVALS.FAST` (15 s) est un rythme de file d'attente Jellyseerr, pas d'une page d'état :
   // l'état que cette route rapporte ne bouge qu'au rythme du relevé, une fois par minute. Un
@@ -222,6 +246,7 @@ export function CapabilitySection() {
   const overall = data?.overall ?? "ok";
   const capabilities = data?.capabilities ?? [];
   const checkedAt = data?.checkedAt ? fmtTime(data.checkedAt) : null;
+  const unconfiguredCount = capabilities.filter((c) => c.configured === false).length;
   // La date affichée est celle du relevé, pas celle de la requête : une page servie depuis le
   // dernier passage qui dirait « mis à jour à l'instant » mentirait par omission.
   const freshnessKey = data?.live ? 'health.updatedAt' : 'health.lastCheckAt';
@@ -257,6 +282,17 @@ export function CapabilitySection() {
               </button>
             </div>
           </div>
+
+          {unconfiguredCount > 0 && (
+            <p className="-mt-2 mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs text-subtle" data-testid="capabilities-not-configured">
+              <span>{t('health.capabilitiesNotConfigured', { n: String(unconfiguredCount) })}</span>
+              {configureHref && (
+                <Link href={configureHref} className="inline-flex items-center gap-0.5 font-medium text-muted hover:text-white">
+                  {t('dashboard.configure')} <ChevronRight size={12} />
+                </Link>
+              )}
+            </p>
+          )}
 
           {(() => {
             const byId = new Map(capabilities.map((c) => [c.id, c]));

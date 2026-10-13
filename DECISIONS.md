@@ -1602,6 +1602,14 @@ de déploiement (`inApp: false`) se montre telle que l'environnement la donne (`
 page Déploiement dit si `TRUSTED_PROXIES` et `COOKIE_SECURE` sont posés. Tests :
 `service-non-configure.test.ts`, `DashboardClient-non-configure.test.tsx`,
 `correctifs-installation-neuve.test.ts`, `setup-ui.test.tsx`.
+La page Santé et la page d'état publique suivent la même règle : un relevé non configuré porte
+`configured: false` (`ifConfigured`, et TMDB, MDBList, VAPID), une fonction dont un service *requis*
+n'est pas configuré aussi (`computeCapabilities` ; une dépendance souple absente ne dégrade rien), et
+l'état d'ensemble les écarte (`overallStatus`, `statusOverall.ts` — la seule formule, lue par
+`/api/health`, `buildStatusPayload` et `anonymousStatus`). Le cron n'en écrit rien dans l'historique ;
+les tests d'API de la page Santé sautent les groupes d'un service non configuré. Présentés « Non
+configuré », neutres ; le lien vers Connexions n'existe que dans la gestion. Tests :
+`etat-non-configure.test.ts`, `etat-non-configure-ui.test.tsx`.
 
 **Décidé le 05/10/2026.**
 

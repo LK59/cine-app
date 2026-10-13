@@ -847,6 +847,8 @@
     "statusOnline": "Online",
     "statusDegraded": "Degraded",
     "statusOffline": "Offline",
+    "statusNotConfigured": "Not configured",
+    "capabilitiesNotConfigured": "Features waiting for a service that is not configured: {n} (not counted in the overall status)",
     "storagePaths": {
       "sectionTitle": "Storage paths",
       "sectionSubtitle": "Checks that the filesystem paths used for disk/media-size stats are mounted and readable",

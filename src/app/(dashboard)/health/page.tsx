@@ -5,13 +5,19 @@ import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/StateViews";
 import type { ServiceHealth, StoragePathHealth, ServiceLatencyStat } from "@/app/api/health/route";
-import { CircleCheckBig, CircleX, RefreshCw, Loader2, Wrench, HardDrive, Activity } from "lucide-react";
+import { CircleCheckBig, CircleX, RefreshCw, Loader2, Wrench, HardDrive, Activity, ChevronRight, CircleDashed } from "lucide-react";
+import Link from "next/link";
+import { useConfiguredServices } from "@/lib/useConfiguredServices";
+import type { ServiceKey as ConfigKey } from "@/lib/services";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { useState, useCallback } from "react";
 import { useT } from "@/components/TranslationProvider";
 import { useRole } from "@/lib/useRole";
 import { fmtTime } from "@/lib/format";
 import { CapabilitySection, StatusIcon, OVERALL_STYLE } from "@/components/CapabilityStatus";
+
+/** Configuration → Connexions, où se branche un service (le même lien que la vue d'ensemble). */
+const CONNECTIONS_HREF = "/parametres";
 
 interface HealthResponse {
   overall: "ok" | "degraded" | "down";
@@ -44,8 +50,25 @@ interface ApiEndpointDef {
   validate?: (json: unknown) => boolean;
 }
 
+/**
+ * Le service derrière chaque groupe de routes. Un groupe dont le service n'est pas configuré n'est
+ * pas testé (13/10/2026) : chaque route y répondait 503, et la section alignait des croix rouges
+ * pour une installation qui n'avait simplement pas branché Bazarr. Les groupes absents d'ici
+ * (vue d'ensemble, multi-sources, système) se testent toujours.
+ */
+const GROUP_SERVICE: Partial<Record<string, ConfigKey>> = {
+  "health.groups.radarr": "radarr",
+  "health.groups.sonarr": "sonarr",
+  "health.groups.jellyfin": "jellyfin",
+  "health.groups.jellyseerr": "jellyseerr",
+  "health.groups.qbittorrent": "qbittorrent",
+  "health.groups.bazarr": "bazarr",
+  "health.groups.jackett": "jackett",
+  "health.groups.tmdb": "tmdb",
+};
+
 interface ApiEndpointResult extends ApiEndpointDef {
-  status: "ok" | "error" | "pending";
+  status: "ok" | "error" | "pending" | "notConfigured";
   latencyMs: number | null;
   statusCode: number | null;
   error?: string;
@@ -104,6 +127,7 @@ async function runApiCheck(ep: ApiEndpointDef): Promise<ApiEndpointResult> {
 
 function ApiStatusBadge({ status }: { status: ApiEndpointResult["status"] }) {
   if (status === "pending") return <Loader2 size={14} className="animate-spin text-subtle" />;
+  if (status === "notConfigured") return <CircleDashed size={14} className="text-subtle" />;
   if (status === "ok")      return <CircleCheckBig size={14} className="text-success" />;
   return                           <CircleX size={14} className="text-danger" />;
 }
@@ -113,16 +137,22 @@ function ApiChecksSection() {
   const [results, setResults] = useState<ApiEndpointResult[]>([]);
   const [running, setRunning] = useState(false);
   const [ranAt, setRanAt] = useState<string | null>(null);
+  const { isConfigured } = useConfiguredServices();
 
   const run = useCallback(async () => {
     setRunning(true);
+    const skipped = (ep: ApiEndpointDef) => {
+      const service = GROUP_SERVICE[ep.group];
+      return !!service && !isConfigured(service);
+    };
+    const skip = (ep: ApiEndpointDef): ApiEndpointResult => ({ ...ep, status: "notConfigured", latencyMs: null, statusCode: null });
     // Show pending state immediately
-    setResults(API_ENDPOINTS.map((ep) => ({ ...ep, status: "pending", latencyMs: null, statusCode: null })));
-    const settled = await Promise.allSettled(API_ENDPOINTS.map(runApiCheck));
-    setResults(settled.map((r) => r.status === "fulfilled" ? r.value : { ...API_ENDPOINTS[0], status: "error", latencyMs: null, statusCode: null, error: "internalError" }));
+    setResults(API_ENDPOINTS.map((ep) => skipped(ep) ? skip(ep) : { ...ep, status: "pending", latencyMs: null, statusCode: null }));
+    const settled = await Promise.allSettled(API_ENDPOINTS.map((ep) => skipped(ep) ? Promise.resolve(skip(ep)) : runApiCheck(ep)));
+    setResults(settled.map((r, i) => r.status === "fulfilled" ? r.value : { ...API_ENDPOINTS[i], status: "error", latencyMs: null, statusCode: null, error: "internalError" }));
     setRanAt(fmtTime(new Date()));
     setRunning(false);
-  }, []);
+  }, [isConfigured]);
 
   // Group results by group name
   const groups = API_ENDPOINTS.reduce<string[]>((acc, ep) => acc.includes(ep.group) ? acc : [...acc, ep.group], []);
@@ -168,6 +198,20 @@ function ApiChecksSection() {
             const groupResults = results.filter((r) => r.group === group);
             const allOk  = groupResults.every((r) => r.status === "ok");
             const anyErr = groupResults.some((r) => r.status === "error");
+            const notConfigured = groupResults.every((r) => r.status === "notConfigured");
+            if (notConfigured) {
+              // Neutre et replié : le nom du service, « non configuré », et où le brancher.
+              return (
+                <div key={group} className="card flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5" data-testid="api-group-not-configured">
+                  <CircleDashed size={13} className="text-subtle" />
+                  <span className="text-sm font-medium text-muted">{t(group)}</span>
+                  <span className="text-xs text-subtle">{t('health.statusNotConfigured')}</span>
+                  <Link href={CONNECTIONS_HREF} className="ml-auto inline-flex items-center gap-0.5 text-xs font-medium text-muted hover:text-white">
+                    {t('dashboard.configure')} <ChevronRight size={12} />
+                  </Link>
+                </div>
+              );
+            }
             const groupStatus = allOk ? "ok" : anyErr ? "error" : "pending";
             return (
               <div key={group} className="card overflow-hidden">
@@ -316,7 +360,10 @@ function TechnicalDetail() {
   );
 
   const overall = data?.overall ?? "ok";
-  const services = data?.services ?? [];
+  // Un service non configuré n'est pas une carte « hors ligne » (13/10/2026) : il est nommé à part,
+  // sous la grille, avec le chemin vers Connexions — comme sur la vue d'ensemble.
+  const services = (data?.services ?? []).filter((s) => s.configured !== false);
+  const unconfigured = (data?.services ?? []).filter((s) => s.configured === false);
   const paths = data?.paths ?? [];
   const checkedAt = data?.checkedAt ? fmtTime(data.checkedAt) : null;
 
@@ -399,6 +446,15 @@ function TechnicalDetail() {
             ))}
           </div>
 
+          {unconfigured.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs text-subtle" data-testid="health-services-not-configured">
+              <span>{t('dashboard.servicesNotConfigured', { list: unconfigured.map((s) => s.name).join(", ") })}</span>
+              <Link href={CONNECTIONS_HREF} className="inline-flex items-center gap-0.5 font-medium text-muted hover:text-white">
+                {t('dashboard.configure')} <ChevronRight size={12} />
+              </Link>
+            </div>
+          )}
+
           {/* Storage path checks */}
           <StoragePathsSection paths={paths} />
 
@@ -426,7 +482,7 @@ export default function HealthPage() {
         subtitle={t('health.subtitle')}
       />
 
-      <CapabilitySection />
+      <CapabilitySection configureHref={role === "admin" ? CONNECTIONS_HREF : undefined} />
 
       {role === "admin" && (
         <div className="mt-10 border-t border-white/5 pt-8">

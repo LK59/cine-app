@@ -847,6 +847,8 @@
     "statusOnline": "Online",
     "statusDegraded": "Eingeschränkt",
     "statusOffline": "Offline",
+    "statusNotConfigured": "Nicht konfiguriert",
+    "capabilitiesNotConfigured": "Funktionen, die auf einen nicht konfigurierten Dienst warten: {n} (nicht im Gesamtstatus)",
     "storagePaths": {
       "sectionTitle": "Speicherpfade",
       "sectionSubtitle": "Prüft, ob die für Speicherplatz-/Mediengröße-Statistiken verwendeten Pfade eingebunden und lesbar sind",

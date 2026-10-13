@@ -1,4 +1,5 @@
 import { runAllServiceChecks, computeCapabilities, type CapabilityResult } from "@/lib/healthChecks";
+import { isConfiguredCheck } from "@/lib/statusOverall";
 import { statusHistoryDb } from "@/lib/db";
 import { logError } from "@/lib/logger";
 
@@ -56,15 +57,18 @@ export async function runStatusPoll(): Promise<void> {
     const services = await runAllServiceChecks();
     const checkedAt = Date.now();
 
+    // Un service non configuré n'est pas une panne : rien n'est écrit pour lui, ni pour ce qui en
+    // dépend (13/10/2026). Sans ça, une installation sans Jackett lisait « 0 % de disponibilité »
+    // et un incident « en cours » depuis toujours sur chaque fonction qui l'attend.
     statusHistoryDb.recordServiceChecks(
-      Object.fromEntries(Object.entries(services).map(([key, r]) => [key, { status: r.status, latencyMs: r.latencyMs }])),
+      Object.fromEntries(Object.entries(services).filter(([, r]) => isConfiguredCheck(r)).map(([key, r]) => [key, { status: r.status, latencyMs: r.latencyMs }])),
       checkedAt
     );
 
     const capabilities = computeCapabilities(services);
     (globalThis as SnapshotHolder)[SNAPSHOT_KEY] = { capabilities, checkedAt };
     statusHistoryDb.recordCapabilityChecks(
-      capabilities.map((c) => ({ id: c.id, status: c.status })),
+      capabilities.filter(isConfiguredCheck).map((c) => ({ id: c.id, status: c.status })),
       checkedAt
     );
   } catch (err) {

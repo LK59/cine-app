@@ -5,9 +5,12 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { getDb } from "@/lib/db";
 import { configuredServices, type ServiceKey as ConfigKey } from "@/lib/services";
 import { ServiceNotConfiguredError } from "@/lib/serviceConfigured";
+import { isConfiguredCheck } from "@/lib/statusOverall";
+export { isConfiguredCheck, overallStatus } from "@/lib/statusOverall";
 import { MEDIA_ROOT, MOVIES_PATH, TV_PATH, SEEDS_PATH, SEED_MOVIES_PATH, SEED_TV_PATH, CROSS_SEED_PATH } from "@/lib/media-paths";
 
-export type CheckStatus = "ok" | "degraded" | "down";
+import type { CheckStatus } from "@/lib/statusOverall";
+export type { CheckStatus };
 
 export interface ServiceHealth {
   name: string;
@@ -16,6 +19,32 @@ export interface ServiceHealth {
   latencyMs: number | null;
   version: string | null;
   error: string | null;
+  /**
+   * `false` : rien n'est réglé pour ce service — il n'a pas été interrogé. Ce n'est pas une panne
+   * (13/10/2026) : la page Santé, la page d'état et la vue d'ensemble le présentent « non
+   * configuré », à part, et ne le comptent ni hors ligne ni dans l'état global. Le statut reste
+   * `down` pour qui lit un relevé sans connaître ce champ ; chaque lecteur l'écarte d'abord.
+   */
+  configured?: false;
+}
+
+/**
+ * Le service derrière chaque relevé est-il réglé *maintenant* ? Relu à chaque appel (§48).
+ * `jellyfinApi` suit Jellyfin ; MDBList, sa clé ; les notifications, leur paire VAPID ; la base
+ * locale est toujours là.
+ */
+export function checkConfigured(key: ServiceKey): boolean {
+  switch (key) {
+    case "jellyfinApi": return configuredServices(config).jellyfin;
+    case "mdblist": return !!config.mdblist?.apiKey;
+    case "pushConfig": return !!process.env.VAPID_PUBLIC_KEY && !!process.env.VAPID_PRIVATE_KEY;
+    case "watchlistDb": return true;
+    default: return configuredServices(config)[key];
+  }
+}
+
+function notConfiguredHealth(name: string, url: string, error: string): ServiceHealth {
+  return { name, url, status: "down", latencyMs: null, version: null, error, configured: false };
 }
 
 // ─── Individual service pings ──────────────────────────────────────────────────
@@ -28,9 +57,7 @@ export interface ServiceHealth {
  * branché — `http://gluetun:8080` pour qBittorrent. Le relevé dit « non configuré », sans réseau.
  */
 export async function ifConfigured(key: ConfigKey, name: string, url: string, ping: () => Promise<ServiceHealth>): Promise<ServiceHealth> {
-  if (!configuredServices(config)[key]) {
-    return { name, url, status: "down", latencyMs: null, version: null, error: new ServiceNotConfiguredError(key).message };
-  }
+  if (!configuredServices(config)[key]) return notConfiguredHealth(name, url, new ServiceNotConfiguredError(key).message);
   return ping();
 }
 
@@ -125,7 +152,10 @@ const TMDB_URL = "https://api.themoviedb.org";
  * TMDB compte nos requêtes : le contrôle d'état, qui tourne chaque minute, ne l'interroge qu'une
  * fois par heure (voir `atMostEvery`). Un service en panne est revérifié au bout de cinq minutes.
  */
-export function pingTmdb(): Promise<ServiceHealth> {
+export async function pingTmdb(): Promise<ServiceHealth> {
+  // Sans clé, rien à demander — et rien à garder une heure : une clé posée dans l'application
+  // s'applique au relevé suivant.
+  if (!config.tmdb.apiKey) return notConfiguredHealth("TMDB", TMDB_URL, new ServiceNotConfiguredError("tmdb").message);
   return atMostEvery("health:tmdb", pingTmdbNow, { isOk: (r) => r.status === "ok" });
 }
 
@@ -133,7 +163,7 @@ export function pingTmdb(): Promise<ServiceHealth> {
 async function pingTmdbNow(): Promise<ServiceHealth> {
   const start = Date.now();
   const apiKey = config.tmdb.apiKey;
-  if (!apiKey) return { name: "TMDB", url: TMDB_URL, status: "down", latencyMs: 0, version: null, error: "No API key configured" };
+  if (!apiKey) return notConfiguredHealth("TMDB", TMDB_URL, new ServiceNotConfiguredError("tmdb").message);
   try {
     const res = await fetch(`${TMDB_URL}/3/authentication?api_key=${apiKey}`, { signal: AbortSignal.timeout(5000) });
     const latencyMs = Date.now() - start;
@@ -156,7 +186,7 @@ const MDBLIST_URL = "https://mdblist.com";
  */
 export async function pingMdblist(): Promise<ServiceHealth> {
   if (!config.mdblist.apiKey) {
-    return { name: "mdblist", url: MDBLIST_URL, status: "down", latencyMs: 0, version: null, error: "No API key configured" };
+    return notConfiguredHealth("mdblist", MDBLIST_URL, "Non configuré — MDBLIST_API_KEY");
   }
   return { name: "mdblist", url: MDBLIST_URL, status: "ok", latencyMs: 0, version: null, error: null };
 }
@@ -176,15 +206,8 @@ export async function pingWatchlistDb(): Promise<ServiceHealth> {
 // Also local/config-only — push notifications don't depend on a remote service being reachable,
 // just on the VAPID keypair actually being configured (web-push signs requests locally).
 export async function pingPushConfig(): Promise<ServiceHealth> {
-  const configured = !!process.env.VAPID_PUBLIC_KEY && !!process.env.VAPID_PRIVATE_KEY;
-  return {
-    name: "Push config",
-    url: "local",
-    status: configured ? "ok" : "down",
-    latencyMs: 0,
-    version: null,
-    error: configured ? null : "VAPID keys not configured",
-  };
+  if (!checkConfigured("pushConfig")) return notConfiguredHealth("Push config", "local", "Non configuré — VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY");
+  return { name: "Push config", url: "local", status: "ok", latencyMs: 0, version: null, error: null };
 }
 
 // ─── Storage path checks ────────────────────────────────────────────────────────
@@ -311,18 +334,37 @@ export const CAPABILITIES: CapabilityDef[] = [
   { id: "videoPreviews", requires: ["jellyfin"] },
 ];
 
+export interface CapabilityDependency {
+  service: ServiceKey;
+  status: CheckStatus;
+  configured?: false;
+}
+
 export interface CapabilityResult {
   id: string;
   status: CheckStatus;
   note: string | null;
-  dependsOn: { service: ServiceKey; status: CheckStatus }[];
-  softDependsOn: { service: ServiceKey; status: CheckStatus }[];
+  /**
+   * `false` : un service dont cette fonction a besoin n'est pas configuré. Elle n'est pas « en
+   * panne » — elle n'existe pas sur cette installation — et ne compte pas dans l'état global.
+   */
+  configured?: false;
+  dependsOn: CapabilityDependency[];
+  softDependsOn: CapabilityDependency[];
 }
 
+
 export function computeCapabilities(services: Record<ServiceKey, ServiceHealth>): CapabilityResult[] {
+  const dep = (service: ServiceKey): CapabilityDependency => {
+    const h = services[service];
+    return { service, status: h?.status ?? "down", ...(h && !isConfiguredCheck(h) ? { configured: false as const } : {}) };
+  };
   return CAPABILITIES.map((cap) => {
-    const dependsOn = cap.requires.map((service) => ({ service, status: services[service]?.status ?? "down" as CheckStatus }));
-    const soft = (cap.softRequires ?? []).map((sr) => ({ ...sr, status: services[sr.service]?.status ?? "down" as CheckStatus }));
+    const dependsOn = cap.requires.map(dep);
+    // Une dépendance souple non configurée ne dégrade rien : l'installation s'en passe, ce n'est
+    // pas un service qui vient de tomber.
+    const soft = (cap.softRequires ?? []).map((sr) => ({ ...sr, ...dep(sr.service) }));
+    const unconfigured = dependsOn.some((d) => d.configured === false);
 
     let status: CheckStatus;
     let note: string | null = null;
@@ -331,7 +373,7 @@ export function computeCapabilities(services: Record<ServiceKey, ServiceHealth>)
     } else if (dependsOn.some((d) => d.status === "degraded")) {
       status = "degraded";
     } else {
-      const softBad = soft.find((d) => d.status !== "ok");
+      const softBad = soft.find((d) => d.status !== "ok" && d.configured !== false);
       if (softBad) {
         status = "degraded";
         note = softBad.noteKey;
@@ -343,9 +385,10 @@ export function computeCapabilities(services: Record<ServiceKey, ServiceHealth>)
     return {
       id: cap.id,
       status,
-      note,
+      note: unconfigured ? null : note,
+      ...(unconfigured ? { configured: false as const } : {}),
       dependsOn,
-      softDependsOn: soft.map(({ service, status }) => ({ service, status })),
+      softDependsOn: soft.map(({ service, status, configured }) => ({ service, status, ...(configured === false ? { configured } : {}) })),
     };
   });
 }

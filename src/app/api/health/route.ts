@@ -3,11 +3,17 @@ import { config } from "@/lib/config";
 import { statusHistoryDb, type ServiceLatencyStat } from "@/lib/db";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
-import { ifConfigured, pingJellyfin, pingJellyseerr, pingReachable, pingWithKey, checkAllStoragePaths, type ServiceHealth, type StoragePathHealth } from "@/lib/healthChecks";
+import { checkConfigured, ifConfigured, isConfiguredCheck, overallStatus, type ServiceKey, pingJellyfin, pingJellyseerr, pingReachable, pingWithKey, checkAllStoragePaths, type ServiceHealth, type StoragePathHealth } from "@/lib/healthChecks";
 
 export const dynamic = "force-dynamic";
 
 const SEVEN_DAYS_MS = 7 * 24 * 3600_000;
+
+/** Les clés de relevé que `checkConfigured` sait lire — toute autre ligne d'historique reste. */
+const KNOWN_CHECKS: Record<ServiceKey, true> = {
+  jellyfin: true, jellyfinApi: true, radarr: true, sonarr: true, jellyseerr: true, bazarr: true,
+  jackett: true, qbittorrent: true, tmdb: true, mdblist: true, watchlistDb: true, pushConfig: true,
+};
 
 export type { ServiceHealth, StoragePathHealth, ServiceLatencyStat };
 
@@ -27,7 +33,7 @@ function forNonAdmin(services: ServiceHealth[], paths: StoragePathHealth[]) {
       url: "",
       // Un statut HTTP ne dit rien de l'intérieur ; un message d'exception, si.
       // (le badge d'état dit déjà « hors service » ; la page n'affiche le message que s'il existe).
-      error: s.error && /^HTTP \d{3}$/.test(s.error) ? s.error : null,
+      error: isConfiguredCheck(s) && s.error && /^HTTP \d{3}$/.test(s.error) ? s.error : null,
     })),
     paths: paths.map((p) => ({
       ...p,
@@ -54,13 +60,14 @@ export async function GET(req: NextRequest) {
     checkAllStoragePaths(),
   ]);
 
-  const allOk    = checks.every((c) => c.status === "ok") && paths.every((p) => p.status === "ok");
-  const anyDown  = checks.some((c)  => c.status === "down") || paths.some((p) => p.status === "down");
+  // Un service non configuré n'est ni une panne ni une dégradation (13/10/2026) : une installation
+  // sans Bazarr lisait « en panne » en tête de la page Santé. `overallStatus` l'écarte.
+  const overall = overallStatus([...checks, ...paths]);
 
   const shown = session?.role === "admin" ? { services: checks, paths } : forNonAdmin(checks, paths);
 
   return NextResponse.json({
-    overall: allOk ? "ok" : anyDown ? "down" : "degraded",
+    overall,
     checkedAt: new Date().toISOString(),
     ...shown,
     /**
@@ -70,6 +77,9 @@ export async function GET(req: NextRequest) {
      * s'il répond moins bien qu'avant. La sonde tourne pourtant chaque minute et garde tout —
      * sans que personne ne l'ait jamais lu. C'est la même donnée, enfin regardée.
      */
-    latencyHistory: statusHistoryDb.getServiceLatencyStats(Date.now() - SEVEN_DAYS_MS),
+    // Sans les services qui ne sont plus configurés : leurs vieux relevés y comptaient des échecs.
+    latencyHistory: statusHistoryDb
+      .getServiceLatencyStats(Date.now() - SEVEN_DAYS_MS)
+      .filter((s) => !(s.service in KNOWN_CHECKS) || checkConfigured(s.service as ServiceKey)),
   });
 }

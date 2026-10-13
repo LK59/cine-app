@@ -847,6 +847,8 @@
     "statusOnline": "En ligne",
     "statusDegraded": "Dégradé",
     "statusOffline": "Hors ligne",
+    "statusNotConfigured": "Non configuré",
+    "capabilitiesNotConfigured": "Fonctions en attente d'un service non configuré : {n} (hors de l'état d'ensemble)",
     "storagePaths": {
       "sectionTitle": "Chemins de stockage",
       "sectionSubtitle": "Vérifie que les chemins utilisés pour les stats disque/média sont montés et lisibles",

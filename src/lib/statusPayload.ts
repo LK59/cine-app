@@ -1,4 +1,5 @@
 import { runAllServiceChecks, computeCapabilities, type CapabilityResult, type CheckStatus } from "@/lib/healthChecks";
+import { overallStatus } from "@/lib/statusOverall";
 import { statusHistoryDb } from "@/lib/db";
 import { analyzeHistory, type Incident } from "@/lib/statusHistory";
 import { POLL_INTERVAL_MS, getLastStatusSnapshot } from "@/lib/statusCron";
@@ -21,6 +22,8 @@ export interface StatusCapabilityPayload {
   id: string;
   status: CheckStatus;
   note: string | null;
+  /** `false` : un service dont elle dépend n'est pas configuré — présentée à part, jamais comptée. */
+  configured?: false;
   dependsOn: CapabilityResult["dependsOn"];
   softDependsOn: CapabilityResult["softDependsOn"];
   uptime7d: number;
@@ -102,6 +105,7 @@ export async function buildStatusPayload(force: boolean): Promise<StatusPayload>
       id: cap.id,
       status: cap.status,
       note: cap.note,
+      ...(cap.configured === false ? { configured: false as const } : {}),
       dependsOn: cap.dependsOn,
       softDependsOn: cap.softDependsOn,
       uptime7d: uptimePct,
@@ -109,11 +113,8 @@ export async function buildStatusPayload(force: boolean): Promise<StatusPayload>
     };
   });
 
-  const overall: CheckStatus = payload.every((c) => c.status === "ok")
-    ? "ok"
-    : payload.some((c) => c.status === "down")
-      ? "down"
-      : "degraded";
+  // Ce qui n'est pas configuré n'entre pas dans l'état d'ensemble (`overallStatus`).
+  const overall = overallStatus(payload);
 
   return { overall, checkedAt: new Date(checkedAt).toISOString(), live: !usable, capabilities: payload };
 }
@@ -133,11 +134,6 @@ export function anonymousStatus(payload: StatusPayload): StatusPayload {
   const kept = payload.capabilities
     .filter((c) => (ANONYMOUS_CAPABILITIES as readonly string[]).includes(c.id))
     .map((c) => ({ ...c, note: null, dependsOn: [], softDependsOn: [] }));
-  const overall: CheckStatus = kept.every((c) => c.status === "ok")
-    ? "ok"
-    : kept.some((c) => c.status === "down")
-      ? "down"
-      : "degraded";
-  return { ...payload, overall, capabilities: kept };
+  return { ...payload, overall: overallStatus(kept), capabilities: kept };
 }
 

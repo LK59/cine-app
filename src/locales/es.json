@@ -847,6 +847,8 @@
     "statusOnline": "En línea",
     "statusDegraded": "Degradado",
     "statusOffline": "Fuera de línea",
+    "statusNotConfigured": "Sin configurar",
+    "capabilitiesNotConfigured": "Funciones a la espera de un servicio sin configurar: {n} (fuera del estado general)",
     "storagePaths": {
       "sectionTitle": "Rutas de almacenamiento",
       "sectionSubtitle": "Comprueba que las rutas usadas para las estadísticas de disco/medios estén montadas y sean legibles",
