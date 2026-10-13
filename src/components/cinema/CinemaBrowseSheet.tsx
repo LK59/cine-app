@@ -110,6 +110,21 @@ const BrowseGrid = memo(function BrowseGrid<T extends BrowsableTitle>({
   }
 ) => React.ReactElement;
 
+/**
+ * Les réglages de la grille, sans le flou d'arrière-plan de `input` / `select` (13/10/2026).
+ *
+ * Posés sur le fond uni du panneau, ces cinq flous ne floutaient rien, mais chacun reste une couche
+ * de `backdrop-filter` que WebKit recalcule quand elle entre dans le champ : sur iPhone, remonter
+ * la grille de « Tous les films » marquait un à-coup au moment précis où la rangée des réglages
+ * reparaissait — « Toutes les séries », qui a moins de menus, ne le montrait pas.
+ */
+// Les styles de `input` / `select` (globals.css) recopiés sans `backdrop-blur-xs` plutôt que
+// surchargés : l'ordre de deux utilitaires qui touchent la même propriété n'est pas garanti.
+const FILTER_BASE =
+  "h-9 shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500";
+const FILTER_FIELD = `${FILTER_BASE} w-full placeholder:text-subtle`;
+const FILTER_SELECT = FILTER_BASE;
+
 function BrowseSheet<T extends BrowsableTitle>({
   genre,
   mediaType,
@@ -194,13 +209,13 @@ function BrowseSheet<T extends BrowsableTitle>({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={escapeClears(query, () => setQuery(""))}
               placeholder={t("player.browse.filter")}
-              className="input h-9 w-40 shrink-0 text-sm"
+              className={`${FILTER_FIELD} w-40`}
             />
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as BrowseSort)}
               aria-label={t("player.browse.sort")}
-              className="select h-9 shrink-0 text-sm"
+              className={FILTER_SELECT}
             >
               {BROWSE_SORTS.map((key) => (
                 <option key={key} value={key}>
@@ -213,7 +228,7 @@ function BrowseSheet<T extends BrowsableTitle>({
                 value={pickedGenre}
                 onChange={(e) => setPickedGenre(e.target.value)}
                 aria-label={t("player.browse.genre")}
-                className="select h-9 shrink-0 text-sm"
+                className={FILTER_SELECT}
               >
                 <option value={BROWSE_ALL}>{t("player.browse.allGenres")}</option>
                 {genreOptions.map((g) => (
@@ -229,7 +244,7 @@ function BrowseSheet<T extends BrowsableTitle>({
                 value={decade ?? ""}
                 onChange={(e) => setDecade(e.target.value ? Number(e.target.value) : null)}
                 aria-label={t("player.browse.decade")}
-                className="select h-9 shrink-0 text-sm"
+                className={FILTER_SELECT}
               >
                 <option value="">{t("player.browse.allDecades")}</option>
                 {decades.map((d) => (
@@ -246,7 +261,7 @@ function BrowseSheet<T extends BrowsableTitle>({
                 value={duration}
                 onChange={(e) => setDuration(e.target.value as BrowseDuration)}
                 aria-label={t("player.browse.duration")}
-                className="select h-9 shrink-0 text-sm"
+                className={FILTER_SELECT}
               >
                 {BROWSE_DURATIONS.map((key) => (
                   <option key={key} value={key}>

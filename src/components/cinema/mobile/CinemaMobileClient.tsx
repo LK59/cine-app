@@ -635,7 +635,7 @@ export function CinemaMobileClient() {
           title={t("cinema.reload")}
           className="flex min-w-0 items-center gap-1.5 rounded-full py-1 pr-2 text-white transition-opacity active:opacity-60"
         >
-          <Clapperboard size={16} className="shrink-0 text-accent-400" />
+          <Clapperboard size={16} className="shrink-0 text-brand" />
           {/* Le nom cède la place quand il n'y en a pas : il était coupé en « C. » sur un iPhone SE
               tant que deux ronds tenaient la droite (07/10/2026). Le logo seul suffit à le dire. */}
           <span className="truncate font-display text-sm font-semibold tracking-tight max-[340px]:hidden">Cine App</span>

@@ -105,7 +105,7 @@ export function PlayerRail() {
     >
       {/* Le logo seul, posé sur l'axe de la pilule : un repère, pas une entrée. Le nom reste dit. */}
       <div className="flex h-16 items-center justify-center">
-        <Clapperboard size={22} className="text-accent-400" aria-hidden />
+        <Clapperboard size={22} className="text-brand" aria-hidden />
         <span className="sr-only">Cine App</span>
       </div>
 

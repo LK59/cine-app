@@ -5,6 +5,8 @@
 @theme {
   --color-accent-50: rgb(var(--accent-50));
   --color-accent-100: rgb(var(--accent-100));
+  /* Le violet du logo — seule couleur de marque, gardée hors de l'accent blanc (§83, 13/10/2026). */
+  --color-brand: rgb(155 140 255);
   --color-accent-400: rgb(var(--accent-400));
   --color-accent-500: rgb(var(--accent-500));
   --color-accent-600: rgb(var(--accent-600));

@@ -40,7 +40,7 @@ export function Sidebar() {
         <BackToCinema className="mb-4" />
 
         <div className="mb-4 flex shrink-0 items-center gap-2.5 px-2">
-          <Clapperboard size={20} className="text-accent-400" aria-hidden />
+          <Clapperboard size={20} className="text-brand" aria-hidden />
           <span className="text-base font-semibold text-white">{APP_NAME}</span>
         </div>
 
