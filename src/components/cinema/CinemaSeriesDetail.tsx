@@ -113,6 +113,8 @@ export function CinemaSeriesDetail({
   const lead = sheetLeadFacts(item, info, info !== undefined || infoError !== undefined);
   const episodeRuntime = sheetEpisodeRuntime(item.episodeRuntime, info?.tmdb?.runtime);
   const { data: episodesData, error: episodesError } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
+  /** L'écran des épisodes est-il vraiment dessiné — il lui faut sa liste, pas seulement l'adresse. */
+  const episodesShown = showEpisodes && !!episodesData?.seasons;
   // L'épisode que Lire lancerait : celui du serveur quand la liste est là, sinon celui que « À
   // suivre » ou « Reprendre », gardés sur l'appareil, connaissent déjà — voir `sheetFacts.ts`.
   const facts = useSheetPlayFacts(
@@ -220,7 +222,18 @@ export function CinemaSeriesDetail({
     function onKey(e: KeyboardEvent) {
       // CinemaEpisodeBrowser has its own Escape handler (also on window) that closes just
       // itself — same guard TrailerModal needed, for the same reason.
-      if (showTrailer || showEpisodes || playerOwnsKeyboard) return;
+      if (showTrailer || playerOwnsKeyboard) return;
+      if (showEpisodes) {
+        // L'adresse dit « épisodes » mais l'écran n'est pas dessiné : sa liste n'est pas encore
+        // là (rechargement, retour sur cette entrée) ou n'arrivera pas (Jellyfin en panne). Personne
+        // n'écoutait alors Échap — la fiche s'effaçait devant un écran absent, et la touche restait
+        // morte pour de bon si la liste échouait (13/10/2026). C'est ce cran-là qu'Échap referme.
+        if (!episodesShown && (e.key === "Escape" || e.key === "Backspace")) {
+          e.preventDefault();
+          cinemaClose({ episodes: false });
+        }
+        return;
+      }
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         requestClose();
@@ -241,7 +254,7 @@ export function CinemaSeriesDetail({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer, showEpisodes, playerOwnsKeyboard, underneath]);
+  }, [requestClose, showTrailer, showEpisodes, episodesShown, playerOwnsKeyboard, underneath]);
 
   // « Vu » et « Favori » vivent chez Jellyfin — voir useJellyfinItemState. « À voir » reste
   // local : c'est une intention, et rien d'autre ne la connaît.
@@ -574,7 +587,7 @@ export function CinemaSeriesDetail({
         />
       )}
 
-      {showEpisodes && episodesData?.seasons && (
+      {episodesShown && episodesData?.seasons && (
         <CinemaEpisodeBrowser
           title={item.title}
           seasons={episodesData.seasons}

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { sonarr } from "@/lib/clients/sonarr";
-import { withCache, TTL } from "@/lib/server-cache";
+import { cachedSeries, withCache, TTL } from "@/lib/server-cache";
+import { hiddenTmdbKeysFor } from "@/lib/blockedTags";
 import { withErrorHandling } from "@/lib/api-helpers";
 import { queueProgress, sonarrQueue } from "@/lib/downloadProgress";
 
@@ -57,6 +58,17 @@ export async function GET(req: NextRequest, props: { params: Promise<{ sonarrId:
   const seriesId = Number.parseInt((await props.params).sonarrId, 10);
   if (!Number.isFinite(seriesId) || seriesId <= 0) {
     return NextResponse.json({ error: "Série introuvable" }, { status: 400 });
+  }
+
+  // Une série que les tags bloqués du compte lui cachent n'existe pas pour lui (DECISIONS.md §54),
+  // comme pour les autres routes d'un titre. Les identifiants Sonarr se suivent : sans ce contrôle,
+  // n'importe quel compte lisait la grille des épisodes manquants d'une série masquée (13/10/2026).
+  const hidden = await hiddenTmdbKeysFor(session.jfId).catch(() => new Set<string>());
+  if (hidden.size > 0) {
+    const tmdbId = (await cachedSeries().catch(() => [])).find((s) => s.id === seriesId)?.tmdbId;
+    if (tmdbId && hidden.has(`series:${tmdbId}`)) {
+      return NextResponse.json({ error: "Série introuvable" }, { status: 404 });
+    }
   }
 
   return withErrorHandling(async () => {

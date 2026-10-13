@@ -53,3 +53,16 @@ describe("GET /api/cinema/series/[id]/episodes — l'épisode à lire", () => {
     expect(body.nextEpisode).toBeNull();
   });
 });
+
+// Un épisode de moins de trente secondes (un bonus de la saison des spéciaux) arrondissait à
+// `0` minute, et les deux listes d'épisodes rendent `runtimeMinutes && …` : un « 0 » nu
+// s'affichait à côté de son titre (13/10/2026).
+describe("GET /api/cinema/series/[id]/episodes — durée d'un épisode très court", () => {
+  it("ne donne jamais zéro minute à un épisode dont la durée est connue", async () => {
+    mockEpisodes.mockResolvedValue([{ ...ep("s0e1", 0, 1, false), RunTimeTicks: 200_000_000 }]);
+    mockNextUp.mockResolvedValue(null);
+    const { GET } = await import("@/app/api/cinema/series/[jellyfinId]/episodes/route");
+    const body = await (await GET(req, params)).json();
+    expect(body.seasons[0].episodes[0].runtimeMinutes).toBe(1);
+  });
+});

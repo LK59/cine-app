@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/react";
-import { SWRConfig } from "swr";
+import { SWRConfig, useSWRConfig } from "swr";
 
 /**
  * La fenêtre des Nouveautés et Compte → Nouveautés (DECISIONS.md §73) : la fusion de plusieurs
@@ -197,11 +197,62 @@ describe("NewsGate", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  // « Ses réglages d'abord, les nouveautés au lancement suivant » (decide.ts). L'écran d'accueil
+  // terminé ne relit pas `/api/onboarding` ; une relecture plus tard dans la séance (retour du
+  // réseau) répondait `pending: false`, et la fenêtre surgissait au milieu de cette même séance.
+  it("après l'écran d'accueil d'un nouveau compte, attend le lancement suivant", async () => {
+    let relire: () => Promise<unknown> = async () => undefined;
+    function Relecture() {
+      const { mutate } = useSWRConfig();
+      relire = () => mutate("/api/onboarding");
+      return null;
+    }
+    onboardingPending = true;
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <NewsGate />
+        <Relecture />
+      </SWRConfig>
+    );
+    await act(() => new Promise((r) => setTimeout(r, 300)));
+    onboardingPending = false;
+    await act(async () => {
+      await relire();
+    });
+    await act(() => new Promise((r) => setTimeout(r, 1600)));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("rien à voir : rien", async () => {
     payload = { pages: [P2, P1], unseen: [], relaunched: false };
     drawGate();
     await act(() => new Promise((r) => setTimeout(r, 1600)));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  // Le drapeau s'éteint à l'affichage : une relecture pendant la lecture (retour du réseau)
+  // répond `unseen: []`, et la fenêtre disparaissait sans fermeture ni mesure (13/10/2026).
+  it("reste ouverte quand une relecture répond « plus rien à voir » pendant qu'on lit", async () => {
+    let relire: () => Promise<unknown> = async () => undefined;
+    function Relecture() {
+      const { mutate } = useSWRConfig();
+      relire = () => mutate("/api/release-notes");
+      return null;
+    }
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <NewsGate />
+        <Relecture />
+      </SWRConfig>
+    );
+    expect(await screen.findByRole("dialog", {}, { timeout: 3000 })).toBeTruthy();
+    payload = { pages: [P2, P1], unseen: [], relaunched: false };
+    await act(async () => {
+      await relire();
+    });
+    expect(screen.queryByRole("dialog")).toBeTruthy();
+    fireEvent.click(screen.getByText("news.ok"));
+    expect(posts("/api/release-notes/event")[0]).toMatchObject({ closedBy: "ok", noteIds: [2, 1] });
   });
 
   it("une relance de l'administrateur est mesurée `auto: false`", async () => {

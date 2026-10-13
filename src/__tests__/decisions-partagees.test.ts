@@ -1105,3 +1105,23 @@ describe("une seule exécution de la connexion lente (§79)", () => {
     expect(lire("src/lib/playbackQuality.ts")).toMatch(/export function carriedLighter\(/);
   });
 });
+
+// Une fiche que le catalogue n'a pas (§47) : une seule conclusion, celle du filet, après sa
+// relecture. Un second crochet qui disait « indisponible » sur le catalogue tenu effaçait l'adresse
+// avant que la relecture ne parte — le titre importé pendant la séance ne s'ouvrait plus.
+describe("une fiche sans titre se conclut à un seul endroit", () => {
+  it("seul `useRepairUnresolvedSheet` dit « indisponible »", () => {
+    const fichiers: string[] = [];
+    const parcourir = (dir: string) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const chemin = `${dir}/${e.name}`;
+        if (e.isDirectory()) {
+          if (e.name !== "__tests__" && e.name !== "locales") parcourir(chemin);
+        } else if (/\.tsx?$/.test(e.name) && lire(chemin).includes("cinema.titleUnavailable")) fichiers.push(chemin);
+      }
+    };
+    parcourir("src");
+    expect(fichiers).toEqual(["src/lib/useRepairUnresolvedSheet.ts"]);
+  });
+});
+

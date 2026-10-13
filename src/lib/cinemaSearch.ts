@@ -82,6 +82,11 @@ export function searchCinemaLibrary(
   const yearMatch = query.match(/\b(19|20)\d{2}\b/);
   const year = yearMatch ? Number.parseInt(yearMatch[0], 10) : null;
   const title = residualTitle(query, natural.genreName, year);
+  // Le même nombre lu comme une partie du titre : « 1917 » (sorti en 2019), « Blade Runner 2049 »,
+  // « 2001 : L'Odyssée de l'espace ». Lu seulement comme une année, il filtrait ces films dehors et
+  // disparaissait du texte cherché : la recherche ne les trouvait pas du tout (13/10/2026).
+  const titleWithYear = year ? residualTitle(query, natural.genreName, null) : title;
+  const yearWord = year ? new RegExp(`(^|\\D)${year}(\\D|$)`) : null;
   // Nothing left to match on and nothing to filter by: an unusable query (e.g. just "de").
   if (!title && !natural.genreName && !year) return [];
 
@@ -91,7 +96,12 @@ export function searchCinemaLibrary(
     if (natural.mediaType === "movie" && kind !== "movie") return;
     if (natural.mediaType === "series" && kind !== "series") return;
     if (natural.genreName && !matchesGenre(item.genres, natural.genreName)) return;
-    if (year && item.year !== year) return;
+    const titles = ["originalTitle" in item ? item.originalTitle : undefined, item.aka, item.title];
+    // Une année qui ne correspond pas à la sortie n'écarte pas un titre qui porte ce nombre : il
+    // se cherche alors sur le texte entier, nombre compris.
+    const yearIsTitle = year !== null && item.year !== year;
+    if (yearIsTitle && !titles.some((t) => t && yearWord?.test(t))) return;
+    const wanted = yearIsTitle ? titleWithYear : title;
 
     // With no title left, the genre/year filters *are* the query — everything surviving them is a
     // hit, ranked by rating below. Otherwise the title has to actually match.
@@ -100,9 +110,7 @@ export function searchCinemaLibrary(
     // moitié des films se cherchent sous leur nom anglais — « Die Hard » pour *Piège de cristal*.
     // `bestTitleMatchScore` prend déjà le meilleur des deux, et la carte, elle, continue
     // d'afficher le titre traduit : on cherche par ce dont on se souvient, on lit ce qu'on connaît.
-    const score = title
-      ? bestTitleMatchScore(["originalTitle" in item ? item.originalTitle : undefined, item.aka, item.title], title)
-      : 50;
+    const score = wanted ? bestTitleMatchScore(titles, wanted) : 50;
     if (score <= 0) return;
     results.push({ kind, item, score } as CinemaSearchResult);
   }

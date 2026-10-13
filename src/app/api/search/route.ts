@@ -260,9 +260,11 @@ export async function GET(req: NextRequest) {
   if (q.length < 2) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
   if (!tmdbPrimary.isEnabled()) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
 
-  const cacheKey = `search:v10:${includeDebug ? "debug" : "normal"}:${locale}:${type}:${q}`;
+  // v11 : la réponse gardée n'est plus filtrée par compte (voir `CachedSearch`) — une entrée v10
+  // l'était déjà, pour le premier compte venu.
+  const cacheKey = `search:v11:${includeDebug ? "debug" : "normal"}:${locale}:${type}:${q}`;
 
-  const result = await withCache<SearchResponse>(cacheKey, TTL.MEDIUM, async () => {
+  const cached = await withCache<CachedSearch>(cacheKey, TTL.MEDIUM, async () => {
     const searchMovie = type === "all" || type === "movie";
     const searchSeries = type === "all" || type === "series";
     const natural = locale === "en" ? parseNaturalQueryEN(q, type)
@@ -471,27 +473,29 @@ export async function GET(req: NextRequest) {
       // Le repli quand TMDB n'a pas répondu : l'ancien décompte, sous-évalué mais jamais faux
       // dans l'autre sens — mieux vaut annoncer moins que d'effacer une personne qu'on possède.
       const fallback = knownForItems.filter((k) => radarrByTmdb.has(k.id) || sonarrByTmdb.has(k.id));
-      const libraryItems = credits[i] ? owned : fallback;
-      const titles = [...new Map(libraryItems.map((k) => [k.id, (k as { title?: string; name?: string }).title ?? (k as { title?: string; name?: string }).name ?? ""])).values()].filter(Boolean);
+      const libraryItems: { id: number; media_type?: string; title?: string; name?: string }[] = credits[i] ? owned : fallback;
+      // Chaque titre garde sa clé TMDB (`movie:603`) : le décompte se fait après le cache, sur ce
+      // que le compte qui demande a le droit de voir (`personsFor`).
+      const library = [
+        ...new Map(
+          libraryItems.map((k) => {
+            // Un « connu pour » sans sorte déclarée : celle sous laquelle on le possède.
+            const isSeries = k.media_type ? k.media_type === "tv" : !radarrByTmdb.has(k.id);
+            const key = `${isSeries ? "series" : "movie"}:${k.id}`;
+            return [k.id, { key, title: k.title ?? k.name ?? "" }] as const;
+          })
+        ).values(),
+      ].filter((entry) => entry.title);
       return {
-        person: {
-          id: p.id,
-          name: p.name,
-          profilePath: p.profile_path ? `${TMDB_IMAGE_BASE}/w185${p.profile_path}` : null,
-          department: p.known_for_department ?? "",
-          knownFor: knownForItems.map((k: { title?: string; name?: string }) => k.title ?? k.name ?? "").filter(Boolean),
-          libraryCount: titles.length,
-          libraryTitles: titles.slice(0, 3),
-        } satisfies PersonResult,
+        id: p.id,
+        name: p.name,
+        profilePath: p.profile_path ? `${TMDB_IMAGE_BASE}/w185${p.profile_path}` : null,
+        department: p.known_for_department ?? "",
+        knownFor: knownForItems.map((k: { title?: string; name?: string }) => k.title ?? k.name ?? "").filter(Boolean),
+        library,
         rank: i,
-      };
+      } satisfies CachedPerson;
     });
-
-    const persons: PersonResult[] = scored
-      .filter(({ person }) => person.libraryCount > 0 || person.profilePath !== null)
-      .sort((a, b) => (b.person.libraryCount - a.person.libraryCount) || (a.rank - b.rank))
-      .slice(0, 5)
-      .map(({ person }) => person);
 
     const debug = includeDebug
       ? {
@@ -510,11 +514,69 @@ export async function GET(req: NextRequest) {
         }
       : undefined;
 
-    // Ce que les tags bloqués du compte lui cachent n'apparaît pas non plus ici (DECISIONS.md §54).
-    const hidden = await hiddenTmdbKeysFor((await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value))?.jfId);
-    const visible = (entry: UnifiedSearchResult) => !hidden.has(`${entry.type}:${entry.tmdbId}`);
-    return { library: library.filter(visible), tmdb: tmdbNotInLib.filter(visible), persons, debug };
+    return { library, tmdb: tmdbNotInLib, persons: scored, debug };
   });
 
+  // Ce que les tags bloqués du compte lui cachent n'apparaît pas non plus ici (DECISIONS.md §54) —
+  // et le filtre passe **après** le cache. Il était appliqué dedans, sous une clé sans compte : le
+  // premier compte à chercher « Dieudonné » décidait pour tous pendant trente secondes, si bien
+  // qu'un compte à qui le tag est bloqué recevait les titres d'un compte qui les voit (et l'inverse).
+  // Même ordre que les rangées « similaires » : la réponse commune d'abord, le compte ensuite.
+  const hidden = await hiddenTmdbKeysFor(session?.jfId);
+  const visible = (entry: UnifiedSearchResult) => !hidden.has(`${entry.type}:${entry.tmdbId}`);
+  const result: SearchResponse = {
+    library: cached.library.filter(visible),
+    tmdb: cached.tmdb.filter(visible),
+    persons: personsFor(cached.persons, hidden),
+    ...(cached.debug ? { debug: cached.debug } : {}),
+  };
   return NextResponse.json(result);
+}
+
+/** Une personne telle que le cache commun la garde : ses titres d'ici nommés par leur clé TMDB. */
+interface CachedPerson {
+  id: number;
+  name: string;
+  profilePath: string | null;
+  department: string;
+  knownFor: string[];
+  library: { key: string; title: string }[];
+  /** Le rang TMDB, pour départager deux décomptes égaux. */
+  rank: number;
+}
+
+/** La réponse commune à tous les comptes — rien n'y est encore retiré pour personne. */
+interface CachedSearch {
+  library: UnifiedSearchResult[];
+  tmdb: UnifiedSearchResult[];
+  persons: CachedPerson[];
+  debug?: SearchDebug;
+}
+
+/**
+ * Les personnes pour un compte : décompte et titres cités sans ce qui lui est caché.
+ *
+ * « Une personne reste trouvable ; ses titres cachés, non » (§54) — or la carte annonçait « 2 titres
+ * ici » et nommait le titre caché (`libraryTitles`), puisque le décompte se faisait sur toute la
+ * bibliothèque. Le tri et la coupe à cinq suivent ce décompte, donc ils se font ici aussi.
+ */
+function personsFor(persons: CachedPerson[], hidden: Set<string>): PersonResult[] {
+  return persons
+    .map((p) => {
+      const titles = p.library.filter((entry) => !hidden.has(entry.key)).map((entry) => entry.title);
+      const person: PersonResult = {
+        id: p.id,
+        name: p.name,
+        profilePath: p.profilePath,
+        department: p.department,
+        knownFor: p.knownFor,
+        libraryCount: titles.length,
+        libraryTitles: titles.slice(0, 3),
+      };
+      return { person, rank: p.rank };
+    })
+    .filter(({ person }) => person.libraryCount > 0 || person.profilePath !== null)
+    .sort((a, b) => (b.person.libraryCount - a.person.libraryCount) || (a.rank - b.rank))
+    .slice(0, 5)
+    .map(({ person }) => person);
 }

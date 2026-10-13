@@ -31,11 +31,15 @@ export function formatContinueLabel(
   if (episodeCode) {
     // Un épisode jamais commencé n'est pas une lecture à reprendre : c'est la suite qui attend.
     // « À suivre » le dit, là où « Lire » ne disait rien de plus qu'un bouton.
-    return hasResume && timeLabel
-      ? `${t("common.resume")} ${episodeCode} · ${timeLabel}`
-      : `${t("cinema.upNext")} ${episodeCode}`;
+    //
+    // Commencé mais de durée inconnue (un fichier que Jellyfin n'a pas encore sondé) : c'est une
+    // reprise quand même. Le temps restant manquant faisait dire « À suivre » (et « Lire » pour un
+    // film) au bouton, quand la bannière disait « Reprendre » pour le même titre (13/10/2026).
+    if (hasResume) return timeLabel ? `${t("common.resume")} ${episodeCode} · ${timeLabel}` : `${t("common.resume")} ${episodeCode}`;
+    return `${t("cinema.upNext")} ${episodeCode}`;
   }
-  return hasResume && timeLabel ? `${t("common.resume")} · ${timeLabel}` : t("common.play");
+  if (hasResume) return timeLabel ? `${t("common.resume")} · ${timeLabel}` : t("common.resume");
+  return t("common.play");
 }
 
 /** « 1h10 », « 25 min » : l'espace avant « min » que la forme courte des boutons n'a pas la place de mettre. */
@@ -67,7 +71,8 @@ export function formatContinueCaption(
     seasonNumber != null && episodeNumber != null
       ? t("cinema.episodeShort", { episode: episodeNumber, season: seasonNumber })
       : null;
-  if (episodeCode) return time ? `${episodeCode} · ${time}` : `${t("cinema.upNext")} · ${episodeCode}`;
+  // « À suivre » seulement pour ce qui n'est pas commencé — voir `formatContinueLabel`.
+  if (episodeCode) return time ? `${episodeCode} · ${time}` : hasResume ? episodeCode : `${t("cinema.upNext")} · ${episodeCode}`;
   return time ?? t("common.resume");
 }
 
