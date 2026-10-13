@@ -20,3 +20,13 @@ describe("logo de l'application — violet de marque", () => {
     expect(readFileSync(file, "utf8")).toMatch(/<Clapperboard[^>]*text-brand/);
   });
 });
+
+// Le champ « Filtrer » garde sa largeur de 10 rem : recopié avec `w-full` (13/10/2026), il prenait
+// toute la ligne et cachait les menus voisins, films comme séries.
+describe("CinemaBrowseSheet — champ Filtrer", () => {
+  it("n'a pas de largeur pleine", () => {
+    const source = readFileSync("src/components/cinema/CinemaBrowseSheet.tsx", "utf8");
+    expect(source).not.toMatch(/const FILTER_(BASE|FIELD)[^\n]*w-full/);
+    expect(source).toMatch(/\$\{FILTER_FIELD\} w-40/);
+  });
+});
