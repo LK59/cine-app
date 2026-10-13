@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLabFlags } from "@/lib/labFlags";
 import { createPortal } from "react-dom";
 import { ArrowLeft } from "lucide-react";
 import { CLOSE_PANELS, cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
@@ -99,8 +98,6 @@ export function PlayerPanelFrame({
   children: React.ReactNode;
 }) {
   const t = useT();
-  // Essai de fluidité (Lab → Tests divers) : le fondu sous l'en-tête retiré.
-  const lab = useLabFlags();
   /**
    * De quoi rejouer l'entrée quand on revient sur un onglet qu'on venait de quitter.
    *
@@ -297,6 +294,17 @@ export function PlayerPanelFrame({
         </div>
       </header>
 
+      {/* Un fondu sous l'en-tête, posé au-dessus de la zone qui défile — et non plus dedans.
+          Le contenu disparaissait net sous le titre, coupé à la ligne près (23/09/2026) : un fondu
+          peint depuis la couleur du fond l'efface en douceur. Il était collé (`sticky`) en haut de
+          la zone qui défile ; iOS recale un élément collé avec un temps de retard pendant le
+          défilement, et une bande d'affiche passait entre le haut de la zone et lui (13/10/2026,
+          vu sur iPhone même décalé d'un pixel). Hors de la zone, il ne bouge plus jamais. */}
+      <div className="relative z-10 h-0 shrink-0" aria-hidden>
+        <div
+          className={`pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-(--panel-bg) to-transparent ${short ? "h-2" : "h-4"}`}
+        />
+      </div>
       {/* Le corps n'a pas d'animation à lui : c'est la racine qui entre et sort (voir plus haut).
           Il est re-clé à chaque entrée pour que l'écouteur des flèches suive le nœud neuf. */}
       <div
@@ -309,24 +317,13 @@ export function PlayerPanelFrame({
           // Au moins deux rems et demi : sur le bureau, la réserve de la barre du bas vaut zéro, et
           // le dernier élément — « Se déconnecter » — touchait le bord de l'écran (23/09/2026).
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + max(var(--player-bar-space, 4rem), 2.5rem))",
-          // Le fondu collé en haut recouvre ce qu'on y fait défiler : une carte atteinte aux flèches
+          // Le fondu posé en haut recouvre ce qu'on y fait défiler : une carte atteinte aux flèches
           // s'arrêtait dessous, son haut estompé. La réserve l'arrête juste après.
           scrollPaddingTop: short ? "0.5rem" : "1rem",
         }}
       >
-        {/* Un fondu sous l'en-tête, collé en haut de la zone qui défile.
-            Le contenu disparaissait net sous le titre, coupé à la ligne près (23/09/2026). Le
-            fondu occupe la marge qui séparait l'en-tête du contenu : au repos il ne recouvre que
-            du vide, et rien ne bouge ; au défilement, ce qui monte s'y efface. Peint depuis la
-            couleur de ce qu'il recouvre, il ne coûte rien au défilement. */}
-        {!lab.noHeaderFade && (
-          <div
-            aria-hidden
-            // Un pixel au-dessus du bord, rendu par une marge négative (13/10/2026) : collé pile à `top-0`,
-            // l'arrondi de Safari laissait un liseré d'affiche passer entre le haut de la zone et le fondu.
-            className={`pointer-events-none sticky -top-px z-10 -mt-px bg-gradient-to-b from-(--panel-bg) to-transparent ${short ? "h-[calc(0.5rem+1px)]" : "h-[calc(1rem+1px)]"}`}
-          />
-        )}
+        {/* La marge que le fondu recouvre au repos : rien ne bouge par rapport à avant. */}
+        <div aria-hidden className={short ? "h-2" : "h-4"} />
         <div className="mx-auto w-full" style={{ maxWidth: contentWidth }}>
           {children}
         </div>
