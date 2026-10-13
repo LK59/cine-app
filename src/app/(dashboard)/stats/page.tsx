@@ -11,6 +11,8 @@ import { BarChart2, Film, Tv, HardDrive, Layers, Zap, Link2, Copy, Share2, Refre
 import type { LibraryStats } from "@/app/api/stats/library/route";
 import type { PeopleStats } from "@/app/api/stats/people/route";
 import type { StorageStats } from "@/app/api/stats/storage/route";
+// Une seule règle de rangement des qualités, testée contre la bibliothèque (`stats-buckets.test.ts`).
+import { qualityBucket } from "@/lib/statsBuckets";
 import { fmtSize, relativeTimeAbs } from "@/lib/format";
 import { useT } from "@/components/TranslationProvider";
 import { useRole } from "@/lib/useRole";
@@ -96,15 +98,6 @@ function MonthlyGrowthChart({ monthlyGrowth }: { monthlyGrowth: { month: string;
       </div>
     </div>
   );
-}
-
-function qualityBucket(name: string): string {
-  const n = name.toLowerCase();
-  if (n.includes("2160") || n.includes("4k") || n.includes("uhd") || n.includes("remux")) return "4K / UHD";
-  if (n.includes("1080")) return "1080p";
-  if (n.includes("720")) return "720p";
-  if (n.includes("480") || n.includes("576")) return "SD";
-  return name;
 }
 
 function lastMonths(n: number): string[] {

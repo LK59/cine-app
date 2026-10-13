@@ -258,8 +258,11 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     // "L'Attaque des Titans (2013)"), which titleMatchScore's substring check treats as an
     // extra token that breaks an otherwise-exact match against Sonarr's plain title — strip
     // it before matching.
+    const yearMatch = rawShow.match(/\s*[([]?((?:19|20)\d{2})[)\]]?\s*$/);
     const stripped = rawShow.replace(/\s*[([]?(19|20)\d{2}[)\]]?\s*$/, "").trim() || rawShow;
-    const cacheKey = normalizeReleaseTitle(stripped);
+    const year = yearMatch ? parseInt(yearMatch[1]) : null;
+    // La clé garde l'année : « Gossip Girl » et « Gossip Girl (2021) » sont deux séries.
+    const cacheKey = normalizeReleaseTitle(rawShow);
     if (seriesHintCache.has(cacheKey)) return seriesHintCache.get(cacheKey)!;
     let best: { id: number; title: string } | null = null;
     let bestScore = 0;
@@ -267,12 +270,25 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
       // Release names are often scene/translated titles (e.g. a French season pack for a show
       // Sonarr tracks under its English title) — alternateTitles carries those localized names.
       const candidates = [s.title, ...(s.alternateTitles?.map((a) => a.title) ?? [])];
-      const score = bestTitleMatchScore(candidates, stripped);
+      // L'année retirée ne doit pas effacer ce qu'elle distingue. Sonarr nomme le remake
+      // « Gossip Girl (2021) » : comparé au seul « Gossip Girl », il perdait (90) contre la série
+      // de 2007 (100), et les 22 épisodes des deux séries — des fichiers différents — sortaient
+      // comme 22 doublons, ~50 Go « en trop » qui n'existaient pas (vérifié le 13/10/2026).
+      // On garde donc le meilleur des deux libellés, et l'année identique départage.
+      let score = Math.max(bestTitleMatchScore(candidates, stripped), bestTitleMatchScore(candidates, rawShow));
+      if (score > 0 && year !== null && s.year === year) score += 1;
       if (score > bestScore) { bestScore = score; best = { id: s.id, title: s.title }; }
     }
     const result = bestScore >= 75 ? best : null;
     seriesHintCache.set(cacheKey, result);
     return result;
+  }
+
+  // Un fichier de la bibliothèque n'a pas à deviner sa série : son dossier est celui que Sonarr
+  // lui a donné (`path`). Le rapprochement par titre reste pour les seeds, qui n'en ont pas.
+  const seriesByFolder = new Map<string, { id: number; title: string }>();
+  for (const s of sonarrSeries) {
+    if (s.path) seriesByFolder.set(path.basename(s.path), { id: s.id, title: s.title });
   }
 
   function resolveDisplayName(name: string): string {
@@ -319,7 +335,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   const releaseSeen = new Set<string>();
   const releaseGroups = new Map<string, { kind: "movie" | "series"; releases: { name: string; relPath: string; sizeBytes: number; inLibrary: boolean; invKey: string }[] }>();
 
-  function addReleaseCandidate(name: string, relPath: string, dev: number, ino: number, size: number, inLibrary: boolean, fallbackKey?: string) {
+  function addReleaseCandidate(name: string, relPath: string, dev: number, ino: number, size: number, inLibrary: boolean, fallbackKey?: string, seriesFolder?: string) {
     const invKey = `${dev}:${ino}`;
     if (releaseSeen.has(invKey)) return;
     releaseSeen.add(invKey);
@@ -330,7 +346,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
       const hint = resolveMovieHint(parsed.rawTitle, parsed.year);
       if (hint) key = `mv:radarr:${hint.id}`;
     } else if (parsed.kind === "series" && parsed.rawTitle && parsed.episodeTag) {
-      const hint = resolveSeriesHint(parsed.rawTitle);
+      const hint = (seriesFolder ? seriesByFolder.get(seriesFolder) : undefined) ?? resolveSeriesHint(parsed.rawTitle);
       if (hint) key = `tv:sonarr:${hint.id}:${parsed.episodeTag}`;
     }
     let group = releaseGroups.get(key);
@@ -350,8 +366,13 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     }
   }
 
+  // Les compteurs « hardlinkés x / y » comptent des fichiers, pas des chemins : un même inode lié
+  // sous deux dossiers de la bibliothèque (Sonarr range certains épisodes dans deux séries — 17
+  // ici, « Berlin » S02 et « Berlin and the Lady with an Ermine » S01) était compté deux fois,
+  // et toujours comme « hardlinké » puisque ses deux noms suffisent à porter nlink à 2.
   for (const item of movieItems) {
     for (const f of item.files) {
+      if (libraryInodes.has(`${f.dev}:${f.ino}`)) continue;
       libraryInodes.add(`${f.dev}:${f.ino}`);
       moviesTotal++; moviesBytes += f.size;
       if (f.nlink > 1) moviesHardlinked++;
@@ -362,11 +383,12 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   for (const item of seriesItems) {
     let h264Bytes = 0;
     for (const f of item.files) {
+      if (libraryInodes.has(`${f.dev}:${f.ino}`)) continue;
       libraryInodes.add(`${f.dev}:${f.ino}`);
       seriesTotal++; seriesBytes += f.size;
       if (f.nlink > 1) seriesHardlinked++;
       else notHardlinked.push({ type: "series", title: item.title, fileName: f.name, relativePath: f.relPath, sizeBytes: f.size });
-      addReleaseCandidate(f.name, f.relPath, f.dev, f.ino, f.size, true);
+      addReleaseCandidate(f.name, f.relPath, f.dev, f.ino, f.size, true, undefined, item.title);
       if (H264_RE.test(f.name)) h264Bytes += f.size;
     }
     if (h264Bytes > 0) heaviestH264.push({ type: "series", title: item.title, sizeBytes: h264Bytes });
@@ -433,7 +455,13 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   for (const [key, group] of releaseGroups) {
     if (group.releases.length < 2) continue;
     const sorted = [...group.releases].sort((a, b) => b.sizeBytes - a.sizeBytes);
-    const wastedBytes = sorted.slice(1).reduce((s, r) => s + r.sizeBytes, 0);
+    // « En trop » = ce que libère la suppression des autres copies, en gardant celle que la
+    // bibliothèque lit (la plus grosse d'entre elles s'il y en a plusieurs). Garder d'office la plus
+    // grosse donnait l'inverse quand le seed pèse plus que le fichier importé : « The Exorcist »
+    // affichait 8,9 Go en trop — la taille du fichier de la bibliothèque, qu'on ne supprime pas —
+    // alors que c'est le seed de 14,8 Go qui est en double.
+    const kept = sorted.find((r) => r.inLibrary) ?? sorted[0];
+    const wastedBytes = sorted.reduce((s, r) => (r === kept ? s : s + r.sizeBytes), 0);
     const title = resolveDisplayName(sorted[0].name) || key;
     duplicates.push({
       type: group.kind,

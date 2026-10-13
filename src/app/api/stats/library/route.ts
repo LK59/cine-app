@@ -1,24 +1,8 @@
 import { NextResponse } from "next/server";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
+import { langCategory, codecCategory } from "@/lib/statsBuckets";
 
 export const dynamic = "force-dynamic";
-
-function langCategory(audioLangs: string): "vf" | "vfvo" | "vo" | "other" {
-  if (!audioLangs) return "other";
-  const hasFre = audioLangs.includes("fre");
-  const hasEng = audioLangs.includes("eng");
-  if (hasFre && hasEng) return "vfvo";
-  if (hasFre) return "vf";
-  if (hasEng) return "vo";
-  return "other";
-}
-
-function codecCategory(codec: string): "hevc" | "h264" | "other" {
-  const c = codec.toLowerCase();
-  if (c.includes("265") || c === "hevc") return "hevc";
-  if (c.includes("264")) return "h264";
-  return "other";
-}
 
 export interface LibraryStats {
   movies: { total: number; withFile: number };
