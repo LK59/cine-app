@@ -12,6 +12,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls, type SubtitleGenerationMenu } from "@/components/PlayerControls";
 import { restoreRememberedVolume } from "@/lib/rememberedVolume";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
+import { usePlayerFocus } from "@/lib/usePlayerFocus";
 import { isPlayerWarning } from "@/lib/webcodecs/playerWarning";
 import { subtitlePlacement } from "@/lib/webcodecs/subtitleMarkup";
 import {
@@ -2002,6 +2003,9 @@ export function ExperimentalPlayerHost({
 
   const handleExpand = useCallback(() => playback.expand(), [playback]);
   const { pos, size, isDragging, handlers } = useMiniPlayerDrag(isMini, handleExpand);
+  // Le focus entre dans le lecteur, sur lecture/pause : il restait sur le bouton « Lecture » de la
+  // fiche, sous le film, et Entrée — le centre d'une télécommande — l'actionnait (voir `usePlayerFocus`).
+  usePlayerFocus(containerRef, !isMini);
 
   // Polled only while the panel is open: it is a debugging surface, not something to run twice a
   // second behind a closed drawer.
@@ -3814,7 +3818,10 @@ export function ExperimentalPlayerHost({
 
       {/* The wait has gone past explaining itself. The report is pointer-enabled where the
           spinner above is not: it exists to be selected and copied. */}
-      {stuck && !error && !isMini && (
+      {/* Pas sous l'écran de coupure non plus, comme la roue au-dessus : l'horloge de l'ouverture
+          court pendant une coupure, et passé vingt secondes « le chargement n'aboutit pas » montait
+          par-dessus « Connexion perdue » et ses boutons (chasse aux défauts du 13/10/2026). */}
+      {stuck && !error && !networkLost && !isMini && (
         <div className="absolute inset-x-0 bottom-0 z-20 flex justify-center bg-gradient-to-t from-black/95 to-transparent px-6 pb-6 pt-16">
           <ExperimentalPlayerReport input={report} />
         </div>

@@ -779,3 +779,23 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
     expect(reported.filter((r) => r.kind === "error")).toHaveLength(0);
   });
 });
+
+describe("les messages brefs de la version allégée et les écrans qui prennent tout (chasse aux défauts, 13/10/2026)", () => {
+  it("« Passage en vidéo allégée… » ne reste pas posé sur l'écran d'erreur", async () => {
+    // Le relais arrive avec son message bref, et la négociation de la version allégée échoue : l'écran
+    // d'erreur (« Quitter · Réessayer ») prenait l'écran, commandes cachées — et le message restait
+    // par-dessus, en bas à gauche, annonçant une bascule qui n'avait pas abouti.
+    switchedTo({ targetBps: 1_500_000, tier: 1 }, { switchedAt: Date.now() });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/jellyfin/playback/start") return { ok: false, status: 503, json: async () => ({ error: "Lecture impossible pour le moment." }) };
+        return { ok: true, status: 200, json: async () => ({}), text: async (): Promise<string> => "" };
+      })
+    );
+    render(<PlayerHost />);
+    for (let i = 0; i < 50; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(document.body.textContent).toContain("Lecture impossible pour le moment.");
+    expect(document.querySelector("[data-lighter-switch-notice]")).toBeNull();
+  });
+});
