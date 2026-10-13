@@ -18,6 +18,24 @@ const ms = (value: unknown): number | null =>
 const megabytes = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1e9 ? Math.round(value * 10) / 10 : null;
 
+/** Un compte de cartes : entier, positif, borné. */
+const count = (value: unknown): number | null =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0 && value < 1000 ? value : null;
+
+/**
+ * « Reprendre » posé depuis l'appareil, et ce que la réponse fraîche y a corrigé (13/10/2026,
+ * `noteContinueReconciled`) : ajouts, retraits, déplacements, barres qui ont bougé.
+ */
+function continueOf(body: Record<string, unknown>): Record<string, number | boolean> {
+  const out: Record<string, number | boolean> = {};
+  if (body.resumeFromCache === true) out.resumeFromCache = true;
+  for (const key of ["resumeAdded", "resumeRemoved", "resumeMoved", "resumeProgressed"] as const) {
+    const n = count(body[key]);
+    if (n !== null) out[key] = n;
+  }
+  return out;
+}
+
 const PERSIST_OUTCOMES = new Set(["accordé", "déjà", "refusé", "ignoré"]);
 
 /**
@@ -65,6 +83,7 @@ export async function POST(req: NextRequest) {
     // envoyées (`beforeHidden`, persistentCache.ts), et ceci dit pourquoi elles manquent.
     ...(ms(body.hiddenAtMs) !== null ? { hiddenAtMs: ms(body.hiddenAtMs) as number } : {}),
     standalone: body.standalone === true,
+    ...continueOf(body),
     ...storageOf(body.storage),
   });
   return new NextResponse(null, { status: 204 });

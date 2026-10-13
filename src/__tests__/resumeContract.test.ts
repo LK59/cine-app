@@ -51,7 +51,14 @@ describe("le contrat de position de départ", () => {
   const files = sources("src");
 
   it("est exercé — le balayage trouve bien les appelants", () => {
-    const total = files.reduce((n, f) => n + playArguments(readFileSync(f, "utf8")).length, 0);
+    // Les lectures lancées depuis « Reprendre » / « À suivre » passent un `FeedStart`
+    // (`useContinueRow`), dont `resumeAt` est un champ obligatoire du type — le compilateur les tient,
+    // le balayage les compte.
+    const viaFeed = (src: string) => src.match(/\bplay\((movieStartFrom|episodeStartFrom)\(/g)?.length ?? 0;
+    const total = files.reduce((n, f) => {
+      const src = readFileSync(f, "utf8");
+      return n + playArguments(src).length + viaFeed(src);
+    }, 0);
     // Un plancher, pas un compte exact : ajouter un écran ne doit pas casser ce test, mais un
     // balayage qui ne trouve plus rien (renommage de `play`, par exemple) doit se voir.
     expect(total).toBeGreaterThanOrEqual(10);

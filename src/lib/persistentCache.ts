@@ -232,6 +232,34 @@ export function isAwaitingFresh(key: string): boolean {
   return awaitingFresh.has(key);
 }
 
+const settleListeners = new Set<(key: string) => void>();
+
+function notifySettled(key: string): void {
+  for (const listener of [...settleListeners]) {
+    try {
+      listener(key);
+    } catch {
+      /* un auditeur ne fait pas tomber la réponse */
+    }
+  }
+}
+
+/**
+ * Une clé montrée depuis le cache vient d'être tranchée par le réseau : réponse fraîche (la clé
+ * n'attend plus) ou échec (elle attend toujours, mais plus rien ne viendra de cette requête).
+ *
+ * Un événement plutôt qu'un état lu au rendu : une réponse fraîche identique au cache ne change
+ * pas la donnée de SWR — il garde l'ancien objet — et ne redessine donc rien. Un « Lire » retenu
+ * sur « Reprendre » (`useContinueRow`) l'aurait attendue indéfiniment. Appelé avant que SWR ne pose
+ * la réponse dans son cache : qui veut la lire attend la tâche suivante.
+ */
+export function onFeedSettled(listener: (key: string) => void): () => void {
+  settleListeners.add(listener);
+  return () => {
+    settleListeners.delete(listener);
+  };
+}
+
 /**
  * Le compte de cette page, tel que l'hydratation l'a reçu — null avant, ou sans session. Lu par la
  * reprise instantanée (`src/lib/resumeCache/`), qui range ses octets par compte comme ce cache-ci
@@ -250,10 +278,28 @@ export function catalogueCacheReady(budgetMs = HYDRATION_BUDGET_MS): Promise<voi
 }
 
 export interface Hydrator {
-  /** L'état actuel d'une clé dans SWR — `undefined` quand aucun écran ne l'a encore demandée. */
+  /** La clé a déjà une donnée, une erreur ou une requête en vol dans SWR — voir `swrEntryHolds`. */
   has(key: string): boolean;
   /** Pose la donnée sans la redemander : c'est le montage de l'écran qui la redemandera. */
   set(key: string, data: unknown): void;
+}
+
+/**
+ * Une entrée du cache de SWR qui *tient* déjà quelque chose : une donnée, une erreur, ou une requête
+ * en vol (`isValidating`). Y poser le cache de l'appareil ferait jeter à SWR la réponse en cours.
+ *
+ * Et seulement cela. Le simple fait qu'une entrée existe ne dit rien : SWR 2.4 écrit `{ _k: clé }`
+ * dans son cache au **montage** de tout crochet, même un crochet qui ne demande rien
+ * (`followOnlyOptions`). `useResumeCache`, monté par la page avant que le cinéma n'attende le cache,
+ * suit « Reprendre » et « À suivre » de cette façon : l'hydratation, qui testait
+ * `cache.get(clé) !== undefined`, croyait ces deux clés déjà demandées et ne les posait jamais. La
+ * rangée « Reprendre » restait vide jusqu'à la réponse du réseau — 1,7 à 4,8 s sur l'iPhone de Louis
+ * (startup.log, `resumeNetworkMs`), alors que le catalogue, lui, s'affichait du cache (13/10/2026).
+ */
+export function swrEntryHolds(entry: unknown): boolean {
+  if (!entry || typeof entry !== "object") return false;
+  const state = entry as { data?: unknown; error?: unknown; isValidating?: boolean; isLoading?: boolean };
+  return state.data !== undefined || state.error !== undefined || state.isValidating === true || state.isLoading === true;
 }
 
 /**
@@ -279,6 +325,7 @@ export async function hydrateFromDisk(account: string | null, target: Hydrator, 
       awaitingFresh.add(entry.key);
       target.set(entry.key, entry.data);
       count += 1;
+      if (CONTINUE_FEED_KEYS.includes(entry.key)) timing.resumeFromCache = true;
       if (entry.key === MOVIES_CATALOGUE_KEY) {
         timing.cacheUsed = true;
         timing.cacheAgeMs = now - entry.savedAt;
@@ -303,18 +350,20 @@ export function noteResponse(key: string, data: unknown): void {
   // écran qui se redessine réécrirait le catalogue toutes les secondes.
   if (lastNoted.get(key) === data) return;
   lastNoted.set(key, data);
-  awaitingFresh.delete(key);
+  const wasAwaiting = awaitingFresh.delete(key);
+  if (wasAwaiting) notifySettled(key);
   // La ligne part quand le catalogue ET « Reprendre » sont arrivés — ou au plus tard quelques
   // secondes après le catalogue. Envoyée sur le seul catalogue, elle partait presque toujours avant
   // « Reprendre » une fois le serveur débloqué (10/10/2026), et `resumeNetworkMs` restait vide.
   if (key === RESUME_FEED_KEY && timing.resumeNetworkMs === null) {
     timing.resumeNetworkMs = nowMs();
-    if (timing.networkMs !== null) reportTiming();
+    reportWhenComplete();
   }
   if (key === MOVIES_CATALOGUE_KEY && timing.networkMs === null) {
     timing.networkMs = nowMs();
-    if (timing.resumeNetworkMs !== null) reportTiming();
-    else setTimeout(reportTiming, RESUME_WAIT_MS);
+    reportWhenComplete();
+    // Au plus tard : la ligne part sans ce qui manque encore.
+    setTimeout(reportTiming, RESUME_WAIT_MS);
   }
   if (!currentAccount) return;
   pendingWrites.set(key, data);
@@ -349,10 +398,18 @@ export const persistMiddleware: Middleware = (useSWRNext) => (key, fetcher, conf
       ? (...args: unknown[]) => {
           const result = (fetcher as (...a: unknown[]) => unknown)(...args);
           if (result && typeof (result as Promise<unknown>).then === "function") {
-            return (result as Promise<unknown>).then((data) => {
-              noteResponse(persisted, data);
-              return data;
-            });
+            return (result as Promise<unknown>).then(
+              (data) => {
+                noteResponse(persisted, data);
+                return data;
+              },
+              (error: unknown) => {
+                // Pas de réponse fraîche, mais plus d'attente non plus : un « Lire » retenu sur
+                // cette liste part sans elle — voir `onFeedSettled`.
+                if (awaitingFresh.has(persisted)) notifySettled(persisted);
+                throw error;
+              }
+            );
           }
           noteResponse(persisted, result);
           return result;
@@ -474,6 +531,8 @@ export async function storageFacts(
  * bloqué par la construction du catalogue, alors que la route seule coûte 50 ms.
  */
 const RESUME_FEED_KEY = "/api/jellyfin/resume";
+/** Les deux flux de la rangée « Reprendre » (films, épisodes) — écrits en toutes lettres, voir `PERSISTED_KEYS`. */
+const CONTINUE_FEED_KEYS: readonly string[] = [RESUME_FEED_KEY, "/api/cinema/next-up"];
 
 /** Combien attendre « Reprendre » après le catalogue avant d'envoyer la ligne sans lui. */
 const RESUME_WAIT_MS = 8000;
@@ -486,6 +545,10 @@ const EMPTY_TIMING = {
   networkMs: null as number | null,
   idbMs: null as number | null,
   resumeNetworkMs: null as number | null,
+  /** « Reprendre » a été posé depuis l'appareil à l'ouverture (13/10/2026). */
+  resumeFromCache: false,
+  /** Ce que la réponse fraîche a corrigé dans la rangée — voir `noteContinueReconciled`. */
+  resumeChanges: null as ContinueChanges | null,
   sent: false,
 };
 
@@ -527,6 +590,34 @@ function nowMs(): number {
   }
 }
 
+/** Ce qui a changé dans « Reprendre » entre le cache et la réponse fraîche, carte par carte. */
+export interface ContinueChanges {
+  added: number;
+  removed: number;
+  moved: number;
+  /** Les cartes restées dont la barre de progression a bougé. */
+  progressed: number;
+}
+
+/**
+ * La rangée « Reprendre » montrée depuis le cache a été corrigée par le réseau — appelé une fois
+ * par `useContinueRow` quand ses deux flux sont frais. Rien n'est envoyé pour cela : les chiffres
+ * partent avec la ligne d'ouverture, qui les attend (au plus `RESUME_WAIT_MS` après le catalogue).
+ * Ils disent si le cache était juste — le pari de l'affichage instantané — sans le supposer.
+ */
+export function noteContinueReconciled(changes: ContinueChanges): void {
+  if (timing.resumeChanges !== null) return;
+  timing.resumeChanges = changes;
+  reportWhenComplete();
+}
+
+/** Part quand le catalogue, « Reprendre » et, s'il venait du cache, sa correction sont là. */
+function reportWhenComplete(): void {
+  if (timing.networkMs === null || timing.resumeNetworkMs === null) return;
+  if (timing.resumeFromCache && timing.resumeChanges === null) return;
+  reportTiming();
+}
+
 function reportTiming(): void {
   if (timing.sent || !currentAccount) return;
   timing.sent = true;
@@ -540,6 +631,15 @@ function reportTiming(): void {
     idbMs: timing.idbMs,
     resumeNetworkMs: beforeHidden(timing.resumeNetworkMs),
     networkMs: beforeHidden(timing.networkMs),
+    resumeFromCache: timing.resumeFromCache,
+    ...(timing.resumeChanges
+      ? {
+          resumeAdded: timing.resumeChanges.added,
+          resumeRemoved: timing.resumeChanges.removed,
+          resumeMoved: timing.resumeChanges.moved,
+          resumeProgressed: timing.resumeChanges.progressed,
+        }
+      : {}),
     ...(firstHiddenAt !== null && (timing.networkMs === null || timing.networkMs >= firstHiddenAt) ? { hiddenAtMs: firstHiddenAt } : {}),
     standalone: typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches === true,
   };
@@ -560,6 +660,7 @@ function reportTiming(): void {
 export function resetPersistentCacheForTests(): void {
   currentAccount = null;
   awaitingFresh.clear();
+  settleListeners.clear();
   lastNoted.clear();
   pendingWrites.clear();
   if (writeTimer) clearTimeout(writeTimer);

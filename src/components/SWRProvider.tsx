@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { SWRConfig, useSWRConfig } from "swr";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
-import { hydrateFromDisk, persistMiddleware, startPersistence } from "@/lib/persistentCache";
+import { hydrateFromDisk, persistMiddleware, startPersistence, swrEntryHolds } from "@/lib/persistentCache";
 
 /**
  * Relit, au démarrage, le catalogue gardé sur l'appareil pour ce compte — voir `persistentCache.ts`.
@@ -18,7 +18,9 @@ function PersistentCacheHydrator({ account }: { account: string | null }) {
   const { cache, mutate } = useSWRConfig();
   useEffect(() => {
     void hydrateFromDisk(account, {
-      has: (key) => cache.get(key) !== undefined,
+      // Pas `cache.get(key) !== undefined` : SWR inscrit chaque clé au montage de ses crochets, même
+      // de ceux qui ne demandent rien, et « Reprendre » n'était jamais posé — voir `swrEntryHolds`.
+      has: (key) => swrEntryHolds(cache.get(key)),
       set: (key, data) => void mutate(key, data, { revalidate: false }),
     });
     if (account && typeof navigator !== "undefined") startPersistence(navigator.userAgent, navigator.storage);

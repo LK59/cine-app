@@ -38,6 +38,12 @@ export function logStartupTiming(fields: {
   resumeNetworkMs?: number | null;
   /** Quand la page est passée en arrière-plan avant la fin de l'ouverture — mesures d'après omises. */
   hiddenAtMs?: number;
+  /** « Reprendre » dessiné depuis l'appareil, puis corrigé par le réseau — voir `noteContinueReconciled`. */
+  resumeFromCache?: boolean;
+  resumeAdded?: number;
+  resumeRemoved?: number;
+  resumeMoved?: number;
+  resumeProgressed?: number;
   standalone: boolean;
   /** Le stockage de l'appareil — voir `storageFacts` (persistentCache.ts). */
   persist?: string;

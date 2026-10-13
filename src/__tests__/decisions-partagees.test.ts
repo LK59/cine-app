@@ -515,15 +515,37 @@ describe("une seule recherche du lecteur", () => {
 });
 
 describe("« Reprendre » et « Ma liste » tiennent leur place, sur les deux interfaces", () => {
-  // Pas gardées sur l'appareil (une rangée d'hier serait fausse), donc demandées à chaque lancement
-  // — et le squelette évite qu'elles fassent sauter l'écran en arrivant.
+  // Le squelette évite qu'elles fassent sauter l'écran en arrivant quand rien n'est encore connu —
+  // ni sur l'appareil, ni du réseau. « Reprendre » décide sa place dans `useContinueRow`.
   it.each(["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"])(
     "%s",
     (f) => {
       const src = lire(f);
       expect(src).toContain("useCinemaMyListPending()");
-      expect(src).toMatch(/isRowPending\(resume, resumeError\)/);
+      expect(src).toContain("continueRowState.pending");
       expect(src.match(/<CinemaSkeletonCards /g)?.length).toBeGreaterThanOrEqual(2);
+    }
+  );
+});
+
+describe("« Reprendre » : une seule rangée, dessinée du cache et corrigée en glissant (§86)", () => {
+  /**
+   * Les deux accueils avaient chacun leurs `useSWR` sur « Reprendre » et « À suivre », leur tri,
+   * leur place tenue et leurs « Lire » à la position du flux. Une rangée dessinée depuis le cache de
+   * l'appareil ne doit jamais lancer la position du cache : la règle tient dans `useContinueRow`,
+   * et ni l'un ni l'autre ne la réécrit.
+   */
+  it.each(["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"])(
+    "%s passe par useContinueRow",
+    (f) => {
+      const src = lire(f);
+      expect(src).toContain("useContinueRow(continueTrack)");
+      expect(src).toContain("continueRowState.shown");
+      expect(src).not.toMatch(/useSWR<[^>]*>\((RESUME_KEY|NEXT_UP_KEY)/);
+      expect(src).not.toMatch(/feedResumeAt\(|bannerResumeAt\(/);
+      expect(src).not.toMatch(/useFlipGrid\(continueTrack/);
+      // Chaque lecture lancée depuis les flux attend la réponse fraîche.
+      expect(src).toMatch(/playWhenFresh\(\(feeds\) => [\w.]*play\(movieStartFrom\(feeds/);
     }
   );
 });

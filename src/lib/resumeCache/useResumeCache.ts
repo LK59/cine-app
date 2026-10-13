@@ -138,7 +138,9 @@ export function useResumeCache(): void {
   // Lues, jamais demandées d'elles-mêmes : monté avant le cinéma (la page attend encore le catalogue
   // gardé sur l'appareil), un `useSWR` qui demandait ces listes au serveur prenait leur place dans
   // le cache — et l'hydratation, qui ne touche jamais une clé déjà demandée, laissait « Reprendre »
-  // sans son affichage instantané. Mais avec le récupérateur : voir `followOnlyOptions`.
+  // sans son affichage instantané. Mais avec le récupérateur : voir `followOnlyOptions`. Et cela ne
+  // suffisait pas : même sans rien demander, SWR inscrit la clé au montage, et l'hydratation la
+  // croyait prise jusqu'au 13/10/2026 — voir `swrEntryHolds` (DECISIONS.md §86).
   const { data: resume } = useSWR<{ items: ResumeFeedItem[] }>(RESUME_KEY, fetcher, followOnlyOptions);
   const { data: nextUp } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, fetcher, followOnlyOptions);
   const filmOpen = session !== null;

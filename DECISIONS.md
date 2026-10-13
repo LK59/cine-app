@@ -4090,3 +4090,59 @@ l'autre), `useMeasuredCardHeight.test.tsx`, `useDecodeAhead.test.tsx`.
 dizaines à deux cents cartes, où le coût ne se voit pas.
 
 **Décidé le 13/10/2026.**
+
+## 86. « Reprendre » se dessine depuis l'appareil et se corrige en glissant
+
+**Règle.** À l'ouverture, la rangée « Reprendre » (films et épisodes mêlés, §33) est dessinée tout de
+suite depuis le cache de l'appareil (`persistentCache.ts`, par compte), puis corrigée par la réponse
+du serveur sans saut : une carte qui change de place glisse (FLIP, transform seulement, 280 ms), une
+carte qui part s'efface sur place (opacité + échelle, 220 ms, sans pointeur ni clavier) puis ses
+voisines glissent dans le trou, une carte qui arrive se pose, une barre de progression glisse vers sa
+valeur (`ProgressFill`, clés stables par titre). « Réduire les animations » : la rangée est remplacée
+telle quelle. Au-delà de huit cartes changées, la rangée entière se remplace en fondu (`CATALOGUE_FLIP`).
+
+**Garde-fou.** Une carte, la bannière ou son bouton Lire dessinés depuis le cache ne lancent jamais
+la position du cache. Un appui qui précède la réponse fraîche de « Reprendre » et d'« À suivre » est
+retenu (`playWhenFresh`, le dernier appui seulement) puis part avec ce qu'elle dit. Un titre sorti de
+la liste fraîche part **sans** position — le serveur décide, la règle de `bannerResumeAt` (§1) ; un
+épisode remplacé dans « À suivre » par le suivant de sa série part sur celui-là. Une réponse en
+échec, ou 4 s sans réponse (`FRESH_WAIT_MAX_MS`), libèrent l'appui, toujours sans position. Une carte
+qui a une fiche ouvre la fiche, comme avant : rien n'y attend.
+
+**Pourquoi la rangée attendait le réseau.** Ce n'était pas voulu : « Reprendre » et « À suivre » sont
+gardés sur l'appareil depuis le 25/09/2026, et `feedResumeAt` / `isAwaitingFresh` (§29) existaient
+précisément pour qu'une liste du cache ne lance jamais sa position. Mais l'hydratation ne posait
+jamais ces deux clés : elle sautait toute clé « déjà connue de SWR » (`cache.get(clé) !== undefined`),
+et SWR 2.4 inscrit `{ _k: clé }` dans son cache **au montage de tout crochet**, même un crochet qui ne
+demande rien (`followOnlyOptions`). `useResumeCache`, monté par la page avant que le cinéma n'attende
+le cache, suit justement ces deux flux. Le catalogue, lui, s'affichait du cache. Mesuré : 1,7 à 4,8 s
+de rangée vide sur l'iPhone de Louis (`resumeNetworkMs`, startup.log du 13/10/2026). L'hydratation ne
+saute plus qu'une clé qui tient une donnée, une erreur ou une requête en vol (`swrEntryHolds`) — ce
+qui garde son motif d'origine : une donnée posée sous une requête en cours ferait jeter sa réponse.
+
+**Mesure.** La ligne d'ouverture de `startup.log` porte `resumeFromCache` et, une fois les deux flux
+frais, ce que la réponse a corrigé : `resumeAdded`, `resumeRemoved`, `resumeMoved` (cartes restées
+dont le rang relatif a changé), `resumeProgressed` (barres qui ont bougé). Aucun envoi de plus : la
+ligne attend la correction, au plus 8 s après le catalogue.
+
+**Porteurs.** `src/lib/useContinueRow.ts` — `useContinueRow` (les deux flux en `liveFeedOptions`,
+l'ordre, la place tenue, les cartes partantes, le FLIP, `playWhenFresh`, le compte rendu),
+`withLeaving`, `continueChanges`, `movieStartFrom`, `episodeStartFrom`, le type `CinemaResumeItem`
+(qui était écrit deux fois) ; `swrEntryHolds`, `onFeedSettled`, `noteContinueReconciled`
+(`persistentCache.ts`) ; `.continue-leaving` (globals.css).
+
+**Appelants.** `CinemaClient` (rangée, bannière Reprendre / À suivre, « Lire » de la bannière des
+nouveautés, carte sans fiche) et `CinemaMobileClient` (rangée, « Lire » de la bannière, carte sans
+fiche).
+
+**Tests.** `useContinueRow.test.tsx` (rendu immédiat malgré un crochet suiveur monté avant — rouge
+sans `swrEntryHolds` —, autre compte, correction animée et compte rendu, réduction des animations,
+appui retenu puis lancé à la position fraîche, titre disparu, échec), `decisions-partagees.test.ts`,
+`resumeContract.test.ts`, `persistentCache-swr.test.tsx`, `useFlipGrid.test.tsx`.
+
+**Différent exprès.** La bannière lit la liste vraie (`entries`), pas les cartes partantes. Le
+retrait par le menu (« Retirer de Reprendre ») passe par le même effacement. `refreshAfterPlayback`,
+le cache par compte effacé à la déconnexion et `PERSISTED_CACHE_SCHEMA` sont inchangés : aucun type
+gardé n'a bougé.
+
+**Décidé le 13/10/2026.**
