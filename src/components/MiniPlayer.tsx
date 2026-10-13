@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePointerCapture } from "@/lib/usePointerCapture";
 import { Play, Pause, X } from "lucide-react";
 import { createLiquidPress } from "@/lib/liquidGlass/liquid";
+import { useT } from "@/components/TranslationProvider";
 
 const MARGIN = 16;
 // Below this width the mini player uses a slightly smaller box — same 16:9-ish
@@ -152,6 +153,7 @@ interface MiniPlayerChromeProps {
 // doesn't also register as the "tap anywhere else to expand" gesture handled by the drag
 // hook above on the shared container.
 export function MiniPlayerChrome({ title, playing, onTogglePlay, onClose }: MiniPlayerChromeProps) {
+  const t = useT();
   // Le verre liquide des commandes plein écran (`.player-liquid`) et le même geste — gonfle et
   // s'étire sous le doigt —, à la taille du mini-lecteur (04/10/2026). Branché par délégation,
   // en natif : il passe avant le `stopPropagation` des boutons, qui ne protège que le glisser.
@@ -181,6 +183,8 @@ export function MiniPlayerChrome({ title, playing, onTogglePlay, onClose }: Mini
           }}
           // La matière des commandes plein écran (`player-pill`, globals.css), à la taille du mini-lecteur.
           data-liquid
+          // Deux icônes seules : sans nom, un lecteur d'écran annonçait « bouton, bouton » (13/10/2026).
+          aria-label={t("common.close")}
           className="player-pill p-1.5 text-white"
         >
           <X size={16} />
@@ -194,6 +198,7 @@ export function MiniPlayerChrome({ title, playing, onTogglePlay, onClose }: Mini
             onTogglePlay();
           }}
           data-liquid
+          aria-label={playing ? t("player.pause") : t("player.play")}
           className="player-pill shrink-0 p-2 text-white"
         >
           {playing ? <Pause size={18} fill="currentColor" strokeWidth={0} /> : <Play size={18} fill="currentColor" strokeWidth={0} />}

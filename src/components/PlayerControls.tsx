@@ -203,6 +203,8 @@ interface PlayerControlsProps {
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
+/** Après un passage à l'épisode suivant, le temps pendant lequel une nouvelle demande est un doublon. */
+const ADVANCE_GUARD_MS = 2000;
 /** « Améliorer les dialogues » : les trois choix du sous-menu, avec les mots et dans l'ordre de
  *  l'Apple TV (Désactivé / Améliorer / Améliorer davantage — demande de Louis, 11/10/2026). */
 const DIALOGUE_CHOICES: { mode: DialogueMode; label: string }[] = [
@@ -714,11 +716,31 @@ export function PlayerControls({
   // Déduit du rendu et non posé dans un effet : l'écran à afficher est une conséquence du
   // décompte et du compteur, pas un état de plus à tenir à jour à côté d'eux.
   const askStillThere = showNextUp && nextUpCountdown === 0 && autoAdvances >= STILL_THERE_AFTER;
+  /**
+   * Passer à l'épisode suivant — une fois par geste, par tous les chemins : le bouton de la pilule, la
+   * carte du générique, son décompte, « Continuer » et la touche « suivant » de l'écran verrouillé.
+   *
+   * Le lecteur serveur enchaîne les épisodes sans remonter ces commandes : le rendu qui suit le premier
+   * appui propose déjà l'épisode d'après sous le même bouton, et un double-tap — ou un appui répété
+   * parce que rien ne bougeait encore sur une connexion lente, ou le décompte tombant à zéro sous le
+   * doigt qui touchait « Lire maintenant » — enjambait un épisode (chasse aux défauts du 13/10/2026).
+   * Une seconde demande dans les `ADVANCE_GUARD_MS` qui suivent la première est ignorée.
+   */
+  const lastAdvanceAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const requestAdvance = useCallback((): boolean => {
+    const now = performance.now();
+    if (now - lastAdvanceAtRef.current < ADVANCE_GUARD_MS) return false;
+    lastAdvanceAtRef.current = now;
+    onAdvance();
+    return true;
+  }, [onAdvance]);
   useEffect(() => {
     if (!showNextUp || nextUpCountdown !== 0 || askStillThere) return;
+    // Déjà demandé à la main dans l'instant : ce n'est pas un enchaînement automatique de plus.
+    if (performance.now() - lastAdvanceAtRef.current < ADVANCE_GUARD_MS) return;
     noteAutoAdvance();
-    onAdvance();
-  }, [showNextUp, nextUpCountdown, askStillThere, onAdvance]);
+    requestAdvance();
+  }, [showNextUp, nextUpCountdown, askStillThere, requestAdvance]);
 
   // « Passer l'intro » et « Passer le récap » : un seul bouton, dont la décision vit dans `activeSkip`.
   const skipNow = activeSkip(currentTime, introSkip, recapSkip);
@@ -1342,7 +1364,7 @@ export function PlayerControls({
           onPause: () => videoRef.current?.pause(),
           onSeek: (seconds) => commitSeek(seconds),
           onSkip: (delta) => skip(delta),
-          onNext: nextEpisode ? onAdvance : null,
+          onNext: nextEpisode ? () => void requestAdvance() : null,
         }
   );
   const [previewFraction, setPreviewFraction] = useState(0);
@@ -1733,7 +1755,7 @@ export function PlayerControls({
             type="button"
             onClick={() => {
               noteViewerPresent();
-              onAdvance();
+              requestAdvance();
             }}
             className="btn-primary px-6"
           >
@@ -1762,7 +1784,7 @@ export function PlayerControls({
             <button
               onClick={() => {
                 noteViewerPresent();
-                onAdvance();
+                requestAdvance();
               }}
               className="btn-primary flex-1 justify-center py-1.5 text-xs"
             >
@@ -1770,6 +1792,8 @@ export function PlayerControls({
             </button>
             <button
               onClick={() => setNextUpDismissed(true)}
+              // Une icône seule : sans nom, un lecteur d'écran n'annonçait que « bouton » (13/10/2026).
+              aria-label={t("common.close")}
               className="rounded-lg bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/20"
             >
               <X size={14} />
@@ -2556,7 +2580,7 @@ export function PlayerControls({
                   data-player-nav="next-episode"
                   onClick={() => {
                     noteViewerPresent();
-                    onAdvance();
+                    requestAdvance();
                   }}
                   title={t("player.nextEpisode")}
                   aria-label={t("player.nextEpisode")}

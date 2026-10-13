@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, cleanup, act, fireEvent } from "@testing-library/react";
+import { render, cleanup, act, fireEvent, within } from "@testing-library/react";
 import { useRef, type RefObject } from "react";
 
 vi.mock("@/components/TranslationProvider", () => ({
@@ -95,6 +95,39 @@ describe("PlayerControls — le clavier, barre de progression focalisée", () =>
     await act(async () => void fireEvent.keyDown(seek, { key: "ArrowLeft", code: "ArrowLeft" }));
     await act(async () => void fireEvent.keyUp(seek, { key: "ArrowLeft", code: "ArrowLeft" }));
     expect(video!.currentTime).toBeCloseTo(90, 1);
+  });
+});
+
+describe("PlayerControls — l'épisode suivant, demandé deux fois de suite", () => {
+  it("un double appui sur « Épisode suivant » n'enjambe pas un épisode", async () => {
+    // Le lecteur serveur enchaîne les épisodes sans remonter ses commandes : le premier appui passe à
+    // l'épisode 2, le rendu qui suit propose déjà l'épisode 3 sous le même bouton, et le second appui
+    // — un double-tap, ou un appui de plus parce que rien ne bougeait encore sur une connexion lente —
+    // y allait : l'épisode 2 n'était jamais vu.
+    stubMediaFetches();
+    const onAdvance = vi.fn();
+    const { rerender, container } = render(
+      <Harness itemId="ep1" nextEpisode={{ itemId: "ep2", title: "Épisode 2" }} onAdvance={onAdvance} />
+    );
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="next-episode"]')!));
+    rerender(<Harness itemId="ep2" nextEpisode={{ itemId: "ep3", title: "Épisode 3" }} onAdvance={onAdvance} loading />);
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="next-episode"]')!));
+    expect(onAdvance).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("PlayerControls — la carte de l'épisode suivant", () => {
+  it("nomme sa croix, qui n'est qu'une icône", async () => {
+    // Sans nom, un lecteur d'écran annonçait « bouton » à côté de « Lire maintenant » : rien ne disait
+    // que celui-ci écartait la carte.
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { getByText } = render(
+      <Harness creditsStart={50} nextEpisode={{ itemId: "ep2", title: "Épisode 2" }} onVideoRef={(v) => (video = v)} />
+    );
+    await withPosition(video!);
+    const card = getByText("Épisode 2").parentElement!;
+    expect(within(card).getByRole("button", { name: "common.close" })).toBeTruthy();
   });
 });
 

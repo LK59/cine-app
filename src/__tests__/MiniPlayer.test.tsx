@@ -120,8 +120,8 @@ describe("MiniPlayerChrome", () => {
     const user = userEvent.setup();
     render(<MiniPlayerChrome title="Some Title" playing={false} onTogglePlay={onTogglePlay} onClose={onClose} />);
 
-    // Both buttons are icon-only (no accessible name) — DOM order is close (top-right) then
-    // play/pause (bottom-left), matching the component's own markup order.
+    // DOM order is close (top-right) then play/pause (bottom-left), matching the component's own
+    // markup order.
     const [closeButton, playButton] = screen.getAllByRole("button");
     await user.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -129,6 +129,16 @@ describe("MiniPlayerChrome", () => {
 
     await user.click(playButton);
     expect(onTogglePlay).toHaveBeenCalledTimes(1);
+  });
+
+  it("nomme ses deux boutons, qui ne sont que des icônes (chasse aux défauts, 13/10/2026)", () => {
+    // Sans nom, un lecteur d'écran annonçait « bouton, bouton » : ni la fermeture ni la lecture ne
+    // se laissaient trouver. Les mêmes mots que les commandes plein écran.
+    const { rerender } = render(<MiniPlayerChrome title="Un film" playing={false} onTogglePlay={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Fermer" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lecture" })).toBeInTheDocument();
+    rerender(<MiniPlayerChrome title="Un film" playing onTogglePlay={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
   });
 
   it("renders the given title", () => {
