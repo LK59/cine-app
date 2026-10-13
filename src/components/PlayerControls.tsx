@@ -2,7 +2,7 @@
 
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages, Check } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
@@ -2155,16 +2155,17 @@ export function PlayerControls({
                    * LaserDisc) ». C'est précisément le cas où couper efface ce qu'on avait mis là
                    * pour choisir. Deux lignes suffisent à tout ce que la bibliothèque contient.
                    */
-                  className={`block w-full px-3 py-2 text-left text-sm line-clamp-2 hover:bg-white/10 ${
-                    (menu === "audio" ? currentAudioId : currentSubtitleId) === tr.id ? "text-accent-400" : "text-white"
-                  }`}
+                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${(menu === "audio" ? currentAudioId : currentSubtitleId) === tr.id ? " font-semibold" : ""}`}
                 >
-                  {tr.label}
-                  {tr.detail && (
-                    <span data-track-detail className="ml-2 text-xs tabular-nums text-white/50">
-                      {tr.detail}
-                    </span>
-                  )}
+                  <OptionCheck on={(menu === "audio" ? currentAudioId : currentSubtitleId) === tr.id} />
+                  <span className="min-w-0 line-clamp-2">
+                    {tr.label}
+                    {tr.detail && (
+                      <span data-track-detail className="ml-2 text-xs tabular-nums text-white/50">
+                        {tr.detail}
+                      </span>
+                    )}
+                  </span>
                 </button>
               ))}
             {/* Sous les pistes, comme sur l'Apple TV : c'est un réglage du son, il vivait dans le
@@ -2192,10 +2193,9 @@ export function PlayerControls({
                   onChangeSubtitle(null);
                   setMenu(null);
                 }}
-                className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
-                  currentSubtitleId === null ? "text-accent-400" : "text-white"
-                }`}
+                className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${currentSubtitleId === null ? " font-semibold" : ""}`}
               >
+                  <OptionCheck on={currentSubtitleId === null} />
                 {t('player.none')}
               </button>
             )}
@@ -2349,10 +2349,9 @@ export function PlayerControls({
                     setMenu(null);
                     if (choice !== hdrCap.current) hdrCap.onPick(choice);
                   }}
-                  className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
-                    hdrCap.current === choice ? "text-accent-400" : "text-white"
-                  }`}
+                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${hdrCap.current === choice ? " font-semibold" : ""}`}
                 >
+                  <OptionCheck on={hdrCap.current === choice} />
                   {hdrCapLabel(choice)}
                 </button>
               ))}
@@ -2367,10 +2366,9 @@ export function PlayerControls({
                     // Rechoisir la durée en cours la relance en entier, comme « Continuer ».
                     sleepTimerStore.choose(choice);
                   }}
-                  className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
-                    sleepMode === choice ? "text-accent-400" : "text-white"
-                  }`}
+                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${sleepMode === choice ? " font-semibold" : ""}`}
                 >
+                  <OptionCheck on={sleepMode === choice} />
                   {sleepLabel(choice)}
                 </button>
               ))}
@@ -2387,8 +2385,9 @@ export function PlayerControls({
                       if (choice !== quality) writePlaybackQuality(choice);
                       setMenu(null);
                     }}
-                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${quality === choice ? "text-accent-400" : "text-white"}`}
+                    className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${quality === choice ? " font-semibold" : ""}`}
                   >
+                  <OptionCheck on={quality === choice} />
                     {choice === "auto" ? t("player.quality.auto") : t("player.quality.original")}
                   </button>
                 ))}
@@ -2405,10 +2404,9 @@ export function PlayerControls({
                       if (mode !== dialogue.mode) dialogue.onChange(mode);
                       setMenu(null);
                     }}
-                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
-                      dialogue.mode === mode ? "text-accent-400" : "text-white"
-                    }`}
+                    className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${dialogue.mode === mode ? " font-semibold" : ""}`}
                   >
+                  <OptionCheck on={dialogue.mode === mode} />
                     {t(label)}
                   </button>
                 ))}
@@ -2424,10 +2422,9 @@ export function PlayerControls({
                 <button
                   key={rate}
                   onClick={() => changeSpeed(rate)}
-                  className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
-                    speed === rate ? "text-accent-400" : "text-white"
-                  }`}
+                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${speed === rate ? " font-semibold" : ""}`}
                 >
+                  <OptionCheck on={speed === rate} />
                   {rate === 1 ? t('player.speedNormal') : `${rate}x`}
                 </button>
               ))}
@@ -2438,12 +2435,11 @@ export function PlayerControls({
                   <button
                     key={i}
                     onClick={() => jumpToChapter(ch.start)}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-white/10 ${
-                      currentTime >= ch.start && (chapters[i + 1] ? currentTime < chapters[i + 1].start : true)
-                        ? "text-accent-400"
-                        : "text-white"
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${
+                      currentTime >= ch.start && (chapters[i + 1] ? currentTime < chapters[i + 1].start : true) ? " font-semibold" : ""
                     }`}
                   >
+                    <OptionCheck on={currentTime >= ch.start && (chapters[i + 1] ? currentTime < chapters[i + 1].start : true)} />
                     {trickplay && (
                       <div
                         className="shrink-0 overflow-hidden rounded bg-black/40"
@@ -2955,4 +2951,14 @@ function DialogueBeta() {
       {t("player.chromecast.beta")}
     </span>
   );
+}
+
+/**
+ * L'option retenue d'un menu du lecteur : une coche, comme les menus d'iOS et de l'Apple TV
+ * (13/10/2026). Elle était dite par la couleur d'accent sur un texte blanc ; l'accent devenu blanc
+ * (§83), la piste choisie ne se distinguait plus des autres. La place est gardée sur chaque ligne
+ * pour que les libellés restent alignés.
+ */
+function OptionCheck({ on }: { on: boolean }) {
+  return <Check size={16} strokeWidth={2.5} aria-hidden className={`mt-0.5 shrink-0 ${on ? "" : "invisible"}`} />;
 }

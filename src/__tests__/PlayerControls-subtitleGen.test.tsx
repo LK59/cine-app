@@ -131,7 +131,9 @@ describe("Générer des sous-titres — le menu", () => {
     });
     const entry = screen.getByText("Français — génération…");
     expect(entry.querySelector("[data-track-detail]")?.textContent).toBe("42 %");
-    expect(entry.className).toContain("text-accent-400");
+    // La piste retenue porte la coche (13/10/2026 : l'accent blanc ne la distinguait plus).
+    expect(entry.closest("button")!.className).toContain("font-semibold");
+    expect(entry.closest("button")!.querySelector("svg")!.getAttribute("class")).not.toContain("invisible");
     expect(container.querySelectorAll("[data-track-detail]")).toHaveLength(1);
   });
 

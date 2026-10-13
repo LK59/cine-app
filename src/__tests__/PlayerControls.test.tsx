@@ -1332,8 +1332,10 @@ describe("améliorer les dialogues", () => {
     const choices = [...document.querySelectorAll("[data-dialogue-choice]")];
     expect(choices.map((c) => c.getAttribute("data-dialogue-choice"))).toEqual(["off", "on", "strong"]);
     expect(choices.map((c) => c.textContent)).toEqual(["player.dialogue.off", "player.dialogue.enhance", "player.dialogue.further"]);
-    expect(choices[0].className).toContain("text-accent-400");
-    expect(choices[1].className).not.toContain("text-accent-400");
+    expect(choices[0].className).toContain("font-semibold");
+    expect(choices[1].className).not.toContain("font-semibold");
+    expect(choices[0].querySelector("svg")!.getAttribute("class")).not.toContain("invisible");
+    expect(choices[1].querySelector("svg")!.getAttribute("class")).toContain("invisible");
   });
 
   it("Retour ramène aux pistes audio", async () => {
@@ -1358,7 +1360,7 @@ describe("améliorer les dialogues", () => {
   it("dit quand la piste qui joue n'est pas de celles qu'il prend", async () => {
     await openDialogue({ dialogue: { mode: "strong", applies: false, onChange: vi.fn() } });
     expect(screen.getByText("player.dialogue.notThisTrack")).toBeTruthy();
-    expect(document.querySelector('[data-dialogue-choice="strong"]')!.className).toContain("text-accent-400");
+    expect(document.querySelector('[data-dialogue-choice="strong"]')!.className).toContain("font-semibold");
   });
 });
 
