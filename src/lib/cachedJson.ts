@@ -28,6 +28,11 @@ export interface Prepared {
 
 const prepared = new Map<string, Prepared>();
 
+/** Pour les tests : combien de réponses préparées sont gardées. */
+export function preparedCount(): number {
+  return prepared.size;
+}
+
 /** La réponse préparée d'une charge utile — partagée avec la copie de secours du catalogue (§92). */
 export function preparedJson(key: string, payload: unknown): Prepared {
   return prepare(key, JSON.stringify(payload));
@@ -36,10 +41,23 @@ export function preparedJson(key: string, payload: unknown): Prepared {
 function prepare(key: string, json: string): Prepared {
   const cached = prepared.get(key);
   if (cached && cached.json === json) return cached;
-  const etag = `W/"${createHash("sha1").update(json).digest("base64url")}"`;
-  const fresh: Prepared = { json, etag, gzip: gzipSync(json) };
+  const fresh = prepareUnkept(json);
   prepared.set(key, fresh);
   return fresh;
+}
+
+/**
+ * Une réponse préparée **sans être gardée** : pour une charge utile propre à un compte et rare — la
+ * copie de secours du catalogue pendant une panne (§92). Gardée sous une clé par compte, langue et
+ * sorte, chacune restait dans `prepared` jusqu'au redémarrage (relecture du 14/10/2026).
+ */
+export function preparedUnkept(payload: unknown): Prepared {
+  return prepareUnkept(JSON.stringify(payload));
+}
+
+function prepareUnkept(json: string): Prepared {
+  const etag = `W/"${createHash("sha1").update(json).digest("base64url")}"`;
+  return { json, etag, gzip: gzipSync(json) };
 }
 
 export function cachedJson(req: Request, key: string, payload: unknown): Response {

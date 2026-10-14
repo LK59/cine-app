@@ -1,3 +1,6 @@
+import { positionUnknownAnswer } from "@/lib/playbackPrefetch";
+import { isUpstreamUnreachable, withCode } from "@/lib/upstreamError";
+
 /**
  * D'où part une lecture — la décision, écrite une fois.
  *
@@ -45,10 +48,15 @@ export async function resolveResumeAt(itemId: string, resumeAt: number | undefin
   if (typeof resumeAt === "number") return resumeAt;
   try {
     const response = await fetch(`/api/jellyfin/playback-state/${itemId}`, { signal: AbortSignal.timeout(8000) });
+    // Jellyfin injoignable (14/10/2026, §92) : la position est inconnue, et ouvrir au début ferait
+    // effacer la reprise par les rapports de progression. L'erreur nommée remonte au lecteur, qui
+    // le dit au lieu d'ouvrir.
+    if (await positionUnknownAnswer(response)) throw withCode(new Error("position de reprise inconnue : Jellyfin ne répond pas"), "upstream_unreachable");
     if (!response.ok) return 0;
     const state = (await response.json()) as { resumeSeconds?: unknown } | null;
     return typeof state?.resumeSeconds === "number" && state.resumeSeconds > 0 ? state.resumeSeconds : 0;
-  } catch {
+  } catch (error) {
+    if (isUpstreamUnreachable(error)) throw error;
     return 0;
   }
 }

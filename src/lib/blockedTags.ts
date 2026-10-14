@@ -17,6 +17,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { cachedJellyfinMoviesAdmin, cachedJellyfinSeriesAdmin } from "@/lib/server-cache";
 import { catalogueLinks } from "@/lib/sonarrLink";
+import { catalogueMembers } from "@/lib/catalogueMembers";
 import { kvCacheDb } from "@/lib/db";
 
 /** Relue toutes les deux minutes : un tag ajouté ou retiré par l'administrateur s'applique vite. */
@@ -185,29 +186,167 @@ export async function hiddenForRequest<M>(
 }
 
 /**
+ * Combien de temps `hiddenTmdbKeysFor` attend Jellyfin — ses tags bloqués et ses listes — avant de se
+ * rabattre sur ce qu'il a gardé (§92) : la recherche et les fiches attendaient sinon les cinq à treize
+ * secondes d'un hôte figé. La même grâce que la recherche (`SEARCH_JELLYFIN_WAIT_MS`). L'appel
+ * continue derrière et remplit les caches pour le suivant.
+ */
+export const HIDDEN_JELLYFIN_WAIT_MS = 1500;
+
+/** `load` dans la limite de `ms` ; `null` passé ce délai ou en échec. L'appel n'est pas abandonné. */
+function within<T>(ms: number, load: () => Promise<T>): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    (timer as { unref?: () => void }).unref?.();
+    void Promise.resolve()
+      .then(load)
+      .then(
+        (value) => resolve(value),
+        () => resolve(null),
+      )
+      .finally(() => clearTimeout(timer));
+  });
+}
+
+/**
+ * L'index des titres étiquetés, par TMDB : pour chaque tag *surveillé*, les clés (`movie:603`,
+ * `series:1399`) des titres qui le portent (14/10/2026, §54/§92).
+ *
+ * Pourquoi : `hiddenTmdbKeysFor` lit les tags des titres dans les listes Jellyfin de l'administrateur.
+ * Jellyfin injoignable après un redémarrage de cine-app (ou au-delà de la copie périmée en mémoire),
+ * ces listes manquaient, l'ensemble rendu était vide — et un titre « prive » réapparaissait dans la
+ * recherche, la découverte et sa fiche pour un compte qui ne doit pas le voir. L'index est gardé sur
+ * disque (`kv_cache`) à chaque calcul réussi, et relu quand les listes manquent.
+ *
+ * Petit exprès : seuls les tags bloqués de quelqu'un — ceux des comptes déjà lus (mémoire) et ceux
+ * posés d'office (`unknownBlockedTags`) — et pas les mots-clés de TMDB que Jellyfin range aussi dans
+ * les tags (562 films sur 650). Un tag présent dans `tags`, même sans clé, est un tag *connu* : sa
+ * liste vide veut dire « aucun titre », pas « on ne sait pas ».
+ */
+interface TaggedIndex {
+  tags: Record<string, string[]>;
+}
+
+const INDEX_KEY = "blocked-tags:tmdb-index";
+let memoryIndex: TaggedIndex | null = null;
+let savedIndexJson: string | null = null;
+
+/** Pour les tests : la mémoire d'un processus neuf (le disque, lui, reste). */
+export function forgetTaggedIndex(): void {
+  memoryIndex = null;
+  savedIndexJson = null;
+}
+
+/** Les tags dont l'index tient la liste : ceux que quelqu'un bloque, à notre connaissance. */
+function watchedTags(extra: readonly string[]): Set<string> {
+  const out = new Set<string>(unknownBlockedTags());
+  for (const { tags } of cache.values()) for (const t of tags) out.add(t);
+  for (const t of extra) out.add(t);
+  return out;
+}
+
+function saveIndex(index: TaggedIndex, now: number): void {
+  memoryIndex = index;
+  const json = JSON.stringify(index);
+  // Écrit quand il change : une ligne de quelques kilo-octets, pas une écriture par recherche.
+  if (json === savedIndexJson) return;
+  try {
+    kvCacheDb.set(INDEX_KEY, index, now);
+    savedIndexJson = json;
+  } catch {
+    // La mémoire suffit tant que le processus vit.
+  }
+}
+
+function lastKnownIndex(): TaggedIndex | null {
+  if (memoryIndex) return memoryIndex;
+  try {
+    const disk = kvCacheDb.get(INDEX_KEY);
+    const value = disk?.value as TaggedIndex | undefined;
+    if (value && typeof value.tags === "object" && value.tags !== null) {
+      memoryIndex = value;
+      savedIndexJson = JSON.stringify(value);
+      return value;
+    }
+  } catch {
+    // Base illisible : pas d'index.
+  }
+  return null;
+}
+
+/**
+ * Faute de savoir quels titres portent un tag bloqué : tous les titres de la bibliothèque (Radarr et
+ * Sonarr, qui répondent). Cacher ce qu'on ne sait pas classer plutôt que le montrer — la recherche
+ * garde les titres que TMDB seul connaît, qu'aucun tag Jellyfin ne peut viser. Cas rare : jamais un
+ * calcul réussi sur cette installation, ou un tag bloqué neuf, pendant une panne.
+ */
+async function wholeLibraryKeys(): Promise<Set<string>> {
+  const members = await within(HIDDEN_JELLYFIN_WAIT_MS, () => catalogueMembers({ jellyfinWaitMs: 0 }));
+  const keys = new Set<string>();
+  for (const m of members?.movies ?? []) if (m.tmdbId > 0) keys.add(`movie:${m.tmdbId}`);
+  for (const s of members?.series ?? []) if (s.tmdbId && s.tmdbId > 0) keys.add(`series:${s.tmdbId}`);
+  return keys;
+}
+
+/**
  * Les mêmes titres, désignés par TMDB (`movie:603`, `series:1399`) : la recherche et les rangées de
  * découverte parlent en identifiants TMDB et marquaient ce titre « dans la bibliothèque ». Un compte
  * qui ne le voit pas dans le catalogue ne le voit nulle part (08/10/2026).
+ *
+ * Jellyfin en panne (§92) : au plus `HIDDEN_JELLYFIN_WAIT_MS` d'attente, puis les tags gardés du
+ * compte et l'index gardé des titres étiquetés ; un tag que l'index ne connaît pas cache toute la
+ * bibliothèque à ce compte plutôt que de lui montrer un titre réservé.
  */
-export async function hiddenTmdbKeysFor(jfId: string | null | undefined): Promise<Set<string>> {
-  const blocked: readonly string[] = jfId ? await blockedTagsOf(jfId) : [];
-  if (blocked.length === 0) return new Set();
-  const [movies, series, links] = await Promise.all([
-    cachedJellyfinMoviesAdmin().catch(() => []),
-    cachedJellyfinSeriesAdmin().catch(() => []),
-    catalogueLinks(),
+export async function hiddenTmdbKeysFor(jfId: string | null | undefined, now = Date.now()): Promise<Set<string>> {
+  if (!jfId) return new Set();
+  // Les listes partent en même temps que les tags : deux attentes bornées à la suite faisaient trois
+  // secondes sur un hôte figé. Elles sont en cache (celui du catalogue) en temps normal.
+  const listsPromise = Promise.all([
+    within(HIDDEN_JELLYFIN_WAIT_MS, () => cachedJellyfinMoviesAdmin()),
+    within(HIDDEN_JELLYFIN_WAIT_MS, () => cachedJellyfinSeriesAdmin()),
   ]);
-  const keys = new Set<string>();
-  for (const [type, items] of [["movie", movies], ["series", series]] as const) {
-    for (const item of items) {
-      if (!carriesBlockedTag(item.Tags, blocked)) continue;
-      const tmdb = item.ProviderIds?.Tmdb;
-      if (tmdb) keys.add(`${type}:${tmdb}`);
-      // Et le TMDB du titre que le catalogue range dans ce dossier (DECISIONS.md §89) : c'est sous
-      // lui que la recherche et les rangées parlent de ce titre, quoi que Jellyfin en ait compris.
-      const link = links.get(item.Id);
-      if (link?.tmdbId) keys.add(`${link.type}:${link.tmdbId}`);
+  const blocked: readonly string[] =
+    (await within(HIDDEN_JELLYFIN_WAIT_MS, () => blockedTagsOf(jfId, now))) ?? lastKnownTags(jfId) ?? unknownBlockedTags();
+  if (blocked.length === 0) return new Set();
+  const [movies, series] = await listsPromise;
+
+  let index: TaggedIndex | null;
+  if (movies && series) {
+    const links = await catalogueLinks();
+    const watched = watchedTags(blocked);
+    const tags: Record<string, Set<string>> = {};
+    for (const tag of watched) tags[tag] = new Set();
+    for (const [type, items] of [["movie", movies], ["series", series]] as const) {
+      for (const item of items) {
+        if (!item.Tags?.length) continue;
+        const carried = item.Tags.map((t) => t.toLowerCase()).filter((t) => watched.has(t));
+        if (carried.length === 0) continue;
+        const keys: string[] = [];
+        const tmdb = item.ProviderIds?.Tmdb;
+        if (tmdb) keys.push(`${type}:${tmdb}`);
+        // Et le TMDB du titre que le catalogue range dans ce dossier (DECISIONS.md §89) : c'est sous
+        // lui que la recherche et les rangées parlent de ce titre, quoi que Jellyfin en ait compris.
+        const link = links.get(item.Id);
+        if (link?.tmdbId) keys.push(`${link.type}:${link.tmdbId}`);
+        for (const tag of carried) for (const key of keys) tags[tag].add(key);
+      }
     }
+    index = { tags: Object.fromEntries(Object.entries(tags).map(([tag, keys]) => [tag, [...keys].sort()])) };
+    saveIndex(index, now);
+  } else {
+    index = lastKnownIndex();
   }
+
+  const keys = new Set<string>();
+  let unknown = index === null;
+  for (const tag of blocked) {
+    const listed = index?.tags[tag];
+    if (!listed) {
+      unknown = true;
+      continue;
+    }
+    for (const key of listed) keys.add(key);
+  }
+  if (unknown) for (const key of await wholeLibraryKeys()) keys.add(key);
   return keys;
 }

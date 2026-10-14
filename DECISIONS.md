@@ -1842,6 +1842,17 @@ métadonnées ne l'efface pas. La lecture reste gardée par `assertVisible`.
 
 **Tests.** `blocked-tags.test.ts`.
 
+**Pendant une panne de Jellyfin (14/10/2026, relecture de §92).** `hiddenTmdbKeysFor` lisait les tags
+des titres dans les listes Jellyfin de l'administrateur ; après un redémarrage de cine-app (ou une panne
+plus longue que la copie périmée en mémoire), ces listes manquaient, l'ensemble rendu était vide, et un
+titre « prive » réapparaissait dans la recherche, la découverte et sa fiche. Il garde désormais sur disque
+(`kv_cache`, `blocked-tags:tmdb-index`), à chaque calcul réussi et seulement quand il change, l'index
+« tag → clés TMDB » des titres portant un tag bloqué de quelqu'un (comptes déjà lus, tags d'office) — pas
+les mots-clés de TMDB. Listes absentes : cet index. Tag que l'index ne connaît pas, ou aucun index : toute
+la bibliothèque (Radarr/Sonarr) est cachée à ce compte plutôt que montrée — un compte sans blocage n'est
+pas touché. L'attente de Jellyfin (tags du compte et listes, en parallèle) est bornée à 1,5 s
+(`HIDDEN_JELLYFIN_WAIT_MS`), comme la recherche. Tests : `blocked-tags-hidden-restart.test.ts`.
+
 **Décidé le 08/10/2026.**
 
 
@@ -4732,6 +4743,10 @@ lecture.
 vrai `usePlaybackSession`), `scene-native.test.tsx`, `player-host-server.test.tsx` (« une scène ouverte
 depuis une réplique »).
 
+**La fin d'une scène (14/10/2026, relecture).** Regardée jusqu'au bout, une scène effaçait les octets
+gardés pour la reprise instantanée du titre (`forgetResumeCache` à `ended`) : elle n'y touche plus, comme
+`keepOnStop`. `scene-native.test.tsx`.
+
 **Décidé le 14/10/2026** (Louis).
 
 ---
@@ -4815,5 +4830,32 @@ qu'avec le ménage ordinaire de `kv_cache` (30 jours).
 `catalogueOutage-ui.test.tsx` (bandeau, Réessayer, compte à rebours, Lecture refusée, titre introuvable),
 `useContinueRow.test.tsx` (rangée gardée pendant la panne), `decisions-partagees.test.ts`,
 `persistentCache-schema.test.ts` (version 16).
+
+**Relecture du même jour (14/10/2026, Louis : tout corriger).**
+- *Lecture refusée une seule fois* : le premier refus affichait un toast, le fournisseur se redessinait
+  avec une valeur de contexte neuve, l'effet de `useCatalogueOutage` repartait et son nettoyage remettait
+  la panne à faux — le second appui ouvrait le lecteur. L'écouteur est posé une fois (message lu par
+  référence), le drapeau n'est levé qu'au démontage ; la valeur de `ToastProvider` est mémoïsée.
+  `catalogueOutage-toast.test.tsx` (avec le vrai fournisseur).
+- *Tags bloqués* : voir la note datée de §54 (index gardé sur disque, attente bornée).
+- *Fausses alertes du coupe-circuit* : le contrôle de la bibliothèque (§90) tourne en **témoin**
+  (`asJellyfinWitness`, `AsyncLocalStorage`) — ses délais dépassés ne comptent pas, un échec certain si ;
+  et un second échec ambigu ne compte que s'il vient d'un appel parti **après** le premier (deux appels
+  d'un même lot expirés ensemble = un témoignage).
+- *Film en cours* : la négociation (`getPlaybackInfo`, toujours) et la description du lecteur
+  (`getItemMediaSources(…, { pass: true })` dans `/direct`, relais vers l'épisode suivant compris)
+  passent outre le coupe-circuit. Une première ouverture pendant une vraie panne reste refusée par le
+  cinéma.
+- *Position inconnue* : `playback-state` répond `502 upstream_unreachable` quand Jellyfin est injoignable
+  (zéro affirmait « jamais commencé ») ; `fetchPlaybackState` en fait `positionUnknown`, et les deux
+  lecteurs n'ouvrent pas au début sans position affirmée par l'appelant — ils le disent
+  (`player.libraryUnreachable`). Une autre erreur garde l'ancienne règle (le début).
+- *Vu* : `syncWatched` ne décide rien quand les liens du catalogue sont incomplets
+  (`CatalogueMembers.complete`, `catalogueLinksState`) — un vu copié se serait rangé sous le TMDB de
+  Jellyfin ; il réessaie à l'appel suivant.
+- *Copie de secours* : servie seulement pour une panne amont (`isUpstreamFailure` : injoignable, délai,
+  5xx) — un défaut de code sort en erreur nommée comme avant ; préparée à la volée (`preparedUnkept`),
+  sans entrer dans la mémoire de `cachedJson`.
+- *Deux sous-titres, lecteur serveur* (§87) : l'état n'est reposé que si un texte change.
 
 **Décidé le 14/10/2026** (Louis).

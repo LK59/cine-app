@@ -292,7 +292,7 @@ export async function GET(req: Request) {
     });
   } catch (err) {
     // Le dernier catalogue servi à ce compte, marqué périmé (§92) — sinon l'erreur nommée.
-    const kept = await catalogueFallbackResponse(req, "series", localeOf(req));
+    const kept = await catalogueFallbackResponse(req, "series", localeOf(req), err);
     if (kept) {
       logError("cinema-series", err, { servedFallback: true });
       return kept;

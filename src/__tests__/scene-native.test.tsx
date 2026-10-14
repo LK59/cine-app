@@ -55,6 +55,11 @@ vi.mock("@/lib/swr", async (original) => ({
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }));
 vi.mock("@/lib/webcodecs/memoryReserve", () => ({ reservePlanFacts: () => ({}), MemoryReserve: { start: () => ({ stop: vi.fn() }) } }));
 vi.mock("@/lib/resumeCache/keepOnStop", () => ({ keepOnStop: vi.fn(async () => 0) }));
+const forgetResumeCache = vi.fn();
+vi.mock("@/lib/resumeCache/diskChunks", async (original) => ({
+  ...(await original<typeof import("@/lib/resumeCache/diskChunks")>()),
+  forgetResumeCache: (...a: unknown[]) => forgetResumeCache(...a),
+}));
 
 function fakeRemux() {
   return {
@@ -154,5 +159,20 @@ describe("hôte natif — une scène ouverte depuis une réplique", () => {
     expect(logged("start")[0]?.fields.scene).toBeUndefined();
     act(() => void fireEvent.click(screen.getByText("fermer")));
     expect(refreshAfterPlayback).toHaveBeenCalledTimes(1);
+  });
+
+  // Relecture du 14/10/2026 : une scène regardée jusqu'au bout effaçait les octets gardés pour la
+  // reprise instantanée du vrai visionnage, qu'elle ne remplace pas.
+  it("regardée jusqu'à la fin : ne touche pas au cache de reprise ; une lecture ordinaire, si", async () => {
+    mount(true, 94);
+    await ready();
+    act(() => void fireEvent(document.querySelector("video")!, new Event("ended")));
+    expect(forgetResumeCache).not.toHaveBeenCalled();
+    cleanup();
+
+    mount(false, 95);
+    await ready();
+    act(() => void fireEvent(document.querySelector("video")!, new Event("ended")));
+    expect(forgetResumeCache).toHaveBeenCalledWith("ep-1");
   });
 });

@@ -90,6 +90,16 @@ describe("l'état du spectateur", () => {
     expect(body.resumeSeconds).toBe(0);
   });
 
+  // Relecture du 14/10/2026 (§92) : zéro affirmait « jamais commencé », et le lecteur effaçait la
+  // reprise. Jellyfin injoignable : 502 nommé, position inconnue.
+  it("répond 502 upstream_unreachable quand Jellyfin est injoignable", async () => {
+    const { UpstreamUnreachableError } = await import("@/lib/http");
+    mockUserData.mockRejectedValue(new UpstreamUnreachableError("jellyfin ne répond pas", "ENOTFOUND", "jellyfin"));
+    const res = await get();
+    expect(res.status).toBe(502);
+    expect((await res.json()).code).toBe("upstream_unreachable");
+  });
+
   // L'administrateur local n'a pas d'identité Jellyfin : il n'y a ni position ni préférences, et
   // c'est une réponse valable.
   it("répond sans position pour une session sans compte Jellyfin", async () => {

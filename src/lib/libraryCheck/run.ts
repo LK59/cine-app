@@ -18,6 +18,7 @@ import { seasonText } from "@/lib/episodeFallback";
 import { mapInBatches, yieldToLoop } from "@/lib/inBatches";
 import { MEDIA_ROOT, MOVIES_PATH, TV_PATH } from "@/lib/media-paths";
 import { logError } from "@/lib/logger";
+import { asJellyfinWitness } from "@/lib/jellyfinBreaker";
 import { analyseLibrary, hardlinkPairs, type CheckDeps } from "./analyse";
 import { episodeTextTrustDb, libraryCheckDb, LIBRARY_CHECK_VERSION } from "./store";
 import type { LibraryCheckResult, LibraryCheckStatus, SourceState, TmdbFacts } from "./types";
@@ -61,7 +62,9 @@ export function startLibraryCheck(): Promise<void> {
   if (state.running) return state.running;
   state.startedAt = Date.now();
   state.progress = { step: "load", done: 0, total: 0 };
-  state.running = runOnce()
+  // En témoin du coupe-circuit (§92) : quatre appels lourds en parallèle sur un Jellyfin occupé
+  // dépassaient leur délai ensemble et ouvraient la panne pour tout le cinéma (relecture du 14/10/2026).
+  state.running = asJellyfinWitness(runOnce)
     .then((result) => {
       libraryCheckDb.set(result);
       state.error = null;

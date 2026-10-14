@@ -44,6 +44,15 @@ describe("resolveResumeAt — ce que le lecteur fait d'une absence", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/jellyfin/playback-state/abc", expect.anything());
   });
 
+  it("Jellyfin injoignable (502 nommé) : position inconnue, l'erreur remonte au lieu d'un zéro", async () => {
+    // Relecture du 14/10/2026 (§92) : un zéro ouvrait au début, et les rapports effaçaient la reprise.
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 502, json: async () => ({ code: "upstream_unreachable" }) })));
+    await expect(resolveResumeAt("abc", undefined)).rejects.toMatchObject({ code: "upstream_unreachable" });
+    // Un autre 502 garde l'ancienne règle.
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 502, json: async () => ({ error: "x" }) })));
+    expect(await resolveResumeAt("abc", undefined)).toBe(0);
+  });
+
   it("ouvre au début plutôt que pas du tout quand le serveur échoue", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false })));
     expect(await resolveResumeAt("abc", undefined)).toBe(0);

@@ -21,6 +21,8 @@ const fake = vi.hoisted(() => ({
   played: [] as Record<string, unknown>[],
   libraryDown: false,
   jellyfinDown: false,
+  /** Radarr muet : les liens du catalogue sont incomplets (relecture du 14/10/2026). */
+  radarrDown: false,
   calls: [] as string[],
 }));
 vi.mock("@/lib/server-cache", () => ({
@@ -38,6 +40,10 @@ vi.mock("@/lib/server-cache", () => ({
   },
   getProviderIdCI: (ids: Record<string, string> | undefined, key: string) => ids?.[key[0].toUpperCase() + key.slice(1)],
   invalidateKey: vi.fn(),
+}));
+// Les liens du catalogue (§89) : aucun ici, entiers tant que Radarr répond.
+vi.mock("@/lib/sonarrLink", () => ({
+  catalogueLinksState: async () => ({ links: new Map(), complete: !fake.radarrDown }),
 }));
 vi.mock("@/lib/clients/jellyfin", () => ({
   jellyfin: {
@@ -61,6 +67,7 @@ beforeEach(() => {
   fake.played = [];
   fake.libraryDown = false;
   fake.jellyfinDown = false;
+  fake.radarrDown = false;
   fake.calls = [];
   resetWatchedSyncForTests();
 });
@@ -96,6 +103,23 @@ describe("marquer un titre", () => {
 });
 
 describe("la synchronisation avec Jellyfin", () => {
+  // Relecture du 14/10/2026 : Radarr muet, un vu copié depuis Jellyfin se rangeait sous le TMDB que
+  // Jellyfin a compris (Aliens sous Alien³), et la suite pouvait reporter un vu au mauvais élément.
+  it("liens du catalogue incomplets : ne copie ni ne reporte rien, et réessaie à la minute suivante", async () => {
+    fake.radarrDown = true;
+    fake.played = [{ Id: "m-dune", Type: "Movie", Name: "Dune", ProviderIds: { Tmdb: "438631" }, UserData: { Played: true } }];
+    await setWatched(who, "movie", 603, true); // absent : copie seule
+    fake.movies.push({ Id: "m-matrix", ProviderIds: { Tmdb: "603" } });
+    fake.calls = [];
+    await syncWatched(who, { force: true });
+    expect(rows()).toEqual(["movie:603"]);
+    expect(fake.calls).toEqual([]);
+    // Radarr revenu : pas besoin d'attendre la minute.
+    fake.radarrDown = false;
+    await syncWatched(who);
+    expect(rows()).toEqual(["movie:438631:présent", "movie:603:présent"]);
+  });
+
   it("copie ce que Jellyfin a vu, avec sa date", async () => {
     fake.played = [{ Id: "m-dune", Type: "Movie", Name: "Dune", ProviderIds: { Tmdb: "438631" }, UserData: { Played: true, LastPlayedDate: "2026-01-02T00:00:00Z" } }];
     await syncWatched(who, { force: true });

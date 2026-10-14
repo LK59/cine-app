@@ -169,6 +169,12 @@ export interface CatalogueMembers {
   jellyfinOnly: { movies: JellyfinOnlyTitle[]; series: JellyfinOnlyTitle[] };
   /** Élément Jellyfin → titre du catalogue, par le dossier. Vide si Jellyfin ne répond pas. */
   byJellyfinId: Map<string, CatalogueLink>;
+  /**
+   * Les quatre listes ont répondu : `byJellyfinId` est entier. Faux quand Radarr, Sonarr ou Jellyfin
+   * manquait — les liens d'un côté sont alors absents, et un élément Jellyfin n'y a que le TMDB que
+   * Jellyfin a compris (14/10/2026 : `syncWatched` ne recopie rien sur une telle base).
+   */
+  complete: boolean;
 }
 
 /**
@@ -231,6 +237,7 @@ export async function catalogueMembers(opts: { jellyfinWaitMs?: number } = {}): 
     seriesJellyfin: new Map((matchedSeries ?? []).map((x) => [x.s.id, x.jfItem])),
     jellyfinOnly: { movies: onlyMovies, series: onlySeries },
     byJellyfinId,
+    complete: movies !== null && series !== null && jfMovies !== null && jfSeries !== null,
   };
 }
 

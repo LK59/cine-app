@@ -16,7 +16,13 @@ import { catalogueMembers, type CatalogueLink } from "@/lib/catalogueMembers";
  * le « vu » (`libraryIndex`).
  */
 export async function catalogueLinks(): Promise<Map<string, CatalogueLink>> {
-  return (await catalogueMembers().catch(() => null))?.byJellyfinId ?? new Map();
+  return (await catalogueLinksState()).links;
+}
+
+/** Les mêmes liens, et s'ils sont entiers (Radarr, Sonarr et Jellyfin ont tous répondu) — voir `CatalogueMembers.complete`. */
+export async function catalogueLinksState(): Promise<{ links: Map<string, CatalogueLink>; complete: boolean }> {
+  const members = await catalogueMembers().catch(() => null);
+  return { links: members?.byJellyfinId ?? new Map(), complete: members?.complete === true };
 }
 
 /** L'adresse de fiche que les cartes de reprise portent (`/radarr/…`, `/sonarr/…`). */

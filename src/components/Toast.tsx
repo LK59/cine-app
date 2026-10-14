@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { CircleCheck, CircleX, Info, X } from "lucide-react";
 
 type ToastType = "success" | "error" | "info";
@@ -38,9 +38,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const success = useCallback((msg: string) => add(msg, "success"), [add]);
   const error = useCallback((msg: string) => add(msg, "error"), [add]);
   const info = useCallback((msg: string) => add(msg, "info"), [add]);
+  // Une valeur stable : recréée à chaque rendu, chaque toast affiché relançait les effets de tous
+  // ceux qui dépendent de `useToast()` — dont le refus de Lecture pendant une panne (§92), que son
+  // nettoyage levait au premier message (14/10/2026).
+  const value = useMemo(() => ({ success, error, info }), [success, error, info]);
 
   return (
-    <ToastContext.Provider value={{ success, error, info }}>
+    <ToastContext.Provider value={value}>
       {children}
       {/* Une pilule flottante, dans le matériau de la barre du bas et du rail (26/09/2026) : des
           rectangles pleins vert, bleu ou rouge, posés à droite sans rapport avec la barre. L'état

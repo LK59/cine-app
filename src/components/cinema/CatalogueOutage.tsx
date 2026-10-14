@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useSWRConfig } from "swr";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
@@ -58,17 +58,26 @@ export function useCatalogueOutage(...payloads: (OutageMarks | null | undefined)
     }, OUTAGE_REFRESH_MS);
     return () => clearInterval(timer);
   }, [refresh, retry]);
+  // Le message et la relecture lus par référence : l'écouteur est posé une fois, au montage, et le
+  // drapeau n'est remis à faux qu'au démontage. Avec `[t, toast, retry]` en dépendances, le premier
+  // refus affichait un toast, le fournisseur se redessinait avec une valeur neuve, l'effet repartait
+  // — et son nettoyage remettait la panne à faux : le second appui ouvrait le lecteur sur un Jellyfin
+  // mort (relecture du 14/10/2026). Un toast quelconque pendant la panne faisait de même.
+  const blockedRef = useRef<() => void>(() => undefined);
   useEffect(() => {
-    onPlayBlockedByOutage(() => {
+    blockedRef.current = () => {
       toast.info(t("cinema.outage.playBlocked"));
       // Et une relecture tout de suite : si Jellyfin est revenu, le bandeau part et l'appui suivant passe.
       void retry();
-    });
+    };
+  }, [t, toast, retry]);
+  useEffect(() => {
+    onPlayBlockedByOutage(() => blockedRef.current());
     return () => {
       onPlayBlockedByOutage(null);
       notePlaybackOutage(false);
     };
-  }, [t, toast, retry]);
+  }, []);
   return outage;
 }
 

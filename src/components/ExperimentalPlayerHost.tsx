@@ -1702,9 +1702,16 @@ export function ExperimentalPlayerHost({
    */
   /** L'erreur affichée est-elle celle d'une connexion trop lente ? Voir `slowLink`. */
   const slowShown = slowLink !== null && runtimeError === SLOW_LINK_REASON;
+  /**
+   * La position de reprise est inconnue — Jellyfin ne répond pas à `playback-state` (14/10/2026,
+   * §92) — et l'appelant n'en affirme aucune. Ouvrir au début, c'était laisser les rapports de
+   * progression effacer la reprise chez Jellyfin dès son retour : le lecteur le dit et n'ouvre pas.
+   */
+  const positionUnknown = playbackState?.positionUnknown === true && (session.resumeAt ?? null) === null;
   const error =
     runtimeError ??
     info?.refusedReason ??
+    (positionUnknown ? t("player.libraryUnreachable") : null) ??
     (infoError && !isNetworkFailure(infoError) ? errorMessage(infoError, t, t("errors.fileInfoFailed"), locale) : null);
   // The server's own name for it, which is the only one that knows an episode is an episode.
   // Whatever the caller passed stands until it arrives, so the title never blinks in empty.
@@ -2305,6 +2312,11 @@ export function ExperimentalPlayerHost({
     // `playbackState` est attendu au même titre que la description : ouvrir le film sans savoir
     // où l'on en est, c'est l'ouvrir au mauvais endroit.
     if (!info || playbackState === undefined || !videoElRef.current) return;
+    // Position inconnue et rien d'affirmé : pas d'ouverture à zéro (voir `positionUnknown`).
+    if (playbackState?.positionUnknown && (session.resumeAt ?? null) === null && lifecycle.rebuildAt === null && positionRef.current <= 0) {
+      trace("reprise : position inconnue (Jellyfin ne répond pas) — pas d'ouverture au début");
+      return;
+    }
 
     let cancelled = false;
     // Ce pipeline-ci a-t-il donné une image ? Propre à chaque ouverture — un changement de piste ou
@@ -2741,7 +2753,9 @@ export function ExperimentalPlayerHost({
         // et à la fin du fichier elle n'a plus rien à prendre — mais « Revoir » repart au début sur
         // ce même pipeline, et l'arrêter ici l'en privait pour tout le second visionnage (chasse aux
         // défauts du 28/09). Elle s'arrête avec le pipeline.
-        if (!session.bench) forgetResumeCache(itemId);
+        // Ni pour une scène (§91) : finie, elle ne dit rien de la reprise du vrai visionnage, dont
+        // les octets gardés restent utiles (relecture du 14/10/2026).
+        if (!session.bench && !isSceneRef.current()) forgetResumeCache(itemId);
       };
       // Le saut demandé est atteint : la position lue redevient la vérité.
       const onSeeked = () => {

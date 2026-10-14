@@ -2515,6 +2515,33 @@ describe("ce que la fiche a préparé avant Lire", () => {
     expect(playbackStateCalls()).toBe(1);
   });
 
+  // Relecture du 14/10/2026 (§92) : la route répondait 0 quand Jellyfin était injoignable, le film
+  // s'ouvrait au début, et ses rapports effaçaient la reprise. Un 502 nommé = position inconnue.
+  it("position inconnue (Jellyfin muet) et rien d'affirmé : n'ouvre pas au début, le dit", async () => {
+    const unknownState = () => ({ ok: false, status: 502, json: async () => ({ code: "upstream_unreachable" }) });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => (typeof url === "string" && url.startsWith("/api/jellyfin/playback-state/") ? unknownState() : { ok: true, text: async () => "" }))
+    );
+    mount();
+    await waitFor(() => expect(screen.getByText("libraryUnreachable")).toBeTruthy());
+    expect(probes).toHaveLength(0);
+  });
+
+  it("position inconnue mais affirmée par l'appelant : ouvre là où il l'a dit", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        typeof url === "string" && url.startsWith("/api/jellyfin/playback-state/")
+          ? { ok: false, status: 502, json: async () => ({ code: "upstream_unreachable" }) }
+          : { ok: true, text: async () => "" }
+      )
+    );
+    mount({ resumeAt: 30 });
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(probes[0].startSeconds).toBe(30);
+  });
+
   it("repose la question pour un autre titre que celui de la fiche", async () => {
     const { prefetchPlaybackState } = await import("@/lib/playbackPrefetch");
     prefetchPlaybackState("item-2");

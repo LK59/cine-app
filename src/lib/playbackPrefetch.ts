@@ -38,8 +38,25 @@ const PLAYBACK_STATE_TIMEOUT_MS = 8000;
 /** La lecture nue de l'état du spectateur, avec la garde de huit secondes de l'hôte. */
 export function fetchPlaybackState(itemId: string, timeoutMs = PLAYBACK_STATE_TIMEOUT_MS): Promise<PlaybackState | null> {
   return fetch(`/api/jellyfin/playback-state/${itemId}`, { signal: AbortSignal.timeout(timeoutMs) })
-    .then((response) => (response.ok ? (response.json() as Promise<PlaybackState>) : null))
+    .then(async (response) => {
+      if (response.ok) return (await response.json()) as PlaybackState;
+      // Jellyfin injoignable (14/10/2026, §92) : la position est *inconnue*, pas nulle. Le lecteur
+      // n'ouvre pas à zéro sur cette réponse — ses rapports auraient effacé la reprise.
+      if (await positionUnknownAnswer(response)) return { resumeSeconds: 0, preferences: null, positionUnknown: true as const };
+      return null;
+    })
     .catch(() => null);
+}
+
+/** La réponse dit-elle « Jellyfin ne répond pas » (502 `upstream_unreachable`) ? Lue avec soin. */
+export async function positionUnknownAnswer(response: Response): Promise<boolean> {
+  if (response.status !== 502) return false;
+  try {
+    const body = (await response.json()) as { code?: unknown } | null;
+    return body?.code === "upstream_unreachable";
+  } catch {
+    return false;
+  }
 }
 
 /** Une demande par titre : la promesse, et l'instant où elle est partie. */
@@ -75,9 +92,10 @@ export function takePrefetchedPlaybackState(itemId: string): Promise<PlaybackSta
   if (Date.now() - entry.at >= PLAYBACK_STATE_FRESH_MS) return null;
   const deadline = Date.now() + PLAYBACK_STATE_TIMEOUT_MS;
   return entry.state.then((state) => {
-    if (state) return state;
+    // Une position inconnue (Jellyfin muet) ne vaut pas mieux qu'une question neuve, elle non plus.
+    if (state && !state.positionUnknown) return state;
     const remaining = deadline - Date.now();
-    return remaining > 0 ? fetchPlaybackState(itemId, remaining) : null;
+    return remaining > 0 ? fetchPlaybackState(itemId, remaining) : state;
   });
 }
 

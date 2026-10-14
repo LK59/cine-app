@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { config } from "@/lib/config";
 import { UpstreamUnreachableError } from "@/lib/http";
 
@@ -118,14 +119,38 @@ export function noteJellyfinSuccess(): void {
   s.strikeAt = 0;
 }
 
-export function noteJellyfinFailure(err: unknown, now = Date.now()): void {
+/**
+ * Les appels lourds de fond de l'administration — le contrôle de la bibliothèque (§90), ses listes
+ * entières et ses listes d'épisodes quatre par quatre — sont des **témoins** : leurs délais dépassés
+ * ne comptent pas (14/10/2026, relecture de §92). Lancés en parallèle sur un Jellyfin vivant mais
+ * occupé, deux d'entre eux dépassaient leur délai ensemble et ouvraient le coupe-circuit : le cinéma
+ * de tout le monde passait « en panne » pendant une analyse. Un échec certain (nom introuvable,
+ * connexion refusée) compte toujours, et une réponse referme comme ailleurs.
+ */
+const witness = new AsyncLocalStorage<true>();
+
+/** `run`, ses appels à Jellyfin en témoins : leurs délais dépassés n'ouvrent rien. */
+export function asJellyfinWitness<T>(run: () => Promise<T>): Promise<T> {
+  return witness.run(true, run);
+}
+
+/**
+ * `startedAt` : quand l'appel qui échoue est parti. Un second échec ambigu ne compte que s'il vient
+ * d'un appel parti **après** le premier échec (14/10/2026) : deux appels d'un même lot, partis
+ * ensemble et expirés ensemble, sont un seul témoignage d'un Jellyfin lent, pas deux.
+ */
+export function noteJellyfinFailure(err: unknown, now = Date.now(), startedAt?: number): void {
   if (!isTransportFailure(err)) return;
   const s = current();
   const detail = err instanceof UpstreamUnreachableError ? err.detail : err instanceof Error ? (((err as { cause?: { code?: string } }).cause?.code) ?? err.message) : String(err);
   // Déjà ouvert (la sonde a échoué) : on prolonge sans compter. Sinon, un échec ambigu attend son second.
   if (s.downSince === null && !CERTAIN.test(detail)) {
-    const second = s.strikeAt > 0 && now - s.strikeAt <= STRIKE_WINDOW_MS;
-    if (!second) {
+    // Un témoin ne compte pas son délai dépassé — ni comme premier, ni comme second.
+    if (witness.getStore()) return;
+    const inWindow = s.strikeAt > 0 && now - s.strikeAt <= STRIKE_WINDOW_MS;
+    // Parti avant le premier échec : le même témoignage — la première date reste.
+    if (inWindow && startedAt !== undefined && startedAt < s.strikeAt) return;
+    if (!inWindow) {
       s.strikeAt = now;
       return;
     }
@@ -178,12 +203,13 @@ export async function throughJellyfinBreaker<T>(call: () => Promise<T>): Promise
  * l'issue renseigne le disjoncteur.
  */
 export async function passJellyfin<T>(call: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
   try {
     const value = await call();
     noteJellyfinSuccess();
     return value;
   } catch (err) {
-    if (isTransportFailure(err)) noteJellyfinFailure(err);
+    if (isTransportFailure(err)) noteJellyfinFailure(err, Date.now(), startedAt);
     else if (isHttpAnswer(err)) noteJellyfinSuccess();
     throw err;
   }

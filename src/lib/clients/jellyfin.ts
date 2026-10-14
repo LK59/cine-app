@@ -16,7 +16,8 @@ import { APP_VERSION } from "@/lib/appBuild";
 /**
  * Chaque appel du client passe par le coupe-circuit (DECISIONS.md §92) : pendant une panne,
  * l'échec est immédiat au lieu de huit secondes. Les rapports de lecture n'y passent pas
- * (`reportJson`) — un film en cours n'est jamais retenu par lui.
+ * (`reportJson`), ni la négociation de lecture et la description qu'ouvre le lecteur (14/10/2026)
+ * — un film en cours n’est jamais retenu par lui.
  */
 function fetchJson<T>(...args: Parameters<typeof fetchJsonRaw>): Promise<T> {
   return throughJellyfinBreaker(() => fetchJsonRaw<T>(...args));
@@ -265,8 +266,13 @@ export const jellyfin = {
   // can't send custom headers per-segment), and that URL eventually reaches
   // the browser. Using the user's scoped, revocable session token there — instead
   // of the eternal admin key — keeps that unavoidable exposure low-stakes.
+  //
+  // Jamais retenu par le coupe-circuit (§92, relecture du 14/10/2026) : la négociation sert aussi un
+  // film en cours — changement de piste, échelle de repli, nouvel essai, relais vers le lecteur
+  // serveur —, et une fausse alerte l'aurait coupé. Une première ouverture pendant une vraie panne
+  // est déjà refusée par le cinéma (`playBlockedByOutage`) ; elle ne fait ici que témoigner.
   getPlaybackInfo: async (userId: string, itemId: string, token: string, opts: PlaybackInfoOptions) =>
-    fetchJson<JellyfinPlaybackInfo>(`${cfg.url}/Items/${idSegment(itemId)}/PlaybackInfo?UserId=${idSegment(userId)}`, {
+    reportJson<JellyfinPlaybackInfo>(`${cfg.url}/Items/${idSegment(itemId)}/PlaybackInfo?UserId=${idSegment(userId)}`, {
       method: "POST",
       headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()), "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -791,8 +797,11 @@ export const jellyfin = {
   // Everything the experimental WebCodecs player needs to decide whether it can play a file and
   // how: container, per-stream codecs, HDR range, and the resume position — all from the one
   // per-item lookup, with no PlaybackInfo call and therefore no transcode session created.
-  getItemMediaSources: async (userId: string, itemId: string) =>
-    fetchJson<{
+  //
+  // `pass` : jamais retenu par le coupe-circuit — la description qu'ouvre le lecteur, dont le relais
+  // vers l'épisode suivant pendant un film (§92, relecture du 14/10/2026). Ailleurs, retenu.
+  getItemMediaSources: async (userId: string, itemId: string, opts: { pass?: boolean } = {}) =>
+    (opts.pass ? reportJson : fetchJson)<{
       Name?: string;
       RunTimeTicks?: number;
       UserData?: JellyfinItem["UserData"];

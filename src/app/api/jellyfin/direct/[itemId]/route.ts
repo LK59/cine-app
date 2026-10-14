@@ -205,7 +205,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   // et la fiche, qui grise son bouton Lire sur la seconde, l'aurait grisé pendant une panne.
   let itemError: unknown = null;
   const [item, timestamps, naming] = await Promise.all([
-    jellyfin.getItemMediaSources(session.jfId, itemId).catch((error: unknown) => {
+    // Hors du coupe-circuit (§92) : c'est la description qu'ouvre le lecteur, relais vers l'épisode
+    // suivant compris — une fausse alerte ne doit pas arrêter une soirée en cours.
+    jellyfin.getItemMediaSources(session.jfId, itemId, { pass: true }).catch((error: unknown) => {
       itemError = error;
       return null;
     }),

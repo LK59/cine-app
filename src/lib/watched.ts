@@ -2,7 +2,7 @@ import { jellyfin, type JellyfinItem } from "@/lib/clients/jellyfin";
 import { watchedDb, type WatchedRow } from "@/lib/db";
 import { cachedJellyfinMoviesAdmin, cachedJellyfinPlayed, cachedJellyfinSeriesAdmin, getProviderIdCI, invalidateKey } from "@/lib/server-cache";
 import { logError } from "@/lib/logger";
-import { catalogueLinks } from "@/lib/sonarrLink";
+import { catalogueLinksState } from "@/lib/sonarrLink";
 
 /**
  * Le « vu » d'un compte — la règle décidée le 06/10/2026 (DECISIONS.md §51), qui remplace « le vu
@@ -42,6 +42,12 @@ export interface LibraryIndex {
   series: Map<number, string>;
   /** Identifiant Jellyfin → (type, TMDB). */
   byJellyfinId: Map<string, { type: WatchedType; tmdbId: number }>;
+  /**
+   * Les liens du catalogue sont entiers (Radarr et Sonarr ont répondu). Faux : certains éléments ne
+   * portent que le TMDB que Jellyfin a compris — *Aliens* rangé sous *Alien³* —, et `syncWatched` ne
+   * décide rien sur cette base (14/10/2026). Facultatif : absent vaut entier (index faits à la main).
+   */
+  complete?: boolean;
 }
 
 const tmdbOf = (item: JellyfinItem): number | null => {
@@ -62,8 +68,8 @@ const tmdbOf = (item: JellyfinItem): number | null => {
  */
 export async function libraryIndex(): Promise<LibraryIndex | null> {
   try {
-    const [movies, series, links] = await Promise.all([cachedJellyfinMoviesAdmin(), cachedJellyfinSeriesAdmin(), catalogueLinks()]);
-    const index: LibraryIndex = { movies: new Map(), series: new Map(), byJellyfinId: new Map() };
+    const [movies, series, { links, complete }] = await Promise.all([cachedJellyfinMoviesAdmin(), cachedJellyfinSeriesAdmin(), catalogueLinksState()]);
+    const index: LibraryIndex = { movies: new Map(), series: new Map(), byJellyfinId: new Map(), complete };
     for (const [jellyfinId, link] of links) {
       if (link.tmdbId === null) continue;
       (link.type === "movie" ? index.movies : index.series).set(link.tmdbId, jellyfinId);
@@ -166,6 +172,14 @@ export async function syncWatched(who: Who, opts: { force?: boolean; now?: numbe
 
   const [played, index] = await Promise.all([cachedJellyfinPlayed(who.jfId).catch(() => null), libraryIndex()]);
   if (!played) return; // Jellyfin muet : on ne touche à rien
+  // Liens du catalogue incomplets (Radarr ou Sonarr muet) : la copie depuis Jellyfin rangerait un vu
+  // sous le TMDB que Jellyfin a compris — *Aliens* sous *Alien³* —, et la suite reporterait chez
+  // Jellyfin le vu d'un mauvais élément. Rien n'est décidé ; la minute suivante réessaie (relecture du
+  // 14/10/2026).
+  if (index && index.complete === false) {
+    lastSync.delete(who.userId);
+    return;
+  }
 
   const rows = watchedDb.all(who.userId);
   const byKey = new Map(rows.map((r) => [`${r.mediaType}:${r.tmdbId}`, r]));

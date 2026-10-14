@@ -4,6 +4,7 @@ import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import type { TrackPreferences } from "@/lib/trackPreferences";
 import { isJellyfinId } from "@/lib/jellyfinPath";
+import { UpstreamUnreachableError, UPSTREAM_UNREACHABLE } from "@/lib/http";
 
 /**
  * Ce qui change entre deux lectures du même fichier — et rien d'autre.
@@ -32,6 +33,11 @@ export interface PlaybackState {
   resumeSeconds: number;
   /** Les langues que le compte demande, ou `null` si Jellyfin n'a pas répondu. */
   preferences: TrackPreferences | null;
+  /**
+   * Posé côté client seulement (`fetchPlaybackState`) quand la route a répondu 502
+   * `upstream_unreachable` : `resumeSeconds` ne vaut alors rien, et le lecteur n'ouvre pas à zéro.
+   */
+  positionUnknown?: true;
 }
 
 export async function GET(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
@@ -48,8 +54,18 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   // Les deux en parallèle, et chacune tolérante à son propre échec. Un serveur qui refuse de dire
   // dans quelle langue quelqu'un regarde est une raison d'ouvrir le fichier sur ses défauts, pas
   // une raison de ne pas le lire — c'est déjà le raisonnement que tenait l'ancienne route.
+  //
+  // Sauf la position quand Jellyfin est injoignable (14/10/2026, relecture de §92) : répondre zéro,
+  // c'était affirmer « jamais commencé » — le lecteur ouvrait au début et ses rapports de progression
+  // effaçaient la reprise chez Jellyfin dès son retour. Un 502 nommé dit « position inconnue », et
+  // les deux lecteurs n'ouvrent pas à zéro sur une telle réponse (`playbackPrefetch.ts`,
+  // `resolveResumeAt`). Une autre erreur (élément refusé, réponse illisible) garde l'ancienne règle.
+  let unreachable: UpstreamUnreachableError | null = null;
   const [item, configuration] = await Promise.all([
-    jellyfin.getItemUserData(session.jfId, itemId).catch(() => null),
+    jellyfin.getItemUserData(session.jfId, itemId).catch((err: unknown) => {
+      if (err instanceof UpstreamUnreachableError) unreachable = err;
+      return null;
+    }),
     session.jfToken
       ? jellyfin
           .getUserConfiguration(session.jfId, session.jfToken)
@@ -57,6 +73,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
           .catch(() => null)
       : Promise.resolve(null),
   ]);
+
+  if (unreachable) {
+    return NextResponse.json({ error: (unreachable as UpstreamUnreachableError).message, code: UPSTREAM_UNREACHABLE }, { status: 502 });
+  }
 
   return NextResponse.json<PlaybackState>({
     resumeSeconds: (item?.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000,

@@ -8,6 +8,7 @@ vi.mock("@/lib/config", () => ({
 
 import {
   OPEN_MS,
+  asJellyfinWitness,
   jellyfinDownSince,
   jellyfinFetch,
   jellyfinIsDown,
@@ -143,6 +144,48 @@ describe("jellyfinBreaker", () => {
     expect(jellyfinIsDown()).toBe(false);
   });
 
+  it("deux délais dépassés d'un même lot (partis ensemble) ne comptent qu'une fois", async () => {
+    // Relecture du 14/10/2026 : le contrôle de la bibliothèque lançait quatre appels lourds ensemble.
+    const pending: ((err: unknown) => void)[] = [];
+    fetchMock.mockImplementation(() => new Promise((_, reject) => pending.push(reject)));
+    const a = jellyfinFetch("http://jellyfin.test:8096/a").catch(() => undefined);
+    const b = jellyfinFetch("http://jellyfin.test:8096/b").catch(() => undefined);
+    vi.advanceTimersByTime(8_000);
+    pending[0](new DOMException("timeout", "TimeoutError"));
+    await a;
+    vi.advanceTimersByTime(5);
+    pending[1](new DOMException("timeout", "TimeoutError"));
+    await b;
+    expect(jellyfinIsDown()).toBe(false);
+    // Un appel parti après le premier échec, lui, est un second témoignage.
+    fetchMock.mockReset();
+    fetchMock.mockRejectedValueOnce(new DOMException("timeout", "TimeoutError"));
+    await expect(jellyfinFetch("http://jellyfin.test:8096/c")).rejects.toThrow();
+    expect(jellyfinIsDown()).toBe(true);
+  });
+
+  it("un appel de fond en témoin ne compte pas ses délais dépassés, mais une réponse referme", async () => {
+    const timeout = () => new DOMException("timeout", "TimeoutError");
+    fetchMock.mockRejectedValue(timeout());
+    await asJellyfinWitness(async () => {
+      await expect(jellyfinFetch("http://jellyfin.test:8096/a")).rejects.toThrow();
+      await expect(jellyfinFetch("http://jellyfin.test:8096/b")).rejects.toThrow();
+      await expect(jellyfinFetch("http://jellyfin.test:8096/c")).rejects.toThrow();
+    });
+    expect(jellyfinIsDown()).toBe(false);
+    // Hors témoin, le premier délai dépassé ne fait toujours qu'un premier avertissement.
+    await expect(jellyfinFetch("http://jellyfin.test:8096/d")).rejects.toThrow();
+    expect(jellyfinIsDown()).toBe(false);
+  });
+
+  it("un échec certain en témoin ouvre quand même", async () => {
+    fetchMock.mockRejectedValueOnce(Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }));
+    await asJellyfinWitness(async () => {
+      await expect(jellyfinFetch("http://jellyfin.test:8096/a")).rejects.toThrow();
+    });
+    expect(jellyfinIsDown()).toBe(true);
+  });
+
   it("une connexion refusée est certaine : elle ouvre tout de suite", async () => {
     fetchMock.mockRejectedValueOnce(Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } }));
     await expect(jellyfinFetch("http://jellyfin.test:8096/a")).rejects.toThrow();
@@ -164,6 +207,33 @@ describe("le client Jellyfin derrière le coupe-circuit", () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
     await jellyfin.reportPlaybackProgress("u", "i", "tok", "ps", "ms", 10, "DirectPlay");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(jellyfinIsDown()).toBe(false);
+  });
+
+  it("la négociation de lecture et la description du lecteur passent outre : un film en cours n'est pas retenu", async () => {
+    const { jellyfin } = await import("@/lib/clients/jellyfin");
+    const U = "a".repeat(32);
+    const I = "b".repeat(32);
+    // Ouvert par un échec certain.
+    fetchMock.mockRejectedValueOnce(dnsFailure());
+    await expect(jellyfin.getSystemInfo()).rejects.toBeInstanceOf(UpstreamUnreachableError);
+    expect(jellyfinIsDown()).toBe(true);
+    fetchMock.mockReset();
+    // La description ordinaire reste retenue…
+    await expect(jellyfin.getItemMediaSources(U, I)).rejects.toBeInstanceOf(UpstreamUnreachableError);
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+    // … celle du lecteur part, et sa réponse referme.
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ MediaSources: [] }), { status: 200, headers: { "content-type": "application/json" } }));
+    await jellyfin.getItemMediaSources(U, I, { pass: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(jellyfinIsDown()).toBe(false);
+    // Rouvert : une renégociation (piste, échelle, relais) part quand même.
+    fetchMock.mockRejectedValueOnce(dnsFailure());
+    await expect(jellyfin.getSystemInfo()).rejects.toThrow();
+    expect(jellyfinIsDown()).toBe(true);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ MediaSources: [{ Id: I }] }), { status: 200, headers: { "content-type": "application/json" } }));
+    const info = await jellyfin.getPlaybackInfo(U, I, "tok", { maxBitrate: 1, deviceProfile: {} as never });
+    expect(info.MediaSources?.[0]?.Id).toBe(I);
     expect(jellyfinIsDown()).toBe(false);
   });
 });

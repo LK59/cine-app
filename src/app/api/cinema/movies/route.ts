@@ -282,7 +282,7 @@ export async function GET(req: Request) {
   } catch (err) {
     // Le dernier catalogue servi à ce compte, marqué périmé, plutôt qu'un écran vide (§92) — sinon
     // une panne amont se nomme, elle ne sort pas en 500 nu (`upstreamFailure`).
-    const kept = await catalogueFallbackResponse(req, "movies", localeOf(req));
+    const kept = await catalogueFallbackResponse(req, "movies", localeOf(req), err);
     if (kept) {
       logError("cinema-movies", err, { servedFallback: true });
       return kept;

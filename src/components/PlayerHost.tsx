@@ -2228,6 +2228,11 @@ function ActivePlayer({
             ? "handover"
             : "open";
         startPlayback({ resumeAt: at, audioStreamIndex: initialAudioStreamIndex, cause: { why } });
+      }, () => {
+        // Position inconnue, Jellyfin muet (14/10/2026, §92) : `resolveResumeAt` lève plutôt que de
+        // rendre zéro — ouvrir au début aurait laissé nos rapports effacer la reprise. Le dire.
+        if (abandoned) return;
+        setError(t("player.libraryUnreachable"));
       });
     }, graceMs);
     return () => {

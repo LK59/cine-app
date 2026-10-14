@@ -5,10 +5,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 let account: string | null = "jf-alice";
 let down = false;
 vi.mock("@/lib/blockedTags", () => ({ requestJfId: async () => account }));
-vi.mock("@/lib/jellyfinBreaker", () => ({ jellyfinIsDown: () => down }));
+vi.mock("@/lib/jellyfinBreaker", async (original) => ({ ...(await original<typeof import("@/lib/jellyfinBreaker")>()), jellyfinIsDown: () => down }));
 
 import { catalogueFallbackResponse, catalogueResponse, forgetCatalogueFallbackMemory } from "@/lib/catalogueFallback";
 import { kvCacheDb } from "@/lib/db";
+import { preparedCount } from "@/lib/cachedJson";
+import { HttpError, UpstreamUnreachableError } from "@/lib/http";
+
+const outage = new UpstreamUnreachableError("jellyfin ne répond pas", "ENOTFOUND", "jellyfin");
 
 const req = () => new Request("https://cine.example/api/cinema/movies");
 const payload = (ids: number[]) => ({ genres: ["Action"], rows: { Action: ids }, items: ids.map((radarrId) => ({ radarrId, title: `#${radarrId}` })), spotlight: ids, recentlyAdded: [], top10: [], top10Theme: null });
@@ -28,7 +32,7 @@ describe("catalogueFallback", () => {
     await catalogueResponse(req(), { kind: "movies", locale: "fr", jfId: alice, cacheKey: `k-${n}`, payload: payload([1, 2]) }).json();
 
     down = true;
-    const kept = await catalogueFallbackResponse(req(), "movies", "fr");
+    const kept = await catalogueFallbackResponse(req(), "movies", "fr", outage);
     expect(kept).not.toBeNull();
     const body = await kept!.json();
     expect(body.items.map((i: { radarrId: number }) => i.radarrId)).toEqual([1, 2]);
@@ -37,11 +41,11 @@ describe("catalogueFallback", () => {
 
     // Un autre compte — ses tags bloqués pouvaient lui cacher ces titres : rien.
     account = `jf-bob-${n}`;
-    expect(await catalogueFallbackResponse(req(), "movies", "fr")).toBeNull();
+    expect(await catalogueFallbackResponse(req(), "movies", "fr", outage)).toBeNull();
     // Ni une autre langue, ni l'autre sorte.
     account = alice;
-    expect(await catalogueFallbackResponse(req(), "movies", "en")).toBeNull();
-    expect(await catalogueFallbackResponse(req(), "series", "fr")).toBeNull();
+    expect(await catalogueFallbackResponse(req(), "movies", "en", outage)).toBeNull();
+    expect(await catalogueFallbackResponse(req(), "series", "fr", outage)).toBeNull();
   });
 
   it("n'écrit que ce qui change", async () => {
@@ -73,6 +77,23 @@ describe("catalogueFallback", () => {
   });
 
   it("sans copie gardée : null, et l'erreur d'origine reste à la route", async () => {
-    expect(await catalogueFallbackResponse(req(), "movies", "fr")).toBeNull();
+    expect(await catalogueFallbackResponse(req(), "movies", "fr", outage)).toBeNull();
+  });
+
+  // Relecture du 14/10/2026 : un défaut de code aurait été masqué par le catalogue d'hier.
+  it("seulement pour une panne amont : un défaut de notre code sort en erreur, comme avant", async () => {
+    await catalogueResponse(req(), { kind: "movies", locale: "fr", jfId: account, cacheKey: `c-${n}`, payload: payload([7]) }).json();
+    expect(await catalogueFallbackResponse(req(), "movies", "fr", new TypeError("Cannot read properties of undefined"))).toBeNull();
+    expect(await catalogueFallbackResponse(req(), "movies", "fr", new HttpError("not found", 404))).toBeNull();
+    expect(await catalogueFallbackResponse(req(), "movies", "fr", new HttpError("bad gateway", 503))).not.toBeNull();
+    expect(await catalogueFallbackResponse(req(), "movies", "fr", new DOMException("timeout", "TimeoutError"))).not.toBeNull();
+    expect(await catalogueFallbackResponse(req(), "movies", "fr", outage)).not.toBeNull();
+  });
+
+  it("servie à la volée : rien ne s'ajoute à la mémoire des réponses préparées", async () => {
+    await catalogueResponse(req(), { kind: "movies", locale: "fr", jfId: account, cacheKey: `p-${n}`, payload: payload([8]) }).json();
+    const before = preparedCount();
+    for (let i = 0; i < 3; i++) await (await catalogueFallbackResponse(req(), "movies", "fr", outage))!.json();
+    expect(preparedCount()).toBe(before);
   });
 });

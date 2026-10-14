@@ -67,7 +67,13 @@ export function useServerDualSubtitles({
       }
       return simultaneousText(covering);
     };
-    const read = () => setTexts({ primary: textOf(primaryAt), second: textOf(secondAt) });
+    // L'état ne change que si l'un des deux textes change : `timeupdate` arrive quatre fois par
+    // seconde, et un objet neuf à chaque fois redessinait tout le lecteur pour rien (relecture du
+    // 14/10/2026).
+    const read = () => {
+      const next = { primary: textOf(primaryAt), second: textOf(secondAt) };
+      setTexts((prev) => (prev.primary === next.primary && prev.second === next.second ? prev : next));
+    };
     modes();
     const watched = [primaryAt, secondAt].map((at) => tracks[at]).filter((track): track is TextTrack => !!track);
     for (const track of watched) track.addEventListener("cuechange", read);

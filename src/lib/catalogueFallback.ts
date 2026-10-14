@@ -1,7 +1,8 @@
 import { gunzipSync } from "node:zlib";
-import { cachedJson, preparedJson, respondPrepared, type Prepared } from "@/lib/cachedJson";
+import { cachedJson, preparedJson, preparedUnkept, respondPrepared, type Prepared } from "@/lib/cachedJson";
 import { kvCacheDb } from "@/lib/db";
-import { jellyfinIsDown } from "@/lib/jellyfinBreaker";
+import { isTransportFailure, jellyfinIsDown } from "@/lib/jellyfinBreaker";
+import { HttpError, UpstreamUnreachableError } from "@/lib/http";
 import { requestJfId } from "@/lib/blockedTags";
 import type { Locale } from "@/lib/i18n";
 
@@ -91,10 +92,24 @@ export function catalogueResponse(
 }
 
 /**
- * Le dernier catalogue gardé pour le compte de la requête, marqué périmé — ou `null` s'il n'y en a
- * jamais eu (l'écran d'erreur prend alors le relais).
+ * L'échec vient-il d'un service amont — injoignable, délai dépassé, ou une réponse 5xx ? Seul cas où
+ * la copie de secours est servie (relecture du 14/10/2026) : un défaut de notre code (une propriété
+ * lue sur `undefined`) aurait sinon été masqué par un catalogue d'hier, marqué « panne », sans que
+ * personne ne le voie — il sort en erreur nommée, comme avant.
  */
-export async function catalogueFallbackResponse(req: Request, kind: CatalogueKind, locale: Locale): Promise<Response | null> {
+export function isUpstreamFailure(err: unknown): boolean {
+  if (err instanceof UpstreamUnreachableError) return true;
+  if (err instanceof HttpError) return err.status >= 500;
+  return isTransportFailure(err);
+}
+
+/**
+ * Le dernier catalogue gardé pour le compte de la requête, marqué périmé — ou `null` s'il n'y en a
+ * jamais eu (l'écran d'erreur prend alors le relais), ou si `cause` n'est pas une panne amont
+ * (`isUpstreamFailure`).
+ */
+export async function catalogueFallbackResponse(req: Request, kind: CatalogueKind, locale: Locale, cause: unknown): Promise<Response | null> {
+  if (!isUpstreamFailure(cause)) return null;
   try {
     const account = accountKey(await requestJfId(req));
     const row = kvCacheDb.get(bodyKey(kind, locale, account));
@@ -102,7 +117,9 @@ export async function catalogueFallbackResponse(req: Request, kind: CatalogueKin
     if (!row || typeof gz !== "string") return null;
     const payload = JSON.parse(gunzipSync(Buffer.from(gz, "base64")).toString("utf8")) as object;
     const flags: CatalogueOutageFlags = { stale: true, savedAt: row.fetchedAt, ...(jellyfinIsDown() ? { jellyfinDown: true as const } : {}) };
-    return cachedJson(req, `${bodyKey(kind, locale, account)}:stale`, { ...payload, ...flags });
+    // Préparée à la volée, sans entrer dans la mémoire de `cachedJson` : une entrée par compte,
+    // langue et sorte y serait restée jusqu'au redémarrage. Une panne est rare, la compression aussi.
+    return respondPrepared(req, preparedUnkept({ ...payload, ...flags }));
   } catch {
     // Une copie illisible ne remplace pas l'erreur d'origine.
     return null;

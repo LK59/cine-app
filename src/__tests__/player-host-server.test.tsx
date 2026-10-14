@@ -76,7 +76,15 @@ vi.mock("@/lib/swr", () => ({ refreshAfterPlayback: (...args: unknown[]) => refr
 vi.mock("@/lib/codecSupport", () => ({ detectCodecSupport: async () => ({}) }));
 // Le HLS natif de Safari : pas de hls.js à charger dans le harnais.
 vi.mock("@/lib/webkitEngine", () => ({ playsHlsNatively: () => true }));
-vi.mock("@/lib/resumePosition", () => ({ resolveResumeAt: async (_id: string, at: number | undefined) => at ?? 0 }));
+/** La position que le serveur connaît — `"inconnue"` : Jellyfin muet, `resolveResumeAt` lève (§92). */
+let positionServeur: number | "inconnue" = 0;
+vi.mock("@/lib/resumePosition", () => ({
+  resolveResumeAt: async (_id: string, at: number | undefined) => {
+    if (at !== undefined) return at;
+    if (positionServeur === "inconnue") throw Object.assign(new Error("position inconnue"), { code: "upstream_unreachable" });
+    return positionServeur;
+  },
+}));
 /** La route AirPlay est-elle établie au montage ? */
 let routeEtablie = false;
 vi.mock("@/lib/castRoute", () => ({ castRouteActive: () => routeEtablie }));
@@ -130,6 +138,7 @@ beforeEach(() => {
   playback.mode = "full";
   relais = { takeover: null };
   routeEtablie = false;
+  positionServeur = 0;
   reportPlayback.mockClear();
   refreshAfterPlayback.mockClear();
   stopNow.mockClear();
@@ -243,6 +252,19 @@ describe("lecteur serveur — où s'ouvre une reprise", () => {
     render(<PlayerHost />);
     await waitFor(() => expect(lignes("start")).toHaveLength(1));
     expect(negociation().startTicks).toBe(115 * 10_000_000);
+  });
+
+  // Relecture du 14/10/2026 (§92) : Jellyfin muet, la position est inconnue — ouvrir au début aurait
+  // laissé les rapports de progression effacer la reprise.
+  it("position inconnue et rien d'affirmé : ne négocie rien, dit que la bibliothèque ne répond pas", async () => {
+    playback.session = { itemId: "film", openId: 1, title: "Film" };
+    positionServeur = "inconnue";
+    stubFetch();
+    render(<PlayerHost />);
+    await waitFor(() => expect(screen.getByText("player.libraryUnreachable")).toBeTruthy());
+    expect(lignes("start")).toHaveLength(0);
+    const calls = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(calls.some(([url]) => url === "/api/jellyfin/playback/start")).toBe(false);
   });
 
   it("ne recule pas un titre quitté il y a moins de dix minutes", async () => {
