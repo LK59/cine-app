@@ -13,7 +13,7 @@
 import type { ByteSource } from "./byteSource";
 import { forgetMatroskaHeader, parseMatroska, type MatroskaFile, type MediaSample } from "./matroska";
 import { forgetMp4Header, isIsoBaseMedia, Mp4SampleReader, parseMp4 } from "./mp4Demux";
-import { SampleReader } from "./sampleReader";
+import { SampleReader, type SampleReaderOptions } from "./sampleReader";
 import { hevcParameterSets, hevcRecordHasParameterSets, hevcRecordWithParameterSets, nalLengthSize } from "./codecConfig";
 import { trace } from "./trace";
 
@@ -121,7 +121,13 @@ async function completeParameterSets(source: ByteSource, file: MatroskaFile): Pr
 const containers = new Map<string, "mp4" | "matroska">();
 const REMEMBERED_CONTAINERS = 16;
 
-/** Le lecteur d'échantillons qui va avec ce fichier, parti de `startOffset`. */
-export function createSampleReader(source: ByteSource, file: MatroskaFile, startOffset: number): MediaSampleReader {
-  return file.mp4 ? new Mp4SampleReader(source, file, startOffset) : new SampleReader(source, file, startOffset);
+/**
+ * Le lecteur d'échantillons qui va avec ce fichier, parti de `startOffset`.
+ *
+ * `options` ne concerne que le Matroska (`SampleReaderOptions`, la zone illisible, §93) : un MP4
+ * est lu par son index d'échantillons, sans en-tête à analyser en chemin — des octets abîmés dans
+ * son `mdat` n'y ont pas d'équivalent détectable.
+ */
+export function createSampleReader(source: ByteSource, file: MatroskaFile, startOffset: number, options?: SampleReaderOptions): MediaSampleReader {
+  return file.mp4 ? new Mp4SampleReader(source, file, startOffset) : new SampleReader(source, file, startOffset, options);
 }

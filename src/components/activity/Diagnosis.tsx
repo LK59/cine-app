@@ -26,7 +26,8 @@ function sentence(d: TitleDiagnosis, t: T): string {
   const v = d.verdict;
   switch (v.kind) {
     case "file":
-      return t("activity.diagnosis.why.file", { n: failing.length });
+      // Une zone illisible lue dans le fichier (§93) : la preuve, sans croisement.
+      return v.proven ? t("activity.diagnosis.why.fileProven") : t("activity.diagnosis.why.file", { n: failing.length });
     case "platform":
       return t(`activity.diagnosis.why.platform${one}`, { device: v.device, n: failing.length, clean });
     case "device": {

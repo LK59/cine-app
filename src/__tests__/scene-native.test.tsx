@@ -86,12 +86,13 @@ import { keepOnStop } from "@/lib/resumeCache/keepOnStop";
 import { __resetSceneClocks } from "@/lib/sceneMode";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 
+const onFallback = vi.fn();
 function mount(scene: boolean, openId: number) {
   return render(
     <ExperimentalPlayerHost
       session={{ itemId: "ep-1", title: "Épisode 1", resumeAt: 1800, openId, ...(scene ? { scene: true } : {}), getNextEpisode: () => ({ itemId: "ep-2", title: "Épisode 2" }) } as never}
       mode="full"
-      onFallback={() => {}}
+      onFallback={(...a: unknown[]) => onFallback(...a)}
     />
   );
 }
@@ -174,5 +175,23 @@ describe("hôte natif — une scène ouverte depuis une réplique", () => {
     await ready();
     act(() => void fireEvent(document.querySelector("video")!, new Event("ended")));
     expect(forgetResumeCache).toHaveBeenCalledWith("ep-1");
+  });
+
+  // Une zone illisible pendant une scène (§93) : le relais au lecteur serveur est un relais comme les
+  // autres — la scène passe avec lui (même `openId`, la même horloge de scène côté serveur), et la
+  // ligne le dit.
+  it("une zone illisible pendant une scène : le relais garde la scène", async () => {
+    const { probePlaybackPath } = await import("@/lib/webcodecs/remuxPlayback");
+    mount(true, 96);
+    await ready();
+    const options = (probePlaybackPath as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0] as {
+      onError: (m: string, k?: string, f?: Record<string, unknown>) => void;
+    };
+    const message = "zone illisible dans le fichier vers 1830,0 s (octet 99)";
+    act(() => options.onError(message, "playback", { unreadableZone: true, zoneByte: 99, zoneSeconds: 1830, resumeAt: 1825 }));
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(onFallback.mock.calls[0][0]).toBe(message);
+    expect(onFallback.mock.calls[0][1]).toMatchObject({ resumeAt: 1825 });
+    expect(logged("fallback")[0]?.fields).toMatchObject({ scene: true, reason: message, zoneByte: 99 });
   });
 });

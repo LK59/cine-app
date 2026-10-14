@@ -146,6 +146,26 @@ describe("une passe", () => {
     }
   });
 
+  // §93 : une seule tâche de fond lit les disques — la vérification de l'intégrité tient le verrou,
+  // l'indexation attend qu'elle le rende avant de lire un film.
+  it("attend que la vérification de l'intégrité rende les disques", async () => {
+    const { acquireDiskReads, diskReadsState } = await import("@/lib/backgroundDiskReads");
+    const lease = await acquireDiskReads("integrite");
+    try {
+      // Film 3 (en erreur) est toujours relu : il y a de quoi lire.
+      await startIndexing();
+      await vi.waitFor(() => expect(diskReadsState().waiting).toContain("repliques"));
+      await new Promise((r) => setTimeout(r, 30));
+      expect(__testing.live.currentFilms.size).toBe(0);
+      expect((await repliquesStatus()).run?.done).toBe(0);
+    } finally {
+      lease.release();
+    }
+    await __testing.waitIdle();
+    expect((await repliquesStatus()).run?.done).toBeGreaterThan(0);
+    expect(diskReadsState().owner).toBeNull();
+  });
+
   // 14/10/2026 : deux passes concurrentes avaient écrit 217 films en double et vidé un autre, sans
   // toucher à leur signature — aucune passe ne les aurait relus.
   it("retire sur place les répliques écrites en double, et relit un film que l'index a perdu", async () => {

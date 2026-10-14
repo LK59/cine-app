@@ -735,6 +735,7 @@
       },
       "why": {
         "file": "Ha fallado con cada uno de sus {n} espectadores: es el archivo.",
+        "fileProven": "Se ha encontrado una zona ilegible en el propio archivo: es el archivo, sea cual sea el dispositivo. Hay que sustituirlo.",
         "platform": "Ha fallado en {device} con {n} personas; los otros {clean} lo vieron sin problema en otros dispositivos: ese tipo de dispositivo.",
         "device": "Solo ha fallado con {who} ({device}); los otros {clean} lo vieron sin problema: ese dispositivo.",
         "everywhere": "También tiene problemas en otros: el {p} % de sus otras sesiones fallaron.",
@@ -2154,6 +2155,7 @@
       "finishedRemoved": "Quitada de tu lista «Por ver»."
     },
     "unplayable": "Este archivo no se puede reproducir en este navegador.",
+    "unreadableZone": "Este archivo está dañado hacia {time} y no se puede reproducir más allá aquí.",
     "handingOver": "Preparando la reproducción…",
     "castPreparing": "Preparando la emisión…",
     "castStop": "Detener la emisión",
@@ -3259,6 +3261,39 @@
       "info": "Solo en Jellyfin: {only} · dobles ubicaciones: {links}",
       "never": "Aún no analizada",
       "running": "Analizando…"
+    },
+    "integrity": {
+      "title": "Integridad de los archivos",
+      "hint": "Vuelve a leer cada archivo de vídeo de la biblioteca (películas y episodios) con el reproductor del cine y muestra los que contienen una zona ilegible. Una lectura a la vez, en pausa mientras alguien ve una película, nunca a la vez que la indexación de diálogos. La primera pasada es larga; después, solo se leen los archivos nuevos o modificados, cada noche.",
+      "start": "Comprobar la integridad de los archivos",
+      "resume": "Reanudar",
+      "pause": "Pausar",
+      "phase": {
+        "idle": "Detenida",
+        "planning": "Preparando la lista de archivos…",
+        "running": "Comprobación en curso",
+        "waiting-playback": "En pausa: alguien está viendo una película",
+        "waiting-disk": "En espera: la indexación de diálogos está leyendo los discos",
+        "paused": "En pausa",
+        "outside-window": "Fuera del horario nocturno",
+        "done": "Terminada"
+      },
+      "files": "Archivos",
+      "read": "Leído",
+      "eta": "Tiempo restante",
+      "damagedCount": "Dañados",
+      "finished": "Última pasada terminada el {when}.",
+      "counts": "{ok} sanos · {damaged} dañados · {unsupported} MP4 sin comprobar · {error} ilegibles",
+      "nightly": "los archivos nuevos se comprueban cada noche",
+      "none": "Ningún archivo dañado.",
+      "never": "Nunca comprobada.",
+      "zone": "hacia {time} (byte {byte})",
+      "replaceRadarr": "Sustituir en Radarr",
+      "replaceSonarr": "Sustituir en Sonarr",
+      "truncated": "Hay más zonas de las que muestra la lista.",
+      "unreachableTail": "No se pudo leer el final del archivo (no hay punto de índice después de la zona).",
+      "unreadable": "Archivos que no se pudieron leer ({n})",
+      "actionFailed": "La acción no se completó."
     }
   }
 }

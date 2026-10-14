@@ -97,6 +97,12 @@ export interface MatroskaFile {
   /** Absolute offset of the Segment's first child — cue positions are relative to this. */
   segmentDataStart: number;
   segmentEnd: number;
+  /**
+   * Le segment déclare sa taille (et non « inconnue », comme un enregistrement en direct). Sans
+   * index, c'est la seule preuve qu'il reste du film après un en-tête illisible — voir
+   * `SampleReaderOptions.unreadable` (DECISIONS.md §93). Absent : inconnue.
+   */
+  segmentSized?: boolean;
   /** Absolute offset of the first Cluster, for playing from the start without cues. */
   firstClusterOffset: number | null;
   /**
@@ -450,6 +456,7 @@ async function readMatroska(source: ByteSource): Promise<MatroskaFile> {
     cues: [],
     segmentDataStart,
     segmentEnd,
+    segmentSized: segment.size !== null,
     firstClusterOffset: null,
   };
 

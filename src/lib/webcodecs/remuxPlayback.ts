@@ -13,7 +13,7 @@ import { HttpByteSource, type ByteSource, type DiskChunks, type HeldBytes } from
 import { fromMatroskaTrack, type PlayerTrack } from "./playerTrack";
 import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { forgetMediaHeader, mediaHeaderKey, openMediaFile } from "./mediaFile";
-import { MseSource, type RecoveryFacts } from "./mseSource";
+import { MseSource, type RecoveryFacts, type UnreadableZoneEvent } from "./mseSource";
 import { choosePlaybackPath, NATIVE_PATH, type ChosenPath } from "./pathSelector";
 import { Remuxer, playableAudio, deliveredAudio, primeAudioDelivery, audioDelivery, dialogueCanShape, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
@@ -60,7 +60,10 @@ export interface RemuxPlaybackOptions {
    * le chemin d'avant. Lu ici une fois et passé au remultiplexeur de cette ouverture seulement.
    */
   dialogue?: DialogueMode;
-  onError: (message: string, kind?: "network" | "playback") => void;
+  /** `facts` : ce que le relais emporte d'une zone illisible (`facts.unreadableZone`, §93). */
+  onError: (message: string, kind?: "network" | "playback", facts?: Record<string, unknown>) => void;
+  /** Une zone illisible tient la lecture, ou un saut l'a quittée — voir `MseCallbacks.onUnreadableZone`. */
+  onUnreadableZone?: (event: UnreadableZoneEvent) => void;
   onWarning?: (warning: PlayerWarning) => void;
   /** Play pressed and the clock not yet moving, or null once it is. See MseCallbacks. */
   onStarting?: (startedAt: number | null) => void;
@@ -424,6 +427,7 @@ export class RemuxPlayback {
       plan,
       {
         onError: this.options.onError,
+        onUnreadableZone: this.options.onUnreadableZone,
         onWarning: this.options.onWarning,
         onStarting: this.options.onStarting,
         onStall: this.options.onStall,

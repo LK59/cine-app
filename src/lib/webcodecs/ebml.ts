@@ -84,14 +84,39 @@ export function readString(bytes: Uint8Array): string {
 const HEADER_WINDOW = 16;
 
 export async function readElementAt(source: ByteSource, offset: number): Promise<EbmlElement | null> {
+  const header = await readElementHeader(source, offset);
+  return header === UNREADABLE ? null : header;
+}
+
+/**
+ * Ce que `readElementHeader` rend pour un en-tête **illisible** : la fenêtre lue était complète
+ * — tous les octets demandés, ou tous ceux jusqu'à la fin du fichier — et le premier octet de
+ * l'identifiant ou de la taille n'a aucun bit de marque (0x00, la seule valeur sans). Ce n'est
+ * pas une lecture courte (un réseau coupé, la fin du fichier au milieu d'un en-tête) : ces octets
+ * sont là, et ce ne sont pas ceux d'un en-tête EBML. C'est ce que laisse un bloc de zéros écrit
+ * par-dessus un fichier (« Le Grinch », 14/10/2026 — DECISIONS.md §93).
+ */
+export const UNREADABLE = "illisible" as const;
+
+/**
+ * L'en-tête d'élément à `offset` — ou `null` (au-delà du fichier, lecture courte, largeur qui
+ * déborde de la fenêtre), ou `UNREADABLE` (voir plus haut). Les mêmes lectures que
+ * `readElementAt`, qui n'en est que la forme sans distinction : rien ne change pour ses appelants.
+ */
+export async function readElementHeader(source: ByteSource, offset: number): Promise<EbmlElement | typeof UNREADABLE | null> {
   if (offset >= source.size) return null;
   const window = await source.read(offset, HEADER_WINDOW);
   const id = readElementId(window, 0);
-  if (!id) return null;
+  if (!id) return windowComplete(window, source, offset) && window[0] === 0 ? UNREADABLE : null;
   const size = readVarSize(window, id.width);
-  if (!size) return null;
+  if (!size) return windowComplete(window, source, offset) && id.width < window.length && window[id.width] === 0 ? UNREADABLE : null;
   const headerSize = id.width + size.width;
   return { id: id.value, size: size.value, offset: offset + headerSize, headerSize };
+}
+
+/** La lecture a rendu tout ce qu'elle pouvait rendre : la fenêtre entière, ou jusqu'à la fin du fichier. */
+function windowComplete(window: Uint8Array, source: ByteSource, offset: number): boolean {
+  return window.length > 0 && window.length >= Math.min(HEADER_WINDOW, source.size - offset);
 }
 
 /**
@@ -109,11 +134,21 @@ export async function forEachChild(
   // anything else — including the "continue" the callers write for readability — carries on.
   // Typing it as a literal union instead forces every async visitor to be annotated, since
   // TypeScript widens a returned string literal to `string` inside an async arrow.
-  visit: EbmlVisit
+  visit: EbmlVisit,
+  /**
+   * Appelé pour un enfant dont l'en-tête est illisible (`UNREADABLE`), à sa position — avant que
+   * le parcours s'arrête, comme il l'a toujours fait. Absent : rien ne change. Seul le lecteur
+   * d'échantillons du remultiplexeur le passe, pour lever une zone illisible (DECISIONS.md §93).
+   */
+  onUnreadable?: (offset: number) => unknown
 ): Promise<void> {
   let cursor = start;
   while (cursor < end) {
-    const element = await readElementAt(source, cursor);
+    const element = await readElementHeader(source, cursor);
+    if (element === UNREADABLE) {
+      if (onUnreadable) await onUnreadable(cursor);
+      return;
+    }
     if (!element) return;
     if (element.size !== null && element.offset + element.size > end + element.headerSize) {
       // A child claiming to run past its parent means the file is damaged or we lost alignment;

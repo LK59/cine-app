@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { config } from "@/lib/config";
 import { logError, SERVER_LOG_FILE, SERVER_LOG_KEEP } from "@/lib/logger";
 import { appendJsonLine } from "@/lib/logFile";
+import { withDiskReads } from "@/lib/backgroundDiskReads";
 import { diskOf, planQueues, type QueuePlan } from "./disks";
 import { indexFilm } from "./indexFilm";
 import { languagesForFilm } from "./languages";
@@ -419,7 +420,9 @@ async function runPass(kind: RunKind): Promise<void> {
           if (live.stopWhy) throw new Stop(live.stopWhy);
           if (failed) return;
           try {
-            await indexOne(item, run);
+            // Le verrou commun des tâches de fond (§93) : jamais pendant que la vérification de
+            // l'intégrité lit un fichier — l'une après l'autre, film par film.
+            await withDiskReads("repliques", () => indexOne(item, run));
           } catch (error) {
             if (!(error instanceof Stop)) failed = true;
             throw error;

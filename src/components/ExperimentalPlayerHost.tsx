@@ -151,6 +151,11 @@ import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from 
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { usePlaybackQuality } from "@/lib/playbackQuality";
 import { prewarmFields } from "@/lib/lighterPrewarm";
+import { ZoneHandover } from "@/lib/unreadableZoneHandover";
+import { isUnreadableZoneReason, zoneSecondsOf } from "@/lib/webcodecs/unreadableZone";
+import { formatTime } from "@/lib/playerClock";
+import { playsHlsNatively } from "@/lib/webkitEngine";
+import { pickMaxBitrate } from "@/lib/networkBitrate";
 import { SlowLinkRunner, type SlowLinkHost } from "@/lib/slowLinkRunner";
 import {
   LONG_STALL_MS,
@@ -1629,6 +1634,52 @@ export function ExperimentalPlayerHost({
     takeoverNowRef.current = takeoverNow;
   }, [takeoverNow]);
   /**
+   * La piste du relais d'une zone illisible (§93) : la même pour son préchauffage et pour le relais,
+   * sans quoi le lecteur serveur ne reprendrait pas le préchauffage (`takeOrdinaryPrewarm`).
+   */
+  const zoneAudioRef = useRef<() => number | undefined>(() => undefined);
+  useEffect(() => {
+    zoneAudioRef.current = () => jellyfinAudioIndex(tracks.audio, info?.audio, wantedAudioRef.current ?? currentAudio ?? -1);
+  }, [tracks.audio, info?.audio, currentAudio]);
+  /**
+   * Le relais préparé avant une zone illisible (§93, `unreadableZoneHandover.ts`) : préchauffé par la
+   * mécanique de la connexion lente, passé à la tête. Un par lecteur, créé une fois ; ce qu'il lit de
+   * ce lecteur passe par des références.
+   */
+  const [zoneHandover] = useState(() => new ZoneHandover());
+  useEffect(() => {
+    zoneHandover.attach({
+      itemId,
+      // Sans lecteur serveur, ou pour le banc d'essai : rien à préparer. WebKit en HLS natif : le
+      // relais tout de suite (voir le module). Ailleurs : préchauffer.
+      mode: () => (serverFallbackRef.current !== true || session.bench ? "wait" : playsHlsNatively(videoElRef.current) ? "immediate" : "prepare"),
+      audioStreamIndex: () => zoneAudioRef.current(),
+      maxBitrate: () => pickMaxBitrate(),
+      paused: () => videoElRef.current?.paused ?? true,
+      trace,
+    });
+  }, [zoneHandover, itemId, session.bench]);
+  useEffect(() => () => zoneHandover.dispose(), [zoneHandover]);
+  /**
+   * Passer la main pour une zone illisible (§93) : à la position du relais, avec le préchauffage s'il
+   * convient. `switchedAt` : le lecteur serveur mesure l'interruption jusqu'à son image
+   * (`switchGapMs`, sur son bilan) — comme pour une bascule de la connexion lente. Sans lecteur
+   * serveur, `fallToStable` écrit l'erreur et l'affiche.
+   */
+  const handZone = useCallback(
+    (message: string, resumeAt: number, facts: Record<string, unknown>) => {
+      if (lifecycle.isOver()) return;
+      const prewarm = zoneHandover.take(resumeAt);
+      const base = everReadyRef.current ? takeoverNowRef.current() : undefined;
+      fallToStable(
+        message,
+        { ...base, resumeAt, audioStreamIndex: zoneAudioRef.current(), switchedAt: Date.now() },
+        { ...facts, ...(prewarm ? { prewarm: prewarmFields(prewarm) } : {}) }
+      );
+    },
+    [lifecycle, zoneHandover, fallToStable]
+  );
+  /**
    * Le Chromecast (DECISIONS.md §64) : proposé seulement s'il y a un lecteur serveur pour préparer
    * le flux (`serverFallback` connu et vrai — dans le doute, pas de bouton), hors banc d'essai, et
    * pour un compte et un navigateur qui y ont droit (`useChromecastAllowed`). Ailleurs le kit de
@@ -1708,7 +1759,11 @@ export function ExperimentalPlayerHost({
    * progression effacer la reprise chez Jellyfin dès son retour : le lecteur le dit et n'ouvre pas.
    */
   const positionUnknown = playbackState?.positionUnknown === true && (session.resumeAt ?? null) === null;
+  // Une zone illisible sans lecteur serveur (§93) : la phrase du compte, dans sa langue, avec l'instant
+  // — le motif technique reste au journal et sous « Signaler un problème ».
+  const zoneError = runtimeError !== null && isUnreadableZoneReason(runtimeError) ? t("player.unreadableZone", { time: formatTime(zoneSecondsOf(runtimeError)) }) : null;
   const error =
+    zoneError ??
     runtimeError ??
     info?.refusedReason ??
     (positionUnknown ? t("player.libraryUnreachable") : null) ??
@@ -2855,6 +2910,16 @@ export function ExperimentalPlayerHost({
     const element = videoElRef.current;
     // Gardée pour la ligne de fin de séance : au démontage, React a déjà détaché la ref.
     lastVideoElRef.current = element;
+    // Le préchauffage d'un relais de zone (§93) ne tient pas pendant une pause : arrêté chez Jellyfin,
+    // refait à la reprise si la zone est toujours devant.
+    const onZonePause = () => zoneHandover.paused();
+    const onZonePlay = () => zoneHandover.played();
+    element.addEventListener("pause", onZonePause);
+    element.addEventListener("play", onZonePlay);
+    unsubscribes.push(() => {
+      element.removeEventListener("pause", onZonePause);
+      element.removeEventListener("play", onZonePlay);
+    });
     probePlaybackPath({
       streamUrl: info.streamUrl,
       // La taille, déjà dans la description du fichier : l'ouverture n'a plus à la demander par
@@ -2883,7 +2948,13 @@ export function ExperimentalPlayerHost({
       // Reconstruit pour un changement de piste pendant une pause : rien ne doit le relancer, ni
       // ce composant (voir startRemux) ni la garde de démarrage de la source.
       startPaused: lifecycle.keepPaused,
-      onError: (message, kind) => {
+      onError: (message, kind, facts) => {
+        // Une zone illisible (§93), la tête arrivée au relais : rien de ce qui suit ne la concerne —
+        // ni reconstruction (la même zone attendrait), ni piste, ni dialogues. La main passe.
+        if (facts?.unreadableZone === true) {
+          handZone(message, typeof facts.resumeAt === "number" ? facts.resumeAt : positionRef.current, facts);
+          return;
+        }
         // A network failure is not this path's fault and not this path's to fix.
         if (kind === "network") {
           // Le lecteur a passé la main ou se ferme : une coupure n'a plus d'écran à montrer.
@@ -2959,6 +3030,20 @@ export function ExperimentalPlayerHost({
           }
         }
         fallToStable(message, undefined, lossFacts);
+      },
+      // La lecture en avance a atteint une zone illisible (§93) : préparer le relais — ou, sur WebKit en
+      // HLS natif, le faire tout de suite, à la tête.
+      onUnreadableZone: (event) => {
+        if (lifecycle.isOver()) return;
+        if (zoneHandover.event(event) === "immediate") {
+          handZone(event.zone.message, positionRef.current, {
+            unreadableZone: true,
+            zoneByte: event.zone.byteOffset,
+            zoneSeconds: Math.round(event.zone.zoneSeconds * 10) / 10,
+            at: Math.round(positionRef.current * 10) / 10,
+            immediate: true,
+          });
+        }
       },
       onWarning: showPipelineWarning,
       onStarting: (at) => {
@@ -3042,7 +3127,9 @@ export function ExperimentalPlayerHost({
   // fixés pour toute la vie de ce lecteur — sa clé est `itemId:openId` (voir PlayerHost). Même
   // chose pour `watched`, créé une fois au montage (`useState`) et jamais remplacé (la réserve lit
   // le temps regardé, 28/09/2026). `stutter` et `runner` aussi (§78) : créés une fois au montage.
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, chooseSecond, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner]);
+  // `zoneHandover` et `handZone` (§93) : le premier créé une fois au montage, le second ne dépend que
+  // de lui, de `lifecycle` et de `fallToStable` — stables tous trois.
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, chooseSecond, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner, zoneHandover, handZone]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure

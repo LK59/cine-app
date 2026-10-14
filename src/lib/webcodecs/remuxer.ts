@@ -876,7 +876,10 @@ export class Remuxer {
         ? transcodedAudioInfo(transcoder, audioTrack)
         : await describeAudio(source, file, start, audioTrack, probeOffset(file, startSeconds, videoTrack.number, start))
       : null;
-    const reader = createSampleReader(source, file, start);
+    // Le seul lecteur strict (§93) : une zone illisible y lève `UnreadableZone`, que `MseSource`
+    // passe à l'hôte sans reprise. La sonde du son (`describeAudio`) et les transcodeurs gardent
+    // le comportement d'avant : c'est ce lecteur-ci qui atteint la zone le premier.
+    const reader = createSampleReader(source, file, start, { unreadable: "throw" });
 
     const videoInfo: MuxTrackInfo = {
       id: 1,
@@ -949,6 +952,19 @@ export class Remuxer {
   keyframeAfter(seconds: number): number | null {
     const us = cueTimeAfter(this.file, Math.round(seconds * 1e6), this.videoTrack.number);
     return us === null ? null : us / 1e6;
+  }
+
+  /**
+   * Le premier point d'index vidéo dont la grappe commence au-delà de cet octet, en secondes sur
+   * l'horloge du fichier, ou null : où un saut retrouve du film après une zone illisible (§93).
+   */
+  resumeAfterByte(byteOffset: number): number | null {
+    const own = this.file.cues.filter((cue) => cue.track === this.videoTrack.number);
+    let best: number | null = null;
+    for (const cue of own.length > 0 ? own : this.file.cues) {
+      if (cue.clusterOffset > byteOffset && (best === null || cue.timeUs < best)) best = cue.timeUs;
+    }
+    return best === null ? null : best / 1e6;
   }
 
   /** L'image clé indexée à cet instant ou avant, sur l'horloge du fichier, ou null. */

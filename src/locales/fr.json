@@ -735,6 +735,7 @@
       },
       "why": {
         "file": "Il a échoué chez chacun de ses {n} spectateurs : c'est le fichier.",
+        "fileProven": "Une zone illisible a été lue dans le fichier lui-même : c'est le fichier, quel que soit l'appareil. À remplacer.",
         "platform": "Il a échoué sur {device} chez {n} personnes ; les {clean} autres l'ont regardé sans souci ailleurs : ce type d'appareil.",
         "device": "Il n'a échoué que chez {who} ({device}) ; les {clean} autres l'ont regardé sans souci : cet appareil.",
         "everywhere": "Il peine aussi ailleurs : {p} % de ses autres séances ont échoué.",
@@ -2154,6 +2155,7 @@
       "finishedRemoved": "Retiré de votre liste « À voir »."
     },
     "unplayable": "Ce fichier ne peut pas être lu dans ce navigateur.",
+    "unreadableZone": "Ce fichier est abîmé vers {time} : il ne peut pas être lu au-delà sur cette installation.",
     "handingOver": "Préparation de la lecture…",
     "castPreparing": "Préparation de la diffusion…",
     "castStop": "Arrêter la diffusion",
@@ -3259,6 +3261,39 @@
       "info": "Jellyfin seul : {only} · doubles rangements : {links}",
       "never": "Pas encore analysée",
       "running": "Analyse en cours…"
+    },
+    "integrity": {
+      "title": "Intégrité des fichiers",
+      "hint": "Relit chaque fichier vidéo de la bibliothèque (films et épisodes) avec le lecteur du cinéma, et liste ceux qui contiennent une zone illisible. Une lecture à la fois, en pause pendant qu'on regarde un film, jamais en même temps que l'indexation des répliques. La première passe est longue ; ensuite, seuls les fichiers nouveaux ou modifiés sont relus, chaque nuit.",
+      "start": "Vérifier l'intégrité des fichiers",
+      "resume": "Reprendre",
+      "pause": "Mettre en pause",
+      "phase": {
+        "idle": "À l'arrêt",
+        "planning": "Préparation de la liste des fichiers…",
+        "running": "Vérification en cours",
+        "waiting-playback": "En pause : quelqu'un regarde un film",
+        "waiting-disk": "En attente : l'indexation des répliques lit les disques",
+        "paused": "En pause",
+        "outside-window": "Hors de la plage de nuit",
+        "done": "Terminée"
+      },
+      "files": "Fichiers",
+      "read": "Lu",
+      "eta": "Reste environ",
+      "damagedCount": "Abîmés",
+      "finished": "Dernière passe terminée le {when}.",
+      "counts": "{ok} sains · {damaged} abîmés · {unsupported} MP4 non vérifiés · {error} illisibles",
+      "nightly": "les fichiers nouveaux sont vérifiés chaque nuit",
+      "none": "Aucun fichier abîmé.",
+      "never": "Jamais vérifiée.",
+      "zone": "vers {time} (octet {byte})",
+      "replaceRadarr": "Remplacer dans Radarr",
+      "replaceSonarr": "Remplacer dans Sonarr",
+      "truncated": "Plus de zones que la liste n'en montre.",
+      "unreachableTail": "La fin du fichier n'a pas pu être relue (aucun point d'index après la zone).",
+      "unreadable": "Fichiers qui n'ont pas pu être relus ({n})",
+      "actionFailed": "L'action n'a pas abouti."
     }
   }
 }

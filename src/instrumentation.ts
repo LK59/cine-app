@@ -80,6 +80,16 @@ export async function register() {
       console.error("repliques: démarrage", error);
     }
 
+    // L'intégrité des fichiers (DECISIONS.md §93) : une passe manuelle interrompue par le redémarrage
+    // reprend, et la vérification de nuit des fichiers nouveaux est surveillée — seulement après une
+    // première passe lancée par l'administrateur. Gardé, comme les répliques.
+    try {
+      const { startIntegrityEngine } = await import("./lib/integrity/engine");
+      startIntegrityEngine();
+    } catch (error) {
+      console.error("integrite: démarrage", error);
+    }
+
     // Non-blocking cache warmup — fire and forget, never delays startup
     setTimeout(() => {
       import("./lib/server-cache").then(async ({ cachedMovies, cachedSeries }) => {

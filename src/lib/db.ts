@@ -514,6 +514,32 @@ function migrate(db: Database.Database): void {
       created_at INTEGER NOT NULL
     );
   `);
+  /**
+   * L'intégrité des fichiers (DECISIONS.md §93) : une ligne par fichier vidéo relu — chemin, taille et
+   * date (ce qui décide qu'il est à relire), ce que la relecture a trouvé (`ok`, `damaged` avec ses
+   * zones, `unsupported` pour un conteneur sans détection, `error`) — et l'état de la passe.
+   */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS file_integrity (
+      path        TEXT    PRIMARY KEY,
+      size        INTEGER NOT NULL,
+      mtime_ms    INTEGER NOT NULL,
+      kind        TEXT    NOT NULL,
+      title       TEXT,
+      service_id  INTEGER,
+      status      TEXT    NOT NULL,
+      zones       TEXT,
+      error       TEXT,
+      bytes_read  INTEGER NOT NULL DEFAULT 0,
+      ms          INTEGER NOT NULL DEFAULT 0,
+      checked_at  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_file_integrity_status ON file_integrity(status);
+    CREATE TABLE IF NOT EXISTS file_integrity_meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");

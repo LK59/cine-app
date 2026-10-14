@@ -1266,3 +1266,31 @@ describe("les deux pages des fiches du bureau : une écriture (DECISIONS.md §61
     for (const f of FICHES) expect([f, lire(f).includes("detailMenuArrowNav(e, containerRef.current)")]).toEqual([f, true]);
   });
 });
+
+describe("la zone illisible : un motif, une détection, un relais préparé (§93)", () => {
+  // DECISIONS.md §93. Le motif est ce que le diagnostic « fichier ou appareil » reconnaît : écrit à
+  // un seul endroit. La vérification de l'intégrité lit avec le lecteur du lecteur natif, en strict :
+  // ce qu'elle dit sain ne lèvera pas au lecteur. Le relais préparé passe par le préchauffage de la
+  // connexion lente (§78), jamais par une seconde négociation à lui.
+  it("le motif « zone illisible dans le fichier » n'est écrit que dans unreadableZone.ts", () => {
+    const hits = (readdirSync("src", { recursive: true }) as string[])
+      .map((f) => `src/${f}`)
+      .filter((f) => /\.tsx?$/.test(f) && !f.includes("__tests__"))
+      .filter((f) => lire(f).includes("zone illisible dans le fichier"));
+    expect(hits).toEqual(["src/lib/webcodecs/unreadableZone.ts"]);
+  });
+
+  it("la vérification de l'intégrité lit par SampleReader, en strict", () => {
+    const src = lire("src/lib/integrity/scan.ts");
+    expect(src).toMatch(/new SampleReader\(/);
+    expect(src).toMatch(/unreadable: "throw"/);
+    expect(src).not.toMatch(/readElementHeader|=== 0x00|data\[0\] === 0/);
+  });
+
+  it("le relais préparé passe par startPrewarm, et le lecteur serveur par takeOrdinaryPrewarm", () => {
+    const handover = lire("src/lib/unreadableZoneHandover.ts");
+    expect(handover).toMatch(/\bstartPrewarm\(/);
+    expect(handover).not.toMatch(/playback\/start/);
+    expect(lire("src/components/PlayerHost.tsx")).toMatch(/takeOrdinaryPrewarm\(/);
+  });
+});

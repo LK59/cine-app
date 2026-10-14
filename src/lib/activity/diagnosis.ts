@@ -32,8 +32,11 @@ export interface Viewer {
 }
 
 export type Verdict =
-  /** Il a échoué au moins une fois chez chacun de ses spectateurs (deux au moins) : le fichier. */
-  | { kind: "file" }
+  /**
+   * Il a échoué au moins une fois chez chacun de ses spectateurs (deux au moins) : le fichier. Ou
+   * une zone illisible y a été lue (`proven`, §93) : le fichier, dès une seule séance.
+   */
+  | { kind: "file"; proven?: true }
   /** Il échoue chez un seul, et passe chez d'autres : cet appareil-là. */
   | { kind: "device"; user: string; device: string; everywhere: boolean }
   /** Il échoue sur un même type d'appareil, chez plusieurs personnes, et passe ailleurs. */
@@ -64,7 +67,9 @@ function viewerKey(s: Seance): string {
   return `${s.user}|${s.device ?? "?"}`;
 }
 
-function verdictOf(viewers: Viewer[]): Verdict {
+function verdictOf(viewers: Viewer[], proven = false): Verdict {
+  // Une zone illisible lue dans le fichier (§93) : ni l'appareil ni le réseau n'y sont pour rien.
+  if (proven) return { kind: "file", proven: true };
   const failing = viewers.filter((v) => v.failed > 0);
   const clean = viewers.filter((v) => v.failed === 0);
   if (failing.length === 1) {
@@ -153,7 +158,7 @@ export function diagnoseTitles(all: Seance[], limit = 12): TitleDiagnosis[] {
       lastFailure: Math.max(...failedList.map((s) => s.start)),
       reasons: [...reasons].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count).slice(0, 3),
       viewers: sortedViewers,
-      verdict: verdictOf(sortedViewers),
+      verdict: verdictOf(sortedViewers, failedList.some((s) => (s.fileDefects ?? 0) > 0)),
     });
   }
   // Les titres qui échouent chez le plus de monde d'abord : c'est là qu'un fichier est en cause.

@@ -27,7 +27,12 @@ export type PrewarmedStart = Record<string, unknown> & { playSessionId?: string;
 
 export interface Prewarm {
   itemId: string;
-  step: LighterStep;
+  /**
+   * Le palier de la version allégée — ou `null` pour la négociation **ordinaire** du lecteur serveur,
+   * celle du relais préparé avant une zone illisible (DECISIONS.md §93) : même mécanique, même
+   * réemploi, sans débit abaissé. Reprise seulement par `takeOrdinaryPrewarm`.
+   */
+  step: LighterStep | null;
   /** La position préchauffée, en secondes — celle où le lecteur serveur doit partir. */
   startSeconds: number;
   audioStreamIndex?: number;
@@ -104,7 +109,14 @@ export function segmentAt(variant: string, base: string, seconds: number): { url
  * dit à la route de ne pas annoncer la lecture à Jellyfin : ce n'en est pas encore une (le lecteur
  * serveur l'annoncera s'il la reprend).
  */
-export function startPrewarm(options: { itemId: string; step: LighterStep; startSeconds: number; audioStreamIndex?: number }): Prewarm {
+export function startPrewarm(options: {
+  itemId: string;
+  step: LighterStep | null;
+  startSeconds: number;
+  audioStreamIndex?: number;
+  /** La négociation ordinaire (`step: null`) : le plafond que le lecteur serveur demanderait (`pickMaxBitrate`). */
+  maxBitrate?: number;
+}): Prewarm {
   if (current && current.state !== "used") cancelPrewarm(current);
   let settle: (ok: boolean) => void = () => {};
   const prewarm: Prewarm = {
@@ -128,8 +140,10 @@ export function startPrewarm(options: { itemId: string; step: LighterStep; start
         headers: { "Content-Type": "application/json", ...touchHintHeaders() },
         body: JSON.stringify({
           itemId: options.itemId,
-          maxBitrate: options.step.targetBps,
-          lighter: true,
+          // Le palier allégé (§78) ; sans palier, la négociation ordinaire du relais (§93), au plafond
+          // que le lecteur serveur aurait demandé lui-même.
+          maxBitrate: options.step ? options.step.targetBps : options.maxBitrate,
+          ...(options.step ? { lighter: true } : {}),
           prewarm: true,
           audioStreamIndex: options.audioStreamIndex,
           startTicks: options.startSeconds > 0 ? Math.floor(options.startSeconds * 10_000_000) : undefined,
@@ -200,7 +214,7 @@ function settleReady(prewarm: Prewarm, settle: (ok: boolean) => void): void {
  * nouvelle (13/10/2026). Dans le doute, non : la négociation d'avant le préchauffage.
  */
 export function prewarmFits(prewarm: Prewarm, step: LighterStep | null | undefined, audioStreamIndex: number | undefined): boolean {
-  if (!step || prewarm.step.targetBps !== step.targetBps) return false;
+  if (!step || !prewarm.step || prewarm.step.targetBps !== step.targetBps) return false;
   return (prewarm.audioStreamIndex ?? null) === (audioStreamIndex ?? null);
 }
 
@@ -223,6 +237,37 @@ export function discardTakenPrewarm(prewarm: Prewarm | null | undefined): void {
 export function takePrewarm(itemId: string): Prewarm | null {
   const prewarm = current ?? takeCarriedPrewarm(itemId);
   if (!prewarm || prewarm.itemId !== itemId || (prewarm.state !== "ready" && prewarm.state !== "running")) return null;
+  // Une négociation ordinaire (§93) n'est reprise que par `takeOrdinaryPrewarm` : une négociation
+  // allégée ne l'emporte jamais, et la laisse en place.
+  if (prewarm.step === null) return null;
+  prewarm.state = "used";
+  current = null;
+  return prewarm;
+}
+
+/** L'écart toléré entre la position préchauffée d'un relais ordinaire et celle où il reprend. */
+const ORDINARY_SLACK_S = 1;
+
+/**
+ * Le préchauffage **ordinaire** de ce titre (`step: null`, le relais préparé avant une zone
+ * illisible, §93), pris par le lecteur serveur qui ouvre à `resumeAt` — s'il convient : même titre,
+ * même piste audio, préparé à cette position (à une seconde près). Ne convient pas : il est arrêté
+ * chez Jellyfin, et la négociation se fait comme avant. Rien d'autre n'est touché : un préchauffage
+ * allégé reste à `takePrewarm`.
+ */
+export function takeOrdinaryPrewarm(itemId: string, resumeAt: number | undefined, audioStreamIndex: number | undefined): Prewarm | null {
+  const prewarm = current;
+  if (!prewarm || prewarm.step !== null) return null;
+  if (prewarm.state !== "ready" && prewarm.state !== "running") return null;
+  const fits =
+    prewarm.itemId === itemId &&
+    resumeAt !== undefined &&
+    Math.abs(prewarm.startSeconds - resumeAt) <= ORDINARY_SLACK_S &&
+    (prewarm.audioStreamIndex ?? null) === (audioStreamIndex ?? null);
+  if (!fits) {
+    cancelPrewarm(prewarm);
+    return null;
+  }
   prewarm.state = "used";
   current = null;
   return prewarm;
@@ -237,7 +282,9 @@ export function takePrewarm(itemId: string): Prewarm | null {
 export function carryPrewarmAcrossReload(itemId: string, nowMs = Date.now()): boolean {
   const prewarm = current;
   if (!prewarm || prewarm.itemId !== itemId) return false;
-  if (prewarm.state !== "ready" || !prewarm.data) {
+  // Un relais ordinaire (§93) ne se prépare jamais sur WebKit en HLS natif : s'il en restait un, il
+  // ne passerait pas la page (la page suivante ne reprend qu'un palier allégé) — arrêté.
+  if (prewarm.state !== "ready" || !prewarm.data || prewarm.step === null) {
     cancelPrewarm(prewarm);
     return false;
   }
@@ -381,8 +428,7 @@ function now(): number {
 export function prewarmFields(prewarm: Prewarm | null): Record<string, string | number> {
   if (!prewarm) return {};
   return {
-    mbps: Math.round(prewarm.step.targetBps / 1e5) / 10,
-    tier: prewarm.step.tier,
+    ...(prewarm.step ? { mbps: Math.round(prewarm.step.targetBps / 1e5) / 10, tier: prewarm.step.tier } : { ordinary: 1 }),
     state: prewarm.state,
     ...(prewarm.variant?.codecs ? { codecs: prewarm.variant.codecs.slice(0, 40) } : {}),
     ...(prewarm.variant?.resolution ? { res: prewarm.variant.resolution } : {}),

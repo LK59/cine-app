@@ -4,6 +4,7 @@ import { MseSource, playabilityOf } from "@/lib/webcodecs/mseSource";
 import type { Remuxer, RemuxPlan, RemuxSegment } from "@/lib/webcodecs/remuxer";
 import { traceReset, traceText } from "@/lib/webcodecs/trace";
 import { mediaSegment, type MuxTrackInfo } from "@/lib/webcodecs/mp4Muxer";
+import { UnreadableZone } from "@/lib/webcodecs/unreadableZone";
 
 // MediaSource does not exist in jsdom, and the parts of it that matter here — when a buffer
 // signals it is done, when the system asks for data, what happens when it is full — are exactly
@@ -3228,5 +3229,152 @@ describe("les évictions du navigateur", () => {
     await flush();
     expect((mse as unknown as Facts).recoveryFacts.evictions).toBe(0);
     mse.destroy();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Une zone illisible dans le fichier (DECISIONS.md §93) : ni fin de flux, ni reprise, un seul relais.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Un remultiplexeur qui donne `good` segments de 2 s, puis lève la zone illisible que le lecteur
+ * de fichier strict lève — à chaque appel, comme le ferait le même endroit relu. Après un saut,
+ * repart de la cible : la zone reste à son instant, seuls les segments d'avant elle sortent.
+ */
+function zoneRemuxer(good: number, zone: { byte: number; seconds: number; safe: number; resumeAfter: number | null }) {
+  let produced = 0;
+  let from = 0;
+  const seeks: number[] = [];
+  let calls = 0;
+  const remuxer = {
+    seeks,
+    get calls() {
+      return calls;
+    },
+    seekable: true,
+    plan: () => PLAN,
+    keyframeAtOrBefore: (s: number) => Math.floor(s / 2) * 2,
+    keyframeAfter: (s: number) => Math.floor(s / 2) * 2 + 2,
+    resumeAfterByte: () => zone.resumeAfter,
+    diagnostics: () => ({ presentationDelaySeconds: 0, clampedSamples: 0 }),
+    seekTo: (s: number) => {
+      seeks.push(s);
+      from = s;
+      produced = 0;
+    },
+    prepareSeek: () => {},
+    nextSegment: async (): Promise<RemuxSegment | null> => {
+      calls += 1;
+      const end = from + (produced + 1) * 2;
+      // Au-delà de la zone (un saut par-dessus) : du film ordinaire.
+      if (from < zone.seconds && (produced >= good || end > zone.seconds)) throw new UnreadableZone(zone.byte, zone.seconds, zone.safe);
+      produced += 1;
+      return { video: [new Uint8Array([30 + produced])], audio: new Uint8Array([40 + produced]), subtitles: [], endSeconds: end };
+    },
+  };
+  return remuxer as unknown as Remuxer & { seeks: number[]; calls: number };
+}
+
+describe("MseSource — zone illisible (§93)", () => {
+  const ZONE = { byte: 169510505, seconds: 12.4, safe: 11, resumeAfter: 20 };
+
+  it("garde ce qui est là, ne déclare pas la fin, ne relit pas, et prévient l'hôte une fois", async () => {
+    const video = fakeVideo();
+    const onError = vi.fn();
+    const onUnreadableZone = vi.fn();
+    const remuxer = zoneRemuxer(5, ZONE);
+    await MseSource.attach(video, remuxer, PLAN, { onError, onUnreadableZone });
+    await until(() => onUnreadableZone.mock.calls.length > 0, "zone annoncée");
+    const callsAtZone = remuxer.calls;
+    await new Promise((r) => setTimeout(r, 400));
+
+    expect(onUnreadableZone).toHaveBeenCalledTimes(1);
+    const event = onUnreadableZone.mock.calls[0][0];
+    expect(event.kind).toBe("held");
+    expect(event.zone.message).toBe("zone illisible dans le fichier vers 12,4 s (octet 169510505)");
+    // La fin de ce qui est sûr (11 s, moins la marge) — avant la fin du tampon (10 s, moins la marge).
+    expect(event.zone.switchAt).toBeCloseTo(9.5, 5);
+    expect(event.zone.resumeAfter).toBe(20);
+    // Rien d'autre n'est demandé au remultiplexeur : relire relirait les mêmes zéros.
+    expect(remuxer.calls).toBe(callsAtZone);
+    expect(remuxer.seeks).toEqual([]);
+    expect(onError).not.toHaveBeenCalled();
+    expect(FakeSource.instances[0].endedTimes).toBe(0);
+    expect(traceText()).not.toContain("fin du fichier");
+    expect(traceText()).toContain("zone illisible dans le fichier vers 12,4 s");
+  });
+
+  it("passe la main une seule fois quand la tête arrive au relais — sans reprise ni reconstruction", async () => {
+    const video = fakeVideo();
+    const onError = vi.fn();
+    const onUnreadableZone = vi.fn();
+    const remuxer = zoneRemuxer(5, ZONE);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError, onUnreadableZone });
+    await until(() => onUnreadableZone.mock.calls.length > 0, "zone annoncée");
+    (video as unknown as { currentTime: number }).currentTime = 9.6;
+    await until(() => onError.mock.calls.length > 0, "relais");
+    // Le chien de garde continue de tourner : il ne doit ni reprendre ni relayer une seconde fois.
+    await new Promise((r) => setTimeout(r, 800));
+    expect(onError).toHaveBeenCalledTimes(1);
+    const [message, kind, facts] = onError.mock.calls[0];
+    expect(message).toBe("zone illisible dans le fichier vers 12,4 s (octet 169510505)");
+    expect(kind).toBe("playback");
+    expect(facts).toMatchObject({ unreadableZone: true, zoneByte: 169510505, zoneSeconds: 12.4, resumeAt: 9.5, resumeAfter: 20 });
+    expect(remuxer.seeks).toEqual([]);
+    // Ni « perdue » (l'hôte reconstruirait au même endroit), ni fin de flux.
+    expect(mse.lost).toBe(false);
+    expect(FakeSource.instances[0].endedTimes).toBe(0);
+  });
+
+  it("un saut dans la zone passe la main tout de suite, là où il visait, sans lire", async () => {
+    const video = fakeVideo();
+    const onError = vi.fn();
+    const remuxer = zoneRemuxer(5, ZONE);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError, onUnreadableZone: () => {} });
+    await until(() => traceText().includes("zone illisible dans le fichier"), "zone atteinte");
+    await mse.seek(14);
+    await until(() => onError.mock.calls.length > 0, "relais");
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][2]).toMatchObject({ unreadableZone: true, resumeAt: 14 });
+    expect(remuxer.seeks).toEqual([]);
+  });
+
+  it("un saut au-delà de la zone la quitte : l'hôte est prévenu, la lecture native continue", async () => {
+    const video = fakeVideo();
+    const onError = vi.fn();
+    const onUnreadableZone = vi.fn();
+    const remuxer = zoneRemuxer(5, ZONE);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError, onUnreadableZone });
+    await until(() => onUnreadableZone.mock.calls.length > 0, "zone annoncée");
+    await mse.seek(30);
+    await until(() => remuxer.seeks.length > 0, "saut servi");
+    await until(() => remuxer.calls > 8, "lecture reprise après la zone");
+    expect(onUnreadableZone.mock.calls[1][0]).toMatchObject({ kind: "left", target: 30 });
+    expect(remuxer.seeks[0]).toBeCloseTo(30, 5);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("un saut en arrière la quitte, et la lecture la retrouve en y revenant", async () => {
+    const video = fakeVideo();
+    const onUnreadableZone = vi.fn();
+    const onError = vi.fn();
+    const remuxer = zoneRemuxer(5, ZONE);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError, onUnreadableZone });
+    await until(() => onUnreadableZone.mock.calls.length > 0, "zone annoncée");
+    (video as unknown as { currentTime: number }).currentTime = 6;
+    await mse.seek(2);
+    await until(() => onUnreadableZone.mock.calls.length >= 3, "zone retrouvée");
+    expect(onUnreadableZone.mock.calls.map((c) => c[0].kind)).toEqual(["held", "left", "held"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("une ouverture qui tombe dans la zone passe la main sur-le-champ, à sa position", async () => {
+    const video = fakeVideo();
+    const onError = vi.fn();
+    await MseSource.attach(video, zoneRemuxer(0, { ...ZONE, seconds: 0.5, safe: 0 }), PLAN, { onError, onUnreadableZone: () => {} });
+    await until(() => onError.mock.calls.length > 0, "relais");
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][2]).toMatchObject({ unreadableZone: true, resumeAt: 0 });
+    expect(FakeSource.instances[0].endedTimes).toBe(0);
   });
 });

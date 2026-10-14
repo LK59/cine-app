@@ -803,3 +803,59 @@ describe("les messages brefs de la version allégée et les écrans qui prennent
     expect(document.querySelector("[data-lighter-switch-notice]")).toBeNull();
   });
 });
+
+// Le relais préparé avant une zone illisible (DECISIONS.md §93) : la même mécanique de préchauffage,
+// en négociation ordinaire — reprise telle quelle par le lecteur serveur quand elle convient.
+describe("le relais d'une zone illisible (§93)", () => {
+  const negotiations = () => startBodies.filter((b) => b.prewarm !== true);
+  const prewarmBodies = () => startBodies.filter((b) => b.prewarm === true);
+  const starts = () => reported.filter((r) => r.kind === "start");
+
+  async function prewarmed(startSeconds: number) {
+    const { startPrewarm } = await import("@/lib/lighterPrewarm");
+    const prewarm = startPrewarm({ itemId: "film", step: null, startSeconds, maxBitrate: 8_000_000 });
+    for (let i = 0; i < 20 && prewarm.state === "running"; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(prewarm.state).toBe("ready");
+    return prewarm;
+  }
+
+  it("le lecteur serveur reprend le préchauffage ordinaire : aucune négociation de plus, hls.js part de sa position", async () => {
+    await prewarmed(600);
+    expect(prewarmBodies()[0]).toMatchObject({ itemId: "film", maxBitrate: 8_000_000, prewarm: true, startTicks: 600 * 10_000_000 });
+    expect(prewarmBodies()[0].lighter).toBeUndefined();
+    stableTakeover = { resumeAt: 600, switchedAt: Date.now(), owner: playback.session };
+    await mounted();
+    expect(negotiations()).toHaveLength(0);
+    expect(starts()[0].fields.prewarm).toMatchObject({ used: true, ordinary: 1 });
+    expect((fake.config as Record<string, unknown>).startPosition).toBe(600);
+  });
+
+  it("préparé ailleurs (un saut dans la zone) : arrêté chez Jellyfin, la négociation se fait comme avant", async () => {
+    await prewarmed(300);
+    stableTakeover = { resumeAt: 600, switchedAt: Date.now(), owner: playback.session };
+    await mounted();
+    expect(negotiations()).toHaveLength(1);
+    expect(negotiations()[0]).toMatchObject({ startTicks: 600 * 10_000_000 });
+    const stops = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/jellyfin/playback/stop");
+    expect(stops.map(([, init]) => JSON.parse(String((init as RequestInit).body)))).toEqual([expect.objectContaining({ prewarm: true, playSessionId: "seance-jf" })]);
+    expect(starts()[0].fields.prewarm).toBeUndefined();
+  });
+
+  it("Safari en HLS natif ne le reprend jamais : arrêté, négociation ordinaire", async () => {
+    await prewarmed(600);
+    nativeHls = true;
+    stableTakeover = { resumeAt: 600, switchedAt: Date.now(), owner: playback.session };
+    render(<PlayerHost />);
+    for (let i = 0; i < 50 && negotiations().length === 0; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(negotiations()).toHaveLength(1);
+  });
+
+  it("une bascule allégée ne prend jamais un préchauffage ordinaire (et inversement)", async () => {
+    const { takePrewarm, takeOrdinaryPrewarm, startPrewarm } = await import("@/lib/lighterPrewarm");
+    await prewarmed(600);
+    expect(takePrewarm("film")).toBeNull();
+    const lighter = startPrewarm({ itemId: "film", step: { targetBps: 1_500_000, tier: 1 }, startSeconds: 600 });
+    expect(takeOrdinaryPrewarm("film", 600, undefined)).toBeNull();
+    expect(takePrewarm("film")).toBe(lighter);
+  });
+});

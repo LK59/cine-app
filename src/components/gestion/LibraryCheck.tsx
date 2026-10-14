@@ -10,6 +10,7 @@ import { useToast } from "@/components/Toast";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, LoadingState } from "@/components/StateViews";
 import { Panel } from "@/components/activity/parts";
+import { IntegrityPanel } from "@/components/gestion/IntegrityPanel";
 import {
   CHECK_CATEGORIES,
   type CheckCategory,
@@ -363,6 +364,9 @@ export function LibraryCheck() {
               </p>
             )}
           </div>
+
+          {/* L'intégrité des fichiers (§93) : une tâche de fond à part, qui relit les fichiers eux-mêmes. */}
+          <IntegrityPanel />
 
           {data.trusted.length > 0 && (
             <Panel title={t("libraryCheck.trust.listTitle")} icon={Tv}>

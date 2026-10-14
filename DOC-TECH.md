@@ -1128,6 +1128,33 @@ reads and two verbs.
   exists to stop: past three minutes without incident the counter resets. Otherwise a two-hour film
   exhausts its budget by accident and yields to the stable player mid-session.
 
+### Unreadable stretches in a file (2026-10-14)
+
+A damaged release can carry blocks of zeros in its clusters. The demuxer used to stay silent: an
+unreadable header inside a cluster skipped to the next cluster (the half-zeroed picture before it still
+reached the browser), and an overwritten *cluster* header ended reading as if the file were over —
+`endOfStream`, no error, no fallback, a frozen picture. The server player's ffmpeg crosses such a
+stretch.
+
+- **Detection is in the parser**, on the remuxer's main reader only (`SampleReader` option
+  `unreadable: "throw"`): an element header whose first id or size byte has no marker bit (0x00), read
+  with a complete window, or a whole block whose track number is in that state — where the file says
+  film remains (a declared-size cluster; at cluster level, a cue point at or beyond; without cues, a
+  declared-size segment). Short reads, children overrunning their parent, trailing bytes after the last
+  cluster and zeros inside a picture's payload are not zones. Every other reader is unchanged.
+- **Named refusal**: `UnreadableZone`, message « zone illisible dans le fichier vers 234,9 s (octet
+  169510505) ». `MseSource` never retries it and never declares the end: it stops reading, plays what it
+  holds, tells the host (`onUnreadableZone`), and hands over once the playhead reaches the end of what is
+  safe (`onError(…, "playback", { unreadableZone })`, never `lost`). A seek into the zone hands over at
+  once; a seek elsewhere leaves it.
+- **Prepared handover**: meanwhile the server player is prewarmed at that position with the slow-link
+  prewarm (`startPrewarm`, `step: null` — the ordinary negotiation) and takes it over
+  (`takeOrdinaryPrewarm`), so the switch costs no negotiation and no ffmpeg start. On WebKit with native
+  HLS the handover is immediate instead. `switchGapMs` on the server player's `stop` measures the gap.
+- **File integrity** (library check): a background pass reads every library Matroska with the same
+  reader and lists the damaged files, polite with the disks (one sequential read at a time, paused during
+  playback, never alongside the quote indexing). See DECISIONS.md §93.
+
 ---
 
 ## Audio

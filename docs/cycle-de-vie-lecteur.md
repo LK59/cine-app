@@ -319,6 +319,8 @@ l'observe par ses événements.
 |---|---|---|
 | `onError(msg, "network")` | remplissage (réseau non gardé), chaîne des sauts | écran « connexion perdue » |
 | `onError(msg, "playback")` | remplissage après 3 échecs ou échelle épuisée, `handOver` | avec `lost` : reconstruction ; sinon bascule |
+| `onUnreadableZone(événement)` | remplissage qui lit une zone illisible (`held`), saut qui la quitte (`left`) | préparer le relais (préchauffage) ou l'annuler ; WebKit HLS natif : relais immédiat (§93) |
+| `onError(motif, "playback", { unreadableZone })` | tête arrivée au relais, saut dans la zone | relais au lecteur serveur à `resumeAt`, **avant** toute autre lecture de l'erreur — ni reconstruction, ni reprise (§93) |
 | `onWarning` | saut ou piste sans index | message passager |
 | `onStarting(t \| null)` | le garde (lecture demandée, première image, pause, destruction) | roue de reprise |
 | `onStall(faits)` | blocage de 5 s, tête partie ; 60 s entre deux | ligne `stall` |

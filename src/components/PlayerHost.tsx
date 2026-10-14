@@ -48,7 +48,7 @@ import {
   playbackLinkSlow,
   type LighterStep,
 } from "@/lib/slowLinkPolicy";
-import { cancelPrewarm, carryPrewarmAcrossReload, discardTakenPrewarm, prewarmFields, prewarmFits, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { cancelPrewarm, carryPrewarmAcrossReload, discardTakenPrewarm, prewarmFields, prewarmFits, takeOrdinaryPrewarm, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
 import { directReloadIntent, reloadLighterOf, reloadPage, shouldReloadDirect, type PlayerReloadIntent } from "@/lib/serverReload";
 import { SlowLinkRunner, type SeekSignal, type SlowLinkHost } from "@/lib/slowLinkRunner";
 import { forgetLighterCarry, readPlaybackQuality, rememberLighter, usePlaybackQuality } from "@/lib/playbackQuality";
@@ -1412,10 +1412,18 @@ function ActivePlayer({
       // Pris, il n'appartient plus qu'à cette négociation : écarté (autre palier, autre piste audio —
       // `prewarmFits` —, échec, négociation remplacée), il est refermé par `discardTakenPrewarm`.
       // `cancelPrewarm` ne touche pas un préchauffage pris : la séance restait ouverte chez Jellyfin.
-      const warmedCandidate = cap.step ? takePrewarm(itemId) : null;
+      //
+      // Sans palier, le relais préparé avant une zone illisible (§93) : la négociation ordinaire que
+      // le lecteur natif a faite pour la position du relais, reprise de même — si elle convient (même
+      // position, même piste : `takeOrdinaryPrewarm`), et seulement pour la négociation qu'elle
+      // remplace : hls.js, sans exclusion de son ni diffusion. Sinon elle est arrêtée chez Jellyfin.
+      const ordinaryUsable = !castSession && !bench && !nativeHls && disableAudioCodecs.length === 0 && !opts?.forceAudioTranscode;
+      const warmedCandidate = cap.step
+        ? takePrewarm(itemId)
+        : takeOrdinaryPrewarm(itemId, ordinaryUsable ? opts?.resumeAt : undefined, opts?.audioStreamIndex);
       let warmed: Prewarm | null = null;
       if (warmedCandidate) {
-        if (prewarmFits(warmedCandidate, cap.step, opts?.audioStreamIndex) && (await warmedCandidate.ready) && warmedCandidate.data) warmed = warmedCandidate;
+        if ((cap.step ? prewarmFits(warmedCandidate, cap.step, opts?.audioStreamIndex) : true) && (await warmedCandidate.ready) && warmedCandidate.data) warmed = warmedCandidate;
         else discardTakenPrewarm(warmedCandidate);
         if (generation !== playbackGeneration.current) {
           if (warmed) discardTakenPrewarm(warmed);

@@ -4859,3 +4859,156 @@ qu'avec le ménage ordinaire de `kv_cache` (30 jours).
 - *Deux sous-titres, lecteur serveur* (§87) : l'état n'est reposé que si un texte change.
 
 **Décidé le 14/10/2026** (Louis).
+
+## 93. Une zone illisible dans un fichier : nommée au parsing, relayée au serveur sans reprise, cherchée d'avance
+
+**Pourquoi.** « Le Grinch » (2018), le 14/10/2026 : une release abîmée — des blocs de zéros de 16 Kio
+au milieu des grappes. Le lecteur Matroska s'y taisait. Un en-tête illisible au milieu d'une grappe
+(`readElementId`/`readVarSize` → `null`) arrêtait la grappe et la lecture sautait à la suivante, l'image
+à moitié nulle partant quand même au navigateur (« Media failed to decode ») ; un en-tête de grappe
+écrasé finissait la lecture : `readElementAt` → `null`, `finished`, « le remultiplexeur ne produit plus
+de segment (fin du fichier) », `endOfStream` — aucune exception, donc aucun repli, et le saut de
+`sourceLost` jamais déclenché. Mathis est resté 198 s sur une image figée ; ffmpeg (le lecteur serveur)
+franchit la même zone.
+
+**La détection** (`ebml.ts` `readElementHeader` → `UNREADABLE`, `SampleReader` option
+`unreadable: "throw"`, `UnreadableZone`). Une zone, c'est un en-tête d'élément dont le premier octet de
+l'identifiant ou de la taille n'a aucun bit de marque (0x00 — la seule valeur sans), **lu avec une
+fenêtre complète** (tous les octets demandés, ou tous ceux jusqu'à la fin du fichier), ou un bloc lu
+entier dont le numéro de piste est dans ce cas — **là où le fichier dit qu'il reste du film** : dans une
+grappe de taille déclarée, ou, au niveau des grappes (et dans une grappe de taille inconnue), avant un
+point d'index (sans index : dans un segment de taille déclarée). Écartés exprès : une lecture courte
+(déjà un échec réseau depuis le 13/10, `byteSource`), un enfant qui dépasse son parent (muxers
+fautifs), des octets en trop après la dernière grappe d'un fichier sain, des zéros dans le contenu d'une
+image sans en-tête touché (rien ne les distingue d'une image — l'échelle des reprises les gère comme
+avant), la durée annoncée. La détection est au parsing : des octets venus du réseau, de la réserve en
+mémoire ou des morceaux gardés sur l'appareil sont jugés pareil.
+
+**Seul le lecteur principal du remultiplexeur est strict.** La sonde du son (`describeAudio`),
+`completeParameterSets`, les transcodeurs audio (TrueHD, AAC), la reprise instantanée
+(`resumeCache/record`) et les répliques (`mkvText`) gardent l'ancien comportement, à l'octet : c'est
+le lecteur principal qui atteint une zone le premier (le son ré-encodé est lu derrière l'image), et
+un transcodeur qui la verrait à son tour n'a rien à décider.
+
+**Le motif**, écrit une fois (`unreadableZoneMessage`) : « zone illisible dans le fichier vers 234,9 s
+(octet 169510505) » — une décimale à virgule, l'octet entier. C'est ce que l'Activité groupe.
+
+**Le relais** (`MseSource.holdAtZone`, `ZoneHandover`, `ExperimentalPlayerHost.handZone`). L'erreur ne
+passe **ni** par les reprises d'envoi raté (elle serait relue trois fois), **ni** par la reconstruction
+(`lost` reste faux ; une zone arrivée sur une source fermée entre-temps relaie quand même), ni par
+« dialogues améliorés » ou le retour de piste. La lecture en avance la rencontre ~30 s avant la tête :
+la source s'arrête de lire (rien de plus n'est demandé au remultiplexeur, aucune fin de flux), joue ce
+qu'elle a, et prévient l'hôte (`onUnreadableZone`). Le relais part quand la tête atteint `switchAt` —
+la fin de ce qui est sûr moins 0,5 s : le début de la grappe dont la fin a pu être touchée (celle de
+l'en-tête illisible, ou celle d'avant pour un en-tête de grappe), borné par la fin du tampon, jamais
+avant la tête — par `onError(motif, "playback", { unreadableZone, zoneByte, zoneSeconds, resumeAt })` ;
+le lecteur serveur reprend à `resumeAt`. Rien à jouer avant (une ouverture ou une reprise tombée dans la
+zone, un saut dedans) : tout de suite. Un saut **dans** la zone (entre `switchAt` et le premier point
+d'index qui la suit, `Remuxer.resumeAfterByte`) relaie tout de suite, à la cible ; tout autre saut la
+quitte (au-delà : la lecture native continue ; en arrière : la lecture la retrouvera).
+
+**Préparé, pas immédiat (Louis, 14/10/2026).** Pendant que la tête finit ce qui est sûr, le lecteur
+serveur est **préchauffé** au point du relais par la mécanique de la connexion lente (§78,
+`lighterPrewarm.ts` : `startPrewarm` avec `step: null` — la négociation **ordinaire**, au plafond
+`pickMaxBitrate`, `prewarm: true` donc rien d'annoncé à Jellyfin, maître, variante et le segment de la
+position) ; le lecteur serveur le reprend tel quel (`takeOrdinaryPrewarm` : même titre, même piste, même
+position à 1 s près, hls.js, aucune exclusion de son ; sinon arrêté chez Jellyfin et renégocié comme
+avant) et hls.js part de son segment (`startPosition`). `takePrewarm` (la version allégée) ne prend
+jamais un préchauffage ordinaire, ni l'inverse. Abandonné — arrêté chez Jellyfin, rien ne fuit — à la
+pause (refait à la reprise), à la fermeture, à un saut au-delà de la zone ou plus de 90 s avant ; gardé
+quand une reconstruction retrouve la même zone. L'interruption est mesurée comme celle d'une bascule
+allégée : `switchedAt` sur le relais, `switchGapMs` sur le bilan du lecteur serveur, `prewarm.used`
+(`ordinary: 1`) sur son `start`.
+
+**WebKit en HLS natif : le relais tout de suite**, à la tête, sans préchauffage (`mode: "immediate"`).
+Safari y relit son segment 0 puis saute (deux démarrages de ffmpeg, §78) : le préchauffage n'épargne que
+la négociation ; et une seconde séance HLS dans une page qui a servi le lecteur natif y a déjà échoué
+(code 4) quand elle était allégée, alors que le relais ordinaire dans la page y marche. Le plus sûr :
+relayer dès la détection, ce qui laisse au lecteur serveur les ~30 s d'avance pour démarrer avant la
+zone. Ligne `fallback` marquée `immediate: true`.
+
+**Sans lecteur serveur** (`PLAYER_SERVER_FALLBACK=false`) : rien de préparé ; à l'arrivée sur la zone,
+l'erreur propre (`error`, même motif) et l'écran « Ce fichier est abîmé vers 3:54 : il ne peut pas être
+lu au-delà sur cette installation » (`player.unreadableZone`, 4 langues). Banc d'essai : rien de
+préparé, le repli à l'arrivée. Une scène (§91) reste une scène à travers le relais (relais ordinaire).
+
+**Journal et Activité.** La ligne `fallback` (ou `error`) porte `reason` (le motif), `zoneByte`,
+`zoneSeconds`, `resumeAt`, `at`, `resumeAfter`, `prewarm` — aucune ligne de plus. `seances.ts` compte
+`fileDefects` ; le diagnostic « fichier ou appareil » rend `{ kind: "file", proven: true }` dès une
+seule séance (`fileProven` : « Une zone illisible a été lue dans le fichier lui-même »).
+
+**L'intégrité des fichiers** (Contrôle de la bibliothèque, `src/lib/integrity/`). Une tâche de fond qui
+relit les fichiers vidéo de `MOVIES_PATH` et `TV_PATH` — films et épisodes ; titre et lien « Remplacer
+dans Radarr/Sonarr » (page de gestion du titre, où la recherche de version remplace le fichier) par le
+dossier — avec le **même** lecteur et la **même** détection (`scanMatroska` : `SampleReader` strict,
+reprise au point d'index après chaque zone, une zone continue comptée une fois, 50 au plus).
+Matroska seulement : un MP4 est lu par son index d'échantillons, sans en-tête en chemin — des octets
+abîmés dans son `mdat` n'y ont pas d'équivalent sans tout décoder ; il est compté (« MP4 non
+vérifiés »), pas relu. Écartés : fichiers cachés (temporaires), `.part`/`.tmp`/`.fftemp`/`.!qB`…,
+modifiés il y a moins de 10 min (en cours d'écriture — relus à la passe suivante). Table
+`file_integrity` (chemin, taille, date, statut, zones) et `file_integrity_meta` (état de la passe) dans
+`cine.db` ; rien n'est écrit ailleurs, les fichiers sont ouverts en lecture. Ne relit que le nouveau, le
+modifié (taille ou date) ou ce qui était en erreur ; oublie ce qui a disparu. Première passe au bouton
+« Vérifier l'intégrité des fichiers » (progression, pause, reprise ; une pause demandée survit à un
+redémarrage, une passe manuelle interrompue reprend 3 min après le démarrage), puis chaque nuit
+(2 h – 6 h, heure du conteneur) pour les fichiers nouveaux, une fois par nuit, seulement après une
+première passe terminée.
+
+*Polie avec les disques* : une lecture à la fois, séquentielle, blocs de 8 Mio (24 Mio de mémoire au
+plus), boucle rendue toutes les 256 lectures ; avant chaque bloc, la garde des répliques
+(`mustWaitForPlayback` : séances Jellyfin, relais de flux, battement — le même mécanisme, reprise
+5 min après) ; débit plafonné (`MAX_BYTES_PER_MS`) et 5 ms de repos. **Jamais en même temps que
+l'indexation des répliques** : un verrou commun (`backgroundDiskReads.ts`, sur `globalThis`) — un
+propriétaire à la fois, l'autre servi avant une nouvelle prise du premier ; l'indexation le prend par
+film, la vérification par fichier, le rend pendant une attente de lecture et le cède après 20 s si
+l'indexation attend.
+
+**Mesuré le 14/10/2026.**
+- *Copies abîmées* (`zone-bench.spec.ts`, extrait de 6 min H.264 + AC-3 d'un film de la bibliothèque,
+  copié par mkvmerge hors de la bibliothèque) — avant / après :
+  A (zéros à cheval sur deux en-têtes de grappe) : « fin du fichier » à 117,3 s / zone vers 117,2 s ;
+  B (16 Kio au milieu d'une grappe) : jusqu'au bout avec un trou de 4,3 s / zone vers 118,2 s ;
+  C (un bloc de 16 Kio sur deux) : jusqu'au bout, trou de 8,8 s / zone vers 118,2 s, quatre zones
+  trouvées par la vérification ; D (un en-tête de grappe) : « fin du fichier » à 117,3 s / zone vers
+  117,3 s. L'extrait sain : 150 segments identiques avant et après.
+- *Aucune régression* (`zone-regress-bench.spec.ts`, HEAD contre la copie de travail, onze fichiers
+  sains lus en entier : *The Exorcist*, *Dirty Dancing*, *Martin Guerre* (FLAC), *Burn After Reading* et
+  *Weird Science* (DTS, H.264), *Dog 51* (TrueHD, DV + HDR10+), *French Twist* (MP4), *Ted Lasso*
+  S02E01 (RASL), *The Grinch* (2018, remplacé), *1917* (4K HDR10+), *Wingwomen* (DV)) : segments
+  d'initialisation, tous les segments du film, six sauts de quatre segments, et le flux brut de tous
+  les échantillons de toutes les pistes par un lecteur strict et un lecteur sans option — empreintes
+  identiques octet pour octet, 14,1 millions d'échantillons. `cout.spec.ts` sur *The Exorcist* :
+  mêmes lectures et mêmes octets à chaque étape, temps égaux au bruit près.
+- *Débit* (`integrity-bench.spec.ts`, en lecture seule) : lecture séquentielle seule 183 Mo/s ; relecture
+  complète 173–201 Mo/s, à peine moins — le calcul suit le disque. La bibliothèque : 8 420 fichiers
+  vidéo, 14,9 To, dont 8 405 Matroska. Au plafond de 60 Mo/s (un tiers du disque) : ~69 h de lecture
+  effective pour la première passe, soit quatre à cinq jours avec les pauses du soir ; une nuit suffit
+  ensuite aux fichiers nouveaux. L'analyse de l'en-tête et de l'index (`parseMatroska`, la même que
+  celle du lecteur) tient la boucle 60 à 100 ms une fois par fichier ; le reste de la relecture la rend
+  toutes les 64 lectures.
+
+**Porteurs.** `src/lib/webcodecs/unreadableZone.ts` (`UnreadableZone`, `unreadableZoneMessage`,
+`isUnreadableZone`, `isUnreadableZoneReason`, `zoneSecondsOf`), `ebml.ts` (`readElementHeader`,
+`UNREADABLE`, `forEachChild(…, onUnreadable)`), `sampleReader.ts` (`SampleReaderOptions`),
+`matroska.ts` (`segmentSized`), `mediaFile.ts` (`createSampleReader(…, options)`), `remuxer.ts` (lecteur
+principal strict, `resumeAfterByte`), `mseSource.ts` (`holdAtZone`, `checkZoneArrival`, `arriveAtZone`,
+`UnreadableZoneNotice`), `remuxPlayback.ts`, `src/lib/unreadableZoneHandover.ts` (`ZoneHandover`),
+`lighterPrewarm.ts` (`step: null`, `takeOrdinaryPrewarm`), `ExperimentalPlayerHost` (`handZone`,
+`zoneHandover`), `PlayerHost` (`ActivePlayer.startPlayback`), `activity/seances.ts`, `activity/diagnosis.ts`,
+`Diagnosis.tsx` ; `src/lib/integrity/` (`scan.ts`, `library.ts`, `store.ts`, `engine.ts`),
+`src/lib/backgroundDiskReads.ts`, `repliques/engine.ts` (le verrou), `/api/admin/library-check/integrity`,
+`IntegrityPanel.tsx` (dans `LibraryCheck`), `instrumentation.ts`.
+
+**Tests.** `unreadable-zone.test.ts` (sain inchangé — strict et sans option identiques sur cinq formes ;
+zéros à cheval sur un en-tête de grappe, en-tête de grappe seul, au milieu d'une grappe, numéro de piste
+d'un bloc, groupe de blocs, un bloc sur deux ; lecture courte ; octets en trop ; sans index ; motif),
+`webcodecs-mseSource.test.ts` (« zone illisible » : ni fin de flux ni relecture, un seul `onError` à la
+tête, saut dans la zone, au-delà, en arrière, ouverture dans la zone), `ExperimentalPlayerHost.test.tsx`
+(« §93 » : préchauffé puis passé, jamais reconstruit, pause, fermeture, sauts, WebKit immédiat, sans
+lecteur serveur, banc), `PlayerHost-connexion-lente.test.tsx` (« zone illisible » : repris tel quel,
+préparé ailleurs, Safari, allégé ≠ ordinaire), `scene-native.test.tsx`, `activity-zone-illisible.test.ts`,
+`integrity-check.test.ts`, `repliques-engine.test.ts` (le verrou), `library-check-ui.test.tsx`,
+`decisions-partagees.test.ts`. Bancs : `zone-bench.spec.ts` (copies abîmées d'un extrait réel),
+`zone-regress-bench.spec.ts` (empreintes avant/après), `integrity-bench.spec.ts` (débit).
+
+**Décidé le 14/10/2026** (Louis).

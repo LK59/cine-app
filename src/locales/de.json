@@ -735,6 +735,7 @@
       },
       "why": {
         "file": "Er ist bei jedem seiner {n} Zuschauer fehlgeschlagen: Es liegt an der Datei.",
+        "fileProven": "In der Datei selbst wurde ein unlesbarer Abschnitt gefunden: Es liegt an der Datei, unabhängig vom Gerät. Ersetzen.",
         "platform": "Er ist auf {device} bei {n} Personen fehlgeschlagen; die {clean} anderen haben ihn anderswo problemlos gesehen: dieser Gerätetyp.",
         "device": "Er ist nur bei {who} ({device}) fehlgeschlagen; die {clean} anderen haben ihn problemlos gesehen: dieses Gerät.",
         "everywhere": "Es hat auch anderswo Probleme: {p} % seiner anderen Sitzungen sind fehlgeschlagen.",
@@ -2154,6 +2155,7 @@
       "finishedRemoved": "Aus deiner Liste „Anschauen“ entfernt."
     },
     "unplayable": "Diese Datei kann in diesem Browser nicht abgespielt werden.",
+    "unreadableZone": "Diese Datei ist bei etwa {time} beschädigt und kann hier nicht weiter abgespielt werden.",
     "handingOver": "Wiedergabe wird vorbereitet…",
     "castPreparing": "Übertragung wird vorbereitet…",
     "castStop": "Übertragung beenden",
@@ -3259,6 +3261,39 @@
       "info": "Nur in Jellyfin: {only} · Doppelablagen: {links}",
       "never": "Noch nicht geprüft",
       "running": "Prüfung läuft…"
+    },
+    "integrity": {
+      "title": "Dateiintegrität",
+      "hint": "Liest jede Videodatei der Bibliothek (Filme und Episoden) mit dem Player des Kinos erneut und listet die, die einen unlesbaren Abschnitt enthalten. Immer nur ein Lesevorgang, pausiert, während jemand einen Film schaut, nie gleichzeitig mit der Zitat-Indexierung. Der erste Durchlauf ist lang; danach werden nur neue oder geänderte Dateien gelesen, jede Nacht.",
+      "start": "Dateiintegrität prüfen",
+      "resume": "Fortsetzen",
+      "pause": "Pausieren",
+      "phase": {
+        "idle": "Angehalten",
+        "planning": "Dateiliste wird erstellt …",
+        "running": "Prüfung läuft",
+        "waiting-playback": "Pausiert: Jemand schaut einen Film",
+        "waiting-disk": "Wartet: Die Zitat-Indexierung liest die Festplatten",
+        "paused": "Pausiert",
+        "outside-window": "Außerhalb des Nachtfensters",
+        "done": "Abgeschlossen"
+      },
+      "files": "Dateien",
+      "read": "Gelesen",
+      "eta": "Verbleibend",
+      "damagedCount": "Beschädigt",
+      "finished": "Letzter Durchlauf abgeschlossen am {when}.",
+      "counts": "{ok} intakt · {damaged} beschädigt · {unsupported} MP4 nicht geprüft · {error} unlesbar",
+      "nightly": "neue Dateien werden jede Nacht geprüft",
+      "none": "Keine beschädigte Datei.",
+      "never": "Noch nie geprüft.",
+      "zone": "bei etwa {time} (Byte {byte})",
+      "replaceRadarr": "In Radarr ersetzen",
+      "replaceSonarr": "In Sonarr ersetzen",
+      "truncated": "Mehr Abschnitte, als die Liste zeigt.",
+      "unreachableTail": "Das Dateiende konnte nicht gelesen werden (kein Indexpunkt nach dem Abschnitt).",
+      "unreadable": "Dateien, die nicht gelesen werden konnten ({n})",
+      "actionFailed": "Die Aktion ist fehlgeschlagen."
     }
   }
 }

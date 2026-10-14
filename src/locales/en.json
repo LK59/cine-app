@@ -735,6 +735,7 @@
       },
       "why": {
         "file": "It failed for every one of its {n} viewers: it's the file.",
+        "fileProven": "An unreadable stretch was found in the file itself: it is the file, whatever the device. Replace it.",
         "platform": "It failed on {device} for {n} people; the {clean} others watched it fine elsewhere: that device type.",
         "device": "It only failed for {who} ({device}); the {clean} others watched it fine: that device.",
         "everywhere": "It struggles elsewhere too: {p}% of its other sessions failed.",
@@ -2154,6 +2155,7 @@
       "finishedRemoved": "Removed from your “To watch” list."
     },
     "unplayable": "This file cannot be played in this browser.",
+    "unreadableZone": "This file is damaged around {time} and cannot be played past that point here.",
     "handingOver": "Getting playback ready…",
     "castPreparing": "Getting the cast ready…",
     "castStop": "Stop casting",
@@ -3259,6 +3261,39 @@
       "info": "Jellyfin only: {only} · double filings: {links}",
       "never": "Not analysed yet",
       "running": "Analysing…"
+    },
+    "integrity": {
+      "title": "File integrity",
+      "hint": "Reads every video file in the library (films and episodes) again with the cinema's own player, and lists those containing an unreadable stretch. One read at a time, paused while someone watches, never alongside the quote indexing. The first pass is long; after that, only new or changed files are read, every night.",
+      "start": "Check file integrity",
+      "resume": "Resume",
+      "pause": "Pause",
+      "phase": {
+        "idle": "Stopped",
+        "planning": "Listing the files…",
+        "running": "Checking",
+        "waiting-playback": "Paused: someone is watching",
+        "waiting-disk": "Waiting: the quote indexing is reading the disks",
+        "paused": "Paused",
+        "outside-window": "Outside the night window",
+        "done": "Finished"
+      },
+      "files": "Files",
+      "read": "Read",
+      "eta": "Time left",
+      "damagedCount": "Damaged",
+      "finished": "Last pass finished on {when}.",
+      "counts": "{ok} sound · {damaged} damaged · {unsupported} MP4 not checked · {error} unreadable",
+      "nightly": "new files are checked every night",
+      "none": "No damaged file.",
+      "never": "Never checked.",
+      "zone": "around {time} (byte {byte})",
+      "replaceRadarr": "Replace in Radarr",
+      "replaceSonarr": "Replace in Sonarr",
+      "truncated": "More stretches than the list shows.",
+      "unreachableTail": "The end of the file could not be read (no index point after the stretch).",
+      "unreadable": "Files that could not be read ({n})",
+      "actionFailed": "The action did not go through."
     }
   }
 }

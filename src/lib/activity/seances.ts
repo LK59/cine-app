@@ -10,6 +10,7 @@ import { deviceLabel } from "@/lib/deviceLabel";
 import type { LogRecord } from "@/lib/activity/logReader";
 import { isServerFailureRestart, isServerRestart, serverStartWhyLabel } from "@/lib/serverPlayerLog";
 import { SLOW_LINK_REASON, isSlowLinkReason } from "@/lib/slowLink";
+import { isUnreadableZoneReason } from "@/lib/webcodecs/unreadableZone";
 
 export interface Seance {
   id: string;
@@ -78,6 +79,14 @@ export interface Seance {
    * « fichier ou appareil ». Absent d'une séance gardée avant ce champ (alertes, signalements).
    */
   slowLinks?: number;
+  /**
+   * Les zones illisibles trouvées dans le fichier (DECISIONS.md §93) — repli ou erreur dont le motif
+   * est celui d'une zone (`isUnreadableZoneReason`). Une preuve contre le fichier, et contre lui
+   * seul : le parsing a lu des octets qui ne sont pas du Matroska, quel que soit l'appareil. Le
+   * diagnostic « fichier ou appareil » le dit dès une seule séance (`verdictOf`). Absent d'une
+   * séance gardée avant ce champ.
+   */
+  fileDefects?: number;
   /**
    * Les passages au lecteur serveur pour diffuser — « diffusion demandée ». Comptés à part : ils
    * faisaient accuser un appareil dans le diagnostic « fichier ou appareil », sept envois vers la
@@ -259,6 +268,7 @@ function absorb(s: Seance, r: LogRecord): void {
         noteSlowLink(s, r);
         break;
       }
+      if (isUnreadableZoneReason(reason)) s.fileDefects = (s.fileDefects ?? 0) + 1;
       s.fallbacks += 1;
       s.incidents.push({ kind: "fallback", t: r._t, reason });
       break;
@@ -271,6 +281,7 @@ function absorb(s: Seance, r: LogRecord): void {
         noteSlowLink(s, r);
         break;
       }
+      if (isUnreadableZoneReason(reason)) s.fileDefects = (s.fileDefects ?? 0) + 1;
       s.errors += 1;
       s.incidents.push({ kind: "error", t: r._t, reason });
       break;

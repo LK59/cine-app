@@ -25,6 +25,12 @@ vi.mock("@/lib/useViewportResizing", () => ({ useViewportResizing: () => false }
 let recentSteps: string[] = [];
 vi.mock("@/lib/webcodecs/trace", () => ({ trace: vi.fn(), traceKeepAcrossReset: vi.fn(), traceRecent: () => recentSteps }));
 vi.mock("@/lib/webcodecs/pathSelector", () => ({ NATIVE_PATH: "raison du choix" }));
+/** WebKit en HLS natif ? Faux par défaut (jsdom) — les tests de la zone illisible (§93) le changent. */
+let nativeHlsHere = false;
+vi.mock("@/lib/webkitEngine", async (original) => ({
+  ...(await original<typeof import("@/lib/webkitEngine")>()),
+  playsHlsNatively: () => nativeHlsHere,
+}));
 /**
  * Le préchauffage de la version allégée (§78), simulé : chaque lancement est noté, et le test dit quand
  * il est prêt (`settle`). Le module réel a ses propres tests (`lighterPrewarm.test.ts`).
@@ -270,7 +276,8 @@ function info(over: Info = {}): Info {
 // --- the pipelines ----------------------------------------------------------------------------
 
 type Callbacks = {
-  onError: (message: string, kind?: "network" | "playback") => void;
+  onError: (message: string, kind?: "network" | "playback", facts?: Record<string, unknown>) => void;
+  onUnreadableZone?: (event: unknown) => void;
   onWarning: (warning: { code: string; detail?: string }) => void;
   onStarting: (at: number | null) => void;
   onStall?: (facts: Record<string, unknown>) => void;
@@ -391,6 +398,8 @@ beforeEach(() => {
   window.localStorage.removeItem("cine:last-watched");
   noteWatching("item-1");
   recentSteps = [];
+  nativeHlsHere = false;
+  prewarms.length = 0;
   serverFallback = undefined;
   probes = [];
   announcedSessions.length = 0;
@@ -3536,5 +3545,147 @@ describe("pendant la lecture : les saccades (§78)", () => {
     await act(async () => void vi.advanceTimersByTime(20_000));
     expect(prewarms).toHaveLength(0);
     expect(onFallback).not.toHaveBeenCalled();
+  });
+});
+
+// ----------------------------------------------------------------------------------------------
+// Une zone illisible dans le fichier (DECISIONS.md §93) : le relais préparé, puis passé à la tête.
+// ----------------------------------------------------------------------------------------------
+
+describe("zone illisible (§93)", () => {
+  const MESSAGE = "zone illisible dans le fichier vers 234,9 s (octet 169510505)";
+  const ZONE = { message: MESSAGE, byteOffset: 169510505, zoneSeconds: 234.9, switchAt: 228.5, resumeAfter: 240 };
+  const held = { kind: "held", zone: ZONE };
+  const arrival = { unreadableZone: true, zoneByte: 169510505, zoneSeconds: 234.9, resumeAt: 228.5, at: 228.6, resumeAfter: 240 };
+  const logLines = () =>
+    (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> });
+
+  /** Le lecteur, prêt, la tête à 200 s et l'élément en lecture. */
+  async function playing() {
+    swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
+    const view = mount();
+    await untilSettled(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    const element = videoElement(200);
+    Object.defineProperty(element, "paused", { value: false, writable: true, configurable: true });
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+    return { view, element };
+  }
+
+  beforeEach(() => {
+    serverFallback = true;
+  });
+
+  it("préchauffe le lecteur serveur au point du relais, en négociation ordinaire, puis le lui passe à la tête", async () => {
+    await playing();
+    act(() => probes[0].onUnreadableZone!(held));
+    expect(prewarms).toHaveLength(1);
+    expect(prewarms[0].options).toMatchObject({ itemId: "item-1", step: null, startSeconds: 228.5, audioStreamIndex: 1 });
+    // Rien n'est passé tant que la tête n'est pas au relais : la lecture native continue.
+    expect(onFallback).not.toHaveBeenCalled();
+
+    act(() => probes[0].onError(MESSAGE, "playback", arrival));
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(onFallback.mock.calls[0][0]).toBe(MESSAGE);
+    expect(onFallback.mock.calls[0][1]).toMatchObject({ resumeAt: 228.5, audioStreamIndex: 1 });
+    expect(typeof onFallback.mock.calls[0][1].switchedAt).toBe("number");
+    // Le préchauffage passe au lecteur serveur : ni arrêté au relais, ni à la fermeture qui suit.
+    cleanup();
+    expect(cancelPrewarmSpy).not.toHaveBeenCalled();
+    const line = logLines().find((l) => l.kind === "fallback");
+    expect(line?.fields).toMatchObject({ reason: MESSAGE, zoneByte: 169510505, zoneSeconds: 234.9, resumeAt: 228.5, at: 228.6, prewarm: { mbps: 1.5 } });
+    // Aucune reconstruction : la même zone attendrait.
+    expect(probes).toHaveLength(1);
+  });
+
+  it("une zone ne passe jamais par la reconstruction, même source fermée entre-temps", async () => {
+    await playing();
+    remux.lost = true;
+    act(() => probes[0].onError(MESSAGE, "playback", arrival));
+    await settle();
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(probes).toHaveLength(1);
+    expect(logLines().some((l) => l.kind === "rebuild")).toBe(false);
+  });
+
+  it("pause avant la zone : préparation arrêtée ; reprise : préparée de nouveau", async () => {
+    const { element } = await playing();
+    act(() => probes[0].onUnreadableZone!(held));
+    expect(prewarms).toHaveLength(1);
+    (element as unknown as { paused: boolean }).paused = true;
+    act(() => void element.dispatchEvent(new Event("pause")));
+    expect(cancelPrewarmSpy).toHaveBeenCalledWith(prewarms[0].prewarm);
+    (element as unknown as { paused: boolean }).paused = false;
+    act(() => void element.dispatchEvent(new Event("play")));
+    expect(prewarms).toHaveLength(2);
+    expect(prewarms[1].options.startSeconds).toBe(228.5);
+  });
+
+  it("fermé avant la zone : la préparation est arrêtée chez Jellyfin, rien ne fuit", async () => {
+    await playing();
+    act(() => probes[0].onUnreadableZone!(held));
+    cleanup();
+    expect(cancelPrewarmSpy).toHaveBeenCalledWith(prewarms[0].prewarm);
+    expect(onFallback).not.toHaveBeenCalled();
+  });
+
+  it("un saut au-delà de la zone annule la préparation ; un saut un peu avant la garde", async () => {
+    await playing();
+    act(() => probes[0].onUnreadableZone!(held));
+    act(() => probes[0].onUnreadableZone!({ kind: "left", zone: ZONE, target: 200 }));
+    expect(cancelPrewarmSpy).not.toHaveBeenCalled();
+    act(() => probes[0].onUnreadableZone!({ kind: "left", zone: ZONE, target: 300 }));
+    expect(cancelPrewarmSpy).toHaveBeenCalledWith(prewarms[0].prewarm);
+    expect(onFallback).not.toHaveBeenCalled();
+  });
+
+  it("la même zone retrouvée (une reconstruction) ne préchauffe pas deux fois", async () => {
+    await playing();
+    act(() => probes[0].onUnreadableZone!(held));
+    act(() => probes[0].onUnreadableZone!(held));
+    expect(prewarms).toHaveLength(1);
+  });
+
+  it("un saut dans la zone : le préchauffage d'ailleurs est arrêté, le relais part de la cible", async () => {
+    await playing();
+    act(() => probes[0].onUnreadableZone!(held));
+    act(() => probes[0].onError(MESSAGE, "playback", { ...arrival, resumeAt: 236 }));
+    expect(cancelPrewarmSpy).toHaveBeenCalledWith(prewarms[0].prewarm);
+    expect(onFallback.mock.calls[0][1]).toMatchObject({ resumeAt: 236 });
+  });
+
+  it("WebKit en HLS natif : le relais tout de suite, à la tête, sans préchauffage", async () => {
+    nativeHlsHere = true;
+    await playing();
+    act(() => probes[0].onUnreadableZone!(held));
+    expect(prewarms).toHaveLength(0);
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(onFallback.mock.calls[0][1]).toMatchObject({ resumeAt: 200 });
+    expect(logLines().find((l) => l.kind === "fallback")?.fields).toMatchObject({ reason: MESSAGE, immediate: true });
+    // L'arrivée de la source, plus tard, ne relaie pas une seconde fois.
+    act(() => probes[0].onError(MESSAGE, "playback", arrival));
+    expect(onFallback).toHaveBeenCalledTimes(1);
+  });
+
+  it("sans lecteur serveur : rien de préparé, une erreur propre à l'arrivée sur la zone", async () => {
+    serverFallback = false;
+    await playing();
+    act(() => probes[0].onUnreadableZone!(held));
+    expect(prewarms).toHaveLength(0);
+    act(() => probes[0].onError(MESSAGE, "playback", arrival));
+    expect(onFallback).not.toHaveBeenCalled();
+    const line = logLines().find((l) => l.kind === "error");
+    expect(line?.fields).toMatchObject({ reason: MESSAGE, zoneByte: 169510505 });
+    // La phrase traduite, pas le motif technique (le double de `useT` rend la fin de la clé).
+    await untilSettled(() => expect(screen.getByText("unreadableZone")).toBeTruthy());
+  });
+
+  it("le banc d'essai ne préchauffe rien", async () => {
+    swr = { data: info(), error: undefined };
+    mount({ bench: true });
+    await untilSettled(() => expect(probes).toHaveLength(1));
+    act(() => probes[0].onUnreadableZone!(held));
+    expect(prewarms).toHaveLength(0);
   });
 });
