@@ -12,42 +12,42 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.129.0",
+    "@anthropic-ai/sdk": "0.134.0",
     "@mediabunny/ac3": "1.58.1",
     "@mediabunny/dts": "1.58.1",
     "@wasm-audio-decoders/flac": "0.2.11",
     "better-sqlite3": "13.0.3",
     "hls.js": "1.5.17",
-    "lucide-react": "1.24.0",
+    "lucide-react": "1.57.0",
     "mediabunny": "1.58.1",
-    "next": "16.3.6",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
-    "swr": "2.4.2",
+    "next": "16.4.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "swr": "2.5.1",
     "web-push": "3.6.7"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.2",
+    "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.4",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/better-sqlite3": "9.6.0",
     "@types/node": "24.13.3",
-    "@types/react": "19.2.17",
-    "@types/react-dom": "19.2.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@types/web-push": "3.6.4",
-    "@vitejs/plugin-react": "6.1.1",
-    "@vitest/coverage-v8": "5.0.1",
+    "@vitejs/plugin-react": "6.1.2",
+    "@vitest/coverage-v8": "5.0.4",
     "eslint": "9.39.1",
-    "eslint-config-next": "16.3.6",
-    "jsdom": "^30.0.1",
-    "postcss": "8.5.23",
-    "tailwindcss": "^4.3.2",
+    "eslint-config-next": "16.4.1",
+    "jsdom": "^30.1.2",
+    "postcss": "8.5.30",
+    "tailwindcss": "^4.3.3",
     "typescript": "5.6.3",
-    "vitest": "5.0.1"
+    "vitest": "5.0.4"
   },
   "overrides": {
-    "@types/react": "19.2.17",
-    "@types/react-dom": "19.2.3"
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
   }
 }
