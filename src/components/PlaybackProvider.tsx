@@ -98,6 +98,16 @@ export interface PlaybackSession {
    */
   bench?: string;
   /**
+   * Une scène ouverte depuis une réplique (recherche de répliques, lecture à début − 5 s) : rien
+   * n'est rapporté à Jellyfin ni gardé pour une reprise — ni battement, ni arrêt, ni « vu », ni
+   * position gardée sur l'appareil —, et pas d'épisode suivant, tant que dix minutes n'ont pas été
+   * jouées ; ensuite, c'est une lecture ordinaire (`sceneMode.ts`, DECISIONS.md §91). Posé par
+   * l'appelant qui lance la scène, et par la relecture d'une intention de rechargement.
+   */
+  scene?: boolean;
+  /** Le temps déjà joué de la scène, emporté par un rechargement de page — jamais par un appelant. */
+  sceneWatchedMs?: number;
+  /**
    * Le visuel, le logo et la place dans la série de ce qu'on lance — pour l'ouverture de la lecture
    * (DECISIONS.md §60). Posé par `play()` et `advance()` à partir de ce que l'appareil a déjà reçu,
    * jamais par un appelant : les endroits qui lancent un film n'ont pas à savoir qu'elle existe.
@@ -332,7 +342,9 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     // L'épisode suivant d'une séance allégée en hérite par la même règle (§78) : l'arrêt de l'épisode
     // vient d'être rapporté, et il a retenu son palier.
     const lighter = carriedLighter() ?? undefined;
-    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt: 0, introArt, lighter, reloadCarry: undefined } : prev));
+    // `scene` ne passe pas à l'épisode suivant : il n'y en a pas pendant une scène, et après elle la
+    // lecture est devenue ordinaire (`sceneMode.ts`).
+    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt: 0, introArt, lighter, reloadCarry: undefined, scene: undefined, sceneWatchedMs: undefined } : prev));
   }, [prepareIntro]);
 
   // Resumes into a WebKit reload-based track switch — see PLAYER_RELOAD_INTENT_KEY. Runs once on
@@ -362,6 +374,8 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
       reloadAttempt: intent.attempt ?? 0,
       ...(intent.server === true ? { reloadedOnServer: intent.itemId } : {}),
       ...(intent.carry ? { reloadCarry: intent.carry } : {}),
+      // Une scène rechargée (WebKit) reste une scène, avec le temps qu'elle a déjà joué.
+      ...(intent.carry?.scene ? { scene: true, sceneWatchedMs: intent.carry.scene.watchedMs } : {}),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

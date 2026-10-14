@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession, stopOrphanSession } from "@/lib/usePlaybackSession";
 import { refreshAfterPlayback } from "@/lib/swr";
+import { useSceneMode, isSceneNow, sceneCarryOf, type SceneSession } from "@/lib/sceneMode";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { apiErrorText } from "@/lib/apiErrorText";
 import { withCode } from "@/lib/upstreamError";
@@ -349,7 +350,7 @@ export function PlayerHost() {
       // Un relais, pas une reprise : le lecteur natif ne recule pas de cinq secondes au retour
       // d'une diffusion de plus de dix minutes, pendant laquelle rien n'avait noté la lecture
       // (relu le 24/09/2026 — voir `resumeRewind.ts`).
-      if (!session?.bench) noteWatching(itemId);
+      if (!session?.bench && !(session && isSceneNow(session))) noteWatching(itemId);
       stepBack(itemId, resumeAt, session, paused);
     },
     [itemId, session, stepBack]
@@ -601,6 +602,25 @@ function ActivePlayer({
   const initialAudioStreamIndex = mine?.audioStreamIndex ?? sessionAudioStreamIndex;
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  /**
+   * Une scène ouverte depuis une réplique (`sceneMode.ts`, DECISIONS.md §91) : rien de rapporté ni
+   * de gardé pour une reprise tant qu'elle n'a pas joué dix minutes. Le décompte est celui de la
+   * lecture : un relais du lecteur natif le continue. `isSceneRef` pour les écouteurs et les
+   * fonctions aux dépendances figées.
+   */
+  const scene = useSceneMode(
+    session,
+    useCallback(() => {
+      const video = videoRef.current;
+      return !!video && !video.paused && !video.ended && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA;
+    }, [])
+  );
+  const isSceneRef = useRef(scene.isScene);
+  const sceneSessionRef = useRef<SceneSession>(session);
+  useEffect(() => {
+    isSceneRef.current = scene.isScene;
+    sceneSessionRef.current = session;
+  }, [scene.isScene, session]);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<import("hls.js").default | null>(null);
   // Quatre appelants lancent startPlayback sans jamais attendre le précédent (changement de
@@ -835,6 +855,8 @@ function ActivePlayer({
         : {}),
       // La cause du relais survit à un rechargement de plus (piste audio, échelle) : le panneau la garde.
       ...(fallbackReasonRef.current ? { reason: fallbackReasonRef.current } : {}),
+      // Une scène reste une scène dans la page rechargée, avec ce qu'elle a déjà joué (§91).
+      ...(sceneCarryOf(sceneSessionRef.current) ? { scene: sceneCarryOf(sceneSessionRef.current) } : {}),
     };
   }, []);
   /** La version allégée est-elle permise à ce compte (réponse de la négociation, §78) ? */
@@ -921,7 +943,7 @@ function ActivePlayer({
   /** La croix a été pressée : la fin de diffusion qu'elle provoque n'est pas un retour au téléphone. */
   const closingRef = useRef(false);
   // Déclaré avant le contexte du journal, qui le lit.
-  const logContext = useRef<ServerPlayerContext>({ itemId, title, cast: castSession, bench: session.bench, session: firstSession, agent });
+  const logContext = useRef<ServerPlayerContext>({ itemId, title, cast: castSession, bench: session.bench, scene: scene.logFields, session: firstSession, agent });
   /**
    * Le décompte de la séance pour son bilan (`stop`) — le même que celui du lecteur natif
    * (`SessionTally`) : attentes d'au moins 250 ms, sauts et leur attente, pistes, arrière-plan. Plus
@@ -956,8 +978,8 @@ function ActivePlayer({
     }
     // `cast` ne se lit plus « séance ouverte pour diffuser » seulement : une route établie depuis
     // les commandes de la vidéo compte aussi, pour les lignes qui suivent (arrêt compris).
-    logContext.current = { itemId, title, cast: castSession || castActive, bench: session.bench, session: logSession.current.id, agent };
-  }, [itemId, title, castSession, castActive, session.bench, agent]);
+    logContext.current = { itemId, title, cast: castSession || castActive, bench: session.bench, scene: scene.logFields, session: logSession.current.id, agent };
+  }, [itemId, title, castSession, castActive, session.bench, agent, scene.logFields]);
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [recapSkip, setRecapSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
@@ -1011,11 +1033,17 @@ function ActivePlayer({
     // Le prix : sans arrêt, Jellyfin ne tue pas le transcodage sur-le-champ — il est censé le faire
     // de lui-même quand plus aucun segment n'est demandé (non mesuré ici). L'arrêter tout de suite
     // demanderait de passer par ses encodages actifs, sans écrire de position.
-    playSession && !bench ? { ...playSession, playMethod, client: PLAYBACK_CLIENTS.stable } : null,
+    //
+    // Rien non plus pendant une scène (§91). Devenue lecture ordinaire, la séance s'annonce elle-même :
+    // sa négociation, faite en scène, n'avait rien dit à Jellyfin (`scene` dans le corps, voir la route).
+    playSession && !bench && !scene.active
+      ? { ...playSession, playMethod, client: PLAYBACK_CLIENTS.stable, ...(session.scene ? { announce: true } : {}) }
+      : null,
     useCallback(() => videoRef.current?.paused ?? false, [])
   );
 
-  const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
+  // Pas d'épisode suivant pendant une scène (§91) : on est venu voir une réplique.
+  const nextEpisode = scene.active ? null : (session.getNextEpisode?.(itemId) ?? null);
 
   /**
    * La minuterie de veille, la même que celle du lecteur natif (`useSleepTimer`) : ses commandes
@@ -1159,7 +1187,8 @@ function ActivePlayer({
     // La fiche et la rangée « Reprendre » décrivent ce film : elles sont fausses dès l'instant
     // où on le quitte, et rien ne les relisait. Volontairement hors du chemin de la fermeture —
     // l'écran doit partir tout de suite, la relecture peut attendre son tour.
-    void refreshAfterPlayback(reported, itemId);
+    // Une scène (§91) n'a rien changé de ce qu'elles montrent.
+    if (!isSceneRef.current()) void refreshAfterPlayback(reported, itemId);
   }, [playback, stopPlaybackNow, itemId, session.openId, reportStop]);
 
   /**
@@ -1328,7 +1357,8 @@ function ActivePlayer({
       /** La séance qu'une négociation remplacée a fait ouvrir chez Jellyfin — voir plus bas. */
       const closeOrphan = (data: { playSessionId?: string; mediaSourceId?: string } | null) => {
         // Un banc n'annonce rien : il n'y a rien à refermer.
-        if (bench || !data?.playSessionId || !data?.mediaSourceId) return;
+        // Une scène (§91) non plus : cet arrêt écrirait sa position comme reprise.
+        if (bench || isSceneRef.current() || !data?.playSessionId || !data?.mediaSourceId) return;
         void stopOrphanSession(
           { itemId, playSessionId: data.playSessionId, mediaSourceId: data.mediaSourceId },
           opts?.resumeAt ?? lastKnownTime.current
@@ -1426,6 +1456,8 @@ function ActivePlayer({
           nativeHls,
           // Rien d'annoncé à Jellyfin pour un banc d'essai — voir la route.
           ...(bench ? { bench: true } : {}),
+          // Ni annonce pour une scène (§91) : la séance s'annoncera si elle devient une lecture.
+          ...(isSceneRef.current() ? { scene: true } : {}),
         }),
       });
       // Avant la lecture du corps, donc avant setNeedsReauth / setError : l'échec d'une
@@ -2180,7 +2212,8 @@ function ActivePlayer({
          */
         // Un rechargement direct d'avant toute image est une ouverture qui a changé de lecteur : même recul.
         const opening = !fromReload || session.reloadCarry?.direct?.opening === true;
-        const at = !mine && opening && !bench ? openingPosition(itemId, resumeAt, null) : resumeAt;
+        // Ni pour une scène (§91) : elle part déjà cinq secondes avant la réplique.
+        const at = !mine && opening && !bench && !isSceneRef.current() ? openingPosition(itemId, resumeAt, null) : resumeAt;
         // Pourquoi cette première négociation : une page rechargée (piste WebKit, ou dernier
         // recours de l'échelle audio), le relais du lecteur natif — la séance qu'il passe, pas
         // l'épisode suivant que ce lecteur enchaîne ensuite —, ou une ouverture.
@@ -2534,13 +2567,14 @@ function ActivePlayer({
       // Trois secondes vraiment jouées : la preuve qui efface les échecs du registre (§67).
       tallyRef.current.retries.notePosition(video.currentTime);
       castResume.observed(video.currentTime);
-      if (!video.paused && !bench && Date.now() - notedAt > 15_000) {
+      // Rien de noté pendant une scène (§91) : ce n'est pas une lecture qu'on reprendra.
+      if (!video.paused && !bench && !isSceneRef.current() && Date.now() - notedAt > 15_000) {
         notedAt = Date.now();
         noteWatching(itemId);
       }
     };
     const onPause = () => {
-      if (!bench && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) noteWatching(itemId);
+      if (!bench && !isSceneRef.current() && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) noteWatching(itemId);
     };
     video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("pause", onPause);

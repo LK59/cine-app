@@ -145,6 +145,12 @@ export async function POST(req: NextRequest) {
    */
   const bench = body?.bench === true;
   /**
+   * Une scène ouverte depuis une réplique (DECISIONS.md §91) : pas d'annonce non plus — elle ferait
+   * entrer le titre dans « Reprendre ». Le lecteur l'annoncera lui-même si la scène devient une
+   * lecture ordinaire (dix minutes jouées, `sceneMode.ts`).
+   */
+  const scene = body?.scene === true;
+  /**
    * Le dernier échelon de l'échelle de repli du client : le son ré-encodé, quel qu'il soit.
    *
    * L'échelon « AAC seul » supposait l'AAC toujours lisible ; il ne l'est pas quand sa disposition
@@ -363,7 +369,7 @@ export async function POST(req: NextRequest) {
     // Same for intro/credits timestamps — 404s for movies and unanalyzed
     // episodes, which just means no skip-intro / next-up prompt for this item.
     const [, timestamps, naming, transcodingAllowed] = await Promise.all([
-      bench || prewarm
+      bench || prewarm || scene
         ? Promise.resolve()
         : jellyfin
             // Sous l'appareil de la connexion, comme les rapports qui suivront — `playbackDevice.ts`.

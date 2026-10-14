@@ -27,6 +27,7 @@ import {
   type HdrCapChoice,
 } from "@/lib/webcodecs/hdrDisplay";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
+import { useSceneMode } from "@/lib/sceneMode";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useViewportResizing } from "@/lib/useViewportResizing";
 import { useT, useLocale } from "@/components/TranslationProvider";
@@ -523,6 +524,23 @@ export function ExperimentalPlayerHost({
   const { itemId, title: openedAs } = session;
 
   const videoElRef = useRef<HTMLVideoElement>(null);
+  /**
+   * Une scène ouverte depuis une réplique (`sceneMode.ts`, DECISIONS.md §91) : ni battement, ni
+   * arrêt, ni position gardée, ni octets pour une reprise, ni épisode suivant, tant que dix minutes
+   * n'ont pas été jouées. `isSceneRef` pour les écouteurs de l'élément, posés une fois pour toutes.
+   */
+  const scene = useSceneMode(
+    session,
+    useCallback(() => {
+      const video = videoElRef.current;
+      return !!video && !video.paused && !video.ended && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA;
+    }, [])
+  );
+  const isSceneRef = useRef(scene.isScene);
+  useEffect(() => {
+    isSceneRef.current = scene.isScene;
+  }, [scene.isScene]);
+  const sceneLogFields = scene.logFields;
   // Le volume mémorisé, rendu une fois à l'élément. Il est monté avec l'hôte et gardé tel quel :
   // une reconstruction ne change que le pipeline, un passage plein écran ↔ réduit que son cadre.
   // Ce lecteur ne le relisait pas — chaque film repartait à plein volume. DECISIONS.md §35.
@@ -1704,8 +1722,10 @@ export function ExperimentalPlayerHost({
       session: sessionId,
       // Les lignes écrites pendant un banc d'essai, reconnaissables — voir `PlaybackSession.bench`.
       ...(session.bench ? { bench: session.bench } : {}),
+      // Une scène (§91) : `scene`, puis `sceneNormal` une fois devenue lecture — lu à chaque ligne.
+      ...sceneLogFields(),
     }),
-    [itemId, info, openedAs, session.bench, sessionId]
+    [itemId, info, openedAs, session.bench, sessionId, sceneLogFields]
   );
 
   useEffect(() => {
@@ -1901,7 +1921,8 @@ export function ExperimentalPlayerHost({
         const kept = keepFileRef.current;
         const remux = remuxRef.current;
         const file = remux?.reserveContext?.()?.file;
-        if (kept && !stopFactsRef.current.ended && !session.bench) {
+        // Ni pour une scène (§91) : ces octets servent une reprise qu'elle n'a pas posée.
+        if (kept && !stopFactsRef.current.ended && !session.bench && !isSceneRef.current()) {
           void keepOnStop(kept, remux?.heldBytes?.() ?? null, file ? { file, seconds: positionRef.current } : null);
         }
       } catch {
@@ -2099,7 +2120,8 @@ export function ExperimentalPlayerHost({
     // It announces its own start for the same reason: nothing else tells the server this film is
     // being watched, so without it the reports described a session Jellyfin had never heard of.
     // Rien pour le banc d'essai : il saute jusqu'à la fin des films, qui seraient tous marqués vus.
-    announced && !session.bench
+    // Rien non plus pendant une scène (§91) : devenue lecture, la séance s'annonce à cet instant.
+    announced && !session.bench && !scene.active
       ? {
           itemId,
           // « engine » : le nom sous lequel Jellyfin connaît ce lecteur depuis le début (sessions,
@@ -2151,11 +2173,13 @@ export function ExperimentalPlayerHost({
     const openId = session.openId;
     setTimeout(() => playback.close(openId), 200);
     // Voir PlayerHost : la fiche et la rangée « Reprendre » sont fausses dès qu'on quitte le film,
-    // et les deux lecteurs doivent les relire de la même façon.
-    void refreshAfterPlayback(reported, itemId);
+    // et les deux lecteurs doivent les relire de la même façon. Pas après une scène (§91), qui ne
+    // les a pas changées.
+    if (!isSceneRef.current()) void refreshAfterPlayback(reported, itemId);
   }, [playback, stopPlaybackNow, itemId, reportStop, session.openId, lifecycle]);
 
-  const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
+  // Pas d'épisode suivant pendant une scène (§91) : on est venu voir une réplique.
+  const nextEpisode = scene.active ? null : (session.getNextEpisode?.(itemId) ?? null);
 
   /**
    * La minuterie de veille — son décompte vit au-dessus de ce lecteur, remonté à chaque épisode
@@ -2472,7 +2496,8 @@ export function ExperimentalPlayerHost({
     // reconstruction, qui rouvre là où l'image vient de s'arrêter. Voir `resumeRewind.ts`.
     if (!openingDecidedRef.current) {
       openingDecidedRef.current = true;
-      if (lifecycle.rebuildAt === null && !session.bench) {
+      // Ni pour une scène (§91) : elle part déjà cinq secondes avant la réplique.
+      if (lifecycle.rebuildAt === null && !session.bench && !isSceneRef.current()) {
         // La même règle que celle qui choisit, en arrière-plan, quels octets garder pour une reprise
         // instantanée (`src/lib/resumeCache/`) : une seule fonction, pour que les deux ne visent
         // jamais deux positions différentes.
@@ -2597,7 +2622,7 @@ export function ExperimentalPlayerHost({
         showSubtitleAt(element.currentTime, (at, track) => playback.subtitleAt(at, track), playback.presentationDelay);
         // Retenu toutes les quinze secondes de lecture : ce qui distingue, à la prochaine
         // ouverture, un relais d'une vraie reprise (voir `resumeRewind.ts`).
-        if (!element.paused && !session.bench && Date.now() - notedAt > 15_000) {
+        if (!element.paused && !session.bench && !isSceneRef.current() && Date.now() - notedAt > 15_000) {
           notedAt = Date.now();
           noteWatching(itemId);
         }
@@ -2637,7 +2662,7 @@ export function ExperimentalPlayerHost({
         // Un saut posé en pause a son image : il n'attend plus rien (§78).
         if (element.paused && !element.seeking) runner.seekDone();
         pausedAt = Date.now();
-        if (!session.bench) noteWatching(itemId);
+        if (!session.bench && !isSceneRef.current()) noteWatching(itemId);
       };
       /**
        * Les attentes en pleine lecture — voir `SessionTally`. Ni celles d'un saut, qui a sa ligne,
@@ -2854,7 +2879,8 @@ export function ExperimentalPlayerHost({
           reportPlayback("network", { ...describeFileRef.current(), reason: message, at: positionRef.current });
           // La position de la coupure, gardée sur l'appareil : si rien ne repasse avant la fermeture,
           // elle part au retour du réseau ou au lancement suivant (`unsentPosition.ts`, §78).
-          if (everReadyRef.current && !session.bench) saveUnsentPosition(itemId, positionRef.current);
+          // Ni pour une scène (§91) : c'est la position que la séance ne doit pas écrire.
+          if (everReadyRef.current && !session.bench && !isSceneRef.current()) saveUnsentPosition(itemId, positionRef.current);
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
           setPlaying(false);
           return;

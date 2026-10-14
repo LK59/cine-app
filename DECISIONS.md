@@ -2389,6 +2389,21 @@ depuis l'audit du 10/10/2026 ; l'élan porté à part (`fingerCarry`) qui le pr�
 Tests : `sheetMorph-motion.test.ts`, `uiQuiet.test.ts`, `resumeCache-uiQuiet.test.ts`,
 `top10-card-tap.test.tsx`, `cinema-mobile-detail-belowfold.test.tsx`.
 
+**La fiche découverte du bureau a les deux pages de la fiche film (14/10/2026).** Capture de Louis,
+« Matchbox – Le film » ouvert pour « Demander » : le titre se dessinait sous le bouton Retour, et la
+distribution occupait le premier écran. La fiche découverte avait sa propre mise en page, et elle avait
+dérivé : une seule section, la rangée de visages *dans* la colonne d'un premier écran qui tient dans la
+fenêtre et se cale en bas (`SECTION_CLASS`, `h-full overflow-hidden justify-end`) — la colonne débordait
+donc par le haut. **Une écriture pour les trois fiches du bureau** (`CinemaDetailPages.tsx`) :
+`CinemaDetailPages` (défilement guidé, premier écran, rappel de défilement, second écran),
+`CinemaDetailTitle` (logo, sinon le titre écrit), `CinemaDetailCastLine` (« Avec » trois noms et le
+décompte, sa fenêtre comprise) ; Haut/Bas du menu par `detailMenuArrowNav` (`detailMenu.ts`), que la
+fiche découverte n'avait pas. Le logo vient de `/api/player/title` (`logo`, `getTitleArt` +
+`logoForLocale`, la même entrée de cache que le catalogue). Appelants : `CinemaMovieDetail`,
+`CinemaSeriesDetail`, `PlayerDiscoverSheet` (film et série TMDB). Le téléphone ne change pas ; la fiche
+personne, carte centrée à croix à droite, n'avait pas le défaut. Tests : `discover-sheet-desktop.test.tsx`,
+`decisions-partagees.test.ts` (« les deux pages des fiches du bureau »), `player-routes.test.ts`.
+
 ## 62. Un AAC à PCE : relu, réécrit sans perte quand il le peut, décodé dans le bon ordre sinon
 
 **Règle.** Une piste AAC dont la disposition est un PCE (`channelConfiguration` à 0) passe par une
@@ -4586,5 +4601,42 @@ entière, table, routes), `library-check-proxy.test.ts`, `library-check-ui.test.
 **Voulu.** Aucun geste automatique : un désaccord se lit, se décide, et se corrige chez le service qui a
 tort. Les seuils sont prudents exprès — un faux signalement coûte une vérification ; une correction
 automatique fausse coûterait un film.
+
+**Décidé le 14/10/2026** (Louis).
+
+## 91. Une scène ouverte depuis une réplique n'est pas une reprise — sauf après dix minutes jouées
+
+**Règle.** Une lecture lancée depuis la recherche de répliques (`PlaybackSession.scene`, posé par
+`DialogueResults`) ne modifie ni la reprise ni le « vu » : pas d'annonce ni de battement ni d'arrêt chez
+Jellyfin, pas de position gardée sur l'appareil (`unsentPosition`), pas de relecture des vues à la
+fermeture (`refreshAfterPlayback`), pas de note pour le recul de reprise (`noteWatching`) ni de recul à
+l'ouverture (elle part déjà cinq secondes avant la réplique), pas d'octets gardés pour une reprise
+instantanée (`keepOnStop`), pas d'épisode suivant. **Sauf si l'on continue** : au-delà de dix minutes
+*jouées* (la pause ne compte pas) depuis l'ouverture, la lecture devient ordinaire, et tout repart de
+cet instant — l'annonce (`playing`) d'abord, puis les battements.
+
+**Pourquoi.** Constaté sur téléphone le 14/10/2026 : la position atteinte en regardant une réplique
+devenait la reprise du film, qui entrait dans « Reprendre ».
+
+**Porteur.** `src/lib/sceneMode.ts` — `SceneClock` (le temps joué), `sceneClockFor` (une horloge par
+lecture, `openId` + titre : un relais natif → serveur continue le décompte), `useSceneMode` (`active`
+pour le rendu, `isScene()` pour les écouteurs, `logFields()`), `sceneCarryOf` (ce qu'emporte un
+rechargement de page, `ReloadCarry.scene`), `sceneLogFields`.
+
+**Appelants.** `ExperimentalPlayerHost` et `PlayerHost` (`ActivePlayer`) : la séance passée à
+`usePlaybackSession` est `null` tant que la scène dure — le lecteur serveur s'annonce lui-même une fois
+devenue lecture (`announce`), sa négociation ayant porté `scene: true` (la route `playback/start` n'annonce
+alors rien, comme pour le banc) ; `stopOrphanSession` ne part pas. `serverReload.ts` (intention de
+rechargement) et `PlaybackProvider` (relecture ; `advance` efface `scene`). `lostStopPosition.ts` : un
+bilan perdu marqué `scene` sans `sceneNormal` ne rend aucune position. Journal : toutes les lignes des deux
+lecteurs portent `scene: true`, et `sceneNormal: true` une fois la lecture devenue ordinaire.
+
+**Différent exprès.** La diffusion (Chromecast, relais AirPlay `castProgress.ts`) n'est pas couverte :
+le téléviseur écrit sa propre position. Le banc d'essai (`bench`) reste à part : il ne devient jamais une
+lecture.
+
+**Tests.** `sceneMode.test.tsx` (horloge, séance, rechargement, bilan perdu, passage à une lecture avec le
+vrai `usePlaybackSession`), `scene-native.test.tsx`, `player-host-server.test.tsx` (« une scène ouverte
+depuis une réplique »).
 
 **Décidé le 14/10/2026** (Louis).

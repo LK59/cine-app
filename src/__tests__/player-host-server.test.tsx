@@ -325,3 +325,54 @@ describe("lecteur serveur — Réessayer", () => {
     expect(negociations()[1].startTicks).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Une scène ouverte depuis une réplique (DECISIONS.md §91) : rien à Jellyfin — ni annonce à la
+ * négociation, ni battements, ni arrêt, ni relecture des vues — et pas d'épisode suivant. Constaté
+ * sur téléphone le 14/10/2026 : la position d'une réplique devenait la reprise du film.
+ */
+describe("lecteur serveur — une scène ouverte depuis une réplique", () => {
+  const corpsNegociation = () =>
+    (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/jellyfin/playback/start")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as Record<string, unknown>);
+
+  it("ne rapporte rien à Jellyfin et ne relit pas les vues à la fermeture", async () => {
+    playback.session = { itemId: "film", openId: 41, resumeAt: 3600, title: "Film", scene: true };
+    stubFetch();
+    render(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(1));
+
+    expect(corpsNegociation()[0]).toMatchObject({ scene: true });
+    // Ni recul de reprise : la scène part déjà cinq secondes avant la réplique.
+    expect(corpsNegociation()[0].startTicks).toBe(3600 * 10_000_000);
+    expect(seancesAnnoncees.every((s) => s === null)).toBe(true);
+    expect(lignes("start")[0]).toMatchObject({ scene: true });
+
+    fireEvent.click(screen.getByText("fermer"));
+    expect(lignes("stop")[0]).toMatchObject({ scene: true });
+    expect(lignes("stop")[0].sceneNormal).toBeUndefined();
+    expect(refreshAfterPlayback).not.toHaveBeenCalled();
+  });
+
+  it("n'enchaîne pas l'épisode suivant", async () => {
+    playback.session = { itemId: "ep-1", openId: 42, resumeAt: 600, title: "Épisode", scene: true, getNextEpisode: () => ({ itemId: "ep-2", title: "Suite" }) };
+    stubFetch();
+    render(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(1));
+    playback.advance.mockClear();
+    fireEvent.click(screen.getByText("suivant"));
+    expect(playback.advance).not.toHaveBeenCalled();
+  });
+
+  it("une lecture ordinaire, elle, s'annonce et relit les vues", async () => {
+    stubFetch();
+    render(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(1));
+    expect(corpsNegociation()[0].scene).toBeUndefined();
+    await waitFor(() => expect(seancesAnnoncees.some((s) => s !== null)).toBe(true));
+    expect(lignes("start")[0].scene).toBeUndefined();
+    fireEvent.click(screen.getByText("fermer"));
+    expect(refreshAfterPlayback).toHaveBeenCalledTimes(1);
+  });
+});

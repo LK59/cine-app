@@ -21,6 +21,7 @@
 import { readPlaybackQuality } from "@/lib/playbackQuality";
 import type { LighterStep } from "@/lib/slowLinkPolicy";
 import type { StableTakeover } from "@/lib/useStableFallback";
+import { sceneCarryOf } from "@/lib/sceneMode";
 
 /** Le palier allégé de la séance rechargée : la cible, le palier, et s'il vient d'une vraie bascule. */
 export interface ReloadLighter extends LighterStep {
@@ -55,6 +56,12 @@ export interface ReloadCarry {
    * page) : le panneau ne disait plus pourquoi le serveur lisait (12/10/2026).
    */
   reason?: string;
+  /**
+   * Une scène ouverte depuis une réplique et pas encore devenue une lecture ordinaire, avec le temps
+   * déjà joué (`sceneMode.ts`, DECISIONS.md §91). Sans elle, la page rechargée pour changer de piste
+   * rapportait tout à Jellyfin.
+   */
+  scene?: { watchedMs: number };
 }
 
 /** Une cause emportée reste lisible et bornée : c'est du texte relu d'un stockage de page. */
@@ -117,7 +124,7 @@ export function shouldReloadDirect(input: {
 
 /** L'intention du rechargement direct, d'après la séance et le relais du lecteur natif. */
 export function directReloadIntent(
-  session: { itemId: string; title: string; resumeAt?: number; initialAudioStreamIndex?: number },
+  session: { itemId: string; title: string; resumeAt?: number; initialAudioStreamIndex?: number; openId?: number; scene?: boolean; sceneWatchedMs?: number },
   takeover: StableTakeover | undefined,
   logSession: string | undefined,
   reason?: string,
@@ -139,6 +146,8 @@ export function directReloadIntent(
       ...(takeover?.switchedAt !== undefined ? { switchedAt: takeover.switchedAt } : {}),
       ...(logSession ? { continues: logSession } : {}),
       ...(reason ? { reason: reason.slice(0, REASON_MAX) } : {}),
+      // Une scène reste une scène dans la page rechargée (`sceneMode.ts`, DECISIONS.md §91).
+      ...(sceneCarryOf(session) ? { scene: sceneCarryOf(session) } : {}),
     },
   };
 }
@@ -178,6 +187,9 @@ export function parseReloadIntent(raw: string): PlayerReloadIntent | null {
               ...(typeof carry.switchedAt === "number" ? { switchedAt: carry.switchedAt } : {}),
               ...(typeof carry.continues === "string" ? { continues: carry.continues } : {}),
               ...(typeof carry.reason === "string" && carry.reason ? { reason: carry.reason.slice(0, REASON_MAX) } : {}),
+              ...(carry.scene && typeof (carry.scene as Record<string, unknown>).watchedMs === "number"
+                ? { scene: { watchedMs: Math.max(0, (carry.scene as { watchedMs: number }).watchedMs) } }
+                : {}),
             },
           }
         : {}),

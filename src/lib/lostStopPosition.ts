@@ -48,6 +48,9 @@ export async function recoverLostPosition(jfId: string | undefined, fields: Reco
   const lateBy = num(fields.lateByMs);
   if (!jfId || !itemId || at === null || at <= 0 || lateBy === null) return "incomplet";
   if (fields.ended === true || fields.bench) return "sans objet";
+  // Une scène ouverte depuis une réplique et jamais devenue lecture (DECISIONS.md §91) : sa position
+  // n'est pas une reprise, et la rendre à Jellyfin aurait fait ce que la séance s'est interdit.
+  if (fields.scene === true && fields.sceneNormal !== true) return "sans objet";
   const savedAt = now - lateBy;
 
   const item = await jellyfin.getItemUserData(jfId, itemId);

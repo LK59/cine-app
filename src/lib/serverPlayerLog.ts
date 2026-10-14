@@ -105,6 +105,12 @@ export interface ServerPlayerContext {
    */
   bench?: string;
   /**
+   * Une scène ouverte depuis une réplique (`sceneMode.ts`, DECISIONS.md §91) : `scene: true`, et
+   * `sceneNormal: true` une fois devenue lecture ordinaire. Une fonction : l'état change en cours de
+   * séance, et chaque ligne le lit à l'instant où elle part.
+   */
+  scene?: () => Record<string, boolean>;
+  /**
    * L'identifiant de séance, comme les lignes du lecteur natif, et le navigateur. Sans eux, le
    * journal reconstituait ces séances « à l'ancienne », par compte et par titre : chaque relance
    * devenait une séance, sans appareil — et, dans le diagnostic « fichier ou appareil », un
@@ -273,6 +279,7 @@ function base(ctx: ServerPlayerContext): Record<string, unknown> {
     player: "serveur",
     cast: ctx.cast,
     ...(ctx.bench ? { bench: ctx.bench } : {}),
+    ...(ctx.scene?.() ?? {}),
     ...(ctx.session ? { session: ctx.session } : {}),
     ...(ctx.agent ? { agent: ctx.agent } : {}),
     ...(ctx.target ? { target: ctx.target } : {}),
