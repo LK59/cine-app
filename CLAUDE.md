@@ -84,6 +84,14 @@ Chromium user agent, and only the tracks meant to change may differ; `aac-census
 classes every AAC track of a library by `aacPlan`'s decision; `aac-pce-bench.spec.ts` checks the
 lossless PCE rewrite and writes the browser probe's files; `aac-wasm-bench.spec.ts` prints each
 channel's level through the WebAssembly AAC decoder, to compare with `ffmpeg astats`.
+`mediabunny-regress-bench.spec.ts` guards a mediabunny upgrade (`mediabunny`, `@mediabunny/ac3`,
+`@mediabunny/dts` move together, exact versions): per audio track, the tracks and durations
+mediabunny finds, the hash of 60 s of demuxed packets and of 60 s of decoded Float32 planes through
+`SoftwareAudioTrack.samples()` from 0 s and three seek points, and the hash of the audio segments
+the remuxer builds from them through a deterministic fake `AudioEncoder` (whose frames are the hash
+of the samples it was handed). Run it before and after on the same files (`MB_FILES`); every line
+except `ms` must be identical. Opus and PCE AAC are decoded by the browser, not in Node: for them
+only the demux is compared.
 
 **Diagnose against the running container rather than reasoning in the dark.**
 `docker exec cine-app node -e '...'` has every service URL and API key in its environment, and
