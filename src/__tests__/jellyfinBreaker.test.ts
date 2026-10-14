@@ -112,8 +112,39 @@ describe("jellyfinBreaker", () => {
     expect(jellyfinIsDown()).toBe(false);
   });
 
-  it("un délai dépassé en est une", async () => {
-    fetchMock.mockRejectedValueOnce(new DOMException("timeout", "TimeoutError"));
+  it("un délai dépassé seul n'ouvre pas — il en faut deux de suite, sans réponse entre les deux", async () => {
+    const timeout = () => new DOMException("timeout", "TimeoutError");
+    fetchMock.mockRejectedValueOnce(timeout());
+    await expect(jellyfinFetch("http://jellyfin.test:8096/a")).rejects.toThrow();
+    expect(jellyfinIsDown()).toBe(false);
+    fetchMock.mockRejectedValueOnce(timeout());
+    await expect(jellyfinFetch("http://jellyfin.test:8096/b")).rejects.toThrow();
+    expect(jellyfinIsDown()).toBe(true);
+  });
+
+  it("une réponse entre deux délais dépassés efface le premier", async () => {
+    const timeout = () => new DOMException("timeout", "TimeoutError");
+    fetchMock.mockRejectedValueOnce(timeout());
+    await expect(jellyfinFetch("http://jellyfin.test:8096/a")).rejects.toThrow();
+    fetchMock.mockResolvedValueOnce(new Response("ok"));
+    await jellyfinFetch("http://jellyfin.test:8096/b");
+    fetchMock.mockRejectedValueOnce(timeout());
+    await expect(jellyfinFetch("http://jellyfin.test:8096/c")).rejects.toThrow();
+    expect(jellyfinIsDown()).toBe(false);
+  });
+
+  it("deux délais dépassés à plus d'une minute d'écart n'ouvrent pas", async () => {
+    const timeout = () => new DOMException("timeout", "TimeoutError");
+    fetchMock.mockRejectedValueOnce(timeout());
+    await expect(jellyfinFetch("http://jellyfin.test:8096/a")).rejects.toThrow();
+    vi.advanceTimersByTime(61_000);
+    fetchMock.mockRejectedValueOnce(timeout());
+    await expect(jellyfinFetch("http://jellyfin.test:8096/b")).rejects.toThrow();
+    expect(jellyfinIsDown()).toBe(false);
+  });
+
+  it("une connexion refusée est certaine : elle ouvre tout de suite", async () => {
+    fetchMock.mockRejectedValueOnce(Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } }));
     await expect(jellyfinFetch("http://jellyfin.test:8096/a")).rejects.toThrow();
     expect(jellyfinIsDown()).toBe(true);
   });

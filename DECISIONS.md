@@ -4727,6 +4727,10 @@ depuis une réplique »).
    `NEW_ACCOUNT_BLOCKED_TAGS`), sinon aucun. Le premier choix — tout titre étiqueté caché — vidait le
    catalogue : Jellyfin range les mots-clés de TMDB dans les tags (562 films sur 650). Corrigé le jour
    même, priorité au catalogue (Louis, 14/10/2026).
+   **Contre les fausses alertes (même jour)** : un échec *certain* (nom introuvable, connexion
+   refusée) ouvre le coupe-circuit tout de suite ; un échec *ambigu* (délai dépassé, connexion coupée)
+   peut n'être qu'un appel lourd sur un Jellyfin vivant — il en faut deux de suite, sans réponse entre
+   les deux, à moins d'une minute (`STRIKE_WINDOW_MS`). `jellyfinBreaker.test.ts`.
 6. **La recherche** n'accorde que 1,5 s aux listes de Jellyfin (`catalogueMembers({ jellyfinWaitMs })`),
    puis rend Radarr/Sonarr/TMDB avec la règle de panne de `catalogueMembers`.
 7. **Le journal** : une panne amont s'écrit au plus une fois par hôte et par minute, la suivante portant

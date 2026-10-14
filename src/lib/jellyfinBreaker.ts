@@ -26,6 +26,15 @@ import { UpstreamUnreachableError } from "@/lib/http";
  */
 
 export const OPEN_MS = 30_000;
+/**
+ * Contre les fausses alertes (14/10/2026) : un échec **certain** — le nom ne se résout pas, la
+ * connexion est refusée — ouvre tout de suite ; un échec **ambigu** — un délai dépassé, une connexion
+ * coupée en route — peut n'être qu'un appel lourd (une liste d'épisodes pendant un scan de la
+ * bibliothèque) sur un Jellyfin bien vivant : il en faut deux de suite, sans aucune réponse entre
+ * les deux et à moins de `STRIKE_WINDOW_MS`, pour ouvrir. Une seule réponse efface le premier.
+ */
+export const STRIKE_WINDOW_MS = 60_000;
+const CERTAIN = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH/;
 /** La sonde d'arrière-plan : la page publique de Jellyfin, qui répond sans clé. */
 const PROBE_TIMEOUT_MS = 5_000;
 
@@ -40,6 +49,8 @@ interface State {
   probing: boolean;
   /** Ce que la couche réseau a dit au dernier échec — repris dans l'erreur rapide. */
   lastDetail: string;
+  /** Le dernier échec ambigu encore sans réponse derrière lui (`STRIKE_WINDOW_MS`) ; 0 : aucun. */
+  strikeAt: number;
 }
 
 /**
@@ -51,7 +62,7 @@ const KEY = "__cineJellyfinBreaker";
 type Holder = { [KEY]?: State };
 
 function fresh(url: string): State {
-  return { url, downSince: null, openUntil: 0, probing: false, lastDetail: "" };
+  return { url, downSince: null, openUntil: 0, probing: false, lastDetail: "", strikeAt: 0 };
 }
 
 function current(): State {
@@ -104,15 +115,25 @@ export function noteJellyfinSuccess(): void {
   s.openUntil = 0;
   s.probing = false;
   s.lastDetail = "";
+  s.strikeAt = 0;
 }
 
 export function noteJellyfinFailure(err: unknown, now = Date.now()): void {
   if (!isTransportFailure(err)) return;
   const s = current();
+  const detail = err instanceof UpstreamUnreachableError ? err.detail : err instanceof Error ? (((err as { cause?: { code?: string } }).cause?.code) ?? err.message) : String(err);
+  // Déjà ouvert (la sonde a échoué) : on prolonge sans compter. Sinon, un échec ambigu attend son second.
+  if (s.downSince === null && !CERTAIN.test(detail)) {
+    const second = s.strikeAt > 0 && now - s.strikeAt <= STRIKE_WINDOW_MS;
+    if (!second) {
+      s.strikeAt = now;
+      return;
+    }
+  }
+  s.strikeAt = 0;
   if (s.downSince === null) s.downSince = now;
   s.openUntil = now + OPEN_MS;
   s.probing = false;
-  const detail = err instanceof UpstreamUnreachableError ? err.detail : err instanceof Error ? (((err as { cause?: { code?: string } }).cause?.code) ?? err.message) : String(err);
   s.lastDetail = detail;
 }
 
