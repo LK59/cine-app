@@ -2,7 +2,9 @@
 // et aux fiches quand Jellyfin est injoignable après un redémarrage de cine-app (§92, relecture du
 // 14/10/2026) : `hiddenTmdbKeysFor` lisait les listes Jellyfin de l'administrateur, et sans elles
 // rendait un ensemble vide — le titre réapparaissait. Il garde désormais sur disque l'index des titres
-// étiquetés, n'attend pas un hôte figé plus de 1,5 s, et cache la bibliothèque faute de rien savoir.
+// étiquetés et n'attend pas un hôte figé plus de 1,5 s. Un tag que l'index ne connaît pas ne cache
+// rien de plus (choix de Louis, 14/10/2026 : le catalogue d'abord — la première règle cachait toute la
+// bibliothèque).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("@/lib/config", () => ({ config: { jellyfin: { url: "http://jellyfin.test:8096", apiKey: "k" }, accounts: { newBlockedTags: "prive" } } }));
@@ -15,12 +17,6 @@ vi.mock("@/lib/server-cache", () => ({
   cachedJellyfinSeriesAdmin: () => lists.series(),
 }));
 vi.mock("@/lib/sonarrLink", () => ({ catalogueLinks: async () => new Map() }));
-vi.mock("@/lib/catalogueMembers", () => ({
-  catalogueMembers: async () => ({
-    movies: [{ id: 1, tmdbId: 100 }, { id: 2, tmdbId: 200 }],
-    series: [{ id: 3, tmdbId: 300 }],
-  }),
-}));
 vi.mock("@/lib/session", () => ({ verifySessionFull: async () => null }));
 
 import { forgetBlockedTags, forgetTaggedIndex, hiddenTmdbKeysFor } from "@/lib/blockedTags";
@@ -83,19 +79,28 @@ describe("hiddenTmdbKeysFor — redémarrage pendant une panne de Jellyfin", () 
     expect([...(await hiddenTmdbKeysFor(fresh, now))]).toEqual(["movie:100"]);
   });
 
-  it("un tag que l'index ne connaît pas : toute la bibliothèque cachée plutôt que montrée", async () => {
+  it("un tag que l'index ne connaît pas : rien de plus n'est caché, la bibliothèque reste visible", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => userResponse(String(url))));
     lists.movies = down;
     lists.series = down;
-    expect([...(await hiddenTmdbKeysFor(secret, now))].sort()).toEqual(["movie:100", "movie:200", "series:300"]);
+    expect((await hiddenTmdbKeysFor(secret, now)).size).toBe(0);
   });
 
-  it("aucun index sur disque : même règle sûre pour un compte restreint, rien pour un compte libre", async () => {
+  it("aucun index sur disque : rien de caché, ni au compte restreint ni au compte libre", async () => {
     kvCacheDb.set("blocked-tags:tmdb-index", null, now);
     forgetTaggedIndex();
     jellyfinDown();
-    expect((await hiddenTmdbKeysFor(restricted, now)).has("movie:200")).toBe(true);
+    expect((await hiddenTmdbKeysFor(restricted, now)).size).toBe(0);
     expect((await hiddenTmdbKeysFor(open, now)).size).toBe(0);
+  });
+
+  it("un compte restreint garde son titre réservé caché quand l'index le connaît, et lui seul", async () => {
+    jellyfinUp();
+    await hiddenTmdbKeysFor(restricted, now);
+    forgetBlockedTags();
+    forgetTaggedIndex();
+    jellyfinDown();
+    expect([...(await hiddenTmdbKeysFor(restricted, now + 10 * 60_000))]).toEqual(["movie:100"]);
   });
 
   it("un hôte figé : la réponse vient de l'index en ~1,5 s, pas après les délais de Jellyfin", async () => {

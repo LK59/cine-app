@@ -17,7 +17,6 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { cachedJellyfinMoviesAdmin, cachedJellyfinSeriesAdmin } from "@/lib/server-cache";
 import { catalogueLinks } from "@/lib/sonarrLink";
-import { catalogueMembers } from "@/lib/catalogueMembers";
 import { kvCacheDb } from "@/lib/db";
 
 /** Relue toutes les deux minutes : un tag ajouté ou retiré par l'administrateur s'applique vite. */
@@ -275,27 +274,14 @@ function lastKnownIndex(): TaggedIndex | null {
 }
 
 /**
- * Faute de savoir quels titres portent un tag bloqué : tous les titres de la bibliothèque (Radarr et
- * Sonarr, qui répondent). Cacher ce qu'on ne sait pas classer plutôt que le montrer — la recherche
- * garde les titres que TMDB seul connaît, qu'aucun tag Jellyfin ne peut viser. Cas rare : jamais un
- * calcul réussi sur cette installation, ou un tag bloqué neuf, pendant une panne.
- */
-async function wholeLibraryKeys(): Promise<Set<string>> {
-  const members = await within(HIDDEN_JELLYFIN_WAIT_MS, () => catalogueMembers({ jellyfinWaitMs: 0 }));
-  const keys = new Set<string>();
-  for (const m of members?.movies ?? []) if (m.tmdbId > 0) keys.add(`movie:${m.tmdbId}`);
-  for (const s of members?.series ?? []) if (s.tmdbId && s.tmdbId > 0) keys.add(`series:${s.tmdbId}`);
-  return keys;
-}
-
-/**
  * Les mêmes titres, désignés par TMDB (`movie:603`, `series:1399`) : la recherche et les rangées de
  * découverte parlent en identifiants TMDB et marquaient ce titre « dans la bibliothèque ». Un compte
  * qui ne le voit pas dans le catalogue ne le voit nulle part (08/10/2026).
  *
  * Jellyfin en panne (§92) : au plus `HIDDEN_JELLYFIN_WAIT_MS` d'attente, puis les tags gardés du
- * compte et l'index gardé des titres étiquetés ; un tag que l'index ne connaît pas cache toute la
- * bibliothèque à ce compte plutôt que de lui montrer un titre réservé.
+ * compte et l'index gardé des titres étiquetés. Un tag que l'index ne connaît pas (jamais de calcul
+ * réussi sur cette installation, ou un tag bloqué neuf pendant la panne) ne cache rien de plus : le
+ * catalogue d'abord (Louis, 14/10/2026). « prive », posé d'office, est toujours dans l'index.
  */
 export async function hiddenTmdbKeysFor(jfId: string | null | undefined, now = Date.now()): Promise<Set<string>> {
   if (!jfId) return new Set();
@@ -337,16 +323,10 @@ export async function hiddenTmdbKeysFor(jfId: string | null | undefined, now = D
     index = lastKnownIndex();
   }
 
+  // Un tag absent de l'index ne cache rien : cacher toute la bibliothèque à un compte restreint
+  // (la règle du premier jet, 14/10/2026) coûtait la recherche et la découverte entières pour un cas
+  // qu'aucune installation ne rencontre en pratique. Choix de Louis : le fonctionnement d'abord.
   const keys = new Set<string>();
-  let unknown = index === null;
-  for (const tag of blocked) {
-    const listed = index?.tags[tag];
-    if (!listed) {
-      unknown = true;
-      continue;
-    }
-    for (const key of listed) keys.add(key);
-  }
-  if (unknown) for (const key of await wholeLibraryKeys()) keys.add(key);
+  for (const tag of blocked) for (const key of index?.tags[tag] ?? []) keys.add(key);
   return keys;
 }

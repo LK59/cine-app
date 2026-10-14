@@ -1848,9 +1848,11 @@ plus longue que la copie périmée en mémoire), ces listes manquaient, l'ensemb
 titre « prive » réapparaissait dans la recherche, la découverte et sa fiche. Il garde désormais sur disque
 (`kv_cache`, `blocked-tags:tmdb-index`), à chaque calcul réussi et seulement quand il change, l'index
 « tag → clés TMDB » des titres portant un tag bloqué de quelqu'un (comptes déjà lus, tags d'office) — pas
-les mots-clés de TMDB. Listes absentes : cet index. Tag que l'index ne connaît pas, ou aucun index : toute
-la bibliothèque (Radarr/Sonarr) est cachée à ce compte plutôt que montrée — un compte sans blocage n'est
-pas touché. L'attente de Jellyfin (tags du compte et listes, en parallèle) est bornée à 1,5 s
+les mots-clés de TMDB. Listes absentes : cet index. Tag que l'index ne connaît pas, ou aucun index : rien de plus
+n'est caché (décision de Louis, 14/10/2026, « priorité au fonctionnement et au catalogue ») — la première
+règle cachait alors toute la bibliothèque (Radarr/Sonarr) au compte restreint, recherche et découverte
+comprises, pour un cas qui demande à la fois une panne et un tag jamais vu ; « prive », posé d'office
+(`unknownBlockedTags`), est toujours dans l'index dès un premier calcul réussi. L'attente de Jellyfin (tags du compte et listes, en parallèle) est bornée à 1,5 s
 (`HIDDEN_JELLYFIN_WAIT_MS`), comme la recherche. Tests : `blocked-tags-hidden-restart.test.ts`.
 
 **Décidé le 08/10/2026.**
