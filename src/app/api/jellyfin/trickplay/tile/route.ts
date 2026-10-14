@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
   if (refused) return refused;
 
   try {
-    const res = await fetch(
+    const res = await jellyfinFetch(
       `${config.jellyfin.url}/Videos/${itemId}/Trickplay/${width}/${index}.jpg?MediaSourceId=${itemId}`,
       {
         signal: AbortSignal.any([req.signal, AbortSignal.timeout(8000)]),

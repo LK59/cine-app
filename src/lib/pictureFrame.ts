@@ -22,6 +22,7 @@
 
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { withPersistentCache } from "@/lib/server-cache";
 import type { PictureFrame } from "@/lib/frameFit";
 
@@ -138,7 +139,7 @@ export interface TrickplayInfo {
 
 export async function trickplayInfo(itemId: string, signal?: AbortSignal): Promise<TrickplayInfo | null> {
   // Par `/Items?Ids=` : `/Items/{id}` exige un UserId (voir la route trickplay/info), la liste non.
-  const res = await fetch(`${config.jellyfin.url}/Items?Ids=${itemId}&Fields=Trickplay&EnableImages=false`, {
+  const res = await jellyfinFetch(`${config.jellyfin.url}/Items?Ids=${itemId}&Fields=Trickplay&EnableImages=false`, {
     headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
     signal: signal ?? AbortSignal.timeout(8000),
   });
@@ -177,7 +178,7 @@ export async function measurePictureFrame(itemId: string, info: TrickplayInfo): 
   const all: Bounds[] = [];
 
   const readTile = async (index: number) => {
-    const res = await fetch(
+    const res = await jellyfinFetch(
       `${config.jellyfin.url}/Videos/${itemId}/Trickplay/${info.width}/${index}.jpg?MediaSourceId=${info.mediaSourceId}`,
       { headers: jellyfinAuthHeaders(config.jellyfin.apiKey), signal: AbortSignal.timeout(15_000) }
     );

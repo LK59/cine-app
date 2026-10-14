@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { hiddenForRequest, withoutHidden } from "@/lib/blockedTags";
 import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
-import { cachedJson } from "@/lib/cachedJson";
+import { catalogueFallbackResponse, catalogueResponse, type CatalogueOutageFlags } from "@/lib/catalogueFallback";
+import { logError } from "@/lib/logger";
 import { cachedMovies, cachedJellyfinMoviesAdmin } from "@/lib/server-cache";
 import { jellyfinOnlyMovies, matchMovies } from "@/lib/catalogueMembers";
 import { jellyfinOnlyCinemaMovie } from "@/lib/jellyfinOnlyCatalogue";
@@ -269,10 +270,23 @@ export async function GET(req: Request) {
       ...matched.map((x) => ({ id: x.m.id, tags: x.jfItem.Tags })),
       ...onlyInJellyfin.map((t) => ({ id: t.id, tags: t.item.Tags })),
     ];
-    const { hidden, signature } = await hiddenForRequest(req, tagged, (x) => x.tags, (x) => x.id);
-    return cachedJson(req, `cinema-movies:${locale}:${signature}`, withoutHidden(payload, hidden, (item) => item.radarrId));
+    const { hidden, signature, jfId } = await hiddenForRequest(req, tagged, (x) => x.tags, (x) => x.id);
+    // Et la copie de secours du compte, tenue à jour au passage (DECISIONS.md §92).
+    return catalogueResponse(req, {
+      kind: "movies",
+      locale,
+      jfId,
+      cacheKey: `cinema-movies:${locale}:${signature}`,
+      payload: withoutHidden(payload, hidden, (item) => item.radarrId),
+    });
   } catch (err) {
-    // Une panne amont se nomme, elle ne sort pas en 500 nu — voir `upstreamFailure`.
+    // Le dernier catalogue servi à ce compte, marqué périmé, plutôt qu'un écran vide (§92) — sinon
+    // une panne amont se nomme, elle ne sort pas en 500 nu (`upstreamFailure`).
+    const kept = await catalogueFallbackResponse(req, "movies", localeOf(req));
+    if (kept) {
+      logError("cinema-movies", err, { servedFallback: true });
+      return kept;
+    }
     return upstreamFailure(err, "cinema-movies");
   }
 }
@@ -283,4 +297,4 @@ export async function GET(req: Request) {
  * `CinemaMoviesWire` est ce qui voyage — les titres une fois, des identifiants ailleurs. `cinemaFetcher`
  * rend cette forme-ci à l'arrivée, si bien qu'aucun écran n'a eu à changer. Voir `cinemaPayload`.
  */
-export type CinemaMoviesPayload = HydratedPayload<CinemaMovie> & { top10Theme: Top10Theme | null };
+export type CinemaMoviesPayload = HydratedPayload<CinemaMovie> & { top10Theme: Top10Theme | null } & CatalogueOutageFlags;

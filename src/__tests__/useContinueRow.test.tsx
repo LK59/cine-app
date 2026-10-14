@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import useSWR, { SWRConfig } from "swr";
 import { fakeIndexedDb } from "./helpers/fakeIndexedDb";
 import { SWRProvider } from "@/components/SWRProvider";
-import { PERSISTED_CACHE_SCHEMA, catalogueCacheReady, noteResponse, resetPersistentCacheForTests, swrEntryHolds, writeEntries } from "@/lib/persistentCache";
+import { PERSISTED_CACHE_SCHEMA, catalogueCacheReady, flushPersistentWritesForTests, noteResponse, readAccountCache, resetPersistentCacheForTests, swrEntryHolds, writeEntries } from "@/lib/persistentCache";
 import { MOVIES_CATALOGUE_KEY } from "@/lib/catalogueKeys";
 import { followOnlyOptions, fetcher, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import {
@@ -74,7 +74,14 @@ beforeEach(() => {
         posted.push(JSON.parse(init?.body ?? "{}"));
         return Promise.resolve({ ok: true, status: 204, json: async () => ({}) });
       }
-      return answer(url).promise.then((data) => ({ ok: true, status: 200, json: async () => data }));
+      // `{ __status, body }` : une réponse en erreur (un 502 de panne, §92).
+      return answer(url).promise.then((data) => {
+        const failed = data as { __status?: number; body?: unknown } | null;
+        if (failed && typeof failed === "object" && typeof failed.__status === "number") {
+          return { ok: false, status: failed.__status, json: async () => failed.body };
+        }
+        return { ok: true, status: 200, json: async () => data };
+      });
     })
   );
   vi.stubGlobal("matchMedia", (query: string) => ({
@@ -287,6 +294,26 @@ describe("un appui sur une carte dessinée depuis le cache", () => {
     });
     await waitFor(() => expect(onPlay).toHaveBeenCalledTimes(1));
     expect(onPlay.mock.calls[0][0].resumeAt).toBeUndefined();
+  });
+
+  // Jellyfin en panne (DECISIONS.md §92) : les deux flux répondent 502 `upstream_unreachable` au lieu
+  // d'une liste vide. La rangée tenue reste, et l'appareil garde sa copie — une liste vide les aurait
+  // remplacées toutes les deux.
+  it("pendant une panne, la rangée connue reste à l'écran et sur l'appareil", async () => {
+    await cached("louis", [movie("a", 30, 3), movie("b", 20, 2)]);
+    app("louis");
+    await waitFor(() => expect(shownKeys()).toEqual(["a", "b"]));
+    const outage = { __status: 502, body: { error: "jellyfin ne répond pas", code: "upstream_unreachable" } };
+    await act(async () => {
+      answer(RESUME_KEY).resolve(outage);
+      answer(NEXT_UP_KEY).resolve(outage);
+    });
+    await act(async () => void (await new Promise((resolve) => setTimeout(resolve, 50))));
+    expect(shownKeys()).toEqual(["a", "b"]);
+    flushPersistentWritesForTests();
+    await act(async () => void (await new Promise((resolve) => setTimeout(resolve, 50))));
+    const kept = (await readAccountCache("louis")).find((e) => e.key === RESUME_KEY);
+    expect((kept?.data as { items: { id: string }[] }).items.map((i) => i.id)).toEqual(["a", "b"]);
   });
 
   it("une fois la liste fraîche, part tout de suite", async () => {

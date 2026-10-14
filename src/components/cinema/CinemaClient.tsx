@@ -24,6 +24,9 @@ import { Play, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet, catalogueErrorView } from "@/lib/swr";
 import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
+import { catalogueSwrOptions, sheetRepairDuring } from "@/lib/catalogueOutage";
+import { CatalogueOutageBanner, CatalogueUnavailable, useCatalogueOutage } from "@/components/cinema/CatalogueOutage";
+import { useRole } from "@/lib/useRole";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
@@ -391,7 +394,9 @@ export function CinemaClient() {
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     MOVIES_CATALOGUE_KEY,
-    cinemaFetcher
+    cinemaFetcher,
+    // Relu toutes les 30 s tant qu'il est un catalogue de secours, jamais sinon (§92).
+    catalogueSwrOptions
   );
   /**
    * Différé, sauf quand une série est visée — la même règle que sur téléphone.
@@ -406,8 +411,12 @@ export function CinemaClient() {
   const seriesWarmed = useWarmSeriesCatalogue(movies !== undefined);
   const { data: series, error: seriesError, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
     mediaType === "series" || route.serie !== null || seriesWarmed ? SERIES_CATALOGUE_KEY : null,
-    cinemaFetcher
+    cinemaFetcher,
+    catalogueSwrOptions
   );
+  // Jellyfin en panne : le bandeau, et le bouton Lecture qui le dit au lieu d'ouvrir (§92).
+  const outage = useCatalogueOutage(movies, series);
+  const { isReadOnly } = useRole();
   // Les films sont là : on peut préparer les séries sans rien retarder. Voir le crochet.
 
   /** Le catalogue de l'onglet affiché est-il arrivé ? Voir la remise à zéro du volet.*/
@@ -624,7 +633,9 @@ export function CinemaClient() {
     // Celui du titre demandé, et lui seul : exiger les deux catalogues rendait ce filet inerte
     // tant que celui des séries n'était pas chargé, c'est-à-dire dans le cas le plus courant.
     route.film !== null ? moviesById.size > 0 : seriesById.size > 0,
-    route.film !== null ? MOVIES_CATALOGUE_KEY : SERIES_CATALOGUE_KEY
+    route.film !== null ? MOVIES_CATALOGUE_KEY : SERIES_CATALOGUE_KEY,
+    // Pendant une panne : un message au lieu de rien (§92) — la même règle que sur téléphone.
+    sheetRepairDuring(route.film, moviesError, movies, seriesError, series, outage)
   );
   const seriesSpotlightOfficial = useMemo(
     () => (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8),
@@ -1094,11 +1105,12 @@ export function CinemaClient() {
 
   // Tout l'écran seulement sans catalogue : une revalidation ratée, catalogue en main, garde
   // l'accueil et ses fiches sous une ligne d'erreur (voir `catalogueErrorView`).
+  // Sans aucun catalogue gardé (§92) : ce qui manque, Réessayer, l'essai automatique annoncé — et
+  // « Mode standard » pour l'administrateur seul (la gestion n'est pas à un spectateur).
   if (catalogueErrorView(moviesError, movies) === "plein") {
     return createPortal(
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
-        <p className="max-w-sm text-sm text-danger">{errorMessage(moviesError, t, t("errors.loadFailed"), locale)}</p>
-        {exitButton}
+        <CatalogueUnavailable error={moviesError}>{!isReadOnly && exitButton}</CatalogueUnavailable>
       </div>,
       document.body
     );
@@ -1184,6 +1196,10 @@ export function CinemaClient() {
           affiches, et un seul endroit où l'on va chercher où aller. */}
 
       <CinemaModeToggle mode={mediaType} onChange={setMediaType} />
+      {/* Jellyfin en panne : sous le sélecteur, centré comme lui (§92). */}
+      <div className="pointer-events-none fixed z-10 -translate-x-1/2" style={{ top: "calc(max(1rem, env(safe-area-inset-top)) + 3rem)", left: "calc(50% + var(--player-rail, 0px) / 2)" }}>
+        <CatalogueOutageBanner outage={outage} />
+      </div>
       {/* « Tous les films / séries » en haut à droite, en rond comme sur téléphone (08/10/2026) ;
           l'aide du clavier se range à sa gauche. Toujours là depuis le 13/10/2026 : l'option qui
           le masquait n'était choisie par personne et doublait chaque écran d'un cas à tenir. */}

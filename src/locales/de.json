@@ -769,7 +769,8 @@
         "audio": "Spurwechsel",
         "background": "Rückkehr aus dem Hintergrund"
       }
-    }
+    },
+    "jellyfinDown": "Jellyfin nicht erreichbar seit {time}"
   },
   "radarr": {
     "pageTitle": "Filme",
@@ -1056,7 +1057,9 @@
       "noIncidents": "In den letzten 7 Tagen wurden keine Vorfälle festgestellt.",
       "maintenance": "Wahrscheinlicher Neustart oder Update um {time} — kurze Unterbrechung",
       "incident": "Nicht verfügbar von {start} bis {end} ({duration})",
-      "ongoing": "Nicht verfügbar seit {start} — andauernd"
+      "ongoing": "Nicht verfügbar seit {start} — andauernd",
+      "offline": "Offline",
+      "offlineSince": "Offline seit {time}"
     },
     "technicalTitle": "Technische Details",
     "technicalShow": "Technische Details anzeigen",
@@ -2319,7 +2322,15 @@
     "removeFromContinueFailed": "Dieser Titel konnte nicht aus „Weiterschauen“ entfernt werden.",
     "titleUnavailable": "Dieser Titel ist im Kino noch nicht verfügbar.",
     "seriesStillWatched": "Alle Folgen sind gesehen: Die Serie bleibt unter „Gesehen“.",
-    "forYou": "Für dich"
+    "forYou": "Für dich",
+    "outage": {
+      "banner": "Wiedergabe vorübergehend nicht verfügbar — der Server antwortet nicht",
+      "playBlocked": "Wiedergabe vorübergehend nicht verfügbar — der Server antwortet nicht. Versuche es in ein paar Minuten erneut.",
+      "titleUnreachable": "Die Mediathek antwortet gerade nicht: Dieser Titel öffnet sich, sobald sie wieder da ist.",
+      "retry": "Erneut versuchen",
+      "retrying": "Neuer Versuch…",
+      "nextRetry": "Neuer Versuch in {n} s"
+    }
   },
   "services": {
     "notConfigured": "{name} ist nicht konfiguriert.",

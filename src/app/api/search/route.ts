@@ -237,6 +237,13 @@ async function findSharedSeriesByCast(castIds: number[]) {
 
 const searchAllowed = createRateLimiter(120, 60_000);
 
+/**
+ * Ce que la recherche accorde à Jellyfin (§92). Ses listes sont en mémoire en temps normal (deux
+ * minutes) et répondent en quelques millisecondes ; seul un hôte figé dépassait — huit secondes de
+ * recherche au lieu de 0,3 le 14/10/2026.
+ */
+const SEARCH_JELLYFIN_WAIT_MS = 1500;
+
 export async function GET(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get("q") ?? "").slice(0, MAX_QUERY_LENGTH).trim();
   const type = req.nextUrl.searchParams.get("type") as "movie" | "series" | "all" | null ?? "all";
@@ -279,7 +286,8 @@ export async function GET(req: NextRequest) {
     const [movies, series, members, multiResults, multiResultsEn, personResults] = await Promise.all([
       cachedMovies().catch(() => []),
       cachedSeries().catch(() => []),
-      catalogueMembers(),
+      // Sans attendre plus d'une seconde et demie un Jellyfin qui ne répond pas (§92).
+      catalogueMembers({ jellyfinWaitMs: SEARCH_JELLYFIN_WAIT_MS }),
       tmdbPrimary.searchMulti(q).catch(() => ({ results: [] })),
       tmdbEn === tmdbPrimary ? Promise.resolve({ results: [] }) : tmdbEn.searchMulti(q).catch(() => ({ results: [] })),
       tmdbPrimary.searchPerson(personQuery).catch(() => ({ results: [] })),

@@ -18,6 +18,7 @@ import { knownAccountsDb } from "@/lib/db";
 import { logAuthEvent } from "@/lib/eventLogs";
 import { upstreamSignal, UPSTREAM_TIMEOUT_MS } from "@/lib/http";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { forgetBlockedTags } from "@/lib/blockedTags";
 import { logError } from "@/lib/logger";
@@ -55,7 +56,7 @@ export async function applyNewAccountTags(): Promise<{ tagged: string[] }> {
   const tagged: string[] = [];
   let users: JellyfinUser[];
   try {
-    const res = await fetch(`${base}/Users`, { headers, signal: upstreamSignal(UPSTREAM_TIMEOUT_MS) });
+    const res = await jellyfinFetch(`${base}/Users`, { headers, signal: upstreamSignal(UPSTREAM_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`GET /Users : HTTP ${res.status}`);
     const body = (await res.json()) as unknown;
     users = Array.isArray(body) ? (body as JellyfinUser[]) : [];
@@ -75,7 +76,7 @@ export async function applyNewAccountTags(): Promise<{ tagged: string[] }> {
     try {
       const policy = user.Policy && !user.Policy.IsAdministrator && tags.length > 0 ? withTags(user.Policy, tags) : null;
       if (policy) {
-        const res = await fetch(`${base}/Users/${jellyfinIdSegment(user.Id)}/Policy`, {
+        const res = await jellyfinFetch(`${base}/Users/${jellyfinIdSegment(user.Id)}/Policy`, {
           method: "POST",
           headers: { ...headers, "Content-Type": "application/json" },
           body: JSON.stringify(policy),

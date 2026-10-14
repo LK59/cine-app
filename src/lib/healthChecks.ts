@@ -2,6 +2,7 @@ import { atMostEvery } from "@/lib/quotaGuard";
 import fs from "fs/promises";
 import { config } from "@/lib/config";
 import { jellyfin } from "@/lib/clients/jellyfin";
+import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
 import { getDb } from "@/lib/db";
 import { configuredServices, type ServiceKey as ConfigKey } from "@/lib/services";
 import { ServiceNotConfiguredError } from "@/lib/serviceConfigured";
@@ -93,7 +94,9 @@ export async function pingWithKey(
 export async function pingJellyfin(): Promise<ServiceHealth> {
   const start = Date.now();
   try {
-    const res = await fetch(`${config.jellyfin.url}/System/Info/Public`, { signal: AbortSignal.timeout(5000) });
+    // Hors du coupe-circuit, mais témoin (§92) : le relevé de chaque minute est la sonde naturelle —
+    // sa réponse referme le disjoncteur, son échec le tient ouvert.
+    const res = await passJellyfinFetch(`${config.jellyfin.url}/System/Info/Public`, { signal: AbortSignal.timeout(5000) });
     const latencyMs = Date.now() - start;
     if (!res.ok) return { name: "Jellyfin", url: config.jellyfin.url, status: "degraded", latencyMs, version: null, error: `HTTP ${res.status}` };
     const json = await res.json();

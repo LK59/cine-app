@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId, isSubtitleStreamIndex, isUnderJellyfinPrefix } from "@/lib/jellyfinPath";
@@ -80,7 +81,7 @@ async function subtitle(req: NextRequest, { params }: SubtitleParams, notePass: 
   }
 
   try {
-    const res = await fetch(target, {
+    const res = await passJellyfinFetch(target, {
       signal: AbortSignal.any([req.signal, AbortSignal.timeout(8000)]),
       headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
     });

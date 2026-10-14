@@ -3,7 +3,8 @@ import { hiddenForRequest, withoutHidden } from "@/lib/blockedTags";
 import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
-import { cachedJson } from "@/lib/cachedJson";
+import { catalogueFallbackResponse, catalogueResponse, type CatalogueOutageFlags } from "@/lib/catalogueFallback";
+import { logError } from "@/lib/logger";
 import { cachedSeries, cachedJellyfinSeriesAdmin, cachedJellyfinFirstEpisodes, cachedJellyfinSeasons, cachedJellyfinRecentEpisodes, cachedJellyfinPlayedAmong } from "@/lib/server-cache";
 import { latestArrivals, seriesFreshness } from "@/lib/seriesArrival";
 import { jellyfinOnlySeries, matchSeries } from "@/lib/catalogueMembers";
@@ -281,9 +282,21 @@ export async function GET(req: Request) {
     // entier — le classement du jour est gardé par sorte, pas par compte —, puis retiré.
     // Une entrée par compte depuis §75 : les dates dépendent de ce qu'il a vu. Bornée par le nombre
     // de comptes — une clé par ensemble « vu » grandirait sans fin.
-    return cachedJson(req, `cinema-series:${locale}:${signature}:${jfId ?? ""}`, withoutHidden(payload, hidden, (item) => item.sonarrId));
+    // Et la copie de secours du compte, tenue à jour au passage (DECISIONS.md §92).
+    return catalogueResponse(req, {
+      kind: "series",
+      locale,
+      jfId,
+      cacheKey: `cinema-series:${locale}:${signature}:${jfId ?? ""}`,
+      payload: withoutHidden(payload, hidden, (item) => item.sonarrId),
+    });
   } catch (err) {
-    // Une panne amont se nomme, elle ne sort pas en 500 nu — voir `upstreamFailure`.
+    // Le dernier catalogue servi à ce compte, marqué périmé (§92) — sinon l'erreur nommée.
+    const kept = await catalogueFallbackResponse(req, "series", localeOf(req));
+    if (kept) {
+      logError("cinema-series", err, { servedFallback: true });
+      return kept;
+    }
     return upstreamFailure(err, "cinema-series");
   }
 }
@@ -294,4 +307,4 @@ export async function GET(req: Request) {
  * `CinemaSeriesWire` est ce qui voyage — les titres une fois, des identifiants ailleurs. `cinemaFetcher`
  * rend cette forme-ci à l'arrivée, si bien qu'aucun écran n'a eu à changer. Voir `cinemaPayload`.
  */
-export type CinemaSeriesPayload = HydratedPayload<CinemaSeries> & { top10Theme: Top10Theme | null };
+export type CinemaSeriesPayload = HydratedPayload<CinemaSeries> & { top10Theme: Top10Theme | null } & CatalogueOutageFlags;

@@ -769,7 +769,8 @@
         "audio": "Changement de piste",
         "background": "Retour d'arrière-plan"
       }
-    }
+    },
+    "jellyfinDown": "Jellyfin injoignable depuis {time}"
   },
   "radarr": {
     "pageTitle": "Films",
@@ -1056,7 +1057,9 @@
       "noIncidents": "Aucun incident détecté sur les 7 derniers jours.",
       "maintenance": "Redémarrage ou mise à jour probable à {time} — coupure de courte durée",
       "incident": "Indisponible de {start} à {end} ({duration})",
-      "ongoing": "Indisponible depuis {start} — en cours"
+      "ongoing": "Indisponible depuis {start} — en cours",
+      "offline": "Hors ligne",
+      "offlineSince": "Hors ligne depuis {time}"
     },
     "technicalTitle": "Détails techniques",
     "technicalShow": "Afficher les détails techniques",
@@ -2319,7 +2322,15 @@
     "removeFromContinueFailed": "Ce titre n'a pas pu être retiré de « Reprendre ».",
     "titleUnavailable": "Ce titre n'est pas encore disponible dans le cinéma.",
     "seriesStillWatched": "Tous ses épisodes sont vus : la série reste dans « Vu ».",
-    "forYou": "Pour vous"
+    "forYou": "Pour vous",
+    "outage": {
+      "banner": "Lecture momentanément indisponible — le serveur ne répond pas",
+      "playBlocked": "Lecture momentanément indisponible — le serveur ne répond pas. Réessaie dans quelques minutes.",
+      "titleUnreachable": "La bibliothèque ne répond pas pour le moment : ce titre s'ouvrira dès son retour.",
+      "retry": "Réessayer",
+      "retrying": "Nouvel essai…",
+      "nextRetry": "Nouvel essai dans {n} s"
+    }
   },
   "services": {
     "notConfigured": "{name} n'est pas configuré.",

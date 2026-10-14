@@ -31,6 +31,8 @@ import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
 import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
 import { useFreshPersonalLists } from "@/lib/freshLists";
 import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet, catalogueErrorView } from "@/lib/swr";
+import { catalogueSwrOptions, sheetRepairDuring } from "@/lib/catalogueOutage";
+import { CatalogueOutageBanner, CatalogueUnavailable, useCatalogueOutage } from "@/components/cinema/CatalogueOutage";
 import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
@@ -201,7 +203,9 @@ export function CinemaMobileClient() {
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     MOVIES_CATALOGUE_KEY,
-    cinemaFetcher
+    cinemaFetcher,
+    // Relu toutes les 30 s tant qu'il est un catalogue de secours, jamais sinon (§92).
+    catalogueSwrOptions
   );
   // Series (and its Continue Watching feed) stay unfetched until the tab is actually opened —
   // same lazy contract as desktop, and more valuable here where the connection may be mobile data.
@@ -224,8 +228,11 @@ export function CinemaMobileClient() {
   const seriesWarmed = useWarmSeriesCatalogue(movies !== undefined);
   const { data: series, error: seriesError, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
     mediaType === "series" || route.serie !== null || seriesWarmed ? SERIES_CATALOGUE_KEY : null,
-    cinemaFetcher
+    cinemaFetcher,
+    catalogueSwrOptions
   );
+  // Jellyfin en panne : le bandeau, et le bouton Lecture qui le dit au lieu d'ouvrir (§92).
+  const outage = useCatalogueOutage(movies, series);
   // Le même réchauffage que sur ordinateur, et le même crochet : c'est une seule décision.
   /**
    * « À suivre » n'appartient pas à un onglet.
@@ -337,7 +344,9 @@ export function CinemaMobileClient() {
     // ce filet inerte tant que celui des séries n'était pas chargé — or il ne l'est qu'au premier
     // besoin, donc le cas courant était précisément celui où le filet ne servait à rien.
     route.film !== null ? !!byIdMovies : !!byIdSeries,
-    route.film !== null ? MOVIES_CATALOGUE_KEY : SERIES_CATALOGUE_KEY
+    route.film !== null ? MOVIES_CATALOGUE_KEY : SERIES_CATALOGUE_KEY,
+    // Pendant une panne : un message au lieu de rien (§92) — la même règle que sur le bureau.
+    sheetRepairDuring(route.film, moviesError, movies, seriesError, series, outage)
   );
 
   /**
@@ -686,7 +695,15 @@ export function CinemaMobileClient() {
         {/* Une ligne, avec ou sans catalogue : le téléphone n'a pas d'écran plein d'erreur. Celle de
             l'onglet affiché : l'erreur des séries n'était jamais lue — un onglet Séries en échec ne
             montrait que l'en-tête, et celle des films s'affichait sur les deux (08/10/2026). */}
-        {shownErrorView !== null && <p className="px-4 pt-6 text-sm text-danger">{errorMessage(shownError, t, t("errors.loadFailed"), locale)}</p>}
+        {/* Sans aucun catalogue gardé (§92) : le même écran que le bureau — Réessayer et l'essai
+            automatique annoncé. Avec un catalogue en main, la ligne d'avant. */}
+        {shownErrorView === "plein" && (
+          <div className="px-4 pt-10">
+            <CatalogueUnavailable error={shownError} />
+          </div>
+        )}
+        {shownErrorView === "ligne" && <p className="px-4 pt-6 text-sm text-danger">{errorMessage(shownError, t, t("errors.loadFailed"), locale)}</p>}
+        <CatalogueOutageBanner outage={outage} className="px-4 pt-3 text-center" />
         {!loading && payload && payload.spotlight.length === 0 && (
           <p className="px-4 pt-6 text-sm text-muted">{t("cinema.empty")}</p>
         )}

@@ -120,6 +120,21 @@ const CATEGORIES: { id: string; capabilityIds: string[] }[] = [
   { id: "library", capabilityIds: ["movieLibrary", "seriesLibrary", "libraryStats", "subtitles", "manualSubtitleSearch"] },
 ];
 
+/**
+ * « Hors ligne depuis 14:32 » — l'heure seule le jour même, la date avec sinon. Le début vient de
+ * l'incident en cours de l'historique ; un service tombé avant son premier relevé dit « Hors ligne ».
+ */
+export function offlineLabel(
+  cap: Pick<CapabilityResult, "incidents7d">,
+  t: (key: string, vars?: Record<string, string>) => string,
+  now = Date.now()
+): string {
+  const ongoing = cap.incidents7d?.find((inc) => inc.type === "ongoing");
+  if (!ongoing) return t("health.history.offline");
+  const sameDay = new Date(ongoing.start).toDateString() === new Date(now).toDateString();
+  return t("health.history.offlineSince", { time: sameDay ? fmtTime(ongoing.start) : fmtDateTime(ongoing.start) });
+}
+
 function CapabilityCard({ cap }: { cap: CapabilityResult }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
@@ -164,6 +179,13 @@ function CapabilityCard({ cap }: { cap: CapabilityResult }) {
       >
         <span className="flex items-center gap-1">
           <History size={10} />
+          {/* Pastille rouge : depuis quand d'abord, la moyenne de la semaine ensuite (§92) — « 99,9 % »
+              seul, à côté d'un service tombé, se lisait comme « tout va bien ». */}
+          {cap.status === "down" && (
+            <span className="text-muted" data-testid={`offline-${cap.id}`}>
+              {offlineLabel(cap, t)} ·
+            </span>
+          )}
           {t('health.history.uptime', { pct: String(cap.uptime7d) })}
         </span>
         <ChevronDown size={12} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />

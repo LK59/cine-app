@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { errorBody } from "@/lib/apiErrorCodes";
+import { upstreamFailure } from "@/lib/upstreamResponse";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
@@ -14,11 +15,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ items: [] });
   }
 
-  const [rawResume, links, index] = await Promise.all([
-    jellyfin.getResumeItems(session.jfId).catch(() => ({ Items: [] })),
-    catalogueLinks(),
-    libraryIndex(),
-  ]);
+  /**
+   * Une panne n'est pas une liste vide (14/10/2026, DECISIONS.md §92). Répondre `{ items: [] }`
+   * quand Jellyfin ne répondait pas se lisait « rien à reprendre » — SWR remplaçait la rangée
+   * connue, et l'appareil gardait la liste vide pour la visite suivante. Un 502 nommé laisse au
+   * client ce qu'il tenait : SWR garde sa donnée quand une relecture échoue.
+   */
+  // Les trois ensemble, comme avant : le chemin heureux n'attend rien de plus.
+  const settled = await Promise.allSettled([jellyfin.getResumeItems(session.jfId), catalogueLinks(), libraryIndex()]);
+  const [resumeResult, linksResult, indexResult] = settled;
+  if (resumeResult.status === "rejected") return upstreamFailure(resumeResult.reason, "jellyfin-resume");
+  // Les deux autres ne levaient pas avant non plus d'une façon qui vidait la rangée : rendue telle quelle.
+  if (linksResult.status === "rejected") throw linksResult.reason;
+  if (indexResult.status === "rejected") throw indexResult.reason;
+  const rawResume = resumeResult.value;
+  const links = linksResult.value;
+  const index = indexResult.value;
   // Sans ce qui est vu (DECISIONS.md §51) : une série marquée vue, un film marqué vu depuis sa
   // dernière lecture. Le filtre est commun à « Reprendre » et « À suivre » (`withoutWatched`).
   const resumeData = { ...rawResume, Items: withoutWatched(session.jfId, rawResume.Items, index) };

@@ -1066,6 +1066,26 @@ export const statusHistoryDb = {
     tx(results);
   },
 
+  /**
+   * Depuis quand ce service est hors ligne d'après les relevés — `null` s'il répondait au dernier
+   * (ou n'a jamais été relevé). Trois lectures par l'index `(service, checked_at)`, chacune bornée
+   * par la panne elle-même : l'Activité la relit toutes les vingt secondes (§92).
+   */
+  serviceDownSince(service: string): number | null {
+    const db = getDb();
+    const last = db
+      .prepare("SELECT status FROM service_checks WHERE service = ? ORDER BY checked_at DESC LIMIT 1")
+      .get(service) as { status: string } | undefined;
+    if (!last || last.status === "ok") return null;
+    const lastOk = db
+      .prepare("SELECT checked_at AS at FROM service_checks WHERE service = ? AND status = 'ok' ORDER BY checked_at DESC LIMIT 1")
+      .get(service) as { at: number } | undefined;
+    const first = db
+      .prepare("SELECT MIN(checked_at) AS at FROM service_checks WHERE service = ? AND checked_at > ?")
+      .get(service, lastOk?.at ?? 0) as { at: number | null } | undefined;
+    return first?.at ?? null;
+  },
+
   getCapabilityHistory(capability: string, sinceMs: number): { status: string; checkedAt: number }[] {
     return getDb()
       .prepare("SELECT status, checked_at as checkedAt FROM capability_checks WHERE capability = ? AND checked_at >= ? ORDER BY checked_at ASC")

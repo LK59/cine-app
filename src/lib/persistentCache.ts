@@ -33,7 +33,7 @@ import { budgetFor } from "@/lib/resumeCache/budget";
  */
 
 /** À changer avec les types des réponses gardées — le test de format le rappelle. */
-export const PERSISTED_CACHE_SCHEMA = 15;
+export const PERSISTED_CACHE_SCHEMA = 16;
 
 /**
  * Ce qui se garde. Rien d'autre : ce sont les flux de l'écran d'accueil, et eux seuls — plus la
@@ -366,9 +366,18 @@ export function noteResponse(key: string, data: unknown): void {
     setTimeout(reportTiming, RESUME_WAIT_MS);
   }
   if (!currentAccount) return;
+  // Un catalogue de secours (§92) n'est pas une réponse à garder : l'appareil garde le dernier vrai,
+  // et la visite suivante ne s'ouvrirait pas sur un bandeau de panne déjà finie.
+  if (outageMarked(data)) return;
   pendingWrites.set(key, data);
   if (writeTimer) return;
   writeTimer = setTimeout(flushWrites, WRITE_DELAY_MS);
+}
+
+function outageMarked(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const marks = data as { stale?: unknown; jellyfinDown?: unknown };
+  return marks.stale === true || marks.jellyfinDown === true;
 }
 
 function flushWrites(): void {

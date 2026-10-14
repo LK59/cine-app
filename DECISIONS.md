@@ -4688,3 +4688,76 @@ vrai `usePlaybackSession`), `scene-native.test.tsx`, `player-host-server.test.ts
 depuis une réplique »).
 
 **Décidé le 14/10/2026** (Louis).
+
+---
+
+## 92. Jellyfin en panne : le catalogue reste, la lecture le dit, et la panne ne se paie qu'une fois
+
+**Règle.** Quand Jellyfin ne répond pas :
+
+1. **Le coupe-circuit** (`jellyfinBreaker.ts`). Après un échec *de transport* (aucune réponse, délai
+   dépassé), l'hôte est réputé hors ligne 30 s : les appels échouent tout de suite avec la même erreur
+   nommée (`upstream_unreachable`), puis **une** sonde passe ; une réponse — même un refus HTTP —
+   referme. Une adresse réglée autrement repart de zéro. **Jamais pour un film en cours** : relais de
+   flux, sous-titres, vérification de visibilité, rapports de lecture et relevé de santé passent outre
+   (`passJellyfin`) et ne font que témoigner — leurs octets referment le disjoncteur.
+2. **Le catalogue** (`catalogueFallback.ts`). Chaque réponse de `/api/cinema/movies` et `/series` tient
+   à jour, sur disque (`kv_cache`, gzip, écrit seulement quand l'étiquette change), **le dernier
+   catalogue servi à ce compte**, après le retrait de ses tags bloqués (§54) et avec ses dates « déjà
+   vu » (§75) — rien d'un autre compte. En panne : cette copie, `200`, marquée `stale` (et
+   `jellyfinDown` si c'est Jellyfin), et jamais recopiée comme fraîche. Une liste encore en mémoire
+   pendant la panne est servie marquée `jellyfinDown`. Sans copie : le 502 nommé d'avant.
+3. **L'écran** (`catalogueOutage.ts`, `CatalogueOutage.tsx`, les deux accueils). Un bandeau discret
+   « Lecture momentanément indisponible — le serveur ne répond pas » ; le catalogue marqué est relu
+   toutes les 30 s (`catalogueSwrOptions`), si bien que le bandeau part seul au retour, sans recharger.
+   `PlaybackProvider.play` refuse d'ouvrir le lecteur pendant la panne et le dit (`playBlockedByOutage`).
+   Sans aucun catalogue : un écran « Réessayer » avec un essai automatique annoncé (« Nouvel essai dans
+   30 s »), « Mode standard » pour l'administrateur seul. Un titre demandé sans catalogue (`#film=138`)
+   affiche un message et rend l'adresse (`useRepairUnresolvedSheet`, `sheetRepairDuring`).
+4. **« Reprendre » / « À suivre » / la progression d'un titre** répondent `502 upstream_unreachable`
+   au lieu d'une liste vide (ou de « pas vu ») : SWR garde ce qu'il tenait, et l'appareil ne garde pas
+   une liste vide (§86). `persistentCache` ne garde pas non plus un catalogue marqué.
+5. **Les tags bloqués inconnus** (Jellyfin injoignable, rien en mémoire ni sur disque) ne valent plus
+   « aucun » : tout titre étiqueté est tenu pour caché (`UNKNOWN_BLOCKED_TAGS`). Une copie sur disque
+   (`blocked-tags:<jfId>`) survit aux redémarrages.
+6. **La recherche** n'accorde que 1,5 s aux listes de Jellyfin (`catalogueMembers({ jellyfinWaitMs })`),
+   puis rend Radarr/Sonarr/TMDB avec la règle de panne de `catalogueMembers`.
+7. **Le journal** : une panne amont s'écrit au plus une fois par hôte et par minute, la suivante portant
+   `suppressed` (le nombre de lignes tues) et `upstream`.
+8. **La gestion** : sur une pastille rouge, « Hors ligne depuis HH:MM » passe avant le pourcentage de
+   disponibilité ; l'Activité ouvre sur « Jellyfin injoignable depuis … » d'après `service_checks`.
+
+**Pourquoi.** Test isolé du 14/10/2026, Jellyfin pointé vers un nom introuvable puis vers un hôte figé :
+le catalogue entier disparaissait alors que Radarr/Sonarr répondaient (écran noir sur le bureau, une
+ligne rouge et la seule rangée Tendances sur iPhone) ; un titre de la recherche ne s'ouvrait pas, sans
+un mot ; « Reprendre » répondait une liste vide indiscernable de « rien à reprendre » ; chaque appel
+repayait huit secondes (recherche à 8 s au lieu de 0,3) ; `server.log` répétait la même ligne ;
+« 99,9 % » s'affichait à côté d'une pastille rouge ; l'Activité ne disait rien.
+
+**Porteurs.** `src/lib/jellyfinBreaker.ts` (`throughJellyfinBreaker`, `passJellyfin`, `jellyfinFetch`,
+`passJellyfinFetch`, `jellyfinIsDown`, `jellyfinDownSince`) — branché dans `clients/jellyfin.ts` (tout
+`fetchJson`, sauf les trois rapports de lecture) et les `fetch` directs (`blockedTags`, `pictureFrame`,
+`transcodePolicy`, `newAccountTags`, `jellyfinDevicePrune`, images, vignettes, chapitres en garde ; flux,
+sous-titres, `itemVisibility`, `pingJellyfin` en passage). `src/lib/catalogueFallback.ts`
+(`catalogueResponse`, `catalogueFallbackResponse`). `src/lib/catalogueOutage.ts` (`outageOf`,
+`catalogueSwrOptions`, `playBlockedByOutage`, `sheetRepairDuring`). `src/components/cinema/CatalogueOutage.tsx`
+(`useCatalogueOutage`, `CatalogueOutageBanner`, `CatalogueUnavailable`). `logger.ts` (limite), `blockedTags.ts`
+(`UNKNOWN_BLOCKED_TAGS`, `requestJfId`), `statusHistoryDb.serviceDownSince`, `offlineLabel` (CapabilityStatus).
+
+**Appelants.** `CinemaClient` et `CinemaMobileClient` (mêmes pièces, placement seul différent : sous le
+sélecteur sur le bureau, en tête du volet sur téléphone). Routes `cinema/movies`, `cinema/series`,
+`jellyfin/resume`, `cinema/next-up`, `cinema/progress/[itemId]`, `search`, `admin/activity`.
+
+**Différent exprès.** Le bandeau et les écrans sont noirs et blancs (§83) : une panne passagère n'est pas
+une alarme. Le lecteur lui-même n'est pas touché : il savait déjà ne pas passer la main au lecteur serveur
+sur `upstream_unreachable`. Une recherche faite pendant la seconde et demie de grâce peut garder 30 s
+(son cache) une réponse sans les titres « Jellyfin seul ». Le catalogue de secours d'un compte n'expire
+qu'avec le ménage ordinaire de `kv_cache` (30 jours).
+
+**Tests.** `jellyfinBreaker.test.ts`, `catalogueFallback.test.ts`, `blocked-tags-outage.test.ts`,
+`resume-route.test.ts` et `cinema-next-up-route.test.ts` (502), `logger.test.ts` (limite),
+`catalogueOutage-ui.test.tsx` (bandeau, Réessayer, compte à rebours, Lecture refusée, titre introuvable),
+`useContinueRow.test.tsx` (rangée gardée pendant la panne), `decisions-partagees.test.ts`,
+`persistentCache-schema.test.ts` (version 16).
+
+**Décidé le 14/10/2026** (Louis).

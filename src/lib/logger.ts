@@ -27,13 +27,57 @@ export const SERVER_LOG_FILE = path.join(LOG_DIR, "server.log");
 // Soixante depuis le 24/09/2026 (≈ 300 Mo) : la même base d'historique que le lecteur. Trois avant.
 export const SERVER_LOG_KEEP = 60;
 
-export function logError(scope: string, err: unknown, context?: Record<string, unknown>): void {
+/**
+ * Une panne amont, journalisée au plus une fois par service et par minute (14/10/2026, §92).
+ *
+ * Jellyfin injoignable, `server.log` recevait la même ligne `ENOTFOUND` en boucle — le catalogue,
+ * l'index « vu », chaque route —, des centaines par heure pour un seul fait, et les autres erreurs
+ * s'y noyaient. La première passe ; les suivantes de la minute sont comptées, et la ligne d'après
+ * dit combien ont été tues (`suppressed`).
+ */
+const UPSTREAM_LOG_EVERY_MS = 60_000;
+// Sur `globalThis`, effacée avant chaque test (`vitest.setup.ts`) : la limite d'un test ne doit pas
+// taire la ligne qu'un autre attend.
+type LogLimitHolder = { __cineUpstreamLogged?: Map<string, { at: number; suppressed: number }> };
+function upstreamLoggedMap(): Map<string, { at: number; suppressed: number }> {
+  const holder = globalThis as LogLimitHolder;
+  return (holder.__cineUpstreamLogged ??= new Map());
+}
+
+/** Pour les tests. */
+export function resetUpstreamLogLimit(): void {
+  upstreamLoggedMap().clear();
+}
+
+function upstreamHostOf(err: unknown): string | null {
+  if (!(err instanceof Error) || (err as { code?: unknown }).code !== "upstream_unreachable") return null;
+  const host = (err as { host?: unknown }).host;
+  if (typeof host === "string" && host) return host;
+  // Sans hôte nommé : le début du message (« hôte ne répond pas (…) »).
+  return err.message.split(" ")[0] || "amont";
+}
+
+export function logError(scope: string, err: unknown, context?: Record<string, unknown>, now = Date.now()): void {
+  const host = upstreamHostOf(err);
+  let suppressed = 0;
+  if (host) {
+    const upstreamLogged = upstreamLoggedMap();
+    const seen = upstreamLogged.get(host);
+    if (seen && now - seen.at < UPSTREAM_LOG_EVERY_MS) {
+      seen.suppressed += 1;
+      return;
+    }
+    suppressed = seen?.suppressed ?? 0;
+    upstreamLogged.set(host, { at: now, suppressed: 0 });
+  }
   const entry = {
     timestamp: new Date().toISOString(),
     level: "error",
     scope,
     message: err instanceof Error ? err.message : String(err),
     ...context,
+    ...(host ? { upstream: host } : {}),
+    ...(suppressed > 0 ? { suppressed } : {}),
   };
   console.error(JSON.stringify(entry));
   /**

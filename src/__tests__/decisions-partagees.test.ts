@@ -549,6 +549,32 @@ describe("« Reprendre » : une seule rangée, dessinée du cache et corrigée e
   );
 });
 
+describe("Jellyfin en panne : une seule conduite pour les deux accueils (§92)", () => {
+  /**
+   * Le bandeau, l'écran sans catalogue (Réessayer, essai annoncé), la relecture toutes les 30 s d'un
+   * catalogue de secours et le message d'un titre introuvable : décidés dans `catalogueOutage.ts` et
+   * `CatalogueOutage.tsx`. Le bureau avait son écran noir et le téléphone sa ligne rouge — deux
+   * réponses à une seule panne.
+   */
+  it.each(["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"])(
+    "%s passe par les pièces communes",
+    (f) => {
+      const src = lire(f);
+      expect(src).toContain("useCatalogueOutage(movies, series)");
+      expect(src).toContain("<CatalogueOutageBanner outage={outage}");
+      expect(src).toContain("<CatalogueUnavailable error=");
+      expect(src).toContain("sheetRepairDuring(route.film, moviesError, movies, seriesError, series, outage)");
+      // Les deux catalogues portent la relecture de panne, et ne l'écrivent pas eux-mêmes.
+      expect(src.match(/cinemaFetcher,\s*(\/\/[^\n]*\n\s*)?catalogueSwrOptions/g)?.length).toBe(2);
+      expect(src).not.toMatch(/refreshInterval/);
+    }
+  );
+
+  it("le bouton Lecture est refusé à un seul endroit : l'ouverture du lecteur", () => {
+    expect(lire("src/components/PlaybackProvider.tsx")).toMatch(/if \(playBlockedByOutage\(\)\) return;/);
+  });
+});
+
 describe("« Ma liste » ne se propose qu'à un titre qui a un identifiant TMDB", () => {
   /**
    * Sonarr ne résout pas toujours d'identifiant TMDB pour une série. Les deux fiches envoyaient

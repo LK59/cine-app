@@ -30,10 +30,13 @@ export class UpstreamUnreachableError extends Error {
   readonly code = UPSTREAM_UNREACHABLE;
   /** Ce que la couche réseau a dit — `EAI_AGAIN`, `ECONNREFUSED`, un délai dépassé. */
   readonly detail: string;
-  constructor(message: string, detail: string) {
+  /** L'hôte qui n'a pas répondu — la clé du journal limité (`logger.ts`, §92). */
+  readonly host?: string;
+  constructor(message: string, detail: string, host?: string) {
     super(message);
     this.name = "UpstreamUnreachableError";
     this.detail = detail;
+    if (host) this.host = host;
   }
 }
 
@@ -146,6 +149,6 @@ async function fetchOrExplain(
     })();
     const cause = (err as { cause?: { code?: string } })?.cause?.code;
     const detail = ours.aborted ? "délai dépassé" : cause || (err instanceof Error ? err.message : String(err));
-    throw new UpstreamUnreachableError(`${host} ne répond pas (${detail})`, detail);
+    throw new UpstreamUnreachableError(`${host} ne répond pas (${detail})`, detail, host);
   }
 }

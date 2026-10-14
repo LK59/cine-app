@@ -82,3 +82,28 @@ describe("logError", () => {
     expect(() => logError("scope", new Error("boom"))).not.toThrow();
   });
 });
+
+// Jellyfin injoignable, la même ligne ENOTFOUND revenait en boucle (DECISIONS.md §92) : une par
+// service et par minute, et la suivante dit combien ont été tues.
+describe("logError — pannes amont limitées", () => {
+  it("une ligne par service et par minute, avec le compte des lignes tues", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { logError } = await import("@/lib/logger");
+    const { UpstreamUnreachableError } = await import("@/lib/http");
+    const jf = () => new UpstreamUnreachableError("jellyfin:8096 ne répond pas (ENOTFOUND)", "ENOTFOUND", "jellyfin:8096");
+    const t0 = Date.parse("2026-10-14T20:00:00Z");
+    logError("cinema-movies", jf(), undefined, t0);
+    logError("watched-index", jf(), undefined, t0 + 1_000);
+    logError("api", jf(), undefined, t0 + 30_000);
+    // Un autre service n'est pas tu par celui-ci.
+    logError("radarr", new UpstreamUnreachableError("radarr:7878 ne répond pas (ECONNREFUSED)", "ECONNREFUSED", "radarr:7878"), undefined, t0 + 2_000);
+    // Une erreur ordinaire passe toujours.
+    logError("other", new Error("boom"), undefined, t0 + 3_000);
+    expect(spy).toHaveBeenCalledTimes(3);
+    logError("cinema-movies", jf(), undefined, t0 + 61_000);
+    expect(spy).toHaveBeenCalledTimes(4);
+    const last = JSON.parse(spy.mock.calls[3][0] as string);
+    expect(last).toMatchObject({ upstream: "jellyfin:8096", suppressed: 2 });
+    expect(lines().filter((l) => l.upstream === "jellyfin:8096")).toHaveLength(2);
+  });
+});

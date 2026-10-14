@@ -10,6 +10,7 @@
 
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 
 /** Relue toutes les deux minutes, comme les tags bloqués : un droit retiré s'applique vite. */
@@ -35,7 +36,7 @@ const inflight = new Map<string, Promise<boolean>>();
 
 async function readPolicy(jfId: string, fallback: boolean, now: number): Promise<boolean> {
   try {
-    const res = await fetch(`${config.jellyfin.url}/Users/${jellyfinIdSegment(jfId)}`, {
+    const res = await jellyfinFetch(`${config.jellyfin.url}/Users/${jellyfinIdSegment(jfId)}`, {
       headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: "no-store",

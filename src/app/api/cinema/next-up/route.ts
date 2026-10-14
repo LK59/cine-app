@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { untouchedPilot } from "@/lib/nextUpFilter";
+import { upstreamFailure } from "@/lib/upstreamResponse";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin, type JellyfinItem } from "@/lib/clients/jellyfin";
@@ -58,7 +59,16 @@ export async function GET(req: NextRequest) {
 
   // Sans les séries vues (DECISIONS.md §51), sauf un épisode entré après le marquage : on en demande
   // davantage pour que le filtre ne raccourcisse pas la rangée.
-  const [raw, index] = await Promise.all([jellyfin.getNextUpGlobal(session.jfId, 30).catch(() => []), libraryIndex()]);
+  // Une panne n'est pas une liste vide (§92) : un 502 nommé, et le client garde ce qu'il tenait.
+  const [nextUpResult, index] = await Promise.all([
+    jellyfin.getNextUpGlobal(session.jfId, 30).then(
+      (items) => ({ ok: true as const, items }),
+      (reason: unknown) => ({ ok: false as const, reason })
+    ),
+    libraryIndex(),
+  ]);
+  if (!nextUpResult.ok) return upstreamFailure(nextUpResult.reason, "cinema-next-up");
+  const raw: JellyfinItem[] = nextUpResult.items;
   const items = withoutWatched(session.jfId, raw, index).filter((item) => !untouchedPilot(item)).slice(0, 10);
 
   // La fiche de la série — une carte de reprise doit pouvoir l'ouvrir, et pas seulement lancer la

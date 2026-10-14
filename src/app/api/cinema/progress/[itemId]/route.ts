@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { UpstreamUnreachableError } from "@/lib/http";
+import { upstreamFailure } from "@/lib/upstreamResponse";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
@@ -55,7 +57,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     return NextResponse.json({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false, known: false });
   }
 
-  const item = await jellyfin.getItemUserData(session.jfId, itemId).catch(() => null);
+  let unreachable: unknown = null;
+  const item = await jellyfin.getItemUserData(session.jfId, itemId).catch((err: unknown) => {
+    if (err instanceof UpstreamUnreachableError) unreachable = err;
+    return null;
+  });
+  // Jellyfin injoignable (§92) : l'erreur nommée, pas « pas vu, aucune position » — la fiche garde
+  // alors ce qu'elle savait (SWR conserve sa donnée quand une relecture échoue).
+  if (unreachable) return upstreamFailure(unreachable, "cinema-progress");
   const payload: CinemaProgressPayload = {
     resumeTicks: item?.UserData?.PlaybackPositionTicks ?? null,
     runtimeTicks: item?.RunTimeTicks ?? null,

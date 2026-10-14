@@ -143,14 +143,20 @@ describe("GET /api/cinema/next-up", () => {
     expect(mockGetSeriesLastPlayed).toHaveBeenCalledTimes(2);
   });
 
-  it("falls back to an empty list when the Jellyfin call fails", async () => {
+  // Une panne n'est pas une liste vide (§92) : `{ items: [] }` se lisait « rien à suivre », et la
+  // rangée gardée sur l'appareil était remplacée. Un 502 laisse au client ce qu'il tenait.
+  it("answers a named 502, never an empty list, when the Jellyfin call fails", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
-    mockGetNextUpGlobal.mockRejectedValue(new Error("jellyfin down"));
+    const { UpstreamUnreachableError } = await import("@/lib/http");
+    mockGetNextUpGlobal.mockRejectedValue(new UpstreamUnreachableError("jellyfin ne répond pas (ENOTFOUND)", "ENOTFOUND", "jellyfin"));
 
     const { GET } = await import("@/app/api/cinema/next-up/route");
-    const body = await (await GET(fakeReq())).json();
+    const res = await GET(fakeReq());
+    const body = await res.json();
 
-    expect(body.items).toEqual([]);
+    expect(res.status).toBe(502);
+    expect(body.code).toBe("upstream_unreachable");
+    expect(body.items).toBeUndefined();
   });
 
   /**

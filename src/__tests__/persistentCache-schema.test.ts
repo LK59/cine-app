@@ -53,6 +53,8 @@ const FINGERPRINTS: Record<number, string> = {
   // 14/10/2026 : `basedOn` (les films qui ont semé « Recommandé pour vous ») remplace `becauseOf`
   // dans la découverte (DECISIONS.md §52).
   15: "9af3baabff995967",
+  // §92 : le catalogue porte `stale` / `jellyfinDown` / `savedAt` pendant une panne de Jellyfin.
+  16: "c282a58b4385be61",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

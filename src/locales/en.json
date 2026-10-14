@@ -769,7 +769,8 @@
         "audio": "Track change",
         "background": "Back from background"
       }
-    }
+    },
+    "jellyfinDown": "Jellyfin unreachable since {time}"
   },
   "radarr": {
     "pageTitle": "Movies",
@@ -1056,7 +1057,9 @@
       "noIncidents": "No incidents detected in the last 7 days.",
       "maintenance": "Likely restart or update at {time} — brief interruption",
       "incident": "Unavailable from {start} to {end} ({duration})",
-      "ongoing": "Unavailable since {start} — ongoing"
+      "ongoing": "Unavailable since {start} — ongoing",
+      "offline": "Offline",
+      "offlineSince": "Offline since {time}"
     },
     "technicalTitle": "Technical details",
     "technicalShow": "Show technical details",
@@ -2319,7 +2322,15 @@
     "removeFromContinueFailed": "This title couldn't be removed from Continue watching.",
     "titleUnavailable": "This title isn't available in the cinema yet.",
     "seriesStillWatched": "All its episodes are watched: the series stays in “Watched”.",
-    "forYou": "For you"
+    "forYou": "For you",
+    "outage": {
+      "banner": "Playback temporarily unavailable — the server isn't responding",
+      "playBlocked": "Playback temporarily unavailable — the server isn't responding. Try again in a few minutes.",
+      "titleUnreachable": "The library isn't responding right now: this title will open as soon as it's back.",
+      "retry": "Try again",
+      "retrying": "Trying again…",
+      "nextRetry": "Trying again in {n} s"
+    }
   },
   "services": {
     "notConfigured": "{name} is not configured.",

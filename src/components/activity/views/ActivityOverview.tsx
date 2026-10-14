@@ -24,6 +24,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
+import { fmtTime } from "@/lib/format";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { LoadingState, ErrorState } from "@/components/StateViews";
@@ -49,6 +50,8 @@ interface Overview {
   household: ReturnType<typeof household>;
   /** La date d'effacement des alertes, 0 si rien n'est effacé — voir `alertsCleared.ts`. */
   alertsClearedAt: number;
+  /** Depuis quand Jellyfin ne répond plus aux relevés de santé — `null` s'il répond (§92). */
+  jellyfinDownSince?: number | null;
 }
 
 /**
@@ -344,6 +347,18 @@ export function ActivityOverview() {
           </ActivityLink>
         </div>
       </div>
+
+      {/* 0. Jellyfin injoignable : avant tout le reste, puisque rien ne se lit tant qu'il manque (§92).
+          Sobre, comme le reste du panneau : le texte suffit, l'icône le signale. */}
+      {data.jellyfinDownSince ? (
+        <div role="status" data-testid="activity-jellyfin-down" className="card flex items-center gap-2 px-4 py-3 text-sm text-white">
+          <ServerCrash size={16} className="shrink-0 text-muted" />
+          <span>
+            {t("activity.jellyfinDown", { time: fmtTime(data.jellyfinDownSince) })}
+            <span className="text-subtle"> · {ago(data.jellyfinDownSince, now, t)}</span>
+          </span>
+        </div>
+      ) : null}
 
       {/* 1. Maintenant. */}
       {/* `grid-cols-1` et non une grille sans colonne : sur téléphone, sa colonne implicite prenait la

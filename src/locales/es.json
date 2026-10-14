@@ -769,7 +769,8 @@
         "audio": "Cambio de pista",
         "background": "Vuelta del segundo plano"
       }
-    }
+    },
+    "jellyfinDown": "Jellyfin inaccesible desde las {time}"
   },
   "radarr": {
     "pageTitle": "Películas",
@@ -1056,7 +1057,9 @@
       "noIncidents": "No se detectaron incidentes en los últimos 7 días.",
       "maintenance": "Probable reinicio o actualización a las {time} — interrupción breve",
       "incident": "No disponible de {start} a {end} ({duration})",
-      "ongoing": "No disponible desde {start} — en curso"
+      "ongoing": "No disponible desde {start} — en curso",
+      "offline": "Sin conexión",
+      "offlineSince": "Sin conexión desde las {time}"
     },
     "technicalTitle": "Detalles técnicos",
     "technicalShow": "Mostrar detalles técnicos",
@@ -2319,7 +2322,15 @@
     "removeFromContinueFailed": "No se pudo quitar este título de Continuar viendo.",
     "titleUnavailable": "Este título aún no está disponible en el cine.",
     "seriesStillWatched": "Todos sus episodios están vistos: la serie sigue en «Visto».",
-    "forYou": "Para ti"
+    "forYou": "Para ti",
+    "outage": {
+      "banner": "Reproducción no disponible por el momento — el servidor no responde",
+      "playBlocked": "Reproducción no disponible por el momento — el servidor no responde. Vuelve a intentarlo en unos minutos.",
+      "titleUnreachable": "La biblioteca no responde por ahora: este título se abrirá en cuanto vuelva.",
+      "retry": "Reintentar",
+      "retrying": "Reintentando…",
+      "nextRetry": "Nuevo intento en {n} s"
+    }
   },
   "services": {
     "notConfigured": "{name} no está configurado.",

@@ -40,7 +40,14 @@ export function useRepairUnresolvedSheet(
   requested: string | null,
   resolved: boolean,
   catalogueReady: boolean,
-  catalogueKey: string
+  catalogueKey: string,
+  /**
+   * Pendant une panne (§92) : `failed`, le catalogue du titre n'a pas pu être chargé du tout ;
+   * `outage`, Jellyfin est réputé hors ligne. Un appui sur un titre (recherche, `#film=138`) ne
+   * faisait alors rien — l'adresse changeait, aucune fiche, aucun mot : le filet attendait un
+   * catalogue qui ne venait pas. Il dit maintenant pourquoi, et rend l'adresse.
+   */
+  during: { failed?: boolean; outage?: boolean } = {}
 ): void {
   const { mutate } = useSWRConfig();
   const toast = useToast();
@@ -59,8 +66,19 @@ export function useRepairUnresolvedSheet(
   /** Une seule relecture par titre demandé : un titre vraiment absent ne coûte qu'une requête. */
   const asked = useRef(new Set<string>());
 
+  const failed = during.failed === true;
+  const outage = during.outage === true;
   useEffect(() => {
-    if (requested === null || resolved || !catalogueReady) return;
+    if (requested === null || resolved || !failed) return;
+    // Pas de catalogue du tout : rien à relire ni à attendre. Le message, puis l'adresse rendue —
+    // un autre essai rouvrira la fiche quand la bibliothèque sera revenue.
+    toast.info(t("cinema.outage.titleUnreachable"));
+    cinemaNavigate({ film: null, serie: null, episodes: false }, "replace");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- le message et la traduction ne changent pas ce qu'on attend.
+  }, [requested, resolved, failed]);
+
+  useEffect(() => {
+    if (requested === null || resolved || !catalogueReady || failed) return;
     if (answered === requested) {
       const timer = setTimeout(() => {
         // Le message de §47 vient d'ici, à la conclusion, et de nulle part ailleurs. Il avait son
@@ -69,7 +87,9 @@ export function useRepairUnresolvedSheet(
         // ne parte — le titre importé pendant la séance (« Voir » d'une notification « Disponible »,
         // Ma liste, une filmographie) redevenait « indisponible », exactement le cas que cette
         // relecture répare depuis le 29/09.
-        toast.info(t("cinema.titleUnavailable"));
+        // Pendant une panne, le catalogue montré est le dernier gardé : un titre arrivé depuis n'y
+        // est pas encore, et « pas disponible » serait faux.
+        toast.info(t(outage ? "cinema.outage.titleUnreachable" : "cinema.titleUnavailable"));
         cinemaNavigate({ film: null, serie: null, episodes: false }, "replace");
       }, GRACE_MS);
       return () => clearTimeout(timer);
@@ -103,7 +123,7 @@ export function useRepairUnresolvedSheet(
     };
     // Les fonctions du message et de traduction ne changent pas ce qu'on attend.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requested, resolved, catalogueReady, answered, catalogueKey, mutate]);
+  }, [requested, resolved, catalogueReady, answered, catalogueKey, mutate, failed, outage]);
 }
 
 /**

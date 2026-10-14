@@ -5,12 +5,25 @@ import type { NamedItem } from "@/lib/displayTitle";
 export { PLAYBACK_CLIENTS, isPlaybackClient, type PlaybackClient } from "@/lib/playbackClients";
 
 import { config } from "@/lib/config";
-import { fetchJson } from "@/lib/http";
+import { fetchJson as fetchJsonRaw } from "@/lib/http";
+import { passJellyfin, throughJellyfinBreaker } from "@/lib/jellyfinBreaker";
 import { jellyfinAuth, jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { forwardedFor } from "@/lib/clientAddress";
 import { jellyfinIdSegment as idSegment } from "@/lib/jellyfinPath";
 import type { JellyfinDeviceProfile } from "@/lib/deviceProfile";
 import { APP_VERSION } from "@/lib/appBuild";
+
+/**
+ * Chaque appel du client passe par le coupe-circuit (DECISIONS.md §92) : pendant une panne,
+ * l'échec est immédiat au lieu de huit secondes. Les rapports de lecture n'y passent pas
+ * (`reportJson`) — un film en cours n'est jamais retenu par lui.
+ */
+function fetchJson<T>(...args: Parameters<typeof fetchJsonRaw>): Promise<T> {
+  return throughJellyfinBreaker(() => fetchJsonRaw<T>(...args));
+}
+function reportJson<T>(...args: Parameters<typeof fetchJsonRaw>): Promise<T> {
+  return passJellyfin(() => fetchJsonRaw<T>(...args));
+}
 
 // Lu à chaque appel, et non recopié au chargement : réglable dans l'application (DECISIONS.md §48).
 const cfg = config.jellyfin;
@@ -291,7 +304,7 @@ export const jellyfin = {
     client: PlaybackClient = PLAYBACK_CLIENTS.stable,
     device?: PlaybackDevice
   ) =>
-    fetchJson<void>(`${cfg.url}/Sessions/Playing`, {
+    reportJson<void>(`${cfg.url}/Sessions/Playing`, {
       method: "POST",
       headers: await playbackHeaders(token, client, userId, device),
       body: JSON.stringify({
@@ -316,7 +329,7 @@ export const jellyfin = {
     isPaused = false,
     device?: PlaybackDevice
   ) =>
-    fetchJson<void>(`${cfg.url}/Sessions/Playing/Progress`, {
+    reportJson<void>(`${cfg.url}/Sessions/Playing/Progress`, {
       method: "POST",
       headers: await playbackHeaders(token, client, userId, device),
       body: JSON.stringify({
@@ -343,7 +356,7 @@ export const jellyfin = {
     client: PlaybackClient = PLAYBACK_CLIENTS.stable,
     device?: PlaybackDevice
   ) =>
-    fetchJson<void>(`${cfg.url}/Sessions/Playing/Stopped`, {
+    reportJson<void>(`${cfg.url}/Sessions/Playing/Stopped`, {
       method: "POST",
       headers: await playbackHeaders(token, client, userId, device),
       body: JSON.stringify({

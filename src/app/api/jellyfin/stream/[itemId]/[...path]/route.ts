@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId, isStreamPath, isUnderJellyfinPrefix } from "@/lib/jellyfinPath";
@@ -30,7 +31,7 @@ const UPSTREAM_RETRY_DELAYS_MS = [200, 500, 1000];
 const UPSTREAM_HEADERS_TIMEOUT_MS = 30_000;
 
 async function fetchWithRetry(target: string, headers: Record<string, string>, signal: AbortSignal) {
-  let res = await fetch(target, { signal, headers });
+  let res = await passJellyfinFetch(target, { signal, headers });
   for (const delay of UPSTREAM_RETRY_DELAYS_MS) {
     // 5xx only. The race above surfaces as a transient 500 from Jellyfin, and that is worth
     // waiting out. A 4xx is a definite answer — a segment past the end of a finished transcode
@@ -41,7 +42,7 @@ async function fetchWithRetry(target: string, headers: Record<string, string>, s
     // ramasse-miettes, une par nouvel essai (08/10/2026).
     await res.body?.cancel().catch(() => {});
     await new Promise((resolve) => setTimeout(resolve, delay));
-    res = await fetch(target, { signal, headers });
+    res = await passJellyfinFetch(target, { signal, headers });
   }
   return res;
 }

@@ -11,6 +11,7 @@ import { flushUnsentPositions, unsentPositionsPending } from "@/lib/unsentPositi
 import { carriedLighter } from "@/lib/playbackQuality";
 import { parseReloadIntent, reloadedLighter, type ReloadCarry } from "@/lib/serverReload";
 import { sleepTimerStore } from "@/lib/sleepTimer";
+import { playBlockedByOutage } from "@/lib/catalogueOutage";
 import { introAllowedFor, introKey, preloadIntroArt, resolveIntroArt, startIntroClock, type IntroCacheReader, type PlaybackIntroArt } from "@/lib/playbackIntro";
 
 export interface PlaybackSession {
@@ -292,6 +293,9 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   );
 
   const play = useCallback((s: PlaybackSession) => {
+    // Jellyfin en panne (§92) : le lecteur ne s'ouvre pas — l'accueil le dit. L'ouvrir menait à un
+    // écran noir, puis à un échec que le lecteur serveur aurait répété (il a besoin du même Jellyfin).
+    if (playBlockedByOutage()) return;
     // La minuterie de veille appartient à la séance (`sleepTimer.ts`) : une nouvelle ouverture
     // repart sans elle. L'épisode suivant, lui, passe par `advance`, qui la garde — c'est pour lui
     // qu'elle existe.

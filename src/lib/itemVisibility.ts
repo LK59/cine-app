@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
 import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -71,7 +72,7 @@ function remember(key: string, visible: boolean, now: number): void {
  */
 async function askJellyfin(jfId: string, itemId: string): Promise<boolean | null> {
   try {
-    const res = await fetch(
+    const res = await passJellyfinFetch(
       `${config.jellyfin.url}/Users/${jellyfinIdSegment(jfId)}/Items/${jellyfinIdSegment(itemId)}`,
       { headers: jellyfinAuthHeaders(config.jellyfin.apiKey), signal: AbortSignal.timeout(CHECK_TIMEOUT_MS), cache: "no-store" }
     );

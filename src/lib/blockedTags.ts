@@ -11,11 +11,13 @@
 
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { cachedJellyfinMoviesAdmin, cachedJellyfinSeriesAdmin } from "@/lib/server-cache";
 import { catalogueLinks } from "@/lib/sonarrLink";
+import { kvCacheDb } from "@/lib/db";
 
 /** Relue toutes les deux minutes : un tag ajouté ou retiré par l'administrateur s'applique vite. */
 const TTL_MS = 2 * 60 * 1000;
@@ -29,31 +31,82 @@ export function forgetBlockedTags(): void {
 }
 
 /**
- * Les tags bloqués du compte Jellyfin, en minuscules. Si Jellyfin ne répond pas : la dernière
- * réponse connue, sinon aucun — la lecture reste de toute façon refusée par `assertVisible`.
+ * Les tags bloqués d'un compte qu'on ne connaît pas — Jellyfin injoignable, et rien de gardé.
+ *
+ * Avant le 14/10/2026, ce cas rendait « aucun » : un compte jamais vu depuis le démarrage, pendant
+ * une panne de Jellyfin, recevait le catalogue entier, titres réservés compris (le catalogue sait
+ * se servir de listes gardées, §92). On ne montre pas sur une supposition : faute de savoir, **tout
+ * titre portant un tag** est tenu pour bloqué (`carriesBlockedTag`). Un titre sans tag ne peut être
+ * bloqué par aucun, il reste.
  */
-export async function blockedTagsOf(jfId: string, now = Date.now()): Promise<string[]> {
+export const UNKNOWN_BLOCKED_TAGS: readonly string[] = Object.freeze(["*inconnus*"]);
+
+/** La copie sur disque, pour qu'un redémarrage pendant une panne ne fasse pas tout oublier. */
+const diskKey = (jfId: string) => `blocked-tags:${jfId}`;
+
+function rememberTags(jfId: string, tags: string[], now: number): void {
+  const before = cache.get(jfId);
+  cache.set(jfId, { tags, at: now });
+  // Écrite quand elle change (ou au premier passage depuis le démarrage) : une ligne minuscule,
+  // pas une écriture toutes les deux minutes par compte.
+  if (before && before.tags.join(",") === tags.join(",")) return;
+  try {
+    kvCacheDb.set(diskKey(jfId), tags, now);
+  } catch {
+    // Un ornement : la mémoire suffit tant que le processus vit.
+  }
+}
+
+function lastKnownTags(jfId: string): string[] | null {
+  const known = cache.get(jfId);
+  if (known) return known.tags;
+  try {
+    const disk = kvCacheDb.get(diskKey(jfId));
+    if (disk && Array.isArray(disk.value) && disk.value.every((t) => typeof t === "string")) {
+      const tags = disk.value as string[];
+      // En mémoire, mais datée de son écriture : la prochaine occasion relira Jellyfin.
+      cache.set(jfId, { tags, at: disk.fetchedAt });
+      return tags;
+    }
+  } catch {
+    // Base illisible : on ne sait pas.
+  }
+  return null;
+}
+
+/**
+ * Les tags bloqués du compte Jellyfin, en minuscules. Si Jellyfin ne répond pas : la dernière
+ * réponse connue (mémoire, puis disque), sinon `UNKNOWN_BLOCKED_TAGS` — jamais « aucun » sur une
+ * supposition. Un 4xx (compte inconnu de Jellyfin) reste « aucun » : c'est une réponse.
+ */
+export async function blockedTagsOf(jfId: string, now = Date.now()): Promise<readonly string[]> {
   const known = cache.get(jfId);
   if (known && now - known.at < TTL_MS) return known.tags;
   try {
-    const res = await fetch(`${config.jellyfin.url}/Users/${jellyfinIdSegment(jfId)}`, {
+    const res = await jellyfinFetch(`${config.jellyfin.url}/Users/${jellyfinIdSegment(jfId)}`, {
       headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: "no-store",
     });
-    if (!res.ok) return known?.tags ?? [];
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      if (res.status >= 500) return lastKnownTags(jfId) ?? UNKNOWN_BLOCKED_TAGS;
+      return known?.tags ?? [];
+    }
     const user = (await res.json()) as { Policy?: { BlockedTags?: string[] | null } };
     const tags = (user.Policy?.BlockedTags ?? []).filter((t): t is string => typeof t === "string" && t.length > 0).map((t) => t.toLowerCase());
-    cache.set(jfId, { tags, at: now });
+    rememberTags(jfId, tags, now);
     return tags;
   } catch {
-    return known?.tags ?? [];
+    return lastKnownTags(jfId) ?? UNKNOWN_BLOCKED_TAGS;
   }
 }
 
 /** L'élément porte-t-il un des tags bloqués ? Même comparaison que Jellyfin : la casse seule est ignorée. */
 export function carriesBlockedTag(itemTags: readonly string[] | null | undefined, blocked: readonly string[]): boolean {
   if (!itemTags?.length || blocked.length === 0) return false;
+  // Blocages inconnus (panne, rien de gardé) : tout titre étiqueté est tenu pour caché.
+  if (blocked === UNKNOWN_BLOCKED_TAGS) return true;
   return itemTags.some((tag) => blocked.includes(tag.toLowerCase()));
 }
 
@@ -101,6 +154,12 @@ function sessionTokenOf(req: Request): string | undefined {
   return undefined;
 }
 
+/** L'identité Jellyfin du compte de la requête — la session seule, sans Jellyfin (§92 : utile pendant une panne). */
+export async function requestJfId(req: Request): Promise<string | null> {
+  const session = await verifySessionFull(sessionTokenOf(req));
+  return session?.jfId ?? null;
+}
+
 /**
  * Ce que le compte de la requête ne doit pas voir dans le catalogue : les identifiants des titres
  * dont l'élément Jellyfin porte un de ses tags bloqués, et une signature de ces tags — pour que
@@ -115,7 +174,7 @@ export async function hiddenForRequest<M>(
   const session = await verifySessionFull(sessionTokenOf(req));
   // Le compte aussi : le catalogue des séries en tire ce que ce compte a déjà vu (§75), sans relire la session.
   const jfId = session?.jfId ?? null;
-  const blocked = jfId ? await blockedTagsOf(jfId) : [];
+  const blocked: readonly string[] = jfId ? await blockedTagsOf(jfId) : [];
   if (blocked.length === 0) return { hidden: new Set(), signature: "", jfId };
   const hidden = new Set(matched.filter((entry) => carriesBlockedTag(tagsOf(entry), blocked)).map(idOf));
   return { hidden, signature: [...blocked].sort().join(","), jfId };
@@ -127,7 +186,7 @@ export async function hiddenForRequest<M>(
  * qui ne le voit pas dans le catalogue ne le voit nulle part (08/10/2026).
  */
 export async function hiddenTmdbKeysFor(jfId: string | null | undefined): Promise<Set<string>> {
-  const blocked = jfId ? await blockedTagsOf(jfId) : [];
+  const blocked: readonly string[] = jfId ? await blockedTagsOf(jfId) : [];
   if (blocked.length === 0) return new Set();
   const [movies, series, links] = await Promise.all([
     cachedJellyfinMoviesAdmin().catch(() => []),

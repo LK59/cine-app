@@ -182,15 +182,33 @@ export interface CatalogueMembers {
  * `cachedMovies` (`cachedSeries`) rend alors une liste vide sans rien demander, et tout ce que Jellyfin
  * a de ce côté est « Jellyfin seul » — une installation sans eux a un cinéma (14/10/2026, §89).
  */
-export async function catalogueMembers(): Promise<CatalogueMembers> {
+export async function catalogueMembers(opts: { jellyfinWaitMs?: number } = {}): Promise<CatalogueMembers> {
   // Rattrapé quelle que soit la façon d'échouer — une promesse rejetée comme une erreur levée tout de
   // suite : Jellyfin absent ne doit jamais vider la bibliothèque des recherches.
   const attempt = <T,>(load: () => Promise<T>) => Promise.resolve().then(load).catch(() => null);
+  /**
+   * Et sans attendre un Jellyfin figé, quand l'appelant le demande (§92) : la recherche attendait
+   * ses huit secondes de délai avant de rendre des résultats Radarr/Sonarr/TMDB qu'elle avait déjà.
+   * Passé `jellyfinWaitMs`, la moitié Jellyfin compte comme absente — la règle de panne ci-dessus ;
+   * l'appel continue et, s'il aboutit, remplit le cache pour la suivante.
+   */
+  const bounded = <T,>(load: () => Promise<T>): Promise<T | null> => {
+    const wait = opts.jellyfinWaitMs;
+    if (wait === undefined) return attempt(load);
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(null), wait);
+      (timer as { unref?: () => void }).unref?.();
+      void attempt(load).then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      });
+    });
+  };
   const [movies, series, jfMovies, jfSeries] = await Promise.all([
     attempt(() => cachedMovies()),
     attempt(() => cachedSeries()),
-    attempt(() => cachedJellyfinMoviesAdmin()),
-    attempt(() => cachedJellyfinSeriesAdmin()),
+    bounded(() => cachedJellyfinMoviesAdmin()),
+    bounded(() => cachedJellyfinSeriesAdmin()),
   ]);
   const matchedMovies = jfMovies ? matchMovies(movies ?? [], jfMovies) : null;
   const matchedSeries = jfSeries ? matchSeries(series ?? [], jfSeries) : null;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId } from "@/lib/jellyfinPath";
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
   if (!session?.jfId) return new NextResponse(null, { status: 401 });
 
   try {
-    const res = await fetch(`${config.jellyfin.url}/Items/${itemId}?Fields=Chapters&UserId=${session.jfId}`, {
+    const res = await jellyfinFetch(`${config.jellyfin.url}/Items/${itemId}?Fields=Chapters&UserId=${session.jfId}`, {
       signal: AbortSignal.any([req.signal, AbortSignal.timeout(8000)]),
       headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
     });

@@ -186,3 +186,20 @@ describe("DELETE /api/jellyfin/resume", () => {
     expect((await del({ itemId: ITEM })).status).toBe(502);
   });
 });
+
+// Une panne n'est pas une liste vide (DECISIONS.md §92) : `{ items: [] }` se lisait « rien à
+// reprendre » et remplaçait la rangée gardée sur l'appareil. Un 502 nommé laisse au client ce qu'il
+// tenait — SWR garde sa donnée quand une relecture échoue.
+describe("GET /api/jellyfin/resume pendant une panne de Jellyfin", () => {
+  it("répond 502 upstream_unreachable, jamais une liste vide", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1" });
+    const { UpstreamUnreachableError } = await import("@/lib/http");
+    mockJellyfin.getResumeItems.mockRejectedValue(new UpstreamUnreachableError("jellyfin ne répond pas (ENOTFOUND)", "ENOTFOUND", "jellyfin"));
+    const { GET } = await import("@/app/api/jellyfin/resume/route");
+    const res = await GET(fakeReq());
+    const body = await res.json();
+    expect(res.status).toBe(502);
+    expect(body).toMatchObject({ code: "upstream_unreachable" });
+    expect(body.items).toBeUndefined();
+  });
+});

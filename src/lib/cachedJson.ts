@@ -20,13 +20,18 @@ import { gzipSync } from "node:zlib";
  * recompresser un mégaoctet et demi à chaque requête pour un contenu identique coûterait plus
  * cher que ce qu'on économise.
  */
-interface Prepared {
+export interface Prepared {
   json: string;
   etag: string;
   gzip: Buffer;
 }
 
 const prepared = new Map<string, Prepared>();
+
+/** La réponse préparée d'une charge utile — partagée avec la copie de secours du catalogue (§92). */
+export function preparedJson(key: string, payload: unknown): Prepared {
+  return prepare(key, JSON.stringify(payload));
+}
 
 function prepare(key: string, json: string): Prepared {
   const cached = prepared.get(key);
@@ -38,7 +43,11 @@ function prepare(key: string, json: string): Prepared {
 }
 
 export function cachedJson(req: Request, key: string, payload: unknown): Response {
-  const { json, etag, gzip } = prepare(key, JSON.stringify(payload));
+  return respondPrepared(req, prepare(key, JSON.stringify(payload)));
+}
+
+/** Répondre une charge utile déjà préparée : étiquette, 304, compression. */
+export function respondPrepared(req: Request, { json, etag, gzip }: Prepared): Response {
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json; charset=utf-8",

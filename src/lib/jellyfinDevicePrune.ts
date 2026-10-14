@@ -28,6 +28,7 @@ import { sessionDb } from "@/lib/db";
 import { logAuthEvent } from "@/lib/eventLogs";
 import { upstreamSignal, UPSTREAM_TIMEOUT_MS } from "@/lib/http";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { logError } from "@/lib/logger";
 
 /** Trente jours sans la moindre requête : plus personne ne se sert de ce jeton. */
@@ -84,7 +85,7 @@ export async function pruneJellyfinDevices(now = Date.now()): Promise<{ deleted:
   let devices: PrunableDevice[];
   let protectedIds: Set<string>;
   try {
-    const res = await fetch(`${base}/Devices`, { headers, signal: upstreamSignal(UPSTREAM_TIMEOUT_MS) });
+    const res = await jellyfinFetch(`${base}/Devices`, { headers, signal: upstreamSignal(UPSTREAM_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`GET /Devices : HTTP ${res.status}`);
     const body = (await res.json()) as { Items?: PrunableDevice[] };
     devices = Array.isArray(body?.Items) ? body.Items : [];
@@ -98,11 +99,13 @@ export async function pruneJellyfinDevices(now = Date.now()): Promise<{ deleted:
   let deleted = 0;
   for (const device of selectPrunableDevices(devices, now, protectedIds)) {
     try {
-      const res = await fetch(`${base}/Devices?id=${encodeURIComponent(device.Id!)}`, {
+      // Hors du coupe-circuit (§92) : la liste vient de répondre, et une suppression qui échoue ne
+      // doit pas faire échouer d'office les suivantes du même passage.
+      const res = await jellyfinFetch(`${base}/Devices?id=${encodeURIComponent(device.Id!)}`, {
         method: "DELETE",
         headers,
         signal: upstreamSignal(UPSTREAM_TIMEOUT_MS),
-      });
+      }, "pass");
       if (!res.ok) throw new Error(`DELETE /Devices : HTTP ${res.status}`);
       deleted++;
       const user = device.LastUserName || "?";

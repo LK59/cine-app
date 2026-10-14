@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
   const url = `${config.jellyfin.url}/Items/${itemId}/Images/${backdrop ? "Backdrop/0" : "Primary"}?${params}`;
 
   try {
-    const res = await fetch(url, {
+    const res = await jellyfinFetch(url, {
       signal: AbortSignal.any([req.signal, AbortSignal.timeout(8000)]),
       headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
     });
