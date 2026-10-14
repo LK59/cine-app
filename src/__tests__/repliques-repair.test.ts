@@ -98,7 +98,9 @@ describe("la réparation du vocabulaire", () => {
     expect(report!.slices).toBeGreaterThan(3);
     expect(ticks).toBeGreaterThan(0);
     expect(storedTerms()).toEqual(exactTerms());
-  });
+    // 30 000 lignes écrites puis relues : sous une machine chargée (un build et une autre suite en
+    // parallèle, 14/10/2026), les 5 s par défaut de Vitest ont été dépassées dans l'image.
+  }, 30_000);
 });
 
 describe("l'effacement d'un film", () => {
