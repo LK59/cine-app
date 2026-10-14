@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   /** Quelqu'un regarde, jusqu'à nouvel ordre. */
   watching: false,
   disks: new Map<string, string[] | null>(),
+  /** Combien de fois la passe a demandé si quelqu'un regarde. */
+  asked: 0,
 }));
 
 vi.mock("@/lib/repliques/library", () => ({
@@ -34,6 +36,7 @@ vi.mock("@/lib/repliques/library", () => ({
 }));
 vi.mock("@/lib/repliques/playbackActivity", () => ({
   mustWaitForPlayback: async () => {
+    mocks.asked++;
     const wait = mocks.watching || (mocks.waits.length > 0 ? mocks.waits.shift()! : false);
     return { wait, signal: { playing: wait, by: wait ? "jellyfin" : null, lastSeenAt: 0 } };
   },
@@ -43,8 +46,8 @@ vi.mock("@/lib/repliques/disks", async (importOriginal) => ({
   diskOf: async (file: string) => mocks.disks.get(file) ?? null,
 }));
 
-import { pauseIndexing, repliquesStatus, startIndexing, rebuildIndex, nightlyDue, inNightWindow, nightKey, __testing } from "@/lib/repliques/engine";
-import { closeRepliquesDb, indexCounts, readMeta } from "@/lib/repliques/store";
+import { pauseIndexing, repliquesStatus, startIndexing, rebuildIndex, setIndexingForced, nightlyDue, inNightWindow, nightKey, __testing, type RunState } from "@/lib/repliques/engine";
+import { closeRepliquesDb, indexCounts, readMeta, writeMeta } from "@/lib/repliques/store";
 import { searchDialogue } from "@/lib/repliques/search";
 import { SETTINGS_BY_KEY } from "@/lib/settings/schema";
 import { config } from "@/lib/config";
@@ -72,6 +75,7 @@ beforeEach(() => {
   mocks.waits = [];
   mocks.watching = false;
   mocks.disks.clear();
+  mocks.asked = 0;
   process.env.REPLIQUES_ENABLED = "true";
 });
 
@@ -174,6 +178,97 @@ describe("une passe", () => {
     await rebuildIndex();
     await __testing.waitIdle();
     expect((await repliquesStatus()).parallel).toEqual({ queues: 1, reason: "unproven" });
+  });
+});
+
+describe("« Forcer l'indexation »", () => {
+  it("ignore la lecture en cours : la passe qui attendait repart aussitôt et ne demande plus", async () => {
+    closeRepliquesDb();
+    mocks.watching = true;
+    // Un sondage d'une minute : seul le réveil de « Forcer » peut la faire repartir avant la fin du test.
+    __testing.live.pollMs = 60_000;
+    await rebuildIndex();
+    await vi.waitFor(() => expect(__testing.live.phase).toBe("waiting-playback"));
+    expect(setIndexingForced(true)).toBeNull();
+    expect((await repliquesStatus()).forced).toBe(true);
+    const asked = mocks.asked;
+    await __testing.waitIdle();
+    // Toujours « quelqu'un regarde », et pourtant terminée, sans avoir redemandé.
+    expect(mocks.asked).toBe(asked);
+    const status = await repliquesStatus();
+    expect(status.phase).toBe("done");
+    expect(status.run).toMatchObject({ done: 3, total: 3 });
+    // Fin de passe : le forçage est retiré, la suivante repartira sans.
+    expect(status.run?.forced).toBe(false);
+    expect(status.forced).toBe(false);
+  });
+
+  it("sans forçage, ou forçage retiré, la passe attend toujours la fin du film", async () => {
+    closeRepliquesDb();
+    mocks.watching = true;
+    await rebuildIndex();
+    await vi.waitFor(() => expect(__testing.live.phase).toBe("waiting-playback"));
+    expect(setIndexingForced(true)).toBeNull();
+    expect(setIndexingForced(false)).toBeNull();
+    // Le forçage retiré aussitôt : elle attend encore (elle a pu lire un film entre les deux).
+    await vi.waitFor(() => expect(__testing.live.phase).toBe("waiting-playback"));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(__testing.live.phase).toBe("waiting-playback");
+    expect((await repliquesStatus()).forced).toBe(false);
+    mocks.watching = false;
+    await __testing.waitIdle();
+    expect((await repliquesStatus()).phase).toBe("done");
+  });
+
+  it("survit à un redémarrage, et se réinitialise à la fin de la passe", async () => {
+    closeRepliquesDb();
+    mocks.watching = true;
+    await rebuildIndex();
+    await vi.waitFor(() => expect(__testing.live.phase).toBe("waiting-playback"));
+    await pauseIndexing();
+    // Forcée pendant la pause : écrit dans l'état de la passe, sans boucle en route.
+    expect(setIndexingForced(true)).toBeNull();
+    expect(readMeta<RunState>("run")?.forced).toBe(true);
+    // Le « redémarrage » : plus rien en mémoire, seul l'état écrit reste.
+    __testing.reset();
+    __testing.live.pollMs = 5;
+    expect((await repliquesStatus()).forced).toBe(true);
+    expect(await startIndexing()).toBeNull();
+    await __testing.waitIdle();
+    const status = await repliquesStatus();
+    expect(status.phase).toBe("done");
+    expect(status.run).toMatchObject({ done: 3, forced: false, userPaused: false });
+  });
+
+  it("ne vaut jamais pour une passe de nuit", async () => {
+    process.env.REPLIQUES_NIGHT_START = "0";
+    process.env.REPLIQUES_NIGHT_END = "0";
+    try {
+      closeRepliquesDb();
+      __testing.wipe();
+      // Une passe de nuit inachevée dont l'état dirait « forcée » : elle attend quand même.
+      const nightly: RunState = { kind: "nightly", startedAt: Date.now(), finishedAt: null, total: 3, done: 0, errors: 0, removed: 0, bytesRead: 0, activeMs: 0, lastFilm: null, userPaused: false, forced: true };
+      writeMeta("run", nightly);
+      mocks.watching = true;
+      __testing.launch("nightly");
+      await vi.waitFor(() => expect(__testing.live.phase).toBe("waiting-playback"));
+      expect(setIndexingForced(true)).toBe("nightly");
+      await new Promise((r) => setTimeout(r, 30));
+      expect(__testing.live.phase).toBe("waiting-playback");
+      expect((await repliquesStatus()).forced).toBe(false);
+      await __testing.stopLoop("rebuild");
+      expect(readMeta<RunState>("run")?.forced).toBe(false);
+    } finally {
+      delete process.env.REPLIQUES_NIGHT_START;
+      delete process.env.REPLIQUES_NIGHT_END;
+    }
+  });
+
+  it("n'a rien à forcer sans passe inachevée", async () => {
+    closeRepliquesDb();
+    await rebuildIndex();
+    await __testing.waitIdle();
+    expect(setIndexingForced(true)).toBe("no-run");
   });
 });
 

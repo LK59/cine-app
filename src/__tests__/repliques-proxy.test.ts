@@ -7,9 +7,9 @@ vi.mock("@/lib/db", () => ({ sessionDb: { touch: vi.fn() } }));
 const mockVerify = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVerify(...a) }));
 
-function req(method: string, pathname: string): NextRequest {
+function req(method: string, pathname: string, body?: unknown): NextRequest {
   const url = new URL(`https://cine.example${pathname}`);
-  return { nextUrl: url, url: url.toString(), method, headers: new Headers(), cookies: { get: () => ({ value: "t" }) } } as unknown as NextRequest;
+  return { nextUrl: url, url: url.toString(), method, headers: new Headers(), cookies: { get: () => ({ value: "t" }) }, json: async () => body } as unknown as NextRequest;
 }
 
 beforeEach(() => {
@@ -22,9 +22,20 @@ describe("proxy — répliques", () => {
     const { proxy } = await import("@/proxy");
     expect((await proxy(req("GET", "/api/repliques/admin"))).status).toBe(403);
     expect((await proxy(req("POST", "/api/repliques/admin"))).status).toBe(403);
+    // « Forcer l'indexation » est une écriture comme les autres : refusée à un compte `user`.
+    expect((await proxy(req("POST", "/api/repliques/admin", { action: "force" }))).status).toBe(403);
     mockVerify.mockResolvedValue({ u: "louis", role: "admin" });
+    expect((await proxy(req("POST", "/api/repliques/admin", { action: "force" }))).status).toBe(200);
     expect((await proxy(req("GET", "/api/repliques/admin"))).status).toBe(200);
     expect((await proxy(req("POST", "/api/repliques/admin"))).status).toBe(200);
+  });
+
+  it("refuse « Forcer » envoyé depuis une autre page, même par l'administrateur", async () => {
+    const { proxy } = await import("@/proxy");
+    mockVerify.mockResolvedValue({ u: "louis", role: "admin" });
+    const r = req("POST", "/api/repliques/admin", { action: "force" });
+    r.headers.set("sec-fetch-site", "cross-site");
+    expect((await proxy(r)).status).toBe(403);
   });
 
   it("laisse chercher tout compte connecté", async () => {

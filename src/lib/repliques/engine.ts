@@ -78,6 +78,13 @@ export interface RunState {
   activeMs: number;
   lastFilm: string | null;
   userPaused: boolean;
+  /**
+   * « Forcer l'indexation » (14/10/2026) : la passe ne s'interrompt plus pendant une lecture
+   * (`mustWaitForPlayback` n'est plus demandé) — tous les autres garde-fous restent. Tenu ici pour
+   * survivre à un redémarrage, et propre à cette passe : une nouvelle passe repart sans. Jamais pour
+   * une passe de nuit. Absent des états écrits avant cette option : lu comme `false`.
+   */
+  forced?: boolean;
 }
 
 export type Phase = "idle" | "planning" | "running" | "waiting-playback" | "paused" | "outside-window" | "disabled" | "unavailable" | "done";
@@ -96,7 +103,10 @@ const live = {
   loop: null as Promise<void> | null,
   stopWhy: null as Stop["why"] | null,
   lastReadAt: 0,
-  wake: null as (() => void) | null,
+  /** La passe en cours, telle qu'elle est écrite à chaque film : « Forcer » la modifie en place. */
+  run: null as RunState | null,
+  /** Une par file en attente : une pause, ou « Forcer », les réveille toutes. */
+  wakers: new Set<() => void>(),
   timers: [] as ReturnType<typeof setTimeout>[],
   /** L'attente entre deux vérifications pendant une lecture (raccourcie par les tests). */
   pollMs: PLAYBACK_POLL_MS,
@@ -110,17 +120,22 @@ function info(message: string, context: Record<string, unknown> = {}): void {
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
-    const timer = setTimeout(() => {
-      live.wake = null;
-      resolve();
-    }, ms);
-    // Une pause demandée réveille l'attente tout de suite.
-    live.wake = () => {
+    const wake = () => {
       clearTimeout(timer);
-      live.wake = null;
+      live.wakers.delete(wake);
       resolve();
     };
+    const timer = setTimeout(wake, ms);
+    // Une pause demandée, ou « Forcer », réveille l'attente tout de suite — chaque file qui attend.
+    live.wakers.add(wake);
   });
+
+const wakeAll = () => {
+  for (const wake of [...live.wakers]) wake();
+};
+
+/** La passe en cours est-elle forcée ? Jamais la nuit, qui tourne hors des lectures. */
+const isForced = (kind: RunKind) => kind === "initial" && live.run?.kind === "initial" && live.run.forced === true;
 
 /** Dans la plage de nuit ? Une plage qui passe minuit (22 → 6) est prise en compte. */
 export function inNightWindow(now: Date, start: number, end: number): boolean {
@@ -154,6 +169,8 @@ async function gate(kind: RunKind, bytes: number): Promise<void> {
     if (live.stopWhy) throw new Stop(live.stopWhy);
     if (!config.repliques.enabled) throw new Stop("disabled");
     if (kind === "nightly" && !inNightWindow(new Date(), config.repliques.nightStart, config.repliques.nightEnd)) throw new Stop("window");
+    // Forcée : la lecture en cours n'est même pas demandée — le reste de la barrière tient.
+    if (isForced(kind)) break;
     const { wait, signal } = await mustWaitForPlayback();
     if (!wait) break;
     if (live.phase !== "waiting-playback") info("en pause : lecture en cours", { by: signal.by });
@@ -280,12 +297,16 @@ async function runPass(kind: RunKind): Promise<void> {
     info("dossier des films indisponible", { problem: mount.problem });
     return;
   }
+  const { todo, removed } = await plan();
+  // Lu après la préparation (qui prend des secondes) : un « Forcer » donné pendant ce temps est gardé.
   const previous = readRun();
   const resuming = previous && previous.finishedAt === null && previous.kind === kind;
-  const { todo, removed } = await plan();
   const run: RunState = resuming
     ? { ...previous, total: previous.done + todo.length, userPaused: false }
-    : { kind, startedAt: Date.now(), finishedAt: null, total: todo.length, done: 0, errors: 0, removed: 0, bytesRead: 0, activeMs: 0, lastFilm: null, userPaused: false };
+    : { kind, startedAt: Date.now(), finishedAt: null, total: todo.length, done: 0, errors: 0, removed: 0, bytesRead: 0, activeMs: 0, lastFilm: null, userPaused: false, forced: false };
+  // Une passe de nuit ne force jamais, même reprise d'un état qui le disait.
+  if (kind !== "initial") run.forced = false;
+  live.run = run;
   for (const itemId of removed) {
     await deleteFilmLines(itemId);
     forgetFilm(itemId);
@@ -307,6 +328,8 @@ async function runPass(kind: RunKind): Promise<void> {
       }),
     );
     run.finishedAt = Date.now();
+    // Le forçage valait pour cette passe : la suivante repart sans.
+    run.forced = false;
     saveRun(run);
     if (kind === "initial") writeMeta(INITIAL_DONE_KEY, true);
     if (kind === "nightly") writeMeta(LAST_NIGHT_KEY, nightKey(new Date(), config.repliques.nightStart));
@@ -331,6 +354,7 @@ function launch(kind: RunKind): void {
     })
     .finally(() => {
       live.loop = null;
+      live.run = null;
       live.currentFilms.clear();
       live.stopWhy = null;
     });
@@ -339,7 +363,7 @@ function launch(kind: RunKind): void {
 async function stopLoop(why: Stop["why"]): Promise<void> {
   if (!live.loop) return;
   live.stopWhy = why;
-  live.wake?.();
+  wakeAll();
   await live.loop;
 }
 
@@ -373,6 +397,29 @@ export async function pauseIndexing(): Promise<void> {
   live.phase = "paused";
 }
 
+export type ForceRefusal = "no-run" | "nightly";
+
+/**
+ * « Forcer » / « Ne plus forcer » : la passe initiale en cours (ou interrompue) ne s'arrête plus
+ * pendant les lectures. Écrit dans l'état de la passe — survit à un redémarrage — et, si elle
+ * attendait la fin d'un film, la réveille tout de suite plutôt qu'au prochain sondage.
+ */
+export function setIndexingForced(on: boolean): ForceRefusal | null {
+  const current = live.run ?? readRun();
+  if (!current || current.finishedAt !== null) return "no-run";
+  if (current.kind !== "initial") return "nightly";
+  if (live.run) {
+    // En mémoire d'abord : c'est cet objet qu'`indexOne` réécrit à chaque film.
+    live.run.forced = on;
+    saveRun(live.run);
+  } else {
+    saveRun({ ...current, forced: on });
+  }
+  info(on ? "indexation forcée" : "forçage retiré", { done: current.done, total: current.total });
+  if (on) wakeAll();
+  return null;
+}
+
 /** « Reconstruire l'index » : tout effacer (le fichier, instantanément) et repartir d'une initiale. */
 export async function rebuildIndex(): Promise<ActionRefusal | null> {
   if (!config.repliques.enabled) return "disabled";
@@ -392,6 +439,8 @@ export interface RepliquesStatus {
   playbackBy: string | null;
   currentFilms: string[];
   run: RunState | null;
+  /** La passe initiale inachevée est forcée (« En cours (forcée) »). */
+  forced: boolean;
   initialDone: boolean;
   lastNight: string | null;
   /** Estimation du temps restant (ms), attentes exclues — `null` sans base de calcul. */
@@ -431,6 +480,7 @@ export async function repliquesStatus(): Promise<RepliquesStatus> {
     playbackBy: live.playbackBy,
     currentFilms: [...live.currentFilms],
     run,
+    forced: unfinished && run!.kind === "initial" && run!.forced === true,
     initialDone: readMeta<boolean>(INITIAL_DONE_KEY) === true,
     lastNight: readMeta<string>(LAST_NIGHT_KEY),
     etaMs,
@@ -498,6 +548,8 @@ export const __testing = {
     live.stopWhy = null;
     live.loop = null;
     live.lastReadAt = 0;
+    live.run = null;
+    live.wakers.clear();
     live.currentFilms.clear();
   },
   waitIdle: () => live.loop ?? Promise.resolve(),

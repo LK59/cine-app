@@ -4349,6 +4349,21 @@ les positions relatives et les durées que le lecteur n'a jamais eu besoin de ga
 
 **Décidé le 14/10/2026** (Louis).
 
+**Forcer l'indexation (14/10/2026, Louis).** Un bouton « Forcer » / « Ne plus forcer » à côté de
+Lancer/Pause, avec l'avertissement que les lectures en cours peuvent saccader. Forcée, la passe ne
+demande plus `mustWaitForPlayback` dans `gate` — et seulement cela : pause demandée, option coupée,
+repos de 2 ms, débit plafonné des lectures complètes et écritures par tranches restent. L'état est
+`RunState.forced`, écrit avec la passe (il survit à un redémarrage, reprise comprise) et remis à
+`false` à sa fin : une nouvelle passe repart sans. Une passe en attente d'un film est réveillée tout
+de suite (`wakeAll`, une attente par file). **Jamais la nuit** : `setIndexingForced` refuse une passe
+de nuit (`nightly`), `gate` ne lit le forçage que pour une initiale, et une passe de nuit reprise
+efface le drapeau. Sans passe inachevée : refusé (`no-run`). La page dit « En cours (forcée) » ;
+`waiting-playback` n'y apparaît plus. `server.log` : « indexation forcée » / « forçage retiré ».
+Porteurs : `setIndexingForced` (`engine.ts`), actions `force` / `unforce` de `/api/repliques/admin`
+(admin seul et même page, par le proxy), `DialogueSearchCard`. Tests : `repliques-engine.test.ts`
+(« Forcer l'indexation » : lecture ignorée et réveil, retiré = attend de nouveau, redémarrage et fin
+de passe, nuit jamais forcée), `repliques-proxy.test.ts` (refusé à un `user`, refusé d'une autre page).
+
 
 ## 89. Jellyfin seul, et la règle de vérité
 

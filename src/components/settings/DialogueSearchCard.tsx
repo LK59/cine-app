@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { Loader2, Pause, Play, RotateCcw } from "lucide-react";
+import { Loader2, Pause, Play, RotateCcw, Zap } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { fmtEta, fmtSize } from "@/lib/format";
 import { useT } from "@/components/TranslationProvider";
@@ -43,6 +43,9 @@ export function DialogueSearchCard() {
   const running = ACTIVE.includes(data.phase);
   const run = data.run;
   const unfinished = !!run && run.finishedAt === null;
+  // « Forcer » n'a de sens que pour une passe initiale inachevée : la nuit tourne hors des lectures.
+  const canForce = unfinished && run?.kind === "initial";
+  const phaseLabel = data.forced && data.phase === "running" ? "running-forced" : data.phase;
   const percent = run && run.total > 0 ? Math.min(100, Math.round((run.done / run.total) * 100)) : run?.finishedAt ? 100 : 0;
 
   const nightly = draft.nightly ?? data.settings.nightly;
@@ -84,7 +87,7 @@ export function DialogueSearchCard() {
     await mutate();
   }
 
-  async function act(action: "start" | "pause" | "rebuild") {
+  async function act(action: "start" | "pause" | "rebuild" | "force" | "unforce") {
     if (action === "rebuild" && !window.confirm(t("repliques.admin.rebuildConfirm"))) return;
     setBusy(action);
     const res = await fetch("/api/repliques/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) }).catch(() => null);
@@ -141,9 +144,21 @@ export function DialogueSearchCard() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 className="text-base font-semibold text-white">{t("repliques.admin.initialTitle")}</h3>
-                <p className="mt-1 text-sm text-muted">{t(`repliques.admin.phase.${data.phase}`)}</p>
+                <p className="mt-1 text-sm text-muted">{t(`repliques.admin.phase.${phaseLabel}`)}</p>
               </div>
-              <div className="flex gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
+                {canForce && (
+                  <button
+                    type="button"
+                    aria-pressed={data.forced}
+                    className={`btn btn-sm rounded-full ${data.forced ? "btn-primary" : ""}`}
+                    disabled={busy !== null}
+                    onClick={() => void act(data.forced ? "unforce" : "force")}
+                  >
+                    {busy === "force" || busy === "unforce" ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                    {t(data.forced ? "repliques.admin.unforce" : "repliques.admin.force")}
+                  </button>
+                )}
                 {running ? (
                   <button type="button" className="btn btn-sm rounded-full" disabled={busy !== null} onClick={() => void act("pause")}>
                     <Pause size={14} />
@@ -157,6 +172,7 @@ export function DialogueSearchCard() {
                 )}
               </div>
             </div>
+            {canForce && <p className={`mt-2 text-xs ${data.forced ? "text-warning" : "text-subtle"}`}>{t(data.forced ? "repliques.admin.forcedNote" : "repliques.admin.forceWarning")}</p>}
             {run && (
               <div className="mt-4 space-y-2">
                 <div className="h-2 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
