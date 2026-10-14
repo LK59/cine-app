@@ -47,7 +47,7 @@ vi.mock("@/lib/repliques/disks", async (importOriginal) => ({
 }));
 
 import { pauseIndexing, repliquesStatus, startIndexing, rebuildIndex, setIndexingForced, nightlyDue, inNightWindow, nightKey, __testing, type RunState } from "@/lib/repliques/engine";
-import { closeRepliquesDb, indexCounts, readMeta, writeMeta } from "@/lib/repliques/store";
+import { closeRepliquesDb, indexCounts, readMeta, repliquesDb, writeMeta } from "@/lib/repliques/store";
 import { searchDialogue } from "@/lib/repliques/search";
 import { SETTINGS_BY_KEY } from "@/lib/settings/schema";
 import { config } from "@/lib/config";
@@ -144,6 +144,28 @@ describe("une passe", () => {
     } finally {
       mocks.films = kept;
     }
+  });
+
+  // 14/10/2026 : deux passes concurrentes avaient écrit 217 films en double et vidé un autre, sans
+  // toucher à leur signature — aucune passe ne les aurait relus.
+  it("retire sur place les répliques écrites en double, et relit un film que l'index a perdu", async () => {
+    await startIndexing();
+    await __testing.waitIdle();
+    const db = repliquesDb();
+    const count = (id: string) => (db.prepare("SELECT COUNT(*) AS n FROM lines WHERE item_id = ?").get(id) as { n: number }).n;
+    const [one, two] = [mocks.films[0].itemId, mocks.films[1].itemId];
+    expect([count(one), count(two)]).toEqual([1, 2]);
+    db.prepare("INSERT INTO lines (item_id, radarr_id, lang, start_ms, end_ms, text, norm) SELECT item_id, radarr_id, lang, start_ms, end_ms, text, norm FROM lines WHERE item_id = ?").run(one);
+    db.prepare("INSERT INTO terms (term, n) VALUES ('nouvelle', 1) ON CONFLICT(term) DO UPDATE SET n = n + 1").run();
+    db.prepare("DELETE FROM lines WHERE item_id = ?").run(two);
+    expect(searchDialogue("nouvelle version").films[0]).toMatchObject({ radarrId: 1, more: 0 });
+
+    await startIndexing();
+    await __testing.waitIdle();
+    // Film 1 réparé sans être relu ; Film 2 relu ; Film 3 (en erreur) réessayé.
+    expect((await repliquesStatus()).run).toMatchObject({ total: 2, done: 2 });
+    expect([count(one), count(two)]).toEqual([1, 2]);
+    expect((db.prepare("SELECT n FROM terms WHERE term = 'nouvelle'").get() as { n: number }).n).toBe(1);
   });
 
   it("s'arrête sur « Mettre en pause », s'en souvient, et reprend au film suivant", async () => {

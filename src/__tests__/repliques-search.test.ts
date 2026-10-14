@@ -13,12 +13,15 @@ vi.hoisted(() => {
 });
 
 import { writeLines, writeStats, deleteFilmLines, repliquesDb, type LineRow } from "@/lib/repliques/store";
-import { corrections, editDistance, searchDialogue, dialogueIndexHasLines } from "@/lib/repliques/search";
+import { corrections, editDistance, searchDialogue, dialogueIndexHasLines, splits, TOO_COMMON } from "@/lib/repliques/search";
 import { normalizedText } from "@/lib/repliques/text";
 
 const A = "a".repeat(32);
 const B = "b".repeat(32);
 const C = "c".repeat(32);
+const D = "d".repeat(31) + "1";
+const E = "e".repeat(32);
+const F = "f".repeat(32);
 
 function row(itemId: string, radarrId: number, startMs: number, text: string, lang = "fr"): LineRow {
   return { itemId, radarrId, lang, startMs, endMs: startMs + 2000, text, norm: normalizedText(text) };
@@ -36,6 +39,17 @@ beforeAll(async () => {
     row(C, 3, 8_000, "Roads? Where we’re going, we don't need roads.", "en"),
     row(C, 3, 9_000, "Merci pour l'avancement du dossier.", "fr"),
     row(B, 2, 9_000, "Le livre dont je parle.", "fr"),
+    // Une phrase coupée entre deux sous-titres.
+    row(D, 4, 40_000, "Maman disait toujours que la vie", "fr"),
+    row(D, 4, 42_500, "c'est comme une boîte de chocolats.", "fr"),
+    // « the » partout, et « isn't he » : la coupure « t he » ne doit pas passer pour « the ».
+    ...Array.from({ length: 6 }, (_, i) => row(E, 5, 100_000 + i * 10_000, `The answer number ${i}.`, "en")),
+    row(E, 5, 200_000, "Isn't he coming?", "en"),
+    // Le même moment en deux langues, et une réplique écrite en double.
+    row(F, 6, 1_000, "Le soleil se lève.", "fr"),
+    row(F, 6, 1_200, "Le soleil se lève.", "en"),
+    row(F, 6, 60_000, "Encore le soleil.", "fr"),
+    row(F, 6, 60_000, "Encore le soleil.", "fr"),
   ]);
 });
 
@@ -84,6 +98,53 @@ describe("la recherche", () => {
   it("rend toutes les répliques d'un film pour « voir plus »", () => {
     const result = searchDialogue("je suis", { itemId: A, perFilm: 30 });
     expect(result.films.map((f) => f.itemId)).toEqual([A]);
+  });
+
+  // Mesuré sur l'index réel (14/10/2026) : « the » ramenait d'abord « ain't he », « isn't he ».
+  it("ne coupe pas un mot courant en deux morceaux qui le singent", () => {
+    expect(splits("the")).toEqual([]);
+    expect(splits("dont")).toContainEqual({ left: "don", right: "t" });
+    expect(searchDialogue("the answer").films.map((f) => f.itemId)).toEqual([E]);
+    const isnt = searchDialogue("isnt he").films;
+    expect(isnt.map((f) => f.itemId)).toEqual([E]);
+    expect(isnt[0].lines.map((l) => l.text)).toEqual(["Isn't he coming?"]);
+  });
+
+  it("retrouve une phrase coupée entre deux sous-titres", () => {
+    const result = searchDialogue("toujours que la vie c'est comme une boite");
+    expect(result.films.map((f) => f.itemId)).toEqual([D]);
+    expect(result.films[0].lines[0]).toMatchObject({ startMs: 40_000, endMs: 44_500, text: "Maman disait toujours que la vie\nc'est comme une boîte de chocolats." });
+    expect(result.approximate).toBeUndefined();
+  });
+
+  it("rend les plus proches, marquées, quand aucune réplique n'a tous les mots", () => {
+    const result = searchDialogue("le coeur a toujours ses raisons");
+    expect(result.approximate).toBe(true);
+    expect(result.films[0].lines[0].text).toBe("Le Cœur a ses raisons.");
+    // Une seule réplique répond : rien d'approchant n'est ajouté à une recherche qui trouve.
+    expect(searchDialogue("le coeur a ses raisons").approximate).toBeUndefined();
+  });
+
+  it("cherche les mots entre guillemets tels quels et à la suite", () => {
+    expect(searchDialogue('"ses raisons"').films.map((f) => f.itemId)).toEqual([A]);
+    expect(searchDialogue('"raisons ses"').films).toEqual([]);
+    // Sans guillemets, la faute est rattrapée ; entre guillemets, non.
+    expect(searchDialogue("persone ne bouge").films).toHaveLength(1);
+    expect(searchDialogue('"persone ne bouge"').films).toEqual([]);
+  });
+
+  it("compte un moment une fois : deux langues du même instant, ou une réplique écrite deux fois", () => {
+    const film = searchDialogue("soleil").films.find((f) => f.itemId === F)!;
+    expect(film.lines.map((l) => l.text)).toEqual(expect.arrayContaining(["Le soleil se lève.", "Encore le soleil."]));
+    expect(film.lines).toHaveLength(2);
+    expect(film.more).toBe(0);
+  });
+
+  it("ne cherche pas une question faite des mots les plus courants", () => {
+    repliquesDb().prepare("INSERT INTO terms (term, n) VALUES ('courantissime', ?)").run(TOO_COMMON + 1);
+    expect(searchDialogue("courantissime")).toMatchObject({ films: [], tooCommon: true });
+    // Avec un mot plus rare, la question a un sens : elle est cherchée.
+    expect(searchDialogue("courantissime soleil").tooCommon).toBeUndefined();
   });
 
   it("ne lève pas sur une requête faite de ponctuation, ni sur des guillemets", () => {

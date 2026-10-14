@@ -292,7 +292,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   const dialogueWanted = dialogueAvailable && searching && wantsDialogueSearch(typed, dialogueOnly);
   const dialogue = useDialogueSearch(dialogueWanted ? dialogueSearchUrl(typed) : null);
   const moviesByItem = useMemo(() => new Map(allMovies.map((m) => [m.jellyfinItemId, m])), [allMovies]);
-  const dialogueFilms = (dialogue.data?.films ?? []).filter((f) => moviesByItem.has(f.itemId)).length;
+  const dialogueFilms = ((dialogue.data ?? dialogue.stale)?.films ?? []).filter((f) => moviesByItem.has(f.itemId)).length;
 
   const counts = useMemo(
     () => ({
@@ -489,7 +489,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
         )}
 
         {showDialogue && (
-          <DialogueResults data={dialogue.data} loading={dialogue.loading} failed={dialogue.failed} query={typed} moviesByItem={moviesByItem} />
+          <DialogueResults data={dialogue.data} stale={dialogue.stale} loading={dialogue.loading} failed={dialogue.failed} query={typed} moviesByItem={moviesByItem} />
         )}
 
         {isLoading && searching && filter !== "dialogue" && (

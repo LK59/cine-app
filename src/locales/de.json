@@ -1888,6 +1888,8 @@
         "loading": "Suche in den Dialogen…",
         "failed": "Die Dialogsuche ist fehlgeschlagen.",
         "none": "Kein Dialog passt.",
+        "tooCommon": "Diese Wörter sind zu häufig, um eine Zeile zu finden – fügen Sie ein genaueres hinzu.",
+        "approximate": "Keine Zeile enthält alle diese Wörter – hier die ähnlichsten.",
         "more": "{n} weitere Zeile zeigen|{n} weitere Zeilen zeigen",
         "playAt": "{title} bei {time} abspielen"
       }

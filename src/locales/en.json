@@ -1888,6 +1888,8 @@
         "loading": "Searching the dialogue…",
         "failed": "The dialogue search did not go through.",
         "none": "No line matches.",
+        "tooCommon": "These words are too common to find a line — add a more specific one.",
+        "approximate": "No line contains all these words — here are the closest.",
         "more": "Show {n} more line|Show {n} more lines",
         "playAt": "Play {title} at {time}"
       }

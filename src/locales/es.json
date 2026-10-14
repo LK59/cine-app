@@ -1888,6 +1888,8 @@
         "loading": "Buscando en los diálogos…",
         "failed": "La búsqueda en los diálogos no se completó.",
         "none": "Ningún diálogo coincide.",
+        "tooCommon": "Estas palabras son demasiado comunes para encontrar un diálogo: añade una más precisa.",
+        "approximate": "Ningún diálogo contiene todas estas palabras; estos son los más cercanos.",
         "more": "Ver {n} diálogo más|Ver {n} diálogos más",
         "playAt": "Reproducir {title} en {time}"
       }

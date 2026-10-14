@@ -4390,6 +4390,33 @@ Porteurs : `setIndexingForced` (`engine.ts`), actions `force` / `unforce` de `/a
 (« Forcer l'indexation » : lecture ignorée et réveil, retiré = attend de nouveau, redémarrage et fin
 de passe, nuit jamais forcée), `repliques-proxy.test.ts` (refusé à un `user`, refusé d'une autre page).
 
+**Audit de la recherche (14/10/2026), mesuré sur une copie de l'index réel** (1,98 M répliques, 599
+films ; banc `repliques-search-bench.spec.ts`, sauté sans `REPLIQUES_SEARCH_DIR`) :
+- *L'index était écrit en double* pour 217 films (deux passes concurrentes, avant le moteur unique) :
+  514 000 répliques en trop, et *Passengers* vide malgré sa fiche à 2 390. Signatures intactes : aucune
+  passe ne les aurait relus. Désormais `plan` compare la fiche à l'index (`filmLineCount`) ; les doubles
+  exacts sont retirés sur place, par tranches (`dedupeFilmLines`, vocabulaire décompté — 75 s pour les
+  514 000 sur la copie, plus longue tranche 40 ms) ; un écart qui reste fait relire le film. Pas de
+  changement de format, pas de migration : la réparation se fait à la préparation de la passe suivante.
+- *Les coupures d'apostrophe singeaient des mots courants* : « the » cherchait aussi « t he », et ses
+  premières réponses étaient « ain't he ». Une lettre seule n'est un morceau que là où une apostrophe la
+  détache ; un mot connu n'est coupé que s'il n'est pas plus fréquent que le plus rare des morceaux.
+- *Une phrase coupée entre deux sous-titres* (10 % des répliques finissent sans ponctuation) se trouve :
+  une réplique et la suivante (`id + 1`/`+ 2`, même film et langue, ≤ 4 s), seulement si moins de trois
+  films répondent, et seulement si les mots s'y suivent.
+- *Un mot faux ou de trop* (« life **is** like a box of chocolates », le film dit *was*) : quand rien ne
+  répond, les mots rares seuls puis chacun en moins, trois sur cinq au moins, marqués `approximate` (l'écran
+  le dit). Entre guillemets : l'expression exacte, sans correction.
+- *Que des mots très courants* (« the », « je », « a » : 200 à 340 ms de boucle tenue) : rien n'est cherché,
+  `tooCommon`, l'écran le dit. Seuils proportionnels à la taille de l'index (référence 2 M).
+- *Coût* : les mots rares seuls passent par FTS5 et les courants sont vérifiés dans les lignes ramenées
+  (`rareFirstRows`, borne 5 000) ; le tri par BM25 se fait avant la jointure. Sur 62 requêtes × 7 :
+  p50 14,9 → 5,0 ms, p95 298 → 72 ms, max 338 → 97 ms (les rattrapages ont 40 ms de budget). Sur
+  10,3 M lignes (l'index recopié sept fois, cas pessimiste) : p50 53 ms, p95 250 ms.
+- *L'écran* : réponses précédentes gardées, estompées, pendant la suivante (plus de clignotement à la
+  frappe) ; place de la vignette gardée au téléphone pendant son chargement ; le nom de chaque bouton
+  porte la réplique ; « voir plus » compte des moments, plus des lignes doublées par langue.
+
 
 ## 89. Jellyfin seul, et la règle de vérité
 

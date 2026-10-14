@@ -16,6 +16,10 @@ export interface DialogueResponse {
   terms?: string[];
   prefixes?: string[];
   films?: DialogueFilm[];
+  /** Aucune réplique n'a tous les mots : ce sont les plus proches (`searchDialogue`). */
+  approximate?: boolean;
+  /** Les mots sont tous parmi les plus courants : rien n'a été cherché. */
+  tooCommon?: boolean;
 }
 
 /** Le recul avant la réplique : on entre dans la scène, pas au milieu de la phrase. */
@@ -79,8 +83,12 @@ const DIALOGUE_DELAY_MS = 350;
  * Une recherche de répliques, en dehors de SWR : **annulée** dès que la question change (le
  * `fetch` en vol est abandonné), lancée après un temps d'arrêt, jamais avant les titres. `url`
  * nulle : rien à chercher.
+ *
+ * `stale` : la dernière réponse reçue, pour une question précédente, tant que la nouvelle est en
+ * route. Sans elle, chaque lettre tapée effaçait les résultats pour « Recherche dans les
+ * dialogues… » puis les redessinait 350 ms plus tard — la section clignotait pendant la frappe.
  */
-export function useDialogueSearch(url: string | null): { data: DialogueResponse | undefined; loading: boolean; failed: boolean } {
+export function useDialogueSearch(url: string | null): { data: DialogueResponse | undefined; stale: DialogueResponse | undefined; loading: boolean; failed: boolean } {
   const [state, setState] = useState<{ url: string; data?: DialogueResponse; failed?: boolean } | null>(null);
   useEffect(() => {
     if (!url) return;
@@ -99,7 +107,8 @@ export function useDialogueSearch(url: string | null): { data: DialogueResponse 
     };
   }, [url]);
   const current = url !== null && state?.url === url ? state : null;
-  return { data: current?.data, loading: url !== null && current === null, failed: !!current?.failed };
+  const loading = url !== null && current === null;
+  return { data: current?.data, stale: loading ? state?.data : undefined, loading, failed: !!current?.failed };
 }
 
 /** L'adresse d'une recherche de répliques. `film` : toutes celles d'un film (« voir plus »). */

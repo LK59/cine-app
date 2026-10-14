@@ -1888,6 +1888,8 @@
         "loading": "Recherche dans les dialogues…",
         "failed": "La recherche dans les dialogues n’a pas abouti.",
         "none": "Aucune réplique ne correspond.",
+        "tooCommon": "Ces mots sont trop courants pour chercher une réplique — ajoutez-en un plus précis.",
+        "approximate": "Aucune réplique ne contient tous ces mots — voici les plus proches.",
         "more": "Voir {n} autre réplique|Voir {n} autres répliques",
         "playAt": "Lire {title} à {time}"
       }

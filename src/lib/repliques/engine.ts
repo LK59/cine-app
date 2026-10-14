@@ -9,8 +9,10 @@ import { checkMoviesMount, libraryFilms, type LibraryFilm, type MountCheck } fro
 import { mustWaitForPlayback } from "./playbackActivity";
 import { listSidecars, type Sidecar } from "./sidecar";
 import {
+  dedupeFilmLines,
   deleteFilmLines,
   filmErrors,
+  filmLineCount,
   filmRecords,
   forgetFilm,
   indexCounts,
@@ -253,11 +255,27 @@ async function plan(): Promise<{ todo: PlannedFilm[]; removed: string[] }> {
     const languages = languagesForFilm(setting, film.originalLanguage);
     const signature = filmSignature(stat.size, stat.mtimeMs, sidecars, languages);
     const known = records.get(film.itemId);
-    if (known && known.signature === signature && known.status !== "error") continue;
+    if (known && known.signature === signature && known.status !== "error" && (await indexMatchesRecord(film.itemId, known.lines))) continue;
     todo.push({ film, languages, sidecars, signature });
   }
   const removed = [...records.keys()].filter((id) => !present.has(id));
   return { todo, removed };
+}
+
+/**
+ * L'index tient-il ce que la fiche du film annonce ? Un film inchangé n'est pas relu — mais deux
+ * passes concurrentes (avant le moteur unique, 14/10/2026) ont écrit 217 films en double et vidé
+ * *Passengers* de ses 2 390 répliques, signatures intactes. Les doubles exacts sont retirés sur
+ * place, sans lire le fichier (`dedupeFilmLines`) ; s'il manque ou reste des lignes, le film est relu.
+ */
+async function indexMatchesRecord(itemId: string, expected: number): Promise<boolean> {
+  const actual = filmLineCount(itemId);
+  if (actual === expected) return true;
+  if (actual > expected && (await dedupeFilmLines(itemId)) === expected) {
+    info("répliques en double retirées", { itemId, removed: actual - expected });
+    return true;
+  }
+  return false;
 }
 
 async function indexOne(item: PlannedFilm, run: RunState): Promise<void> {

@@ -171,9 +171,67 @@ export interface FilmRecord {
   indexedAt: number;
 }
 
-export function filmRecords(): Map<string, { signature: string; status: string }> {
-  const rows = repliquesDb().prepare("SELECT item_id, signature, status FROM films").all() as { item_id: string; signature: string; status: string }[];
-  return new Map(rows.map((r) => [r.item_id, { signature: r.signature, status: r.status }]));
+export function filmRecords(): Map<string, { signature: string; status: string; lines: number }> {
+  const rows = repliquesDb().prepare("SELECT item_id, signature, status, lines FROM films").all() as { item_id: string; signature: string; status: string; lines: number }[];
+  return new Map(rows.map((r) => [r.item_id, { signature: r.signature, status: r.status, lines: r.lines }]));
+}
+
+/** Combien de répliques d'un film sont réellement dans l'index (par `lines_item`, moins d'une ms). */
+export function filmLineCount(itemId: string): number {
+  return (repliquesDb().prepare("SELECT COUNT(*) AS n FROM lines WHERE item_id = ?").get(itemId) as { n: number }).n;
+}
+
+/**
+ * Retire les répliques écrites en double d'un film — même langue, mêmes instants, même texte — en
+ * gardant la première, par tranches, et décompte leurs mots du vocabulaire. Rend combien il en reste.
+ *
+ * Mesuré le 14/10/2026 sur la production : avant que le moteur ne soit unique (deux passes
+ * concurrentes, l'une lancée par « Forcer »), 217 films sur 599 avaient été écrits deux fois —
+ * 514 000 répliques en trop sur 1,98 M, chaque résultat lu deux fois, « voir plus » compté double.
+ * La signature de ces films n'a pas changé : aucune passe ne les aurait relus. Aucune lecture de
+ * fichier pour réparer : les doubles sont identiques à l'octet.
+ */
+export async function dedupeFilmLines(itemId: string): Promise<number> {
+  const conn = repliquesDb();
+  const rows = conn.prepare("SELECT id, lang, start_ms, end_ms, norm FROM lines WHERE item_id = ? ORDER BY id").all(itemId) as {
+    id: number;
+    lang: string;
+    start_ms: number;
+    end_ms: number;
+    norm: string;
+  }[];
+  const seen = new Set<string>();
+  const extra: { id: number; norm: string }[] = [];
+  for (const r of rows) {
+    const key = `${r.lang}|${r.start_ms}|${r.end_ms}|${r.norm}`;
+    if (seen.has(key)) extra.push({ id: r.id, norm: r.norm });
+    else seen.add(key);
+  }
+  const drop = conn.prepare("DELETE FROM lines WHERE id = ?");
+  const term = conn.prepare("UPDATE terms SET n = MAX(0, n - ?) WHERE term = ?");
+  const slice = conn.transaction((part: readonly { id: number; norm: string }[]) => {
+    const counts = new Map<string, number>();
+    for (const r of part) {
+      drop.run(r.id);
+      for (const word of r.norm.split(" ")) if (word) counts.set(word, (counts.get(word) ?? 0) + 1);
+    }
+    for (const [word, n] of counts) term.run(n, word);
+  });
+  let size = 100;
+  for (let at = 0; at < extra.length; ) {
+    const part = extra.slice(at, at + size);
+    const t0 = performance.now();
+    slice(part);
+    const ms = performance.now() - t0;
+    noteSlice(ms);
+    at += part.length;
+    await yieldToLoop();
+    mergeStep();
+    if (ms < WRITE_BUDGET_MS / 3) size = Math.min(1000, Math.ceil(size * 1.5));
+    else if (ms > WRITE_BUDGET_MS / 2) size = Math.max(20, Math.floor(size / 2));
+    await yieldToLoop();
+  }
+  return rows.length - extra.length;
 }
 
 export function saveFilm(record: FilmRecord): void {
