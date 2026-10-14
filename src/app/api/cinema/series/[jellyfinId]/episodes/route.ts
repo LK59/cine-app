@@ -11,6 +11,7 @@ import { cachedItemProviderIds, cachedSeries, cachedSonarrEpisodeTexts, getProvi
 import { catalogueLinks } from "@/lib/sonarrLink";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
 import { localeOf } from "@/lib/i18n";
+import { episodeTextTrustDb } from "@/lib/libraryCheck/store";
 
 export interface CinemaEpisode {
   jellyfinItemId: string;
@@ -77,12 +78,16 @@ function toCinemaEpisode(arranged: ArrangedEpisode): CinemaEpisode & { path: str
  */
 async function seriesIdentity(jellyfinId: string, jellyfinProviderIds: Record<string, string> | undefined) {
   const jellyfinTmdb = getProviderIdCI(jellyfinProviderIds, "tmdb");
-  const fallback = { tmdbId: jellyfinTmdb ? Number.parseInt(jellyfinTmdb, 10) : null, sonarr: null as SonarrSeries | null, jellyfinOnly: false };
+  const fallback = { tmdbId: jellyfinTmdb ? Number.parseInt(jellyfinTmdb, 10) : null, sonarr: null as SonarrSeries | null, jellyfinText: false };
   const link = (await catalogueLinks()).get(jellyfinId);
   if (!link) return fallback;
-  if (link.source !== "sonarr") return { tmdbId: link.tmdbId, sonarr: null, jellyfinOnly: true };
+  if (link.source !== "sonarr") return { tmdbId: link.tmdbId, sonarr: null, jellyfinText: true };
+  // L'exception par série (§89, posée depuis le contrôle de la bibliothèque, §90) : l'administrateur a
+  // décidé que Jellyfin a les bons noms d'épisodes. L'identité reste celle de Sonarr ; le texte, celui
+  // de Jellyfin, verrouillages compris — ni l'épisode rattaché par Sonarr, ni TMDB.
+  if (episodeTextTrustDb.has(link.catalogueId)) return { tmdbId: link.tmdbId, sonarr: null, jellyfinText: true };
   const sonarrSeries = (await cachedSeries().catch(() => [] as SonarrSeries[])).find((s) => s.id === link.catalogueId) ?? null;
-  return { tmdbId: link.tmdbId, sonarr: sonarrSeries, jellyfinOnly: false };
+  return { tmdbId: link.tmdbId, sonarr: sonarrSeries, jellyfinText: false };
 }
 
 /** Jellyfin identifie-t-il la série comme Sonarr ? Un identifiant commun suffit. */
@@ -115,7 +120,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinI
 
   const locale = localeOf(req);
   const providerIds = series?.ProviderIds as Record<string, string> | undefined;
-  const identity = await seriesIdentity(jellyfinId, providerIds).catch(() => ({ tmdbId: null, sonarr: null, jellyfinOnly: false }));
+  const identity = await seriesIdentity(jellyfinId, providerIds).catch(() => ({ tmdbId: null, sonarr: null, jellyfinText: false }));
   const seriesName = items.find((item) => item.SeriesName)?.SeriesName ?? null;
   const episodes = arrangeEpisodes(items, seriesName, locale).map(toCinemaEpisode);
 
@@ -129,10 +134,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinI
       () => new Set<(typeof episodes)[number]>()
     );
   }
-  // Une série que Jellyfin a seule (§89) : son texte, jamais complété par TMDB. Ses saisons sont celles
-  // du disque, que TMDB peut numéroter autrement — *La Casa de Papel* rangée comme Netflix (5 parties)
-  // recevait, en saison 2, les titres de la saison 2 de TMDB, qui sont ceux de la partie 3 (14/10/2026).
-  if (!identity.jellyfinOnly) {
+  // Une série que Jellyfin a seule (§89), ou que l'administrateur lui a confiée (§90) : son texte, jamais
+  // complété par TMDB. Ses saisons sont celles du disque, que TMDB peut numéroter autrement — *La Casa
+  // de Papel* rangée comme Netflix (5 parties) recevait, en saison 2, les titres de la saison 2 de TMDB,
+  // qui sont ceux de la partie 3 (14/10/2026).
+  if (!identity.jellyfinText) {
     await fillEpisodeText(episodes.filter((e) => !settled.has(e)), identity.tmdbId, locale).catch(() => {});
   }
 

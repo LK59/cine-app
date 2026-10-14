@@ -20,7 +20,6 @@ export type Draft = Record<string, string>;
 
 const NEED_TONE = {
   required: "bg-danger/15 text-danger",
-  library: "bg-warning/15 text-warning",
   optional: "bg-white/8 text-subtle",
 } as const;
 
@@ -54,7 +53,7 @@ export function SettingsGroupCard({
 }) {
   const t = useT();
   const defs = SETTINGS.filter((s) => s.group === group && (!keys || keys.includes(s.key)));
-  const need = defs.some((d) => d.need === "required") ? "required" : defs.some((d) => d.need === "library") ? "library" : "optional";
+  const need = defs.some((d) => d.need === "required") ? "required" : "optional";
   const testable = (TESTABLE_GROUPS as readonly string[]).includes(group);
   // Une aide (où trouver la clé) seulement pour les services : un texte absent revient sous la
   // forme de sa clé, qu'il ne faut pas afficher.

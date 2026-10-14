@@ -28,6 +28,7 @@ import {
   ServerCrash,
   Server,
   PackageCheck,
+  ScanSearch,
 } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { PageHeader } from "@/components/PageHeader";
@@ -41,6 +42,7 @@ import { ADMIN_REPORTS_KEY } from "@/components/reports/reportCache";
 import { fmtSize } from "@/lib/format";
 import { RelativeTime } from "@/components/RelativeTime";
 import { AnimatedNumber } from "@/lib/useTweenedNumber";
+import { ACTIONABLE_CATEGORIES, type LibraryCheckStatus } from "@/lib/libraryCheck/types";
 
 /**
  * L'accueil de la gestion — un tableau de bord d'administrateur (13/10/2026, DECISIONS.md §81).
@@ -385,6 +387,46 @@ function ActivityDigestSection() {
   );
 }
 
+/**
+ * Le contrôle de la bibliothèque, en un compteur discret (DECISIONS.md §90) : les désaccords qui
+ * demandent un geste (identité, numérotation, fichiers mal rangés), puis l'informatif. La lecture de
+ * cette route relance d'elle-même une analyse vieille de plus d'un jour — en arrière-plan.
+ */
+function LibraryCheckSection() {
+  const t = useT();
+  const { data } = useSWR<LibraryCheckStatus>("/api/admin/library-check", fetcher, { refreshInterval: (latest) => (latest?.running ? 5_000 : 300_000) });
+  const result = data?.result ?? null;
+  const actionable = result ? ACTIONABLE_CATEGORIES.reduce((sum, c) => sum + result.counts[c], 0) : 0;
+  return (
+    <Panel
+      title={t("libraryCheck.overview.title")}
+      icon={ScanSearch}
+      action={
+        <Link href="/controle" className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
+          {t("libraryCheck.overview.open")} <ChevronRight size={13} />
+        </Link>
+      }
+    >
+      <div className="px-4 py-4 text-sm" data-testid="library-check-digest">
+        {!data ? (
+          <div className="h-10 animate-pulse" />
+        ) : !result ? (
+          <p className="text-subtle">{t(data.running ? "libraryCheck.overview.running" : "libraryCheck.overview.never")}</p>
+        ) : (
+          <>
+            <p className={actionable > 0 ? "font-medium text-warning" : "text-muted"}>
+              {actionable > 0 ? t("libraryCheck.overview.count", { n: actionable }) : t("libraryCheck.overview.clean")}
+            </p>
+            <p className="mt-1 text-xs text-subtle">
+              {t("libraryCheck.overview.info", { only: result.counts.jellyfinOnly, links: result.counts.hardlinks })} · <RelativeTime date={result.computedAt} />
+            </p>
+          </>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 /** Les derniers imports de Radarr et Sonarr (et les demandes) — le détail est à la page « Imports ». */
 function ImportsSection({ items }: { items: ActivityItem[] }) {
   const t = useT();
@@ -473,6 +515,9 @@ export function DashboardClient({ initialData }: { initialData?: DashboardPayloa
 
             {/* L'Activité du cinéma, en résumé */}
             <ActivityDigestSection />
+
+            {/* Le contrôle de la bibliothèque (§90) */}
+            <LibraryCheckSection />
           </div>
 
           {/* Les derniers imports */}

@@ -70,7 +70,8 @@
     },
     "backToCinema": "Zurück zum Kino",
     "accountPreferences": "Deine Einstellungen sind unter Konto",
-    "label": "Navigation der Verwaltung"
+    "label": "Navigation der Verwaltung",
+    "libraryCheck": "Bibliotheksprüfung"
   },
   "common": {
     "loading": "Laden...",
@@ -2320,7 +2321,8 @@
   },
   "services": {
     "notConfigured": "{name} ist nicht konfiguriert.",
-    "notConfiguredHint": "Diese Seite braucht einen Dienst, der auf dieser Installation nicht angebunden ist. Trage diese Variablen in deine .env-Datei ein und starte den Container neu."
+    "notConfiguredHint": "Diese Seite braucht einen Dienst, der in dieser Installation nicht angebunden ist. Binden Sie ihn unter Konfiguration → Verbindungen an oder tragen Sie diese Variablen in Ihre .env-Datei ein.",
+    "notConfiguredNote": "Nicht eingerichtet: {names}. Diese Seite zeigt, was nicht von ihnen abhängt."
   },
   "maintenance": {
     "bannerTitle": "Wartung läuft",
@@ -2740,10 +2742,9 @@
     },
     "need": {
       "required": "Erforderlich",
-      "library": "Radarr oder Sonarr",
       "optional": "Optional"
     },
-    "libraryRule": "Mindestens einer der beiden wird gebraucht: Radarr für Filme, Sonarr für Serien.",
+    "libraryRule": "Optional: Radarr und Sonarr verwalten Downloads, Anfragen und fehlende Folgen. Ohne sie zeigt das Kino alles, was Jellyfin hat.",
     "test": "Verbindung testen",
     "testing": "Wird getestet…",
     "testOk": "Verbunden — {detail}",
@@ -2794,12 +2795,12 @@
       },
       "radarr": {
         "title": "Radarr",
-        "why": "Die Filme der Bibliothek, ihre Dateien und ihre Qualität.",
+        "why": "Optional. Verwaltet Filme: Downloads, Anfragen, Dateiqualität. Ohne Radarr zeigt das Kino die Filme, die Jellyfin hat.",
         "help": "Schlüssel: Radarr → Settings → General → API Key."
       },
       "sonarr": {
         "title": "Sonarr",
-        "why": "Die Serien der Bibliothek, ihre Staffeln und Folgen.",
+        "why": "Optional. Verwaltet Serien: Downloads, Anfragen, fehlende Folgen. Ohne Sonarr zeigt das Kino die Serien, die Jellyfin hat.",
         "help": "Schlüssel: Sonarr → Settings → General → API Key."
       },
       "jellyseerr": {
@@ -2950,6 +2951,32 @@
     "deployStatus": {
       "set": "In diesem Container gesetzt: {value}",
       "unset": "In diesem Container nicht gesetzt."
+    },
+    "features": {
+      "cinema": {
+        "on": "Das Kino: Filme und Serien aus Jellyfin, mit Plakaten und Beschreibungen von TMDB",
+        "off": "Das Kino: braucht Jellyfin und TMDB"
+      },
+      "movies": {
+        "on": "Filmverwaltung (Radarr): Hinzufügen, Downloads, Qualität",
+        "off": "Ohne Radarr: keine Filmverwaltung — das Kino zeigt die Filme aus Jellyfin"
+      },
+      "series": {
+        "on": "Serienverwaltung (Sonarr): Hinzufügen, Downloads, fehlende Folgen",
+        "off": "Ohne Sonarr: keine Serienverwaltung — das Kino zeigt die Serien aus Jellyfin"
+      },
+      "requests": {
+        "on": "Titelanfragen (Jellyseerr)",
+        "off": "Ohne Jellyseerr: keine Anfragen aus dem Kino"
+      },
+      "downloads": {
+        "on": "Download-Fortschritt (qBittorrent)",
+        "off": "Ohne qBittorrent: keine Download-Verfolgung"
+      },
+      "subtitles": {
+        "on": "Untertitelsuche (Bazarr)",
+        "off": "Ohne Bazarr: keine Untertitelsuche"
+      }
     }
   },
   "subtitleGen": {
@@ -3096,6 +3123,129 @@
       },
       "writeSlice": "längster Schreibvorgang {ms} ms",
       "errorList": "{n} Film mit Fehler|{n} Filme mit Fehler"
+    }
+  },
+  "libraryCheck": {
+    "subtitle": "Wo sich Jellyfin, Radarr, Sonarr, TMDB und die Festplatte widersprechen. Nur lesend: Von dieser Seite aus wird dort nichts geändert.",
+    "analyse": "Prüfen",
+    "analysing": "Prüfung läuft…",
+    "lastRun": "Letzte Prüfung {when} · {seconds} s",
+    "never": "Noch nicht geprüft",
+    "error": "Die Prüfung ist fehlgeschlagen: {message}",
+    "progress": {
+      "load": "Listen werden gelesen…",
+      "episodes": "Folgen: {done} / {total}",
+      "movies": "Filme: {done} / {total}",
+      "series": "Serien: {done} / {total}",
+      "hardlinks": "Harte Links…"
+    },
+    "sources": {
+      "title": "Quellen",
+      "ok": "gelesen",
+      "unconfigured": "nicht eingerichtet",
+      "down": "antwortet nicht",
+      "mediaAbsent": "Medienordner nicht eingebunden: Doppelablagen nicht geprüft"
+    },
+    "categories": {
+      "identity": {
+        "title": "Abweichende Identität",
+        "hint": "Richtiger Ordner, aber Jellyfin sieht darin einen anderen Titel als Radarr oder Sonarr."
+      },
+      "numbering": {
+        "title": "Folgennummerierung",
+        "hint": "Sonarr ordnet Dateien anderen Nummern zu als die Festplatte — typisch für Anime."
+      },
+      "misfiled": {
+        "title": "Möglicherweise falsch abgelegte Dateien",
+        "hint": "Die Datei scheint nicht der Film zu sein, unter dem Radarr sie abgelegt hat: Laufzeit, Originalname oder der Film, den Jellyfin darin sieht."
+      },
+      "jellyfinOnly": {
+        "title": "Nur in Jellyfin",
+        "hint": "In Jellyfin, aber nicht in Radarr oder Sonarr. Das Kino zeigt sie trotzdem: zur Information."
+      },
+      "hardlinks": {
+        "title": "Doppelablagen",
+        "hint": "Dieselben Dateien (harte Links) unter zwei Titeln abgelegt. Oft gewollt."
+      }
+    },
+    "empty": "Nichts zu melden.",
+    "showMore": "Die anderen {n} anzeigen",
+    "movie": "Film",
+    "series": "Serie",
+    "verdict": {
+      "catalogue": "{service} hat wahrscheinlich recht",
+      "jellyfin": "Jellyfin hat wahrscheinlich recht",
+      "file": "Die Datei ist wahrscheinlich nicht dieser Film",
+      "unknown": "Unentschieden",
+      "info": "Zur Information"
+    },
+    "says": {
+      "catalogue": "{service}",
+      "jellyfin": "Jellyfin",
+      "tmdb": "TMDB",
+      "file": "Datei",
+      "noIds": "keine Kennung"
+    },
+    "minutes": "{n} Min.",
+    "numbering": {
+      "summary": "Folgen mit anderer Nummer zugeordnet: {mismatched} von {compared}",
+      "unattached": "Dateien, die Sonarr nicht zuordnet: {n}",
+      "seriesType": "Serientyp in Sonarr: {type}"
+    },
+    "arbiter": {
+      "title": "Schiedsspruch durch TMDB",
+      "score": "Wert {score}",
+      "titlesJellyfin": "Jellyfin-Titel ↔ TMDB: {n}",
+      "titlesSonarr": "Sonarr-Titel ↔ TMDB: {n}",
+      "titlesCatalogue": "Titel auf der Festplatte ↔ TMDB-Serie von Sonarr: {n}",
+      "seasons": "Staffeln der Festplatte mit der Anzahl von TMDB: {tmdb}/{n}, von Sonarr: {sonarr}/{n}",
+      "seasonsIdentity": "Staffeln der Festplatte mit der Anzahl der TMDB-Serie von Sonarr: {tmdb}/{n}, der von Jellyfin: {other}/{n}",
+      "none": "TMDB konnte nicht entscheiden."
+    },
+    "misfiled": {
+      "duration": "Laufzeit der Datei {file} Min. bei erwarteten {expected} Min.",
+      "nameYear": "Originalname mit Jahr {years}, für einen Film von {year}",
+      "jellyfinRuntime": "Laufzeit nahe am Film, den Jellyfin darin sieht ({title}, {runtime} Min.)",
+      "original": "Originalname: {name}"
+    },
+    "hardlinks": {
+      "files": "Geteilte Dateien: {n}",
+      "intended": "Möglicherweise gewollt"
+    },
+    "gesture": {
+      "title": "Empfohlener Schritt",
+      "jellyfinIdentifyMovie": "Jellyfin → der Film → ⋮ → Identifizieren → TMDB {tmdb} ({title}), dann Metadaten aktualisieren und alles ersetzen.",
+      "jellyfinIdentifySeries": "Jellyfin → die Serie → ⋮ → Identifizieren → TVDB {tvdb} / TMDB {tmdb} ({title}), dann Metadaten aktualisieren und alles ersetzen.",
+      "radarrReplace": "Radarr → {title} → Dateien: Datei prüfen. Ist es ein anderer Film, löschen und neu suchen — oder über Wanted → Manual Import dem richtigen Film zuordnen.",
+      "sonarrFixIdentity": "Sonarr → {title} → Bearbeiten: die verfolgte Serie prüfen. Enthält der Ordner {jellyfin}, aus Sonarr entfernen und den Ordner unter der richtigen Serie importieren (Library Import) — oder Jellyfin bei den Folgennamen vertrauen.",
+      "identityUnknown": "Den Titel in Jellyfin öffnen und mit {service} vergleichen. Irrt Jellyfin: Identifizieren → TMDB {tmdb}. Irrt {service}: den verfolgten Titel korrigieren oder die Datei ersetzen.",
+      "numberingJellyfin": "Die Festplatte folgt der Reihenfolge von TMDB: „Jellyfin vertrauen“ einschalten — oder in Sonarr → {title} → Bearbeiten den Serientyp ändern (Standard / Anime) und die Dateien umbenennen.",
+      "numberingSonarr": "Sonarr benennt diese Dateien richtig: Das Kino zeigt bereits seine Namen. Um die Festplatte anzugleichen: Sonarr → {title} → Dateien umbenennen.",
+      "numberingUnknown": "Einige Folgen am Bildschirm vergleichen. Sind die im Kino gezeigten Namen falsch, „Jellyfin vertrauen“ einschalten; sonst ist nichts zu tun.",
+      "radarrImport": "Zum Verfolgen: Radarr → Movies → Library Import, Ordner {folder}.",
+      "sonarrImport": "Zum Verfolgen: Sonarr → Series → Library Import, Ordner {folder}.",
+      "noService": "{service} ist nicht eingerichtet: Das ist der Normalfall.",
+      "hardlinks": "Ist diese Doppelung nicht gewollt, einen der beiden Titel in Radarr oder Sonarr entfernen (nur die Dateien dieses Titels löschen)."
+    },
+    "trust": {
+      "on": "Jellyfin bei den Folgennamen vertrauen",
+      "off": "Zurück zu den Namen von Sonarr",
+      "active": "Folgennamen: die von Jellyfin (Ausnahme gesetzt)",
+      "suggested": "Vom Schiedsspruch empfohlen",
+      "saved": "Ausnahme gesetzt",
+      "removed": "Ausnahme entfernt",
+      "failed": "Speichern nicht möglich",
+      "listTitle": "Ausnahmen",
+      "listHint": "Diese Serien behalten im Kino die Folgennamen und Zusammenfassungen von Jellyfin."
+    },
+    "overview": {
+      "title": "Bibliotheksprüfung",
+      "open": "Öffnen",
+      "count": "Zu prüfende Abweichungen: {n}",
+      "clean": "Keine Abweichung",
+      "info": "Nur in Jellyfin: {only} · Doppelablagen: {links}",
+      "never": "Noch nicht geprüft",
+      "running": "Prüfung läuft…"
     }
   }
 }

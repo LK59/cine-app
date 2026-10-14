@@ -1552,7 +1552,8 @@ dans `data/config/secrets.json` (0600) et relus ensuite ; `.env` l'emporte toujo
 Tant que l'assistant n'est pas terminé, toute page y mène. Il commence par « Bonjour » dans les
 langues de l'application et le choix de la langue (qui règle celle de l'installation), puis crée
 le compte administrateur (haché, scrypt) si aucun n'existe, et ne rend obligatoires que Jellyfin,
-TMDB et Radarr ou Sonarr. Son drapeau n'est posé que par « Terminer ». Une installation configurée
+TMDB et Radarr ou Sonarr. (Depuis le 14/10/2026, Jellyfin et TMDB seulement : Radarr et Sonarr sont
+facultatifs, §89.) Son drapeau n'est posé que par « Terminer ». Une installation configurée
 par son `.env` avant lui (Jellyfin, TMDB et Radarr ou Sonarr renseignés) est reconnue et marquée
 terminée une fois pour toutes ; `SETUP_COMPLETE=true` le force.
 
@@ -4456,5 +4457,124 @@ réservés stables, collision journalisée, tags bloqués, « dans la bibliothè
 description sans Radarr ni Bazarr), `search-jellyfin-seul.test.ts`, `episodes-verite.test.ts` (numéro
 lu dans le fichier, fin de saison, remplissage, saison TMDB absente, épisode de Sonarr, TMDB du
 catalogue), `resume-route.test.ts`, `cinema-next-up-route.test.ts`, `decisions-partagees.test.ts`.
+
+**Complété le 14/10/2026 (soir), deux règles.**
+
+*L'exception par série : « Faire confiance à Jellyfin pour les noms d'épisodes ».* Les noms d'épisodes
+vont à Sonarr quand il rattache un fichier à un autre numéro que le disque — juste si le disque est mal
+numéroté, faux si c'est Sonarr qui numérote autrement que le disque *voulu* (l'ordre de diffusion d'un
+animé, des parties Netflix rangées en saisons). Ça ne se devine pas : l'administrateur le décide, série
+par série, depuis le contrôle de la bibliothèque (§90). Gardé dans CineApp (`episode_text_trust`, par
+identifiant Sonarr, `episodeTextTrustDb`) ; quand il est posé, la route des épisodes garde le texte de
+Jellyfin tel quel — noms, résumés, verrouillages compris — sans l'épisode rattaché par Sonarr ni le
+complément TMDB, exactement comme une série que Jellyfin a seule. L'identité et le catalogue restent
+ceux de Sonarr. « Revenir aux noms de Sonarr » le retire. Route : `POST /api/admin/library-check/trust`
+(administrateur seul ; un identifiant de la plage réservée est refusé).
+
+*Une installation sans Radarr ou sans Sonarr.* Un service **non configuré** (`serviceConfigured`) n'est
+pas une panne : `cachedMovies` / `cachedSeries` rendent une liste vide sans rien demander, et tout ce que
+Jellyfin a de ce côté devient « Jellyfin seul ». Avant, l'appel partait vers l'adresse par défaut sans
+clé, levait, et la route du catalogue répondait 500 — aucune série. Un service **configuré mais en
+panne** garde le comportement de la panne (aucun « Jellyfin seul » de ce côté, le catalogue échoue
+comme avant). Ont suivi : `jellyfinOnlySeries` compte les épisodes par lots de huit (`mapInBatches`) —
+sans Sonarr, toutes les séries sont candidates ; le calendrier, les Imports, l'activité de la gestion et
+l'annonce des épisodes importés ne demandent plus rien à un service non configuré ; le calendrier et les
+statistiques disent ce qui manque (`NotConfiguredNote`) ; les pages Films, Séries et Téléchargements
+avaient déjà leur état « non configuré » (`ServiceNotConfigured`, dont le texte renvoie maintenant à
+Configuration → Connexions). **Radarr et Sonarr deviennent facultatifs dans l'assistant** : seuls Jellyfin
+et TMDB sont exigés (`missingRequired`, `setupDone`), l'étape Bibliothèque les présente comme tels, et
+l'écran de fin résume ce qui sera disponible ou non (`availableFeatures`, `SERVICE_FEATURES`) ; le
+niveau « Radarr ou Sonarr » (`need: "library"`) a disparu du schéma des réglages.
+
+Tests : `instance-sans-arr.test.ts` (listes vides sans appel, tout Jellyfin au catalogue, routes du
+catalogue, calendrier et Imports sans appel), `episodes-verite.test.ts` (l'exception, posée puis
+retirée), `settings-setup.test.ts`, `library-check-ui.test.tsx` (écran de fin de l'assistant).
+
+**Décidé le 14/10/2026** (Louis).
+
+## 90. Le contrôle de la bibliothèque : où les sources se contredisent, en lecture seule
+
+Demandé le 14/10/2026, après la mesure qui a mené à §89 : les désaccords entre Jellyfin, Radarr/Sonarr,
+TMDB et le disque s'étaient trouvés à la main, par des scripts jetables. Ils ont maintenant une page :
+**Gestion → Infrastructure → Contrôle de la bibliothèque** (`/controle`), et une ligne dans la Vue
+d'ensemble.
+
+**La règle.** Le contrôle **lit et conseille** ; il n'écrit chez aucun service. Pour chaque désaccord :
+ce que dit chaque source, qui a probablement raison (`catalogue`, `jellyfin`, `file`, `unknown`,
+`info`), et le geste à faire chez le service, écrit (« Jellyfin → le film → Identifier → TMDB … »). La
+seule écriture possible depuis la page est l'exception par série de §89, que l'arbitrage peut
+*conseiller* (bouton mis en avant) mais ne pose jamais seul.
+
+**Les catégories.**
+- **Identité différente** — bon dossier, autre identité chez Jellyfin (un identifiant présent des deux
+  côtés qui diffère, ou aucun chez Jellyfin). Films : la durée du fichier départage entre les deux films
+  TMDB (à 10 minutes près au moins), sinon l'année du nom d'origine du fichier si elle est celle d'un
+  seul. Séries : l'arbitre TMDB (ci-dessous).
+- **Numérotation des épisodes** — fichiers que Sonarr rattache à un autre numéro que le disque (la règle
+  de `applyAttachedEpisodeText`), avec leur nombre, ceux qu'il ne rattache pas, le type de série Sonarr.
+- **Fichiers peut-être mal rangés** (films) — sans lire le disque : la durée mesurée par Radarr
+  (`mediaInfo.runTime`, sinon Jellyfin) très éloignée de celle de TMDB — **30 minutes et 30 %
+  ensemble**, ou moins de la moitié ; une version longue annoncée (`movieFile.edition`, ou « Extended »,
+  « Director's Cut », « Roadshow »… dans le nom) n'en est pas une si le fichier est plus long — ; l'année
+  du **nom d'origine** du fichier (Radarr le garde : `originalFilePath`, `sceneName`) qui n'est pas celle
+  du film à un an près — sauf si la durée est juste à trois minutes près — ; ou la durée proche (8 min)
+  du film que Jellyfin croit voir et loin (15 min) de celui de Radarr. Jellyfin n'expose pas le titre
+  Matroska du conteneur (vérifié sur *Aliens* : `MediaSources.Name` est le nom du fichier, le `Title` de
+  la piste vidéo absent) : le nom d'origine le remplace.
+- **Jellyfin seul** — informatif ; le geste (Library Import) n'est proposé que si le service est
+  configuré.
+- **Doubles rangements** — fichiers vidéo à plusieurs liens physiques sous deux dossiers de titre
+  (`find … -links +1 -exec stat`, BusyBox, une seconde pour 7 900 fichiers ; les seeds ne sont pas
+  parcourus) — « voulu possible ».
+
+**L'arbitre TMDB** (séries), source indépendante de Sonarr qui suit TVDB, et **seulement dans le
+contrôle** — jamais dans le rendu des épisodes. Numérotation : pour chaque fichier concerné (huit au
+plus), le titre Jellyfin et celui de l'épisode rattaché par Sonarr comparés au titre TMDB **au numéro
+du disque** (français puis anglais, la meilleure ressemblance : Jaccard sur les mots sans accents ni
+ponctuation ni mots vides, 1 si identiques, 0,8 si l'un contient tous les mots de l'autre) ; score =
+moyenne Jellyfin − moyenne Sonarr, ± 0,25 selon que les saisons complètes du disque ont le compte
+d'épisodes de TMDB ou de Sonarr. Identité : les titres du disque comparés à la série TMDB de Sonarr, et
+les comptes de saisons du disque à la série TMDB de Sonarr, à celle de Jellyfin et à Sonarr. Verdict à
+± 0,3 ; deux ou trois exemples d'épisodes affichés. Coût borné : quarante séries arbitrées par analyse ;
+les saisons TMDB passent par `seasonText` (une semaine sur le disque, le cache de la fiche), les faits de
+titre par des projections `tmdb:check-facts:v1:*` (deux semaines).
+
+**Le calcul.** `startLibraryCheck` : une analyse à la fois, à la demande (« Analyser ») ou d'elle-même
+quand la lecture de la route trouve un résultat de plus d'un jour (la Vue d'ensemble la lit toutes les
+cinq minutes). Les séries par lots de quatre (Sonarr : épisodes et fichiers, `cachedSonarrEpisodeTexts` ;
+Jellyfin : `getEpisodesAdmin`), une respiration de la boucle entre deux lots (`mapInBatches`,
+`yieldToLoop`). Le résultat, daté, dans sa table (`library_check`, une ligne, hors de `kv_cache` qu'on
+élague à trente jours) ; un résultat d'une autre forme (`LIBRARY_CHECK_VERSION`) est relu comme absent.
+Les règles du catalogue sont celles du cinéma (`matchMovies`, `matchSeries`, `jellyfinOnlyMovies`,
+`jellyfinOnlySeries`) : Radarr/Sonarr en panne, rien de « Jellyfin seul » de ce côté.
+
+**Mesuré le 14/10/2026 sur la production** (banc `library-check-bench.spec.ts`, en lecture seule,
+base jetable) : 58 s à froid, 3 s ensuite. Trois séries « Jellyfin seul » (*La casa de papel*, *Berlin
+et La Dame à l'hermine*, *Le Flambeau*), deux doubles rangements (*Berlin* ↔ *Berlin and the Lady with
+an Ermine*, 8 fichiers ; *Burning Love (FR)* ↔ *Le Flambeau*, 9), une identité (*November* : Radarr
+*Novembre* 2022, Jellyfin *November* 2017 — Radarr a raison, le fichier a été remplacé), un fichier
+mal rangé (*A Good Day to Die Hard* : 15 minutes, 208 Mo, pour 98 attendues), aucune numérotation. Le
+premier passage signalait aussi *Les Deux Tours* Extended, *Kingdom of Heaven* Roadshow et *Le Chef*
+(« Comme.un.Chef.2014 », 85 min pour 84) : d'où l'exception des versions longues et celle de la durée
+juste.
+
+**Porteurs.** `src/lib/libraryCheck/analyse.ts` (seuils, `misfiledSignals`, `movieIdentityVerdict`,
+`compareNumbering`, `arbitrateNumbering`, `arbitrateIdentity`, `hardlinkPairs`, `analyseLibrary`),
+`run.ts` (`startLibraryCheck`, `refreshLibraryCheckIfStale`, `libraryCheckStatus`), `store.ts`
+(`libraryCheckDb`, `episodeTextTrustDb`), `types.ts` ; `src/lib/inBatches.ts` ;
+`jellyfin.getEpisodesAdmin`.
+
+**Appelants.** `/api/admin/library-check` (GET, POST), `/api/admin/library-check/trust`,
+`src/components/gestion/LibraryCheck.tsx` (`/controle`), `LibraryCheckSection` (Vue d'ensemble), la
+route des épisodes (l'exception). `proxy.ts` : `ADMIN_ONLY_READS` ; les routes vérifient aussi
+(`adminOnly`).
+
+**Tests.** `library-check.test.ts` (seuils sur les cas réels, arbitre, doubles rangements, analyse
+entière, table, routes), `library-check-proxy.test.ts`, `library-check-ui.test.tsx`, `navItems.test.ts`,
+`design-tokens.test.ts`.
+
+**Voulu.** Aucun geste automatique : un désaccord se lit, se décide, et se corrige chez le service qui a
+tort. Les seuils sont prudents exprès — un faux signalement coûte une vérification ; une correction
+automatique fausse coûterait un film.
 
 **Décidé le 14/10/2026** (Louis).

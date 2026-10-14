@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serviceConfigured } from "@/lib/serviceConfigured";
 import { radarr } from "@/lib/clients/radarr";
 import { sonarr } from "@/lib/clients/sonarr";
 import { withCache, TTL, cachedMovies } from "@/lib/server-cache";
@@ -25,8 +26,9 @@ export interface ImportEvent {
 export async function GET() {
   const events = await withCache<ImportEvent[]>("timeline:imports", TTL.MEDIUM, async () => {
     const [radarrHist, sonarrHist, movies] = await Promise.all([
-      radarr.getHistory(50).catch(() => ({ records: [] })),
-      sonarr.getHistory(50).catch(() => ({ records: [] })),
+      // Non configuré : rien à demander, un historique vide (§48, §89).
+      serviceConfigured("radarr") ? radarr.getHistory(50).catch(() => ({ records: [] })) : { records: [] },
+      serviceConfigured("sonarr") ? sonarr.getHistory(50).catch(() => ({ records: [] })) : { records: [] },
       cachedMovies().catch(() => []),
     ]);
 

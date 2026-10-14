@@ -183,6 +183,7 @@ flowchart TB
             CAL["/calendar"]
             STA["/stats"]
             IMP["/timeline — imports"]
+            LCK["/controle — library check<br/>read-only · §90"]
             subgraph SVC["Services"]
                 SV1["/bazarr · /jackett · /jellyfin · /jellyseerr"]
                 HEALTH["/health — service checks"]
@@ -221,6 +222,18 @@ presentation only: a `user` who types `/gestion` gets pages whose reads answer 4
 (`ADMIN_ONLY_READS`, diagram 7). Every cinema screen is a field of the address hash, so Back steps
 out one screen at a time; desktop and phone are two layouts sharing one function per decision
 ([DECISIONS §31, §52, §74, §81](DECISIONS.md), [The sheet lifecycle in CLAUDE.md](CLAUDE.md)).
+
+**What the cinema shows, and where its truth comes from** ([DECISIONS §47, §89](DECISIONS.md)):
+storage and episode numbering from the disk (Jellyfin), identity from Radarr/Sonarr by folder,
+episode names from the episode Sonarr attached to the file — or Jellyfin's, for a series the
+administrator trusts (`episode_text_trust`) — and titles Radarr/Sonarr do not track from Jellyfin
+alone. Radarr and Sonarr are **optional**: not configured, `cachedMovies` / `cachedSeries` answer an
+empty list without any request and everything Jellyfin has becomes "Jellyfin only"; configured but
+down, nothing becomes "Jellyfin only" (eight hundred films would change identifier during an
+outage). **The library check** (`/controle`, `src/lib/libraryCheck/`, [§90](DECISIONS.md)) lists
+where these sources disagree — identity, episode numbering (with TMDB as an independent arbiter),
+files Radarr probably misfiled, Jellyfin-only titles, hard-linked double filings — in a background
+pass stored in `library_check`; it writes nowhere else, and only suggests gestures.
 
 ### 3. The player
 

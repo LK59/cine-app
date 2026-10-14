@@ -1,5 +1,6 @@
 "use client";
 
+import { NotConfiguredNote } from "@/components/ServiceNotConfigured";
 import { useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
@@ -457,6 +458,8 @@ export default function StatsPage() {
   return (
     <div>
       <PageHeader title={t('stats.pageTitle')} subtitle={t('stats.subtitle')} />
+      {/* Sans Radarr ni Sonarr, la page tient mais montre moins : elle le dit, sans l'allure d'une panne (§89). */}
+      <NotConfiguredNote services={["radarr", "sonarr"]} />
 
       {isLoading && <LoadingState label={t('stats.loading')} />}
       {libError && <ErrorState message={t('stats.error')} onRetry={() => retryLib()} />}

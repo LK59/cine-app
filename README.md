@@ -449,15 +449,18 @@ Lists, discovery and recommendations are Cinema's: Management has no watchlist o
 
 # Optional services
 
-Only **Jellyfin** and **TMDB** are needed for Cinema to be worth opening; Radarr and Sonarr are
-what fill it. Everything else is optional, and an integration that is not configured is treated as
-a configuration, not as a failure:
+Only **Jellyfin** and **TMDB** are needed. Without Radarr and Sonarr, Cinema shows everything
+Jellyfin has ("Jellyfin only" titles); with them it also gets management — additions, downloads,
+requests, missing episodes, the library check. **Jellyseerr** adds requests from Cinema,
+**qBittorrent** download progress, **Bazarr** subtitle search, **Jackett** indexers. An integration
+that is not configured is treated as a configuration, not as a failure — it is never queried:
 
 - `/api/config/public` reports which services are connected — booleans only, never an address or a
   key — and only to a signed-in session: to anyone else, the list would say what runs behind the
   site.
-- A page whose service is missing shows what is missing and the exact variables to add to `.env`,
-  instead of a network error.
+- A page whose service is missing shows what is missing and where to connect it (*Configuration →
+  Connections*, or the variables for `.env`), instead of a network error; the calendar and the
+  statistics keep what does not depend on it and say what is missing.
 - The sidebar dims those entries rather than hiding them, so a page someone is looking for can
   still be found and explain itself.
 - In Cinema, requests disappear when Jellyseerr is absent, and playback falls back to the
@@ -481,9 +484,10 @@ docker compose up -d
 # then open http://<server>:3000 — the setup assistant asks for the rest
 ```
 
-You need Docker, a running Jellyfin, Radarr and/or Sonarr, and a free TMDB key. You do **not**
-clone this repository, install Node or write an `.env`: the assistant creates the administrator
-account, asks for Jellyfin, TMDB and Radarr/Sonarr, and the secrets are generated on first launch.
+You need Docker, a running Jellyfin and a free TMDB key; Radarr and/or Sonarr are optional. You do
+**not** clone this repository, install Node or write an `.env`: the assistant creates the
+administrator account, asks for Jellyfin and TMDB (and offers Radarr, Sonarr and the rest), and the
+secrets are generated on first launch.
 Everything else is set later in **Management → Configuration**.
 
 The app listens on port `3000`; put an HTTPS reverse proxy in front of it (the guide has Nginx

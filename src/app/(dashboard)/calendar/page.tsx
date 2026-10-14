@@ -1,5 +1,6 @@
 "use client";
 
+import { NotConfiguredNote } from "@/components/ServiceNotConfigured";
 import { useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import useSWR from "swr";
@@ -373,6 +374,8 @@ export default function CalendarPage() {
   return (
     <div>
       <PageHeader title={t('calendar.pageTitle')} subtitle={t('calendar.subtitle')} />
+      {/* Sans Radarr ni Sonarr, la page tient mais montre moins : elle le dit, sans l'allure d'une panne (§89). */}
+      <NotConfiguredNote services={["radarr", "sonarr"]} />
 
       {/* Controls row */}
       <div className="mb-4 flex flex-wrap items-center gap-2">

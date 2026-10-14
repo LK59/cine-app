@@ -60,6 +60,14 @@ export interface RadarrMovie {
     size: number;
     relativePath: string;
     dateAdded?: string;
+    /**
+     * Le nom du fichier avant que Radarr le renomme, et celui de sa release : le seul nom qui ne vient
+     * pas de Radarr lui-même — le contrôle de la bibliothèque y cherche l'année d'un autre film (§90).
+     */
+    originalFilePath?: string;
+    sceneName?: string;
+    /** L'édition lue dans la release (« Extended », « Director's Cut ») — vide le plus souvent. */
+    edition?: string;
     mediaInfo?: {
       audioAdditionalFeatures?: string;
       audioBitrate?: number;

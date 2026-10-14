@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+// Radarr et Sonarr supposés configurés : non configurés, ils ne sont plus interrogés (DECISIONS.md §89).
+vi.mock("@/lib/serviceConfigured", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/serviceConfigured")>()),
+  serviceConfigured: () => true,
+}));
 import type { NextRequest } from "next/server";
 
 const mockRadarr = { getCalendar: vi.fn() };

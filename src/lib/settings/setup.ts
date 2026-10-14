@@ -62,7 +62,8 @@ export function missingRequiredSettings(): string[] {
  * L'assistant est-il terminé ?
  *
  * Posé par « Terminer », ou forcé par `SETUP_COMPLETE=true`. Une installation configurée par son
- * `.env` avant que l'assistant n'existe — Jellyfin, TMDB et Radarr ou Sonarr déjà renseignés — est
+ * `.env` avant que l'assistant n'existe — Jellyfin et TMDB déjà renseignés (Radarr et Sonarr sont
+ * facultatifs depuis le 14/10/2026, §89) — est
  * reconnue comme terminée, et le drapeau est posé une fois pour toutes : la vider plus tard de son
  * `.env` ne la renverra jamais dans l'assistant.
  */
@@ -71,8 +72,7 @@ export function setupDone(): boolean {
   if (envValue("SETUP_COMPLETE") === "true") return true;
   const configured =
     envValue("JELLYFIN_API_KEY").trim() !== "" &&
-    envValue("TMDB_API_KEY").trim() !== "" &&
-    (envValue("RADARR_API_KEY").trim() !== "" || envValue("SONARR_API_KEY").trim() !== "");
+    envValue("TMDB_API_KEY").trim() !== "";
   if (configured) {
     try {
       writeOverride(SETUP_DONE_KEY, "1");

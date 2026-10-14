@@ -1,4 +1,5 @@
 import { availabilityNotifDb, pendingRequestDb, kvCacheDb, getDb } from "@/lib/db";
+import { serviceConfigured } from "@/lib/serviceConfigured";
 import { cachedMovies, cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { sonarr } from "@/lib/clients/sonarr";
@@ -125,6 +126,8 @@ export async function checkWatchlistAvailability(): Promise<void> {
 export async function recentEpisodeImports(
   since: number
 ): Promise<{ id: number; tmdb_id: number; title: string; detail: string | null }[]> {
+  // Sans Sonarr configuré, aucun import d'épisode à annoncer — et rien à lui demander (§48, §89).
+  if (!serviceConfigured("sonarr")) return [];
   const history = await sonarr.getHistory(100);
   const imports: { id: number; tmdb_id: number; title: string; detail: string | null }[] = [];
   for (const record of history.records ?? []) {

@@ -30,7 +30,11 @@ export function isPlaceholderTitle(title: string | null | undefined): boolean {
 
 type SeasonText = Map<number, { name?: string; overview?: string }>;
 
-async function seasonText(tmdbTvId: number, seasonNumber: number, lang: string): Promise<SeasonText> {
+/**
+ * Les épisodes d'une saison chez TMDB, dans une langue, gardés une semaine sur le disque. Lu aussi par
+ * le contrôle de la bibliothèque (§90), qui s'en sert d'arbitre — jamais pour écrire un épisode.
+ */
+export async function seasonText(tmdbTvId: number, seasonNumber: number, lang: string): Promise<SeasonText> {
   const episodes = await withPersistentCache(`tmdb:season-text:${lang}:${tmdbTvId}:${seasonNumber}`, WEEK_MS, async () => {
     // Une saison que TMDB n'a pas (404) n'apporte rien, et le dit pour la semaine : sans quoi chaque
     // ouverture de la fiche la redemandait. *La casa de papel* : cinq saisons sur le disque, trois

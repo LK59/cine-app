@@ -9,7 +9,10 @@ From an empty folder to a working cinema in about ten minutes. This page is enou
 - A running **Jellyfin**, with an API key (*Jellyfin → Dashboard → API Keys → +*). Every viewer
   signs in with their own Jellyfin account.
 - A free **TMDB** API key (*themoviedb.org → Settings → API*), for posters and synopses.
-- **Radarr and/or Sonarr**, with their API key (*Settings → General → API Key*). At least one.
+- Optionally **Radarr and/or Sonarr**, with their API key (*Settings → General → API Key*). Without
+  them the cinema shows everything Jellyfin has; with them you also get management — additions,
+  downloads, requests, missing episodes. **Jellyseerr** adds requests from the cinema,
+  **qBittorrent** download progress, **Bazarr** subtitle search.
 
 No repository to clone, no Node, no `.env` file: secrets are generated on first launch and every
 setting is made in the browser.
@@ -167,11 +170,13 @@ it is finished. Each screen saves when you press **Next**; you can leave and com
    `localhost` is the container itself. Use the container name on a shared Docker network
    (`http://jellyfin:8096`), otherwise the server's LAN address.
 4. **TMDB** — the API key.
-5. **Library** — Radarr and/or Sonarr: address and API key.
+5. **Library** — Radarr and/or Sonarr: address and API key. Optional: **Next** does not need them.
 6. **Extras** — all optional: Jellyseerr, qBittorrent, Bazarr, Jackett, OMDb and MDBList ratings,
    playback and default settings. Fill what you have.
 7. **Deployment** — nothing to fill: the compose-file options, each with the line to copy.
-8. **Finish** — then **Open management**, or **Sign in with Jellyfin** to reach the cinema.
+8. **Finish** — a summary of what will be available and what will not (with or without Radarr,
+   Sonarr, Jellyseerr, qBittorrent, Bazarr), then **Open management**, or **Sign in with Jellyfin**
+   to reach the cinema.
 
 **Next tests each service** you filled in. If a test fails, the screen stays and says why
 (*Refused: the key or password is wrong*, *Unreachable: check the address from inside the

@@ -53,7 +53,9 @@ names (`http://jellyfin:8096`); otherwise the server's LAN address (`http://192.
 `localhost` means the container itself. A service without a key is simply not used.
 
 Set in the app: **Management → Configuration → Connections**, each with a **Test connection**
-button. Jellyfin, TMDB and Radarr or Sonarr are asked for by the setup assistant.
+button. Only Jellyfin and TMDB are required; the setup assistant also offers Radarr and Sonarr,
+which are optional — without them, the cinema shows everything Jellyfin has, and the management
+features that depend on them (downloads, requests, missing episodes) are simply absent.
 
 | Variable | Default | Role |
 |---|---|---|
@@ -61,10 +63,10 @@ button. Jellyfin, TMDB and Radarr or Sonarr are asked for by the setup assistant
 | `JELLYFIN_API_KEY` | — | Jellyfin → Administration → API Keys → **+**. **Required.** |
 | `JELLYFIN_PUBLIC_URL` | — | The address people use for Jellyfin, for the *Open in Jellyfin* links. Example: `https://jellyfin.example.com`. |
 | `TMDB_API_KEY` | — | Free key from themoviedb.org → Settings → API. **Required**: posters, synopses, cast, suggestions. |
-| `RADARR_URL` | `http://radarr:7878` | Radarr's address. Radarr or Sonarr is required. |
+| `RADARR_URL` | `http://radarr:7878` | Radarr's address. Optional: movie management (additions, downloads, quality). |
 | `RADARR_API_KEY` | — | Radarr → Settings → General → API Key. |
 | `RADARR_QUALITY_PROFILE` | first profile Radarr lists | Quality profile given to films added from the app (its numeric ID). Easier to pick from the list in the app. |
-| `SONARR_URL` | `http://sonarr:8989` | Sonarr's address. |
+| `SONARR_URL` | `http://sonarr:8989` | Sonarr's address. Optional: series management (additions, downloads, missing episodes). |
 | `SONARR_API_KEY` | — | Sonarr → Settings → General → API Key. |
 | `SONARR_QUALITY_PROFILE` | first profile Sonarr lists | Same as above, for series. |
 | `JELLYSEERR_URL` | `http://jellyseerr:5055` | Requests. Without a key, the request buttons do not appear. |
@@ -169,7 +171,7 @@ Deployment** shows each one with the line to copy. Recreate the container after 
 | `POSTER_PREWARM_LOCALES` | `fr` plus `APP_LANGUAGE` from the environment | Poster languages prepared in advance (a poster depends on the viewer's language). |
 | `APP_ADMIN_USER` | `admin` | Administrator account fixed by the deployment. Only used with `APP_ADMIN_PASSWORD`. |
 | `APP_ADMIN_PASSWORD` | — | Its password. When set, this account replaces the one created by the setup assistant. The old example value `change-me` stops the startup. |
-| `SETUP_COMPLETE` | — | `true` skips the setup assistant. An installation whose environment already sets Jellyfin, TMDB and Radarr or Sonarr skips it on its own. |
+| `SETUP_COMPLETE` | — | `true` skips the setup assistant. An installation whose environment already sets Jellyfin and TMDB skips it on its own. |
 
 The local administrator account works even when Jellyfin is down, and opens Management. Most
 installations use the one the assistant creates (its password is stored hashed and changed in

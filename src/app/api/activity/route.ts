@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { serviceConfigured } from "@/lib/serviceConfigured";
 import { radarr } from "@/lib/clients/radarr";
 import { sonarr } from "@/lib/clients/sonarr";
 import { getJellyseerrActivityItems } from "@/lib/jellyseerr-scope";
@@ -33,8 +34,9 @@ const SONARR_EVENT_LABELS: Record<string, string> = {
 export async function GET(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   const [radarrHistory, sonarrHistory, jellyseerrRequests] = await Promise.all([
-    radarr.getHistory(15).catch(() => ({ records: [] })),
-    sonarr.getHistory(15).catch(() => ({ records: [] })),
+    // Non configuré : rien à demander, un historique vide (§48, §89).
+    serviceConfigured("radarr") ? radarr.getHistory(15).catch(() => ({ records: [] })) : { records: [] },
+    serviceConfigured("sonarr") ? sonarr.getHistory(15).catch(() => ({ records: [] })) : { records: [] },
     // Admin sees everyone's requests; anyone else only their own — see jellyseerr-scope.ts.
     getJellyseerrActivityItems(session, 15),
   ]);

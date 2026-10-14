@@ -11,12 +11,14 @@
  * - `secret` : jamais renvoyée au navigateur, seulement « renseignée » et ses quatre derniers caractères.
  * - `profile` : un profil de qualité de Radarr ou Sonarr, choisi dans la liste lue chez le service
  *   (son identifiant ; vide = le premier de la liste).
- * - `need` : `required` (le cinéma ne fonctionne pas sans), `library` (au moins Radarr ou Sonarr),
- *   ou `optional` (enrichit l'interface).
+ * - `need` : `required` (le cinéma ne fonctionne pas sans) ou `optional` (enrichit l'interface).
+ *   Radarr et Sonarr sont facultatifs depuis le 14/10/2026 (DECISIONS.md §89) : sans eux, le cinéma
+ *   montre ce que Jellyfin a ; ils apportent la gestion — téléchargements, demandes, épisodes manquants.
+ *   (Il existait un troisième niveau, « au moins Radarr ou Sonarr », qui bloquait l'assistant.)
  */
 
 export type SettingKind = "url" | "secret" | "text" | "boolean" | "select" | "profile" | "number";
-export type SettingNeed = "required" | "library" | "optional";
+export type SettingNeed = "required" | "optional";
 export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "playback" | "subtitles" | "dialogue" | "app" | "defaults" | "deployment";
 
 export interface SettingDef {
@@ -47,11 +49,11 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "JELLYFIN_API_KEY", group: "jellyfin", kind: "secret", need: "required", fallback: "", inApp: true },
   { key: "JELLYFIN_PUBLIC_URL", group: "jellyfin", kind: "url", need: "optional", fallback: "", inApp: true, placeholder: "https://jellyfin.example.com" },
   { key: "TMDB_API_KEY", group: "tmdb", kind: "secret", need: "required", fallback: "", inApp: true },
-  { key: "RADARR_URL", group: "radarr", kind: "url", need: "library", fallback: "http://radarr:7878", inApp: true, placeholder: "http://radarr:7878" },
-  { key: "RADARR_API_KEY", group: "radarr", kind: "secret", need: "library", fallback: "", inApp: true },
+  { key: "RADARR_URL", group: "radarr", kind: "url", need: "optional", fallback: "http://radarr:7878", inApp: true, placeholder: "http://radarr:7878" },
+  { key: "RADARR_API_KEY", group: "radarr", kind: "secret", need: "optional", fallback: "", inApp: true },
   { key: "RADARR_QUALITY_PROFILE", group: "radarr", kind: "profile", need: "optional", fallback: "", inApp: true },
-  { key: "SONARR_URL", group: "sonarr", kind: "url", need: "library", fallback: "http://sonarr:8989", inApp: true, placeholder: "http://sonarr:8989" },
-  { key: "SONARR_API_KEY", group: "sonarr", kind: "secret", need: "library", fallback: "", inApp: true },
+  { key: "SONARR_URL", group: "sonarr", kind: "url", need: "optional", fallback: "http://sonarr:8989", inApp: true, placeholder: "http://sonarr:8989" },
+  { key: "SONARR_API_KEY", group: "sonarr", kind: "secret", need: "optional", fallback: "", inApp: true },
   { key: "SONARR_QUALITY_PROFILE", group: "sonarr", kind: "profile", need: "optional", fallback: "", inApp: true },
   // ── Ce qui enrichit ──
   { key: "JELLYSEERR_URL", group: "jellyseerr", kind: "url", need: "optional", fallback: "http://jellyseerr:5055", inApp: true, placeholder: "http://jellyseerr:5055" },
@@ -185,13 +187,28 @@ export interface SettingView {
 }
 
 /**
- * Ce qui manque pour terminer l'assistant : chaque réglage `required` vide, et — si ni Radarr ni
- * Sonarr n'a de clé — la paire `library`.
+ * Ce qui manque pour terminer l'assistant : chaque réglage `required` vide — Jellyfin et TMDB. Ni
+ * Radarr ni Sonarr depuis le 14/10/2026 : une installation « Jellyfin seulement » a un cinéma (§89).
  */
 export function missingRequired(valueOf: (key: string) => string): string[] {
-  const missing = SETTINGS.filter((s) => s.need === "required" && !valueOf(s.key).trim()).map((s) => s.key);
-  if (!valueOf("RADARR_API_KEY").trim() && !valueOf("SONARR_API_KEY").trim()) missing.push("RADARR_API_KEY|SONARR_API_KEY");
-  return missing;
+  return SETTINGS.filter((s) => s.need === "required" && !valueOf(s.key).trim()).map((s) => s.key);
+}
+
+/**
+ * Ce que l'installation offrira, selon les services branchés — l'écran de fin de l'assistant le
+ * résume, pour qu'un service laissé de côté se lise comme un choix et pas comme un oubli.
+ */
+export const SERVICE_FEATURES = [
+  { id: "cinema", needs: ["JELLYFIN_API_KEY", "TMDB_API_KEY"] },
+  { id: "movies", needs: ["RADARR_API_KEY"] },
+  { id: "series", needs: ["SONARR_API_KEY"] },
+  { id: "requests", needs: ["JELLYSEERR_API_KEY"] },
+  { id: "downloads", needs: ["QBITTORRENT_URL", "QBITTORRENT_PASSWORD"] },
+  { id: "subtitles", needs: ["BAZARR_API_KEY"] },
+] as const;
+
+export function availableFeatures(isSet: (key: string) => boolean): { id: (typeof SERVICE_FEATURES)[number]["id"]; available: boolean }[] {
+  return SERVICE_FEATURES.map((f) => ({ id: f.id, available: f.needs.every(isSet) }));
 }
 
 /**

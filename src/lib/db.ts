@@ -492,6 +492,28 @@ function migrate(db: Database.Database): void {
       rearmed_at   INTEGER
     );
   `);
+
+  /**
+   * Le contrôle de la bibliothèque (DECISIONS.md §90) : son dernier résultat, une ligne, gardé hors de
+   * `kv_cache` — que l'on élague au bout de trente jours, alors qu'une analyse de deux mois reste une
+   * réponse (datée) à « où en est la bibliothèque ». Et l'exception par série de §89 : « faire confiance
+   * à Jellyfin pour les noms d'épisodes », par identifiant Sonarr — une décision de l'administrateur,
+   * jamais déduite, qu'on retire comme on l'a posée.
+   */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS library_check (
+      id          INTEGER PRIMARY KEY CHECK (id = 1),
+      result      TEXT    NOT NULL,
+      computed_at INTEGER NOT NULL,
+      duration_ms INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS episode_text_trust (
+      sonarr_id  INTEGER PRIMARY KEY,
+      title      TEXT,
+      set_by     TEXT,
+      created_at INTEGER NOT NULL
+    );
+  `);
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { serviceConfigured } from "@/lib/serviceConfigured";
 import { upstreamSignal } from "@/lib/http";
 import { radarr } from "@/lib/clients/radarr";
 import { sonarr } from "@/lib/clients/sonarr";
@@ -89,8 +90,10 @@ export async function GET(req: NextRequest) {
 
   const events = await withCache<CalendarEvent[]>(cacheKey, TTL.SHORT * 3, async () => {
     const [radarrMovies, sonarrEps, tmdbNow, tmdbUp] = await Promise.allSettled([
-      radarr.getCalendar(start, end),
-      sonarr.getCalendar(start, end),
+      // Un service non configuré n'est jamais interrogé (§48) : son côté du calendrier est vide, sans
+      // rien demander — une installation sans Radarr/Sonarr garde les sorties de TMDB (§89).
+      serviceConfigured("radarr") ? radarr.getCalendar(start, end) : Promise.resolve([]),
+      serviceConfigured("sonarr") ? sonarr.getCalendar(start, end) : Promise.resolve([]),
       getTmdbMovies("now_playing"),
       getTmdbMovies("upcoming"),
     ]);

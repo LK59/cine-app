@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Minus } from "lucide-react";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { HelloIntro } from "@/components/setup/HelloIntro";
 import { DeploymentGuide, SettingsGroupCard, runServiceTest, testFailureText, type Draft } from "@/components/settings/SettingsGroupCard";
 import { LOCALE_COOKIE, type Locale } from "@/lib/i18n";
-import { SETTINGS_BY_KEY, type SettingGroup, type SettingView, type TestableGroup } from "@/lib/settings/schema";
+import { SETTINGS_BY_KEY, availableFeatures, type SettingGroup, type SettingView, type TestableGroup } from "@/lib/settings/schema";
 import { groupsToTest } from "@/lib/settings/wizardTests";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 
@@ -16,8 +16,10 @@ import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
  *
  * Il s'ouvre tant que son drapeau n'est pas posé — le proxy y mène toute page — et ne se ferme qu'au
  * clic sur « Terminer ». Chaque étape enregistre ses réglages à « Suivant » : quitter au milieu ne
- * perd rien, et l'étape atteinte est retrouvée au retour. Ne sont obligatoires que Jellyfin, TMDB et
- * Radarr ou Sonarr ; le reste enrichit l'interface et se règle aussi plus tard, dans la gestion.
+ * perd rien, et l'étape atteinte est retrouvée au retour. Ne sont obligatoires que Jellyfin et TMDB ;
+ * Radarr et Sonarr sont facultatifs depuis le 14/10/2026 (§89) — ils apportent la gestion — et le
+ * reste enrichit l'interface ; tout se règle aussi plus tard, dans la gestion. L'écran de fin résume
+ * ce qui sera disponible ou non.
  */
 
 type Status = { done: boolean; needsAdmin: boolean };
@@ -282,7 +284,7 @@ export default function SetupPage() {
       {groups && signedIn && (
         <div className="space-y-4">
           {current === "jellyfin" && <p className="text-sm text-subtle">{t("setup.welcome.urls")} {t("setup.welcome.env")}</p>}
-          {current === "library" && <p className="text-sm text-warning">{t("setup.libraryRule")}</p>}
+          {current === "library" && <p className="text-sm text-subtle">{t("setup.libraryRule")}</p>}
           {cards!.map((c) => (
             <SettingsGroupCard
               key={`${c.group}-${c.keys?.join() ?? ""}`}
@@ -307,6 +309,7 @@ export default function SetupPage() {
         <div>
           <h2 className="mb-2 text-xl font-semibold text-white">{t("setup.steps.finish")}</h2>
           <p className="text-sm text-muted">{t("setup.done.text")}</p>
+          {payload && <FeatureSummary views={views} />}
           <p className="mt-2 text-sm text-subtle">{t("setup.later")}</p>
           {payload && payload.missing.length > 0 && (
             <p className="mt-3 text-sm text-danger">{t("setup.missing", { list: payload.missing.map((m) => labelOfMissing(m, t)).join(", ") })}</p>
@@ -390,6 +393,25 @@ function Shell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
     </main>
+  );
+}
+
+/** Ce que l'installation offrira, service par service — un service laissé de côté se lit comme un choix. */
+function FeatureSummary({ views }: { views: Map<string, SettingView> }) {
+  const t = useT();
+  const isSet = (key: string) => {
+    const v = views.get(key);
+    return !!v && (v.set || (!!v.value && v.source !== "default"));
+  };
+  return (
+    <ul className="mt-4 space-y-1.5 text-sm" data-testid="setup-features">
+      {availableFeatures(isSet).map(({ id, available }) => (
+        <li key={id} className={`flex items-start gap-2 ${available ? "text-white" : "text-subtle"}`}>
+          {available ? <Check size={16} className="mt-0.5 shrink-0 text-success" /> : <Minus size={16} className="mt-0.5 shrink-0" />}
+          <span>{t(`setup.features.${id}.${available ? "on" : "off"}`)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -490,11 +512,9 @@ function groupOf(key: string): SettingGroup | undefined {
 }
 /** Ce qui manque concerne-t-il cette étape ? */
 function stepNeeds(groups: SettingGroup[], missing: string): boolean {
-  if (missing === "RADARR_API_KEY|SONARR_API_KEY") return groups.includes("radarr") || groups.includes("sonarr");
   const g = groupOf(missing);
   return !!g && groups.includes(g);
 }
 function labelOfMissing(missing: string, t: (key: string) => string): string {
-  if (missing === "RADARR_API_KEY|SONARR_API_KEY") return t("setup.need.library");
   return t(`setup.fields.${missing}`);
 }

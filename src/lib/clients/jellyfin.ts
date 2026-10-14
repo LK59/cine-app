@@ -543,6 +543,16 @@ export const jellyfin = {
     ).then((res) => res.TotalRecordCount ?? res.Items?.length ?? 0),
 
   /**
+   * Les épisodes réels d'une série, vus par le serveur — nom, numéros et chemin, sans image ni état de
+   * compte. Pour le contrôle de la bibliothèque (§90), qui compare le rangement du disque à Sonarr.
+   */
+  getEpisodesAdmin: (seriesId: string) =>
+    fetchJson<{ Items: JellyfinItem[] }>(
+      `${cfg.url}/Items?ParentId=${idSegment(seriesId)}&Recursive=true&IncludeItemTypes=Episode&IsMissing=false&Fields=Path&EnableImages=false&EnableUserData=false`,
+      { headers }
+    ).then((res) => res.Items ?? []),
+
+  /**
    * Les épisodes entrés dans la bibliothèque depuis `sinceMs`, les plus récents d'abord — de quoi
    * dater chaque série de son dernier épisode (DECISIONS.md §75) sans une requête par série.
    *

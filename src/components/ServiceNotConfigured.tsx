@@ -3,6 +3,7 @@
 import { PlugZap } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { SERVICE_ENV, type ServiceKey } from "@/lib/services";
+import { useConfiguredServices } from "@/lib/useConfiguredServices";
 
 /**
  * Un service qui n'est pas branché n'est pas un service en panne.
@@ -30,3 +31,33 @@ export function ServiceNotConfigured({ service }: { service: ServiceKey }) {
     </div>
   );
 }
+
+/**
+ * Une ligne au-dessus d'une page qui tient sans ces services mais en montre moins : le calendrier sans
+ * Radarr ni Sonarr garde les sorties de TMDB, les statistiques de la bibliothèque restent vides
+ * (14/10/2026, §89). Rien si tout est branché — et rien avant la réponse (`isConfigured` dit « oui »
+ * tant qu'il ne sait pas), pour ne jamais faire clignoter un avertissement à tort.
+ */
+export function NotConfiguredNote({ services }: { services: ServiceKey[] }) {
+  const t = useT();
+  const { isConfigured } = useConfiguredServices();
+  const missing = services.filter((s) => !isConfigured(s));
+  if (missing.length === 0) return null;
+  return (
+    <p className="mb-4 flex items-center gap-2 rounded-xl bg-white/4 px-4 py-2.5 text-xs text-subtle" data-testid="not-configured-note">
+      <PlugZap size={14} className="shrink-0" />
+      {t("services.notConfiguredNote", { names: missing.map((s) => SERVICE_LABEL[s]).join(", ") })}
+    </p>
+  );
+}
+
+const SERVICE_LABEL: Record<ServiceKey, string> = {
+  radarr: "Radarr",
+  sonarr: "Sonarr",
+  bazarr: "Bazarr",
+  jackett: "Jackett",
+  jellyfin: "Jellyfin",
+  jellyseerr: "Jellyseerr",
+  qbittorrent: "qBittorrent",
+  tmdb: "TMDB",
+};

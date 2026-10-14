@@ -13,6 +13,7 @@ import type { SonarrSeries } from "@/lib/clients/sonarr";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
 import { assignJellyfinOnlyIds } from "@/lib/jellyfinOnlyId";
 import { logError } from "@/lib/logger";
+import { mapInBatches } from "@/lib/inBatches";
 
 /**
  * Ce que le cinéma montre — une seule définition (DECISIONS.md §47).
@@ -129,9 +130,11 @@ export async function jellyfinOnlySeries(
       !(ids.imdbId !== null && imdb.has(ids.imdbId))
     );
   });
-  // Une requête par série candidate — elles se comptent sur les doigts — et une série dont le compte
-  // échoue reste dehors : mieux vaut une carte de moins qu'une fiche vide.
-  const counts = await Promise.all(unclaimed.map((item) => episodeCount(item.Id).catch(() => 0)));
+  // Une requête par série candidate, et une série dont le compte échoue reste dehors : mieux vaut une
+  // carte de moins qu'une fiche vide. Elles se comptent sur les doigts tant que Sonarr revendique
+  // presque tout — mais une installation sans Sonarr les a **toutes** pour candidates (14/10/2026) :
+  // par lots de huit, pour ne jamais envoyer deux cents requêtes ensemble à Jellyfin.
+  const counts = await mapInBatches(unclaimed, 8, (item) => episodeCount(item.Id).catch(() => 0));
   const withEpisodes = unclaimed.filter((_, i) => counts[i] > 0);
   return withReservedIds("series", withEpisodes, new Set(matched.map((x) => x.s.id)));
 }
@@ -175,7 +178,9 @@ export interface CatalogueMembers {
  *
  * Et si Radarr (ou Sonarr) ne répond pas, **aucun** titre « Jellyfin seul » de ce côté : sans la
  * liste de Radarr, tout Jellyfin paraîtrait non revendiqué, et huit cents films changeraient
- * d'identifiant le temps d'une panne.
+ * d'identifiant le temps d'une panne. Un Radarr (ou Sonarr) **non configuré** n'est pas une panne :
+ * `cachedMovies` (`cachedSeries`) rend alors une liste vide sans rien demander, et tout ce que Jellyfin
+ * a de ce côté est « Jellyfin seul » — une installation sans eux a un cinéma (14/10/2026, §89).
  */
 export async function catalogueMembers(): Promise<CatalogueMembers> {
   // Rattrapé quelle que soit la façon d'échouer — une promesse rejetée comme une erreur levée tout de

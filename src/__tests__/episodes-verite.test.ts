@@ -219,4 +219,26 @@ describe("GET /api/cinema/series/[id]/episodes — la règle de vérité", () =>
     expect(body.seasons[0].episodes.map((e: { title: string }) => e.title)).toEqual(["Les 7 péchés capitaux", "L'épée du Chevalier Sacré"]);
     expect(tmdbCalls.some((c) => c.includes(":218843:"))).toBe(false);
   });
+  it("l'exception par série (§90) : « faire confiance à Jellyfin » garde son texte, verrouillages compris, et se retire", async () => {
+    const { episodeTextTrustDb } = await import("@/lib/libraryCheck/store");
+    mockLinks.mockResolvedValue(new Map([[SERIES, { type: "series", catalogueId: 12, tmdbId: 62104, source: "sonarr" }]]));
+    mockProviderIds.mockResolvedValue({ ProviderIds: { Tmdb: "62104", Tvdb: "284131" } });
+    mockSonarrSeries.mockResolvedValue([{ id: 12, tvdbId: 284131, tmdbId: 62104, title: "The Seven Deadly Sins" }]);
+    // Sonarr rattache le fichier du disque S01E02 à son S02E01 (ordre de diffusion d'un animé).
+    mockAttached.mockResolvedValue([{ file: "sds - s01e02.mkv", season: 2, episode: 1, title: "Sonarr's name", overview: "Sonarr." }]);
+    mockNextUp.mockResolvedValue(null);
+    mockEpisodes.mockResolvedValue([item("e2", "Le nom verrouillé dans Jellyfin", "/m/SDS - S01E02.mkv", 1, 2, { SeriesName: "SDS", Overview: "Résumé de Jellyfin." })]);
+    seasons.set("fr-FR:62104:2", { episodes: [{ episode_number: 1, name: "Nom TMDB au numéro de Sonarr", overview: "TMDB." }] });
+    const { GET } = await import("@/app/api/cinema/series/[jellyfinId]/episodes/route");
+
+    episodeTextTrustDb.set(12, true, { title: "The Seven Deadly Sins", by: "louis" });
+    const trusted = await (await GET(req, params)).json();
+    expect(trusted.seasons[0].episodes[0]).toMatchObject({ seasonNumber: 1, episodeNumber: 2, title: "Le nom verrouillé dans Jellyfin", overview: "Résumé de Jellyfin." });
+    expect(mockAttached).not.toHaveBeenCalled();
+    expect(tmdbCalls).toEqual([]);
+
+    episodeTextTrustDb.set(12, false);
+    const back = await (await GET(req, params)).json();
+    expect(back.seasons[0].episodes[0]).toMatchObject({ seasonNumber: 1, episodeNumber: 2, title: "Nom TMDB au numéro de Sonarr" });
+  });
 });

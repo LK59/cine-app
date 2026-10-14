@@ -70,7 +70,8 @@
     },
     "backToCinema": "Back to Cinema",
     "accountPreferences": "Your preferences are in Account",
-    "label": "Management navigation"
+    "label": "Management navigation",
+    "libraryCheck": "Library check"
   },
   "common": {
     "loading": "Loading...",
@@ -2320,7 +2321,8 @@
   },
   "services": {
     "notConfigured": "{name} is not configured.",
-    "notConfiguredHint": "This page needs a service that is not connected on this installation. Add these variables to your .env file, then restart the container."
+    "notConfiguredHint": "This page needs a service that is not connected on this installation. Connect it in Configuration → Connections, or add these variables to your .env file.",
+    "notConfiguredNote": "Not configured: {names}. This page shows what does not depend on them."
   },
   "maintenance": {
     "bannerTitle": "Maintenance under way",
@@ -2740,10 +2742,9 @@
     },
     "need": {
       "required": "Required",
-      "library": "Radarr or Sonarr",
       "optional": "Optional"
     },
-    "libraryRule": "At least one of the two is needed: Radarr for movies, Sonarr for series.",
+    "libraryRule": "Optional: Radarr and Sonarr manage downloads, requests and missing episodes. Without them, the cinema shows everything Jellyfin has.",
     "test": "Test connection",
     "testing": "Testing…",
     "testOk": "Connected — {detail}",
@@ -2794,12 +2795,12 @@
       },
       "radarr": {
         "title": "Radarr",
-        "why": "The library's films, their files and quality.",
+        "why": "Optional. Manages movies: downloads, requests, file quality. Without it, the cinema shows the movies Jellyfin has.",
         "help": "Key: Radarr → Settings → General → API Key."
       },
       "sonarr": {
         "title": "Sonarr",
-        "why": "The library's series, their seasons and episodes.",
+        "why": "Optional. Manages series: downloads, requests, missing episodes. Without it, the cinema shows the series Jellyfin has.",
         "help": "Key: Sonarr → Settings → General → API Key."
       },
       "jellyseerr": {
@@ -2950,6 +2951,32 @@
     "deployStatus": {
       "set": "Set in this container: {value}",
       "unset": "Not set in this container."
+    },
+    "features": {
+      "cinema": {
+        "on": "The cinema: Jellyfin's movies and series, with TMDB posters and summaries",
+        "off": "The cinema: needs Jellyfin and TMDB"
+      },
+      "movies": {
+        "on": "Movie management (Radarr): additions, downloads, quality",
+        "off": "Without Radarr: no movie management — the cinema shows Jellyfin's movies"
+      },
+      "series": {
+        "on": "Series management (Sonarr): additions, downloads, missing episodes",
+        "off": "Without Sonarr: no series management — the cinema shows Jellyfin's series"
+      },
+      "requests": {
+        "on": "Title requests (Jellyseerr)",
+        "off": "Without Jellyseerr: no requests from the cinema"
+      },
+      "downloads": {
+        "on": "Download progress (qBittorrent)",
+        "off": "Without qBittorrent: no download tracking"
+      },
+      "subtitles": {
+        "on": "Subtitle search (Bazarr)",
+        "off": "Without Bazarr: no subtitle search"
+      }
     }
   },
   "subtitleGen": {
@@ -3096,6 +3123,129 @@
       },
       "writeSlice": "longest write {ms} ms",
       "errorList": "{n} film with an error|{n} films with an error"
+    }
+  },
+  "libraryCheck": {
+    "subtitle": "Where Jellyfin, Radarr, Sonarr, TMDB and the disk disagree. Read-only: nothing is changed in them from this page.",
+    "analyse": "Analyse",
+    "analysing": "Analysing…",
+    "lastRun": "Last analysis {when} · {seconds} s",
+    "never": "Not analysed yet",
+    "error": "The analysis failed: {message}",
+    "progress": {
+      "load": "Reading the lists…",
+      "episodes": "Episodes: {done} / {total}",
+      "movies": "Movies: {done} / {total}",
+      "series": "Series: {done} / {total}",
+      "hardlinks": "Hard links…"
+    },
+    "sources": {
+      "title": "Sources",
+      "ok": "read",
+      "unconfigured": "not configured",
+      "down": "not responding",
+      "mediaAbsent": "media folder not mounted: double filings not checked"
+    },
+    "categories": {
+      "identity": {
+        "title": "Different identity",
+        "hint": "Right folder, but Jellyfin sees a different title there than Radarr or Sonarr."
+      },
+      "numbering": {
+        "title": "Episode numbering",
+        "hint": "Sonarr attaches files to different numbers than the disk — typically anime."
+      },
+      "misfiled": {
+        "title": "Possibly misfiled files",
+        "hint": "The file does not seem to be the movie Radarr filed it under: runtime, original name, or the movie Jellyfin sees in it."
+      },
+      "jellyfinOnly": {
+        "title": "Jellyfin only",
+        "hint": "In Jellyfin, missing from Radarr and Sonarr. The cinema shows them anyway: for information."
+      },
+      "hardlinks": {
+        "title": "Double filings",
+        "hint": "The same files (hard links) filed under two titles. Often intended."
+      }
+    },
+    "empty": "Nothing to report.",
+    "showMore": "Show the {n} others",
+    "movie": "Movie",
+    "series": "Series",
+    "verdict": {
+      "catalogue": "{service} is probably right",
+      "jellyfin": "Jellyfin is probably right",
+      "file": "The file is probably not this movie",
+      "unknown": "Undetermined",
+      "info": "For information"
+    },
+    "says": {
+      "catalogue": "{service}",
+      "jellyfin": "Jellyfin",
+      "tmdb": "TMDB",
+      "file": "File",
+      "noIds": "no identifier"
+    },
+    "minutes": "{n} min",
+    "numbering": {
+      "summary": "Episodes attached to another number: {mismatched} of {compared}",
+      "unattached": "Files Sonarr does not attach: {n}",
+      "seriesType": "Series type in Sonarr: {type}"
+    },
+    "arbiter": {
+      "title": "TMDB arbitration",
+      "score": "score {score}",
+      "titlesJellyfin": "Jellyfin titles ↔ TMDB: {n}",
+      "titlesSonarr": "Sonarr titles ↔ TMDB: {n}",
+      "titlesCatalogue": "disk titles ↔ Sonarr's TMDB series: {n}",
+      "seasons": "disk seasons matching TMDB's count: {tmdb}/{n}, Sonarr's: {sonarr}/{n}",
+      "seasonsIdentity": "disk seasons matching Sonarr's TMDB series: {tmdb}/{n}, Jellyfin's: {other}/{n}",
+      "none": "TMDB could not settle it."
+    },
+    "misfiled": {
+      "duration": "file runtime {file} min for {expected} min expected",
+      "nameYear": "original name dated {years}, for a movie from {year}",
+      "jellyfinRuntime": "runtime close to the movie Jellyfin sees ({title}, {runtime} min)",
+      "original": "Original name: {name}"
+    },
+    "hardlinks": {
+      "files": "Shared files: {n}",
+      "intended": "Possibly intended"
+    },
+    "gesture": {
+      "title": "Suggested action",
+      "jellyfinIdentifyMovie": "Jellyfin → the movie → ⋮ → Identify → TMDB {tmdb} ({title}), then Refresh metadata replacing everything.",
+      "jellyfinIdentifySeries": "Jellyfin → the series → ⋮ → Identify → TVDB {tvdb} / TMDB {tmdb} ({title}), then Refresh metadata replacing everything.",
+      "radarrReplace": "Radarr → {title} → Files: check this file. If it is another movie, delete it and search again — or attach it to the right movie through Wanted → Manual Import.",
+      "sonarrFixIdentity": "Sonarr → {title} → Edit: check the tracked series. If the folder holds {jellyfin}, remove it from Sonarr and import the folder under the right series (Library Import) — or trust Jellyfin for episode names.",
+      "identityUnknown": "Open the title in Jellyfin and compare it with {service}. If Jellyfin is wrong: Identify → TMDB {tmdb}. If {service} is: fix the tracked title or replace the file.",
+      "numberingJellyfin": "The disk follows TMDB's order: turn on “Trust Jellyfin” — or in Sonarr → {title} → Edit, change the series type (Standard / Anime) then rename the files.",
+      "numberingSonarr": "Sonarr names these files correctly: the cinema already shows its names. To align the disk: Sonarr → {title} → Rename files.",
+      "numberingUnknown": "Compare a few episodes on screen. If the names shown in the cinema are wrong, turn on “Trust Jellyfin”; otherwise, nothing to do.",
+      "radarrImport": "To track it: Radarr → Movies → Library Import, folder {folder}.",
+      "sonarrImport": "To track it: Sonarr → Series → Library Import, folder {folder}.",
+      "noService": "{service} is not configured: this is normal.",
+      "hardlinks": "If this double is not intended, remove one of the two titles from Radarr or Sonarr (deleting that title's files only)."
+    },
+    "trust": {
+      "on": "Trust Jellyfin for episode names",
+      "off": "Back to Sonarr's names",
+      "active": "Episode names: Jellyfin's (exception set)",
+      "suggested": "Suggested by the arbitration",
+      "saved": "Exception set",
+      "removed": "Exception removed",
+      "failed": "Could not save",
+      "listTitle": "Exceptions",
+      "listHint": "These series keep Jellyfin's episode names and summaries in the cinema."
+    },
+    "overview": {
+      "title": "Library check",
+      "open": "Open",
+      "count": "Disagreements to look at: {n}",
+      "clean": "No disagreement",
+      "info": "Jellyfin only: {only} · double filings: {links}",
+      "never": "Not analysed yet",
+      "running": "Analysing…"
     }
   }
 }

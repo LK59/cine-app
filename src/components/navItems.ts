@@ -18,6 +18,7 @@ import {
   KeyRound,
   Container,
   MessageSquareQuote,
+  ScanSearch,
 } from "lucide-react";
 import type { ServiceKey } from "@/lib/services";
 
@@ -74,6 +75,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/calendar", navKey: "nav.calendar", icon: CalendarDays },
       { href: "/stats", navKey: "nav.stats", icon: BarChart2 },
       { href: "/timeline", navKey: "nav.timeline", icon: PackageCheck },
+      // Où Jellyfin, Radarr/Sonarr, TMDB et le disque se contredisent (DECISIONS.md §90) — lecture seule.
+      { href: "/controle", navKey: "nav.libraryCheck", icon: ScanSearch },
     ],
   },
   {

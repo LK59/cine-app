@@ -14,8 +14,11 @@ One compose file, one container, then everything is set in the browser.
 [Uninstalling](#uninstalling) · Every variable: [ENV.md](ENV.md)
 
 **What you need:** a Linux host with Docker Engine and the Compose plugin (`docker compose version`
-answers), a running Jellyfin, Radarr and/or Sonarr, and a free [TMDB](https://www.themoviedb.org/settings/api)
-API key. You do not clone this repository, install Node, or write an `.env` file.
+answers), a running Jellyfin and a free [TMDB](https://www.themoviedb.org/settings/api) API key.
+Radarr and Sonarr are optional: without them the cinema shows everything Jellyfin has; with them you
+also get management (additions, downloads, requests, missing episodes, the library check). Jellyseerr
+adds requests, qBittorrent download progress, Bazarr subtitle search. You do not clone this
+repository, install Node, or write an `.env` file.
 
 | | |
 |---|---|
@@ -240,10 +243,10 @@ assistant reopens where you stopped, until you press **Finish**.
 | **1 · Account** | The local administrator account: a username and a password of eight characters or more, stored hashed. It opens Management even when Jellyfin is down. If an account already exists (one from a previous visit, or one fixed in `.env`), the screen asks you to sign in with it instead. |
 | **2 · Jellyfin** | Its address and API key (*Jellyfin → Dashboard → API Keys → +*), and optionally the public address used by the *Open in Jellyfin* links. Below, one playback choice: hand files the browser cannot play over to Jellyfin, which converts them — on by default. |
 | **3 · TMDB** | The API key (*themoviedb.org → Settings → API*). |
-| **4 · Library** | Radarr and/or Sonarr: address and API key (*Settings → General → API Key*). At least one. |
+| **4 · Library** | Optional. Radarr and/or Sonarr: address and API key (*Settings → General → API Key*). **Next** does not need them: without them the cinema shows what Jellyfin has, and the management pages that depend on them say they are not configured. |
 | **5 · Extras** | Optional, all of it: Jellyseerr (requests), qBittorrent (download progress), Bazarr, Jackett, OMDb and MDBList (ratings), the built-in player and black-bar framing, the default language, poster preparation, the notification contact. Fill what you have; the rest can wait. A service left empty is not configured: the app never contacts it. Chromecast, generated subtitles and what new accounts receive are set later, in **Management → Configuration**. |
 | **6 · Deployment** | Nothing to fill: the options that live in the compose file (time zone, media folder, reverse proxy, HTTPS), each with the line to copy. |
-| **7 · Finish** | Refused while Jellyfin, TMDB or Radarr/Sonarr is missing. Then **Open management**, or **Sign in with Jellyfin** to go to the cinema. |
+| **7 · Finish** | Refused while Jellyfin or TMDB is missing. A summary says what will be available and what will not — the cinema, movie and series management, requests, downloads, subtitles. Then **Open management**, or **Sign in with Jellyfin** to go to the cinema. |
 
 **_Next_ tests the connection.** On the Jellyfin, TMDB and Library screens, and for every extra
 you filled in, *Next* saves the screen and then runs the same test as the *Test connection* button.
@@ -515,8 +518,8 @@ mkdir -p data && sudo chown -R 1001:1001 data
 ```
 
 `.env` is optional even there: every line of `.env.example` is commented, and [ENV.md](ENV.md)
-describes each one. An installation whose `.env` already sets Jellyfin, TMDB and Radarr or Sonarr
-skips the assistant.
+describes each one. An installation whose `.env` already sets Jellyfin and TMDB skips the
+assistant.
 
 ### File permissions
 

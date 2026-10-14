@@ -114,6 +114,8 @@ export interface TmdbTv {
   first_air_date?: string;
   vote_average?: number;
   number_of_seasons?: number;
+  /** Les saisons et leur nombre d'épisodes — l'arbitre du contrôle de la bibliothèque (§90). */
+  seasons?: { season_number: number; episode_count: number }[];
   overview: string;
   genres: { id: number; name: string }[];
   backdrop_path: string | null;

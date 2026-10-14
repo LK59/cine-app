@@ -1,6 +1,7 @@
 import { spreadTtl } from "@/lib/cacheSpread";
-import { radarr } from "@/lib/clients/radarr";
-import { sonarr } from "@/lib/clients/sonarr";
+import { radarr, type RadarrMovie } from "@/lib/clients/radarr";
+import { sonarr, type SonarrSeries } from "@/lib/clients/sonarr";
+import { serviceConfigured } from "@/lib/serviceConfigured";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { qbittorrent } from "@/lib/clients/qbittorrent";
 import { jellyfin, JellyfinItem } from "@/lib/clients/jellyfin";
@@ -322,8 +323,16 @@ export function invalidateJellyfinLibrary() {
 // Radarr et 33 ms d'analyse synchrone ici — redemandée environ deux cents fois par jour. Les
 // écritures de l'application l'invalident déjà (`invalidateLibrary`) ; seul un ajout fait
 // directement dans Radarr attend un peu plus.
-export const cachedMovies = (opts?: { forceRefresh?: boolean }) =>
-  withCache("radarr:movies", TTL.LONG, () => radarr.getMovies(), opts);
+//
+// **Radarr non configuré : une liste vide, sans rien demander** (14/10/2026, DECISIONS.md §89). Une
+// installation « Jellyfin seulement » est une installation, pas une panne : tout ce que Jellyfin a
+// devient « Jellyfin seul » et le cinéma s'ouvre. Avant, l'appel partait vers l'adresse par défaut
+// sans clé, levait, et la route du catalogue répondait 500 — aucun film. Un Radarr *configuré* qui
+// ne répond pas lève toujours : pendant une panne, tout Jellyfin paraîtrait non revendiqué et huit
+// cents films changeraient d'identifiant (`catalogueMembers`). Vérifié avant le cache : un Radarr
+// branché ensuite dans l'application est lu au prochain appel.
+export const cachedMovies = (opts?: { forceRefresh?: boolean }): Promise<RadarrMovie[]> =>
+  serviceConfigured("radarr") ? withCache("radarr:movies", TTL.LONG, () => radarr.getMovies(), opts) : Promise.resolve([]);
 
 /**
  * La liste des torrents, partagée par ses deux lecteurs en arrière-plan (08/10/2026) : les messages
@@ -332,8 +341,9 @@ export const cachedMovies = (opts?: { forceRefresh?: boolean }) =>
  */
 export const cachedTorrents = () => withCache("qbit:torrents", TTL.VERY_SHORT, () => qbittorrent.getTorrents());
 
-export const cachedSeries = (opts?: { forceRefresh?: boolean }) =>
-  withCache("sonarr:series", TTL.MEDIUM, () => sonarr.getSeries(), opts);
+// Sonarr non configuré : une liste vide, sans rien demander — la même règle que `cachedMovies`.
+export const cachedSeries = (opts?: { forceRefresh?: boolean }): Promise<SonarrSeries[]> =>
+  serviceConfigured("sonarr") ? withCache("sonarr:series", TTL.MEDIUM, () => sonarr.getSeries(), opts) : Promise.resolve([]);
 
 /**
  * Les identifiants externes d'un titre chez Jellyfin — TVDB, TMDB, IMDb.

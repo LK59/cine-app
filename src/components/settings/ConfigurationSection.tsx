@@ -85,7 +85,7 @@ export function ConfigurationSection({ cards, showMissing = false }: { cards: re
     <div className="space-y-4">
       {showMissing && data.missing.length > 0 && (
         <p className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">
-          {t("setup.missing", { list: data.missing.map((m) => (m.includes("|") ? t("setup.need.library") : t(`setup.fields.${m}`))).join(", ") })}
+          {t("setup.missing", { list: data.missing.map((m) => t(`setup.fields.${m}`)).join(", ") })}
         </p>
       )}
       {cards.map((card) => {

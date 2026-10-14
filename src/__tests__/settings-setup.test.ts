@@ -68,7 +68,31 @@ describe("une valeur de réglage", () => {
 describe("l'assistant de premier lancement", () => {
   it("est ouvert sur une installation neuve, et liste ce qui manque", () => {
     expect(setup.setupDone()).toBe(false);
-    expect(setup.missingRequiredSettings()).toEqual(["JELLYFIN_API_KEY", "TMDB_API_KEY", "RADARR_API_KEY|SONARR_API_KEY"]);
+    // Radarr et Sonarr sont facultatifs depuis le 14/10/2026 (DECISIONS.md §89) : Jellyfin et TMDB suffisent.
+    expect(setup.missingRequiredSettings()).toEqual(["JELLYFIN_API_KEY", "TMDB_API_KEY"]);
+  });
+
+  it("se termine sans Radarr ni Sonarr, et l'écran de fin dit ce qui manquera", async () => {
+    setup.saveSettings({ JELLYFIN_API_KEY: "j", TMDB_API_KEY: "t" });
+    expect(setup.missingRequiredSettings()).toEqual([]);
+    const { availableFeatures } = await import("@/lib/settings/schema");
+    const set = new Set(["JELLYFIN_API_KEY", "TMDB_API_KEY"]);
+    expect(availableFeatures((k) => set.has(k))).toEqual([
+      { id: "cinema", available: true },
+      { id: "movies", available: false },
+      { id: "series", available: false },
+      { id: "requests", available: false },
+      { id: "downloads", available: false },
+      { id: "subtitles", available: false },
+    ]);
+  });
+
+  it("reconnaît une installation configurée par son .env avec Jellyfin et TMDB seuls", () => {
+    process.env.JELLYFIN_API_KEY = "j";
+    process.env.TMDB_API_KEY = "t";
+    expect(setup.setupDone()).toBe(true);
+    delete process.env.JELLYFIN_API_KEY;
+    delete process.env.TMDB_API_KEY;
   });
 
   it("reconnaît une installation déjà configurée par son .env, et ne la rouvre plus ensuite", () => {

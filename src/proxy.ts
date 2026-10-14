@@ -197,6 +197,9 @@ const ADMIN_ONLY_READS: RegExp[] = [
   // Les Nouveautés vues de l'activité : l'état de chaque compte, les brouillons (§73). La route le
   // vérifie aussi (`adminOnly`).
   /^\/api\/admin\/release-notes(\/|$)/,
+  // Le contrôle de la bibliothèque : chaque titre et chaque dossier, tags bloqués compris (§90). La
+  // route le vérifie aussi (`adminOnly`).
+  /^\/api\/admin\/library-check(\/|$)/,
 ];
 
 function isAdminOnlyRead(pathname: string): boolean {
