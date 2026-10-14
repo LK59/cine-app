@@ -1,14 +1,57 @@
 import { describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { TrueHdCore } from "@/lib/webcodecs/truehd/truehdCore";
 import { contiguousAudio } from "@/lib/webcodecs/truehd/truehdAudio";
 
+/** Les unités d'accès d'un flux TrueHD brut : la longueur, en mots de 16 bits, dans les 12 bits bas. */
+function accessUnits(bytes: Uint8Array): Uint8Array[] {
+  const units: Uint8Array[] = [];
+  for (let at = 0; at + 4 <= bytes.length; ) {
+    const length = (((bytes[at] & 0x0f) << 8) | bytes[at + 1]) * 2;
+    if (length < 4) break;
+    units.push(bytes.subarray(at, at + length));
+    at += length;
+  }
+  return units;
+}
+
 /**
  * Le décodeur lui-même, sans flux réel : l'encodeur TrueHD de FFmpeg — 6.1, 7.1 et 8.1, essayés le
- * 21/09/2026 — produit des flux que son propre décodeur refuse, quelle que soit la configuration,
- * et le dépôt est public, donc pas d'extrait de film ici. Ce que le décodage donne sur de vrais
- * fichiers est vérifié par truehd-bench.spec.ts, contre ffmpeg, canal par canal.
+ * 21/09/2026 — produit des flux multicanaux que son propre décodeur refuse, et le dépôt est public,
+ * donc pas d'extrait de film ici. Ce que le décodage donne sur de vrais fichiers est vérifié par
+ * truehd-bench.spec.ts (contre ffmpeg, canal par canal) et ffmpeg-wasm-regress-bench.spec.ts. Seuls
+ * le mono et la stéréo de l'encodeur de FFmpeg 9.0 se relisent : fixtures/truehd/generate.sh.
  */
 describe("le décodeur TrueHD de FFmpeg, compilé en WebAssembly", () => {
+  /**
+   * FFmpeg 7.1.2 ne donnait un masque au seul sous-flux d'un TrueHD mono ou stéréo que si
+   * l'appelant avait déjà nommé ce compte de canaux ; ce module n'en nomme aucun, et ces pistes ne
+   * rendaient rien (« invalid output channel »), sans erreur. Corrigé en 7.1.3 (« don't depend on
+   * context channel layout when setting substream masks »), embarqué depuis 7.1.5 le 14/10/2026.
+   * Aucune piste de la bibliothèque n'est dans ce cas ce jour-là ; les niveaux attendus sont ceux
+   * d'`ffmpeg -af astats` (FFmpeg 9.0) sur les mêmes fixtures.
+   */
+  it.each([
+    ["mono", [-27.09]],
+    ["stereo", [-27.09, -41.07]],
+  ])("décode un TrueHD %s à un sous-flux, chaque canal à son rang", async (name, expected) => {
+    const units = accessUnits(new Uint8Array(readFileSync(`src/__tests__/fixtures/truehd/${name}.thd`)));
+    const core = await TrueHdCore.create(false);
+    const batch = core.decode(units);
+    core.close();
+    expect(batch.errors).toBe(0);
+    expect(batch.channels).toBe(expected.length);
+    expect(batch.sampleRate).toBe(48000);
+    const frames = batch.pcm.length / batch.channels;
+    expect(frames).toBeGreaterThanOrEqual(24000);
+    const rms = expected.map((_, c) => {
+      let sum = 0;
+      for (let i = 0; i < frames; i++) sum += batch.pcm[i * batch.channels + c] ** 2;
+      return 10 * Math.log10(sum / frames);
+    });
+    rms.forEach((db, c) => expect(Math.abs(db - expected[c])).toBeLessThan(0.05));
+  });
+
   it("se charge dans Node et refuse proprement ce qui n'est pas du TrueHD", async () => {
     const core = await TrueHdCore.create(false);
     const batch = core.decode([new Uint8Array(64).fill(7), new Uint8Array(3000).fill(0x55)]);

@@ -2554,6 +2554,16 @@ par des tests qui échouaient, corrigés sans qu'aucune piste ne change (`aac-re
   closed`, envoi refusé) — jamais un échec de décodage (code 3, l'image), un délai ni le réseau.
 Tests : `aacPce-refusal-guards.test.tsx`.
 
+**Révisé le 14/10/2026 — FFmpeg 7.1.5 dans les deux modules WebAssembly (7.1.2 avant).** Aucune
+règle ne change : l'ordre de sortie mesuré (`MEASURED_DECODED_ORDERS`) reste celui du module. Le diff
+des sources ne touche, côté AAC, que des chemins d'erreur (use-after-free USAC, trame sans
+fréquence). Preuve, `ffmpeg-wasm-regress-bench.spec.ts` : 45 pistes AAC (les 13 à PCE de la
+bibliothèque, LC et HE ordinaires de la mono au 7.1), 180 fenêtres de 60 s, **identiques à l'octet**
+avant et après ; `aac-regress-bench` identique sur WebKit et Chromium ; Ruby à ≤ 0,03 dB de
+`ffmpeg astats` comme avant. Côté TrueHD, les 65 pistes de la bibliothèque à l'octet aussi ; seul
+change le TrueHD mono ou stéréo à un sous-flux, illisible en 7.1.2 (aucune piste de la bibliothèque),
+lu désormais (`webcodecs-truehd.test.ts`). Voir DOC-TECH « Audio delivery ».
+
 ## 63. Une image qui échoue réessaie, au lieu d'abandonner jusqu'au redémarrage
 
 **Règle.** Toute image du cinéma qui échoue montre son repli (carré gris, titre écrit, fond uni) et

@@ -9,17 +9,27 @@
 # version de FFmpeg. Ce script est là pour qu'on puisse le refaire à l'identique, et vérifier que
 # le fichier du dépôt vient bien d'ici.
 #
-# Tout est figé : la version de FFmpeg et l'empreinte de son archive — relevée le 21/09/2026 après
-# vérification de la signature de l'équipe FFmpeg (clé FCF9 86EA 15E6 E293 A564 4F10 B432 2F04
-# D676 58D8) —, et l'image emscripten.
+# Tout est figé : la version de FFmpeg et l'empreinte de son archive — relevée après vérification
+# de la signature de l'équipe FFmpeg (clé FCF9 86EA 15E6 E293 A564 4F10 B432 2F04 D676 58D8) —, et
+# l'image emscripten.
 #
-# Le résultat est reproductible à l'octet : deux constructions complètes, le 21/09/2026, ont donné
-# la même empreinte, celle du fichier versionné —
-#   1dc5424a8bb5119cdedf4626fc787c525a4c5e10e9e615975e7afbc528f87318
+# FFmpeg 7.1.5 depuis le 14/10/2026 (7.1.2 avant). Ce qu'il change ici, lu dans le diff des sources
+# et non dans le Changelog : le correctif des masques de sous-flux de mlpdec (7.1.3, « don't depend
+# on context channel layout when setting substream masks »). Ce module n'indique pas de disposition
+# au décodeur : en 7.1.2, une piste TrueHD mono ou stéréo à un sous-flux ne rendait rien (masque
+# vide, « invalid output channel »), et un TrueHD à deux sous-flux lisait le masque du 6 canaux à la
+# première synchronisation. Mesuré avant/après sur les 65 pistes TrueHD de la bibliothèque
+# (ffmpeg-wasm-regress-bench.spec.ts, DOC-TECH « Audio delivery ») : rien d'autre ne bouge. La
+# branche 7.1 seulement — la 8 et la 9 changent bien plus que ce décodeur.
+#
+# Le résultat est reproductible à l'octet : deux constructions complètes, le 14/10/2026, ont donné
+# la même empreinte, celle du fichier versionné (le 7.1.2 d'avant, reconstruit le même jour par ce
+# script, retrouvait aussi la sienne, 1dc5424a…) —
+#   b8d19dcd1aa7f221bf05fc7d29eb94b9c62e794d394e78d84aadd6271753fb71
 set -eu
 
-FFMPEG=ffmpeg-7.1.2
-SHA256=089bc60fb59d6aecc5d994ff530fd0dcb3ee39aa55867849a2bbc4e555f9c304
+FFMPEG=ffmpeg-7.1.5
+SHA256=de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f
 EMSDK=emscripten/emsdk:4.0.15
 
 HERE=$(cd "$(dirname "$0")" && pwd)
