@@ -304,7 +304,7 @@ export function DayBars({ days }: { days: { day: string; seances: number; proble
       {days.map((d) => (
         <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day} · ${d.seances} · ${d.problems}`}>
           <span className="text-[11px] tabular-nums text-subtle">{d.seances || ""}</span>
-          <div className="relative w-full overflow-hidden rounded-t bg-accent-500/70" style={{ height: `${Math.max(2, (d.seances / max) * 80)}px` }}>
+          <div className="relative w-full overflow-hidden rounded-t bg-brand/70" style={{ height: `${Math.max(2, (d.seances / max) * 80)}px` }}>
             {d.problems > 0 && (
               <div className="absolute inset-x-0 bottom-0 bg-warning/80" style={{ height: `${Math.min(100, (d.problems / Math.max(1, d.seances)) * 100)}%` }} />
             )}

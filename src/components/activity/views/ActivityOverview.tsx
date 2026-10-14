@@ -433,7 +433,7 @@ export function ActivityOverview() {
             <DayBars days={s.perDay} />
             <p className="mt-3 flex gap-4 text-xs text-subtle">
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-sm bg-accent-500/70" />
+                <span className="h-2 w-2 rounded-sm bg-brand/70" />
                 {t("activity.week.legendSeances")}
               </span>
               <span className="inline-flex items-center gap-1.5">

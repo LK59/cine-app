@@ -284,6 +284,9 @@ describe("le violet de la marque dit ce qui est à moi", () => {
     "src/components/player/PlayerDiscoverSheet.tsx", "src/components/player/PlayerListAdd.tsx",
     "src/components/player/NavDot.tsx", "src/components/player/PlayerAccountPanel.tsx", "src/components/reports/ReportParts.tsx",
     "src/app/(dashboard)/radarr/[id]/page.tsx", "src/app/(dashboard)/sonarr/[id]/page.tsx", // « Vu » dans la gestion
+    // Les graphiques (14/10/2026, Louis) : l'accent devenu blanc les avait décolorés — séances par jour
+    // de l'Activité ; ajouts mensuels, qualité, langues et encodage des Statistiques.
+    "src/components/activity/parts.tsx", "src/components/activity/views/ActivityOverview.tsx", "src/app/(dashboard)/stats/page.tsx",
   ];
 
   it("pas de violet ailleurs", () => {
