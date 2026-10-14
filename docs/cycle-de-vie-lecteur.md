@@ -299,6 +299,22 @@ DECISIONS.md §67) : plus aucune exclusion de codec n'est retenue d'une séance 
 des tentatives (`SessionTally.retries`) note ses marches et les erreurs fatales d'hls.js, en
 observation.
 
+hls.js 1.7.3 (14/10/2026, `hlsRecovery.ts`, DECISIONS.md §67) — trois choses que l'écouteur d'erreur
+suppose désormais :
+- hls.js remet lui-même la MediaSource à zéro sur `MEDIA_SOURCE_REQUIRES_RESET` (drapeau
+  `ResetMediaSource`), **avant** nos écouteurs. Non fatale : comptée (registre, budget de trois), rien
+  d'autre. Fatale (aucune variante SDR) : pas de second `recoverMediaError()`, seulement
+  `startLoad(position)` — sa fatale a appelé `stopLoad()`. Au bout du budget, `detachMedia()` : sans lui,
+  la MediaSource neuve rechargerait d'elle-même sous l'écran d'erreur (`autoStartLoad`, `autoPlay`).
+- Toute relance (réseau ou média) part de la position de l'élément, ou de celle relevée à
+  `MEDIA_DETACHING`, ou de `lastKnownTime` — jamais de `config.startPosition`, le point de reprise d'une
+  séance préchauffée (§78).
+- Une requête sans réponse (statut 0) est réessayée par hls.js avant toute fatale : marquée coupure
+  (`reconnecting`), jamais lenteur.
+- Inchangé, et à savoir : sur Chrome, une erreur de décodage lève aussi l'`error` de l'élément, dont
+  l'échelle du son (marche 1, 1,2 s) renégocie par-dessus la récupération d'hls.js — mesuré à
+  l'identique en 1.5.17 et 1.7.3 (reprise à la position en ~5 s).
+
 ### Hôte natif → moteur
 
 | Appel | Quand | Note |
