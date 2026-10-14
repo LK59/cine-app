@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import type { MissingPayload, MissingSeason } from "@/app/api/player/series/[sonarrId]/missing/route";
 import { DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
+import { isJellyfinOnlyId } from "@/lib/jellyfinOnlyId";
 
 /**
  * Ce qui manque à une série — à lire, plus à demander.
@@ -16,7 +17,9 @@ import { DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
  */
 export function usePlayerSeriesRequests(sonarrId: number | null | undefined) {
   const { data } = useSWR<MissingPayload>(
-    sonarrId ? `/api/player/series/${sonarrId}/missing` : null,
+    // Une série que Jellyfin a seule (DECISIONS.md §89) : Sonarr ne la connaît pas, rien ne lui
+    // manque qu'on puisse demander — la fiche n'affiche ni « à venir » ni « Demander ».
+    sonarrId && !isJellyfinOnlyId(sonarrId) ? `/api/player/series/${sonarrId}/missing` : null,
     fetcher,
     {
       revalidateOnFocus: false,

@@ -2,6 +2,7 @@ import { jellyfin, type JellyfinItem } from "@/lib/clients/jellyfin";
 import { watchedDb, type WatchedRow } from "@/lib/db";
 import { cachedJellyfinMoviesAdmin, cachedJellyfinPlayed, cachedJellyfinSeriesAdmin, getProviderIdCI, invalidateKey } from "@/lib/server-cache";
 import { logError } from "@/lib/logger";
+import { catalogueLinks } from "@/lib/sonarrLink";
 
 /**
  * Le « vu » d'un compte — la règle décidée le 06/10/2026 (DECISIONS.md §51), qui remplace « le vu
@@ -53,23 +54,29 @@ const tmdbOf = (item: JellyfinItem): number | null => {
  * L'index, ou `null` si Jellyfin ne répond pas. **Nul ne vaut pas vide** : sans lui, on ne sait pas
  * si un titre est présent, et rien de ce qui en dépend — reporter un vu, suivre un démarquage — ne
  * doit se faire sur une supposition (un Jellyfin injoignable aurait sinon tout « fait partir »).
+ *
+ * Le TMDB de chaque élément est **celui du catalogue** (DECISIONS.md §89) : le titre que Radarr ou
+ * Sonarr range dans ce dossier, pas celui que Jellyfin a compris — *Aliens*, que Jellyfin prenait
+ * pour *Alien³*, rangeait son vu sous Alien³. Les éléments hors du catalogue (Radarr injoignable,
+ * doublon d'un titre déjà là) gardent le TMDB de Jellyfin, sans jamais prendre la place d'un lien.
  */
 export async function libraryIndex(): Promise<LibraryIndex | null> {
   try {
-    const [movies, series] = await Promise.all([cachedJellyfinMoviesAdmin(), cachedJellyfinSeriesAdmin()]);
+    const [movies, series, links] = await Promise.all([cachedJellyfinMoviesAdmin(), cachedJellyfinSeriesAdmin(), catalogueLinks()]);
     const index: LibraryIndex = { movies: new Map(), series: new Map(), byJellyfinId: new Map() };
-    for (const m of movies) {
-      const t = tmdbOf(m);
-      if (t) {
-        index.movies.set(t, m.Id);
-        index.byJellyfinId.set(m.Id, { type: "movie", tmdbId: t });
-      }
+    for (const [jellyfinId, link] of links) {
+      if (link.tmdbId === null) continue;
+      (link.type === "movie" ? index.movies : index.series).set(link.tmdbId, jellyfinId);
+      index.byJellyfinId.set(jellyfinId, { type: link.type, tmdbId: link.tmdbId });
     }
-    for (const s of series) {
-      const t = tmdbOf(s);
-      if (t) {
-        index.series.set(t, s.Id);
-        index.byJellyfinId.set(s.Id, { type: "series", tmdbId: t });
+    for (const [type, items] of [["movie", movies], ["series", series]] as const) {
+      const byTmdb = type === "movie" ? index.movies : index.series;
+      for (const item of items) {
+        if (links.has(item.Id)) continue;
+        const t = tmdbOf(item);
+        if (!t || byTmdb.has(t)) continue;
+        byTmdb.set(t, item.Id);
+        index.byJellyfinId.set(item.Id, { type, tmdbId: t });
       }
     }
     return index;
@@ -165,7 +172,8 @@ export async function syncWatched(who: Who, opts: { force?: boolean; now?: numbe
   const playedKeys = new Set<string>();
 
   for (const item of played) {
-    const tmdbId = tmdbOf(item);
+    // Le titre du catalogue d'abord (le dossier, §89), celui que Jellyfin a compris sinon.
+    const tmdbId = index?.byJellyfinId.get(item.Id)?.tmdbId ?? tmdbOf(item);
     if (!tmdbId) continue;
     const type: WatchedType = item.Type === "Series" ? "series" : "movie";
     const key = `${type}:${tmdbId}`;

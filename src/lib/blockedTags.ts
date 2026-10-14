@@ -15,6 +15,7 @@ import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { cachedJellyfinMoviesAdmin, cachedJellyfinSeriesAdmin } from "@/lib/server-cache";
+import { catalogueLinks } from "@/lib/sonarrLink";
 
 /** Relue toutes les deux minutes : un tag ajouté ou retiré par l'administrateur s'applique vite. */
 const TTL_MS = 2 * 60 * 1000;
@@ -128,15 +129,21 @@ export async function hiddenForRequest<M>(
 export async function hiddenTmdbKeysFor(jfId: string | null | undefined): Promise<Set<string>> {
   const blocked = jfId ? await blockedTagsOf(jfId) : [];
   if (blocked.length === 0) return new Set();
-  const [movies, series] = await Promise.all([
+  const [movies, series, links] = await Promise.all([
     cachedJellyfinMoviesAdmin().catch(() => []),
     cachedJellyfinSeriesAdmin().catch(() => []),
+    catalogueLinks(),
   ]);
   const keys = new Set<string>();
   for (const [type, items] of [["movie", movies], ["series", series]] as const) {
     for (const item of items) {
+      if (!carriesBlockedTag(item.Tags, blocked)) continue;
       const tmdb = item.ProviderIds?.Tmdb;
-      if (tmdb && carriesBlockedTag(item.Tags, blocked)) keys.add(`${type}:${tmdb}`);
+      if (tmdb) keys.add(`${type}:${tmdb}`);
+      // Et le TMDB du titre que le catalogue range dans ce dossier (DECISIONS.md §89) : c'est sous
+      // lui que la recherche et les rangées parlent de ce titre, quoi que Jellyfin en ait compris.
+      const link = links.get(item.Id);
+      if (link?.tmdbId) keys.add(`${link.type}:${link.tmdbId}`);
     }
   }
   return keys;

@@ -6,7 +6,8 @@ import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
 import { cachedSeries, cachedJellyfinSeriesAdmin, cachedJellyfinFirstEpisodes, cachedJellyfinSeasons, cachedJellyfinRecentEpisodes, cachedJellyfinPlayedAmong } from "@/lib/server-cache";
 import { latestArrivals, seriesFreshness } from "@/lib/seriesArrival";
-import { matchSeries } from "@/lib/catalogueMembers";
+import { jellyfinOnlySeries, matchSeries } from "@/lib/catalogueMembers";
+import { jellyfinOnlyCinemaSeries } from "@/lib/jellyfinOnlyCatalogue";
 import { cataloguePoster, seriesBackdrop } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt, logoForLocale } from "@/lib/title-art";
@@ -18,7 +19,13 @@ import type { HydratedPayload } from "@/lib/cinemaPayload";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
 
 export interface CinemaSeries {
+  /**
+   * L'identifiant de fiche : celui de Sonarr — ou, pour une série que Jellyfin a seule, un nombre de
+   * la plage réservée (`jellyfinOnlyId.ts`, DECISIONS.md §89).
+   */
   sonarrId: number;
+  /** `"jellyfin"` pour une série que Jellyfin a seule — rien à demander à Sonarr. Absent sinon. */
+  source?: "jellyfin";
   jellyfinItemId: string;
   tvdbId: number;
   tmdbId: number | null;
@@ -182,22 +189,31 @@ export async function GET(req: Request) {
 
     // La règle du catalogue, commune à tout ce qui dit « dans la bibliothèque » (`catalogueMembers`).
     const matched = matchSeries(series, jellyfinSeries);
+    // Et ce que Jellyfin a seul (DECISIONS.md §89) : une série qu'aucune de Sonarr ne revendique, avec
+    // au moins un épisode. Un compte qui échoue la laisse dehors, le reste du catalogue suit.
+    const onlyInJellyfin = await jellyfinOnlySeries(jellyfinSeries, matched).catch(() => []);
 
     // Le compte de la requête : ses tags bloqués (§54), et ce qu'il a déjà vu (§75).
-    const { hidden, signature, jfId } = await hiddenForRequest(req, matched, (x) => x.jfItem.Tags, (x) => x.s.id);
+    const tagged = [
+      ...matched.map((x) => ({ id: x.s.id, tags: x.jfItem.Tags })),
+      ...onlyInJellyfin.map((t) => ({ id: t.id, tags: t.item.Tags })),
+    ];
+    const { hidden, signature, jfId } = await hiddenForRequest(req, tagged, (x) => x.tags, (x) => x.id);
 
     // La date de chaque série pour ce compte (DECISIONS.md §75). Le catalogue est commun, mais « déjà
     // vu » appartient au compte : décidé ici, où l'identité est connue, plutôt que sur l'appareil, qui
     // n'a aucun état « vu » par épisode en main. Une requête pour toute la liste, pas une par carte ;
     // un Jellyfin qui ne répond pas laisse remonter — on ne cache pas un épisode sur une supposition.
     const arrivals = latestArrivals(recentEpisodes);
-    const latestIds = matched.map(({ jfItem }) => arrivals.get(jfItem.Id)?.episodeId).filter((id): id is string => !!id);
+    const latestIds = [...matched.map(({ jfItem }) => jfItem), ...onlyInJellyfin.map((t) => t.item)]
+      .map((jfItem) => arrivals.get(jfItem.Id)?.episodeId)
+      .filter((id): id is string => !!id);
     const seen: Set<string> = jfId && latestIds.length > 0 ? await cachedJellyfinPlayedAmong(jfId, latestIds).catch(() => new Set<string>()) : new Set<string>();
     const now = Date.now();
-    const freshnessOf = (s: SonarrSeries, jfItem: { Id: string; DateCreated?: string }) => {
+    const freshnessOf = (s: Pick<SonarrSeries, "added"> | null, jfItem: { Id: string; DateCreated?: string }) => {
       const latest = arrivals.get(jfItem.Id);
       return seriesFreshness({
-        sonarrAddedAt: s.added ?? null,
+        sonarrAddedAt: s?.added ?? null,
         libraryAddedAt: jfItem.DateCreated,
         latest,
         seenLatest: latest ? seen.has(latest.episodeId) : false,
@@ -206,9 +222,12 @@ export async function GET(req: Request) {
     };
 
     const locale = localeOf(req);
-    const cinemaSeries = await Promise.all(
-      matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem, locale, firstBySeries.get(jfItem.Id), seasonsBySeries.get(jfItem.Id)?.size, freshnessOf(s, jfItem)))
-    );
+    const cinemaSeries = await Promise.all([
+      ...matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem, locale, firstBySeries.get(jfItem.Id), seasonsBySeries.get(jfItem.Id)?.size, freshnessOf(s, jfItem))),
+      ...onlyInJellyfin.map((t) =>
+        jellyfinOnlyCinemaSeries(t, locale, firstBySeries.get(t.item.Id), seasonsBySeries.get(t.item.Id)?.size, freshnessOf(null, t.item))
+      ),
+    ]);
 
     // Des identifiants, pas des titres : un film à trois genres n'a pas à être écrit trois
     // fois. Voir `cinemaPayload` — le client reconstruit la forme complète à l'arrivée.
@@ -234,7 +253,11 @@ export async function GET(req: Request) {
     //
     // Classé sur la date de la série dans Sonarr, la même pour tous : le palmarès départage ses
     // ex-aequo par la date, et celle de §75 dépend du compte — deux comptes auraient lu deux top 10.
-    const sonarrAdded = new Map(matched.map(({ s }) => [s.id, s.added ?? null]));
+    // Une série que Jellyfin a seule : son entrée dans Jellyfin, la même pour tous elle aussi.
+    const sonarrAdded = new Map<number, string | null>([
+      ...matched.map(({ s }) => [s.id, s.added ?? null] as const),
+      ...onlyInJellyfin.map((t) => [t.id, t.item.DateCreated ?? null] as const),
+    ]);
     const top10OfTheDay = dailyTop10(
       cinemaSeries.map((cs) => ({ ...cs, addedAt: sonarrAdded.get(cs.sonarrId) ?? null })),
       undefined,

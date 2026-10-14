@@ -3,8 +3,7 @@ import { errorBody } from "@/lib/apiErrorCodes";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
-import { cachedMovies, cachedSeries } from "@/lib/server-cache";
-import { sonarrIdsBySeriesId } from "@/lib/sonarrLink";
+import { catalogueLinks, cinemaHrefOf } from "@/lib/sonarrLink";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { libraryIndex, withoutWatched } from "@/lib/watched";
 
@@ -15,49 +14,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ items: [] });
   }
 
-  const [rawResume, movies, series, index] = await Promise.all([
+  const [rawResume, links, index] = await Promise.all([
     jellyfin.getResumeItems(session.jfId).catch(() => ({ Items: [] })),
-    cachedMovies().catch(() => []),
-    cachedSeries().catch(() => []),
+    catalogueLinks(),
     libraryIndex(),
   ]);
   // Sans ce qui est vu (DECISIONS.md §51) : une série marquée vue, un film marqué vu depuis sa
   // dernière lecture. Le filtre est commun à « Reprendre » et « À suivre » (`withoutWatched`).
   const resumeData = { ...rawResume, Items: withoutWatched(session.jfId, rawResume.Items, index) };
 
-  // Seulement les films qui ont un fichier : le catalogue du cinéma ne contient qu'eux. Un film en
-  // cours dont Radarr n'a plus le fichier (en pleine mise à niveau, par exemple) menait à une fiche
-  // introuvable — l'adresse était effacée, et le clic ne faisait rien (23/09/2026). Sans lien, la
-  // carte lance la lecture directement, ce que Jellyfin sait encore faire.
-  const moviesByTmdb = new Map(movies.filter((m) => m.hasFile).map((m) => [m.tmdbId, m.id]));
-  const seriesByTvdb = new Map(series.map((s) => [s.tvdbId, s.id]));
-
-  // Jellyfin ne pose jamais d'identifiants externes sur un épisode, seulement sur sa série : la
-  // fiche d'un épisode en cours se retrouve donc par la série. Même calcul que « À suivre », et
-  // au même endroit — voir `sonarrIdsBySeriesId`.
-  const sonarrBySeries = await sonarrIdsBySeriesId(
-    session.jfId,
-    resumeData.Items.filter((i) => i.Type === "Episode" && i.SeriesId).map((i) => i.SeriesId!)
-  );
-
   const items = resumeData.Items.map((item) => {
     const positionTicks = item.UserData?.PlaybackPositionTicks ?? 0;
     const runtimeTicks = item.RunTimeTicks ?? 0;
     const progress = runtimeTicks > 0 ? Math.min((positionTicks / runtimeTicks) * 100, 99) : 0;
 
-    let cinemaHref: string | null = null;
-    if (item.Type === "Movie" && item.ProviderIds?.Tmdb) {
-      const tmdbId = parseInt(item.ProviderIds.Tmdb, 10);
-      const radarrId = moviesByTmdb.get(tmdbId);
-      if (radarrId) cinemaHref = `/radarr/${radarrId}`;
-    } else if (item.Type === "Series" && item.ProviderIds?.Tvdb) {
-      const tvdbId = parseInt(item.ProviderIds.Tvdb, 10);
-      const sonarrId = seriesByTvdb.get(tvdbId);
-      if (sonarrId) cinemaHref = `/sonarr/${sonarrId}`;
-    } else if (item.Type === "Episode" && item.SeriesId) {
-      const sonarrId = sonarrBySeries.get(item.SeriesId);
-      if (sonarrId) cinemaHref = `/sonarr/${sonarrId}`;
-    }
+    // La fiche, par le lien que le catalogue tient de chaque élément Jellyfin — le dossier, pas les
+    // identifiants que Jellyfin a compris (DECISIONS.md §89). Seuls les titres du catalogue en ont un :
+    // un film dont Radarr n'a plus le fichier (en pleine mise à niveau) n'ouvre pas une fiche
+    // introuvable (23/09/2026) — sans lien, la carte lance la lecture, ce que Jellyfin sait encore
+    // faire. Un épisode n'a pas de lien à lui : c'est celui de sa série.
+    const cinemaHref = cinemaHrefOf(links.get(item.Type === "Episode" ? item.SeriesId ?? "" : item.Id));
 
     return {
       id: item.Id,

@@ -3,11 +3,24 @@ import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
 
+/**
+ * Un titre ouvrable : son identifiant de fiche, et les visuels de Radarr/Sonarr quand il en a. Un
+ * titre que Jellyfin a seul (DECISIONS.md §89) n'a que le premier — son affiche vient de Jellyfin
+ * (`seriesJellyfin`, `moviesJellyfin`).
+ */
+export interface PlayableEntry {
+  id: number;
+  images?: RadarrMovie["images"] | SonarrSeries["images"];
+  source?: "jellyfin";
+}
+
 export interface PlayableLibrary {
-  movies: Map<number, RadarrMovie>;
-  series: Map<number, SonarrSeries>;
+  movies: Map<number, PlayableEntry>;
+  series: Map<number, PlayableEntry>;
   /** L'élément Jellyfin de chaque série, par identifiant TMDB — voir `CatalogueMembers.seriesJellyfin`. */
   seriesJellyfin: Map<number, JellyfinItem>;
+  /** L'élément Jellyfin des films que Jellyfin a seul, par identifiant TMDB — leur seule affiche. */
+  moviesJellyfin?: Map<number, JellyfinItem>;
 }
 
 /**
@@ -21,21 +34,35 @@ export interface PlayableLibrary {
  * La règle est donc **celle du catalogue**, et non plus une approximation : `catalogueMembers`
  * (fichier ou épisode, *et* élément Jellyfin retrouvé). Un titre qui n'y est pas s'ouvre sur sa
  * fiche TMDB (*The Arena*, 05/10/2026 — Jellyfin l'avait pris pour une autre série).
+ *
+ * Les titres que Jellyfin a seul y entrent aussi (§89), par le TMDB que Jellyfin leur donne : la
+ * fiche TMDB et la recherche les ouvrent dans la bibliothèque au lieu de proposer de les demander.
+ * Un titre de Radarr/Sonarr passe toujours devant, au même TMDB.
  */
 export async function playableLibrary(): Promise<PlayableLibrary> {
-  const { movies, series, seriesJellyfin } = await catalogueMembers();
+  const { movies, series, seriesJellyfin, jellyfinOnly } = await catalogueMembers();
   const jellyfinBySonarr = seriesJellyfin ?? new Map<number, JellyfinItem>();
   const playableSeries = series.filter((s) => s.tmdbId != null);
-  return {
-    movies: new Map(movies.filter((m) => m.tmdbId).map((m) => [m.tmdbId, m])),
-    series: new Map(playableSeries.map((s) => [s.tmdbId!, s])),
-    seriesJellyfin: new Map(
-      playableSeries.flatMap((s) => {
-        const item = jellyfinBySonarr.get(s.id);
-        return item ? [[s.tmdbId!, item] as const] : [];
-      })
-    ),
-  };
+  const movieMap = new Map<number, PlayableEntry>(movies.filter((m) => m.tmdbId).map((m) => [m.tmdbId, m]));
+  const seriesMap = new Map<number, PlayableEntry>(playableSeries.map((s) => [s.tmdbId!, s]));
+  const seriesItems = new Map<number, JellyfinItem>(
+    playableSeries.flatMap((s) => {
+      const item = jellyfinBySonarr.get(s.id);
+      return item ? [[s.tmdbId!, item] as const] : [];
+    })
+  );
+  const movieItems = new Map<number, JellyfinItem>();
+  for (const t of jellyfinOnly?.movies ?? []) {
+    if (t.tmdbId === null || movieMap.has(t.tmdbId)) continue;
+    movieMap.set(t.tmdbId, { id: t.id, source: "jellyfin" });
+    movieItems.set(t.tmdbId, t.item);
+  }
+  for (const t of jellyfinOnly?.series ?? []) {
+    if (t.tmdbId === null || seriesMap.has(t.tmdbId)) continue;
+    seriesMap.set(t.tmdbId, { id: t.id, source: "jellyfin" });
+    seriesItems.set(t.tmdbId, t.item);
+  }
+  return { movies: movieMap, series: seriesMap, seriesJellyfin: seriesItems, moviesJellyfin: movieItems };
 }
 
 /** L'identifiant de fiche d'un titre, ou `null` s'il n'est pas ouvrable. */

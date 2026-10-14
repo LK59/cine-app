@@ -148,7 +148,7 @@ export async function GET(req: NextRequest) {
     const ownedPoster = (type: "movie" | "series", tmdbId: number): string | null => {
       const entry = type === "series" ? seriesLibrary.get(tmdbId) : movieLibrary.get(tmdbId);
       if (!entry) return null;
-      const jellyfinItem = type === "series" ? lib.seriesJellyfin?.get(tmdbId) : null;
+      const jellyfinItem = type === "series" ? lib.seriesJellyfin?.get(tmdbId) : lib.moviesJellyfin?.get(tmdbId);
       return cataloguePoster(type, artByTitle.get(artKey(type, tmdbId)), entry.images, locale, jellyfinItem);
     };
     const fromWatchlist = (statuses: string[]): PlayerListItem[] =>

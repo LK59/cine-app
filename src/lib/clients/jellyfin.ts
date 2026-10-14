@@ -58,6 +58,13 @@ export interface JellyfinItem {
   SeriesId?: string;
   IndexNumber?: number;
   ParentIndexNumber?: number;
+  /**
+   * Demandés par les listes d'administration depuis le 14/10/2026 (DECISIONS.md §89) : un titre que
+   * Jellyfin a seul n'a que ces champs pour se décrire quand TMDB ne le connaît pas — et `DateCreated`
+   * manquait à la date propre d'une série (§75), qui lisait donc toujours `undefined`.
+   */
+  Genres?: string[];
+  OriginalTitle?: string;
 }
 
 /**
@@ -480,7 +487,7 @@ export const jellyfin = {
   /** Même repliement, même correctif — voir `getAllMovies`. */
   getAllMoviesAdmin: () =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${cfg.url}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path,Tags&Limit=5000`,
+      `${cfg.url}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path,Tags,DateCreated,Genres,Overview,OriginalTitle&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 
@@ -492,7 +499,7 @@ export const jellyfin = {
 
   getAllSeriesAdmin: () =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${cfg.url}/Items?IncludeItemTypes=Series&Recursive=true&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path,Tags&Limit=5000`,
+      `${cfg.url}/Items?IncludeItemTypes=Series&Recursive=true&Fields=ProviderIds,ProductionYear,RunTimeTicks,Path,Tags,DateCreated,Genres,Overview,OriginalTitle&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 
@@ -520,6 +527,20 @@ export const jellyfin = {
       `${cfg.url}/Items?IncludeItemTypes=Season&Recursive=true&Fields=ChildCount&EnableImages=false&Limit=10000`,
       { headers }
     ).then((res) => res.Items),
+
+  /**
+   * Combien d'épisodes réels (pas les « manquants » que Jellyfin peut inventer) une série contient.
+   *
+   * Seulement pour les quelques séries que Jellyfin a seul (DECISIONS.md §89) : la vue serveur ne
+   * remplit ni `ChildCount` ni `RecursiveItemCount` (relevé le 14/10/2026, `null` partout), et une
+   * série sans épisode — *La casa de las flores*, que Sonarr suit sans fichier — ne doit pas entrer
+   * au catalogue.
+   */
+  countEpisodesAdmin: (seriesId: string) =>
+    fetchJson<{ TotalRecordCount?: number; Items?: unknown[] }>(
+      `${cfg.url}/Items?ParentId=${idSegment(seriesId)}&Recursive=true&IncludeItemTypes=Episode&IsMissing=false&EnableImages=false&EnableUserData=false&Limit=1&EnableTotalRecordCount=true`,
+      { headers }
+    ).then((res) => res.TotalRecordCount ?? res.Items?.length ?? 0),
 
   /**
    * Les épisodes entrés dans la bibliothèque depuis `sinceMs`, les plus récents d'abord — de quoi
@@ -667,7 +688,7 @@ export const jellyfin = {
   // additive field, no effect on existing callers that don't read it.
   getSeriesEpisodes: async (userId: string, seriesId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${cfg.url}/Shows/${idSegment(seriesId)}/Episodes?userId=${idSegment(userId)}&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,Overview`,
+      `${cfg.url}/Shows/${idSegment(seriesId)}/Episodes?userId=${idSegment(userId)}&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,Overview,Path`,
       { headers }
     ).then((res) => res.Items),
 

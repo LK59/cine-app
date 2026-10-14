@@ -1530,6 +1530,13 @@ du catalogue au réseau : celui gardé sur l'appareil peut dater de quelques jou
 **Trouvé le 05/10/2026** : *The Arena (2026)*, identifiée par Jellyfin comme *The World's Greatest
 Arena* ; la recherche la disait dans la bibliothèque, et l'ouvrir ne faisait rien.
 
+**Étendu le 14/10/2026 (§89).** La règle compte aussi ce que **Jellyfin a seul** : un élément qu'aucun
+titre de Radarr/Sonarr ne revendique (film avec un fichier, série avec au moins un épisode réel), sans
+identifiant commun avec un titre du catalogue — jamais rapproché par le titre. Il reçoit un identifiant
+de la plage réservée et entre partout où « dans la bibliothèque » se lit. Et le rapprochement par dossier
+devient **le** lien d'un élément Jellyfin vers son titre (`CatalogueMembers.byJellyfinId`), que
+« Reprendre », « À suivre » et le « vu » lisent au lieu des identifiants de Jellyfin. Voir §89.
+
 ## 48. Le déploiement simplifié : réglages dans l'application, assistant de premier lancement
 
 **Règle.** Une valeur de configuration se lit dans cet ordre : réglée dans l'application (table
@@ -4339,5 +4346,100 @@ réutilisé en lecture, son index des grappes n'apprend rien de nouveau (`mkvTex
 les positions relatives et les durées que le lecteur n'a jamais eu besoin de garder). Seul
 `PlayerControls` change, et à l'identique : son calcul de vignette trickplay passe par
 `trickplayTile.ts`, partagé avec les répliques.
+
+**Décidé le 14/10/2026** (Louis).
+
+
+## 89. Jellyfin seul, et la règle de vérité
+
+Demandé le 14/10/2026, après une mesure de la bibliothèque : les 806 films étaient tous rattachés à
+Radarr par leur dossier, mais trois séries rangées à la main dans Jellyfin, hors Sonarr, étaient
+jouables et absentes du cinéma (*La casa de papel*, *Berlin et La Dame à l'hermine*, *Le Flambeau*) ;
+et une quinzaine de titres étaient **mal identifiés par Jellyfin** — bon dossier, mauvais TMDB (*Cure*
+lu comme *La Cure*, *Shōgun* 2024 comme celui de 1980, *The Seven Deadly Sins* comme sa suite). Le
+« vu », « Reprendre » et « À suivre » suivaient l'erreur : ils reliaient Jellyfin au catalogue par les
+identifiants que Jellyfin avait compris.
+
+**Règle de vérité** (validée par Louis) :
+- *quels épisodes existent, et leur rangement* (saisons, numéros) : **le disque**, donc Jellyfin ;
+- *l'identité* (quel film, quelle série) : **Radarr/Sonarr, par le dossier** — Jellyfin s'aligne ;
+- *les noms et résumés d'épisodes* : **l'épisode que Sonarr a rattaché au fichier** (épisode ↔ fichier),
+  sinon Jellyfin ;
+- *un titre absent de Radarr/Sonarr* : **Jellyfin seul**.
+
+**Jellyfin seul.** `jellyfinOnlyMovies` / `jellyfinOnlySeries`, après `matchMovies` / `matchSeries` :
+les éléments non revendiqués — un film avec un `Path`, une série avec au moins un épisode réel
+(`countEpisodesAdmin`, `IsMissing=false` : la vue serveur ne remplit pas `ChildCount`) — dont aucun
+identifiant (TMDB, IMDb ; TVDB pour une série) n'est celui d'un titre du catalogue. **Jamais de
+rapprochement par le titre.** Identifiant de fiche : `1 000 000 000 + FNV-1a(Id Jellyfin) mod 10⁹`
+(`jellyfinOnlyId.ts`), le même d'un chargement à l'autre ; une collision prend le suivant libre, dans
+l'ordre des identifiants Jellyfin, et s'écrit dans `server.log` (`catalogue-reserved-id`). Les cartes
+portent `source: "jellyfin"`. Leurs métadonnées passent par le TMDB que Jellyfin leur donne (titres et
+synopsis traduits, logo, accroche — les caches du catalogue), sinon par les champs de Jellyfin (nom,
+synopsis, genres) ; l'affiche et le grand visuel de Jellyfin quand TMDB n'en a pas dans la langue ;
+`addedAt` est `DateCreated`. Les tags bloqués s'appliquent (§54). Ils entrent dans les rangées, la
+recherche, `playableLibrary` (la fiche TMDB et la recherche les ouvrent dans la bibliothèque, jamais
+« Demander »), les nouveautés (§75).
+
+**La fiche d'un titre que Jellyfin a seul n'a rien de la gestion.** Les adresses de description
+(`/api/radarr/movies/<id>/info`, `/api/sonarr/series/<id>/info`) répondent pour un identifiant réservé
+sans rien demander à Radarr, Sonarr ni Bazarr (`jellyfinOnlyInfo`) : TMDB et OMDb, pas de sous-titres,
+pas de téléchargement. `usePlayerSeriesRequests` ne demande pas à Sonarr ce qui manque.
+
+**Voulu : les doubles rangements.** *Le Flambeau* est aussi la saison 2 de *Burning Love (FR)* ;
+*Berlin et La Dame à l'hermine*, la saison 2 de *Berlin (2023)*. Deux dossiers, deux identités : chacun
+garde sa fiche (option a, choisie par Louis). *La casa de las flores*, dossier vide que Sonarr suit sans
+fichier, reste invisible. Radarr (ou Sonarr) injoignable : aucun titre « Jellyfin seul » de ce côté — tout
+Jellyfin paraîtrait non revendiqué, et huit cents films changeraient d'identifiant le temps d'une panne.
+
+**Un seul lien d'un élément Jellyfin vers son titre.** `CatalogueMembers.byJellyfinId` : le
+rapprochement par dossier, plus les titres que Jellyfin a seul. Le lisent `catalogueLinks` /
+`cinemaHrefOf` / `seriesCatalogueIds` (`sonarrLink.ts`) pour « Reprendre » et « À suivre »,
+`libraryIndex` et `syncWatched` pour le « vu » (le TMDB du catalogue ; un élément hors du catalogue garde
+celui de Jellyfin sans jamais prendre la place d'un lien), `hiddenTmdbKeysFor` (les deux TMDB d'un élément
+bloqué), la liste des épisodes (le TMDB du complément).
+
+**Les épisodes.** Dans la liste d'une série (`arrangeEpisodes`, `episodeDisplay.ts`) : un épisode sans
+numéro prend celui de son nom de fichier (`S04E01`), sinon la fin de sa saison — jamais « É0 » en tête ;
+un titre égal au nom du fichier ou de la série devient « Épisode N » dans la langue de qui regarde. Pour
+une série Sonarr (`applyAttachedEpisodeText`) : si Sonarr a rattaché le fichier au même épisode et que
+Jellyfin identifie la série comme lui, le texte de Jellyfin (déjà traduit) ; sinon le texte de
+**l'épisode de Sonarr**, par TMDB au TMDB de Sonarr (langue de qui regarde, puis anglais), à défaut celui
+de Sonarr (« TBA » ignoré) — le numéro affiché reste celui du disque. Le reste est complété par
+`fillEpisodeText` **au TMDB du catalogue**, seulement là où TMDB a la saison : une saison absente (404)
+est gardée vide une semaine au lieu d'être redemandée à chaque ouverture.
+
+**Réparé au passage.** Les listes d'administration de Jellyfin demandent `DateCreated,Genres,Overview,
+OriginalTitle` : la date propre d'une série (§75, `libraryAddedAt`) lisait jusque-là toujours `undefined`.
+
+**Les métadonnées dans Jellyfin (14/10/2026, à la main).** Réalignés sur Radarr/Sonarr par
+`RemoteSearch/Apply` (identifiants, puis actualisation complète, images comprises) : *Cure*, *A
+Separation*, *The Hunt* (2012), *The Party* (*La Boum*), *Forsaken* (*L'Abandon*), *Cocorico 2* (IMDb),
+*The Wailing*, *Dollhouse*, *Balloon* ; *The Seven Deadly Sins*, *Spiral* (*Engrenages*), *Shōgun* (2024),
+*LOL France*. Les « vu » et reprises des 28 comptes comparés avant/après : identiques. **Pas touchés** :
+*Aliens* et *November* — leurs fichiers sont *Alien³* (Special Assembly Cut) et *Novembre* (2022),
+Jellyfin avait raison, c'est Radarr qui a rangé le mauvais fichier ; le cinéma les montre sous l'identité
+de Radarr, comme la règle le dit, jusqu'à ce que le fichier soit remplacé. *La casa de papel* : noms et
+résumés des saisons 2 à 5 posés depuis le groupe d'épisodes TMDB « Parts (edited version) » (ordre
+Netflix, celui du disque) et verrouillés (`LockedFields: Name, Overview`) — les saisons 2 et 3 portaient
+les noms des parties 3 et 5.
+
+**Porteurs.** `catalogueMembers`, `jellyfinOnlyMovies`, `jellyfinOnlySeries`, `jellyfinOnlyTitle`
+(`catalogueMembers.ts`) ; `jellyfinOnlyId.ts` ; `jellyfinOnlyCinemaMovie` / `jellyfinOnlyCinemaSeries`
+(`jellyfinOnlyCatalogue.ts`) ; `jellyfinOnlyInfo` ; `movieTmdbFacts` / `seriesTmdbFacts`
+(`titleInfoShape.ts`, la forme TMDB des descriptions, une fois) ; `sonarrLink.ts` ;
+`episodeDisplay.ts` ; `applyAttachedEpisodeText` (`episodeFallback.ts`) ; `cachedSonarrEpisodeTexts`,
+`cachedJellyfinEpisodeCount` (`server-cache.ts`).
+
+**Appelants.** `/api/cinema/movies`, `/api/cinema/series`, `/api/cinema/series/[id]/episodes`,
+`/api/search`, `playableLibrary` (et par elle §47), `/api/jellyfin/resume`, `/api/cinema/next-up`,
+`watched.ts`, `blockedTags.ts`, les deux routes `/info`, `usePlayerSeriesRequests`. `PERSISTED_CACHE_SCHEMA` 14.
+
+**Tests.** `jellyfin-seul.test.ts` (orphelins visibles avec leurs saisons, série vide invisible,
+anti-doublon par identifiants, jamais par le titre, doubles rangements, Radarr muet, identifiants
+réservés stables, collision journalisée, tags bloqués, « dans la bibliothèque », vu par le dossier,
+description sans Radarr ni Bazarr), `search-jellyfin-seul.test.ts`, `episodes-verite.test.ts` (numéro
+lu dans le fichier, fin de saison, remplissage, saison TMDB absente, épisode de Sonarr, TMDB du
+catalogue), `resume-route.test.ts`, `cinema-next-up-route.test.ts`, `decisions-partagees.test.ts`.
 
 **Décidé le 14/10/2026** (Louis).

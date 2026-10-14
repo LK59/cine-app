@@ -52,6 +52,10 @@ export interface SonarrEpisode {
   airDateUtc?: string;
   monitored: boolean;
   hasFile: boolean;
+  /** Le fichier que Sonarr a rattaché à cet épisode — la preuve que c'est bien lui (DECISIONS.md §89). */
+  episodeFileId?: number;
+  /** Le résumé, en anglais : Sonarr n'a qu'une langue. */
+  overview?: string;
   series?: { id: number; title: string; images: { coverType: string; remoteUrl?: string; url?: string }[] };
 }
 

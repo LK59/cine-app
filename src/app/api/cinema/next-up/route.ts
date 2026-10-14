@@ -3,7 +3,7 @@ import { untouchedPilot } from "@/lib/nextUpFilter";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin, type JellyfinItem } from "@/lib/clients/jellyfin";
-import { sonarrIdsBySeriesId } from "@/lib/sonarrLink";
+import { seriesCatalogueIds } from "@/lib/sonarrLink";
 import { libraryIndex, withoutWatched } from "@/lib/watched";
 
 export interface CinemaNextUpItem {
@@ -16,7 +16,10 @@ export interface CinemaNextUpItem {
   // Jellyfin's NextUp already resolves it to the right one — see the client's own doc comment).
   resumeTicks: number | null;
   runtimeTicks: number | null;
-  /** La série dans Sonarr, quand elle y est — c'est ce qui ouvre sa fiche depuis la reprise. */
+  /**
+   * La fiche de la série, quand elle est au catalogue — c'est ce qui l'ouvre depuis la reprise.
+   * L'identifiant Sonarr, ou celui de la plage réservée d'une série que Jellyfin a seule (§89).
+   */
   sonarrId: number | null;
   /**
    * Quand cet épisode a été lu pour la dernière fois — ou, jamais ouvert, le dernier épisode lu de sa
@@ -58,13 +61,9 @@ export async function GET(req: NextRequest) {
   const [raw, index] = await Promise.all([jellyfin.getNextUpGlobal(session.jfId, 30).catch(() => []), libraryIndex()]);
   const items = withoutWatched(session.jfId, raw, index).filter((item) => !untouchedPilot(item)).slice(0, 10);
 
-  // La correspondance vers Sonarr — une carte de reprise doit pouvoir ouvrir sa fiche, et pas
-  // seulement lancer la lecture. Le calcul est partagé avec le flux « Reprendre » : voir
-  // `sonarrIdsBySeriesId`.
-  const sonarrBySeries = await sonarrIdsBySeriesId(
-    session.jfId,
-    items.map((i) => i.SeriesId).filter((id): id is string => !!id)
-  );
+  // La fiche de la série — une carte de reprise doit pouvoir l'ouvrir, et pas seulement lancer la
+  // lecture. Par le lien du catalogue (le dossier), partagé avec « Reprendre » : voir `sonarrLink.ts`.
+  const sonarrBySeries = await seriesCatalogueIds(items.map((i) => i.SeriesId).filter((id): id is string => !!id));
 
   // La date d'un épisode jamais ouvert : celle du dernier épisode lu de sa série, demandée pour ceux-là
   // seulement, en parallèle. Un échec laisse la carte sans date — elle garde sa place, après les datées.

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { radarr } from "@/lib/clients/radarr";
 import { bazarr } from "@/lib/clients/bazarr";
-import { createTmdbClient, pickTrailer, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { createTmdbClient, pickTrailer } from "@/lib/clients/tmdb";
+import { movieTmdbFacts } from "@/lib/titleInfoShape";
+import { jellyfinOnlyInfo } from "@/lib/jellyfinOnlyInfo";
 import { getTmdbLocale, localeOf } from "@/lib/i18n";
 import { cachedOmdbRating, cachedRadarrQueue, cachedTmdbMovieInfo, hiddenFromCaller } from "@/lib/titleInfoCache";
 import { getTitleLogoFor } from "@/lib/title-logo";
@@ -11,6 +13,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const lang = getTmdbLocale(req.cookies.get("cine-lang")?.value);
   const tmdb = createTmdbClient(lang);
   const id = Number(params.id);
+  // Un film que Jellyfin a seul (DECISIONS.md §89) : rien à demander à Radarr ni à Bazarr.
+  const onlyInJellyfin = await jellyfinOnlyInfo(req, "movie", id);
+  if (onlyInJellyfin) return onlyInJellyfin;
   const movie = await radarr.getMovie(id).catch(() => null);
   if (!movie) return NextResponse.json({ error: "Film introuvable" }, { status: 404 });
   // Caché par les tags bloqués du compte : il n'existe pas pour lui (DECISIONS.md §54).
@@ -37,24 +42,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const trailer = pickTrailer(tmdbVideos.results);
 
   return NextResponse.json({
-    tmdb: tmdbInfo
-      ? {
-          overview: tmdbInfo.overview,
-          tagline: tmdbInfo.tagline,
-          genres: tmdbInfo.genres?.map((g) => g.name) ?? [],
-          runtime: tmdbInfo.runtime,
-          backdropUrl: tmdbInfo.backdrop_path ? `${TMDB_IMAGE_BASE}/w1280${tmdbInfo.backdrop_path}` : null,
-          cast: (tmdbInfo.credits?.cast ?? []).slice(0, 12).map((c) => ({
-            tmdbId: c.id,
-            name: c.name,
-            character: c.character,
-            photoUrl: c.profile_path ? `${TMDB_IMAGE_BASE}/w185${c.profile_path}` : null,
-          })),
-          collection: tmdbInfo.belongs_to_collection
-            ? { id: tmdbInfo.belongs_to_collection.id, name: tmdbInfo.belongs_to_collection.name }
-            : null,
-        }
-      : null,
+    tmdb: tmdbInfo ? movieTmdbFacts(tmdbInfo) : null,
     logoUrl,
     trailerKey: trailer?.key ?? null,
     // Pour les notes critiques de la fenêtre « Voir plus » (MDBList) — voir `CinemaRatingsLine`.

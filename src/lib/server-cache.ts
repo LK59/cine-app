@@ -370,6 +370,40 @@ export const cachedJellyfinSeasons = (opts?: { forceRefresh?: boolean }) =>
   withCache("jf:seasons:admin", TTL.LONG, () => jellyfin.getSeasonsAdmin(), opts);
 
 /**
+ * Le nombre d'épisodes réels d'une série — pour les seules séries que Jellyfin a seul (§89), qui
+ * n'entrent au catalogue qu'avec au moins un épisode. Au rythme de la bibliothèque.
+ */
+export const cachedJellyfinEpisodeCount = (seriesId: string) =>
+  withCache(`jf:episode-count:${seriesId}`, TTL.LONG, () => jellyfin.countEpisodesAdmin(seriesId));
+
+/** Un épisode de Sonarr réduit à ce que la fiche en lit, avec le nom du fichier qu'il a rattaché. */
+export interface SonarrEpisodeText {
+  /** Le nom du fichier (sans dossier), en minuscules — le pont avec Jellyfin, qui voit le même. */
+  file: string;
+  season: number;
+  episode: number;
+  title: string;
+  overview: string | null;
+}
+
+/**
+ * Les épisodes d'une série Sonarr qui ont un fichier, avec ce fichier (DECISIONS.md §89) : qui est
+ * quel épisode se décide par le rattachement de Sonarr (épisode ↔ fichier), et Jellyfin voit le même
+ * fichier. Deux appels Sonarr (épisodes, fichiers), gardés dix minutes : la fiche les demande à chaque
+ * ouverture.
+ */
+export const cachedSonarrEpisodeTexts = (sonarrId: number) =>
+  withCache(`sonarr:episode-texts:${sonarrId}`, TTL.VERY_LONG, async (): Promise<SonarrEpisodeText[]> => {
+    const [episodes, files] = await Promise.all([sonarr.getEpisodes(sonarrId), sonarr.getEpisodeFiles(sonarrId)]);
+    const fileName = new Map(files.map((f) => [f.id, (f.relativePath ?? f.path ?? "").replace(/\\/g, "/").split("/").pop()!.toLowerCase()]));
+    return episodes.flatMap((e) => {
+      const file = e.hasFile && e.episodeFileId ? fileName.get(e.episodeFileId) : undefined;
+      if (!file) return [];
+      return [{ file, season: e.seasonNumber, episode: e.episodeNumber, title: e.title ?? "", overview: e.overview?.trim() || null }];
+    });
+  });
+
+/**
  * Les épisodes entrés dans la fenêtre de « récent », projetés sur ce que `latestArrivals` lit
  * (DECISIONS.md §75) — 1 925 épisodes et 1,7 Mo de réponse un jour d'imports massifs, quelques
  * dizaines d'octets chacun une fois réduits. Dix minutes et non deux comme la bibliothèque : la

@@ -4,7 +4,8 @@ import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
 import { cachedMovies, cachedJellyfinMoviesAdmin } from "@/lib/server-cache";
-import { matchMovies } from "@/lib/catalogueMembers";
+import { jellyfinOnlyMovies, matchMovies } from "@/lib/catalogueMembers";
+import { jellyfinOnlyCinemaMovie } from "@/lib/jellyfinOnlyCatalogue";
 import { posterUrl, backdropUrl, tmdbResize, cataloguePoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt, logoForLocale } from "@/lib/title-art";
@@ -16,7 +17,16 @@ import { toDynamicRange, type VideoQuality } from "@/lib/videoQuality";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 
 export interface CinemaMovie {
+  /**
+   * L'identifiant de fiche : celui de Radarr — ou, pour un film que Jellyfin a seul, un nombre de la
+   * plage réservée (`jellyfinOnlyId.ts`, DECISIONS.md §89).
+   */
   radarrId: number;
+  /**
+   * `"jellyfin"` pour un film que Jellyfin a seul : ni Radarr, ni Bazarr, ni rien de la gestion ne le
+   * connaît. Absent pour un film de Radarr — un champ de moins par carte.
+   */
+  source?: "jellyfin";
   jellyfinItemId: string;
   tmdbId: number;
   title: string;
@@ -208,30 +218,33 @@ export async function GET(req: Request) {
 
     // La règle du catalogue, commune à tout ce qui dit « dans la bibliothèque » (`catalogueMembers`).
     const matched = matchMovies(movies, jellyfinMovies);
-    const downloaded = matched.map((x) => x.m);
+
+    // Et ce que Jellyfin a seul (DECISIONS.md §89) : un élément qu'aucun film de Radarr ne revendique.
+    const onlyInJellyfin = jellyfinOnlyMovies(jellyfinMovies, matched);
 
     const locale = localeOf(req);
-    const cinemaMovies = await Promise.all(matched.map(({ m, jfItem }) => toCinemaMovie(m, jfItem.Id, locale)));
+    const cinemaMovies = await Promise.all([
+      ...matched.map(({ m, jfItem }) => toCinemaMovie(m, jfItem.Id, locale)),
+      ...onlyInJellyfin.map((t) => jellyfinOnlyCinemaMovie(t, locale)),
+    ]);
 
-    const byRadarrId = new Map<number, CinemaMovie>();
     // Des identifiants, pas des titres : un film à trois genres n'a pas à être écrit trois
     // fois. Voir `cinemaPayload` — le client reconstruit la forme complète à l'arrivée.
     const rows: Record<string, number[]> = {};
     const genreSet = new Set<string>();
 
     for (const cinemaMovie of cinemaMovies) {
-      byRadarrId.set(cinemaMovie.radarrId, cinemaMovie);
       for (const g of cinemaMovie.genres) {
         genreSet.add(g);
         (rows[g] ??= []).push(cinemaMovie.radarrId);
       }
     }
 
-    const spotlight = downloaded
-      .filter((m) => byRadarrId.has(m.id) && m.added && m.added !== "0001-01-01T00:00:00Z")
-      .sort((a, b) => new Date(b.added!).getTime() - new Date(a.added!).getTime())
-      .slice(0, 10)
-      .map((m) => byRadarrId.get(m.id)!);
+    // La date de la carte : l'ajout dans Radarr, ou l'entrée dans Jellyfin d'un film qu'il a seul.
+    const spotlight = cinemaMovies
+      .filter((m) => m.addedAt && m.addedAt !== "0001-01-01T00:00:00Z")
+      .sort((a, b) => new Date(b.addedAt!).getTime() - new Date(a.addedAt!).getTime())
+      .slice(0, 10);
 
     // Le thème du jour est tiré de la date, donc le même pour tout le monde et stable tant que la
     // journée dure — voir `dailyTop10`.
@@ -252,7 +265,11 @@ export async function GET(req: Request) {
     // langues différentes s'évinçaient l'un l'autre — une recompression complète à chaque fois.
     // Sans ce que les tags bloqués du compte lui cachent (DECISIONS.md §54) : construit une fois en
     // entier — le classement du jour est gardé par sorte, pas par compte —, puis retiré.
-    const { hidden, signature } = await hiddenForRequest(req, matched, (x) => x.jfItem.Tags, (x) => x.m.id);
+    const tagged = [
+      ...matched.map((x) => ({ id: x.m.id, tags: x.jfItem.Tags })),
+      ...onlyInJellyfin.map((t) => ({ id: t.id, tags: t.item.Tags })),
+    ];
+    const { hidden, signature } = await hiddenForRequest(req, tagged, (x) => x.tags, (x) => x.id);
     return cachedJson(req, `cinema-movies:${locale}:${signature}`, withoutHidden(payload, hidden, (item) => item.radarrId));
   } catch (err) {
     // Une panne amont se nomme, elle ne sort pas en 500 nu — voir `upstreamFailure`.

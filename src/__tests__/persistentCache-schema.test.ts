@@ -47,6 +47,9 @@ const FINGERPRINTS: Record<number, string> = {
   12: "0a905ddd1ad81cd1",
   // 13/10/2026 : `homeBrowseButton` retiré de la configuration publique (bouton « Tous » toujours là).
   13: "99b76d283eadc8b9",
+  // 14/10/2026 : `source: "jellyfin"` sur les titres que Jellyfin a seuls, et le lien de « Reprendre »
+  // par le dossier (DECISIONS.md §89).
+  14: "cd921e57f89349f2",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

@@ -1170,3 +1170,19 @@ describe("deux sous-titres : une apparence, une mémoire, pour les deux lecteurs
     }
   });
 });
+
+describe("un seul lien d'un élément Jellyfin vers son titre", () => {
+  // DECISIONS.md §89. « Reprendre », « À suivre » et le « vu » reliaient chacun Jellyfin au catalogue
+  // par les identifiants que Jellyfin avait posés — ceux qu'il avait compris : *Aliens* rangeait son vu
+  // sous *Alien³*, une série mal identifiée laissait une carte de reprise qui n'ouvrait rien. Ils lisent
+  // tous la même carte, tirée du rapprochement par dossier (`catalogueLinks`).
+  const LECTEURS = ["src/app/api/jellyfin/resume/route.ts", "src/app/api/cinema/next-up/route.ts", "src/lib/watched.ts"];
+  it.each(LECTEURS)("%s lit `catalogueLinks` (directement ou par `seriesCatalogueIds`)", (f) => {
+    expect([f, /catalogueLinks\(|seriesCatalogueIds\(/.test(lire(f))]).toEqual([f, true]);
+  });
+  it("aucun ne retrouve la fiche par les identifiants de Jellyfin", () => {
+    for (const f of ["src/app/api/jellyfin/resume/route.ts", "src/app/api/cinema/next-up/route.ts"]) {
+      expect([f, /ProviderIds\??\.(Tmdb|Tvdb)|cachedItemProviderIds|cachedMovies|cachedSeries/.test(lire(f))]).toEqual([f, false]);
+    }
+  });
+});

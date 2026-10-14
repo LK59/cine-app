@@ -12,10 +12,16 @@ vi.mock("@/lib/clients/jellyfin", () => ({
     getNextUpGlobal: (...a: unknown[]) => mockGetNextUpGlobal(...a),
     getItemProviderIds: (...a: unknown[]) => mockGetItemProviderIds(...a),
     getSeriesLastPlayed: (...a: unknown[]) => mockGetSeriesLastPlayed(...a),
+    // Le catalogue, d'où vient le lien vers la fiche (le dossier, DECISIONS.md §89).
+    getAllSeriesAdmin: () => mockAllSeriesAdmin(),
+    getAllMoviesAdmin: async () => [],
+    countEpisodesAdmin: async () => 1,
   },
 }));
+const mockAllSeriesAdmin = vi.fn();
 const mockGetSeries = vi.fn();
 vi.mock("@/lib/clients/sonarr", () => ({ sonarr: { getSeries: () => mockGetSeries() } }));
+vi.mock("@/lib/clients/radarr", () => ({ radarr: { getMovies: async () => [] } }));
 
 function fakeReq(cookie = "t"): NextRequest {
   return {
@@ -33,6 +39,7 @@ beforeEach(async () => {
   cache.invalidateJellyfinLibrary();
   mockGetItemProviderIds.mockResolvedValue(null);
   mockGetSeries.mockResolvedValue([]);
+  mockAllSeriesAdmin.mockResolvedValue([]);
   mockGetSeriesLastPlayed.mockResolvedValue(null);
 });
 
@@ -148,19 +155,21 @@ describe("GET /api/cinema/next-up", () => {
    * pour l'ouvrir, il faut savoir laquelle. Jellyfin ne connaît que son propre identifiant : le
    * pont passe par le TVDB de la série, comme la liste des films passe par le TMDB.
    */
-  it("resolves an episode to its Sonarr series through the series' TVDB id", async () => {
+  // *Shōgun* (14/10/2026) : Jellyfin lisait le dossier comme la série de 1980. Le lien vient du
+  // dossier, pas du TVDB que Jellyfin a posé — et sans rien lui redemander.
+  it("resolves an episode to the series Sonarr keeps in its folder", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
     mockGetNextUpGlobal.mockResolvedValue([
       { Id: "ep-1", Name: "Pilote", Type: "Episode", SeriesName: "Une Série", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 3 },
     ]);
-    mockGetItemProviderIds.mockResolvedValue({ ProviderIds: { Tvdb: "424242" } });
-    mockGetSeries.mockResolvedValue([{ id: 77, tvdbId: 424242 }]);
+    mockAllSeriesAdmin.mockResolvedValue([{ Id: "series-9", Name: "Autre chose", ProviderIds: { Tvdb: "80284" }, Path: "/media/tv/Une Série" }]);
+    mockGetSeries.mockResolvedValue([{ id: 77, tvdbId: 424242, title: "Une Série", path: "/tv/Une Série", statistics: { episodeFileCount: 3 } }]);
 
     const { GET } = await import("@/app/api/cinema/next-up/route");
     const body = await (await GET(fakeReq())).json();
 
     expect(body.items[0].sonarrId).toBe(77);
-    expect(mockGetItemProviderIds).toHaveBeenCalledWith("jf-1", "series-9");
+    expect(mockGetItemProviderIds).not.toHaveBeenCalled();
   });
 
   it("leaves the link empty for a series Sonarr does not have", async () => {
@@ -168,28 +177,27 @@ describe("GET /api/cinema/next-up", () => {
     mockGetNextUpGlobal.mockResolvedValue([
       { Id: "ep-1", Name: "Pilote", Type: "Episode", SeriesName: "Une Série", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 3 },
     ]);
-    mockGetItemProviderIds.mockResolvedValue({ ProviderIds: { Tvdb: "424242" } });
-    mockGetSeries.mockResolvedValue([{ id: 77, tvdbId: 999 }]);
+    mockGetSeries.mockResolvedValue([{ id: 77, tvdbId: 999, title: "Rien à voir", path: "/tv/Rien à voir", statistics: { episodeFileCount: 3 } }]);
 
     const { GET } = await import("@/app/api/cinema/next-up/route");
     const body = await (await GET(fakeReq())).json();
     expect(body.items[0].sonarrId).toBeNull();
   });
 
-  /** Une seule interrogation par série, même si plusieurs épisodes en viennent. */
-  it("asks for each series once, however many of its episodes are up next", async () => {
+  /** Plusieurs épisodes d'une même série : la même fiche, sans requête par épisode. */
+  it("gives every episode of a series the same sheet", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
     mockGetNextUpGlobal.mockResolvedValue([
       { Id: "ep-1", Name: "A", Type: "Episode", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 3 },
       { Id: "ep-2", Name: "B", Type: "Episode", SeriesId: "series-9", ParentIndexNumber: 1, IndexNumber: 4 },
     ]);
-    mockGetItemProviderIds.mockResolvedValue({ ProviderIds: { Tvdb: "1" } });
-    mockGetSeries.mockResolvedValue([{ id: 5, tvdbId: 1 }]);
+    mockAllSeriesAdmin.mockResolvedValue([{ Id: "series-9", Name: "S", ProviderIds: { Tvdb: "1" }, Path: "/media/tv/S" }]);
+    mockGetSeries.mockResolvedValue([{ id: 5, tvdbId: 1, title: "S", path: "/tv/S", statistics: { episodeFileCount: 2 } }]);
 
     const { GET } = await import("@/app/api/cinema/next-up/route");
     const body = await (await GET(fakeReq())).json();
 
-    expect(mockGetItemProviderIds).toHaveBeenCalledTimes(1);
+    expect(mockGetItemProviderIds).not.toHaveBeenCalled();
     expect(body.items.map((i: { sonarrId: number }) => i.sonarrId)).toEqual([5, 5]);
   });
 });

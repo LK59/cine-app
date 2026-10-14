@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sonarr } from "@/lib/clients/sonarr";
 import { bazarr } from "@/lib/clients/bazarr";
-import { createTmdbClient, pickTrailer, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { createTmdbClient, pickTrailer } from "@/lib/clients/tmdb";
+import { seriesTmdbFacts } from "@/lib/titleInfoShape";
+import { jellyfinOnlyInfo } from "@/lib/jellyfinOnlyInfo";
 import { getTmdbLocale, localeOf } from "@/lib/i18n";
 import { cachedOmdbRating, cachedSonarrQueue, cachedTmdbIdForTvdb, cachedTmdbTvInfo, hiddenFromCaller } from "@/lib/titleInfoCache";
 import { getTitleLogoFor } from "@/lib/title-logo";
-import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const lang = getTmdbLocale(req.cookies.get("cine-lang")?.value);
   const tmdb = createTmdbClient(lang);
   const id = Number(params.id);
+  // Une série que Jellyfin a seule (DECISIONS.md §89) : rien à demander à Sonarr ni à Bazarr.
+  const onlyInJellyfin = await jellyfinOnlyInfo(req, "series", id);
+  if (onlyInJellyfin) return onlyInJellyfin;
   const series = await sonarr.getSeriesById(id).catch(() => null);
   if (!series) return NextResponse.json({ error: "Série introuvable" }, { status: 404 });
   // Cachée par les tags bloqués du compte : elle n'existe pas pour lui (DECISIONS.md §54).
@@ -41,21 +45,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   return NextResponse.json({
     logoUrl,
     trailerKey: trailer?.key ?? null,
-    tmdb: tmdbInfo
-      ? {
-          overview: tmdbInfo.overview,
-          tagline: tmdbInfo.tagline,
-          genres: tmdbInfo.genres?.map((g) => g.name) ?? [],
-          runtime: tvEpisodeRuntime(tmdbInfo, series.runtime),
-          backdropUrl: tmdbInfo.backdrop_path ? `${TMDB_IMAGE_BASE}/w1280${tmdbInfo.backdrop_path}` : null,
-          cast: (tmdbInfo.credits?.cast ?? []).slice(0, 12).map((c) => ({
-            tmdbId: c.id,
-            name: c.name,
-            character: c.character,
-            photoUrl: c.profile_path ? `${TMDB_IMAGE_BASE}/w185${c.profile_path}` : null,
-          })),
-        }
-      : null,
+    tmdb: tmdbInfo ? seriesTmdbFacts(tmdbInfo, series.runtime) : null,
     // Pour les notes critiques de la fenêtre « Voir plus » (MDBList) — voir `CinemaRatingsLine`.
     imdbId: series.imdbId || null,
     imdbRating: rating && rating.Response === "True" ? rating.imdbRating : null,

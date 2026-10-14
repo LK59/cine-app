@@ -1,40 +1,37 @@
-import { cachedSeries, cachedItemProviderIds } from "@/lib/server-cache";
+import { catalogueMembers, type CatalogueLink } from "@/lib/catalogueMembers";
 
 /**
- * De la série vue par Jellyfin à sa fiche dans Sonarr.
+ * D'un élément Jellyfin à sa fiche du catalogue — **par le dossier** (DECISIONS.md §89).
  *
- * Les deux flux de reprise en ont besoin — « Reprendre » pour un épisode commencé, « À suivre »
- * pour le prochain — et le calculaient chacun de leur côté, avec les mêmes trois étapes : Jellyfin
- * ne pose jamais d'identifiants externes sur un épisode, seulement sur sa série ; il faut donc les
- * demander série par série, en tirer le TVDB, puis le retrouver dans le catalogue Sonarr.
+ * Les deux flux de reprise en ont besoin — « Reprendre » pour un épisode commencé ou un film,
+ * « À suivre » pour le prochain épisode — et le calculaient chacun de leur côté jusqu'au 24/09/2026,
+ * puis ensemble par les identifiants que Jellyfin pose sur la série (TVDB → Sonarr). Or ces
+ * identifiants sont ceux que Jellyfin a *compris* : une série qu'il avait prise pour une autre
+ * (*Shōgun* 2024 lue comme celle de 1980, *Engrenages* comme une autre *Spiral*) donnait une carte de
+ * reprise qui n'ouvrait rien, et un film mal identifié pouvait ouvrir la fiche d'un autre.
  *
- * Deux copies d'un même calcul, c'est une correction sur une seule le jour où il se trompe — et
- * c'est précisément ce qui venait d'arriver : la version de « À suivre » interrogeait Sonarr sans
- * passer par le cache, sur un flux que le retour sur l'application relit et que les deux onglets
- * demandent. Une carte de reprise qui n'ouvre pas sa fiche, c'est un bouton mort ; qu'elle
- * l'ouvre coûte maintenant le même prix des deux côtés.
+ * Le lien vient maintenant du catalogue lui-même (`catalogueMembers().byJellyfinId`) : l'élément que
+ * le rapprochement par dossier a donné à chaque titre de Radarr/Sonarr, et les titres que Jellyfin a
+ * seul. Une seule carte, que tout ce qui relie Jellyfin au catalogue lit — la reprise, « À suivre »,
+ * le « vu » (`libraryIndex`).
  */
-export async function sonarrIdsBySeriesId(
-  jfUserId: string,
-  seriesIds: string[]
-): Promise<Map<string, number>> {
-  const unique = [...new Set(seriesIds)];
-  const [series, tvdbEntries] = await Promise.all([
-    cachedSeries().catch(() => []),
-    Promise.all(
-      unique.map(async (seriesId) => {
-        const providerIds = await cachedItemProviderIds(jfUserId, seriesId).catch(() => null);
-        const tvdb = providerIds?.ProviderIds?.Tvdb;
-        return [seriesId, tvdb ? parseInt(tvdb, 10) : null] as const;
-      })
-    ),
-  ]);
+export async function catalogueLinks(): Promise<Map<string, CatalogueLink>> {
+  return (await catalogueMembers().catch(() => null))?.byJellyfinId ?? new Map();
+}
 
-  const sonarrByTvdb = new Map(series.filter((s) => s.tvdbId).map((s) => [s.tvdbId, s.id] as const));
+/** L'adresse de fiche que les cartes de reprise portent (`/radarr/…`, `/sonarr/…`). */
+export function cinemaHrefOf(link: CatalogueLink | undefined): string | null {
+  if (!link) return null;
+  return `/${link.type === "movie" ? "radarr" : "sonarr"}/${link.catalogueId}`;
+}
+
+/** L'identifiant de fiche de chaque série, par son identifiant Jellyfin — seulement celles du catalogue. */
+export async function seriesCatalogueIds(seriesIds: string[]): Promise<Map<string, number>> {
+  const links = await catalogueLinks();
   const out = new Map<string, number>();
-  for (const [seriesId, tvdb] of tvdbEntries) {
-    const sonarrId = tvdb !== null ? sonarrByTvdb.get(tvdb) : undefined;
-    if (sonarrId !== undefined) out.set(seriesId, sonarrId);
+  for (const seriesId of new Set(seriesIds)) {
+    const link = links.get(seriesId);
+    if (link?.type === "series") out.set(seriesId, link.catalogueId);
   }
   return out;
 }

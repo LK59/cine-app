@@ -95,7 +95,10 @@ export function cataloguePoster(
   locale: string,
   jellyfinItem?: { Id: string; ImageTags?: { Primary?: string } } | null
 ): string | null {
-  return libraryPoster(posterByLang, images, locale, kind === "series" ? jellyfinPoster(jellyfinItem ?? undefined) : null);
+  // Un film sans visuels Radarr — un titre que Jellyfin a seul (DECISIONS.md §89) — prend aussi celle
+  // de Jellyfin ; un film de Radarr n'en reçoit jamais (aucun appelant ne la passe pour lui).
+  const fromJellyfin = kind === "series" || !images?.length ? jellyfinPoster(jellyfinItem ?? undefined) : null;
+  return libraryPoster(posterByLang, images, locale, fromJellyfin);
 }
 
 /**

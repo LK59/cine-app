@@ -294,6 +294,21 @@ export async function GET(req: NextRequest) {
       ...members.movies.map((m) => `movie:${m.id}`),
       ...members.series.map((s) => `series:${s.id}`),
     ]);
+    // Ce que Jellyfin a seul (DECISIONS.md §89), par le TMDB qu'il lui donne : « dans la
+    // bibliothèque », ouvert sur sa fiche — jamais « Demander ». Un titre de Radarr/Sonarr *ouvrable*
+    // au même TMDB passe devant ; un titre qu'ils suivent sans l'avoir s'efface devant celui qu'on a.
+    for (const [titles, byTmdb, kind] of [
+      [members.jellyfinOnly?.movies ?? [], radarrByTmdb, "movie"],
+      [members.jellyfinOnly?.series ?? [], sonarrByTmdb, "series"],
+    ] as const) {
+      for (const t of titles) {
+        if (t.tmdbId === null) continue;
+        const known = byTmdb.get(t.tmdbId);
+        if (known !== undefined && playable.has(`${kind}:${known}`)) continue;
+        byTmdb.set(t.tmdbId, t.id);
+        playable.add(`${kind}:${t.id}`);
+      }
+    }
 
     const library: UnifiedSearchResult[] = [];
     const tmdbNotInLib: UnifiedSearchResult[] = [];
