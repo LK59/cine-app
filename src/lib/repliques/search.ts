@@ -97,6 +97,32 @@ function known(word: string): boolean {
 
 const quote = (term: string) => `"${term.replace(/"/g, "")}"`;
 
+/**
+ * Un mot tapé collé qui, dans l'index, est en deux (14/10/2026, Louis) : l'apostrophe devient une
+ * espace à la normalisation — « don't » est rangé « don t », « l'avancement » « l avancement » — et
+ * qui tape « dont » ou « lavancement » ne trouvait rien. « dont » est même un mot français connu :
+ * il était cherché tel quel, jamais coupé. Chaque coupure dont les deux morceaux existent dans le
+ * vocabulaire devient une expression (« don t »), proposée en plus du mot lui-même. Le côté droit
+ * d'une coupure est court par nature (t, s, re, ll, ve, d…) : on garde les trois plus fréquentes.
+ * Rien à réindexer : la forme rangée ne change pas, seule la question s'élargit.
+ */
+export function splits(word: string): { left: string; right: string }[] {
+  if (word.length < 3) return [];
+  const db = repliquesDb();
+  const freq = db.prepare("SELECT n FROM terms WHERE term = ?");
+  const out: { left: string; right: string; n: number }[] = [];
+  for (let i = 1; i < word.length; i++) {
+    const left = word.slice(0, i);
+    const right = word.slice(i);
+    const a = freq.get(left) as { n: number } | undefined;
+    if (!a) continue;
+    const b = freq.get(right) as { n: number } | undefined;
+    if (!b) continue;
+    out.push({ left, right, n: Math.min(a.n, b.n) });
+  }
+  return out.sort((x, y) => y.n - x.n).slice(0, 3).map(({ left, right }) => ({ left, right }));
+}
+
 interface Candidate {
   item_id: string;
   radarr_id: number;
@@ -122,6 +148,12 @@ export function searchDialogue(
     const alternatives = known(word) ? [word] : corrections(word);
     const parts = alternatives.map(quote);
     for (const a of alternatives) terms.add(a);
+    // « dont » → « don t », « lavancement » → « l avancement » : voir `splits`.
+    for (const { left, right } of splits(word)) {
+      parts.push(`"${left} ${right}"`);
+      terms.add(left);
+      terms.add(right);
+    }
     if (isLast && word.length >= 3) {
       parts.push(`${quote(word)}*`);
       prefixes.push(word);

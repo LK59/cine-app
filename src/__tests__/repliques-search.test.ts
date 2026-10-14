@@ -33,6 +33,9 @@ beforeAll(async () => {
     row(B, 2, 5_000, "Ton père et moi, je suis sûr qu'il viendra."),
     row(B, 2, 6_000, "On va avoir besoin d'un plus gros bateau."),
     row(C, 3, 7_000, "Je suis ton père, Luke.", "fr"),
+    row(C, 3, 8_000, "Roads? Where we’re going, we don't need roads.", "en"),
+    row(C, 3, 9_000, "Merci pour l'avancement du dossier.", "fr"),
+    row(B, 2, 9_000, "Le livre dont je parle.", "fr"),
   ]);
 });
 
@@ -56,6 +59,16 @@ describe("la recherche", () => {
     const result = searchDialogue("persone ne bouge");
     expect(result.films.map((f) => f.itemId)).toEqual([A]);
     expect(result.terms).toContain("personne");
+  });
+
+  // L'apostrophe devient une espace à l'index : « dont », « lavancement » tapés collés (14/10/2026).
+  it("retrouve un mot à apostrophe tapé collé, sans perdre le mot français « dont »", () => {
+    expect(searchDialogue("we dont need roads").films.map((f) => f.itemId)).toContain(C);
+    expect(searchDialogue("we don't need roads").films.map((f) => f.itemId)).toContain(C);
+    for (const q of ["l'avancement du dossier", "l avancement du dossier", "lavancement du dossier"]) {
+      expect(searchDialogue(q).films.map((f) => f.itemId), q).toContain(C);
+    }
+    expect(searchDialogue("le livre dont je parle").films[0]?.itemId).toBe(B);
   });
 
   it("prend le dernier mot comme un début de mot", () => {
