@@ -126,7 +126,13 @@ function DialogueLineButton({ itemId, title, line, terms, prefixes }: { itemId: 
       >
         <SceneThumb itemId={itemId} seconds={line.startMs / 1000} />
         <span className="min-w-0 flex-1">
-          <span className="block text-xs tabular-nums text-subtle">{clock}</span>
+          {/* La langue de la réplique : français et VO sont mêlés dans les résultats (14/10/2026). */}
+          <span className="flex items-center gap-1.5 text-xs tabular-nums text-subtle">
+            {clock}
+            <span data-line-lang="" className="rounded px-1 text-[11px] font-semibold uppercase leading-4 tracking-wide ring-1 ring-white/15">
+              {line.lang}
+            </span>
+          </span>
           <span className="mt-0.5 line-clamp-3 whitespace-pre-line text-sm text-muted group-hover:text-white">
             {highlightSegments(line.text, terms, prefixes).map((part, i) =>
               part.hit ? (

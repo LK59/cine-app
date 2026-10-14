@@ -23,7 +23,9 @@ export const SECOND_SUBTITLE_SCALE = 0.8;
  * image claire, pas la couleur.
  */
 export const SECOND_SUBTITLE_TINT: Record<SubtitleColor, string> = {
-  white: "#d5d8dd",
+  // Éclairci de #d5d8dd (14/10/2026) : sur une image claire (eau, ciel), ~15 % de contraste en plus,
+  // toujours distinct du blanc du principal — mesuré sur trois images, captures dans §87.
+  white: "#e2e5e9",
   yellow: "#e8e0b4",
 };
 

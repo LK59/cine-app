@@ -138,6 +138,12 @@ describe("ce que la section dit", () => {
     expect(line.getAttribute("aria-label")).toContain("Tu choisis la pilule bleue.");
   });
 
+  it("montre la langue de chaque réplique à côté de l'horodatage", async () => {
+    type("tu choisis la pilule");
+    const line = await screen.findByRole("button", { name: /player.search.dialogue.playAt/ }, { timeout: 2000 });
+    expect(line.querySelector("[data-line-lang]")?.textContent).toBe("fr");
+  });
+
   it("dit que les mots sont trop courants plutôt qu'« aucune réplique »", async () => {
     state.dialogue = { available: true, terms: [], prefixes: [], films: [], tooCommon: true };
     type("je je je");
