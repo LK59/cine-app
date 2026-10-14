@@ -15,6 +15,7 @@ import {
   forgetFilm,
   indexCounts,
   readMeta,
+  repliquesDb,
   repliquesDbBytes,
   saveFilm,
   wipeRepliquesDb,
@@ -95,7 +96,30 @@ class Stop extends Error {
   }
 }
 
-const live = {
+/**
+ * L'état du moteur, UN SEUL pour tout le serveur (14/10/2026) : Next charge ce module deux fois — par
+ * la tâche de démarrage (`instrumentation.ts`) et par les routes — et chaque copie avait le sien.
+ * « Forcer » depuis la page de réglages trouvait une copie sans passe en mémoire et en lançait une
+ * seconde : deux passes lisaient les mêmes films en même temps et écrivaient tour à tour leur
+ * compteur (la progression reculait de 80 films puis revenait). Rangé sur `globalThis`, l'état est
+ * partagé par toutes les copies du module, et il n'y a jamais qu'une boucle.
+ */
+type Live = {
+  phase: Phase;
+  playbackBy: string | null;
+  currentFilms: Set<string>;
+  queues: { count: number; reason: QueuePlan<unknown>["reason"] };
+  loop: Promise<void> | null;
+  stopWhy: Stop["why"] | null;
+  lastReadAt: number;
+  run: RunState | null;
+  wakers: Set<() => void>;
+  timers: ReturnType<typeof setTimeout>[];
+  pollMs: number;
+};
+const LIVE_KEY = Symbol.for("cine.repliques.live");
+const shared = globalThis as typeof globalThis & { [LIVE_KEY]?: Live };
+const live: Live = (shared[LIVE_KEY] ??= {
   phase: "idle" as Phase,
   playbackBy: null as string | null,
   currentFilms: new Set<string>(),
@@ -110,7 +134,7 @@ const live = {
   timers: [] as ReturnType<typeof setTimeout>[],
   /** L'attente entre deux vérifications pendant une lecture (raccourcie par les tests). */
   pollMs: PLAYBACK_POLL_MS,
-};
+});
 
 function info(message: string, context: Record<string, unknown> = {}): void {
   const entry = { timestamp: new Date().toISOString(), level: "info", scope: "repliques", message, ...context };
@@ -157,6 +181,11 @@ function readRun(): RunState | null {
   } catch {
     return null;
   }
+}
+
+/** Les films déjà dans l'index (lus ou en erreur) : la vérité de l'avancement d'une passe reprise. */
+function indexedFilmCount(): number {
+  return (repliquesDb().prepare("SELECT COUNT(*) AS n FROM films").get() as { n: number }).n;
 }
 
 function saveRun(run: RunState): void {
@@ -302,7 +331,9 @@ async function runPass(kind: RunKind): Promise<void> {
   const previous = readRun();
   const resuming = previous && previous.finishedAt === null && previous.kind === kind;
   const run: RunState = resuming
-    ? { ...previous, total: previous.done + todo.length, userPaused: false }
+    ? // Le compte repris de l'index lui-même, pas de l'état écrit : deux passes concurrentes (avant
+      // l'état partagé) avaient laissé un compteur faux, et la reprise l'aurait gardé.
+      { ...previous, done: indexedFilmCount(), total: indexedFilmCount() + todo.length, userPaused: false }
     : { kind, startedAt: Date.now(), finishedAt: null, total: todo.length, done: 0, errors: 0, removed: 0, bytesRead: 0, activeMs: 0, lastFilm: null, userPaused: false, forced: false };
   // Une passe de nuit ne force jamais, même reprise d'un état qui le disait.
   if (kind !== "initial") run.forced = false;

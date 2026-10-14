@@ -252,10 +252,6 @@ export function DialogueSearchCard() {
                 {t("repliques.admin.rebuild")}
               </button>
             </div>
-            <p className="mt-2 text-xs text-subtle">
-              {t(`repliques.admin.parallel.${data.parallel.reason}`, { n: data.parallel.queues })}
-              {data.write.slices > 0 ? ` · ${t("repliques.admin.writeSlice", { ms: data.write.maxSliceMs })}` : ""}
-            </p>
             {data.errors.length > 0 && (
               <details className="mt-3">
                 <summary className="cursor-pointer text-sm text-warning">{t("repliques.admin.errorList", { n: data.index.errors })}</summary>

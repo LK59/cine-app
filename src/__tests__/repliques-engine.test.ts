@@ -291,3 +291,14 @@ describe("la nuit", () => {
     expect(nightlyDue(at(3), { ...base, enabled: false })).toBe(false);
   });
 });
+
+// Next charge le moteur deux fois (démarrage et routes) : l'état doit être le même, sinon « Forcer »
+// lançait une seconde passe à côté de la première (14/10/2026).
+describe("un seul moteur pour tout le serveur", () => {
+  it("deux copies du module partagent le même état", async () => {
+    const first = (await import("@/lib/repliques/engine")).__testing.live;
+    vi.resetModules();
+    const second = (await import("@/lib/repliques/engine")).__testing.live;
+    expect(second).toBe(first);
+  });
+});
