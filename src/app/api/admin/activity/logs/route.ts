@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminOnly } from "@/lib/activity/adminOnly";
-import { LOG_SOURCES, generationsNewestFirst, readGenerationRecords, typeOf, type LogSource } from "@/lib/activity/logReader";
+import { LOG_SOURCES, generationsNewestFirst, lineUsers, matchesSearch, readGenerationRecords, typeOf, type LogSource } from "@/lib/activity/logReader";
 
 export const dynamic = "force-dynamic";
 
 const PAGE = 100;
 /** Voir la boucle de lecture : au-delà, la page rend la main avec un curseur. */
 const MAX_GENERATIONS_PER_PAGE = 8;
-/** Les listes de filtres (comptes, types) : lues sur les deux dernières générations, pas sur des années. */
-const FACET_GENERATIONS = 2;
+/**
+ * Les listes de filtres (comptes, types) : comptées sur la **période choisie**, à travers au plus
+ * ce nombre de générations. Elles l'étaient sur les deux derniers fichiers, quelle que soit la
+ * période : « 1 dernier jour » affichait « seek (759) » pour quelques sauts du jour, et un type
+ * vu le mois dernier dans une archive plus ancienne n'était pas proposé (relu le 14/10/2026).
+ * La borne garde « Tout » d'ouvrir des centaines d'archives ; au-delà, `partial` le dit.
+ */
+const FACET_MAX_GENERATIONS = 8;
 
 /**
  * Un journal, de la ligne la plus récente vers la plus ancienne, filtré et par pages.
@@ -33,9 +39,13 @@ export async function GET(req: NextRequest) {
   const days = Number(q.get("days") ?? 0);
   const since = days > 0 ? Date.now() - days * 24 * 60 * 60 * 1000 : 0;
   const sessionId = q.get("session") || null;
+  const cursorParam = q.get("cursor");
+  // Les filtres ne servent qu'à la première page ; le rafraîchissement automatique (toutes les
+  // 20 s) les refuse aussi (`facets=0`) — il ne cherche que les lignes arrivées.
+  const wantFacets = !cursorParam && q.get("facets") !== "0";
 
   const generations = generationsNewestFirst(source);
-  const [cg, ci] = (q.get("cursor") ?? "").split(".").map(Number);
+  const [cg, ci] = (cursorParam ?? "").split(".").map(Number);
   let g = Number.isInteger(cg) && cg >= 0 ? cg : 0;
   let resumeAt: number | null = Number.isInteger(ci) && ci >= 0 ? ci : null;
 
@@ -68,25 +78,43 @@ export async function GET(req: NextRequest) {
         reachedEnd = true;
         break scan;
       }
-      if (user && String(r.user ?? "").toLowerCase() !== user) continue;
+      if (user && !lineUsers(r).some((u) => u.toLowerCase() === user)) continue;
       if (type && typeOf(r) !== type) continue;
       if (sessionId && r.session !== sessionId) continue;
-      if (search && !JSON.stringify(r).toLowerCase().includes(search)) continue;
+      if (search && !matchesSearch(r, search)) continue;
       items.push(r);
     }
   }
   if (reachedEnd) next = null;
 
-  const users = new Set<string>();
-  const types = new Map<string, number>();
-  let total = 0;
-  for (const { file } of generations.slice(0, FACET_GENERATIONS)) {
-    for (const r of readGenerationRecords(file)) {
-      total += 1;
-      if (typeof r.user === "string" && r.user) users.add(r.user);
-      const t = typeOf(r);
-      types.set(t, (types.get(t) ?? 0) + 1);
+  let facets: { users: string[]; types: { name: string; count: number }[]; recentLines: number; partial: boolean } | undefined;
+  if (wantFacets) {
+    const users = new Set<string>();
+    const types = new Map<string, number>();
+    let total = 0;
+    let partial = false;
+    for (let fg = 0; fg < generations.length; fg++) {
+      const { file, mtimeMs } = generations[fg];
+      // Comme la page : une archive entièrement plus ancienne que la période n'est pas ouverte.
+      if (since && fg > 0 && mtimeMs < since) break;
+      if (fg >= FACET_MAX_GENERATIONS) {
+        partial = true;
+        break;
+      }
+      for (const r of readGenerationRecords(file)) {
+        if (since && r._t && r._t < since) continue;
+        total += 1;
+        for (const u of lineUsers(r)) users.add(u);
+        const t = typeOf(r);
+        types.set(t, (types.get(t) ?? 0) + 1);
+      }
     }
+    facets = {
+      users: [...users].sort((a, b) => a.localeCompare(b)),
+      types: [...types].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
+      recentLines: total,
+      partial,
+    };
   }
 
   return NextResponse.json({
@@ -94,10 +122,6 @@ export async function GET(req: NextRequest) {
     generations: generations.length,
     items,
     nextCursor: next,
-    facets: {
-      users: [...users].sort((a, b) => a.localeCompare(b)),
-      types: [...types].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
-      recentLines: total,
-    },
+    ...(facets && { facets }),
   });
 }

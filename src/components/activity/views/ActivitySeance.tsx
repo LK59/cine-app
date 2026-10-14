@@ -103,7 +103,7 @@ function Step({ line, start }: { line: Record<string, unknown>; start: number })
       >
         <span className="flex items-center gap-2 sm:contents">
           <span className="font-mono text-[11px] text-subtle">+{clock((at - start) / 1000)}</span>
-          <span className={`rounded px-1.5 py-0.5 text-center font-mono text-[11px] sm:w-16 ${kindTone(kind)}`}>{kind}</span>
+          <span className={`rounded px-1.5 py-0.5 text-center font-mono text-[11px] sm:w-16 ${kindTone(kind, line.level, line.event)}`}>{kind}</span>
         </span>
         <span className="order-3 col-span-2 min-w-0 break-words text-sm text-white sm:order-none sm:col-span-1">{describeLine(line, t)}</span>
         {open ? <ChevronDown size={14} className="mt-0.5 shrink-0 text-subtle" /> : <ChevronRight size={14} className="mt-0.5 shrink-0 text-subtle" />}

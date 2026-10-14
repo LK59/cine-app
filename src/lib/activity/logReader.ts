@@ -16,11 +16,16 @@ import { logGenerations } from "@/lib/logFile";
 import { playerLogFile, benchPlayerLogFile, PLAYER_LOG_KEEP, BENCH_PLAYER_LOG_KEEP } from "@/lib/playerLog";
 import { SERVER_LOG_FILE, SERVER_LOG_KEEP } from "@/lib/logger";
 import { BENCH_LOG, BENCH_LOG_KEEP } from "@/lib/playerBench/benchLog";
-import { AUTH_LOG, NOTIFICATIONS_LOG, EVENT_LOG_KEEP } from "@/lib/eventLogs";
+import { AUTH_LOG, NOTIFICATIONS_LOG, STARTUP_LOG, EVENT_LOG_KEEP } from "@/lib/eventLogs";
 import { SUBTITLE_GEN_LOG, SUBTITLE_GEN_LOG_KEEP } from "@/lib/subtitleGen/log";
 
-export type LogSource = "player" | "server" | "auth" | "notifications" | "bench" | "benchPlayer" | "subtitleGen";
-export const LOG_SOURCES: LogSource[] = ["player", "server", "auth", "notifications", "bench", "benchPlayer", "subtitleGen"];
+export type LogSource = "player" | "server" | "auth" | "notifications" | "startup" | "bench" | "benchPlayer" | "subtitleGen";
+/**
+ * `startup` (les ouvertures du cinéma, la télécommande d'un Fire TV, les Nouveautés) depuis le
+ * 14/10/2026 : le journal était écrit depuis le 25/09 et ne se lisait qu'au terminal, avec `jq` —
+ * c'est pourtant lui qui a montré les 1,7 à 4,8 s de « Reprendre » vide (§86).
+ */
+export const LOG_SOURCES: LogSource[] = ["player", "server", "auth", "notifications", "startup", "bench", "benchPlayer", "subtitleGen"];
 
 function generationsOf(source: LogSource): string[] {
   switch (source) {
@@ -32,6 +37,8 @@ function generationsOf(source: LogSource): string[] {
       return logGenerations(AUTH_LOG(), EVENT_LOG_KEEP);
     case "notifications":
       return logGenerations(NOTIFICATIONS_LOG(), EVENT_LOG_KEEP);
+    case "startup":
+      return logGenerations(STARTUP_LOG(), EVENT_LOG_KEEP);
     case "bench":
       return logGenerations(BENCH_LOG(), BENCH_LOG_KEEP);
     case "benchPlayer":
@@ -54,17 +61,60 @@ export type LogRecord = Record<string, unknown> & {
 export const HEAVY_FIELDS: ReadonlySet<string> = new Set(["steps", "trace", "stack", "questions", "timeline"]);
 const MAX_STRING = 240;
 
+/** Les champs lourds dont le texte se cherche — `questions` et `timeline` ne sont que des chiffres. */
+const SEARCHED_HEAVY: ReadonlySet<string> = new Set(["steps", "stack", "trace"]);
+/**
+ * Ce qu'on garde, par ligne, de ce que la forme compacte retire : 2 000 caractères au plus — le
+ * début (ce qui a été tenté) et surtout la fin (là où une trace finit en panne). Mesuré le
+ * 14/10/2026 sur un `player.log.1` de 5 Mo : 808 lignes sur 6 761 portent une trace, 600 Ko en
+ * tout, 3 216 caractères au plus — l'extrait tient donc presque toujours la trace entière, pour
+ * quelques centaines de Ko par génération en mémoire.
+ */
+const SEARCH_EXTRACT = 2000;
+const EXTRACT_HEAD = 600;
+
+/**
+ * L'extrait cherchable d'une ligne, rangé à côté d'elle et non dedans : une propriété de plus
+ * partirait vers la page avec chaque ligne de la liste, et c'est précisément le poids qu'on retire.
+ */
+const extracts = new WeakMap<LogRecord, string>();
+
 function compact(entry: Record<string, unknown>, file: string, line: number): LogRecord {
   const out: Record<string, unknown> = {};
+  const hidden: string[] = [];
   for (const [key, value] of Object.entries(entry)) {
     if (HEAVY_FIELDS.has(key)) {
       out[key] = true;
+      if (SEARCHED_HEAVY.has(key) && typeof value === "string") hidden.push(value);
       continue;
     }
-    out[key] = typeof value === "string" && value.length > MAX_STRING ? `${value.slice(0, MAX_STRING)}…` : value;
+    if (typeof value === "string" && value.length > MAX_STRING) {
+      out[key] = `${value.slice(0, MAX_STRING)}…`;
+      // La suite coupée d'une raison longue : une recherche sur sa fin ne trouvait rien.
+      hidden.push(value.slice(MAX_STRING));
+      continue;
+    }
+    out[key] = value;
   }
   const stamp = typeof entry.timestamp === "string" ? entry.timestamp : typeof entry.at === "string" ? entry.at : null;
-  return { ...out, _file: file, _line: line, _t: stamp ? Date.parse(stamp) || 0 : 0 };
+  const record: LogRecord = { ...out, _file: file, _line: line, _t: stamp ? Date.parse(stamp) || 0 : 0 };
+  if (hidden.length) {
+    const text = hidden.join(" | ");
+    const bounded = text.length > SEARCH_EXTRACT ? `${text.slice(0, EXTRACT_HEAD)} … ${text.slice(text.length - (SEARCH_EXTRACT - EXTRACT_HEAD))}` : text;
+    extracts.set(record, bounded.toLowerCase());
+  }
+  return record;
+}
+
+/**
+ * La ligne contient-elle `needle` (déjà en minuscules) — ses champs courts, ou l'extrait de ce que
+ * la forme compacte a retiré (`steps`, `stack`, `trace`, la fin des chaînes longues). Jusqu'au
+ * 14/10/2026, chercher « saut de l'élément » ou le nom d'une fonction d'une pile ne trouvait rien :
+ * la recherche ne voyait que la forme compacte, d'où ces champs sont absents.
+ */
+export function matchesSearch(r: LogRecord, needle: string): boolean {
+  if (JSON.stringify(r).toLowerCase().includes(needle)) return true;
+  return extracts.get(r)?.includes(needle) ?? false;
 }
 
 interface Cached {
@@ -256,6 +306,23 @@ export function readFullLines(source: LogSource, refs: { file: string; line: num
       } catch {
         /* déplacée par une rotation */
       }
+    }
+  }
+  return out;
+}
+
+/**
+ * Les comptes qu'une ligne concerne : `user`, et pour une notification ses destinataires
+ * (`recipients[].user`) — une notification n'a pas d'auteur, et le filtre « Compte » ne trouvait
+ * aucune de celles reçues par un compte (14/10/2026).
+ */
+export function lineUsers(r: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  if (typeof r.user === "string" && r.user) out.push(r.user);
+  if (Array.isArray(r.recipients)) {
+    for (const x of r.recipients as unknown[]) {
+      const u = x && typeof x === "object" ? (x as { user?: unknown }).user : null;
+      if (typeof u === "string" && u && !out.includes(u)) out.push(u);
     }
   }
   return out;

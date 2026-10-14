@@ -430,7 +430,7 @@
         "cast-relaunch": "Übertragung neu gestartet",
         "ladder": "Neustart nach einem Fehler (Versuch {n})"
       },
-      "restarts": "· {n} Neustart|· {n} Neustarts",
+      "restarts": "{n} Neustart|{n} Neustarts",
       "seek": "Sprung von {from} zu {to} · {took} {buffered}",
       "buffered": "· bereits geladen",
       "audio": "Tonspur: {from} → {to} · {took} · {how}",
@@ -440,7 +440,103 @@
       "stop": "Ende ({why}) · {watched} geschaut · gestoppt bei {at}",
       "error": "Fehler",
       "cast": "Auf einen Fernseher übertragen",
-      "sleep": "Sleep-Timer ({mode}): pausiert bei {at}"
+      "sleep": "Sleep-Timer ({mode}): pausiert bei {at}",
+      "days": "{n} T",
+      "mb": "{n} MB",
+      "stopWhy": {
+        "close": "geschlossen",
+        "next": "nächste Folge",
+        "page": "Seite verlassen",
+        "unmount": "Player ersetzt",
+        "lost": "Bilanz verloren, nachgesendet"
+      },
+      "waits": "{n} Wartezeit (max. {longest})|{n} Wartezeiten (max. {longest})",
+      "seeks": "{n} Sprung|{n} Sprünge",
+      "link": "Verbindung {verdict}",
+      "linkVerdict": {
+        "enough": "ausreichend",
+        "slow": "zu langsam",
+        "unknown": "unbekannt"
+      },
+      "lighter": "leichtere Version",
+      "lighterMbps": "leichtere Version {mbps} Mb/s",
+      "slowChoice": "„Langsam“-Bildschirm: {choice}",
+      "reserveSum": "Reserve {mb} in {n} Schub|Reserve {mb} in {n} Schüben",
+      "openedFrom": {
+        "device": "vom Gerät",
+        "memory": "aus dem Speicher",
+        "mixed": "Gerät und Netz",
+        "network": "aus dem Netz"
+      },
+      "opening": "Start · {path}",
+      "firstPicture": "Bild nach {s}",
+      "network": "Netz bei {at}: {reason}",
+      "reserve": "Reserve",
+      "reserveError": "Reserve: Fehler ({message})",
+      "reserveRetry": "Versuch {n}, erneut in {s} s",
+      "reserveStop": "Reserve gestoppt ({why})",
+      "bursts": "{n} Schub|{n} Schübe",
+      "fluidity": "Messung {probe}",
+      "frames": "{n} Bilder, {long} lange",
+      "worst": "schlechtestes {worst} · p95 {p95}",
+      "subtitleGen": "Generierte Untertitel: {event}",
+      "auth": {
+        "login": "Anmeldung",
+        "loginFailed": "Abgelehnt",
+        "logout": "Abmeldung",
+        "tokenRefused": "Token vom Medienserver abgelehnt — Sitzung geschlossen",
+        "expired": "{n} abgelaufene Sitzung gelöscht|{n} abgelaufene Sitzungen gelöscht",
+        "othersClosed": "{n} andere Sitzung geschlossen|{n} andere Sitzungen geschlossen",
+        "closedByAdmin": "{n} Sitzung von {by} geschlossen|{n} Sitzungen von {by} geschlossen",
+        "devicesPruned": "{n} inaktives Gerät entfernt|{n} inaktive Geräte entfernt",
+        "passwordChanged": "Passwort geändert · {n} Sitzung geschlossen|Passwort geändert · {n} Sitzungen geschlossen",
+        "newAccountTags": "Tags gesetzt: {tags}"
+      },
+      "notif": {
+        "recipients": "{n} Empfänger|{n} Empfänger",
+        "sent": "{n} Zustellung|{n} Zustellungen",
+        "failed": "{n} Fehler|{n} Fehler",
+        "removed": "{n} Abo entfernt|{n} Abos entfernt",
+        "muted": "{n} stumm|{n} stumm"
+      },
+      "startup": {
+        "cache": "Cache {age}",
+        "noCache": "ohne Cache",
+        "catalogue": "Katalog {s}",
+        "network": "Netz {s}",
+        "resume": "Weiterschauen {s}",
+        "resumeFromDevice": "Weiterschauen {s} (vom Gerät)",
+        "fixed": "korrigiert +{added} −{removed} ↕{moved}",
+        "progressed": "({n} Balken bewegt)|({n} Balken bewegt)",
+        "stored": "{mb} auf dem Gerät",
+        "storedTitles": "{mb} auf dem Gerät ({n} Titel)|{mb} auf dem Gerät ({n} Titel)",
+        "hidden": "Hintergrund bei {s}"
+      },
+      "remote": {
+        "keys": "{n} Taste|{n} Tasten",
+        "pointer": "{n} Cursorbewegung|{n} Cursorbewegungen",
+        "wheels": "{n} Mausrad|{n} Mausräder"
+      },
+      "news": {
+        "window": "Neuigkeiten-Fenster",
+        "more": "„Mehr anzeigen“",
+        "page": "Neuigkeiten-Seite"
+      },
+      "newsShown": "{s} auf dem Bildschirm",
+      "newsClosed": "geschlossen: {by}",
+      "subgen": {
+        "start": "Anfrage",
+        "first": "Erste Zeile nach {s}",
+        "seek": "Sprung {from} → {to}",
+        "seekFirst": "Erste Zeile nach dem Sprung nach {s}",
+        "source": "Quelle",
+        "batch": "{n} Stapel · {lines} Zeilen|{n} Stapel · {lines} Zeilen",
+        "retry": "Neuer Versuch {n}",
+        "lines": "{n} Zeile|{n} Zeilen",
+        "present": "Status",
+        "kept": "Behalten",
+        "done": "Fertig"
+      }
     },
     "logs": {
       "title": "Protokolle",
@@ -454,7 +550,8 @@
         "benchPlayer": "Prüfstand-Player",
         "auth": "Anmeldungen",
         "notifications": "Benachrichtigungen",
-        "subtitleGen": "Generierte Untertitel"
+        "subtitleGen": "Generierte Untertitel",
+        "startup": "Starts"
       },
       "user": "Konto",
       "allUsers": "Alle Konten",
@@ -469,7 +566,9 @@
       "empty": "Keine passende Zeile.",
       "rotated": "Das Protokoll wurde seitdem rotiert: Die vollständige Zeile ist nicht mehr dort.",
       "allSteps": "Alle {n} Schritte zeigen",
-      "fewerSteps": "Nur die letzten zeigen"
+      "fewerSteps": "Nur die letzten zeigen",
+      "refresh": "Aktualisieren",
+      "gap": "Inzwischen sind weitere Zeilen eingetroffen — zum Anzeigen aktualisieren."
     },
     "tabs": {
       "seances": "Sitzungen",

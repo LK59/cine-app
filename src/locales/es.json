@@ -430,7 +430,7 @@
         "cast-relaunch": "Transmisión relanzada",
         "ladder": "Reinicio tras un error (intento {n})"
       },
-      "restarts": "· {n} reinicio|· {n} reinicios",
+      "restarts": "{n} reinicio|{n} reinicios",
       "seek": "Salto de {from} a {to} · {took} {buffered}",
       "buffered": "· ya cargado",
       "audio": "Pista de audio: {from} → {to} · {took} · {how}",
@@ -440,7 +440,103 @@
       "stop": "Fin ({why}) · {watched} vistos · parada en {at}",
       "error": "Error",
       "cast": "Transmisión a un televisor",
-      "sleep": "Temporizador ({mode}): pausa en {at}"
+      "sleep": "Temporizador ({mode}): pausa en {at}",
+      "days": "{n} d",
+      "mb": "{n} MB",
+      "stopWhy": {
+        "close": "cerrado",
+        "next": "episodio siguiente",
+        "page": "página abandonada",
+        "unmount": "reproductor reemplazado",
+        "lost": "resumen perdido, reenviado"
+      },
+      "waits": "{n} espera (máx. {longest})|{n} esperas (máx. {longest})",
+      "seeks": "{n} salto|{n} saltos",
+      "link": "conexión {verdict}",
+      "linkVerdict": {
+        "enough": "suficiente",
+        "slow": "demasiado lenta",
+        "unknown": "desconocida"
+      },
+      "lighter": "versión ligera",
+      "lighterMbps": "versión ligera {mbps} Mb/s",
+      "slowChoice": "pantalla «lenta»: {choice}",
+      "reserveSum": "reserva {mb} en {n} ráfaga|reserva {mb} en {n} ráfagas",
+      "openedFrom": {
+        "device": "desde el dispositivo",
+        "memory": "desde la memoria",
+        "mixed": "dispositivo y red",
+        "network": "desde la red"
+      },
+      "opening": "Inicio · {path}",
+      "firstPicture": "imagen en {s}",
+      "network": "Red en {at}: {reason}",
+      "reserve": "Reserva",
+      "reserveError": "Reserva: fallo ({message})",
+      "reserveRetry": "intento {n}, reintento en {s} s",
+      "reserveStop": "Reserva detenida ({why})",
+      "bursts": "{n} ráfaga|{n} ráfagas",
+      "fluidity": "Sonda {probe}",
+      "frames": "{n} fotogramas, {long} largos",
+      "worst": "peor {worst} · p95 {p95}",
+      "subtitleGen": "Subtítulos generados: {event}",
+      "auth": {
+        "login": "Inicio de sesión",
+        "loginFailed": "Rechazado",
+        "logout": "Cierre de sesión",
+        "tokenRefused": "Token rechazado por el servidor multimedia — sesión cerrada",
+        "expired": "{n} sesión caducada borrada|{n} sesiones caducadas borradas",
+        "othersClosed": "{n} otra sesión cerrada|{n} otras sesiones cerradas",
+        "closedByAdmin": "{n} sesión cerrada por {by}|{n} sesiones cerradas por {by}",
+        "devicesPruned": "{n} dispositivo inactivo eliminado|{n} dispositivos inactivos eliminados",
+        "passwordChanged": "Contraseña cambiada · {n} sesión cerrada|Contraseña cambiada · {n} sesiones cerradas",
+        "newAccountTags": "Etiquetas aplicadas: {tags}"
+      },
+      "notif": {
+        "recipients": "{n} destinatario|{n} destinatarios",
+        "sent": "{n} envío|{n} envíos",
+        "failed": "{n} fallo|{n} fallos",
+        "removed": "{n} suscripción eliminada|{n} suscripciones eliminadas",
+        "muted": "{n} silenciado|{n} silenciados"
+      },
+      "startup": {
+        "cache": "caché {age}",
+        "noCache": "sin caché",
+        "catalogue": "catálogo {s}",
+        "network": "red {s}",
+        "resume": "Continuar {s}",
+        "resumeFromDevice": "Continuar {s} (desde el dispositivo)",
+        "fixed": "corregido +{added} −{removed} ↕{moved}",
+        "progressed": "({n} barra avanzada)|({n} barras avanzadas)",
+        "stored": "{mb} en el dispositivo",
+        "storedTitles": "{mb} en el dispositivo ({n} título)|{mb} en el dispositivo ({n} títulos)",
+        "hidden": "segundo plano a {s}"
+      },
+      "remote": {
+        "keys": "{n} tecla|{n} teclas",
+        "pointer": "{n} movimiento del cursor|{n} movimientos del cursor",
+        "wheels": "{n} rueda|{n} ruedas"
+      },
+      "news": {
+        "window": "Ventana de novedades",
+        "more": "«Ver más»",
+        "page": "Página de novedades"
+      },
+      "newsShown": "{s} en pantalla",
+      "newsClosed": "cerrada: {by}",
+      "subgen": {
+        "start": "Solicitud",
+        "first": "Primera línea en {s}",
+        "seek": "Salto {from} → {to}",
+        "seekFirst": "Primera línea tras el salto en {s}",
+        "source": "Fuente",
+        "batch": "{n} lote · {lines} líneas|{n} lotes · {lines} líneas",
+        "retry": "Reintento {n}",
+        "lines": "{n} línea|{n} líneas",
+        "present": "Estado",
+        "kept": "Conservada",
+        "done": "Terminado"
+      }
     },
     "logs": {
       "title": "Registros",
@@ -454,7 +550,8 @@
         "benchPlayer": "Reproductor del banco",
         "auth": "Inicios de sesión",
         "notifications": "Notificaciones",
-        "subtitleGen": "Subtítulos generados"
+        "subtitleGen": "Subtítulos generados",
+        "startup": "Aperturas"
       },
       "user": "Cuenta",
       "allUsers": "Todas las cuentas",
@@ -469,7 +566,9 @@
       "empty": "Ninguna línea coincide.",
       "rotated": "El registro ha rotado desde entonces: la línea completa ya no está ahí.",
       "allSteps": "Ver los {n} pasos",
-      "fewerSteps": "Ver solo los últimos"
+      "fewerSteps": "Ver solo los últimos",
+      "refresh": "Actualizar",
+      "gap": "Han llegado más líneas mientras tanto — Actualizar para verlas."
     },
     "tabs": {
       "seances": "Sesiones",

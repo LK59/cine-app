@@ -430,7 +430,7 @@
         "cast-relaunch": "Cast relaunched",
         "ladder": "Restart after an error (attempt {n})"
       },
-      "restarts": "· {n} restart|· {n} restarts",
+      "restarts": "{n} restart|{n} restarts",
       "seek": "Seek from {from} to {to} · {took} {buffered}",
       "buffered": "· already loaded",
       "audio": "Audio track: {from} → {to} · {took} · {how}",
@@ -440,7 +440,103 @@
       "stop": "End ({why}) · {watched} watched · stopped at {at}",
       "error": "Error",
       "cast": "Cast to a TV",
-      "sleep": "Sleep timer ({mode}) paused at {at}"
+      "sleep": "Sleep timer ({mode}) paused at {at}",
+      "days": "{n} d",
+      "mb": "{n} MB",
+      "stopWhy": {
+        "close": "closed",
+        "next": "next episode",
+        "page": "page left",
+        "unmount": "player replaced",
+        "lost": "lost summary, resent"
+      },
+      "waits": "{n} wait (max {longest})|{n} waits (max {longest})",
+      "seeks": "{n} seek|{n} seeks",
+      "link": "link {verdict}",
+      "linkVerdict": {
+        "enough": "sufficient",
+        "slow": "too slow",
+        "unknown": "unknown"
+      },
+      "lighter": "lighter version",
+      "lighterMbps": "lighter version {mbps} Mb/s",
+      "slowChoice": "\"slow\" screen: {choice}",
+      "reserveSum": "reserve {mb} in {n} burst|reserve {mb} in {n} bursts",
+      "openedFrom": {
+        "device": "from the device",
+        "memory": "from memory",
+        "mixed": "device and network",
+        "network": "from the network"
+      },
+      "opening": "Starting · {path}",
+      "firstPicture": "picture in {s}",
+      "network": "Network at {at}: {reason}",
+      "reserve": "Reserve",
+      "reserveError": "Reserve: failed ({message})",
+      "reserveRetry": "attempt {n}, retry in {s} s",
+      "reserveStop": "Reserve stopped ({why})",
+      "bursts": "{n} burst|{n} bursts",
+      "fluidity": "Probe {probe}",
+      "frames": "{n} frames, {long} long",
+      "worst": "worst {worst} · p95 {p95}",
+      "subtitleGen": "Generated subtitles: {event}",
+      "auth": {
+        "login": "Sign-in",
+        "loginFailed": "Refused",
+        "logout": "Sign-out",
+        "tokenRefused": "Token refused by the media server — session closed",
+        "expired": "{n} expired session cleared|{n} expired sessions cleared",
+        "othersClosed": "{n} other session closed|{n} other sessions closed",
+        "closedByAdmin": "{n} session closed by {by}|{n} sessions closed by {by}",
+        "devicesPruned": "{n} inactive device removed|{n} inactive devices removed",
+        "passwordChanged": "Password changed · {n} session closed|Password changed · {n} sessions closed",
+        "newAccountTags": "Tags applied: {tags}"
+      },
+      "notif": {
+        "recipients": "{n} recipient|{n} recipients",
+        "sent": "{n} delivery|{n} deliveries",
+        "failed": "{n} failure|{n} failures",
+        "removed": "{n} subscription removed|{n} subscriptions removed",
+        "muted": "{n} muted|{n} muted"
+      },
+      "startup": {
+        "cache": "cache {age}",
+        "noCache": "no cache",
+        "catalogue": "catalogue {s}",
+        "network": "network {s}",
+        "resume": "Continue {s}",
+        "resumeFromDevice": "Continue {s} (from the device)",
+        "fixed": "corrected +{added} −{removed} ↕{moved}",
+        "progressed": "({n} bar moved)|({n} bars moved)",
+        "stored": "{mb} on the device",
+        "storedTitles": "{mb} on the device ({n} title)|{mb} on the device ({n} titles)",
+        "hidden": "background at {s}"
+      },
+      "remote": {
+        "keys": "{n} key|{n} keys",
+        "pointer": "{n} cursor move|{n} cursor moves",
+        "wheels": "{n} wheel|{n} wheels"
+      },
+      "news": {
+        "window": "What's new window",
+        "more": "\"See more\"",
+        "page": "What's new page"
+      },
+      "newsShown": "{s} on screen",
+      "newsClosed": "closed: {by}",
+      "subgen": {
+        "start": "Request",
+        "first": "First line in {s}",
+        "seek": "Seek {from} → {to}",
+        "seekFirst": "First line after the seek in {s}",
+        "source": "Source",
+        "batch": "{n} batch · {lines} lines|{n} batches · {lines} lines",
+        "retry": "Retry {n}",
+        "lines": "{n} line|{n} lines",
+        "present": "State",
+        "kept": "Kept",
+        "done": "Done"
+      }
     },
     "logs": {
       "title": "Logs",
@@ -454,7 +550,8 @@
         "benchPlayer": "Bench player",
         "auth": "Sign-ins",
         "notifications": "Notifications",
-        "subtitleGen": "Generated subtitles"
+        "subtitleGen": "Generated subtitles",
+        "startup": "Launches"
       },
       "user": "Account",
       "allUsers": "All accounts",
@@ -469,7 +566,9 @@
       "empty": "No line matches.",
       "rotated": "The log has rotated since: the full line is no longer there.",
       "allSteps": "Show all {n} steps",
-      "fewerSteps": "Show the last ones only"
+      "fewerSteps": "Show the last ones only",
+      "refresh": "Refresh",
+      "gap": "More lines arrived meanwhile — Refresh to see them."
     },
     "tabs": {
       "seances": "Sessions",

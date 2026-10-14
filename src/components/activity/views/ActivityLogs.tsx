@@ -1,29 +1,114 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
-import { ChevronDown, ChevronRight, Clapperboard, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Clapperboard, RefreshCw, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
-import { JsonBlock, Steps, describeLine, fullDate, kindTone } from "@/components/activity/parts";
+import { JsonBlock, Steps, TimelineTable, describeLine, fullDate, kindTone } from "@/components/activity/parts";
 import { ActivityLink, type LogsPreset } from "@/components/activity/nav";
+
+type LogItem = Record<string, unknown> & { _file: string; _line: number; _t: number };
 
 interface LogPage {
   source: string;
   /** Combien de fichiers ce journal compte : le courant et ses archives. */
   generations: number;
-  items: (Record<string, unknown> & { _file: string; _line: number; _t: number })[];
+  items: LogItem[];
   /** `génération.ligne`, ou rien quand on est au bout. */
   nextCursor: string | null;
-  facets: { users: string[]; types: { name: string; count: number }[]; recentLines: number };
+  /** Sur la première page seulement, comptés sur la période ; `partial` quand la borne d'archives a coupé. */
+  facets?: { users: string[]; types: { name: string; count: number }[]; recentLines: number; partial?: boolean };
 }
 
-const SOURCES = ["player", "server", "auth", "notifications", "bench", "benchPlayer", "subtitleGen"] as const;
+const SOURCES = ["player", "server", "auth", "notifications", "startup", "bench", "benchPlayer", "subtitleGen"] as const;
 const PERIODS = [1, 7, 30, 0] as const;
+/** Le rafraîchissement automatique : assez vif pour suivre une séance en cours, sans tenir le serveur. */
+const LIVE_REFRESH_MS = 20_000;
+
+/**
+ * La période affichée inclut-elle aujourd'hui ? Toutes celles proposées — « les N derniers jours »,
+ * « Tout » — finissent maintenant : elles l'incluent toutes. Une période fermée, le jour où elle
+ * existera, coupera ici le rafraîchissement automatique — ses lignes ne bougent plus.
+ */
+export function periodIncludesToday(days: number): boolean {
+  return Number.isFinite(days) && days >= 0;
+}
+
+/**
+ * Les lignes arrivées depuis le chargement de la liste : celles de `head` (la première page relue,
+ * de la plus récente à la plus ancienne) qui précèdent `top`, la première ligne déjà affichée.
+ * Une ligne est reconnue à son instant et à son rang — pas à son fichier : une rotation renomme
+ * `player.log` en `.1` sans changer ni l'un ni l'autre. `gap` : toute la page relue est neuve et il
+ * y en a d'autres derrière — plus de cent lignes en vingt secondes, la liste ne se raccorde plus.
+ */
+export function freshLines(head: LogItem[] | undefined, top: LogItem | undefined, headHasMore: boolean): { lines: LogItem[]; gap: boolean } {
+  if (!head?.length) return { lines: [], gap: false };
+  if (!top) return { lines: head, gap: false };
+  const seam = head.findIndex((i) => i._t < top._t || (i._t === top._t && i._line === top._line));
+  if (seam === -1) return { lines: head, gap: headHasMore };
+  return { lines: head.slice(0, seam), gap: false };
+}
+
+/** Le conteneur qui fait défiler la liste : le panneau de l'activité, ou la page. */
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight) return node;
+  }
+  return null;
+}
+
+/**
+ * Un repère posé entre les lignes arrivées et la liste chargée, qui garde la position de lecture
+ * quand des lignes s'ajoutent en tête : si on lisait plus bas (le repère au-dessus de la vue), le
+ * défilement avance d'autant que le repère est descendu. Sans lui, chaque rafraîchissement faisait
+ * glisser sous les yeux la ligne qu'on lisait. Sa position est relevée à chaque défilement : un
+ * moteur qui ancre le défilement de lui-même (Chromium) l'a déjà compensé, l'écart est alors nul —
+ * jamais deux fois. Seule une **hausse** du nombre de lignes arrivées déplace : quand « Actualiser »
+ * les reverse dans la liste, la ligne lue n'a pas bougé.
+ */
+function ReadingAnchor({ count }: { count: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const last = useRef<{ top: number; above: boolean; count: number } | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const target: HTMLElement | Window = scrollParent(el) ?? window;
+    const onScroll = () => {
+      last.current = { ...anchorPlace(el), count: last.current?.count ?? 0 };
+    };
+    target.addEventListener("scroll", onScroll, { passive: true });
+    return () => target.removeEventListener("scroll", onScroll);
+  }, []);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const before = last.current;
+    if (before?.above && count > before.count) {
+      const delta = el.getBoundingClientRect().top - before.top;
+      if (delta > 0) {
+        const scroller = scrollParent(el);
+        if (scroller) scroller.scrollTop += delta;
+        else window.scrollBy(0, delta);
+      }
+    }
+    last.current = { ...anchorPlace(el), count };
+  }, [count]);
+  return <div ref={ref} aria-hidden />;
+}
+
+/** Où est le repère : son haut à l'écran, et s'il est passé au-dessus de la partie visible. */
+function anchorPlace(el: HTMLElement): { top: number; above: boolean } {
+  const scroller = scrollParent(el);
+  const top = el.getBoundingClientRect().top;
+  return { top, above: top < (scroller ? scroller.getBoundingClientRect().top : 0) };
+}
 
 /** Une ligne, repliée : l'heure, le type, qui, quoi. Dépliée : la ligne entière, traces comprises. */
-function LogLine({ item, source }: { item: LogPage["items"][number]; source: string }) {
+function LogLine({ item, source }: { item: LogItem; source: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [full, setFull] = useState<Record<string, unknown> | null>(null);
@@ -40,7 +125,7 @@ function LogLine({ item, source }: { item: LogPage["items"][number]; source: str
   };
   const summary = describeLine(item, t);
   const shown = full ?? item;
-  const { steps, stack, ...rest } = shown as { steps?: unknown; stack?: unknown };
+  const { steps, stack, timeline, ...rest } = shown as { steps?: unknown; stack?: unknown; timeline?: unknown };
   return (
     <li className="border-b border-white/5">
       {/* Sur téléphone, la date et le type sur une ligne, le texte en dessous sur toute la largeur ;
@@ -48,12 +133,12 @@ function LogLine({ item, source }: { item: LogPage["items"][number]; source: str
       <button
         type="button"
         onClick={toggle}
-        className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 px-4 py-2 text-left hover:bg-white/[0.03] sm:grid-cols-[auto_7.5rem_6rem_minmax(0,1fr)]"
+        className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 px-4 py-2 text-left hover:bg-white/[0.03] sm:grid-cols-[auto_9rem_6rem_minmax(0,1fr)]"
       >
         {open ? <ChevronDown size={14} className="mt-0.5 shrink-0 text-subtle" /> : <ChevronRight size={14} className="mt-0.5 shrink-0 text-subtle" />}
         <span className="flex items-center gap-2 sm:contents">
-          <span className="whitespace-nowrap font-mono text-[11px] text-subtle">{fullDate(item._t)}</span>
-          <span className={`truncate rounded px-1.5 py-0.5 text-center font-mono text-[11px] sm:w-24 ${kindTone(kind, item.level)}`}>{kind}</span>
+          <span className="whitespace-nowrap font-mono text-[11px] text-subtle">{fullDate(item._t, { seconds: true })}</span>
+          <span className={`truncate rounded px-1.5 py-0.5 text-center font-mono text-[11px] sm:w-24 ${kindTone(kind, item.level, item.event)}`}>{kind}</span>
         </span>
         <span className="col-start-2 min-w-0 text-sm sm:col-start-auto">
           <span className="flex flex-wrap items-baseline gap-x-2">
@@ -74,6 +159,8 @@ function LogLine({ item, source }: { item: LogPage["items"][number]; source: str
           {missing && <p className="text-xs text-warning">{t("activity.logs.rotated")}</p>}
           {typeof steps === "string" && <Steps text={steps} />}
           {typeof stack === "string" && <Steps text={stack} />}
+          {/* Les deux dernières minutes d'un incident (§77) : en tableau, comme dans la séance. */}
+          {typeof timeline === "string" && <TimelineTable text={timeline} />}
           <JsonBlock value={Object.fromEntries(Object.entries(rest).filter(([k]) => !k.startsWith("_")))} />
         </div>
       )}
@@ -97,18 +184,39 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
   const [draft, setDraft] = useState("");
 
   const base = new URLSearchParams({ source, days: String(days), ...(user && { user }), ...(type && { type }), ...(q && { q }), ...(session && { session }) });
-  const { data, error, isLoading, size, setSize, mutate } = useSWRInfinite<LogPage>(
+  const { data, error, isLoading, isValidating, size, setSize, mutate } = useSWRInfinite<LogPage>(
     (index, previous) => {
       if (previous && previous.nextCursor === null) return null;
       const cursor = previous?.nextCursor;
       return `/api/admin/activity/logs?${base}${index && cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
     },
-    fetcher
+    fetcher,
+    // Les pages chargées ne se relisent pas d'elles-mêmes : relire la première décale le curseur de
+    // toutes les suivantes, qui se rechargeraient toutes. Les lignes neuves passent par `head`.
+    { revalidateOnFocus: false, revalidateOnReconnect: false, revalidateFirstPage: false }
   );
 
   const first = data?.[0];
-  const items = data?.flatMap((page) => page.items) ?? [];
+  const loaded = data?.flatMap((page) => page.items) ?? [];
   const more = data?.[data.length - 1]?.nextCursor != null;
+
+  // Le rafraîchissement automatique (14/10/2026) : la première page relue toutes les 20 s, page
+  // visible seulement (SWR saute un tour quand l'onglet est caché), sans les filtres (`facets=0`).
+  // Pas de lecture au montage : la liste vient d'être chargée. Les lignes plus récentes que la
+  // première affichée s'ajoutent en tête ; les pages déjà chargées ne bougent pas.
+  const live = periodIncludesToday(days) && !!data && !error;
+  const { data: head } = useSWR<LogPage>(live ? `/api/admin/activity/logs?${base}&facets=0` : null, fetcher, {
+    refreshInterval: LIVE_REFRESH_MS,
+    revalidateOnMount: false,
+    revalidateOnFocus: false,
+  });
+  // Une liste vide au chargement (`loaded[0]` absent) : tout ce que la relecture trouve est neuf.
+  const fresh = freshLines(head?.items, loaded[0], head?.nextCursor != null);
+  const freshItems = fresh.lines;
+  const items = [...freshItems, ...loaded];
+
+  // « Actualiser » : toute la liste relue depuis la plus récente ; les lignes arrivées y rentrent.
+  const refresh = () => void mutate();
 
   return (
     <div className="space-y-4">
@@ -135,7 +243,7 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
         <div className="flex flex-wrap items-center gap-2">
           <select value={user} onChange={(e) => setUser(e.target.value)} className="input h-9 w-auto text-xs" aria-label={t("activity.logs.user")}>
             <option value="">{t("activity.logs.allUsers")}</option>
-            {first?.facets.users.map((u) => (
+            {first?.facets?.users.map((u) => (
               <option key={u} value={u}>
                 {u}
               </option>
@@ -143,9 +251,10 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
           </select>
           <select value={type} onChange={(e) => setType(e.target.value)} className="input h-9 w-auto text-xs" aria-label={t("activity.logs.type")}>
             <option value="">{t("activity.logs.allTypes")}</option>
-            {first?.facets.types.map((ty) => (
+            {first?.facets?.types.map((ty) => (
               <option key={ty.name} value={ty.name}>
-                {ty.name} ({ty.count})
+                {ty.name} ({ty.count}
+                {first?.facets?.partial ? "+" : ""})
               </option>
             ))}
           </select>
@@ -168,6 +277,17 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
               <Search size={14} />
             </button>
           </form>
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={isValidating}
+            className="btn-ghost h-9 gap-1.5 px-3 text-xs"
+            aria-label={t("activity.logs.refresh")}
+            title={t("activity.logs.refresh")}
+          >
+            <RefreshCw size={14} className={isValidating ? "animate-spin" : undefined} />
+            <span className="hidden sm:inline">{t("activity.logs.refresh")}</span>
+          </button>
           {session && (
             <button type="button" onClick={() => setSession("")} className="rounded bg-accent-500/15 px-2 py-1 text-xs text-accent-100">
               {t("activity.logs.sessionFilter", { id: session })} ×
@@ -184,14 +304,28 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
         // Une page vide n'est pas la fin : les archives plus anciennes peuvent encore porter des
         // lignes du filtre (`nextCursor`). « Aucune ligne » et la disparition de « Plus » cachaient
         // celles-là (08/10/2026).
-        <section className="card overflow-hidden">
-          {items.length ? (
+        // `overflow-anchor: none` : la position de lecture est tenue par `ReadingAnchor`, une seule fois.
+        <section className="card overflow-hidden [overflow-anchor:none]">
+          {freshItems.length > 0 && (
+            <ul data-testid="log-fresh">
+              {freshItems.map((item) => (
+                <LogLine key={`fresh:${item._t}:${item._line}`} item={item} source={source} />
+              ))}
+            </ul>
+          )}
+          {fresh.gap && loaded.length > 0 && (
+            <button type="button" onClick={refresh} className="block w-full border-b border-white/5 px-4 py-2 text-center text-xs text-warning hover:bg-white/[0.03]">
+              {t("activity.logs.gap")}
+            </button>
+          )}
+          <ReadingAnchor count={freshItems.length} />
+          {loaded.length ? (
             <ul>
-              {items.map((item) => (
+              {loaded.map((item) => (
                 <LogLine key={`${item._file}:${item._line}`} item={item} source={source} />
               ))}
             </ul>
-          ) : (
+          ) : freshItems.length ? null : (
             <p className="px-4 py-6 text-center text-sm text-subtle">{t("activity.logs.empty")}</p>
           )}
           {more && (

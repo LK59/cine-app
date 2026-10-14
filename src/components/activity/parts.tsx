@@ -71,9 +71,25 @@ export function latest(...ts: (number | null | undefined)[]): number | null {
   return known.length ? Math.max(...known) : null;
 }
 
-export function fullDate(ts: number | null | undefined): string {
+/**
+ * « 14 oct. 08:12 » ; avec `seconds`, « 14 oct. 08:12:50 ». L'année paraît quand ce n'est pas
+ * l'année en cours : les journaux gardent des archives sur des mois, et « 3 janv. » sans année
+ * se lisait comme le mois qui vient (14/10/2026). Les secondes, pour la vue Journaux : vingt lignes
+ * d'une même minute — un saut, son `seek`, la `stall` qui suit — s'y suivaient sans ordre lisible.
+ */
+export function fullDate(ts: number | null | undefined, opts: { seconds?: boolean } = {}): string {
   if (!ts) return "—";
-  return new Date(ts).toLocaleString(uiLocale(), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+  const date = new Date(ts);
+  const otherYear = date.getFullYear() !== new Date().getFullYear();
+  return date.toLocaleString(uiLocale(), {
+    day: "2-digit",
+    month: "short",
+    ...(otherYear && { year: "numeric" }),
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(opts.seconds && { second: "2-digit" }),
+    hour12: false,
+  });
 }
 
 const STATE_STYLES = {
@@ -305,7 +321,9 @@ export function DayBars({ days }: { days: { day: string; seances: number; proble
 /** Du JSON lisible, repliable — pour le détail d'une ligne de journal. */
 export function JsonBlock({ value }: { value: unknown }) {
   return (
-    <pre className="scrollbar-thin max-h-[60vh] overflow-auto rounded-lg bg-black/40 p-3 text-[11px] leading-relaxed text-muted">
+    // Replié à la largeur : un agent utilisateur ou une raison de 240 caractères faisaient défiler
+    // le bloc de côté, et sur un iPhone on ne lisait que le début de chaque ligne (14/10/2026).
+    <pre className="scrollbar-thin max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg bg-black/40 p-3 text-[11px] leading-relaxed text-muted [overflow-wrap:anywhere]">
       {JSON.stringify(value, null, 2)}
     </pre>
   );
@@ -385,8 +403,10 @@ export function AlertChip({ label }: { label: string }) {
 }
 
 /** La couleur d'un type de ligne : le vert de ce qui commence, le rouge de ce qui casse. */
-export function kindTone(kind: string, level?: unknown): string {
+export function kindTone(kind: string, level?: unknown, event?: unknown): string {
   if (level === "error" && !["client", "admin"].includes(kind)) return "bg-danger/15 text-danger";
+  // Une réserve qui échoue est un incident ; ses autres lignes ne sont que des relevés.
+  if (kind === "reserve" && event === "erreur") return "bg-warning/15 text-warning";
   switch (kind) {
     case "start":
       return "bg-success/15 text-success";
@@ -397,10 +417,16 @@ export function kindTone(kind: string, level?: unknown): string {
       return "bg-sky-500/15 text-sky-300";
     case "stall":
     case "rebuild":
+    // Une coupure réseau en pleine lecture : le lecteur s'en remet le plus souvent, mais c'est ce
+    // qu'on cherche d'abord dans un journal (14/10/2026).
+    case "network":
       return "bg-warning/15 text-warning";
     case "fallback":
     case "error":
     case "client":
+    // Un mot de passe refusé, un jeton refusé par le serveur média : ce qu'on cherche dans les connexions.
+    case "login-failed":
+    case "token-refused":
       return "bg-danger/15 text-danger";
     case "admin":
     case "cast":
@@ -413,13 +439,154 @@ export function kindTone(kind: string, level?: unknown): string {
 const numOf = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const strOf = (v: unknown) => (typeof v === "string" && v ? v : null);
 
+/** Les parties présentes, jointes par « · » — une ligne qui n'a pas un champ n'a pas son morceau. */
+const join = (...parts: (string | null | false | undefined)[]) => parts.filter((p): p is string => typeof p === "string" && p.trim() !== "").join(" · ");
+
+/** 52 294 761 ms → « 15 h » ; au-delà de deux jours, en jours. Pour un âge, pas une attente. */
+function age(ms: number | null, t: T): string | null {
+  if (ms == null) return null;
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 1) return `${Math.round(ms / 1000)} s`;
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.round(minutes / 60);
+  return h < 48 ? `${h} h` : t("activity.line.days", { n: Math.round(h / 24) });
+}
+
+/** 114.7 → « 115 Mo » ; sous 10, une décimale. */
+function mb(v: number | null, t: T): string | null {
+  if (v == null) return null;
+  return t("activity.line.mb", { n: v < 10 ? v.toFixed(1) : String(Math.round(v)) });
+}
+
+/** Une valeur de journal écrite en français, dite dans la langue de l'écran quand on la connaît. */
+function known(t: T, prefix: string, map: Record<string, string>, value: unknown): string | null {
+  const v = strOf(value);
+  if (!v) return null;
+  return map[v] ? t(`${prefix}.${map[v]}`) : v;
+}
+
+const OPENED_FROM = { appareil: "device", "mémoire": "memory", mixte: "mixed", "réseau": "network" };
+const LINK_VERDICT = { suffisante: "enough", "trop lente": "slow", inconnue: "unknown" };
+const STOP_WHY = { close: "close", next: "next", page: "page", unmount: "unmount", lost: "lost" };
+const NEWS_EVENT = { "fenêtre": "window", "voir-plus": "more", page: "page" };
+
+/**
+ * Le bilan d'une séance (`stop`) : pourquoi, combien regardé, où — puis, seulement s'ils disent
+ * quelque chose, les attentes, les sauts, le verdict du lien, la version allégée et la réserve.
+ * Une lecture sans histoire garde sa ligne courte ; le détail reste dans le JSON.
+ */
+function describeStop(line: Record<string, unknown>, t: T): string {
+  const restarts = numOf(line.restarts) ?? 0;
+  const waits = numOf(line.waits) ?? 0;
+  const seeks = numOf(line.seeks) ?? 0;
+  const verdict = strOf(line["diag.linkVerdict"]);
+  const lighter = numOf(line.lighterMbps);
+  const choice = strOf(line.slowChoice);
+  const reserve = numOf(line["diag.reserveNetMB"]);
+  const bursts = numOf(line["diag.reserveBursts"]) ?? 0;
+  return join(
+    t("activity.line.stop", {
+      why: known(t, "activity.line.stopWhy", STOP_WHY, line.why) ?? "?",
+      watched: hours(numOf(line.watched)),
+      at: clock(numOf(line.at)),
+    }),
+    restarts > 0 && t("activity.line.restarts", { n: restarts }),
+    waits > 0 && t("activity.line.waits", { n: waits, longest: secs(numOf(line.longestWaitMs)) }),
+    seeks > 0 && t("activity.line.seeks", { n: seeks }),
+    // « inconnue » ne dit rien (trop peu de réception pour juger) : on ne l'écrit pas.
+    verdict && verdict !== "inconnue" && t("activity.line.link", { verdict: known(t, "activity.line.linkVerdict", LINK_VERDICT, verdict) ?? verdict }),
+    (lighter != null || line.quality === "auto") && (lighter != null ? t("activity.line.lighterMbps", { mbps: lighter }) : t("activity.line.lighter")),
+    choice && choice !== "aucun" && t("activity.line.slowChoice", { choice }),
+    reserve != null && reserve > 0 && t("activity.line.reserveSum", { mb: mb(reserve, t) ?? "", n: bursts })
+  );
+}
+
+/** La ligne d'ouverture du cinéma (`startup.log`, §86) : d'où, en combien de temps, ce qu'on a corrigé. */
+function describeStartup(line: Record<string, unknown>, t: T): string {
+  const hidden = numOf(line.hiddenAtMs);
+  const fromCache = line.resumeFromCache === true;
+  const resume = numOf(line.resumeNetworkMs);
+  const added = numOf(line.resumeAdded);
+  const progressed = numOf(line.resumeProgressed) ?? 0;
+  const titles = numOf(line.resumeTitles);
+  const kept = mb(numOf(line.resumeMB), t);
+  return join(
+    line.cacheUsed === true ? t("activity.line.startup.cache", { age: age(numOf(line.cacheAgeMs), t) ?? "?" }) : t("activity.line.startup.noCache"),
+    line.cacheUsed === true && numOf(line.cacheMs) != null && t("activity.line.startup.catalogue", { s: secs(numOf(line.cacheMs)) }),
+    numOf(line.networkMs) != null && t("activity.line.startup.network", { s: secs(numOf(line.networkMs)) }),
+    resume != null && t(fromCache ? "activity.line.startup.resumeFromDevice" : "activity.line.startup.resume", { s: secs(resume) }),
+    added != null &&
+      t("activity.line.startup.fixed", { added, removed: numOf(line.resumeRemoved) ?? 0, moved: numOf(line.resumeMoved) ?? 0 }) +
+        (progressed > 0 ? ` ${t("activity.line.startup.progressed", { n: progressed })}` : ""),
+    kept && (titles != null ? t("activity.line.startup.storedTitles", { mb: kept, n: titles }) : t("activity.line.startup.stored", { mb: kept })),
+    hidden != null && t("activity.line.startup.hidden", { s: secs(hidden) })
+  );
+}
+
+/** Une ligne du journal des sous-titres générés (`subtitle-gen.log`) — reconnue à son `job`. */
+function describeSubtitleJob(line: Record<string, unknown>, t: T): string {
+  const kind = strOf(line.kind) ?? "?";
+  const label = (key: string, vars?: Record<string, string | number>) => t(`activity.line.subgen.${key}`, vars);
+  switch (kind) {
+    case "start":
+      return join(label("start"), strOf(line.target), strOf(line.model));
+    case "first":
+      return label("first", { s: secs(numOf(line.clickToFirstMs) ?? numOf(line.ms)) });
+    case "seek":
+      return label("seek", { from: clock(numOf(line.from)), to: clock(numOf(line.to)) });
+    case "seekFirst":
+      return label("seekFirst", { s: secs(numOf(line.seekToFirstMs)) });
+    case "source":
+      return join(label("source"), strOf(line.language), strOf(line.verdict));
+    case "batch":
+      return label("batch", { n: numOf(line.batches) ?? 0, lines: numOf(line.count) ?? 0 });
+    case "retry":
+      return join(label("retry", { n: numOf(line.attempt) ?? 0 }), strOf(line.cause), numOf(line.count) != null && label("lines", { n: numOf(line.count) ?? 0 }));
+    case "present":
+      return join(label("present"), strOf(line.state));
+    case "kept":
+      return join(label("kept"), strOf(line.why));
+    case "done":
+      return join(
+        label("done"),
+        strOf(line.target),
+        numOf(line.total) != null && label("lines", { n: numOf(line.total) ?? 0 }),
+        numOf(line.durationMs) != null && clock((numOf(line.durationMs) ?? 0) / 1000),
+        numOf(line.cost) != null && `$${numOf(line.cost)}`
+      );
+    default:
+      // Un événement que ce résumé ne connaît pas encore : son nom, son état, sa langue.
+      return join(kind, strOf(line.state) ?? strOf(line.status), strOf(line.target) ?? strOf(line.language), strOf(line.reason) ?? strOf(line.message));
+  }
+}
+
+/** Une notification envoyée : son texte, puis à combien de comptes et ce qu'il en est advenu. */
+function describeNotification(line: Record<string, unknown>, t: T): string {
+  const recipients = (line.recipients as unknown[]).filter((x): x is Record<string, unknown> => !!x && typeof x === "object");
+  const sum = (k: string) => recipients.reduce((acc, r) => acc + (numOf(r[k]) ?? 0), 0);
+  const muted = recipients.filter((r) => r.muted === true).length;
+  return join(
+    strOf(line.body),
+    t("activity.line.notif.recipients", { n: recipients.length }),
+    t("activity.line.notif.sent", { n: sum("sent") }),
+    sum("failed") > 0 && t("activity.line.notif.failed", { n: sum("failed") }),
+    sum("removed") > 0 && t("activity.line.notif.removed", { n: sum("removed") }),
+    muted > 0 && t("activity.line.notif.muted", { n: muted })
+  );
+}
+
 /**
  * Une ligne de journal dite en une phrase — « saut de 752 à 762 s, 6,7 s ». Écrit une fois, pour
- * la liste des journaux et pour la chronologie d'une séance.
+ * la liste des journaux, la chronologie d'une séance et les journaux figés d'un signalement : tous
+ * les journaux passent ici (lecteur, serveur, connexions, notifications, ouvertures, sous-titres
+ * générés). Deux journaux partagent des noms de type (`start`, `seek` : lecteur et sous-titres
+ * générés) — une ligne de sous-titres se reconnaît à son `job`, une notification à ses `recipients`.
  */
 export function describeLine(line: Record<string, unknown>, t: T): string {
+  if (strOf(line.job)) return describeSubtitleJob(line, t);
+  if (Array.isArray(line.recipients)) return describeNotification(line, t);
   switch (line.kind) {
-    case "start":
+    case "start": {
       // Le lecteur serveur dit pourquoi il (re)négocie depuis le 10/10/2026 — ouverture, piste,
       // échelon de l'échelle de repli et l'erreur qui l'a provoqué.
       if (line.player === "serveur" && isStartWhy(line.why)) {
@@ -429,12 +596,20 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
           extra: strOf(line.trigger) ? `· ${strOf(line.trigger)}` : "",
         }).trim();
       }
-      return t("activity.line.start", {
+      const base = t("activity.line.start", {
         at: clock(numOf(line.at)),
         path: strOf(line.path) ?? "?",
         opened: secs(numOf(line.openedInMs)),
         rebuild: numOf(line.rebuild) ? t("activity.line.rebuildN", { n: numOf(line.rebuild) ?? 0 }) : "",
       }).trim();
+      return join(base, known(t, "activity.line.openedFrom", OPENED_FROM, line.openedFrom));
+    }
+    case "opening":
+      return join(
+        t("activity.line.opening", { path: strOf(line.path) ?? "?" }),
+        numOf(line.firstMoveMs) != null && t("activity.line.firstPicture", { s: secs(numOf(line.firstMoveMs)) }),
+        known(t, "activity.line.openedFrom", OPENED_FROM, line.openedFrom)
+      );
     case "seek":
       return t("activity.line.seek", {
         from: clock(numOf(line.from)),
@@ -453,17 +628,12 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
       return t("activity.line.stall", { at: clock(numOf(line.position)), took: secs(numOf(line.stalledMs)) });
     case "rebuild":
       return t("activity.line.rebuild", { at: clock(numOf(line.at)), reason: strOf(line.reason) ?? "?" });
+    case "network":
+      return t("activity.line.network", { at: clock(numOf(line.at)), reason: strOf(line.reason) ?? "?" });
     case "fallback":
       return t("activity.line.fallback", { reason: strOf(line.reason) ?? "?" });
-    case "stop": {
-      const restarts = numOf(line.restarts) ?? 0;
-      const base = t("activity.line.stop", {
-        why: strOf(line.why) ?? "?",
-        watched: hours(numOf(line.watched)),
-        at: clock(numOf(line.at)),
-      });
-      return restarts > 0 ? `${base} ${t("activity.line.restarts", { n: restarts })}` : base;
-    }
+    case "stop":
+      return describeStop(line, t);
     case "error":
       return strOf(line.reason) ?? strOf(line.message) ?? t("activity.line.error");
     case "cast":
@@ -471,6 +641,63 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
     // La seule pause écrite : celle de la minuterie de veille (`sleepTimer.ts`).
     case "pause":
       return t("activity.line.sleep", { mode: strOf(line.sleepTimer) ?? "?", at: clock(numOf(line.at)) });
+    case "reserve":
+      // Seules l'erreur et l'arrêt décidé par la réserve s'écrivent encore (§84).
+      if (line.event === "erreur") {
+        return join(t("activity.line.reserveError", { message: strOf(line.message) ?? "?" }), numOf(line.failures) != null && t("activity.line.reserveRetry", { n: numOf(line.failures) ?? 0, s: numOf(line.backoffS) ?? 0 }));
+      }
+      if (line.event === "arrêt") {
+        const net = numOf(line.netMB) ?? numOf(line.networkMB);
+        const bursts = numOf(line.bursts) ?? 0;
+        return join(t("activity.line.reserveStop", { why: strOf(line.why) ?? "?" }), net != null && net > 0 && mb(net, t), bursts > 0 && t("activity.line.bursts", { n: bursts }));
+      }
+      return join(t("activity.line.reserve"), strOf(line.event));
+    case "fluidite":
+      return join(
+        t("activity.line.fluidity", { probe: strOf(line.probe) ?? "?" }),
+        t("activity.line.frames", { n: numOf(line.frames) ?? 0, long: numOf(line.longFrames) ?? 0 }),
+        t("activity.line.worst", { worst: secs(numOf(line.worstMs)), p95: secs(numOf(line.p95Ms)) })
+      );
+    case "subtitle-gen":
+      return join(t("activity.line.subtitleGen", { event: strOf(line.event) ?? "?" }), strOf(line.target), numOf(line.ms) != null && secs(numOf(line.ms)));
+    // Les connexions (`auth.log`) : l'appareil et l'adresse, et pour un refus sa raison.
+    case "login":
+      // Le rôle seulement quand il compte : « admin » ; un compte ordinaire n'a rien à dire de plus.
+      return join(t("activity.line.auth.login"), line.role === "admin" && "admin", strOf(line.device), strOf(line.ip));
+    case "login-failed":
+      return join(t("activity.line.auth.loginFailed"), strOf(line.reason), strOf(line.device), strOf(line.ip));
+    case "logout":
+      return join(t("activity.line.auth.logout"), strOf(line.device), strOf(line.ip));
+    case "token-refused":
+      return t("activity.line.auth.tokenRefused");
+    case "expired":
+      return t("activity.line.auth.expired", { n: numOf(line.count) ?? 0 });
+    case "others-closed":
+      return t("activity.line.auth.othersClosed", { n: numOf(line.count) ?? 0 });
+    case "closed-by-admin":
+      return t("activity.line.auth.closedByAdmin", { n: numOf(line.count) ?? 0, by: strOf(line.by) ?? "?" });
+    case "devices-pruned":
+      return t("activity.line.auth.devicesPruned", { n: numOf(line.count) ?? 0 });
+    case "password-changed":
+      return join(t("activity.line.auth.passwordChanged", { n: numOf(line.closedSessions) ?? 0 }), strOf(line.ip));
+    case "new-account-tags":
+      return t("activity.line.auth.newAccountTags", { tags: Array.isArray(line.tags) ? line.tags.join(", ") : "?" });
+    // Le journal des ouvertures (`startup.log`).
+    case "ouverture":
+      return describeStartup(line, t);
+    case "télécommande":
+      return join(
+        t("activity.line.remote.keys", { n: Array.isArray(line.keys) ? line.keys.length : 0 }),
+        t("activity.line.remote.pointer", { n: numOf(line.pointerMoves) ?? 0 }),
+        numOf(line.wheels) ? t("activity.line.remote.wheels", { n: numOf(line.wheels) ?? 0 }) : null,
+        strOf(line.viewport)
+      );
+    case "nouveautés":
+      return join(
+        known(t, "activity.line.news", NEWS_EVENT, line.event),
+        numOf(line.shownMs) != null && t("activity.line.newsShown", { s: secs(numOf(line.shownMs)) }),
+        strOf(line.closedBy) && t("activity.line.newsClosed", { by: strOf(line.closedBy) ?? "" })
+      );
     default:
       return strOf(line.message) ?? strOf(line.reason) ?? "";
   }
@@ -488,6 +715,7 @@ export function kindDot(kind: string): string {
       return "bg-sky-400";
     case "stall":
     case "rebuild":
+    case "network":
       return "bg-amber-400";
     case "fallback":
     case "error":
