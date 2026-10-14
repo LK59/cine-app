@@ -861,7 +861,7 @@ function mergedSpans(spans: Span[]): Span[] {
 /**
  * Les segments de Jellyfin, ramenés à la forme qu'attend le lecteur (secondes) — DECISIONS.md §65.
  *
- * L'intro et le récap : le premier passage, doublons fusionnés. Le générique de fin : celui qui se
+ * L'intro : le premier passage, doublons fusionnés (le récap n'est plus lu, voir plus bas). Le générique de fin : celui qui se
  * termine le plus tard. On prenait le premier « Outro » passé la première minute, et un faux
  * générique en milieu d'épisode faisait venir la carte « Épisode suivant » des minutes trop tôt —
  * « Shōgun » S01E06 : un « Outro » de 25 s à 3147 s, le vrai à 3290 s ; « Trying » : un de 14 s à
@@ -875,14 +875,18 @@ export function timestampsFromSegments(items: MediaSegment[]): EpisodeTimestamps
     .filter((s) => s.end - s.start >= MIN_SEGMENT_S);
   const of = (type: string, keep: (s: Span) => boolean = () => true) => mergedSpans(spans.filter((s) => s.type === type && keep(s)));
   const intro = of("Intro")[0];
-  const recap = of("Recap")[0];
+  // Le récap n'est plus lu (14/10/2026) : mesuré sur 7 608 épisodes, 1 622 en portent un et **tous
+  // commencent à 0 s** — c'est l'ouverture de l'épisode, pas un « précédemment ». Le premier épisode
+  // de la première saison en a autant que les autres (36 sur 156, 23 % contre 21 %), alors qu'il n'a
+  // rien à résumer : « Passer le récap » paraissait à la première seconde d'une série neuve. Le type
+  // reste dans `EpisodeTimestamps` et le bouton dans le lecteur, sans source, si un greffon un jour
+  // le détecte pour de bon.
   const credits = of("Outro", (s) => s.start >= MIN_CREDITS_START_S).reduce<Span | undefined>(
     (latest, s) => (!latest || s.end > latest.end || (s.end === latest.end && s.start > latest.start) ? s : latest),
     undefined
   );
   return {
     ...(intro ? { Introduction: { Start: intro.start, End: intro.end, Valid: true } } : {}),
-    ...(recap ? { Recap: { Start: recap.start, End: recap.end, Valid: true } } : {}),
     ...(credits ? { Credits: { Start: credits.start, End: credits.end, Valid: true } } : {}),
   };
 }

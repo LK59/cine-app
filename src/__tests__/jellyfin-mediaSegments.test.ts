@@ -32,10 +32,8 @@ describe("timestampsFromSegments", () => {
     expect(t.Credits?.Start).toBe(115);
   });
 
-  it("lit le récap, et ignore les autres types de segment", () => {
-    expect(timestampsFromSegments([segment("Recap", 0, 60), segment("Commercial", 600, 700), segment("Preview", 1500, 1530)])).toEqual({
-      Recap: { Start: 0, End: 60, Valid: true },
-    });
+  it("ne lit plus le récap (14/10/2026 : toujours à 0 s, premiers épisodes compris), ni les autres types", () => {
+    expect(timestampsFromSegments([segment("Recap", 0, 60), segment("Commercial", 600, 700), segment("Preview", 1500, 1530)])).toEqual({});
   });
 });
 
@@ -57,7 +55,6 @@ describe("timestampsFromSegments — doublons et faux génériques (Jellyfin de 
     ]);
     expect(t).toEqual({
       Introduction: { Start: 324, End: 414, Valid: true },
-      Recap: { Start: 6, End: 61, Valid: true },
       Credits: { Start: 3290, End: 3390, Valid: true },
     });
   });

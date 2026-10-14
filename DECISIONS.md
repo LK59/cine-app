@@ -2685,6 +2685,10 @@ position courante) ; absent quand la minuterie de veille arrête la série à la
 **Le récap.** Les segments `Recap` de Jellyfin (~20 % des épisodes ici) donnent « Passer le récap »,
 le même bouton que « Passer l'intro » : `activeSkip` choisit lequel montrer, et, s'ils se
 chevauchent, celui qui finit le plus tard.
+**Retiré le 14/10/2026** : les 1 622 segments `Recap` de la bibliothèque (7 608 épisodes) commencent
+tous à 0 s, et le premier épisode d'une première saison en porte autant que les autres (36 sur 156) —
+c'est l'ouverture, pas un « précédemment ». Le bouton paraissait à la première seconde d'une série
+neuve. `timestampsFromSegments` ne lit plus ce type ; le reste du chemin est gardé, sans source.
 
 **Le bon générique.** Deux greffons écrivent des segments (Intro Skipper, Chapter Segments
 Provider) : doublons, et faux « Outro » en milieu d'épisode. On prenait le premier « Outro » passé la
