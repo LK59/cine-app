@@ -7,7 +7,15 @@ import { useLongPress } from "@/lib/useLongPress";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { episodeStartFrom, movieStartFrom, useContinueRow, type CinemaResumeItem, type ShownContinueEntry } from "@/lib/useContinueRow";
 import { ROW_CONTAINMENT } from "@/lib/rowContainment";
-import { continueHeroTitles, continueTargets, heroSource, myListGoesLate, spotlightRowItems } from "@/lib/homeLayout";
+import {
+  continueHeroTitles,
+  continueTargets,
+  discoveryEyebrow,
+  discoveryRowsFor,
+  heroSource,
+  myListGoesLate,
+  spotlightRowItems,
+} from "@/lib/homeLayout";
 import { useHomeLayout } from "@/lib/useHomeLayout";
 import useSWR from "swr";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -527,21 +535,15 @@ export function CinemaClient() {
    */
   const [bannerEngaged, setBannerEngaged] = useState(false);
 
-  // Les rangées de découverte, tout en bas : chargées comme le reste, mais elles ne bloquent
-  // rien — la page est déjà utilisable sans elles, et TMDB est le seul appel de cet écran qui
-  // sorte de la maison.
+  // Les rangées de découverte, sous les derniers ajouts comme sur le téléphone (`discoveryRowsFor`) :
+  // chargées comme le reste, mais elles ne bloquent rien — la page est déjà utilisable sans elles,
+  // et TMDB est le seul appel de cet écran qui sorte de la maison.
   const { data: discovery } = useSWR<PlayerDiscoverPayload>("/api/player/discover", fetcher, {
     revalidateOnFocus: false,
   });
 
   // Un titre de découverte mène à sa fiche quand on l'a, à la fiche TMDB sinon — où « Lire » est
   // devenu « Demander ». Un seul chemin, quel que soit le côté de la frontière.
-  // Le focus d'une rangée de découverte rend la main au carrousel : voir CinemaDiscoveryRow.
-  const clearFocus = useCallback(() => {
-    setFocusedItem(null);
-    setHeroFocus(heroFocusAt("movies", "movies"));
-  }, []);
-
   // Voir `cinemaOpen` : cette décision était écrite ici *et* sur le téléphone, mot pour mot.
   const openDiscovery = useCallback((item: DiscoveryItem) => openDiscoveryItem(item), []);
   // Which sheet is open is read back out of the URL, not held here: that's what makes Back close
@@ -608,10 +610,6 @@ export function CinemaClient() {
   // above (not touched) so each tab remembers its own position independently when you switch
   // back and forth, same as Netflix's own Movies/TV Shows toggle.
   const [seriesFocusedItem, setSeriesFocusedItem] = useState<CinemaSeries | null>(null);
-  const clearSeriesFocus = useCallback(() => {
-    setSeriesFocusedItem(null);
-    setHeroFocus(heroFocusAt("series", "series"));
-  }, []);
   const heroKind = heroKindFor(heroFocus, mediaType);
   const seriesSelectedItem = route.serie !== null ? seriesById.get(route.serie) ?? null : null;
 
@@ -1379,7 +1377,7 @@ export function CinemaClient() {
 
               {/* L'ordre des rangées (08/10/2026, DECISIONS.md §52) : la bannière et sa rangée, « À la une »
                   quand la bannière montre les reprises, Reprendre / À suivre, Ma liste, le classement
-                  du jour, les derniers ajouts, puis les genres. */}
+                  du jour, les derniers ajouts, la découverte (14/10/2026), puis les genres. */}
               {movieHero.continuing && (
                 <CinemaRow
                   label={t("cinema.spotlight")}
@@ -1449,6 +1447,22 @@ export function CinemaClient() {
                 />
               )}
 
+              {/* La découverte, sous les derniers ajouts : la place et le choix d'onglet du téléphone
+                  (`discoveryRowsFor`, 14/10/2026 — elle était tout en bas, après les genres). */}
+              {discoveryRowsFor("movies", discovery?.rows).map((row) => (
+                <CinemaDiscoveryRow
+                  key={row.key}
+                  label={t(`cinema.discovery.${row.key}`)}
+                  eyebrow={discoveryEyebrow(row, t)}
+                  rowKey={row.key}
+                  rowIndex={RAIL_COUNT}
+                  items={row.items}
+                  cardWidthClassName={CARD_WIDTH}
+                  missingLabel={t("player.notInLibrary")}
+                  onSelectItem={openDiscovery}
+                />
+              ))}
+
               {/* Sa place pendant qu'elle arrive, en bas : une liste courte y descend, et le squelette
                   tenu en haut disparaissait en faisant remonter toutes les rangées (08/10/2026). */}
               {myListSkeleton}
@@ -1480,22 +1494,6 @@ export function CinemaClient() {
                   seeAllKey={genre}
                 />
               ))}
-
-              {discovery?.rows
-                .filter((row) => row.key === "recommended" || row.key === "trendingMovies")
-                .map((row) => (
-                  <CinemaDiscoveryRow
-                    key={row.key}
-                    label={t(`cinema.discovery.${row.key}`)}
-                    rowKey={row.key}
-                    rowIndex={RAIL_COUNT}
-                    items={row.items}
-                    cardWidthClassName={CARD_WIDTH}
-                    missingLabel={t("player.notInLibrary")}
-                    onFocusItem={clearFocus}
-                    onSelectItem={openDiscovery}
-                  />
-                ))}
 
               {/* Le bout des rangées : toute la bibliothèque, triable et filtrable. C'est la
                   sortie de quelqu'un qui a tout parcouru sans rien trouver. */}
@@ -1588,6 +1586,22 @@ export function CinemaClient() {
                 />
               )}
 
+              {/* La découverte, sous les derniers ajouts : la place et le choix d'onglet du téléphone
+                  (`discoveryRowsFor`, 14/10/2026 — elle était tout en bas, après les genres). */}
+              {discoveryRowsFor("series", discovery?.rows).map((row) => (
+                <CinemaDiscoveryRow
+                  key={row.key}
+                  label={t(`cinema.discovery.${row.key}`)}
+                  eyebrow={discoveryEyebrow(row, t)}
+                  rowKey={row.key}
+                  rowIndex={RAIL_COUNT}
+                  items={row.items}
+                  cardWidthClassName={CARD_WIDTH}
+                  missingLabel={t("player.notInLibrary")}
+                  onSelectItem={openDiscovery}
+                />
+              ))}
+
               {/* Voir la note jumelle côté films. */}
               {myListSkeleton}
               {myListGoesLate(myListSeries.length) && (
@@ -1618,22 +1632,6 @@ export function CinemaClient() {
                   seeAllKey={genre}
                 />
               ))}
-
-              {discovery?.rows
-                .filter((row) => row.key === "trendingSeries")
-                .map((row) => (
-                  <CinemaDiscoveryRow
-                    key={row.key}
-                    label={t(`cinema.discovery.${row.key}`)}
-                    rowKey={row.key}
-                    rowIndex={RAIL_COUNT}
-                    items={row.items}
-                    cardWidthClassName={CARD_WIDTH}
-                    missingLabel={t("player.notInLibrary")}
-                    onFocusItem={clearSeriesFocus}
-                    onSelectItem={openDiscovery}
-                  />
-                ))}
 
               {/* Voir la note jumelle côté films. */}
               <div className="mb-10 mt-4 px-8 sm:px-12">

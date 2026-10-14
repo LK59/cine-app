@@ -161,3 +161,30 @@ export function spotlightRowItems<T>(pools: readonly (readonly T[])[], shown: Re
 export function myListGoesLate(count: number): boolean {
   return count < 2;
 }
+
+/**
+ * Les rangées de découverte d'un onglet, dans leur ordre (14/10/2026, DECISIONS.md §52).
+ *
+ * « Recommandé pour vous » et « Tendances films » vont aux Films, « Tendances séries » aux Séries ;
+ * une clé que le serveur ajouterait un jour va aux Films, comme sur le téléphone depuis toujours.
+ * Leur **place** est la même sur les deux accueils : juste sous les derniers ajouts, avant « Ma
+ * liste » quand elle descend (`myListGoesLate`) et avant les genres.
+ *
+ * Le bureau en décidait autrement, seul de son côté : les deux rangées des films tout en bas, après
+ * le dernier genre — une douzaine de rangées sous ce que le téléphone montrait en quatrième — et
+ * l'étiquette « Parce que vous avez regardé… » jamais affichée. Un seul choix, lu par les deux.
+ */
+export function discoveryRowsFor<R extends { key: string }>(tab: "movies" | "series", rows: readonly R[] | undefined): R[] {
+  return (rows ?? []).filter((row) => (row.key === "trendingSeries") === (tab === "series"));
+}
+
+/**
+ * Ce qui explique une rangée de découverte, au-dessus de son titre : « Parce que vous avez regardé
+ * X » pour les recommandations, rien ailleurs. Écrit une fois pour les deux accueils.
+ */
+export function discoveryEyebrow(
+  row: { becauseOf?: string },
+  t: (key: string, vars?: Record<string, string | number>) => string
+): string | null {
+  return row.becauseOf ? t("cinema.becauseWatched", { title: row.becauseOf }) : null;
+}

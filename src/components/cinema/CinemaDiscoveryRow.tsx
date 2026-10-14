@@ -1,6 +1,5 @@
 "use client";
 
-import { onRealHover } from "@/lib/pointerHover";
 import { memo, useRef } from "react";
 import { Plus } from "lucide-react";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
@@ -25,26 +24,33 @@ const EDGE_FADE = {
  * est immédiate.
  *
  * Elle ne pilote pas la bannière : un titre qu'on ne possède pas n'a ni logo, ni fond, ni durée à
- * y afficher. Le focus rend donc la main au carrousel, exactement comme la rangée « Reprendre »
- * le fait déjà pour une reprise qu'elle n'arrive pas à relier à la bibliothèque.
+ * y afficher. Survol et focus la laissent donc **telle quelle**, sur le dernier titre de la
+ * bibliothèque qu'elle montrait (14/10/2026). Ils la rendaient au carrousel : en descendant au
+ * clavier d'un genre à la découverte, l'aperçu du film qu'on venait de quitter s'effaçait, la
+ * pastille « ‹ À la une » avec lui, et un simple passage de souris faisait de même — un écran qui
+ * se vide pour une affiche qui n'a rien à y mettre.
+ *
+ * Quelles rangées vont dans quel onglet, et à quelle place : `discoveryRowsFor` (homeLayout),
+ * commun avec le téléphone ; l'étiquette au-dessus du titre : `discoveryEyebrow`.
  */
 export const CinemaDiscoveryRow = memo(function CinemaDiscoveryRow({
   label,
+  eyebrow,
   rowKey,
   rowIndex = 0,
   items,
   cardWidthClassName,
   missingLabel,
-  onFocusItem,
   onSelectItem,
 }: {
   label: string;
+  /** « Parce que vous avez regardé X », au-dessus du titre — `discoveryEyebrow`. */
+  eyebrow?: string | null;
   rowKey: string;
   rowIndex?: number;
   items: DiscoveryItem[];
   cardWidthClassName: string;
   missingLabel: string;
-  onFocusItem: () => void;
   onSelectItem: (item: DiscoveryItem) => void;
 }) {
   // Comme les autres rangées : les affiches glissent quand les données fraîches arrivent.
@@ -59,7 +65,10 @@ export const CinemaDiscoveryRow = memo(function CinemaDiscoveryRow({
       // Mise en page sautée loin de l'écran — voir `ROW_CONTAINMENT`.
       style={{ ...ROW_CONTAINMENT, animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}
     >
-      <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{label}</h2>
+      <div className="mb-2 min-w-0 px-8 sm:px-12">
+        {eyebrow && <p className="truncate text-[11px] leading-4 text-subtle">{eyebrow}</p>}
+        <h2 className="min-w-0 truncate text-sm font-medium text-muted">{label}</h2>
+      </div>
       <div
         ref={track}
         className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12"
@@ -72,8 +81,6 @@ export const CinemaDiscoveryRow = memo(function CinemaDiscoveryRow({
             data-tv-card
             data-tv-row={rowKey}
             data-tv-col={i}
-            onFocus={onFocusItem}
-            onMouseEnter={onRealHover(onFocusItem)}
             onClick={() => onSelectItem(item)}
             title={item.title}
             className={`${cardWidthClassName} relative shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition duration-200 hover:z-10 hover:scale-105 hover:shadow-xl hover:shadow-black/60 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}

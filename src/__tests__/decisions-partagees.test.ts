@@ -1076,12 +1076,43 @@ describe("un survol ne désigne une affiche que si le pointeur a bougé", () => 
     "src/components/cinema/CinemaCard.tsx",
     "src/components/cinema/CinemaSeriesCard.tsx",
     "src/components/cinema/CinemaTop10Card.tsx",
-    "src/components/cinema/CinemaDiscoveryRow.tsx",
     "src/components/cinema/CinemaClient.tsx",
   ])("%s passe par `onRealHover`", (f) => {
     const src = lire(f);
     expect(src).toMatch(/onMouseEnter=\{[^}]*onRealHover\(/);
     expect(src).not.toMatch(/onMouseEnter=\{(\(\) => onFocusItem|onFocusItem\}|focus\})/);
+  });
+
+  // Une carte de découverte ne prête plus rien à la bannière (14/10/2026, §52) : ni survol ni focus,
+  // elle garde le dernier titre de la bibliothèque — rien à filtrer, donc.
+  it("la rangée de découverte n'écoute ni survol ni focus", () => {
+    const src = lire("src/components/cinema/CinemaDiscoveryRow.tsx");
+    expect(src).not.toMatch(/onMouseEnter=|onFocus=/);
+  });
+});
+
+describe("les rangées de découverte : un même choix d'onglet, une même place (§52, 14/10/2026)", () => {
+  // Le bureau posait « Recommandé » et « Tendances films » après le dernier genre, et n'affichait
+  // jamais « Parce que vous avez regardé… » ; le téléphone les mettait sous les derniers ajouts.
+  it.each([
+    ["src/components/cinema/CinemaClient.tsx", /t\("cinema\.recentlyAdded"\)/, /\?\.genres\.map\(/],
+    ["src/components/cinema/mobile/CinemaMobileClient.tsx", /t\("cinema\.recentlyAdded"\)/, /payload\?\.genres\.map\(/],
+  ] as const)("%s passe par discoveryRowsFor et discoveryEyebrow, sous les derniers ajouts", (f, recent, genres) => {
+    const src = lire(f);
+    expect(src).toMatch(/discoveryEyebrow\(row, t\)/);
+    expect(src).not.toMatch(/row\.key === "trendingSeries"|row\.key !== "trendingSeries"|row\.key === "recommended"/);
+    // Chaque appel tombe entre une rangée des derniers ajouts et la suivante des genres.
+    const calls = [...src.matchAll(/discoveryRowsFor\(/g)].map((m) => m.index!);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const at of calls) {
+      const before = src.slice(0, at);
+      const after = src.slice(at);
+      expect(before).toMatch(recent);
+      expect(after).toMatch(genres);
+      // Aucun genre entre les derniers ajouts et la découverte.
+      const lastRecent = before.search(new RegExp(`${recent.source}(?![\\s\\S]*${recent.source})`));
+      expect(before.slice(lastRecent)).not.toMatch(genres);
+    }
   });
 });
 

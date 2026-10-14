@@ -1736,6 +1736,13 @@ mêmes titres trois fois et mêlait deux intentions ; il reste une option.
   la grille complète, triée par date d'ajout), puis les genres. **Ma liste descend juste avant les
   genres quand elle tient moins de deux titres** (`myListGoesLate`). Pas de « Voir tout » sur Reprendre ni
   sur le classement : ils sont déjà entiers.
+- **La découverte (14/10/2026)** : « Recommandé pour vous » et « Tendances films » sur Films, « Tendances
+  séries » sur Séries (`discoveryRowsFor`), **sous les derniers ajouts**, avant Ma liste descendue et les
+  genres — bureau et téléphone. Le bureau les mettait après le dernier genre et n'affichait pas « Parce
+  que vous avez regardé X » (`discoveryEyebrow`, commun). Au bureau, survoler ou désigner une de leurs
+  cartes **ne touche plus la bannière** : elle garde le dernier titre de la bibliothèque montré (le
+  focus la rendait au carrousel — l'aperçu et « ‹ À la une » s'effaçaient en descendant d'un genre).
+  L'ouverture ne change pas (`openDiscoveryItem`).
 - **Téléphone** : l'affiche entière à 86 % de la largeur, les voisines qui dépassent (`peek` de
   `carouselTransform`), les tirets dessous, un passage de 500 ms en longue décélération
   (`CAROUSEL_MS`) ; toucher l'affiche ouvre la fiche (pas le relâchement d'un balayage) ; la piste
@@ -1757,16 +1764,19 @@ mêmes titres trois fois et mêlait deux intentions ; il reste une option.
 en tête. Une copie du dépôt (une image `:alt`) aurait fait deux applications à maintenir.
 
 **Porteurs.** `homeLayout.ts` (`continueHeroTitles`, `heroSource`, `continueTargets`,
-`spotlightRowItems`) ; `useHomeLayout.ts` ; `cinemaContinueLabel.ts` (`heroContinueFacts`) ;
+`spotlightRowItems`, `discoveryRowsFor`, `discoveryEyebrow`) ; `useHomeLayout.ts` ; `cinemaContinueLabel.ts` (`heroContinueFacts`) ;
 `CinemaHero.tsx` (`HeroBannerControls`, `HeroBackToSpotlight`, `HeroTitleLink`) ;
 `CinemaBrowseAllButton`, `HeroContinueProgress` ; `useCarouselDrag` (`peek`, `loop`).
 
 **Appelants.** `CinemaClient` (bureau), `CinemaMobileClient` / `CinemaMobileHero` (téléphone).
 
 **Tests.** `home-layout.test.ts`, `heroCarousel.test.ts`, `cinema-next-up-route.test.ts`,
-`misc-simple-routes.test.ts`, `misc-routes-batch2.test.ts`, `persistentCache-schema.test.ts`.
+`misc-simple-routes.test.ts`, `misc-routes-batch2.test.ts`, `persistentCache-schema.test.ts`,
+`discovery-rows-home.test.tsx` (ordre des deux accueils, bannière gardée, flèches) et
+`decisions-partagees.test.ts` (« les rangées de découverte »).
 
-**Décidé le 07/10/2026, revu le 08/10/2026 et le 13/10/2026 (bouton toujours affiché).**
+**Décidé le 07/10/2026, revu le 08/10/2026, le 13/10/2026 (bouton toujours affiché) et le 14/10/2026
+(découverte).**
 
 ## 53. Un genre, un nom
 

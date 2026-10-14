@@ -14,7 +14,16 @@ import { prefetchLibraryItem } from "@/lib/prefetch";
 import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
 import { continueOrder } from "@/lib/continueOrder";
-import { continueHeroTitles, continueTargets, heroSource, myListGoesLate, spotlightRowItems, HERO_LIMIT_PHONE } from "@/lib/homeLayout";
+import {
+  continueHeroTitles,
+  continueTargets,
+  discoveryEyebrow,
+  discoveryRowsFor,
+  heroSource,
+  myListGoesLate,
+  spotlightRowItems,
+  HERO_LIMIT_PHONE,
+} from "@/lib/homeLayout";
 import { useHomeLayout } from "@/lib/useHomeLayout";
 import { CinemaBrowseAllButton } from "@/components/cinema/CinemaBrowseAllButton";
 import { heroOffscreen } from "@/lib/heroCarousel";
@@ -1001,7 +1010,7 @@ const DiscoveryRow = memo(function DiscoveryRow({
  * Chaque volet a donc sa propre piste de classement (`useFlipGrid`), comme chaque rangée a la
  * sienne.
  */
-const MobileTabRows = memo(function MobileTabRows({
+export const MobileTabRows = memo(function MobileTabRows({
   tab,
   payload,
   myList,
@@ -1070,18 +1079,18 @@ const MobileTabRows = memo(function MobileTabRows({
         seeAll={BROWSE_ALL}
       />
 
-      {(discoveryRows ?? [])
-        .filter((row) => (tab === "movies" ? row.key !== "trendingSeries" : row.key === "trendingSeries"))
-        .map((row) => (
-          <DiscoveryRow
-            key={row.key}
-            label={t(`cinema.discovery.${row.key}`)}
-            eyebrow={row.becauseOf ? t("cinema.becauseWatched", { title: row.becauseOf }) : null}
-            items={row.items}
-            missingLabel={t("player.notInLibrary")}
-            onSelect={onDiscover}
-          />
-        ))}
+      {/* Quelles rangées, dans quel onglet, et leur étiquette : `discoveryRowsFor` / `discoveryEyebrow`,
+          lus aussi par le bureau, à la même place (sous les derniers ajouts). */}
+      {discoveryRowsFor(tab, discoveryRows).map((row) => (
+        <DiscoveryRow
+          key={row.key}
+          label={t(`cinema.discovery.${row.key}`)}
+          eyebrow={discoveryEyebrow(row, t)}
+          items={row.items}
+          missingLabel={t("player.notInLibrary")}
+          onSelect={onDiscover}
+        />
+      ))}
 
       {/* Moins de deux titres : juste avant les genres — `myListGoesLate`. Le squelette aussi : tant
           que la liste n'est pas là elle compte zéro titre, et il tenait la place du haut — à
