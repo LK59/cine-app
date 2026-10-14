@@ -25,15 +25,20 @@ export interface DiscoveryRow {
   key: string;
   items: DiscoveryItem[];
   /**
-   * Pourquoi cette rangée est là.
+   * Pourquoi cette rangée est là : les films regardés qui l'ont **réellement** semée, le plus récent
+   * d'abord (« D'après Interstellar, Dune et Premier contact » — `discoveryEyebrow`).
    *
-   * Une recommandation qui ne dit pas d'où elle vient est un mur d'affiches de plus. Nommer le
-   * titre qui l'a déclenchée — le dernier regardé parmi ceux qui l'ont semée — la rend vérifiable :
-   * on peut être d'accord ou non, ce qui n'est possible que si on sait de quoi il s'agit.
+   * Une recommandation qui ne dit pas d'où elle vient est un mur d'affiches de plus. Nommer ce qui
+   * l'a déclenchée la rend vérifiable : on peut être d'accord ou non, ce qui n'est possible que si on
+   * sait de quoi il s'agit. Il a d'abord été `becauseOf`, le seul dernier film vu (« Parce que vous
+   * avez regardé Interstellar ») alors que trois graines remplissaient la rangée — une explication
+   * fausse aux deux tiers (14/10/2026, DECISIONS.md §52). N'y figure qu'un film qui a un identifiant
+   * TMDB **et** a fourni au moins un titre resté dans la rangée, tags bloqués compris : une graine
+   * dont TMDB n'a rien rendu n'explique rien.
    *
    * Absent sur les rangées qui n'ont rien à expliquer : les tendances sont les tendances.
    */
-  becauseOf?: string;
+  basedOn?: string[];
 }
 
 export interface PlayerDiscoverPayload {
@@ -63,30 +68,29 @@ async function recommendedFor(
   userId: string | null,
   tmdb: ReturnType<typeof createTmdbClient>,
   locale: string
-): Promise<{
-  items: { id: number; title: string; year: number | null; posterPath: string | null }[];
-  becauseOf: string | null;
-}> {
-  if (!userId) return { items: [], becauseOf: null };
-  return withCache(`player:reco:${userId}:${locale}`, TTL.MEDIUM, async () => {
+): Promise<{ items: RecommendedItem[]; seeds: string[] }> {
+  if (!userId) return { items: [], seeds: [] };
+  // `v2` : la forme a changé (`seeds` et `seed` au lieu de `becauseOf`) — une valeur de l'ancienne
+  // forme restée dans le cache du serveur ne doit pas être relue.
+  return withCache(`player:reco:v2:${userId}:${locale}`, TTL.MEDIUM, async () => {
     const played = await jellyfin.getRecentlyPlayed(userId, "Movie", SEED_COUNT).catch(() => null);
-    const watched = played?.Items ?? [];
-    const seeds = watched
-      .map((item) => Number(getProviderIdCI(item.ProviderIds as Record<string, string> | undefined, "tmdb") ?? 0))
-      .filter((id) => id > 0);
-    // Le plus récent des titres qui ont semé la rangée : c'est celui dont on se souvient, donc
-    // celui qui rend l'explication crédible.
-    const becauseOf = watched[0]?.Name ?? null;
-    if (seeds.length === 0) return { items: [], becauseOf: null };
+    // Dans l'ordre de Jellyfin : le plus récemment joué d'abord — c'est l'ordre de l'étiquette.
+    const seeds = (played?.Items ?? [])
+      .map((item) => ({
+        id: Number(getProviderIdCI(item.ProviderIds as Record<string, string> | undefined, "tmdb") ?? 0),
+        name: item.Name ?? "",
+      }))
+      .filter((seed) => seed.id > 0);
+    if (seeds.length === 0) return { items: [], seeds: [] };
 
-    const batches = await Promise.allSettled(seeds.map((id) => tmdb.movieRecommendations(id)));
-    const seen = new Set<number>(seeds);
-    const out: { id: number; title: string; year: number | null; posterPath: string | null }[] = [];
+    const batches = await Promise.allSettled(seeds.map((seed) => tmdb.movieRecommendations(seed.id)));
+    const seen = new Set<number>(seeds.map((seed) => seed.id));
+    const out: RecommendedItem[] = [];
     // Entrelacé plutôt que concaténé : trois films d'affilée tirés de la même graine donnent
     // l'impression d'une rangée qui n'a qu'une idée.
     const lists = batches.map((b) => (b.status === "fulfilled" ? b.value.results : []));
     for (let i = 0; out.length < ROW_SIZE && lists.some((l) => i < l.length); i++) {
-      for (const list of lists) {
+      for (const [seed, list] of lists.entries()) {
         const r = list[i];
         if (!r || seen.has(r.id) || !r.poster_path || r.vote_average <= 6) continue;
         seen.add(r.id);
@@ -95,12 +99,32 @@ async function recommendedFor(
           title: r.title,
           year: r.release_date ? Number.parseInt(r.release_date.slice(0, 4), 10) || null : null,
           posterPath: r.poster_path,
+          seed,
         });
         if (out.length >= ROW_SIZE) break;
       }
     }
-    return { items: out, becauseOf };
+    return { items: out, seeds: seeds.map((s) => s.name) };
   });
+}
+
+interface RecommendedItem {
+  id: number;
+  title: string;
+  year: number | null;
+  posterPath: string | null;
+  /** L'indice, dans `seeds`, du film regardé qui a apporté ce titre à la rangée. */
+  seed: number;
+}
+
+/**
+ * Les films regardés qui expliquent la rangée telle qu'elle sera montrée : ceux qui ont apporté au
+ * moins un des titres qui restent, dans l'ordre des graines (le plus récent d'abord). Lu **après**
+ * le filtre des tags bloqués : une graine dont tous les titres sont cachés n'a rien semé de visible.
+ */
+function contributingSeeds(seeds: readonly string[], kept: readonly { seed: number }[]): string[] {
+  const used = new Set(kept.map((item) => item.seed));
+  return seeds.filter((name, i) => name !== "" && used.has(i));
 }
 
 /**
@@ -130,7 +154,7 @@ export async function GET(req: NextRequest) {
       withCache(`tmdb:trending:movie:${locale}`, TTL.LONG, () => tmdb.trendingMovies()).catch(() => ({ results: [] })),
       withCache(`tmdb:trending:tv:${locale}`, TTL.LONG, () => tmdb.trendingTv()).catch(() => ({ results: [] })),
       playableLibrary(),
-      recommendedFor(session.jfId ?? null, tmdb, locale).catch(() => ({ items: [], becauseOf: null })),
+      recommendedFor(session.jfId ?? null, tmdb, locale).catch(() => ({ items: [] as RecommendedItem[], seeds: [] as string[] })),
     ]);
 
     // Seulement ce qui est ouvrable : un titre surveillé sans fichier doit porter la pastille et
@@ -138,11 +162,16 @@ export async function GET(req: NextRequest) {
     const movieLibrary = new Map([...lib.movies].map(([tmdbId, m]) => [tmdbId, m.id]));
     const tvLibrary = new Map([...lib.series].map(([tmdbId, s]) => [tmdbId, s.id]));
 
+    // Les tags bloqués filtrés ici d'abord, pour que l'étiquette ne nomme que ce qui a semé un titre
+    // encore visible ; le filtre commun ci-dessous ne retirera plus rien de cette rangée.
+    const recommendedKept = recommended.items.filter((r) => !hidden.has(`movie:${r.id}`));
+    const basedOn = contributingSeeds(recommended.seeds, recommendedKept);
+
     const rows: DiscoveryRow[] = [
       {
         key: "recommended",
-        becauseOf: recommended.becauseOf ?? undefined,
-        items: recommended.items.map((r): DiscoveryItem => ({
+        ...(basedOn.length > 0 ? { basedOn } : {}),
+        items: recommendedKept.map((r): DiscoveryItem => ({
           tmdbId: r.id,
           type: "movie",
           title: r.title,

@@ -1098,7 +1098,7 @@ describe("les rangées de découverte : un même choix d'onglet, une même place
     ["src/components/cinema/mobile/CinemaMobileClient.tsx", /t\("cinema\.recentlyAdded"\)/, /payload\?\.genres\.map\(/],
   ] as const)("%s passe par discoveryRowsFor et discoveryEyebrow, sous les derniers ajouts", (f, recent, genres) => {
     const src = lire(f);
-    expect(src).toMatch(/discoveryEyebrow\(row, t\)/);
+    expect(src).toMatch(/discoveryEyebrow\(row, t, locale\)/);
     expect(src).not.toMatch(/row\.key === "trendingSeries"|row\.key !== "trendingSeries"|row\.key === "recommended"/);
     // Chaque appel tombe entre une rangée des derniers ajouts et la suivante des genres.
     const calls = [...src.matchAll(/discoveryRowsFor\(/g)].map((m) => m.index!);

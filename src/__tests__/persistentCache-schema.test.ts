@@ -50,6 +50,9 @@ const FINGERPRINTS: Record<number, string> = {
   // 14/10/2026 : `source: "jellyfin"` sur les titres que Jellyfin a seuls, et le lien de « Reprendre »
   // par le dossier (DECISIONS.md §89).
   14: "cd921e57f89349f2",
+  // 14/10/2026 : `basedOn` (les films qui ont semé « Recommandé pour vous ») remplace `becauseOf`
+  // dans la découverte (DECISIONS.md §52).
+  15: "9af3baabff995967",
 };
 
 /** Les déclarations qui décrivent ce qui est gardé, par fichier. */

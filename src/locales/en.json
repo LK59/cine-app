@@ -2302,7 +2302,7 @@
     },
     "reload": "Reload the page",
     "upNext": "Up next",
-    "becauseWatched": "Because you watched {title}",
+    "basedOn": "Based on {titles}",
     "castTitle": "Cast",
     "top10Theme": "Top 10 today · {theme}",
     "decade": "the {decade}s",

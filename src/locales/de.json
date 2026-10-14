@@ -2302,7 +2302,7 @@
     },
     "reload": "Seite neu laden",
     "upNext": "Als Nächstes",
-    "becauseWatched": "Weil du {title} gesehen hast",
+    "basedOn": "Basierend auf {titles}",
     "castTitle": "Besetzung",
     "top10Theme": "Top 10 heute · {theme}",
     "decade": "{decade}er",

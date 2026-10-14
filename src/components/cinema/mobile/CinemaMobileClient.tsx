@@ -1028,6 +1028,7 @@ export const MobileTabRows = memo(function MobileTabRows({
   onDiscover: (item: DiscoveryItem) => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   // Le classement suit ses données fraîches en glissant, comme les autres rangées.
   const top10Track = useRef<HTMLDivElement>(null);
   const top10: (CinemaMovie | CinemaSeries)[] = payload?.top10 ?? [];
@@ -1085,7 +1086,7 @@ export const MobileTabRows = memo(function MobileTabRows({
         <DiscoveryRow
           key={row.key}
           label={t(`cinema.discovery.${row.key}`)}
-          eyebrow={discoveryEyebrow(row, t)}
+          eyebrow={discoveryEyebrow(row, t, locale)}
           items={row.items}
           missingLabel={t("player.notInLibrary")}
           onSelect={onDiscover}
@@ -1295,8 +1296,8 @@ function MobileRow({
   /**
    * Pourquoi cette rangée est là, au-dessus de son titre.
    *
-   * Une rangée qui ne dit pas d'où elle vient est un mur d'affiches de plus. « Parce que vous
-   * avez regardé Interstellar » se vérifie : on peut n'être pas d'accord, ce qui suppose déjà
+   * Une rangée qui ne dit pas d'où elle vient est un mur d'affiches de plus. « D'après
+   * Interstellar et Dune » se vérifie : on peut n'être pas d'accord, ce qui suppose déjà
    * de savoir de quoi il s'agit. Absent partout où il n'y a rien à expliquer.
    */
   eyebrow?: string | null;
@@ -1317,7 +1318,8 @@ function MobileRow({
           qu'il y avait une suite. Ici il se voit avant qu'on commence. */}
       <div className="mb-2 flex items-baseline justify-between gap-3 px-4 [@media(max-height:500px)]:mb-1.5">
         <div className="min-w-0">
-          {eyebrow && <p className="truncate text-[11px] leading-4 text-subtle">{eyebrow}</p>}
+          {/* Une ligne, coupée par des points de suspension si trois titres n'y tiennent pas. */}
+          {eyebrow && <p className="truncate text-[11px] leading-4 text-subtle" title={eyebrow}>{eyebrow}</p>}
           <h2 className="min-w-0 truncate text-sm font-semibold text-white">{label}</h2>
         </div>
         {onSeeAll && (

@@ -1453,7 +1453,7 @@ export function CinemaClient() {
                 <CinemaDiscoveryRow
                   key={row.key}
                   label={t(`cinema.discovery.${row.key}`)}
-                  eyebrow={discoveryEyebrow(row, t)}
+                  eyebrow={discoveryEyebrow(row, t, locale)}
                   rowKey={row.key}
                   rowIndex={RAIL_COUNT}
                   items={row.items}
@@ -1592,7 +1592,7 @@ export function CinemaClient() {
                 <CinemaDiscoveryRow
                   key={row.key}
                   label={t(`cinema.discovery.${row.key}`)}
-                  eyebrow={discoveryEyebrow(row, t)}
+                  eyebrow={discoveryEyebrow(row, t, locale)}
                   rowKey={row.key}
                   rowIndex={RAIL_COUNT}
                   items={row.items}

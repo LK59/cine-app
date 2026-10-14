@@ -172,19 +172,42 @@ export function myListGoesLate(count: number): boolean {
  *
  * Le bureau en décidait autrement, seul de son côté : les deux rangées des films tout en bas, après
  * le dernier genre — une douzaine de rangées sous ce que le téléphone montrait en quatrième — et
- * l'étiquette « Parce que vous avez regardé… » jamais affichée. Un seul choix, lu par les deux.
+ * l'étiquette de « Recommandé pour vous » jamais affichée. Un seul choix, lu par les deux.
  */
 export function discoveryRowsFor<R extends { key: string }>(tab: "movies" | "series", rows: readonly R[] | undefined): R[] {
   return (rows ?? []).filter((row) => (row.key === "trendingSeries") === (tab === "series"));
 }
 
 /**
- * Ce qui explique une rangée de découverte, au-dessus de son titre : « Parce que vous avez regardé
- * X » pour les recommandations, rien ailleurs. Écrit une fois pour les deux accueils.
+ * Ce qui explique une rangée de découverte, au-dessus de son titre : « D'après Interstellar, Dune et
+ * Premier contact » pour les recommandations, rien ailleurs. Écrit une fois pour les deux accueils.
+ *
+ * Les titres sont ceux qui ont **réellement** semé la rangée (`basedOn`, route
+ * `/api/player/discover`), le plus récent d'abord, joints par `Intl.ListFormat` dans la langue de
+ * l'interface (« X et Y », « X, Y and Z », « X, Y y Z », « X, Y und Z »). Elle disait « Parce que
+ * vous avez regardé X » — le seul dernier film vu, quand trois films remplissaient la rangée
+ * (14/10/2026, DECISIONS.md §52).
+ *
+ * Une réponse d'avant, gardée sur l'appareil, porte `becauseOf` et pas `basedOn` : pas d'étiquette
+ * plutôt qu'une explication fausse. Tout ce qui n'est pas une liste de chaînes est ignoré de même.
  */
 export function discoveryEyebrow(
-  row: { becauseOf?: string },
-  t: (key: string, vars?: Record<string, string | number>) => string
+  row: { basedOn?: unknown },
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  locale: string
 ): string | null {
-  return row.becauseOf ? t("cinema.becauseWatched", { title: row.becauseOf }) : null;
+  const titles = Array.isArray(row.basedOn)
+    ? row.basedOn.filter((title): title is string => typeof title === "string" && title.trim() !== "")
+    : [];
+  if (titles.length === 0) return null;
+  return t("cinema.basedOn", { titles: formatTitleList(titles, locale) });
+}
+
+/** « A », « A et B », « A, B et C » — la conjonction de la langue ; repli sur la virgule si `Intl` manque. */
+function formatTitleList(titles: string[], locale: string): string {
+  try {
+    return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(titles);
+  } catch {
+    return titles.join(", ");
+  }
 }

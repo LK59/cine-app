@@ -6,9 +6,9 @@ import { render, screen, cleanup, act, fireEvent } from "@testing-library/react"
  * Les rangées de découverte sur les deux accueils (14/10/2026, DECISIONS.md §52).
  *
  * Le bureau posait « Recommandé pour vous » et « Tendances films » après le dernier genre, quand le
- * téléphone les montrait sous les derniers ajouts ; il n'affichait pas « Parce que vous avez
- * regardé… » ; et survoler ou désigner une de leurs cartes vidait la bannière. On monte ici le
- * vrai écran du bureau et les vraies rangées du téléphone, sur les mêmes données, et on compare.
+ * téléphone les montrait sous les derniers ajouts ; il n'affichait pas l'étiquette de la rangée
+ * (« D'après Interstellar, Dune et Premier contact » depuis) ; et survoler ou désigner une de leurs
+ * cartes vidait la bannière. On monte ici le vrai écran du bureau et les vraies rangées du téléphone, sur les mêmes données, et on compare.
  */
 
 // ---- Les données ----------------------------------------------------------------------------
@@ -78,7 +78,7 @@ const disc = (tmdbId: number, type: "movie" | "series", title: string, libraryId
 });
 const discoverPayload = {
   rows: [
-    { key: "recommended", becauseOf: "Interstellar", items: [disc(91, "movie", "Reco absente")] },
+    { key: "recommended", basedOn: ["Interstellar", "Dune", "Premier contact"], items: [disc(91, "movie", "Reco absente")] },
     { key: "trendingMovies", items: [disc(92, "movie", "Tendance absente"), disc(1001, "movie", "Premier", 1)] },
     { key: "trendingSeries", items: [disc(93, "series", "Série tendance")] },
   ],
@@ -123,6 +123,9 @@ import { CinemaClient } from "@/components/cinema/CinemaClient";
 import { MobileTabRows } from "@/components/cinema/mobile/CinemaMobileClient";
 import { cinemaNavigate, readCinemaRoute } from "@/lib/cinemaRoute";
 import { discoveryEyebrow, discoveryRowsFor } from "@/lib/homeLayout";
+import { createT } from "@/lib/i18n";
+import frDict from "@/locales/fr.json";
+import enDict from "@/locales/en.json";
 import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload } from "@/app/api/cinema/series/route";
 
@@ -188,9 +191,32 @@ describe("discoveryRowsFor", () => {
     expect(discoveryRowsFor("movies", undefined)).toEqual([]);
   });
 
-  it("l'étiquette ne vient que d'un titre qui explique la rangée", () => {
-    expect(discoveryEyebrow({ becauseOf: "Interstellar" }, t)).toBe("cinema.becauseWatched:Interstellar");
-    expect(discoveryEyebrow({}, t)).toBeNull();
+  it("l'étiquette ne vient que des titres qui expliquent la rangée", () => {
+    expect(discoveryEyebrow({ basedOn: ["Interstellar"] }, t, "fr")).toBe("cinema.basedOn:Interstellar");
+    expect(discoveryEyebrow({}, t, "fr")).toBeNull();
+    expect(discoveryEyebrow({ basedOn: [] }, t, "fr")).toBeNull();
+  });
+});
+
+// Le vrai dictionnaire, pour lire la phrase entière telle qu'elle s'affiche.
+const realT = (locale: "fr" | "en") => createT(locale === "fr" ? frDict : enDict, frDict, locale);
+
+describe("discoveryEyebrow : un, deux ou trois titres, dans la langue de l'interface", () => {
+  it.each([
+    ["fr", ["Interstellar"], "D'après Interstellar"],
+    ["fr", ["Interstellar", "Dune"], "D'après Interstellar et Dune"],
+    ["fr", ["Interstellar", "Dune", "Premier contact"], "D'après Interstellar, Dune et Premier contact"],
+    ["en", ["Interstellar"], "Based on Interstellar"],
+    ["en", ["Interstellar", "Dune"], "Based on Interstellar and Dune"],
+    ["en", ["Interstellar", "Dune", "Arrival"], "Based on Interstellar, Dune, and Arrival"],
+  ] as const)("%s : %j", (locale, titles, expected) => {
+    expect(discoveryEyebrow({ basedOn: [...titles] }, realT(locale), locale)).toBe(expected);
+  });
+
+  it("une réponse d'avant gardée sur l'appareil (`becauseOf`) ne plante pas : pas d'étiquette", () => {
+    expect(discoveryEyebrow({ becauseOf: "Interstellar" } as { basedOn?: unknown }, realT("fr"), "fr")).toBeNull();
+    expect(discoveryEyebrow({ basedOn: "Interstellar" }, realT("fr"), "fr")).toBeNull();
+    expect(discoveryEyebrow({ basedOn: [null, "", "Dune"] }, realT("fr"), "fr")).toBe("D'après Dune");
   });
 });
 
@@ -213,9 +239,41 @@ describe("le bureau range la découverte comme le téléphone", () => {
     expect(cardsOf("trendingSeries")).toHaveLength(1);
   });
 
-  it("« Parce que vous avez regardé… » s'affiche au bureau comme au téléphone", () => {
+  it("« D'après … » s'affiche au bureau comme au téléphone, sur une ligne coupée proprement", () => {
+    // `t` du test joint ses variables : la liste formatée par `Intl.ListFormat` (fr) s'y lit.
+    const label = "cinema.basedOn:Interstellar, Dune et Premier contact";
     render(<CinemaClient />);
-    expect(screen.getAllByText("cinema.becauseWatched:Interstellar")).toHaveLength(1);
+    const desktop = screen.getAllByText(label);
+    expect(desktop).toHaveLength(1);
+    expect(desktop[0].className).toMatch(/\btruncate\b/);
+    cleanup();
+
+    render(
+      <MobileTabRows
+        tab="movies"
+        payload={moviesPayload as unknown as CinemaMoviesPayload}
+        myList={[]}
+        myListPending={false}
+        discoveryRows={discoverPayload.rows}
+        onSelect={() => {}}
+        onDiscover={() => {}}
+      />
+    );
+    const phone = screen.getAllByText(label);
+    expect(phone).toHaveLength(1);
+    expect(phone[0].className).toMatch(/\btruncate\b/);
+  });
+
+  it("une réponse d'avant gardée sur l'appareil (`becauseOf`) s'affiche sans étiquette", () => {
+    const rows = discoverPayload.rows;
+    discoverPayload.rows = rows.map((r) => (r.key === "recommended" ? { key: r.key, becauseOf: "Interstellar", items: r.items } : r)) as typeof rows;
+    try {
+      render(<CinemaClient />);
+      expect(screen.getAllByText("cinema.discovery.recommended")).toHaveLength(1);
+      expect(screen.queryByText(/cinema\.basedOn|cinema\.becauseWatched/)).toBeNull();
+    } finally {
+      discoverPayload.rows = rows;
+    }
   });
 });
 

@@ -44,7 +44,7 @@ export const CinemaDiscoveryRow = memo(function CinemaDiscoveryRow({
   onSelectItem,
 }: {
   label: string;
-  /** « Parce que vous avez regardé X », au-dessus du titre — `discoveryEyebrow`. */
+  /** « D'après X, Y et Z », au-dessus du titre — `discoveryEyebrow`. */
   eyebrow?: string | null;
   rowKey: string;
   rowIndex?: number;
@@ -66,7 +66,9 @@ export const CinemaDiscoveryRow = memo(function CinemaDiscoveryRow({
       style={{ ...ROW_CONTAINMENT, animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}
     >
       <div className="mb-2 min-w-0 px-8 sm:px-12">
-        {eyebrow && <p className="truncate text-[11px] leading-4 text-subtle">{eyebrow}</p>}
+        {/* Une ligne, coupée par des points de suspension si trois titres n'y tiennent pas ; le texte
+            entier au survol. */}
+        {eyebrow && <p className="truncate text-[11px] leading-4 text-subtle" title={eyebrow}>{eyebrow}</p>}
         <h2 className="min-w-0 truncate text-sm font-medium text-muted">{label}</h2>
       </div>
       <div

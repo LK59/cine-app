@@ -2302,7 +2302,7 @@
     },
     "reload": "Recharger la page",
     "upNext": "À suivre",
-    "becauseWatched": "Parce que vous avez regardé {title}",
+    "basedOn": "D'après {titles}",
     "castTitle": "Distribution",
     "top10Theme": "Top 10 du jour · {theme}",
     "decade": "années {decade}",

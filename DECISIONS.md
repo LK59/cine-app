@@ -1743,6 +1743,17 @@ mêmes titres trois fois et mêlait deux intentions ; il reste une option.
   cartes **ne touche plus la bannière** : elle garde le dernier titre de la bibliothèque montré (le
   focus la rendait au carrousel — l'aperçu et « ‹ À la une » s'effaçaient en descendant d'un genre).
   L'ouverture ne change pas (`openDiscoveryItem`).
+- **L'étiquette de « Recommandé pour vous » nomme ce qui l'a semée (14/10/2026)** : « D'après
+  Interstellar, Dune et Premier contact » (« D'après X », « D'après X et Y » quand il y en a moins).
+  Elle disait « Parce que vous avez regardé Interstellar » — le dernier film vu seul — alors que les
+  trois derniers (`SEED_COUNT`) remplissaient la rangée. La route `/api/player/discover` renvoie
+  `basedOn: string[]` (au lieu de `becauseOf`) : les noms Jellyfin des films regardés qui ont un
+  identifiant TMDB **et** ont apporté au moins un titre resté dans la rangée, tags bloqués filtrés
+  compris, le plus récent d'abord ; un titre déjà apporté par une graine plus récente ne compte que
+  pour elle. `discoveryEyebrow(row, t, locale)` les joint par `Intl.ListFormat` (conjonction, langue
+  de l'interface), clé `cinema.basedOn` (`cinema.becauseWatched` retirée). Une ligne, tronquée par
+  `truncate` (texte entier en `title`). Une réponse d'avant restée sur l'appareil (`becauseOf`) ne
+  donne pas d'étiquette ; `PERSISTED_CACHE_SCHEMA` 15 l'écarte de toute façon.
 - **Téléphone** : l'affiche entière à 86 % de la largeur, les voisines qui dépassent (`peek` de
   `carouselTransform`), les tirets dessous, un passage de 500 ms en longue décélération
   (`CAROUSEL_MS`) ; toucher l'affiche ouvre la fiche (pas le relâchement d'un balayage) ; la piste
@@ -1772,7 +1783,8 @@ en tête. Une copie du dépôt (une image `:alt`) aurait fait deux applications 
 
 **Tests.** `home-layout.test.ts`, `heroCarousel.test.ts`, `cinema-next-up-route.test.ts`,
 `misc-simple-routes.test.ts`, `misc-routes-batch2.test.ts`, `persistentCache-schema.test.ts`,
-`discovery-rows-home.test.tsx` (ordre des deux accueils, bannière gardée, flèches) et
+`discovery-rows-home.test.tsx` (ordre des deux accueils, bannière gardée, flèches, étiquette « D'après »
+en fr/en et ancien cache), `player-discover-route.test.ts` (`basedOn` : graines qui ont contribué) et
 `decisions-partagees.test.ts` (« les rangées de découverte »).
 
 **Décidé le 07/10/2026, revu le 08/10/2026, le 13/10/2026 (bouton toujours affiché) et le 14/10/2026
