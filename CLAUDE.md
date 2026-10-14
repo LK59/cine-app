@@ -84,6 +84,10 @@ Chromium user agent, and only the tracks meant to change may differ; `aac-census
 classes every AAC track of a library by `aacPlan`'s decision; `aac-pce-bench.spec.ts` checks the
 lossless PCE rewrite and writes the browser probe's files; `aac-wasm-bench.spec.ts` prints each
 channel's level through the WebAssembly AAC decoder, to compare with `ffmpeg astats`.
+`ffmpeg-wasm-regress-bench.spec.ts` guards both WebAssembly modules across an FFmpeg version change:
+per TrueHD/AAC track listed in `FFW_LIST`, the SHA-256 of the delivered floats and each channel's
+level, from 0 s, after two seeks and on a fresh decoder mid-film — run it with the old and the new
+module on the same list and compare line by line.
 
 **Diagnose against the running container rather than reasoning in the dark.**
 `docker exec cine-app node -e '...'` has every service URL and API key in its environment, and
@@ -373,13 +377,16 @@ predicate** that refuses at runtime: `playableAudio` means "cannot cross MediaSo
 
 **TrueHD is decoded by FFmpeg's own decoder, compiled to WebAssembly and committed**
 (`src/lib/webcodecs/truehd/truehd-wasm.mjs`, 466 KB). `tools/truehd-wasm/build.sh` rebuilds it
-reproducibly — pinned FFmpeg, checked SHA-256, pinned emscripten — and exists so nobody has to take
-the file on trust. It runs on the main thread, a quarter-second batch at a time with a real yield
+reproducibly — pinned FFmpeg (**7.1.5** since 2026-10-14, the 7.1 branch on purpose; DOC-TECH "Audio
+delivery" says what it changed and how it was proved), checked SHA-256, pinned emscripten — and exists
+so nobody has to take the file on trust. A version change ships only with `ffmpeg-wasm-regress-bench`
+run before and after on every TrueHD and PCE track: every fingerprint that moves is explained against
+`ffmpeg astats`, or the new files stay out. It runs on the main thread, a quarter-second batch at a time with a real yield
 to the browser between batches — and in Node, where `truehd-bench.spec.ts` compares it with ffmpeg
 channel by channel. Four things it cost to learn: FFmpeg's `mlp_parser` loses sync when started
 mid-stream — no sound after every seek — so each Matroska block goes to the decoder whole;
-FFmpeg's TrueHD *encoder* (6.1 to 8.1) writes streams its own decoder rejects, so there is no
-synthetic fixture and the proof is the bench; emscripten's Node variant imports `module`, which
+FFmpeg's TrueHD *encoder* (6.1 to 8.1) writes multichannel streams its own decoder rejects, so the
+proof is the bench (only mono and stereo have synthetic fixtures, `fixtures/truehd/generate.sh`); emscripten's Node variant imports `module`, which
 breaks Next's browser build, so the module is built for web and worker only (Node runs it anyway);
 and **Turbopack does not compile `new Worker(new URL("./x.worker.ts", import.meta.url))`** — it
 copied the TypeScript source into `static/media` as-is, a worker that would never have started.

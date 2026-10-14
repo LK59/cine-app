@@ -5,17 +5,23 @@
 #   sh tools/aac-wasm/build.sh        (depuis la racine du dépôt ; Docker seulement)
 #
 # Le jumeau de tools/truehd-wasm/build.sh, avec la même version de FFmpeg, la même empreinte
-# d'archive (vérifiée le 21/09/2026 contre la signature de l'équipe FFmpeg, clé FCF9 86EA 15E6 E293
-# A564 4F10 B432 2F04 D676 58D8) et la même image emscripten. Un module à part plutôt qu'un ajout
-# au TrueHD : le fichier TrueHD versionné, mesuré canal par canal contre ffmpeg, reste identique à
-# l'octet — aucun risque pour ce qui marche déjà.
+# d'archive (vérifiée contre la signature de l'équipe FFmpeg, clé FCF9 86EA 15E6 E293 A564 4F10
+# B432 2F04 D676 58D8) et la même image emscripten. Un module à part plutôt qu'un ajout au TrueHD :
+# le fichier TrueHD versionné, mesuré canal par canal contre ffmpeg, ne dépend pas de celui-ci.
 #
-# Empreinte du fichier versionné, relevée à sa construction (11/10/2026) : voir la sortie de la
-# dernière ligne, reportée dans DOC-TECH.md « Audio delivery ».
+# FFmpeg 7.1.5 depuis le 14/10/2026 (7.1.2 avant), en même temps que le TrueHD. Pour l'AAC, le diff
+# des sources entre les deux ne touche que des chemins d'erreur : le use-after-free USAC (7.1.4 :
+# tag_che_map vidé quand un élément est libéré), une trame sans fréquence refusée (7.1.5) et les
+# contrôles de la configuration USAC. Ni l'extension de hauteur du PCE ni le HE-AAC 960 de la 8.x.
+# Mesuré avant/après (ffmpeg-wasm-regress-bench.spec.ts) : même son, à l'octet, sur toutes les
+# pistes AAC essayées, PCE compris.
+#
+# Empreinte du fichier versionné : voir la sortie de la dernière ligne, reportée dans DOC-TECH.md
+# « Audio delivery ». Deux constructions complètes, le 14/10/2026, ont donné la même.
 set -eu
 
-FFMPEG=ffmpeg-7.1.2
-SHA256=089bc60fb59d6aecc5d994ff530fd0dcb3ee39aa55867849a2bbc4e555f9c304
+FFMPEG=ffmpeg-7.1.5
+SHA256=de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f
 EMSDK=emscripten/emsdk:4.0.15
 
 HERE=$(cd "$(dirname "$0")" && pwd)

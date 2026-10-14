@@ -1196,7 +1196,7 @@ pre-skip, 312 samples = 6.5 ms here) is not subtracted, and the browser discards
 
 Every decoder here hands back the **standard (WAVE) order** — L R C LFE Ls Rs (Lrs Rrs): mediabunny's
 AC-3/E-AC3/DTS (measured against ffmpeg, 19/09), libFLAC (the format defines it), FFmpeg's TrueHD
-(layout masks 0x60f / 0x63f). `fold` reads that order. What differs is the **encoder**:
+(layout masks 0x60f / 0x63f; mono and stereo, decoded only since FFmpeg 7.1.5, come out as C / L R — levels per rank checked against `astats` on synthetic streams, 14/10). `fold` reads that order. What differs is the **encoder**:
 
 | Encoder | Takes | Verified by |
 |---|---|---|
@@ -1247,12 +1247,30 @@ measured, L R C when it was not. `isTypeSupported('mp4a.40.2')` says nothing abo
 answers yes and then refuses the init segment. Outside Chromium a PCE is copied first (the
 pre-2026-10-10 behaviour); if the browser refuses the copy — Safari on iPhone does for Ruby, during
 path selection — the player rebuilds once and decodes it with **FFmpeg's native AAC decoder compiled
-to WebAssembly** (`src/lib/webcodecs/aac/aac-wasm.mjs`, 913 KB / 386 KB gzipped, rebuilt
+to WebAssembly** (`src/lib/webcodecs/aac/aac-wasm.mjs`, 913 KB / 385 KB gzipped, rebuilt
 byte-for-byte by `tools/aac-wasm/build.sh` — SHA-256
-`e45134157bb1417b10d72f8189fdd3c59df6dbdc0208c40de1e907fe5588f1ca`), never with the browser's
+`6c6d93e7507d08362a600b4a05b091c1658c403a27eb794ea4e3d742bf0cbdbc`), never with the browser's
 AudioDecoder: Safari's (CoreAudio) fails on Ruby's PCE. Chromium keeps its own AudioDecoder and
 falls back to the WebAssembly one only if it refuses the track. `aac-wasm-bench.spec.ts` compares
 the module's output with `ffmpeg -af astats` channel by channel (Ruby: ≤ 0.03 dB on six channels).
+
+**Pinned FFmpeg: 7.1.5 since 2026-10-14** (7.1.2 before), for both modules — the TrueHD one
+(`truehd-wasm.mjs`, 465 KB / 193 KB gzipped, SHA-256
+`b8d19dcd1aa7f221bf05fc7d29eb94b9c62e794d394e78d84aadd6271753fb71`) and the AAC one. Archive checked
+against the FFmpeg release signing key and pinned by SHA-256 in both `build.sh`; both scripts first
+rebuilt the 7.1.2 files byte for byte, then 7.1.5 twice with the same result. Read in the source diff
+(not the Changelog), what changes for us: mlpdec's substream masks no longer depend on a layout the
+caller set (7.1.3) — our module sets none, so under 7.1.2 a one-substream **mono or stereo TrueHD
+decoded to nothing** (every unit refused, no sound, no error); and on the AAC side only error paths
+(USAC use-after-free, a frame without a sample rate refused). Not in 7.1.x, deliberately: the PCE
+height extension and 960-sample HE-AAC of 8.x. Proof, `ffmpeg-wasm-regress-bench.spec.ts` (SHA-256 of
+the delivered floats, from 0 s, after two seeks and on a fresh decoder mid-film, 60 s each): all 65
+TrueHD tracks of the library (62 Atmos 4-substream 7.1, 3 two-substream 5.1) and 45 AAC tracks
+(13 with a PCE, LC/HE, mono to 7.1, 44.1 and 48 kHz) are **identical to the byte**, 440 windows of
+440; `aac-regress-bench` identical on WebKit and Chromium. The library holds no mono or stereo TrueHD;
+`webcodecs-truehd.test.ts` decodes synthetic ones (`fixtures/truehd/generate.sh`, FFmpeg 9.0's
+encoder) to `astats`' levels, and fails on the 7.1.2 module. Against native FFmpeg 9.0 on the same
+10 s, still within 0.01 dB on every channel (Braveheart at 0 and 600 s, Dog 51, Gattaca's 5.1).
 
 **"Enhance dialogue"** (beta, every account — DECISIONS §68) shapes the voices inside this re-encode:
 `DialogueEnhancer` (`dialogueEnhance.ts`) runs between `fold` and the encoder's channel order, on the
@@ -2048,7 +2066,7 @@ or computer to be tested, and it plays real films through the real player while 
 | Limitation | Detail |
 |---|---|
 | **No adaptive bitrate on the native path** | The file is read as it is. A link too slow for it is handed to the server player's lighter version (a Jellyfin transcode, see [User-facing messages](#user-facing-messages)), never switched back to the original during that film; Safari's native HLS on the server player measures nothing |
-| **TrueHD is decoded here** | Since 2026-09-21: FFmpeg's decoder compiled to WebAssembly (`tools/truehd-wasm`), run on the main thread in quarter-second batches with a yield between them (Turbopack does not compile a TypeScript worker), fed one Matroska block per call (FFmpeg's parser loses sync mid-stream), re-encoded like DTS. 52 tracks in the library — 50 TrueHD Atmos 7.1, 2 TrueHD 5.1 — 35 films whose VO or VF exists only in TrueHD. Validated against `ffmpeg astats` to 0.01 dB on every channel (`truehd-bench.spec.ts`); at most 88 ms of silence after a seek. Atmos objects are not rendered: the 7.1 presentation is, as on the server player |
+| **TrueHD is decoded here** | Since 2026-09-21: FFmpeg's decoder compiled to WebAssembly (`tools/truehd-wasm`; FFmpeg 7.1.5 since 2026-10-14, see "Audio delivery"), run on the main thread in quarter-second batches with a yield between them (Turbopack does not compile a TypeScript worker), fed one Matroska block per call (FFmpeg's parser loses sync mid-stream), re-encoded like DTS. 52 tracks in the library then — 50 TrueHD Atmos 7.1, 2 TrueHD 5.1 (65 on 2026-10-14: 62 and 3) — 35 films whose VO or VF exists only in TrueHD. Validated against `ffmpeg astats` to 0.01 dB on every channel (`truehd-bench.spec.ts`); at most 88 ms of silence after a seek. Atmos objects are not rendered: the 7.1 presentation is, as on the server player |
 | **False keyframes cost one seek in eighty** | On the affected file only; a few seconds of frames nobody sees are re-read |
 | **ASS/SSA without styling** | Dialogue only — see [Subtitles](#subtitles) |
 | **Fragmented MP4 refused** | `moof`/`mvex` files carry no sample tables; the header read refuses them by name and the server player takes over. Only the first media edit of an edit list is followed |
