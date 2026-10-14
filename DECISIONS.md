@@ -4722,8 +4722,11 @@ depuis une réplique »).
    au lieu d'une liste vide (ou de « pas vu ») : SWR garde ce qu'il tenait, et l'appareil ne garde pas
    une liste vide (§86). `persistentCache` ne garde pas non plus un catalogue marqué.
 5. **Les tags bloqués inconnus** (Jellyfin injoignable, rien en mémoire ni sur disque) ne valent plus
-   « aucun » : tout titre étiqueté est tenu pour caché (`UNKNOWN_BLOCKED_TAGS`). Une copie sur disque
-   (`blocked-tags:<jfId>`) survit aux redémarrages.
+   « aucun » : la copie gardée du compte (mémoire, puis disque `blocked-tags:<jfId>`, qui survit aux
+   redémarrages), sinon les tags posés d'office aux nouveaux comptes (`unknownBlockedTags()`, réglage
+   `NEW_ACCOUNT_BLOCKED_TAGS`), sinon aucun. Le premier choix — tout titre étiqueté caché — vidait le
+   catalogue : Jellyfin range les mots-clés de TMDB dans les tags (562 films sur 650). Corrigé le jour
+   même, priorité au catalogue (Louis, 14/10/2026).
 6. **La recherche** n'accorde que 1,5 s aux listes de Jellyfin (`catalogueMembers({ jellyfinWaitMs })`),
    puis rend Radarr/Sonarr/TMDB avec la règle de panne de `catalogueMembers`.
 7. **Le journal** : une panne amont s'écrit au plus une fois par hôte et par minute, la suivante portant
@@ -4746,7 +4749,7 @@ sous-titres, `itemVisibility`, `pingJellyfin` en passage). `src/lib/catalogueFal
 (`catalogueResponse`, `catalogueFallbackResponse`). `src/lib/catalogueOutage.ts` (`outageOf`,
 `needsOutageRefresh`, `playBlockedByOutage`, `sheetRepairDuring`). `src/components/cinema/CatalogueOutage.tsx`
 (`useCatalogueOutage`, `CatalogueOutageBanner`, `CatalogueUnavailable`). `logger.ts` (limite), `blockedTags.ts`
-(`UNKNOWN_BLOCKED_TAGS`, `requestJfId`), `statusHistoryDb.serviceDownSince`, `offlineLabel` (CapabilityStatus).
+(`unknownBlockedTags`, `requestJfId`), `statusHistoryDb.serviceDownSince`, `offlineLabel` (CapabilityStatus).
 
 **Appelants.** `CinemaClient` et `CinemaMobileClient` (mêmes pièces, placement seul différent : sous le
 sélecteur sur le bureau, en tête du volet sur téléphone). Routes `cinema/movies`, `cinema/series`,

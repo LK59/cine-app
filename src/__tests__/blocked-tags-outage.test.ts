@@ -1,14 +1,16 @@
 // Les tags bloqués pendant une panne de Jellyfin (DECISIONS.md §92, §54) : la dernière réponse
-// connue — mémoire, puis disque après un redémarrage —, et sinon *tout titre étiqueté caché*. Avant,
-// un compte jamais vu recevait « aucun blocage », donc les titres réservés.
+// connue — mémoire, puis disque après un redémarrage —, et sinon les tags posés d'office aux nouveaux
+// comptes (`NEW_ACCOUNT_BLOCKED_TAGS`) : jamais « tout titre étiqueté », qui vidait le catalogue
+// (les mots-clés de TMDB sont des tags), ni « aucun » quand l'installation en déclare.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-vi.mock("@/lib/config", () => ({ config: { jellyfin: { url: "http://jellyfin.test:8096", apiKey: "k" } } }));
+const settings = vi.hoisted(() => ({ newBlockedTags: "Prive, lk " }));
+vi.mock("@/lib/config", () => ({ config: { jellyfin: { url: "http://jellyfin.test:8096", apiKey: "k" }, accounts: settings } }));
 vi.mock("@/lib/server-cache", () => ({ cachedJellyfinMoviesAdmin: async () => [], cachedJellyfinSeriesAdmin: async () => [] }));
 vi.mock("@/lib/sonarrLink", () => ({ catalogueLinks: async () => new Map() }));
 vi.mock("@/lib/session", () => ({ verifySessionFull: async () => null }));
 
-import { blockedTagsOf, carriesBlockedTag, forgetBlockedTags, UNKNOWN_BLOCKED_TAGS } from "@/lib/blockedTags";
+import { blockedTagsOf, carriesBlockedTag, forgetBlockedTags } from "@/lib/blockedTags";
 
 const fetchMock = vi.fn();
 /** Un identifiant Jellyfin valide (32 hexadécimaux), neuf à chaque test : la base est commune au fichier. */
@@ -25,15 +27,24 @@ afterEach(() => vi.unstubAllGlobals());
 const user = (tags: string[]) => new Response(JSON.stringify({ Policy: { BlockedTags: tags } }), { status: 200, headers: { "content-type": "application/json" } });
 
 describe("blockedTagsOf pendant une panne", () => {
-  it("jamais vu, Jellyfin injoignable : inconnus — et tout titre étiqueté est tenu pour caché", async () => {
+  it("jamais vu, Jellyfin injoignable : les tags posés d'office aux nouveaux comptes, pas « tout titre étiqueté »", async () => {
+    settings.newBlockedTags = "Prive, lk ";
     fetchMock.mockRejectedValue(Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }));
     const tags = await blockedTagsOf(jfIdFor("new"));
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(tags).toBe(UNKNOWN_BLOCKED_TAGS);
+    expect(tags).toEqual(["prive", "lk"]);
     expect(carriesBlockedTag(["Prive"], tags)).toBe(true);
-    // Un titre sans tag ne peut être bloqué par aucun.
+    // Un mot-clé de TMDB n'est pas un blocage : le catalogue reste.
+    expect(carriesBlockedTag(["based on novel or book", "murder"], tags)).toBe(false);
     expect(carriesBlockedTag([], tags)).toBe(false);
     expect(carriesBlockedTag(undefined, tags)).toBe(false);
+  });
+
+  it("sans tags d'office déclarés : aucun blocage supposé", async () => {
+    settings.newBlockedTags = "";
+    fetchMock.mockRejectedValue(new TypeError("fetch failed"));
+    expect(await blockedTagsOf(jfIdFor("none"))).toEqual([]);
+    settings.newBlockedTags = "Prive, lk ";
   });
 
   it("déjà lu une fois, puis redémarrage pendant la panne : la copie sur disque", async () => {
@@ -47,6 +58,6 @@ describe("blockedTagsOf pendant une panne", () => {
 
   it("un Jellyfin qui répond 500 ne vaut pas « aucun blocage »", async () => {
     fetchMock.mockResolvedValue(new Response("oops", { status: 500 }));
-    expect(await blockedTagsOf(jfIdFor("five"))).toBe(UNKNOWN_BLOCKED_TAGS);
+    expect(await blockedTagsOf(jfIdFor("five"))).toEqual(["prive", "lk"]);
   });
 });

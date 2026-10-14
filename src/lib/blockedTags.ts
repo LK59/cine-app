@@ -34,12 +34,19 @@ export function forgetBlockedTags(): void {
  * Les tags bloqués d'un compte qu'on ne connaît pas — Jellyfin injoignable, et rien de gardé.
  *
  * Avant le 14/10/2026, ce cas rendait « aucun » : un compte jamais vu depuis le démarrage, pendant
- * une panne de Jellyfin, recevait le catalogue entier, titres réservés compris (le catalogue sait
- * se servir de listes gardées, §92). On ne montre pas sur une supposition : faute de savoir, **tout
- * titre portant un tag** est tenu pour bloqué (`carriesBlockedTag`). Un titre sans tag ne peut être
- * bloqué par aucun, il reste.
+ * une panne de Jellyfin, recevait le catalogue entier, titres réservés compris (§92). La première
+ * réponse cachait alors *tout titre étiqueté* — mais Jellyfin range les mots-clés de TMDB dans les
+ * tags (562 films sur 650 en portent), et le catalogue devenait presque vide. Décidé par Louis le
+ * même jour, priorité au catalogue : faute de savoir, on applique les tags que l'installation pose
+ * d'office aux nouveaux comptes (`NEW_ACCOUNT_BLOCKED_TAGS`, « prive » ici) ; sans réglage, aucun.
+ * La copie gardée par compte (mémoire, puis disque) passe toujours avant.
  */
-export const UNKNOWN_BLOCKED_TAGS: readonly string[] = Object.freeze(["*inconnus*"]);
+export function unknownBlockedTags(): readonly string[] {
+  return config.accounts.newBlockedTags
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => t.length > 0);
+}
 
 /** La copie sur disque, pour qu'un redémarrage pendant une panne ne fasse pas tout oublier. */
 const diskKey = (jfId: string) => `blocked-tags:${jfId}`;
@@ -76,8 +83,7 @@ function lastKnownTags(jfId: string): string[] | null {
 
 /**
  * Les tags bloqués du compte Jellyfin, en minuscules. Si Jellyfin ne répond pas : la dernière
- * réponse connue (mémoire, puis disque), sinon `UNKNOWN_BLOCKED_TAGS` — jamais « aucun » sur une
- * supposition. Un 4xx (compte inconnu de Jellyfin) reste « aucun » : c'est une réponse.
+ * réponse connue (mémoire, puis disque), sinon `unknownBlockedTags()`. Un 4xx (compte inconnu de Jellyfin) reste « aucun » : c'est une réponse.
  */
 export async function blockedTagsOf(jfId: string, now = Date.now()): Promise<readonly string[]> {
   const known = cache.get(jfId);
@@ -90,7 +96,7 @@ export async function blockedTagsOf(jfId: string, now = Date.now()): Promise<rea
     });
     if (!res.ok) {
       await res.body?.cancel().catch(() => {});
-      if (res.status >= 500) return lastKnownTags(jfId) ?? UNKNOWN_BLOCKED_TAGS;
+      if (res.status >= 500) return lastKnownTags(jfId) ?? unknownBlockedTags();
       return known?.tags ?? [];
     }
     const user = (await res.json()) as { Policy?: { BlockedTags?: string[] | null } };
@@ -98,15 +104,13 @@ export async function blockedTagsOf(jfId: string, now = Date.now()): Promise<rea
     rememberTags(jfId, tags, now);
     return tags;
   } catch {
-    return lastKnownTags(jfId) ?? UNKNOWN_BLOCKED_TAGS;
+    return lastKnownTags(jfId) ?? unknownBlockedTags();
   }
 }
 
 /** L'élément porte-t-il un des tags bloqués ? Même comparaison que Jellyfin : la casse seule est ignorée. */
 export function carriesBlockedTag(itemTags: readonly string[] | null | undefined, blocked: readonly string[]): boolean {
   if (!itemTags?.length || blocked.length === 0) return false;
-  // Blocages inconnus (panne, rien de gardé) : tout titre étiqueté est tenu pour caché.
-  if (blocked === UNKNOWN_BLOCKED_TAGS) return true;
   return itemTags.some((tag) => blocked.includes(tag.toLowerCase()));
 }
 
