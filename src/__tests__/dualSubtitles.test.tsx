@@ -45,7 +45,10 @@ describe("l'apparence du second", () => {
 
   it("le facteur du mode (`--dual-k`, réduit en portrait) s'applique aux deux, la taille du principal sinon inchangée", () => {
     expect(String(primaryDualCss(DEFAULT_SUBTITLE_STYLE).fontSize)).toBe(`calc(var(--dual-k, 1) * ${overlayCss(DEFAULT_SUBTITLE_STYLE).fontSize})`);
-    expect(String(secondOverlayCss(DEFAULT_SUBTITLE_STYLE).fontSize)).toMatch(/^calc\(var\(--dual-k, 1\) \* /);
+    // 11 px au moins, jamais plus que le principal (rendu mesuré à 390 × 844 : 10,1 px avant).
+    expect(String(secondOverlayCss(DEFAULT_SUBTITLE_STYLE).fontSize)).toBe(
+      `max(min(11px, ${primaryDualCss(DEFAULT_SUBTITLE_STYLE).fontSize}), calc(var(--dual-k, 1) * ${overlayCss({ ...DEFAULT_SUBTITLE_STYLE, size: 0.8 }).fontSize}))`,
+    );
   });
 });
 

@@ -4200,7 +4200,9 @@ la hauteur du principal garde la place de celui-ci : sans elle, le second tombai
 puis remontait d'un cran à la réplique suivante. Dans une zone plus haute que large (téléphone en
 portrait), les deux rétrécissent d'un dixième et ne passent pas deux lignes chacune (`.subtitle-dual`,
 requête de conteneur) — ce facteur dépend du **mode**, pas de la présence d'une réplique du second,
-sinon le principal changerait de taille à chaque ligne du second. Une réplique placée en haut
+sinon le principal changerait de taille à chaque ligne du second. Le second ne descend jamais sous 11 px
+(`SECOND_SUBTITLE_MIN_PX`, ni au-dessus du principal) : rendu fidèle mesuré le 14/10/2026 à 390 × 844,
+il tombait à 10,1 px sous un principal de 12,6 px. Une réplique placée en haut
 (`{\an8}`) y reste.
 
 **Les deux lecteurs.** Natif : une seconde voie tenue au-dessus des pipelines comme la première ; une

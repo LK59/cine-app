@@ -43,10 +43,20 @@ export function primaryDualCss(style: SubtitleStyle): React.CSSProperties {
   return { ...base, fontSize: dualFont(base.fontSize) };
 }
 
-/** Le second : 80 % du principal, sa teinte douce, le même fond ou la même ombre. */
+/**
+ * Le plus petit second qu'on accepte : 11 px, la plus petite taille de texte qu'Apple admet (Caption 2).
+ * Mesuré le 14/10/2026 sur un rendu fidèle à 390 × 844 (téléphone en portrait, taille « Normale ») :
+ * le principal y fait 12,6 px, et le second à 80 % tombait à 10,1 px — sous ce seuil, lu à bout de
+ * bras. Jamais plus grand que le principal : à une taille où le principal est lui-même sous 11 px
+ * (« Très petite » au téléphone), le second prend sa taille, et seule la teinte les distingue.
+ */
+export const SECOND_SUBTITLE_MIN_PX = 11;
+
+/** Le second : 80 % du principal (11 px au moins), sa teinte douce, le même fond ou la même ombre. */
 export function secondOverlayCss(style: SubtitleStyle): React.CSSProperties {
   const base = overlayCss({ ...style, size: style.size * SECOND_SUBTITLE_SCALE });
-  return { ...base, fontSize: dualFont(base.fontSize), color: SECOND_SUBTITLE_TINT[style.color] };
+  const primary = dualFont(overlayCss(style).fontSize);
+  return { ...base, fontSize: `max(min(${SECOND_SUBTITLE_MIN_PX}px, ${primary}), ${dualFont(base.fontSize)})`, color: SECOND_SUBTITLE_TINT[style.color] };
 }
 
 // --- ce que l'appareil retient ----------------------------------------------------------------
