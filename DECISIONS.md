@@ -3994,9 +3994,12 @@ barre de reprise d'une barre de téléchargement. La règle devient à trois ter
 - **Violet de la marque** (celui du logo) : ce qui est *à moi* — la coche et l'état « Vu » (cartes,
   fiches, épisodes, menus des fiches), « Dans ma liste » (bouton `btn-mine`, icônes, pastille du
   menu), les barres de progression de reprise (cartes Reprendre, bannière, fiches, épisodes, ligne
-  « Reprendre » du menu) et la partie lue de la barre du lecteur et du mini-lecteur, les pastilles
+  « Reprendre » du menu), les pastilles
   de compteur (signalements, réponses non lues, Activité). Le téléchargement en cours, une jauge,
   un graphique ne sont pas « à moi » et restent blancs ou à leurs teintes.
+  **Sauf la partie lue de la barre du lecteur (et du mini-lecteur), rendue au blanc le 14/10/2026
+  par Louis** : violette un jour, seul élément coloré pendant un film ; un lecteur façon Apple
+  s'efface devant l'image, et dans le lecteur la barre est forcément la sienne. `design-tokens.test.ts`.
 - **Rouge, orange, vert** : `danger`, `warning`, `success`, et rien d'autre — « Vu » en vert dans
   les fiches de la gestion passe au violet, « déjà dans la liste » aussi.
 

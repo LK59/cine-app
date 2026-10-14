@@ -257,9 +257,9 @@ describe("le violet de la marque dit ce qui est à moi", () => {
     expect(readFileSync(path, "utf8")).toMatch(pattern);
   });
 
-  it("la partie lue du lecteur est violette, et `btn-mine` aussi", () => {
-    expect(theme).toMatch(/\.player-seek::-webkit-slider-runnable-track \{[^}]*var\(--color-brand\) 0 var\(--played/);
-    expect(theme).toMatch(/\.player-seek::-moz-range-track \{[^}]*var\(--color-brand\) 0 var\(--played/);
+  it("la partie lue du lecteur reste blanche (14/10/2026), `btn-mine` est violet", () => {
+    expect(theme).toMatch(/\.player-seek::-webkit-slider-runnable-track \{[^}]*currentColor 0 var\(--played/);
+    expect(theme).toMatch(/\.player-seek::-moz-range-track \{[^}]*currentColor 0 var\(--played/);
     expect(theme).toMatch(/@utility btn-mine \{\s*@apply bg-brand-strong\/\d+ text-white;/);
   });
 

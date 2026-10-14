@@ -1158,10 +1158,13 @@
 .player-seek:focus { outline: none; }
 .player-seek:focus-visible { outline: 2px solid rgb(255 255 255 / 0.6); outline-offset: 4px; border-radius: 999px; }
 
+/* La partie lue est blanche (le texte de la barre) : un lecteur façon Apple s'efface devant l'image.
+   Violette du 13 au 14/10/2026 (§83, option B), rendue au blanc par Louis — dans le lecteur, la barre
+   est forcément la sienne, il n'y a rien dont la distinguer. */
 .player-seek::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 999px;
-  background: linear-gradient(to right, var(--color-brand) 0 var(--played, 0%), transparent var(--played, 0%) 100%);
+  background: linear-gradient(to right, currentColor 0 var(--played, 0%), transparent var(--played, 0%) 100%);
   transition: height 260ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 /* Épaissie tant que le doigt ou le curseur est sur la barre, et pas une milliseconde de plus.
@@ -1197,7 +1200,7 @@
 .player-seek::-moz-range-track {
   height: 4px;
   border-radius: 999px;
-  background: linear-gradient(to right, var(--color-brand) 0 var(--played, 0%), transparent var(--played, 0%) 100%);
+  background: linear-gradient(to right, currentColor 0 var(--played, 0%), transparent var(--played, 0%) 100%);
   transition: height 260ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 [data-scrub] .player-seek::-moz-range-track { height: 8px; }
