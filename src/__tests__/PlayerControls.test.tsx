@@ -1906,6 +1906,11 @@ describe("PlayerControls — ce qui coûte un rendu (banc du 02/10/2026)", () =>
       </Profiler>
     );
     await act(async () => {});
+    // Les `volumechange` de la sonde du volume au montage (`probeVolume`) : depuis jsdom 30.1, comme
+    // dans un navigateur, ils partent en tâche (setImmediate, retenu par les faux minuteurs) et non
+    // plus pendant l'écriture. Laissés en attente, ils tiraient au premier `advanceTimersByTime` —
+    // un rendu de l'ouverture compté au compte d'une mesure qui n'a rien à voir.
+    await act(async () => void vi.advanceTimersByTime(0));
     Object.defineProperty(video, "paused", { value: false, configurable: true });
     Object.defineProperty(video, "duration", { value: 3600, configurable: true });
     act(() => void video.dispatchEvent(new Event("durationchange")));
