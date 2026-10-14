@@ -4439,6 +4439,51 @@ films ; banc `repliques-search-bench.spec.ts`, sauté sans `REPLIQUES_SEARCH_DIR
   porte la réplique ; « voir plus » compte des moments, plus des lignes doublées par langue.
 
 
+**Relecture du moteur et santé de la base (14/10/2026, Louis : tout corriger, rien relire).** Contrôlée
+sur une copie de la production (sauvegarde SQLite, l'original en lecture seule) : `integrity_check`,
+`quick_check` et l'`integrity-check` de FTS5 bons ; 1 958 103 répliques, 809 films (795 `ok`, 14 `empty`),
+aucune ligne orpheline, aucun film `ok` sans lignes, `films.lines` égal au compte réel partout, aucun
+double restant. **Seul le vocabulaire était faux** : `deleteFilmLines` effaçait les lignes sans décompter
+leurs mots (seul `dedupeFilmLines` décomptait), et chaque film relu les ajoutait une seconde fois —
+43 143 mots sur 133 570 surcomptés, 13,23 M occurrences pour 12,14 M réelles (+9 %), « a » à 282 764
+pour 259 581, 5 mots sans plus aucune réplique. Les seuils de la recherche (`TOO_COMMON`, `RARE`,
+`PREFIX_MAX`) et l'ordre des corrections lisent ces nombres.
+- *Effacer décompte* : `deleteFilmLines` et `dedupeFilmLines` passent par un seul chemin (`removeLines`),
+  qui décompte dans la même transaction et retire un mot tombé à zéro.
+- *Réparation en place* (`repairIndex`, `store.ts`) : le vocabulaire recalculé **depuis les lignes
+  stockées**, aucun film relu ; versionnée dans `meta` (`repair`, version 1 — une base neuve naît à la
+  version courante), idempotente (relancée, elle refait le même calcul), par tranches sous 12 ms, le
+  vocabulaire corrigé en place (jamais vidé : une recherche pendant ce temps lit des comptes justes ou
+  encore faux, jamais une table vide). Lancée 30 s après le démarrage si la base existe ; **une passe
+  l'attend avant de préparer quoi que ce soit** et « Reconstruire » avant d'effacer (`ensureRepaired`,
+  `engine.ts`) : un comptage étalé sur des secondes ne supporte pas d'écriture concurrente. Mesurée sur
+  la copie : 3,7 s de bout en bout, 771 tranches, la plus longue 9,6 ms, plus long retard de la boucle
+  9,7 ms ; 43 138 comptes corrigés, 5 mots retirés ; après coup, les mêmes contrôles sont bons et le
+  vocabulaire égal au recalcul exact (12 141 833).
+- *Pas de `VACUUM` ni d'`optimize` FTS5* : mesurés sur la copie, 13 316 pages libres (54 Mo, 11 %) ; un
+  `VACUUM` ramène 495 → 402 Mo (2 s de boucle tenue d'un bloc), `optimize` puis `VACUUM` 383 Mo (1,1 s de
+  plus), pour une recherche FTS5 brute à p50 7,9 → 6,0 ms et p95 inchangé (~250 ms). Les pages libres
+  sont reprises par les écritures suivantes, la base est reconstructible : le gain ne vaut pas une
+  opération qui tient la boucle plusieurs secondes.
+- *Un état par serveur, pas par copie de module* (Next charge chaque module deux fois : le moteur par
+  `instrumentation.ts`, les routes) : les signaux de lecture (`playbackActivity.ts` — après un
+  redémarrage, la passe reprise n'entendait plus le relais de flux ni le battement, seulement
+  Jellyfin), les battements de présence (`presence.ts`), la connexion à la base (après « Reconstruire »,
+  la copie du moteur restait ouverte sur le fichier supprimé) et `writeStats` (la page lisait les zéros
+  de la copie des routes) sont sur `globalThis` (`Symbol.for`), comme l'état du moteur.
+- *Un arrêt attend toutes les files* (`Promise.allSettled`) : avec `Promise.all`, le premier arrêt finissait
+  la passe, le `finally` effaçait l'arrêt, et une file encore occupée repartait au film suivant — une passe
+  fantôme, le mécanisme des doublons. Une file en erreur arrête les autres au film suivant.
+- *« Pause » puis « Reprendre » aussitôt* : « Reprendre » n'annule plus un arrêt en cours (la demande de
+  pause attendait alors toute la passe) ; la passe finit son film, s'arrête, et une nouvelle repart au
+  film suivant — sauf si une nouvelle demande est venue entre-temps (`live.requests`). La pause attend
+  l'arrêt au plus 10 s (`PAUSE_WAIT_MS`).
+- *Recherche* : l'indice de coupure d'une phrase entre deux sous-titres s'appelait `k`, comme le facteur
+  d'échelle qu'il masquait — le seuil de mot courant valait `TOO_COMMON` × 2, × 3… selon la coupure.
+Tests : `repliques-repair.test.ts` (réparation, idempotence, tranches, effacement qui décompte, connexion
+partagée), `repliques-engine-queues.test.ts` (deux files, pause/reprise, réparation attendue),
+`repliques-disks.test.ts` (signaux partagés entre copies), `repliques-search.test.ts` (seuil à chaque coupure).
+
 ## 89. Jellyfin seul, et la règle de vérité
 
 Demandé le 14/10/2026, après une mesure de la bibliothèque : les 806 films étaient tous rattachés à

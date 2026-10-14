@@ -147,6 +147,19 @@ describe("la recherche", () => {
     expect(searchDialogue("courantissime soleil").tooCommon).toBeUndefined();
   });
 
+  // `for (let k = 1; …)` masquait le facteur d'échelle `k` : à la deuxième coupure, le seuil valait
+  // deux fois `TOO_COMMON`, et une moitié faite d'un seul mot très courant était cherchée (14/10/2026).
+  it("garde le même seuil de mot courant à chaque coupure d'une phrase entre deux sous-titres", async () => {
+    const G = "9".repeat(32);
+    await writeLines([row(G, 7, 300_000, "Zorglub brandouille"), row(G, 7, 301_000, "frimousse")]);
+    // Plus courant que le seuil, moins que deux fois le seuil.
+    repliquesDb().prepare("UPDATE terms SET n = ? WHERE term = 'frimousse'").run(Math.round(TOO_COMMON * 1.5));
+    const result = searchDialogue("zorglub brandouille frimousse");
+    // La coupure qui isolerait « frimousse » n'est pas tentée : la réponse est approchée, pas la phrase.
+    expect(result.approximate).toBe(true);
+    expect(result.films[0].lines[0].text).toBe("Zorglub brandouille");
+  });
+
   it("ne lève pas sur une requête faite de ponctuation, ni sur des guillemets", () => {
     expect(searchDialogue("!!! ???").films).toEqual([]);
     expect(() => searchDialogue('je "suis" ton')).not.toThrow();
@@ -164,8 +177,14 @@ describe("les écritures", () => {
     expect(writeStats.slices - slicesBefore).toBeGreaterThan(1);
     // La boucle a tourné pendant l'écriture : d'autres tâches ont eu leur tour.
     expect(ticks).toBeGreaterThan(0);
+    const term = (word: string) => (repliquesDb().prepare("SELECT n FROM terms WHERE term = ?").get(word) as { n: number } | undefined)?.n;
+    const duBefore = term("du")!;
     await deleteFilmLines("d".repeat(32));
     expect(repliquesDb().prepare("SELECT COUNT(*) AS n FROM lines WHERE item_id = ?").get("d".repeat(32))).toEqual({ n: 0 });
+    // Le vocabulaire suit (14/10/2026 : il ne décomptait rien, et chaque film relu gonflait ses mots) :
+    // un mot qui n'est plus dans aucune réplique en sort, un mot partagé perd ce qui est parti.
+    expect(term("numero")).toBeUndefined();
+    expect(term("du")).toBe(duBefore - 3000);
     // L'index plein texte suit : plus rien ne répond.
     expect(searchDialogue("ligne numero").films).toEqual([]);
   });

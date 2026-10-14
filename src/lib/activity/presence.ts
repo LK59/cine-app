@@ -22,8 +22,16 @@ interface Beat {
   device: string | null;
 }
 
-/** Un signal par session (`jti`) : une personne a souvent deux appareils ouverts. */
-const beats = new Map<string, Beat>();
+/**
+ * Un signal par session (`jti`) : une personne a souvent deux appareils ouverts.
+ *
+ * Partagé par les copies du module (14/10/2026) : les routes l'écrivent, et l'indexation des
+ * répliques, démarrée par `instrumentation.ts` dans sa propre copie, le lit (`anyPlaybackBeat`) —
+ * elle lisait une table toujours vide.
+ */
+const BEATS_KEY = Symbol.for("cine.presence.beats");
+const shared = globalThis as typeof globalThis & { [BEATS_KEY]?: Map<string, Beat> };
+const beats: Map<string, Beat> = (shared[BEATS_KEY] ??= new Map<string, Beat>());
 
 export function recordBeat(jti: string, beat: Beat): void {
   beats.set(jti, beat);

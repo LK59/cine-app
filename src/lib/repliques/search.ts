@@ -481,9 +481,11 @@ export function searchDialogue(query: string, options: SearchOptions = {}): Dial
   const quoted = groups.some((g) => g.quoted !== null);
   // Pas quand une réplique a déjà l'expression entière : c'est elle qu'on cherchait.
   if (filmCount(strict) < FEW_FILMS && groups.length >= 3 && !quoted && !strict.some((s) => s.a.phrase)) {
-    for (let k = 1; k < groups.length && performance.now() - t0 < EXTRA_BUDGET_MS; k++) {
-      const head = groups.slice(0, k);
-      const tail = groups.slice(k);
+    // L'indice de la coupure s'appelait `k`, comme le facteur d'échelle de l'index qu'il masquait : le
+    // seuil valait `TOO_COMMON` × 2, × 3… selon la coupure (14/10/2026).
+    for (let cut = 1; cut < groups.length && performance.now() - t0 < EXTRA_BUDGET_MS; cut++) {
+      const head = groups.slice(0, cut);
+      const tail = groups.slice(cut);
       // Une moitié faite d'un seul mot très courant coûterait sans rien apprendre.
       if (rarest(head) > TOO_COMMON * k || rarest(tail) > TOO_COMMON * k) continue;
       const a = matchExpression(head);

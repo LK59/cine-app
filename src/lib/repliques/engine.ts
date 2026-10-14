@@ -17,8 +17,10 @@ import {
   forgetFilm,
   indexCounts,
   readMeta,
+  repairIndex,
   repliquesDb,
   repliquesDbBytes,
+  repliquesDbExists,
   saveFilm,
   wipeRepliquesDb,
   writeLines,
@@ -64,6 +66,10 @@ const LOG_EVERY_FILMS = 25;
 /** Après un redémarrage, une passe interrompue reprend après ce délai — le démarrage a sa propre charge. */
 const RESUME_DELAY_MS = 2 * 60_000;
 const NIGHT_CHECK_MS = 5 * 60_000;
+/** La réparation de démarrage (`repairIndex`) attend ce délai : le démarrage a sa propre charge. */
+const REPAIR_DELAY_MS = 30_000;
+/** Ce qu'une demande de pause attend au plus la fin du film en cours, avant de rendre la main à la page. */
+const PAUSE_WAIT_MS = 10_000;
 
 export type RunKind = "initial" | "nightly";
 
@@ -118,6 +124,13 @@ type Live = {
   wakers: Set<() => void>;
   timers: ReturnType<typeof setTimeout>[];
   pollMs: number;
+  /** La réparation en place de la base (`repairIndex`), une par processus : toute passe l'attend. */
+  repair: Promise<void> | null;
+  /**
+   * Le numéro de la dernière demande (Lancer, Pause, Reconstruire) : un « Lancer » donné pendant
+   * qu'une passe s'arrête la relance à la fin de l'arrêt — sauf si une autre demande l'a suivi.
+   */
+  requests: number;
 };
 const LIVE_KEY = Symbol.for("cine.repliques.live");
 const shared = globalThis as typeof globalThis & { [LIVE_KEY]?: Live };
@@ -136,7 +149,12 @@ const live: Live = (shared[LIVE_KEY] ??= {
   timers: [] as ReturnType<typeof setTimeout>[],
   /** L'attente entre deux vérifications pendant une lecture (raccourcie par les tests). */
   pollMs: PLAYBACK_POLL_MS,
+  repair: null as Promise<void> | null,
+  requests: 0,
 });
+// Un état laissé par une copie plus ancienne du module (rechargement à chaud) n'a pas ces champs.
+live.repair ??= null;
+live.requests ??= 0;
 
 function info(message: string, context: Record<string, unknown> = {}): void {
   const entry = { timestamp: new Date().toISOString(), level: "info", scope: "repliques", message, ...context };
@@ -335,9 +353,30 @@ async function queuesFor(todo: PlannedFilm[]): Promise<QueuePlan<PlannedFilm>> {
   return planQueues(todo, disks);
 }
 
+/**
+ * La réparation en place de la base, une fois par processus — et jamais pendant qu'une passe écrit :
+ * elle recompte depuis les lignes (`repairIndex`), une ligne écrite au milieu fausserait le compte.
+ * Une passe l'attend avant de préparer quoi que ce soit ; « Reconstruire » l'attend avant d'effacer.
+ * Un échec est au journal et ne bloque rien : la réparation sera retentée par la passe suivante.
+ */
+function ensureRepaired(): Promise<void> {
+  live.repair ??= (async () => {
+    try {
+      const report = await repairIndex();
+      if (report) info("index réparé", { ...report });
+    } catch (error) {
+      logError("repliques.repair", error);
+      live.repair = null;
+    }
+  })();
+  return live.repair;
+}
+
 async function runPass(kind: RunKind): Promise<void> {
   live.phase = "planning";
   live.stopWhy = null;
+  // Une pause demandée pendant la réparation reste demandée : la première file l'entend.
+  await ensureRepaired();
   const mount = await checkMoviesMount();
   if (!mount.ok) {
     live.phase = "unavailable";
@@ -368,14 +407,30 @@ async function runPass(kind: RunKind): Promise<void> {
   live.queues = { count: Math.max(1, queues.queues.length), reason: queues.reason };
   live.phase = "running";
   try {
-    await Promise.all(
+    // Toutes les files jusqu'au bout, même quand l'une s'arrête (14/10/2026). Avec `Promise.all`, le
+    // premier arrêt terminait la passe pendant qu'une autre file finissait son film : le `finally` de
+    // `launch` remettait `stopWhy` à zéro, et cette file, ne voyant plus d'arrêt, repartait au film
+    // suivant — une passe fantôme à côté de la suivante, le mécanisme même des doublons d'index.
+    // Une file en échec arrête aussi les autres au film suivant.
+    let failed = false;
+    const settled = await Promise.allSettled(
       queues.queues.map(async (queue) => {
         for (const item of queue) {
           if (live.stopWhy) throw new Stop(live.stopWhy);
-          await indexOne(item, run);
+          if (failed) return;
+          try {
+            await indexOne(item, run);
+          } catch (error) {
+            if (!(error instanceof Stop)) failed = true;
+            throw error;
+          }
         }
       }),
     );
+    const reasons = settled.flatMap((r) => (r.status === "rejected" ? [r.reason as unknown] : []));
+    // Une vraie erreur passe devant un arrêt : c'est elle qu'il faut voir au journal.
+    const error = reasons.find((r) => !(r instanceof Stop)) ?? reasons[0];
+    if (error !== undefined) throw error;
     run.finishedAt = Date.now();
     // Le forçage valait pour cette passe : la suivante repart sans.
     run.forced = false;
@@ -423,26 +478,49 @@ export type ActionRefusal = "disabled" | "unavailable" | "busy";
 /** « Lancer » / « Reprendre » : une passe, initiale tant que la première n'est pas finie. */
 export async function startIndexing(): Promise<ActionRefusal | null> {
   if (!config.repliques.enabled) return "disabled";
-  if (live.loop) {
-    // Déjà en route : seule une pause demandée et pas encore prise est levée.
-    live.stopWhy = null;
-    return null;
-  }
+  const ticket = ++live.requests;
+  const stopping = live.loop;
+  if (stopping && !live.stopWhy) return null;
+  // Une reconstruction en cours : elle relance elle-même une passe.
+  if (stopping && live.stopWhy === "rebuild") return "busy";
   const mount = await checkMoviesMount();
   if (!mount.ok) return "unavailable";
-  const run = readRun();
-  if (run && run.userPaused) saveRun({ ...run, userPaused: false });
+  const clearPause = () => {
+    const run = readRun();
+    if (run && run.userPaused) saveRun({ ...run, userPaused: false });
+  };
+  if (stopping) {
+    // Une passe en train de s'arrêter (« Pause » puis « Reprendre » aussitôt) : l'arrêt n'est plus
+    // annulé — l'annuler laissait la demande de pause attendre la fin de toute la passe, et une file
+    // déjà arrêtée ne repartait pas. La passe finit son film, s'arrête, et une nouvelle repart d'ici,
+    // au film suivant — sauf si une autre demande (une nouvelle pause) est venue entre-temps.
+    clearPause();
+    void stopping.finally(() => {
+      if (live.requests !== ticket || live.loop || !config.repliques.enabled) return;
+      clearPause();
+      launch("initial");
+    });
+    return null;
+  }
+  clearPause();
   // Toujours une passe « manuelle », à toute heure : une passe de nuit inachevée reprise d'ici ne doit
   // pas s'arrêter aussitôt pour cause de plage horaire.
   launch("initial");
   return null;
 }
 
-/** « Mettre en pause » : retenue, y compris à travers un redémarrage, jusqu'à « Reprendre ». */
+/**
+ * « Mettre en pause » : retenue, y compris à travers un redémarrage, jusqu'à « Reprendre ». Attend que
+ * la passe s'arrête (le film en cours finit de s'écrire), mais au plus `PAUSE_WAIT_MS` : la page n'a
+ * pas à tenir sa requête plus longtemps, la passe finit de s'arrêter seule.
+ */
 export async function pauseIndexing(): Promise<void> {
+  live.requests++;
   const run = readRun();
   if (run && run.finishedAt === null) saveRun({ ...run, userPaused: true });
-  await stopLoop("paused");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([stopLoop("paused"), new Promise<void>((resolve) => (timer = setTimeout(resolve, PAUSE_WAIT_MS)))]);
+  clearTimeout(timer);
   live.phase = "paused";
 }
 
@@ -474,7 +552,10 @@ export async function rebuildIndex(): Promise<ActionRefusal | null> {
   if (!config.repliques.enabled) return "disabled";
   const mount = await checkMoviesMount();
   if (!mount.ok) return "unavailable";
+  live.requests++;
   await stopLoop("rebuild");
+  // Une réparation de démarrage en cours lit la base qu'on va supprimer : elle finit d'abord.
+  if (live.repair) await live.repair;
   wipeRepliquesDb();
   launch("initial");
   info("index reconstruit à neuf");
@@ -570,6 +651,16 @@ function nightTick(): void {
 
 /** Démarrage du serveur : la passe interrompue reprend (sauf pause demandée), et la nuit est surveillée. */
 export function startRepliquesEngine(): void {
+  // La réparation en place (`repairIndex`), une fois, un peu après le démarrage — seulement si la
+  // base existe : l'option jamais activée n'en crée pas. Une passe reprise l'attendrait de toute façon.
+  const repair = setTimeout(() => {
+    try {
+      if (repliquesDbExists()) void ensureRepaired();
+    } catch (error) {
+      logError("repliques.repair", error);
+    }
+  }, REPAIR_DELAY_MS);
+  repair.unref?.();
   const resume = setTimeout(() => {
     try {
       if (!config.repliques.enabled) return;
@@ -582,7 +673,7 @@ export function startRepliquesEngine(): void {
   resume.unref?.();
   const night = setInterval(nightTick, NIGHT_CHECK_MS);
   night.unref?.();
-  live.timers.push(resume, night);
+  live.timers.push(repair, resume, night);
 }
 
 export const __testing = {
@@ -590,6 +681,7 @@ export const __testing = {
   launch,
   stopLoop,
   gate,
+  ensureRepaired,
   reset(): void {
     for (const t of live.timers) clearTimeout(t);
     live.timers = [];
@@ -600,6 +692,8 @@ export const __testing = {
     live.run = null;
     live.wakers.clear();
     live.currentFilms.clear();
+    live.repair = null;
+    live.requests = 0;
   },
   waitIdle: () => live.loop ?? Promise.resolve(),
   wipe: wipeRepliquesDb,

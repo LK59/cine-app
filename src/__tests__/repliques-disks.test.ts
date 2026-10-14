@@ -96,3 +96,35 @@ describe("la pause pendant une lecture", () => {
     expect((await mustWaitForPlayback(now)).signal.by).toBe("beat");
   });
 });
+
+// Next charge ces modules deux fois : le relais de flux et la route de progression écrivent dans la
+// copie des routes, le moteur (démarré par `instrumentation.ts`) lit la sienne. Chacune avait son
+// état : après un redémarrage, l'indexation n'entendait plus que Jellyfin (14/10/2026).
+describe("les signaux de lecture, partagés par toutes les copies du module", () => {
+  beforeEach(() => {
+    __testing.reset();
+    presenceTesting.reset();
+    sessions.list = [];
+    sessions.fail = true;
+  });
+
+  it("le relais de flux noté par une copie est entendu par l'autre", async () => {
+    const now = Date.now();
+    noteMediaRead(now);
+    vi.resetModules();
+    const other = await import("@/lib/repliques/playbackActivity");
+    expect((await other.mustWaitForPlayback(now)).signal.by).toBe("stream");
+    // Et la dernière lecture vue par l'une tient l'autre en attente les minutes qui suivent.
+    expect((await other.mustWaitForPlayback(now + 120_000)).wait).toBe(true);
+  });
+
+  it("le battement de lecture enregistré par une copie est entendu par l'autre", async () => {
+    const now = Date.now();
+    recordPlaybackBeat("jti", { user: "u", jfId: null, at: now, visible: true, itemId: "x", device: null });
+    vi.resetModules();
+    const presence = await import("@/lib/activity/presence");
+    const other = await import("@/lib/repliques/playbackActivity");
+    expect(presence.anyPlaybackBeat(now)).toBe(true);
+    expect((await other.mustWaitForPlayback(now)).signal.by).toBe("beat");
+  });
+});
