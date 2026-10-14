@@ -170,16 +170,18 @@ describe("GET /api/cinema/series/[id]/episodes — la règle de vérité", () =>
   const req = { cookies: { get: () => ({ value: "t" }) } } as unknown as NextRequest;
   const params = { params: Promise.resolve({ jellyfinId: SERIES }) };
 
-  it("une série que Jellyfin a seule : numéros du disque, remplissage, TMDB du catalogue seulement pour les saisons qu'il a", async () => {
+  it("une série que Jellyfin a seule : numéros et texte du disque, jamais complétés par TMDB (numérotation différente)", async () => {
     mockLinks.mockResolvedValue(new Map([[SERIES, { type: "series", catalogueId: 1_234_567_890, tmdbId: 71446, source: "jellyfin" }]]));
     mockProviderIds.mockResolvedValue({ ProviderIds: { Tmdb: "71446" } });
     mockNextUp.mockResolvedValue(null);
     mockEpisodes.mockResolvedValue([
       item("e1", "La Casa de Papel - S04E01", "/m/La Casa de Papel - S04E01.mkv", 4, 1),
       item("e2", "La Casa de Papel - S04E02", "/m/La Casa de Papel - S04E02.mkv", 4, undefined),
-      item("e3", "On est de retour", "/m/La Casa de Papel - S03E01.mkv", 3, 1),
+      item("e3", "On est de retour", "/m/La Casa de Papel - S03E01.mkv", 3, 1, { Overview: "Rio est fait prisonnier." }),
+      item("e4", "Épisode 1", "/m/La Casa de Papel - S02E01.mkv", 2, 1),
     ]);
-    seasons.set("fr-FR:71446:3", { episodes: [{ episode_number: 1, name: "On est de retour", overview: "Rio est fait prisonnier." }] });
+    // TMDB numérote autrement : sa saison 2 porte les titres de la partie 3 de Netflix.
+    seasons.set("fr-FR:71446:2", { episodes: [{ episode_number: 1, name: "On est de retour", overview: "Rio." }] });
     const { GET } = await import("@/app/api/cinema/series/[jellyfinId]/episodes/route");
     const body = await (await GET(req, params)).json();
     const s4 = body.seasons.find((s: { seasonNumber: number }) => s.seasonNumber === 4);
@@ -190,6 +192,9 @@ describe("GET /api/cinema/series/[id]/episodes — la règle de vérité", () =>
     const s3 = body.seasons.find((s: { seasonNumber: number }) => s.seasonNumber === 3);
     expect(s3.episodes[0]).toMatchObject({ title: "On est de retour", overview: "Rio est fait prisonnier." });
     expect(s3.episodes[0]).not.toHaveProperty("path");
+    const s2 = body.seasons.find((s: { seasonNumber: number }) => s.seasonNumber === 2);
+    expect(s2.episodes[0].title).toBe("Épisode 1");
+    expect(tmdbCalls).toEqual([]);
     expect(mockAttached).not.toHaveBeenCalled();
   });
 

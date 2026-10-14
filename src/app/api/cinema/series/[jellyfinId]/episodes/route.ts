@@ -77,12 +77,12 @@ function toCinemaEpisode(arranged: ArrangedEpisode): CinemaEpisode & { path: str
  */
 async function seriesIdentity(jellyfinId: string, jellyfinProviderIds: Record<string, string> | undefined) {
   const jellyfinTmdb = getProviderIdCI(jellyfinProviderIds, "tmdb");
-  const fallback = { tmdbId: jellyfinTmdb ? Number.parseInt(jellyfinTmdb, 10) : null, sonarr: null as SonarrSeries | null };
+  const fallback = { tmdbId: jellyfinTmdb ? Number.parseInt(jellyfinTmdb, 10) : null, sonarr: null as SonarrSeries | null, jellyfinOnly: false };
   const link = (await catalogueLinks()).get(jellyfinId);
   if (!link) return fallback;
-  if (link.source !== "sonarr") return { tmdbId: link.tmdbId, sonarr: null };
+  if (link.source !== "sonarr") return { tmdbId: link.tmdbId, sonarr: null, jellyfinOnly: true };
   const sonarrSeries = (await cachedSeries().catch(() => [] as SonarrSeries[])).find((s) => s.id === link.catalogueId) ?? null;
-  return { tmdbId: link.tmdbId, sonarr: sonarrSeries };
+  return { tmdbId: link.tmdbId, sonarr: sonarrSeries, jellyfinOnly: false };
 }
 
 /** Jellyfin identifie-t-il la série comme Sonarr ? Un identifiant commun suffit. */
@@ -115,7 +115,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinI
 
   const locale = localeOf(req);
   const providerIds = series?.ProviderIds as Record<string, string> | undefined;
-  const identity = await seriesIdentity(jellyfinId, providerIds).catch(() => ({ tmdbId: null, sonarr: null }));
+  const identity = await seriesIdentity(jellyfinId, providerIds).catch(() => ({ tmdbId: null, sonarr: null, jellyfinOnly: false }));
   const seriesName = items.find((item) => item.SeriesName)?.SeriesName ?? null;
   const episodes = arrangeEpisodes(items, seriesName, locale).map(toCinemaEpisode);
 
@@ -129,7 +129,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinI
       () => new Set<(typeof episodes)[number]>()
     );
   }
-  await fillEpisodeText(episodes.filter((e) => !settled.has(e)), identity.tmdbId, locale).catch(() => {});
+  // Une série que Jellyfin a seule (§89) : son texte, jamais complété par TMDB. Ses saisons sont celles
+  // du disque, que TMDB peut numéroter autrement — *La Casa de Papel* rangée comme Netflix (5 parties)
+  // recevait, en saison 2, les titres de la saison 2 de TMDB, qui sont ceux de la partie 3 (14/10/2026).
+  if (!identity.jellyfinOnly) {
+    await fillEpisodeText(episodes.filter((e) => !settled.has(e)), identity.tmdbId, locale).catch(() => {});
+  }
 
   const bySeasonNumber = new Map<number, CinemaEpisode[]>();
   for (const { path: _path, ...ep } of episodes) {
