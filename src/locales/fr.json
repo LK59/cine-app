@@ -1880,7 +1880,16 @@
       "personTitles": "{n} titre ici|{n} titres ici",
       "recent": "Vos dernières recherches",
       "forget": "Effacer",
-      "failed": "La recherche n’a pas abouti. Vérifiez la connexion et réessayez."
+      "failed": "La recherche n’a pas abouti. Vérifiez la connexion et réessayez.",
+      "dialogue": {
+        "title": "Répliques",
+        "chip": "Répliques",
+        "loading": "Recherche dans les dialogues…",
+        "failed": "La recherche dans les dialogues n’a pas abouti.",
+        "none": "Aucune réplique ne correspond.",
+        "more": "Voir {n} autre réplique|Voir {n} autres répliques",
+        "playAt": "Lire {title} à {time}"
+      }
     },
     "lists": {
       "requests": "Demandes",

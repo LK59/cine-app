@@ -4301,15 +4301,27 @@ lecteur de CineApp, le lecteur du serveur, le cast, les applications Jellyfin de
 au plus toutes les 20 s), une requête au relais de flux dans la minute (`noteMediaRead`, instantané),
 ou un battement de lecture vivant (`anyPlaybackBeat`). Reprise cinq minutes après le dernier signal.
 
+**La recherche** (`search.ts`, `/api/repliques`, `dialogueSearch.ts`, `DialogueResults`). Dans le
+panneau de recherche du cinéma, le même pour le bureau et le téléphone : les titres d'abord,
+inchangés ; la section « Répliques » dessous, par sa propre requête, lancée 350 ms après la frappe,
+abandonnée quand la frappe change, à partir de trois mots — ou dès trois lettres avec la puce
+« Répliques ». Elle n'existe que si l'option est active et l'index non vide (`GET /api/repliques` sans
+`q`). Groupée par film (trois répliques, « voir plus » demande celles du film), vignette trickplay de la
+scène, horodatage `h:mm:ss`, mots trouvés mis en évidence ; un appui lance le film à
+`dialogueResumeAt` = début − 5 s, jamais négatif (un nombre, §1). Les films cachés par les tags
+bloqués du compte sont retirés **dans la requête** SQL (§54) ; session exigée, 120 recherches par
+minute et par compte.
+
 **Porteurs.** `src/lib/repliques/` — `engine.ts` (passes, `gate`, `startIndexing`, `pauseIndexing`,
 `rebuildIndex`, `repliquesStatus`, `nightlyDue`), `indexFilm.ts`, `mkvText.ts` (`openMatroskaText`,
 `readTextTracks`, `bestTextTrack`), `sidecar.ts`, `fileSource.ts`, `store.ts`, `search.ts`,
 `disks.ts` (`diskOf`, `planQueues`), `playbackActivity.ts`, `library.ts` (`libraryFilms`,
-`containerPathOf`, `checkMoviesMount`), `languages.ts`, `text.ts`.
+`containerPathOf`, `checkMoviesMount`), `languages.ts`, `text.ts` ; `src/lib/dialogueSearch.ts` ;
+`src/lib/trickplayTile.ts` (le calcul de vignette, partagé avec `PlayerControls`).
 
 **Appelants.** `instrumentation.ts` (`startRepliquesEngine`), `/api/repliques/admin` (réservée,
-`ADMIN_ONLY_READS`), `PUT /api/settings`, le relais de flux (`noteMediaRead`),
-`DialogueSearchCard` (Configuration → Recherche de répliques).
+`ADMIN_ONLY_READS`), `/api/repliques`, `PUT /api/settings`, le relais de flux (`noteMediaRead`),
+`DialogueSearchCard` (Configuration → Recherche de répliques), `PlayerSearchPanel`.
 
 **Tests.** `repliques-index.test.ts` (Matroska fabriqué en mémoire : lecture ciblée, taille de grappe
 sur 8 octets, lecture complète en repli, choix de piste, fichiers posés à côté, Windows-1252, ASS),
@@ -4317,11 +4329,15 @@ sur 8 octets, lecture complète en repli, choix de piste, fichiers posés à cô
 rendent la main), `repliques-engine.test.ts` (option coupée par défaut, montage exigé, pause pendant
 une lecture, pause demandée et reprise, film modifié relu, film disparu retiré, erreurs, parallélisme),
 `repliques-disks.test.ts` (preuve des disques, signaux de lecture), `repliques-library.test.ts`,
-`repliques-settings-route.test.ts` (réglage refusé sans montage), `repliques-proxy.test.ts` ; banc
-`repliques-bench.spec.ts`.
+`repliques-settings-route.test.ts` (réglage refusé sans montage), `repliques-proxy.test.ts`,
+`repliques-routes.test.ts` (session, disponibilité, tags bloqués, borne),
+`player-search-dialogue.test.tsx` (titres d'abord, requête à part et abandonnée, puce, −5 s,
+mise en évidence) ; banc `repliques-bench.spec.ts`.
 
 **Différent exprès.** Les séries ne sont pas indexées. Le lecteur n'est pas touché : son analyseur est
 réutilisé en lecture, son index des grappes n'apprend rien de nouveau (`mkvText` relit les Cues pour
-les positions relatives et les durées que le lecteur n'a jamais eu besoin de garder).
+les positions relatives et les durées que le lecteur n'a jamais eu besoin de garder). Seul
+`PlayerControls` change, et à l'identique : son calcul de vignette trickplay passe par
+`trickplayTile.ts`, partagé avec les répliques.
 
 **Décidé le 14/10/2026** (Louis).

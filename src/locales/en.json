@@ -1880,7 +1880,16 @@
       "personTitles": "{n} title here|{n} titles here",
       "recent": "Your recent searches",
       "forget": "Clear",
-      "failed": "The search didn’t go through. Check your connection and try again."
+      "failed": "The search didn’t go through. Check your connection and try again.",
+      "dialogue": {
+        "title": "Lines",
+        "chip": "Lines",
+        "loading": "Searching the dialogue…",
+        "failed": "The dialogue search did not go through.",
+        "none": "No line matches.",
+        "more": "Show {n} more line|Show {n} more lines",
+        "playAt": "Play {title} at {time}"
+      }
     },
     "lists": {
       "requests": "Requests",

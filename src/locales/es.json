@@ -1880,7 +1880,16 @@
       "personTitles": "{n} título aquí|{n} títulos aquí",
       "recent": "Tus últimas búsquedas",
       "forget": "Borrar",
-      "failed": "La búsqueda no se ha completado. Comprueba la conexión e inténtalo de nuevo."
+      "failed": "La búsqueda no se ha completado. Comprueba la conexión e inténtalo de nuevo.",
+      "dialogue": {
+        "title": "Diálogos",
+        "chip": "Diálogos",
+        "loading": "Buscando en los diálogos…",
+        "failed": "La búsqueda en los diálogos no se completó.",
+        "none": "Ningún diálogo coincide.",
+        "more": "Ver {n} diálogo más|Ver {n} diálogos más",
+        "playAt": "Reproducir {title} en {time}"
+      }
     },
     "lists": {
       "requests": "Peticiones",

@@ -21,8 +21,11 @@ import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonResult } from "@/app/api/search/route";
 import { libraryTargetOf } from "@/lib/searchResultTarget";
 import { escapeClears } from "@/lib/escapeClears";
+import { fetcher } from "@/lib/swr";
+import { dialogueSearchUrl, useDialogueSearch, wantsDialogueSearch, type DialogueResponse } from "@/lib/dialogueSearch";
+import { DialogueResults } from "./DialogueResults";
 
-type Filter = "all" | "movie" | "series" | "person";
+type Filter = "all" | "movie" | "series" | "person" | "dialogue";
 
 /**
  * Un résultat, d'où qu'il vienne.
@@ -277,27 +280,45 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
 
   const persons: PersonResult[] = useMemo(() => data?.persons ?? [], [data]);
 
+  /**
+   * Les répliques (DECISIONS.md §88) : une seconde recherche, à part, qui ne retarde jamais les
+   * titres — sa propre requête, partie après un temps d'arrêt, abandonnée dès que la frappe change
+   * (`useDialogueSearch`). Elle n'existe que si l'installation l'a activée et que l'index a des
+   * répliques (`available`) ; sous les titres à partir de trois mots, ou seule avec la puce.
+   */
+  const { data: dialogueState } = useSWR<DialogueResponse>("/api/repliques", fetcher, { revalidateOnFocus: false });
+  const dialogueAvailable = dialogueState?.available === true;
+  const dialogueOnly = requested === "dialogue" && dialogueAvailable;
+  const dialogueWanted = dialogueAvailable && searching && wantsDialogueSearch(typed, dialogueOnly);
+  const dialogue = useDialogueSearch(dialogueWanted ? dialogueSearchUrl(typed) : null);
+  const moviesByItem = useMemo(() => new Map(allMovies.map((m) => [m.jellyfinItemId, m])), [allMovies]);
+  const dialogueFilms = (dialogue.data?.films ?? []).filter((f) => moviesByItem.has(f.itemId)).length;
+
   const counts = useMemo(
     () => ({
       all: titles.length + persons.length,
       movie: titles.filter((r) => r.kind === "movie").length,
       series: titles.filter((r) => r.kind === "series").length,
       person: persons.length,
+      dialogue: dialogueFilms,
     }),
-    [titles, persons]
+    [titles, persons, dialogueFilms]
   );
 
   // Un filtre qui ne correspond plus à rien laisserait une grille vide sans que rien ne
   // l'explique. Déduit au rendu plutôt que corrigé dans un effet : c'est la même règle, mais elle
-  // s'applique sur la frame où le résultat change, sans rendu en cascade.
-  const filter: Filter = requested !== "all" && counts[requested] === 0 ? "all" : requested;
+  // s'applique sur la frame où le résultat change, sans rendu en cascade. La puce « Répliques » fait
+  // exception : on la choisit *pour* chercher, avant d'avoir un résultat.
+  const filter: Filter =
+    requested === "dialogue" ? (dialogueAvailable ? "dialogue" : "all") : requested !== "all" && counts[requested] === 0 ? "all" : requested;
 
   // Rien tant qu'il n'y a rien de cherché. `keepPreviousData` garde les derniers résultats quand
   // la clé change — ce qui est ce qu'on veut en tapant, et pas du tout ce qu'on veut quand on
   // efface : le champ redevenait vide, l'invitation réapparaissait, et la grille précédente
   // restait affichée dessous.
-  const shownTitles = !searching || filter === "person" ? [] : titles.filter((r) => filter === "all" || r.kind === filter);
+  const shownTitles = !searching || filter === "person" || filter === "dialogue" ? [] : titles.filter((r) => filter === "all" || r.kind === filter);
   const shownPersons = searching && (filter === "all" || filter === "person") ? persons : [];
+  const showDialogue = dialogueWanted && (filter === "all" || filter === "dialogue");
   /**
    * « Rien trouvé » ne se dit qu'une fois la réponse connue.
    *
@@ -309,7 +330,8 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
    * dit qu'il en est un (`failed`), même quand la bibliothèque, elle, a trouvé de quoi remplir
    * la grille — la moitié qui manque doit se voir.
    */
-  const empty = searching && debounced === typed && !isLoading && !failed && counts.all === 0;
+  const empty =
+    searching && filter !== "dialogue" && debounced === typed && !isLoading && !failed && counts.all === 0 && !(showDialogue && (dialogue.loading || counts.dialogue > 0));
   const unreachable = searching && debounced === typed && failed;
 
   // La fiche s'ouvre par-dessus la recherche, qui reste montée dessous : le retour du navigateur
@@ -336,6 +358,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
     { key: "movie", label: t("player.kind.moviePlural") },
     { key: "series", label: t("player.kind.seriesPlural") },
     { key: "person", label: t("player.kind.personPlural") },
+    { key: "dialogue", label: t("player.search.dialogue.chip") },
   ];
 
   return (
@@ -397,10 +420,11 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
           )}
         </div>
 
-        {searching && counts.all > 0 && (
+        {searching && (counts.all > 0 || dialogueAvailable) && (
           <div className="mt-5 flex flex-wrap gap-2">
             {FILTERS.map(({ key, label }) => {
-              if (key !== "all" && counts[key] === 0) return null;
+              // La puce « Répliques » est là dès que la recherche existe : on la choisit pour chercher.
+              if (key === "dialogue" ? !dialogueAvailable : key !== "all" && counts[key] === 0) return null;
               return (
                 <button
                   key={key}
@@ -411,7 +435,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
                   className={filter === key ? "chip chip-on" : "chip"}
                 >
                   {label}
-                  <span className="ml-1.5 tabular-nums opacity-60">{counts[key]}</span>
+                  {key !== "dialogue" || counts.dialogue > 0 ? <span className="ml-1.5 tabular-nums opacity-60">{counts[key]}</span> : null}
                 </button>
               );
             })}
@@ -464,7 +488,11 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
           </div>
         )}
 
-        {isLoading && searching && (
+        {showDialogue && (
+          <DialogueResults data={dialogue.data} loading={dialogue.loading} failed={dialogue.failed} query={typed} moviesByItem={moviesByItem} />
+        )}
+
+        {isLoading && searching && filter !== "dialogue" && (
           <div className="mt-10 flex justify-center">
             <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-white" />
           </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { trickplayTileAt as sharedTrickplayTileAt } from "@/lib/trickplayTile";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages, Check } from "lucide-react";
@@ -1468,21 +1469,8 @@ export function PlayerControls({
   // reasoning as updatePreview above (nothing needs referential stability, and the React
   // Compiler's memoization check gets confused by unrelated nearby state).
   function trickplayTileAt(time: number): { url: string; bgX: number; bgY: number } | null {
-    if (!trickplay) return null;
-    const thumbIndex = Math.min(
-      trickplay.thumbnailCount - 1,
-      Math.max(0, Math.floor((time * 1000) / trickplay.intervalMs))
-    );
-    const perTile = trickplay.tileWidth * trickplay.tileHeight;
-    const tileIndex = Math.floor(thumbIndex / perTile);
-    const posInTile = thumbIndex % perTile;
-    const row = Math.floor(posInTile / trickplay.tileWidth);
-    const col = posInTile % trickplay.tileWidth;
-    return {
-      url: `/api/jellyfin/trickplay/tile?itemId=${itemId}&width=${trickplay.width}&index=${tileIndex}`,
-      bgX: -(col * trickplay.width),
-      bgY: -(row * trickplay.height),
-    };
+    // Le calcul est partagé avec les répliques de la recherche (`trickplayTile.ts`, §88).
+    return trickplay ? sharedTrickplayTileAt(trickplay, itemId, time) : null;
   }
   const previewTile = previewTime !== null ? trickplayTileAt(previewTime) : null;
 

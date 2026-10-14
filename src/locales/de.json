@@ -1880,7 +1880,16 @@
       "personTitles": "{n} Titel hier",
       "recent": "Deine letzten Suchen",
       "forget": "Löschen",
-      "failed": "Die Suche ist fehlgeschlagen. Prüfe die Verbindung und versuche es erneut."
+      "failed": "Die Suche ist fehlgeschlagen. Prüfe die Verbindung und versuche es erneut.",
+      "dialogue": {
+        "title": "Dialoge",
+        "chip": "Dialoge",
+        "loading": "Suche in den Dialogen…",
+        "failed": "Die Dialogsuche ist fehlgeschlagen.",
+        "none": "Kein Dialog passt.",
+        "more": "{n} weitere Zeile zeigen|{n} weitere Zeilen zeigen",
+        "playAt": "{title} bei {time} abspielen"
+      }
     },
     "lists": {
       "requests": "Anfragen",
