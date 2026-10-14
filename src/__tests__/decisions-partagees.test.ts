@@ -1151,3 +1151,22 @@ describe("une fiche sans titre se conclut à un seul endroit", () => {
   });
 });
 
+
+describe("deux sous-titres : une apparence, une mémoire, pour les deux lecteurs", () => {
+  // DECISIONS.md §87. Le lecteur natif et le lecteur serveur dessinent le second par le même calque
+  // (`SubtitleLayer`) et retiennent le choix par les mêmes fonctions : un empilement ou une mémoire
+  // écrits deux fois diffèreraient d'un lecteur à l'autre pour le même film.
+  const HOSTS = ["src/components/ExperimentalPlayerHost.tsx", "src/components/PlayerHost.tsx"];
+  it.each(HOSTS)("%s dessine par `SubtitleLayer` et retient par `rememberDual` / `pickRememberedDual`", (f) => {
+    const host = lire(f);
+    expect(host).toMatch(/<SubtitleLayer/);
+    expect(host).toMatch(/rememberDual\(/);
+    expect(host).toMatch(/pickRememberedDual\(/);
+  });
+
+  it("la clé de la mémoire et la teinte du second ne sont écrites qu'une fois", () => {
+    for (const f of [...HOSTS, "src/components/PlayerControls.tsx", "src/components/player/SubtitleLayer.tsx"]) {
+      expect(lire(f)).not.toMatch(/cine:dual-subtitles|SECOND_SUBTITLE_SCALE|#d5d8dd/);
+    }
+  });
+});

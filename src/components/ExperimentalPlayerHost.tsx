@@ -9,12 +9,13 @@ import { directInfoForOpening } from "@/lib/directInfo";
 import { directInfoKey, fetchPlaybackState, takePrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { errorMessage, isUpstreamUnreachable } from "@/lib/upstreamError";
 import { usePlayback } from "@/components/PlaybackProvider";
-import { PlayerControls, type SubtitleGenerationMenu } from "@/components/PlayerControls";
+import { PlayerControls, type SecondSubtitleMenu, type SubtitleGenerationMenu } from "@/components/PlayerControls";
 import { restoreRememberedVolume } from "@/lib/rememberedVolume";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { usePlayerFocus } from "@/lib/usePlayerFocus";
 import { isPlayerWarning } from "@/lib/webcodecs/playerWarning";
-import { subtitlePlacement } from "@/lib/webcodecs/subtitleMarkup";
+import { SubtitleLayer } from "@/components/player/SubtitleLayer";
+import { dualSubtitleMemory, pickRememberedDual, rememberDual } from "@/lib/dualSubtitles";
 import {
   autoHdrCap,
   displayIsHdr,
@@ -72,13 +73,7 @@ import { ExperimentalPlayerReport, type ReportInput } from "@/components/Experim
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
-import {
-  subtitleStyleStore,
-  overlayCss,
-  subtitleRowStyle,
-  SUBTITLE_LAYER_STYLE,
-  type ChromeEdges,
-} from "@/lib/subtitleStyle";
+import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
 import { useFrameFit } from "@/lib/frameFit";
 import { readDialogueMode, writeDialogueMode } from "@/lib/dialoguePreference";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
@@ -994,11 +989,60 @@ export function ExperimentalPlayerHost({
   const [subtitleIsNotice, setSubtitleIsNotice] = useState(false);
 
   /**
+   * Le second sous-titre (« Deux sous-titres », DECISIONS.md §87) : une seconde voie, tenue comme la
+   * première au-dessus des pipelines — son numéro, son fichier s'il vient d'à côté du film, son propre
+   * décalage, sa ligne. Une piste du fichier n'a rien à demander au pipeline : toutes les pistes texte
+   * sont déjà recueillies, on lit simplement une autre piste (`subtitleAt(at, piste)`).
+   */
+  const secondWantedRef = useRef<number | null>(null);
+  const [secondSubtitle, setSecondSubtitle] = useState<number | null>(null);
+  const secondExternalRef = useRef<ExternalSubtitleTrack | null>(null);
+  const secondOffsetRef = useRef(0);
+  const [secondOffset, setSecondOffset] = useState(0);
+  const secondFetchRef = useRef<AbortController | null>(null);
+  const [secondText, setSecondText] = useState<string | null>(null);
+  const [secondIsNotice, setSecondIsNotice] = useState(false);
+  /** Le choix retenu sur l'appareil n'est réappliqué qu'une fois par lecteur, à la première ouverture. */
+  const dualMemoryAppliedRef = useRef(false);
+
+  /**
+   * Quelle voie porte la génération active : une seule génération est sondée et dessinée à la fois
+   * (`SubtitleGeneration.activate`), le principal ou le second. `null` : aucune des deux.
+   */
+  const generationLane = useCallback((): "primary" | "second" | null => {
+    const active = generation.activeTarget;
+    if (!active) return null;
+    const primary = wantedSubtitleRef.current;
+    if (isGeneratingTrack(primary) && generation.targetOf(primary) === active) return "primary";
+    const second = secondWantedRef.current;
+    if (isGeneratingTrack(second) && generation.targetOf(second) === active) return "second";
+    return null;
+  }, [generation]);
+
+  /** Retire le second : un seul sous-titre. */
+  const clearSecond = useCallback(() => {
+    secondWantedRef.current = null;
+    secondExternalRef.current = null;
+    secondFetchRef.current?.abort();
+    secondFetchRef.current = null;
+    secondOffsetRef.current = 0;
+    setSecondOffset(0);
+    setSecondSubtitle(null);
+    setSecondText(null);
+    setSecondIsNotice(false);
+  }, []);
+
+  /**
    * Chooses a subtitle, from the menu or from the viewer's account — a track of the file, told to
    * the pipeline, or a file beside the film, fetched here.
    */
   const chooseSubtitle = useCallback(
     (id: number | null, sources: ExternalSubtitleSource[]) => {
+      // Le second ne survit pas à un principal éteint (un seul sous-titre, ou aucun), ni à devenir
+      // lui-même le principal (les commandes rendent alors l'ancien principal comme second), ni à une
+      // seconde génération : une seule est dessinée à la fois (§87).
+      const second = secondWantedRef.current;
+      if (second !== null && (id === null || id === second || (isGeneratingTrack(id) && isGeneratingTrack(second)))) clearSecond();
       wantedSubtitleRef.current = id;
       // Un décalage corrige une piste, pas la suivante.
       subtitleOffsetRef.current = 0;
@@ -1019,7 +1063,8 @@ export function ExperimentalPlayerHost({
       // Une entrée « … génération… » : ses lignes viennent du sondage, pas d'un fichier. Toute
       // autre piste arrête de sonder — on ne sonde que ce que le spectateur regarde.
       const generating = isGeneratingTrack(id);
-      generation.activate(generating ? id : null);
+      // Une génération que le second affiche reste sondée quand le principal change (§87).
+      generation.activate(generating ? id : isGeneratingTrack(secondWantedRef.current) ? secondWantedRef.current : null);
       if (!external || generating) return;
       const source = sources.find((candidate) => candidate.id === id);
       if (!source) return;
@@ -1039,7 +1084,38 @@ export function ExperimentalPlayerHost({
           if (!fetching.signal.aborted) showWarning(tRef.current("player.experimental.externalSubtitlesUnavailable"));
         });
     },
-    [showWarning, generation]
+    [showWarning, generation, clearSecond]
+  );
+
+  /**
+   * Choisit le second sous-titre (§87) — même chemin que le principal : une piste du fichier se lit
+   * dans les lignes déjà recueillies, un fichier à côté du film se télécharge au choix, une entrée
+   * « … génération… » s'active. Jamais le principal lui-même, jamais une seconde génération.
+   */
+  const chooseSecond = useCallback(
+    (id: number | null, sources: ExternalSubtitleSource[]) => {
+      const primary = wantedSubtitleRef.current;
+      if (id !== null && (id === primary || primary === null)) return;
+      const generating = isGeneratingTrack(id);
+      if (generating && isGeneratingTrack(primary)) return;
+      clearSecond();
+      secondWantedRef.current = id;
+      setSecondSubtitle(id);
+      generation.activate(generating ? id : isGeneratingTrack(primary) ? primary : null);
+      if (id === null || generating || !isExternalTrack(id)) return;
+      const source = sources.find((candidate) => candidate.id === id);
+      if (!source) return;
+      const fetching = new AbortController();
+      secondFetchRef.current = fetching;
+      void ExternalSubtitleTrack.load(source, fetching.signal)
+        .then((loaded) => {
+          if (secondWantedRef.current === id) secondExternalRef.current = loaded;
+        })
+        .catch(() => {
+          if (!fetching.signal.aborted) showWarning(tRef.current("player.experimental.externalSubtitlesUnavailable"));
+        });
+    },
+    [showWarning, generation, clearSecond]
   );
 
   /**
@@ -1047,20 +1123,61 @@ export function ExperimentalPlayerHost({
    * une zone pas encore traduite seulement — un message d'état, au même endroit et du même style
    * (DECISIONS.md §70). Jamais les deux : un message ne remplace qu'un vide.
    */
-  const showGeneratedAt = useCallback(
-    (fileSeconds: number) => {
+  const generatedAt = useCallback(
+    (fileSeconds: number): { text: string | null; notice: boolean } => {
       const text = generation.textAt(fileSeconds);
       if (text) {
-        setSubtitleIsNotice(false);
-        setSubtitle(text);
         generation.noteShown();
-        return;
+        return { text, notice: false };
       }
       const notice = generation.noticeAt(fileSeconds);
-      setSubtitleIsNotice(notice !== null);
-      setSubtitle(notice ? noticeText(notice, tRef.current) : null);
+      return { text: notice ? noticeText(notice, tRef.current) : null, notice: notice !== null };
     },
     [generation]
+  );
+  const showGeneratedAt = useCallback(
+    (fileSeconds: number) => {
+      const shown = generatedAt(fileSeconds);
+      setSubtitleIsNotice(shown.notice);
+      setSubtitle(shown.text);
+    },
+    [generatedAt]
+  );
+  /** La même chose sur la voie du second (§87) : ses messages d'état s'écrivent à sa place à lui. */
+  const showSecondGeneratedAt = useCallback(
+    (fileSeconds: number) => {
+      const shown = generatedAt(fileSeconds);
+      setSecondIsNotice(shown.notice);
+      setSecondText(shown.text);
+    },
+    [generatedAt]
+  );
+
+  /**
+   * La ligne du second à cet instant, sur sa propre horloge — son décalage à lui, et celle du fichier
+   * pour ce qui vient d'à côté du film, comme le principal.
+   */
+  const showSecondAt = useCallback(
+    (playerSeconds: number, fromContainer: (at: number, track?: number) => string | null, fileDelay: number) => {
+      const id = secondWantedRef.current;
+      if (id === null) {
+        setSecondText(null);
+        setSecondIsNotice(false);
+        return;
+      }
+      const at = playerSeconds - secondOffsetRef.current;
+      if (isGeneratingTrack(id)) {
+        if (generationLane() === "second") showSecondGeneratedAt(at - fileDelay);
+        else {
+          setSecondText(null);
+          setSecondIsNotice(false);
+        }
+        return;
+      }
+      setSecondIsNotice(false);
+      setSecondText(isExternalTrack(id) ? (secondExternalRef.current?.textAt(at - fileDelay) ?? null) : fromContainer(at, id));
+    },
+    [generationLane, showSecondGeneratedAt]
   );
 
   /**
@@ -1071,12 +1188,14 @@ export function ExperimentalPlayerHost({
    * racing to set the same line.
    */
   const showSubtitleAt = useCallback(
-    (playerSeconds: number, fromContainer: (at: number) => string | null, fileDelay = 0) => {
+    (playerSeconds: number, fromContainer: (at: number, track?: number) => string | null, fileDelay = 0) => {
       const at = playerSeconds - subtitleOffsetRef.current;
       const external = externalSubtitleRef.current;
       fileDelayRef.current = fileDelay;
-      // Une génération est datée comme un fichier à côté du film : sur l'horloge du fichier.
-      if (!external && generation.activeTarget) {
+      showSecondAt(playerSeconds, fromContainer, fileDelay);
+      // Une génération est datée comme un fichier à côté du film : sur l'horloge du fichier. Celle du
+      // principal seulement : une génération affichée par le second ne remplace pas le principal (§87).
+      if (!external && generationLane() === "primary") {
         showGeneratedAt(at - fileDelay);
         return;
       }
@@ -1084,7 +1203,7 @@ export function ExperimentalPlayerHost({
       // Un fichier à côté du film est daté sur l'horloge du fichier, pas sur celle du lecteur.
       setSubtitle(external ? external.textAt(at - fileDelay) : fromContainer(at));
     },
-    [generation, showGeneratedAt]
+    [generationLane, showGeneratedAt, showSecondAt]
   );
 
   // Reset for every attempt, not fixed at the mount. A rebuild lowers `ready`, and measured from
@@ -1353,6 +1472,11 @@ export function ExperimentalPlayerHost({
     return origins;
   }, [externals, generationView]);
   const subtitleLabels = useSubtitleLabels(subtitleChoices, subtitleOrigins);
+  /** Une piste du menu par son numéro — ce que « deux sous-titres » retient d'elle, c'est sa langue (§87). */
+  const trackOfSubtitle = useCallback(
+    (id: number | null) => (id === null ? null : (subtitleChoices.find((track) => track.number === id) ?? null)),
+    [subtitleChoices]
+  );
   const subtitleDetails = useMemo(
     () => new Map(generationView.entries.map((entry) => [entry.track.number, entry.detail])),
     [generationView]
@@ -1369,6 +1493,24 @@ export function ExperimentalPlayerHost({
       onError: (code, facts) => showWarning(generationErrorText(code, facts.quotaLimit, tRef.current)),
       onFinal: (target, source, list) => {
         setRefreshedExternals(list);
+        // Le second qui affichait cette génération passe, lui aussi sans à-coup, sur la piste finale.
+        const second = secondWantedRef.current;
+        if (isGeneratingTrack(second) && generation.targetOf(second) === target) {
+          secondWantedRef.current = source.id;
+          setSecondSubtitle(source.id);
+          secondExternalRef.current = ExternalSubtitleTrack.fromCues(source.id, generation.cuesOf(target));
+          setSecondIsNotice(false);
+          secondFetchRef.current?.abort();
+          const fetchingSecond = new AbortController();
+          secondFetchRef.current = fetchingSecond;
+          void ExternalSubtitleTrack.load(source, fetchingSecond.signal)
+            .then((loaded) => {
+              if (secondWantedRef.current === source.id && loaded.count > 0) secondExternalRef.current = loaded;
+            })
+            .catch(() => {
+              // Les lignes en mémoire sont complètes.
+            });
+        }
         const wanted = wantedSubtitleRef.current;
         if (!isGeneratingTrack(wanted) || generation.targetOf(wanted) !== target) return;
         // Sans à-coup : les lignes déjà reçues deviennent tout de suite la piste finale — même
@@ -1390,6 +1532,8 @@ export function ExperimentalPlayerHost({
           });
       },
       onFailed: (target) => {
+        const second = secondWantedRef.current;
+        if (isGeneratingTrack(second) && generation.targetOf(second) === target) clearSecond();
         const wanted = wantedSubtitleRef.current;
         if (!isGeneratingTrack(wanted) || generation.targetOf(wanted) !== target) return;
         wantedSubtitleRef.current = null;
@@ -1411,10 +1555,16 @@ export function ExperimentalPlayerHost({
     () =>
       generation.subscribe(() => {
         const element = videoElRef.current;
-        if (!element || externalSubtitleRef.current || !generation.activeTarget) return;
+        const lane = generationLane();
+        if (!element || !lane) return;
+        if (lane === "second") {
+          if (!secondExternalRef.current) showSecondGeneratedAt(element.currentTime - secondOffsetRef.current - fileDelayRef.current);
+          return;
+        }
+        if (externalSubtitleRef.current) return;
         showGeneratedAt(element.currentTime - subtitleOffsetRef.current - fileDelayRef.current);
       }),
-    [generation, showGeneratedAt]
+    [generation, generationLane, showGeneratedAt, showSecondGeneratedAt]
   );
   /** « Générer » dans le menu : la demande part, et l'entrée temporaire devient la piste choisie. */
   const requestGeneration = useCallback(
@@ -1424,6 +1574,15 @@ export function ExperimentalPlayerHost({
       });
     },
     [generation, chooseSubtitle]
+  );
+  /** « Générer — <langue> » comme second (§87) : la même demande, puis l'entrée devient le second. */
+  const requestSecondGeneration = useCallback(
+    (code: string) => {
+      void generation.generate(code).then((id) => {
+        if (id !== null) chooseSecond(id, externalsRef.current);
+      });
+    },
+    [generation, chooseSecond]
   );
 
   /**
@@ -1978,6 +2137,7 @@ export function ExperimentalPlayerHost({
   }, [lifecycle]);
 
   useEffect(() => () => subtitleFetchRef.current?.abort(), []);
+  useEffect(() => () => secondFetchRef.current?.abort(), []);
 
   const handleClose = useCallback(() => {
     // Plus aucune initiative pendant le fondu — voir `PlayerLifecycle.stepAside`. Et une seule
@@ -2223,6 +2383,22 @@ export function ExperimentalPlayerHost({
       return wantedAudio?.number ?? null;
     };
 
+    /**
+     * « Deux sous-titres » retenu sur l'appareil (§87) : réappliqué une fois par lecteur, après les
+     * préférences du compte, si ses langues existent dans ce titre — sinon un seul sous-titre. Pas
+     * pendant un banc d'essai, qui mesure la lecture telle qu'elle s'ouvre.
+     */
+    const applyDualMemory = (subtitles: PlayerTrack[]) => {
+      if (dualMemoryAppliedRef.current || session.bench) return;
+      dualMemoryAppliedRef.current = true;
+      const externalsNow = info.externalSubtitles ?? [];
+      const pair = pickRememberedDual([...subtitles, ...externalsNow.map(externalToPlayerTrack)], wantedSubtitleRef.current, dualSubtitleMemory.read());
+      if (!pair) return;
+      trace(`deux sous-titres retenus : principal ${pair.primary.number}, second ${pair.second.number}`);
+      if (wantedSubtitleRef.current !== pair.primary.number) chooseSubtitle(pair.primary.number, externalsNow);
+      chooseSecond(pair.second.number, externalsNow);
+    };
+
     // Timed from here rather than from the `openedAt` state: that one is reset by a restart, so
     // depending on it would make every restart rebuild the pipeline a second time.
     const attemptStartedAt = Date.now();
@@ -2348,6 +2524,7 @@ export function ExperimentalPlayerHost({
         // Sans réponse du chemin, les canaux de la source et aucune copie : le classement d'avant.
         (track) => track.delivered ?? { channels: track.channels ?? 0, copied: false }
       );
+      applyDualMemory(playback.subtitleTracks);
       const wantedAudio = wantedAudioRef.current ?? preferred;
       const wantedSubtitle = wantedSubtitleRef.current;
       // A track number from a file beside the film means nothing to a pipeline reading the
@@ -2417,7 +2594,7 @@ export function ExperimentalPlayerHost({
       let notedAt = 0;
       const onTime = () => {
         positionRef.current = element.currentTime;
-        showSubtitleAt(element.currentTime, (at) => playback.subtitleAt(at), playback.presentationDelay);
+        showSubtitleAt(element.currentTime, (at, track) => playback.subtitleAt(at, track), playback.presentationDelay);
         // Retenu toutes les quinze secondes de lecture : ce qui distingue, à la prochaine
         // ouverture, un relais d'une vraie reprise (voir `resumeRewind.ts`).
         if (!element.paused && !session.bench && Date.now() - notedAt > 15_000) {
@@ -2814,7 +2991,7 @@ export function ExperimentalPlayerHost({
   // fixés pour toute la vie de ce lecteur — sa clé est `itemId:openId` (voir PlayerHost). Même
   // chose pour `watched`, créé une fois au montage (`useState`) et jamais remplacé (la réserve lit
   // le temps regardé, 28/09/2026). `stutter` et `runner` aussi (§78) : créés une fois au montage.
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner]);
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, chooseSecond, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -3248,7 +3425,7 @@ export function ExperimentalPlayerHost({
     seeks.request(seconds);
     // Une génération active l'apprend tout de suite (sur l'horloge du fichier) : le serveur traduit
     // d'abord là où le spectateur va, et un saut dans une zone pas encore faite est mesuré.
-    generation.noteSeek(seconds - subtitleOffsetRef.current - fileDelayRef.current);
+    generation.noteSeek(seconds - (generationLane() === "second" ? secondOffsetRef.current : subtitleOffsetRef.current) - fileDelayRef.current);
     // Une reconstruction pas encore ouverte rouvre directement là.
     lifecycle.seekDuringRebuild(seconds);
     // Mesuré une fois le chemin natif en marche : c'est le `seeked` de son élément qui ferme la
@@ -3488,36 +3665,18 @@ export function ExperimentalPlayerHost({
         />
       )}
 
-      {subtitle && !isMini && (
-        // En haut quand le fichier le demande (`{\an8}`) : un sous-titre forcé qui traduit un texte
-        // à l'image ne doit pas le cacher. Voir `subtitlePlacement`.
-        // Le calque couvre tout l'écran du lecteur et en est un conteneur de taille : la taille du
-        // texte et sa hauteur de repos se mesurent à lui (`cqh`/`cqw`), et la rangée ne s'écarte que
-        // des commandes réellement affichées (`subtitleRowStyle`, 12/10/2026 — elle était à 96 px
-        // fixes du bas, un quart d'un téléphone en paysage, commandes cachées ou non).
-        <div className="pointer-events-none absolute inset-0 z-10" style={SUBTITLE_LAYER_STYLE}>
-          <div
-            className="subtitle-lift absolute inset-x-0 flex justify-center px-8"
-            style={subtitleRowStyle(subtitlePlacement(subtitle).top, chromeEdges)}
-          >
-            <p
-              // Un message d'état de génération (« Préparation des sous-titres… ») : même place, même
-              // style qu'une réplique, marqué pour qui le cherche — jamais mêlé à une vraie ligne.
-              data-subtitle-notice={subtitleIsNotice ? "" : undefined}
-              // Le sens d'écriture vient du texte : une réplique arabe ou hébraïque (pistes du
-              // conteneur, ou générées depuis le 12/10/2026) mettrait sinon sa ponctuation finale du
-              // mauvais côté, la page étant écrite de gauche à droite.
-              dir="auto"
-              // Ni taille ni couleur écrites ici : ce lecteur dessine ses lignes lui-même, et il
-              // ignorait donc les réglages de sous-titres, qui ne touchaient que les pistes natives.
-              // Un réglage qui marche un film sur deux n'est pas un réglage — voir `subtitleStyle`.
-              className="max-w-4xl whitespace-pre-line text-center font-display font-medium leading-snug"
-              style={overlayCss(subtitleStyle)}
-            >
-              {subtitlePlacement(subtitle).text}
-            </p>
-          </div>
-        </div>
+      {/* Les lignes sous l'image — le principal, et le second au-dessus en mode « deux sous-titres »
+          (§87). Un seul : le calque d'avant à l'identique (`SubtitleLayer`). */}
+      {!isMini && (
+        <SubtitleLayer
+          primary={subtitle}
+          primaryNotice={subtitleIsNotice}
+          second={secondText}
+          secondNotice={secondIsNotice}
+          dual={secondSubtitle !== null}
+          style={subtitleStyle}
+          chromeEdges={chromeEdges}
+        />
       )}
 
       {/* A network cut is not a fault to report, it is a wait to sit through — so it gets its own
@@ -3766,8 +3925,47 @@ export function ExperimentalPlayerHost({
             onChangeSubtitle={(id) => {
               // Comme la piste audio : à l'instant, pas au battement suivant.
               reportPositionNow();
+              const wasDual = secondWantedRef.current !== null;
               chooseSubtitle(id, externals);
+              // En mode deux sous-titres, le principal fait partie du choix retenu (§87).
+              if (wasDual) rememberDual(trackOfSubtitle(wantedSubtitleRef.current), trackOfSubtitle(secondWantedRef.current));
             }}
+            secondSubtitle={
+              path === "remux"
+                ? ({
+                    currentId: secondSubtitle,
+                    onChange: (id) => {
+                      chooseSecond(id, externals);
+                      rememberDual(trackOfSubtitle(wantedSubtitleRef.current), trackOfSubtitle(secondWantedRef.current));
+                    },
+                    // Une seule génération dessinée à la fois : le principal en affiche une, le second
+                    // ne peut ni en prendre une autre, ni en lancer une.
+                    ...(isGeneratingTrack(currentSubtitle)
+                      ? {
+                          tracks: subtitleChoices
+                            .filter((track) => !isGeneratingTrack(track.number))
+                            .map((track) => ({ id: track.number, label: subtitleLabels.get(track.number) ?? String(track.number) })),
+                        }
+                      : session.bench || generationView.targets.length === 0
+                        ? {}
+                        : {
+                            generation: {
+                              targets: generationView.targets,
+                              busy: generationState.requesting !== null,
+                              onGenerate: requestSecondGeneration,
+                            },
+                          }),
+                    offset: {
+                      seconds: secondOffset,
+                      onShift: (delta) => {
+                        const next = Math.round((secondOffsetRef.current + delta) * 10) / 10;
+                        secondOffsetRef.current = next;
+                        setSecondOffset(next);
+                      },
+                    },
+                  } satisfies SecondSubtitleMenu)
+                : undefined
+            }
             // « Générer des sous-titres » (DECISIONS.md §70) : lecteur natif seulement, et seulement
             // s'il reste une langue à demander ou une génération à reprendre.
             subtitleGeneration={

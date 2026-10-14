@@ -1685,6 +1685,16 @@
     "cast": "Transmitir (AirPlay/Chromecast)",
     "subtitleSize": "Tamaño de subtítulos",
     "subtitleOffset": "Desfase",
+    "dualSubtitles": {
+      "title": "Dos subtítulos",
+      "primary": "Principal",
+      "second": "Segundo",
+      "secondOffset": "Desfase del segundo",
+      "off": "Desactivar",
+      "primaryFirst": "Elige primero el subtítulo principal.",
+      "generate": "Generar — {language}",
+      "tvNote": "En la televisión solo se muestra el subtítulo principal."
+    },
     "none": "Ninguno",
     "dialogue": {
       "title": "Mejorar diálogos",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, useSyncExternalStore, type RefObject } from "react";
 import { Loader2 } from "lucide-react";
 import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession, stopOrphanSession } from "@/lib/usePlaybackSession";
@@ -93,7 +93,10 @@ import { positionBucket, retrySignature } from "@/lib/retryLedger";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
-import type { ChromeEdges } from "@/lib/subtitleStyle";
+import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
+import { SubtitleLayer } from "@/components/player/SubtitleLayer";
+import { dualSubtitleMemory, pickRememberedDual, rememberDual } from "@/lib/dualSubtitles";
+import { useServerDualSubtitles } from "@/lib/useServerDualSubtitles";
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 import { useServerIntroPicture } from "@/lib/introEnd";
@@ -148,6 +151,23 @@ interface ExternalSubtitleTrack {
   isForced?: boolean;
   isHearingImpaired?: boolean;
   isExternal?: boolean;
+}
+
+/** Une piste de ce lecteur, dans les termes du choix des pistes (`trackPreferences`) — §87. */
+function subtitleFacts(st: ExternalSubtitleTrack) {
+  return {
+    number: st.index,
+    language: st.language ?? null,
+    name: st.title ?? null,
+    isDefault: st.isDefault,
+    isForced: st.isForced ?? false,
+    isHearingImpaired: st.isHearingImpaired,
+  };
+}
+
+function subtitleFactsOf(tracks: readonly ExternalSubtitleTrack[], id: number | null) {
+  const found = id === null ? undefined : tracks.find((st) => st.index === id);
+  return found ? subtitleFacts(found) : null;
 }
 
 const MAX_NETWORK_RETRIES = 6;
@@ -953,6 +973,15 @@ function ActivePlayer({
   // obtient déjà tout seul et ce qu'il n'obtient pas.
   useWakeLock(playing);
   const [externalSubtitleTracks, setExternalSubtitleTracks] = useState<ExternalSubtitleTrack[]>([]);
+  /**
+   * « Deux sous-titres » (DECISIONS.md §87) : le second, et le principal tenu aussi en référence —
+   * les deux gestes lisent l'autre au moment de l'appui, pas au rendu qui a créé le gestionnaire.
+   */
+  const [secondSubtitleId, setSecondSubtitleId] = useState<number | null>(null);
+  const secondSubtitleRef = useRef<number | null>(null);
+  const currentSubtitleRef = useRef<number | null>(null);
+  const subtitleTrackIds = useMemo(() => externalSubtitleTracks.map((st) => st.index), [externalSubtitleTracks]);
+  const subtitleStyle = useSyncExternalStore(subtitleStyleStore.subscribe, subtitleStyleStore.snapshot, subtitleStyleStore.serverSnapshot);
   const [playbackInfo, setPlaybackInfo] = useState<PlaybackInfoSummary | null>(null);
   /**
    * Le lecteur natif a passé la main parce que l'appareil ne sait pas lire ce fichier, et le serveur
@@ -1744,12 +1773,21 @@ function ActivePlayer({
       // Le sous-titre que le lecteur natif montrait, rallumé une fois quand la version allégée prend
       // le relais (§78) — seulement s'il existe dans ce flux ; sinon aucun, comme avant.
       const carriedSubtitle = takeSubtitleCarry();
-      const wantedSubtitle = carriedSubtitle !== null && tracks.some((st) => st.index === carriedSubtitle) ? carriedSubtitle : null;
+      const carried = carriedSubtitle !== null && tracks.some((st) => st.index === carriedSubtitle) ? carriedSubtitle : null;
+      // « Deux sous-titres » retenu sur l'appareil (§87), réappliqué à chaque négociation si ses langues
+      // sont dans ce flux : chaque négociation repose ses pistes `<track>`, et les sous-titres avec.
+      const dual = pickRememberedDual(tracks.map(subtitleFacts), carried, dualSubtitleMemory.read());
+      const wantedSubtitle = dual ? dual.primary.number : carried;
+      currentSubtitleRef.current = wantedSubtitle;
+      secondSubtitleRef.current = dual ? dual.second.number : null;
       setCurrentSubtitleId(wantedSubtitle);
+      setSecondSubtitleId(secondSubtitleRef.current);
       if (wantedSubtitle !== null) {
         video.addEventListener(
           "loadeddata",
           () => {
+            // En mode deux sous-titres, c'est `useServerDualSubtitles` qui pose les modes.
+            if (secondSubtitleRef.current !== null) return;
             const position = tracks.findIndex((st) => st.index === wantedSubtitle);
             for (let i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode = i === position ? "showing" : "disabled";
           },
@@ -2063,13 +2101,48 @@ function ActivePlayer({
     const video = videoRef.current;
     if (!video) return;
     reportPositionNow();
+    // Le second ne survit pas à un principal éteint, ni à devenir le principal (§87).
+    const wasDual = secondSubtitleRef.current !== null;
+    if (wasDual && (id === null || id === secondSubtitleRef.current)) {
+      secondSubtitleRef.current = null;
+      setSecondSubtitleId(null);
+    }
+    currentSubtitleRef.current = id;
     const position = id === null ? -1 : externalSubtitleTracks.findIndex((t) => t.index === id);
     subtitleSwitchesRef.current += 1;
-    for (let i = 0; i < video.textTracks.length; i++) {
-      video.textTracks[i].mode = i === position ? "showing" : "disabled";
+    // Toujours deux sous-titres : `useServerDualSubtitles` repose les modes, le navigateur ne doit pas
+    // dessiner le nouveau principal entre-temps.
+    if (secondSubtitleRef.current === null || castActive) {
+      for (let i = 0; i < video.textTracks.length; i++) {
+        video.textTracks[i].mode = i === position ? "showing" : "disabled";
+      }
     }
     setCurrentSubtitleId(id);
+    if (wasDual) rememberDual(subtitleFactsOf(externalSubtitleTracks, id), subtitleFactsOf(externalSubtitleTracks, secondSubtitleRef.current));
+  }, [externalSubtitleTracks, reportPositionNow, castActive]);
+
+  /** Le second sous-titre (§87) : jamais le principal, jamais sans principal. */
+  const changeSecondSubtitle = useCallback((id: number | null) => {
+    const primary = currentSubtitleRef.current;
+    if (id !== null && (primary === null || id === primary)) return;
+    reportPositionNow();
+    subtitleSwitchesRef.current += 1;
+    secondSubtitleRef.current = id;
+    setSecondSubtitleId(id);
+    rememberDual(subtitleFactsOf(externalSubtitleTracks, primary), subtitleFactsOf(externalSubtitleTracks, id));
   }, [externalSubtitleTracks, reportPositionNow]);
+
+  const primarySubtitleNow = useCallback(() => currentSubtitleRef.current, []);
+  const dualSubtitles = useServerDualSubtitles({
+    videoRef,
+    trackIds: subtitleTrackIds,
+    primaryNow: primarySubtitleNow,
+    primary: currentSubtitleId,
+    second: secondSubtitleId,
+    // Pendant une diffusion, la télévision ne reçoit que le principal : rien n'est dessiné ici.
+    enabled: !castActive,
+    videoKey,
+  });
 
   // Kicks off async playback setup (fetch + hls.js wiring) on mount — real effect work, not a
   // simple state derivation, so it can't move to render.
@@ -2997,6 +3070,17 @@ function ActivePlayer({
               <track key={t.index} kind="subtitles" src={t.url} srcLang={t.language ?? undefined} label={t.label} />
             ))}
           </video>
+          {/* Deux sous-titres (§87) : dessinés par la page, au calque du lecteur natif — voir
+              `useServerDualSubtitles`. Un seul : le navigateur, comme avant. */}
+          {dualSubtitles.active && !isMini && !error && (
+            <SubtitleLayer
+              dual
+              primary={dualSubtitles.primary}
+              second={dualSubtitles.second}
+              style={subtitleStyle}
+              chromeEdges={chromeEdges}
+            />
+          )}
           {/* La diffusion interrompue passe devant l'erreur ordinaire : elle a son propre geste,
               et proposer « Réessayer » ici ne voudrait rien dire — il n'y a plus de route à
               reprendre, seulement une bascule à refaire. */}
@@ -3195,10 +3279,11 @@ function ActivePlayer({
           subtitleTracks={subtitleTracks}
           currentSubtitleId={currentSubtitleId}
           onChangeSubtitle={changeSubtitle}
+          secondSubtitle={{ currentId: secondSubtitleId, onChange: changeSecondSubtitle }}
           hidden={!!error || needsReauth}
           loading={loading}
           openingQuiet={introCovering}
-          onChromeEdges={switchNotice || subtitleGenNotice || awaitingTap ? setChromeEdges : undefined}
+          onChromeEdges={switchNotice || subtitleGenNotice || awaitingTap || dualSubtitles.active ? setChromeEdges : undefined}
           introSkip={introSkip}
           recapSkip={recapSkip}
           creditsStart={creditsStart}

@@ -1685,6 +1685,16 @@
     "cast": "Cast (AirPlay/Chromecast)",
     "subtitleSize": "Subtitle size",
     "subtitleOffset": "Offset",
+    "dualSubtitles": {
+      "title": "Two subtitles",
+      "primary": "Main",
+      "second": "Second",
+      "secondOffset": "Second offset",
+      "off": "Turn off",
+      "primaryFirst": "Choose the main subtitle first.",
+      "generate": "Generate — {language}",
+      "tvNote": "On the TV, only the main subtitle is shown."
+    },
     "none": "None",
     "dialogue": {
       "title": "Enhance dialogue",

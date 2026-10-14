@@ -1365,6 +1365,16 @@ the height (12 px minimum) plus the safe area, and rises just above the controls
 shown — their real height, reported by `PlayerControls` through `onChromeEdges` — by a transform
 alone. Native `<track>` cues keep the browser's own placement.
 
+**Two subtitles at once** (DECISIONS.md §87, `dualSubtitles.ts`, `SubtitleLayer`). A second subtitle
+can be drawn just above the main one, at 80 % of its size in a softer tint, with its own track, clock
+and offset; it may be a generated track (native player). The main line never moves: both sit in one
+row anchored by its bottom, the main line last, and an empty line of the main's height keeps its
+place while only the second speaks. On a portrait phone both shrink by a tenth and keep to two lines
+each. The server player keeps the browser drawing a single subtitle; with two, both `<track>`s go to
+`hidden` and the page draws them (`useServerDualSubtitles`). The choice is remembered per device as
+two languages (`cine:dual-subtitles`) and reapplied on the next title when both exist. Televisions
+(AirPlay, Chromecast) receive the main subtitle only.
+
 **Overlapping lines** are shown together, in the order they appeared, two at most
 (`simultaneousText`, DECISIONS.md n°19); they stay at the top only if every one asks for it.
 

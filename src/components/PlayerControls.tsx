@@ -63,6 +63,30 @@ export interface SubtitleGenerationMenu {
   onResume: (code: string) => void;
 }
 
+/**
+ * « Deux sous-titres » (DECISIONS.md §87) : un second sous-titre, dessiné au-dessus du principal.
+ * Fourni par l'hôte qui sait le dessiner — le lecteur natif et le lecteur serveur. Absent (Chromecast,
+ * mini-lecteur), l'entrée n'existe pas.
+ */
+export interface SecondSubtitleMenu {
+  /** Le second choisi, `null` : un seul sous-titre. */
+  currentId: number | null;
+  onChange: (id: number | null) => void;
+  /**
+   * Les pistes proposées comme second, quand l'hôte doit en retirer (une génération en cours ailleurs
+   * que celle du principal : une seule génération s'affiche à la fois). Absent : toutes celles du
+   * menu, moins le principal.
+   */
+  tracks?: Track[];
+  /**
+   * Son décalage, quand c'est l'hôte qui dessine (lecteur natif) — comme `subtitleOffset`. Absent, les
+   * commandes déplacent les lignes de sa piste `<track>`, comme pour le principal du lecteur serveur.
+   */
+  offset?: { seconds: number; onShift: (deltaSeconds: number) => void };
+  /** « Générer — <langue> » comme second (lecteur natif, §70) : absent, rien à générer. */
+  generation?: { targets: { code: string; label: string }[]; busy: boolean; onGenerate: (code: string) => void };
+}
+
 // AirPlay (Safari, webkit-prefixed) isn't in lib.dom's HTMLVideoElement typings — unlike the
 // standard Remote Playback API (Chrome/Edge's actual Chromecast entry point for a plain
 // <video>), which `video.remote` already covers natively.
@@ -130,6 +154,8 @@ interface PlayerControlsProps {
    * (relevé le 23/09/2026).
    */
   subtitleOffset?: { seconds: number; onShift: (deltaSeconds: number) => void };
+  /** Voir `SecondSubtitleMenu`. */
+  secondSubtitle?: SecondSubtitleMenu;
   hidden: boolean;
   loading: boolean;
   /**
@@ -268,6 +294,9 @@ const MENU_TITLES: Record<string, string> = {
   subtitleStyle: "player.subtitleStyle.title",
   subtitleGen: "player.subtitleGen.generate",
   subtitleGenOther: "player.subtitleGen.generate",
+  dual: "player.dualSubtitles.title",
+  dualPrimary: "player.dualSubtitles.primary",
+  dualSecond: "player.dualSubtitles.second",
   more: "player.moreOptions",
   chapters: "player.chapters",
   sleep: "player.sleep.title",
@@ -280,6 +309,9 @@ const MENU_ICONS: Record<string, React.ReactNode> = {
   subtitleStyle: <Captions size={20} />,
   subtitleGen: <Languages size={20} />,
   subtitleGenOther: <Languages size={20} />,
+  dual: <Captions size={20} />,
+  dualPrimary: <Captions size={20} />,
+  dualSecond: <Captions size={20} />,
   more: <EllipsisVertical size={20} />,
   chapters: <ListVideo size={20} />,
   sleep: <Timer size={20} />,
@@ -319,6 +351,7 @@ export function PlayerControls({
   currentSubtitleId,
   onChangeSubtitle,
   subtitleOffset: hostSubtitleOffset,
+  secondSubtitle,
   hidden,
   loading,
   resuming = false,
@@ -462,7 +495,7 @@ export function PlayerControls({
   }, [visible, hidden, onChromeEdges]);
   // Démonté (fermeture, passage au mini-lecteur), il n'y a plus de commandes à éviter.
   useEffect(() => () => onChromeEdges?.(null), [onChromeEdges]);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "subtitleGen" | "subtitleGenOther" | "quality" | "more">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "subtitleGen" | "subtitleGenOther" | "dual" | "dualPrimary" | "dualSecond" | "quality" | "more">(null);
   // Cachées par un écran d'erreur, les commandes restent montées (le lecteur serveur garde l'élément
   // pour « Réessayer ») et gardaient leur menu : le nouvel essai les rendait menu ouvert par-dessus le
   // film qui repart — et un menu ouvert suspend leur disparition, elles ne partaient plus (chasse
@@ -605,6 +638,22 @@ export function PlayerControls({
   }
   const subtitleOffset =
     hostSubtitleOffset?.seconds ?? (currentSubtitleId === null ? 0 : (cueOffsets[currentSubtitleId] ?? 0));
+  // Le second a son propre décalage (§87) : deux pistes ne sont pas désynchronisées de la même façon.
+  const secondId = secondSubtitle?.currentId ?? null;
+  const secondOffset = secondSubtitle?.offset?.seconds ?? (secondId === null ? 0 : (cueOffsets[secondId] ?? 0));
+  /** Ce qu'on peut prendre comme second : toute piste du menu sauf le principal. */
+  const secondChoices = (secondSubtitle?.tracks ?? subtitleTracks).filter((tr) => tr.id !== currentSubtitleId);
+  const labelOf = (id: number | null) => (id === null ? t("player.none") : (subtitleTracks.find((tr) => tr.id === id)?.label ?? t("player.none")));
+  /**
+   * Choisir le principal depuis « Deux sous-titres ». Prendre le second comme principal les échange :
+   * l'hôte retire d'abord le second devenu principal, puis reçoit l'ancien principal comme second.
+   */
+  function pickPrimary(id: number) {
+    const previous = currentSubtitleId;
+    if (id === previous) return;
+    onChangeSubtitle(id);
+    if (secondSubtitle && id === secondSubtitle.currentId) secondSubtitle.onChange(previous);
+  }
   const [nextUpDismissed, setNextUpDismissed] = useState(false);
   const [nextUpCountdown, setNextUpCountdown] = useState(NEXT_UP_COUNTDOWN_S);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1530,9 +1579,22 @@ export function PlayerControls({
       hostSubtitleOffset.onShift(deltaSeconds);
       return;
     }
+    if (currentSubtitleId !== null) shiftCues(currentSubtitleId, deltaSeconds);
+  }
+
+  /** Le décalage du second (§87) : par l'hôte qui le dessine, sinon sur les lignes de sa piste. */
+  function shiftSecond(deltaSeconds: number) {
+    if (secondSubtitle?.offset) {
+      secondSubtitle.offset.onShift(deltaSeconds);
+      return;
+    }
+    if (secondId !== null) shiftCues(secondId, deltaSeconds);
+  }
+
+  function shiftCues(id: number, deltaSeconds: number) {
     const video = videoRef.current;
-    if (!video || currentSubtitleId === null) return;
-    const position = subtitleTracks.findIndex((t) => t.id === currentSubtitleId);
+    if (!video) return;
+    const position = subtitleTracks.findIndex((t) => t.id === id);
     const cues = video.textTracks[position]?.cues;
     if (!cues) return;
     for (let i = 0; i < cues.length; i++) {
@@ -1544,7 +1606,6 @@ export function PlayerControls({
       cue.startTime += deltaSeconds;
       cue.endTime += deltaSeconds;
     }
-    const id = currentSubtitleId;
     setCueOffsets((all) => ({ ...all, [id]: Math.round(((all[id] ?? 0) + deltaSeconds) * 10) / 10 }));
   }
 
@@ -2119,17 +2180,22 @@ export function PlayerControls({
               menu === "dialogue" ||
               menu === "quality" ||
               menu === "subtitleGen" ||
-              menu === "subtitleGenOther") && (
+              menu === "subtitleGenOther" ||
+              menu === "dual" ||
+              menu === "dualPrimary" ||
+              menu === "dualSecond") && (
               <button
                 onClick={() =>
                   setMenu(
-                    menu === "subtitleStyle" || menu === "subtitleGen"
+                    menu === "subtitleStyle" || menu === "subtitleGen" || menu === "dual"
                       ? "subtitles"
                       : menu === "subtitleGenOther"
                         ? "subtitleGen"
-                        : menu === "dialogue"
-                          ? "audio"
-                          : "more"
+                        : menu === "dualPrimary" || menu === "dualSecond"
+                          ? "dual"
+                          : menu === "dialogue"
+                            ? "audio"
+                            : "more"
                   )
                 }
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
@@ -2143,6 +2209,8 @@ export function PlayerControls({
                   key={tr.id}
                   onClick={() => {
                     if (menu === "audio") onChangeAudio(tr.id);
+                    // Le second pris comme principal : les deux s'échangent (§87).
+                    else if (secondSubtitle && tr.id === secondSubtitle.currentId) pickPrimary(tr.id);
                     else onChangeSubtitle(tr.id);
                     setMenu(null);
                   }}
@@ -2288,29 +2356,147 @@ export function PlayerControls({
                   <ChevronRight size={14} className="shrink-0 text-white/50" />
                 </button>
                 {currentSubtitleId !== null && (
-                  <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-white">
-                    <span className="min-w-0">{t('player.subtitleOffset')}</span>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        onClick={() => shiftSubtitles(-0.5)}
-                        className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
-                      >
-                        −0.5s
-                      </button>
-                      <span className="w-12 text-center tabular-nums text-xs text-white/70">
-                        {subtitleOffset > 0 ? "+" : ""}
-                        {subtitleOffset}s
-                      </span>
-                      <button
-                        onClick={() => shiftSubtitles(0.5)}
-                        className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
-                      >
-                        +0.5s
-                      </button>
-                    </div>
-                  </div>
+                  <OffsetRow label={t("player.subtitleOffset")} seconds={subtitleOffset} onShift={shiftSubtitles} />
                 )}
               </div>
+            )}
+            {/* « Deux sous-titres » (§87) : sous l'apparence, une porte comme elle. Proposée dès qu'il y a
+                de quoi faire deux — deux pistes, ou une piste et une langue à générer. La ligne dit le
+                second retenu, pour qu'on sache sans ouvrir que le mode est actif. */}
+            {menu === "subtitles" &&
+              secondSubtitle &&
+              (subtitleTracks.length >= 2 || (subtitleTracks.length >= 1 && (secondSubtitle.generation?.targets.length ?? 0) > 0)) && (
+                <button
+                  data-dual-subtitles-row
+                  onClick={() => setMenu("dual")}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                >
+                  <span className="truncate">{t("player.dualSubtitles.title")}</span>
+                  <span className="flex min-w-0 items-center gap-1">
+                    {secondId !== null && <span className="truncate text-xs text-white/50">{labelOf(secondId)}</span>}
+                    <ChevronRight size={14} className="shrink-0 text-white/50" />
+                  </span>
+                </button>
+              )}
+            {menu === "dual" && secondSubtitle && (
+              <>
+                <button
+                  data-dual-primary-row
+                  onClick={() => setMenu("dualPrimary")}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                >
+                  <span className="shrink-0">{t("player.dualSubtitles.primary")}</span>
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span className="truncate text-xs text-white/50">{labelOf(currentSubtitleId)}</span>
+                    <ChevronRight size={14} className="shrink-0 text-white/50" />
+                  </span>
+                </button>
+                <button
+                  data-dual-second-row
+                  disabled={currentSubtitleId === null}
+                  onClick={() => setMenu("dualSecond")}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+                >
+                  <span className="shrink-0">{t("player.dualSubtitles.second")}</span>
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span className="truncate text-xs text-white/50">{labelOf(secondId)}</span>
+                    <ChevronRight size={14} className="shrink-0 text-white/50" />
+                  </span>
+                </button>
+                {currentSubtitleId === null && (
+                  <p className="px-3 pb-2 text-xs text-white/50">{t("player.dualSubtitles.primaryFirst")}</p>
+                )}
+                {secondId !== null && (
+                  <div className="border-t border-white/10">
+                    <OffsetRow label={t("player.dualSubtitles.secondOffset")} seconds={secondOffset} onShift={shiftSecond} />
+                    <button
+                      data-dual-off
+                      onClick={() => {
+                        secondSubtitle.onChange(null);
+                        setMenu("subtitles");
+                      }}
+                      className="block w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                    >
+                      {t("player.dualSubtitles.off")}
+                    </button>
+                  </div>
+                )}
+                {/* Ce que la télévision reçoit, dit simplement : AirPlay et le Chromecast ne prennent
+                    que le principal — le second est dessiné par cette page, qui n'est pas à l'écran. */}
+                {(castSupported || !!chromecast) && (
+                  <p data-dual-tv-note className="border-t border-white/10 px-3 py-2 text-xs text-white/50">
+                    {t("player.dualSubtitles.tvNote")}
+                  </p>
+                )}
+              </>
+            )}
+            {menu === "dualPrimary" &&
+              subtitleTracks.map((tr) => (
+                <button
+                  key={tr.id}
+                  data-dual-primary={tr.id}
+                  onClick={() => {
+                    pickPrimary(tr.id);
+                    setMenu("dual");
+                  }}
+                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${currentSubtitleId === tr.id ? " font-semibold" : ""}`}
+                >
+                  <OptionCheck on={currentSubtitleId === tr.id} />
+                  <span className="min-w-0 line-clamp-2">{tr.label}</span>
+                </button>
+              ))}
+            {menu === "dualSecond" && secondSubtitle && (
+              <>
+                <button
+                  data-dual-second="none"
+                  onClick={() => {
+                    secondSubtitle.onChange(null);
+                    setMenu("dual");
+                  }}
+                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${secondId === null ? " font-semibold" : ""}`}
+                >
+                  <OptionCheck on={secondId === null} />
+                  {t("player.none")}
+                </button>
+                {secondChoices.map((tr) => (
+                  <button
+                    key={tr.id}
+                    data-dual-second={tr.id}
+                    onClick={() => {
+                      secondSubtitle.onChange(tr.id);
+                      setMenu("dual");
+                    }}
+                    className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${secondId === tr.id ? " font-semibold" : ""}`}
+                  >
+                    <OptionCheck on={secondId === tr.id} />
+                    <span className="min-w-0 line-clamp-2">
+                      {tr.label}
+                      {tr.detail && <span className="ml-2 text-xs tabular-nums text-white/50">{tr.detail}</span>}
+                    </span>
+                  </button>
+                ))}
+                {/* Générer le second, à la volée depuis la position — la même demande, les mêmes limites et
+                    les mêmes messages que « Générer des sous-titres » (§70). */}
+                {secondSubtitle.generation && secondSubtitle.generation.targets.length > 0 && (
+                  <div className="border-t border-white/10">
+                    {secondSubtitle.generation.targets.map((target) => (
+                      <button
+                        key={target.code}
+                        data-dual-generate={target.code}
+                        disabled={secondSubtitle.generation!.busy}
+                        onClick={() => {
+                          secondSubtitle.generation!.onGenerate(target.code);
+                          setMenu(null);
+                        }}
+                        className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+                      >
+                        <Languages size={16} aria-hidden className="mt-0.5 shrink-0" />
+                        <span className="min-w-0 line-clamp-2">{t("player.dualSubtitles.generate", { language: target.label })}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
             {menu === "subtitleStyle" && (
               <>
@@ -2950,6 +3136,30 @@ function DialogueBeta() {
     <span className="shrink-0 rounded-full border border-white/20 px-1.5 py-px text-[11px] font-semibold uppercase leading-4 tracking-wider text-white/70">
       {t("player.chromecast.beta")}
     </span>
+  );
+}
+
+/**
+ * Un décalage de sous-titres : l'intitulé, −0,5 s, la valeur, +0,5 s. Le même pour le principal et
+ * pour le second (§87) — même pas, même place.
+ */
+function OffsetRow({ label, seconds, onShift }: { label: string; seconds: number; onShift: (deltaSeconds: number) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-white">
+      <span className="min-w-0">{label}</span>
+      <div className="flex shrink-0 items-center gap-1">
+        <button onClick={() => onShift(-0.5)} className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20">
+          −0.5s
+        </button>
+        <span className="w-12 text-center tabular-nums text-xs text-white/70">
+          {seconds > 0 ? "+" : ""}
+          {seconds}s
+        </span>
+        <button onClick={() => onShift(0.5)} className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20">
+          +0.5s
+        </button>
+      </div>
+    </div>
   );
 }
 

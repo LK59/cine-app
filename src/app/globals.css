@@ -1034,6 +1034,23 @@
 .subtitle-lift {
   transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+/* Deux sous-titres à la fois (DECISIONS.md §87). Le calque est un conteneur de taille : plus haut
+   que large — un téléphone en portrait —, les deux lignes rétrécissent d'un dixième et ne passent
+   pas deux lignes chacune, sinon elles couvraient un tiers de l'image. Le facteur est porté par le
+   mode et non par la présence d'une réplique du second : le principal ne change jamais de taille
+   quand le second parle. Le rembourrage laisse à l'ombre portée la place que `overflow` couperait. */
+.subtitle-dual { --dual-k: 1; }
+@container (orientation: portrait) {
+  .subtitle-dual { --dual-k: 0.9; }
+  .subtitle-dual-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    padding: 0.15em 0.3em;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .subtitle-lift { transition: none; }
   .player-menu { animation: none; }

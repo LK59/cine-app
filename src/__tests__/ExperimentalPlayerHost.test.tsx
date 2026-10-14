@@ -129,6 +129,14 @@ vi.mock("@/components/PlayerControls", () => ({
     };
     suspended?: boolean;
     subtitleOffset?: { seconds: number; onShift: (delta: number) => void };
+    // « Deux sous-titres » (DECISIONS.md §87) : une ligne par second possible, « aucun », la génération.
+    secondSubtitle?: {
+      currentId: number | null;
+      onChange: (id: number | null) => void;
+      tracks?: { id: number; label: string }[];
+      offset?: { seconds: number; onShift: (delta: number) => void };
+      generation?: { targets: { code: string; label: string }[]; onGenerate: (code: string) => void };
+    };
     hdrCap?: { current: string | number; autoNits: number | null; onPick: (choice: string | number) => void };
     onClose?: () => void;
     chromecast?: { active: boolean; onRequest: () => void };
@@ -138,6 +146,7 @@ vi.mock("@/components/PlayerControls", () => ({
       data-loading={String(props.loading)}
       data-suspended={String(!!props.suspended)}
       data-current-subtitle={String(props.currentSubtitleId ?? "")}
+      data-current-second={String(props.secondSubtitle?.currentId ?? "")}
     >
       {props.onClose && <button onClick={props.onClose}>fermer</button>}
       {/* Le bouton où le focus doit entrer à l'ouverture — voir `usePlayerFocus`. */}
@@ -170,6 +179,19 @@ vi.mock("@/components/PlayerControls", () => ({
         <button key={entry.code} onClick={() => props.subtitleGeneration!.onResume(entry.code)}>{`reprendre:${entry.code}`}</button>
       ))}
       <button onClick={() => props.onChangeSubtitle(null)}>st:aucun</button>
+      {props.secondSubtitle &&
+        (props.secondSubtitle.tracks ?? props.subtitleTracks)
+          .filter((track) => track.id !== props.currentSubtitleId)
+          .map((track) => (
+            <button key={`2:${track.id}`} onClick={() => props.secondSubtitle!.onChange(track.id)}>{`st2:${track.label}`}</button>
+          ))}
+      {props.secondSubtitle && <button onClick={() => props.secondSubtitle!.onChange(null)}>st2:aucun</button>}
+      {props.secondSubtitle?.generation?.targets.map((target) => (
+        <button key={`g2:${target.code}`} onClick={() => props.secondSubtitle!.generation!.onGenerate(target.code)}>{`gen2:${target.code}`}</button>
+      ))}
+      {props.secondSubtitle?.offset && (
+        <button onClick={() => props.secondSubtitle!.offset!.onShift(0.5)}>{`décalage2:${props.secondSubtitle.offset.seconds}`}</button>
+      )}
     </div>
   ),
 }));
@@ -1278,6 +1300,111 @@ describe("les sous-titres posés à côté du film", () => {
 });
 
 /**
+ * « Deux sous-titres » (DECISIONS.md §87), vu du lecteur natif : chaque piste garde ses lignes et son
+ * horloge, le second se lit dans les lignes déjà recueillies (une autre piste, pas un autre filtre du
+ * pipeline), il a son propre décalage, et le choix est retenu pour le film suivant.
+ */
+describe("deux sous-titres à la fois", () => {
+  beforeEach(() => {
+    window.localStorage.removeItem("cine:dual-subtitles");
+    remux = fakeRemux({
+      subtitleTracks: [
+        { number: 5, codecId: "S_TEXT/UTF8", language: "fre", name: null, isDefault: false, isForced: false },
+        { number: 6, codecId: "S_TEXT/UTF8", language: "eng", name: null, isDefault: false, isForced: false },
+      ],
+      // Le principal se lit sur la piste choisie (pas de piste donnée), le second sur la sienne.
+      subtitleAt: vi.fn((at: number, track?: number) => (track === 6 ? (at < 20 ? "Hello." : null) : track === undefined ? "Bonjour." : null)),
+    });
+  });
+
+  const controls = () => screen.getByTestId("controls").dataset;
+
+  async function twoSubtitles() {
+    mount();
+    await waitFor(() => expect(screen.getByText(/^st:Français/)).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText(/^st:Français/)));
+    await act(async () => void fireEvent.click(screen.getByText(/^st2:Anglais/)));
+  }
+
+  it("les deux répliques en même temps, le second au-dessus ; un seul quand l'autre se tait", async () => {
+    await twoSubtitles();
+    expect(controls().currentSubtitle).toBe("5");
+    expect(controls().currentSecond).toBe("6");
+    // Le pipeline ne filtre que le principal : le second ne lui est jamais demandé comme piste choisie.
+    expect(remux.selectSubtitleTrack).not.toHaveBeenCalledWith(6);
+    await act(async () => void fireEvent(videoElement(10), new Event("timeupdate")));
+    const row = document.querySelector('[data-subtitle-row="bottom"]')!;
+    expect([...row.children].map((el) => el.textContent)).toEqual(["Hello.", "Bonjour."]);
+    expect(row.lastElementChild!.hasAttribute("data-subtitle-primary")).toBe(true);
+
+    // Le second se tait : le principal reste seul, à sa place, sans second.
+    await act(async () => void fireEvent(videoElement(30), new Event("timeupdate")));
+    expect(document.querySelector("[data-subtitle-second]")).toBeNull();
+    expect(document.querySelector("[data-subtitle-primary]")?.textContent).toBe("Bonjour.");
+  });
+
+  it("le décalage du second ne touche qu'à lui", async () => {
+    await twoSubtitles();
+    await act(async () => void fireEvent.click(screen.getByText("décalage2:0")));
+    expect(screen.getByText("décalage2:0.5")).toBeTruthy();
+    // Le principal garde son décalage à zéro.
+    expect(screen.getByText("décalage:0")).toBeTruthy();
+    remux.subtitleAt.mockClear();
+    await act(async () => void fireEvent(videoElement(10), new Event("timeupdate")));
+    expect(remux.subtitleAt).toHaveBeenCalledWith(9.5, 6);
+    expect(remux.subtitleAt).toHaveBeenCalledWith(10, undefined);
+  });
+
+  it("le second venu d'un fichier à côté du film : téléchargé au choix, sur l'horloge du fichier", async () => {
+    swr = { data: info({ externalSubtitles: [{ id: -1, language: "spa", title: null, url: "/es.vtt" }] }), error: undefined };
+    stubFetch((url) => (url === "/es.vtt" ? { ok: true, text: async () => "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHola." } : { ok: true, text: async () => "" }));
+    mount();
+    await waitFor(() => expect(screen.getByText(/^st:Français/)).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText(/^st:Français/)));
+    await act(async () => void fireEvent.click(screen.getByText(/^st2:Espagnol/)));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/es.vtt", expect.anything()));
+    // Le principal, piste du fichier, reste filtré par le pipeline.
+    expect(remux.selectSubtitleTrack).not.toHaveBeenCalledWith(null);
+    await act(async () => void fireEvent(videoElement(2), new Event("timeupdate")));
+    await waitFor(() => expect(document.querySelector("[data-subtitle-second]")?.textContent).toBe("Hola."));
+    expect(document.querySelector("[data-subtitle-primary]")?.textContent).toBe("Bonjour.");
+  });
+
+  it("éteindre le principal éteint aussi le second ; « aucun » revient à un seul", async () => {
+    await twoSubtitles();
+    await act(async () => void fireEvent.click(screen.getByText("st2:aucun")));
+    expect(controls().currentSecond).toBe("");
+    expect(controls().currentSubtitle).toBe("5");
+    await act(async () => void fireEvent.click(screen.getByText(/^st2:Anglais/)));
+    await act(async () => void fireEvent.click(screen.getByText("st:aucun")));
+    expect(controls().currentSecond).toBe("");
+    expect(controls().currentSubtitle).toBe("");
+    await act(async () => void fireEvent(videoElement(10), new Event("timeupdate")));
+    expect(document.querySelector("[data-subtitle-second]")).toBeNull();
+  });
+
+  it("retenu sur l'appareil, réappliqué au film suivant si les langues y sont — sinon un seul", async () => {
+    await twoSubtitles();
+    expect(JSON.parse(window.localStorage.getItem("cine:dual-subtitles")!)).toMatchObject({ primary: "fr", second: "en" });
+    cleanup();
+
+    // Le film suivant, sans préférence de compte : les deux reviennent.
+    mount({ itemId: "item-2" });
+    await untilSettled(() => expect(controls().currentSecond).toBe("6"));
+    expect(controls().currentSubtitle).toBe("5");
+    expect(remux.selectSubtitleTrack).toHaveBeenCalledWith(5);
+    cleanup();
+
+    // Un film sans piste anglaise : un seul sous-titre, et le choix reste retenu pour la suite.
+    remux = fakeRemux({ subtitleTracks: [{ number: 5, codecId: "S_TEXT/UTF8", language: "fre", name: null, isDefault: false, isForced: false }] });
+    mount({ itemId: "item-3" });
+    await untilSettled(() => expect(controls().loading).toBe("false"));
+    expect(controls().currentSecond).toBe("");
+    expect(window.localStorage.getItem("cine:dual-subtitles")).not.toBeNull();
+  });
+});
+
+/**
  * « Générer des sous-titres » (DECISIONS.md §70), vu de l'hôte : l'entrée temporaire, les messages
  * d'état dessinés comme des sous-titres, la bascule vers la piste finale — et aucun de ses échecs ne
  * touche à la lecture.
@@ -1473,6 +1600,36 @@ describe("générer des sous-titres", () => {
     await act(async () => void fireEvent.click(screen.getByText("saut:600")));
     await settle();
     expect(gen.pollBodies).toHaveLength(polls);
+  });
+
+  // « Deux sous-titres » (§87) : le second peut être une génération — même demande, même sondage, ses
+  // messages et ses lignes à la place du second ; le principal, une piste du fichier, n'en est pas touché.
+  it("générer comme second : l'entrée temporaire devient le second, le principal reste celui du fichier", async () => {
+    remux.subtitleAt = vi.fn((_at: number, track?: number) => (track === undefined ? "Bonjour." : null)) as never;
+    mount();
+    await waitFor(() => expect(screen.getByText(/^st:Français/)).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText(/^st:Français/)));
+    await waitFor(() => expect(screen.getByText("gen2:en")).toBeTruthy());
+    videoElement(600);
+    await act(async () => void fireEvent.click(screen.getByText("gen2:en")));
+    expect(gen.createBodies[0]).toMatchObject({ itemId: "item-1", target: "en" });
+    await waitFor(() => expect(Number(screen.getByTestId("controls").dataset.currentSecond)).toBeLessThanOrEqual(-1_000_000));
+    expect(screen.getByTestId("controls").dataset.currentSubtitle).toBe("5");
+    // Le pipeline garde sa piste : la génération ne passe jamais par lui.
+    expect(remux.selectSubtitleTrack).not.toHaveBeenCalledWith(null);
+    await waitFor(() => expect(gen.pollBodies.length).toBeGreaterThan(0));
+    await act(async () => void fireEvent(videoElement(600), new Event("timeupdate")));
+    await waitFor(() => expect(document.querySelector("[data-subtitle-second]")?.textContent).toBe("preparing"));
+    expect(document.querySelector("[data-subtitle-second]")!.hasAttribute("data-subtitle-notice")).toBe(true);
+    expect(document.querySelector("[data-subtitle-primary]")?.textContent).toBe("Bonjour.");
+
+    gen.polls = [{ status: "running", rev: 2, done: 1, total: 10, cues: [{ i: 0, start: 599, end: 602, text: "Translated line" }] }];
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    await waitFor(() => expect(document.querySelector("[data-subtitle-second]")?.textContent).toBe("Translated line"));
+    expect(document.querySelector("[data-subtitle-primary]")?.textContent).toBe("Bonjour.");
+    // Une seule génération à la fois : le second en affiche une, le principal ne s'en voit pas imposer.
+    expect(screen.getByTestId("controls").dataset.currentSubtitle).toBe("5");
+    expect(onFallback).not.toHaveBeenCalled();
   });
 });
 

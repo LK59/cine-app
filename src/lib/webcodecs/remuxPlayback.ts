@@ -558,8 +558,12 @@ export class RemuxPlayback {
     return this.mse?.presentationDelay ?? 0;
   }
 
-  subtitleAt(seconds: number): string | null {
-    const track = this.currentSubtitle;
+  /**
+   * `track` absent : la piste choisie. Donnée : une autre piste du fichier — le second sous-titre
+   * (DECISIONS.md §87), lu dans les mêmes lignes déjà en mémoire (toutes les pistes texte sont
+   * recueillies d'un seul passage), sans rien changer au filtre de la piste choisie.
+   */
+  subtitleAt(seconds: number, track: number | null = this.currentSubtitle): string | null {
     if (track === null) return null;
     return simultaneousText(
       this.cues.filter((cue) => cue.track === track && cue.startSeconds <= seconds && seconds <= cue.endSeconds)

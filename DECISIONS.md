@@ -4146,3 +4146,75 @@ le cache par compte effacé à la déconnexion et `PERSISTED_CACHE_SCHEMA` sont 
 gardé n'a bougé.
 
 **Décidé le 13/10/2026.**
+
+---
+
+## 87. Deux sous-titres à la fois : un second au-dessus du principal, qui ne le déplace jamais
+
+**Règle.** Le menu des sous-titres ouvre « Deux sous-titres » : un principal et un second, choisis
+chacun dans sa liste, cochés comme le reste des menus (`OptionCheck`). Le second est une piste texte
+du titre autre que le principal, « Aucun », ou — lecteur natif — « Générer — <langue> ». Pas de second
+sans principal ; prendre le second comme principal les échange ; éteindre le principal, ou
+« Désactiver », revient à un seul sous-titre. Chaque piste garde ses propres lignes et son horloge, et
+a son propre décalage (même pas de 0,5 s que celui du principal).
+
+**Affichage.** Le principal reste à sa place et à sa taille (§72). Le second se pose juste au-dessus,
+à 80 % de sa taille, d'une teinte plus douce — blanc légèrement grisé sous un principal blanc, jaune
+pâle presque crème sous un principal jaune —, avec le même contour ou la même boîte. Les deux vivent
+dans une rangée ancrée par son bas dont le **dernier** enfant est le principal : le second qui
+apparaît, grandit ou se tait ne le fait jamais bouger. Quand seul le second parle, une ligne vide de
+la hauteur du principal garde la place de celui-ci : sans elle, le second tombait à la ligne du bas
+puis remontait d'un cran à la réplique suivante. Dans une zone plus haute que large (téléphone en
+portrait), les deux rétrécissent d'un dixième et ne passent pas deux lignes chacune (`.subtitle-dual`,
+requête de conteneur) — ce facteur dépend du **mode**, pas de la présence d'une réplique du second,
+sinon le principal changerait de taille à chaque ligne du second. Une réplique placée en haut
+(`{\an8}`) y reste.
+
+**Les deux lecteurs.** Natif : une seconde voie tenue au-dessus des pipelines comme la première ; une
+piste du fichier se lit dans les lignes déjà recueillies (`RemuxPlayback.subtitleAt(at, piste)` —
+toutes les pistes texte sont recueillies d'un passage, le filtre du principal n'est pas touché), un
+fichier à côté du film se télécharge au choix. Serveur : un seul sous-titre reste une piste `<track>`
+dessinée par le navigateur, comme avant ; à deux, `::cue` ne permettant aucun placement, les deux
+pistes passent en `hidden` (chargées, répliques actives tenues, rien de dessiné) et la page dessine
+les deux par le même calque que le natif (`useServerDualSubtitles`). Ses décalages déplacent les
+répliques de chaque piste (`PlayerControls.shiftCues`), comme celui du principal l'a toujours fait.
+
+**Génération.** Une seule génération est sondée et dessinée à la fois (`SubtitleGeneration.activate`) :
+celle du principal ou celle du second (`generationLane`). Le second en génération reçoit les mêmes
+messages d'état, à sa place à lui, les mêmes refus passagers, et bascule sans à-coup sur le fichier
+final présenté par Jellyfin. Quand le principal est lui-même une génération, le second ne propose ni
+autre génération ni entrée temporaire. Rien d'autre ne change à §69/§70.
+
+**Mémoire.** Comme l'apparence, par appareil (`cine:dual-subtitles`, `v: 1`) : les deux *langues* du
+choix — un numéro de piste ne veut rien dire d'un fichier à l'autre. Au film suivant, une fois par
+lecteur natif (à chaque négociation côté serveur, qui repose ses `<track>`), le second revient si sa
+langue existe en piste complète (ni forcée, ordinaire de préférence à SDH), à côté du principal déjà
+choisi — ou de celui de la langue retenue s'il n'y en a pas — et pas dans la même langue que lui.
+Sinon un seul sous-titre, et la mémoire reste pour la suite. Jamais de génération relancée d'office :
+elle coûte. Écrite seulement par un geste sur le second, ou sur le principal pendant que le mode est
+actif.
+
+**Diffusion.** AirPlay et le Chromecast ne reçoivent que le principal ; le menu le dit quand une
+diffusion est possible. Pendant AirPlay, le lecteur serveur rend le principal au navigateur et ne
+dessine rien. Le `ChromecastPlayer` n'a pas d'entrée « Deux sous-titres ».
+
+**Porteurs.** `src/lib/dualSubtitles.ts` (`secondOverlayCss`, `primaryDualCss`, `SECOND_SUBTITLE_TINT`,
+`dualSubtitleMemory`, `rememberDual`, `pickRememberedDual`) ; `SubtitleLayer`
+(`src/components/player/SubtitleLayer.tsx`) ; `useServerDualSubtitles` ; `SecondSubtitleMenu` et les
+vues `dual` / `dualPrimary` / `dualSecond`, `OffsetRow`, `pickPrimary` (`PlayerControls`) ;
+`.subtitle-dual`, `.subtitle-dual-text` (globals.css).
+
+**Appelants.** `ExperimentalPlayerHost` (`chooseSecond`, `showSecondAt`, `generationLane`,
+`applyDualMemory`) ; `PlayerHost` (`changeSecondSubtitle`, ré-application dans `startPlayback`).
+
+**Tests.** `PlayerControls-dualSubtitles.test.tsx` (porte, choix, coches, échange, désactiver, décalage
+par l'hôte et sur la piste, génération, liste imposée, note de diffusion), `dualSubtitles.test.tsx`
+(apparence, empilement, place gardée, mémoire), `ExperimentalPlayerHost.test.tsx` (« deux sous-titres à
+la fois », « générer comme second »), `PlayerHost-deuxSousTitres.test.tsx`, `decisions-partagees.test.ts`.
+
+**Différent exprès.** Le mini-lecteur n'affiche toujours aucun sous-titre. Un seul sous-titre ne
+change rien au rendu d'avant, ni dans le natif (même arbre) ni dans le serveur (le navigateur dessine).
+Le second n'est pas transmis lors d'un passage du natif au serveur : la mémoire le réapplique à
+l'ouverture du serveur.
+
+**Décidé le 14/10/2026** (validé par Louis).

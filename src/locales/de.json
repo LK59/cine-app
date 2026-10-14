@@ -1685,6 +1685,16 @@
     "cast": "Streamen (AirPlay/Chromecast)",
     "subtitleSize": "Untertitelgröße",
     "subtitleOffset": "Versatz",
+    "dualSubtitles": {
+      "title": "Zwei Untertitel",
+      "primary": "Hauptuntertitel",
+      "second": "Zweiter",
+      "secondOffset": "Versatz des zweiten",
+      "off": "Ausschalten",
+      "primaryFirst": "Wähle zuerst den Hauptuntertitel.",
+      "generate": "Erzeugen — {language}",
+      "tvNote": "Auf dem Fernseher wird nur der Hauptuntertitel angezeigt."
+    },
     "none": "Keine",
     "dialogue": {
       "title": "Dialoge verbessern",
