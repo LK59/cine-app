@@ -64,11 +64,12 @@ const fake = {
   listeners: new Map<string, Listener[]>(),
   startLoad: vi.fn(),
   recoverMediaError: vi.fn(),
+  detachMedia: vi.fn(),
 };
 vi.mock("hls.js", () => {
   class Hls {
     static isSupported = () => true;
-    static Events = { FRAG_BUFFERED: "hlsFragBuffered", ERROR: "hlsError", MANIFEST_PARSED: "hlsManifestParsed", LEVEL_LOADED: "hlsLevelLoaded" };
+    static Events = { FRAG_BUFFERED: "hlsFragBuffered", ERROR: "hlsError", MANIFEST_PARSED: "hlsManifestParsed", LEVEL_LOADED: "hlsLevelLoaded", MEDIA_DETACHING: "hlsMediaDetaching" };
     static ErrorTypes = { NETWORK_ERROR: "networkError", MEDIA_ERROR: "mediaError", OTHER_ERROR: "otherError" };
     bandwidthEstimate = 0;
     audioTracks = [];
@@ -78,8 +79,11 @@ vi.mock("hls.js", () => {
     off() {}
     loadSource() {}
     attachMedia() {}
-    startLoad() {
-      fake.startLoad();
+    startLoad(...args: unknown[]) {
+      fake.startLoad(...args);
+    }
+    detachMedia() {
+      fake.detachMedia();
     }
     recoverMediaError() {
       fake.recoverMediaError();
@@ -125,6 +129,7 @@ beforeEach(() => {
   fake.listeners = new Map();
   fake.startLoad.mockClear();
   fake.recoverMediaError.mockClear();
+  fake.detachMedia.mockClear();
 });
 afterEach(() => {
   cleanup();
@@ -187,5 +192,92 @@ describe("boucle (a)2 — les compteurs remis à zéro par chaque fragment", () 
       fatal("mediaError");
     }
     expect(fake.recoverMediaError.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+});
+
+/** L'élément tel que hls.js le laisse : en lecture à `at`, ou remis à zéro par un détachement (`null`). */
+function elementAt(at: number | null) {
+  const video = document.querySelector("video")!;
+  Object.defineProperty(video, "readyState", { configurable: true, get: () => (at === null ? 0 : 4) });
+  Object.defineProperty(video, "currentTime", { configurable: true, get: () => at ?? 0, set: () => {} });
+}
+/** Ce qu'hls.js 1.7 pose quand il a appelé `recoverMediaError()` lui-même (ResetMediaSource | SwitchToSDR). */
+const RESET_BY_HLS = { action: 5, flags: 16 | 8 };
+const requiresReset = (isFatal: boolean) =>
+  emit("hlsError", { fatal: isFatal, type: "mediaError", details: "mediaSourceRequiresReset", errorAction: RESET_BY_HLS });
+
+describe("hls.js 1.7 — une seule récupération par incident, à la bonne position", () => {
+  beforeEach(() => {
+    // Ouvert loin du début, comme une séance reprise d'un préchauffage (§78, `startPosition`).
+    playback.session = { itemId: "film", openId: 1, resumeAt: 600, title: "Film" };
+  });
+
+  it("MEDIA_SOURCE_REQUIRES_RESET fatale déjà récupérée par hls.js : pas de second recoverMediaError, chargement relancé où l'élément en était", async () => {
+    await mounted();
+    elementAt(1500);
+    // hls.js détache lui-même (sa récupération), l'élément retombe à zéro, puis la fatale nous arrive.
+    emit("hlsMediaDetaching");
+    elementAt(null);
+    requiresReset(true);
+    expect(fake.recoverMediaError).not.toHaveBeenCalled();
+    expect(fake.startLoad).toHaveBeenCalledTimes(1);
+    expect(fake.startLoad).toHaveBeenCalledWith(1500);
+  });
+
+  it("erreur média fatale ordinaire : notre récupération, puis le chargement relancé à la position courante — pas au point d'ouverture", async () => {
+    await mounted();
+    elementAt(1500);
+    fatal("mediaError");
+    expect(fake.recoverMediaError).toHaveBeenCalledTimes(1);
+    expect(fake.startLoad).toHaveBeenCalledWith(1500);
+    expect(fake.startLoad).not.toHaveBeenCalledWith(600);
+  });
+
+  it("erreur média fatale avant la première image : relancée au point de reprise", async () => {
+    await mounted();
+    elementAt(null);
+    fatal("mediaError");
+    expect(fake.recoverMediaError).toHaveBeenCalledTimes(1);
+    // Le point de reprise tel que la séance l'a ouvert (reculé de quelques secondes à la reprise,
+    // `resumeRewind`) — jamais le début.
+    const at = fake.startLoad.mock.calls[0]?.[0] as number;
+    expect(at).toBeGreaterThan(580);
+    expect(at).toBeLessThanOrEqual(600);
+  });
+
+  it("erreur réseau fatale : la relance repart de la position courante", async () => {
+    await mounted();
+    elementAt(1500);
+    vi.useFakeTimers();
+    fatal("networkError");
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(fake.startLoad).toHaveBeenCalledTimes(1);
+    expect(fake.startLoad).toHaveBeenCalledWith(1500);
+  });
+
+  it("hls.js 1.7 réessaie lui-même une requête restée sans réponse : c'est une coupure, dite tout de suite — pas une expiration", async () => {
+    await mounted();
+    emit("hlsError", { fatal: false, type: "networkError", details: "fragLoadError", response: { code: 0, text: "" } });
+    await waitFor(() => expect(document.body.textContent).toContain("player.slowLink.unstable"));
+    emit("hlsFragBuffered");
+    await waitFor(() => expect(document.body.textContent).not.toContain("player.slowLink.unstable"));
+    // Une expiration (le lien est lent, il livre) n'est pas une coupure.
+    emit("hlsError", { fatal: false, type: "networkError", details: "fragLoadTimeOut" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(document.body.textContent).not.toContain("player.slowLink.unstable");
+  });
+
+  it("les remises à zéro non fatales d'hls.js comptent au budget : trois, puis une fatale = l'écran d'erreur, élément détaché", async () => {
+    await mounted();
+    elementAt(1500);
+    for (let i = 0; i < 3; i++) requiresReset(false);
+    expect(fake.recoverMediaError).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain("player.playbackInterrupted");
+    requiresReset(true);
+    expect(fake.recoverMediaError).not.toHaveBeenCalled();
+    expect(fake.startLoad).not.toHaveBeenCalled();
+    // Sans le détachement, la MediaSource neuve d'hls.js rechargerait sous l'écran (`autoStartLoad`).
+    expect(fake.detachMedia).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(document.body.textContent).toContain("player.playbackInterrupted"));
   });
 });

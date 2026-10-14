@@ -53,6 +53,7 @@ import { directReloadIntent, reloadLighterOf, reloadPage, shouldReloadDirect, ty
 import { SlowLinkRunner, type SeekSignal, type SlowLinkHost } from "@/lib/slowLinkRunner";
 import { forgetLighterCarry, readPlaybackQuality, rememberLighter, usePlaybackQuality } from "@/lib/playbackQuality";
 import { simulatorActive, throttledHlsLoader } from "@/lib/linkSimulator";
+import { hlsRecoveryPosition, hlsResetItself, livePosition } from "@/lib/hlsRecovery";
 import { pushSlowLinkEvent } from "@/lib/slowLinkMonitor";
 
 /** Pas d'indice : l'état ordinaire d'un chargement (§78). */
@@ -636,6 +637,12 @@ function ActivePlayer({
   const networkRetryCount = useRef(0);
   const mediaRetryCount = useRef(0);
   const networkRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * La position de l'élément juste avant le dernier détachement d'hls.js (`MEDIA_DETACHING`) : quand
+   * hls.js récupère lui-même (1.7, `hlsRecovery.ts`), l'élément est déjà remis à zéro quand notre
+   * écouteur d'erreur passe — c'est la seule trace de l'endroit où il en était (un saut compris).
+   */
+  const hlsDetachedAt = useRef<number | null>(null);
   // Kept up to date on every 'timeupdate' so a fatal error (which freezes the <video> in
   // place, no longer receiving new data) still has a recent position to resume from — reading
   // video.currentTime directly at that point would work too, but this is more robust if the
@@ -1325,6 +1332,7 @@ function ActivePlayer({
       setLinkSignal(NO_LINK_SIGNAL);
       networkRetryCount.current = 0;
       mediaRetryCount.current = 0;
+      hlsDetachedAt.current = null;
       setError(null);
       setReconnecting(false);
       setLoading(true);
@@ -1957,13 +1965,50 @@ function ActivePlayer({
         }
       });
 
+      // Où en était l'élément au moment où hls.js le détache — le sien (récupération qu'il fait
+      // lui-même, 1.7) comme le nôtre. Lu par `recoveryPosition` ci-dessous.
+      hls.on(Hls.Events.MEDIA_DETACHING, () => {
+        if (generation !== playbackGeneration.current) return;
+        hlsDetachedAt.current = livePosition(videoRef.current);
+      });
+      /**
+       * D'où relancer après une récupération. `startLoad()` sans argument, et le rattachement qui suit
+       * un `recoverMediaError()` après une fatale, repartent de `config.startPosition` — la position de
+       * reprise d'origine d'une séance préchauffée (§78) : la récupération ramenait le spectateur au
+       * point d'ouverture (lu dans hls.js 1.7.3, `onMediaAttached` ; déjà vrai en 1.5.17).
+       */
+      const recoveryPosition = () => hlsRecoveryPosition(videoRef.current, hlsDetachedAt.current, lastKnownTime.current) ?? -1;
+      const noteMediaFailure = () =>
+        tallyRef.current.retries.noteFailure(retrySignature("hls.js : média", { pos: positionBucket(lastKnownTime.current) }));
+
       // hls.js's own per-request retry/backoff (fragLoadingMaxRetry etc.) already absorbs a
       // short stall before ever raising a *fatal* error — a fatal here means that budget is
       // already exhausted. hls.js's documented recovery for that case is to call startLoad()
       // (network) or recoverMediaError() (media) ourselves rather than tearing the player down;
       // bounded so a genuinely dead stream still surfaces an error instead of retrying forever.
       hls.on(Hls.Events.ERROR, (_evt, data2) => {
-        if (!data2.fatal) return;
+        // hls.js 1.7 récupère lui-même une `MEDIA_SOURCE_REQUIRES_RESET` (`hlsRecovery.ts`) — avant
+        // nous, son écouteur passant le premier. Non fatale (une variante SDR a pris le relais), il
+        // recharge déjà à la bonne position : la récupération est seulement comptée, au registre et
+        // au budget, pour qu'une série de remises à zéro reste bornée comme les nôtres.
+        const resetByHls = data2.type === Hls.ErrorTypes.MEDIA_ERROR && hlsResetItself(data2);
+        if (!data2.fatal) {
+          if (resetByHls) {
+            noteMediaFailure();
+            mediaRetryCount.current += 1;
+          } else if (data2.type === Hls.ErrorTypes.NETWORK_ERROR && data2.response?.code === 0) {
+            // Une requête restée sans aucune réponse (statut 0 : la connexion est coupée). hls.js 1.5
+            // déclarait aussitôt la fatale, qui posait « Connexion perdue ou instable… » ; 1.7 réessaie
+            // d'abord lui-même ce segment (1, 2, 4, 8, 8, 8 s — mesuré sur l'instance de test le
+            // 14/10/2026) avant toute fatale. Sans ce marquage, ces ~30 s de coupure ne disaient rien
+            // et une attente pendant ce temps était jugée comme une lenteur — préchauffage, bascule
+            // vers la version allégée, ce que §78 interdit pour une coupure. Effacé au prochain
+            // fragment accepté (`FRAG_BUFFERED`). Une expiration (lien lent, octets qui arrivent)
+            // n'a pas de statut et n'est pas une coupure.
+            setReconnecting(true);
+          }
+          return;
+        }
         switch (data2.type) {
           case Hls.ErrorTypes.NETWORK_ERROR: {
             tallyRef.current.retries.noteFailure(retrySignature("hls.js : réseau", { pos: positionBucket(lastKnownTime.current) }));
@@ -1980,12 +2025,17 @@ function ActivePlayer({
             // for roughly 1-3s) without hammering the server if it's actually down.
             const delay = Math.min(1000 * 2 ** (networkRetryCount.current - 1), 15_000);
             if (networkRetryTimer.current) clearTimeout(networkRetryTimer.current);
-            networkRetryTimer.current = setTimeout(() => hls.startLoad(), delay);
+            // À la position d'alors, pas au départ de la séance : voir `recoveryPosition`.
+            networkRetryTimer.current = setTimeout(() => hls.startLoad(recoveryPosition()), delay);
             return;
           }
           case Hls.ErrorTypes.MEDIA_ERROR: {
-            tallyRef.current.retries.noteFailure(retrySignature("hls.js : média", { pos: positionBucket(lastKnownTime.current) }));
+            noteMediaFailure();
             if (mediaRetryCount.current >= MAX_MEDIA_RETRIES) {
+              // hls.js vient peut-être de rattacher l'élément à une MediaSource neuve : à son
+              // ouverture, il rechargerait de lui-même (`autoStartLoad`) et l'élément (`autoPlay`)
+              // repartirait sous l'écran d'erreur. Détaché, il reste vide — « Réessayer » repart de zéro.
+              if (resetByHls) hls.detachMedia();
               setReconnecting(false);
               setLoading(false);
               setError(t('player.playbackInterrupted'));
@@ -1993,7 +2043,12 @@ function ActivePlayer({
             }
             mediaRetryCount.current += 1;
             setReconnecting(true);
-            hls.recoverMediaError();
+            // Une seule récupération par incident : si hls.js vient de la faire, il ne reste qu'à
+            // relancer le chargement que sa fatale a arrêté (`stopLoad`) — un second
+            // `recoverMediaError()` détachait la MediaSource qu'il venait d'ouvrir.
+            const at = recoveryPosition();
+            if (!resetByHls) hls.recoverMediaError();
+            hls.startLoad(at);
             return;
           }
           default:
