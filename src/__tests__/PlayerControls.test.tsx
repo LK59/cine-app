@@ -766,7 +766,9 @@ describe("PlayerControls", () => {
 
     Object.defineProperty(video, "muted", { value: false, writable: true, configurable: true });
     const muteButtons = screen.getAllByRole("button");
-    const muteButton = muteButtons.find((b) => b.querySelector("svg.lucide-volume2"));
+    // La classe vient du nom de l'icône depuis lucide-react 1.57 (« lucide-volume-2 ») et non plus
+    // du composant (« lucide-volume2 ») : le sélecteur suit la bibliothèque, le geste testé non.
+    const muteButton = muteButtons.find((b) => b.querySelector("svg.lucide-volume-2"));
     expect(muteButton).toBeTruthy();
     await user.click(muteButton!);
 
