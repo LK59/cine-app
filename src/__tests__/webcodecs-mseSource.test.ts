@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MseSource, playabilityOf } from "@/lib/webcodecs/mseSource";
 import type { Remuxer, RemuxPlan, RemuxSegment } from "@/lib/webcodecs/remuxer";
 import { traceReset, traceText } from "@/lib/webcodecs/trace";
+import { mediaSegment, type MuxTrackInfo } from "@/lib/webcodecs/mp4Muxer";
 
 // MediaSource does not exist in jsdom, and the parts of it that matter here — when a buffer
 // signals it is done, when the system asks for data, what happens when it is full — are exactly
@@ -2605,6 +2606,169 @@ describe("lossReport", () => {
     const mse = await MseSource.attach(video, fakeRemuxer(40), PLAN, { onError: vi.fn() });
     await until(() => video.buffered.length > 0, "du média");
     expect(mse.lossReport()).toEqual(expect.objectContaining({ position: expect.any(Number), steps: expect.any(String) }));
+    mse.destroy();
+  });
+});
+
+// 14/10/2026 : un « Media failed to decode » après un saut arrière (iPhone, Lucifer S01E05) n'a
+// laissé que « illisible (source fermée) » — la source était déjà fermée quand l'élément a signalé
+// l'erreur. Les faits d'un échec sont désormais relevés avant, et chacun dans sa garde.
+describe("faits d'un échec de décodage", () => {
+  /** Des fragments fMP4 véritables : deux secondes chacun, première image montrée 42 ms après. */
+  function fragmentRemuxer(segments: number) {
+    const base = fakeRemuxer(segments);
+    let index = 0;
+    const track = { id: 1 } as MuxTrackInfo;
+    return Object.assign(base, {
+      seekTo: (s: number) => {
+        base.seeks.push(s);
+        index = 0;
+      },
+      nextSegment: async (): Promise<RemuxSegment | null> => {
+        if (index >= segments) return null;
+        index += 1;
+        const at = (index - 1) * 2_000_000;
+        const sample = { data: new Uint8Array([1, 2, 3]), decodeTime: at, duration: 2_000_000, isKeyframe: true, compositionOffset: 42_000 };
+        return { video: [mediaSegment(track, index, [sample])], audio: new Uint8Array([20 + index]), subtitles: [], endSeconds: index * 2 };
+      },
+    });
+  }
+
+  /**
+   * La plateforme ferme la source : les tampons ne se lisent plus, et l'élément — comme un vrai,
+   * détaché de sa source — n'a plus aucune plage.
+   */
+  function closeSource(video: HTMLVideoElement) {
+    Object.defineProperty(video, "buffered", { get: () => ({ length: 0 }) as unknown as TimeRanges, configurable: true });
+    const source = FakeSource.instances.at(-1)!;
+    source.readyState = "closed";
+    for (const buffer of source.buffers) {
+      Object.defineProperty(buffer, "buffered", {
+        get: () => {
+          throw new DOMException("removed", "InvalidStateError");
+        },
+      });
+    }
+  }
+
+  it("rapporte les tampons du dernier envoi, les images, le message et le fragment sous la tête", async () => {
+    const video = fakeVideo();
+    Object.assign(video, {
+      getVideoPlaybackQuality: () => ({ totalVideoFrames: 120, droppedVideoFrames: 2, corruptedVideoFrames: 1 }),
+    });
+    const mse = await MseSource.attach(video, fragmentRemuxer(8), PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) >= 6, "trois fragments au moins");
+    video.currentTime = 3.5;
+
+    // Dans l'ordre de WebKit : la source se ferme d'abord, l'élément signale ensuite.
+    closeSource(video);
+    Object.defineProperty(video, "error", { value: { code: 3, message: "PIPELINE_ERROR_DECODE" }, configurable: true });
+    video.dispatchEvent(new Event("error"));
+
+    const report = mse.lossReport();
+    expect(report.videoBuffered).toBe("illisible (source fermée)");
+    expect(report.lastBuffered).toMatch(/^vidéo 0\.00–\d+\.00 · audio 0\.00–\d+\.00 — après envoi (vidéo|audio), \d+ ms avant$/);
+    expect(report.videoQuality).toBe("total 120 · perdues 2 · corrompues 1");
+    expect(report.mediaError).toBe("3 « PIPELINE_ERROR_DECODE »");
+    expect(report.lastFragment).toMatch(/^n°\d+ \(\d+e depuis le saut\) dts \d+\.000 pts \d+\.042 · tête -?[\d.+-]+ s · envoyé \d+ ms avant$/);
+    // La tête à 3,5 s est dans le deuxième fragment, qui commence à 2,042 s.
+    expect(report.headFragment).toBe("n°2 (2e) pts 2.042 · tête +1.46 s");
+    // `steps` reste le dernier champ de la ligne.
+    expect(Object.keys(report).at(-1)).toBe("steps");
+    mse.destroy();
+  });
+
+  it("n'ajoute rien de ce qu'il ne sait pas", async () => {
+    // L'élément simulé n'a ni compteur d'images ni erreur ; les fragments ne sont pas des moof.
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(40), PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0, "du média");
+    const report = mse.lossReport();
+    expect(report).not.toHaveProperty("videoQuality");
+    expect(report).not.toHaveProperty("mediaError");
+    expect(report).not.toHaveProperty("lastFragment");
+    expect(report).not.toHaveProperty("headFragment");
+    expect(report.lastBuffered).toEqual(expect.any(String));
+    mse.destroy();
+  });
+
+  it("une lecture qui lève perd ce fait-là, jamais les autres ni la ligne", async () => {
+    const video = fakeVideo();
+    Object.assign(video, {
+      getVideoPlaybackQuality: () => {
+        throw new Error("indisponible");
+      },
+    });
+    Object.defineProperty(video, "error", {
+      get: () => {
+        throw new Error("illisible");
+      },
+      configurable: true,
+    });
+    const onError = vi.fn();
+    const mse = await MseSource.attach(video, fragmentRemuxer(8), PLAN, { onError });
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) >= 4, "du média");
+    video.currentTime = 1;
+    closeSource(video);
+    // Directement, sans l'événement : `elementState`, qui lit aussi `error` pour la trace, n'est
+    // pas l'objet de ce test.
+    (mse as unknown as { noteLoss: () => void }).noteLoss();
+    const report = mse.lossReport();
+    expect(report).not.toHaveProperty("videoQuality");
+    expect(report).not.toHaveProperty("mediaError");
+    expect(report.lastFragment).toEqual(expect.stringMatching(/^n°/));
+    expect(report.steps).toEqual(expect.any(String));
+    expect(onError).not.toHaveBeenCalled();
+    mse.destroy();
+  });
+
+  it("un état illisible n'emporte plus les faits de l'échec ni la trace", async () => {
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fragmentRemuxer(8), PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) >= 4, "du média");
+    closeSource(video);
+    // L'élément lui-même lève à son tour : `stateFacts` ne peut rien relever.
+    Object.defineProperty(video, "buffered", {
+      get: () => {
+        throw new DOMException("removed", "InvalidStateError");
+      },
+      configurable: true,
+    });
+    const report = mse.lossReport();
+    expect(report).not.toHaveProperty("position");
+    expect(report.lastBuffered).toEqual(expect.stringMatching(/^vidéo 0\.00–/));
+    expect(report.lastFragment).toEqual(expect.stringMatching(/^n°/));
+    expect(report.steps).toEqual(expect.any(String));
+    mse.destroy();
+  });
+
+  it("trace le vidage d'un saut : durée de chaque piste et ce qui reste", async () => {
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fragmentRemuxer(40), PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0, "du média");
+    await mse.seek(600);
+    expect(traceText()).toMatch(/vidage fait \(vidéo \d+ ms, audio \d+ ms\) — reste vidéo vide · audio vide/);
+    mse.destroy();
+  });
+
+  it("ne garde, après un saut, que les fragments envoyés depuis le vidage", async () => {
+    const video = fakeVideo();
+    const remuxer = fragmentRemuxer(3);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await until(() => (mse as unknown as { sentFragments: unknown[] }).sentFragments.length === 3, "trois fragments");
+    await mse.seek(1200);
+    await until(() => (mse as unknown as { fragmentsSinceSeek: number }).fragmentsSinceSeek > 0, "un fragment après le saut");
+    const kept = (mse as unknown as { sentFragments: { n: number }[] }).sentFragments;
+    expect(kept[0].n).toBe(1);
+    mse.destroy();
+  });
+
+  it("n'est pas porté par les lignes `stall`", async () => {
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fragmentRemuxer(4), PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0, "du média");
+    const stall = (mse as unknown as { stallReport: (now: number, ms: number) => Record<string, unknown> }).stallReport(1, 5000);
+    for (const key of ["lastBuffered", "videoQuality", "mediaError", "lastFragment", "headFragment"]) expect(stall).not.toHaveProperty(key);
     mse.destroy();
   });
 });

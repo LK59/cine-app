@@ -10,6 +10,7 @@
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import type { Remuxer, RemuxPlan, TrackedCue } from "./remuxer";
 import { trace, traceRecent } from "./trace";
+import { fragmentTimes } from "./fragmentProbe";
 import { diagInterval, diagNow, diagStallFacts } from "./playbackDiagnosis";
 import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource";
 import { BufferQueue } from "./bufferQueue";
@@ -150,6 +151,13 @@ const RUNAWAY_REPORT_SECONDS = 3;
 
 /** How much of the trace a stall line carries: enough to hold the seek or skip that led to it. */
 const STALL_TRACE_MS = 20_000;
+/** Fragments vidéo gardés pour situer la tête à un échec — voir `sentFragments`. */
+const SENT_FRAGMENTS_KEPT = 48;
+
+/** Un écart en secondes, signé et arrondi au centième — pour le journal. */
+function signed(seconds: number): string {
+  return `${seconds >= 0 ? "+" : ""}${seconds.toFixed(2)}`;
+}
 
 /** Refused appends in a row before playback is declared broken rather than merely interrupted. */
 const MAX_APPEND_FAILURES = 3;
@@ -485,6 +493,26 @@ export class MseSource {
   /** Le premier envoi après un saut écrit ce que le réseau a coûté — voir `NetworkWindow`. */
   private seekNetworkPending = false;
 
+  /**
+   * Les plages des deux tampons après la dernière opération réussie — envoi ou retrait —, pour la
+   * ligne d'une perte (`failureFacts`).
+   *
+   * Relevées à ce moment-là parce qu'après la fermeture de la source elles ne se lisent plus : le
+   * « Media failed to decode » de Lucifer S01E05 sur un iPhone (14/10/2026) n'a laissé que
+   * « illisible (source fermée) », la source étant déjà fermée quand l'élément a signalé son
+   * erreur. Purement informatif : rien ne lit ce relevé hors du journal.
+   */
+  private lastGoodBuffered: { at: number; after: string; video: string; audio: string } | null = null;
+  /**
+   * Les derniers fragments vidéo envoyés depuis le dernier vidage : numéro, début (dts/pts, horloge
+   * de l'élément) et rang depuis le saut — de quoi dire, à l'échec, dans quel fragment était la
+   * tête et lequel venait de partir. Bornés, et vidés avec les tampons qu'ils décrivent.
+   */
+  private sentFragments: { n: number; seq: number | null; dts: number; pts: number; at: number }[] = [];
+  private fragmentsSinceSeek = 0;
+  /** Les faits propres à l'échec, relevés avec `lossSnapshot` — voir `failureFacts`. */
+  private lossFailure: Record<string, unknown> | null = null;
+
   private async open(startSeconds: number): Promise<void> {
     // AirPlay cannot carry a managed stream, and Safari refuses to attach one until this is set.
     this.video.disableRemotePlayback = true;
@@ -688,6 +716,8 @@ export class MseSource {
   private lossSnapshot: Record<string, unknown> | null = null;
 
   private noteLoss(): void {
+    // Relevés au premier signal, comme l'état : c'est lui qui a vu l'élément au moment de l'échec.
+    this.lossFailure ??= this.failureFacts();
     if (this.lossSnapshot) return;
     try {
       this.lossSnapshot = this.stateFacts(this.video.currentTime);
@@ -697,17 +727,138 @@ export class MseSource {
   }
 
   /**
+   * Ce qu'un échec de décodage laisse à dire, en plus de l'état (14/10/2026) : les tampons au
+   * dernier envoi réussi, les images comptées par l'élément, son message d'erreur, et la place de
+   * la tête dans les fragments envoyés — pour dire si c'est l'image ou le son qui a lâché, et où.
+   *
+   * Chaque fait dans sa propre garde : une lecture qui lève perd ce fait-là, jamais les autres, et
+   * jamais la ligne. Ne lève pas.
+   */
+  private failureFacts(): Record<string, unknown> {
+    const facts: Record<string, unknown> = {};
+    const now = Date.now();
+    let head = NaN;
+    try {
+      head = this.video.currentTime;
+    } catch {
+      /* rien */
+    }
+    try {
+      const seen = this.lastGoodBuffered;
+      if (seen) {
+        facts.lastBuffered = `vidéo ${seen.video} · audio ${seen.audio} — après ${seen.after}, ${now - seen.at} ms avant`;
+      }
+    } catch {
+      /* rien */
+    }
+    try {
+      const quality = this.video.getVideoPlaybackQuality?.();
+      if (quality) {
+        const corrupted = (quality as { corruptedVideoFrames?: number }).corruptedVideoFrames;
+        facts.videoQuality =
+          `total ${quality.totalVideoFrames} · perdues ${quality.droppedVideoFrames}` +
+          (typeof corrupted === "number" ? ` · corrompues ${corrupted}` : "");
+      }
+    } catch {
+      /* rien */
+    }
+    try {
+      const failure = this.video.error;
+      if (failure) facts.mediaError = `${failure.code}${failure.message ? ` « ${failure.message.slice(0, 300)} »` : ""}`;
+    } catch {
+      /* rien */
+    }
+    try {
+      const last = this.sentFragments.at(-1);
+      if (last) {
+        const offset = Number.isFinite(head) ? ` · tête ${signed(head - last.pts)} s` : "";
+        facts.lastFragment =
+          `n°${last.seq ?? "?"} (${last.n}e depuis le saut) dts ${last.dts.toFixed(3)} pts ${last.pts.toFixed(3)}` +
+          `${offset} · envoyé ${now - last.at} ms avant`;
+      }
+      if (Number.isFinite(head)) {
+        // Celui dont la première image est la dernière à ne pas dépasser la tête : le fragment
+        // qui la contient, si la tête est bien dans ce qui a été envoyé depuis le vidage.
+        let under: (typeof this.sentFragments)[number] | null = null;
+        for (const fragment of this.sentFragments) {
+          if (fragment.pts <= head && (!under || fragment.pts >= under.pts)) under = fragment;
+        }
+        if (under) {
+          facts.headFragment = `n°${under.seq ?? "?"} (${under.n}e) pts ${under.pts.toFixed(3)} · tête ${signed(head - under.pts)} s`;
+        }
+      }
+    } catch {
+      /* rien */
+    }
+    return facts;
+  }
+
+  /** Les plages de ce tampon, toutes (quatre au plus), sans rapport à la tête. Ne lève jamais. */
+  private spansAll(buffer: SourceBuffer | null): string {
+    if (!buffer) return "aucun";
+    try {
+      const ranges = buffer.buffered;
+      if (ranges.length === 0) return "vide";
+      const spans: string[] = [];
+      for (let i = 0; i < ranges.length && i < 4; i++) spans.push(`${ranges.start(i).toFixed(2)}–${ranges.end(i).toFixed(2)}`);
+      if (ranges.length > 4) spans.push(`+${ranges.length - 4}`);
+      return spans.join(" · ");
+    } catch {
+      return "illisible (source fermée)";
+    }
+  }
+
+  /** Voir `lastGoodBuffered`. Ne lève jamais. */
+  private rememberBuffered(after: string): void {
+    try {
+      this.lastGoodBuffered = {
+        at: Date.now(),
+        after,
+        video: this.spansAll(this.videoBuffer),
+        audio: this.spansAll(this.audioBuffer),
+      };
+    } catch {
+      /* rien */
+    }
+  }
+
+  /** Un fragment vidéo accepté par le tampon — voir `sentFragments`. Ne lève jamais. */
+  private rememberFragment(data: Uint8Array): void {
+    try {
+      const times = fragmentTimes(data);
+      if (!times) return;
+      this.fragmentsSinceSeek += 1;
+      this.sentFragments.push({ n: this.fragmentsSinceSeek, ...times, at: Date.now() });
+      if (this.sentFragments.length > SENT_FRAGMENTS_KEPT) this.sentFragments.shift();
+    } catch {
+      /* rien */
+    }
+  }
+
+  /**
    * Ce qu'une ligne `rebuild` porte en plus de son motif : l'état relevé à la perte, et les vingt
    * dernières secondes de la trace — les envois, les sauts, l'erreur de l'élément, dans l'ordre.
    */
   lossReport(): Record<string, unknown> {
+    // Chaque part dans sa garde (14/10/2026) : un état illisible — une source déjà détachée — ne
+    // doit plus emporter avec lui les faits de l'échec ni la trace, qui sont faits pour ce cas-là.
+    let state: Record<string, unknown> = {};
     try {
-      return {
-        ...(this.lossSnapshot ?? this.stateFacts(this.video.currentTime)),
-        steps: traceRecent(STALL_TRACE_MS).join(" | "),
-      };
+      state = this.lossSnapshot ?? this.stateFacts(this.video.currentTime);
     } catch {
-      return {};
+      /* le journal ne vaut pas un lecteur */
+    }
+    let failure: Record<string, unknown> = {};
+    try {
+      failure = this.lossFailure ?? this.failureFacts();
+    } catch {
+      /* idem */
+    }
+    try {
+      // `steps` reste le dernier champ de la ligne.
+      return { ...state, ...failure, steps: traceRecent(STALL_TRACE_MS).join(" | ") };
+    } catch {
+      return { ...state, ...failure };
     }
   }
 
@@ -1122,6 +1273,10 @@ export class MseSource {
       const sentFrom = diagNow();
       await queue.enqueue(() => queue.buffer.appendBuffer(data as BufferSource));
       diagInterval("append", sentFrom, data.byteLength);
+      // Pour le journal d'une perte seulement — voir `lastGoodBuffered`, `sentFragments`.
+      const video = queue === this.videoOps;
+      if (video) this.rememberFragment(data);
+      this.rememberBuffered(video ? "envoi vidéo" : "envoi audio");
       this.appendFailures = 0;
       this.networkRetries = 0;
     } catch (error) {
@@ -1148,12 +1303,18 @@ export class MseSource {
   private removeRange(queue: BufferQueue, from: number, to: number): Promise<void> {
     const buffer = queue.buffer;
     let started = false;
-    return queue
-      .enqueue(() => {
-        started = true;
-        this.ownRemovals.set(buffer, (this.ownRemovals.get(buffer) ?? 0) + 1);
-        buffer.remove(from, to);
-      })
+    const removal = queue.enqueue(() => {
+      started = true;
+      this.ownRemovals.set(buffer, (this.ownRemovals.get(buffer) ?? 0) + 1);
+      buffer.remove(from, to);
+    });
+    // Une branche à part, pour le journal d'une perte (`lastGoodBuffered`) : la promesse rendue
+    // garde exactement son enchaînement, et un retrait refusé ne relève rien.
+    removal.then(
+      () => this.rememberBuffered("retrait"),
+      () => {}
+    );
+    return removal
       .finally(() => {
         if (started) this.ownRemovals.set(buffer, Math.max(0, (this.ownRemovals.get(buffer) ?? 1) - 1));
       });
@@ -1569,10 +1730,26 @@ export class MseSource {
     // No abort() here any more. Cancelling an operation mid-flight leaves the buffer's parser in
     // a state the next append has to be careful about, and the queue already guarantees that
     // whatever was running has finished before this removal starts.
+    // Chronométré piste par piste, de la demande à son `updateend` : la preuve au journal que le
+    // vidage a eu lieu et ce qu'il a laissé, au lieu de la déduire du code (14/10/2026).
+    const clearMs: string[] = [];
     for (const queue of [this.videoOps, this.audioOps]) {
-      if (queue) await this.clear(queue);
+      if (!queue) continue;
+      const clearFrom = Date.now();
+      await this.clear(queue);
+      clearMs.push(`${queue === this.videoOps ? "vidéo" : "audio"} ${Date.now() - clearFrom} ms`);
     }
     if (this.destroyed) return;
+    try {
+      trace(
+        `vidage fait (${clearMs.join(", ")}) — reste vidéo ${this.spansAll(this.videoBuffer)} · audio ${this.spansAll(this.audioBuffer)}`
+      );
+    } catch {
+      /* rien */
+    }
+    // Ce qui a été envoyé avant ce vidage n'est plus dans les tampons.
+    this.sentFragments = [];
+    this.fragmentsSinceSeek = 0;
     // La même question après le vidage, qui attend lui aussi le navigateur — des centaines de
     // millisecondes sur un appareil lent. Un geste arrivé pendant ce temps était écrasé : la tête,
     // que le spectateur venait de poser, repartait sur la cible abandonnée. Le saut suivant la

@@ -2933,7 +2933,18 @@ export function ExperimentalPlayerHost({
           if (again) showWarning(tRef.current("player.experimental.passageSkipped"));
           return;
         }
-        fallToStable(message);
+        // Une perte au bout du budget de reconstructions : la ligne `fallback` (ou `error` sans
+        // lecteur serveur) porte le même relevé que `rebuild` — tampons au dernier envoi, images,
+        // fragment sous la tête (14/10/2026). Le relais lui-même n'en dépend pas.
+        let lossFacts: Record<string, unknown> | undefined;
+        if (lost?.kind === "giveUp") {
+          try {
+            lossFacts = remuxRef.current?.lossReport();
+          } catch {
+            lossFacts = undefined;
+          }
+        }
+        fallToStable(message, undefined, lossFacts);
       },
       onWarning: showPipelineWarning,
       onStarting: (at) => {

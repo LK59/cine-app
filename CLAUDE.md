@@ -176,6 +176,7 @@ its own, and what it did rides on the lines already sent — `slowLink` (a bound
 first segment, picture, ms from the request, and `startup.stage` on a failure); `stall`, `error`,
 `fallback`, `rebuild`, `network` and `stop` carry `timeline`, the last two minutes sampled every 5 s in
 memory (`pos,s,Mb/s,ahead,reserveMB,state;…`, `playbackTimeline.ts`) — no extra line is ever sent for it.
+Since 2026-10-14 a source loss's `rebuild` (and the `fallback`/`error` that ends a run of them) also carries `lastBuffered` (both buffers' ranges after the last successful append or removal — once the source has closed they read « illisible »), `videoQuality` (`getVideoPlaybackQuality` at the failure), `mediaError` (code and `MediaError.message`), and `lastFragment`/`headFragment` (the fragment last sent and the one under the head: `mfhd` number, rank since the seek, first dts/pts and the head's offset, read from the moof by `fragmentProbe.ts`), each in its own guard; a seek's trace says « vidage fait » with each buffer's removal time and what is left in it.
 `data/logs/auth.log` (since 2026-09-24) records sign-ins, refusals, sign-outs, closed sessions and
 refused tokens, with device and address; `data/logs/notifications.log` records every push sent,
 with what happened to it per account (delivered, failed, subscription removed, turned off). Both are

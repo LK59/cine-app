@@ -904,6 +904,58 @@ describe("une source perdue", () => {
     expect(onFallback).toHaveBeenCalledWith("morte", expect.anything());
   });
 
+  // 14/10/2026 : la ligne qui clôt une suite de pertes porte le même relevé que `rebuild`.
+  const fallbackLine = () =>
+    (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .find((entry) => entry.kind === "fallback");
+
+  it("porte le relevé de la perte sur la ligne `fallback` d'un renoncement", async () => {
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    remux.lost = true;
+    remux.lossReport = vi.fn(() => ({
+      videoBuffered: "illisible (source fermée)",
+      lastBuffered: "vidéo 52.00–60.00 · audio 52.01–60.02 — après envoi vidéo, 40 ms avant",
+      videoQuality: "total 120 · perdues 0 · corrompues 1",
+      lastFragment: "n°31 (4e depuis le saut) dts 58.000 pts 58.042 · tête -1.20 s · envoyé 40 ms avant",
+      steps: "+0 ms l'élément a échoué",
+    }));
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const at = probes.length;
+      act(() => probes[at - 1].onError("morte"));
+      await act(async () => {});
+    }
+    expect(onFallback).toHaveBeenCalledWith("morte", expect.anything());
+    expect(fallbackLine()?.fields).toMatchObject({
+      reason: "morte",
+      lastBuffered: expect.stringContaining("52.00–60.00"),
+      videoQuality: "total 120 · perdues 0 · corrompues 1",
+      lastFragment: expect.stringContaining("n°31"),
+    });
+  });
+
+  it("cède la main pareil quand le relevé lève", async () => {
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    remux.lost = true;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const at = probes.length;
+      // Les reconstructions gardent leur relevé ; seul celui du renoncement lève.
+      if (attempt === 3) {
+        remux.lossReport = vi.fn(() => {
+          throw new Error("relevé impossible");
+        });
+      }
+      act(() => probes[at - 1].onError("morte"));
+      await act(async () => {});
+    }
+    expect(onFallback).toHaveBeenCalledWith("morte", expect.anything());
+    expect(fallbackLine()?.fields).toMatchObject({ reason: "morte" });
+    expect(fallbackLine()?.fields.lastBuffered).toBeUndefined();
+  });
+
   it("confie au lecteur stable l'endroit du film et la piste, pas la position d'ouverture", async () => {
     // Relu le 22/09/2026 : seuls la diffusion et la piste impossible transmettaient un relais.
     // Un renoncement en cours de film — ici, une source perdue quatre fois — rouvrait le lecteur
