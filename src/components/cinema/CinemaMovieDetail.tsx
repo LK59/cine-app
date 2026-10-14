@@ -13,7 +13,6 @@ import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaCollectionRow, useCinemaCollection } from "@/components/cinema/CinemaCollectionRow";
 import { CinemaCastRow } from "@/components/cinema/CinemaCastRow";
-import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
@@ -29,8 +28,8 @@ import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip, BELOW_SECTION_CLASS } from "@/components/cinema/CinemaDetailLayout";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival } from "@/components/cinema/CinemaDetailExtras";
@@ -38,7 +37,7 @@ import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts }
 import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
-import { guidedScrollClass, useGuidedScroll } from "@/lib/guidedScroll";
+import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -88,8 +87,6 @@ export function CinemaMovieDetail({
   onSelectSimilar?: (item: CinemaMovie) => void;
   underneath?: boolean;
 }) {
-  // Le calage sur une rangée ou une page entière, réglable par appareil (`guidedScroll.ts`).
-  const guidedScroll = useGuidedScroll();
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   /** Vrai dès que le spectateur a lui-même déplacé le focus — voir l'effet plus bas. */
@@ -97,7 +94,6 @@ export function CinemaMovieDetail({
 
   const [showTrailer, setShowTrailer] = useState(false);
   const [showSynopsis, setShowSynopsis] = useState(false);
-  const [showCast, setShowCast] = useState(false);
   const { data: info, error: infoError } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
   // L'accroche, la distribution et la bande-annonce n'arrivent que par cette réponse : leur place
   // est tenue dès l'ouverture, et elles s'y posent en fondu — voir `useLateArrival`.
@@ -257,12 +253,7 @@ export function CinemaMovieDetail({
 
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
       userMovedFocus.current = true;
-      const rows = Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>("[data-detail-menu]") ?? []);
-      if (rows.length === 0) return;
-      e.preventDefault();
-      const idx = rows.indexOf(document.activeElement as HTMLButtonElement);
-      if (e.key === "ArrowDown") rows[Math.min(idx + 1, rows.length - 1)]?.focus();
-      else rows[Math.max(idx - 1, 0)]?.focus();
+      detailMenuArrowNav(e, containerRef.current);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -347,8 +338,10 @@ export function CinemaMovieDetail({
           aligned to its end edge clips whatever overflows past its START edge and makes it
           unreachable by scrolling — that's what pushed the logo and title off the top of the
           screen when the similar row first landed here. A section that simply grows can't. */}
-      <div className={`scrollbar-thin relative h-full ${guidedScrollClass(guidedScroll)} overflow-y-auto scroll-smooth`}>
-        <div data-snap-section className={SECTION_CLASS}>
+      {/* Les deux pages, écrites une fois pour le film, la série et la fiche découverte —
+          voir `CinemaDetailPages`. */}
+      <CinemaDetailPages
+        first={
         <div
           key={item.radarrId}
           data-sheet-content=""
@@ -356,17 +349,7 @@ export function CinemaMovieDetail({
           // La sortie est celle de la copie (`useSheetMorph`), plus celle de la colonne.
           className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: false, revealed: revealed || morph.handlesEntry })}`}
         >
-          {item.logoUrl ? (
-            <CinemaLogo
-              src={item.logoUrl}
-              alt={item.title}
-              surface="sheet"
-              className="mb-1"
-              fallback={<h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>}
-            />
-          ) : (
-            <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>
-          )}
+          <CinemaDetailTitle title={item.title} logoUrl={item.logoUrl} />
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
             <span>{item.year}</span>
@@ -393,48 +376,8 @@ export function CinemaMovieDetail({
           />
 
           {late.pending && <ReservedLine className="h-4" />}
-          {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-            /* Chaque nom mène à sa fiche, sans quitter le lecteur. C'était une ligne de texte
-               mort au milieu d'un écran où tout le reste s'ouvre ; et une filmographie est
-               souvent la meilleure façon de trouver quoi regarder ensuite.
-
-               Volontairement hors du parcours des flèches (pas de `data-detail-menu`) : le menu
-               est une colonne d'actions, et y intercaler cinq noms ferait descendre de six crans
-               pour atteindre la ligne suivante. La tabulation, elle, y va. */
-            /* Trois noms entiers et un décompte, plutôt qu'une coupure au pixel.
-               `truncate` tranchait au milieu d'un nom en laissant la virgule qui le précédait
-               pendre dans le vide — « Julie Glenn,… ». Un nombre dit la même chose sans rien
-               casser, et il devient l'entrée vers la liste complète.
-
-               Le décompte est hors du paragraphe tronqué : à l'intérieur, il aurait pu être coupé
-               lui aussi, ce qui est le seul élément qu'on ne peut pas se permettre de perdre. */
-            <div className={`flex items-baseline gap-1.5 ${late.fade}`}>
-              <p className={CAST_CLASS}>
-                {t("cinema.cast")}{" "}
-                {info.tmdb.cast.slice(0, CAST_SHOWN).map((c, i) => (
-                  <span key={c.tmdbId}>
-                    {i > 0 && ", "}
-                    <button
-                      type="button"
-                      onClick={() => cinemaNavigate({ person: c.tmdbId })}
-                      className="rounded transition-colors hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
-                    >
-                      {c.name}
-                    </button>
-                  </span>
-                ))}
-              </p>
-              {info.tmdb.cast.length > CAST_SHOWN && (
-                <button
-                  type="button"
-                  onClick={() => setShowCast(true)}
-                  className="shrink-0 rounded text-xs font-medium text-muted transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
-                >
-                  +{info.tmdb.cast.length - CAST_SHOWN}
-                </button>
-              )}
-            </div>
-          )}
+          {/* Les noms mènent chacun à leur fiche ; voir `CinemaDetailCastLine`. */}
+          <CinemaDetailCastLine cast={cast} className={late.fade} />
 
           {/* Plus étroit que le texte au-dessus, sans être une colonne à part : deux tiers de
               la largeur du bloc — voir MENU_STYLE. */}
@@ -542,17 +485,16 @@ export function CinemaMovieDetail({
           </div>
 
         </div>
-        {hasBelow && <CinemaScrollHint />}
-        </div>
-
-        {/* Its own full-height snap position — centred rather than pinned to the top, so landing
-            on it reads as a deliberate second screen instead of one row stranded above a lot of
-            empty backdrop. */}
-        {/* La saga partage la section des titres similaires plutôt que d'en réclamer une à elle :
-            deux écrans pleins à faire défiler l'un après l'autre, pour deux rangées, c'est une
-            promenade là où on voulait une réponse. */}
-        {hasBelow && (
-          <div data-snap-section className={BELOW_SECTION_CLASS}>
+        }
+        below={
+          hasBelow && (
+            <>
+              {/* Its own full-height snap position — centred rather than pinned to the top, so landing
+                  on it reads as a deliberate second screen instead of one row stranded above a lot of
+                  empty backdrop. */}
+              {/* La saga partage la section des titres similaires plutôt que d'en réclamer une à elle :
+                  deux écrans pleins à faire défiler l'un après l'autre, pour deux rangées, c'est une
+                  promenade là où on voulait une réponse. */}
             {/* Le même rappel que la rangée du dessous : ouvrir un titre de la saga et ouvrir un
                 titre similaire sont le même geste, donc le même chemin — et donc, à la fermeture,
                 la même animation. */}
@@ -560,9 +502,10 @@ export function CinemaMovieDetail({
             <CinemaCastRow cast={cast} />
             <CinemaCollectionRow name={collection.name} parts={collection.parts} onSelectOwned={onSelectSimilar} />
             {hasSimilar && <CinemaSimilarRow items={similar} onSelect={(next) => onSelectSimilar?.(next as CinemaMovie)} />}
-          </div>
-        )}
-      </div>
+            </>
+          )
+        }
+      />
 
       {showTrailer && lead.trailerKey && (
         <TrailerModal
@@ -578,34 +521,6 @@ export function CinemaMovieDetail({
             requestAnimationFrame(() => focusFirstAction(containerRef.current));
           }}
         />
-      )}
-
-      {showCast && info?.tmdb?.cast && (
-        <CinemaDetailModal
-          title={t("cinema.castTitle")}
-          closeLabel={t("common.close")}
-          onClose={() => setShowCast(false)}
-        >
-          {/* La même fenêtre que le synopsis, et chaque nom y reste ce qu'il est ailleurs : une
-              porte vers sa filmographie. Fermer d'abord, naviguer ensuite — laisser la fenêtre
-              ouverte par-dessus la fiche qu'on vient de quitter serait un écran de trop. */}
-          <ul className="flex flex-col gap-1">
-            {info.tmdb.cast.map((c) => (
-              <li key={c.tmdbId}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCast(false);
-                    cinemaNavigate({ person: c.tmdbId });
-                  }}
-                  className="rounded text-left transition-colors hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
-                >
-                  {c.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </CinemaDetailModal>
       )}
 
       {showSynopsis && (

@@ -72,3 +72,22 @@ export const MENU_BADGE_ACTIVE =
 export function focusFirstAction(container: HTMLElement | null | undefined) {
   container?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]")?.focus();
 }
+
+/**
+ * Haut et Bas dans le menu d'une fiche : la ligne d'avant, la ligne d'après, sans boucler.
+ *
+ * Le film et la série l'écrivaient chacun dans leur écouteur ; la fiche découverte n'en avait
+ * aucun, et sa distribution passée sur la seconde page (14/10/2026) n'aurait été atteignable
+ * qu'à la tabulation. Appelée après `similarRowKeyNav`, qui prend la main dès que le focus est
+ * dans une rangée. Rend vrai quand elle a traité la touche.
+ */
+export function detailMenuArrowNav(e: KeyboardEvent, container: HTMLElement | null | undefined): boolean {
+  if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return false;
+  const rows = Array.from(container?.querySelectorAll<HTMLButtonElement>("[data-detail-menu]") ?? []);
+  if (rows.length === 0) return false;
+  e.preventDefault();
+  const idx = rows.indexOf(document.activeElement as HTMLButtonElement);
+  if (e.key === "ArrowDown") rows[Math.min(idx + 1, rows.length - 1)]?.focus();
+  else rows[Math.max(idx - 1, 0)]?.focus();
+  return true;
+}

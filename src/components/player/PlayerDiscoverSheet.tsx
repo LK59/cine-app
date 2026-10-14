@@ -16,14 +16,12 @@ import { useIsMobile } from "@/lib/useIsMobile";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { SHEET_OUT_MS, sheetMotionClass, detailColumnMotion, phoneSheetCorner } from "@/lib/sheetMotion";
 import { useSheetExit } from "@/lib/useSheetExit";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
 import {
   HORIZONTAL_VEIL,
   VERTICAL_VEIL,
   COLUMN_STYLE,
   MENU_STYLE,
-  SECTION_CLASS,
-  CAST_CLASS,
   COLUMN_GAP,
   CinemaOverview,
   CinemaDetailModal,
@@ -31,6 +29,8 @@ import {
 import type { PlayerTitlePayload } from "@/app/api/player/title/[type]/[tmdbId]/route";
 import type { PlayerRequestState } from "@/lib/playerRequestState";
 import { CinemaCastRow, castFromTitle } from "@/components/cinema/CinemaCastRow";
+import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
+import { similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaTagline, CinemaDownloading, useRuntimeLabel, useReleaseLabel, DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
@@ -154,6 +154,22 @@ export function PlayerDiscoverSheet({
     focusPlaced.current = true;
     focusFirstAction(containerRef.current);
   }, [data, isMobile]);
+
+  /**
+   * Les flèches, comme sur les fiches de la bibliothèque : Haut/Bas parcourent le menu, et Bas sur
+   * sa dernière ligne descend dans la distribution, passée sur le second écran (14/10/2026) — elle
+   * n'aurait été atteignable qu'à la tabulation. Muettes sur le départ et sous le synopsis, dont la
+   * fenêtre garde les flèches pour elle.
+   */
+  useEffect(() => {
+    if (isMobile || leaving || showSynopsis) return;
+    function onKey(e: KeyboardEvent) {
+      if (similarRowKeyNav(e, containerRef.current)) return;
+      detailMenuArrowNav(e, containerRef.current);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isMobile, leaving, showSynopsis]);
 
   const inList = data?.watchlistStatus === "to_watch";
   /**
@@ -404,13 +420,16 @@ export function PlayerDiscoverSheet({
         </div>
       )}
 
+      {/* Les deux pages des fiches de la bibliothèque, et leurs pièces : le nom en tête de
+          colonne, la ligne « Avec », le menu, puis la distribution en visages sur le second
+          écran. La rangée de visages vivait dans la colonne du premier, qui tient dans la
+          fenêtre et se cale en bas : elle la faisait déborder par le haut, et le titre passait
+          sous le bouton Retour (« Matchbox – Le film », 14/10/2026). */}
       {data && (
-        <div className="scrollbar-thin relative h-full overflow-y-auto">
-          <div className={SECTION_CLASS}>
+        <CinemaDetailPages
+          first={
             <div data-sheet-content="" style={COLUMN_STYLE} className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: false, revealed: revealed || morph.handlesEntry })}`}>
-              <h1 className="font-display text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl">
-                {data.title}
-              </h1>
+              <CinemaDetailTitle title={data.title} logoUrl={data.logo} />
 
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
                 {releaseLabel(data.releaseDate, data.year) && <span>{releaseLabel(data.releaseDate, data.year)}</span>}
@@ -425,91 +444,88 @@ export function PlayerDiscoverSheet({
                 <CinemaOverview
                   text={data.overview}
                   readMore={t("cinema.readMore")}
+                  // Jusqu'à cinq lignes quand la page a de la place, comme la fiche d'un film possédé.
+                  maxLines={5}
                   onOpen={() => setShowSynopsis(true)}
                 />
               )}
 
-              {data.cast.length > 0 && (
-                <p className={CAST_CLASS}>
-                  {t("cinema.cast")} {data.cast.slice(0, 5).map((c) => c.name).join(", ")}
-                </p>
-              )}
+              <CinemaDetailCastLine cast={cast} />
 
-              <div data-detail-actions className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
-                {/* La première ligne, celle qui a le focus : « Lire » quand on l'a, « Demander »
-                    quand on ne l'a pas, l'état de l'attente quand c'est déjà parti. Toujours au
-                    même endroit, toujours avec le même poids. */}
-                {data.libraryId !== null ? (
-                  <button
-                    data-detail-menu
-                    onClick={() => openLibraryTitle(mediaType, data.libraryId!, { discover: null })}
-                    className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-                  >
-                    <span className={MENU_BADGE}>
-                      <Play size={14} />
-                    </span>
-                    <span className="text-sm font-medium">{t("player.discover.open")}</span>
-                  </button>
-                ) : data.requestState ? (
-                  <div className={`${MENU_ROW} text-muted`}>
-                    <span className={MENU_BADGE}>
-                      <StateIcon size={14} />
-                    </span>
-                    {data.downloading != null ? (
-                      <CinemaDownloading progress={data.downloading} className="text-sm" />
-                    ) : (
-                      <span className="text-sm font-medium">{t(`player.requests.state.${data.requestState}`)}</span>
-                    )}
-                  </div>
-                ) : (
-                  <button
-                    data-detail-menu
-                    disabled={busy}
-                    onClick={() => void request()}
-                    className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-                  >
-                    <span className={MENU_BADGE}>
-                      <Plus size={14} />
-                    </span>
-                    <span className="text-sm font-medium">{t("player.discover.request")}</span>
-                  </button>
-                )}
-
+            <div data-detail-actions className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
+              {/* La première ligne, celle qui a le focus : « Lire » quand on l'a, « Demander »
+                  quand on ne l'a pas, l'état de l'attente quand c'est déjà parti. Toujours au
+                  même endroit, toujours avec le même poids. */}
+              {data.libraryId !== null ? (
+                <button
+                  data-detail-menu
+                  onClick={() => openLibraryTitle(mediaType, data.libraryId!, { discover: null })}
+                  className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+                >
+                  <span className={MENU_BADGE}>
+                    <Play size={14} />
+                  </span>
+                  <span className="text-sm font-medium">{t("player.discover.open")}</span>
+                </button>
+              ) : data.requestState ? (
+                <div className={`${MENU_ROW} text-muted`}>
+                  <span className={MENU_BADGE}>
+                    <StateIcon size={14} />
+                  </span>
+                  {data.downloading != null ? (
+                    <CinemaDownloading progress={data.downloading} className="text-sm" />
+                  ) : (
+                    <span className="text-sm font-medium">{t(`player.requests.state.${data.requestState}`)}</span>
+                  )}
+                </div>
+              ) : (
                 <button
                   data-detail-menu
                   disabled={busy}
-                  onClick={() => void setStatus(inList ? null : "to_watch")}
+                  onClick={() => void request()}
                   className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
                 >
-                  <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                    <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={14} />} offIcon={<Bookmark size={14} />} />
+                  <span className={MENU_BADGE}>
+                    <Plus size={14} />
                   </span>
-                  <span className="text-sm font-medium">
-                    {inList ? t("player.discover.inList") : t("player.discover.addToList")}
-                  </span>
+                  <span className="text-sm font-medium">{t("player.discover.request")}</span>
                 </button>
+              )}
 
-                <button
-                  data-detail-menu
-                  disabled={watchedState.busy}
-                  onClick={() => void watchedState.toggle()}
-                  aria-pressed={watchedState.watched}
-                  className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-                >
-                  <span className={watchedState.watched ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                    <ToggleGlyph on={watchedState.watched} onIcon={<Eye size={14} />} offIcon={<EyeOff size={14} />} />
-                  </span>
-                  <span className="text-sm font-medium">
-                    {watchedState.watched ? t("player.discover.watched") : t("player.discover.markWatched")}
-                  </span>
-                </button>
+              <button
+                data-detail-menu
+                disabled={busy}
+                onClick={() => void setStatus(inList ? null : "to_watch")}
+                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+              >
+                <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
+                  <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={14} />} offIcon={<Bookmark size={14} />} />
+                </span>
+                <span className="text-sm font-medium">
+                  {inList ? t("player.discover.inList") : t("player.discover.addToList")}
+                </span>
+              </button>
 
-              </div>
+              <button
+                data-detail-menu
+                disabled={watchedState.busy}
+                onClick={() => void watchedState.toggle()}
+                aria-pressed={watchedState.watched}
+                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+              >
+                <span className={watchedState.watched ? MENU_BADGE_ACTIVE : MENU_BADGE}>
+                  <ToggleGlyph on={watchedState.watched} onIcon={<Eye size={14} />} offIcon={<EyeOff size={14} />} />
+                </span>
+                <span className="text-sm font-medium">
+                  {watchedState.watched ? t("player.discover.watched") : t("player.discover.markWatched")}
+                </span>
+              </button>
 
-              <CinemaCastRow cast={cast} className="mt-4" />
             </div>
-          </div>
-        </div>
+            </div>
+          }
+          below={cast.length > 0 && <CinemaCastRow cast={cast} />}
+        />
       )}
 
       {showSynopsis && data && (

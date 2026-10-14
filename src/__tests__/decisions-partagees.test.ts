@@ -352,9 +352,8 @@ describe("le second écran des fiches laisse sa place au bouton Retour", () => {
   // commençait en haut, et « Distribution » passait sous le bouton Retour, fixe.
   it("une réserve en haut, écrite une fois pour le film et la série", () => {
     expect(lire("src/components/cinema/CinemaDetailLayout.tsx")).toMatch(/BELOW_SECTION_CLASS =[\s\S]{0,200}pt-\[calc\(5rem/);
-    for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"]) {
-      expect([f, lire(f)]).toEqual([f, expect.stringContaining("className={BELOW_SECTION_CLASS}")]);
-    }
+    // Depuis le 14/10/2026, une seule section écrite, pour le film, la série et la découverte.
+    expect(lire("src/components/cinema/CinemaDetailPages.tsx")).toContain("className={BELOW_SECTION_CLASS}");
   });
 });
 
@@ -985,9 +984,9 @@ describe("un seul défilement guidé (§50)", () => {
   });
 
   it("les trois volets qui défilent passent par guidedScrollClass", () => {
-    for (const f of ["CinemaClient", "CinemaMovieDetail", "CinemaSeriesDetail"]) {
-      expect(lire(`src/components/cinema/${f}.tsx`), f).toMatch(/guidedScrollClass\(guidedScroll\)/);
-    }
+    // Les fiches (film, série, découverte) par `CinemaDetailPages` depuis le 14/10/2026.
+    expect(lire("src/components/cinema/CinemaClient.tsx")).toMatch(/guidedScrollClass\(guidedScroll\)/);
+    expect(lire("src/components/cinema/CinemaDetailPages.tsx")).toMatch(/guidedScrollClass\(guided\)/);
   });
 });
 
@@ -1215,5 +1214,29 @@ describe("un seul lien d'un élément Jellyfin vers son titre", () => {
     for (const f of ["src/app/api/jellyfin/resume/route.ts", "src/app/api/cinema/next-up/route.ts"]) {
       expect([f, /ProviderIds\??\.(Tmdb|Tvdb)|cachedItemProviderIds|cachedMovies|cachedSeries/.test(lire(f))]).toEqual([f, false]);
     }
+  });
+});
+
+describe("les deux pages des fiches du bureau : une écriture (DECISIONS.md §61, 14/10/2026)", () => {
+  /**
+   * La fiche découverte avait sa propre mise en page et elle avait dérivé : une seule page, les
+   * visages dans la colonne du premier écran — qui débordait par le haut, titre sous le bouton
+   * Retour (« Matchbox – Le film »). Le film, la série et la découverte passent par les mêmes pièces.
+   */
+  const FICHES = [
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+  ];
+  it.each(FICHES)("%s passe par `CinemaDetailPages` et `CinemaDetailTitle`", (fiche) => {
+    const src = lire(fiche);
+    expect(src).toContain("<CinemaDetailPages");
+    expect(src).toContain("<CinemaDetailTitle");
+    expect(src).toContain("<CinemaDetailCastLine");
+    // Plus de section écrite à la main.
+    expect(src).not.toMatch(/data-snap-section|SECTION_CLASS|guidedScrollClass/);
+  });
+  it("Haut et Bas dans le menu : `detailMenuArrowNav`, une fois", () => {
+    for (const f of FICHES) expect([f, lire(f).includes("detailMenuArrowNav(e, containerRef.current)")]).toEqual([f, true]);
   });
 });

@@ -3,7 +3,9 @@ import { errorBody } from "@/lib/apiErrorCodes";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { playableLibrary, playableId } from "@/lib/playerLibrary";
-import { getTmdbLocale, LOCALE_COOKIE } from "@/lib/i18n";
+import { getTmdbLocale, LOCALE_COOKIE, localeOf } from "@/lib/i18n";
+import { getTitleArt, logoForLocale } from "@/lib/title-art";
+import { getTitleNames } from "@/lib/titleNames";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { watchlistDb, type WatchlistStatus } from "@/lib/db";
@@ -54,6 +56,12 @@ export interface PlayerTitlePayload {
   watched: boolean;
   /** Le chemin TMDB de l'affiche, gardé avec un titre marqué vu (sa seule image s'il n'est pas chez nous). */
   posterPath: string | null;
+  /**
+   * Le logo du titre dans la langue de qui regarde (`logoForLocale`, DECISIONS.md §58), `null` sans
+   * logo. Ajouté le 14/10/2026 : la fiche découverte du bureau se dessine désormais comme celle
+   * d'un film de la bibliothèque, logo en tête de colonne, et n'avait que le titre écrit.
+   */
+  logo: string | null;
 }
 
 /**
@@ -102,7 +110,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
         : null;
 
     if (type === "movie") {
-      const [detail, lib] = await Promise.all([tmdb.getMovie(tmdbId), playableLibrary()]);
+      const [detail, lib, logo] = await Promise.all([tmdb.getMovie(tmdbId), playableLibrary(), titleLogo("movie", tmdbId, req)]);
       // Ouvrable, pas seulement connu de Radarr : un film surveillé sans fichier n'a pas de fiche
       // à ouvrir, et lui donner un identifiant menait à un clic qui ne faisait rien.
       const libraryId = hidden ? null : playableId(lib, "movie", tmdbId);
@@ -125,10 +133,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
         watchlistStatus: userId ? watchlistDb.get(userId, "movie", tmdbId)?.status ?? null : null,
         downloading,
         watched: userId ? isWatchedLocally(userId, "movie", tmdbId) : false,
+        logo,
       });
     }
 
-    const [detail, lib] = await Promise.all([tmdb.getTv(tmdbId), playableLibrary()]);
+    const [detail, lib, logo] = await Promise.all([tmdb.getTv(tmdbId), playableLibrary(), titleLogo("series", tmdbId, req)]);
     const libraryId = hidden ? null : playableId(lib, "series", tmdbId);
     const downloading = libraryId === null && !hidden ? await titleDownloadProgress("series", tmdbId) : null;
     return build({
@@ -150,8 +159,22 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       watchlistStatus: userId ? watchlistDb.get(userId, "series", tmdbId)?.status ?? null : null,
       downloading,
       watched: userId ? isWatchedLocally(userId, "series", tmdbId) : false,
+      logo,
     });
   }, "player-title");
+}
+
+/**
+ * Le logo, de la même entrée de cache que le catalogue (`getTitleArt`, une semaine sur disque).
+ * Un ornement : un échec rend le titre écrit, jamais une fiche en erreur.
+ */
+async function titleLogo(type: "movie" | "series", tmdbId: number, req: NextRequest): Promise<string | null> {
+  try {
+    const art = await getTitleArt(tmdbId, type);
+    return logoForLocale(art, getTitleNames(tmdbId, type), localeOf(req));
+  } catch {
+    return null;
+  }
 }
 
 function build(input: {
@@ -172,6 +195,7 @@ function build(input: {
   watchlistStatus: WatchlistStatus | null;
   downloading: number | null;
   watched: boolean;
+  logo: string | null;
 }): PlayerTitlePayload {
   return {
     tmdbId: input.tmdbId,
@@ -203,5 +227,6 @@ function build(input: {
     downloading: input.downloading,
     watched: input.watched,
     posterPath: input.posterPath,
+    logo: input.logo,
   };
 }

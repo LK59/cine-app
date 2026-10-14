@@ -76,6 +76,12 @@ const watchlistDb = { get: vi.fn(), getAll: vi.fn() };
 vi.mock("@/lib/db", () => ({ watchlistDb, pendingRequestDb: { add: vi.fn() } }));
 const mockHidden = vi.fn(async (_jfId?: string | null) => new Set<string>());
 vi.mock("@/lib/blockedTags", () => ({ hiddenTmdbKeysFor: (jfId?: string | null) => mockHidden(jfId) }));
+// Le logo de la fiche découverte (14/10/2026) : la même entrée de cache que le catalogue.
+vi.mock("@/lib/title-art", () => ({
+  getTitleArt: async () => ({ logoUrl: "https://image.tmdb.org/t/p/w500/logo.png", posterTextlessUrl: null, posterByLang: {} }),
+  logoForLocale: (art: { logoUrl: string | null }) => art.logoUrl,
+}));
+vi.mock("@/lib/titleNames", () => ({ getTitleNames: () => ({}) }));
 
 function req(cookie: string | null = "t"): NextRequest {
   return {
@@ -119,6 +125,15 @@ describe("GET /api/player/title", () => {
     expect(body.libraryId).toBeNull();
     expect(body.downloading).toBeNull();
     expect(jellyseerr.getMovieMedia).not.toHaveBeenCalled();
+  });
+
+  // 14/10/2026 : la fiche découverte du bureau pose le logo en tête, comme celle d'un film possédé.
+  it("carries the title's logo for the discovery sheet", async () => {
+    jellyseerr.getMovieMedia.mockResolvedValue({});
+    tmdbClient.getMovie.mockResolvedValue({ title: "Matchbox", release_date: "2026-10-10", overview: "", genres: [], runtime: 100, credits: { cast: [] } });
+    const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "1" }) })).json();
+    expect(body.logo).toBe("https://image.tmdb.org/t/p/w500/logo.png");
   });
 
   it("refuses an anonymous caller", async () => {
