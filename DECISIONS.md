@@ -2833,6 +2833,38 @@ Tests : `retryLedger.test.ts`, `PlayerHost-echelle.test.tsx` (caractérisation d
 exclusion retenue, boucle (a)1), `PlayerHost-hls-recovery.test.tsx` (caractérisation d'hls.js,
 boucle (a)2), `ExperimentalPlayerHost.test.tsx` (boucle (a)3).
 
+**hls.js 1.7.3 (14/10/2026) : une récupération par incident, à la position d'alors.** Montée depuis
+1.5.17 (épinglée exacte, import dynamique hors WebKit inchangé, pas de `hls.js/light`). Lu dans ses
+sources et vérifié sur la vraie bibliothèque (`hls-contrat.test.ts`) :
+- `MEDIA_SOURCE_REQUIRES_RESET` (nouvelle) : l'`ErrorController` d'hls.js appelle lui-même
+  `recoverMediaError()` (drapeau `ResetMediaSource`), puis, sans variante SDR pour prendre le relais, la
+  déclare fatale et appelle `stopLoad()` — tout cela avant nos écouteurs. L'écouteur de `PlayerHost`
+  rappelait `recoverMediaError()` : deux détachements et deux tentatives du budget pour un incident.
+  Désormais (`hlsResetItself`, `hlsRecovery.ts`) : non fatale, la remise à zéro d'hls.js est seulement
+  comptée (registre, motif « hls.js : média » inchangé, et `mediaRetryCount`, pour que des remises à
+  zéro en série restent bornées) ; fatale, on ne fait que relancer le chargement ; au bout du budget,
+  `detachMedia()` pour que la MediaSource neuve ne recharge pas sous l'écran d'erreur.
+- Toute relance passe la position (`startLoad(position)`, `hlsRecoveryPosition` : l'élément, sinon la
+  position relevée à `MEDIA_DETACHING`, sinon `lastKnownTime`). Sans elle, `startLoad()` et le
+  rattachement après une fatale repartaient de `config.startPosition` : le point d'ouverture d'une séance
+  préchauffée (§78). Défaut déjà présent en 1.5.17, invisible hors préchauffage.
+- Une requête restée sans réponse (statut 0) est réessayée par hls.js (1, 2, 4, 8, 8, 8 s) avant toute
+  fatale, là où 1.5.17 la déclarait fatale aussitôt. Marquée coupure (`reconnecting`) dès la première :
+  sans cela ces ~30 s n'étaient ni dites ni protégées, et une attente y était jugée lenteur (§78).
+  Conséquence voulue, conforme à « la coupure : attente visible » : l'écran « connexion perdue » vient
+  après ~4,5 min de coupure au lieu de ~48 s, et une coupure de 60 s reprend seule (~8 s après le
+  retour du réseau) au lieu de laisser l'écran. Les six relances et leurs délais sont inchangés.
+- Mesuré sur une instance de test contre le vrai Jellyfin (Chrome 155, lecteur serveur, avant/après) :
+  démarrage, préchauffage repris (`startPosition` respecté), coupures 5 s / 60 s / hors ligne 60 s, saut
+  avant 600 s et arrière 15 s dans le tampon, changement de piste, flux 4K HDR converti SDR, erreur de
+  décodage (`endOfStream("decode")`) dans une séance ordinaire et dans une séance préchauffée. Le reste
+  identique ; sur Chrome l'erreur de décodage lève aussi l'`error` de l'élément, dont l'échelle du son
+  renégocie à la position (~5 s, déjà le cas en 1.5.17). Non vérifiables ici : Fire TV, Android, une
+  variante HDR servie telle quelle (la seule où la double récupération se produisait en vrai).
+
+Tests : `hls-contrat.test.ts` (vraie bibliothèque : ordre des écouteurs, drapeau, fatale), et dans
+`PlayerHost-hls-recovery.test.tsx` « hls.js 1.7 » — chacun échoue sans le correctif.
+
 ## 68. « Améliorer les dialogues » : dans la chaîne audio, sur les canaux livrés — bêta, tous les comptes
 
 **Règle.** Le traitement des voix vit dans le ré-encodage du lecteur natif, entre le repli des
