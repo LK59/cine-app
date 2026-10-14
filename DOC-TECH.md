@@ -1172,6 +1172,20 @@ stretch.
 Software decoders: `@mediabunny/dts` and `@mediabunny/ac3` (libavcodec in WASM, ~1.5 MB and
 ~1.1 MB, lazily loaded).
 
+They run in a worker the extension builds from an inline script (`blob:` URL, hence `worker-src
+blob:` in the CSP). The three packages move together, at exact versions, and an upgrade is proven
+by `mediabunny-regress-bench.spec.ts` — identical hashes before and after for the tracks found,
+the demuxed packets, the decoded planes and the remuxed audio segments (1.58.1 → 1.61.4 on
+2026-10-14: 58 tracks of 21 files, every line identical; the WASM decoders are byte-identical; the worker script the Next build emits
+is byte-identical to the published one, and decodes the same PCM in Chromium, Firefox and WebKit
+under the production CSP as in Node). Since 1.61.4 a worker
+that fails to start or dies **rejects** every pending and later command: our chain turns that into
+a named refusal of the native path, and the film goes to the server player
+(`mediabunny-worker-failure.test.ts`). Before, the command never answered: the opening waited out
+the encoder's priming timeout and blamed the encoder, and a worker lost mid-film left the sound
+reading forever. mediabunny still leaves one rejection unhandled after such a failure (the decoder's
+close, chained on the rejected call queue), which reaches `server.log` as a client error.
+
 ### The replacement codec is chosen, not assumed
 
 Both halves must hold: the browser must be able to **produce** the codec *and* **take it back** in
