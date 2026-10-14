@@ -65,7 +65,8 @@
       "subtitles": "Generated subtitles",
       "accounts": "New accounts",
       "admin": "Administrator",
-      "deployment": "Deployment"
+      "deployment": "Deployment",
+      "dialogue": "Dialogue search"
     },
     "backToCinema": "Back to Cinema",
     "accountPreferences": "Your preferences are in Account",
@@ -2768,7 +2769,8 @@
       "invalid": "Invalid value.",
       "too-long": "Too long.",
       "unknown": "Unknown setting.",
-      "save": "Saving failed."
+      "save": "Saving failed.",
+      "unavailable": "The films folder cannot be read inside the container."
     },
     "groups": {
       "jellyfin": {
@@ -2837,6 +2839,10 @@
         "title": "Generated subtitles",
         "why": "Translates a full subtitle of the title into the chosen language on demand, during playback, with an online AI. Without a key, the feature appears nowhere.",
         "help": "The key stays on the server: it is never sent to devices nor written to the logs."
+      },
+      "dialogue": {
+        "title": "Dialogue search",
+        "why": "Reads the films' subtitles so they can be searched by a line."
       }
     },
     "fields": {
@@ -2884,7 +2890,12 @@
       "SUBTITLE_GEN_MODEL": "Model",
       "SUBTITLE_GEN_BUDGET_USD": "Monthly budget (dollars)",
       "SUBTITLE_GEN_PRICE_INPUT": "Input price per million tokens (empty: known rate)",
-      "SUBTITLE_GEN_PRICE_OUTPUT": "Output price per million tokens (empty: known rate)"
+      "SUBTITLE_GEN_PRICE_OUTPUT": "Output price per million tokens (empty: known rate)",
+      "REPLIQUES_ENABLED": "Dialogue search",
+      "REPLIQUES_NIGHTLY": "Nightly update",
+      "REPLIQUES_NIGHT_START": "Night window start",
+      "REPLIQUES_NIGHT_END": "Night window end",
+      "REPLIQUES_LANGUAGES": "Dialogue languages"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml, under “environment”:",
@@ -3009,6 +3020,68 @@
     },
     "deployment": {
       "hint": "What requires editing docker-compose.yml or .env, then recreating the container."
+    },
+    "dialogue": {
+      "hint": "Find a film by a line spoken in it. The films' subtitles are read once, then every night for what is new."
+    }
+  },
+  "repliques": {
+    "admin": {
+      "title": "Dialogue search",
+      "why": "A “Lines” section under the titles in the cinema search: type a line you heard, find the film and the moment. Subtitles are read from disk and sent nowhere; indexing pauses by itself whenever a film is being watched.",
+      "mount": {
+        "not-mounted": "The films folder ({path}) is not mounted in the container. The option stays off.",
+        "unreadable": "The films folder ({path}) exists but cannot be read (permissions).",
+        "no-radarr": "Radarr is not answering: there is no way to know where the films are.",
+        "no-films": "Radarr has no film with a file.",
+        "files-missing": "{path} is mounted, but no film is where Radarr says: it does not match Radarr's root folder for films."
+      },
+      "mountDoc": "Mount the films folder read-only and point MOVIES_PATH at it: see DEPLOYMENT.md and ENV.md, or Configuration → Deployment.",
+      "mountOk": "Films folder readable: {path} ({found} of {checked} films found at their path).",
+      "mountRequired": "Cannot turn on: the films folder is not readable.",
+      "initialTitle": "Initial indexing",
+      "start": "Start",
+      "resume": "Resume",
+      "update": "Update now",
+      "pause": "Pause",
+      "phase": {
+        "idle": "Stopped.",
+        "planning": "Preparing: comparing the films with the index…",
+        "running": "Running.",
+        "waiting-playback": "Paused: a film is being watched. Resumes a few minutes after it ends.",
+        "paused": "Paused.",
+        "outside-window": "Stopped at the end of the night window; continues next night.",
+        "disabled": "Option turned off.",
+        "unavailable": "Films folder unavailable.",
+        "done": "Finished."
+      },
+      "films": "Films",
+      "eta": "Time left",
+      "read": "Data read",
+      "errors": "Errors",
+      "current": "Now: {title}",
+      "last": "Last film: {title}",
+      "nightTitle": "Nightly update",
+      "nightWhy": "Once a night, within the chosen window (server time): only new or changed films are read, and those that are gone are removed.",
+      "from": "From",
+      "to": "to",
+      "lastNight": "Last nightly update: {date}",
+      "nightAfterInitial": "The nightly update starts once the initial indexing has finished.",
+      "languages": "Indexed languages",
+      "languagesWhy": "“Original”: each film's original language. A change re-reads the films concerned at the next update.",
+      "original": "Original",
+      "indexTitle": "The index",
+      "indexSize": "{size} · {lines} lines · {films} films",
+      "rebuild": "Rebuild the index",
+      "rebuildConfirm": "Erase the index and read every film again?",
+      "actionFailed": "The action did not go through.",
+      "parallel": {
+        "proven": "{n} reads in parallel (distinct disks proven)",
+        "single-disk": "One read at a time (a single disk)",
+        "unproven": "One read at a time (distinct disks not proven)"
+      },
+      "writeSlice": "longest write {ms} ms",
+      "errorList": "{n} film with an error|{n} films with an error"
     }
   }
 }

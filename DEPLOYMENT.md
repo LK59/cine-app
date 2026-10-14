@@ -72,7 +72,8 @@ services:
       # Create it first, owned by the container's user: mkdir data && sudo chown 1001:1001 data
       # - ./data:/app/data
 
-      # Optional, read-only: your media, for Management → Statistics and the storage card only.
+      # Optional, read-only: your media, for Management → Statistics, the storage card and
+      # dialogue search (which reads the films' subtitles).
       # Mount the root Radarr and Sonarr see at /mnt/media/video; movies/, tv/ and downloads/seeds/
       # inside it are found on their own (other layouts: MEDIA_ROOT and *_PATH in ENV.md).
       # - /path/to/media:/mnt/media/video:ro
@@ -315,6 +316,7 @@ at once, without a restart, unless the field says otherwise.
 | **Connections** | Address, key and *Test connection* for each service: Jellyfin, TMDB, Radarr and Sonarr (with the quality profile given to titles added from the app), Jellyseerr, qBittorrent, Bazarr, Jackett, ratings. The *Application* card: poster preparation (applies at the next start) and the notification contact. |
 | **Playback** | The built-in player, handing unplayable files to Jellyfin, black-bar framing, who sees the Chromecast button, and the Chromecast receiver. |
 | **Generated subtitles** | Provider, key, model and monthly budget for AI-translated subtitles, with the month's spending and the jobs. |
+| **Dialogue search** | Off by default. Indexes the films' subtitles so the cinema search finds a film by a line: the initial indexing (start, pause, resume, progress), the nightly update and its window, the languages, the index size and *Rebuild the index*. Greyed out until the films folder is mounted. |
 | **New accounts** | What an account gets until it chooses otherwise: language, home banner, Jellyfin tags blocked automatically on new accounts. And the welcome screen, offered again to everyone or removed. |
 | **Administrator** | The local administrator's password, a search diagnostic, and the installed version. |
 | **Deployment** | What only the compose file can set — time zone, media folders, reverse proxy, HTTPS, an administrator fixed by `.env` — with the line to copy. Recreate the container after adding one. It also says whether `TRUSTED_PROXIES` (with its value) and `COOKIE_SECURE` are set in the running container. |
@@ -343,6 +345,23 @@ a day. The finished file is kept in `data/subtitles/` and handed to Jellyfin, wh
 to the video so every Jellyfin client sees it; Jellyfin needs write access to its media folders
 for that, otherwise CineApp serves its own copy. Image subtitles (PGS, VobSub) cannot be
 translated, and nothing is transcribed from the audio.
+
+**Dialogue search.** Type a line you remember in the cinema search — three words or more, or
+pick the *Lines* chip — and a *Lines* section appears under the titles, grouped by film, with the
+scene's thumbnail; a tap plays the film five seconds before the line. It needs the films folder
+mounted read-only (`- /path/to/media:/mnt/media/video:ro`, and `MOVIES_PATH` if films are not in
+`movies/` under it): the folder must be what Radarr calls its root folder for films, since each
+film is read at the path Radarr gives it. Nothing else is read — never seeds or downloads.
+
+For each film and language, a subtitle file next to the film (`Film (2001).fr.srt`) is used
+first; otherwise the full text track inside the MKV, read through the file's index — a few
+megabytes per film rather than the whole file; old files without an index are read in full.
+Image subtitles (PGS, VobSub) are skipped. Turn the option on, then press **Start** under
+*Initial indexing*: on spinning disks expect roughly ten seconds per film, one film at a time.
+Indexing pauses on its own whenever a film is being watched (any Jellyfin client, the built-in
+player or casting) and resumes a few minutes after; it can also be paused by hand, and resumes
+after a restart. The index lives in `data/repliques.db` (a few hundred kilobytes per film), is
+left out of the nightly database copy, and can be rebuilt at any time.
 
 **Notifications.** The push keys are generated on first launch; nothing to set. Each person turns
 them on in **Account → Notifications**, on each device. On iPhone and iPad, add the app to the Home
@@ -387,7 +406,7 @@ nothing is playing. `docker image prune` reclaims the old images.
 ### Backups
 
 Everything is in the data volume. The app also copies its database every night into `backups/`
-inside it, keeping seven days — a guard against a damaged database file, not against losing the
+inside it (not `repliques.db`, the dialogue index, which is rebuilt from the films), keeping seven days — a guard against a damaged database file, not against losing the
 disk. Copy the volume elsewhere for that, with the container stopped so the copy is consistent
 (the image cache rebuilds itself):
 

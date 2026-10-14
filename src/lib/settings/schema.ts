@@ -17,7 +17,7 @@
 
 export type SettingKind = "url" | "secret" | "text" | "boolean" | "select" | "profile" | "number";
 export type SettingNeed = "required" | "library" | "optional";
-export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "playback" | "subtitles" | "app" | "defaults" | "deployment";
+export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "playback" | "subtitles" | "dialogue" | "app" | "defaults" | "deployment";
 
 export interface SettingDef {
   key: string;
@@ -37,6 +37,9 @@ export interface SettingDef {
    */
   restart?: true;
 }
+
+/** Les heures d'une plage horaire, « 0 » à « 23 ». */
+const HOURS: readonly string[] = Array.from({ length: 24 }, (_, h) => String(h));
 
 export const SETTINGS: readonly SettingDef[] = [
   // ── L'indispensable ──
@@ -74,6 +77,16 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "SUBTITLE_GEN_BUDGET_USD", group: "subtitles", kind: "number", need: "optional", fallback: "5", inApp: true, placeholder: "5" },
   { key: "SUBTITLE_GEN_PRICE_INPUT", group: "subtitles", kind: "number", need: "optional", fallback: "", inApp: true },
   { key: "SUBTITLE_GEN_PRICE_OUTPUT", group: "subtitles", kind: "number", need: "optional", fallback: "", inApp: true },
+  // ── La recherche de répliques (DECISIONS.md §88) ──
+  // Coupée par défaut : elle lit les films sur le disque, ce qu'une installation doit avoir monté et
+  // décidé. La page refuse de l'allumer tant que le dossier des films n'est pas lisible (`checkMoviesMount`).
+  // La plage de nuit est en heures locales du conteneur (`TZ`) ; les langues, des codes séparés par des
+  // virgules, `original` valant la langue de tournage de chaque film.
+  { key: "REPLIQUES_ENABLED", group: "dialogue", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  { key: "REPLIQUES_NIGHTLY", group: "dialogue", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  { key: "REPLIQUES_NIGHT_START", group: "dialogue", kind: "select", need: "optional", fallback: "2", inApp: true, options: HOURS },
+  { key: "REPLIQUES_NIGHT_END", group: "dialogue", kind: "select", need: "optional", fallback: "6", inApp: true, options: HOURS },
+  { key: "REPLIQUES_LANGUAGES", group: "dialogue", kind: "text", need: "optional", fallback: "fr,original", inApp: true, placeholder: "fr,original" },
   // ── L'application ──
   { key: "PLAYER_ENABLED", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "PLAYER_SERVER_FALLBACK", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
@@ -111,7 +124,7 @@ export const SETTINGS: readonly SettingDef[] = [
 export const SETTINGS_BY_KEY: ReadonlyMap<string, SettingDef> = new Map(SETTINGS.map((s) => [s.key, s]));
 
 /** Les groupes réglables, dans l'ordre de l'assistant et de la page. */
-export const SETTING_GROUPS: readonly SettingGroup[] = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "playback", "subtitles", "app", "defaults", "deployment"];
+export const SETTING_GROUPS: readonly SettingGroup[] = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "playback", "subtitles", "dialogue", "app", "defaults", "deployment"];
 
 /**
  * Le guide de déploiement : ce qui ne se règle pas dans l'application — un dossier à monter, le

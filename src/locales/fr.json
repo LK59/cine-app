@@ -65,7 +65,8 @@
       "subtitles": "Sous-titres générés",
       "accounts": "Nouveaux comptes",
       "admin": "Administrateur",
-      "deployment": "Déploiement"
+      "deployment": "Déploiement",
+      "dialogue": "Recherche de répliques"
     },
     "backToCinema": "Retour au cinéma",
     "accountPreferences": "Vos préférences sont dans Compte",
@@ -2768,7 +2769,8 @@
       "invalid": "Valeur invalide.",
       "too-long": "Trop long.",
       "unknown": "Réglage inconnu.",
-      "save": "L'enregistrement a échoué."
+      "save": "L'enregistrement a échoué.",
+      "unavailable": "Le dossier des films n'est pas lisible dans le conteneur."
     },
     "groups": {
       "jellyfin": {
@@ -2837,6 +2839,10 @@
         "title": "Sous-titres générés",
         "why": "Traduit à la demande, pendant le film, un sous-titre complet du titre vers la langue choisie, par une IA en ligne. Sans clé, la fonction n'apparaît nulle part.",
         "help": "La clé reste sur le serveur : elle n'est jamais envoyée aux appareils ni écrite dans les journaux."
+      },
+      "dialogue": {
+        "title": "Recherche de répliques",
+        "why": "Lit les sous-titres des films pour qu'on puisse les chercher par une réplique."
       }
     },
     "fields": {
@@ -2884,7 +2890,12 @@
       "SUBTITLE_GEN_MODEL": "Modèle",
       "SUBTITLE_GEN_BUDGET_USD": "Budget mensuel (dollars)",
       "SUBTITLE_GEN_PRICE_INPUT": "Prix en entrée, par million de jetons (vide : tarif connu)",
-      "SUBTITLE_GEN_PRICE_OUTPUT": "Prix en sortie, par million de jetons (vide : tarif connu)"
+      "SUBTITLE_GEN_PRICE_OUTPUT": "Prix en sortie, par million de jetons (vide : tarif connu)",
+      "REPLIQUES_ENABLED": "Recherche de répliques",
+      "REPLIQUES_NIGHTLY": "Mise à jour chaque nuit",
+      "REPLIQUES_NIGHT_START": "Début de la plage de nuit",
+      "REPLIQUES_NIGHT_END": "Fin de la plage de nuit",
+      "REPLIQUES_LANGUAGES": "Langues des répliques"
     },
     "deployHint": {
       "TZ": "Dans docker-compose.yml, sous « environment » :",
@@ -3009,6 +3020,68 @@
     },
     "deployment": {
       "hint": "Ce qui demande de modifier le docker-compose.yml ou le .env, puis de recréer le conteneur."
+    },
+    "dialogue": {
+      "hint": "Retrouver un film par une phrase qu'on y entend. Les sous-titres des films sont lus une fois, puis chaque nuit pour les nouveautés."
+    }
+  },
+  "repliques": {
+    "admin": {
+      "title": "Recherche de répliques",
+      "why": "Une section « Répliques » sous les titres de la recherche du cinéma : on tape une phrase entendue, on retrouve le film et le moment. Les sous-titres sont lus sur le disque, sans rien envoyer nulle part ; l'indexation se met en pause d'elle-même dès qu'un film est regardé.",
+      "mount": {
+        "not-mounted": "Le dossier des films ({path}) n'est pas monté dans le conteneur. L'option reste désactivée.",
+        "unreadable": "Le dossier des films ({path}) existe mais ne se lit pas (droits).",
+        "no-radarr": "Radarr ne répond pas : impossible de savoir où sont les films.",
+        "no-films": "Radarr n'a aucun film avec un fichier.",
+        "files-missing": "Le dossier {path} est monté, mais aucun film n'y est au chemin que Radarr donne : il ne correspond pas au dossier racine des films de Radarr."
+      },
+      "mountDoc": "Montez le dossier des films en lecture seule et indiquez-le avec MOVIES_PATH : voir DEPLOYMENT.md et ENV.md, ou Configuration → Déploiement.",
+      "mountOk": "Dossier des films lisible : {path} ({found} films sur {checked} trouvés à leur chemin).",
+      "mountRequired": "Impossible d'activer : le dossier des films n'est pas lisible.",
+      "initialTitle": "Indexation initiale",
+      "start": "Lancer",
+      "resume": "Reprendre",
+      "update": "Mettre à jour maintenant",
+      "pause": "Mettre en pause",
+      "phase": {
+        "idle": "À l'arrêt.",
+        "planning": "Préparation : comparaison des films avec l'index…",
+        "running": "En cours.",
+        "waiting-playback": "En pause : un film est regardé. Reprise quelques minutes après la fin.",
+        "paused": "En pause.",
+        "outside-window": "Arrêtée à la fin de la plage de nuit ; reprend la nuit prochaine.",
+        "disabled": "Option désactivée.",
+        "unavailable": "Dossier des films indisponible.",
+        "done": "Terminée."
+      },
+      "films": "Films",
+      "eta": "Temps restant",
+      "read": "Données lues",
+      "errors": "Erreurs",
+      "current": "En cours : {title}",
+      "last": "Dernier film : {title}",
+      "nightTitle": "Mise à jour chaque nuit",
+      "nightWhy": "Une fois par nuit, dans la plage choisie (heure du serveur) : seuls les films nouveaux ou modifiés sont lus, et ceux qui ont disparu sont retirés.",
+      "from": "De",
+      "to": "à",
+      "lastNight": "Dernière mise à jour de nuit : {date}",
+      "nightAfterInitial": "La mise à jour de nuit commence une fois l'indexation initiale terminée.",
+      "languages": "Langues indexées",
+      "languagesWhy": "« VO » : la langue de tournage de chaque film. Un changement relit les films concernés à la mise à jour suivante.",
+      "original": "VO",
+      "indexTitle": "L'index",
+      "indexSize": "{size} · {lines} répliques · {films} films",
+      "rebuild": "Reconstruire l'index",
+      "rebuildConfirm": "Effacer l'index et relire tous les films ?",
+      "actionFailed": "L'action n'a pas abouti.",
+      "parallel": {
+        "proven": "{n} lectures en parallèle (disques distincts prouvés)",
+        "single-disk": "Une lecture à la fois (un seul disque)",
+        "unproven": "Une lecture à la fois (disques distincts non prouvés)"
+      },
+      "writeSlice": "écriture la plus longue {ms} ms",
+      "errorList": "{n} film en erreur|{n} films en erreur"
     }
   }
 }

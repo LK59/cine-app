@@ -109,6 +109,25 @@ spending and the jobs.
 | `SUBTITLE_GEN_PRICE_OUTPUT` | the app's price table | Price per million output tokens. |
 | `SUBTITLE_GEN_ENABLED` | `true` | `false` turns the feature off while keeping the key. |
 
+## Dialogue search
+
+Finds a film by a line spoken in it: the films' text subtitles are read from disk into a separate,
+rebuildable index (`data/repliques.db`), and the cinema search shows a *Lines* section under the
+titles. **Off by default.** It can only be turned on when the films folder is mounted and readable
+inside the container — `MEDIA_ROOT` / `MOVIES_PATH` below, the same folder Radarr calls its root
+folder for films; the page says why when it is greyed out.
+
+Set in the app: **Management → Configuration → Dialogue search**, which also starts the initial
+indexing, shows its progress, and rebuilds the index.
+
+| Variable | Default | Role |
+|---|---|---|
+| `REPLIQUES_ENABLED` | `false` | Turns the feature on. Refused while the films folder is not readable. |
+| `REPLIQUES_NIGHTLY` | `true` | Once a night, reads only new or changed films and removes those that are gone. Starts only after the initial indexing has finished. |
+| `REPLIQUES_NIGHT_START` | `2` | Start of the night window, hour 0–23, in the container's time zone (`TZ`). |
+| `REPLIQUES_NIGHT_END` | `6` | End of the night window. A window across midnight (22 → 6) works. |
+| `REPLIQUES_LANGUAGES` | `fr,original` | Languages indexed, comma-separated two-letter codes; `original` is each film's original language (from Radarr). |
+
 ## Defaults for accounts
 
 What an account gets until it chooses otherwise in **Account**. Set in the app: **Management →
@@ -139,8 +158,8 @@ Deployment** shows each one with the line to copy. Recreate the container after 
 | Variable | Default | Role |
 |---|---|---|
 | `TZ` | the container's (UTC) | Time zone for logs and scheduled tasks, e.g. `Europe/Paris`. Times shown in the app follow each viewer's device. |
-| `MEDIA_ROOT` | `/mnt/media/video` | Where the media folder is mounted **inside the container**, read-only. Used by Management → Statistics and the storage card only. |
-| `MOVIES_PATH` | `$MEDIA_ROOT/movies` | Films folder, inside the container. Only if your layout differs. |
+| `MEDIA_ROOT` | `/mnt/media/video` | Where the media folder is mounted **inside the container**, read-only. Used by Management → Statistics, the storage card, and dialogue search. |
+| `MOVIES_PATH` | `$MEDIA_ROOT/movies` | Films folder, inside the container — the container's view of Radarr's root folder for films. Only if your layout differs. Dialogue search reads each film at `MOVIES_PATH/<film folder>/<file>` as Radarr names them, never seeds or downloads. |
 | `TV_PATH` | `$MEDIA_ROOT/tv` | Series folder. |
 | `SEEDS_PATH` | `$MEDIA_ROOT/downloads/seeds` | Downloads kept for seeding. |
 | `SEED_MOVIES_PATH` | `$SEEDS_PATH/movies` | Seeding films. |

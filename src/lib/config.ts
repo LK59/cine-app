@@ -28,6 +28,12 @@ function envOnly(name: string, fallback = ""): string {
   return process.env[name] ?? fallback;
 }
 
+/** Une heure de 0 à 23 ; une valeur mal formée prend le défaut. */
+function hourOf(value: string, fallback: number): number {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 && n <= 23 ? n : fallback;
+}
+
 export const config = {
   app: {
     get adminUser() {
@@ -217,6 +223,25 @@ export const config = {
     },
     get priceOutput() {
       return optional("SUBTITLE_GEN_PRICE_OUTPUT");
+    },
+  },
+  // La recherche de répliques (DECISIONS.md §88) : relue à chaque accès, comme le reste — couper
+  // l'option arrête l'indexation à sa prochaine lecture de fichier, sans redémarrage.
+  repliques: {
+    get enabled() {
+      return optional("REPLIQUES_ENABLED", "false") === "true";
+    },
+    get nightly() {
+      return optional("REPLIQUES_NIGHTLY", "true") === "true";
+    },
+    get nightStart() {
+      return hourOf(optional("REPLIQUES_NIGHT_START", "2"), 2);
+    },
+    get nightEnd() {
+      return hourOf(optional("REPLIQUES_NIGHT_END", "6"), 6);
+    },
+    get languages() {
+      return optional("REPLIQUES_LANGUAGES", "fr,original");
     },
   },
   push: {

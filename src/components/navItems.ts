@@ -17,6 +17,7 @@ import {
   UserPlus,
   KeyRound,
   Container,
+  MessageSquareQuote,
 } from "lucide-react";
 import type { ServiceKey } from "@/lib/services";
 
@@ -94,6 +95,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/parametres", navKey: "nav.config.connections", icon: PlugZap },
       { href: "/parametres/lecture", navKey: "nav.config.playback", icon: Clapperboard },
       { href: "/parametres/sous-titres", navKey: "nav.config.subtitles", icon: Languages },
+      { href: "/parametres/repliques", navKey: "nav.config.dialogue", icon: MessageSquareQuote },
       { href: "/parametres/comptes", navKey: "nav.config.accounts", icon: UserPlus },
       { href: "/parametres/administration", navKey: "nav.config.admin", icon: KeyRound },
       { href: "/parametres/deploiement", navKey: "nav.config.deployment", icon: Container },

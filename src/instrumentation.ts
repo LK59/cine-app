@@ -70,6 +70,16 @@ export async function register() {
       console.error("subtitle-gen: démarrage", error);
     }
 
+    // La recherche de répliques (DECISIONS.md §88) : une passe interrompue par le redémarrage reprend
+    // au film suivant, et la mise à jour de nuit est surveillée. Rien ne tourne tant que l'option est
+    // coupée. Gardé, comme les sous-titres générés.
+    try {
+      const { startRepliquesEngine } = await import("./lib/repliques/engine");
+      startRepliquesEngine();
+    } catch (error) {
+      console.error("repliques: démarrage", error);
+    }
+
     // Non-blocking cache warmup — fire and forget, never delays startup
     setTimeout(() => {
       import("./lib/server-cache").then(async ({ cachedMovies, cachedSeries }) => {

@@ -4218,3 +4218,110 @@ Le second n'est pas transmis lors d'un passage du natif au serveur : la mémoire
 l'ouverture du serveur.
 
 **Décidé le 14/10/2026** (validé par Louis).
+
+---
+
+## 88. La recherche de répliques : un index à part, lu par les Cues, qui se tait pendant un film
+
+**Règle.** Films seulement (pas les séries pour l'instant). Une option de la Configuration
+(`REPLIQUES_ENABLED`, **coupée par défaut**, §48), qui ne s'allume que si le dossier des films est
+monté et lisible dans le conteneur (`checkMoviesMount` : `MOVIES_PATH` lisible, Radarr joignable, un
+échantillon de films trouvé au chemin déduit) — la page grise l'interrupteur et dit pourquoi, le
+serveur refuse de toute façon (`PUT /api/settings`). Les films lus sont ceux du catalogue
+(`matchMovies`), au chemin de Radarr ramené sous `MOVIES_PATH` (`containerPathOf`, la règle de
+`libraryKey`) — jamais les seeds ni les téléchargements.
+
+**Une seule mécanique pour l'initiale et la nuit.** Chaque passe compare chaque film à sa signature
+dans l'index (taille et date du fichier, fichiers de sous-titres posés à côté, langues voulues),
+relit ce qui a changé — un film nouveau, réencodé par FileFlows, un `.srt` ajouté —, réessaie les
+films en erreur et retire ceux qui ont disparu. L'initiale part du bouton « Lancer », à toute heure ;
+la nuit (`REPLIQUES_NIGHTLY`, plage `REPLIQUES_NIGHT_START`–`END`, défaut 2 h–6 h, heure du
+conteneur) ne part qu'une fois par nuit, **et seulement après une initiale terminée** — activer
+l'option ne déclenche jamais seule une passe complète. L'état est écrit à chaque film : un redémarrage
+reprend au film suivant (le film interrompu est effacé puis relu) ; une pause demandée est retenue.
+Pas d'ETag Jellyfin dans la signature : la taille et la date du fichier disent déjà qu'il a changé.
+
+**La source, par film et par langue** (français + VO par défaut, `REPLIQUES_LANGUAGES`) :
+1. un fichier posé à côté (`.srt`, `.vtt`, `.ass`, `.ssa`), langue lue dans le nom, jamais un forcé ;
+2. sinon la piste texte intégrée — complète (pas une forcée seule ; la SDH si c'est la seule complète ;
+   une piste non marquée mais quatre fois moins fournie que la plus fournie de sa langue est traitée
+   comme forcée) —, lue **par l'index** : une lecture de 4 Kio par réplique, à
+   `CueClusterPosition + 4 + taille + CueRelativePosition`, la largeur de la taille devinée (1 à 8
+   octets) en vérifiant le numéro de piste du bloc, l'instant pris de `CueTime` ;
+3. sinon (piste absente de l'index, ou bloc introuvable où l'index le dit) la lecture complète en
+   flux par le `SampleReader` du lecteur.
+Les images (PGS, VobSub) sont ignorées. Un MP4 n'a que ses fichiers posés à côté.
+
+**Mesuré le 14/10/2026.** Le premier essai lisait l'en-tête de grappe et le bloc d'un tenant :
+762 Mo pour les 5 093 répliques des *Huit Salopards*. La lecture par fenêtre de 4 Kio : 11 à 41 Mo
+par film (1 300 à 5 000 lectures, 41 Mo pour ce même film), 6 à 23 s par film sur ces disques — le
+coût est le nombre de déplacements de tête, pas les octets. Vérifié identique à la lecture complète du même fichier sur
+13 pistes de 7 films (`repliques-bench.spec.ts`, `REPLIQUES_BENCH_VERIFY`). Un fichier posé à côté :
+0,3 s.
+
+**La base** `data/repliques.db`, à part (`store.ts`) : reconstructible, donc hors de la sauvegarde
+quotidienne (qui ne copie que `cine.db`), et « Reconstruire l'index » supprime le fichier au lieu
+d'effacer des millions de lignes. Une ligne = élément Jellyfin, identifiant Radarr, langue, début et
+fin en ms, texte affiché, texte normalisé. FTS5 sur le texte **normalisé** (`fold` : minuscules, sans
+accents, `œ` → `oe`), `unicode61 remove_diacritics 2`. **Pas de table trigramme** : mesurée sur
+trois échantillons (30, 14 et 10 films, français + anglais), la base fait 400 à 475 Ko par film
+(≈ 300 à 340 Mo pour 720 films en deux langues) et le trigramme y ajoutait 270 à 320 Ko par film
+(+66 %, ≈ +200 Mo) pour une tolérance que le vocabulaire donne déjà. Les fautes passent par le **vocabulaire** (`terms`, le
+nombre d'occurrences de chaque mot) : un mot inconnu est remplacé par ses voisins à distance
+d'édition 1 (4–6 lettres) ou 2 (au-delà), même première lettre ; le dernier mot vaut aussi comme
+début de mot. Recherche : 1 à 8 ms sur 87 000 lignes réelles, ~30 ms sur 750 000 lignes
+synthétiques faites des mêmes mots partout (le pire cas) ; pas de fil à part pour elle.
+
+**Jamais la boucle tenue.** Écritures par tranches qui s'ajustent pour rester sous 12 ms, une main
+rendue entre deux, `synchronous = OFF` (une base reconstructible n'a pas à payer `fsync` : avec
+`NORMAL`, 1 265 tranches sur 2 000 dépassaient le budget), `wal_autocheckpoint = 200`, et les fusions
+FTS5 faites par nous, 64 pages à la fois (`automerge = 0`, `crisismerge = 2000`) : laissées au commit,
+une fusion de haut niveau tenait la boucle 70 ms sur 750 000 lignes. Mesuré sur 750 000 lignes :
+17 306 tranches, la plus longue 19 ms, une seule au-delà de 12 ms. La normalisation rend la main toutes
+les 500 lignes. Les lectures de fichiers sont asynchrones. L'analyse de l'en-tête et de l'index, servie
+depuis la mémoire, était une seule chaîne de micro-tâches : 151 ms de boucle tenue sur un vrai film
+(dont une part dans `parseMatroska`, qui lit tout l'index pour le lecteur) ; `mkvText` relit donc
+l'en-tête lui-même et rend la main toutes les 256 lectures (`YieldingSlice`). Banc sur dix vrais
+films : plus long retard de la boucle 29 ms, écriture la plus longue 8 ms.
+
+**La priorité et les lectures.** Une seule lecture à la fois. Le parallélisme n'est permis qu'entre
+fichiers sur des disques physiques **prouvés** distincts (`disks.ts` : périphérique remonté dans
+`/sys/dev/block` jusqu'aux disques entiers, partitions et RAID compris ; sous mergerfs, la branche lue
+dans `user.mergerfs.basepath`). Relevé sur la production : `/mnt/media/video` est un mergerfs de trois
+branches sur trois disques distincts, mais le conteneur ne peut pas lire l'attribut (ni `getfattr`
+dans l'image, ni `getxattr` dans Node) et les branches n'y sont pas montées : **pas de preuve, une
+file**. Le moindre fichier sans preuve, ou deux groupes qui partagent un disque, ramènent à une file.
+`ionice -c 3` n'aurait aucun effet ici (lectures faites par le démon mergerfs, ordonnanceur
+`mq-deadline`) : chaque lecture est précédée d'un repos de 2 ms et le débit d'une lecture complète est
+plafonné à 25 Mo/s.
+
+**Pause pendant une lecture** (`playbackActivity.ts`), vérifiée avant **chaque lecture de fichier** :
+une séance Jellyfin avec un `NowPlayingItem` rapporté depuis moins de cinq minutes (voit tout : le
+lecteur de CineApp, le lecteur du serveur, le cast, les applications Jellyfin des téléviseurs ; demandé
+au plus toutes les 20 s), une requête au relais de flux dans la minute (`noteMediaRead`, instantané),
+ou un battement de lecture vivant (`anyPlaybackBeat`). Reprise cinq minutes après le dernier signal.
+
+**Porteurs.** `src/lib/repliques/` — `engine.ts` (passes, `gate`, `startIndexing`, `pauseIndexing`,
+`rebuildIndex`, `repliquesStatus`, `nightlyDue`), `indexFilm.ts`, `mkvText.ts` (`openMatroskaText`,
+`readTextTracks`, `bestTextTrack`), `sidecar.ts`, `fileSource.ts`, `store.ts`, `search.ts`,
+`disks.ts` (`diskOf`, `planQueues`), `playbackActivity.ts`, `library.ts` (`libraryFilms`,
+`containerPathOf`, `checkMoviesMount`), `languages.ts`, `text.ts`.
+
+**Appelants.** `instrumentation.ts` (`startRepliquesEngine`), `/api/repliques/admin` (réservée,
+`ADMIN_ONLY_READS`), `PUT /api/settings`, le relais de flux (`noteMediaRead`),
+`DialogueSearchCard` (Configuration → Recherche de répliques).
+
+**Tests.** `repliques-index.test.ts` (Matroska fabriqué en mémoire : lecture ciblée, taille de grappe
+sur 8 octets, lecture complète en repli, choix de piste, fichiers posés à côté, Windows-1252, ASS),
+`repliques-search.test.ts` (accents, faute de frappe, expression exacte, films cachés, tranches qui
+rendent la main), `repliques-engine.test.ts` (option coupée par défaut, montage exigé, pause pendant
+une lecture, pause demandée et reprise, film modifié relu, film disparu retiré, erreurs, parallélisme),
+`repliques-disks.test.ts` (preuve des disques, signaux de lecture), `repliques-library.test.ts`,
+`repliques-settings-route.test.ts` (réglage refusé sans montage), `repliques-proxy.test.ts` ; banc
+`repliques-bench.spec.ts`.
+
+**Différent exprès.** Les séries ne sont pas indexées. Le lecteur n'est pas touché : son analyseur est
+réutilisé en lecture, son index des grappes n'apprend rien de nouveau (`mkvText` relit les Cues pour
+les positions relatives et les durées que le lecteur n'a jamais eu besoin de garder).
+
+**Décidé le 14/10/2026** (Louis).

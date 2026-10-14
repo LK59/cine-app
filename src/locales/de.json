@@ -65,7 +65,8 @@
       "subtitles": "Generierte Untertitel",
       "accounts": "Neue Konten",
       "admin": "Administrator",
-      "deployment": "Bereitstellung"
+      "deployment": "Bereitstellung",
+      "dialogue": "Dialogsuche"
     },
     "backToCinema": "Zurück zum Kino",
     "accountPreferences": "Deine Einstellungen sind unter Konto",
@@ -2768,7 +2769,8 @@
       "invalid": "Ungültiger Wert.",
       "too-long": "Zu lang.",
       "unknown": "Unbekannte Einstellung.",
-      "save": "Speichern fehlgeschlagen."
+      "save": "Speichern fehlgeschlagen.",
+      "unavailable": "Der Filmordner ist im Container nicht lesbar."
     },
     "groups": {
       "jellyfin": {
@@ -2837,6 +2839,10 @@
         "title": "Generierte Untertitel",
         "why": "Übersetzt auf Wunsch, während des Films, einen vollständigen Untertitel des Titels mit einer Online-KI in die gewählte Sprache. Ohne Schlüssel erscheint die Funktion nirgends.",
         "help": "Der Schlüssel bleibt auf dem Server: Er wird nie an Geräte gesendet und nie in die Protokolle geschrieben."
+      },
+      "dialogue": {
+        "title": "Dialogsuche",
+        "why": "Liest die Untertitel der Filme, damit man sie über einen Satz finden kann."
       }
     },
     "fields": {
@@ -2884,7 +2890,12 @@
       "SUBTITLE_GEN_MODEL": "Modell",
       "SUBTITLE_GEN_BUDGET_USD": "Monatsbudget (Dollar)",
       "SUBTITLE_GEN_PRICE_INPUT": "Eingabepreis pro Million Tokens (leer: bekannter Tarif)",
-      "SUBTITLE_GEN_PRICE_OUTPUT": "Ausgabepreis pro Million Tokens (leer: bekannter Tarif)"
+      "SUBTITLE_GEN_PRICE_OUTPUT": "Ausgabepreis pro Million Tokens (leer: bekannter Tarif)",
+      "REPLIQUES_ENABLED": "Dialogsuche",
+      "REPLIQUES_NIGHTLY": "Nächtliche Aktualisierung",
+      "REPLIQUES_NIGHT_START": "Beginn des Nachtfensters",
+      "REPLIQUES_NIGHT_END": "Ende des Nachtfensters",
+      "REPLIQUES_LANGUAGES": "Sprachen der Dialoge"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml unter „environment“:",
@@ -3009,6 +3020,68 @@
     },
     "deployment": {
       "hint": "Was eine Änderung an docker-compose.yml oder .env und das Neuerstellen des Containers erfordert."
+    },
+    "dialogue": {
+      "hint": "Einen Film über einen gesprochenen Satz finden. Die Untertitel werden einmal gelesen, danach jede Nacht für Neues."
+    }
+  },
+  "repliques": {
+    "admin": {
+      "title": "Dialogsuche",
+      "why": "Ein Abschnitt „Dialoge“ unter den Titeln der Kinosuche: einen gehörten Satz eingeben, Film und Stelle finden. Die Untertitel werden von der Festplatte gelesen und nirgendwohin gesendet; die Indexierung pausiert von selbst, sobald ein Film läuft.",
+      "mount": {
+        "not-mounted": "Der Filmordner ({path}) ist im Container nicht eingebunden. Die Option bleibt aus.",
+        "unreadable": "Der Filmordner ({path}) existiert, ist aber nicht lesbar (Rechte).",
+        "no-radarr": "Radarr antwortet nicht: Unklar, wo die Filme liegen.",
+        "no-films": "Radarr hat keinen Film mit Datei.",
+        "files-missing": "{path} ist eingebunden, aber kein Film liegt dort, wo Radarr ihn angibt: Er entspricht nicht dem Stammordner von Radarr."
+      },
+      "mountDoc": "Den Filmordner schreibgeschützt einbinden und mit MOVIES_PATH angeben: siehe DEPLOYMENT.md und ENV.md oder Konfiguration → Bereitstellung.",
+      "mountOk": "Filmordner lesbar: {path} ({found} von {checked} Filmen am Pfad gefunden).",
+      "mountRequired": "Aktivieren nicht möglich: Der Filmordner ist nicht lesbar.",
+      "initialTitle": "Erstindexierung",
+      "start": "Starten",
+      "resume": "Fortsetzen",
+      "update": "Jetzt aktualisieren",
+      "pause": "Pausieren",
+      "phase": {
+        "idle": "Angehalten.",
+        "planning": "Vorbereitung: Filme werden mit dem Index verglichen…",
+        "running": "Läuft.",
+        "waiting-playback": "Pausiert: Ein Film läuft. Fortsetzung einige Minuten nach dem Ende.",
+        "paused": "Pausiert.",
+        "outside-window": "Am Ende des Nachtfensters angehalten; geht nächste Nacht weiter.",
+        "disabled": "Option ausgeschaltet.",
+        "unavailable": "Filmordner nicht verfügbar.",
+        "done": "Abgeschlossen."
+      },
+      "films": "Filme",
+      "eta": "Restzeit",
+      "read": "Gelesene Daten",
+      "errors": "Fehler",
+      "current": "Gerade: {title}",
+      "last": "Letzter Film: {title}",
+      "nightTitle": "Nächtliche Aktualisierung",
+      "nightWhy": "Einmal pro Nacht im gewählten Fenster (Serverzeit): Nur neue oder geänderte Filme werden gelesen, verschwundene entfernt.",
+      "from": "Von",
+      "to": "bis",
+      "lastNight": "Letzte nächtliche Aktualisierung: {date}",
+      "nightAfterInitial": "Die nächtliche Aktualisierung beginnt nach Abschluss der Erstindexierung.",
+      "languages": "Indexierte Sprachen",
+      "languagesWhy": "„OV“: die Originalsprache jedes Films. Eine Änderung liest die betroffenen Filme bei der nächsten Aktualisierung neu.",
+      "original": "OV",
+      "indexTitle": "Der Index",
+      "indexSize": "{size} · {lines} Dialogzeilen · {films} Filme",
+      "rebuild": "Index neu aufbauen",
+      "rebuildConfirm": "Index löschen und alle Filme neu lesen?",
+      "actionFailed": "Die Aktion ist fehlgeschlagen.",
+      "parallel": {
+        "proven": "{n} parallele Lesevorgänge (verschiedene Platten nachgewiesen)",
+        "single-disk": "Ein Lesevorgang zur Zeit (eine Platte)",
+        "unproven": "Ein Lesevorgang zur Zeit (verschiedene Platten nicht nachgewiesen)"
+      },
+      "writeSlice": "längster Schreibvorgang {ms} ms",
+      "errorList": "{n} Film mit Fehler|{n} Filme mit Fehler"
     }
   }
 }

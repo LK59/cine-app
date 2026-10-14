@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { allSettingViews, missingRequiredSettings, resetSetting, saveSettings, setupDone } from "@/lib/settings/setup";
 import { invalidateByPrefix } from "@/lib/server-cache";
+import { checkMoviesMount } from "@/lib/repliques/library";
 
 /**
  * Les réglages de l'installation (DECISIONS.md §48) — lecture réservée à l'administrateur
@@ -18,7 +19,14 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as { values?: unknown } | null;
   if (!body || typeof body.values !== "object" || body.values === null) return NextResponse.json({ error: "invalid" }, { status: 400 });
-  const { errors } = saveSettings(body.values as Record<string, unknown>);
+  const values = body.values as Record<string, unknown>;
+  // La recherche de répliques ne s'allume que si le dossier des films est monté et lisible (§88) :
+  // la page grise l'interrupteur, et le serveur refuse quand même — l'interface n'est pas une garde.
+  if (values.REPLIQUES_ENABLED === "true") {
+    const mount = await checkMoviesMount().catch(() => null);
+    if (!mount?.ok) return NextResponse.json({ error: "invalid", errors: { REPLIQUES_ENABLED: "unavailable" } }, { status: 400 });
+  }
+  const { errors } = saveSettings(values);
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: "invalid", errors }, { status: 400 });
   invalidateByPrefix("");
   return NextResponse.json({ ok: true, settings: allSettingViews(), missing: missingRequiredSettings() });

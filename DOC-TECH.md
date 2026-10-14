@@ -53,8 +53,8 @@ flowchart LR
         GATE{"src/proxy.ts<br/>the single gate"}
         PAGES["Pages<br/>(player) · (dashboard) · /setup · /login · /status"]
         API["API routes — src/app/api/**<br/>thin, ~60 lines"]
-        LIB["src/lib<br/>clients/* · server-cache · watched · blockedTags<br/>subtitleGen · news · activity · reports"]
-        JOBS["instrumentation.ts timers<br/>notifications · torrent watch · status · backup<br/>device prune · new-account tags · poster prewarm · subtitle engine"]
+        LIB["src/lib<br/>clients/* · server-cache · watched · blockedTags<br/>subtitleGen · news · activity · reports · repliques"]
+        JOBS["instrumentation.ts timers<br/>notifications · torrent watch · status · backup<br/>device prune · new-account tags · poster prewarm · subtitle engine<br/>dialogue indexing (resume, nightly)"]
         CFG["config.ts getters<br/>app setting → .env → default"]
         subgraph DATA["./data — the only writable volume"]
             DB[("cine.db — SQLite<br/>sessions · watchlist · watched_titles · kv_cache<br/>app_settings · reports · news_pages · subtitle_gen_*")]
@@ -62,7 +62,9 @@ flowchart LR
             IMGC[("data/image-cache")]
             SEC[("data/config/secrets.json")]
             REPS[("data/reports/ID/")]
+            REPL[("data/repliques.db — SQLite, separate<br/>dialogue lines · FTS5 · vocabulary<br/>rebuildable, not in the nightly copy")]
         end
+        MEDIA[("/mnt/media/video — read-only<br/>films read by the dialogue indexer")]
     end
 
     subgraph UP["Upstream services"]
@@ -92,6 +94,8 @@ flowchart LR
     CFG --> DB
     LIB <--> DB
     LIB -->|"append, rotate at 5 MB"| LOGS
+    LIB <-->|"small timed batches"| REPL
+    JOBS -->|"sidecar .srt · MKV Cues · full read"| MEDIA
     LIB --> JF
     LIB --> ARR
     LIB --> JS
@@ -114,6 +118,15 @@ Everything a viewer sees goes through `src/proxy.ts`; nothing in the browser tal
 service directly, and only a television fetches without a session cookie. Configuration and
 secrets live in `data/` beside the database ([DECISIONS §48](DECISIONS.md)), so a fresh install
 needs no `.env`.
+
+**Dialogue search** ([DECISIONS §88](DECISIONS.md), `src/lib/repliques/`) is the one part of the
+server that reads media files itself. When an administrator turns it on, a background pass reads
+each library film's text subtitles — a sidecar file first, otherwise the MKV's text track through
+its Cues (one 4 KiB read per line, `mkvText.ts`, reusing the player's Matroska parser read-only),
+otherwise the whole file streamed — and writes them to `data/repliques.db`, a separate SQLite file
+with an FTS5 index on the folded text. Every file read passes a gate that stops for a pause and
+waits while anyone is watching (Jellyfin sessions, the stream relay, the playback beat). The
+cinema search queries it through `/api/repliques`, after and apart from the title search.
 
 ### 2. The two interfaces
 

@@ -87,4 +87,13 @@ export function presenceOf(user: string, now = Date.now()): Presence {
   return { state, lastSeen, playing, devices: [...devices] };
 }
 
+/**
+ * Un film joue-t-il quelque part, tous comptes confondus ? — un battement de lecture vivant. Lu par
+ * l'indexation des répliques, qui se met en pause pendant qu'on regarde (DECISIONS.md §88).
+ */
+export function anyPlaybackBeat(now = Date.now()): boolean {
+  for (const beat of beats.values()) if (beat.playing && now - beat.at <= PRESENCE_TTL_MS) return true;
+  return false;
+}
+
 export const __testing = { reset: () => beats.clear() };

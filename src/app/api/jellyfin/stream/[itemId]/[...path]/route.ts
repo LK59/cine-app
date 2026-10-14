@@ -12,6 +12,7 @@ import { castMasterPlaylist } from "@/lib/castMaster";
 import { fixVttTimestampMap } from "@/lib/vttTimestampMap";
 import { assertVisible } from "@/lib/itemVisibility";
 import { encodePlaylist } from "@/lib/playlistEncoding";
+import { noteMediaRead } from "@/lib/repliques/playbackActivity";
 
 // Root cause found live via temporary request logging: right after a fresh remux job starts
 // (e.g. on an audio-track switch, which always requests a brand new PlaySessionId/ffmpeg job),
@@ -109,6 +110,9 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
     const refused = await assertVisible(session, itemId);
     if (refused) return refused;
   }
+
+  // Des octets d'un film partent : l'indexation des répliques se tait (DECISIONS.md §88).
+  noteMediaRead();
 
   const restPath = path.join("/");
   // Le jeton d'une adresse ancienne ou recopiée ne repart pas : l'en-tête ci-dessous authentifie

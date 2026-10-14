@@ -65,7 +65,8 @@
       "subtitles": "Subtítulos generados",
       "accounts": "Cuentas nuevas",
       "admin": "Administrador",
-      "deployment": "Despliegue"
+      "deployment": "Despliegue",
+      "dialogue": "Búsqueda de diálogos"
     },
     "backToCinema": "Volver al cine",
     "accountPreferences": "Tus preferencias están en Cuenta",
@@ -2768,7 +2769,8 @@
       "invalid": "Valor no válido.",
       "too-long": "Demasiado largo.",
       "unknown": "Ajuste desconocido.",
-      "save": "No se pudo guardar."
+      "save": "No se pudo guardar.",
+      "unavailable": "La carpeta de películas no se puede leer dentro del contenedor."
     },
     "groups": {
       "jellyfin": {
@@ -2837,6 +2839,10 @@
         "title": "Subtítulos generados",
         "why": "Traduce bajo demanda, durante la película, un subtítulo completo del título al idioma elegido, con una IA en línea. Sin clave, la función no aparece en ninguna parte.",
         "help": "La clave se queda en el servidor: nunca se envía a los dispositivos ni se escribe en los registros."
+      },
+      "dialogue": {
+        "title": "Búsqueda de diálogos",
+        "why": "Lee los subtítulos de las películas para poder buscarlas por una frase."
       }
     },
     "fields": {
@@ -2884,7 +2890,12 @@
       "SUBTITLE_GEN_MODEL": "Modelo",
       "SUBTITLE_GEN_BUDGET_USD": "Presupuesto mensual (dólares)",
       "SUBTITLE_GEN_PRICE_INPUT": "Precio de entrada por millón de tokens (vacío: tarifa conocida)",
-      "SUBTITLE_GEN_PRICE_OUTPUT": "Precio de salida por millón de tokens (vacío: tarifa conocida)"
+      "SUBTITLE_GEN_PRICE_OUTPUT": "Precio de salida por millón de tokens (vacío: tarifa conocida)",
+      "REPLIQUES_ENABLED": "Búsqueda de diálogos",
+      "REPLIQUES_NIGHTLY": "Actualización cada noche",
+      "REPLIQUES_NIGHT_START": "Inicio de la franja nocturna",
+      "REPLIQUES_NIGHT_END": "Fin de la franja nocturna",
+      "REPLIQUES_LANGUAGES": "Idiomas de los diálogos"
     },
     "deployHint": {
       "TZ": "En docker-compose.yml, bajo «environment»:",
@@ -3009,6 +3020,68 @@
     },
     "deployment": {
       "hint": "Lo que requiere editar docker-compose.yml o .env y volver a crear el contenedor."
+    },
+    "dialogue": {
+      "hint": "Encontrar una película por una frase que se dice en ella. Los subtítulos se leen una vez y luego cada noche para lo nuevo."
+    }
+  },
+  "repliques": {
+    "admin": {
+      "title": "Búsqueda de diálogos",
+      "why": "Una sección «Diálogos» bajo los títulos en la búsqueda del cine: escribe una frase oída y encuentra la película y el momento. Los subtítulos se leen del disco sin enviarse a ningún sitio; la indexación se pausa sola cuando alguien ve una película.",
+      "mount": {
+        "not-mounted": "La carpeta de películas ({path}) no está montada en el contenedor. La opción sigue desactivada.",
+        "unreadable": "La carpeta de películas ({path}) existe pero no se puede leer (permisos).",
+        "no-radarr": "Radarr no responde: no se puede saber dónde están las películas.",
+        "no-films": "Radarr no tiene ninguna película con archivo.",
+        "files-missing": "{path} está montada, pero ninguna película está donde dice Radarr: no corresponde a la carpeta raíz de Radarr."
+      },
+      "mountDoc": "Monte la carpeta de películas en solo lectura e indíquela con MOVIES_PATH: vea DEPLOYMENT.md y ENV.md, o Configuración → Despliegue.",
+      "mountOk": "Carpeta de películas legible: {path} ({found} de {checked} películas encontradas en su ruta).",
+      "mountRequired": "No se puede activar: la carpeta de películas no es legible.",
+      "initialTitle": "Indexación inicial",
+      "start": "Iniciar",
+      "resume": "Reanudar",
+      "update": "Actualizar ahora",
+      "pause": "Pausar",
+      "phase": {
+        "idle": "Detenida.",
+        "planning": "Preparando: comparando las películas con el índice…",
+        "running": "En curso.",
+        "waiting-playback": "En pausa: alguien ve una película. Se reanuda unos minutos después.",
+        "paused": "En pausa.",
+        "outside-window": "Detenida al final de la franja nocturna; continúa la próxima noche.",
+        "disabled": "Opción desactivada.",
+        "unavailable": "Carpeta de películas no disponible.",
+        "done": "Terminada."
+      },
+      "films": "Películas",
+      "eta": "Tiempo restante",
+      "read": "Datos leídos",
+      "errors": "Errores",
+      "current": "Ahora: {title}",
+      "last": "Última película: {title}",
+      "nightTitle": "Actualización cada noche",
+      "nightWhy": "Una vez por noche, en la franja elegida (hora del servidor): solo se leen las películas nuevas o modificadas, y se retiran las que ya no están.",
+      "from": "De",
+      "to": "a",
+      "lastNight": "Última actualización nocturna: {date}",
+      "nightAfterInitial": "La actualización nocturna empieza cuando termina la indexación inicial.",
+      "languages": "Idiomas indexados",
+      "languagesWhy": "«VO»: el idioma original de cada película. Un cambio vuelve a leer las películas afectadas en la siguiente actualización.",
+      "original": "VO",
+      "indexTitle": "El índice",
+      "indexSize": "{size} · {lines} diálogos · {films} películas",
+      "rebuild": "Reconstruir el índice",
+      "rebuildConfirm": "¿Borrar el índice y volver a leer todas las películas?",
+      "actionFailed": "La acción no se completó.",
+      "parallel": {
+        "proven": "{n} lecturas en paralelo (discos distintos comprobados)",
+        "single-disk": "Una lectura a la vez (un solo disco)",
+        "unproven": "Una lectura a la vez (discos distintos no comprobados)"
+      },
+      "writeSlice": "escritura más larga {ms} ms",
+      "errorList": "{n} película con error|{n} películas con error"
     }
   }
 }

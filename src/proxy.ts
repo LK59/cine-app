@@ -192,6 +192,8 @@ const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/jellyfin\/items\/?$/,
   // Le panneau des sous-titres générés : dépense du mois, tâches de tous les comptes (§69).
   /^\/api\/subtitle-gen\/admin(\/|$)/,
+  // L'indexation des répliques : chemins des films, erreurs, titres de tous les films (§88).
+  /^\/api\/repliques\/admin(\/|$)/,
   // Les Nouveautés vues de l'activité : l'état de chaque compte, les brouillons (§73). La route le
   // vérifie aussi (`adminOnly`).
   /^\/api\/admin\/release-notes(\/|$)/,
