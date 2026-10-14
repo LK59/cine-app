@@ -13,8 +13,8 @@ import { UpstreamUnreachableError } from "@/lib/http";
  * Après un échec **de transport** — pas de réponse du tout, ou délai dépassé —, l'hôte est réputé
  * hors ligne pendant `OPEN_MS` : les appels échouent tout de suite, avec la même erreur nommée
  * (`upstream_unreachable`) que le vrai échec, si bien qu'aucun appelant n'a à changer. Le délai
- * passé, **un** appel passe pour sonder (les autres échouent encore vite) : sa réponse rouvre ou
- * referme. Une réponse HTTP, même un 500, prouve que l'hôte répond : elle referme.
+ * passé, une sonde part en arrière-plan (`/System/Info/Public`) pendant que les appels échouent
+ * encore vite : sa réponse rouvre ou referme. Une réponse HTTP, même un 500, prouve que l'hôte répond : elle referme.
  *
  * **Jamais pour un film en cours.** Les octets d'un film (relais de flux, sous-titres, flux direct)
  * et les rapports de lecture ne sont pas retenus (`passJellyfin`) : un disjoncteur ouvert sur une
@@ -26,6 +26,8 @@ import { UpstreamUnreachableError } from "@/lib/http";
  */
 
 export const OPEN_MS = 30_000;
+/** La sonde d'arrière-plan : la page publique de Jellyfin, qui répond sans clé. */
+const PROBE_TIMEOUT_MS = 5_000;
 
 interface State {
   /** L'adresse dont on parle — un réglage changé repart de zéro. */
@@ -115,22 +117,30 @@ export function noteJellyfinFailure(err: unknown, now = Date.now()): void {
 }
 
 /**
- * Peut-on appeler ? Lève l'erreur rapide si non. Rend `true` quand cet appel est la sonde (il doit
- * alors rendre compte de son issue — `throughJellyfinBreaker` s'en charge).
+ * Peut-on appeler ? Lève l'erreur rapide tant que Jellyfin est réputé hors ligne — et, passé
+ * `OPEN_MS`, lance la sonde d'arrière-plan dont la réponse referme.
  */
-export function admitJellyfinCall(now = Date.now()): boolean {
+export function admitJellyfinCall(now = Date.now()): void {
   const s = current();
-  if (s.downSince === null) return false;
-  if (now < s.openUntil || s.probing) {
-    const host = hostOf(s.url);
-    throw new UpstreamUnreachableError(
-      `${host} ne répond pas (hors ligne depuis ${new Date(s.downSince).toISOString()} — ${s.lastDetail || "injoignable"})`,
-      s.lastDetail || "hors ligne",
-      host
-    );
+  if (s.downSince === null) return;
+  // Le délai passé, la sonde part **en arrière-plan** : aucun appel d'un spectateur ne la paie. Le
+  // nom d'un conteneur arrêté met ~5 s à se dire introuvable (résolveur de Docker, mesuré au test
+  // isolé du 14/10/2026) — le catalogue redemandé toutes les 30 s le payait une fois sur deux.
+  if (now >= s.openUntil && !s.probing) {
+    s.probing = true;
+    void passJellyfinFetch(`${s.url}/System/Info/Public`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS), cache: "no-store" })
+      .then((res) => res.body?.cancel().catch(() => {}))
+      .catch(() => {
+        // `passJellyfin` a déjà rouvert le disjoncteur ; une issue sans verdict libère la sonde.
+        current().probing = false;
+      });
   }
-  s.probing = true;
-  return true;
+  const host = hostOf(s.url);
+  throw new UpstreamUnreachableError(
+    `${host} ne répond pas (hors ligne depuis ${new Date(s.downSince).toISOString()} — ${s.lastDetail || "injoignable"})`,
+    s.lastDetail || "hors ligne",
+    host
+  );
 }
 
 /**
@@ -138,17 +148,8 @@ export function admitJellyfinCall(now = Date.now()): boolean {
  * referme ; un échec de transport ouvre pour `OPEN_MS`. Toute autre erreur est rendue telle quelle.
  */
 export async function throughJellyfinBreaker<T>(call: () => Promise<T>): Promise<T> {
-  const probe = admitJellyfinCall();
-  try {
-    const value = await call();
-    noteJellyfinSuccess();
-    return value;
-  } catch (err) {
-    if (isTransportFailure(err)) noteJellyfinFailure(err);
-    else if (isHttpAnswer(err)) noteJellyfinSuccess();
-    else if (probe) current().probing = false;
-    throw err;
-  }
+  admitJellyfinCall();
+  return passJellyfin(call);
 }
 
 /**

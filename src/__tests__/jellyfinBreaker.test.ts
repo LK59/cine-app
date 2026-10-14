@@ -44,20 +44,22 @@ describe("jellyfinBreaker", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("passé 30 s, une seule sonde part ; sa réponse referme", async () => {
+  it("passé 30 s, une sonde part en arrière-plan — l'appel du spectateur échoue vite quand même — et sa réponse referme", async () => {
     fetchMock.mockRejectedValueOnce(dnsFailure());
     await expect(jellyfinFetch("http://jellyfin.test:8096/a")).rejects.toThrow();
     vi.advanceTimersByTime(OPEN_MS + 1);
 
     let answer!: (r: Response) => void;
     fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
-    const probe = jellyfinFetch("http://jellyfin.test:8096/b");
-    // Pendant la sonde, les autres échouent encore vite.
+    await expect(jellyfinFetch("http://jellyfin.test:8096/b")).rejects.toBeInstanceOf(UpstreamUnreachableError);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toBe("http://jellyfin.test:8096/System/Info/Public");
+    // Une seule sonde à la fois : les appels suivants ne la relancent pas.
     await expect(jellyfinFetch("http://jellyfin.test:8096/c")).rejects.toBeInstanceOf(UpstreamUnreachableError);
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
     answer(new Response("{}", { status: 200 }));
-    await probe;
+    await vi.advanceTimersByTimeAsync(0);
     expect(jellyfinIsDown()).toBe(false);
     fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
     await jellyfinFetch("http://jellyfin.test:8096/d");
@@ -69,16 +71,26 @@ describe("jellyfinBreaker", () => {
     await expect(jellyfinFetch("http://jellyfin.test:8096/a")).rejects.toThrow();
     const since = jellyfinDownSince();
     vi.advanceTimersByTime(OPEN_MS + 1);
-    await expect(jellyfinFetch("http://jellyfin.test:8096/b")).rejects.toThrow("fetch failed");
+    await expect(jellyfinFetch("http://jellyfin.test:8096/b")).rejects.toBeInstanceOf(UpstreamUnreachableError);
+    await vi.advanceTimersByTimeAsync(0);
     expect(jellyfinDownSince()).toBe(since);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Rouvert : pas de nouvelle sonde avant 30 s.
+    vi.advanceTimersByTime(OPEN_MS - 1000);
     await expect(jellyfinFetch("http://jellyfin.test:8096/c")).rejects.toBeInstanceOf(UpstreamUnreachableError);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("un refus HTTP prouve que Jellyfin répond : il referme", async () => {
-    fetchMock.mockRejectedValueOnce(dnsFailure());
-    await expect(jellyfinFetch("http://jellyfin.test:8096/a")).rejects.toThrow();
+    await expect(throughJellyfinBreaker(() => Promise.reject(dnsFailure()))).rejects.toThrow();
+    expect(jellyfinIsDown()).toBe(true);
+    // La sonde d'arrière-plan reçoit un 503 : Jellyfin démarre, mais il répond.
     vi.advanceTimersByTime(OPEN_MS + 1);
+    fetchMock.mockResolvedValueOnce(new Response("starting", { status: 503 }));
+    await expect(jellyfinFetch("http://jellyfin.test:8096/b")).rejects.toBeInstanceOf(UpstreamUnreachableError);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(jellyfinIsDown()).toBe(false);
+    // Un HttpError d'un appel ordinaire referme aussi.
     await expect(throughJellyfinBreaker(() => Promise.reject(new HttpError("500", 500)))).rejects.toBeInstanceOf(HttpError);
     expect(jellyfinIsDown()).toBe(false);
   });

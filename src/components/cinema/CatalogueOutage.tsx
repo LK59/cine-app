@@ -65,8 +65,11 @@ export function CatalogueOutageBanner({ outage, className = "" }: { outage: Cata
   const t = useT();
   if (!outage.jellyfinDown) return null;
   return (
-    <p role="status" data-testid="catalogue-outage-banner" className={`text-xs text-muted ${className}`}>
-      <span className="rounded-full bg-white/8 px-3 py-1.5">{t("cinema.outage.banner")}</span>
+    <p role="status" data-testid="catalogue-outage-banner" className={`text-xs ${className}`}>
+      {/* Un bloc et non un texte en ligne : sur téléphone la phrase passe à la ligne, et un fond posé
+          sur une ligne coupée se découpait en deux morceaux. Sombre et opaque : sur le visuel clair
+          d'une bannière, un voile à 8 % ne se lisait plus. */}
+      <span className="inline-block max-w-full rounded-2xl bg-ink/85 px-3 py-1.5 leading-snug text-white">{t("cinema.outage.banner")}</span>
     </p>
   );
 }

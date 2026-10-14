@@ -4697,7 +4697,9 @@ depuis une réplique »).
 
 1. **Le coupe-circuit** (`jellyfinBreaker.ts`). Après un échec *de transport* (aucune réponse, délai
    dépassé), l'hôte est réputé hors ligne 30 s : les appels échouent tout de suite avec la même erreur
-   nommée (`upstream_unreachable`), puis **une** sonde passe ; une réponse — même un refus HTTP —
+   nommée (`upstream_unreachable`) ; passé ce délai, une sonde part **en arrière-plan**
+   (`/System/Info/Public`) pendant que les appels échouent encore vite — aucun spectateur ne la paie
+   (un nom de conteneur arrêté mettait ~5 s à se dire introuvable). Toute réponse — même un refus HTTP —
    referme. Une adresse réglée autrement repart de zéro. **Jamais pour un film en cours** : relais de
    flux, sous-titres, vérification de visibilité, rapports de lecture et relevé de santé passent outre
    (`passJellyfin`) et ne font que témoigner — leurs octets referment le disjoncteur.

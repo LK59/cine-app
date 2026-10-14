@@ -177,16 +177,18 @@ function CapabilityCard({ cap }: { cap: CapabilityResult }) {
         onClick={() => setExpanded((v) => !v)}
         className="mt-1 flex w-full items-center justify-between rounded-lg px-0.5 py-0.5 text-[11px] text-subtle hover:text-muted transition-colors"
       >
-        <span className="flex items-center gap-1">
-          <History size={10} />
-          {/* Pastille rouge : depuis quand d'abord, la moyenne de la semaine ensuite (§92) — « 99,9 % »
-              seul, à côté d'un service tombé, se lisait comme « tout va bien ». */}
+        {/* Pastille rouge : depuis quand d'abord, sur sa ligne, la moyenne de la semaine ensuite (§92)
+            — « 99,9 % » seul, à côté d'un service tombé, se lisait comme « tout va bien ». */}
+        <span className="flex min-w-0 flex-col items-start gap-0.5 text-left">
           {cap.status === "down" && (
             <span className="text-muted" data-testid={`offline-${cap.id}`}>
-              {offlineLabel(cap, t)} ·
+              {offlineLabel(cap, t)}
             </span>
           )}
-          {t('health.history.uptime', { pct: String(cap.uptime7d) })}
+          <span className="flex items-center gap-1">
+            <History size={10} />
+            {t('health.history.uptime', { pct: String(cap.uptime7d) })}
+          </span>
         </span>
         <ChevronDown size={12} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
