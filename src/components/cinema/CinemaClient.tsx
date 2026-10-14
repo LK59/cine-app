@@ -24,7 +24,7 @@ import { Play, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet, catalogueErrorView } from "@/lib/swr";
 import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
-import { catalogueSwrOptions, sheetRepairDuring } from "@/lib/catalogueOutage";
+import { sheetRepairDuring } from "@/lib/catalogueOutage";
 import { CatalogueOutageBanner, CatalogueUnavailable, useCatalogueOutage } from "@/components/cinema/CatalogueOutage";
 import { useRole } from "@/lib/useRole";
 import { leaveCinema } from "@/lib/leaveCinema";
@@ -394,9 +394,7 @@ export function CinemaClient() {
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     MOVIES_CATALOGUE_KEY,
-    cinemaFetcher,
-    // Relu toutes les 30 s tant qu'il est un catalogue de secours, jamais sinon (§92).
-    catalogueSwrOptions
+    cinemaFetcher
   );
   /**
    * Différé, sauf quand une série est visée — la même règle que sur téléphone.
@@ -411,10 +409,9 @@ export function CinemaClient() {
   const seriesWarmed = useWarmSeriesCatalogue(movies !== undefined);
   const { data: series, error: seriesError, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
     mediaType === "series" || route.serie !== null || seriesWarmed ? SERIES_CATALOGUE_KEY : null,
-    cinemaFetcher,
-    catalogueSwrOptions
+    cinemaFetcher
   );
-  // Jellyfin en panne : le bandeau, et le bouton Lecture qui le dit au lieu d'ouvrir (§92).
+  // Jellyfin en panne : le bandeau, la relecture toutes les 30 s, et le bouton Lecture qui le dit (§92).
   const outage = useCatalogueOutage(movies, series);
   const { isReadOnly } = useRole();
   // Les films sont là : on peut préparer les séries sans rien retarder. Voir le crochet.

@@ -22,7 +22,7 @@ const cinemaNavigate = vi.fn();
 vi.mock("@/lib/cinemaRoute", () => ({ cinemaNavigate: (...a: unknown[]) => cinemaNavigate(...a) }));
 
 import { CatalogueOutageBanner, CatalogueUnavailable, useCatalogueOutage } from "@/components/cinema/CatalogueOutage";
-import { catalogueSwrOptions, playBlockedByOutage, resetPlaybackOutage, sheetRepairDuring } from "@/lib/catalogueOutage";
+import { playBlockedByOutage, resetPlaybackOutage, sheetRepairDuring } from "@/lib/catalogueOutage";
 import { PlaybackProvider, usePlayback } from "@/components/PlaybackProvider";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/catalogueKeys";
@@ -53,11 +53,23 @@ describe("le bandeau", () => {
     expect(screen.queryByTestId("catalogue-outage-banner")).toBeNull();
   });
 
-  it("le catalogue marqué est relu toutes les 30 s — et jamais en temps normal", () => {
-    expect(catalogueSwrOptions.refreshInterval({ jellyfinDown: true })).toBe(30_000);
-    expect(catalogueSwrOptions.refreshInterval({ stale: true })).toBe(30_000);
-    expect(catalogueSwrOptions.refreshInterval({})).toBe(0);
-    expect(catalogueSwrOptions.refreshInterval(undefined)).toBe(0);
+  it("le catalogue marqué est relu toutes les 30 s, page visible — et jamais en temps normal", async () => {
+    mutateSpy.mockClear();
+    const { rerender } = renderHook(({ marks }: { marks: { jellyfinDown?: boolean; stale?: boolean } }) => useCatalogueOutage(marks), {
+      initialProps: { marks: {} },
+    });
+    await act(async () => void (await vi.advanceTimersByTimeAsync(65_000)));
+    expect(mutateSpy).not.toHaveBeenCalled();
+    // Marqué après coup (la réponse arrive après le montage) : la relecture démarre quand même.
+    rerender({ marks: { jellyfinDown: true, stale: true } });
+    await act(async () => void (await vi.advanceTimersByTimeAsync(30_100)));
+    expect(mutateSpy).toHaveBeenCalledWith(MOVIES_CATALOGUE_KEY);
+    expect(mutateSpy).toHaveBeenCalledWith(SERIES_CATALOGUE_KEY);
+    // Jellyfin revenu : plus rien.
+    rerender({ marks: {} });
+    mutateSpy.mockClear();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(65_000)));
+    expect(mutateSpy).not.toHaveBeenCalled();
   });
 });
 

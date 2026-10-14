@@ -564,8 +564,7 @@ describe("Jellyfin en panne : une seule conduite pour les deux accueils (§92)",
       expect(src).toContain("<CatalogueOutageBanner outage={outage}");
       expect(src).toContain("<CatalogueUnavailable error=");
       expect(src).toContain("sheetRepairDuring(route.film, moviesError, movies, seriesError, series, outage)");
-      // Les deux catalogues portent la relecture de panne, et ne l'écrivent pas eux-mêmes.
-      expect(src.match(/cinemaFetcher,\s*(\/\/[^\n]*\n\s*)?catalogueSwrOptions/g)?.length).toBe(2);
+      // La relecture de panne vit dans `useCatalogueOutage`, pas dans les accueils.
       expect(src).not.toMatch(/refreshInterval/);
     }
   );

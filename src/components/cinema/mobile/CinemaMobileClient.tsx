@@ -31,7 +31,7 @@ import { tabPaneProps, useKeptTabs, useTabScrollMemory } from "@/lib/keptTabs";
 import { useDecodeRowsAhead } from "@/lib/useDecodeAhead";
 import { useFreshPersonalLists } from "@/lib/freshLists";
 import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet, catalogueErrorView } from "@/lib/swr";
-import { catalogueSwrOptions, sheetRepairDuring } from "@/lib/catalogueOutage";
+import { sheetRepairDuring } from "@/lib/catalogueOutage";
 import { CatalogueOutageBanner, CatalogueUnavailable, useCatalogueOutage } from "@/components/cinema/CatalogueOutage";
 import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
@@ -203,9 +203,7 @@ export function CinemaMobileClient() {
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     MOVIES_CATALOGUE_KEY,
-    cinemaFetcher,
-    // Relu toutes les 30 s tant qu'il est un catalogue de secours, jamais sinon (§92).
-    catalogueSwrOptions
+    cinemaFetcher
   );
   // Series (and its Continue Watching feed) stay unfetched until the tab is actually opened —
   // same lazy contract as desktop, and more valuable here where the connection may be mobile data.
@@ -228,10 +226,9 @@ export function CinemaMobileClient() {
   const seriesWarmed = useWarmSeriesCatalogue(movies !== undefined);
   const { data: series, error: seriesError, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
     mediaType === "series" || route.serie !== null || seriesWarmed ? SERIES_CATALOGUE_KEY : null,
-    cinemaFetcher,
-    catalogueSwrOptions
+    cinemaFetcher
   );
-  // Jellyfin en panne : le bandeau, et le bouton Lecture qui le dit au lieu d'ouvrir (§92).
+  // Jellyfin en panne : le bandeau, la relecture toutes les 30 s, et le bouton Lecture qui le dit (§92).
   const outage = useCatalogueOutage(movies, series);
   // Le même réchauffage que sur ordinateur, et le même crochet : c'est une seule décision.
   /**

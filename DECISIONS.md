@@ -4711,7 +4711,9 @@ depuis une réplique »).
    pendant la panne est servie marquée `jellyfinDown`. Sans copie : le 502 nommé d'avant.
 3. **L'écran** (`catalogueOutage.ts`, `CatalogueOutage.tsx`, les deux accueils). Un bandeau discret
    « Lecture momentanément indisponible — le serveur ne répond pas » ; le catalogue marqué est relu
-   toutes les 30 s (`catalogueSwrOptions`), si bien que le bandeau part seul au retour, sans recharger.
+   toutes les 30 s, page visible (`useCatalogueOutage`, `needsOutageRefresh` — pas le `refreshInterval`
+   de SWR, dont la minuterie ne lit la donnée qu'au montage et ne partait jamais), si bien que le
+   bandeau part seul au retour, sans recharger.
    `PlaybackProvider.play` refuse d'ouvrir le lecteur pendant la panne et le dit (`playBlockedByOutage`).
    Sans aucun catalogue : un écran « Réessayer » avec un essai automatique annoncé (« Nouvel essai dans
    30 s »), « Mode standard » pour l'administrateur seul. Un titre demandé sans catalogue (`#film=138`)
@@ -4742,7 +4744,7 @@ repayait huit secondes (recherche à 8 s au lieu de 0,3) ; `server.log` répéta
 `transcodePolicy`, `newAccountTags`, `jellyfinDevicePrune`, images, vignettes, chapitres en garde ; flux,
 sous-titres, `itemVisibility`, `pingJellyfin` en passage). `src/lib/catalogueFallback.ts`
 (`catalogueResponse`, `catalogueFallbackResponse`). `src/lib/catalogueOutage.ts` (`outageOf`,
-`catalogueSwrOptions`, `playBlockedByOutage`, `sheetRepairDuring`). `src/components/cinema/CatalogueOutage.tsx`
+`needsOutageRefresh`, `playBlockedByOutage`, `sheetRepairDuring`). `src/components/cinema/CatalogueOutage.tsx`
 (`useCatalogueOutage`, `CatalogueOutageBanner`, `CatalogueUnavailable`). `logger.ts` (limite), `blockedTags.ts`
 (`UNKNOWN_BLOCKED_TAGS`, `requestJfId`), `statusHistoryDb.serviceDownSince`, `offlineLabel` (CapabilityStatus).
 

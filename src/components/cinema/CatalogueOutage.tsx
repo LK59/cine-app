@@ -7,6 +7,7 @@ import { useToast } from "@/components/Toast";
 import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { errorMessage } from "@/lib/upstreamError";
 import {
+  needsOutageRefresh,
   notePlaybackOutage,
   onPlayBlockedByOutage,
   outageOf,
@@ -46,6 +47,17 @@ export function useCatalogueOutage(...payloads: (OutageMarks | null | undefined)
   useEffect(() => {
     notePlaybackOutage(outage.jellyfinDown);
   }, [outage.jellyfinDown]);
+  // Tant que le catalogue est marqué : une relecture toutes les 30 s, page visible seulement — le
+  // bandeau part seul au retour de Jellyfin, sans recharger. Rien en temps normal.
+  const refresh = needsOutageRefresh(outage);
+  useEffect(() => {
+    if (!refresh) return;
+    const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void retry();
+    }, OUTAGE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [refresh, retry]);
   useEffect(() => {
     onPlayBlockedByOutage(() => {
       toast.info(t("cinema.outage.playBlocked"));

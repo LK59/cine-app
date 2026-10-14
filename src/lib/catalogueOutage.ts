@@ -6,8 +6,8 @@
  * `stale` et/ou `jellyfinDown`. Trois conséquences, chacune ici et nulle part ailleurs :
  *
  *  - **le bandeau** : `outageOf` dit s'il faut l'afficher ;
- *  - **la relecture** : `catalogueSwrOptions` relit le catalogue toutes les 30 s tant qu'il est
- *    marqué, si bien que le bandeau disparaît seul au retour de Jellyfin, sans recharger la page — et
+ *  - **la relecture** : `useCatalogueOutage` relit le catalogue toutes les 30 s tant qu'il est
+ *    marqué (`needsOutageRefresh`), si bien que le bandeau disparaît seul au retour de Jellyfin, sans recharger la page — et
  *    ne relit rien de plus en temps normal (le catalogue reste figé, `liveFeedOptions` à part) ;
  *  - **le bouton Lecture** : `playBlockedByOutage`, appelé par `PlaybackProvider.play`, refuse
  *    d'ouvrir le lecteur pendant la panne et le dit (un message, pas un écran noir, pas un repli
@@ -40,12 +40,17 @@ export function outageOf(...payloads: (OutageMarks | null | undefined)[]): Catal
 export const OUTAGE_REFRESH_MS = 30_000;
 
 /**
- * Les options SWR des deux catalogues de l'accueil. Une fonction : SWR la rappelle avec la dernière
- * donnée, et rien n'est relu tant que la réponse n'est pas marquée — le chemin heureux est inchangé.
+ * Faut-il relire les catalogues toutes les `OUTAGE_REFRESH_MS` ? Tant qu'ils sont marqués — et
+ * jamais sinon : le chemin heureux ne relit rien de plus.
+ *
+ * Pas par le `refreshInterval` de SWR : sa minuterie ne se lance qu'au montage, et lit alors une
+ * donnée encore absente — la fonction rendait 0, et la relecture ne partait jamais (vu au test isolé
+ * du 14/10/2026 : bandeau resté 90 s après le retour de Jellyfin). `useCatalogueOutage` tient sa
+ * propre minuterie.
  */
-export const catalogueSwrOptions = {
-  refreshInterval: (latest: OutageMarks | undefined) => (latest?.jellyfinDown || latest?.stale ? OUTAGE_REFRESH_MS : 0),
-};
+export function needsOutageRefresh(outage: CatalogueOutage): boolean {
+  return outage.jellyfinDown || outage.stale;
+}
 
 // ─── Le bouton Lecture pendant la panne ────────────────────────────────────────────────────────
 
