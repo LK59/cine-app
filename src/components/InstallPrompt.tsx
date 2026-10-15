@@ -5,20 +5,11 @@ import { usePathname } from "next/navigation";
 import { Share, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { ABOVE_BOTTOM_BAR, PROMPT_CLOSE_CLASS } from "@/lib/floatingPrompt";
+import { isIosSafariBrowserTab } from "@/lib/iosInstall";
 
 const DISMISS_KEY = "cine-install-prompt-dismissed-until";
 const SNOOZE_DAYS = 21;
 const SHOW_DELAY_MS = 4000;
-
-function isIosSafariBrowserTab(): boolean {
-  const ua = window.navigator.userAgent;
-  const isIos = /iPad|iPhone|iPod/.test(ua) || (ua.includes("Macintosh") && "ontouchend" in document);
-  if (!isIos) return false;
-  const isStandalone =
-    (window.navigator as Navigator & { standalone?: boolean }).standalone === true ||
-    window.matchMedia("(display-mode: standalone)").matches;
-  return !isStandalone;
-}
 
 // Discreet nudge for iOS: Safari has no beforeinstallprompt event, so the only
 // way to "install" is Share -> Add to Home Screen, which we can't trigger

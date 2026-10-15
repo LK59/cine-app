@@ -54,6 +54,16 @@ describe("PushToggle", () => {
     await waitFor(() => expect(screen.getByText("notifications.pushToggle.unsupported")).toBeInTheDocument());
   });
 
+  // 15/10/2026 (passe de nuit, MOBILE-4) : sur iPhone dans Safari, « non supportées sur ce
+  // navigateur » contredisait l'accueil, qui renvoyait au Compte une fois l'app installée.
+  it("sur iPhone hors de l'app installée, dit d'installer l'application", async () => {
+    stubNotification("default");
+    vi.stubGlobal("navigator", { ...window.navigator, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1" });
+    render(<PushToggle />);
+    await waitFor(() => expect(screen.getByText("player.onboarding.notifInstall")).toBeInTheDocument());
+    expect(screen.queryByText("notifications.pushToggle.unsupported")).toBeNull();
+  });
+
   it("shows the blocked state when notification permission was already denied", async () => {
     stubServiceWorker({ getSubscription: () => Promise.resolve(null) });
     stubNotification("denied");
