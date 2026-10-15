@@ -944,3 +944,105 @@ describe("la reprise du lecteur serveur", () => {
     expect(Object.keys((stop.diag as Record<string, unknown>) ?? {}).filter((k) => k.startsWith("resume"))).toEqual([]);
   });
 });
+
+/**
+ * Une reprise ouverte par hls.js part du segment de la reprise (LECTEUR-2) : le segment demandé AVANT
+ * hls.js — c'est lui qui fait partir ffmpeg chez Jellyfin à cet endroit —, puis `startPosition`. Sans
+ * cela, hls.js demandait l'init et le segment 0 : deux démarrages de ffmpeg.
+ */
+describe("la reprise par hls.js part du segment de la reprise", () => {
+  // Seulement en transcodage (le seul cas mesuré) : la réponse de ces tests en est un.
+  beforeEach(() => void (reponse.playbackInfo.playMethod = "Transcode"));
+  afterEach(() => void (reponse.playbackInfo.playMethod = "DirectStream"));
+  const calls = () => (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([url]) => String(url));
+  /** Le `fetch` du `beforeEach`, enveloppé. */
+  function around(wrap: (base: (url: string, init?: RequestInit) => Promise<unknown>, url: string, init?: RequestInit) => Promise<unknown>) {
+    const base = fetch as unknown as (url: string, init?: RequestInit) => Promise<unknown>;
+    vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => wrap(base, url, init)));
+  }
+
+  it("le segment de la reprise est demandé avant qu'hls.js existe, puis hls.js part de la reprise", async () => {
+    playback.session = { itemId: "film", openId: 1, resumeAt: 1200, title: "Film" };
+    let segmentBeforeHls: boolean | null = null;
+    around((base, url, init) => {
+      if (String(url).includes("/hls1/main/")) segmentBeforeHls ??= fake.config === null;
+      return base(url, init);
+    });
+    await mounted();
+    expect(segmentBeforeHls).toBe(true);
+    const order = calls().filter((u) => /master\.m3u8|main\.m3u8|hls1\/main/.test(u));
+    expect(order[0]).toContain("master.m3u8");
+    expect(order[1]).toContain("main.m3u8");
+    expect(order[2]).toContain("/hls1/main/");
+    // La reprise recule de 5 s (« se remettre dans la scène ») : 1 195.
+    expect((fake.config as { startPosition?: number }).startPosition).toBe(1195);
+    expect(startBodies).toHaveLength(1);
+    // Le bilan dit quel segment a lancé ffmpeg, et quand.
+    cleanup();
+    const diag = reported.find((r) => r.kind === "stop")!.fields.diag as Record<string, number>;
+    expect(diag.resumeKickMs).toBeTypeOf("number");
+    expect(diag.resumeKickSegment).toBe(1);
+  });
+
+  it("sans reprise : rien de demandé avant hls.js, aucune position de départ — l'ouverture d'avant", async () => {
+    await mounted();
+    expect(calls().some((u) => /master\.m3u8|hls1\/main/.test(u))).toBe(false);
+    expect((fake.config as { startPosition?: number }).startPosition).toBeUndefined();
+  });
+
+  it("le segment en erreur : aucune position de départ posée — l'ouverture d'avant", async () => {
+    playback.session = { itemId: "film", openId: 1, resumeAt: 1200, title: "Film" };
+    around((base, url, init) =>
+      String(url).includes("/hls1/main/") ? Promise.resolve({ ok: false, status: 500, arrayBuffer: async () => new ArrayBuffer(0) }) : base(url, init)
+    );
+    await mounted();
+    expect((fake.config as { startPosition?: number }).startPosition).toBeUndefined();
+  });
+
+  it("fermé pendant que le segment se charge : la requête est interrompue, hls.js n'est jamais construit", async () => {
+    playback.session = { itemId: "film", openId: 1, resumeAt: 1200, title: "Film" };
+    let signal: AbortSignal | null = null;
+    around((base, url, init) => {
+      if (!String(url).includes("/hls1/main/")) return base(url, init);
+      signal = init?.signal ?? null;
+      return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
+    });
+    render(<PlayerHost />);
+    for (let i = 0; i < 100 && !signal; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(signal).not.toBeNull();
+    cleanup();
+    for (let i = 0; i < 10; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(signal!.aborted).toBe(true);
+    expect(fake.config).toBeNull();
+  });
+
+  it("le corps du segment est laissé à hls.js : ses en-têtes suffisent (ffmpeg est parti), rien n'est lu deux fois", async () => {
+    playback.session = { itemId: "film", openId: 1, resumeAt: 1200, title: "Film" };
+    const cancel = vi.fn(async () => {});
+    const read = vi.fn(async () => new ArrayBuffer(1000));
+    around((base, url, init) =>
+      String(url).includes("/hls1/main/") ? Promise.resolve({ ok: true, status: 200, body: { cancel }, arrayBuffer: read }) : base(url, init)
+    );
+    await mounted();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(read).not.toHaveBeenCalled();
+    expect((fake.config as { startPosition?: number }).startPosition).toBe(1195);
+  });
+
+  it("DirectStream (vidéo copiée) : inchangé tant qu'un gain n'y est pas mesuré", async () => {
+    reponse.playbackInfo.playMethod = "DirectStream";
+    playback.session = { itemId: "film", openId: 1, resumeAt: 1200, title: "Film" };
+    await mounted();
+    expect(calls().some((u) => /hls1\/main/.test(u))).toBe(false);
+    expect((fake.config as { startPosition?: number }).startPosition).toBeUndefined();
+  });
+
+  it("Safari (HLS natif) : inchangé — rien demandé avant l'élément", async () => {
+    nativeHls = true;
+    playback.session = { itemId: "film", openId: 1, resumeAt: 1200, title: "Film" };
+    render(<PlayerHost />);
+    for (let i = 0; i < 70; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(startBodies).toHaveLength(1);
+    expect(calls().some((u) => /hls1\/main/.test(u))).toBe(false);
+  });
+});

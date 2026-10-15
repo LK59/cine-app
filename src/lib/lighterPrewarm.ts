@@ -104,6 +104,66 @@ export function segmentAt(variant: string, base: string, seconds: number): { url
   return last;
 }
 
+/** Ce qu'il faut d'un compteur de lien (`LinkMeter.open`, slowLink.ts) — facultatif. */
+interface MeterLike {
+  open(): { headers(): void; received(bytes: number): void; end(): void };
+}
+
+/**
+ * Faire partir ffmpeg à `startSeconds` : la liste maître, sa première variante, puis **le** segment qui
+ * contient cette position, demandé et lu en entier — c'est cette demande qui lance le transcodage chez
+ * Jellyfin, à cet endroit. Écrit une fois pour le préchauffage (§78, §93) et pour l'ouverture d'une
+ * reprise par hls.js (`PlayerHost`, LECTEUR-2) : hls.js demande l'init d'abord, et Jellyfin lançait
+ * alors ffmpeg au début du film, puis le relançait au segment de la reprise.
+ *
+ * Lève sur toute erreur (réseau, liste sans variante ou sans segment, abandon par `signal`) : à
+ * l'appelant d'en faire un échec silencieux. `meter` compte ses requêtes comme celles d'hls.js.
+ */
+export async function warmSegmentAt(
+  manifestUrl: string,
+  startSeconds: number,
+  signal: AbortSignal,
+  options: { onVariant?: (variant: { codecs: string | null; resolution: string | null }) => void; meter?: MeterLike; strict?: boolean; headersOnly?: boolean } = {}
+): Promise<{ index: number; startsAt: number }> {
+  const metered = async <T>(url: string, read: (res: Response) => Promise<T>, size: (value: T) => number): Promise<T> => {
+    const request = options.meter?.open();
+    try {
+      const res = await fetch(url, { signal });
+      request?.headers();
+      // Le préchauffage lit le corps quel que soit le statut, comme il l'a toujours fait ; l'ouverture
+      // d'une reprise (`strict`) ne pose sa position de départ que sur un segment réellement servi.
+      if (options.strict && !res.ok) throw new Error(`réponse ${res.status}`);
+      const value = await read(res);
+      request?.received(size(value));
+      return value;
+    } finally {
+      request?.end();
+    }
+  };
+  const text = (url: string) => metered(url, (res) => res.text(), (t) => t.length);
+  const base = typeof location !== "undefined" ? location.href : "http://localhost/";
+  const masterAbs = new URL(manifestUrl, base).href;
+  const master = await text(masterAbs);
+  const variant = firstVariant(master, masterAbs);
+  if (!variant) throw new Error("liste maître sans variante");
+  options.onVariant?.({ codecs: variant.codecs, resolution: variant.resolution });
+  const list = await text(variant.url);
+  const segment = segmentAt(list, variant.url, startSeconds);
+  if (!segment) throw new Error("variante sans segment");
+  // Le segment lui-même, en entier : c'est sa demande qui fait partir ffmpeg chez Jellyfin.
+  // `headersOnly` (l'ouverture d'une reprise) : Jellyfin ne répond qu'une fois le segment produit —
+  // ffmpeg tourne alors à cette position, et le segment est sur son disque. Le corps est abandonné :
+  // hls.js le demandera aussitôt, et le lirait une seconde fois si le cache du navigateur ne le
+  // rendait pas (mesuré sous Playwright, 15/10/2026 : 4 s de plus à 20 Mbit/s) — sur un lien lent, le
+  // premier segment payé deux fois. Le préchauffage, lui, le lit en entier comme toujours.
+  if (options.headersOnly) {
+    await metered(segment.url, async (res) => void (await res.body?.cancel().catch(() => {})), () => 0);
+  } else {
+    await metered(segment.url, (res) => res.arrayBuffer(), (b) => b.byteLength);
+  }
+  return { index: segment.index, startsAt: segment.startsAt };
+}
+
 /**
  * Lance un préchauffage — le précédent, s'il y en a un, est arrêté chez Jellyfin. `prewarm: true`
  * dit à la route de ne pas annoncer la lecture à Jellyfin : ce n'en est pas encore une (le lecteur
@@ -165,20 +225,10 @@ export function startPrewarm(options: {
         // Rien à transcoder : rien à chauffer (n'arrive pas à ces débits, mais ne coûte rien).
         return settleReady(prewarm, settle);
       }
-      const masterUrl = String(data.castUrl ?? data.manifestUrl ?? "");
-      const base = typeof location !== "undefined" ? location.href : "http://localhost/";
-      const masterAbs = new URL(masterUrl, base).href;
-      const master = await (await fetch(masterAbs, { signal })).text();
-      const variant = firstVariant(master, masterAbs);
-      if (!variant) throw new Error("liste maître sans variante");
-      prewarm.variant = { codecs: variant.codecs, resolution: variant.resolution };
-      const list = await (await fetch(variant.url, { signal })).text();
-      const segment = segmentAt(list, variant.url, options.startSeconds);
-      if (!segment) throw new Error("variante sans segment");
-      prewarm.segment = { index: segment.index, startsAt: segment.startsAt };
-      // Le segment lui-même, en entier : c'est sa demande qui fait partir ffmpeg chez Jellyfin.
-      const seg = await fetch(segment.url, { signal });
-      await seg.arrayBuffer();
+      const segment = await warmSegmentAt(String(data.castUrl ?? data.manifestUrl ?? ""), options.startSeconds, signal, {
+        onVariant: (variant) => (prewarm.variant = variant),
+      });
+      prewarm.segment = segment;
       settleReady(prewarm, settle);
     } catch {
       // Annulé : `cancelPrewarm` a déjà refermé la séance — une seule fois.

@@ -48,7 +48,7 @@ import {
   playbackLinkSlow,
   type LighterStep,
 } from "@/lib/slowLinkPolicy";
-import { cancelPrewarm, carryPrewarmAcrossReload, discardTakenPrewarm, prewarmFields, prewarmFits, takeOrdinaryPrewarm, takePrewarm, type Prewarm } from "@/lib/lighterPrewarm";
+import { cancelPrewarm, carryPrewarmAcrossReload, discardTakenPrewarm, prewarmFields, prewarmFits, takeOrdinaryPrewarm, takePrewarm, warmSegmentAt, type Prewarm } from "@/lib/lighterPrewarm";
 import { directReloadIntent, reloadLighterOf, reloadPage, shouldReloadDirect, type PlayerReloadIntent } from "@/lib/serverReload";
 import { SlowLinkRunner, type SeekSignal, type SlowLinkHost } from "@/lib/slowLinkRunner";
 import { forgetLighterCarry, readPlaybackQuality, rememberLighter, usePlaybackQuality } from "@/lib/playbackQuality";
@@ -683,6 +683,11 @@ function ActivePlayer({
    * lente… » et le verdict anticipé. Arrêté partout où le chien de garde l'est.
    */
   const linkWatch = useRef<ReturnType<typeof setInterval> | null>(null);
+  /**
+   * Le segment de la reprise, demandé avant de lancer hls.js (LECTEUR-2) : interrompu par une négociation
+   * qui remplace celle-ci, par le chien de garde et au démontage — jamais une requête pour un flux mort.
+   */
+  const resumeKick = useRef<AbortController | null>(null);
   // Belt-and-braces for the native (non-hls.js) path: iOS's media daemon releases HLS sessions
   // asynchronously, so even with the reload-based track switch a fresh load can race the old
   // session's teardown and get refused (SRC_NOT_SUPPORTED). One automatic, delayed re-attempt
@@ -1370,6 +1375,8 @@ function ActivePlayer({
       loadWatchdog.current = null;
       if (linkWatch.current) clearInterval(linkWatch.current);
       linkWatch.current = null;
+      resumeKick.current?.abort();
+      resumeKick.current = null;
       setLinkSignal(NO_LINK_SIGNAL);
       networkRetryCount.current = 0;
       mediaRetryCount.current = 0;
@@ -1752,6 +1759,7 @@ function ActivePlayer({
       let halted = false;
       const haltLoading = () => {
         halted = true;
+        resumeKick.current?.abort();
         if (generation !== playbackGeneration.current) return;
         const current = hlsRef.current;
         if (current) {
@@ -1969,6 +1977,43 @@ function ActivePlayer({
         return;
       }
 
+      /**
+       * Une reprise ouverte par hls.js part du segment de la reprise (LECTEUR-2, 15/10/2026).
+       *
+       * Sans cela, hls.js demandait l'init puis le segment 0 : Jellyfin lançait ffmpeg au début du film,
+       * puis — le saut de reprise posé au `loadeddata` — le relançait au segment voulu (*L'Exorciste* à
+       * 2 205 s, Chrome : 0.mp4, puis 1.mp4 annulé, puis 734.mp4 en 3,8 s). Poser `startPosition` seul ne
+       * suffit pas : la demande de l'init suffit à lancer ffmpeg au début. Le préchauffage (§78, §93) le
+       * savait déjà : il demande le segment de la position **avant** tout le reste. Le même mécanisme
+       * (`warmSegmentAt`, pas une copie), sur la négociation de cette séance elle-même : maître, variante,
+       * puis le segment de la reprise, jusqu'à ses en-têtes (Jellyfin ne répond qu'une fois le segment
+       * produit ; le corps est laissé à hls.js, pour ne pas le payer deux fois sur un lien lent) ; ffmpeg
+       * part là, une seule fois, et hls.js part de ce segment (`startPosition`) — Jellyfin le sert de son
+       * disque et poursuit le même ffmpeg.
+       *
+       * Seulement hls.js en transcodage (`Transcode`) : le seul cas mesuré (*American Beauty*, Chrome,
+       * 15/10/2026 — un job `-ss` par séance au lieu de la paire début puis `-ss`). DirectStream (vidéo
+       * copiée) reste tel quel tant qu'un gain n'y est pas mesuré ; jamais un préchauffage repris (il a déjà
+       * fait tout cela), ni une diffusion, ni le banc. Safari en HLS natif et la lecture directe sont partis
+       * plus haut, inchangés. Un échec, ou une réponse en erreur : rien de posé —
+       * l'ouverture d'avant, à l'octet. Interrompu si la négociation est remplacée (`resumeKick`). Ses
+       * requêtes sont comptées par le compteur du lien comme celles d'hls.js : l'ouverture les attend.
+       */
+      let kicked = false;
+      if (!warmed && typeof resumeAt === "number" && resumeAt > 0 && !castSession && !bench && data.playbackInfo?.playMethod === "Transcode") {
+        const controller = new AbortController();
+        resumeKick.current = controller;
+        try {
+          const segment = await warmSegmentAt(sourceUrl, resumeAt, controller.signal, { meter: linkMeterRef.current ?? linkMeter, strict: true, headersOnly: true });
+          startup.resumeKicked(segment.index);
+          kicked = true;
+        } catch {
+          kicked = false;
+        }
+        if (resumeKick.current === controller) resumeKick.current = null;
+        if (generation !== playbackGeneration.current || halted) return;
+      }
+
       // Started alongside the request above, not here — see its comment. Non-null because this
       // branch is only reached when canPlayType said there is no native HLS.
       const { default: Hls } = await hlsModule!;
@@ -1985,9 +2030,10 @@ function ActivePlayer({
         backBufferLength: 90,
         maxBufferLength: 30,
         maxMaxBufferLength: 90,
-        // Repris d'un préchauffage (§78) : partir directement du segment préchauffé. Sans cela hls.js
-        // demande le segment 0, puis saute — et Jellyfin relance ffmpeg deux fois (1,85 s mesurées).
-        ...(warmed ? { startPosition: resumeAt ?? 0 } : {}),
+        // Repris d'un préchauffage (§78), ou ffmpeg lancé à la reprise juste au-dessus (LECTEUR-2) :
+        // partir directement de ce segment. Sans cela hls.js demande le segment 0, puis saute — et
+        // Jellyfin relance ffmpeg deux fois (1,85 s mesurées).
+        ...(warmed || kicked ? { startPosition: resumeAt ?? 0 } : {}),
         // Compter ce que le lien livre, pour le chien de garde ci-dessus (§77) : des écouteurs de
         // plus sur chaque requête, rien d'autre — `meterXhr` ne lève jamais.
         // Le compteur courant : réarmé au retour du premier plan pendant le chargement (§78).
@@ -2951,6 +2997,14 @@ function ActivePlayer({
       runner.dispose();
     },
     [runner]
+  );
+  // Démonté pendant que le segment de la reprise se chargeait (LECTEUR-2) : la requête est interrompue.
+  useEffect(
+    () => () => {
+      resumeKick.current?.abort();
+      resumeKick.current = null;
+    },
+    []
   );
   useEffect(() => {
     const onVisibility = () => {

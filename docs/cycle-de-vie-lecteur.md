@@ -300,6 +300,13 @@ DECISIONS.md §67) : plus aucune exclusion de codec n'est retenue d'une séance 
 des tentatives (`SessionTally.retries`) note ses marches et les erreurs fatales d'hls.js, en
 observation.
 
+Une ouverture hls.js à une position (> 0), sans préchauffage repris (15/10/2026, LECTEUR-2, DECISIONS.md
+§77) : entre la négociation et la construction d'hls.js, `warmSegmentAt` demande maître, variante et le
+segment de la reprise (jusqu'à ses en-têtes ; transcodage seulement) — un `await` de plus dans `startPlayback`, gardé comme les autres
+(`generation !== playbackGeneration.current || halted` après lui) et interruptible (`resumeKick`, coupé par la
+négociation suivante, le chien de garde et le démontage). Réussi : `startPosition`. Échoué : rien, l'ouverture
+d'avant. Le saut de `loadeddata` reste posé (il ne bouge plus qu'à l'intérieur du segment).
+
 hls.js 1.7.3 (14/10/2026, `hlsRecovery.ts`, DECISIONS.md §67) — trois choses que l'écouteur d'erreur
 suppose désormais :
 - hls.js remet lui-même la MediaSource à zéro sur `MEDIA_SOURCE_REQUIRES_RESET` (drapeau

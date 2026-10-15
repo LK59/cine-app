@@ -3691,6 +3691,34 @@ position porte au `stop`, sous `diag` (hors du plafond des quarante champs) : `r
 HLS natif, lecture directe) ; `ServerStartup.resumeFields`. **Tests** : `PlayerHost-connexion-lente.test.tsx`
 (« la reprise du lecteur serveur »).
 
+**Une reprise par hls.js part du segment de la reprise (15/10/2026, LECTEUR-2, choix de Louis).** Sans
+préchauffage, hls.js demandait l'init puis le segment 0, et le saut de reprise n'était posé qu'au
+`loadeddata` : Jellyfin lançait ffmpeg au début du film, puis le relançait au segment voulu — deux jobs
+FFmpeg.Transcode par séance (le premier sans `-ss`). Poser `startPosition` seul ne suffit pas : la demande de
+l'init lance déjà ffmpeg au début ; le préchauffage (§78, §93) ne marchait que parce qu'il demande le segment
+de la position **avant** tout le reste. Désormais, quand une séance hls.js s'ouvre à une position (> 0) sans
+préchauffage repris, `ActivePlayer` fait, après sa négociation ordinaire et avant de construire hls.js, ce que
+fait le préchauffage — la même fonction, `warmSegmentAt` (`lighterPrewarm.ts`, extraite de `startPrewarm`
+sans changement de son comportement) : maître, variante, puis le segment de la reprise **jusqu'à ses
+en-têtes** — Jellyfin ne répond qu'une fois le segment produit, ffmpeg tourne alors à cette position ; le corps
+est abandonné, hls.js le demande aussitôt (le lire ici l'aurait fait payer deux fois sur un lien lent : sous
+Playwright, 4 s de plus à 20 Mbit/s) ; hls.js part ensuite de ce segment (`startPosition`). Un seul ffmpeg par
+séance, lancé au bon endroit. **Transcodage seulement** (`playMethod === "Transcode"`) : DirectStream (vidéo
+copiée) reste tel quel tant qu'un gain n'y est pas mesuré — Chrome n'y passe pas par hls.js dans cette
+bibliothèque. Garde-fous : Safari en HLS natif et la lecture directe sont inchangés (branches prises avant) ; ni
+pour une diffusion, ni pour le banc d'essai, ni quand un préchauffage est repris ; une erreur ou une réponse en
+échec (`strict`) ne pose aucune position — l'ouverture d'avant, à l'octet ; la requête est interrompue
+(`resumeKick`) par une négociation qui remplace celle-ci, par le chien de garde des 20 s et au démontage ; ses
+requêtes sont comptées par le compteur du lien comme celles d'hls.js. **Mesuré le 15/10/2026** (instance de
+test, Chrome, *American Beauty* HEVC 10 bits → H.264, reprise à ~1 520 s ; négociation → image à la reprise) :
+avant 2,87 / 2,82 / 3,41 s, après 2,38 / 2,27 / 2,53 s ; lien bridé à 20 Mbit/s : avant 9,09 / 8,84 s, après 7,0 /
+7,6 s. Jellyfin, FFmpeg.Transcode : avant, chaque séance ouvre deux jobs (`start_number 0` sans `-ss`, puis
+`-ss 00:25:…` une à deux secondes plus tard) ; après, un seul (`-ss 00:25:…`, `start_number` du segment). Journal : `diag.resumeKickMs` et
+`diag.resumeKickSegment` au bilan, à côté de `diag.resumePictureMs`. **Tests** :
+`PlayerHost-connexion-lente.test.tsx` (« la reprise par hls.js part du segment de la reprise » : ordre des
+requêtes avant hls.js, `startPosition`, sans reprise inchangé, segment en erreur, fermeture pendant le
+chargement, Safari inchangé), `lighterPrewarm.test.ts` (inchangé).
+
 **Dire la lenteur pendant le chargement — informer tôt, ne jamais abandonner tôt (12/10/2026, choix de
 Louis).** Le verdict attendait le renoncement (35 s / 20 s) alors que le lien se savait lent bien avant.
 Pendant l'ouverture, le lien est lu chaque seconde (`openingLinkState`) — mesure et affichage seulement,
