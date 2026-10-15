@@ -448,3 +448,48 @@ describe("lecteur serveur — la pastille « Connexion instable »", () => {
     expect(screen.getByText("player.badConnection")).toBeTruthy();
   });
 });
+
+/**
+ * Un seul `stop` par séance (passe de nuit du 15/10/2026, LECTEUR-12) : l'épisode suivant écrit
+ * `stop "next"` ; s'il repart par le lecteur natif, ce lecteur-ci est démonté aussitôt, et son
+ * démontage écrivait un second `stop "unmount"` à zéro seconde — celui que la page Activité garde.
+ */
+describe("lecteur serveur — l'épisode suivant", () => {
+  const episode = (next: string) => ({
+    itemId: "ep-1",
+    openId: 7,
+    resumeAt: 600,
+    title: "Épisode 1",
+    getNextEpisode: () => ({ itemId: next, title: "Épisode suivant" }),
+  });
+
+  it("parti par le lecteur natif : un seul `stop`, celui de l'épisode suivant", async () => {
+    playback.session = episode("ep-3");
+    stubFetch();
+    const { rerender } = render(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(1));
+    fireEvent.click(screen.getByText("suivant"));
+    expect(playback.advance).toHaveBeenCalledWith(expect.objectContaining({ itemId: "ep-3" }));
+    // Ce que fait `advance` : la même lecture, un autre épisode — que le lecteur serveur n'a pas reçu.
+    playback.session = { itemId: "ep-3", openId: 7, resumeAt: 0, title: "Épisode suivant" };
+    rerender(<PlayerHost />);
+    expect(screen.getByTestId("natif")).toBeTruthy();
+    expect(lignes("stop")).toHaveLength(1);
+    expect(lignes("stop")[0]).toMatchObject({ why: "next" });
+  });
+
+  it("enchaîné en place : l'épisode suivant a sa séance, et son propre `stop`", async () => {
+    playback.session = episode("ep-2");
+    stubFetch();
+    const { rerender } = render(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(1));
+    fireEvent.click(screen.getByText("suivant"));
+    playback.session = { itemId: "ep-2", openId: 7, resumeAt: 0, title: "Épisode suivant" };
+    rerender(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(2));
+    fireEvent.click(screen.getByText("fermer"));
+    const stops = lignes("stop");
+    expect(stops.map((s) => s.why)).toEqual(["next", "close"]);
+    expect(stops[0].session).not.toBe(stops[1].session);
+  });
+});

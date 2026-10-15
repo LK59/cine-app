@@ -1123,9 +1123,27 @@ function ActivePlayer({
     handedOverRef.current = true;
     if (logContext.current.session) clearUnsentStop(logContext.current.session);
   }, []);
+  /**
+   * La séance du journal dont le bilan est déjà parti — un seul `stop` par séance.
+   *
+   * L'épisode suivant (`handleAdvance`) écrit `stop "next"` sans fermer le lecteur : il compte rester
+   * monté pour l'enchaîner. Mais quand l'épisode suivant repart par l'aiguillage ordinaire (le natif
+   * d'abord, pour un titre qu'il n'a pas encore passé au serveur), ce lecteur est démonté aussitôt,
+   * et son démontage écrivait un second `stop "unmount"` à zéro seconde pour la même séance — celui
+   * que la page Activité retient, le dernier (passe de nuit du 15/10/2026, LECTEUR-12). Une séance
+   * par épisode : quand le lecteur enchaîne en place, l'épisode suivant ouvre une séance neuve
+   * (`logSession`), et la garde se rouvre d'elle-même.
+   */
+  const stoppedSessionRef = useRef<string | null>(null);
+  const stopAlreadySent = useCallback(() => {
+    const id = logContext.current.session;
+    return !!id && stoppedSessionRef.current === id;
+  }, []);
   /** Envoie le bilan et efface sa copie gardée sur l'appareil — une seule fois par séance. */
   const reportStop = useCallback(
     (why: ServerStopWhy) => {
+      if (stopAlreadySent()) return;
+      stoppedSessionRef.current = logContext.current.session ?? null;
       // Une séance réellement allégée qui s'arrête est retenue deux minutes (§78) — sauf si le lien a
       // retrouvé de quoi porter la lecture classique pendant qu'elle jouait. Une séance ordinaire du
       // lecteur serveur ne retient rien.
@@ -1134,7 +1152,7 @@ function ActivePlayer({
       reportPlayback("stop", stopFields(why, true));
       if (logContext.current.session) clearUnsentStop(logContext.current.session);
     },
-    [stopFields]
+    [stopFields, stopAlreadySent]
   );
 
   // Swaps to the next episode in place — reports the current one's final
@@ -1204,7 +1222,7 @@ function ActivePlayer({
   useEffect(() => {
     const save = () => {
       const id = logContext.current.session;
-      if (!id || bench || closedRef.current || handedOverRef.current) return;
+      if (!id || bench || closedRef.current || handedOverRef.current || stopAlreadySent()) return;
       saveUnsentStop(id, stopFields("lost", false));
     };
     save();
@@ -1222,7 +1240,7 @@ function ActivePlayer({
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [bench, stopFields]);
+  }, [bench, stopFields, stopAlreadySent]);
 
   /**
    * La page qui se ferme, et le lecteur qui disparaît sans avoir été fermé : un bilan quand même.
