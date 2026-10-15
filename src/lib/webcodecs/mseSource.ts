@@ -13,6 +13,7 @@ import { trace, traceRecent } from "./trace";
 import { fragmentTimes } from "./fragmentProbe";
 import { diagInterval, diagNow, diagStallFacts } from "./playbackDiagnosis";
 import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource";
+import { networkUnstable } from "@/lib/networkTrouble";
 import { isUnreadableZone, type UnreadableZone } from "./unreadableZone";
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
@@ -2188,11 +2189,37 @@ export class MseSource {
       evictions: this.evictions,
       // Only ManagedMediaSource has the signal; plain MediaSource says so rather than `true`.
       streaming: typeof managed === "boolean" ? managed : "sans objet",
+      // Le réseau à cet instant, et où en est la relance (15/10/2026, LECTEUR-4) : trois coupures
+      // en pleine lecture n'avaient laissé ni ligne `network` ni rien qui dise si l'appareil se
+      // savait hors ligne, si des tentatives échouaient, ni ce que la source faisait en attendant.
+      ...this.networkFacts(),
       // Ce qui a retenu la chaîne dans les 30 s d'avant : réseau, calcul ou décodeur — voir
       // playbackDiagnosis.ts. Aplati en `diag.*`, sous son propre plafond de champs.
       diag: diagStallFacts(this.lead),
       steps: traceRecent(STALL_TRACE_MS).join(" | "),
     };
+  }
+
+  /**
+   * Le réseau vu d'ici, pour la ligne `stall` : ce que dit le navigateur (`onLine`, absent s'il ne
+   * dit rien), des tentatives en échec ou l'appareil hors ligne (`netTrouble`, `networkTrouble.ts`),
+   * et la relance en une chaîne courte (`relaunch`) — la réserve réseau (`keepThroughNetworkFailure` :
+   * essais faits sur le maximum, « en attente » si un nouvel essai est programmé) et les échecs de
+   * suite comptés avant l'écran. Ne lève jamais : c'est le chemin d'un blocage.
+   */
+  private networkFacts(): Record<string, unknown> {
+    try {
+      const onLine = typeof navigator !== "undefined" && typeof navigator.onLine === "boolean" ? navigator.onLine : undefined;
+      return {
+        ...(onLine === undefined ? {} : { onLine }),
+        netTrouble: networkUnstable(),
+        relaunch:
+          `garde ${this.networkRetries}/${NETWORK_RETRY_DELAYS_MS.length}${this.networkHold ? " en attente" : ""}` +
+          ` · échecs ${this.appendFailures}/${MAX_APPEND_FAILURES}`,
+      };
+    } catch {
+      return {};
+    }
   }
 
   /** L'élément et ses tampons, en peu de champs — commun au blocage et à la perte. */

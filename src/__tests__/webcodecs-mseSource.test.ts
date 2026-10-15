@@ -2159,6 +2159,8 @@ describe("l'échelle des reprises", () => {
     // avoir passé la main, puisque c'est précisément là que tout le reste s'est tu.
     expect(onStall).toHaveBeenCalledTimes(1);
     expect(onStall.mock.calls[0][0]).toMatchObject({ recoveries: 6, filling: false });
+    // Et ce que le réseau disait à cet instant, et où en était la relance (15/10/2026, LECTEUR-4).
+    expect(onStall.mock.calls[0][0]).toMatchObject({ onLine: true, netTrouble: false, relaunch: "garde 0/4 · échecs 0/3" });
   });
 
   it("compte ses propres poussées : une horloge qui n'a bougé que d'elles reste figée", async () => {
