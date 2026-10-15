@@ -17,7 +17,7 @@ const mockUserPrefsDb = {
   getHomeLayout: vi.fn(() => ({ continueHero: true })),
   setHomeLayout: vi.fn(),
 };
-const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn(), listOthers: vi.fn(() => []) };
+const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn(), listOthers: vi.fn(() => []), find: vi.fn((): unknown => null) };
 vi.mock("@/lib/db", () => ({
   notificationPrefsDb: mockNotificationPrefsDb,
   pushDb: mockPushDb,
@@ -342,6 +342,33 @@ describe("/api/auth/sessions", () => {
     ]);
     // Le `jti` identifie une session : la page n'a besoin que de la reconnaître.
     expect(JSON.stringify(body)).not.toContain('"a"');
+  });
+
+  // BUREAU-27 (15/10/2026), DECISIONS.md §99 : la route dit laquelle est celle de l'appelant —
+  // à part, pour que `sessions` reste « les autres », celles que le bouton ferme.
+  it("GET says which session is the caller's, without its jti", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jti: "current-jti" });
+    mockSessionDb.listOthers.mockReturnValue([{ jti: "a", createdAt: 111, lastSeenAt: 222, device: "Linux · Chrome" }] as never);
+    mockSessionDb.find.mockReturnValue({ jti: "current-jti", createdAt: 500, lastSeenAt: 900, device: "iPhone · Safari" } as never);
+    const { GET } = await import("@/app/api/auth/sessions/route");
+    const body = await (await GET(fakeReq())).json();
+    expect(mockSessionDb.find).toHaveBeenCalledWith("current-jti");
+    expect(body.count).toBe(1);
+    expect(body.current).toEqual({ id: "current", createdAt: 500, lastSeenAt: 900, device: "iPhone · Safari" });
+    expect(JSON.stringify(body)).not.toContain("current-jti");
+  });
+
+  // « Cet appareil » ne doit jamais faire échouer la liste.
+  it("GET still lists the others when the caller's row cannot be read", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jti: "current-jti" });
+    mockSessionDb.listOthers.mockReturnValue([] as never);
+    mockSessionDb.find.mockImplementationOnce(() => {
+      throw new Error("base indisponible");
+    });
+    const { GET } = await import("@/app/api/auth/sessions/route");
+    const res = await GET(fakeReq());
+    expect(res.status).toBe(200);
+    expect((await res.json()).current).toBeNull();
   });
 
   // Cine App et rien d'autre : le bouton ne doit jamais vouloir dire « coupe-moi Jellyfin ».

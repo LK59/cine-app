@@ -12,6 +12,15 @@ function userId(session: { jfId?: string; u: string }) {
   return session.jfId ?? session.u;
 }
 
+/** La ligne de l'appelant ; gardée — « Cet appareil » ne doit jamais faire échouer la liste. */
+function lookupOwn(jti: string) {
+  try {
+    return sessionDb.find(jti);
+  } catch {
+    return null;
+  }
+}
+
 export interface OtherSession {
   id: string;
   createdAt: number;
@@ -31,11 +40,22 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   const others = sessionDb.listOthers(userId(session), session.jti);
+  /**
+   * La session de l'appelant, à part (DECISIONS.md §99) : « Cet appareil » en tête de la liste.
+   *
+   * Treize lignes « Ouverte le 14 oct. · Vue le 14 oct. » ne disaient pas laquelle on tenait en main
+   * (passe de nuit du 15/10/2026, BUREAU-27). Un champ à part et non un drapeau dans `sessions` : la
+   * liste reste « les autres », celles que le bouton ferme, et un onglet resté sur la version d'avant
+   * lit toujours le bon nombre. Jamais de `jti` ici non plus. Lue en base pour ses dates ; une
+   * session absente de la table (la connexion locale de secours n'y est pas toujours) n'en a pas.
+   */
+  const own = lookupOwn(session.jti);
   return NextResponse.json({
     count: others.length,
     // Jamais le `jti` : c'est lui qui identifie une session, et une page n'a besoin que de la
     // reconnaître, pas de la nommer.
     sessions: others.map((s, i): OtherSession => ({ id: String(i), createdAt: s.createdAt, lastSeenAt: s.lastSeenAt, device: s.device })),
+    current: own ? ({ id: "current", createdAt: own.createdAt, lastSeenAt: own.lastSeenAt, device: own.device } satisfies OtherSession) : null,
   });
 }
 

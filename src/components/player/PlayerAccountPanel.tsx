@@ -559,6 +559,9 @@ function SessionsSection() {
   const { locale } = useLocale();
   const toast = useToast();
   const [sessions, setSessions] = useState<OtherSession[] | null>(null);
+  // La session de cet appareil, en tête de liste et marquée (DECISIONS.md §99) — absente d'une
+  // réponse de la version d'avant, ou d'une session que la table ne connaît pas.
+  const [current, setCurrent] = useState<OtherSession | null>(null);
   const [revoking, setRevoking] = useState(false);
   // L'heure de l'ouverture du panneau, pour « Vue il y a 5 min » — voir `sessionSeenLabel`.
   const [now] = useState(() => Date.now());
@@ -569,7 +572,10 @@ function SessionsSection() {
     fetch("/api/auth/sessions")
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (alive && j != null) setSessions(j.sessions ?? []);
+        if (alive && j != null) {
+          setSessions(j.sessions ?? []);
+          setCurrent(j.current ?? null);
+        }
       })
       .catch(() => {});
     return () => {
@@ -614,8 +620,21 @@ function SessionsSection() {
         {/* Les dates, pas seulement le nombre. « 3 » ne permet ni de reconnaître une connexion
             oubliée sur un ordinateur prêté, ni de constater qu'il n'y a rien d'anormal — et elles
             étaient déjà en base. */}
-        {sessions && sessions.length > 0 && (
+        {sessions && (sessions.length > 0 || current) && (
           <ul className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
+            {/* Celle qu'on tient en main, d'abord : sans elle, rien ne disait laquelle des lignes
+                identiques était la sienne (BUREAU-27). Le bouton ne la ferme pas. */}
+            {current && (
+              <li key="current" data-current-session className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm text-white">
+                    {current.device ?? t("player.account.unknownDevice")}
+                    <span className="ml-2 text-xs font-medium text-muted">· {t("player.account.currentDevice")}</span>
+                  </span>
+                  <span className="block text-xs text-subtle">{t("player.account.sessionOpened", { date: formatDay(current.createdAt, locale) })}</span>
+                </span>
+              </li>
+            )}
             {sessions.map((s) => (
               <li key={s.id} className="flex items-baseline justify-between gap-3">
                 {/* L'appareil d'abord : c'est ce qui dit laquelle on déconnecterait. Les sessions

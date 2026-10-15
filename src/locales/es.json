@@ -2018,6 +2018,7 @@
       "otherDevices": "{n} otro dispositivo conectado.|{n} otros dispositivos conectados.",
       "signOutOthers": "Desconectar los demás",
       "devicesRevoked": "Los demás dispositivos se han desconectado",
+      "currentDevice": "Este dispositivo",
       "signOut": "Cerrar sesión",
       "signOutAction": "Cerrar sesión",
       "localAccountHint": "Esta cuenta no está vinculada a Jellyfin: las preferencias de reproducción y la contraseña se gestionan en otro sitio.",

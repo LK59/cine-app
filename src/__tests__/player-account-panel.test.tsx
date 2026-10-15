@@ -52,7 +52,48 @@ describe("appareils connectés — vue quand", () => {
   });
 });
 
-const FIREFOX_LINUX = "Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0";
+// La suite (DECISIONS.md §99) : « Cet appareil » en tête, distinct des lignes que le bouton ferme.
+describe("appareils connectés — cet appareil", () => {
+  it("marque la session de l'appelant en tête, et ne la compte pas parmi les autres", async () => {
+    payload = { username: "sarah", jfUser: "sarah", role: "user" };
+    const now = Date.now();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).startsWith("/api/auth/sessions")) {
+          return new Response(
+            JSON.stringify({
+              count: 1,
+              sessions: [{ id: "0", createdAt: now - 86_400_000, lastSeenAt: now - 60_000, device: "Linux · Chrome" }],
+              current: { id: "current", createdAt: now - 3_600_000, lastSeenAt: now, device: "iPhone · Safari" },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+      })
+    );
+    try {
+      const { container } = render(<PlayerAccountPanel />);
+      const mine = await waitFor(() => {
+        const el = container.querySelector("[data-current-session]");
+        if (!el) throw new Error("pas encore");
+        return el as HTMLElement;
+      });
+      expect(mine.textContent).toContain("iPhone · Safari");
+      expect(mine.textContent).toContain("player.account.currentDevice");
+      const rows = Array.from(mine.parentElement!.children);
+      expect(rows[0]).toBe(mine);
+      expect(rows).toHaveLength(2);
+      expect(rows[1].textContent).toContain("Linux · Chrome");
+      expect(rows[1].textContent).not.toContain("player.account.currentDevice");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+const FIREFOX_LINUX ="Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0";
 const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 const CHROME_LINUX = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const FIREFOX_ANDROID = "Mozilla/5.0 (Android 14; Mobile; rv:131.0) Gecko/131.0 Firefox/131.0";

@@ -2018,6 +2018,7 @@
       "otherDevices": "{n} weiteres Gerät angemeldet.|{n} weitere Geräte angemeldet.",
       "signOutOthers": "Andere abmelden",
       "devicesRevoked": "Die anderen Geräte wurden abgemeldet",
+      "currentDevice": "Dieses Gerät",
       "signOut": "Abmelden",
       "signOutAction": "Abmelden",
       "localAccountHint": "Dieses Konto ist nicht mit Jellyfin verknüpft — Wiedergabe-Einstellungen und Passwort werden anderswo verwaltet.",

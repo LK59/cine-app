@@ -5543,3 +5543,28 @@ seulement quand un cookie a été présenté).
 propres mots. La redirection du proxy garde `next` = le chemin seul, comme avant.
 
 **Décidé le 15/10/2026** (Louis).
+
+## 99. « Appareils connectés » : cet appareil est nommé, à part des autres
+
+**Règle.** Le panneau Compte montre en tête la session de l'appareil qu'on tient, marquée « Cet
+appareil » (`player.account.currentDevice`, quatre langues), avec son appareil et sa date d'ouverture ;
+suivent les autres, celles que « Déconnecter les autres » ferme, avec leur « Vue il y a… ».
+
+**Porteur.** `GET /api/auth/sessions` : `sessions` reste la liste des **autres** (et `count` leur
+nombre), la session de l'appelant vient à part dans `current` (`{ id: "current", createdAt, lastSeenAt,
+device }` ou `null`), lue par `sessionDb.find(jti)` dans sa propre garde. Jamais de `jti` dans la
+réponse.
+
+**Pourquoi à part, et non un drapeau dans la liste.** La liste est ce que le bouton ferme ; y glisser
+la session courante aurait changé ce que compte un onglet resté sur la version d'avant (« 2 autres
+appareils » pour un seul) et ce que vide `setSessions([])` après la fermeture.
+
+**Appelant.** `SessionsSection` (`PlayerAccountPanel.tsx`).
+
+**Tests.** `misc-routes-batch2.test.ts` (`current` sans `jti`, et la liste intacte si la ligne est
+illisible), `player-account-panel.test.tsx` (la ligne marquée en tête, hors des autres).
+
+**Pourquoi.** Passe de nuit du 15/10/2026 (BUREAU-27) : treize lignes identiques, rien ne disait
+laquelle était celle-ci. L'heure « Vue il y a 5 min » (`sessionSeenLabel`) était déjà faite.
+
+**Décidé le 15/10/2026** (Louis).

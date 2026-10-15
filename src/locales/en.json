@@ -2018,6 +2018,7 @@
       "otherDevices": "{n} other device signed in.|{n} other devices signed in.",
       "signOutOthers": "Sign the others out",
       "devicesRevoked": "The other devices have been signed out",
+      "currentDevice": "This device",
       "signOut": "Sign out",
       "signOutAction": "Sign out",
       "localAccountHint": "This account isn’t linked to Jellyfin, so playback preferences and the password live elsewhere.",

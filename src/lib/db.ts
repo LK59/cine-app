@@ -1265,6 +1265,14 @@ export const sessionDb = {
     return rows.map((r) => ({ jti: r.jti, createdAt: r.created_at, lastSeenAt: r.last_seen_at, device: r.device ?? null }));
   },
 
+  /** Une session par son `jti` — celle de l'appelant, pour « Cet appareil » (DECISIONS.md §99). */
+  find(jti: string): StoredSession | null {
+    const row = getDb()
+      .prepare("SELECT jti, created_at, last_seen_at, device FROM sessions WHERE jti = ?")
+      .get(jti) as { jti: string; created_at: number; last_seen_at: number; device: string | null } | undefined;
+    return row ? { jti: row.jti, createdAt: row.created_at, lastSeenAt: row.last_seen_at, device: row.device ?? null } : null;
+  },
+
   exists(jti: string): boolean {
     const db = getDb();
     return !!(db.prepare("SELECT 1 FROM sessions WHERE jti = ?").get(jti));
