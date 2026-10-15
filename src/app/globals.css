@@ -1613,6 +1613,12 @@
   inset: -12px;
   border-radius: 999px;
 }
+/* Ce qui garde son propre geste (`IGNORE`, liquid.ts : le curseur du volume) passe au-dessus de cette
+   zone. Positionnée, elle se peint au-dessus de tout enfant qui ne l'est pas : le curseur du volume,
+   recouvert, ne recevait plus ni souris ni doigt depuis le 04/10 — l'appui tombait sur la pilule, et
+   tout près du bouton le geste le redirigeait vers « couper le son » (relevé le 15/10/2026 en
+   vérifiant LECTEUR-13). Les boutons, eux, sont déjà positionnés. */
+[data-liquid] :is(input, select, textarea) { position: relative; }
 
 /* Le fondu des commandes, porté par chaque élément et jamais par leur conteneur : un parent à
    opacité < 1 isole le fond, et le flou des pilules n'avait alors rien à flouter pendant le

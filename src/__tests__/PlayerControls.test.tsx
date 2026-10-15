@@ -1861,6 +1861,21 @@ describe("PlayerControls — la disposition", () => {
     const outside = css.slice(0, at) + css.slice(css.indexOf("\n}\n", at));
     expect(outside).not.toMatch(/\.player-volume\s*\{[^}]*row-reverse/);
   });
+
+  // Relevé en vérifiant LECTEUR-13 dans Chrome (15/10/2026) : la zone de toucher élargie du verre
+  // (`[data-liquid]::before`, positionnée) se peignait au-dessus du curseur du volume, qui ne l'est
+  // pas — `elementFromPoint` donnait la pilule sur toute sa longueur ; ni clic ni glissé n'y
+  // arrivaient. jsdom ne teste pas les plans : la règle qui l'en sort est lue dans la feuille.
+  it("le curseur du volume passe au-dessus de la zone de toucher du verre", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness />);
+    await act(async () => {});
+    expect(nav(container, "volume")!.closest("[data-liquid]")).not.toBeNull();
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync("src/app/globals.css", "utf8");
+    expect(css).toMatch(/\[data-liquid\]::before\s*\{[^}]*position:\s*absolute/);
+    expect(css).toMatch(/\[data-liquid\] :is\(input, select, textarea\)\s*\{\s*position:\s*relative;\s*\}/);
+  });
 });
 
 describe("PlayerControls — passer sur AirPlay", () => {
