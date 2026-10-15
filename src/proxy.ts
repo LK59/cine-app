@@ -190,6 +190,18 @@ const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/sse\/?$/,
   /^\/api\/status\/?$/,
   /^\/api\/jellyfin\/items\/?$/,
+  // Ce que seules les pages de la gestion lisent encore, fermé quand Louis a confirmé qu'un compte
+  // ordinaire n'accède à rien de la gestion, « ni aux pages ni à leurs données » (15/10/2026) —
+  // appelants vérifiés un par un ce jour-là : l'état des services (`/api/health` : versions exactes
+  // et sept sondes amont à chaque appel, ROBUSTESSE-16 ; `/api/discover/movies`, sa sonde TMDB), les
+  // fiches Radarr/Sonarr de la gestion (`redirect`, `streams`, `series/…/episodes` de Jellyfin), les
+  // notes de la page Sonarr (`/api/watchlist/ratings`). Le cinéma lit l'état public (`/api/status/public`).
+  /^\/api\/health\/?$/,
+  /^\/api\/discover\/movies\/?$/,
+  /^\/api\/jellyfin\/redirect\/?$/,
+  /^\/api\/jellyfin\/streams\/[^/]+\/?$/,
+  /^\/api\/jellyfin\/series\/[^/]+\/episodes\/?$/,
+  /^\/api\/watchlist\/ratings\/?$/,
   // Le panneau des sous-titres générés : dépense du mois, tâches de tous les comptes (§69).
   /^\/api\/subtitle-gen\/admin(\/|$)/,
   // L'indexation des répliques : chemins des films, erreurs, titres de tous les films (§88).

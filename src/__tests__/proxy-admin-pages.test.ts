@@ -71,6 +71,17 @@ describe("proxy — les pages de la gestion", () => {
     }
   });
 
+  // 15/10/2026, Louis : un compte ordinaire n'accède à rien de la gestion, « ni aux pages ni à leurs
+  // données ». Les dernières lectures que seules ses pages faisaient.
+  it("refuse aussi les données que seules ces pages lisent", async () => {
+    const { proxy } = await import("@/proxy");
+    for (const path of ["/api/health", "/api/discover/movies", "/api/jellyfin/redirect", "/api/jellyfin/streams/abc", "/api/jellyfin/series/abc/episodes", "/api/watchlist/ratings"]) {
+      expect([path, (await proxy(req(path))).status]).toEqual([path, 403]);
+    }
+    mockVerify.mockResolvedValue({ u: "admin", role: "admin" });
+    expect((await proxy(req("/api/health"))).status).toBe(200);
+  });
+
   // Les voisins ne sont pas attrapés : le cinéma, l'état public des services, les API du cinéma qui
   // partagent un premier segment avec une page (`/api/jellyfin/...` n'est pas `/jellyfin`).
   it("n'attrape ni le cinéma ni les API qui lui servent", async () => {
