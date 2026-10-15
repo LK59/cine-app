@@ -91,6 +91,7 @@ import { useCinemaMyList, useCinemaMyListPending } from "@/lib/useCinemaMyList";
 import { CinemaSkeletonCards } from "@/components/cinema/CinemaRowSkeleton";
 import { heroOffscreen, heroSignature, resolveHeroCarousel, upcomingImages, useDecodeAhead, useHeroOrder } from "@/lib/heroCarousel";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
+import { requestSearchFocusOnOpen } from "@/lib/searchFocus";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
@@ -820,6 +821,9 @@ export function CinemaClient() {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
       e.preventDefault();
       setSearchOpen(true);
+      // Le curseur dans le champ : « / » est un geste de clavier, on l'a pressé pour taper
+      // (BUREAU-10 — le panneau, chargé à la demande, ne l'avait pas encore à son montage).
+      requestSearchFocusOnOpen();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
