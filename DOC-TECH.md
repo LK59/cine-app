@@ -1874,7 +1874,9 @@ after being declared lost still sends its real `stop`: keep the last line per `s
 `stop` itself leaves through `navigator.sendBeacon`, which the browser keeps queued after the page —
 except offline, where a beacon is accepted and then lost while the kept copy is erased at the same
 instant: it then goes through `fetch`, and a failure puts it in the queue of unsent lines
-(`unsentLines.ts`) like any other line (13/10/2026).
+(`unsentLines.ts`) like any other line (13/10/2026). That queue is sent after the next successful
+send, at launch, every minute, and — since 2026-10-15 — on the window's `online` event, with a second
+pass 5 s later (DECISIONS §97): a cut mid-film is what fills it.
 
 **What a slow link and the server player add to the lines** — no extra line, fields on the existing
 ones: `slowLink`, a bounded thread of events, in French, with their time and measure

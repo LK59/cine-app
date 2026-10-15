@@ -166,6 +166,8 @@ export function usePlaybackMode(): PlaybackMode {
 // navigating to a different page while minimized.
 /** Voir `PlaybackSession.openId`. */
 let openCounter = 0;
+/** La seconde passe des lignes en attente après `online` — voir l'effet des envois en retard. */
+const ONLINE_SECOND_FLUSH_MS = 5000;
 
 export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<PlaybackSession | null>(null);
@@ -187,7 +189,27 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     };
     flush(true);
     const timer = setInterval(() => flush(false), 60_000);
-    return () => clearInterval(timer);
+    /**
+     * Et au retour du réseau, tout de suite (15/10/2026, LECTEUR-4) : une coupure en plein film est
+     * précisément ce qui remplit la file, et ses lignes attendaient jusqu'à une minute — souvent
+     * au-delà de la fermeture de la page. Une seconde passe un peu après : `online` dit l'interface
+     * revenue, pas encore le serveur joignable, et une passe s'arrête au premier échec.
+     */
+    let later: ReturnType<typeof setTimeout> | null = null;
+    const onOnline = () => {
+      void flushUnsentLines();
+      if (later !== null) clearTimeout(later);
+      later = setTimeout(() => {
+        later = null;
+        void flushUnsentLines();
+      }, ONLINE_SECOND_FLUSH_MS);
+    };
+    window.addEventListener("online", onOnline);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("online", onOnline);
+      if (later !== null) clearTimeout(later);
+    };
   }, []);
 
   // Told to the rest of the app, which stops polling while the film has the whole screen.
