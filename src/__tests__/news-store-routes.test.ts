@@ -120,6 +120,12 @@ describe("la page initiale, publiée par la migration", () => {
       expect(c.sections.map((s) => s.entries.map((e) => e.icon))).toEqual(INITIAL_NEWS_CONTENT.fr.sections.map((s) => s.entries.map((e) => e.icon)));
     }
   });
+  it("ne promet pas « Passer le récap », retiré en 8.60.3, dans aucune des quatre langues", () => {
+    // Une installation neuve reçoit cette page au premier démarrage : elle ne doit annoncer que ce
+    // qui existe. Le bouton est parti avec les segments Recap de Jellyfin, tous à 0 s.
+    const text = JSON.stringify(INITIAL_NEWS_CONTENT).toLowerCase();
+    expect(text).not.toMatch(/récap|recap|resumen|rückblick/);
+  });
 });
 
 describe("le drapeau par compte", () => {

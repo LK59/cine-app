@@ -9,6 +9,9 @@ import type { NewsContentByLang } from "./content";
  * l'administrateur et sans appel à un fournisseur d'IA. Le démarrage ne la traduit jamais.
  *
  * Ne pas y mentionner les titres masqués : voulu par Louis.
+ * « Passer le récap » en a été retiré le 15/10 (le bouton est parti en 8.60.3, les segments Recap
+ * de Jellyfin commençant tous à 0 s) : une installation neuve ne doit pas chercher un bouton absent.
+ * Une base déjà semée garde son texte (le marqueur ne la réécrit pas) : elle se corrige à part.
  */
 export const INITIAL_NEWS_VERSION = "8.44";
 /** Le nom du marqueur dans `migrations_done` : posé une fois, la page n'est plus jamais réécrite. */
@@ -22,7 +25,7 @@ export const INITIAL_NEWS_CONTENT: NewsContentByLang = {
         entries: [
           { icon: "audio", title: "Améliorer les dialogues", text: "Les voix passent devant la musique. Menu audio → Améliorer les dialogues.", badge: "" },
           { icon: "subtitles", title: "Sous-titres générés", text: "Votre langue manque ? Générez-la en quelques secondes. Menu sous-titres → Générer.", badge: "" },
-          { icon: "next", title: "Épisode suivant", text: "Passer le récap, enchaîner l'épisode, d'un seul clic.", badge: "" },
+          { icon: "next", title: "Épisode suivant", text: "Enchaîner l'épisode, d'un seul clic.", badge: "" },
           { icon: "cast", title: "Chromecast", text: "Diffusez sur votre téléviseur depuis Chrome ou Android.", badge: "bêta" },
         ],
       },
@@ -83,7 +86,7 @@ export const INITIAL_NEWS_CONTENT: NewsContentByLang = {
         entries: [
           { icon: "audio", title: "Enhance dialogue", text: "Voices come through over the music. Audio menu → Enhance dialogue.", badge: "" },
           { icon: "subtitles", title: "Generated subtitles", text: "Missing your language? Generate it in seconds. Subtitles menu → Generate.", badge: "" },
-          { icon: "next", title: "Next episode", text: "Skip the recap and roll into the next episode, in one click.", badge: "" },
+          { icon: "next", title: "Next episode", text: "Roll into the next episode, in one click.", badge: "" },
           { icon: "cast", title: "Chromecast", text: "Cast to your TV from Chrome or Android.", badge: "beta" },
         ],
       },
@@ -141,7 +144,7 @@ export const INITIAL_NEWS_CONTENT: NewsContentByLang = {
         entries: [
           { icon: "audio", title: "Mejorar diálogos", text: "Las voces se oyen por encima de la música. Menú de audio → Mejorar diálogos.", badge: "" },
           { icon: "subtitles", title: "Subtítulos generados", text: "¿Falta tu idioma? Genéralo en unos segundos. Menú de subtítulos → Generar.", badge: "" },
-          { icon: "next", title: "Siguiente episodio", text: "Salta el resumen y pasa al siguiente episodio con un solo clic.", badge: "" },
+          { icon: "next", title: "Siguiente episodio", text: "Pasa al siguiente episodio con un solo clic.", badge: "" },
           { icon: "cast", title: "Chromecast", text: "Envía a tu televisor desde Chrome o Android.", badge: "beta" },
         ],
       },
@@ -199,7 +202,7 @@ export const INITIAL_NEWS_CONTENT: NewsContentByLang = {
         entries: [
           { icon: "audio", title: "Dialoge verbessern", text: "Stimmen treten vor die Musik. Audiomenü → Dialoge verbessern.", badge: "" },
           { icon: "subtitles", title: "Generierte Untertitel", text: "Deine Sprache fehlt? In wenigen Sekunden generiert. Untertitelmenü → Generieren.", badge: "" },
-          { icon: "next", title: "Nächste Folge", text: "Rückblick überspringen, nächste Folge starten – mit einem Klick.", badge: "" },
+          { icon: "next", title: "Nächste Folge", text: "Nächste Folge starten – mit einem Klick.", badge: "" },
           { icon: "cast", title: "Chromecast", text: "Streame von Chrome oder Android auf deinen Fernseher.", badge: "Beta" },
         ],
       },
