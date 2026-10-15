@@ -19,6 +19,7 @@ import { appendImages, reportContext } from "./prepareImage";
 import { useRefreshReports } from "./reportCache";
 import { reportErrorText } from "./reportErrors";
 import { escapeBlurs } from "./escapeBlurs";
+import { usePanelBackStep } from "@/lib/panelBackStep";
 
 type Step = "zone" | "element" | "title" | "issue" | "describe";
 
@@ -252,6 +253,13 @@ export function ReportWizard({
     setStep(after[after.indexOf(step) + 1] ?? "describe");
   };
   const back = () => setStep(steps[Math.max(0, index - 1)]);
+  // La flèche du haut et Échap reculent d'une étape, comme le « Retour » du bas ; à la première,
+  // l'écran se ferme comme avant (BUREAU-13, `panelBackStep.ts`).
+  usePanelBackStep(() => {
+    if (index === 0) return false;
+    back();
+    return true;
+  });
 
   const payload = () => ({
     zone: draft.zone,

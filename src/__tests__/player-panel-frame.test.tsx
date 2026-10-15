@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
@@ -233,6 +235,40 @@ describe("PlayerPanelFrame — Échap", () => {
     } finally {
       playbackMode.current = "closed";
     }
+  });
+
+  // 15/10/2026 (passe de nuit, BUREAU-13) : la flèche du haut de « Signaler un problème » refermait
+  // tout l'assistant — choix et description perdus — quand celle du bas reculait d'une étape.
+  it("un écran à étapes recule d'une étape par la flèche du haut et par Échap, puis se ferme", async () => {
+    const { cinemaClose } = await import("@/lib/cinemaRoute");
+    vi.mocked(cinemaClose).mockClear();
+    const { usePanelBackStep } = await import("@/lib/panelBackStep");
+    let step = 2;
+    function Stepped() {
+      usePanelBackStep(() => {
+        if (step === 0) return false;
+        step -= 1;
+        return true;
+      });
+      return <p>étapes</p>;
+    }
+    render(
+      <PlayerPanelFrame title="Signaler" back>
+        <Stepped />
+      </PlayerPanelFrame>
+    );
+    fireEvent.click(screen.getByText("cinema.back"));
+    expect(step).toBe(1);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(step).toBe(0);
+    expect(cinemaClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("cinema.back"));
+    expect(cinemaClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("l'assistant de signalement s'en sert", () => {
+    const src = readFileSync(join(process.cwd(), "src/components/reports/ReportWizard.tsx"), "utf8");
+    expect(src).toContain("usePanelBackStep(");
   });
 
   it("laisse Échap à l'élément qui le gère lui-même", async () => {

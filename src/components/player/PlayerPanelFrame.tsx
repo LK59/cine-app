@@ -11,6 +11,7 @@ import { openPanel } from "./playerNav";
 import { usePanelScrollMemory } from "@/lib/panelScrollMemory";
 import { usePlaybackMode } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
+import { PanelBackStepContext } from "@/lib/panelBackStep";
 
 /**
  * L'habillage commun des écrans ouverts depuis le rail — Recherche, Ma liste, Compte.
@@ -133,10 +134,21 @@ export function PlayerPanelFrame({
    * Sauf sur un écran poussé (`back` : Parcourir, l'activité, les signalements), où la flèche et
    * Échap reviennent d'un cran — c'est ce que dit la flèche.
    */
+  //
+  // Et un écran à étapes (l'assistant de signalement) recule d'abord d'une étape — voir
+  // `panelBackStep.ts` (BUREAU-13).
+  const backStep = useRef<(() => boolean) | null>(null);
+  const registerBackStep = useCallback((step: (() => boolean) | null) => {
+    backStep.current = step;
+  }, []);
+  const goBack = useCallback(() => {
+    if (backStep.current?.()) return;
+    cinemaClose(CLOSE_PANELS);
+  }, []);
   const closeWindow = useCallback(() => {
-    if (back) cinemaClose(CLOSE_PANELS);
+    if (back) goBack();
     else openPanel("home", route);
-  }, [back, route]);
+  }, [back, route, goBack]);
   const short = useIsShortViewport();
   const bodyRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -313,7 +325,7 @@ export function PlayerPanelFrame({
           {back && (
             <button
               type="button"
-              onClick={() => cinemaClose(CLOSE_PANELS)}
+              onClick={goBack}
               className="btn btn-ghost -ml-1 mt-0.5 shrink-0 rounded-full px-3 py-2"
             >
               <ArrowLeft size={16} /> {t("cinema.back")}
@@ -374,7 +386,7 @@ export function PlayerPanelFrame({
         {/* La marge que le fondu recouvre au repos : rien ne bouge par rapport à avant. */}
         <div aria-hidden className={short ? "h-2" : "h-4"} />
         <div className="mx-auto w-full" style={{ maxWidth: contentWidth }}>
-          {children}
+          <PanelBackStepContext.Provider value={registerBackStep}>{children}</PanelBackStepContext.Provider>
         </div>
       </div>
     </div>,
