@@ -1984,7 +1984,8 @@ export function PlayerControls({
             </div>
           </div>
           {/* Le son, seul à droite. Au bureau, le curseur se replie et se déplie sous le pointeur ou
-              au clavier (`.player-volume`, globals.css) ; partout ailleurs — doigt, tablette, écran
+              au clavier (`.player-volume`, globals.css) — à gauche du bouton, qui reste sous le
+              pointeur (LECTEUR-13, 15/10/2026) ; partout ailleurs — doigt, tablette, écran
               tactile — il reste déplié, et sur iPhone il n'y a que le bouton, iOS ignorant le
               volume d'une page. Jamais une fonction réservée au survol. Le temps d'une confirmation
               de diffusion, sur un écran étroit, il cède sa place à la pilule qui s'ouvre. */}

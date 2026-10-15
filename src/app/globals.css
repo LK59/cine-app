@@ -1075,6 +1075,14 @@
     width: 5.75rem;
     opacity: 1;
   }
+  /* Le curseur se déplie du côté opposé à l'ancrage : la pilule, collée au bord droit, grandit vers
+     la gauche, et l'icône du son reste sous le pointeur. Dans l'ordre du DOM (bouton puis curseur),
+     elle partait de 82 px vers la gauche au survol et le clic tombait sur le curseur (passe de nuit
+     du 15/10/2026, LECTEUR-13). L'ordre du DOM ne change pas — Tab atteint toujours le bouton
+     d'abord ; au doigt, hors de ce bloc, rien ne change. */
+  .player-volume { flex-direction: row-reverse; }
+  .player-volume-slider { justify-content: flex-end; }
+  .player-volume-slider input { margin-right: 0; margin-left: 0.75rem; }
 }
 
 /* Les onglets du bas : la couleur seule. Leur geste — creux, icône qui résiste, lueur — a laissé

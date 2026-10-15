@@ -1802,6 +1802,26 @@ describe("PlayerControls — la disposition", () => {
     expect(outside).not.toMatch(/\.player-volume-slider\s*\{[^}]*width:\s*0/);
     expect(css.slice(at, css.indexOf("\n}\n", at))).toMatch(/\.player-volume:focus-within \.player-volume-slider/);
   });
+
+  // Passe de nuit du 15/10/2026 (LECTEUR-13) : au survol, la pilule ancrée à droite dépliait son
+  // curseur à droite du bouton et poussait l'icône de 82 px vers la gauche — le clic tombait sur le
+  // curseur. Au pointeur fin, le curseur se déplie à gauche du bouton ; le DOM garde son ordre.
+  it("au pointeur fin, déplie le curseur à gauche du bouton, sans changer l'ordre du clavier", async () => {
+    stubMediaFetches();
+    const { container } = render(<Harness />);
+    await act(async () => {});
+    const mute = nav(container, "mute")!;
+    const slider = nav(container, "volume")!;
+    expect(mute.compareDocumentPosition(slider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync("src/app/globals.css", "utf8");
+    const at = css.indexOf("@media (hover: hover) and (pointer: fine) {\n  .player-volume-slider");
+    const block = css.slice(at, css.indexOf("\n}\n", at));
+    expect(block).toMatch(/\.player-volume\s*\{\s*flex-direction:\s*row-reverse;\s*\}/);
+    // Hors de ce bloc (doigt, tablette), la disposition d'avant.
+    const outside = css.slice(0, at) + css.slice(css.indexOf("\n}\n", at));
+    expect(outside).not.toMatch(/\.player-volume\s*\{[^}]*row-reverse/);
+  });
 });
 
 describe("PlayerControls — passer sur AirPlay", () => {
