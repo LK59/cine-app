@@ -3156,8 +3156,9 @@ function OffsetRow({ label, seconds, onShift }: { label: string; seconds: number
  * L'option retenue d'un menu du lecteur : une coche, comme les menus d'iOS et de l'Apple TV
  * (13/10/2026). Elle était dite par la couleur d'accent sur un texte blanc ; l'accent devenu blanc
  * (§83), la piste choisie ne se distinguait plus des autres. La place est gardée sur chaque ligne
- * pour que les libellés restent alignés.
+ * pour que les libellés restent alignés. `data-option-on` la désigne au menu, qui la fait
+ * défiler dans son cadre à l'ouverture (`LiquidMenu`, LECTEUR-15).
  */
 function OptionCheck({ on }: { on: boolean }) {
-  return <Check size={16} strokeWidth={2.5} aria-hidden className={`mt-0.5 shrink-0 ${on ? "" : "invisible"}`} />;
+  return <Check size={16} strokeWidth={2.5} aria-hidden data-option-on={on ? "" : undefined} className={`mt-0.5 shrink-0 ${on ? "" : "invisible"}`} />;
 }

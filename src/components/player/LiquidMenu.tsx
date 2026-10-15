@@ -101,6 +101,40 @@ function layoutBox(el: HTMLElement, ancestor: Element | null) {
 
 const canAnimate = () => typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.animate === "function";
 
+/**
+ * La ligne retenue (sa coche, `[data-option-on]`) amenée dans le cadre d'une liste qui défile, au
+ * plus près — rien ne bouge si elle y est déjà. Un menu est borné à 280 px : la sixième piste d'un
+ * fichier qui en a six ouvrait le menu Audio sur les cinq premières, la coche hors du cadre, sans
+ * rien qui dise quelle piste jouait (passe de nuit du 15/10/2026, LECTEUR-15).
+ *
+ * Par `scrollTop` sur la liste seule, jamais `scrollIntoView`, qui ferait aussi défiler les
+ * ancêtres — le lecteur, la page dessous. Mesuré en mise en page : la boîte peut déjà porter une
+ * transformation (le geste liquide, un changement de vue), l'échelle est retirée des mesures.
+ */
+export function revealChosen(list: HTMLElement | null) {
+  if (!list || list.scrollHeight <= list.clientHeight + 1) return;
+  const mark = list.querySelector<HTMLElement>("[data-option-on]");
+  if (!mark) return;
+  const row = mark.closest<HTMLElement>("button") ?? mark;
+  if (!list.contains(row)) return;
+  const listBox = list.getBoundingClientRect();
+  const rowBox = row.getBoundingClientRect();
+  const scale = list.offsetHeight > 0 && listBox.height > 0 ? listBox.height / list.offsetHeight : 1;
+  const top = (rowBox.top - listBox.top) / scale - list.clientTop + list.scrollTop;
+  const bottom = top + rowBox.height / scale;
+  if (top < list.scrollTop) list.scrollTop = Math.max(0, top);
+  else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+}
+
+/** `revealChosen` comme habillage : une mesure qui lèverait ne doit jamais emporter le menu. */
+function revealChosenSafely(list: HTMLElement | null) {
+  try {
+    revealChosen(list);
+  } catch {
+    /* le menu s'ouvre en haut de sa liste, comme avant */
+  }
+}
+
 /** La découpe d'une ouverture `p` (0 : la pilule, 1 : le menu entier). */
 function clipAt(p: number, top: number, left: number, pillRadius: number) {
   const q = Math.min(Math.max(p, 0), 1);
@@ -154,6 +188,9 @@ export function LiquidMenu({
       box.style.bottom = `${parent.clientHeight - (p.y + p.h)}px`;
       box.style.maxHeight = `${Math.max(120, Math.min(280, p.y + p.h - 16))}px`;
     }
+    // La hauteur posée, avant toute animation (les lignes visibles qui entrent en fondu sont lues
+    // sur la position de défilement) : la ligne retenue dans le cadre.
+    revealChosenSafely(listEl);
     if (!animated || !anchor) return;
 
     // L'animation n'est qu'un habillage : quoi qu'il arrive en elle, le menu reste un menu. Une
@@ -344,6 +381,8 @@ export function LiquidMenu({
     g.height = after;
     // Une nouvelle hauteur : la fermeture repartira de la bonne découpe.
     g.top = Math.max(0, after - (anchorRef.current?.offsetHeight ?? 0));
+    // La nouvelle vue a sa ligne retenue elle aussi (une liste de sous-titres après « … »).
+    revealChosenSafely(listRef.current);
     if (!canAnimate() || prefersReducedMotion()) return;
     if (after > before) {
       box.animate([{ clipPath: `inset(${after - before}px 0px 0px 0px round ${RADIUS}px)` }, { clipPath: `inset(0px 0px 0px 0px round ${RADIUS}px)` }], {

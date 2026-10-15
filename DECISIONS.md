@@ -1385,7 +1385,8 @@ du geste (15/10/2026 : « Passer l'intro », `data-liquid` sans être une cible 
 clic retenu comme « tombé dans la pilule » — mort depuis le 04/10 ; `PlayerControls-geste-clic.test.tsx`). Les menus du lecteur naissent de la pilule des réglages
 (une surface découpée à sa forme qui s'ouvre sur le ressort ; icône, titre et lignes apparaissent
 en fondu à leur place — l'icône glissait du bouton jusqu'au titre et bougeait encore dans la boîte
-posée), hauts de 280 px au plus ; ils se démontent à l'instant où ils se ferment, et une copie inerte
+posée), hauts de 280 px au plus, ouverts sur leur ligne retenue (`revealChosen`, la coche
+`data-option-on` amenée dans le cadre — 15/10/2026, la sixième piste audio restait hors de vue) ; ils se démontent à l'instant où ils se ferment, et une copie inerte
 joue la fermeture (180 ms, depuis l'état atteint). Un doigt posé hors du menu le referme à l'appui,
 non au clic, et le clic qui suit est retenu (il cachait les commandes). Les menus bougent eux aussi au doigt
 (gonflement, étirement, rebond) sans viser ni arrêter aucun clic (`redirect: false`) : leurs lignes

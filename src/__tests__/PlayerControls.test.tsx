@@ -339,6 +339,45 @@ describe("PlayerControls — le menu", () => {
     expect(root.className).not.toContain("cursor-none");
   });
 
+  // Passe de nuit du 15/10/2026 (LECTEUR-15) : la sixième piste de L'Exorciste choisie, le menu
+  // Audio rouvert montrait les cinq premières — la coche hors du cadre de 280 px.
+  it("s'ouvre sur la piste retenue quand elle est sous le bas de la liste", async () => {
+    stubMediaFetches();
+    const ROW = 48;
+    // `offsetHeight` est un accesseur de jsdom sur ce prototype même : rendu tel quel à la fin.
+    const saved = ["scrollHeight", "clientHeight", "offsetHeight"].map((k) => [k, Object.getOwnPropertyDescriptor(HTMLElement.prototype, k)] as const);
+    const isList = (el: Element) => el.classList.contains("player-menu-list");
+    const rowsOf = (list: Element) => Array.from(list.querySelectorAll("button"));
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get(this: HTMLElement) { return isList(this) ? rowsOf(this).length * ROW : 0; } });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get(this: HTMLElement) { return isList(this) ? 280 : 0; } });
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", { configurable: true, get(this: HTMLElement) { return isList(this) ? 280 : 0; } });
+    const rect = (top: number, height: number) => ({ top, height, bottom: top + height, left: 0, right: 200, width: 200, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    const original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (isList(this)) return rect(100, 280);
+      const list = this.closest(".player-menu-list") as HTMLElement | null;
+      if (list && this.tagName === "BUTTON") return rect(100 + rowsOf(list).indexOf(this as HTMLButtonElement) * ROW - list.scrollTop, ROW);
+      return original.call(this);
+    };
+    try {
+      const tracks = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, label: `Piste ${i + 1}` }));
+      const { container } = render(<Harness audioTracks={tracks} currentAudioId={7} />);
+      await act(async () => {});
+      await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="audio"]')!));
+      const list = container.querySelector<HTMLElement>(".player-menu-list")!;
+      const chosen = list.querySelector("[data-option-on]")!.closest("button")!;
+      expect(chosen.textContent).toContain("Piste 7");
+      // Au plus près : le bas de la ligne retenue sur le bas du cadre.
+      expect(list.scrollTop).toBe(7 * ROW - 280);
+    } finally {
+      Element.prototype.getBoundingClientRect = original;
+      for (const [k, d] of saved) {
+        if (d) Object.defineProperty(HTMLElement.prototype, k, d);
+        else delete (HTMLElement.prototype as unknown as Record<string, unknown>)[k];
+      }
+    }
+  });
+
   it("un appui dans le menu ne le referme pas", async () => {
     stubMediaFetches();
     const { container } = render(<Harness />);
