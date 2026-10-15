@@ -5332,3 +5332,49 @@ inerte puis glissement, défilement, focus, doigt posé, réduction des animatio
 `useRetainedTitle.test.tsx`, `decisions-partagees.test.ts`.
 
 **Décidé le 15/10/2026** (Louis).
+
+## 97. Une coupure en pleine lecture : dite à l'écran, hors du temps regardé, au journal
+
+Relevé le 15/10/2026 (passe de nuit, LECTEUR-4) : trois séances d'un même compte (Windows, *The
+Rookie*, 212 s ; iPhone, *Lucifer*, 129 s et 66 s) figées sans un mot, puis fermées à la croix ; une
+seule ligne `network` en production depuis septembre. Le cas réel est un lien mort alors que
+`navigator.onLine` reste vrai (Wi-Fi sans Internet, 5G morte en itinérance). Reproduit sur une
+instance de test : image figée 100 à 196 s, ni roue, ni mot, ni ligne `stall` ou `network`, et un bilan
+`watched: 261` pour un film avancé de 60 s.
+
+**Règle — temps 1, sans toucher au chemin de lecture.**
+- *Temps regardé* — l'horloge (`WatchedClock`) s'arrête sur l'événement `waiting` de l'élément et repart
+  sur `playing` (ou un `timeupdate` avec de quoi jouer, si un navigateur reprenait sans le dire), dans le
+  lecteur natif et le lecteur serveur. L'attente est indépendante de « en lecture » : elle peut arriver
+  avant que l'hôte ne l'ait dit, et l'image après une pause ne relance rien. La diffusion Chromecast
+  l'excluait déjà (`remote.waiting`).
+- *Le mot* — « Connexion perdue ou instable… » (§78) se dit aussi sous la roue d'une attente en pleine
+  lecture (ni ouverture, ni saut, ni reprise après une pause), au même délai que les autres mots
+  (`WORD_AFTER_MS`, 3 s) et à la même condition (`networkTrouble` : une plage qui réessaie, ou le
+  navigateur hors ligne). Retenu jusqu'à la fin de l'attente : il ne clignote pas entre deux tentatives.
+  Une attente sans tentative en échec reste muette — la roue (ou le fil) des commandes suffit.
+- *Journal* — la ligne `stall` porte `onLine` (ce que dit le navigateur, absent s'il ne dit rien),
+  `netTrouble` (tentatives en échec ou hors ligne) et `relaunch` (« garde 1/4 en attente · échecs 0/3 » :
+  la réserve réseau de `keepThroughNetworkFailure` et les échecs comptés avant l'écran). Les lignes
+  restées en file (`unsentLines`, §42) partent dès l'événement `online`, puis une seconde passe 5 s
+  après (`online` dit l'interface revenue, pas encore le serveur joignable), en plus du tic de la minute.
+
+**Porteurs.** `WatchedClock.stall` / `resume`, `watchElementWaits` (`src/lib/playerSessionTally.ts`) ;
+`stallAt` / `stallUnstable` / `stallWord` (`ExperimentalPlayerHost`) ; `MseSource.networkFacts` ;
+l'effet des envois en retard de `PlaybackProvider`.
+
+**Appelants.** `ExperimentalPlayerHost` et `ActivePlayer` (`PlayerHost.tsx`) pour l'horloge ;
+`ChromecastPlayer` garde sa propre condition.
+
+**Tests.** `playerSessionTally.test.ts` (« s'arrête pendant une attente », `watchElementWaits`),
+`ExperimentalPlayerHost.test.tsx` (« une coupure en pleine lecture » : temps regardé, mot à 3 s, sans
+clignoter, muet sans tentative, hors ligne), `PlayerHost-temps-regarde.test.tsx`,
+`webcodecs-mseSource.test.ts` (« l'échelle des reprises » : `onLine`, `netTrouble`, `relaunch`),
+`unsentLines-online.test.tsx`, `decisions-partagees.test.ts` (« le temps regardé s'arrête pendant une
+attente »).
+
+**Différent exprès.** Le lecteur serveur garde son propre message (« Reconnexion… » devenu « Connexion
+perdue ou instable… », §78) : seul son temps regardé change ici. Le mot reste sous la roue, jamais sur un
+film qui joue.
+
+**Décidé le 15/10/2026.**
