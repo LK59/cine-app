@@ -522,9 +522,18 @@ export const jellyfin = {
       { headers }
     ).then((res) => res.Items),
 
-  /** La configuration du serveur — pour ses seuils de reprise (`MinResumePct`, `MaxResumePct`). */
+  /**
+   * La configuration du serveur — pour ses seuils de reprise (`MinResumePct`, `MaxResumePct`) et la
+   * langue de ses métadonnées (`PreferredMetadataLanguage`, `MetadataCountryCode` : DECISIONS.md §100).
+   */
   getServerConfiguration: () =>
-    fetchJson<{ MinResumePct?: number; MaxResumePct?: number; MinResumeDurationSeconds?: number }>(`${cfg.url}/System/Configuration`, { headers }),
+    fetchJson<{
+      MinResumePct?: number;
+      MaxResumePct?: number;
+      MinResumeDurationSeconds?: number;
+      PreferredMetadataLanguage?: string;
+      MetadataCountryCode?: string;
+    }>(`${cfg.url}/System/Configuration`, { headers }),
 
   /**
    * Le premier épisode (S1·É1) de chaque série, en un appel pour toute la bibliothèque — de quoi

@@ -1,9 +1,11 @@
 import { createTmdbClient } from "@/lib/clients/tmdb";
-import { withPersistentCache } from "@/lib/server-cache";
+import { jellyfin } from "@/lib/clients/jellyfin";
+import { withCache, withPersistentCache } from "@/lib/server-cache";
 import { getTmdbLocale, type Locale } from "@/lib/i18n";
 import { HttpError } from "@/lib/http";
 import type { SonarrEpisodeText } from "@/lib/server-cache";
 import { fileKey } from "@/lib/episodeDisplay";
+import { normalize } from "@/lib/search-natural-query";
 import { isSonarrPending } from "@/lib/sonarrPending";
 
 /**
@@ -87,6 +89,91 @@ export async function fillEpisodeText<T extends EpisodeText>(
         if (isPlaceholderTitle(ep.title) && found.name) ep.title = found.name;
       }
     }
+  }
+}
+
+/**
+ * La langue des métadonnées de Jellyfin — celle dans laquelle il écrit les titres et résumés
+ * d'épisodes : `{ locale: "fr", tmdb: "fr-FR" }`. Lue dans sa configuration (Tableau de bord →
+ * Bibliothèques → langue préférée), gardée dix minutes ; `null` si Jellyfin ne la donne pas — on ne
+ * traduit alors rien plutôt que de deviner.
+ */
+export async function libraryMetadataLanguage(): Promise<{ locale: string; tmdb: string } | null> {
+  try {
+    return await withCache("jf:metadata-language", 10 * 60_000, async () => {
+      const c = await jellyfin.getServerConfiguration();
+      const lang = (c.PreferredMetadataLanguage ?? "").trim().toLowerCase();
+      if (!/^[a-z]{2,3}$/.test(lang)) return null;
+      const country = (c.MetadataCountryCode ?? "").trim().toUpperCase();
+      return { locale: lang, tmdb: /^[A-Z]{2}$/.test(country) ? `${lang}-${country}` : lang };
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** Deux titres d'un même épisode, à la casse, aux accents et à la ponctuation près. */
+const sameTitle = (a: string, b: string) => normalize(a) === normalize(b);
+
+/**
+ * Les épisodes dans la langue de qui regarde, quand ce n'est pas celle de la bibliothèque
+ * (15/10/2026, passe de nuit, BUREAU-15, DECISIONS.md §100).
+ *
+ * Jellyfin écrit ses épisodes dans la langue de ses métadonnées : un compte en anglais, en espagnol
+ * ou en allemand lisait « Veuillez garder votre calme » sous « Season 1 », alors que le titre et le
+ * synopsis de la série, eux, suivaient sa langue (TMDB, §58). TMDB a les épisodes par saison, dans
+ * chaque langue : **une requête par saison et par langue**, gardée une semaine (`seasonText`).
+ *
+ * Remplacer le texte d'un épisode suppose que le numéro du disque soit celui de TMDB. Ce n'est pas
+ * toujours vrai (ordre de diffusion d'un animé, *La Casa de Papel* en parties) : la saison n'est
+ * traduite que si TMDB, **dans la langue de la bibliothèque**, y porte les mêmes titres que Jellyfin
+ * — la moitié au moins de ceux qu'on peut comparer. Cette saison-là est la même pour tous les
+ * comptes, déjà lue par le contrôle de la bibliothèque (§90) ; une saison qu'on ne peut pas vérifier
+ * reste comme avant. Un titre ou un résumé que TMDB n'a pas dans la langue demandée reste celui de
+ * Jellyfin (le repli de toujours) ; un titre de remplissage n'est jamais pris.
+ *
+ * En place ; une panne de Jellyfin ou de TMDB laisse les épisodes tels qu'ils étaient.
+ */
+export async function translateEpisodeText<T extends EpisodeText>(
+  episodes: T[],
+  tmdbTvId: number | null | undefined,
+  locale: Locale
+): Promise<void> {
+  if (!tmdbTvId || episodes.length === 0) return;
+  const library = await libraryMetadataLanguage();
+  if (!library || library.locale === locale) return;
+  const wanted = getTmdbLocale(locale);
+  if (wanted === library.tmdb) return;
+  const bySeason = new Map<number, T[]>();
+  for (const ep of episodes) bySeason.set(ep.seasonNumber, [...(bySeason.get(ep.seasonNumber) ?? []), ep]);
+  // Les saisons en parallèle, quatre à la fois : une série de vingt saisons ouverte pour la première
+  // fois dans une langue ne doit pas attendre vingt allers-retours l'un après l'autre.
+  const seasonsList = [...bySeason.entries()];
+  for (let i = 0; i < seasonsList.length; i += 4) {
+    await Promise.all(
+      seasonsList.slice(i, i + 4).map(async ([seasonNumber, list]) => {
+        const [reference, target] = await Promise.all([
+          seasonText(tmdbTvId, seasonNumber, library.tmdb).catch(() => null),
+          seasonText(tmdbTvId, seasonNumber, wanted).catch(() => null),
+        ]);
+        if (!reference || !target || target.size === 0) return;
+        let comparable = 0;
+        let agreeing = 0;
+        for (const ep of list) {
+          const ref = reference.get(ep.episodeNumber)?.name;
+          if (!ref || isPlaceholderTitle(ep.title)) continue;
+          comparable++;
+          if (sameTitle(ref, ep.title)) agreeing++;
+        }
+        if (comparable === 0 || agreeing * 2 < comparable) return;
+        for (const ep of list) {
+          const found = target.get(ep.episodeNumber);
+          if (!found) continue;
+          if (found.name) ep.title = found.name;
+          if (found.overview) ep.overview = found.overview;
+        }
+      })
+    );
   }
 }
 

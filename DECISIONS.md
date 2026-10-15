@@ -5479,3 +5479,35 @@ Thing* et *La Mouche*. La grille et le Top 10 filtraient déjà par décennie. D
 
 **Tests.** `search-decade.test.ts` (tournures, titres à nombre, filtre de la bibliothèque, « That '70s
 Show »), `search-route.test.ts` (« décennie »), `tmdb-discover-decade.test.ts` (l'adresse).
+
+## 100. Les épisodes dans la langue du compte
+
+**Règle.** Quand la langue du compte n'est pas celle des métadonnées de Jellyfin
+(`PreferredMetadataLanguage` / `MetadataCountryCode` de sa configuration, lus et gardés dix minutes),
+le titre et le résumé de chaque épisode viennent de TMDB dans la langue du compte — **une requête par
+saison et par langue**, gardée une semaine (`seasonText`, `tmdb:season-text:<langue>:<tmdb>:<saison>`,
+la clé et la forme de toujours). Ce que TMDB n'a pas dans cette langue (titre de remplissage, résumé
+vide) reste celui de Jellyfin, puis les trous se comblent comme avant (`fillEpisodeText` : langue du
+compte, puis anglais). Un compte dans la langue de la bibliothèque ne coûte aucun appel de plus et ne
+change pas.
+
+**Seulement si la numérotation est la même.** Une saison n'est traduite que si TMDB, dans la langue
+de la bibliothèque, y porte les mêmes titres que Jellyfin pour la moitié au moins des épisodes
+comparables — sinon le numéro du disque n'est pas celui de TMDB (ordre de diffusion d'un animé, une
+série rangée en parties) et l'on garderait les titres d'autres épisodes. La langue de la bibliothèque
+inconnue (Jellyfin muet) : rien n'est traduit. Les exceptions de §89/§90 tiennent : une série que
+Jellyfin a seule ou qu'on lui a confiée garde son texte ; un épisode réglé par le rattachement de
+Sonarr a déjà le texte TMDB de la langue du compte.
+
+**Pourquoi.** Nuit du 15/10/2026 (BUREAU-15) : en anglais, en espagnol et en allemand, l'interface,
+le titre et le synopsis de *Chernobyl* suivaient la langue du compte (§58), ses épisodes restaient
+« Veuillez garder votre calme ». Décision de Louis le 15/10.
+
+**Porteur.** `translateEpisodeText`, `libraryMetadataLanguage` (`src/lib/episodeFallback.ts`).
+
+**Appelant.** `/api/cinema/series/[jellyfinId]/episodes` (fiches de série, « Plus d'épisodes »,
+épisode suivant du lecteur, qui relit cette liste). **Différent exprès** : « Reprendre »
+(`/api/jellyfin/resume`) et « À suivre » (`/api/cinema/next-up`) gardent le nom de Jellyfin — flux
+de l'accueil gardés sur l'appareil, qu'aucun appel TMDB ne doit ralentir.
+
+**Tests.** `episodes-langue.test.ts`.

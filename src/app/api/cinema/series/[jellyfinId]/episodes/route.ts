@@ -5,7 +5,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { isJellyfinId } from "@/lib/jellyfinPath";
-import { applyAttachedEpisodeText, fillEpisodeText } from "@/lib/episodeFallback";
+import { applyAttachedEpisodeText, fillEpisodeText, translateEpisodeText } from "@/lib/episodeFallback";
 import { arrangeEpisodes, type ArrangedEpisode } from "@/lib/episodeDisplay";
 import { cachedItemProviderIds, cachedSeries, cachedSonarrEpisodeTexts, getProviderIdCI } from "@/lib/server-cache";
 import { catalogueLinks } from "@/lib/sonarrLink";
@@ -139,7 +139,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinI
   // de Papel* rangée comme Netflix (5 parties) recevait, en saison 2, les titres de la saison 2 de TMDB,
   // qui sont ceux de la partie 3 (14/10/2026).
   if (!identity.jellyfinText) {
-    await fillEpisodeText(episodes.filter((e) => !settled.has(e)), identity.tmdbId, locale).catch(() => {});
+    const rest = episodes.filter((e) => !settled.has(e));
+    // Dans la langue de qui regarde quand ce n'est pas celle de la bibliothèque (§100) — les épisodes
+    // réglés par Sonarr ont déjà la leur — puis les trous comblés comme avant.
+    await translateEpisodeText(rest, identity.tmdbId, locale).catch(() => {});
+    await fillEpisodeText(rest, identity.tmdbId, locale).catch(() => {});
   }
 
   const bySeasonNumber = new Map<number, CinemaEpisode[]>();
