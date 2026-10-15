@@ -32,7 +32,12 @@ export function startCatalogueWarm(): void {
       cachedJellyfinFirstEpisodes(),
       cachedJellyfinSeasons(),
       cachedJellyfinRecentEpisodes(),
-    ]);
+    ])
+      // Puis les deux catalogues par leurs propres routes, une fois les listes en mémoire — voir
+      // `selfWarm.ts`. Importé ici et pas en tête : le module tire `node:crypto`.
+      .then(() => import("@/lib/selfWarm"))
+      .then(({ runSelfWarm }) => runSelfWarm())
+      .catch(() => {});
   }, FIRST_READ_DELAY_MS);
   (first as { unref?: () => void }).unref?.();
 }

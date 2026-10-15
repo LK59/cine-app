@@ -8,6 +8,7 @@ import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { isPublicPath } from "@/lib/publicPaths";
 import { verifySessionFull } from "@/lib/session";
 import { castPassFor, castPreflightFor } from "@/lib/castToken";
+import { selfWarmPassFor } from "@/lib/selfWarm";
 import { fromLoopback } from "@/lib/trustedProxy";
 import { sessionDb } from "@/lib/db";
 import { forgetJellyfinToken, jellyfinTokenAlive } from "@/lib/jellyfinToken";
@@ -410,6 +411,9 @@ export async function proxy(req: NextRequest) {
   // La question préalable (CORS) d'un récepteur Chromecast, sur la même adresse et avec le même
   // laissez-passer : elle n'emporte jamais de cookie. La route y répond — DECISIONS.md §64.
   if (await castPreflightFor(req)) return NextResponse.next();
+  // Le serveur qui construit ses deux catalogues au démarrage, sur la boucle locale et avec le jeton
+  // du processus — voir `selfWarm.ts`.
+  if (selfWarmPassFor(req)) return NextResponse.next();
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);

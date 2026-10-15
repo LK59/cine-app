@@ -1,5 +1,7 @@
 import { preload } from "swr";
 import { fetcher, progressKey } from "@/lib/swr";
+import { startEarlyFetch } from "@/lib/earlyFetch";
+import { prefetchSheetBannerNow } from "@/lib/sheetMorph/prefetchBanners";
 
 /**
  * Un préchargement SWR dont l'échec ne va nulle part — le seul `preload` du dépôt.
@@ -55,8 +57,21 @@ export function preloadOutcome<T>(
  * ne partage que la demande encore en vol. Un doigt qui revient sur la même affiche — ou qui la
  * frôle en faisant défiler la rangée — relancerait sinon les deux requêtes à chaque fois.
  */
-export function prefetchTitleSheet(title: { kind: "movie"; radarrId: number; jellyfinItemId: string | null | undefined } | { kind: "series"; sonarrId: number; jellyfinItemId: string | null | undefined }): void {
+export function prefetchTitleSheet(
+  title: ({ kind: "movie"; radarrId: number } | { kind: "series"; sonarrId: number }) & {
+    jellyfinItemId: string | null | undefined;
+    /** Le logo que la fiche affichera — décodé dès l'appui, comme son visuel (`prefetchSheetBannerNow`). */
+    logoUrl?: string | null;
+  }
+): void {
   if (!title.jellyfinItemId) return;
+  // Le logo de la fiche, dès l'appui (15/10/2026) : le visuel partait déjà (`data-sheet-backdrop`),
+  // le logo, servi par TMDB lui aussi, n'arrivait qu'une fois la fiche montée.
+  prefetchSheetBannerNow(title.logoUrl);
+  // L'état « vu » et la position du compte, eux aussi dès l'appui — mais pas par `preload` (voir
+  // plus bas) : par une requête que la fiche ne reprend que dans les trois secondes. Passé ce délai
+  // (un doigt qui frôlait l'affiche en défilant), elle refait la sienne : jamais plus vieille qu'avant.
+  startEarlyFetch(progressKey(title.jellyfinItemId), PROGRESS_EARLY_MAX_AGE_MS);
   // La description seulement, la même pour tout le monde. Pas l'état Jellyfin ni la liste des
   // épisodes : un préchargement jamais consommé reste dans la réserve de SWR et est rendu, des
   // heures plus tard, comme s'il venait d'arriver — un doigt qui frôlait *Dune* en défilant, le film
@@ -73,6 +88,8 @@ export function prefetchTitleSheet(title: { kind: "movie"; radarrId: number; jel
 }
 
 const PREFETCH_AGAIN_MS = 30_000;
+/** Entre l'appui et le montage de la fiche il s'écoule 100 à 300 ms ; trois secondes couvrent un appui long. */
+export const PROGRESS_EARLY_MAX_AGE_MS = 3_000;
 const recentlyPrefetched = new Map<string, number>();
 
 /** Pour les tests : oublier ce qui a déjà été demandé. */
@@ -85,10 +102,11 @@ export function resetTitleSheetPrefetch(): void {
  * écrites une fois pour les films et les séries.
  */
 export function prefetchLibraryItem(item: object): void {
-  const title = item as { radarrId?: unknown; sonarrId?: unknown; jellyfinItemId?: unknown };
+  const title = item as { radarrId?: unknown; sonarrId?: unknown; jellyfinItemId?: unknown; logoUrl?: unknown };
   const jellyfinItemId = typeof title.jellyfinItemId === "string" ? title.jellyfinItemId : null;
-  if (typeof title.radarrId === "number") prefetchTitleSheet({ kind: "movie", radarrId: title.radarrId, jellyfinItemId });
-  else if (typeof title.sonarrId === "number") prefetchTitleSheet({ kind: "series", sonarrId: title.sonarrId, jellyfinItemId });
+  const logoUrl = typeof title.logoUrl === "string" ? title.logoUrl : null;
+  if (typeof title.radarrId === "number") prefetchTitleSheet({ kind: "movie", radarrId: title.radarrId, jellyfinItemId, logoUrl });
+  else if (typeof title.sonarrId === "number") prefetchTitleSheet({ kind: "series", sonarrId: title.sonarrId, jellyfinItemId, logoUrl });
 }
 
 // Warms the SWR cache for a route's main data before navigation actually

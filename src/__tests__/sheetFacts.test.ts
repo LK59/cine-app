@@ -113,20 +113,24 @@ describe("prefetchTitleSheet — l'appui sur une affiche", () => {
   afterEach(() => vi.unstubAllGlobals());
   const urls = () => fetchMock.mock.calls.map((c) => String((c as unknown[])[0]));
 
-  // Seule la description, qui ne bouge pas : un préchargement jamais consommé de l'état Jellyfin
-  // ou des épisodes était servi tel quel des minutes plus tard, à la place de l'état du moment
-  // (chasse aux défauts du 25/09/2026).
-  it("demande la description d'un film, une seule fois, et pas son état Jellyfin", async () => {
+  // Seule la description passe par la réserve de SWR : un préchargement jamais consommé de l'état
+  // Jellyfin ou des épisodes y était servi tel quel des minutes plus tard, à la place de l'état du
+  // moment (chasse aux défauts du 25/09/2026). L'état part depuis le 15/10/2026 par une requête qui
+  // expire en trois secondes (`startEarlyFetch`, vérifiée sous jsdom dans `prefetch-progress-early`) ;
+  // ici, sans fenêtre, il ne part pas du tout.
+  it("demande la description d'un film, une seule fois, et son état Jellyfin hors de SWR", async () => {
     prefetchTitleSheet({ kind: "movie", radarrId: 12, jellyfinItemId: "jf-12" });
     prefetchTitleSheet({ kind: "movie", radarrId: 12, jellyfinItemId: "jf-12" });
     await Promise.resolve();
-    expect(urls()).toEqual(["/api/radarr/movies/12/info"]);
-    expect(urls()).not.toContain(progressKey("jf-12"));
+    // La description par SWR, une fois ; l'état par la requête qui expire (`startEarlyFetch`), une fois.
+    expect(urls().sort()).toEqual(["/api/cinema/progress/jf-12", "/api/radarr/movies/12/info"].sort());
+    expect(urls().filter((u) => u === progressKey("jf-12"))).toHaveLength(1);
   });
 
   it("une série : sa description, pas sa liste d'épisodes", () => {
     prefetchLibraryItem({ sonarrId: 4, jellyfinItemId: "jf-s" });
-    expect(urls()).toEqual(["/api/sonarr/series/4/info"]);
+    expect(urls()).not.toContainEqual(expect.stringContaining("/episodes"));
+    expect(urls().sort()).toEqual(["/api/cinema/progress/jf-s", "/api/sonarr/series/4/info"].sort());
   });
 
   it("rien pour une affiche hors bibliothèque", () => {

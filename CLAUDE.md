@@ -259,7 +259,12 @@ is wrong, and only this header means the viewer's own session is gone.
 or subtitle routes carrying a valid cast pass for that title (`castPassFor`), and since 2026-10-11 the
 CORS `OPTIONS` preflight a Chromecast receiver sends for the same address (`castPreflightFor`, answered
 by the route — DECISIONS §64). Responses served to a cast pass without a session cookie, and only
-those, carry `Access-Control-Allow-Origin: *` without credentials (`castCors.ts`).
+those, carry `Access-Control-Allow-Origin: *` without credentials (`castCors.ts`). **The other one is
+the server itself** (`selfWarm.ts`, since 2026-10-15): at startup it asks its own two catalogue routes
+(`GET /api/cinema/movies`, `/api/cinema/series`) over loopback — peer checked through `x-cine-peer`,
+plus a per-process token in `process.env` — so the routes' own module copies load every title's data
+before the first viewer does (390 ms of route after each deploy otherwise). The answer, the whole
+catalogue with no account's blocked tags removed, never leaves loopback.
 
 **Client addresses come from the connection** (DECISIONS §57). `server-boot/boot.mjs` wraps
 `http.createServer` and writes the socket's address into `x-cine-peer` on every request (overwriting
@@ -588,7 +593,10 @@ dictionaries' values.
   the HTML on every engine** (`earlyFetch.ts`): an inline script in the `(player)` layout starts the
   three bare `fetch`es, and `fetcher` / `cinemaFetcher` take theirs once (`fetchOrEarly`) — our code
   pairs them, not the browser, so one request per address. Not on a page reloaded to reopen a film;
-  not taken past 20 s. The freeze is about not re-asking a question whose answer changes daily, not
+  not taken past 20 s. The same store carries the account's state for a pressed poster
+  (`startEarlyFetch` from `prefetchTitleSheet`, 15/10/2026): the sheet takes it only within 3 s —
+  never SWR's `preload`, whose unconsumed entries were served hours later as fresh (25/09/2026). The
+  pressed title's logo is decoded at the press too, like its backdrop. The freeze is about not re-asking a question whose answer changes daily, not
   about bytes — and splitting the catalogue into a "first screen" payload would buy nothing.
   **Since 2026-10-15 (DECISIONS §96) the two catalogues are re-read on return to the foreground
   once the last successful read is 15 min old** (`useCatalogueRefresh`, `catalogueRefresh.ts`) —
