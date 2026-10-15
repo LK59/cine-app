@@ -453,9 +453,10 @@ export function PlayerDiscoverSheet({
               <CinemaDetailCastLine cast={cast} />
 
             <div data-detail-actions className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
-              {/* La première ligne, celle qui a le focus : « Lire » quand on l'a, « Demander »
+              {/* La première ligne : « Lire » quand on l'a, « Demander »
                   quand on ne l'a pas, l'état de l'attente quand c'est déjà parti. Toujours au
-                  même endroit, toujours avec le même poids. */}
+                  même endroit, toujours avec le même poids. Elle a le focus à l'arrivée, sauf
+                  « Demander » (BUREAU-8, voir `focusFirstAction`). */}
               {data.libraryId !== null ? (
                 <button
                   data-detail-menu
@@ -481,6 +482,8 @@ export function PlayerDiscoverSheet({
               ) : (
                 <button
                   data-detail-menu
+                  // Jamais le premier focus — voir `focusFirstAction`.
+                  data-detail-no-autofocus=""
                   disabled={busy}
                   onClick={() => void request()}
                   className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
