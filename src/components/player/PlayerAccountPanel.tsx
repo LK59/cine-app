@@ -378,7 +378,11 @@ function PlaybackSection() {
 
   return (
     <Section icon={Subtitles} title={t("player.account.playback")}>
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* `grid-cols-1` (une piste `minmax(0, 1fr)`) sous `sm`, et non la piste implicite `auto` :
+          celle-ci prenait la largeur de l'option la plus longue des menus — ils sortaient de la
+          carte sur 375 px et de l'écran sur 320 px, la page défilant de côté (15/10/2026, passe
+          de nuit, MOBILE-11). Rien ne change à partir de `sm`. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <LanguageSelect
           label={t("player.account.audioLanguage")}
           value={data?.audioLanguage ?? null}
