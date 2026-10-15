@@ -5056,3 +5056,84 @@ préparé ailleurs, Safari, allégé ≠ ordinaire), `scene-native.test.tsx`, `a
 `zone-regress-bench.spec.ts` (empreintes avant/après), `integrity-bench.spec.ts` (débit).
 
 **Décidé le 14/10/2026** (Louis).
+
+## 94. Le catalogue se relit au retour au premier plan, et les rangées le montrent sans rien bousculer
+
+**Règle.** Au retour au premier plan (`visibilitychange` vers « visible », et le focus de la fenêtre
+sur ordinateur), si la dernière lecture réussie d'un catalogue a **plus de quinze minutes**
+(`CATALOGUE_REFRESH_AFTER_MS`), les deux catalogues que l'écran tient sont relus, l'un après l'autre.
+Jamais page cachée ; jamais pendant un film (lecteur ouvert, plein écran ou réduit) ni sous la grille
+complète ouverte — la règle est relue à leur fermeture, et une échéance passée pendant un film est
+rattrapée là, une fois ; une seule relecture en vol ; rien d'autre que ces deux catalogues (celui des
+séries, différé, n'est pas demandé pour autant). Pas de bandeau ni de message : un titre arrivé se pose
+dans ses rangées, un titre retiré s'efface.
+
+**Pourquoi.** Le catalogue était figé une fois chargé (relu au lancement et à la reconnexion
+seulement) : une PWA d'iPhone ne se relance presque jamais, elle revient au premier plan. Un film
+supprimé de Radarr restait affiché des heures, un film arrivé dans la journée n'apparaissait qu'au
+redémarrage du téléphone (Louis, 15/10/2026).
+
+**La requête.** Envoyée à part, pas par la revalidation de SWR : l'étiquette du dernier catalogue lu
+part en `If-None-Match`, écrite par la page — `fetch` ne consulte alors pas son cache HTTP et rend le
+304 tel quel (`respondPrepared` le sert déjà). Un 304 ne pose rien, n'analyse rien, ne redessine rien ;
+il date la lecture et l'appareil réécrit sa copie (`renewPersisted`). Un 200 d'une autre étiquette est
+lu une fois l'interface au repos (`whenUiQuiet`), puis posé par `mutate(clé, donnée, { revalidate:
+false })` — le cache de l'appareil le garde comme au lancement (`persistMiddleware`). Une lecture de SWR
+aboutie pendant le vol fait foi (la relecture s'efface). Et la lecture ordinaire de SWR (lancement,
+reconnexion, filet d'une fiche) profite de la même étiquette : le cache HTTP du navigateur y rend un 200
+reconstitué après un 304, et `cinemaFetcher` rend alors l'objet déjà tenu, sans analyser ni comparer un
+mégaoctet de JSON (`catalogueUnchanged`).
+
+**Panne (§92).** Une copie de secours (`stale`) gardée par le serveur **avant** notre dernière lecture
+vraie (`savedAt` ≤ l'heure de son en-tête `Date`) ne remplace pas nos titres : seules ses marques passent
+(bandeau, Lecture refusée), sur les titres tenus — mêmes références, la grille n'a rien à refaire, et la
+relecture de 30 s de la panne ne fabrique pas d'objet neuf. Une copie gardée après (un autre appareil du
+compte a lu plus neuf) passe telle quelle, et au lancement sans lecture vraie la règle de §92 est
+inchangée. L'appareil ne garde jamais une réponse marquée (§92).
+
+**Les rangées** (`useCatalogueRow`). Le glissement des voisines et la carte qui se pose existaient
+(`useFlipGrid`, `CATALOGUE_FLIP`) ; s'y ajoutent, une fois pour toutes les rangées du catalogue :
+- **une carte qui part s'efface sur place** (opacité et échelle, 220 ms, inerte : ni pointeur ni focus),
+  puis ses voisines glissent dans le trou — le placement de « Reprendre » (§86), écrit une fois
+  (`interleaveLeaving`, que `withLeaving` appelle) ; au-delà de huit changements, le fondu de la rangée
+  (`fadeBeyond`) ;
+- **rien ne bouge sous la main** : une rangée qu'on fait défiler (moins de 300 ms depuis le dernier
+  défilement), sous un doigt posé, sous la souris, ou qui tient le focus (clavier, télécommande) garde ce
+  qu'elle montre ; sa mise à jour se joue à son repos. Défiler une rangée ne la redessine pas : l'état
+  « sous la main » n'avertit React que lorsqu'une mise à jour l'attend ;
+- un classement compte ses rangs sur les cartes qui restent (`catalogueRanks`).
+« Réduire les animations » : la rangée est remplacée telle quelle — mais toujours pas sous la main.
+Uniquement transform et opacity.
+
+**La fiche d'un titre retiré** (`useRetainedTitle`). Une fiche ouverte dont le titre sort du catalogue
+ne se démonte pas : le dernier titre résolu pour la même adresse est gardé, marqué `retired`. Sa Lecture
+est refusée par `PlaybackProvider.play` (`playBlockedByRetired`, à côté de `playBlockedByOutage`) avec
+« Ce titre a été retiré de la bibliothèque. » (`cinema.titleRetired`) — rien ne s'ouvre. Une autre
+adresse vers un titre absent reste l'affaire du filet (`useRepairUnresolvedSheet`, §47). Un titre revenu
+redevient le sien.
+
+**Porteurs.** `src/lib/catalogueRefresh.ts` (`CATALOGUE_REFRESH_AFTER_MS`, `catalogueRefreshDue`,
+`catalogueUnchanged`, `noteCatalogueRead`, `reconcileCatalogue`, `refreshCatalogues`) ;
+`src/lib/useCatalogueRefresh.ts` ; `readCatalogueBody` et `cinemaFetcher` (`cinemaPayload.ts`) ;
+`renewPersisted` (`persistentCache.ts`) ; `src/lib/useCatalogueRow.ts` (`useCatalogueRow`,
+`interleaveLeaving`, `catalogueRanks`) ; `src/lib/useRetainedTitle.ts`, `src/lib/retiredTitle.ts`.
+
+**Appelants.** `CinemaClient` et `CinemaMobileClient` (`useCatalogueRefresh(playback.mode !== "closed"
+|| route.browse !== null)`, `useRetainedTitle`, `useRetiredTitleGuard`) ; `CinemaRow`,
+`CinemaSeriesRow`, `CinemaTop10Row`, `PosterRow` et le classement de `MobileTabRows` (`useCatalogueRow`).
+
+**Différent exprès.** La bannière et « À la une » du bureau gardent leur règle (`useHeroOrder`, 25/09) :
+le titre à l'écran y reste, une nouveauté vient au passage suivant. Les rangées de découverte (TMDB, hors
+catalogue) gardent `useFlipGrid` seul. La grille complète ne change pas sous les yeux : la relecture
+attend qu'elle soit refermée. `PERSISTED_CACHE_SCHEMA` est inchangé : aucun type gardé n'a bougé.
+
+**Tests.** `catalogueRefresh.test.ts` (quinze minutes, `If-None-Match`, 304 sans rien poser, interface au
+repos, une seule relecture en vol et une requête à la fois, page cachée ou film, lecture de SWR aboutie
+pendant le vol, copie de secours plus ancienne ou plus neuve, retour de Jellyfin),
+`useCatalogueRefresh.test.tsx` (vrai SWR : 304 sans aucun rendu, 200 à la même étiquette rendu sous
+l'objet tenu, titre arrivé et retiré, page cachée, film puis reprise à la fermeture, focus +
+`visibilitychange` en une requête, copie de secours), `useCatalogueRow.test.tsx` (arrivée, départ
+inerte puis glissement, défilement, focus, doigt posé, réduction des animations, retour d'un titre),
+`useRetainedTitle.test.tsx`, `decisions-partagees.test.ts`.
+
+**Décidé le 15/10/2026** (Louis).

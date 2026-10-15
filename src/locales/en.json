@@ -2323,6 +2323,7 @@
     "removeFromContinue": "Remove from Continue watching",
     "removeFromContinueFailed": "This title couldn't be removed from Continue watching.",
     "titleUnavailable": "This title isn't available in the cinema yet.",
+    "titleRetired": "This title has been removed from the library.",
     "seriesStillWatched": "All its episodes are watched: the series stays in “Watched”.",
     "forYou": "For you",
     "outage": {

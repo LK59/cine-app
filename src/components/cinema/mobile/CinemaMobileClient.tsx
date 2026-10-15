@@ -35,6 +35,9 @@ import { sheetRepairDuring } from "@/lib/catalogueOutage";
 import { CatalogueOutageBanner, CatalogueUnavailable, useCatalogueOutage } from "@/components/cinema/CatalogueOutage";
 import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
+import { useCatalogueRefresh } from "@/lib/useCatalogueRefresh";
+import { catalogueRanks, useCatalogueRow } from "@/lib/useCatalogueRow";
+import { useRetainedTitle, useRetiredTitleGuard } from "@/lib/useRetainedTitle";
 import { top10Label, genreLabel } from "@/lib/top10Label";
 import {
   accountScreenOpen,
@@ -230,6 +233,9 @@ export function CinemaMobileClient() {
   );
   // Jellyfin en panne : le bandeau, la relecture toutes les 30 s, et le bouton Lecture qui le dit (§92).
   const outage = useCatalogueOutage(movies, series);
+  // Les deux catalogues relus au retour au premier plan, passé un quart d'heure — jamais pendant un
+  // film ni sous la grille complète (DECISIONS.md §94, la même règle que sur ordinateur).
+  useCatalogueRefresh(playback.mode !== "closed" || route.browse !== null);
   // Le même réchauffage que sur ordinateur, et le même crochet : c'est une seule décision.
   /**
    * « À suivre » n'appartient pas à un onglet.
@@ -324,12 +330,17 @@ export function CinemaMobileClient() {
    */
   const catalogue = useMemo(() => (byId ? [...byId.values()] : []), [byId]);
 
-  const selected = useMemo(() => {
+  const liveSelected = useMemo(() => {
     const target = sheetTarget(mediaType, route.film, route.serie);
     if (!target) return null;
     const item = (target.type === "series" ? byIdSeries : byIdMovies)?.get(target.id);
     return item ? { item, mediaType: target.type } : null;
   }, [mediaType, route.film, route.serie, byIdMovies, byIdSeries]);
+  // Une fiche ouverte sur un titre que la relecture du catalogue vient de retirer reste ouverte, et
+  // sa Lecture le dit (`useRetainedTitle`, DECISIONS.md §94) — la même règle que sur ordinateur.
+  const sheet = useRetainedTitle(unresolvedSheetRequest(route.film, route.serie), liveSelected);
+  const selected = sheet.item;
+  useRetiredTitleGuard(sheet.retired);
 
   // Le filet : une adresse qui ne mène à aucune fiche ne doit pas laisser l'écran sans
   // navigation. Voir `useRepairUnresolvedSheet` — la cause est corrigée à la source, ceci couvre
@@ -932,14 +943,15 @@ function PosterRowInner<T extends { title: string; posterUrl: string | null; add
   seeAll?: string;
   showNewBadge?: NewBadgeMode;
 }) {
-  // Les affiches glissent quand les données fraîches remplacent celles du cache — voir
-  // `CATALOGUE_FLIP`, la même règle que les rangées du bureau.
+  // Les affiches glissent quand les données fraîches remplacent celles du cache, une carte retirée
+  // s'efface, et rien ne bouge sous le doigt — `useCatalogueRow` (DECISIONS.md §94), la même règle
+  // que les rangées du bureau.
   const track = useRef<HTMLDivElement>(null);
-  useFlipGrid(track, items.map((item) => String(itemId(item))), CATALOGUE_FLIP);
-  if (items.length === 0) return null;
+  const { shown } = useCatalogueRow(track, items, (item) => String(itemId(item)));
+  if (shown.length === 0) return null;
   return (
     <MobileRow label={label} onSeeAll={seeAll === undefined ? undefined : () => openSeeAll(seeAll)} trackRef={track}>
-      {items.map((item) => (
+      {shown.map((item) => (
         // Servie au relâchement du doigt (`useTap`) : juste après un défilement, ou pendant le retour
         // d'une fiche qui se ferme (DECISIONS.md §61), iOS garde parfois le premier `click` — il
         // fallait toucher deux fois l'affiche qu'on venait de refermer.
@@ -969,6 +981,10 @@ function openSeeAll(key: string): void {
 // `memo` perd la généricité de la fonction ; le cast la rend aux appelants sans rien changer à
 // l'exécution.
 const PosterRow = memo(PosterRowInner) as typeof PosterRowInner;
+
+/** Un classement absent : une liste vide stable, pour que la rangée ne la croie pas neuve à chaque rendu. */
+const NO_TITLES: (CinemaMovie | CinemaSeries)[] = [];
+const top10Key = (item: CinemaMovie | CinemaSeries) => String(itemId(item));
 
 /**
  * Une rangée de découverte : les mêmes affiches, avec une pastille sur ce qu'on n'a pas encore.
@@ -1045,8 +1061,10 @@ export const MobileTabRows = memo(function MobileTabRows({
   const { locale } = useLocale();
   // Le classement suit ses données fraîches en glissant, comme les autres rangées.
   const top10Track = useRef<HTMLDivElement>(null);
-  const top10: (CinemaMovie | CinemaSeries)[] = payload?.top10 ?? [];
-  useFlipGrid(top10Track, top10.map((item) => String(itemId(item))), CATALOGUE_FLIP);
+  const top10: (CinemaMovie | CinemaSeries)[] = payload?.top10 ?? NO_TITLES;
+  // La même règle que toute rangée du catalogue : `useCatalogueRow` (DECISIONS.md §94).
+  const top10Row = useCatalogueRow(top10Track, top10, top10Key);
+  const top10Ranks = catalogueRanks(top10Row.shown, top10Row.leaving, top10Key);
   const recentlyAdded: (CinemaMovie | CinemaSeries)[] = payload?.recentlyAdded ?? [];
   const rows = payload?.rows as Record<string, (CinemaMovie | CinemaSeries)[]> | undefined;
   const myListRow = (
@@ -1066,12 +1084,12 @@ export const MobileTabRows = memo(function MobileTabRows({
           découverte, puis les genres — le même ordre que le bureau (08/10/2026, DECISIONS.md §52). */}
       {/* Deux titres au moins : sous Reprendre ; sinon sous les derniers ajouts — `myListGoesLate`. */}
       {!myListGoesLate(myList.length) && myListRow}
-      {top10.length > 0 && (
+      {top10Row.shown.length > 0 && (
         <MobileRow label={top10Label(payload?.top10Theme ?? null, t)} trackRef={top10Track}>
-          {top10.map((item, i) => (
+          {top10Row.shown.map((item, i) => (
             <CinemaTop10Card
               key={itemId(item)}
-              rank={i + 1}
+              rank={top10Ranks[i]}
               title={item.title}
               posterUrl={item.posterUrl}
               addedAt={item.addedAt}

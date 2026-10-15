@@ -2,7 +2,7 @@
 
 import { memo, useRef } from "react";
 import { CinemaTop10Card } from "@/components/cinema/CinemaTop10Card";
-import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
+import { catalogueRanks, useCatalogueRow } from "@/lib/useCatalogueRow";
 import { ROW_CONTAINMENT } from "@/lib/rowContainment";
 
 // Same edge fade as CinemaRow/CinemaSeriesRow — see the doc comment there for why it's a static
@@ -47,20 +47,23 @@ function Top10Row<T extends Top10Item>({
   onFocusItem: (item: T) => void;
   onSelectItem: (item: T) => void;
 }) {
-  // Un classement qui change à l'arrivée des données fraîches : les affiches glissent à leur rang.
+  // Un classement qui change à l'arrivée des données fraîches : les affiches glissent à leur rang,
+  // une carte sortie s'efface, et rien ne bouge sous la main (`useCatalogueRow`, DECISIONS.md §94).
   const track = useRef<HTMLDivElement>(null);
-  useFlipGrid(track, items.map((item) => String(idOf(item))), CATALOGUE_FLIP);
-  if (items.length === 0) return null;
+  const keyOf = (item: T) => String(idOf(item));
+  const { shown, leaving } = useCatalogueRow(track, items, keyOf);
+  const ranks = catalogueRanks(shown, leaving, keyOf);
+  if (shown.length === 0) return null;
 
   return (
     // Mise en page sautée loin de l'écran — voir `ROW_CONTAINMENT`.
     <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ ...ROW_CONTAINMENT, animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
       <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{label}</h2>
       <div ref={track} className="scrollbar-thin flex scroll-smooth items-end gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
-        {items.map((item, i) => (
+        {shown.map((item, i) => (
           <CinemaTop10Card
             key={idOf(item)}
-            rank={i + 1}
+            rank={ranks[i]}
             title={item.title}
             posterUrl={item.posterUrl}
             addedAt={item.addedAt}

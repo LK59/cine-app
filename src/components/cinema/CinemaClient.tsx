@@ -29,6 +29,8 @@ import { CatalogueOutageBanner, CatalogueUnavailable, useCatalogueOutage } from 
 import { useRole } from "@/lib/useRole";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
+import { useCatalogueRefresh } from "@/lib/useCatalogueRefresh";
+import { useRetainedTitle, useRetiredTitleGuard } from "@/lib/useRetainedTitle";
 import { top10Label, genreLabel } from "@/lib/top10Label";
 import {
   useCinemaRoute,
@@ -413,6 +415,9 @@ export function CinemaClient() {
   );
   // Jellyfin en panne : le bandeau, la relecture toutes les 30 s, et le bouton Lecture qui le dit (§92).
   const outage = useCatalogueOutage(movies, series);
+  // Les deux catalogues relus au retour au premier plan, passé un quart d'heure — jamais pendant un
+  // film ni sous la grille complète (DECISIONS.md §94, la même règle que sur téléphone).
+  useCatalogueRefresh(playback.mode !== "closed" || route.browse !== null);
   const { isReadOnly } = useRole();
   // Les films sont là : on peut préparer les séries sans rien retarder. Voir le crochet.
 
@@ -555,7 +560,13 @@ export function CinemaClient() {
   // Which sheet is open is read back out of the URL, not held here: that's what makes Back close
   // it. Until the payload has loaded (a cold deep link into a title) the lookup simply finds
   // nothing and the sheet opens as soon as the data lands.
-  const selectedItem = route.film !== null ? moviesById.get(route.film) ?? null : null;
+  // Une fiche ouverte sur un titre que la relecture du catalogue vient de retirer reste ouverte, et
+  // sa Lecture le dit (`useRetainedTitle`, DECISIONS.md §94).
+  const filmSheet = useRetainedTitle(
+    route.film !== null ? `film=${route.film}` : null,
+    route.film !== null ? moviesById.get(route.film) ?? null : null
+  );
+  const selectedItem = filmSheet.item;
   // Before you touch anything, the hero cycles through the latest arrivals instead of sitting on
   // one fixed pick — the same carousel (and the same 8s cadence) as the dashboard's own hero.
   // The moment a card takes focus it wins and the rotation stops: this pane's job from then on
@@ -617,7 +628,12 @@ export function CinemaClient() {
   // back and forth, same as Netflix's own Movies/TV Shows toggle.
   const [seriesFocusedItem, setSeriesFocusedItem] = useState<CinemaSeries | null>(null);
   const heroKind = heroKindFor(heroFocus, mediaType);
-  const seriesSelectedItem = route.serie !== null ? seriesById.get(route.serie) ?? null : null;
+  const serieSheet = useRetainedTitle(
+    route.serie !== null ? `serie=${route.serie}` : null,
+    route.serie !== null ? seriesById.get(route.serie) ?? null : null
+  );
+  const seriesSelectedItem = serieSheet.item;
+  useRetiredTitleGuard(filmSheet.retired || serieSheet.retired);
 
   // Le même filet que sur téléphone : une adresse qui ne mène à aucune fiche s'efface. Le rail
   // étant permanent ici, le symptôme visible y est moindre — mais l'adresse est fausse des deux

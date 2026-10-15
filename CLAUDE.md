@@ -555,6 +555,13 @@ dictionaries' values.
   "1.4 MB" and that raw figure made the payload look like a bottleneck it is not. It is half the
   JavaScript bundle. The freeze is about not re-asking a question whose answer changes daily, not
   about bytes — and splitting the catalogue into a "first screen" payload would buy nothing.
+  **Since 2026-10-15 (DECISIONS §94) the two catalogues are re-read on return to the foreground
+  once the last successful read is 15 min old** (`useCatalogueRefresh`, `catalogueRefresh.ts`) —
+  not through SWR's focus revalidation: a hand-sent `If-None-Match` gets a real 304 that touches
+  nothing, never during a film or under the full grid (re-checked when they close), one request at
+  a time; a `stale` fallback (§92) older than the held catalogue only lends its marks. Rows show the
+  change through `useCatalogueRow` (arrival settles, departure fades, nothing moves under a finger,
+  a scroll or focus); an open sheet on a removed title stays and its Play says so (`useRetainedTitle`).
   Since 2026-10-08 the catalogue also carries what a sheet and the desktop banner used to fetch
   per title (DECISIONS §55): `tagline`, `trailerKey`, `castNames` (from the same TMDB call as the
   translations, `append_to_response=translations,videos,credits`), and for series `episodeRuntime`,

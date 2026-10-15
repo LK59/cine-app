@@ -17,8 +17,10 @@ export const fetcher = async (url: string) => {
 /**
  * Les deux flux qui vieillissent pendant qu'on regarde ailleurs.
  *
- * Tout le reste du catalogue est figé volontairement — il ne change qu'au rythme des imports, et
- * le recharger au retour coûterait 1,4 Mo pour rien. Ces deux-là sont l'exception : la position
+ * Le reste du catalogue ne se relit pas au focus par SWR — il ne change qu'au rythme des imports.
+ * Depuis le 15/10/2026, il se relit au retour au premier plan passé un quart d'heure, par une
+ * requête conditionnelle à part (`useCatalogueRefresh`, DECISIONS.md §94). Ces deux-là sont relus à
+ * chaque retour : la position
  * d'un film et l'épisode qui attend sont exactement ce qui a bougé pendant que le téléphone
  * dormait, ou pendant qu'on regardait la même série sur la télé.
  */

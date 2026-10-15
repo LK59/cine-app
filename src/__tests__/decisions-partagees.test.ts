@@ -1294,3 +1294,36 @@ describe("la zone illisible : un motif, une détection, un relais préparé (§9
     expect(lire("src/components/PlayerHost.tsx")).toMatch(/takeOrdinaryPrewarm\(/);
   });
 });
+
+describe("le catalogue relu au premier plan : une règle, une rangée, une fiche gardée (§94)", () => {
+  // DECISIONS.md §94. Le bureau et le téléphone relisent le catalogue par le même crochet, leurs
+  // rangées l'affichent par le même (entrée, sortie, rien sous la main), et une fiche ouverte sur un
+  // titre retiré reste ouverte par le même.
+  const ACCUEILS = ["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"];
+
+  it.each(ACCUEILS)("%s relit par useCatalogueRefresh et garde la fiche par useRetainedTitle", (f) => {
+    const src = lire(f);
+    expect(src).toMatch(/useCatalogueRefresh\(playback\.mode !== "closed" \|\| route\.browse !== null\)/);
+    expect(src).toMatch(/useRetainedTitle\(/);
+    expect(src).toMatch(/useRetiredTitleGuard\(/);
+  });
+
+  it("les rangées du catalogue passent par useCatalogueRow, jamais par useFlipGrid seul", () => {
+    for (const f of ["src/components/cinema/CinemaRow.tsx", "src/components/cinema/CinemaSeriesRow.tsx", "src/components/cinema/CinemaTop10Row.tsx"]) {
+      expect([f, /useCatalogueRow\(/.test(lire(f)), /useFlipGrid\(/.test(lire(f))]).toEqual([f, true, false]);
+    }
+    const mobile = lire("src/components/cinema/mobile/CinemaMobileClient.tsx");
+    // Les affiches et le classement ; la découverte (TMDB, hors catalogue) garde `useFlipGrid`.
+    expect(mobile.match(/useCatalogueRow\(/g)?.length).toBe(2);
+    expect(mobile.match(/useFlipGrid\(/g)?.length).toBe(1);
+  });
+
+  it("le placement des cartes partantes n'est écrit qu'une fois (Reprendre et le catalogue)", () => {
+    expect(lire("src/lib/useContinueRow.ts")).toMatch(/interleaveLeaving</);
+  });
+
+  it("la Lecture d'un titre retiré est refusée par PlaybackProvider, à côté de celle de la panne", () => {
+    const src = lire("src/components/PlaybackProvider.tsx");
+    expect(src).toMatch(/if \(playBlockedByOutage\(\)\) return;[\s\S]{0,200}if \(playBlockedByRetired\(\)\) return;/);
+  });
+});
