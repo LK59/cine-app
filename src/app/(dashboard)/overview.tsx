@@ -16,6 +16,11 @@ export async function Overview() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
 
+  // Le proxy renvoie déjà un compte ordinaire au cinéma (`ADMIN_ONLY_PAGES`) ; cette garde-ci
+  // empêche seulement que la charge utile de `/api/dashboard` — refusée à ce compte par l'API —
+  // reparte un jour dans le HTML si la page sortait de la liste (BUREAU-14, 15/10/2026).
+  if (session?.role !== "admin") return <DashboardClient initialData={undefined} />;
+
   let initialData: DashboardPayload | undefined;
   try {
     initialData = await buildDashboardPayload(session);

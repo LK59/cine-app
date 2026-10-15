@@ -207,6 +207,44 @@ function isAdminOnlyRead(pathname: string): boolean {
 }
 
 /**
+ * Les pages de la gestion — le groupe `(dashboard)` — réservées à l'administrateur.
+ *
+ * Les API qu'elles lisent étaient refusées à un compte ordinaire (ci-dessus), mais les pages, elles,
+ * restaient ouvertes : `/gestion` se rend côté serveur (`Overview` → `buildDashboardPayload`) et
+ * glissait dans le HTML ce que `/api/dashboard` refuse — versions des services, compteurs, derniers
+ * imports titre par titre, l'erreur de qBittorrent. Constaté le 15/10/2026 avec un compte ordinaire
+ * qui tapait l'adresse (passe de nuit, BUREAU-14) ; un titre caché par un tag bloqué (§54) y sortait
+ * en clair. Aucun écran du cinéma ne mène un compte ordinaire ici (le bouton « Gestion » du panneau
+ * Compte n'est rendu qu'à l'administrateur), donc on le renvoie au cinéma.
+ *
+ * Écrit en premiers segments plutôt que page par page : une nouvelle page sous `/radarr/…` est
+ * couverte d'office. Un test liste les `page.tsx` du groupe et échoue si l'un d'eux n'est pas pris.
+ */
+const ADMIN_ONLY_PAGES = new Set([
+  "gestion",
+  "bazarr",
+  "calendar",
+  "controle",
+  "health",
+  "jackett",
+  "jellyfin",
+  "jellyseerr",
+  "parametres",
+  "person",
+  "qbittorrent",
+  "radarr",
+  "sonarr",
+  "stats",
+  "timeline",
+]);
+
+export function isAdminOnlyPage(pathname: string): boolean {
+  if (pathname.startsWith("/api/")) return false;
+  const first = pathname.split("/")[1] ?? "";
+  return ADMIN_ONLY_PAGES.has(first);
+}
+
+/**
  * Les adresses que le lecteur a portées avant d'être la racine.
  *
  * Il a été `/cinema`, puis `/player`, et il est maintenant l'application elle-même : c'est sur lui
@@ -388,6 +426,11 @@ export async function proxy(req: NextRequest) {
   }
   if (session.role !== "admin" && isAdminOnlyRead(pathname)) {
     return NextResponse.json({ error: "Action réservée à l'administrateur" }, { status: 403 });
+  }
+  // Une redirection et non un 403 : c'est une page, tapée ou restée en favori — le cinéma est la
+  // bonne réponse à qui n'a pas la gestion. Voir `ADMIN_ONLY_PAGES`.
+  if (session.role !== "admin" && isAdminOnlyPage(pathname)) {
+    return NextResponse.redirect(new URL("/", req.url));
   }
 
   /**
