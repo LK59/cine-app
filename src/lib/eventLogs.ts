@@ -57,6 +57,8 @@ export function logStartupTiming(fields: {
   resumeMB?: number;
   storageTimedOut?: boolean;
   storageMode?: string;
+  /** Les requêtes de l'ouverture vues par le navigateur — voir `routeTimingsOf` (persistentCache.ts). */
+  routes?: Record<string, Record<string, number>>;
 }): void {
   try {
     appendJsonLine(STARTUP_LOG(), { timestamp: new Date().toISOString(), kind: "ouverture", ...fields }, { keep: EVENT_LOG_KEEP });

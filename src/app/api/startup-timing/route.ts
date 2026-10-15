@@ -36,6 +36,31 @@ function continueOf(body: Record<string, unknown>): Record<string, number | bool
   return out;
 }
 
+/**
+ * Les requêtes de l'ouverture vues par le navigateur (15/10/2026, `routeTimingsOf`) : les quatre
+ * routes connues, leurs champs connus, bornés ; le reste tombe.
+ */
+const TIMED_ROUTE_NAMES = new Set(["movies", "series", "resume", "nextUp"]);
+const ROUTE_FIELDS = ["startMs", "waitMs", "appMs", "readMs"] as const;
+
+function routesOf(value: unknown): Record<string, Record<string, number>> | null {
+  if (!value || typeof value !== "object") return null;
+  const out: Record<string, Record<string, number>> = {};
+  for (const [name, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!TIMED_ROUTE_NAMES.has(name) || !raw || typeof raw !== "object") continue;
+    const fields = raw as Record<string, unknown>;
+    const route: Record<string, number> = {};
+    for (const key of ROUTE_FIELDS) {
+      const n = ms(fields[key]);
+      if (n !== null) route[key] = n;
+    }
+    const kB = fields.kB;
+    if (typeof kB === "number" && Number.isInteger(kB) && kB >= 0 && kB < 1_000_000) route.kB = kB;
+    if (Object.keys(route).length > 0) out[name] = route;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 const PERSIST_OUTCOMES = new Set(["accordé", "déjà", "refusé", "ignoré"]);
 
 /**
@@ -67,6 +92,7 @@ export async function POST(req: NextRequest) {
   if (!startupTimingAllowed(session.u)) return new NextResponse(null, { status: 429 });
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: "Corps invalide" }, { status: 400 });
+  const routes = routesOf(body.routes);
   logStartupTiming({
     user: session.jfUser ?? session.u,
     device: requestDeviceLabel(req),
@@ -83,6 +109,7 @@ export async function POST(req: NextRequest) {
     // envoyées (`beforeHidden`, persistentCache.ts), et ceci dit pourquoi elles manquent.
     ...(ms(body.hiddenAtMs) !== null ? { hiddenAtMs: ms(body.hiddenAtMs) as number } : {}),
     standalone: body.standalone === true,
+    ...(routes ? { routes } : {}),
     ...continueOf(body),
     ...storageOf(body.storage),
   });

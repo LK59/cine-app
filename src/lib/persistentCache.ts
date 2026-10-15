@@ -311,6 +311,7 @@ export async function hydrateFromDisk(account: string | null, target: Hydrator, 
   currentAccount = account;
   timing.startedAt = nowMs();
   watchVisibility();
+  watchRoutes();
   if (!account) {
     resolveReady?.();
     return 0;
@@ -599,6 +600,76 @@ function watchVisibility(): void {
   });
 }
 
+/**
+ * Les requêtes de l'ouverture, vues par le navigateur (15/10/2026).
+ *
+ * `networkMs` disait quand le catalogue arrivait, pas pourquoi si tard : 1,2 à 2,2 s après le
+ * démarrage du code (médianes de la semaine), sans rien pour séparer le départ tardif de la requête,
+ * le travail du serveur (`Server-Timing`, voir `timedRoute`) et la route jusqu'à lui. Par requête :
+ * `startMs` (départ, depuis la navigation), `waitMs` (départ → premier octet), `appMs` (la route
+ * elle-même), `readMs` (premier → dernier octet), `kB` (compressés ; absent d'un 304 ou d'un cache).
+ */
+const TIMED_ROUTES: Readonly<Record<string, string>> = {
+  movies: MOVIES_CATALOGUE_KEY,
+  series: SERIES_CATALOGUE_KEY,
+  resume: RESUME_FEED_KEY,
+  nextUp: "/api/cinema/next-up",
+};
+
+export type RouteTimings = Record<string, Record<string, number>>;
+
+/** La première requête de chaque route de l'ouverture — finie avant tout passage en arrière-plan. */
+export function routeTimingsOf(entries: readonly PerformanceResourceTiming[], hiddenAt: number | null): RouteTimings {
+  const out: RouteTimings = {};
+  for (const [name, path] of Object.entries(TIMED_ROUTES)) {
+    const entry = entries.find((e) => {
+      try {
+        return new URL(e.name, "http://x").pathname === path;
+      } catch {
+        return false;
+      }
+    });
+    if (!entry || (hiddenAt !== null && entry.responseEnd >= hiddenAt)) continue;
+    const t: Record<string, number> = { startMs: Math.round(entry.startTime) };
+    if (entry.responseStart > 0) {
+      t.waitMs = Math.round(entry.responseStart - entry.startTime);
+      t.readMs = Math.round(entry.responseEnd - entry.responseStart);
+    }
+    const app = entry.serverTiming?.find((s) => s.name === "app");
+    if (app) t.appMs = Math.round(app.duration);
+    if (entry.encodedBodySize > 0) t.kB = Math.round(entry.encodedBodySize / 1024);
+    out[name] = t;
+  }
+  return out;
+}
+
+/**
+ * Un observateur plutôt qu'une lecture à la fin : le tampon des mesures du navigateur s'arrête à
+ * 250 entrées, et un accueil posé depuis le cache demande ses affiches avant que le catalogue frais
+ * réponde. `buffered` rattrape ce qui est parti avant l'installation (le préchargement du layout).
+ */
+const routeEntries: PerformanceResourceTiming[] = [];
+let watchingRoutes = false;
+
+function watchRoutes(): void {
+  if (watchingRoutes || typeof PerformanceObserver === "undefined") return;
+  watchingRoutes = true;
+  const paths = new Set(Object.values(TIMED_ROUTES));
+  try {
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries() as PerformanceResourceTiming[]) {
+        try {
+          if (paths.has(new URL(entry.name).pathname)) routeEntries.push(entry);
+        } catch {
+          /* une adresse illisible n'est pas une des nôtres */
+        }
+      }
+    }).observe({ type: "resource", buffered: true });
+  } catch {
+    /* un navigateur sans observateur : la ligne part sans `routes` */
+  }
+}
+
 /** Une mesure prise avant tout passage en arrière-plan, seule à valoir quelque chose. */
 function beforeHidden(ms: number | null): number | null {
   return ms !== null && (firstHiddenAt === null || ms < firstHiddenAt) ? ms : null;
@@ -668,7 +739,9 @@ function reportTiming(): void {
   };
   const send = (storage: Record<string, string | number | boolean>) => {
     try {
-      const body = JSON.stringify({ ...fields, storage });
+      // Lues au départ de la ligne, pas avant l'attente du stockage : l'observateur a eu le temps
+      // de recevoir la dernière requête.
+      const body = JSON.stringify({ ...fields, routes: routeTimingsOf(routeEntries, firstHiddenAt), storage });
       // L'indice tactile : sans lui, un iPad s'inscrit « Mac » au journal (`deviceLabel.ts`).
       void fetch("/api/startup-timing", { method: "POST", headers: { "Content-Type": "application/json", ...touchHintHeaders() }, body, keepalive: true }).catch(() => {});
     } catch {

@@ -16,6 +16,7 @@ import { dailyTop10Db } from "@/lib/db";
 import type { HydratedPayload } from "@/lib/cinemaPayload";
 import { toDynamicRange, type VideoQuality } from "@/lib/videoQuality";
 import type { RadarrMovie } from "@/lib/clients/radarr";
+import { timedRoute } from "@/lib/serverTiming";
 
 export interface CinemaMovie {
   /**
@@ -213,7 +214,10 @@ function videoQualityOf(m: RadarrMovie): VideoQuality | undefined {
  * existe déjà pour ce jour-là ; le prix à payer sera un cache par compte au lieu d'un seul, pour
  * une charge utile qui ne se partagera plus.
  */
-export async function GET(req: Request) {
+// Le temps de la route, dit au navigateur pour la ligne d'ouverture — voir `timedRoute`.
+export const GET = timedRoute(getMovies);
+
+async function getMovies(req: Request) {
   try {
     const [movies, jellyfinMovies] = await Promise.all([cachedMovies(), cachedJellyfinMoviesAdmin()]);
 

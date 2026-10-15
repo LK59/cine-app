@@ -93,4 +93,23 @@ describe("POST /api/startup-timing", () => {
     expect((await post(new Error("pas du JSON"))).status).toBe(400);
     expect(mockLog).not.toHaveBeenCalled();
   });
+
+  it("garde les requêtes de l'ouverture connues, bornées, et rien d'autre (15/10/2026)", async () => {
+    await post({
+      cacheUsed: false,
+      routes: {
+        movies: { startMs: 410, waitMs: 1240, appMs: 313, readMs: 241, kB: 118, extra: 5 },
+        resume: { startMs: -1, waitMs: "200" },
+        hero: { startMs: 3 },
+        nextUp: "non",
+      },
+    });
+    const line = mockLog.mock.calls.at(-1)![0];
+    expect(line.routes).toEqual({ movies: { startMs: 410, waitMs: 1240, appMs: 313, readMs: 241, kB: 118 } });
+  });
+
+  it("n'écrit pas de champ `routes` quand rien n'y est lisible", async () => {
+    await post({ cacheUsed: false, routes: { resume: { startMs: -1 } } });
+    expect(mockLog.mock.calls.at(-1)![0]).not.toHaveProperty("routes");
+  });
 });

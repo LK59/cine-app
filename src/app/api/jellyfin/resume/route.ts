@@ -7,8 +7,12 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { catalogueLinks, cinemaHrefOf } from "@/lib/sonarrLink";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { libraryIndex, withoutWatched } from "@/lib/watched";
+import { timedRoute } from "@/lib/serverTiming";
 
-export async function GET(req: NextRequest) {
+// Le temps de la route, dit au navigateur pour la ligne d'ouverture — voir `timedRoute`.
+export const GET = timedRoute(getResume);
+
+async function getResume(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
   if (!session?.jfId) {

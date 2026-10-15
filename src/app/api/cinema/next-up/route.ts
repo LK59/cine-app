@@ -6,6 +6,7 @@ import { verifySessionFull } from "@/lib/session";
 import { jellyfin, type JellyfinItem } from "@/lib/clients/jellyfin";
 import { seriesCatalogueIds } from "@/lib/sonarrLink";
 import { libraryIndex, withoutWatched } from "@/lib/watched";
+import { timedRoute } from "@/lib/serverTiming";
 
 export interface CinemaNextUpItem {
   jellyfinItemId: string;
@@ -52,7 +53,10 @@ function toNextUpItem(item: JellyfinItem, sonarrId: number | null, lastPlayedAt:
 // Jellyfin's global NextUp feed (see jellyfin.getNextUpGlobal's own doc comment) is used directly
 // rather than cross-referenced against Sonarr, same reasoning as the episode-browser route: every
 // item it returns is by definition already downloaded and playable.
-export async function GET(req: NextRequest) {
+// Le temps de la route, dit au navigateur pour la ligne d'ouverture — voir `timedRoute`.
+export const GET = timedRoute(getNextUp);
+
+async function getNextUp(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
   if (!session?.jfId) return NextResponse.json({ items: [] });

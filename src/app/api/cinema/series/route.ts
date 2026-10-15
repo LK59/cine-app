@@ -18,6 +18,7 @@ import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRail
 import { dailyTop10Db } from "@/lib/db";
 import type { HydratedPayload } from "@/lib/cinemaPayload";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
+import { timedRoute } from "@/lib/serverTiming";
 
 export interface CinemaSeries {
   /**
@@ -163,7 +164,10 @@ async function toCinemaSeries(
  * deux comptages sont écrits : le défaut de 10.11, sa correction en 12, et pourquoi on garde la
  * vue serveur malgré tout.
  */
-export async function GET(req: Request) {
+// Le temps de la route, dit au navigateur pour la ligne d'ouverture — voir `timedRoute`.
+export const GET = timedRoute(getSeries);
+
+async function getSeries(req: Request) {
   try {
     const [series, jellyfinSeries, firstEpisodes, seasons, recentEpisodes] = await Promise.all([
       cachedSeries(),
