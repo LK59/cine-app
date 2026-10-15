@@ -571,8 +571,13 @@ dictionaries' values.
   JavaScript bundle. Remeasured on 2026-10-15 over 812 films, with taglines, trailers and cast added (§55):
   1 MB raw, 381 KB gzip, **297 KB brotli** — `respondPrepared` serves brotli (quality 11,
   computed once per version off the main thread, gzip until it is ready). The opening's wait on an
-  iPhone was not the size, though: the catalogue request left ~1 s after the code started (no
-  preload on WebKit, see the `(player)` layout) and then took ~0.3 s (`routes` in startup.log). The freeze is about not re-asking a question whose answer changes daily, not
+  iPhone was not the size, though: the catalogue request left ~1 s after the code started (the
+  `<link rel="preload">` was off on WebKit, which downloaded it twice) and then took ~0.3 s
+  (`routes` in startup.log). **Since 8.65.3 the catalogue, « Reprendre » and « À suivre » leave with
+  the HTML on every engine** (`earlyFetch.ts`): an inline script in the `(player)` layout starts the
+  three bare `fetch`es, and `fetcher` / `cinemaFetcher` take theirs once (`fetchOrEarly`) — our code
+  pairs them, not the browser, so one request per address. Not on a page reloaded to reopen a film;
+  not taken past 20 s. The freeze is about not re-asking a question whose answer changes daily, not
   about bytes — and splitting the catalogue into a "first screen" payload would buy nothing.
   **Since 2026-10-15 (DECISIONS §96) the two catalogues are re-read on return to the foreground
   once the last successful read is 15 min old** (`useCatalogueRefresh`, `catalogueRefresh.ts`) —
