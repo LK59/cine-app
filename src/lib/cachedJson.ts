@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { gzipSync } from "node:zlib";
+import { brotliCompress, constants, gzipSync } from "node:zlib";
+import { playlistEncodingFor } from "@/lib/playlistEncoding";
 
 /**
  * Répondre en JSON sans renvoyer ce que le navigateur a déjà.
@@ -24,6 +25,44 @@ export interface Prepared {
   json: string;
   etag: string;
   gzip: Buffer;
+  /** Le même corps en brotli, une fois calculé — voir `startBrotli`. */
+  br?: Buffer;
+  brStarted?: boolean;
+}
+
+/**
+ * Brotli au niveau maximal, hors du fil principal (15/10/2026).
+ *
+ * Le catalogue des films : 1 Mo de JSON, 381 Ko en gzip, 297 Ko en brotli 11 (−22 %), retéléchargé
+ * au moins une fois par jour (le classement du jour est dans la charge) — et c'est le plus gros
+ * envoi de l'ouverture, en 4G à l'étranger. Mesuré sur le vrai catalogue : 1,7 s de calcul au
+ * niveau 11, 94 ms au niveau 9 pour 320 Ko seulement. Le niveau 11 coûte donc trop pour une
+ * réponse, mais rien une fois par version : il tourne dans le pool de libuv, et la réponse part en
+ * gzip comme avant tant qu'il n'a pas fini. Une charge sous 1 Kio ne vaut pas la peine.
+ */
+const BROTLI_MIN_BYTES = 1024;
+
+function startBrotli(p: Prepared): void {
+  if (p.brStarted || p.json.length < BROTLI_MIN_BYTES) return;
+  p.brStarted = true;
+  try {
+    brotliCompress(
+      p.json,
+      {
+        params: {
+          [constants.BROTLI_PARAM_QUALITY]: constants.BROTLI_MAX_QUALITY,
+          [constants.BROTLI_PARAM_MODE]: constants.BROTLI_MODE_TEXT,
+          [constants.BROTLI_PARAM_SIZE_HINT]: Buffer.byteLength(p.json),
+        },
+      },
+      (err, out) => {
+        // Un échec laisse gzip, comme avant ; rien à journaliser pour une économie manquée.
+        if (!err) p.br = out;
+      }
+    );
+  } catch {
+    /* idem */
+  }
 }
 
 const prepared = new Map<string, Prepared>();
@@ -65,7 +104,8 @@ export function cachedJson(req: Request, key: string, payload: unknown): Respons
 }
 
 /** Répondre une charge utile déjà préparée : étiquette, 304, compression. */
-export function respondPrepared(req: Request, { json, etag, gzip }: Prepared): Response {
+export function respondPrepared(req: Request, p: Prepared): Response {
+  const { json, etag, gzip } = p;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json; charset=utf-8",
@@ -82,7 +122,17 @@ export function respondPrepared(req: Request, { json, etag, gzip }: Prepared): R
     return new Response(null, { status: 304, headers });
   }
 
-  if ((req.headers.get("accept-encoding") ?? "").includes("gzip")) {
+  const acceptEncoding = req.headers.get("accept-encoding");
+  if (playlistEncodingFor(acceptEncoding) === "br") {
+    if (p.br) {
+      return new Response(new Uint8Array(p.br), {
+        headers: { ...headers, "Content-Encoding": "br", "Content-Length": String(p.br.byteLength) },
+      });
+    }
+    startBrotli(p);
+  }
+
+  if ((acceptEncoding ?? "").includes("gzip")) {
     return new Response(new Uint8Array(gzip), {
       headers: { ...headers, "Content-Encoding": "gzip", "Content-Length": String(gzip.byteLength) },
     });

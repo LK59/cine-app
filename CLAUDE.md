@@ -568,7 +568,11 @@ dictionaries' values.
   of the compressed size (without them it is 28 KB, since URLs and repeated structure compress to
   nothing while prose does not). The number to quote is the compressed one; an earlier note said
   "1.4 MB" and that raw figure made the payload look like a bottleneck it is not. It is half the
-  JavaScript bundle. The freeze is about not re-asking a question whose answer changes daily, not
+  JavaScript bundle. Remeasured on 2026-10-15 over 812 films, with taglines, trailers and cast added (§55):
+  1 MB raw, 381 KB gzip, **297 KB brotli** — `respondPrepared` serves brotli (quality 11,
+  computed once per version off the main thread, gzip until it is ready). The opening's wait on an
+  iPhone was not the size, though: the catalogue request left ~1 s after the code started (no
+  preload on WebKit, see the `(player)` layout) and then took ~0.3 s (`routes` in startup.log). The freeze is about not re-asking a question whose answer changes daily, not
   about bytes — and splitting the catalogue into a "first screen" payload would buy nothing.
   **Since 2026-10-15 (DECISIONS §96) the two catalogues are re-read on return to the foreground
   once the last successful read is 15 min old** (`useCatalogueRefresh`, `catalogueRefresh.ts`) —
