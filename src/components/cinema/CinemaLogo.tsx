@@ -96,6 +96,7 @@ export function CinemaLogo({
   onError,
   fallback = null,
   shadow = true,
+  carry = false,
 }: {
   src: string;
   alt: string;
@@ -119,6 +120,8 @@ export function CinemaLogo({
    * la partie sombre : le contour n'y servait presque à rien.
    */
   shadow?: boolean;
+  /** Voyage avec la carte pendant l'ouverture d'une fiche du téléphone (`data-sheet-carry`, `useSheetMorph`). */
+  carry?: boolean;
 }) {
   const [ratio, setRatio] = useState<number | null>(() => KNOWN_RATIOS.get(src) ?? null);
   // L'adresse refusée, et non un simple drapeau : un autre logo passé à la même instance a droit
@@ -163,6 +166,7 @@ export function CinemaLogo({
       // Un logo n'est pas une image à emporter : glissé, il partait en fantôme au lieu de laisser le
       // geste au lecteur ou à la fiche (11/10/2026).
       draggable={false}
+      data-sheet-carry={carry ? "" : undefined}
       onError={() => {
         retry.onError();
         onError?.();

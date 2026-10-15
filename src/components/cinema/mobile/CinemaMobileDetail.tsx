@@ -37,7 +37,7 @@ import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
-import { CinemaLogo } from "@/components/cinema/CinemaLogo";
+import { PhoneSheetTitle } from "@/components/cinema/CinemaDetailPages";
 import { resumeAtFor } from "@/lib/resumePosition";
 import { useQueuedPlay } from "@/lib/useQueuedPlay";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
@@ -508,18 +508,7 @@ export function CinemaMobileDetail({
           à sa place — le chevauchement lui-même est voulu, c'est ce qui pose le titre dans le
           fondu de l'image. */}
       <div data-sheet-content="" className={`relative -mt-6 px-4 pb-16 ${short ? "mx-auto w-full max-w-xl" : ""}`}>
-        {item.logoUrl ? (
-          <CinemaLogo
-            src={item.logoUrl}
-            alt={item.title}
-            surface="phone"
-            shadow={false}
-            className="mb-3 object-left"
-            fallback={<h1 className="mb-3 text-2xl font-bold leading-tight text-white font-display">{item.title}</h1>}
-          />
-        ) : (
-          <h1 className="mb-3 text-2xl font-bold leading-tight text-white font-display">{item.title}</h1>
-        )}
+        <PhoneSheetTitle title={item.title} logoUrl={item.logoUrl} />
 
         <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
           <span>{item.year}</span>

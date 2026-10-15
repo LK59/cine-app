@@ -30,7 +30,7 @@ import {
 import type { PlayerTitlePayload } from "@/app/api/player/title/[type]/[tmdbId]/route";
 import type { PlayerRequestState } from "@/lib/playerRequestState";
 import { CinemaCastRow, castFromTitle } from "@/components/cinema/CinemaCastRow";
-import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
+import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine, PhoneSheetTitle } from "@/components/cinema/CinemaDetailPages";
 import { similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaTagline, CinemaDownloading, useRuntimeLabel, useReleaseLabel, DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
 import { FadeInImg } from "@/components/FadeInImg";
@@ -286,7 +286,7 @@ export function PlayerDiscoverSheet({
           fondu de l'image. */}
       {data && (
         <div data-sheet-content="" className="relative -mt-6 px-4 pb-16">
-          <h1 className="mb-3 font-display text-2xl font-bold leading-tight text-white">{data.title}</h1>
+          <PhoneSheetTitle title={data.title} logoUrl={data.logo} />
 
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
             {releaseLabel(data.releaseDate, data.year) && <span>{releaseLabel(data.releaseDate, data.year)}</span>}

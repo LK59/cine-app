@@ -38,7 +38,9 @@ function Sheet({
   revealed = false,
   active = true,
   instantExit = false,
+  carry = false,
 }: {
+  carry?: boolean;
   layout?: SheetLayout;
   leaving?: boolean;
   revealed?: boolean;
@@ -58,7 +60,14 @@ function Sheet({
           x
         </button>
       </div>
-      <div data-sheet-content="">contenu</div>
+      {carry ? (
+        <div data-sheet-content="">
+          <h1 data-sheet-carry="">Titre</h1>
+          <p>contenu</p>
+        </div>
+      ) : (
+        <div data-sheet-content="">contenu</div>
+      )}
     </div>,
     document.body,
   );
@@ -209,6 +218,25 @@ describe("l'ouverture", () => {
     expect(root()!.style.backgroundColor).toBe("rgb(10, 10, 15)");
     expect(layer()!.querySelectorAll("img").length).toBe(0);
     expect(layer()!.children.length).toBe(1);
+  });
+
+  it("le logo (ou le titre) voyage avec la carte, hors du fondu du contenu — d'un seul bloc avec elle", async () => {
+    const poster = addPoster();
+    press(poster.querySelector("img")!);
+    render(<Sheet carry />);
+    const title = root()!.querySelector<HTMLElement>("[data-sheet-carry]")!;
+    // Une copie dans la carte qui grandit ; l'original caché le temps du trajet.
+    const inner = windowOf().firstElementChild as HTMLElement;
+    expect(Array.from(inner.querySelectorAll("h1")).map((h) => h.textContent)).toEqual(["Titre"]);
+    expect(root()!.hasAttribute("data-sheet-flying")).toBe(true);
+    // Le fondu porte sur le reste du contenu, jamais sur le titre ni sur le bloc qui le contient.
+    expect(live(title)).toHaveLength(0);
+    expect(live(root()!.querySelector("[data-sheet-content]"))).toHaveLength(0);
+    expect(live(root()!.querySelector("[data-sheet-content] p"))[0]).toBeDefined();
+    await runOpen();
+    // Arrivée : la copie part avec la fenêtre, le vrai titre est là.
+    expect(root()!.hasAttribute("data-sheet-flying")).toBe(false);
+    expect(layer()!.querySelectorAll("h1").length).toBe(0);
   });
 
   it("la fenêtre ne plonge jamais : son haut reste entre l'affiche et le haut de la carte", () => {

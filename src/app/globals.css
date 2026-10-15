@@ -1521,7 +1521,8 @@
    sa place au repos, hors d'une carte encore en route. */
 [data-sheet-flying] [data-sheet-photo],
 [data-sheet-flying] [data-sheet-veil],
-[data-sheet-flying] [data-sheet-settle] {
+[data-sheet-flying] [data-sheet-settle],
+[data-sheet-flying] [data-sheet-carry] {
   visibility: hidden !important;
 }
 
