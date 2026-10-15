@@ -1,7 +1,7 @@
 {
   "auth": {
-    "reasonPlayback": "Melde dich erneut an, um abzuspielen.",
-    "reasonJellyfin": "Deine Sitzung ist abgelaufen: Melde dich erneut an, damit dein Fortschritt wieder gespeichert wird.",
+    "reasonPlayback": "Melden Sie sich erneut an, um abzuspielen.",
+    "reasonJellyfin": "Ihre Sitzung ist abgelaufen: Melden Sie sich erneut an, damit Ihr Fortschritt wieder gespeichert wird.",
     "jellyfin": {
       "heading": "Anmelden",
       "username": "Benutzername",
@@ -21,12 +21,12 @@
       "unknown": "Ein Fehler ist aufgetreten",
       "rateLimited": "Zu viele Versuche. Versuch es in {n} Min. erneut."
     },
-    "tagline": "Deine Filme und Serien, startklar.",
-    "hint": "Melde dich mit deinem Jellyfin-Konto an.",
+    "tagline": "Ihre Filme und Serien, startklar.",
+    "hint": "Melden Sie sich mit Ihrem Jellyfin-Konto an.",
     "statusLink": "Dienststatus",
     "showPassword": "Passwort anzeigen",
     "hidePassword": "Passwort verbergen",
-    "passwordLeadingSpace": "Dein Passwort beginnt mit einem Leerzeichen. Von woanders eingefügt?"
+    "passwordLeadingSpace": "Ihr Passwort beginnt mit einem Leerzeichen. Von woanders eingefügt?"
   },
   "nav": {
     "overview": "Übersicht",
@@ -70,7 +70,7 @@
       "dialogue": "Dialogsuche"
     },
     "backToCinema": "Zurück zum Kino",
-    "accountPreferences": "Deine Einstellungen sind unter Konto",
+    "accountPreferences": "Ihre Einstellungen sind unter Konto",
     "label": "Navigation der Verwaltung",
     "libraryCheck": "Bibliotheksprüfung"
   },
@@ -142,8 +142,8 @@
     "notDownloaded": "Nicht heruntergeladen",
     "installPrompt": {
       "title": "CineApp installieren",
-      "body": "Füge die App zum Home-Bildschirm hinzu, um Benachrichtigungen und einen schnelleren Start zu aktivieren.",
-      "steps": "Tippe auf Teilen, dann auf \"Zum Home-Bildschirm\".",
+      "body": "Fügen Sie die App zum Home-Bildschirm hinzu, um Benachrichtigungen und einen schnelleren Start zu aktivieren.",
+      "steps": "Tippen Sie auf Teilen, dann auf \"Zum Home-Bildschirm\".",
       "dismiss": "Später"
     },
     "moreOptions": "Weitere Optionen",
@@ -160,7 +160,7 @@
     "activeDownloads": "Aktive Downloads",
     "waitingSeeds": "Wartet auf Seeds",
     "showMore": "+{n} weitere — alle anzeigen",
-    "pageSubtitle": "Live-Status deiner Dienste",
+    "pageSubtitle": "Live-Status Ihrer Dienste",
     "storageTitle": "Speicher",
     "computingStorage": "Wird berechnet…",
     "storageFree": "{free} frei von {total}",
@@ -191,7 +191,7 @@
     "servicesNotConfigured": "Nicht konfiguriert: {list}",
     "configure": "Konfigurieren",
     "torrentsNotConfigured": "qBittorrent ist nicht konfiguriert: Laufende Downloads erscheinen hier, sobald es verbunden ist.",
-    "storageNoMedia": "Binde den Medienordner ein, um den Speicher zu sehen.",
+    "storageNoMedia": "Binden Sie den Medienordner ein, um den Speicher zu sehen.",
     "storageHowTo": "So geht's"
   },
   "activity": {
@@ -244,7 +244,7 @@
       "language": "Sprache",
       "translate": "Übersetzen",
       "translating": "Übersetzung…",
-      "translated": "Übersetzt: Prüfe jede Sprache vor dem Speichern",
+      "translated": "Übersetzt: Prüfen Sie jede Sprache vor dem Speichern",
       "translateUnavailable": "Kein KI-Anbieter eingerichtet: Übersetzungen von Hand eingeben.",
       "fallbackFr": "Leer: In dieser Sprache wird Französisch gezeigt.",
       "sectionTitle": "Abschnittstitel",
@@ -977,7 +977,7 @@
       "running": "Test läuft…",
       "run": "Tests starten",
       "rerun": "Erneut starten",
-      "empty": "Klicke auf »Tests starten«, um alle API-Routen zu prüfen",
+      "empty": "Klicken Sie auf »Tests starten«, um alle API-Routen zu prüfen",
       "unexpectedResponse": "Unerwartete Antwort",
       "internalError": "Interner Fehler"
     },
@@ -1086,7 +1086,7 @@
   },
   "stats": {
     "pageTitle": "Statistiken",
-    "subtitle": "Übersicht deiner Mediathek",
+    "subtitle": "Übersicht Ihrer Mediathek",
     "loading": "Statistiken werden berechnet…",
     "error": "Statistiken konnten nicht abgerufen werden.",
     "cards": {
@@ -1269,7 +1269,7 @@
     "pushNotifications": "Push-Benachrichtigungen",
     "pushDescription": "Dieses Gerät aktivieren oder deaktivieren.",
     "categories": "Kategorien",
-    "categoriesDescription": "Wähle die Benachrichtigungen, die du erhalten möchtest.",
+    "categoriesDescription": "Wählen Sie die Benachrichtigungen, die Sie erhalten möchten.",
     "test": "Test",
     "testDescription": "Sendet in 5 Sekunden eine Testbenachrichtigung.",
     "sendingIn": "Senden in {n}s",
@@ -1288,19 +1288,19 @@
       },
       "watchlistAvailable": {
         "label": "Film/Serie verfügbar",
-        "description": "Wenn ein Inhalt aus deiner Liste in Jellyfin verfügbar wird."
+        "description": "Wenn ein Inhalt aus Ihrer Liste in Jellyfin verfügbar wird."
       },
       "newEpisode": {
         "label": "Neue Episode",
         "description": "Wenn eine neue Episode einer verfolgten Serie importiert wird."
       },
       "requestAvailable": {
-        "label": "Deine Anfrage ist verfügbar",
-        "description": "Wenn ein Film oder eine Serie, die du über Jellyseerr angefragt hast, verfügbar wird."
+        "label": "Ihre Anfrage ist verfügbar",
+        "description": "Wenn ein Film oder eine Serie, die Sie über Jellyseerr angefragt haben, verfügbar wird."
       },
       "reportReply": {
-        "label": "Antwort auf deine Meldung",
-        "description": "Wenn der Administrator auf eine deiner Meldungen antwortet oder ihren Status ändert."
+        "label": "Antwort auf Ihre Meldung",
+        "description": "Wenn der Administrator auf eine Ihrer Meldungen antwortet oder ihren Status ändert."
       },
       "reportNew": {
         "label": "Neue Meldung",
@@ -1383,7 +1383,7 @@
     "tabMine": "Meine Anfragen",
     "tabPending": "Zur Genehmigung",
     "tabAll": "Alle Anfragen",
-    "emptyMine": "Keine Anfragen für dein Konto.",
+    "emptyMine": "Keine Anfragen für Ihr Konto.",
     "emptyPending": "Keine ausstehenden Anfragen.",
     "emptyAll": "Noch keine Anfragen.",
     "untitled": "Ohne Titel",
@@ -1438,7 +1438,7 @@
   },
   "watchlist": {
     "pageTitle": "Meine Liste",
-    "addFailed": "Hinzufügen zur Liste fehlgeschlagen, versuch's erneut.",
+    "addFailed": "Hinzufügen zur Liste fehlgeschlagen, bitte erneut versuchen.",
     "addToLibrary": "Hinzufügen",
     "addedToLibrary": "Zur Bibliothek hinzugefügt",
     "statuses": {
@@ -1488,13 +1488,13 @@
   },
   "search": {
     "placeholder": "Titel, Schauspieler, Regisseur… (z. B. mit Brad Pitt)",
-    "inLibrary": "In deiner Bibliothek",
+    "inLibrary": "In Ihrer Bibliothek",
     "people": "Personen",
     "notInLibrary": "Nicht in der Bibliothek",
     "noResults": "Keine Ergebnisse für »{query}«",
     "keyboardHint": "↑↓ navigieren · Enter auswählen",
     "shortcutHint": "⌘K öffnen/schließen",
-    "libraryCount": "{n} in deiner Bibliothek",
+    "libraryCount": "{n} in Ihrer Bibliothek",
     "viewSheet": "Details ansehen",
     "removeFromList": "Aus der Liste entfernen",
     "addToList": "Zur Liste hinzufügen",
@@ -1568,16 +1568,16 @@
         "showHelp": "Diese Hilfe anzeigen",
         "close": "Fenster schließen / Auswahl aufheben"
       },
-      "openClose": "Drücke {key} zum Öffnen / Schließen"
+      "openClose": "Drücken Sie {key} zum Öffnen / Schließen"
     },
     "request": {
       "confirmTitle": "Anfrage bestätigen",
-      "confirmBody": "Die Anfrage wird über Jellyseerr gesendet und deinem Konto zugeordnet.",
+      "confirmBody": "Die Anfrage wird über Jellyseerr gesendet und Ihrem Konto zugeordnet.",
       "loadingSeasons": "Staffeln werden geladen…",
       "loadError": "Staffeln konnten nicht geladen werden.",
       "noSeasons": "Keine Staffeln für diese Serie gefunden.",
       "allCovered": "Bereits angefragt oder vollständig verfügbar.",
-      "pickSeasons": "Wähle die anzufragenden Staffeln:",
+      "pickSeasons": "Wählen Sie die anzufragenden Staffeln:",
       "alreadyRequested": "Bereits angefragt",
       "episodeCount": "{n} Folgen",
       "requestMore": "Mehr anfragen",
@@ -1599,7 +1599,7 @@
     "tabFile": "Tab Datei / Staffeln (Details)",
     "showHelp": "Diese Hilfe anzeigen",
     "close": "Fenster schließen / Auswahl aufheben",
-    "hint": "Drücke {key} zum Öffnen / Schließen"
+    "hint": "Drücken Sie {key} zum Öffnen / Schließen"
   },
   "collection": {
     "loading": "Filmreihe wird geladen…",
@@ -1641,27 +1641,27 @@
     "pageError": "Auf dieser Seite ist etwas schiefgelaufen.",
     "retry": "Erneut versuchen",
     "loadFailed": "Diese Daten konnten nicht geladen werden.",
-    "generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
+    "generic": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
     "fileInfoFailed": "Die Dateiinformationen konnten nicht abgerufen werden.",
     "playbackUnavailable": "Wiedergabe ist gerade nicht möglich.",
     "codes": {
-      "upstream_unreachable": "Der Dienst antwortet gerade nicht. Versuche es in ein paar Minuten erneut.",
+      "upstream_unreachable": "Der Dienst antwortet gerade nicht. Versuchen Sie es in ein paar Minuten erneut.",
       "file_missing": "Diese Datei ist nicht mehr in der Bibliothek.",
       "invalid_request": "Ungültige Anfrage.",
       "jellyfin_account_required": "Ein Jellyfin-Konto ist erforderlich.",
-      "password_required": "Gib dein aktuelles und dein neues Passwort ein.",
+      "password_required": "Geben Sie Ihr aktuelles und Ihr neues Passwort ein.",
       "password_too_short": "Das Passwort muss mindestens 8 Zeichen lang sein.",
       "same_password": "Das neue Passwort ist identisch mit dem aktuellen.",
       "wrong_password": "Das aktuelle Passwort ist falsch.",
       "requests_unavailable": "Anfragen sind nicht verfügbar.",
-      "request_identity_pending": "Dein Konto ist noch nicht für Anfragen bereit. Versuche es gleich noch einmal.",
-      "request_seasons_required": "Wähle mindestens eine Staffel aus.",
+      "request_identity_pending": "Ihr Konto ist noch nicht für Anfragen bereit. Versuchen Sie es gleich noch einmal.",
+      "request_seasons_required": "Wählen Sie mindestens eine Staffel aus.",
       "request_duplicate": "Dieser Titel wurde bereits angefragt.",
-      "request_quota": "Du hast dein Anfragelimit erreicht. Versuche es später erneut.",
+      "request_quota": "Sie haben Ihr Anfragelimit erreicht. Versuchen Sie es später erneut.",
       "request_refused": "Diese Anfrage wurde abgelehnt.",
       "request_not_found": "Anfrage nicht gefunden.",
       "title_not_found": "Titel nicht gefunden.",
-      "not_in_list": "Dieser Titel ist nicht in deiner Liste.",
+      "not_in_list": "Dieser Titel ist nicht in Ihrer Liste.",
       "service_unavailable": "Dieser Dienst ist gerade nicht verfügbar.",
       "network": "Der Server ist gerade nicht erreichbar.",
       "person_not_found": "Person nicht gefunden."
@@ -1700,7 +1700,7 @@
       "second": "Zweiter",
       "secondOffset": "Versatz des zweiten",
       "off": "Ausschalten",
-      "primaryFirst": "Wähle zuerst den Hauptuntertitel.",
+      "primaryFirst": "Wählen Sie zuerst den Hauptuntertitel.",
       "generate": "Erzeugen — {language}",
       "tvNote": "Auf dem Fernseher wird nur der Hauptuntertitel angezeigt."
     },
@@ -1741,26 +1741,26 @@
     "speedNormal": "Normal",
     "rewind10": "10s zurück",
     "forward10": "10s vor",
-    "sessionExpired": "Deine Jellyfin-Sitzung ist abgelaufen.",
+    "sessionExpired": "Ihre Jellyfin-Sitzung ist abgelaufen.",
     "reconnect": "Erneut anmelden",
     "quit": "Verlassen",
-    "offline": "Du bist offline",
+    "offline": "Sie sind offline",
     "stillLoading": "Wird noch geladen, Player nicht schließen…",
     "compatPrep": "Eine mit diesem Gerät kompatible Version wird vorbereitet…",
     "reconnecting": "Verbindung wird wiederhergestellt…",
-    "loadingTooLong": "Das dauert zu lange. Versuch's erneut.",
+    "loadingTooLong": "Das dauert zu lange. Bitte erneut versuchen.",
     "slowLink": {
       "hint": "Langsame Verbindung…",
       "failed": "Wiedergabe nicht möglich: Die Verbindung ist zu langsam.",
       "unstable": "Verbindung verloren oder instabil…",
       "subtitlesGenerating": "Untertitel werden noch erstellt: in der leichteren Version nicht verfügbar. Sie sind es, sobald die Erstellung abgeschlossen ist.",
       "switched": "Wechsel zu einem leichteren Video wegen einer langsamen Verbindung.",
-      "tapToResume": "Leichtere Version bereit. Tippe auf Wiedergabe, um fortzufahren."
+      "tapToResume": "Leichtere Version bereit. Tippen Sie auf Wiedergabe, um fortzufahren."
     },
     "unsupportedBrowser": "Dieser Browser kann diesen Stream nicht abspielen.",
-    "playbackInterruptedCheckConnection": "Die Wiedergabe wurde unterbrochen. Prüfe deine Verbindung und versuch's erneut.",
-    "playbackInterrupted": "Die Wiedergabe wurde unterbrochen. Versuch's erneut.",
-    "libraryUnreachable": "Die Bibliothek antwortet gerade nicht. Versuche es in ein paar Minuten erneut.",
+    "playbackInterruptedCheckConnection": "Die Wiedergabe wurde unterbrochen. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+    "playbackInterrupted": "Die Wiedergabe wurde unterbrochen. Bitte erneut versuchen.",
+    "libraryUnreachable": "Die Bibliothek antwortet gerade nicht. Versuchen Sie es in ein paar Minuten erneut.",
     "info": {
       "title": "Wiedergabe-Infos",
       "network": "Netzwerk",
@@ -1882,13 +1882,13 @@
     "notInLibrary": "Noch nicht da",
     "search": {
       "placeholder": "Ein Titel, ein Schauspieler, ein Genre…",
-      "hint": "Suche nach einem Film, einer Serie oder einer Person. Was noch nicht da ist, lässt sich anfragen.",
+      "hint": "Suchen Sie nach einem Film, einer Serie oder einer Person. Was noch nicht da ist, lässt sich anfragen.",
       "noResults": "Nichts gefunden für „{query}“.",
       "filterAll": "Alles",
       "personTitles": "{n} Titel hier",
-      "recent": "Deine letzten Suchen",
+      "recent": "Ihre letzten Suchen",
       "forget": "Löschen",
-      "failed": "Die Suche ist fehlgeschlagen. Prüfe die Verbindung und versuche es erneut.",
+      "failed": "Die Suche ist fehlgeschlagen. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
       "dialogue": {
         "title": "Dialoge",
         "chip": "Dialoge",
@@ -1910,7 +1910,7 @@
       "watchedHint": "Füllt sich beim Ansehen und von Hand auf der Seite eines Titels — auch für Titel, die nicht in der Bibliothek sind. Ein Titel, der die Bibliothek verlässt, bleibt hier.",
       "empty": {
         "requests": "Noch keine Anfragen.",
-        "toWatch": "Noch nichts vorgemerkt. Füge einen Titel von seiner Seite aus hinzu.",
+        "toWatch": "Noch nichts vorgemerkt. Fügen Sie einen Titel von seiner Seite aus hinzu.",
         "watched": "Noch nichts zu Ende geschaut."
       },
       "addTitle": "Titel hinzufügen",
@@ -1932,7 +1932,7 @@
       "addNothing": "Nichts gefunden.",
       "addToWatch": "Zu „Anzusehen“ hinzufügen",
       "alreadyInList": "Schon in der Liste",
-      "failed": "Deine Liste kann gerade nicht geladen werden."
+      "failed": "Ihre Liste kann gerade nicht geladen werden."
     },
     "requests": {
       "state": {
@@ -1943,7 +1943,7 @@
         "removed": "Nicht mehr verfügbar"
       },
       "cancel": "Anfrage für {title} zurückziehen",
-      "cancelHint": "Entfernt die Anfrage aus deiner Liste.",
+      "cancelHint": "Entfernt die Anfrage aus Ihrer Liste.",
       "confirmTitle": "Anfrage für „{title}“ abbrechen?",
       "confirmQuestion": "Diese Anfrage abbrechen?",
       "confirmYes": "Anfrage abbrechen",
@@ -2000,14 +2000,14 @@
       },
       "notifications": "Benachrichtigungen",
       "notificationsLabel": "Benachrichtigungen auf diesem Gerät",
-      "notificationsHint": "Dann wähle, worüber du informiert wirst.",
+      "notificationsHint": "Dann wählen Sie, worüber Sie informiert werden.",
       "password": "Passwort",
       "currentPassword": "Aktuelles Passwort",
       "newPassword": "Neues Passwort",
       "confirmPassword": "Bestätigen",
       "changePassword": "Passwort ändern",
       "passwordRule": "Mindestens 8 Zeichen.",
-      "passwordOtherDevices": "Deine anderen Geräte müssen sich mit dem neuen Passwort erneut anmelden – auch der Fernseher und die Jellyfin-Apps. Dieses Gerät bleibt angemeldet.",
+      "passwordOtherDevices": "Ihre anderen Geräte müssen sich mit dem neuen Passwort erneut anmelden – auch der Fernseher und die Jellyfin-Apps. Dieses Gerät bleibt angemeldet.",
       "passwordMismatch": "Die beiden Passwörter stimmen nicht überein.",
       "passwordChanged": "Passwort geändert",
       "saving": "Wird gespeichert…",
@@ -2049,11 +2049,11 @@
       "maintenanceOnDone": "Wartung eingeschaltet.",
       "maintenanceOffDone": "Wartung ausgeschaltet.",
       "notifNewEpisode": "Neue Folge",
-      "notifNewEpisodeHint": "Einer Serie, die du begonnen hast",
+      "notifNewEpisodeHint": "Einer Serie, die Sie begonnen haben",
       "notifRequest": "Meine Anfragen",
       "notifRequestHint": "Wenn ein angefragter Titel verfügbar ist",
       "notifList": "Meine Liste",
-      "notifListHint": "Wenn ein Titel aus deiner Liste ankommt",
+      "notifListHint": "Wenn ein Titel aus Ihrer Liste ankommt",
       "redoOnboarding": "Willkommensbildschirm erneut anzeigen",
       "welcome": "Willkommen",
       "notifDownloads": "Downloads",
@@ -2063,7 +2063,7 @@
       "notifDownloadStartedHint": "Wenn ein Download startet",
       "notifTest": "Test senden",
       "notifTestHint": "In 5 Sekunden, Zeit genug, die App zu verlassen",
-      "notifTestNoDevice": "Aktiviere zuerst die Benachrichtigungen auf diesem Gerät",
+      "notifTestNoDevice": "Aktivieren Sie zuerst die Benachrichtigungen auf diesem Gerät",
       "unknownDevice": "Unbekanntes Gerät",
       "groups": {
         "preferences": "Einstellungen",
@@ -2080,7 +2080,7 @@
       "animLabHint": "Schaltflächen über Bildern mit verschiedenen Druckgesten und Unschärfen, zum Vergleichen auf diesem Gerät.",
       "openAnimLab": "Verschiedene Tests",
       "notifReportReply": "Antwort auf eine Meldung",
-      "notifReportReplyHint": "Wenn eine deiner Meldungen eine Antwort bekommt oder ihren Status ändert.",
+      "notifReportReplyHint": "Wenn eine Ihrer Meldungen eine Antwort bekommt oder ihren Status ändert.",
       "notifReportNew": "Neue Meldungen",
       "notifReportNewHint": "Wenn jemand ein Problem meldet, einen Vorschlag macht oder eine Meldung kommentiert.",
       "report": "Problem melden",
@@ -2097,7 +2097,7 @@
       "guidedScrollHint": "Am Computer rastet die Startseite auf eine ganze Reihe und die Titelseiten auf eine ganze Seite ein. Aus: Die Seite scrollt frei.",
       "home": {
         "continueHero": "Laufende Titel im Startseiten-Banner zeigen",
-        "continueHeroHint": "Was du gerade schaust, steht oben auf der Startseite; ist es wenig, ergänzen Titel aus „Im Fokus“."
+        "continueHeroHint": "Was Sie gerade schauen, steht oben auf der Startseite; ist es wenig, ergänzen Titel aus „Im Fokus“."
       },
       "lab": "Lab",
       "labHint": "Der Wiedergabe-Prüfstand öffnet echte Filme auf diesem Gerät und testet sie wie ein Zuschauer (Fenster sichtbar lassen). Verschiedene Tests vergleichen Gesten, Materialien und Animationen."
@@ -2145,21 +2145,21 @@
         "none": "Keiner"
       }
     },
-    "stillThere": "Schaust du noch?",
-    "stillThereHint": "Drei Folgen liefen ohne eine Berührung hintereinander. Die Wiedergabe geht weiter, wann du willst.",
+    "stillThere": "Schauen Sie noch?",
+    "stillThereHint": "Drei Folgen liefen ohne eine Berührung hintereinander. Die Wiedergabe geht weiter, wann Sie wollen.",
     "stillThereContinue": "Weiter",
     "end": {
       "finished": "Beendet",
       "replay": "Noch einmal",
       "done": "Zurück",
       "suite": "Weiter in der Reihe",
-      "finishedMovieAsk": "Du hast diesen Film beendet. Aus deiner Liste „Anschauen“ entfernen?",
-      "finishedMovieNote": "(Dieser Film wurde deiner Liste „Gesehen“ hinzugefügt.)",
-      "finishedSeriesAsk": "Du hast diese Serie beendet. Aus deiner Liste „Anschauen“ entfernen?",
-      "finishedSeriesNote": "(Diese Serie wurde deiner Liste „Gesehen“ hinzugefügt.)",
+      "finishedMovieAsk": "Sie haben diesen Film beendet. Aus Ihrer Liste „Anschauen“ entfernen?",
+      "finishedMovieNote": "(Dieser Film wurde Ihrer Liste „Gesehen“ hinzugefügt.)",
+      "finishedSeriesAsk": "Sie haben diese Serie beendet. Aus Ihrer Liste „Anschauen“ entfernen?",
+      "finishedSeriesNote": "(Diese Serie wurde Ihrer Liste „Gesehen“ hinzugefügt.)",
       "finishedRemove": "Entfernen",
       "finishedKeep": "Behalten",
-      "finishedRemoved": "Aus deiner Liste „Anschauen“ entfernt."
+      "finishedRemoved": "Aus Ihrer Liste „Anschauen“ entfernt."
     },
     "unplayable": "Diese Datei kann in diesem Browser nicht abgespielt werden.",
     "unreadableZone": "Diese Datei ist bei etwa {time} beschädigt und kann hier nicht weiter abgespielt werden.",
@@ -2188,16 +2188,16 @@
       "finish": "Los geht's",
       "progress": "Schritt {n} von {total}",
       "welcomeTitle": "Willkommen, {name}",
-      "welcomeText": "Drei kurze Einstellungen, und alles ist nach deinem Geschmack.",
+      "welcomeText": "Drei kurze Einstellungen, und alles ist nach Ihrem Geschmack.",
       "languageLabel": "Sprache der App",
       "playbackTitle": "Ton und Untertitel",
-      "playbackText": "Filme öffnen sich direkt in deinen Sprachen.",
-      "playbackNote": "Gilt auch für deine anderen Jellyfin-Geräte, etwa den Fernseher.",
+      "playbackText": "Filme öffnen sich direkt in Ihren Sprachen.",
+      "playbackNote": "Gilt auch für Ihre anderen Jellyfin-Geräte, etwa den Fernseher.",
       "notifTitle": "Benachrichtigungen",
-      "notifText": "Erfahre es, wenn etwas für dich ankommt.",
-      "notifInstall": "Füge die App auf dem iPhone zuerst zum Home-Bildschirm hinzu (Teilen → Zum Home-Bildschirm) und aktiviere dann die Benachrichtigungen unter Konto.",
+      "notifText": "Erfahren Sie es, wenn etwas für Sie ankommt.",
+      "notifInstall": "Fügen Sie die App auf dem iPhone zuerst zum Home-Bildschirm hinzu (Teilen → Zum Home-Bildschirm) und aktivieren Sie dann die Benachrichtigungen unter Konto.",
       "doneTitle": "Alles bereit",
-      "doneText": "Alle diese Einstellungen findest du jederzeit unter Konto."
+      "doneText": "Alle diese Einstellungen finden Sie jederzeit unter Konto."
     },
     "warnings": {
       "noIndexSeek": "In dieser Datei kann nicht gespult werden: sie hat keinen Index.",
@@ -2269,7 +2269,7 @@
     "markWatched": "Gesehen",
     "addToList": "Meine Liste",
     "continueWatching": "Weiterschauen",
-    "empty": "Noch nichts anzuzeigen — füge Filme zu deiner Bibliothek hinzu.",
+    "empty": "Noch nichts anzuzeigen — fügen Sie Filme zu Ihrer Bibliothek hinzu.",
     "back": "Zurück",
     "shortcutsNavigate": "Navigieren",
     "shortcutsSelect": "Auswählen",
@@ -2288,8 +2288,8 @@
     "heroSlide": "Highlight, {n} von {total}",
     "seasonCount": "{n} Staffel|{n} Staffeln",
     "searchPlaceholder": "Film oder Serie suchen…",
-    "searchHint": "Durchsucht deine Bibliothek: Titel, Genre, Jahr…",
-    "searchEmpty": "Nichts in deiner Bibliothek passt zu dieser Suche.",
+    "searchHint": "Durchsucht Ihre Bibliothek: Titel, Genre, Jahr…",
+    "searchEmpty": "Nichts in Ihrer Bibliothek passt zu dieser Suche.",
     "searchResults": "{n} Ergebnis|{n} Ergebnisse",
     "search": "Suchen",
     "myList": "Meine Liste",
@@ -2308,7 +2308,7 @@
     "discovery": {
       "trendingMovies": "Im Trend — Filme",
       "trendingSeries": "Im Trend — Serien",
-      "recommended": "Für dich empfohlen"
+      "recommended": "Für Sie empfohlen"
     },
     "missing": {
       "count": "{n} Folge fehlt|{n} Folgen fehlen",
@@ -2335,10 +2335,10 @@
     "titleUnavailable": "Dieser Titel ist im Kino noch nicht verfügbar.",
     "titleRetired": "Dieser Titel wurde aus der Bibliothek entfernt.",
     "seriesStillWatched": "Alle Folgen sind gesehen: Die Serie bleibt unter „Gesehen“.",
-    "forYou": "Für dich",
+    "forYou": "Für Sie",
     "outage": {
       "banner": "Wiedergabe vorübergehend nicht verfügbar — der Server antwortet nicht",
-      "playBlocked": "Wiedergabe vorübergehend nicht verfügbar — der Server antwortet nicht. Versuche es in ein paar Minuten erneut.",
+      "playBlocked": "Wiedergabe vorübergehend nicht verfügbar — der Server antwortet nicht. Versuchen Sie es in ein paar Minuten erneut.",
       "titleUnreachable": "Die Mediathek antwortet gerade nicht: Dieser Titel öffnet sich, sobald sie wieder da ist.",
       "retry": "Erneut versuchen",
       "retrying": "Neuer Versuch…",
@@ -2352,9 +2352,9 @@
   },
   "maintenance": {
     "bannerTitle": "Wartung läuft",
-    "bannerText": "Einzelne Dienste oder die Wiedergabe können gestört sein. Schlägt die Wiedergabe fehl, starte sie erneut.",
+    "bannerText": "Einzelne Dienste oder die Wiedergabe können gestört sein. Schlägt die Wiedergabe fehl, starten Sie sie erneut.",
     "noticeTitle": "Wartung steht bevor",
-    "noticeText": "Die Anwendung startet gleich neu. Die Wiedergabe kann abbrechen: starte sie erneut, falls sie fehlschlägt."
+    "noticeText": "Die Anwendung startet gleich neu. Die Wiedergabe kann abbrechen: Starten Sie sie erneut, falls sie fehlschlägt."
   },
   "genres": {
     "Action": "Action",
@@ -2391,7 +2391,7 @@
   },
   "bench": {
     "title": "Testlauf des Players",
-    "hint": "Öffnet echte Filme auf diesem Gerät und prüft sie wie ein Zuschauer: Sprünge, Pausen, Sprachen, Untertitel. Die Ergebnisse werden auf dem Server gespeichert; keine Fortsetzungsposition und kein „gesehen“ wird verändert. Lass dieses Fenster während des Testlaufs sichtbar: verdeckt zeichnet der Browser das Video nicht mehr.",
+    "hint": "Öffnet echte Filme auf diesem Gerät und prüft sie wie ein Zuschauer: Sprünge, Pausen, Sprachen, Untertitel. Die Ergebnisse werden auf dem Server gespeichert; keine Fortsetzungsposition und kein „gesehen“ wird verändert. Lassen Sie dieses Fenster während des Testlaufs sichtbar: verdeckt zeichnet der Browser das Video nicht mehr.",
     "prepare": "Testlauf vorbereiten",
     "loading": "Filme werden geladen…",
     "empty": "Das Player-Protokoll kennt noch keinen Film.",
@@ -2519,9 +2519,9 @@
       "accountDevices": "Angemeldete Geräte",
       "accountReports": "Meine Meldungen",
       "notifEpisode": "„Neue Folge“",
-      "notifRequest": "„Deine Anfrage ist verfügbar“",
-      "notifWatchlist": "„Ein Titel deiner Liste ist verfügbar“",
-      "notifReport": "„Antwort auf deine Meldung“",
+      "notifRequest": "„Ihre Anfrage ist verfügbar“",
+      "notifWatchlist": "„Ein Titel Ihrer Liste ist verfügbar“",
+      "notifReport": "„Antwort auf Ihre Meldung“",
       "accessLogin": "Anmelden",
       "accessInstall": "Die App auf dem Startbildschirm",
       "accessUpdate": "App-Updates",
@@ -2736,7 +2736,7 @@
   },
   "setup": {
     "title": "Willkommen bei CineApp",
-    "subtitle": "Ein paar Einstellungen, und dein Kino ist bereit.",
+    "subtitle": "Ein paar Einstellungen, und Ihr Kino ist bereit.",
     "progress": "Schritt {n} von {total}",
     "steps": {
       "welcome": "Willkommen",
@@ -2749,10 +2749,10 @@
       "finish": "Fertig"
     },
     "welcome": {
-      "text": "Dieser Assistent hilft dir, CineApp mit deinen Diensten zu verbinden. Er bleibt offen, bis du auf „Fertigstellen“ klickst: Du kannst ihn verlassen und zurückkehren.",
+      "text": "Dieser Assistent hilft Ihnen, CineApp mit Ihren Diensten zu verbinden. Er bleibt offen, bis Sie auf „Fertigstellen“ klicken: Sie können ihn verlassen und zurückkehren.",
       "language": "Sprache der Oberfläche",
       "urls": "Adressen werden aus dem Container heraus gesehen: In einem gemeinsamen Docker-Netzwerk den Containernamen (http://radarr:7878), sonst die IP-Adresse des Servers. „localhost“ bezeichnet den Container selbst.",
-      "env": "Ein Wert, der bereits in deiner .env steht, füllt sein Feld automatisch."
+      "env": "Ein Wert, der bereits in Ihrer .env steht, füllt sein Feld automatisch."
     },
     "admin": {
       "title": "Administratorkonto anlegen",
@@ -2764,8 +2764,8 @@
       "weak": "Mindestens 8 Zeichen.",
       "invalidUsername": "Buchstaben, Ziffern, Punkt, Bindestrich, @ oder Unterstrich — höchstens 64.",
       "create": "Konto anlegen",
-      "signInTitle": "Melde dich an, um fortzufahren",
-      "signInText": "Es gibt bereits ein Administratorkonto (das aus deiner .env oder ein hier angelegtes). Melde dich damit an, um die Einrichtung fortzusetzen.",
+      "signInTitle": "Melden Sie sich an, um fortzufahren",
+      "signInText": "Es gibt bereits ein Administratorkonto (das aus Ihrer .env oder ein hier angelegtes). Melden Sie sich damit an, um die Einrichtung fortzusetzen.",
       "signIn": "Anmelden"
     },
     "need": {
@@ -2778,7 +2778,7 @@
     "testOk": "Verbunden — {detail}",
     "testFail": {
       "unauthorized": "Abgelehnt: Schlüssel oder Passwort stimmt nicht.",
-      "unreachable": "Nicht erreichbar: Prüfe die Adresse aus dem Container heraus.",
+      "unreachable": "Nicht erreichbar: Prüfen Sie die Adresse aus dem Container heraus.",
       "timeout": "Keine Antwort innerhalb von 6 Sekunden.",
       "other": "Fehlgeschlagen ({detail})."
     },
@@ -2795,7 +2795,7 @@
       "env": "Aus der .env",
       "default": "Standardwert"
     },
-    "envOverride": "Dieser Wert ersetzt den aus deiner .env: Er wird verwendet.",
+    "envOverride": "Dieser Wert ersetzt den aus Ihrer .env: Er wird verwendet.",
     "resetEnv": "Zum Wert der .env zurück",
     "secretSet": "Gesetzt ({hint})",
     "secretSetNoHint": "Gesetzt",
@@ -2867,7 +2867,7 @@
       },
       "deployment": {
         "title": "Bereitstellungsoptionen",
-        "why": "Diese Optionen werden beim Start des Containers gesetzt: Füge die angezeigte Zeile in deine docker-compose.yml (oder deine .env) ein und starte den Container neu."
+        "why": "Diese Optionen werden beim Start des Containers gesetzt: Fügen Sie die angezeigte Zeile in Ihre docker-compose.yml (oder Ihre .env) ein und starten Sie den Container neu."
       },
       "playback": {
         "title": "Wiedergabe",
@@ -3057,7 +3057,7 @@
     "improvements": "Verbesserungen",
     "fixesTitle": "Optimierungen und Fehlerbehebungen",
     "seeMore": "Mehr anzeigen",
-    "footer": "Die Neuigkeiten findest du jederzeit unter Konto → Neuigkeiten.",
+    "footer": "Die Neuigkeiten finden Sie jederzeit unter Konto → Neuigkeiten.",
     "ok": "OK",
     "history": "Frühere Versionen",
     "publishedOn": "Veröffentlicht am {date}",

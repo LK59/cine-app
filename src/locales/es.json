@@ -2169,7 +2169,7 @@
     "castReturn": "Volver al reproductor",
     "castInterrupted": "La emisión se ha interrumpido.",
     "castRelaunch": "Reiniciar la emisión",
-    "castAudioWarning": "Cambiar de pista de audio recarga el reproductor, así que la emisión al dispositivo se detendrá. Podrá reiniciarla justo después, desde el botón de emisión.",
+    "castAudioWarning": "Cambiar de pista de audio recarga el reproductor, así que la emisión al dispositivo se detendrá. Podrás reiniciarla justo después, desde el botón de emisión.",
     "castAudioContinue": "Cambiar de todos modos",
     "trackLabel": {
       "channels": "{n} canales",
@@ -2347,7 +2347,7 @@
   },
   "services": {
     "notConfigured": "{name} no está configurado.",
-    "notConfiguredHint": "Esta página necesita un servicio que no está conectado en esta instalación. Conéctelo en Configuración → Conexiones, o añada estas variables a su archivo .env.",
+    "notConfiguredHint": "Esta página necesita un servicio que no está conectado en esta instalación. Conéctalo en Configuración → Conexiones, o añade estas variables a tu archivo .env.",
     "notConfiguredNote": "Sin configurar: {names}. Esta página muestra lo que no depende de ellos."
   },
   "maintenance": {
@@ -2939,7 +2939,7 @@
       "TZ": "En docker-compose.yml, bajo «environment»:",
       "MEDIA_ROOT": "Monta la carpeta en solo lectura y luego indícala:",
       "APP_ADMIN_USER": "Opcional: una cuenta de administrador fijada en el .env sustituye a la creada aquí.",
-      "MEDIA_PATHS": "Solo si sus carpetas difieren de la estructura habitual de Radarr, Sonarr y qBittorrent bajo la carpeta de medios — para las estadísticas de almacenamiento:",
+      "MEDIA_PATHS": "Solo si tus carpetas difieren de la estructura habitual de Radarr, Sonarr y qBittorrent bajo la carpeta de medios — para las estadísticas de almacenamiento:",
       "POSTER_PREWARM_TUNING": "Opcional: los anchos preparados (384 y 750 por defecto) y los idiomas de los carteles (francés e idioma por defecto):",
       "TRUSTED_PROXIES": "Detrás de un proxy inverso: el nombre de su contenedor (o su dirección), para que solo él pueda indicar la dirección de los visitantes:",
       "COOKIE_SECURE": "Servida en HTTPS detrás de un proxy inverso: las cookies de sesión solo viajan entonces por HTTPS. Se fija en el despliegue — un valor erróneo impediría cualquier inicio de sesión, incluida esta página:"
@@ -2956,7 +2956,7 @@
     },
     "settings": {},
     "profileFirst": "El primero de la lista",
-    "profileUnavailable": "Lista no disponible: compruebe la dirección y la clave y recargue la página.",
+    "profileUnavailable": "Lista no disponible: comprueba la dirección y la clave y recarga la página.",
     "adminPassword": {
       "title": "Cuenta de administrador",
       "text": "La cuenta local que abre la gestión. Cambiar su contraseña cierra sus otras sesiones.",
@@ -2966,7 +2966,7 @@
       "save": "Cambiar la contraseña",
       "done": "Contraseña cambiada.",
       "wrong": "La contraseña actual no es correcta.",
-      "env": "Esta cuenta la fija APP_ADMIN_PASSWORD en su .env: cámbiela allí y reinicie el contenedor.",
+      "env": "Esta cuenta la fija APP_ADMIN_PASSWORD en tu .env: cámbiala allí y reinicia el contenedor.",
       "forgot": "Si la olvidó: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
     },
     "restartNote": "Se aplica en el próximo arranque del contenedor.",
@@ -3010,7 +3010,7 @@
   "subtitleGen": {
     "admin": {
       "noKey": "Sin clave: la generación de subtítulos no se ofrece en ninguna parte.",
-      "noPrice": "No se conoce el precio de este modelo: indique ambos precios para activar la función.",
+      "noPrice": "No se conoce el precio de este modelo: indica ambos precios para activar la función.",
       "price": "{model} — {input} $ de entrada, {output} $ de salida, por millón de tokens",
       "spendTitle": "Gasto del mes",
       "spend": "{spent} $ de un presupuesto de {budget} $",
@@ -3100,7 +3100,7 @@
         "no-films": "Radarr no tiene ninguna película con archivo.",
         "files-missing": "{path} está montada, pero ninguna película está donde dice Radarr: no corresponde a la carpeta raíz de Radarr."
       },
-      "mountDoc": "Monte la carpeta de películas en solo lectura e indíquela con MOVIES_PATH: vea DEPLOYMENT.md y ENV.md, o Configuración → Despliegue.",
+      "mountDoc": "Monta la carpeta de películas en solo lectura e indícala con MOVIES_PATH: mira DEPLOYMENT.md y ENV.md, o Configuración → Despliegue.",
       "mountOk": "Carpeta de películas legible: {path} ({found} de {checked} películas encontradas en su ruta).",
       "mountRequired": "No se puede activar: la carpeta de películas no es legible.",
       "initialTitle": "Indexación inicial",
@@ -3244,16 +3244,16 @@
       "title": "Acción aconsejada",
       "jellyfinIdentifyMovie": "Jellyfin → la película → ⋮ → Identificar → TMDB {tmdb} ({title}), luego Actualizar metadatos reemplazándolo todo.",
       "jellyfinIdentifySeries": "Jellyfin → la serie → ⋮ → Identificar → TVDB {tvdb} / TMDB {tmdb} ({title}), luego Actualizar metadatos reemplazándolo todo.",
-      "radarrReplace": "Radarr → {title} → Archivos: compruebe este archivo. Si es otra película, elimínelo y lance una búsqueda — o asócielo a la película correcta con Wanted → Manual Import.",
-      "sonarrFixIdentity": "Sonarr → {title} → Editar: compruebe la serie seguida. Si la carpeta contiene {jellyfin}, quítela de Sonarr e importe la carpeta bajo la serie correcta (Library Import) — o confíe en Jellyfin para los nombres de episodios.",
-      "identityUnknown": "Abra el título en Jellyfin y compárelo con {service}. Si Jellyfin se equivoca: Identificar → TMDB {tmdb}. Si es {service}: corrija el título seguido o sustituya el archivo.",
-      "numberingJellyfin": "El disco sigue el orden de TMDB: active «Confiar en Jellyfin» — o, en Sonarr → {title} → Editar, cambie el tipo de serie (Standard / Anime) y renombre los archivos.",
+      "radarrReplace": "Radarr → {title} → Archivos: comprueba este archivo. Si es otra película, elimínalo y lanza una búsqueda — o asócialo a la película correcta con Wanted → Manual Import.",
+      "sonarrFixIdentity": "Sonarr → {title} → Editar: comprueba la serie seguida. Si la carpeta contiene {jellyfin}, quítala de Sonarr e importa la carpeta bajo la serie correcta (Library Import) — o confía en Jellyfin para los nombres de episodios.",
+      "identityUnknown": "Abre el título en Jellyfin y compáralo con {service}. Si Jellyfin se equivoca: Identificar → TMDB {tmdb}. Si es {service}: corrige el título seguido o sustituye el archivo.",
+      "numberingJellyfin": "El disco sigue el orden de TMDB: activa «Confiar en Jellyfin» — o, en Sonarr → {title} → Editar, cambia el tipo de serie (Standard / Anime) y renombra los archivos.",
       "numberingSonarr": "Sonarr nombra bien estos archivos: el cine ya muestra sus nombres. Para alinear el disco: Sonarr → {title} → Renombrar archivos.",
-      "numberingUnknown": "Compare algunos episodios en pantalla. Si los nombres del cine son erróneos, active «Confiar en Jellyfin»; si no, nada que hacer.",
+      "numberingUnknown": "Compara algunos episodios en pantalla. Si los nombres del cine son erróneos, activa «Confiar en Jellyfin»; si no, nada que hacer.",
       "radarrImport": "Para seguirla: Radarr → Movies → Library Import, carpeta {folder}.",
       "sonarrImport": "Para seguirla: Sonarr → Series → Library Import, carpeta {folder}.",
       "noService": "{service} no está configurado: es el funcionamiento normal.",
-      "hardlinks": "Si este doble no es intencionado, quite uno de los dos títulos desde Radarr o Sonarr (eliminando solo los archivos de ese título)."
+      "hardlinks": "Si este doble no es intencionado, quita uno de los dos títulos desde Radarr o Sonarr (eliminando solo los archivos de ese título)."
     },
     "trust": {
       "on": "Confiar en Jellyfin para los nombres de episodios",

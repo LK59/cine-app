@@ -38,6 +38,8 @@ import { PlayerAccountPanel, sessionSeenLabel } from "@/components/player/Player
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // Rend l'agent utilisateur de jsdom après `asBrowser`.
+  vi.restoreAllMocks();
 });
 
 // 15/10/2026 (passe de nuit, BUREAU-27) : treize lignes « Vue le 14 oct. », impossibles à distinguer.
@@ -50,18 +52,42 @@ describe("appareils connectés — vue quand", () => {
   });
 });
 
+const FIREFOX_LINUX = "Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0";
+const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+const CHROME_LINUX = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+const FIREFOX_ANDROID = "Mozilla/5.0 (Android 14; Mobile; rv:131.0) Gecko/131.0 Firefox/131.0";
+const FIREFOX_MAC = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.6; rv:131.0) Gecko/20100101 Firefox/131.0";
+function asBrowser(userAgent: string) {
+  vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
+}
+
 describe("PlayerAccountPanel — known issues", () => {
-  // La fiche n'est conditionnée à rien : elle est là pour qui la cherche, sans annoncer à
-  // personne un problème qu'il n'a peut-être pas.
-  it("always shows the card, whatever the browser", () => {
+  // La fiche ne sert qu'à Firefox sous Linux : c'est là seulement que le HDR sort délavé, faute
+  // d'un réglage du navigateur coupé par défaut. Elle était d'abord montrée partout (« elle nomme
+  // Firefox, un lecteur sur téléphone comprend que ça ne le concerne pas ») ; vue sur iPhone, elle
+  // n'était qu'une ligne de bruit dans un panneau voulu épuré — Louis a tranché le 15/10/2026.
+  it("shows the card on Firefox for Linux", () => {
+    asBrowser(FIREFOX_LINUX);
     render(<PlayerAccountPanel />);
     expect(screen.getByText("player.account.help.hdrTitle")).toBeTruthy();
     expect(screen.getByText("gfx.color_management.hdr")).toBeTruthy();
   });
 
+  it.each([
+    ["an iPhone", IPHONE],
+    ["Chrome on Linux", CHROME_LINUX],
+    ["Firefox on Android", FIREFOX_ANDROID],
+    ["Firefox on a Mac", FIREFOX_MAC],
+  ])("hides it on %s, which the setting does not concern", (_name, userAgent) => {
+    asBrowser(userAgent);
+    render(<PlayerAccountPanel />);
+    expect(screen.queryByText("player.account.help.hdrTitle")).toBeNull();
+  });
+
   // Le nom du réglage se copie : on ne peut pas faire de lien vers about:config, et le retaper
   // sans faute est le seul endroit où l'utilisateur peut échouer.
   it("copies the setting name", async () => {
+    asBrowser(FIREFOX_LINUX);
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
 
@@ -75,6 +101,7 @@ describe("PlayerAccountPanel — known issues", () => {
   // Un presse-papiers refusé — contexte non sécurisé, permission bloquée — laisse le texte à
   // l'écran : il reste sélectionnable, et le dire vaut mieux qu'un bouton qui ne fait rien.
   it("says so when the clipboard refuses", async () => {
+    asBrowser(FIREFOX_LINUX);
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
       configurable: true,
@@ -195,6 +222,8 @@ describe("PlayerAccountPanel — l'ordre de la page", () => {
   // Tout au même niveau : une liste de lignes de même dessin, sans section ni carte dans la carte.
   it("met toute l'aide à plat, dans l'ordre voulu", () => {
     payload = { username: "sarah", jfUser: "sarah", role: "user" };
+    // Le seul navigateur où l'aide HDR paraît : l'ordre se vérifie avec toutes les lignes.
+    asBrowser(FIREFOX_LINUX);
     render(<PlayerAccountPanel />);
     const card = cardOf("player.account.groups.help");
     expect(card.querySelector("section")).toBeNull();

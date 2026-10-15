@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical } from "lucide-react";
@@ -28,6 +28,7 @@ import type { OtherSession } from "@/app/api/auth/sessions/route";
 import { MAINTENANCE_KEY, type MaintenanceState } from "@/lib/useMaintenance";
 import { clearDeviceCache, deviceCacheUsage } from "@/lib/resumeCache/clearDeviceCache";
 import { fmtSize, relativeTime } from "@/lib/format";
+import { isFirefoxOnLinux } from "@/lib/webcodecs/hdrDisplay";
 
 /**
  * Le compte, en une feuille.
@@ -147,6 +148,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
   // sautait quand la lecture et le mot de passe apparaissaient (23/09/2026).
   const hasJellyfin = me ? me.jfUser != null : true;
   const badge = useReportBadge();
+  const needsHdrHelp = useNeedsHdrHelp();
 
   // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
   const logout = () => signOut(hardNavigate);
@@ -205,7 +207,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
           <NewsRow />
           <OnboardingRow />
           <StatusRow />
-          <HdrFaqRow />
+          {needsHdrHelp && <HdrFaqRow />}
           <StorageRow />
           <ReportRows />
         </Group>
@@ -676,9 +678,12 @@ function StatusRow() {
  *
  * Il n'y en a qu'une pour l'instant, et elle est réelle : Firefox sous Linux n'affiche pas encore le
  * HDR correctement, les films sortent gris et délavés. Firefox sait le faire — l'option existe,
- * elle est simplement désactivée par défaut le temps que le travail se termine. Aucune détection :
- * la fiche nomme Firefox et non « votre navigateur », et quelqu'un qui la lit sur un téléphone
- * comprend en une seconde que ça ne le concerne pas.
+ * elle est simplement désactivée par défaut le temps que le travail se termine.
+ *
+ * Montrée à Firefox sous Linux seulement (`useNeedsHdrHelp`, décidé par Louis le 15/10/2026).
+ * Elle l'était d'abord partout, sans détection, au motif qu'un lecteur sur téléphone comprend vite
+ * que Firefox ne le concerne pas ; vue sur iPhone entre « État des services » et « Stockage »
+ * (relecture mobile du 15/10), c'était une ligne de bruit dans un panneau voulu épuré.
  */
 function HdrFaqRow() {
   const t = useT();
@@ -740,6 +745,16 @@ function HdrFaqRow() {
     </details>
   );
 }
+
+/**
+ * L'aide HDR ne concerne que Firefox sous Linux. Lu après l'hydratation (instantané serveur
+ * `false`) : le serveur ne connaît pas l'agent, et une ligne qui apparaîtrait côté serveur pour
+ * disparaître côté client serait un désaccord d'hydratation.
+ */
+function useNeedsHdrHelp(): boolean {
+  return useSyncExternalStore(subscribeNothing, () => isFirefoxOnLinux(navigator.userAgent), () => false);
+}
+const subscribeNothing = () => () => {};
 
 /** Le réglage Firefox qui règle le HDR sous Linux, vérifié sur place avant d'être écrit ici. */
 const FIREFOX_HDR_PREF = "gfx.color_management.hdr";
