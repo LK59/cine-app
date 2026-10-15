@@ -787,6 +787,12 @@ function readTabBase(): string | null {
 /** Ouvrir l'onglet que décrit `patch` — Recherche, Ma liste, Compte. Voir `TAB_BASE_KEY`. */
 export function cinemaSwitchTab(patch: Partial<CinemaRoute>): void {
   if (typeof window === "undefined") return;
+  // Pendant le retour d'une fermeture, la décision elle-même attend : lue maintenant, l'entrée
+  // d'onglet serait celle de la fiche qui s'en va (voir `afterBack`).
+  if (backPending) {
+    afterBack.push(() => cinemaSwitchTab(patch));
+    return;
+  }
   if (readTabBase() !== null) cinemaNavigate(patch, "replace");
   else cinemaNavigate(patch, "push", { tabBase: serialize(getSnapshot()) });
 }
@@ -797,6 +803,10 @@ export function cinemaSwitchTab(patch: Partial<CinemaRoute>): void {
  */
 export function cinemaTabHome(patch: Partial<CinemaRoute>, alreadyHome: boolean): void {
   if (typeof window === "undefined") return;
+  if (backPending) {
+    afterBack.push(() => cinemaTabHome(patch, alreadyHome));
+    return;
+  }
   const tabBase = readTabBase();
   if (tabBase !== null) {
     // Ce que l'entrée recouvre, une fois refermé ce que l'accueil referme : si rien ne change, c'est

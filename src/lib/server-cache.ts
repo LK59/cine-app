@@ -6,6 +6,7 @@ import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { qbittorrent } from "@/lib/clients/qbittorrent";
 import { jellyfin, JellyfinItem } from "@/lib/clients/jellyfin";
 import { kvCacheDb } from "@/lib/db";
+import { asJellyfinWitness } from "@/lib/jellyfinBreaker";
 import { createHash } from "node:crypto";
 import { NEW_BADGE_DAYS } from "@/lib/cinemaRails";
 import type { RecentEpisode } from "@/lib/seriesArrival";
@@ -369,7 +370,11 @@ export function refreshKeptCache(now = Date.now()): void {
     k.retryAt = now + Math.max(k.ttlMs * KEEP_AHEAD_SHARE, KEEP_RETRY_MIN_MS);
     // `forceRefresh` saute la valeur encore bonne ; une route qui lit pendant le trajet la reçoit
     // toujours, et la garde anti-ruée partage la relecture. Un échec garde l'ancienne (`withCache`).
-    withCache(key, k.ttlMs, k.fn, { forceRefresh: true }).catch(() => {});
+    // En témoin (`asJellyfinWitness`, comme le contrôle de la bibliothèque) : une liste entière relue
+    // sans personne pour l'attendre, sur un Jellyfin occupé par un scan, peut dépasser son délai — et
+    // deux d'affilée ouvraient le disjoncteur, le cinéma de tout le monde affiché « en panne ». Un
+    // échec certain (nom introuvable, connexion refusée) compte toujours.
+    asJellyfinWitness(() => withCache(key, k.ttlMs, k.fn, { forceRefresh: true })).catch(() => {});
   }
 }
 

@@ -39,8 +39,6 @@ const RELOAD_INTENT_KEY = "cine:player-reload-intent";
 interface EarlyEntry {
   at: number;
   p: Promise<Response>;
-  /** Au-delà, elle n'est plus prise — `EARLY_FETCH_MAX_AGE_MS` si absent (le script de l'ouverture). */
-  maxAge?: number;
 }
 
 type EarlyStore = Record<string, EarlyEntry | undefined>;
@@ -84,28 +82,7 @@ export function takeEarlyResponse(url: string): Promise<Response> | null {
   } catch {
     /* sans horloge, on ne la prend pas */
   }
-  return age >= 0 && age <= (entry.maxAge ?? EARLY_FETCH_MAX_AGE_MS) ? entry.p : null;
-}
-
-/**
- * Une requête partie avant que l'écran ne la demande, reprise par lui s'il arrive à temps
- * (15/10/2026) — le même mécanisme que l'ouverture, pour l'appui sur une affiche (`prefetchTitleSheet`).
- *
- * Une donnée propre au compte (l'état « vu », la position) ne passe jamais par `preload` de SWR :
- * un préchargement jamais consommé y restait et était rendu des heures plus tard comme neuf (chasse
- * aux défauts du 25/09/2026). Ici, passé `maxAgeMs`, la réponse n'est plus prise : la fiche refait sa
- * requête, comme si rien n'était parti. Une requête encore valable pour la même adresse n'est pas
- * relancée.
- */
-export function startEarlyFetch(url: string, maxAgeMs: number): void {
-  if (typeof window === "undefined" || typeof fetch !== "function") return;
-  const store = (window.__cineEarly ??= {});
-  const now = performance.now();
-  const held = store[url];
-  if (held && now - held.at <= (held.maxAge ?? EARLY_FETCH_MAX_AGE_MS)) return;
-  const p = fetch(url);
-  p.catch(() => {});
-  store[url] = { at: now, p, maxAge: maxAgeMs };
+  return age >= 0 && age <= EARLY_FETCH_MAX_AGE_MS ? entry.p : null;
 }
 
 /**

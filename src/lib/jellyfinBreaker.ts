@@ -127,7 +127,11 @@ export function noteJellyfinSuccess(): void {
  * de tout le monde passait « en panne » pendant une analyse. Un échec certain (nom introuvable,
  * connexion refusée) compte toujours, et une réponse referme comme ailleurs.
  */
-const witness = new AsyncLocalStorage<true>();
+// Sur `globalThis`, comme l'état (15/10/2026) : le minuteur des listes gardées chaudes part de
+// `instrumentation.ts` et relit avec les fonctions d'une route — deux exemplaires de ce module (voir
+// `server-cache.ts`). Un marqueur propre à chacun ne se voyait pas de l'un à l'autre.
+const WITNESS_KEY = Symbol.for("cine-app.jellyfinWitness");
+const witness: AsyncLocalStorage<true> = ((globalThis as { [WITNESS_KEY]?: AsyncLocalStorage<true> })[WITNESS_KEY] ??= new AsyncLocalStorage<true>());
 
 /** `run`, ses appels à Jellyfin en témoins : leurs délais dépassés n'ouvrent rien. */
 export function asJellyfinWitness<T>(run: () => Promise<T>): Promise<T> {

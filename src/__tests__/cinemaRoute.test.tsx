@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
+import { cinemaSwitchTab, cinemaTabHome } from "@/lib/cinemaRoute";
 import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack, useRouteBehind, personBehind, markSheetLeaving, useSheetLeaving, useSheetOrigins, behindIsSameTitleSheet, behindOrigins, readCinemaRoute } from "@/lib/cinemaRoute";
 
 beforeEach(() => {
@@ -584,6 +585,32 @@ describe("une navigation pendant le retour d'une fermeture", () => {
       await back;
     });
     expect(result.current.film).toBeNull();
+  });
+
+  it("Recherche touchée pendant le retour : l'entrée d'onglet recouvre l'accueil, et Accueil y revient en un retour", async () => {
+    // Ce que la barre du bas envoie vraiment (`openPanel`, playerNav.ts) : tout se referme.
+    const closed = { search: false, list: false, account: false, film: null, serie: null, episodes: false, discover: null, person: null, browse: null, activity: null, report: null, news: null };
+    const { result } = renderHook(() => useCinemaRoute());
+    act(() => openLibraryTitle("movie", 603));
+    const arrived = nextPopstate();
+    act(() => {
+      cinemaClose({ film: null });
+      cinemaSwitchTab({ ...closed, search: true });
+    });
+    await act(async () => {
+      await arrived;
+    });
+    expect(result.current.search).toBe(true);
+    expect(result.current.film).toBeNull();
+    // Accueil depuis la Recherche : l'entrée d'onglet recouvre l'accueil (et non la fiche partie),
+    // donc c'est un retour — pas une réécriture qui laisserait une entrée de trop derrière soi.
+    const back = vi.spyOn(window.history, "back");
+    act(() => cinemaTabHome(closed, false));
+    expect(back).toHaveBeenCalledTimes(1);
+    back.mockRestore();
+    await act(async () => {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
   });
 
   it("sans retour en vol, une navigation part tout de suite, comme avant", () => {

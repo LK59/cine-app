@@ -1,6 +1,5 @@
 import { preload } from "swr";
 import { fetcher, progressKey } from "@/lib/swr";
-import { startEarlyFetch } from "@/lib/earlyFetch";
 import { prefetchSheetBannerNow } from "@/lib/sheetMorph/prefetchBanners";
 
 /**
@@ -68,10 +67,6 @@ export function prefetchTitleSheet(
   // Le logo de la fiche, dès l'appui (15/10/2026) : le visuel partait déjà (`data-sheet-backdrop`),
   // le logo, servi par TMDB lui aussi, n'arrivait qu'une fois la fiche montée.
   prefetchSheetBannerNow(title.logoUrl);
-  // L'état « vu » et la position du compte, eux aussi dès l'appui — mais pas par `preload` (voir
-  // plus bas) : par une requête que la fiche ne reprend que dans les trois secondes. Passé ce délai
-  // (un doigt qui frôlait l'affiche en défilant), elle refait la sienne : jamais plus vieille qu'avant.
-  startEarlyFetch(progressKey(title.jellyfinItemId), PROGRESS_EARLY_MAX_AGE_MS);
   // La description seulement, la même pour tout le monde. Pas l'état Jellyfin ni la liste des
   // épisodes : un préchargement jamais consommé reste dans la réserve de SWR et est rendu, des
   // heures plus tard, comme s'il venait d'arriver — un doigt qui frôlait *Dune* en défilant, le film
@@ -88,8 +83,6 @@ export function prefetchTitleSheet(
 }
 
 const PREFETCH_AGAIN_MS = 30_000;
-/** Entre l'appui et le montage de la fiche il s'écoule 100 à 300 ms ; trois secondes couvrent un appui long. */
-export const PROGRESS_EARLY_MAX_AGE_MS = 3_000;
 const recentlyPrefetched = new Map<string, number>();
 
 /** Pour les tests : oublier ce qui a déjà été demandé. */

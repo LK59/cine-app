@@ -1,4 +1,5 @@
 import { catalogueMembers } from "@/lib/catalogueMembers";
+import { asJellyfinWitness } from "@/lib/jellyfinBreaker";
 import {
   cachedJellyfinFirstEpisodes,
   cachedJellyfinRecentEpisodes,
@@ -27,12 +28,16 @@ export function startCatalogueWarm(): void {
   const first = setTimeout(() => {
     // Chacune pour soi : une source absente au démarrage ne retient pas les autres, et elle sera lue
     // à la première ouverture comme avant.
-    void Promise.allSettled([
-      catalogueMembers(),
-      cachedJellyfinFirstEpisodes(),
-      cachedJellyfinSeasons(),
-      cachedJellyfinRecentEpisodes(),
-    ])
+    // En témoin, comme les relectures du minuteur (`refreshKeptCache`) : quatre listes entières
+    // demandées ensemble au démarrage ne doivent pas suffire à déclarer Jellyfin en panne.
+    void asJellyfinWitness(() =>
+      Promise.allSettled([
+        catalogueMembers(),
+        cachedJellyfinFirstEpisodes(),
+        cachedJellyfinSeasons(),
+        cachedJellyfinRecentEpisodes(),
+      ])
+    )
       // Puis les deux catalogues par leurs propres routes, une fois les listes en mémoire — voir
       // `selfWarm.ts`. Importé ici et pas en tête : le module tire `node:crypto`.
       .then(() => import("@/lib/selfWarm"))

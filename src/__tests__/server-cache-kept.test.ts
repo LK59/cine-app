@@ -14,7 +14,9 @@ import {
   stopKeptCacheRefresh,
   keptCacheKeys,
   invalidateKey,
+  withCache,
 } from "@/lib/server-cache";
+import { noteJellyfinFailure, jellyfinIsDown, resetJellyfinBreaker } from "@/lib/jellyfinBreaker";
 
 const TTL = 120_000;
 
@@ -120,5 +122,36 @@ describe("listes gardées chaudes (withKeptCache)", () => {
     await withKeptCache("k:f", TTL, fn);
     refreshKeptCache(Date.now() + 25 * 3600_000);
     expect(keptCacheKeys()).not.toContain("k:f");
+  });
+
+  describe("et le disjoncteur Jellyfin", () => {
+    /** Ce que fait le client Jellyfin quand une liste dépasse son délai : il le signale, puis lève. */
+    const slowJellyfin = async (): Promise<string> => {
+      const err = Object.assign(new Error("délai dépassé"), { name: "TimeoutError" });
+      noteJellyfinFailure(err, Date.now(), Date.now());
+      throw err;
+    };
+
+    afterEach(() => resetJellyfinBreaker());
+
+    it("des relectures de fond qui expirent ne déclarent pas Jellyfin en panne (témoins)", async () => {
+      resetJellyfinBreaker();
+      const fn = vi.fn(async () => "liste");
+      startKeptCacheRefresh();
+      await withKeptCache("k:jf", TTL, fn);
+      fn.mockImplementation(slowJellyfin);
+      // Plusieurs relectures, toutes en échec ambigu, à moins d'une minute d'écart.
+      await vi.advanceTimersByTimeAsync(TTL * 1.5);
+      expect(fn.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(jellyfinIsDown()).toBe(false);
+    });
+
+    it("témoin de contrôle : les mêmes échecs, demandés par des requêtes, l'ouvrent toujours", async () => {
+      resetJellyfinBreaker();
+      await withCache("k:jf-direct-1", TTL, slowJellyfin).catch(() => {});
+      await vi.advanceTimersByTimeAsync(5_000);
+      await withCache("k:jf-direct-2", TTL, slowJellyfin).catch(() => {});
+      expect(jellyfinIsDown()).toBe(true);
+    });
   });
 });
