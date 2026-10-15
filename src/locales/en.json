@@ -2032,6 +2032,7 @@
       },
       "sessionOpened": "Opened {date}",
       "sessionSeen": "Seen {date}",
+      "sessionSeenAgo": "Seen {when}",
       "openManage": "Open management",
       "status": "Service status",
       "openStatus": "View service status",
