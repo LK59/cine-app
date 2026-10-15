@@ -1099,6 +1099,15 @@ export class Remuxer {
     }
   }
 
+  /** Le silence du réseau sous une demande — voir `ByteSource.networkSilentMs` (DECISIONS.md §97). */
+  networkSilentMs(): number {
+    try {
+      return this.source.networkSilentMs?.() ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
   /** The next pair of segments, or null once the file is exhausted. */
   /**
    * The next piece of media, handed over as soon as it is settled rather than when the keyframe

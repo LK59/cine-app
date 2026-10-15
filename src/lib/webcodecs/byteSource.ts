@@ -51,6 +51,12 @@ export interface ByteSource {
   /** Le réseau depuis le dernier saut (`abandon`) — voir `NetworkWindow`. Optionnel. */
   networkSinceSeek?(): NetworkWindow | null;
   /**
+   * Depuis combien de millisecondes le réseau ne livre plus rien alors qu'on lui demande quelque
+   * chose — voir `HttpByteSource.networkSilentMs`. Zéro quand rien n'est demandé. Optionnel : une
+   * source en mémoire n'attend jamais le réseau.
+   */
+  networkSilentMs?(): number;
+  /**
    * Les morceaux entiers en mémoire, et la date du fichier selon le serveur — ce que l'arrêt d'une
    * lecture garde sur l'appareil (`keepOnStop`). Optionnel : une source en mémoire n'a rien à garder.
    */
@@ -563,6 +569,25 @@ export class HttpByteSource implements ByteSource {
     if (document.visibilityState !== "visible") return;
     this.wakeUntil = performance.now() + WAKE_FIRST_BYTE_WINDOW_MS;
     for (const arm of this.silentAttempts) arm();
+    // Ce qui s'est tu en arrière-plan ne se compte pas : le système a pu mettre le réseau en veille.
+    this.silenceFloor = Date.now();
+  };
+  /**
+   * Le silence du réseau, pour la borne d'une coupure en pleine lecture (DECISIONS.md §97).
+   *
+   * `demand` : les morceaux en cours de demande, tentatives, attentes entre elles et attente du
+   * retour du réseau comprises (`fetchWithRetries`). `silentFrom` : le début de la demande restée
+   * sans octet — posé quand une demande commence, effacé par un morceau arrivé ou par une demande
+   * qui finit sans échec réseau, **gardé** par une demande qui échoue, si bien qu'un serveur qui
+   * refuse aussitôt (essais de 2 s séparés de quelques secondes) reste un silence qui dure.
+   * `silenceFloor` : un retour au premier plan ou `online` — le silence repart de là. En `Date.now()` :
+   * des durées de quelques dizaines de secondes, et l'horloge que les minuteurs simulés savent avancer.
+   */
+  private demand = 0;
+  private silentFrom: number | null = null;
+  private silenceFloor = 0;
+  private readonly onOnline = () => {
+    this.silenceFloor = Date.now();
   };
   private window: {
     since: number;
@@ -583,6 +608,7 @@ export class HttpByteSource implements ByteSource {
     lastOpened.set(url, this);
     while (lastOpened.size > 4) lastOpened.delete(lastOpened.keys().next().value!);
     if (typeof document !== "undefined") document.addEventListener("visibilitychange", this.onVisibility);
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") window.addEventListener("online", this.onOnline);
   }
 
   // The length has to come from the server before anything else can be parsed. HEAD is tried
@@ -677,6 +703,10 @@ export class HttpByteSource implements ByteSource {
   private async fetchWithRetries(start: number, end: number, own: AbortSignal): Promise<Uint8Array> {
     // Ce morceau réessaie-t-il ? Dit à l'hôte (`networkTrouble`, §78) et retiré quoi qu'il arrive.
     let retrying = false;
+    // Une demande au réseau de plus — voir `networkSilentMs`.
+    this.demand += 1;
+    this.silentFrom ??= Date.now();
+    let networkFailed = false;
     try {
       return await this.fetchAttempts(start, end, own, () => {
         if (!retrying) {
@@ -684,9 +714,27 @@ export class HttpByteSource implements ByteSource {
           noteFetchRetrying();
         }
       });
+    } catch (error) {
+      networkFailed = isNetworkFailure(error);
+      throw error;
     } finally {
+      this.demand -= 1;
+      if (this.demand === 0 && !networkFailed) this.silentFrom = null;
       if (retrying) noteFetchSettled();
     }
+  }
+
+  /**
+   * Depuis combien de temps le réseau ne livre plus un octet alors qu'on lui demande quelque chose
+   * (DECISIONS.md §97). Zéro quand rien n'est demandé, sauf après une demande qui a échoué : un film
+   * en pause, un tampon plein, une lecture servie par l'appareil ne sont pas un silence. Un morceau arrivé (1 Mio, bien au-delà des
+   * 256 Kio qui suffisent à dire un lien lent, §77) le remet à zéro ; un lien lent mais vivant en livre
+   * un bien avant la borne — sous ~40 Ko/s, l'échéance de 25 s des requêtes l'aurait de toute façon
+   * coupé. Mesure seulement : rien ici ne change une requête.
+   */
+  networkSilentMs(): number {
+    if (this.silentFrom === null) return 0;
+    return Math.max(0, Date.now() - Math.max(this.silentFrom, this.silenceFloor));
   }
 
   private async fetchAttempts(start: number, end: number, own: AbortSignal, noteRetrying: () => void): Promise<Uint8Array> {
@@ -792,6 +840,8 @@ export class HttpByteSource implements ByteSource {
         }
         metered?.received(bytes.byteLength);
         this.networkBytes += bytes.byteLength;
+        // Le réseau livre : le silence est fini — et repart d'ici pour les autres morceaux en vol.
+        this.silentFrom = this.demand > 1 ? Date.now() : null;
         const endAt = performance.now();
         this.note(sentAt, headersAt, endAt, bytes.byteLength, res);
         // Toutes les requêtes, pas seulement celles d'un saut : le débit en pleine lecture — voir
@@ -1254,6 +1304,7 @@ export class HttpByteSource implements ByteSource {
     if (this.controller.signal.aborted) return;
     this.controller.abort();
     if (typeof document !== "undefined") document.removeEventListener("visibilitychange", this.onVisibility);
+    if (typeof window !== "undefined" && typeof window.removeEventListener === "function") window.removeEventListener("online", this.onOnline);
     this.silentAttempts.clear();
     // Chaque morceau a son propre interrupteur : la fermeture les coupe tous.
     for (const own of this.inflightControllers.values()) own.abort();

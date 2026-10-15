@@ -888,3 +888,120 @@ describe("retour au premier plan : une requête muette est redemandée (13/10/20
     }
   });
 });
+
+/**
+ * Le silence du réseau sous une demande (DECISIONS.md §97) : ce que la borne d'une coupure en pleine
+ * lecture mesure. Trois coupures avec un `fetch` factice — hors ligne, refus immédiat, requête pendante
+ * avec `onLine` vrai (le cas réel : Wi-Fi sans Internet, 5G morte en itinérance) — et un lien lent.
+ */
+describe("le silence du réseau (§97)", () => {
+  /** Une fenêtre factice dont on garde les écouteurs (`online`). */
+  function fakeWindow() {
+    const listeners = new Map<string, Set<() => void>>();
+    vi.stubGlobal("window", {
+      addEventListener: (t: string, f: () => void) => void (listeners.get(t) ?? listeners.set(t, new Set()).get(t)!).add(f),
+      removeEventListener: (t: string, f: () => void) => void listeners.get(t)?.delete(f),
+    });
+    return { fire: (t: string) => listeners.get(t)?.forEach((f) => f()) };
+  }
+  const ok = (init?: RequestInit & { headers?: Record<string, string> }) => {
+    const [, from, to] = /bytes=(\d+)-(\d+)/.exec(init?.headers?.Range ?? "")!.map(Number);
+    return { status: 206, headers: { get: () => `bytes ${from}-${to}/${SIZE}` }, arrayBuffer: async () => new Uint8Array(to - from + 1).buffer };
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("rien demandé : aucun silence", async () => {
+    stubFetch();
+    const source = await HttpByteSource.open("/calme.mkv", SIZE);
+    await source.read(0, 4);
+    await settle();
+    expect(source.networkSilentMs()).toBe(0);
+    source.close();
+  });
+
+  it("hors ligne (`onLine` faux) : le silence court pendant l'attente du réseau, et repart de zéro à `online`", async () => {
+    const win = fakeWindow();
+    vi.stubGlobal("navigator", { onLine: false });
+    vi.stubGlobal("fetch", () => Promise.reject(new TypeError("Load failed")));
+    vi.useFakeTimers();
+    const source = await HttpByteSource.open("/hors-ligne-silence.mkv", SIZE);
+    const read = source.read(5 * CHUNK, 4).catch(() => null);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(source.networkSilentMs()).toBeGreaterThanOrEqual(30_000);
+    // Le réseau revient : le silence repart d'ici (la lecture, elle, repart toute seule).
+    vi.stubGlobal("fetch", async (_u: string, init?: RequestInit & { headers?: Record<string, string> }) => ok(init));
+    (navigator as { onLine: boolean }).onLine = true;
+    win.fire("online");
+    expect(source.networkSilentMs()).toBeLessThan(100);
+    await vi.advanceTimersByTimeAsync(2000);
+    await read;
+    expect(source.networkSilentMs()).toBe(0);
+    source.close();
+  });
+
+  it("refus immédiat (`onLine` vrai) : chaque lecture échoue en ~2 s, mais le silence dure d'un essai à l'autre", async () => {
+    fakeWindow();
+    vi.stubGlobal("navigator", { onLine: true });
+    vi.stubGlobal("fetch", () => Promise.reject(new TypeError("Failed to fetch")));
+    vi.useFakeTimers();
+    const source = await HttpByteSource.open("/refus-silence.mkv", SIZE);
+    const first = source.read(3 * CHUNK, 4).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect((await first) as { network?: boolean }).toMatchObject({ network: true });
+    // Rien n'est en vol entre deux essais : le silence n'en est pas effacé.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(source.networkSilentMs()).toBeGreaterThanOrEqual(15_000);
+    const second = source.read(4 * CHUNK, 4).catch(() => null);
+    await vi.advanceTimersByTimeAsync(5000);
+    await second;
+    expect(source.networkSilentMs()).toBeGreaterThanOrEqual(20_000);
+    // Un morceau arrive : fini.
+    vi.stubGlobal("fetch", async (_u: string, init?: RequestInit & { headers?: Record<string, string> }) => ok(init));
+    await source.read(6 * CHUNK, 4);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(source.networkSilentMs()).toBe(0);
+    source.close();
+  });
+
+  it("requête pendante, `onLine` vrai : le silence court tant qu'elle pend", async () => {
+    fakeWindow();
+    vi.stubGlobal("navigator", { onLine: true });
+    vi.stubGlobal("fetch", (_u: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true }))
+    );
+    vi.useFakeTimers();
+    const source = await HttpByteSource.open("/pendante-silence.mkv", SIZE);
+    const read = source.read(2 * CHUNK, 4).catch(() => null);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(source.networkSilentMs()).toBeGreaterThanOrEqual(20_000);
+    source.close();
+    await read;
+  });
+
+  it("un lien lent qui livre ses morceaux n'est jamais un silence long", async () => {
+    fakeWindow();
+    vi.stubGlobal("navigator", { onLine: true });
+    // Chaque morceau met 8 s à arriver (≈ 1 Mbit/s), l'un après l'autre.
+    vi.stubGlobal("fetch", async (_u: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      await new Promise((r) => setTimeout(r, 8000));
+      return ok(init);
+    });
+    vi.useFakeTimers();
+    const source = await HttpByteSource.open("/lent-silence.mkv", SIZE);
+    let worst = 0;
+    for (let i = 1; i < 6; i++) {
+      const read = source.read(i * CHUNK, 4);
+      for (let s = 0; s < 9; s++) {
+        await vi.advanceTimersByTimeAsync(1000);
+        worst = Math.max(worst, source.networkSilentMs());
+      }
+      await read;
+    }
+    expect(worst).toBeLessThan(10_000);
+    source.close();
+  });
+});
