@@ -28,6 +28,7 @@ import { getDb, seedInitialNews, seedNewsPage } from "@/lib/db";
 import { newsDb, newsFor } from "@/lib/news/store";
 import { INITIAL_NEWS_CONTENT, INITIAL_NEWS_SEED, INITIAL_NEWS_VERSION } from "@/lib/news/initialPage";
 import { NEWS_848_CONTENT, NEWS_848_SEED, NEWS_848_VERSION } from "@/lib/news/page848";
+import { NEWS_864_VERSION } from "@/lib/news/page864";
 import { STARTUP_LOG } from "@/lib/eventLogs";
 import { setProviderFactoryForTests, type TranslationCall } from "@/lib/subtitleGen/providers";
 import { NEWS_TRANSLATION_SCHEMA, rebuild } from "@/lib/news/translate";
@@ -58,11 +59,13 @@ function logLines(): Record<string, unknown>[] {
 beforeEach(() => verify.mockReset());
 
 describe("la page initiale, publiée par la migration", () => {
-  it("base vide : la 8.44 est publiée, la 8.48 attend en brouillon ; publiée, un compte qui n'a rien vu a les deux fusionnées", () => {
+  it("base vide : la 8.44 et la 8.64 sont publiées, la 8.48 attend en brouillon ; publiée, un compte qui n'a rien vu a les trois fusionnées", () => {
     getDb();
     const pages = newsDb.published();
-    expect(pages.map((p) => p.version)).toEqual([INITIAL_NEWS_VERSION]);
-    const initial = pages[0];
+    // La 8.64 est publiée d'office sur toute installation qui prend l'image (Louis, 15/10/2026).
+    expect(pages.map((p) => p.version)).toEqual([NEWS_864_VERSION, INITIAL_NEWS_VERSION]);
+    const initial = pages[1];
+    const p864 = pages[0];
     expect(initial.seq).toBe(1);
     expect(initial.content.fr.sections[0].entries[0].title).toBe("Améliorer les dialogues");
     for (const lang of ["en", "es", "de"] as const) expect(initial.content[lang]?.sections.length).toBe(2);
@@ -71,10 +74,10 @@ describe("la page initiale, publiée par la migration", () => {
     expect(draft.content.fr.sections[0].entries[0].title).toBe("Connexion lente");
     for (const lang of ["en", "es", "de"] as const) expect(draft.content[lang]?.sections.length).toBe(1);
     // En brouillon, elle ne s'annonce à personne.
-    expect(newsFor("un-compte-quelconque").unseen).toEqual([initial.id]);
-    // Publiée depuis Activité : un compte qui n'a rien vu reçoit les deux, la plus récente d'abord.
+    expect(newsFor("un-compte-quelconque").unseen).toEqual([p864.id, initial.id]);
+    // Publiée depuis Activité : un compte qui n'a rien vu reçoit les trois, la plus récente d'abord.
     newsDb.publish(draft.id);
-    expect(newsFor("un-autre").unseen).toEqual([draft.id, initial.id]);
+    expect(newsFor("un-autre").unseen).toEqual([draft.id, p864.id, initial.id]);
   });
 
   it("second démarrage : rien ne change — ni nouvelle page, ni republication, ni réarmement", () => {
@@ -125,10 +128,10 @@ describe("le drapeau par compte", () => {
     const seen = await import("@/app/api/release-notes/seen/route");
     asUser("mathis");
     const before = (await (await GET(req())).json()) as { unseen: number[]; pages: { id: number }[] };
-    expect(before.unseen).toHaveLength(2);
+    expect(before.unseen).toHaveLength(3);
     expect((await seen.POST(req({ ids: before.unseen }))).status).toBe(204);
     expect(((await (await GET(req())).json()) as { unseen: number[] }).unseen).toEqual([]);
-    expect(newsFor("emma").unseen).toHaveLength(2);
+    expect(newsFor("emma").unseen).toHaveLength(3);
   });
 
   it("refuse un visiteur sans session", async () => {

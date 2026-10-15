@@ -7,6 +7,7 @@ import { DATA_DIR } from "@/lib/dataDir";
 import { INITIAL_NEWS_CONTENT, INITIAL_NEWS_SEED, INITIAL_NEWS_VERSION } from "@/lib/news/initialPage";
 import type { NewsContentByLang } from "@/lib/news/content";
 import { NEWS_848_CONTENT, NEWS_848_SEED, NEWS_848_VERSION } from "@/lib/news/page848";
+import { NEWS_864_CONTENT, NEWS_864_SEED, NEWS_864_VERSION } from "@/lib/news/page864";
 
 // Réexporté, et défini ailleurs : le journal des erreurs a besoin du chemin et ne doit rien
 // devoir à la base — voir `dataDir.ts`. Une seule écriture de la valeur, ici comme là-bas.
@@ -543,6 +544,8 @@ function migrate(db: Database.Database): void {
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");
+  // Publiée d'office sur toute installation qui prend cette image (Louis, 15/10/2026).
+  seedNewsPage(db, NEWS_864_SEED, NEWS_864_VERSION, NEWS_864_CONTENT);
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
     const now = Date.now();
     db.prepare("INSERT OR IGNORE INTO onboarding (user_name, pending, updated_at) VALUES ('louis', 1, ?)").run(now);
