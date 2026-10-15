@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     // Jamais au nom de l'administrateur de Jellyseerr pour un compte ordinaire — voir la route
     // jumelle `/api/jellyseerr/requests` (audit du 08/10/2026).
     if (session.role !== "admin" && !identity.cookie && identity.userId == null) {
-      throw new HttpError("Jellyseerr ne reconnaît pas encore ce compte. Réessaie dans un instant.", 503, "request_identity_pending");
+      throw new HttpError("Jellyseerr ne reconnaît pas encore ce compte. Réessayez dans un instant.", 503, "request_identity_pending");
     }
     let seasons: number[] | undefined;
     if (type === "series") {
