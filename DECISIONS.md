@@ -2869,6 +2869,20 @@ sources et vérifié sur la vraie bibliothèque (`hls-contrat.test.ts`) :
   Conséquence voulue, conforme à « la coupure : attente visible » : l'écran « connexion perdue » vient
   après ~4,5 min de coupure au lieu de ~48 s, et une coupure de 60 s reprend seule (~8 s après le
   retour du réseau) au lieu de laisser l'écran. Les six relances et leurs délais sont inchangés.
+  **Revu le 15/10/2026 (Louis) : l'écran final revient à ~48 s.** Mesuré hors ligne (Chrome,
+  `setOffline` de Playwright) : hls.js 1.7, `navigator.onLine` faux, attend le réseau **sans fin**
+  (`retryDate = Infinity`) et ne déclare aucune fatale — l'écran ne venait jamais (image figée sous
+  « hors ligne » après 5 min 30). La borne est à nous : `NETWORK_OUTAGE_GIVE_UP_MS` (PlayerHost), 48 s
+  depuis le premier signe (première requête sans réponse, ou première fatale réseau), effacée au premier
+  fragment accepté ; à l'échéance, hls.js arrêté et détaché, « La lecture a été interrompue… ».
+  « Connexion perdue ou instable… » reste dite dès le premier signe ; une coupure plus courte reprend
+  seule ; « Réessayer » repart de `lastKnownTime`, la position où l'image s'est figée. Les politiques
+  d'hls.js ne sont pas touchées : réduire `fragLoadPolicy.errorRetry` ne met pas fin à l'attente hors
+  ligne (prise dès que `maxNumRetry` > 0 sur un flux à niveau unique), et zéro supprimerait aussi ses
+  nouveaux essais silencieux d'une erreur HTTP passagère ; `manifestLoadPolicy` / `playlistLoadPolicy`
+  ne servent qu'à l'ouverture (VOD), couverte par le chien de garde des 20 s ; `keyLoadPolicy` est sans
+  objet (flux non chiffré). Nos six relances (45 s) gardent la main là où hls.js déclare la fatale.
+  Tests : `PlayerHost-hls-recovery.test.tsx` « une coupure a sa borne ».
 - Mesuré sur une instance de test contre le vrai Jellyfin (Chrome 155, lecteur serveur, avant/après) :
   démarrage, préchauffage repris (`startPosition` respecté), coupures 5 s / 60 s / hors ligne 60 s, saut
   avant 600 s et arrière 15 s dans le tampon, changement de piste, flux 4K HDR converti SDR, erreur de

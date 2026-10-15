@@ -1695,12 +1695,19 @@ rebuild — `fallToStable` natively, a renegotiation on the server player).
 
 **hls.js (server player outside WebKit), since 1.7.3 (14/10/2026).** A segment request that gets no answer at
 all (status 0: the connection is cut) is first retried by hls.js itself — 1, 2, 4, 8, 8, 8 s — before any fatal
-error; 1.5.17 declared it fatal at once. The player marks such a non-fatal error as a cut (`reconnecting`, the
-same « Connexion perdue ou instable… »), so those seconds are never judged as slowness. Measured on a test
-instance against the real Jellyfin: a 5 s cut is absorbed by both versions; a 60 s cut ended on the
-« connexion perdue » screen at ~48 s with 1.5.17 and stayed there once the network was back, while 1.7.3
-resumes on its own ~8 s after the network returns; the screen now comes after ~4.5 min (each of our six
-relaunches gives hls.js its own retries). Media recovery: hls.js 1.7 resets the MediaSource itself on
+error; 1.5.17 declared it fatal at once. And when `navigator.onLine` is false, hls.js 1.7 waits for the network
+**without end** (`retryDate = Infinity`, « Waiting for connection (offline) »), never raising a fatal: our six
+relaunches never started, and the final screen never came (measured 15/10/2026 in Chrome, offline through
+Playwright: still frozen under « hors ligne » after 5 min 30). The player marks such a non-fatal error as a cut
+(`reconnecting`, the same « Connexion perdue ou instable… »), so those seconds are never judged as slowness,
+and since 15/10/2026 bounds the cut itself (`NETWORK_OUTAGE_GIVE_UP_MS`, 48 s from the first sign — the first
+request without an answer or the first network fatal —, cleared by the next buffered fragment): at the
+deadline hls.js is stopped and detached and « La lecture a été interrompue… » is shown, ~48 s as with 1.5.17
+(Louis's decision). A shorter cut still resumes on its own; « Réessayer » restarts at the position the picture
+froze at (`lastKnownTime`). hls.js's own load policies are left as they are: lowering `fragLoadPolicy.errorRetry`
+does not end the offline wait (taken whenever `maxNumRetry` > 0 on a single-variant stream), and zero would also
+drop hls.js's silent retries of a passing HTTP error. Our six relaunches (45 s) keep the hand where hls.js does
+declare the fatal (online, server unreachable). Media recovery: hls.js 1.7 resets the MediaSource itself on
 `MEDIA_SOURCE_REQUIRES_RESET`; when it then declares the error fatal (no SDR variant to fall back to), the
 player only restarts loading — one recovery per incident — and every restart is given the position the
 element was at (`startLoad(position)`, `hlsRecovery.ts`), never `config.startPosition`, which is the

@@ -311,7 +311,10 @@ suppose désormais :
   `MEDIA_DETACHING`, ou de `lastKnownTime` — jamais de `config.startPosition`, le point de reprise d'une
   séance préchauffée (§78).
 - Une requête sans réponse (statut 0) est réessayée par hls.js avant toute fatale : marquée coupure
-  (`reconnecting`), jamais lenteur.
+  (`reconnecting`), jamais lenteur. Hors ligne (`navigator.onLine` faux), hls.js attend le réseau sans
+  fin, sans fatale : la coupure a donc sa borne à nous, `NETWORK_OUTAGE_GIVE_UP_MS` (48 s depuis le
+  premier signe, effacée au premier fragment accepté) — à l'échéance, hls.js arrêté et détaché, écran
+  « La lecture a été interrompue… », « Réessayer » à `lastKnownTime` (15/10/2026, DECISIONS.md §67).
 - Inchangé, et à savoir : sur Chrome, une erreur de décodage lève aussi l'`error` de l'élément, dont
   l'échelle du son (marche 1, 1,2 s) renégocie par-dessus la récupération d'hls.js — mesuré à
   l'identique en 1.5.17 et 1.7.3 (reprise à la position en ~5 s).

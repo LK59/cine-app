@@ -174,6 +174,24 @@ function subtitleFactsOf(tracks: readonly ExternalSubtitleTrack[], id: number | 
 }
 
 const MAX_NETWORK_RETRIES = 6;
+/**
+ * Une coupure du lecteur serveur (hls.js) : l'écran « La lecture a été interrompue » au plus tard
+ * 48 s après son premier signe — comme avec hls.js 1.5.17 (décision de Louis du 15/10/2026).
+ *
+ * hls.js 1.7 attend lui-même le réseau : une requête sans réponse alors que `navigator.onLine` est
+ * faux met le chargement en attente **sans fin** (`retryDate = Infinity`, « Waiting for connection
+ * (offline) »), sans jamais déclarer de fatale — nos six relances ne partaient donc jamais, et l'écran
+ * ne venait pas (mesuré dans Chrome hors ligne : plus de 5 min 30, image figée sous « hors ligne »).
+ * Réduire `fragLoadPolicy.errorRetry` n'y change rien tant que `maxNumRetry` est au-dessus de zéro
+ * (le chemin d'attente est pris pour un flux à niveau unique), et zéro supprimerait aussi les nouveaux
+ * essais silencieux d'hls.js sur une erreur HTTP passagère. La borne est donc la nôtre, et la
+ * politique d'hls.js reste la sienne : comptée dès la première requête sans réponse ou la première
+ * fatale réseau, effacée au premier fragment accepté. Une coupure plus courte reprend seule, comme
+ * avant ; au-delà, « Réessayer » repart de la position où l'image s'est figée (`lastKnownTime`).
+ * Juste au-dessus des six relances (1 + 2 + 4 + 8 + 15 + 15 = 45 s), qui gardent la main là où hls.js
+ * déclare la fatale lui-même (en ligne, serveur injoignable) : les deux bornes ne se croisent pas.
+ */
+export const NETWORK_OUTAGE_GIVE_UP_MS = 48_000;
 
 // ── Audio-codec fallback ladder (native HLS path) ────────────────────────────────────────────
 // Ground truth from live testing: a device's own canPlayType() can overreport what its native
@@ -638,6 +656,8 @@ function ActivePlayer({
   const networkRetryCount = useRef(0);
   const mediaRetryCount = useRef(0);
   const networkRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** La borne d'une coupure (`NETWORK_OUTAGE_GIVE_UP_MS`), armée au premier signe, effacée au premier fragment. */
+  const outageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * La position de l'élément juste avant le dernier détachement d'hls.js (`MEDIA_DETACHING`) : quand
    * hls.js récupère lui-même (1.7, `hlsRecovery.ts`), l'élément est déjà remis à zéro quand notre
@@ -1340,6 +1360,8 @@ function ActivePlayer({
       hlsRef.current = null;
       if (networkRetryTimer.current) clearTimeout(networkRetryTimer.current);
       networkRetryTimer.current = null;
+      if (outageTimer.current) clearTimeout(outageTimer.current);
+      outageTimer.current = null;
       if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
       loadWatchdog.current = null;
       if (linkWatch.current) clearInterval(linkWatch.current);
@@ -1997,8 +2019,34 @@ function ActivePlayer({
       hls.on(Hls.Events.LEVEL_LOADED, (_e, d) => startup.variant(d?.stats));
       hls.on(Hls.Events.FRAG_LOADING, () => startup.fragAsked());
       hls.on(Hls.Events.FRAG_LOADED, (_e, d) => startup.fragLoaded(d?.frag?.stats, d?.payload?.byteLength));
+      // La borne d'une coupure (`NETWORK_OUTAGE_GIVE_UP_MS`) : armée au premier signe, une seule fois
+      // par coupure ; à l'échéance, l'écran final — hls.js arrêté et détaché, comme au bout du budget
+      // média, pour qu'il ne reprenne pas sous l'écran quand le réseau revient.
+      const armOutage = () => {
+        if (outageTimer.current) return;
+        outageTimer.current = setTimeout(() => {
+          outageTimer.current = null;
+          if (generation !== playbackGeneration.current || hlsRef.current !== hls) return;
+          if (networkRetryTimer.current) clearTimeout(networkRetryTimer.current);
+          networkRetryTimer.current = null;
+          try {
+            hls.stopLoad();
+            hls.detachMedia();
+          } catch {
+            // L'arrêt n'est qu'un ménage : l'écran doit paraître quoi qu'il arrive.
+          }
+          setReconnecting(false);
+          setLoading(false);
+          setError(t('player.playbackInterruptedCheckConnection'));
+        }, NETWORK_OUTAGE_GIVE_UP_MS);
+      };
+      const disarmOutage = () => {
+        if (outageTimer.current) clearTimeout(outageTimer.current);
+        outageTimer.current = null;
+      };
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
         startup.buffered();
+        disarmOutage();
         networkRetryCount.current = 0;
         mediaRetryCount.current = 0;
         setReconnecting(false);
@@ -2044,13 +2092,14 @@ function ActivePlayer({
           } else if (data2.type === Hls.ErrorTypes.NETWORK_ERROR && data2.response?.code === 0) {
             // Une requête restée sans aucune réponse (statut 0 : la connexion est coupée). hls.js 1.5
             // déclarait aussitôt la fatale, qui posait « Connexion perdue ou instable… » ; 1.7 réessaie
-            // d'abord lui-même ce segment (1, 2, 4, 8, 8, 8 s — mesuré sur l'instance de test le
-            // 14/10/2026) avant toute fatale. Sans ce marquage, ces ~30 s de coupure ne disaient rien
-            // et une attente pendant ce temps était jugée comme une lenteur — préchauffage, bascule
-            // vers la version allégée, ce que §78 interdit pour une coupure. Effacé au prochain
-            // fragment accepté (`FRAG_BUFFERED`). Une expiration (lien lent, octets qui arrivent)
-            // n'a pas de statut et n'est pas une coupure.
+            // d'abord lui-même ce segment — et, `navigator.onLine` faux, attend le réseau sans fin —
+            // avant toute fatale. Sans ce marquage, cette coupure ne disait rien et une attente
+            // pendant ce temps était jugée comme une lenteur — préchauffage, bascule vers la version
+            // allégée, ce que §78 interdit pour une coupure. Effacé au prochain fragment accepté
+            // (`FRAG_BUFFERED`). Une expiration (lien lent, octets qui arrivent) n'a pas de statut et
+            // n'est pas une coupure. La borne de la coupure part d'ici (`armOutage`).
             setReconnecting(true);
+            armOutage();
           }
           return;
         }
@@ -2058,6 +2107,7 @@ function ActivePlayer({
           case Hls.ErrorTypes.NETWORK_ERROR: {
             tallyRef.current.retries.noteFailure(retrySignature("hls.js : réseau", { pos: positionBucket(lastKnownTime.current) }));
             if (networkRetryCount.current >= MAX_NETWORK_RETRIES) {
+              disarmOutage();
               setReconnecting(false);
               setLoading(false);
               setError(t('player.playbackInterruptedCheckConnection'));
@@ -2065,6 +2115,7 @@ function ActivePlayer({
             }
             networkRetryCount.current += 1;
             setReconnecting(true);
+            armOutage();
             // Exponential backoff (1s, 2s, 4s... capped at 15s) — covers a brief network
             // handoff (e.g. mobile switching between 5G and Wi-Fi, which drops connectivity
             // for roughly 1-3s) without hammering the server if it's actually down.
@@ -2353,6 +2404,8 @@ function ActivePlayer({
       hlsRef.current = null;
       if (networkRetryTimer.current) clearTimeout(networkRetryTimer.current);
       networkRetryTimer.current = null;
+      if (outageTimer.current) clearTimeout(outageTimer.current);
+      outageTimer.current = null;
       if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
       loadWatchdog.current = null;
       if (linkWatch.current) clearInterval(linkWatch.current);

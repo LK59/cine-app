@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, cleanup, act, waitFor } from "@testing-library/react";
+import { render, cleanup, act, waitFor, fireEvent } from "@testing-library/react";
 
 // La récupération d'hls.js dans le lecteur serveur (Chrome, Firefox, Edge) — DECISIONS §67.
 // Caractérisation : une erreur fatale réseau relance le chargement (6 fois au plus, délai doublé
@@ -65,6 +65,7 @@ const fake = {
   startLoad: vi.fn(),
   recoverMediaError: vi.fn(),
   detachMedia: vi.fn(),
+  stopLoad: vi.fn(),
 };
 vi.mock("hls.js", () => {
   class Hls {
@@ -81,6 +82,9 @@ vi.mock("hls.js", () => {
     attachMedia() {}
     startLoad(...args: unknown[]) {
       fake.startLoad(...args);
+    }
+    stopLoad() {
+      fake.stopLoad();
     }
     detachMedia() {
       fake.detachMedia();
@@ -130,6 +134,7 @@ beforeEach(() => {
   fake.startLoad.mockClear();
   fake.recoverMediaError.mockClear();
   fake.detachMedia.mockClear();
+  fake.stopLoad.mockClear();
 });
 afterEach(() => {
   cleanup();
@@ -279,5 +284,83 @@ describe("hls.js 1.7 — une seule récupération par incident, à la bonne posi
     // Sans le détachement, la MediaSource neuve d'hls.js rechargerait sous l'écran (`autoStartLoad`).
     expect(fake.detachMedia).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(document.body.textContent).toContain("player.playbackInterrupted"));
+  });
+});
+
+/**
+ * La borne d'une coupure (`NETWORK_OUTAGE_GIVE_UP_MS`, décision de Louis du 15/10/2026) : l'écran
+ * final ~48 s après le premier signe, comme avec hls.js 1.5.17. hls.js 1.7, hors ligne, attend le
+ * réseau sans fin et ne déclare aucune fatale — l'écran ne venait plus (mesuré : > 5 min 30).
+ */
+describe("hls.js 1.7 — une coupure a sa borne : l'écran final à 48 s", () => {
+  const sansReponse = () => emit("hlsError", { fatal: false, type: "networkError", details: "fragLoadError", response: { code: 0, text: "" } });
+
+  it("la politique : 48 s, juste au-dessus des six relances (45 s)", async () => {
+    const { NETWORK_OUTAGE_GIVE_UP_MS } = await import("@/components/PlayerHost");
+    expect(NETWORK_OUTAGE_GIVE_UP_MS).toBe(48_000);
+    expect(NETWORK_OUTAGE_GIVE_UP_MS).toBeGreaterThan(1000 + 2000 + 4000 + 8000 + 15000 + 15000);
+  });
+
+  it("hors ligne (hls.js attend sans fin) : « coupure » tout de suite, puis l'écran final à 48 s, hls.js arrêté et détaché", async () => {
+    await mounted();
+    vi.useFakeTimers();
+    sansReponse();
+    expect(document.body.textContent).toContain("player.slowLink.unstable");
+    act(() => void vi.advanceTimersByTime(47_999));
+    expect(document.body.textContent).not.toContain("player.playbackInterruptedCheckConnection");
+    // hls.js ne dit plus rien : il attend le réseau. La borne seule décide.
+    act(() => void vi.advanceTimersByTime(1));
+    expect(document.body.textContent).toContain("player.playbackInterruptedCheckConnection");
+    expect(fake.stopLoad).toHaveBeenCalled();
+    expect(fake.detachMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("une coupure courte reprend seule : un fragment accepté avant l'échéance efface la borne", async () => {
+    await mounted();
+    vi.useFakeTimers();
+    sansReponse();
+    act(() => void vi.advanceTimersByTime(30_000));
+    emit("hlsFragBuffered");
+    act(() => void vi.advanceTimersByTime(60_000));
+    expect(document.body.textContent).not.toContain("player.playbackInterrupted");
+    expect(fake.detachMedia).not.toHaveBeenCalled();
+    // Une seconde coupure a sa propre borne, entière.
+    sansReponse();
+    act(() => void vi.advanceTimersByTime(47_000));
+    expect(document.body.textContent).not.toContain("player.playbackInterrupted");
+    act(() => void vi.advanceTimersByTime(1_000));
+    expect(document.body.textContent).toContain("player.playbackInterruptedCheckConnection");
+  });
+
+  it("des fatales réseau : la borne compte depuis la première, et les relances restent les nôtres", async () => {
+    await mounted();
+    vi.useFakeTimers();
+    fatal("networkError");
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(fake.startLoad).toHaveBeenCalledTimes(1);
+    fatal("networkError");
+    act(() => void vi.advanceTimersByTime(46_999));
+    expect(document.body.textContent).not.toContain("player.playbackInterruptedCheckConnection");
+    act(() => void vi.advanceTimersByTime(1));
+    expect(document.body.textContent).toContain("player.playbackInterruptedCheckConnection");
+  });
+
+  it("« Réessayer » repart de la position où l'image s'est figée", async () => {
+    await mounted();
+    elementAt(1500);
+    act(() => void document.querySelector("video")!.dispatchEvent(new Event("timeupdate")));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    sansReponse();
+    act(() => void vi.advanceTimersByTime(48_000));
+    expect(document.body.textContent).toContain("player.playbackInterruptedCheckConnection");
+    // Détaché, l'élément retombe à zéro : la position retenue n'en bouge pas.
+    elementAt(null);
+    const retry = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "common.retry")!;
+    fireEvent.click(retry);
+    await waitFor(() =>
+      expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/jellyfin/playback/start")).toHaveLength(2)
+    );
+    const second = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/jellyfin/playback/start")[1];
+    expect(JSON.parse((second[1] as RequestInit).body as string).startTicks).toBe(1500 * 10_000_000);
   });
 });
