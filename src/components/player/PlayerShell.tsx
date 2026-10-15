@@ -20,6 +20,7 @@ import { preloadQuietly } from "@/lib/prefetch";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { PlayerRail } from "./PlayerRail";
 import { PlayerBottomBar } from "./PlayerBottomBar";
+import { scheduleWarmPanels } from "@/lib/warmPanels";
 
 // Chaque panneau est un écran entier qu'on n'ouvre pas forcément de la soirée : les charger à la
 // demande garde le premier rendu du lecteur à ce qu'il doit être — des affiches.
@@ -230,6 +231,12 @@ export function PlayerShell() {
     const timer = setTimeout(warm, 1500);
     return () => clearTimeout(timer);
   }, []);
+
+  // Et le code de tous les écrans chargés à la demande, gardé sur l'appareil pour qu'ils s'ouvrent
+  // hors ligne — voir `warmPanels.ts` (ROBUSTESSE-4). Le `preload` ci-dessus ne s'en charge pas :
+  // les composants de `next/dynamic` de l'App Router n'en exposent pas, et hors ligne la Recherche
+  // remplaçait l'application par la page « Pas de connexion ».
+  useEffect(() => scheduleWarmPanels(), []);
 
   return (
     <>
