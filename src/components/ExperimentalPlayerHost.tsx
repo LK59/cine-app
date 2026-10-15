@@ -174,6 +174,7 @@ import { pushSlowLinkEvent } from "@/lib/slowLinkMonitor";
 import { saveUnsentPosition } from "@/lib/unsentPosition";
 import { finishIntro, formatResumeClock, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 import { useIntroPlaybackStarted } from "@/lib/introEnd";
+import { usePlayerBackClose } from "@/lib/playerHistory";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -2239,6 +2240,8 @@ export function ExperimentalPlayerHost({
     // les a pas changées.
     if (!isSceneRef.current()) void refreshAfterPlayback(reported, itemId);
   }, [playback, stopPlaybackNow, itemId, reportStop, session.openId, lifecycle]);
+  // Retour ferme le lecteur comme sa croix (`playerHistory.ts`) — écran de fin compris.
+  usePlayerBackClose(handleClose);
 
   // Pas d'épisode suivant pendant une scène (§91) : on est venu voir une réplique.
   const nextEpisode = scene.active ? null : (session.getNextEpisode?.(itemId) ?? null);

@@ -34,6 +34,7 @@ import {
   type RemotePlayerState,
 } from "@/lib/chromecast/framework";
 import { chromecastErrorReason, chromecastMediaSpec, idleOutcome, isSideLoadable, subtitleTrackId, toLoadRequest, type ChromecastSubtitleFacts } from "@/lib/chromecast/media";
+import { usePlayerBackClose } from "@/lib/playerHistory";
 
 /**
  * Le plafond de débit demandé à Jellyfin pour un Chromecast.
@@ -477,6 +478,9 @@ export function ChromecastPlayer({
     },
     [stopFields, stopPlaybackNow, session.openId, playback, itemId]
   );
+  // Retour ferme la télécommande comme sa croix, téléviseur arrêté compris (`playerHistory.ts`).
+  const closeByBack = useCallback(() => close(), [close]);
+  usePlayerBackClose(closeByBack);
 
   // La fin du film : l'épisode suivant si la page est là pour l'enchaîner, sinon la fermeture.
   useEffect(() => {

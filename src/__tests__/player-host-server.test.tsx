@@ -221,6 +221,34 @@ describe("lecteur serveur — revenir sur le téléphone", () => {
     expect(stepBack).toHaveBeenCalledTimes(1);
   });
 
+  // Retour ferme le lecteur comme la croix (LECTEUR-11, 15/10/2026) — en diffusion, la page est une
+  // télécommande : le téléviseur s'arrête comme à la croix.
+  it("Retour en pleine diffusion AirPlay : la croix — bilan, téléviseur arrêté, lecteur fermé", async () => {
+    const { holdPlayerEntry, installPlayerHistory, __resetPlayerHistoryForTests } = await import("@/lib/playerHistory");
+    __resetPlayerHistoryForTests();
+    const uninstall = installPlayerHistory(vi.fn(), false);
+    try {
+      routeEtablie = true;
+      stubFetch();
+      render(<PlayerHost />);
+      await waitFor(() => expect(lignes("cast")).toHaveLength(1));
+      const video = document.querySelector("video")!;
+      video.setAttribute("src", "/api/jellyfin/stream/film/master.m3u8");
+      holdPlayerEntry(1);
+      await act(async () => {
+        window.history.back();
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(lignes("stop")).toEqual([expect.objectContaining({ why: "close" })]);
+      expect(video.hasAttribute("src")).toBe(false);
+      expect(refreshAfterPlayback).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(playback.close).toHaveBeenCalledWith(1));
+    } finally {
+      uninstall();
+      __resetPlayerHistoryForTests();
+    }
+  });
+
   it("sans route établie (sélecteur refermé sur le téléphone), n'écrit ni n'arrête rien, et rend la main", async () => {
     diffusion();
     stubFetch();

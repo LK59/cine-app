@@ -138,6 +138,35 @@ describe("hôte natif — une séance close ne se rouvre pas et ne se ferme qu'u
     expect(stopPlaybackNow).toHaveBeenCalledTimes(1);
   });
 
+  // Retour ferme le lecteur comme la croix (LECTEUR-11, 15/10/2026) : même bilan, même relecture
+  // des vues, même fermeture après le fondu — écran de fin compris, qui ferme par la même croix.
+  it("Retour ferme le lecteur natif exactement comme la croix", async () => {
+    const { holdPlayerEntry, installPlayerHistory, __resetPlayerHistoryForTests } = await import("@/lib/playerHistory");
+    __resetPlayerHistoryForTests();
+    const fallback = vi.fn();
+    const uninstall = installPlayerHistory(fallback, false);
+    try {
+      mount();
+      await ready();
+      holdPlayerEntry(7);
+      await act(async () => {
+        window.history.back();
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(logged("stop").map((e) => e.fields.why)).toEqual(["close"]);
+      expect(refreshAfterPlayback).toHaveBeenCalledTimes(1);
+      expect(stopPlaybackNow).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(close).toHaveBeenCalledWith(7));
+      expect(fallback).not.toHaveBeenCalled();
+      // Puis la croix pendant le fondu : rien de plus.
+      act(() => void fireEvent.click(screen.getByText("fermer")));
+      expect(logged("stop")).toHaveLength(1);
+    } finally {
+      uninstall();
+      __resetPlayerHistoryForTests();
+    }
+  });
+
   it("l'épisode suivant s'enchaîne toujours quand rien n'a été fermé", async () => {
     mount();
     await ready();

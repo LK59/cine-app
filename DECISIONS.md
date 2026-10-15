@@ -5059,3 +5059,49 @@ préparé ailleurs, Safari, allégé ≠ ordinaire), `scene-native.test.tsx`, `a
 `zone-regress-bench.spec.ts` (empreintes avant/après), `integrity-bench.spec.ts` (débit).
 
 **Décidé le 14/10/2026** (Louis).
+
+## 94. Retour ferme le lecteur
+
+**Règle.** Le lecteur plein écran a son entrée d'historique : le geste retour d'iOS, le bouton
+Retour d'Android et la touche Précédent du navigateur le ferment, **exactement comme la croix** —
+bilan `stop "close"`, arrêt chez Jellyfin, fondu, `refreshAfterPlayback`, téléviseur arrêté en
+diffusion —, et la fiche dessous reste telle quelle. La croix, la fin d'un film et la réduction
+rendent l'entrée (un `history.back()` reconnu comme le nôtre) : le Retour suivant ferme la fiche,
+jamais l'application. Le mini-lecteur n'a pas d'entrée : il vit sous la navigation, Retour y
+referme les fiches et le film continue ; agrandi, il reprend la sienne.
+
+**Porteur.** `src/lib/playerHistory.ts` : `holdPlayerEntry` (empile, ou réécrit une entrée de
+lecteur déjà là), `releasePlayerEntry`, `installPlayerHistory` (l'écouteur `popstate`, et le jeton
+effacé d'une page rechargée sans intention), `usePlayerBackClose` (le lecteur monté s'inscrit avec
+sa croix ; le dernier monté répond). L'entrée garde l'adresse et recopie `history.state` (Next et la
+pile des fiches y lisent leurs clés), plus un jeton `cinePlayer` propre au chargement de la page.
+
+**Appelants.** `PlaybackProvider` (`play`, `close`, `minimize`, `expand`, l'installation),
+`ActivePlayer` (PlayerHost), `ExperimentalPlayerHost` (écran de fin compris), `ChromecastPlayer` ;
+`cinemaNavigate` retire le jeton d'une entrée qu'il empile (`withoutPlayerEntry`).
+
+**Cas tranchés.**
+- Épisode suivant (`advance`) : rien — une entrée par séance, pas par épisode. Un film qui en
+  remplace un autre plein écran (la suite d'une saga) réécrit l'entrée.
+- Rechargement voulu (WebKit : changement de piste au lecteur serveur, relais natif → serveur
+  direct) : l'intention de rechargement est lue avant tout, et l'entrée gardée par la page est
+  **reprise**, jamais doublée. Son Retour charge alors l'entrée d'avant, qui appartenait au document
+  d'avant le rechargement : une page rechargée sur la fiche (`stop "page"` au lieu de `"close"`), et
+  non un fondu — le prix d'un rechargement, le même que pour une fiche avant ce changement.
+- Rechargement ordinaire (F5 en plein film) : l'entrée n'a plus de lecteur, son jeton est effacé
+  au démarrage ; elle reste un doublon de la fiche dessous (un Retour sans effet visible).
+- Un titre ouvert depuis l'écran de fin s'empile au-dessus de l'entrée du lecteur, sans son jeton :
+  la fermeture ne le referme pas. L'entrée restée dessous, ou retrouvée par Suivant, est sautée dès
+  qu'on y arrive.
+- Retour pendant le fondu de la croix, double Retour rapide : un seul bilan (les gardes de fermeture
+  des lecteurs), le second Retour ferme la fiche.
+- Aucun lecteur encore monté (la séance attend ses réglages) : la séance se ferme directement.
+
+**Tests.** `playerHistory.test.tsx` (le vrai `PlaybackProvider` et l'historique de jsdom : chaque
+cas ci-dessus), `native-close-once.test.tsx`, `player-host-server.test.tsx` (AirPlay),
+`ChromecastPlayer.test.tsx` — Retour = la croix pour chaque lecteur.
+
+**Voulu.** Échap ne ferme toujours pas le lecteur (le clavier du lecteur est un jeu fixe, §45) :
+seule la navigation du système le fait.
+
+**Décidé le 15/10/2026** (Louis), après la passe de nuit (LECTEUR-11, ROBUSTESSE-13, MOBILE-12).

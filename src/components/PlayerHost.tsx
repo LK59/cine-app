@@ -102,6 +102,7 @@ import { useServerDualSubtitles } from "@/lib/useServerDualSubtitles";
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 import { useServerIntroPicture } from "@/lib/introEnd";
+import { usePlayerBackClose } from "@/lib/playerHistory";
 
 /** Les adresses du flux du lecteur serveur, pour les entrées de ressources de Safari (§77). */
 const STREAM_PREFIX = "/api/jellyfin/stream/";
@@ -1209,6 +1210,8 @@ function ActivePlayer({
     // Une scène (§91) n'a rien changé de ce qu'elles montrent.
     if (!isSceneRef.current()) void refreshAfterPlayback(reported, itemId);
   }, [playback, stopPlaybackNow, itemId, session.openId, reportStop]);
+  // Retour ferme le lecteur comme sa croix (`playerHistory.ts`).
+  usePlayerBackClose(handleClose);
 
   /**
    * Le bilan gardé sur l'appareil, réécrit tant que la séance vit — comme le lecteur natif.

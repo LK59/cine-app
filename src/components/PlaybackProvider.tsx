@@ -13,6 +13,7 @@ import { parseReloadIntent, reloadedLighter, type ReloadCarry } from "@/lib/serv
 import { sleepTimerStore } from "@/lib/sleepTimer";
 import { playBlockedByOutage } from "@/lib/catalogueOutage";
 import { introAllowedFor, introKey, preloadIntroArt, resolveIntroArt, startIntroClock, type IntroCacheReader, type PlaybackIntroArt } from "@/lib/playbackIntro";
+import { holdPlayerEntry, installPlayerHistory, releasePlayerEntry } from "@/lib/playerHistory";
 
 export interface PlaybackSession {
   itemId: string;
@@ -308,6 +309,9 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     // Une page rechargée par le lecteur serveur dit elle-même son palier (`reloadCarry`) : la mémoire
     // des deux minutes n'a pas à le deviner — elle pouvait avoir expiré pendant une séance allégée.
     const lighter = s.reloadCarry ? reloadedLighter(s.reloadCarry) : carriedLighter();
+    // Retour ferme le lecteur (`playerHistory.ts`) : son entrée d'historique, empilée ici, dans le
+    // geste qui lance le film. Une page rechargée pour le rouvrir reprend celle qu'elle a gardée.
+    holdPlayerEntry(openCounter, { adopt: s.fromReload === true });
     setSession({ ...s, openId: openCounter, ...(introArt ? { introArt } : {}), ...(lighter ? { lighter } : {}) });
     setMode("full");
   }, [prepareIntro]);
@@ -321,6 +325,8 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   const close = useCallback((openId?: number) => {
     if (openId !== undefined && currentOpenId.current !== openId) return;
     sleepTimerStore.clear();
+    // La croix (ou la fin) rend l'entrée du lecteur : le Retour suivant ferme la fiche, pas l'application.
+    releasePlayerEntry();
     setMode("closed");
     setSession(null);
   }, []);
@@ -329,11 +335,38 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   // règles `:fullscreen` du navigateur l'emportaient sur la position du mini-lecteur — une vidéo
   // plein écran habillée en mini-lecteur, qu'on ne pouvait ni déplacer ni quitter autrement
   // qu'avec Échap (relevé le 23/09/2026).
+  // Le mini-lecteur n'a pas d'entrée d'historique : il vit sous la navigation, et Retour y referme
+  // les fiches comme avant. Agrandi, il reprend la sienne.
   const minimize = useCallback(() => {
     if (typeof document !== "undefined" && document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    releasePlayerEntry();
     setMode("mini");
   }, []);
-  const expand = useCallback(() => setMode("full"), []);
+  const expand = useCallback(() => {
+    holdPlayerEntry(currentOpenId.current);
+    setMode("full");
+  }, []);
+
+  /**
+   * Retour ferme le lecteur plein écran (`playerHistory.ts`). Le lecteur monté s'en charge lui-même,
+   * par sa croix (`usePlayerBackClose`) ; s'il n'y en a pas encore (la séance attend ses réglages),
+   * la séance se ferme ici. Branché avant la relecture d'une intention de rechargement, qui reprend
+   * l'entrée gardée : sans intention, une entrée de lecteur restée dans une page rechargée n'a plus
+   * de lecteur, et son jeton est effacé.
+   */
+  const closeRef = useRef(close);
+  useEffect(() => {
+    closeRef.current = close;
+  }, [close]);
+  useEffect(() => {
+    let reloading = false;
+    try {
+      reloading = sessionStorage.getItem(PLAYER_RELOAD_INTENT_KEY) !== null;
+    } catch {
+      reloading = false;
+    }
+    return installPlayerHistory(() => closeRef.current(), reloading);
+  }, []);
 
   // Resets resumeAt — an advance always starts the new episode from 0, matching the previous
   // per-invocation player's behavior.

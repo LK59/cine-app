@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { withoutPlayerEntry } from "@/lib/playerHistory";
 
 // Which Cinema Mode layer is open, expressed in the URL so the browser's own Back and Forward —
 // and the phone's edge-swipe, which is the same thing — step through the screens instead of
@@ -534,9 +535,12 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
   const current = getSnapshot();
   const origins = readOrigins();
   // Spread whatever Next put in history.state rather than replacing it — its router reads its own
-  // keys back on popstate.
+  // keys back on popstate. Sauf le jeton du lecteur (`playerHistory.ts`) sur un `push` : une fiche
+  // ouverte depuis l'écran de fin, par-dessus l'entrée du lecteur, n'est pas cette entrée — la
+  // fermeture du lecteur, qui rend la sienne d'un `history.back()`, l'aurait refermée aussitôt.
+  const base = (window.history.state ?? {}) as Record<string, unknown>;
   const state = {
-    ...(window.history.state ?? {}),
+    ...(mode === "push" ? withoutPlayerEntry(base) : base),
     [DEPTH_KEY]: mode === "push" ? depth + 1 : depth,
     // Ce qu'on laisse derrière soi, retenu au moment où on l'empile — la seule occasion de le
     // savoir. Un `replace` ne change pas ce qui est en dessous, donc il garde la valeur en place.

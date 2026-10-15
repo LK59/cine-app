@@ -208,6 +208,29 @@ describe("la fin de la diffusion", () => {
     expect(onCastEnded).not.toHaveBeenCalled();
   });
 
+  // Retour ferme la télécommande comme sa croix (LECTEUR-11, 15/10/2026).
+  it("Retour : la croix — bilan, téléviseur arrêté, lecteur fermé", async () => {
+    const { holdPlayerEntry, installPlayerHistory, __resetPlayerHistoryForTests } = await import("@/lib/playerHistory");
+    __resetPlayerHistoryForTests();
+    const uninstall = installPlayerHistory(vi.fn(), false);
+    try {
+      const { onCastEnded } = await mount();
+      act(() => fake.play(2200));
+      holdPlayerEntry(1);
+      await act(async () => {
+        window.history.back();
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(linesOf("stop")[0]).toMatchObject({ why: "close", target: "chromecast", at: 2200 });
+      expect(fake.ended).toContain(true);
+      await waitFor(() => expect(playback.close).toHaveBeenCalledWith(1));
+      expect(onCastEnded).not.toHaveBeenCalled();
+    } finally {
+      uninstall();
+      __resetPlayerHistoryForTests();
+    }
+  });
+
   it("la fin du film avec un épisode suivant : il s'enchaîne", async () => {
     await mount({ next: { itemId: "b".repeat(32), title: "Épisode 2" } });
     act(() => fake.play(3590, 3600));

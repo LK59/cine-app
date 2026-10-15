@@ -108,6 +108,7 @@ terminé », sinon `loading` qui retombe dans `ActivePlayer`.
 | Épisode suivant | l'arrêt est rapporté (sans l'attendre), `playback.advance` remplace l'objet `session` (`resumeAt: 0`) | les deux hôtes, `handleAdvance` |
 | Fin de fichier (serveur) | réduite ou sans épisode suivant → fermeture ; sinon `stop` Jellyfin seul, `resume()` si on relance | `ActivePlayer` écouteur `ended` |
 | Fermer | ligne `stop`, arrêt Jellyfin, fondu, `close(openId)` après 200 ms, `refreshAfterPlayback` | les deux hôtes, `handleClose` |
+| Retour du système (plein écran) | `popstate` quitte l'entrée du lecteur → la croix du lecteur monté (`usePlayerBackClose`) ; `close`/`minimize` rendent l'entrée, `play`/`expand` l'empilent, un rechargement voulu la reprend (DECISIONS.md §94) | `playerHistory.ts`, `PlaybackProvider` |
 | La séance passe à `null` | `RESUME_KEY` et `NEXT_UP_KEY` redemandés | `PlaybackProvider` effet `wasPlaying` |
 | `refreshAfterPlayback` | attend le rapport d'arrêt **puis** l'écran libre (au plus 3 s), puis revalide Reprendre, À suivre, la progression du titre et toutes les listes d'épisodes | `swr.ts` |
 | Changement de piste sur le lecteur serveur | WebKit : intention dans `sessionStorage` (avec `carry.lighter`, le palier en cours) puis `location.reload()` ; ailleurs : nouvelle négociation, nouveau `playSessionId` | `PlayerHost` `changeAudio` (protégé, voir `CLAUDE.md`) |
