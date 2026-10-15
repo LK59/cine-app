@@ -229,18 +229,26 @@ describe("l'amorce du catalogue et la requête qui la consomme", () => {
    * Deux requêtes, ici, c'est le plus gros envoi du démarrage téléchargé deux fois. D'où ces deux
    * assertions, qui tiennent chacune un bout du contrat.
    */
-  it("l'amorce déclare le régime qui correspond à un fetch nu", () => {
-    const src = lire("src/app/(player)/layout.tsx");
-    expect(src).toMatch(/rel="preload" as="fetch" crossOrigin="anonymous" href=\{MOVIES_CATALOGUE_KEY\}/);
-    // Et seulement hors de WebKit, qui ne la reprenait qu'une fois sur deux (08/10/2026).
-    expect(src).toMatch(/\{!webkit && <link rel="preload"/);
+  it("l'amorce est un fetch lancé avec le HTML, sur tous les moteurs (15/10/2026)", () => {
+    // L'ancienne `<link rel="preload">` n'était pas reprise par Safari une fois sur deux, et coupée
+    // sur WebKit depuis le 08/10 : l'iPhone envoyait le catalogue une seconde après son code.
+    const layout = lire("src/app/(player)/layout.tsx");
+    expect(layout).toMatch(/<script dangerouslySetInnerHTML=\{\{ __html: earlyFetchScript\(\) \}\} \/>/);
+    expect(layout).not.toMatch(/rel="preload"/);
+    expect(layout).not.toMatch(/!webkit/);
+    // Et le script fait un fetch nu — le même que les récupérateurs.
+    expect(lire("src/lib/earlyFetch.ts")).toMatch(/var p=fetch\(u\);/);
   });
 
-  it("le récupérateur du catalogue reste un fetch nu", () => {
-    // `fetch(url, { … })` — en-têtes, `credentials`, `cache` — romprait la correspondance sans
-    // qu'aucun écran ne change d'apparence : le catalogue partirait deux fois, en silence.
-    const src = lire("src/lib/cinemaPayload.ts");
-    expect(src).toMatch(/const res = await fetch\(url\);/);
+  it("les récupérateurs reprennent l'amorce, sinon font un fetch nu", () => {
+    // `fetch(url, { … })` — en-têtes, `credentials`, `cache` — donnerait à l'écran une autre réponse
+    // que celle qu'il aurait demandée lui-même. Les deux passent par `fetchOrEarly`, qui retombe sur
+    // le fetch nu d'avant.
+    for (const file of ["src/lib/cinemaPayload.ts", "src/lib/swr.ts"]) {
+      expect(lire(file)).toMatch(/const res = await fetchOrEarly\(url\);/);
+    }
+    const early = lire("src/lib/earlyFetch.ts");
+    expect(early).toMatch(/return early \? early\.catch\(\(\) => fetch\(url\)\) : fetch\(url\);/);
   });
 
   it("le service worker laisse passer les appels d'API sans les toucher", () => {

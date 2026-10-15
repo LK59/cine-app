@@ -19,6 +19,7 @@
 import { noteUnauthorized } from "@/lib/sessionExpired";
 import { withCode } from "@/lib/upstreamError";
 import { catalogueUnchanged, noteCatalogueRead } from "@/lib/catalogueRefresh";
+import { fetchOrEarly } from "@/lib/earlyFetch";
 
 /** Ce qui voyage : les titres une fois, et des identifiants partout ailleurs. */
 export interface WirePayload<T> {
@@ -84,7 +85,8 @@ export function hydrate<T>(payload: WirePayload<T> | undefined, idOf: (item: T) 
  * d'identifiant se déduit de l'adresse, qui dit déjà s'il s'agit de films ou de séries.
  */
 export async function cinemaFetcher<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  // La réponse partie avec le HTML, si c'est l'ouverture — voir `earlyFetch.ts`.
+  const res = await fetchOrEarly(url);
   if (!res.ok) {
     noteUnauthorized(res);
     const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };

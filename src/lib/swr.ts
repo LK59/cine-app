@@ -3,9 +3,11 @@ import { noteUnauthorized } from "@/lib/sessionExpired";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
 import { withCode } from "@/lib/upstreamError";
 import { forgetPrefetchedPlaybackState } from "@/lib/playbackPrefetch";
+import { fetchOrEarly } from "@/lib/earlyFetch";
 
 export const fetcher = async (url: string) => {
-  const res = await fetch(url);
+  // La réponse partie avec le HTML, si c'est l'ouverture — voir `earlyFetch.ts`.
+  const res = await fetchOrEarly(url);
   if (!res.ok) {
     noteUnauthorized(res);
     const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };

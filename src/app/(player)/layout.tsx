@@ -1,10 +1,9 @@
 import { redirect } from "next/navigation";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { PlayerShell } from "@/components/player/PlayerShell";
-import { MOVIES_CATALOGUE_KEY } from "@/lib/catalogueKeys";
-import { isWebKitEngine } from "@/lib/webkitEngine";
+import { earlyFetchScript } from "@/lib/earlyFetch";
 
 /**
  * Le lecteur a sa propre coquille, et c'est tout l'intérêt du groupe de routes : pas de barre
@@ -16,8 +15,6 @@ export default async function PlayerLayout({ children }: { children: React.React
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
   if (!session) redirect("/login");
-  // Voir l'amorce plus bas : WebKit ne la reprend pas toujours.
-  const webkit = isWebKitEngine((await headers()).get("user-agent") ?? "");
 
   return (
     <div className="app-viewport overflow-hidden bg-ink">
@@ -53,8 +50,16 @@ export default async function PlayerLayout({ children }: { children: React.React
         d'intervalle (Chrome : 2 sur 24), soit 300 Ko de plus par lancement. Le premier affichage y
         vient du catalogue gardé sur l'appareil (`persistentCache.ts`) : l'amorce n'y gagnait que
         quelques dizaines de millisecondes, et coûtait un second téléchargement une fois sur deux.
+
+        **Remplacée le 15/10/2026 par un `fetch` lancé ici même** (`earlyFetch.ts`) : sans amorce,
+        l'iPhone envoyait la requête une seconde après le démarrage du code (journal d'ouverture,
+        `routes` : code prêt à 0,78 s, catalogue parti à 1,76 s, revenu en 0,28 s). C'est notre
+        récupérateur qui reprend la réponse rangée, pas le navigateur qui l'apparie : une requête
+        par adresse sur tous les moteurs, et « Reprendre » et « À suivre » partent avec le catalogue.
+        La même raison qui faisait `crossOrigin="anonymous"` vaut ici : le `fetch` du script est
+        identique à celui des récupérateurs — mêmes mode et identifiants, donc même réponse.
       */}
-      {!webkit && <link rel="preload" as="fetch" crossOrigin="anonymous" href={MOVIES_CATALOGUE_KEY} />}
+      <script dangerouslySetInnerHTML={{ __html: earlyFetchScript() }} />
       {children}
       <PlayerShell />
     </div>
