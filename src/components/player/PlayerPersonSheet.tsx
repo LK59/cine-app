@@ -672,7 +672,7 @@ export function PlayerPersonSheet({
 
             {/* Pas sous une fiche pleine : c'est une rangée d'images qu'on ne verra pas, montée
                 à l'instant où le film du dessus, lui, a besoin de tout le fil d'exécution. */}
-            {!underneath && settled && <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} name={data.name} />}
+            {!underneath && settled && <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} name={data.name ?? ""} />}
 
             {/* La biographie de Wikipédia quand elle existe, dans la langue du compte — plus
                 complète que celle de TMDB, souvent vide ou en anglais. Voir `selectBio`. */}
