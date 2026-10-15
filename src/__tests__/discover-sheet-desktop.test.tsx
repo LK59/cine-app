@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, cleanup, screen } from "@testing-library/react";
+import { render, cleanup, screen, fireEvent } from "@testing-library/react";
 import { SWRConfig } from "swr";
 
 /**
@@ -18,8 +18,9 @@ vi.mock("@/components/TranslationProvider", () => ({
   useLocale: () => ({ locale: "fr" }),
 }));
 vi.mock("@/lib/useIsMobile", () => ({ useIsMobile: () => false, useIsShortViewport: () => false, useIsTouch: () => false }));
+const requestSpy = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/usePlayerTitleActions", () => ({
-  usePlayerTitleActions: () => ({ busy: false, setStatus: vi.fn(), request: vi.fn(), cancelRequest: vi.fn() }),
+  usePlayerTitleActions: () => ({ busy: false, setStatus: vi.fn(), request: requestSpy, cancelRequest: vi.fn() }),
 }));
 vi.mock("@/lib/useTitleWatched", () => ({ useTitleWatched: () => ({ watched: false, busy: false, toggle: vi.fn() }) }));
 vi.mock("@/lib/cinemaRoute", async (importOriginal) => ({
@@ -125,6 +126,29 @@ describe("fiche découverte, ordinateur — la mise en page d'une fiche film", (
     mount({ libraryId: 42 });
     await screen.findByRole("heading", { level: 1, name: "Matchbox – Le film" });
     await vi.waitFor(() => expect(document.activeElement?.textContent).toContain("player.discover.open"));
+  });
+
+  // 15/10/2026 (décision de Louis, §94) : « Demander » partait au premier appui — un double Entrée,
+  // un pouce qui remonte la fiche, et un téléchargement était lancé.
+  it("« Demander » demande confirmation, focus sur « Annuler », et ne part qu'au second geste", async () => {
+    requestSpy.mockClear();
+    mount();
+    await screen.findByRole("heading", { level: 1, name: "Matchbox – Le film" });
+    fireEvent.click(screen.getByText("player.discover.request").closest("button")!);
+    expect(requestSpy).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.getAttribute("aria-label")).toBe("Matchbox – Le film (2026)");
+    expect(dialog.textContent).toContain("player.discover.confirmRequestMovie");
+    await vi.waitFor(() => expect(document.activeElement?.textContent).toBe("common.cancel"));
+    // Annuler : rien ne part.
+    fireEvent.click(screen.getByText("common.cancel"));
+    expect(requestSpy).not.toHaveBeenCalled();
+    // Demander, confirmé : la demande part. (La feuille refermée reste montée le temps de sa sortie :
+    // c'est le bouton de la fiche qu'on vise.)
+    fireEvent.click(document.querySelector<HTMLButtonElement>("[data-detail-menu][data-detail-no-autofocus]")!);
+    const again = await screen.findByRole("alertdialog");
+    fireEvent.click(Array.from(again.querySelectorAll("button")).find((b) => b.textContent === "player.discover.request")!);
+    expect(requestSpy).toHaveBeenCalledTimes(1);
   });
 
   it("sans distribution, une seule page", async () => {

@@ -1960,6 +1960,8 @@
     "discover": {
       "open": "Open the page",
       "request": "Request",
+      "confirmRequestMovie": "Request this movie?",
+      "confirmRequestSeries": "Request this series?",
       "addToList": "Add to my list",
       "inList": "In my list",
       "watched": "Watched",

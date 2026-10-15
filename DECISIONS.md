@@ -5066,3 +5066,31 @@ préparé ailleurs, Safari, allégé ≠ ordinaire), `scene-native.test.tsx`, `a
 `zone-regress-bench.spec.ts` (empreintes avant/après), `integrity-bench.spec.ts` (débit).
 
 **Décidé le 14/10/2026** (Louis).
+
+## 94. « Demander » se confirme
+
+**Règle.** Une demande (Jellyseerr, approuvée d'office, téléchargement lancé dans Radarr ou Sonarr)
+ne part jamais d'un seul geste. L'appui sur « Demander » ouvre une question sobre, en noir et blanc :
+la feuille d'actions de verre de l'annulation (§49) au téléphone, une petite fenêtre centrée à
+l'ordinateur (`ActionSheet` `centerOnWide`). Elle reprend ce que l'écran montre déjà — titre, année,
+affiche — et pose « Demander ce film ? » / « Demander cette série ? », avec « Demander » et
+« Annuler » (quatre langues). Le focus d'arrivée va sur « Annuler » (`noAutoFocus`), et la fiche
+découverte ne pose pas non plus son propre focus d'arrivée sur « Demander » (`focusFirstAction`,
+`data-detail-no-autofocus`) : un double Entrée ne peut plus rien envoyer. Échap ferme la question,
+pas la fiche dessous.
+
+**Pourquoi.** Nuit du 15/10/2026 : un seul appui sur « Demander », sur téléphone, a envoyé une vraie
+demande — le film a été téléchargé dans l'heure (MOBILE-7) ; au clavier, Entrée-Entrée sur une affiche
+« Pas encore là » faisait de même (BUREAU-8). Décision de Louis le matin même.
+
+**Porteur.** `useRequestConfirmation` (`src/components/player/RequestConfirm.tsx`).
+
+**Appelants.** `PlayerDiscoverSheet` — ses deux mises en page (téléphone et ordinateur), film comme
+série : c'est la seule fiche du cinéma qui demande. Les saisons ne se demandent pas depuis le cinéma
+(`CinemaMissingEpisodes`, 23/09/2026). La gestion (`RequestFlowModal`, `GlobalSearch`) a son propre
+parcours d'administrateur, hors de cette règle.
+
+**Tests.** `discover-sheet-desktop.test.tsx` (la question, le focus sur « Annuler », la demande au
+second geste seulement).
+
+**Décidé le 15/10/2026** (Louis).

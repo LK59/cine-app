@@ -18,6 +18,11 @@ export interface SheetAction {
    * sans intitulé restent en tête, sans en-tête au-dessus d'elles.
    */
   section?: string;
+  /**
+   * Jamais le focus d'arrivée d'une confirmation (`alertdialog`) : le geste lourd qu'on confirme —
+   * « Demander », qui lance un téléchargement — ne doit pas partir d'un Entrée de plus (15/10/2026).
+   */
+  noAutoFocus?: boolean;
 }
 
 interface Props {
@@ -29,11 +34,17 @@ interface Props {
   actions: SheetAction[];
   /** `alertdialog` pour une confirmation : une question qui attend une réponse, pas un menu. */
   role?: "dialog" | "alertdialog";
+  /**
+   * Sur grand écran, une petite fenêtre centrée plutôt qu'une feuille posée en bas (15/10/2026,
+   * confirmation de « Demander », décision de Louis : feuille d'actions au téléphone, petite fenêtre
+   * à l'ordinateur). Au téléphone, rien ne change. Les autres feuilles gardent leur forme.
+   */
+  centerOnWide?: boolean;
 }
 
 const CLOSE_THRESHOLD = 80; // px dragged down to trigger close
 
-export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSubtitle, poster: livePoster, actions, role = "dialog" }: Props) {
+export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSubtitle, poster: livePoster, actions, role = "dialog", centerOnWide = false }: Props) {
   /**
    * L'en-tête reste celui de l'ouverture pendant la sortie.
    *
@@ -99,7 +110,7 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
     // demande. Elle s'ouvre sur la première action sans danger — « Non, garder ».
     const enabled = "button[data-sheet-action]:not(:disabled)";
     const first =
-      (role === "alertdialog" ? sheet?.querySelector<HTMLButtonElement>(`${enabled}:not([data-variant="danger"])`) : null) ??
+      (role === "alertdialog" ? sheet?.querySelector<HTMLButtonElement>(`${enabled}:not([data-variant="danger"]):not([data-no-autofocus])`) : null) ??
       sheet?.querySelector<HTMLButtonElement>(enabled);
     first?.focus();
     // Et le focus revient à ce qui l'a ouverte quand elle se ferme : il tombait sur la page, et la
@@ -162,7 +173,11 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
   if (!mounted || typeof document === "undefined") return null;
 
   return createPortal(
-    <div data-action-sheet className="fixed inset-0 z-60 flex items-end" style={{ touchAction: "none" }}>
+    <div
+      data-action-sheet
+      className={`fixed inset-0 z-60 flex items-end ${centerOnWide ? "sm:items-center sm:justify-center" : ""}`}
+      style={{ touchAction: "none" }}
+    >
       {/* Backdrop */}
       <div
         className={`absolute inset-0 bg-black/70 transition-opacity duration-300 ${show ? "opacity-100" : "opacity-0"}`}
@@ -227,6 +242,7 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
             <button
               data-sheet-action
               data-variant={action.variant}
+              data-no-autofocus={action.noAutoFocus ? "" : undefined}
               disabled={action.disabled}
               onClick={() => { action.onClick(); onClose(); }}
               className={`flex w-full items-center gap-4 px-5 py-3.5 text-sm font-medium transition-colors active:bg-white/5 disabled:opacity-40 ${

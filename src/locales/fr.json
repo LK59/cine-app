@@ -1960,6 +1960,8 @@
     "discover": {
       "open": "Ouvrir la fiche",
       "request": "Demander",
+      "confirmRequestMovie": "Demander ce film ?",
+      "confirmRequestSeries": "Demander cette série ?",
       "addToList": "Ajouter à ma liste",
       "inList": "Dans ma liste",
       "watched": "Vu",
