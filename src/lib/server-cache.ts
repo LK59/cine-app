@@ -34,9 +34,35 @@ interface StaleEntry<T> {
   fetchedAt: number;
 }
 
-const store      = new Map<string, Entry<unknown>>();
-const staleStore = new Map<string, StaleEntry<unknown>>();
-const inFlight   = new Map<string, Promise<unknown>>();
+/**
+ * Sur `globalThis`, pas dans des variables de module (15/10/2026) — la raison de `statusCron.ts` :
+ * `instrumentation.ts` et les routes sont des points d'entrée que le bundler compile séparément, et
+ * rien ne garantit qu'ils partagent l'instance de ce module. Les listes lues au démarrage, et relues
+ * par le minuteur qui en part (`withKeptCache`), atterrissaient sinon dans une copie qu'aucune route
+ * ne lit.
+ */
+interface CacheState {
+  store: Map<string, Entry<unknown>>;
+  staleStore: Map<string, StaleEntry<unknown>>;
+  inFlight: Map<string, Promise<unknown>>;
+  generation: Map<string, number>;
+  kept: Map<string, Kept>;
+  keepTimer: ReturnType<typeof setInterval> | null;
+}
+const STATE_KEY = Symbol.for("cine-app.serverCache");
+const holder = globalThis as typeof globalThis & { [STATE_KEY]?: CacheState };
+const state: CacheState = (holder[STATE_KEY] ??= {
+  store: new Map(),
+  staleStore: new Map(),
+  inFlight: new Map(),
+  generation: new Map(),
+  kept: new Map(),
+  keepTimer: null,
+});
+
+const store      = state.store;
+const staleStore = state.staleStore;
+const inFlight   = state.inFlight;
 /**
  * Un numéro par clé, avancé à chaque invalidation.
  *
@@ -46,7 +72,7 @@ const inFlight   = new Map<string, Promise<unknown>>();
  * trente secondes de plus, précisément après l'action qui demandait de relire. Une réponse n'est
  * écrite que si la clé n'a pas été invalidée depuis son départ.
  */
-const generation = new Map<string, number>();
+const generation = state.generation;
 const generationOf = (key: string) => generation.get(key) ?? 0;
 
 /**
@@ -308,14 +334,13 @@ interface Kept {
   retryAt: number;
 }
 
-const kept = new Map<string, Kept>();
+const kept = state.kept;
 /** La relecture part quand il reste ce quart du TTL. */
 const KEEP_AHEAD_SHARE = 0.25;
 /** Une relecture ratée (source absente) n'est pas retentée plus vite que ça. */
 const KEEP_RETRY_MIN_MS = 15_000;
 const KEEP_UNREAD_MS = 24 * 3600_000;
 const KEEP_TICK_MS = 5_000;
-let keepTimer: ReturnType<typeof setInterval> | null = null;
 
 /** `withCache`, et la clé gardée chaude tant qu'une route la lit. */
 export function withKeptCache<T>(key: string, ttlMs: number, fn: () => Promise<T>, options: { forceRefresh?: boolean } = {}): Promise<T> {
@@ -349,15 +374,15 @@ export function refreshKeptCache(now = Date.now()): void {
 }
 
 export function startKeptCacheRefresh(): void {
-  if (keepTimer) return;
-  keepTimer = setInterval(() => refreshKeptCache(), KEEP_TICK_MS);
-  (keepTimer as { unref?: () => void }).unref?.();
+  if (state.keepTimer) return;
+  state.keepTimer = setInterval(() => refreshKeptCache(), KEEP_TICK_MS);
+  (state.keepTimer as { unref?: () => void }).unref?.();
 }
 
 /** Pour les tests. */
 export function stopKeptCacheRefresh(): void {
-  if (keepTimer) clearInterval(keepTimer);
-  keepTimer = null;
+  if (state.keepTimer) clearInterval(state.keepTimer);
+  state.keepTimer = null;
   kept.clear();
 }
 
@@ -391,7 +416,7 @@ export function invalidateKey(key: string) {
   generation.set(key, generationOf(key) + 1);
   // Une liste gardée chaude est relue tout de suite : la prochaine ouverture n'a pas à l'attendre.
   const k = kept.get(key);
-  if (k && keepTimer) {
+  if (k && state.keepTimer) {
     k.retryAt = 0;
     setTimeout(() => refreshKeptCache(), 0);
   }
