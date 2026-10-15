@@ -5067,7 +5067,7 @@ préparé ailleurs, Safari, allégé ≠ ordinaire), `scene-native.test.tsx`, `a
 
 **Décidé le 14/10/2026** (Louis).
 
-## 94. « Demander » se confirme
+## 95. « Demander » se confirme
 
 **Règle.** Une demande (Jellyseerr, approuvée d'office, téléchargement lancé dans Radarr ou Sonarr)
 ne part jamais d'un seul geste. L'appui sur « Demander » ouvre une question sobre, en noir et blanc :

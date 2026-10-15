@@ -85,7 +85,7 @@ export function PlayerDiscoverSheet({
   const { busy, setStatus, request } = usePlayerTitleActions(
     data ? { tmdbId, type: mediaType, title: data.title, year: data.year, poster: data.poster, rating: data.rating } : null
   );
-  // « Demander » passe par une confirmation, la même partout (§94, `useRequestConfirmation`).
+  // « Demander » passe par une confirmation, la même partout (§95, `useRequestConfirmation`).
   const confirmRequest = useRequestConfirmation(
     data ? { type: mediaType, title: data.title, year: data.year, poster: data.poster } : null,
     request

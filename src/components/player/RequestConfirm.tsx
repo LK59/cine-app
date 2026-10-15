@@ -14,7 +14,7 @@ export interface RequestConfirmTarget {
 }
 
 /**
- * « Demander » se confirme (15/10/2026, décision de Louis, DECISIONS.md §94).
+ * « Demander » se confirme (15/10/2026, décision de Louis, DECISIONS.md §95).
  *
  * Une demande part chez Jellyseerr, s'approuve d'elle-même et lance un téléchargement dans Radarr ou
  * Sonarr. Elle partait au premier appui : un pouce qui remonte la fiche sur téléphone, un double

@@ -128,7 +128,7 @@ describe("fiche découverte, ordinateur — la mise en page d'une fiche film", (
     await vi.waitFor(() => expect(document.activeElement?.textContent).toContain("player.discover.open"));
   });
 
-  // 15/10/2026 (décision de Louis, §94) : « Demander » partait au premier appui — un double Entrée,
+  // 15/10/2026 (décision de Louis, §95) : « Demander » partait au premier appui — un double Entrée,
   // un pouce qui remonte la fiche, et un téléchargement était lancé.
   it("« Demander » demande confirmation, focus sur « Annuler », et ne part qu'au second geste", async () => {
     requestSpy.mockClear();
