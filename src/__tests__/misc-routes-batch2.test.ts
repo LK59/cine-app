@@ -344,7 +344,7 @@ describe("/api/auth/sessions", () => {
     expect(JSON.stringify(body)).not.toContain('"a"');
   });
 
-  // BUREAU-27 (15/10/2026), DECISIONS.md §99 : la route dit laquelle est celle de l'appelant —
+  // BUREAU-27 (15/10/2026), DECISIONS.md §102 : la route dit laquelle est celle de l'appelant —
   // à part, pour que `sessions` reste « les autres », celles que le bouton ferme.
   it("GET says which session is the caller's, without its jti", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jti: "current-jti" });

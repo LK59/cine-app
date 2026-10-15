@@ -543,7 +543,7 @@ export function cinemaNavigate(
   // ouverte depuis l'écran de fin, par-dessus l'entrée du lecteur, n'est pas cette entrée — la
   // fermeture du lecteur, qui rend la sienne d'un `history.back()`, l'aurait refermée aussitôt.
   const base = (window.history.state ?? {}) as Record<string, unknown>;
-  // L'entrée d'onglet (`TAB_BASE_KEY`, DECISIONS.md §100) ne se transmet pas : une fiche empilée
+  // L'entrée d'onglet (`TAB_BASE_KEY`, DECISIONS.md §103) ne se transmet pas : une fiche empilée
   // par-dessus un onglet n'est pas un onglet. Un `replace` la garde — c'est la même entrée.
   const pushed = mode === "push" ? withoutTabEntry(withoutPlayerEntry(base)) : base;
   const state = {
@@ -658,7 +658,7 @@ export function cinemaClose(fallback: Partial<CinemaRoute>): void {
 }
 
 /**
- * Les onglets de la barre ne s'empilent pas (DECISIONS.md §100, ROBUSTESSE-14).
+ * Les onglets de la barre ne s'empilent pas (DECISIONS.md §103, ROBUSTESSE-14).
  *
  * Chaque appui sur Recherche, Ma liste, Compte ou Accueil empilait une entrée : dix changements
  * d'onglet, dix retours pour sortir, en repassant par chaque panneau et plusieurs fois par l'accueil

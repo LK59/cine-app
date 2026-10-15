@@ -12,7 +12,7 @@ vi.mock("@/lib/cinemaRoute", () => ({
   accountScreenOpen: (r: { activity?: string | null; report?: string | null; news?: string | null }) => (r.activity ?? null) !== null || (r.report ?? null) !== null || (r.news ?? null) !== null,
   cinemaClose: vi.fn(),
   cinemaNavigate: vi.fn(),
-  // La porte « Accueil » des onglets (DECISIONS.md §100) : elle choisit seule entre rendre l'entrée
+  // La porte « Accueil » des onglets (DECISIONS.md §103) : elle choisit seule entre rendre l'entrée
   // d'onglet et réécrire l'adresse.
   cinemaTabHome: vi.fn(),
   cinemaSwitchTab: vi.fn(),
@@ -191,7 +191,7 @@ describe("PlayerPanelFrame — Échap", () => {
     vi.mocked(cinemaTabHome).mockClear();
     render(panel(false));
     fireEvent.keyDown(window, { key: "Escape" });
-    // Par la porte « Accueil » des onglets (§100) : un retour si l'accueil est dessous, jamais une
+    // Par la porte « Accueil » des onglets (§103) : un retour si l'accueil est dessous, jamais une
     // entrée de plus.
     expect(cinemaTabHome).toHaveBeenCalledTimes(1);
     expect(vi.mocked(cinemaTabHome).mock.calls[0][0]).toMatchObject({ search: false, list: false, account: false });

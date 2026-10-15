@@ -52,7 +52,7 @@ describe("appareils connectés — vue quand", () => {
   });
 });
 
-// La suite (DECISIONS.md §99) : « Cet appareil » en tête, distinct des lignes que le bouton ferme.
+// La suite (DECISIONS.md §102) : « Cet appareil » en tête, distinct des lignes que le bouton ferme.
 describe("appareils connectés — cet appareil", () => {
   it("marque la session de l'appelant en tête, et ne la compte pas parmi les autres", async () => {
     payload = { username: "sarah", jfUser: "sarah", role: "user" };

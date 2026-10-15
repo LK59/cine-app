@@ -6,7 +6,7 @@ vi.mock("@/lib/cinemaRoute", async (importOriginal) => ({
   // La règle « un écran poussé depuis le Compte est ouvert » reste la vraie (`accountScreenOpen`).
   accountScreenOpen: (await importOriginal<typeof import("@/lib/cinemaRoute")>()).accountScreenOpen,
   cinemaNavigate: (...args: unknown[]) => mockNavigate(...args),
-  // Les onglets passent par leurs deux portes (DECISIONS.md §100), éprouvées sur le vrai historique
+  // Les onglets passent par leurs deux portes (DECISIONS.md §103), éprouvées sur le vrai historique
   // dans `cinemaRoute.test.tsx` ; ici, on note seulement laquelle a été prise.
   cinemaSwitchTab: (patch: unknown) => mockNavigate(patch, "tab"),
   cinemaTabHome: (patch: unknown, alreadyHome: boolean) => mockNavigate(patch, alreadyHome ? "home-already" : "home"),

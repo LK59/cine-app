@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   const others = sessionDb.listOthers(userId(session), session.jti);
   /**
-   * La session de l'appelant, à part (DECISIONS.md §99) : « Cet appareil » en tête de la liste.
+   * La session de l'appelant, à part (DECISIONS.md §102) : « Cet appareil » en tête de la liste.
    *
    * Treize lignes « Ouverte le 14 oct. · Vue le 14 oct. » ne disaient pas laquelle on tenait en main
    * (passe de nuit du 15/10/2026, BUREAU-27). Un champ à part et non un drapeau dans `sessions` : la

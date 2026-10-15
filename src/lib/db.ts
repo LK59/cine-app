@@ -1265,7 +1265,7 @@ export const sessionDb = {
     return rows.map((r) => ({ jti: r.jti, createdAt: r.created_at, lastSeenAt: r.last_seen_at, device: r.device ?? null }));
   },
 
-  /** Une session par son `jti` — celle de l'appelant, pour « Cet appareil » (DECISIONS.md §99). */
+  /** Une session par son `jti` — celle de l'appelant, pour « Cet appareil » (DECISIONS.md §102). */
   find(jti: string): StoredSession | null {
     const row = getDb()
       .prepare("SELECT jti, created_at, last_seen_at, device FROM sessions WHERE jti = ?")

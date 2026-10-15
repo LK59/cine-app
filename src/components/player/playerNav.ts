@@ -97,7 +97,7 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute, mode: "push"
       !current.person &&
       !current.browse;
     // Le glisser de la lentille réécrit l'entrée que l'appui vient d'écrire ; sinon la règle des
-    // onglets (DECISIONS.md §100) : rendre l'entrée d'onglet quand l'accueil est dessous.
+    // onglets (DECISIONS.md §103) : rendre l'entrée d'onglet quand l'accueil est dessous.
     if (mode === "replace") cinemaNavigate(closed, "replace");
     else cinemaTabHome(closed, alreadyHome);
     return;
@@ -114,7 +114,7 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute, mode: "push"
     ...closed,
     ...(panel === "search" ? { search: true } : panel === "list" ? { list: true } : { account: true }),
   };
-  // Un onglet remplace l'onglet d'avant au lieu de s'empiler (DECISIONS.md §100) : le premier depuis
+  // Un onglet remplace l'onglet d'avant au lieu de s'empiler (DECISIONS.md §103) : le premier depuis
   // l'accueil ou une fiche empile une entrée d'onglet, les suivants la réécrivent.
   if (mode === "replace") cinemaNavigate(patch, "replace");
   else cinemaSwitchTab(patch);

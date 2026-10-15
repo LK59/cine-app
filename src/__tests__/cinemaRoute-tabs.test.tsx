@@ -5,7 +5,7 @@ import { cinemaClose, openLibraryTitle, readCinemaRoute, CLOSE_PANELS } from "@/
 import { openPanel, type PlayerPanel } from "@/components/player/playerNav";
 
 /**
- * Les onglets de la barre ne s'empilent pas (DECISIONS.md §100).
+ * Les onglets de la barre ne s'empilent pas (DECISIONS.md §103).
  *
  * Passe de nuit du 15/10/2026 (ROBUSTESSE-14) : dix changements d'onglet, `depth` 0 → 10, dix
  * retours pour revenir au départ en repassant par chaque panneau. Ces tests jouent la même suite
@@ -49,7 +49,7 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
-describe("les onglets de la barre (§100)", () => {
+describe("les onglets de la barre (§103)", () => {
   it("la rafale de la passe de nuit : jamais plus d'une entrée au-dessus de l'accueil", async () => {
     const seen: number[] = [];
     for (const panel of ["search", "list", "account", "home", "search", "home", "account", "list", "search", "home"] as PlayerPanel[]) {

@@ -5544,7 +5544,7 @@ propres mots. La redirection du proxy garde `next` = le chemin seul, comme avant
 
 **Décidé le 15/10/2026** (Louis).
 
-## 99. « Appareils connectés » : cet appareil est nommé, à part des autres
+## 102. « Appareils connectés » : cet appareil est nommé, à part des autres
 
 **Règle.** Le panneau Compte montre en tête la session de l'appareil qu'on tient, marquée « Cet
 appareil » (`player.account.currentDevice`, quatre langues), avec son appareil et sa date d'ouverture ;
@@ -5569,7 +5569,7 @@ laquelle était celle-ci. L'heure « Vue il y a 5 min » (`sessionSeenLabel`) é
 
 **Décidé le 15/10/2026** (Louis).
 
-## 100. Les onglets de la barre se remplacent ; les fiches, panneaux poussés et le lecteur s'empilent
+## 103. Les onglets de la barre se remplacent ; les fiches, panneaux poussés et le lecteur s'empilent
 
 **Règle.** Changer d'onglet (Accueil, Recherche, Ma liste, Compte — barre du téléphone, rail du
 bureau, clavier et télécommande compris) ne coûte jamais plus d'un Retour :

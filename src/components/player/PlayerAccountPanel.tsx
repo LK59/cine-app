@@ -559,7 +559,7 @@ function SessionsSection() {
   const { locale } = useLocale();
   const toast = useToast();
   const [sessions, setSessions] = useState<OtherSession[] | null>(null);
-  // La session de cet appareil, en tête de liste et marquée (DECISIONS.md §99) — absente d'une
+  // La session de cet appareil, en tête de liste et marquée (DECISIONS.md §102) — absente d'une
   // réponse de la version d'avant, ou d'une session que la table ne connaît pas.
   const [current, setCurrent] = useState<OtherSession | null>(null);
   const [revoking, setRevoking] = useState(false);
