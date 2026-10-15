@@ -268,8 +268,9 @@ export async function GET(req: NextRequest) {
   if (!tmdbPrimary.isEnabled()) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
 
   // v11 : la réponse gardée n'est plus filtrée par compte (voir `CachedSearch`) — une entrée v10
-  // l'était déjà, pour le premier compte venu.
-  const cacheKey = `search:v11:${includeDebug ? "debug" : "normal"}:${locale}:${type}:${q}`;
+  // l'était déjà, pour le premier compte venu. v12 (15/10/2026) : la décennie est comprise
+  // (DECISIONS.md §99) — une entrée v11 pour « horreur des années 80 » gardait les films de 2026.
+  const cacheKey = `search:v12:${includeDebug ? "debug" : "normal"}:${locale}:${type}:${q}`;
 
   const cached = await withCache<CachedSearch>(cacheKey, TTL.MEDIUM, async () => {
     const searchMovie = type === "all" || type === "movie";
@@ -365,6 +366,7 @@ export async function GET(req: NextRequest) {
           genreId: genreIds?.movie ?? undefined,
           castIds,
           crewIds: directorIds,
+          decade: natural.decade ?? undefined,
         }));
       }
       if (!missingCast && !missingDirector && allowSeriesResults) {
@@ -373,6 +375,7 @@ export async function GET(req: NextRequest) {
           genreId: genreIds?.tv ?? undefined,
           castIds,
           crewIds: directorIds,
+          decade: natural.decade ?? undefined,
         }));
       }
 
@@ -392,7 +395,7 @@ export async function GET(req: NextRequest) {
           }
           addResult(
             entry,
-            `natural: discover ${mediaType}; credits verified; genre=${natural.genreName ?? "none"}; cast=${natural.castNames.join(",") || "none"} -> ${castIds.join(",") || "none"}; director=${natural.directorNames.join(",") || "none"} -> ${directorIds.join(",") || "none"}`
+            `natural: discover ${mediaType}; credits verified; genre=${natural.genreName ?? "none"}; decade=${natural.decade ?? "none"}; cast=${natural.castNames.join(",") || "none"} -> ${castIds.join(",") || "none"}; director=${natural.directorNames.join(",") || "none"} -> ${directorIds.join(",") || "none"}`
           );
         }
       }

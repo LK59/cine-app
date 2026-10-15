@@ -379,6 +379,8 @@ function createTmdbClient(lang = "fr-FR") {
       castIds?: number[];
       crewIds?: number[];
       query?: string;
+      /** Première année d'une décennie (1980) : sortie (film) ou première diffusion (série) dans [1980, 1989]. */
+      decade?: number;
     }) => {
       const qs = new URLSearchParams({
         api_key: cfg.apiKey,
@@ -395,6 +397,11 @@ function createTmdbClient(lang = "fr-FR") {
         if (peopleIds.length) qs.set("with_people", peopleIds.join(","));
       }
       if (params.query) qs.set("query", params.query);
+      if (params.decade) {
+        const field = params.mediaType === "movie" ? "primary_release_date" : "first_air_date";
+        qs.set(`${field}.gte`, `${params.decade}-01-01`);
+        qs.set(`${field}.lte`, `${params.decade + 9}-12-31`);
+      }
       return fetchJson<{ results: (TmdbTrendingMovie | TmdbTrendingTv)[] }>(
         `${BASE}/discover/${params.mediaType}?${qs.toString()}`
       );

@@ -2,6 +2,7 @@ import {
   normalize,
   bestTitleMatchScore,
   GENRE_ALIASES,
+  extractDecade,
   parseNaturalQuery,
   parseNaturalQueryEN,
   parseNaturalQueryES,
@@ -44,11 +45,14 @@ function matchesGenre(genres: string[], canonical: string): boolean {
 const MEDIA_WORDS =
   /\b(film|films|movie|movies|serie|series|series|tv|show|shows|pelicula|peliculas|filme|serien)\b/g;
 
-// Strips the parts of the query the parser consumed (media type, genre, a year), leaving whatever
+// Strips the parts of the query the parser consumed (media type, genre, a year, a decade), leaving whatever
 // the user meant as an actual title. "films d'action de 2019" leaves nothing — which is the
 // signal to list the whole genre instead of scoring titles against noise.
-function residualTitle(raw: string, genreName: string | null, year: number | null): string {
-  let q = normalize(raw).replace(MEDIA_WORDS, " ");
+function residualTitle(raw: string, genreName: string | null, year: number | null, decade = false): string {
+  let q = normalize(raw);
+  // La décennie d'abord, avant que « show » ne parte avec les mots de média (« That '70s Show »).
+  if (decade) q = extractDecade(q).rest;
+  q = q.replace(MEDIA_WORDS, " ");
   if (year) q = q.replace(new RegExp(`\\b${year}\\b`, "g"), " ");
   if (genreName) {
     for (const alias of GENRE_ALIASES[genreName] ?? []) {
@@ -79,16 +83,22 @@ export function searchCinemaLibrary(
     : parseNaturalQuery;
   const natural = parse(query, "all");
 
-  const yearMatch = query.match(/\b(19|20)\d{2}\b/);
+  // La décennie (« années 80 », « 1980s », DECISIONS.md §99) : un filtre, comme le genre. Son
+  // nombre n'est pas une année — « années 1980 » ne filtre pas sur 1980 seul.
+  const decade = natural.decade;
+  const withoutDecade = decade !== null ? extractDecade(normalize(query)).rest : query;
+  const yearMatch = withoutDecade.match(/\b(19|20)\d{2}\b/);
   const year = yearMatch ? Number.parseInt(yearMatch[0], 10) : null;
-  const title = residualTitle(query, natural.genreName, year);
+  const title = residualTitle(query, natural.genreName, year, decade !== null);
   // Le même nombre lu comme une partie du titre : « 1917 » (sorti en 2019), « Blade Runner 2049 »,
   // « 2001 : L'Odyssée de l'espace ». Lu seulement comme une année, il filtrait ces films dehors et
   // disparaissait du texte cherché : la recherche ne les trouvait pas du tout (13/10/2026).
-  const titleWithYear = year ? residualTitle(query, natural.genreName, null) : title;
+  const titleWithYear = year ? residualTitle(query, natural.genreName, null, decade !== null) : title;
+  // De même pour une décennie : « That '70s Show » (1998) se cherche avec ses « 70s ».
+  const titleWithDecade = decade !== null ? residualTitle(query, natural.genreName, year, false) : title;
   const yearWord = year ? new RegExp(`(^|\\D)${year}(\\D|$)`) : null;
   // Nothing left to match on and nothing to filter by: an unusable query (e.g. just "de").
-  if (!title && !natural.genreName && !year) return [];
+  if (!title && !natural.genreName && !year && decade === null) return [];
 
   const results: CinemaSearchResult[] = [];
 
@@ -101,9 +111,12 @@ export function searchCinemaLibrary(
     // se cherche alors sur le texte entier, nombre compris.
     const yearIsTitle = year !== null && item.year !== year;
     if (yearIsTitle && !titles.some((t) => t && yearWord?.test(t))) return;
-    const wanted = yearIsTitle ? titleWithYear : title;
+    // Hors de la décennie demandée : seulement si le titre porte ces mots-là (« That '70s Show »).
+    const decadeIsTitle = decade !== null && !(item.year !== null && item.year !== undefined && item.year >= decade && item.year <= decade + 9);
+    if (decadeIsTitle && !titleWithDecade) return;
+    const wanted = decadeIsTitle ? titleWithDecade : yearIsTitle ? titleWithYear : title;
 
-    // With no title left, the genre/year filters *are* the query — everything surviving them is a
+    // With no title left, the genre/year/decade filters *are* the query — everything surviving them is a
     // hit, ranked by rating below. Otherwise the title has to actually match.
     //
     // Le titre d'origine compte autant que celui qu'on affiche : dans un foyer francophone, la

@@ -5450,3 +5450,32 @@ genre ne part pas au navigateur.
 
 **Tests.** `tmdb-routes.test.ts` (« hors bibliothèque : note pondérée par les votes, et les apparitions
 … en fin »).
+
+## 99. La recherche comprend les décennies
+
+**Règle.** Une décennie dite dans sa tournure est un filtre de la recherche, comme le genre :
+« années 80 », « années 1980 », « années quatre-vingt » ; « 80s », « 1980s », « eighties » ; « años 80 »,
+« los 80 », « los ochenta » ; « 80er », « 80ern », « 80er Jahre », « achtziger » — reconnues dans les
+quatre langues quel que soit le compte. Deux chiffres : 00 et 10 sont 2000 et 2010, les autres le XXᵉ
+siècle (« années 20 » = 1920) ; les années 2020 se disent avec quatre chiffres. **Jamais un nombre
+seul** : « 2001 », « 2010 », « 1917 », « Apollo 13 » restent des titres (un nombre de quatre chiffres
+garde sa double lecture titre/année, 13/10/2026). Le nombre d'une décennie n'est pas une année :
+« années 1980 » ne filtre pas sur 1980 seul. Un titre hors de la décennie qui porte la tournure se
+trouve quand même (« That '70s Show », 1998), comme un titre qui porte une année.
+
+Dans la bibliothèque (`searchCinemaLibrary`) : `year` dans [1980, 1989]. Vers TMDB (`/api/search`) :
+la découverte reçoit `primary_release_date` (films) ou `first_air_date` (séries) bornées ; la clé de
+la réponse gardée passe en `search:v12`.
+
+**Pourquoi.** Nuit du 15/10/2026 (BUREAU-25) : « films d'horreur des années 80 » comprenait le genre et
+ignorait la décennie — *Resident Evil* (2026), *Obsession* (2026)… alors que la bibliothèque a *The
+Thing* et *La Mouche*. La grille et le Top 10 filtraient déjà par décennie. Décision de Louis le 15/10.
+
+**Porteur.** `extractDecade` (`src/lib/search-natural-query.ts`), appelée par les quatre
+`parseNaturalQuery*` (champ `decade`) et par `residualTitle` (`cinemaSearch.ts`).
+
+**Appelants.** `searchCinemaLibrary` (recherche du cinéma, assistant de signalement),
+`/api/search` (recherche du cinéma et de la gestion) → `tmdb.discover({ decade })`.
+
+**Tests.** `search-decade.test.ts` (tournures, titres à nombre, filtre de la bibliothèque, « That '70s
+Show »), `search-route.test.ts` (« décennie »), `tmdb-discover-decade.test.ts` (l'adresse).

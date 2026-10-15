@@ -35,6 +35,8 @@ export interface NaturalQuery {
   genreName: string | null;
   castNames: string[];
   directorNames: string[];
+  /** La décennie demandée, par sa première année (1980 pour « les années 80 ») — voir `extractDecade`. */
+  decade: number | null;
 }
 
 export const GENRE_ALIASES: Record<string, string[]> = {
@@ -201,8 +203,75 @@ function extractPeople(q: string, patterns: RegExp[], locale: Locale = "fr"): { 
   return { names, rest: rest.replace(/\s+/g, " ").trim() };
 }
 
+/**
+ * Les décennies, dans les quatre langues (15/10/2026, passe de nuit, BUREAU-25, DECISIONS.md §99).
+ *
+ * « films d'horreur des années 80 » comprenait le genre et pas la décennie : la recherche rendait
+ * les films d'horreur les plus populaires du moment, tous de 2026. La grille et le Top 10 savaient
+ * déjà filtrer par décennie ; la recherche, non.
+ *
+ * Une décennie ne se lit **que dans sa tournure** — « années 80 », « années 1980 », « 80s »,
+ * « 1980s », « eighties », « años 80 », « los 80 », « 80er (Jahre) », « achtziger » — jamais sur un
+ * nombre seul : « 2001 », « 2010 », « Apollo 13 », « 1917 » restent des titres (et, pour un nombre
+ * de quatre chiffres, une année : voir `cinemaSearch`). Le mot qui l'introduit (« des », « de los »,
+ * « from the », « aus den ») part avec elle, pour ne pas rester comme un bout de titre.
+ *
+ * Deux chiffres : « 00 » et « 10 » sont 2000 et 2010 ; les autres, le XXᵉ siècle — « les années 20 »
+ * sont les Années folles. Les années 2020 se disent avec quatre chiffres.
+ */
+const DECADE_WORDS: Record<string, number> = {
+  // Plus long d'abord : « quatre vingt dix » avant « quatre vingt », « soixante dix » avant « soixante ».
+  "quatre vingt dix": 1990, "quatre vingt": 1980, "soixante dix": 1970, soixante: 1960, cinquante: 1950,
+  quarante: 1940, trente: 1930, vingt: 1920,
+  twenties: 1920, thirties: 1930, forties: 1940, fifties: 1950, sixties: 1960, seventies: 1970, eighties: 1980, nineties: 1990,
+  veinte: 1920, treinta: 1930, cuarenta: 1940, cincuenta: 1950, sesenta: 1960, setenta: 1970, ochenta: 1980, noventa: 1990,
+  zwanziger: 1920, dreissiger: 1930, vierziger: 1940, funfziger: 1950, sechziger: 1960, siebziger: 1970, achtziger: 1980, neunziger: 1990,
+};
+const DECADE_WORD_ALT = Object.keys(DECADE_WORDS).sort((a, b) => b.length - a.length).join("|");
+// Seuls l'anglais et l'allemand se lisent sans « années » / « años » devant : « trente » ou
+// « quarante » seuls sont des titres (« Les Quarante Rugissants »), « eighties » ne l'est guère.
+const DECADE_WORD_ALONE = Object.keys(DECADE_WORDS).filter((w) => /(ies|ziger)$/.test(w)).join("|");
+// Le mot d'introduction, facultatif, consommé avec la décennie.
+const DECADE_LEAD = String.raw`(?:\b(?:des|de|du|from the|from|of the|in the|the|de los|de la decada de los|de la decada de|en los|aus den|in den|der|den)\s+)?`;
+const DECADE_NUM = String.raw`((?:19|20)?[0-9]0)`;
+const DECADE_PATTERNS: RegExp[] = [
+  // FR « années 80 / 1980 / quatre-vingt », ES « años 80 / ochenta », « los 80 ».
+  new RegExp(String.raw`${DECADE_LEAD}\b(?:annees?|anos|los|decada de los)\s+(?:${DECADE_NUM}s?|(${DECADE_WORD_ALT}))\b`),
+  // EN « 80s / 1980s », DE « 80er / 80ern / 1980er (Jahre) ».
+  new RegExp(String.raw`${DECADE_LEAD}\b${DECADE_NUM}(?:s|ern?(?:\s+jahren?)?)\b`),
+  // EN « eighties », DE « achtziger (Jahre) ».
+  new RegExp(String.raw`${DECADE_LEAD}\b(${DECADE_WORD_ALONE})(?:\s+jahren?)?\b`),
+];
+
+function decadeFromDigits(digits: string): number | null {
+  const n = Number.parseInt(digits, 10);
+  if (!Number.isFinite(n)) return null;
+  if (digits.length === 4) return n >= 1900 && n <= 2090 ? n : null;
+  return n <= 10 ? 2000 + n : 1900 + n;
+}
+
+/**
+ * Cherche une décennie dans une requête **déjà normalisée** (`normalize`) ; rend sa première année
+ * et la requête sans elle.
+ */
+export function extractDecade(q: string): { decade: number | null; rest: string } {
+  for (const pattern of DECADE_PATTERNS) {
+    const m = pattern.exec(q);
+    if (!m) continue;
+    const digits = m.slice(1).find((g) => g !== undefined && /^[0-9]+$/.test(g));
+    const word = m.slice(1).find((g) => g !== undefined && !/^[0-9]+$/.test(g));
+    const decade = digits ? decadeFromDigits(digits) : word ? DECADE_WORDS[word] ?? null : null;
+    if (decade === null) continue;
+    const rest = (q.slice(0, m.index) + " " + q.slice(m.index + m[0].length)).replace(/\s+/g, " ").trim();
+    return { decade, rest };
+  }
+  return { decade: null, rest: q };
+}
+
 export function parseNaturalQuery(raw: string, forcedType: "movie" | "series" | "all"): NaturalQuery {
   let q = normalize(raw);
+  const { decade, rest: withoutDecade } = extractDecade(q);
+  q = withoutDecade;
   const detectedType =
     /\b(film|films|movie|movies)\b/.test(q) ? "movie"
     : /\b(serie|series|série|séries|tv|show)\b/.test(q) ? "series"
@@ -231,18 +300,21 @@ export function parseNaturalQuery(raw: string, forcedType: "movie" | "series" | 
   ]);
   q = director.rest;
 
-  const enabled = Boolean(genreName || cast.names.length || director.names.length);
+  const enabled = Boolean(genreName || cast.names.length || director.names.length || decade !== null);
   return {
     enabled,
     mediaType: detectedType,
     genreName,
     castNames: [...new Set(cast.names.map(normalize))],
     directorNames: [...new Set(director.names.map(normalize))],
+    decade,
   };
 }
 
 export function parseNaturalQueryEN(raw: string, forcedType: "movie" | "series" | "all"): NaturalQuery {
   let q = normalize(raw);
+  const { decade, rest: withoutDecade } = extractDecade(q);
+  q = withoutDecade;
   const detectedType =
     /\b(movie|movies|film|films)\b/.test(q) ? "movie"
     : /\b(series|show|shows|tv)\b/.test(q) ? "series"
@@ -271,18 +343,21 @@ export function parseNaturalQueryEN(raw: string, forcedType: "movie" | "series" 
   ], "en");
   q = director.rest;
 
-  const enabled = Boolean(genreName || cast.names.length || director.names.length);
+  const enabled = Boolean(genreName || cast.names.length || director.names.length || decade !== null);
   return {
     enabled,
     mediaType: detectedType,
     genreName,
     castNames: [...new Set(cast.names.map(normalize))],
     directorNames: [...new Set(director.names.map(normalize))],
+    decade,
   };
 }
 
 export function parseNaturalQueryES(raw: string, forcedType: "movie" | "series" | "all"): NaturalQuery {
   let q = normalize(raw);
+  const { decade, rest: withoutDecade } = extractDecade(q);
+  q = withoutDecade;
   const detectedType =
     /\b(pelicula|peliculas|film|films)\b/.test(q) ? "movie"
     : /\b(serie|series|programa|programas|show)\b/.test(q) ? "series"
@@ -311,18 +386,21 @@ export function parseNaturalQueryES(raw: string, forcedType: "movie" | "series" 
   ], "es");
   q = director.rest;
 
-  const enabled = Boolean(genreName || cast.names.length || director.names.length);
+  const enabled = Boolean(genreName || cast.names.length || director.names.length || decade !== null);
   return {
     enabled,
     mediaType: detectedType,
     genreName,
     castNames: [...new Set(cast.names.map(normalize))],
     directorNames: [...new Set(director.names.map(normalize))],
+    decade,
   };
 }
 
 export function parseNaturalQueryDE(raw: string, forcedType: "movie" | "series" | "all"): NaturalQuery {
   let q = normalize(raw);
+  const { decade, rest: withoutDecade } = extractDecade(q);
+  q = withoutDecade;
   const detectedType =
     /film(e)?\b/.test(q) ? "movie"
     : /serien?\b|\b(show|sendung)\b/.test(q) ? "series"
@@ -353,12 +431,13 @@ export function parseNaturalQueryDE(raw: string, forcedType: "movie" | "series" 
   ], "de");
   q = director.rest;
 
-  const enabled = Boolean(genreName || cast.names.length || director.names.length);
+  const enabled = Boolean(genreName || cast.names.length || director.names.length || decade !== null);
   return {
     enabled,
     mediaType: detectedType,
     genreName,
     castNames: [...new Set(cast.names.map(normalize))],
     directorNames: [...new Set(director.names.map(normalize))],
+    decade,
   };
 }

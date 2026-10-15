@@ -145,6 +145,24 @@ describe("GET /api/search", () => {
   });
 });
 
+// 15/10/2026 (BUREAU-25, DECISIONS.md §99) : la décennie était ignorée, la découverte TMDB rendait
+// les films d'horreur populaires du moment — tous de 2026.
+describe("GET /api/search — décennie", () => {
+  it("« films d'horreur des années 80 » : la découverte TMDB est bornée à 1980–1989", async () => {
+    const { GET } = await import("@/app/api/search/route");
+    await GET(fakeReq({ q: "films d'horreur des années 80" }));
+    expect(mockTmdbSingleton.discover).toHaveBeenCalledWith(expect.objectContaining({ mediaType: "movie", decade: 1980 }));
+    // « films » : pas de découverte de séries.
+    expect(mockTmdbSingleton.discover).not.toHaveBeenCalledWith(expect.objectContaining({ mediaType: "tv" }));
+  });
+
+  it("un titre qui porte un nombre ne déclenche aucune découverte", async () => {
+    const { GET } = await import("@/app/api/search/route");
+    await GET(fakeReq({ q: "apollo 13" }));
+    expect(mockTmdbSingleton.discover).not.toHaveBeenCalled();
+  });
+});
+
 // Chaque nom reconnu coûtait une à deux recherches TMDB, sans borne : une adresse listant des
 // centaines de noms partait en autant d'appels sur la clé de la maison (26/09/2026).
 describe("GET /api/search — coût borné", () => {
