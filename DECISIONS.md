@@ -3889,6 +3889,40 @@ celle de l'app, et elle n'agit que sur un blocage réel (règle ci-dessous). `do
 (`diag.downlinkMbps`, `downlinkMinMbps`), lu, jamais suivi. **Tests** : `networkBitrate.test.ts` (« ne lit
 jamais downlink comme une mesure », « garde la classe 3g quel que soit downlink »).
 
+**Seul un blocage réel agit ; un chiffre ne fait que le qualifier (15/10/2026, règle de Louis).** Indice,
+préchauffage, bascule, palier suivant, écran final : chacun part d'un blocage que le spectateur subit — une
+ouverture ou un saut **sans image** depuis un délai, une **attente** (`waiting`) en pleine lecture, tampon vide
+ou horloge figée. Le débit mesuré et le besoin du flux ne font que dire si ce blocage tient au réseau (et
+choisir le palier) ; seuls, ils ne déclenchent jamais rien — ils vont au journal et au panneau technique.
+*Pourquoi* : deux chiffres faux ont suffi à agir. `downlink` sous 10 bridait le plafond ordinaire sans que
+rien ne bloque (paragraphe précédent) ; et le « besoin » d'un transcodage sans plafond valait 100 Mbit/s, le
+plafond que Jellyfin recopie dans `VideoBitrate` (LECTEUR-9) — tout lien y paraissait « trop lent », si bien
+qu'une attente de décodeur était rangée « réseau » et pouvait basculer. Le besoin est désormais le débit visé
+quand il en est un (`transcodeTargetBps`, `slowLink.ts` : une somme à 95 % du plafond envoyé, hors version
+allégée et sans source plus lourde, rend `null` — le besoin retombe sur la source) ; le panneau ne dit plus
+« Diffusé 100 Mb/s » pour un fichier de 2,5.
+
+*Ce qui décide d'une action, et ce qui la déclenche* (relu dans les deux hôtes le 15/10/2026) :
+- ouverture, chaque seconde tant qu'aucune image (`decideOpening` ; natif : intervalle arrêté à `ready` ;
+  serveur hls.js : `linkWatch`, arrêté à `loadeddata`) — préchauffage à 8 s, bascule à 10 s / 20 s :
+  **l'ouverture sans image** depuis ce délai ; la mesure (< 50 %, < 25 %) qualifie ;
+- renoncement (minuteur des 35 s du natif, chien de garde des 20 s du serveur) — bascule ou écran : **pas
+  d'image au délai** ; `slowLinkVerdict` qualifie ;
+- saut (`SlowLinkRunner.seekTick`) — **un saut en lecture resté 10 s sans image** (jamais en pause) ;
+- en lecture (`StutterWatch` → `decidePlayback`) — **une attente** de plus de 5 s, ou la 2e / 3e de plus
+  d'1 s en 3 min, après la première image, hors saut ; classée réseau (natif : `playbackDiagnosis`,
+  serveur : tampon vide) **et** sous un débit mesuré inférieur au besoin ;
+- préchauffage prêt (`playbackDecision`) — ne bascule que si la règle de lecture a déjà joué
+  (`armPlayback`) ;
+- mémoire des deux minutes (`carriedLighter`) — posée seulement par une séance réellement basculée ;
+- plafond ordinaire (`pickMaxBitrate`) — la classe annoncée, jamais `downlink` (corrigé ce jour).
+**Seule exception, voulue** : `LinkRecovery` *efface* la mémoire des deux minutes sur la seule mesure (110 %
+du besoin d'origine tenus 10 s). Elle ne fait que lever une restriction — la lecture suivante revient au
+comportement ordinaire —, jamais en poser une. **Tests** : `ExperimentalPlayerHost.test.tsx` et
+`PlayerHost-connexion-lente.test.tsx` (« un lien mesuré très lent sans aucun blocage : ni préchauffage ni
+bascule »), `jellyfin-playback-start-route.test.ts` (« débit visé : le plafond recopié… »),
+`networkBitrate.test.ts`.
+
 ## 79. La connexion lente s'exécute à un seul endroit pour les deux lecteurs
 
 **La règle.** Ce que `slowLinkPolicy.ts` décide (§78) est exécuté par **une** classe, `SlowLinkRunner`

@@ -3413,6 +3413,15 @@ describe("pendant la lecture : les saccades (§78)", () => {
     expect(Math.abs((takeover as { resumeAt: number }).resumeAt - 600)).toBeLessThanOrEqual(5);
   });
 
+  // La règle de Louis (15/10/2026, §78) : une mesure seule n'agit jamais — seul un blocage réel le peut.
+  it("un lien mesuré très lent sans aucun blocage : ni préchauffage ni bascule, même deux minutes durant", async () => {
+    await playing();
+    diagMock.link = slowLinkNow;
+    await act(async () => void vi.advanceTimersByTime(120_000));
+    expect(prewarms).toHaveLength(0);
+    expect(onFallback).not.toHaveBeenCalled();
+  });
+
   it("une attente de calcul ou de décodeur, un lien qui suffit, ou « Originale » : rien, jamais", async () => {
     const element = await playing();
     diagMock.currentWait = { verdict: "calcul", ms: 5000 };

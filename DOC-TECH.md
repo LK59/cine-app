@@ -2181,7 +2181,7 @@ All in `src/lib/`. DECISIONS §77–§79.
 
 | File | Role |
 |---|---|
-| `slowLink.ts` | The measured verdict (`slowLinkVerdict`), the opening's link reading, `readCounted` (kept, not wired) |
+| `slowLink.ts` | The measured verdict (`slowLinkVerdict`), the opening's link reading, the stream's need (`streamNeedBps`; `transcodeTargetBps` drops a target that is only our own cap copied back by Jellyfin), `readCounted` (kept, not wired) |
 | `slowLinkPolicy.ts` | The one state machine: `openingAdvice`, `decideOpening`, `decidePlayback`, `StutterWatch`, `nextLighter`, `lighterMaxWidth`, `LinkRecovery`, `SlowLog` |
 | `slowLinkRunner.ts` | The one executor for both players: the pre-warm held, the final screen, the seek watch |
 | `lighterPrewarm.ts` | Pre-warming the lighter version, taking it over (`takePrewarm`, `prewarmFits`), carrying it across a reload |
@@ -2192,6 +2192,8 @@ All in `src/lib/`. DECISIONS §77–§79.
 | `playbackQuality.ts` | The Quality setting (Automatique / Originale) and the two-minute memory (`carriedLighter`) |
 | `linkSimulator.ts`, `slowLinkMonitor.ts` | The Lab's link simulator and its live thread; inert elsewhere |
 | `networkBitrate.ts` | The ordinary `MaxStreamingBitrate`: from the browser's link *class* only (`2g` → 1.5, `3g` → 6.4 Mb/s, else unconstrained) — `downlink` is never read as a measurement |
+
+**Only a real stall acts** (DECISIONS §78, 15/10/2026): an opening or a seek without a picture past its delay, or a `waiting` in mid-playback. The measured rate and the stream's need only say whether that stall is the network's, and pick the tier; on their own they trigger nothing.
 
 Removed: `SlowLinkPopup.tsx` (12/10/2026 — nothing is offered any more, the switch is automatic) and
 `useLegacyPlayer.ts` (13/10/2026 — no per-account choice of the server player).

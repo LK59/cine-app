@@ -375,6 +375,32 @@ export function meterXhr(meter: LinkMeter, xhr: XMLHttpRequest): void {
 }
 
 /**
+ * Le débit visé d'un transcodage, tel que la route de démarrage le rend (`streamBitrate`) — ou `null`
+ * quand le chiffre de l'adresse n'est que notre plafond recopié (15/10/2026, LECTEUR-9).
+ *
+ * Jellyfin écrit dans `VideoBitrate` le plafond qu'on lui envoie (`MaxStreamingBitrate`) moins le son,
+ * pas un débit qu'il vise : sans plafond (`UNCONSTRAINED`, 100 Mbit/s), « Le Grinch » à 2,5 Mbit/s
+ * était « diffusé » à `VideoBitrate=99763149`, le panneau disait « Débit 100.0 Mb/s », et le besoin
+ * lu par §77/§78 valait 100 (`diag.needMbps: 100`) — tout lien y paraissait « trop lent ».
+ *
+ * Donc, **hors version allégée** (dont le palier est un vrai débit visé, choisi par §78) : une somme qui
+ * atteint 95 % du plafond envoyé ne dit rien du flux — `null`, et le besoin retombe sur la source
+ * (`streamNeedBps`). Sauf si la source est connue et plus lourde que cette somme : le plafond mord
+ * alors vraiment (classe `3g` / `2g` de `pickMaxBitrate`), et la somme est bien ce que ffmpeg produit.
+ */
+export function transcodeTargetBps(
+  urlBps: number | null,
+  sent: { maxBitrate: number; lighter: boolean; sourceBps: number | null },
+): number | null {
+  if (urlBps === null || !(urlBps > 0) || !Number.isFinite(urlBps)) return null;
+  if (sent.lighter) return urlBps;
+  if (!(sent.maxBitrate > 0) || urlBps < sent.maxBitrate * 0.95) return urlBps;
+  const source = sent.sourceBps;
+  if (typeof source === "number" && Number.isFinite(source) && source > urlBps) return urlBps;
+  return null;
+}
+
+/**
  * Le débit que le lecteur serveur reçoit de Jellyfin : vidéo et son du flux négocié.
  *
  * Pour un transcodage, celui que Jellyfin vise (`streamBitrate`, lu dans son adresse) : `video` et

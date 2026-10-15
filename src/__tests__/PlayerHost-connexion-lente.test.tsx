@@ -815,6 +815,17 @@ describe("la lecture allégée : relais, règle des deux minutes, lien rétabli 
     expect(prewarmStops()).toHaveLength(1);
   });
 
+  // La règle de Louis (15/10/2026, §78) : une mesure seule n'agit jamais — seul un blocage réel le peut.
+  it("une lecture qui joue sur un lien mesuré très lent, sans aucun blocage : ni préchauffage ni bascule", async () => {
+    await mounted();
+    await picture();
+    // Deux minutes à 0,25 Mo/s (2 Mbit/s pour un besoin de 3,9) : la mesure dit « lent », l'image ne s'arrête pas.
+    await trickle(250_000, 120);
+    for (let i = 0; i < 30; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(startBodies.filter((b) => b.prewarm === true)).toHaveLength(0);
+    expect(reported.filter((r) => r.kind === "start" && r.fields.why === "lighter")).toHaveLength(0);
+  });
+
   it("B en « Originale » : rien — jamais d'erreur tant que la lecture continue", async () => {
     writePlaybackQuality("original");
     await mounted();

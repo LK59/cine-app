@@ -472,6 +472,37 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(hlsJs.playbackInfo.streamBitrate).toBe(1_500_000);
   });
 
+  // LECTEUR-9 (15/10/2026) : sans plafond (100 Mbit/s), Jellyfin recopie le plafond dans `VideoBitrate`.
+  // « Le Grinch » (2,5 Mbit/s) était « diffusé à 100 Mb/s », et §77/§78 jugeaient le lien contre 100.
+  it("débit visé : le plafond recopié par Jellyfin n'est pas un débit — le besoin retombe sur la source", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    const grinch = (videoBitrate: number, sourceVideo: number) => ({
+      PlaySessionId: "play-1",
+      MediaSources: [{
+        Id: "src-1",
+        TranscodingUrl: `/videos/aaaa/master.m3u8?VideoCodec=h264&VideoBitrate=${videoBitrate}&AudioBitrate=236851&TranscodeReasons=VideoCodecNotSupported`,
+        MediaStreams: [
+          { Type: "Video", Index: 0, Codec: "hevc", BitRate: sourceVideo, Width: 1920 },
+          { Type: "Audio", Index: 1, Codec: "eac3", BitRate: 640_000 },
+        ],
+      }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    // Le cas relevé : plafond 100 Mbit/s, source 2,5 → aucun débit visé (le besoin sera la source).
+    mockJellyfin.getPlaybackInfo.mockResolvedValue(grinch(99_763_149, 1_900_000));
+    let body = await (await POST(fakeReq({ itemId: validId, nativeHls: false, maxBitrate: 100_000_000 }))).json();
+    expect(body.playbackInfo.playMethod).toBe("Transcode");
+    expect(body.playbackInfo.streamBitrate).toBeNull();
+    // Un plafond qui mord vraiment (classe 3g, source plus lourde) : la somme est ce que ffmpeg produit.
+    mockJellyfin.getPlaybackInfo.mockResolvedValue(grinch(6_163_149, 18_000_000));
+    body = await (await POST(fakeReq({ itemId: validId, nativeHls: false, maxBitrate: 6_400_000 }))).json();
+    expect(body.playbackInfo.streamBitrate).toBe(6_400_000);
+    // Une version allégée garde son palier, même au ras du plafond qu'elle a elle-même choisi.
+    mockJellyfin.getPlaybackInfo.mockResolvedValue(grinch(1_263_149, 1_900_000));
+    body = await (await POST(fakeReq({ itemId: validId, nativeHls: false, maxBitrate: 1_500_000, lighter: true }))).json();
+    expect(body.playbackInfo.streamBitrate).toBe(1_500_000);
+  });
+
   it("skips the pre-warm for an hls.js client, so the response isn't held behind ffmpeg", async () => {
     transcodingSource();
     const { POST } = await import("@/app/api/jellyfin/playback/start/route");

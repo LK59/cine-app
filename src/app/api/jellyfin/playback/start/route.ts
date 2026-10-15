@@ -21,6 +21,7 @@ import { isJellyfinId } from "@/lib/jellyfinPath";
 import { signCastToken, CAST_TOKEN_PARAM } from "@/lib/castToken";
 import { masterVariantFacts } from "@/lib/playbackPanel";
 import { forwardedFor } from "@/lib/clientAddress";
+import { transcodeTargetBps } from "@/lib/slowLink";
 
 // Both "no Jellyfin identity in session" and "Jellyfin rejected our stored
 // token" boil down to the same user-facing action: log back in with Jellyfin
@@ -86,6 +87,12 @@ const VIDEO_TRANSCODE_REASONS = new Set([
   "AnamorphicVideoNotSupported",
   "InterlacedVideoNotSupported",
 ]);
+/** Le débit de la source (vidéo + son retenu), ou `null` sans débit vidéo connu. */
+function sourceBitrate(video: number | null | undefined, audio: number | null | undefined): number | null {
+  if (typeof video !== "number" || !(video > 0)) return null;
+  return video + (typeof audio === "number" && audio > 0 ? audio : 0);
+}
+
 type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
 function derivePlayMethod(isDirectPlay: boolean, isVideoCopied: boolean): PlayMethod {
   if (isDirectPlay) return "DirectPlay";
@@ -483,8 +490,17 @@ export async function POST(req: NextRequest) {
           language: audioStreamForPlayback.Language ?? null,
         },
         // Le flux envoyé quand Jellyfin transcode — voir `streamNeedBps` et le panneau (« Diffusé »).
-        // Une vidéo copiée ignore le débit visé : rien hors transcodage.
-        streamBitrate: playMethod === "Transcode" ? streamBitrate : null,
+        // Une vidéo copiée ignore le débit visé : rien hors transcodage. Notre plafond recopié par
+        // Jellyfin n'est pas un débit visé (`transcodeTargetBps`, LECTEUR-9 : « 100 Mb/s » pour un
+        // fichier de 2,5).
+        streamBitrate:
+          playMethod === "Transcode"
+            ? transcodeTargetBps(streamBitrate, {
+                maxBitrate,
+                lighter,
+                sourceBps: sourceBitrate(videoStream?.BitRate, audioStreamForPlayback?.BitRate),
+              })
+            : null,
         served,
       },
     });
