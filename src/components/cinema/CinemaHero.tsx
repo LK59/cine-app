@@ -234,7 +234,11 @@ export function HeroBannerControls({
           ref={infoRef}
           type="button"
           onClick={onInfo}
-          className={`nav-glass inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-white transition-transform hover:scale-[1.03] active:scale-[0.97] ${ring}`}
+          // Un contour et non l'anneau de « Lire » (15/10/2026, passe de nuit, BUREAU-19) : l'anneau
+          // est un `box-shadow`, et celui de `.nav-glass` (globals.css, hors couche) l'emportait sur
+          // l'utilitaire — au clavier, le focus sur « Plus d'infos » ne se voyait pas du tout. Le
+          // contour ne se dispute avec rien ; même épaisseur, même écart, même couleur.
+          className="nav-glass inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-white transition-transform hover:scale-[1.03] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
         >
           <Info size={16} aria-hidden />
           {t("cinema.moreInfo")}
