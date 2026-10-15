@@ -32,7 +32,7 @@ const CLICK_ECHO_MS = 700;
  * un clic sans `detail` (clavier, `element.click()`), qui n'est pas l'écho d'un doigt. Un clic sur le
  * bouton lui-même passe : `onClick` sait déjà ne pas rejouer l'appui.
  */
-function swallowStrayClick(origin: Element | null): void {
+function swallowEchoElsewhere(origin: Element | null): void {
   if (typeof window === "undefined") return;
   const disarm = () => {
     window.removeEventListener("click", onClick, true);
@@ -65,7 +65,7 @@ export function useTap(action: () => void) {
       if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > TAP_SLOP_PX || e.timeStamp - s.t > TAP_MAX_MS) return;
       servedAt.current = Date.now();
       // Armé avant l'action : c'est elle qui ouvre la fiche dont un bouton recevrait l'écho.
-      swallowStrayClick(e.currentTarget instanceof Element ? e.currentTarget : null);
+      swallowEchoElsewhere(e.currentTarget instanceof Element ? e.currentTarget : null);
       action();
     },
     onPointerCancel: () => {
