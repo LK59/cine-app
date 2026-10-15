@@ -1662,7 +1662,8 @@
       "request_not_found": "Anfrage nicht gefunden.",
       "title_not_found": "Titel nicht gefunden.",
       "not_in_list": "Dieser Titel ist nicht in deiner Liste.",
-      "service_unavailable": "Dieser Dienst ist gerade nicht verfügbar."
+      "service_unavailable": "Dieser Dienst ist gerade nicht verfügbar.",
+      "network": "Der Server ist gerade nicht erreichbar."
     }
   },
   "sse": {

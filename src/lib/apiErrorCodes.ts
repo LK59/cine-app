@@ -31,6 +31,9 @@ export const API_ERROR_CODES = [
   "title_not_found",
   "not_in_list",
   "service_unavailable",
+  // Posé par le navigateur lui-même (`apiAction`), jamais par une route : le serveur n'a pas été
+  // joint. Voir BUREAU-7 (15/10/2026).
+  "network",
 ] as const;
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];

@@ -1662,7 +1662,8 @@
       "request_not_found": "Demande introuvable.",
       "title_not_found": "Titre introuvable.",
       "not_in_list": "Ce titre n'est pas dans ta liste.",
-      "service_unavailable": "Ce service n'est pas disponible pour le moment."
+      "service_unavailable": "Ce service n'est pas disponible pour le moment.",
+      "network": "Le serveur est injoignable pour le moment."
     }
   },
   "sse": {

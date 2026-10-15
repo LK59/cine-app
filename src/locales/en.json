@@ -1662,7 +1662,8 @@
       "request_not_found": "Request not found.",
       "title_not_found": "Title not found.",
       "not_in_list": "This title isn't in your list.",
-      "service_unavailable": "This service isn't available right now."
+      "service_unavailable": "This service isn't available right now.",
+      "network": "Couldn't reach the server right now."
     }
   },
   "sse": {
