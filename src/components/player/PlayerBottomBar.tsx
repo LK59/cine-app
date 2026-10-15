@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useCinemaRoute, useSheetBehind, useSheetLeaving } from "@/lib/cinemaRoute";
 import { useIsShortViewport } from "@/lib/useIsMobile";
-import { useHideOnScroll } from "@/lib/useHideOnScroll";
+import { revealNavigation, useHideOnScroll } from "@/lib/useHideOnScroll";
 import { useT } from "@/components/TranslationProvider";
 import { PLAYER_NAV, activePanel, isOnPanel, openPanel } from "./playerNav";
 import { requestSearchFocus } from "@/lib/searchFocus";
@@ -66,6 +66,23 @@ export function PlayerBottomBar() {
   // rechercher en remontant. Le crochet repart de zéro quand il reprend la main.
   const hidden = useHideOnScroll(!covered);
   const active = activePanel(route);
+  /**
+   * Changer d'écran — panneau, grille complète, écran poussé depuis le Compte —, c'est repartir
+   * avec la barre (15/10/2026, passe de nuit, MOBILE-6).
+   *
+   * L'état « cachée » survivait au changement : « Voir tout » → défiler → Retour rendait l'accueil
+   * en haut de page *sans* barre, et rien ne pouvait plus la rappeler — on y est déjà en haut, et un
+   * panneau qui ne défile pas (« Ma liste » vide, retrouvée par un retour arrière) n'émet aucun
+   * défilement. Seuls les onglets Films/Séries la rendaient (`useTabScrollMemory`) ; même geste ici,
+   * pour tout écran que la barre ou l'historique fait apparaître. Pas au montage : elle y est visible.
+   */
+  const screenKey = `${active}|${route.browse ?? ""}|${route.activity ?? ""}|${route.report ?? ""}|${route.news ?? ""}`;
+  const shownScreen = useRef(screenKey);
+  useEffect(() => {
+    if (shownScreen.current === screenKey) return;
+    shownScreen.current = screenKey;
+    revealNavigation();
+  }, [screenKey]);
   const away = hidden || covered;
   /** Ce qui sépare la barre du bord de l'écran — et donc ce qu'il faut franchir pour en sortir. */
   const gap = `calc(env(safe-area-inset-bottom, 0px) + ${short ? "0.5rem" : "0.75rem"})`;
