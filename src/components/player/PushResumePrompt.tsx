@@ -8,6 +8,7 @@ import { PushToggle } from "@/components/PushToggle";
 import { fetcher } from "@/lib/swr";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 import { forgetPushWasOn, pushWasOn } from "@/lib/pushOnSignOut";
+import { ABOVE_BOTTOM_BAR, PROMPT_CLOSE_CLASS } from "@/lib/floatingPrompt";
 
 /** Laissé au lancement le temps de s'installer, comme l'invitation à installer l'application. */
 const SHOW_DELAY_MS = 3000;
@@ -56,7 +57,8 @@ export function PushResumePrompt() {
   return (
     <div
       className="fixed inset-x-0 bottom-0 z-60 flex justify-center px-3 pb-3 pointer-events-none"
-      style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
+      // Au-dessus de la barre du bas, comme « Installer » — voir `ABOVE_BOTTOM_BAR`.
+      style={{ paddingBottom: ABOVE_BOTTOM_BAR }}
     >
       <div
         role="dialog"
@@ -71,7 +73,7 @@ export function PushResumePrompt() {
             <PushToggle onSubscribed={done} />
           </div>
         </div>
-        <button onClick={done} aria-label={t("player.pushResume.later")} className="shrink-0 text-subtle hover:text-white">
+        <button type="button" onClick={done} aria-label={t("player.pushResume.later")} className={`${PROMPT_CLOSE_CLASS} text-subtle hover:text-white`}>
           <X size={13} />
         </button>
       </div>

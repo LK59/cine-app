@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Share, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
+import { ABOVE_BOTTOM_BAR, PROMPT_CLOSE_CLASS } from "@/lib/floatingPrompt";
 
 const DISMISS_KEY = "cine-install-prompt-dismissed-until";
 const SNOOZE_DAYS = 21;
@@ -53,7 +54,8 @@ export function InstallPrompt() {
   return (
     <div
       className="fixed inset-x-0 bottom-0 z-60 flex justify-center px-3 pb-3 pointer-events-none"
-      style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
+      // Au-dessus de la barre du bas du cinéma, pas dessus — voir `ABOVE_BOTTOM_BAR`.
+      style={{ paddingBottom: ABOVE_BOTTOM_BAR }}
     >
       <div className="glass-panel pointer-events-auto flex max-w-sm items-start gap-3 rounded-2xl px-4 py-3 shadow-glow">
         <Share size={16} className="mt-0.5 shrink-0 text-accent-400" />
@@ -62,7 +64,14 @@ export function InstallPrompt() {
           <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{t("common.installPrompt.body")}</p>
           <p className="mt-1 text-[11px] leading-snug text-slate-500">{t("common.installPrompt.steps")}</p>
         </div>
-        <button onClick={dismiss} className="shrink-0 text-slate-500 hover:text-slate-200">
+        {/* Une cible de 44 px (la croix en faisait 13) et un nom : c'était la seule sortie de la
+            bannière. */}
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label={t("common.close")}
+          className={`${PROMPT_CLOSE_CLASS} text-slate-500 hover:text-slate-200`}
+        >
           <X size={13} />
         </button>
       </div>
