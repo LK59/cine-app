@@ -1970,6 +1970,7 @@
       "filmography": "Filmographie",
       "ownedCount": "{owned} sur {total} disponibles",
       "photos": "Photos",
+      "photoN": "Photo {n} sur {total} — {name}",
       "elsewhere": "À découvrir"
     },
     "account": {
@@ -2279,6 +2280,7 @@
     "unmutePreview": "Activer le son de l'aperçu",
     "nextUpBadge": "À suivre",
     "moreInfo": "Plus d'infos",
+    "heroSlide": "À la une, {n} sur {total}",
     "seasonCount": "{n} saison|{n} saisons",
     "searchPlaceholder": "Rechercher un film ou une série…",
     "searchHint": "Recherche dans votre bibliothèque : titre, genre, année…",

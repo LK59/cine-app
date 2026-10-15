@@ -257,7 +257,8 @@ export function HeroBannerControls({
                 type="button"
                 tabIndex={-1}
                 onClick={() => onPick(i)}
-                aria-label={String(i + 1)}
+                // Une position nommée (« À la une, 2 sur 8 »), plus « bouton 2 » (BUREAU-18).
+                aria-label={t("cinema.heroSlide", { n: i + 1, total: count })}
                 aria-current={i === index}
                 className="h-1 w-6 overflow-hidden rounded-full bg-white/25"
               >

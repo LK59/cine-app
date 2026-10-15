@@ -72,7 +72,8 @@ function ageAt(birthday: string, deathday: string | null, now: number): number |
 const NO_PHOTOS: PersonPhoto[] = [];
 
 // Mémorisée : voir `PersonFilmography`, pour la même raison.
-const PhotoRow = memo(function PhotoRow({ photos, onOpen, label }: { photos: PersonPhoto[]; onOpen: (i: number) => void; label: string }) {
+const PhotoRow = memo(function PhotoRow({ photos, onOpen, label, name }: { photos: PersonPhoto[]; onOpen: (i: number) => void; label: string; name: string }) {
+  const t = useT();
   if (photos.length === 0) return null;
   return (
     <div className="mt-8">
@@ -83,6 +84,9 @@ const PhotoRow = memo(function PhotoRow({ photos, onOpen, label }: { photos: Per
             key={photo.filePath}
             type="button"
             onClick={() => onOpen(i)}
+            // Un nom : l'image seule a `alt=""`, et un lecteur d'écran annonçait vingt-trois boutons
+            // muets (15/10/2026, passe de nuit, BUREAU-18).
+            aria-label={t("player.person.photoN", { n: i + 1, total: photos.length, name })}
             className="h-44 shrink-0 overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10 transition hover:ring-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 sm:h-56"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -668,7 +672,7 @@ export function PlayerPersonSheet({
 
             {/* Pas sous une fiche pleine : c'est une rangée d'images qu'on ne verra pas, montée
                 à l'instant où le film du dessus, lui, a besoin de tout le fil d'exécution. */}
-            {!underneath && settled && <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} />}
+            {!underneath && settled && <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} name={data.name} />}
 
             {/* La biographie de Wikipédia quand elle existe, dans la langue du compte — plus
                 complète que celle de TMDB, souvent vide ou en anglais. Voir `selectBio`. */}
