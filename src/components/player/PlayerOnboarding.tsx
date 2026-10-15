@@ -449,7 +449,11 @@ export function PlayerOnboarding({
           )}
         </div>
 
-        <div className="flex flex-col gap-2">
+        {/* Collé au bas de l'écran sur un petit téléphone (15/10/2026, passe de nuit, MOBILE-17) :
+            sur un iPhone SE, « Continuer » tombait sous le bord — l'étape Notifications montrait
+            quatre interrupteurs et aucune suite, rien ne disait qu'il fallait défiler. Au-delà de
+            700 px de haut, ou dès `sm` (la carte de verre), rien ne change. */}
+        <div className="flex flex-col gap-2 [@media(max-width:639px)_and_(max-height:700px)]:sticky [@media(max-width:639px)_and_(max-height:700px)]:bottom-0 [@media(max-width:639px)_and_(max-height:700px)]:-mx-6 [@media(max-width:639px)_and_(max-height:700px)]:bg-ink [@media(max-width:639px)_and_(max-height:700px)]:px-6 [@media(max-width:639px)_and_(max-height:700px)]:pt-3 [@media(max-width:639px)_and_(max-height:700px)]:pb-3">
           <button
             ref={primaryRef}
             type="button"
