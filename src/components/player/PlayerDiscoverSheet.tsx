@@ -11,6 +11,7 @@ import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
 import { useT } from "@/components/TranslationProvider";
 import { useErrorText } from "@/lib/useErrorText";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
+import { useRequestConfirmation } from "./RequestConfirm";
 import { useTitleWatched } from "@/lib/useTitleWatched";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
@@ -84,6 +85,11 @@ export function PlayerDiscoverSheet({
   const { busy, setStatus, request } = usePlayerTitleActions(
     data ? { tmdbId, type: mediaType, title: data.title, year: data.year, poster: data.poster, rating: data.rating } : null
   );
+  // « Demander » passe par une confirmation, la même partout (§95, `useRequestConfirmation`).
+  const confirmRequest = useRequestConfirmation(
+    data ? { type: mediaType, title: data.title, year: data.year, poster: data.poster } : null,
+    request
+  );
 
   // « Vu », même pour un titre que la bibliothèque n'a pas (DECISIONS.md §51).
   const watchedState = useTitleWatched(
@@ -112,7 +118,7 @@ export function PlayerDiscoverSheet({
    * dessous. Voir `useSheetExit` — le même que la fiche personne, qui avait le même trou. Échap
    * se tait aussi tant que le synopsis est ouvert : c'est lui qu'il referme alors.
    */
-  const exit = useSheetExit(close, { leaving, listening: !showSynopsis });
+  const exit = useSheetExit(close, { leaving, listening: !showSynopsis && !confirmRequest.open });
   const requestClose = exit.requestClose;
   // Le même geste que sur les fiches de la bibliothèque, qui l'avaient et pas celle-ci : on tire
   // la bannière vers le bas pour refermer.
@@ -162,14 +168,14 @@ export function PlayerDiscoverSheet({
    * fenêtre garde les flèches pour elle.
    */
   useEffect(() => {
-    if (isMobile || leaving || showSynopsis) return;
+    if (isMobile || leaving || showSynopsis || confirmRequest.open) return;
     function onKey(e: KeyboardEvent) {
       if (similarRowKeyNav(e, containerRef.current)) return;
       detailMenuArrowNav(e, containerRef.current);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isMobile, leaving, showSynopsis]);
+  }, [isMobile, leaving, showSynopsis, confirmRequest.open]);
 
   const inList = data?.watchlistStatus === "to_watch";
   /**
@@ -315,7 +321,7 @@ export function PlayerDiscoverSheet({
             <button
               type="button"
               disabled={busy}
-              onClick={() => void request()}
+              onClick={confirmRequest.ask}
               className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink transition-transform active:scale-95 disabled:opacity-60"
             >
               <Plus size={18} />
@@ -355,7 +361,10 @@ export function PlayerDiscoverSheet({
   );
 
   return createPortal(
-    isMobile ? (
+    <>
+    {/* La confirmation de « Demander » : portée d'elle-même au-dessus de tout, pour les deux mises en page. */}
+    {confirmRequest.sheet}
+    {isMobile ? (
       mobileSheet
     ) : (
     <div
@@ -453,9 +462,10 @@ export function PlayerDiscoverSheet({
               <CinemaDetailCastLine cast={cast} />
 
             <div data-detail-actions className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
-              {/* La première ligne, celle qui a le focus : « Lire » quand on l'a, « Demander »
+              {/* La première ligne : « Lire » quand on l'a, « Demander »
                   quand on ne l'a pas, l'état de l'attente quand c'est déjà parti. Toujours au
-                  même endroit, toujours avec le même poids. */}
+                  même endroit, toujours avec le même poids. Elle a le focus à l'arrivée, sauf
+                  « Demander » (BUREAU-8, voir `focusFirstAction`). */}
               {data.libraryId !== null ? (
                 <button
                   data-detail-menu
@@ -481,8 +491,10 @@ export function PlayerDiscoverSheet({
               ) : (
                 <button
                   data-detail-menu
+                  // Jamais le premier focus — voir `focusFirstAction`.
+                  data-detail-no-autofocus=""
                   disabled={busy}
-                  onClick={() => void request()}
+                  onClick={confirmRequest.ask}
                   className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
                 >
                   <span className={MENU_BADGE}>
@@ -538,7 +550,8 @@ export function PlayerDiscoverSheet({
         </CinemaDetailModal>
       )}
     </div>
-    ),
+    )}
+    </>,
     document.body
   );
 }

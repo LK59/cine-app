@@ -195,11 +195,15 @@ export function CinemaSeriesDetail({
   useEffect(() => {
     // Tant que le spectateur n'a pas bougé lui-même — voir la fiche film pour le détail.
     const frame = requestAnimationFrame(() => {
-      if (underneath || userMovedFocus.current) return;
+      // Ni sous l'écran des épisodes (15/10/2026, passe de nuit, BUREAU-23) : ouvert par l'adresse
+      // (rechargement, lien), il pose le focus sur sa saison, puis `nextEpisode` arrive et relançait
+      // cet effet — le focus repartait sur « À suivre », caché dessous, et plus aucune flèche ne
+      // bougeait rien. Sa fermeture rend elle-même la main à la première action.
+      if (underneath || showEpisodes || userMovedFocus.current) return;
       focusFirstAction(containerRef.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playerEnabled, lead.trailerKey, episodesData?.nextEpisode, facts.targetId, item.sonarrId, underneath]);
+  }, [playerEnabled, lead.trailerKey, episodesData?.nextEpisode, facts.targetId, item.sonarrId, underneath, showEpisodes]);
 
   // Same as CinemaMovieDetail — see its own note. The sheet stays open under the player so
   // closing the player comes back here, and stands down from the keyboard while it's up there.

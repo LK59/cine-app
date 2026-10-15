@@ -86,19 +86,30 @@ const STOPWORDS_ES = new Set(["el", "la", "los", "las", "un", "una", "de", "del"
 const STOPWORDS_DE = new Set(["der", "die", "das", "ein", "eine", "mit", "von", "und", "im", "in", "am"]);
 const STOPWORDS = STOPWORDS_FR;
 
+/**
+ * Distance d'édition « alignement optimal » (Damerau restreinte) : comme Levenshtein, plus
+ * l'inversion de deux lettres voisines comptée pour une faute (15/10/2026, passe de nuit, BUREAU-9).
+ *
+ * C'est la faute de frappe la plus courante au clavier, et Levenshtein la comptait double :
+ * « matrx » (lettre oubliée) trouvait Matrix, « matirx » rien du tout — la tolérance n'était que
+ * d'une faute sous sept lettres. Une distance ne peut que baisser par ce cas de plus : une recherche
+ * exacte ou par préfixe reste classée comme avant, seules les inversions entrent dans le flou.
+ */
 function editDistance(a: string, b: string): number {
   if (a === b) return 0;
   if (!a) return b.length;
   if (!b) return a.length;
-  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  const curr = Array.from({ length: b.length + 1 }, () => 0);
+  let before = Array.from({ length: b.length + 1 }, () => 0);
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  let curr = Array.from({ length: b.length + 1 }, () => 0);
   for (let i = 1; i <= a.length; i++) {
     curr[0] = i;
     for (let j = 1; j <= b.length; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
       curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) curr[j] = Math.min(curr[j], before[j - 2] + 1);
     }
-    for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
+    [before, prev, curr] = [prev, curr, before];
   }
   return prev[b.length];
 }

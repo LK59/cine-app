@@ -312,6 +312,20 @@ describe("une carte de découverte ne vide pas la bannière", () => {
     expect(document.activeElement?.getAttribute("data-tv-row")).toBe("recent-movies");
   });
 
+  // 15/10/2026 (passe de nuit, ROBUSTESSE-10) : refermer une fiche ouverte depuis une rangée de
+  // découverte rendait le focus à la page ; la flèche suivante repartait de « Reprendre ».
+  it("au retour d'une fiche TMDB, le focus revient sur la carte d'où l'on est parti", () => {
+    render(<CinemaClient />);
+    const card = cardsOf("trendingMovies")[0];
+    act(() => card.focus());
+    fireEvent.click(card);
+    expect(readCinemaRoute().discover).toBe(92);
+    // La fiche a pris le focus ; elle se referme d'elle-même.
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
+    act(() => cinemaNavigate({ discover: null }, "replace"));
+    expect(document.activeElement).toBe(card);
+  });
+
   it("l'ouverture ne change pas : la fiche TMDB pour un absent, la fiche du titre sinon", () => {
     render(<CinemaClient />);
     fireEvent.click(cardsOf("trendingMovies")[0]);

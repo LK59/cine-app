@@ -80,7 +80,7 @@ export async function checkWatchlistAvailability(): Promise<void> {
 
       await sendPushToUser(userName, {
         title: "🎬 Disponible maintenant",
-        body: `${row.title} est disponible dans ta bibliothèque`,
+        body: `${row.title} est disponible dans votre bibliothèque`,
         url: playerUrl(row.media_type === "movie" ? "movie" : "series", row.tmdb_id),
         tag: "watchlist-available",
         category: "watchlist-available",
@@ -280,7 +280,7 @@ export async function checkRequestAvailability(): Promise<void> {
       if (!available || !title) continue;
 
       await sendPushToUser(req.userId, {
-        title: "🎬 Ta demande est disponible",
+        title: "🎬 Votre demande est disponible",
         body: `${title} est maintenant disponible`,
         url: playerUrl(req.mediaType === "movie" ? "movie" : "series", req.tmdbId),
         tag: `request-available-${req.mediaType}-${req.tmdbId}`,

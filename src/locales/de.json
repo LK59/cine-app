@@ -18,7 +18,8 @@
     },
     "error": {
       "failed": "Anmeldung nicht möglich",
-      "unknown": "Ein Fehler ist aufgetreten"
+      "unknown": "Ein Fehler ist aufgetreten",
+      "rateLimited": "Zu viele Versuche. Versuch es in {n} Min. erneut."
     },
     "tagline": "Deine Filme und Serien, startklar.",
     "hint": "Melde dich mit deinem Jellyfin-Konto an.",
@@ -1661,7 +1662,9 @@
       "request_not_found": "Anfrage nicht gefunden.",
       "title_not_found": "Titel nicht gefunden.",
       "not_in_list": "Dieser Titel ist nicht in deiner Liste.",
-      "service_unavailable": "Dieser Dienst ist gerade nicht verfügbar."
+      "service_unavailable": "Dieser Dienst ist gerade nicht verfügbar.",
+      "network": "Der Server ist gerade nicht erreichbar.",
+      "person_not_found": "Person nicht gefunden."
     }
   },
   "sse": {
@@ -1957,6 +1960,8 @@
     "discover": {
       "open": "Seite öffnen",
       "request": "Anfragen",
+      "confirmRequestMovie": "Diesen Film anfragen?",
+      "confirmRequestSeries": "Diese Serie anfragen?",
       "addToList": "Zu meiner Liste",
       "inList": "In meiner Liste",
       "watched": "Gesehen",
@@ -1967,6 +1972,7 @@
       "filmography": "Filmografie",
       "ownedCount": "{owned} von {total} verfügbar",
       "photos": "Fotos",
+      "photoN": "Foto {n} von {total} — {name}",
       "elsewhere": "Zu entdecken"
     },
     "account": {
@@ -2028,6 +2034,7 @@
       },
       "sessionOpened": "Geöffnet am {date}",
       "sessionSeen": "Gesehen am {date}",
+      "sessionSeenAgo": "Gesehen {when}",
       "openManage": "Verwaltung öffnen",
       "status": "Dienststatus",
       "openStatus": "Dienststatus ansehen",
@@ -2204,6 +2211,8 @@
       "hint": "Ändert die Helligkeit von HDR-Filmen auf diesem Bildschirm. Auto sollte passen."
     },
     "chapterN": "Kapitel {n}",
+    "seekLabel": "Wiedergabeposition",
+    "seekValue": "{at} von {total}",
     "report": {
       "details": "Technische Details",
       "copy": "Kopieren",
@@ -2276,6 +2285,7 @@
     "unmutePreview": "Ton der Vorschau aktivieren",
     "nextUpBadge": "Als Nächstes",
     "moreInfo": "Mehr Infos",
+    "heroSlide": "Highlight, {n} von {total}",
     "seasonCount": "{n} Staffel|{n} Staffeln",
     "searchPlaceholder": "Film oder Serie suchen…",
     "searchHint": "Durchsucht deine Bibliothek: Titel, Genre, Jahr…",
@@ -2361,6 +2371,7 @@
     "Game Show": "Spielshow",
     "History": "Historie",
     "Horror": "Horror",
+    "Martial Arts": "Kampfsport",
     "Mini-Series": "Miniserie",
     "Music": "Musik",
     "Musical": "Musical",
@@ -2368,6 +2379,7 @@
     "Reality": "Reality",
     "Romance": "Romanze",
     "Science Fiction": "Science-Fiction",
+    "Soap": "Seifenoper",
     "Sport": "Sport",
     "Suspense": "Spannung",
     "TV Movie": "Fernsehfilm",

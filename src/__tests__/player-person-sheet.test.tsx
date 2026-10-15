@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, act } from "@testing-library/react";
+import { render, screen, cleanup, act, fireEvent, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 
 /**
@@ -349,6 +349,25 @@ describe("PlayerPersonSheet — la fiche de la gestion, transposée", () => {
     } finally {
       raf.mockRestore();
     }
+  });
+});
+
+// 15/10/2026 (passe de nuit, BUREAU-24) : ouverte au clavier, la fiche personne laissait le focus sur
+// le document — aucune flèche ne faisait rien, seule la tabulation entrait.
+describe("fiche personne au clavier", () => {
+  it("prend le focus sur sa croix, et ↓ entre dans la filmographie", async () => {
+    draw({ tmdbId: 31 });
+    await screen.findByText("Film 0");
+    const close = screen.getByLabelText("common.close");
+    await waitFor(() => expect(document.activeElement).toBe(close));
+    fireEvent.keyDown(close, { key: "ArrowDown" });
+    expect(document.activeElement?.textContent).toContain("Film 0");
+  });
+
+  it("ne prend rien sous une autre fiche", async () => {
+    draw({ tmdbId: 31, underneath: true });
+    await screen.findByText("Film 0");
+    expect(document.activeElement).toBe(document.body);
   });
 });
 

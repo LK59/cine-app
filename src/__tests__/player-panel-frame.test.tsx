@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
@@ -12,6 +14,9 @@ vi.mock("@/lib/cinemaRoute", () => ({
   cinemaNavigate: vi.fn(),
   useCinemaRoute: () => ({ film: null, serie: null, discover: null, person: null }),
 }));
+
+const playbackMode = vi.hoisted(() => ({ current: "closed" as "closed" | "full" | "mini" }));
+vi.mock("@/components/PlaybackProvider", () => ({ usePlaybackMode: () => playbackMode.current }));
 
 import { PlayerPanelFrame } from "@/components/player/PlayerPanelFrame";
 
@@ -36,6 +41,41 @@ afterEach(() => {
  * faisaient plus rien dans le panneau.
  */
 describe("PlayerPanelFrame — les flèches", () => {
+  // 15/10/2026 (passe de nuit, BUREAU-24) : à l'ouverture, le focus est sur le titre (hors du corps
+  // qui écoute les flèches), ou resté sur le bouton de l'accueil caché dessous : aucune flèche ne
+  // bougeait rien dans la grille complète ni dans Ma liste.
+  it("entrent dans le contenu depuis le titre, depuis rien, et depuis l'écran caché dessous", () => {
+    render(panel(false));
+    const heading = screen.getByRole("heading", { name: "Titre" });
+    heading.focus();
+    fireEvent.keyDown(heading, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByText("un"));
+
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(screen.getByText("un"));
+
+    const below = document.createElement("button");
+    document.body.appendChild(below);
+    below.focus();
+    fireEvent.keyDown(below, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByText("un"));
+    below.remove();
+  });
+
+  it("laissent le rail et la barre du bas à leurs propres flèches", () => {
+    render(panel(false));
+    const rail = document.createElement("nav");
+    rail.setAttribute("data-player-nav", "");
+    const tab = document.createElement("button");
+    rail.appendChild(tab);
+    document.body.appendChild(rail);
+    tab.focus();
+    fireEvent.keyDown(tab, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(tab);
+    rail.remove();
+  });
+
   it("parcourent le panneau à son ouverture", () => {
     render(panel(false));
     fireEvent.keyDown(screen.getByText("un").parentElement!, { key: "ArrowDown" });
@@ -178,6 +218,57 @@ describe("PlayerPanelFrame — Échap", () => {
     expect(cinemaClose).not.toHaveBeenCalled();
     expect(vi.mocked((await import("@/lib/cinemaRoute")).cinemaNavigate)).not.toHaveBeenCalled();
     dialog.remove();
+  });
+
+  // 15/10/2026 (passe de nuit, BUREAU-11) : Échap pendant une scène lancée depuis la Recherche
+  // refermait la Recherche sous le film ; à la fermeture du lecteur, requête et résultats perdus.
+  it("se tait pendant qu'un film occupe l'écran", async () => {
+    const { cinemaClose, cinemaNavigate } = await import("@/lib/cinemaRoute");
+    vi.mocked(cinemaClose).mockClear();
+    vi.mocked(cinemaNavigate).mockClear();
+    playbackMode.current = "full";
+    try {
+      render(panel(false));
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(cinemaNavigate).not.toHaveBeenCalled();
+      expect(cinemaClose).not.toHaveBeenCalled();
+    } finally {
+      playbackMode.current = "closed";
+    }
+  });
+
+  // 15/10/2026 (passe de nuit, BUREAU-13) : la flèche du haut de « Signaler un problème » refermait
+  // tout l'assistant — choix et description perdus — quand celle du bas reculait d'une étape.
+  it("un écran à étapes recule d'une étape par la flèche du haut et par Échap, puis se ferme", async () => {
+    const { cinemaClose } = await import("@/lib/cinemaRoute");
+    vi.mocked(cinemaClose).mockClear();
+    const { usePanelBackStep } = await import("@/lib/panelBackStep");
+    let step = 2;
+    function Stepped() {
+      usePanelBackStep(() => {
+        if (step === 0) return false;
+        step -= 1;
+        return true;
+      });
+      return <p>étapes</p>;
+    }
+    render(
+      <PlayerPanelFrame title="Signaler" back>
+        <Stepped />
+      </PlayerPanelFrame>
+    );
+    fireEvent.click(screen.getByText("cinema.back"));
+    expect(step).toBe(1);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(step).toBe(0);
+    expect(cinemaClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("cinema.back"));
+    expect(cinemaClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("l'assistant de signalement s'en sert", () => {
+    const src = readFileSync(join(process.cwd(), "src/components/reports/ReportWizard.tsx"), "utf8");
+    expect(src).toContain("usePanelBackStep(");
   });
 
   it("laisse Échap à l'élément qui le gère lui-même", async () => {

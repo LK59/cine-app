@@ -2950,6 +2950,10 @@ export function PlayerControls({
               min={0}
               max={duration || 0}
               value={currentTime}
+              // Un nom et une valeur lisible (15/10/2026, passe de nuit, ROBUSTESSE-11) : sans eux,
+              // un lecteur d'écran annonçait « curseur, 437 » — des secondes brutes, sans dire de quoi.
+              aria-label={t("player.seekLabel")}
+              aria-valuetext={t("player.seekValue", { at: formatTime(currentTime), total: formatTime(duration || 0) })}
               // Every intermediate value while dragging is a preview only (see previewSeek) —
               // native range inputs fire 'input'/onChange continuously during a drag, not just
               // on release, so onChange alone can't distinguish "still dragging" from "done".

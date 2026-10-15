@@ -157,3 +157,31 @@ describe("le passage au choix qui écarte les logos sombres", () => {
     await vi.waitFor(() => expect(mockGetTvImages).toHaveBeenCalledWith(74577));
   });
 });
+
+// 15/10/2026 (passe de nuit, BUREAU-6) : à la première ouverture de la fiche découverte de
+// *Toy Story 2*, le logo québécois « Histoire de jouets 2 » — les noms du titre n'étaient pas encore
+// en cache, et le logo suivait la langue de l'écran.
+describe("le logo d'un titre jamais vu", () => {
+  const art = {
+    logoUrl: "en.png",
+    logosByLang: { fr: "quebec.png", en: "en.png" },
+  } as unknown as import("@/lib/title-art").TitleArt;
+
+  it("suit le titre affiché dès la première réponse, avec les noms de TMDB", async () => {
+    const { logoForLocale, namesWithDetail } = await import("@/lib/title-art");
+    const names = namesWithDetail({}, "fr", { shown: "Toy Story 2", original: "Toy Story 2", originalLanguage: "en" });
+    expect(logoForLocale(art, names, "fr")).toBe("en.png");
+  });
+
+  it("ne change rien quand le cache a les noms", async () => {
+    const { namesWithDetail } = await import("@/lib/title-art");
+    const cached = { fr: "Le Titre", original: "The Title", originalLanguage: "en" };
+    expect(namesWithDetail(cached, "fr", { shown: "Autre", original: "Other", originalLanguage: "de" })).toBe(cached);
+  });
+
+  it("est appliqué par la fiche découverte", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("src/app/api/player/title/[type]/[tmdbId]/route.ts", "utf8");
+    expect(src).toContain("namesWithDetail(getTitleNames(tmdbId, type), locale, fromDetail)");
+  });
+});

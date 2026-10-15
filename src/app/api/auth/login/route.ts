@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { config } from "@/lib/config";
-import { checkRateLimit } from "@/lib/rateLimiter";
+import { checkRateLimit, rateLimitedResponse, refundRateLimit } from "@/lib/rateLimiter";
 import { getClientIp } from "@/lib/api-helpers";
 import { timingSafeEquals } from "@/lib/timingSafeEquals";
 import { passwordAttempts, hasLeadingSpace, readCredentials } from "@/lib/passwordAttempts";
@@ -11,9 +11,7 @@ import { verifySetupAdmin } from "@/lib/settings/setup";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  if (!checkRateLimit(ip)) {
-    return NextResponse.json({ error: "Trop de tentatives, réessayez dans 15 minutes" }, { status: 429 });
-  }
+  if (!checkRateLimit(ip)) return rateLimitedResponse(ip);
 
   // Types et longueurs vérifiés avant tout travail : ce qui suit compare, journalise et appelle
   // Jellyfin avec ces valeurs, et la route est publique — voir `readCredentials`.
@@ -43,5 +41,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Seuls les échecs comptent — voir `refundRateLimit` (BUREAU-2).
+  refundRateLimit(ip);
   return adminSessionResponse(req, username, ip);
 }

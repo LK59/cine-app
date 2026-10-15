@@ -3,6 +3,7 @@
 import { useLocale, useT } from "@/components/TranslationProvider";
 import type { MissingSeason } from "@/app/api/player/series/[sonarrId]/missing/route";
 import { CinemaDownloading } from "@/components/cinema/CinemaDetailExtras";
+import { isSonarrPending } from "@/lib/sonarrPending";
 
 /**
  * Ce qui manque à une saison, et ce qui va arriver — de l'information, pas de bouton.
@@ -61,7 +62,8 @@ export function CinemaMissingEpisodes({ season }: { season: MissingSeason | unde
                   et elle est mise en avant sur ce qui n'est pas encore sorti, où « Pas encore
                   diffusé » ne disait pas la moitié de ce qu'on voulait savoir. */}
               <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
-                <span className="min-w-0 truncate text-sm text-muted">{ep.title}</span>
+                {/* Pas « TBA » : un titre en attente chez Sonarr n'en est pas un (MOBILE-8). */}
+                {!isSonarrPending(ep.title) && <span className="min-w-0 truncate text-sm text-muted">{ep.title}</span>}
                 {airs && (
                   <span
                     className={`shrink-0 text-xs ${ep.released ? "text-subtle" : "text-accent-400/80"} sm:ml-auto`}

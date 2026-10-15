@@ -149,6 +149,15 @@ export function usePlayback(): PlaybackContextValue {
   return ctx;
 }
 
+/**
+ * Le seul mode du lecteur, « fermé » hors du fournisseur — pour un écran qui doit seulement savoir
+ * s'il est recouvert (`playerHoldsKeyboard`) et qui se rend aussi hors du cinéma, où `usePlayback`
+ * lèverait (les panneaux du cinéma, montés seuls dans leurs tests et dans le labo).
+ */
+export function usePlaybackMode(): PlaybackMode {
+  return useContext(PlaybackContext)?.mode ?? "closed";
+}
+
 // Owns the single, app-wide "what's currently playing" state — deliberately separate from the
 // component that actually renders the <video> (PlayerHost, mounted once in the dashboard
 // layout) so play() can be called from anywhere (movie sheets, episode rows, dashboard cards)

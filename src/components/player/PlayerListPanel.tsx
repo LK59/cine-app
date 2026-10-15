@@ -203,7 +203,12 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={escapeClears(query, () => setQuery(""))}
-              placeholder={t("player.lists.searchInList")}
+              // Court à l'écran, complet pour un lecteur d'écran (15/10/2026, passe de nuit,
+              // MOBILE-9) : à côté du tri et du « + », « Rechercher dans la liste… » était coupé
+              // en « Rechercher dar » sur iPhone, et réduit à sa loupe sur 320 px. Le panneau dit
+              // déjà de quelle liste il s'agit.
+              placeholder={t("nav.searchPlaceholder")}
+              aria-label={t("player.lists.searchInList")}
               className="input h-10 w-full pl-9 text-sm"
             />
           </div>

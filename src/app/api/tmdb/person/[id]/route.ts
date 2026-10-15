@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { errorBody } from "@/lib/apiErrorCodes";
+import { errorBody, renameNotFound } from "@/lib/apiErrorCodes";
 import { hiddenTmdbKeysFor } from "@/lib/blockedTags";
 import { verifySessionFull } from "@/lib/session";
 import { SESSION_COOKIE } from "@/lib/auth";
@@ -28,7 +28,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   return withErrorHandling(async () => {
     const [personFr, { cast }, lib] = await Promise.all([
       withPersistentCache(`tmdb:person:details:${locale}:${personId}`, WEEK_MS, () => tmdb.getPersonDetails(personId)).catch(() => null),
-      withPersistentCache(`tmdb:person:credits:${locale}:${personId}`, WEEK_MS, () => tmdb.getPersonCredits(personId)),
+      // Une personne inconnue de TMDB (lien ancien) : « Personne introuvable », pas le corps de TMDB
+      // — voir `renameNotFound` (ROBUSTESSE-7).
+      renameNotFound(
+        withPersistentCache(`tmdb:person:credits:${locale}:${personId}`, WEEK_MS, () => tmdb.getPersonCredits(personId)),
+        "Personne introuvable",
+        "person_not_found"
+      ),
       // Ouvrable, et pas seulement connu de Radarr/Sonarr : une filmographie est pleine de titres
       // surveillés sans fichier, et les annoncer comme présents menait à un clic qui ne faisait
       // rien. Voir playableLibrary.

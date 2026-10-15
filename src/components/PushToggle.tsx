@@ -6,8 +6,9 @@ import { useT } from "@/components/TranslationProvider";
 import { useErrorText } from "@/lib/useErrorText";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
+import { isIosSafariBrowserTab } from "@/lib/iosInstall";
 
-type State = "unsupported" | "denied" | "unsubscribed" | "subscribed" | "loading";
+type State = "unsupported" | "needsInstall" | "denied" | "unsubscribed" | "subscribed" | "loading";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -57,7 +58,9 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
 
   const detect = useCallback(async () => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-      setState("unsupported"); return;
+      // Sur iPhone, ce n'est pas le navigateur qui ne sait pas : c'est l'application qui n'est pas
+      // installée (15/10/2026, passe de nuit, MOBILE-4) — voir `isIosSafariBrowserTab`.
+      setState(isIosSafariBrowserTab() ? "needsInstall" : "unsupported"); return;
     }
     if (Notification.permission === "denied") { setState("denied"); return; }
 
@@ -167,6 +170,11 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
       toast.error(errorText(error));
     }
   }, [sub, toast, errorText]);
+
+  // La même phrase que l'accueil, qui renvoie justement ici une fois l'application installée.
+  if (state === "needsInstall") return (
+    <p className="text-sm leading-relaxed text-muted">{t("player.onboarding.notifInstall")}</p>
+  );
 
   if (state === "unsupported") return (
     <div className="flex items-center gap-2 text-sm text-slate-500">

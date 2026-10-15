@@ -117,6 +117,44 @@ export const CinemaSimilarRow = memo(function CinemaSimilarRow({
 // sits below that menu, so it joins the same path rather than competing with it: Down off the
 // last menu item drops into the row, Up leaves it, Left/Right walk it. Everything is scrolled
 // into view as focus moves — the row lives at the bottom of a scrolling column.
+/**
+ * Les rangées de la fiche, chacune à part : distribution, saga, titres similaires.
+ *
+ * Toutes portent `data-detail-similar`, et elles étaient parcourues comme **une seule** rangée :
+ * ↓ depuis la distribution était avalé, les titres similaires ne s'atteignaient qu'en appuyant →
+ * douze fois au-delà du dernier visage, et ↑ depuis eux remontait au menu en sautant la
+ * distribution (passe de nuit du 15/10/2026, BUREAU-3). Regroupées par leur `<section>`, dans
+ * l'ordre du document : ←/→ restent dans la rangée, ↓/↑ passent à la voisine, à la carte la plus
+ * proche en largeur.
+ */
+function detailRows(cards: HTMLButtonElement[]): HTMLButtonElement[][] {
+  const byRow = new Map<Element, HTMLButtonElement[]>();
+  for (const card of cards) {
+    const key = card.closest("section") ?? card.parentElement ?? card;
+    const row = byRow.get(key);
+    if (row) row.push(card);
+    else byRow.set(key, [card]);
+  }
+  return [...byRow.values()];
+}
+
+/** La carte d'une rangée la plus proche, en largeur, de celle qu'on quitte. */
+function nearestCard(row: HTMLButtonElement[], from: HTMLElement): HTMLButtonElement {
+  const box = from.getBoundingClientRect();
+  const x = box.left + box.width / 2;
+  let best = row[0];
+  let distance = Number.POSITIVE_INFINITY;
+  for (const card of row) {
+    const r = card.getBoundingClientRect();
+    const d = Math.abs(r.left + r.width / 2 - x);
+    if (d < distance) {
+      best = card;
+      distance = d;
+    }
+  }
+  return best;
+}
+
 export function similarRowKeyNav(e: KeyboardEvent, container: HTMLElement | null): boolean {
   if (!container) return false;
   const cards = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-detail-similar]"));
@@ -124,7 +162,10 @@ export function similarRowKeyNav(e: KeyboardEvent, container: HTMLElement | null
 
   const menu = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-detail-menu]"));
   const active = document.activeElement as HTMLElement | null;
-  const index = cards.indexOf(active as HTMLButtonElement);
+  const rows = detailRows(cards);
+  const rowIdx = rows.findIndex((r) => r.includes(active as HTMLButtonElement));
+  const row = rowIdx === -1 ? null : rows[rowIdx];
+  const index = row ? row.indexOf(active as HTMLButtonElement) : -1;
 
   // Within the row, "nearest" is right: only the horizontal position needs adjusting.
   function focusInRow(el: HTMLElement) {
@@ -144,12 +185,20 @@ export function similarRowKeyNav(e: KeyboardEvent, container: HTMLElement | null
     (section ?? el).scrollIntoView({ block: "start", behavior: scrollBehavior() });
   }
 
-  if (index === -1) {
+  // D'une rangée à sa voisine : dans la même page de la fiche, le déplacement discret ; sur une
+  // autre page, la page entière (voir `focusInOtherSection`).
+  function focusInNextRow(el: HTMLElement) {
+    const here = active?.closest("[data-snap-section]");
+    if (here && here === el.closest("[data-snap-section]")) focusInRow(el);
+    else focusInOtherSection(el);
+  }
+
+  if (!row || index === -1) {
     // Only the last menu row hands off downwards — from anywhere else Down still means "next
     // menu item", which the caller handles.
     if (e.key === "ArrowDown" && menu.length > 0 && active === menu[menu.length - 1]) {
       e.preventDefault();
-      focusInOtherSection(cards[0]);
+      focusInOtherSection(rows[0][0]);
       return true;
     }
     return false;
@@ -157,23 +206,25 @@ export function similarRowKeyNav(e: KeyboardEvent, container: HTMLElement | null
 
   if (e.key === "ArrowUp") {
     e.preventDefault();
-    focusInOtherSection(menu[menu.length - 1] ?? cards[0]);
+    if (rowIdx > 0) focusInNextRow(nearestCard(rows[rowIdx - 1], active!));
+    else focusInOtherSection(menu[menu.length - 1] ?? cards[0]);
     return true;
   }
   if (e.key === "ArrowRight") {
     e.preventDefault();
-    focusInRow(cards[Math.min(index + 1, cards.length - 1)]);
+    focusInRow(row[Math.min(index + 1, row.length - 1)]);
     return true;
   }
   if (e.key === "ArrowLeft") {
     e.preventDefault();
-    focusInRow(cards[Math.max(index - 1, 0)]);
+    focusInRow(row[Math.max(index - 1, 0)]);
     return true;
   }
-  // Down inside the row has nowhere to go — swallow it so it can't fall through to the menu
-  // handler and jump focus back up.
   if (e.key === "ArrowDown") {
     e.preventDefault();
+    // La rangée suivante ; sous la dernière, rien — la touche est avalée pour ne pas retomber dans
+    // le gestionnaire du menu, qui ramènerait le focus en haut.
+    if (rowIdx < rows.length - 1) focusInNextRow(nearestCard(rows[rowIdx + 1], active!));
     return true;
   }
   return false;

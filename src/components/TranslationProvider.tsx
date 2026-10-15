@@ -121,7 +121,12 @@ export function TranslationProvider({
 
       const target = serverLang ?? instanceDefault;
 
-      if (cookieLang !== null && target !== cookieLang) {
+      // Seulement quand la préférence du compte a été lue (15/10/2026, passe de nuit, BUREAU-1).
+      // Déconnecté — la page de connexion, après une déconnexion ou une session expirée —, la
+      // lecture répond 401 et `prefs` vaut `null` : la cible devenait la langue de l'instance, le
+      // cookie d'un compte allemand était réécrit en français et la page se rechargeait. Le cookie
+      // y est la seule trace de la langue de ce navigateur ; on la garde.
+      if (cookieLang !== null && prefs !== null && target !== cookieLang) {
         // Cookie exists but out of sync (cross-device change) → update + reload
         document.cookie = `${LOCALE_COOKIE}=${target};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
         window.location.reload();

@@ -103,6 +103,7 @@ import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntr
 import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 import { useServerIntroPicture } from "@/lib/introEnd";
 import { usePlayerBackClose } from "@/lib/playerHistory";
+import { PlayerReauthScreen } from "@/components/player/PlayerReauthScreen";
 
 /** Les adresses du flux du lecteur serveur, pour les entrées de ressources de Safari (§77). */
 const STREAM_PREFIX = "/api/jellyfin/stream/";
@@ -3236,17 +3237,8 @@ function ActivePlayer({
       {...(isMini ? handlers : {})}
     >
       {needsReauth ? (
-        <div className="flex h-full items-center justify-center px-6 text-center">
-          <div>
-            <p className="mb-4 text-sm text-white">{t('player.sessionExpired')}</p>
-            <a
-              href={`/login?reason=playback&next=${encodeURIComponent(window.location.pathname)}`}
-              className="btn-primary inline-flex justify-center"
-            >
-              {t('player.reconnect')}
-            </a>
-          </div>
-        </div>
+        // Avec une sortie — voir `PlayerReauthScreen` (BUREAU-22).
+        <PlayerReauthScreen onClose={handleClose} keyboard={!isMini} />
       ) : (
         <>
           {/* Kept mounted even while `error` is showing, so `lastKnownTime`/hls state aren't

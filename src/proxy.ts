@@ -190,6 +190,18 @@ const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/sse\/?$/,
   /^\/api\/status\/?$/,
   /^\/api\/jellyfin\/items\/?$/,
+  // Ce que seules les pages de la gestion lisent encore, fermé quand Louis a confirmé qu'un compte
+  // ordinaire n'accède à rien de la gestion, « ni aux pages ni à leurs données » (15/10/2026) —
+  // appelants vérifiés un par un ce jour-là : l'état des services (`/api/health` : versions exactes
+  // et sept sondes amont à chaque appel, ROBUSTESSE-16 ; `/api/discover/movies`, sa sonde TMDB), les
+  // fiches Radarr/Sonarr de la gestion (`redirect`, `streams`, `series/…/episodes` de Jellyfin), les
+  // notes de la page Sonarr (`/api/watchlist/ratings`). Le cinéma lit l'état public (`/api/status/public`).
+  /^\/api\/health\/?$/,
+  /^\/api\/discover\/movies\/?$/,
+  /^\/api\/jellyfin\/redirect\/?$/,
+  /^\/api\/jellyfin\/streams\/[^/]+\/?$/,
+  /^\/api\/jellyfin\/series\/[^/]+\/episodes\/?$/,
+  /^\/api\/watchlist\/ratings\/?$/,
   // Le panneau des sous-titres générés : dépense du mois, tâches de tous les comptes (§69).
   /^\/api\/subtitle-gen\/admin(\/|$)/,
   // L'indexation des répliques : chemins des films, erreurs, titres de tous les films (§88).
@@ -204,6 +216,44 @@ const ADMIN_ONLY_READS: RegExp[] = [
 
 function isAdminOnlyRead(pathname: string): boolean {
   return ADMIN_ONLY_READS.some((re) => re.test(pathname));
+}
+
+/**
+ * Les pages de la gestion — le groupe `(dashboard)` — réservées à l'administrateur.
+ *
+ * Les API qu'elles lisent étaient refusées à un compte ordinaire (ci-dessus), mais les pages, elles,
+ * restaient ouvertes : `/gestion` se rend côté serveur (`Overview` → `buildDashboardPayload`) et
+ * glissait dans le HTML ce que `/api/dashboard` refuse — versions des services, compteurs, derniers
+ * imports titre par titre, l'erreur de qBittorrent. Constaté le 15/10/2026 avec un compte ordinaire
+ * qui tapait l'adresse (passe de nuit, BUREAU-14) ; un titre caché par un tag bloqué (§54) y sortait
+ * en clair. Aucun écran du cinéma ne mène un compte ordinaire ici (le bouton « Gestion » du panneau
+ * Compte n'est rendu qu'à l'administrateur), donc on le renvoie au cinéma.
+ *
+ * Écrit en premiers segments plutôt que page par page : une nouvelle page sous `/radarr/…` est
+ * couverte d'office. Un test liste les `page.tsx` du groupe et échoue si l'un d'eux n'est pas pris.
+ */
+const ADMIN_ONLY_PAGES = new Set([
+  "gestion",
+  "bazarr",
+  "calendar",
+  "controle",
+  "health",
+  "jackett",
+  "jellyfin",
+  "jellyseerr",
+  "parametres",
+  "person",
+  "qbittorrent",
+  "radarr",
+  "sonarr",
+  "stats",
+  "timeline",
+]);
+
+export function isAdminOnlyPage(pathname: string): boolean {
+  if (pathname.startsWith("/api/")) return false;
+  const first = pathname.split("/")[1] ?? "";
+  return ADMIN_ONLY_PAGES.has(first);
 }
 
 /**
@@ -388,6 +438,11 @@ export async function proxy(req: NextRequest) {
   }
   if (session.role !== "admin" && isAdminOnlyRead(pathname)) {
     return NextResponse.json({ error: "Action réservée à l'administrateur" }, { status: 403 });
+  }
+  // Une redirection et non un 403 : c'est une page, tapée ou restée en favori — le cinéma est la
+  // bonne réponse à qui n'a pas la gestion. Voir `ADMIN_ONLY_PAGES`.
+  if (session.role !== "admin" && isAdminOnlyPage(pathname)) {
+    return NextResponse.redirect(new URL("/", req.url));
   }
 
   /**

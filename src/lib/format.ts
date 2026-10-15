@@ -58,12 +58,26 @@ export function fmtEta(seconds: number): string {
   return `${seconds % 60}s`;
 }
 
-/** Formats a byte count into a human-readable string (e.g. 1.4 GB) */
-export function fmtSize(bytes: number): string {
+/** Les unités d'octets en français : le reste de l'interface écrit déjà « 6 Mo ». */
+const FR_UNITS = ["o", "Ko", "Mo", "Go", "To"];
+const UNITS = ["B", "KB", "MB", "GB", "TB"];
+
+/**
+ * Formats a byte count into a human-readable string (e.g. 1.4 GB).
+ *
+ * Avec une langue (15/10/2026, passe de nuit, BUREAU-28 / ROBUSTESSE-15), le séparateur et les
+ * unités suivent celle de l'écran : « 56.5 MB utilisés » s'affichait au milieu d'une phrase
+ * française du panneau Compte. « 56,5 Mo » en français, « 56,5 MB » en allemand et en espagnol,
+ * « 56.5 MB » en anglais. Sans langue, la forme d'avant, inchangée — la gestion s'en sert partout.
+ */
+export function fmtSize(bytes: number, locale?: string): string {
   if (bytes <= 0) return "—";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), UNITS.length - 1);
+  const value = bytes / Math.pow(1024, i);
+  if (!locale) return `${value.toFixed(1)} ${UNITS[i]}`;
+  const number = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
+  const units = locale.toLowerCase().startsWith("fr") ? FR_UNITS : UNITS;
+  return `${number} ${units[i]}`;
 }
 
 type TFn = (key: string, vars?: Record<string, string | number>) => string;

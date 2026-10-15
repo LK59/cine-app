@@ -26,7 +26,8 @@ export interface CinemaCastMember {
  *
  * Même forme que les rangées voisines (saga, titres similaires) et même attribut : les flèches y
  * entrent et en sortent comme dans les autres — voir `similarRowKeyNav`, qui parcourt tout ce qui
- * porte `data-detail-similar`. Une rangée à part, c'était un troisième chemin au clavier.
+ * porte `data-detail-similar`, rangée par rangée (par `<section>`, depuis le 15/10/2026). Une
+ * rangée à part, c'était un troisième chemin au clavier.
  *
  * Mémoïsée pour la même raison que `CinemaSimilarRow` : elle est en bas d'une fiche que le
  * moindre changement d'adresse redessine.

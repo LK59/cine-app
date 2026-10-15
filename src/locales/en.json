@@ -18,7 +18,8 @@
     },
     "error": {
       "failed": "Could not sign in",
-      "unknown": "Something went wrong"
+      "unknown": "Something went wrong",
+      "rateLimited": "Too many attempts. Try again in {n} min."
     },
     "tagline": "Your films and series, ready to watch.",
     "hint": "Sign in with your Jellyfin account details.",
@@ -1661,7 +1662,9 @@
       "request_not_found": "Request not found.",
       "title_not_found": "Title not found.",
       "not_in_list": "This title isn't in your list.",
-      "service_unavailable": "This service isn't available right now."
+      "service_unavailable": "This service isn't available right now.",
+      "network": "Couldn't reach the server right now.",
+      "person_not_found": "Person not found."
     }
   },
   "sse": {
@@ -1957,6 +1960,8 @@
     "discover": {
       "open": "Open the page",
       "request": "Request",
+      "confirmRequestMovie": "Request this movie?",
+      "confirmRequestSeries": "Request this series?",
       "addToList": "Add to my list",
       "inList": "In my list",
       "watched": "Watched",
@@ -1967,6 +1972,7 @@
       "filmography": "Filmography",
       "ownedCount": "{owned} of {total} available",
       "photos": "Photos",
+      "photoN": "Photo {n} of {total} — {name}",
       "elsewhere": "To discover"
     },
     "account": {
@@ -2028,6 +2034,7 @@
       },
       "sessionOpened": "Opened {date}",
       "sessionSeen": "Seen {date}",
+      "sessionSeenAgo": "Seen {when}",
       "openManage": "Open management",
       "status": "Service status",
       "openStatus": "View service status",
@@ -2204,6 +2211,8 @@
       "hint": "Changes how bright HDR films look on this screen. Auto should be right."
     },
     "chapterN": "Chapter {n}",
+    "seekLabel": "Playback position",
+    "seekValue": "{at} of {total}",
     "report": {
       "details": "Technical details",
       "copy": "Copy",
@@ -2276,6 +2285,7 @@
     "unmutePreview": "Unmute preview",
     "nextUpBadge": "Up next",
     "moreInfo": "More info",
+    "heroSlide": "Featured, {n} of {total}",
     "seasonCount": "{n} season|{n} seasons",
     "searchPlaceholder": "Search a movie or series…",
     "searchHint": "Searches your library: title, genre, year…",
@@ -2361,6 +2371,7 @@
     "Game Show": "Game Show",
     "History": "History",
     "Horror": "Horror",
+    "Martial Arts": "Martial Arts",
     "Mini-Series": "Mini-Series",
     "Music": "Music",
     "Musical": "Musical",
@@ -2368,6 +2379,7 @@
     "Reality": "Reality",
     "Romance": "Romance",
     "Science Fiction": "Science Fiction",
+    "Soap": "Soap",
     "Sport": "Sport",
     "Suspense": "Suspense",
     "TV Movie": "TV Movie",

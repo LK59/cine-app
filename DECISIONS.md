@@ -281,7 +281,10 @@ plein écran.
 
 **Porteur.** `playerHoldsKeyboard(playback)` (`src/lib/playerKeyboard.ts`). Appelants :
 `CinemaMobileDetail`, `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaEpisodeBrowser`, et
-`gridIsTop` (`src/lib/cinemaGridTop.ts`) pour la grille du bureau — flèches, « / », carte centrée.
+`gridIsTop` (`src/lib/cinemaGridTop.ts`) pour la grille du bureau — flèches, « / », carte centrée —,
+et depuis le 15/10/2026 `PlayerPanelFrame` (Échap d'un panneau, par `usePlaybackMode`, qui vaut
+« fermé » hors du fournisseur) : Échap pendant une scène lancée depuis la Recherche refermait la
+Recherche sous le film.
 
 **Corrigé le 21/09.** Les fiches du bureau le savaient, chacune avec son `playback.mode === "full"` ;
 la fiche du téléphone non — Échap sur une tablette à clavier refermait le lecteur *et* la fiche.
@@ -1486,7 +1489,10 @@ interruptible, avec un fil de chargement fin qui n'apparaît qu'après 150 ms. T
 - ouvrir la grille complète : le premier écran (28 cartes) d'abord, la liste entière ensuite
   (`useDeferredValue(shown, firstScreen)`), un filtre changé par le même chemin ;
 - les boutons « Voir tout » du téléphone répondent au relâchement du doigt (`useTap`) : juste après
-  un défilement, iOS garde le premier `click` pour arrêter l'élan.
+  un défilement, iOS garde le premier `click` pour arrêter l'élan. Le `click` de compatibilité qui
+  suit un appui servi est retenu s'il tombe sur un autre élément (15/10/2026) : il visait « Lire »
+  de la fiche ouverte sous le doigt, et le film partait sur Android. Borné par 700 ms et par le
+  prochain `pointerdown` ; un clic clavier (`detail` 0) passe toujours.
 
 **Porteur.** `useDeferredValue` aux deux endroits cités, `useKeptTabs` (`src/lib/keptTabs.ts`),
 `useTap` (`src/lib/useTap.ts`) et `TapButton`.
@@ -2387,6 +2393,10 @@ L'accueil du bureau porte `data-sheet-home`.
   `swallowStrayClick`, `visibleFraction`.
 - `src/lib/sheetMorph/source.ts` : le geste, la source, sa visibilité au retour.
 - `useSheetMorph` (`src/lib/sheetMorph/useSheetMorph.ts`).
+- `useSwallowEntryRepeatClicks` (`src/lib/sheetMorph/entryClicks.ts`, 15/10/2026), posé par
+  `useSheetMorph` : pendant 600 ms après l'arrivée d'une fiche, un clic portant `detail ≥ 2` (la
+  suite d'un double-clic sur l'affiche) est retenu — il ouvrait le résumé, ou cochait « À voir »,
+  de la fiche toute neuve. Un clic simple passe toujours.
 
 Ses appelants : `CinemaMobileDetail`, `CinemaMovieDetail`, `CinemaSeriesDetail`,
 `PlayerDiscoverSheet`. Le lot H de `IntroLots.tsx` importe le moteur.
@@ -5119,3 +5129,31 @@ cas ci-dessus), `native-close-once.test.tsx`, `player-host-server.test.tsx` (Air
 seule la navigation du système le fait.
 
 **Décidé le 15/10/2026** (Louis), après la passe de nuit (LECTEUR-11, ROBUSTESSE-13, MOBILE-12).
+
+## 95. « Demander » se confirme
+
+**Règle.** Une demande (Jellyseerr, approuvée d'office, téléchargement lancé dans Radarr ou Sonarr)
+ne part jamais d'un seul geste. L'appui sur « Demander » ouvre une question sobre, en noir et blanc :
+la feuille d'actions de verre de l'annulation (§49) au téléphone, une petite fenêtre centrée à
+l'ordinateur (`ActionSheet` `centerOnWide`). Elle reprend ce que l'écran montre déjà — titre, année,
+affiche — et pose « Demander ce film ? » / « Demander cette série ? », avec « Demander » et
+« Annuler » (quatre langues). Le focus d'arrivée va sur « Annuler » (`noAutoFocus`), et la fiche
+découverte ne pose pas non plus son propre focus d'arrivée sur « Demander » (`focusFirstAction`,
+`data-detail-no-autofocus`) : un double Entrée ne peut plus rien envoyer. Échap ferme la question,
+pas la fiche dessous.
+
+**Pourquoi.** Nuit du 15/10/2026 : un seul appui sur « Demander », sur téléphone, a envoyé une vraie
+demande — le film a été téléchargé dans l'heure (MOBILE-7) ; au clavier, Entrée-Entrée sur une affiche
+« Pas encore là » faisait de même (BUREAU-8). Décision de Louis le matin même.
+
+**Porteur.** `useRequestConfirmation` (`src/components/player/RequestConfirm.tsx`).
+
+**Appelants.** `PlayerDiscoverSheet` — ses deux mises en page (téléphone et ordinateur), film comme
+série : c'est la seule fiche du cinéma qui demande. Les saisons ne se demandent pas depuis le cinéma
+(`CinemaMissingEpisodes`, 23/09/2026). La gestion (`RequestFlowModal`, `GlobalSearch`) a son propre
+parcours d'administrateur, hors de cette règle.
+
+**Tests.** `discover-sheet-desktop.test.tsx` (la question, le focus sur « Annuler », la demande au
+second geste seulement).
+
+**Décidé le 15/10/2026** (Louis).

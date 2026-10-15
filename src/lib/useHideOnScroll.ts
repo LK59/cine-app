@@ -46,7 +46,14 @@ export function useHideOnScroll(enabled = true): boolean {
   // Le dernier point connu de chaque conteneur : plusieurs peuvent défiler dans la même session
   // — l'accueil derrière, un panneau devant — et comparer leurs positions entre elles n'aurait
   // aucun sens.
-  const lastTop = useRef(new WeakMap<EventTarget, number>());
+  //
+  // Et, pour chacun, d'où part le mouvement en cours (`anchor`) et dans quel sens (`dir`) : le seuil
+  // se mesure sur la distance parcourue dans un même sens, pas d'une image à l'autre. Comparé image
+  // par image, il était devenu un seuil de *vitesse* — remonter de 400 px au doigt sans élan (4 px par
+  // image, deux fois moins encore sur un écran à 120 Hz) ne rendait jamais la barre ; seul un coup
+  // sec la rappelait (passe de nuit du 15/10/2026, MOBILE-3). Un coup sec dépasse le seuil dès sa
+  // première image, comme avant.
+  const lastTop = useRef(new WeakMap<EventTarget, { last: number; anchor: number; dir: number }>());
   const frame = useRef<number | null>(null);
   const quietUntil = useRef(0);
 
@@ -77,18 +84,27 @@ export function useHideOnScroll(enabled = true): boolean {
       if (frame.current !== null) return;
       frame.current = requestAnimationFrame(() => {
         frame.current = null;
-        const top = target.scrollTop;
-        const previous = lastTop.current.get(target) ?? 0;
-        lastTop.current.set(target, top);
+        // Bornée à ce que le conteneur peut parcourir : le rebond élastique au bout d'une liste
+        // n'est pas une remontée.
+        const top = Math.min(Math.max(target.scrollTop, 0), target.scrollHeight - target.clientHeight);
+        const prev = lastTop.current.get(target) ?? { last: 0, anchor: 0, dir: 0 };
         // Le déplacement d'un changement d'onglet : retenu comme point de départ, pas comme geste.
-        if (performance.now() < quietUntil.current) return;
+        if (performance.now() < quietUntil.current) {
+          lastTop.current.set(target, { last: top, anchor: top, dir: 0 });
+          return;
+        }
+        const sign = Math.sign(top - prev.last);
+        // Le sens change : le mouvement repart d'ici.
+        const turned = sign !== 0 && sign !== prev.dir;
+        const anchor = turned ? prev.last : prev.anchor;
+        lastTop.current.set(target, { last: top, anchor, dir: turned ? sign : prev.dir });
         if (top <= TOP_ZONE) {
           setHidden(false);
           return;
         }
-        const delta = top - previous;
-        if (delta > THRESHOLD) setHidden(true);
-        else if (delta < -THRESHOLD) setHidden(false);
+        const travel = top - anchor;
+        if (travel > THRESHOLD) setHidden(true);
+        else if (travel < -THRESHOLD) setHidden(false);
       });
     }
 

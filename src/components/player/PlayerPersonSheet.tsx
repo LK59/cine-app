@@ -2,7 +2,7 @@
 
 import { departmentLabel } from "@/lib/personDepartment";
 import { liquidButtonRef } from "@/lib/liquidGlass/liquid";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { Calendar, ChevronLeft, ChevronRight, Globe, MapPin, Star, User, X } from "lucide-react";
@@ -20,6 +20,7 @@ import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { SHEET_OUT_MS, sheetMotionClass } from "@/lib/sheetMotion";
 import { useSheetExit } from "@/lib/useSheetExit";
+import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
 
 const LINK_CHIP =
   "flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-white/10 hover:text-white";
@@ -71,7 +72,8 @@ function ageAt(birthday: string, deathday: string | null, now: number): number |
 const NO_PHOTOS: PersonPhoto[] = [];
 
 // Mémorisée : voir `PersonFilmography`, pour la même raison.
-const PhotoRow = memo(function PhotoRow({ photos, onOpen, label }: { photos: PersonPhoto[]; onOpen: (i: number) => void; label: string }) {
+const PhotoRow = memo(function PhotoRow({ photos, onOpen, label, name }: { photos: PersonPhoto[]; onOpen: (i: number) => void; label: string; name: string }) {
+  const t = useT();
   if (photos.length === 0) return null;
   return (
     <div className="mt-8">
@@ -82,6 +84,9 @@ const PhotoRow = memo(function PhotoRow({ photos, onOpen, label }: { photos: Per
             key={photo.filePath}
             type="button"
             onClick={() => onOpen(i)}
+            // Un nom : l'image seule a `alt=""`, et un lecteur d'écran annonçait vingt-trois boutons
+            // muets (15/10/2026, passe de nuit, BUREAU-18).
+            aria-label={t("player.person.photoN", { n: i + 1, total: photos.length, name })}
             className="h-44 shrink-0 overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10 transition hover:ring-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 sm:h-56"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -343,6 +348,26 @@ export function PlayerPersonSheet({
    */
   const exit = useSheetExit(close, { leaving, listening: photoIndex === null && !underneath });
   const requestClose = exit.requestClose;
+
+  /**
+   * Le clavier et la télécommande (15/10/2026, passe de nuit, BUREAU-24) : à l'ouverture, le focus
+   * restait sur le document ou sur la fiche du dessous, et aucune flèche ne faisait rien — seule la
+   * tabulation entrait (« Fermer », « Instagram »…). Le focus entre dans la carte, sur sa croix, et
+   * les flèches parcourent ses affiches comme celles d'un panneau (`usePanelArrowNav` : ↓ ou → depuis
+   * la croix entre dans la filmographie). Pas sur un appareil qu'on touche, où un focus déplacé ne
+   * sert à rien ; jamais sous une autre fiche ni sous la visionneuse.
+   */
+  const dialogRef = useRef<HTMLDivElement>(null);
+  usePanelArrowNav(dialogRef, !underneath && photoIndex === null);
+  useEffect(() => {
+    if (underneath) return;
+    if (typeof window.matchMedia === "function" && window.matchMedia("(hover: none) and (pointer: coarse)").matches) return;
+    if (dialogRef.current?.contains(document.activeElement)) return;
+    dialogRef.current?.querySelector<HTMLButtonElement>("[data-person-close]")?.focus({ preventScroll: true });
+    // À l'arrivée seulement : revenue au-dessus (la fiche d'au-dessus refermée), le focus suit déjà
+    // ce qu'on y avait fait.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   /**
    * Le même geste que sur les fiches de films : on tire la fiche vers le bas pour la refermer. La
    * poignée est le bloc du portrait et du nom — il n'y a pas de bannière ici.
@@ -494,6 +519,7 @@ export function PlayerPersonSheet({
       />
 
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         // La fin de l'entrée, et seulement la sienne : les animations des enfants remontent jusqu'ici.
@@ -534,6 +560,8 @@ export function PlayerPersonSheet({
           type="button"
           onClick={requestClose}
           aria-label={t("common.close")}
+          // Le focus d'arrivée au clavier — voir `dialogRef`.
+          data-person-close=""
           // La croix en verre liquide, comme celle des fiches de titre (DECISIONS.md §45).
           ref={liquidButtonRef}
           data-liquid
@@ -644,7 +672,7 @@ export function PlayerPersonSheet({
 
             {/* Pas sous une fiche pleine : c'est une rangée d'images qu'on ne verra pas, montée
                 à l'instant où le film du dessus, lui, a besoin de tout le fil d'exécution. */}
-            {!underneath && settled && <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} />}
+            {!underneath && settled && <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} name={data.name ?? ""} />}
 
             {/* La biographie de Wikipédia quand elle existe, dans la langue du compte — plus
                 complète que celle de TMDB, souvent vide ou en anglais. Voir `selectBio`. */}

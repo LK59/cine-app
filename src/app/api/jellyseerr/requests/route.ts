@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
    * réessaie plus tard. L'administrateur, lui, *est* le propriétaire de la clé.
    */
   if (session?.role !== "admin" && !identity.cookie && identity.userId == null) {
-    return NextResponse.json(errorBody("Jellyseerr ne reconnaît pas encore ce compte. Réessaie dans un instant.", "request_identity_pending"), { status: 503 });
+    return NextResponse.json(errorBody("Jellyseerr ne reconnaît pas encore ce compte. Réessayez dans un instant.", "request_identity_pending"), { status: 503 });
   }
 
   return withErrorHandling(async () => {

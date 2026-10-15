@@ -91,6 +91,7 @@ import { useCinemaMyList, useCinemaMyListPending } from "@/lib/useCinemaMyList";
 import { CinemaSkeletonCards } from "@/components/cinema/CinemaRowSkeleton";
 import { heroOffscreen, heroSignature, resolveHeroCarousel, upcomingImages, useDecodeAhead, useHeroOrder } from "@/lib/heroCarousel";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
+import { requestSearchFocusOnOpen } from "@/lib/searchFocus";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
@@ -551,7 +552,7 @@ export function CinemaClient() {
   // Un titre de découverte mène à sa fiche quand on l'a, à la fiche TMDB sinon — où « Lire » est
   // devenu « Demander ». Un seul chemin, quel que soit le côté de la frontière.
   // Voir `cinemaOpen` : cette décision était écrite ici *et* sur le téléphone, mot pour mot.
-  const openDiscovery = useCallback((item: DiscoveryItem) => openDiscoveryItem(item), []);
+  // (`openDiscovery`, plus bas : il retient la carte de départ, comme les autres ouvertures.)
   // Which sheet is open is read back out of the URL, not held here: that's what makes Back close
   // it. Until the payload has loaded (a cold deep link into a title) the lookup simply finds
   // nothing and the sheet opens as soon as the data lands.
@@ -820,6 +821,9 @@ export function CinemaClient() {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
       e.preventDefault();
       setSearchOpen(true);
+      // Le curseur dans le champ : « / » est un geste de clavier, on l'a pressé pour taper
+      // (BUREAU-10 — le panneau, chargé à la demande, ne l'avait pas encore à son montage).
+      requestSearchFocusOnOpen();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -996,6 +1000,27 @@ export function CinemaClient() {
     restoreFocusOnReturn.current = closeUncoversGrid(readCinemaRoute(), sheetIsBehind());
     cinemaClose({ serie: null, episodes: false });
   }, []);
+
+  /**
+   * Une carte des rangées de découverte : la fiche du titre quand on l'a, la fiche TMDB sinon (voir
+   * `openDiscoveryItem`, la même décision que le téléphone).
+   *
+   * Elle retient la carte de départ, comme `openDetail` (15/10/2026, passe de nuit, ROBUSTESSE-10) :
+   * sans quoi, au clavier ou à la télécommande, refermer une fiche ouverte depuis « Recommandé pour
+   * vous » ou « Tendances » rendait le focus à la page, et la flèche suivante repartait de la
+   * première carte de « Reprendre » — bannière et défilement tout en haut. La fiche TMDB se referme
+   * d'elle-même (`PlayerDiscoverSheet`), sans passer par `closeDetail` : la demande de retour est
+   * donc posée au départ, et l'effet ne la sert qu'une fois la grille redevenue l'écran du dessus.
+   * Remplacée par une fiche de la bibliothèque, c'est `closeDetail` qui décide, comme d'habitude.
+   */
+  const openDiscovery = useCallback(
+    (item: DiscoveryItem) => {
+      rememberGridCard();
+      restoreFocusOnReturn.current = true;
+      openDiscoveryItem(item);
+    },
+    [rememberGridCard]
+  );
 
   /**
    * La pile de fiches.

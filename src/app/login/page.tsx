@@ -46,6 +46,12 @@ function LoginForm() {
         // mot de passe attendu. Une espace de tête est invisible et ne pardonne pas ; la signaler
         // transforme six tentatives identiques en une correction.
         if (data.code === "password-leading-space") throw new Error(t("auth.passwordLeadingSpace"));
+        // Le refus du compteur, dans la langue de la page et avec le vrai temps restant (BUREAU-2) :
+        // il arrivait en français, et annonçait toujours « 15 minutes ».
+        if (data.code === "rate_limited") {
+          const minutes = Math.max(1, Math.ceil((Number(data.retryAfterS) || 60) / 60));
+          throw new Error(t("auth.error.rateLimited", { n: minutes }));
+        }
         throw new Error(data.error || t("auth.error.failed"));
       }
       /**

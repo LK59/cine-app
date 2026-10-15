@@ -94,3 +94,46 @@ describe("checkRateLimit (login limiter)", () => {
     expect(checkRateLimit(ip)).toBe(false);
   });
 });
+
+// 15/10/2026 (passe de nuit, BUREAU-2) : les connexions réussies comptaient — dix appareils d'un même
+// foyer dans le quart d'heure, et la onzième, avec le bon mot de passe, était refusée.
+describe("checkRateLimit — seuls les échecs comptent", () => {
+  it("une connexion réussie rend sa place", async () => {
+    const { checkRateLimit, refundRateLimit } = await import("@/lib/rateLimiter");
+    const ip = "10.3.3.3";
+    for (let i = 0; i < 25; i++) {
+      expect(checkRateLimit(ip)).toBe(true);
+      refundRateLimit(ip);
+    }
+  });
+
+  it("dix échecs bloquent toujours, même entrecoupés de réussites", async () => {
+    const { checkRateLimit, refundRateLimit } = await import("@/lib/rateLimiter");
+    const ip = "10.4.4.4";
+    for (let i = 0; i < 9; i++) expect(checkRateLimit(ip)).toBe(true); // neuf échecs
+    expect(checkRateLimit(ip)).toBe(true); // une réussite…
+    refundRateLimit(ip); // …qui rend sa place
+    expect(checkRateLimit(ip)).toBe(true); // dixième échec
+    expect(checkRateLimit(ip)).toBe(false);
+  });
+
+  it("une rafale parallèle est bornée avant toute réponse de Jellyfin", async () => {
+    const { checkRateLimit } = await import("@/lib/rateLimiter");
+    const ip = "10.5.5.5";
+    const passed = Array.from({ length: 50 }, () => checkRateLimit(ip)).filter(Boolean).length;
+    expect(passed).toBe(10);
+  });
+
+  it("le refus porte un code et le vrai temps restant", async () => {
+    const { checkRateLimit, rateLimitedResponse } = await import("@/lib/rateLimiter");
+    const ip = "10.6.6.6";
+    for (let i = 0; i < 10; i++) checkRateLimit(ip);
+    const res = rateLimitedResponse(ip);
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.code).toBe("rate_limited");
+    expect(body.retryAfterS).toBeGreaterThan(0);
+    expect(body.retryAfterS).toBeLessThanOrEqual(15 * 60);
+    expect(res.headers.get("Retry-After")).toBe(String(body.retryAfterS));
+  });
+});

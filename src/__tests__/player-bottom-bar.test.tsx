@@ -19,7 +19,8 @@ vi.mock("@/lib/cinemaRoute", async (importOriginal) => ({
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/lib/useIsMobile", () => ({ useIsShortViewport: () => false }));
 let scrolledAway = false;
-vi.mock("@/lib/useHideOnScroll", () => ({ useHideOnScroll: () => scrolledAway }));
+const mockReveal = vi.fn();
+vi.mock("@/lib/useHideOnScroll", () => ({ useHideOnScroll: () => scrolledAway, revealNavigation: () => mockReveal() }));
 const mockOpenPanel = vi.fn();
 vi.mock("@/components/player/playerNav", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/components/player/playerNav")>();
@@ -160,5 +161,31 @@ describe("le second appui sur Recherche", () => {
     expect(mockOpenPanel).toHaveBeenCalledWith("search", route);
     fireEvent.pointerUp(searchButton(), { pointerId: 9 });
     expect(mockSearchFocus).not.toHaveBeenCalled();
+  });
+});
+
+// 15/10/2026 (passe de nuit, MOBILE-6) : « Voir tout » → défiler → Retour rendait l'accueil en haut
+// de page sans barre, et un retour vers « Ma liste » vide aussi — rien ne pouvait plus la rappeler.
+describe("la barre revient à chaque changement d'écran", () => {
+  it("à la fermeture de la grille complète et au passage d'un panneau à l'autre", () => {
+    route = { ...route, browse: "*" };
+    const { rerender } = render(<PlayerBottomBar />);
+    // Pas au montage : elle y est déjà visible.
+    expect(mockReveal).not.toHaveBeenCalled();
+    route = { ...route, browse: null };
+    rerender(<PlayerBottomBar />);
+    expect(mockReveal).toHaveBeenCalledTimes(1);
+    route = { ...route, account: true };
+    rerender(<PlayerBottomBar />);
+    route = { ...route, account: false, list: true };
+    rerender(<PlayerBottomBar />);
+    expect(mockReveal).toHaveBeenCalledTimes(3);
+  });
+
+  it("pas sur un rendu qui ne change pas d'écran", () => {
+    const { rerender } = render(<PlayerBottomBar />);
+    route = { ...route };
+    rerender(<PlayerBottomBar />);
+    expect(mockReveal).not.toHaveBeenCalled();
   });
 });

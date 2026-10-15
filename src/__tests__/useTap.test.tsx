@@ -35,6 +35,62 @@ describe("un appui servi au relâchement", () => {
     expect(onTap).not.toHaveBeenCalled();
   });
 
+  // 15/10/2026 (ROBUSTESSE-1) : le clic de compatibilité qui suit l'appui tombait sur « Lire » de la
+  // fiche qui venait de s'ouvrir sous le doigt — le film démarrait sur Android.
+  it("retient l'écho du doigt qui tombe sur un autre bouton, et seulement lui", () => {
+    const onTap = vi.fn();
+    const onPlay = vi.fn();
+    render(
+      <>
+        <TapButton onTap={onTap}>Affiche</TapButton>
+        <button type="button" onClick={onPlay}>
+          Lire
+        </button>
+      </>,
+    );
+    const poster = screen.getByRole("button", { name: "Affiche" });
+    const play = screen.getByRole("button", { name: "Lire" });
+    fireEvent.pointerDown(poster, { pointerType: "touch", pointerId: 7, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(poster, { pointerType: "touch", pointerId: 7, clientX: 10, clientY: 10 });
+    expect(onTap).toHaveBeenCalledTimes(1);
+    // L'écho du relâchement (un clic de doigt porte `detail: 1`) atterrit sur « Lire » : retenu.
+    fireEvent.click(play, { detail: 1 });
+    expect(onPlay).not.toHaveBeenCalled();
+    // Le vrai appui suivant commence par un `pointerdown` : son clic passe.
+    fireEvent.pointerDown(play, { pointerType: "touch", pointerId: 8 });
+    fireEvent.click(play, { detail: 1 });
+    expect(onPlay).toHaveBeenCalledTimes(1);
+  });
+
+  it("ne retient ni un clic clavier ni un clic d'après le délai", () => {
+    vi.useFakeTimers();
+    try {
+      const onPlay = vi.fn();
+      render(
+        <>
+          <TapButton onTap={() => {}}>Affiche</TapButton>
+          <button type="button" onClick={onPlay}>
+            Lire
+          </button>
+        </>,
+      );
+      const poster = screen.getByRole("button", { name: "Affiche" });
+      const play = screen.getByRole("button", { name: "Lire" });
+      fireEvent.pointerDown(poster, { pointerType: "touch", pointerId: 9, clientX: 1, clientY: 1 });
+      fireEvent.pointerUp(poster, { pointerType: "touch", pointerId: 9, clientX: 1, clientY: 1 });
+      // Entrée sur un bouton : `detail` vaut 0.
+      fireEvent.click(play, { detail: 0 });
+      expect(onPlay).toHaveBeenCalledTimes(1);
+      fireEvent.pointerDown(poster, { pointerType: "touch", pointerId: 10, clientX: 1, clientY: 1 });
+      fireEvent.pointerUp(poster, { pointerType: "touch", pointerId: 10, clientX: 1, clientY: 1 });
+      vi.advanceTimersByTime(800);
+      fireEvent.click(play, { detail: 1 });
+      expect(onPlay).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("garde le clic pour la souris et le clavier", () => {
     const { onTap, button } = setup();
     fireEvent.pointerDown(button, { pointerType: "mouse", pointerId: 4 });

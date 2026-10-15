@@ -20,6 +20,7 @@ import { preloadQuietly } from "@/lib/prefetch";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { PlayerRail } from "./PlayerRail";
 import { PlayerBottomBar } from "./PlayerBottomBar";
+import { scheduleWarmPanels } from "@/lib/warmPanels";
 
 // Chaque panneau est un écran entier qu'on n'ouvre pas forcément de la soirée : les charger à la
 // demande garde le premier rendu du lecteur à ce qu'il doit être — des affiches.
@@ -37,17 +38,28 @@ function PanelPlaceholder() {
   if (!isMobile) return null;
   return <div aria-hidden className="fixed inset-0 bg-ink" style={{ zIndex: 46 }} />;
 }
-const PlayerListPanel = dynamic(() => import("./PlayerListPanel").then((m) => m.PlayerListPanel), { ssr: false, loading: PanelPlaceholder });
-const PlayerAccountPanel = dynamic(() => import("./PlayerAccountPanel").then((m) => m.PlayerAccountPanel), { ssr: false, loading: PanelPlaceholder });
+// Les chargeurs nommés (15/10/2026, ROBUSTESSE-4) : `scheduleWarmPanels` appelle *ces* fonctions-là
+// pour garder le code des écrans sur l'appareil. Turbopack découpe un morceau par endroit d'import :
+// un `import()` du même fichier écrit ailleurs produisait un autre morceau, et hors ligne la Recherche
+// demandait encore le sien, jamais téléchargé (vérifié dans Chromium : « 1udtxr91seedu.js »).
+const loadPlayerListPanel = () => import("./PlayerListPanel").then((m) => m.PlayerListPanel);
+const PlayerListPanel = dynamic(loadPlayerListPanel, { ssr: false, loading: PanelPlaceholder });
+const loadPlayerAccountPanel = () => import("./PlayerAccountPanel").then((m) => m.PlayerAccountPanel);
+const PlayerAccountPanel = dynamic(loadPlayerAccountPanel, { ssr: false, loading: PanelPlaceholder });
 // L'activité des comptes, pour l'administrateur seul : chargée à la première ouverture, jamais
 // avant — personne d'autre ne paie son code.
 const PlayerActivityPanel = dynamic(() => import("./PlayerActivityPanel").then((m) => m.PlayerActivityPanel), { ssr: false, loading: PanelPlaceholder });
 // Compte → Nouveautés (DECISIONS.md §73), ouvert depuis le Compte ou par « Voir plus » de la fenêtre.
-const PlayerNewsPanel = dynamic(() => import("./PlayerNewsPanel").then((m) => m.PlayerNewsPanel), { ssr: false, loading: PanelPlaceholder });
-const PlayerReportPanel = dynamic(() => import("./PlayerReportPanel").then((m) => m.PlayerReportPanel), { ssr: false, loading: PanelPlaceholder });
-const PlayerSearchPanel = dynamic(() => import("./PlayerSearchPanel").then((m) => m.PlayerSearchPanel), { ssr: false, loading: PanelPlaceholder });
-const PlayerDiscoverSheet = dynamic(() => import("./PlayerDiscoverSheet").then((m) => m.PlayerDiscoverSheet), { ssr: false });
-const PlayerPersonSheet = dynamic(() => import("./PlayerPersonSheet").then((m) => m.PlayerPersonSheet), { ssr: false });
+const loadPlayerNewsPanel = () => import("./PlayerNewsPanel").then((m) => m.PlayerNewsPanel);
+const PlayerNewsPanel = dynamic(loadPlayerNewsPanel, { ssr: false, loading: PanelPlaceholder });
+const loadPlayerReportPanel = () => import("./PlayerReportPanel").then((m) => m.PlayerReportPanel);
+const PlayerReportPanel = dynamic(loadPlayerReportPanel, { ssr: false, loading: PanelPlaceholder });
+const loadPlayerSearchPanel = () => import("./PlayerSearchPanel").then((m) => m.PlayerSearchPanel);
+const PlayerSearchPanel = dynamic(loadPlayerSearchPanel, { ssr: false, loading: PanelPlaceholder });
+const loadPlayerDiscoverSheet = () => import("./PlayerDiscoverSheet").then((m) => m.PlayerDiscoverSheet);
+const PlayerDiscoverSheet = dynamic(loadPlayerDiscoverSheet, { ssr: false });
+const loadPlayerPersonSheet = () => import("./PlayerPersonSheet").then((m) => m.PlayerPersonSheet);
+const PlayerPersonSheet = dynamic(loadPlayerPersonSheet, { ssr: false });
 // L'écran d'accueil — chargé à part : la plupart des lancements ne l'affichent pas.
 const PlayerOnboardingGate = dynamic(() => import("./PlayerOnboarding").then((m) => m.PlayerOnboardingGate), { ssr: false });
 // La fenêtre des Nouveautés : la décision est légère, la fenêtre elle-même n'arrive qu'avec elle.
@@ -230,6 +242,18 @@ export function PlayerShell() {
     const timer = setTimeout(warm, 1500);
     return () => clearTimeout(timer);
   }, []);
+
+  // Et le code de tous les écrans chargés à la demande, gardé sur l'appareil pour qu'ils s'ouvrent
+  // hors ligne — voir `warmPanels.ts` (ROBUSTESSE-4). Le `preload` ci-dessus ne s'en charge pas :
+  // les composants de `next/dynamic` de l'App Router n'en exposent pas, et hors ligne la Recherche
+  // remplaçait l'application par la page « Pas de connexion ».
+  useEffect(
+    () =>
+      scheduleWarmPanels({
+        loaders: [loadPlayerSearchPanel, loadPlayerListPanel, loadPlayerAccountPanel, loadPlayerReportPanel, loadPlayerNewsPanel, loadPlayerDiscoverSheet, loadPlayerPersonSheet],
+      }),
+    []
+  );
 
   return (
     <>

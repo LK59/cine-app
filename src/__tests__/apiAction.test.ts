@@ -36,6 +36,28 @@ describe("apiAction", () => {
     await expect(apiAction("/api/thing")).rejects.toThrow("502 Bad Gateway");
   });
 
+  // 15/10/2026 (passe de nuit, BUREAU-7) : une coupure pendant une action affichait le message du
+  // navigateur, « Failed to fetch », en anglais et en rouge, à un compte en français.
+  it("nomme une coupure par le code `network`, que l'écran traduit", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
+    const error = await apiAction("/api/watchlist", { method: "POST" }).catch((e: unknown) => e);
+    expect((error as { code?: string }).code).toBe("network");
+    expect((error as Error).message).not.toContain("Failed to fetch");
+    const { apiErrorText } = await import("@/lib/apiErrorText");
+    const t = (k: string) => k;
+    expect(apiErrorText(error, t, "fr")).toBe("errors.codes.network");
+    expect(apiErrorText(error, t, "en")).toBe("errors.codes.network");
+  });
+
+  it("une passerelle sans corps (redéploiement) porte le même code ; une annulation reste une annulation", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => answer(502, undefined, "Bad Gateway")));
+    const gateway = await apiAction("/api/thing").catch((e: unknown) => e);
+    expect((gateway as { code?: string }).code).toBe("network");
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new DOMException("aborted", "AbortError"); }));
+    const aborted = await apiAction("/api/thing").catch((e: unknown) => e);
+    expect((aborted as Error).name).toBe("AbortError");
+  });
+
   it("falls back to the status when the body is JSON without an error field", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => answer(400, { detail: "nope" }, "Bad Request")));
     await expect(apiAction("/api/thing")).rejects.toThrow("400 Bad Request");
@@ -71,8 +93,12 @@ describe("apiAction", () => {
     });
   });
 
+  // Le message n'est plus celui du navigateur (BUREAU-7, ci-dessus) ; l'échec, lui, remonte toujours,
+  // et la cause d'origine reste attachée pour qui la cherche.
   it("does not swallow a network failure", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
-    await expect(apiAction("/api/thing")).rejects.toThrow("Failed to fetch");
+    const error = await apiAction("/api/thing").then(() => null, (e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(((error as Error).cause as Error).message).toBe("Failed to fetch");
   });
 });

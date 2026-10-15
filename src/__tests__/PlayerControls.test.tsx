@@ -63,6 +63,21 @@ function stubMediaFetches() {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => null }));
 }
 
+// 15/10/2026 (passe de nuit, ROBUSTESSE-11) : axe `label` (critique) — la barre de progression
+// n'avait pas de nom, et s'annonçait en secondes brutes.
+describe("PlayerControls — la barre de progression pour un lecteur d'écran", () => {
+  it("a un nom et une valeur lisible", async () => {
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    Object.defineProperty(video, "duration", { value: 3600, configurable: true });
+    await act(async () => void video.dispatchEvent(new Event("durationchange")));
+    const input = container.querySelector(".player-seek") as HTMLInputElement;
+    expect(input.getAttribute("aria-label")).toBe("player.seekLabel");
+    expect(input.getAttribute("aria-valuetext")).toMatch(/^player\.seekValue:/);
+  });
+});
+
 describe("PlayerControls — la barre de progression", () => {
   /** The bar only tracks a pointer once the film has a length to map it onto. */
   const withDuration = async (video: HTMLVideoElement, bar: HTMLElement) => {

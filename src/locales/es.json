@@ -18,7 +18,8 @@
     },
     "error": {
       "failed": "No se pudo iniciar sesión",
-      "unknown": "Se produjo un error"
+      "unknown": "Se produjo un error",
+      "rateLimited": "Demasiados intentos. Inténtalo de nuevo en {n} min."
     },
     "tagline": "Tus películas y series, listas para ver.",
     "hint": "Usa los datos de tu cuenta de Jellyfin.",
@@ -1661,7 +1662,9 @@
       "request_not_found": "No se encontró la solicitud.",
       "title_not_found": "No se encontró el título.",
       "not_in_list": "Este título no está en tu lista.",
-      "service_unavailable": "Este servicio no está disponible en este momento."
+      "service_unavailable": "Este servicio no está disponible en este momento.",
+      "network": "No se puede conectar con el servidor en este momento.",
+      "person_not_found": "No se encontró a esta persona."
     }
   },
   "sse": {
@@ -1957,6 +1960,8 @@
     "discover": {
       "open": "Abrir la ficha",
       "request": "Pedir",
+      "confirmRequestMovie": "¿Pedir esta película?",
+      "confirmRequestSeries": "¿Pedir esta serie?",
       "addToList": "Añadir a mi lista",
       "inList": "En mi lista",
       "watched": "Visto",
@@ -1967,6 +1972,7 @@
       "filmography": "Filmografía",
       "ownedCount": "{owned} de {total} disponibles",
       "photos": "Fotos",
+      "photoN": "Foto {n} de {total} — {name}",
       "elsewhere": "Por descubrir"
     },
     "account": {
@@ -2028,6 +2034,7 @@
       },
       "sessionOpened": "Abierta el {date}",
       "sessionSeen": "Vista el {date}",
+      "sessionSeenAgo": "Vista {when}",
       "openManage": "Abrir la gestión",
       "status": "Estado de los servicios",
       "openStatus": "Ver el estado de los servicios",
@@ -2204,6 +2211,8 @@
       "hint": "Cambia el brillo de las películas HDR en esta pantalla. El valor Auto debería ser adecuado."
     },
     "chapterN": "Capítulo {n}",
+    "seekLabel": "Posición de reproducción",
+    "seekValue": "{at} de {total}",
     "report": {
       "details": "Detalles técnicos",
       "copy": "Copiar",
@@ -2276,6 +2285,7 @@
     "unmutePreview": "Activar el sonido de la vista previa",
     "nextUpBadge": "A continuación",
     "moreInfo": "Más información",
+    "heroSlide": "Destacado, {n} de {total}",
     "seasonCount": "{n} temporada|{n} temporadas",
     "searchPlaceholder": "Buscar una película o serie…",
     "searchHint": "Busca en tu biblioteca: título, género, año…",
@@ -2361,6 +2371,7 @@
     "Game Show": "Concurso",
     "History": "Historia",
     "Horror": "Terror",
+    "Martial Arts": "Artes marciales",
     "Mini-Series": "Miniserie",
     "Music": "Música",
     "Musical": "Musical",
@@ -2368,6 +2379,7 @@
     "Reality": "Telerrealidad",
     "Romance": "Romance",
     "Science Fiction": "Ciencia ficción",
+    "Soap": "Telenovela",
     "Sport": "Deporte",
     "Suspense": "Suspense",
     "TV Movie": "Telefilme",

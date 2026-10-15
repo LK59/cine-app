@@ -4,6 +4,7 @@ import { getTmdbLocale, type Locale } from "@/lib/i18n";
 import { HttpError } from "@/lib/http";
 import type { SonarrEpisodeText } from "@/lib/server-cache";
 import { fileKey } from "@/lib/episodeDisplay";
+import { isSonarrPending } from "@/lib/sonarrPending";
 
 /**
  * Le résumé et le titre d'un épisode quand Jellyfin n'en a pas — mieux vaut l'anglais que rien.
@@ -103,8 +104,6 @@ async function tmdbEpisodeText(tmdbTvId: number, seasonNumber: number, episodeNu
   return out;
 }
 
-/** Un titre que Sonarr laisse en attente (« TBA ») n'en est pas un. */
-const isSonarrPending = (title: string) => /^(tba|tbd)$/i.test(title.trim());
 
 /**
  * Le texte d'un épisode d'une série Sonarr, selon la règle de vérité (DECISIONS.md §89) : **qui**

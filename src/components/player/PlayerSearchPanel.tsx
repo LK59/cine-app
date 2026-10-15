@@ -320,6 +320,15 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   const shownPersons = searching && (filter === "all" || filter === "person") ? persons : [];
   const showDialogue = dialogueWanted && (filter === "all" || filter === "dialogue");
   /**
+   * Le chiffre de la puce « Tout » : ce que la vue « Tout » montre, répliques comprises (15/10/2026,
+   * passe de nuit, BUREAU-26 / MOBILE-16). « Tout 0 », puce active, s'affichait au-dessus d'une
+   * réplique de *Good Bye Lenin!* ; « Tout 1 » au-dessus de vingt. Un chiffre à part, et non
+   * `counts.all` : celui-ci sert aussi aux règles « filtre vide → Tout » et « Rien trouvé », qui
+   * parlent des titres et des personnes — et le compte des répliques peut être celui d'une frappe
+   * précédente (`stale`) quand elles ne sont plus cherchées.
+   */
+  const allChipCount = counts.all + (dialogueWanted ? counts.dialogue : 0);
+  /**
    * « Rien trouvé » ne se dit qu'une fois la réponse connue.
    *
    * La bibliothèque répond à la lettre, le serveur cent cinquante millisecondes plus tard : entre
@@ -435,7 +444,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
                   className={filter === key ? "chip chip-on" : "chip"}
                 >
                   {label}
-                  {key !== "dialogue" || counts.dialogue > 0 ? <span className="ml-1.5 tabular-nums opacity-60">{counts[key]}</span> : null}
+                  {key !== "dialogue" || counts.dialogue > 0 ? <span className="ml-1.5 tabular-nums opacity-60">{key === "all" ? allChipCount : counts[key]}</span> : null}
                 </button>
               );
             })}

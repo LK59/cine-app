@@ -9,6 +9,9 @@ import { useT } from "@/components/TranslationProvider";
 import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
 import { openPanel } from "./playerNav";
 import { usePanelScrollMemory } from "@/lib/panelScrollMemory";
+import { usePlaybackMode } from "@/components/PlaybackProvider";
+import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
+import { PanelBackStepContext } from "@/lib/panelBackStep";
 
 /**
  * L'habillage commun des écrans ouverts depuis le rail — Recherche, Ma liste, Compte.
@@ -131,10 +134,21 @@ export function PlayerPanelFrame({
    * Sauf sur un écran poussé (`back` : Parcourir, l'activité, les signalements), où la flèche et
    * Échap reviennent d'un cran — c'est ce que dit la flèche.
    */
+  //
+  // Et un écran à étapes (l'assistant de signalement) recule d'abord d'une étape — voir
+  // `panelBackStep.ts` (BUREAU-13).
+  const backStep = useRef<(() => boolean) | null>(null);
+  const registerBackStep = useCallback((step: (() => boolean) | null) => {
+    backStep.current = step;
+  }, []);
+  const goBack = useCallback(() => {
+    if (backStep.current?.()) return;
+    cinemaClose(CLOSE_PANELS);
+  }, []);
   const closeWindow = useCallback(() => {
-    if (back) cinemaClose(CLOSE_PANELS);
+    if (back) goBack();
     else openPanel("home", route);
-  }, [back, route]);
+  }, [back, route, goBack]);
   const short = useIsShortViewport();
   const bodyRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -177,8 +191,15 @@ export function PlayerPanelFrame({
   // il y en a *deux* montés, celui qui part et celui qui arrive. Sans cette condition, les deux
   // écoutent Échap, et une seule touche reculait de deux crans — depuis le premier écran de la
   // pile, elle faisait sortir du mode cinéma. Un écran en train de partir n'a plus d'avis sur rien.
+  //
+  // Et le lecteur plein écran recouvre tout (15/10/2026, passe de nuit, BUREAU-11) : Échap pendant
+  // une scène lancée depuis la Recherche refermait la Recherche *sous* le film — en fermant le
+  // lecteur on tombait sur l'accueil, requête et résultats perdus. Les fiches se taisaient déjà
+  // (`playerHoldsKeyboard`) ; les panneaux, non. Écoutant en capture, ils prenaient même la touche
+  // au lecteur (`stopPropagation`).
+  const playerOwnsKeyboard = playerHoldsKeyboard({ mode: usePlaybackMode() });
   useEffect(() => {
-    if (covered || leaving) return;
+    if (covered || leaving || playerOwnsKeyboard) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       // Deux cas où Échap ne revient pas au panneau, relevés le 23/09/2026 :
@@ -200,7 +221,40 @@ export function PlayerPanelFrame({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [covered, leaving, closeWindow]);
+  }, [covered, leaving, playerOwnsKeyboard, closeWindow]);
+
+  /**
+   * La première flèche entre dans le contenu, d'où que parte le focus (15/10/2026, passe de nuit,
+   * BUREAU-24).
+   *
+   * Les flèches sont écoutées sur le corps (`usePanelArrowNav`) ; or à l'ouverture le focus est sur
+   * le titre — hors du corps —, ou resté sur le bouton de l'accueil qui a ouvert l'écran (« Voir tous
+   * les films », caché dessous), ou sur rien après un lien profond. Aucune flèche ne bougeait alors
+   * rien dans la grille complète ni dans Ma liste : il fallait six tabulations pour atteindre la
+   * première affiche. Comme sur l'accueil, ↓ et → y entrent par le premier élément. Pas depuis le
+   * rail ou la barre du bas (leurs propres flèches), ni depuis une fenêtre, ni dans un champ.
+   */
+  useEffect(() => {
+    if (covered || leaving || playerOwnsKeyboard) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || (e.key !== "ArrowDown" && e.key !== "ArrowRight")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const active = document.activeElement as HTMLElement | null;
+      const nowhere = !active || active === document.body || active === document.documentElement;
+      const onHeading = active !== null && active === headingRef.current;
+      const outside = !nowhere && !onHeading && !active!.closest("[data-panel-root]");
+      if (!nowhere && !onHeading && !outside) return;
+      if (active?.closest("[data-player-nav], [aria-modal='true']")) return;
+      if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
+      const first = bodyRef.current?.querySelector<HTMLElement>("[data-nav-item]");
+      if (!first) return;
+      e.preventDefault();
+      first.focus({ preventScroll: true });
+      first.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [covered, leaving, playerOwnsKeyboard]);
 
   // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
   // `document` n'existe pas et où `createPortal` fait échouer la page entière.
@@ -271,7 +325,7 @@ export function PlayerPanelFrame({
           {back && (
             <button
               type="button"
-              onClick={() => cinemaClose(CLOSE_PANELS)}
+              onClick={goBack}
               className="btn btn-ghost -ml-1 mt-0.5 shrink-0 rounded-full px-3 py-2"
             >
               <ArrowLeft size={16} /> {t("cinema.back")}
@@ -332,7 +386,7 @@ export function PlayerPanelFrame({
         {/* La marge que le fondu recouvre au repos : rien ne bouge par rapport à avant. */}
         <div aria-hidden className={short ? "h-2" : "h-4"} />
         <div className="mx-auto w-full" style={{ maxWidth: contentWidth }}>
-          {children}
+          <PanelBackStepContext.Provider value={registerBackStep}>{children}</PanelBackStepContext.Provider>
         </div>
       </div>
     </div>,

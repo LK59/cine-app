@@ -22,7 +22,7 @@ const mockSessionDb = { create: vi.fn((): string[] => []) };
 const mockUserPrefsDb = { getLang: vi.fn() };
 vi.mock("@/lib/db", () => ({ sessionDb: mockSessionDb, userPrefsDb: mockUserPrefsDb }));
 let rateLimitOk = true;
-vi.mock("@/lib/rateLimiter", () => ({ checkRateLimit: () => rateLimitOk }));
+vi.mock("@/lib/rateLimiter", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/rateLimiter")>()), checkRateLimit: () => rateLimitOk }));
 vi.mock("@/lib/i18n", () => ({ LOCALE_COOKIE: "cine-lang" }));
 vi.mock("@/lib/api-helpers", () => ({ getClientIp: () => "1.2.3.4" }));
 

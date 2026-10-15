@@ -18,7 +18,8 @@
     },
     "error": {
       "failed": "Connexion impossible",
-      "unknown": "Une erreur est survenue"
+      "unknown": "Une erreur est survenue",
+      "rateLimited": "Trop de tentatives. Réessayez dans {n} min."
     },
     "tagline": "Vos films et vos séries, prêts à regarder.",
     "hint": "Utilisez les identifiants de votre compte Jellyfin.",
@@ -414,7 +415,7 @@
       "reports": "Tickets liés à cette séance ({n})",
       "writeTo": "Écrire à {who}",
       "writeHint": "{who} recevra un ticket lié à cette séance, dans « Mes signalements », et pourra y répondre.",
-      "writePlaceholder": "Par exemple : j'ai vu que la lecture s'est bloquée, tu peux me dire ce qui s'est passé ?",
+      "writePlaceholder": "Par exemple : j'ai vu que la lecture s'est bloquée, pouvez-vous me dire ce qui s'est passé ?",
       "written": "Ticket envoyé à {who}"
     },
     "line": {
@@ -954,7 +955,7 @@
     "capabilitiesNotConfigured": "Fonctions en attente d'un service non configuré : {n} (hors de l'état d'ensemble)",
     "storagePaths": {
       "sectionTitle": "Chemins de stockage",
-      "sectionSubtitle": "Vérifie que les chemins utilisés pour les stats disque/média sont montés et lisibles",
+      "sectionSubtitle": "Vérifiez que les chemins utilisés pour les stats disque/média sont montés et lisibles",
       "entries": "{n} éléments",
       "notFound": "Le chemin n'existe pas — vérifier le montage du volume et MEDIA_ROOT/.env",
       "notReadable": "Le chemin existe mais n'est pas lisible — vérifier les permissions du conteneur",
@@ -970,7 +971,7 @@
     },
     "apiTests": {
       "sectionTitle": "Tests des routes API",
-      "sectionSubtitle": "Vérifie chaque endpoint interne — authentification, latence et forme de réponse",
+      "sectionSubtitle": "Vérifiez chaque endpoint interne — authentification, latence et forme de réponse",
       "ok": "{n} ok",
       "errors": "{n} erreur|{n} erreurs",
       "running": "Test en cours…",
@@ -1266,11 +1267,11 @@
     "thisDevice": "Cet appareil",
     "deviceNotice": "L'activation reste propre à chaque navigateur ou PWA installée.",
     "pushNotifications": "Notifications push",
-    "pushDescription": "Active ou désactive cet appareil.",
+    "pushDescription": "Activez ou désactivez cet appareil.",
     "categories": "Catégories",
-    "categoriesDescription": "Choisis les alertes que tu veux recevoir.",
+    "categoriesDescription": "Choisissez les alertes que vous voulez recevoir.",
     "test": "Test",
-    "testDescription": "Envoie une notification de test dans 5 secondes.",
+    "testDescription": "Envoyez une notification de test dans 5 secondes.",
     "sendingIn": "Envoi dans {n}s",
     "sending": "Envoi…",
     "testButton": "Tester",
@@ -1287,19 +1288,19 @@
       },
       "watchlistAvailable": {
         "label": "Film/Série disponible",
-        "description": "Quand un contenu de ta liste devient disponible dans Jellyfin."
+        "description": "Quand un contenu de votre liste devient disponible dans Jellyfin."
       },
       "newEpisode": {
         "label": "Nouvel épisode",
         "description": "Quand un nouvel épisode est importé pour une série suivie."
       },
       "requestAvailable": {
-        "label": "Ta demande est disponible",
-        "description": "Quand un film ou une série que tu as demandé via Jellyseerr devient disponible."
+        "label": "Votre demande est disponible",
+        "description": "Quand un film ou une série que vous avez demandé via Jellyseerr devient disponible."
       },
       "reportReply": {
-        "label": "Réponse à ton signalement",
-        "description": "Quand l'administrateur répond à un de tes signalements ou change son état."
+        "label": "Réponse à votre signalement",
+        "description": "Quand l'administrateur répond à un de vos signalements ou change son état."
       },
       "reportNew": {
         "label": "Nouveau signalement",
@@ -1410,7 +1411,7 @@
       "title": "Application",
       "subtitle": "Mise à jour de la PWA installée",
       "updateTitle": "Mettre à jour la PWA",
-      "updateDesc": "Vérifie et installe la dernière version du Service Worker",
+      "updateDesc": "Vérifiez et installez la dernière version du Service Worker",
       "version": "Version {version}",
       "alreadyUpToDate": "Déjà à jour",
       "updateApplied": "Mise à jour appliquée",
@@ -1437,7 +1438,7 @@
   },
   "watchlist": {
     "pageTitle": "Ma liste",
-    "addFailed": "Échec de l'ajout à la liste, réessaie.",
+    "addFailed": "Échec de l'ajout à la liste, réessayez.",
     "addToLibrary": "Ajouter",
     "addedToLibrary": "Ajoutée à la bibliothèque",
     "statuses": {
@@ -1493,7 +1494,7 @@
     "noResults": "Aucun résultat pour « {query} »",
     "keyboardHint": "↑↓ naviguer · Entrée sélectionner",
     "shortcutHint": "⌘K ouvrir/fermer",
-    "libraryCount": "{n} dans ta biblio",
+    "libraryCount": "{n} dans votre biblio",
     "viewSheet": "Voir la fiche",
     "removeFromList": "Retirer de la liste",
     "addToList": "Ajouter à la liste",
@@ -1567,16 +1568,16 @@
         "showHelp": "Afficher cette aide",
         "close": "Fermer la fenêtre / désélectionner"
       },
-      "openClose": "Appuie sur {key} pour ouvrir / fermer"
+      "openClose": "Appuyez sur {key} pour ouvrir / fermer"
     },
     "request": {
       "confirmTitle": "Confirmer la demande",
-      "confirmBody": "La demande sera envoyée via Jellyseerr et associée à ton compte.",
+      "confirmBody": "La demande sera envoyée via Jellyseerr et associée à votre compte.",
       "loadingSeasons": "Chargement des saisons…",
       "loadError": "Impossible de charger les saisons.",
       "noSeasons": "Aucune saison trouvée pour cette série.",
       "allCovered": "Déjà demandée ou disponible en entier.",
-      "pickSeasons": "Choisis les saisons à demander :",
+      "pickSeasons": "Choisissez les saisons à demander :",
       "alreadyRequested": "Déjà demandée",
       "episodeCount": "{n} ép.",
       "requestMore": "Demander plus",
@@ -1598,7 +1599,7 @@
     "tabFile": "Onglet Fichier / Saisons (fiche)",
     "showHelp": "Afficher cette aide",
     "close": "Fermer la fenêtre / désélectionner",
-    "hint": "Appuie sur {key} pour ouvrir / fermer"
+    "hint": "Appuyez sur {key} pour ouvrir / fermer"
   },
   "collection": {
     "loading": "Chargement de la saga…",
@@ -1640,11 +1641,11 @@
     "pageError": "Quelque chose s'est mal passé sur cette page.",
     "retry": "Réessayer",
     "loadFailed": "Impossible de charger ces données.",
-    "generic": "Une erreur est survenue. Réessaie.",
+    "generic": "Une erreur est survenue. Réessayez.",
     "fileInfoFailed": "Impossible de récupérer les informations du fichier.",
     "playbackUnavailable": "Lecture impossible pour le moment.",
     "codes": {
-      "upstream_unreachable": "Le service ne répond pas pour le moment. Réessaie dans quelques minutes.",
+      "upstream_unreachable": "Le service ne répond pas pour le moment. Réessayez dans quelques minutes.",
       "file_missing": "Ce fichier n'est plus dans la bibliothèque.",
       "invalid_request": "Requête invalide.",
       "jellyfin_account_required": "Compte Jellyfin requis.",
@@ -1653,15 +1654,17 @@
       "same_password": "Le nouveau mot de passe est identique à l'actuel.",
       "wrong_password": "Le mot de passe actuel est incorrect.",
       "requests_unavailable": "Les demandes ne sont pas disponibles.",
-      "request_identity_pending": "Ton compte n'est pas encore prêt pour les demandes. Réessaie dans un instant.",
-      "request_seasons_required": "Sélectionne au moins une saison.",
+      "request_identity_pending": "Votre compte n'est pas encore prêt pour les demandes. Réessayez dans un instant.",
+      "request_seasons_required": "Sélectionnez au moins une saison.",
       "request_duplicate": "Ce titre a déjà été demandé.",
-      "request_quota": "Tu as atteint ta limite de demandes. Réessaie plus tard.",
+      "request_quota": "Vous avez atteint votre limite de demandes. Réessayez plus tard.",
       "request_refused": "Cette demande a été refusée.",
       "request_not_found": "Demande introuvable.",
       "title_not_found": "Titre introuvable.",
-      "not_in_list": "Ce titre n'est pas dans ta liste.",
-      "service_unavailable": "Ce service n'est pas disponible pour le moment."
+      "not_in_list": "Ce titre n'est pas dans votre liste.",
+      "service_unavailable": "Ce service n'est pas disponible pour le moment.",
+      "network": "Le serveur est injoignable pour le moment.",
+      "person_not_found": "Personne introuvable."
     }
   },
   "sse": {
@@ -1738,14 +1741,14 @@
     "speedNormal": "Normale",
     "rewind10": "Reculer de 10s",
     "forward10": "Avancer de 10s",
-    "sessionExpired": "Ta session Jellyfin a expiré.",
+    "sessionExpired": "Votre session Jellyfin a expiré.",
     "reconnect": "Se reconnecter",
     "quit": "Quitter",
     "offline": "Vous êtes hors ligne",
     "stillLoading": "Le chargement est toujours en cours, ne fermez pas le lecteur…",
     "compatPrep": "Préparation d'une version compatible avec cet appareil…",
     "reconnecting": "Reconnexion…",
-    "loadingTooLong": "Le chargement prend trop de temps. Réessaie.",
+    "loadingTooLong": "Le chargement prend trop de temps. Réessayez.",
     "slowLink": {
       "hint": "Connexion lente…",
       "failed": "Lecture impossible : la connexion est trop lente.",
@@ -1755,9 +1758,9 @@
       "tapToResume": "Version allégée prête. Touchez Lecture pour reprendre."
     },
     "unsupportedBrowser": "Ce navigateur ne peut pas lire ce flux.",
-    "playbackInterruptedCheckConnection": "La lecture a été interrompue. Vérifie ta connexion et réessaie.",
-    "playbackInterrupted": "La lecture a été interrompue. Réessaie.",
-    "libraryUnreachable": "La bibliothèque ne répond pas pour le moment. Réessaie dans quelques minutes.",
+    "playbackInterruptedCheckConnection": "La lecture a été interrompue. Vérifiez votre connexion et réessayez.",
+    "playbackInterrupted": "La lecture a été interrompue. Réessayez.",
+    "libraryUnreachable": "La bibliothèque ne répond pas pour le moment. Réessayez dans quelques minutes.",
     "info": {
       "title": "Infos de lecture",
       "network": "Réseau",
@@ -1957,6 +1960,8 @@
     "discover": {
       "open": "Ouvrir la fiche",
       "request": "Demander",
+      "confirmRequestMovie": "Demander ce film ?",
+      "confirmRequestSeries": "Demander cette série ?",
       "addToList": "Ajouter à ma liste",
       "inList": "Dans ma liste",
       "watched": "Vu",
@@ -1967,6 +1972,7 @@
       "filmography": "Filmographie",
       "ownedCount": "{owned} sur {total} disponibles",
       "photos": "Photos",
+      "photoN": "Photo {n} sur {total} — {name}",
       "elsewhere": "À découvrir"
     },
     "account": {
@@ -2028,6 +2034,7 @@
       },
       "sessionOpened": "Ouverte le {date}",
       "sessionSeen": "Vue le {date}",
+      "sessionSeenAgo": "Vue {when}",
       "openManage": "Ouvrir la gestion",
       "status": "État des services",
       "openStatus": "Voir l'état des services",
@@ -2204,6 +2211,8 @@
       "hint": "Change la luminosité des films HDR sur cet écran. La valeur Auto devrait convenir."
     },
     "chapterN": "Chapitre {n}",
+    "seekLabel": "Position de lecture",
+    "seekValue": "{at} sur {total}",
     "report": {
       "details": "Détails techniques",
       "copy": "Copier",
@@ -2260,7 +2269,7 @@
     "markWatched": "Vu",
     "addToList": "Ma liste",
     "continueWatching": "Reprendre",
-    "empty": "Rien à afficher pour l'instant — ajoute des films à ta bibliothèque.",
+    "empty": "Rien à afficher pour l'instant — ajoutez des films à votre bibliothèque.",
     "back": "Retour",
     "shortcutsNavigate": "Naviguer",
     "shortcutsSelect": "Sélectionner",
@@ -2276,6 +2285,7 @@
     "unmutePreview": "Activer le son de l'aperçu",
     "nextUpBadge": "À suivre",
     "moreInfo": "Plus d'infos",
+    "heroSlide": "À la une, {n} sur {total}",
     "seasonCount": "{n} saison|{n} saisons",
     "searchPlaceholder": "Rechercher un film ou une série…",
     "searchHint": "Recherche dans votre bibliothèque : titre, genre, année…",
@@ -2327,7 +2337,7 @@
     "forYou": "Pour vous",
     "outage": {
       "banner": "Lecture momentanément indisponible — le serveur ne répond pas",
-      "playBlocked": "Lecture momentanément indisponible — le serveur ne répond pas. Réessaie dans quelques minutes.",
+      "playBlocked": "Lecture momentanément indisponible — le serveur ne répond pas. Réessayez dans quelques minutes.",
       "titleUnreachable": "La bibliothèque ne répond pas pour le moment : ce titre s'ouvrira dès son retour.",
       "retry": "Réessayer",
       "retrying": "Nouvel essai…",
@@ -2361,6 +2371,7 @@
     "Game Show": "Jeu",
     "History": "Histoire",
     "Horror": "Horreur",
+    "Martial Arts": "Arts martiaux",
     "Mini-Series": "Mini-série",
     "Music": "Musique",
     "Musical": "Comédie musicale",
@@ -2368,6 +2379,7 @@
     "Reality": "Téléréalité",
     "Romance": "Romance",
     "Science Fiction": "Science-fiction",
+    "Soap": "Feuilleton",
     "Sport": "Sport",
     "Suspense": "Suspense",
     "TV Movie": "Téléfilm",
@@ -2378,7 +2390,7 @@
   },
   "bench": {
     "title": "Banc d'essai du lecteur",
-    "hint": "Ouvre de vrais films sur cet appareil et les éprouve comme un spectateur : sauts, pauses, langues, sous-titres. Les résultats sont enregistrés sur le serveur ; aucune reprise ni aucun « vu » n'est modifié. Garde cette fenêtre visible pendant le banc : cachée, le navigateur cesse d'afficher la vidéo.",
+    "hint": "Ouvre de vrais films sur cet appareil et les éprouve comme un spectateur : sauts, pauses, langues, sous-titres. Les résultats sont enregistrés sur le serveur ; aucune reprise ni aucun « vu » n'est modifié. Gardez cette fenêtre visible pendant le banc : cachée, le navigateur cesse d'afficher la vidéo.",
     "prepare": "Préparer un banc",
     "loading": "Chargement des films…",
     "empty": "Le journal du lecteur ne connaît encore aucun film.",
@@ -2506,9 +2518,9 @@
       "accountDevices": "Les appareils connectés",
       "accountReports": "Mes signalements",
       "notifEpisode": "« Nouvel épisode »",
-      "notifRequest": "« Ta demande est disponible »",
-      "notifWatchlist": "« Un titre de ta liste est disponible »",
-      "notifReport": "« Réponse à ton signalement »",
+      "notifRequest": "« Votre demande est disponible »",
+      "notifWatchlist": "« Un titre de votre liste est disponible »",
+      "notifReport": "« Réponse à votre signalement »",
       "accessLogin": "Se connecter",
       "accessInstall": "L'application sur l'écran d'accueil",
       "accessUpdate": "Les mises à jour de l'application",

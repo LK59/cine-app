@@ -66,6 +66,8 @@ export interface TmdbMovie {
   // rien n'en avait besoin (la fiche du lecteur, elle, dessine le titre et l'année elle-même).
   id?: number;
   title?: string;
+  original_title?: string;
+  original_language?: string;
   release_date?: string;
   vote_average?: number;
   overview: string;
@@ -111,6 +113,8 @@ export interface TmdbTv {
   // n'a pas répondu avec sa propre liste de saisons.
   id?: number;
   name?: string;
+  original_name?: string;
+  original_language?: string;
   first_air_date?: string;
   vote_average?: number;
   number_of_seasons?: number;

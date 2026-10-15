@@ -236,7 +236,9 @@ sliding session refresh, the reads a `user` may not make although they are `GET`
 (`ADMIN_ONLY_READS`: interactive release/subtitle searches, `/api/activity`, and since 2026-10-08
 every read only `(dashboard)` uses — Radarr/Sonarr lists and items, calendar, queues, qBittorrent,
 Jackett, stats, `/api/status`, `/api/jellyfin/items`; they leaked titles hidden by blocked tags.
-Grep the cinema's callers before gating a route), the refusal of any
+Grep the cinema's callers before gating a route), the `(dashboard)` pages themselves
+(`ADMIN_ONLY_PAGES`, since 2026-10-15: `/gestion` rendered `/api/dashboard`'s payload server-side
+to a `user`; a `user` is redirected to `/`, and a test walks the route group), the refusal of any
 `/api/` write sent from another page (`crossSiteWrite`: `Sec-Fetch-Site`, else `Origin` — the
 `Lax` cookie rides along with sibling subdomains' POSTs), and the
 `x-session-expired: 1` header. **It is that header's only

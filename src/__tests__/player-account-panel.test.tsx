@@ -33,11 +33,21 @@ vi.mock("@/components/player/PlayerPanelFrame", () => ({
   PlayerPanelFrame: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
-import { PlayerAccountPanel } from "@/components/player/PlayerAccountPanel";
+import { PlayerAccountPanel, sessionSeenLabel } from "@/components/player/PlayerAccountPanel";
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+// 15/10/2026 (passe de nuit, BUREAU-27) : treize lignes « Vue le 14 oct. », impossibles à distinguer.
+describe("appareils connectés — vue quand", () => {
+  const tr = (k: string, v?: Record<string, string | number>) => (v ? `${k}:${JSON.stringify(v)}` : k);
+  it("dit le temps écoulé pour les deux derniers jours, la date au-delà", () => {
+    const now = Date.now();
+    expect(sessionSeenLabel(now - 5 * 60_000, now, tr, "fr")).toBe('player.account.sessionSeenAgo:{"when":"common.time.minutesAgo:{\\"n\\":5}"}');
+    expect(sessionSeenLabel(now - 5 * 24 * 3600_000, now, tr, "fr")).toMatch(/^player\.account\.sessionSeen:/);
+  });
 });
 
 describe("PlayerAccountPanel — known issues", () => {

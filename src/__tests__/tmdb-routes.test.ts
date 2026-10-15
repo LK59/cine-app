@@ -108,6 +108,22 @@ describe("GET /api/tmdb/person/[id]", () => {
     expect(body.credits[0].title).toBe("In library");
   });
 
+  // 15/10/2026 (passe de nuit, ROBUSTESSE-7) : un lien vers une personne disparue de TMDB affichait
+  // en rouge `404 Not Found: {"success":false,"status_code":34,…}`.
+  it("une personne inconnue de TMDB : 404, une phrase et un code, jamais le corps de TMDB", async () => {
+    const { HttpError } = await import("@/lib/http");
+    mockTmdb.getPersonDetails.mockResolvedValue(null);
+    mockTmdb.getPersonCredits.mockRejectedValue(
+      new HttpError('404 Not Found: {"success":false,"status_code":34,"status_message":"The resource you requested could not be found."}', 404)
+    );
+    const { GET } = await import("@/app/api/tmdb/person/[id]/route");
+    const res = await GET(fakeReq(), params("999999999"));
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.code).toBe("person_not_found");
+    expect(body.error).not.toContain("status_code");
+  });
+
   it("falls back to English biography when the French one is empty", async () => {
     mockTmdb.getPersonDetails
       .mockResolvedValueOnce({ name: "Actor", biography: "" })

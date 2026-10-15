@@ -3,43 +3,144 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-<title>Cine App — Hors ligne</title>
+<meta name="color-scheme" content="dark" />
+<title>Cine App</title>
+<!--
+  La page « Pas de connexion », servie par le service worker quand une navigation échoue.
+
+  Tout est ici, sans rien charger d'autre : elle s'affiche justement quand le serveur ne répond pas,
+  et elle fait partie des ACTIFS_PUBLICS du proxy (servie sans session) — un fichier qu'elle
+  demanderait devrait l'être aussi.
+
+  15/10/2026 (passe de nuit, ROBUSTESSE-4/5, décision de Louis) : elle ne revenait pas seule au
+  retour du réseau — il fallait toucher « Réessayer » —, elle était en français pour tout le monde,
+  et sur le fond bleu ardoise d'une ancienne version. Elle parle maintenant la langue de l'app (le
+  cookie cine-lang) ou du navigateur, en noir et blanc, et se recharge d'elle-même dès que le
+  serveur répond vraiment : un événement « online » ne suffit pas (le Wi-Fi peut revenir sans le
+  serveur), la page interroge /api/ping — publique, sans cookie, que le service worker ne
+  retient pas — et ne se recharge que sur une réponse 200. Pas de boucle : rien ne recharge tant
+  que la sonde échoue.
+-->
 <style>
   html, body {
     height: 100%;
     margin: 0;
-    background: #020617;
-    color: #e2e8f0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #000;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
   .wrap {
-    height: 100%;
+    min-height: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 0.75rem;
-    padding: 1.5rem;
+    padding: max(1.5rem, env(safe-area-inset-top)) 1.5rem max(1.5rem, env(safe-area-inset-bottom));
     text-align: center;
   }
-  h1 { font-size: 1rem; font-weight: 600; margin: 0; }
-  p { font-size: 0.85rem; color: #94a3b8; margin: 0; max-width: 24rem; }
+  h1 { font-size: 1.125rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  p { font-size: 0.9rem; line-height: 1.5; color: #a3a3a3; margin: 0; max-width: 24rem; }
   button {
-    margin-top: 0.5rem;
-    border: 1px solid rgba(255,255,255,0.15);
-    background: rgba(255,255,255,0.05);
-    color: #e2e8f0;
-    border-radius: 0.5rem;
-    padding: 0.5rem 1rem;
-    font-size: 0.85rem;
+    margin-top: 0.75rem;
+    border: 0;
+    background: #fff;
+    color: #000;
+    border-radius: 9999px;
+    padding: 0.7rem 1.4rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
   }
+  button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  .waiting { font-size: 0.75rem; color: #737373; }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Pas de connexion</h1>
-    <p>Cine App n'a pas pu joindre le serveur. Vérifiez votre connexion réseau et réessayez.</p>
-    <button onclick="location.reload()">Réessayer</button>
-  </div>
+  <main class="wrap">
+    <h1 id="title">Pas de connexion</h1>
+    <p id="text">Cine App n'a pas pu joindre le serveur. Vérifiez votre connexion réseau et réessayez.</p>
+    <button id="retry" type="button">Réessayer</button>
+    <p id="waiting" class="waiting">La page reviendra d'elle-même dès que le serveur répondra.</p>
+  </main>
+<script>
+  (function () {
+    var TEXTS = {
+      fr: {
+        title: "Pas de connexion",
+        text: "Cine App n'a pas pu joindre le serveur. Vérifiez votre connexion réseau et réessayez.",
+        retry: "Réessayer",
+        waiting: "La page reviendra d'elle-même dès que le serveur répondra."
+      },
+      en: {
+        title: "No connection",
+        text: "Cine App couldn't reach the server. Check your network connection and try again.",
+        retry: "Try again",
+        waiting: "This page will come back on its own as soon as the server answers."
+      },
+      es: {
+        title: "Sin conexión",
+        text: "Cine App no ha podido contactar con el servidor. Comprueba tu conexión de red e inténtalo de nuevo.",
+        retry: "Reintentar",
+        waiting: "La página volverá sola en cuanto el servidor responda."
+      },
+      de: {
+        title: "Keine Verbindung",
+        text: "Cine App konnte den Server nicht erreichen. Prüfe deine Netzwerkverbindung und versuche es erneut.",
+        retry: "Erneut versuchen",
+        waiting: "Die Seite kommt von selbst zurück, sobald der Server antwortet."
+      }
+    };
+
+    function pickLang() {
+      var m = /(?:^|;\s*)cine-lang=([a-z]{2})/.exec(document.cookie || "");
+      if (m && TEXTS[m[1]]) return m[1];
+      var langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || "fr"];
+      for (var i = 0; i < langs.length; i++) {
+        var code = String(langs[i] || "").slice(0, 2).toLowerCase();
+        if (TEXTS[code]) return code;
+      }
+      return "fr";
+    }
+
+    var lang = pickLang();
+    var t = TEXTS[lang];
+    document.documentElement.lang = lang;
+    document.title = "Cine App — " + t.title;
+    ["title", "text", "retry", "waiting"].forEach(function (id) {
+      document.getElementById(id).textContent = t[id];
+    });
+
+    document.getElementById("retry").addEventListener("click", function () {
+      location.reload();
+    });
+
+    // Le serveur répond-il vraiment ? Seul un 200 de /api/ping recharge la page.
+    var reloading = false;
+    function probe() {
+      if (reloading) return;
+      fetch("/api/ping", { cache: "no-store" })
+        .then(function (res) {
+          if (res.ok && !reloading) {
+            reloading = true;
+            location.reload();
+          }
+        })
+        .catch(function () {});
+    }
+    window.addEventListener("online", probe);
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") probe();
+    });
+    // Le réseau peut revenir sans que le navigateur le dise (ou le serveur revenir sur un réseau
+    // resté en place) : une sonde de temps en temps, tant que la page est visible.
+    setInterval(function () {
+      if (document.visibilityState === "visible") probe();
+    }, 15000);
+  })();
+</script>
 </body>
 </html>

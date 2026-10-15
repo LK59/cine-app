@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { BookmarkCheck, Check, ChevronDown, CircleCheck, Play, Plus, RotateCcw, Video, X } from "lucide-react";
+import { BookmarkCheck, Check, CircleCheck, Play, Plus, RotateCcw, Video, X } from "lucide-react";
 import { fetcher, progressKey } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
@@ -672,7 +672,9 @@ export function CinemaMobileDetail({
                           {gap}
                         </span>
                       )}
-                      {active && <ChevronDown size={14} />}
+                      {/* Plus de chevron sur la pastille active (15/10/2026, passe de nuit,
+                          MOBILE-14) : il promettait un menu déroulant, que cette rangée remplace
+                          justement, et l'appui n'ouvrait rien. Le blanc plein dit laquelle est choisie. */}
                     </button>
                   );
                 })}

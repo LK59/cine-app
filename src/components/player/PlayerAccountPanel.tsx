@@ -27,7 +27,7 @@ import type { PlayerPreferences } from "@/app/api/player/account/preferences/rou
 import type { OtherSession } from "@/app/api/auth/sessions/route";
 import { MAINTENANCE_KEY, type MaintenanceState } from "@/lib/useMaintenance";
 import { clearDeviceCache, deviceCacheUsage } from "@/lib/resumeCache/clearDeviceCache";
-import { fmtSize } from "@/lib/format";
+import { fmtSize, relativeTime } from "@/lib/format";
 
 /**
  * Le compte, en une feuille.
@@ -378,7 +378,11 @@ function PlaybackSection() {
 
   return (
     <Section icon={Subtitles} title={t("player.account.playback")}>
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* `grid-cols-1` (une piste `minmax(0, 1fr)`) sous `sm`, et non la piste implicite `auto` :
+          celle-ci prenait la largeur de l'option la plus longue des menus — ils sortaient de la
+          carte sur 375 px et de l'écran sur 320 px, la page défilant de côté (15/10/2026, passe
+          de nuit, MOBILE-11). Rien ne change à partir de `sm`. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <LanguageSelect
           label={t("player.account.audioLanguage")}
           value={data?.audioLanguage ?? null}
@@ -502,6 +506,8 @@ function PasswordSection() {
  */
 function StorageRow() {
   const t = useT();
+  // La taille dans la langue de l'écran — « 56,5 Mo », pas « 56.5 MB » (BUREAU-28, `fmtSize`).
+  const { locale } = useLocale();
   const toast = useToast();
   const [usage, setUsage] = useState<number | null>(null);
   const [clearing, setClearing] = useState(false);
@@ -534,7 +540,7 @@ function StorageRow() {
       hint={
         <>
           {t("player.account.storageHint")}
-          {usage !== null && usage > 0 && <span className="mt-0.5 block text-muted">{t("player.account.storageUsed", { size: fmtSize(usage) })}</span>}
+          {usage !== null && usage > 0 && <span className="mt-0.5 block text-muted">{t("player.account.storageUsed", { size: fmtSize(usage, locale) })}</span>}
         </>
       }
     >
@@ -552,6 +558,8 @@ function SessionsSection() {
   const toast = useToast();
   const [sessions, setSessions] = useState<OtherSession[] | null>(null);
   const [revoking, setRevoking] = useState(false);
+  // L'heure de l'ouverture du panneau, pour « Vue il y a 5 min » — voir `sessionSeenLabel`.
+  const [now] = useState(() => Date.now());
   const count = sessions?.length ?? null;
 
   useEffect(() => {
@@ -614,7 +622,7 @@ function SessionsSection() {
                   <span className="block truncate text-sm text-muted">{s.device ?? t("player.account.unknownDevice")}</span>
                   <span className="block text-xs text-subtle">{t("player.account.sessionOpened", { date: formatDay(s.createdAt, locale) })}</span>
                 </span>
-                <span className="shrink-0 text-xs text-subtle">{t("player.account.sessionSeen", { date: formatDay(s.lastSeenAt, locale) })}</span>
+                <span className="shrink-0 text-xs text-subtle">{sessionSeenLabel(s.lastSeenAt, now, t, locale)}</span>
               </li>
             ))}
           </ul>
@@ -744,6 +752,23 @@ const FIREFOX_HDR_PREF = "gfx.color_management.hdr";
  */
 function formatDay(ms: number, locale: string): string {
   return new Date(ms).toLocaleDateString(getDateLocale(locale), { day: "numeric", month: "short" });
+}
+
+/** En deçà, « Vue il y a 5 min » ; au-delà, la date. */
+const RECENT_SEEN_MS = 48 * 3600_000;
+
+/**
+ * Quand un appareil a servi pour la dernière fois (15/10/2026, passe de nuit, BUREAU-27).
+ *
+ * Le jour seul ne distinguait rien : treize lignes « Ouverte le 14 oct. · Vue le 14 oct. », et
+ * aucune ne disait laquelle venait de servir — alors que la liste est là pour reconnaître une
+ * connexion oubliée. Les deux derniers jours se disent en temps écoulé, le reste en date.
+ */
+export function sessionSeenLabel(lastSeenAt: number, now: number, t: (key: string, vars?: Record<string, string | number>) => string, locale: string): string {
+  if (now - lastSeenAt < RECENT_SEEN_MS) {
+    return t("player.account.sessionSeenAgo", { when: relativeTime(new Date(lastSeenAt).toISOString(), t) });
+  }
+  return t("player.account.sessionSeen", { date: formatDay(lastSeenAt, locale) });
 }
 
 /**

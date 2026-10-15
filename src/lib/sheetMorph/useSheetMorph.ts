@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { phoneSheetCorner } from "@/lib/sheetMotion";
 import { arrivedByBack } from "@/lib/cinemaRoute";
+import { useSwallowEntryRepeatClicks } from "./entryClicks";
 import {
   CONTENT_OUT_MS,
   DIM,
@@ -466,6 +467,9 @@ function standInUntilLoaded(container: HTMLElement, standIn: string): void {
 }
 
 export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
+  // La suite d'un double-clic qui tombe dans la fiche qui arrive — voir `entryClicks.ts`. Même
+  // quand ce crochet ne mène pas l'entrée (`off`) : c'est l'arrivée de la fiche qui compte.
+  useSwallowEntryRepeatClicks(opts.rootRef);
   // Décidé au premier rendu — la fiche en retire sa classe d'entrée dès ce rendu-là.
   const [entry] = useState<Entry>(() => decideEntry(opts));
   const [settled, setSettled] = useState(entry === "none");

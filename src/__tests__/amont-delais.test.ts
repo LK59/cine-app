@@ -24,7 +24,7 @@ vi.mock("@/lib/db", () => ({
   sessionDb: { create: vi.fn((): string[] => []) },
   userPrefsDb: { getLang: vi.fn(() => "fr") },
 }));
-vi.mock("@/lib/rateLimiter", () => ({ checkRateLimit: () => true }));
+vi.mock("@/lib/rateLimiter", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/rateLimiter")>()), checkRateLimit: () => true }));
 vi.mock("@/lib/i18n", () => ({ LOCALE_COOKIE: "cine-lang" }));
 vi.mock("@/lib/api-helpers", () => ({ getClientIp: () => "1.2.3.4" }));
 vi.mock("@/lib/eventLogs", () => ({ logAuthEvent: vi.fn() }));

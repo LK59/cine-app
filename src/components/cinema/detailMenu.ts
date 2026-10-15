@@ -70,7 +70,12 @@ export const MENU_BADGE_ACTIVE =
  * seul — le résumé est en dehors.
  */
 export function focusFirstAction(container: HTMLElement | null | undefined) {
-  container?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]")?.focus();
+  // Sauf une ligne qui déclenche quelque chose de lourd au premier appui (`data-detail-no-autofocus`)
+  // : « Demander » d'une fiche découverte lance un téléchargement chez Radarr ou Sonarr. Posé en
+  // premier focus, il partait d'un double Entrée — celui qui ouvre la fiche, puis la touche répétée
+  // d'une télécommande (passe de nuit du 15/10/2026, BUREAU-8). Le focus va à la ligne suivante ;
+  // la flèche du haut y remonte, et l'appui lui-même ne change pas.
+  container?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]:not([data-detail-no-autofocus])")?.focus();
 }
 
 /**

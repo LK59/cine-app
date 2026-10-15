@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fmtSize, fmtEta, formatResumeTicks, formatDurationShort, relativeTime, relativeTimeAbs, relDate, selectBio } from "@/lib/format";
 import { createT } from "@/lib/i18n";
@@ -6,6 +8,27 @@ import fr from "@/locales/fr.json";
 const t = createT(fr as Record<string, unknown>, fr as Record<string, unknown>);
 
 describe("fmtSize", () => {
+  // 15/10/2026 (passe de nuit, BUREAU-28 / ROBUSTESSE-15) : « 56.5 MB utilisés » dans le Compte
+  // d'un compte en français.
+  it("suit la langue de l'écran quand on la lui donne", () => {
+    const bytes = 56.5 * 1024 * 1024;
+    expect(fmtSize(bytes, "fr")).toBe("56,5 Mo");
+    expect(fmtSize(bytes, "de")).toBe("56,5 MB");
+    expect(fmtSize(bytes, "es")).toBe("56,5 MB");
+    expect(fmtSize(bytes, "en")).toBe("56.5 MB");
+    expect(fmtSize(109.1 * 1024, "fr")).toBe("109,1 Ko");
+    expect(fmtSize(0, "fr")).toBe("—");
+  });
+
+  it("garde sa forme d'avant sans langue (la gestion)", () => {
+    expect(fmtSize(56.5 * 1024 * 1024)).toBe("56.5 MB");
+  });
+
+  it("le panneau Compte lui donne la langue", () => {
+    const src = readFileSync(join(process.cwd(), "src/components/player/PlayerAccountPanel.tsx"), "utf8");
+    expect(src).toContain("fmtSize(usage, locale)");
+  });
+
   it("returns — for 0 bytes", () => {
     expect(fmtSize(0)).toBe("—");
   });

@@ -20,6 +20,22 @@ describe("normalize", () => {
   });
 });
 
+// 15/10/2026 (passe de nuit, BUREAU-9) : « matrx » trouvait Matrix, « matirx » et « amtrix » rien —
+// une inversion de deux lettres voisines comptait pour deux fautes.
+describe("titleMatchScore — deux lettres inversées", () => {
+  it("tolère l'inversion de deux lettres voisines", () => {
+    expect(titleMatchScore("Matrix", "matirx")).toBe(55);
+    expect(titleMatchScore("Matrix", "amtrix")).toBe(55);
+    expect(titleMatchScore("Matrix", "matrx")).toBe(55);
+  });
+
+  it("ne change rien aux recherches exactes ni aux préfixes, et pas au-delà d'une faute", () => {
+    expect(titleMatchScore("Matrix", "matrix")).toBe(100);
+    expect(titleMatchScore("Matrix Reloaded", "matrix")).toBe(90);
+    expect(titleMatchScore("Matrix", "mtairx")).toBe(0);
+  });
+});
+
 describe("titleMatchScore", () => {
   it("scores exact match highest", () => {
     expect(titleMatchScore("Inception", "inception")).toBe(100);

@@ -19,6 +19,7 @@ import { appendImages, reportContext } from "./prepareImage";
 import { useRefreshReports } from "./reportCache";
 import { reportErrorText } from "./reportErrors";
 import { escapeBlurs } from "./escapeBlurs";
+import { usePanelBackStep } from "@/lib/panelBackStep";
 
 type Step = "zone" | "element" | "title" | "issue" | "describe";
 
@@ -44,6 +45,18 @@ function stepsFor(draft: Draft): Step[] {
   if (issueSetFor(zone, draft.element)) steps.push("issue");
   steps.push("describe");
   return steps;
+}
+
+/**
+ * Les segments de la barre de progression — l'affichage seul (15/10/2026, passe de nuit, MOBILE-15).
+ *
+ * Tant qu'aucune zone n'est choisie, `stepsFor` ne connaît qu'une étape : la barre était un seul
+ * segment plein — « terminé » dès la première question —, puis devenait quatre segments dont deux
+ * pleins. Sans zone, elle montre le plus court chemin possible (la zone, puis la description), le
+ * premier seul rempli. La logique des étapes ne change pas.
+ */
+export function progressSteps(draft: Pick<Draft, "zone" | "element">): Step[] {
+  return zoneOf(draft.zone) ? stepsFor(draft as Draft) : ["zone", "describe"];
 }
 
 /** Une ligne de choix, grande et franche — le doigt et le lecteur d'écran s'y retrouvent. */
@@ -252,6 +265,13 @@ export function ReportWizard({
     setStep(after[after.indexOf(step) + 1] ?? "describe");
   };
   const back = () => setStep(steps[Math.max(0, index - 1)]);
+  // La flèche du haut et Échap reculent d'une étape, comme le « Retour » du bas ; à la première,
+  // l'écran se ferme comme avant (BUREAU-13, `panelBackStep.ts`).
+  usePanelBackStep(() => {
+    if (index === 0) return false;
+    back();
+    return true;
+  });
 
   const payload = () => ({
     zone: draft.zone,
@@ -341,7 +361,7 @@ export function ReportWizard({
       {/* Où l'on en est : une barre, et le chemin déjà choisi, que l'on peut toucher pour y revenir. */}
       <div className="space-y-3">
         <div className="flex gap-1.5" aria-hidden>
-          {steps.map((s, i) => (
+          {progressSteps(draft).map((s, i) => (
             <span key={s} className={`h-1 flex-1 rounded-full ${i <= index ? "bg-accent-500" : "bg-white/10"}`} />
           ))}
         </div>
