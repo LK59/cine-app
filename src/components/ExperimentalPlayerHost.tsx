@@ -132,7 +132,7 @@ import { useSleepTimer } from "@/lib/useSleepTimer";
 import { sleepTimerLogFields, sleepTimerStore, type SleepMode } from "@/lib/sleepTimer";
 import { registerBenchBridge } from "@/lib/playerBench/bridge";
 import { seekArrived } from "@/lib/webcodecs/seekArrival";
-import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
+import { SessionTally, WatchedClock, newPlayerSessionId, watchElementWaits } from "@/lib/playerSessionTally";
 import { positionBucket, retryMotif, retrySignature } from "@/lib/retryLedger";
 import { saveUnsentStop, clearUnsentStop, touchUnsentStop } from "@/lib/unsentStop";
 import { forgetResumeCache, openDiskChunks, openingFacts, type FileIdentity } from "@/lib/resumeCache/diskChunks";
@@ -2856,6 +2856,8 @@ export function ExperimentalPlayerHost({
       element.addEventListener("waiting", onWaiting);
       element.addEventListener("playing", onPlaying);
       element.addEventListener("seeking", onSeeking);
+      // Le temps regardé s'arrête pendant une attente de l'élément (`WatchedClock.stall`).
+      unsubscribes.push(watchElementWaits(element, watched));
       unsubscribes.push(() => {
         // Le blocage de 5 s en attente meurt avec ce pipeline : il ne doit rien décider pour le suivant.
         if (longWaitTimer !== null) clearTimeout(longWaitTimer);

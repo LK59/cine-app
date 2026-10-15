@@ -1327,3 +1327,16 @@ describe("le catalogue relu au premier plan : une règle, une rangée, une fiche
     expect(src).toMatch(/if \(playBlockedByOutage\(\)\) return;[\s\S]{0,200}if \(playBlockedByRetired\(\)\) return;/);
   });
 });
+
+describe("le temps regardé s'arrête pendant une attente, dans les trois lecteurs (§97)", () => {
+  // DECISIONS.md §97. Une seule règle, `watchElementWaits` (`WatchedClock.stall`) : la coupure du
+  // 15/10/2026 comptait 196 s d'image figée comme regardées sur le natif, et le lecteur serveur
+  // faisait de même. La diffusion lit l'attente du récepteur (`remote.waiting`), sans élément local.
+  it.each(["src/components/ExperimentalPlayerHost.tsx", "src/components/PlayerHost.tsx"])("%s branche watchElementWaits", (f) => {
+    expect([f, /watchElementWaits\(/.test(lire(f))]).toEqual([f, true]);
+  });
+
+  it("la diffusion Chromecast exclut toujours l'attente du récepteur", () => {
+    expect(lire("src/components/player/ChromecastPlayer.tsx")).toMatch(/const playing = [^;]*!remote\.waiting/);
+  });
+});

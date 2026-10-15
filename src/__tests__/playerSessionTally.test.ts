@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SessionTally, MIN_WAIT_MS, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
+import { SessionTally, MIN_WAIT_MS, WatchedClock, newPlayerSessionId, watchElementWaits } from "@/lib/playerSessionTally";
 
 // Le décompte qui fait le bilan d'une séance. Les attentes d'une à quatre secondes n'avaient
 // aucune trace : seules celles de cinq secondes et plus devenaient une ligne `stall`.
@@ -127,6 +127,75 @@ describe("WatchedClock", () => {
     clock.halt(50_000);
     expect(clock.take(60_000)).toBe(10);
     expect(clock.take(70_000)).toBe(0);
+  });
+
+  /**
+   * 15/10/2026 (LECTEUR-4) : une coupure figeait l'image 196 s et le bilan disait `watched: 261`
+   * pour un film avancé de 60 s — l'horloge suivait « en lecture », que `waiting` ne change pas.
+   */
+  it("s'arrête pendant une attente de l'élément et repart à l'image", () => {
+    const clock = new WatchedClock();
+    clock.run(0);
+    clock.stall(10_000);
+    expect(clock.seconds(200_000)).toBe(10);
+    clock.resume(200_000);
+    expect(clock.seconds(205_000)).toBe(15);
+  });
+
+  it("une attente signalée avant « en lecture » tient jusqu'à l'image ; une image en pause ne relance rien", () => {
+    const clock = new WatchedClock();
+    // L'élément dit `waiting` avant que l'hôte n'ait dit « en lecture » (son effet vient après).
+    clock.stall(0);
+    clock.run(100);
+    expect(clock.seconds(60_000)).toBe(0);
+    clock.resume(60_000);
+    expect(clock.seconds(70_000)).toBe(10);
+    // En pause : une image qui arrive ne compte rien, la lecture reprise compte de nouveau.
+    clock.halt(70_000);
+    clock.resume(80_000);
+    expect(clock.seconds(90_000)).toBe(10);
+    clock.run(90_000);
+    expect(clock.seconds(95_000)).toBe(15);
+  });
+});
+
+describe("watchElementWaits", () => {
+  function element(over: Partial<{ paused: boolean; readyState: number }> = {}) {
+    return Object.assign(new EventTarget(), { paused: false, readyState: 4, ...over }) as unknown as HTMLMediaElement;
+  }
+
+  it("arrête l'horloge sur `waiting`, la relance sur `playing`, et se débranche", () => {
+    let t = 0;
+    const clock = new WatchedClock();
+    const el = element();
+    const unwatch = watchElementWaits(el, clock, () => t);
+    clock.run(0);
+    t = 5_000;
+    el.dispatchEvent(new Event("waiting"));
+    t = 65_000;
+    el.dispatchEvent(new Event("playing"));
+    t = 70_000;
+    expect(clock.seconds(t)).toBe(10);
+    unwatch();
+    el.dispatchEvent(new Event("waiting"));
+    t = 80_000;
+    expect(clock.seconds(t)).toBe(20);
+  });
+
+  it("relance aussi sur un `timeupdate` avec de quoi jouer — jamais sur un élément en pause ou à court", () => {
+    let t = 0;
+    const clock = new WatchedClock();
+    const el = element({ readyState: 2 });
+    watchElementWaits(el, clock, () => t);
+    clock.run(0);
+    el.dispatchEvent(new Event("waiting"));
+    t = 10_000;
+    el.dispatchEvent(new Event("timeupdate"));
+    expect(clock.seconds(20_000)).toBe(0);
+    (el as unknown as { readyState: number }).readyState = 4;
+    t = 20_000;
+    el.dispatchEvent(new Event("timeupdate"));
+    expect(clock.seconds(25_000)).toBe(5);
   });
 });
 

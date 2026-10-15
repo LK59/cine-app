@@ -90,7 +90,7 @@ import { useSleepTimer } from "@/lib/useSleepTimer";
 import { sleepTimerLogFields, sleepTimerStore, type SleepMode } from "@/lib/sleepTimer";
 import { CastResume } from "@/lib/castResume";
 import { castRouteActive } from "@/lib/castRoute";
-import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
+import { SessionTally, WatchedClock, newPlayerSessionId, watchElementWaits } from "@/lib/playerSessionTally";
 import { positionBucket, retrySignature } from "@/lib/retryLedger";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
@@ -2754,11 +2754,14 @@ function ActivePlayer({
     const onPause = () => setPlaying(false);
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
+    // Le temps regardé s'arrête pendant une attente de l'élément (`WatchedClock.stall`).
+    const unwatch = watchElementWaits(video, watched);
     return () => {
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
+      unwatch();
     };
-  }, [videoKey]);
+  }, [videoKey, watched]);
 
   // Drives the ">3s, still working on it" reassurance line — heavy 4K track switches can
   // legitimately spend 15-20s across the post-reload grace delay, codec fallback ladder and

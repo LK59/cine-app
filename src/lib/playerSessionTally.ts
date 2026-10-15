@@ -223,12 +223,41 @@ export function newPlayerSessionId(): string {
 export class WatchedClock {
   private total = 0;
   private since: number | null = null;
+  /** L'hôte dit le film en lecture (`run`) — ce qu'il voulait avant cette attente-ci. */
+  private wanted = false;
+  /** L'élément attend son média (`waiting`) : rien ne passe à l'écran, rien n'est compté. */
+  private stalled = false;
 
   run(now: number): void {
-    if (this.since === null) this.since = now;
+    this.wanted = true;
+    if (!this.stalled && this.since === null) this.since = now;
   }
 
   halt(now: number): void {
+    this.wanted = false;
+    this.stop(now);
+  }
+
+  /**
+   * Une attente de l'élément (`waiting`) arrête le compte ; `playing` le relance (`resume`).
+   *
+   * 15/10/2026 (passe de nuit, LECTEUR-4) : une coupure réseau figeait l'image 196 s, et le bilan
+   * disait `watched: 261` pour un film avancé de 60 s — l'horloge suivait l'état « en lecture » de
+   * l'hôte, que `waiting` ne change pas. La diffusion Chromecast l'excluait déjà (`remote.waiting`).
+   * Indépendant de `run`/`halt` : l'attente peut arriver avant que l'hôte ait dit « en lecture » (son
+   * effet passe après l'événement), et la reprise après qu'il a dit « en pause ».
+   */
+  stall(now: number): void {
+    this.stalled = true;
+    this.stop(now);
+  }
+
+  resume(now: number): void {
+    this.stalled = false;
+    if (this.wanted && this.since === null) this.since = now;
+  }
+
+  private stop(now: number): void {
     if (this.since === null) return;
     this.total += Math.max(0, now - this.since);
     this.since = null;
@@ -251,3 +280,28 @@ export class WatchedClock {
     return seconds;
   }
 }
+
+/**
+ * Branche les attentes de l'élément sur l'horloge du temps regardé — la même règle pour les deux
+ * lecteurs (`WatchedClock.stall`). `playing` relance ; un `timeupdate` avec de quoi jouer aussi, au
+ * cas où un navigateur reprendrait sans le dire : mieux vaut compter que perdre une séance entière.
+ * Rend de quoi se débrancher.
+ */
+export function watchElementWaits(element: HTMLMediaElement, clock: WatchedClock, now: () => number = () => Date.now()): () => void {
+  const onWaiting = () => clock.stall(now());
+  const onPlaying = () => clock.resume(now());
+  const onTime = () => {
+    if (!element.paused && element.readyState >= HAVE_FUTURE_DATA) clock.resume(now());
+  };
+  element.addEventListener("waiting", onWaiting);
+  element.addEventListener("playing", onPlaying);
+  element.addEventListener("timeupdate", onTime);
+  return () => {
+    element.removeEventListener("waiting", onWaiting);
+    element.removeEventListener("playing", onPlaying);
+    element.removeEventListener("timeupdate", onTime);
+  };
+}
+
+/** `HTMLMediaElement.HAVE_FUTURE_DATA`, sans dépendre du global (tests en environnement node). */
+const HAVE_FUTURE_DATA = 3;
