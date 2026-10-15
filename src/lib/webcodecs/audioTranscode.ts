@@ -258,7 +258,7 @@ async function primeEncoder(
     output: (chunk, metadata) => {
       if (sink.current !== encoder) return;
       const carried = metadata?.decoderConfig?.description;
-      if (carried && !description) description = new Uint8Array(toBytes(carried));
+      if (carried && !description) description = toBytes(carried);
       sink.frame(toFrame(chunk));
     },
     error: (error) => {
@@ -885,8 +885,14 @@ export class AudioTranscoder {
   }
 }
 
-function toBytes(source: BufferSource): ArrayBuffer {
-  return source instanceof ArrayBuffer ? source.slice(0) : source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+// A copy of the bytes. The description is typed AllowSharedBufferSource, so a bare buffer is told
+// apart by isView, never by `instanceof SharedArrayBuffer`: that global does not exist in a page
+// that is not cross-origin isolated, which is every page here.
+function toBytes(source: AllowSharedBufferSource) {
+  const view = ArrayBuffer.isView(source)
+    ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
+    : new Uint8Array(source);
+  return view.slice();
 }
 
 function toFrame(chunk: EncodedAudioChunk): TranscodedFrame {

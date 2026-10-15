@@ -54,6 +54,23 @@ describe("FlacDecoder", () => {
     await instance.close();
   });
 
+  it("reads the header from a bare buffer and from a view into a larger one alike", async () => {
+    // mediabunny hands the description either way. Told apart by ArrayBuffer.isView since TS 7's
+    // typings (AllowSharedBufferSource): an offset view read from its start would hand libFLAC the
+    // bytes before the header.
+    const padded = new Uint8Array(STREAMINFO.length + 7);
+    padded.set(STREAMINFO, 5);
+    for (const description of [STREAMINFO.slice().buffer, padded.subarray(5, 5 + STREAMINFO.length)]) {
+      const { instance, samples } = await decoder(description as never);
+      await instance.decode({ data: FRAME, timestamp: 0 } as never);
+      expect(samples).toHaveLength(1);
+      const left = new Float32Array(2048);
+      samples[0].copyTo(left, { planeIndex: 0, format: "f32-planar" });
+      for (const value of left) expect(value).toBeCloseTo(0.25, 4);
+      await instance.close();
+    }
+  });
+
   it("is given STREAMINFO and nothing else of the header, and still decodes", async () => {
     // *Le Retour de Martin Guerre* (21/09/2026): 8 KiB of PADDING after STREAMINFO in its
     // CodecPrivate made libFLAC corrupt its heap 25 s in. A header carrying padding and tags must

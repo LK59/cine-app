@@ -64,10 +64,9 @@ class FlacDecoder extends CustomAudioDecoder {
     // sample rate or depth cannot be read without it — but only STREAMINFO, see streamInfoHeader.
     const description = this.config.description;
     if (description) {
-      const bytes =
-        description instanceof ArrayBuffer
-          ? new Uint8Array(description)
-          : new Uint8Array(description.buffer, description.byteOffset, description.byteLength);
+      const bytes = ArrayBuffer.isView(description)
+        ? new Uint8Array(description.buffer, description.byteOffset, description.byteLength)
+        : new Uint8Array(description);
       await this.decoder.decodeFrames([streamInfoHeader(bytes)]);
     }
   }

@@ -312,14 +312,14 @@ export async function probePceCopy(): Promise<boolean | null> {
                   () => finish(source.readyState === "open" && buffer.buffered.length > 0),
                   { once: true }
                 );
-                buffer.appendBuffer(media);
+                buffer.appendBuffer(media as BufferSource);
               } catch {
                 finish(false);
               }
             },
             { once: true }
           );
-          buffer.appendBuffer(init);
+          buffer.appendBuffer(init as BufferSource);
         } catch {
           finish(false);
         }
