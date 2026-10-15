@@ -43,7 +43,9 @@ describe("le code des écrans chargés à la demande", () => {
     const lazy = [...shell.matchAll(/dynamic\(\(\) => import\("\.\/(\w+)"\)/g)].map((m) => m[1]);
     expect(lazy.length).toBeGreaterThan(5);
     for (const name of lazy) {
-      if (name === "PlayerActivityPanel" || name === "DecoderWarmup") continue;
+      // L'activité : administrateur seul. Les décodeurs et l'accueil « Bienvenue » : ils tirent le
+      // décodeur FLAC, qu'un `import()` hors de `next/dynamic` ferait entrer dans le rendu serveur.
+      if (name === "PlayerActivityPanel" || name === "DecoderWarmup" || name === "PlayerOnboarding") continue;
       expect(warm, name).toContain(`import("@/components/player/${name}")`);
     }
     expect(shell).toContain("scheduleWarmPanels()");

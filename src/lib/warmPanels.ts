@@ -28,7 +28,11 @@ export const PANEL_LOADERS: PanelLoader[] = [
   () => import("@/components/player/PlayerNewsPanel"),
   () => import("@/components/player/PlayerDiscoverSheet"),
   () => import("@/components/player/PlayerPersonSheet"),
-  () => import("@/components/player/PlayerOnboarding"),
+  // Pas l'accueil « Bienvenue » (`PlayerOnboarding`) : il importe le préchauffage des décodeurs, et
+  // un `import()` écrit ici est aussi compilé pour le rendu serveur — le décodeur FLAC y casse la
+  // construction (« Module not found », @eshaz/web-worker). C'est ce que `ssr: false` de
+  // `next/dynamic` évite dans PlayerShell (voir decoderWarmup.ts). Il ne sert qu'au premier
+  // lancement, en ligne par définition.
   () => import("@/components/player/NewsGate"),
   () => import("@/components/player/PushResumePrompt"),
   () => import("@/components/TrailerModal"),
