@@ -63,6 +63,70 @@ function stubMediaFetches() {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => null }));
 }
 
+// LECTEUR-6 (15/10/2026) : sur un lien à 2 Mbit/s, les neuf planches (≈ 7 Mo) partaient au montage,
+// avant le film, et retardaient sa première image de ~25 s. Elles partent après la première image, la
+// planche de la position d'abord, puis une à une.
+describe("PlayerControls — les vignettes de la barre, préchargées après la première image", () => {
+  /** Les `Image` créées, dans l'ordre, avec la planche demandée. */
+  const created: { index: number; img: { onload: (() => void) | null; onerror: (() => void) | null } }[] = [];
+  function stubImages() {
+    created.length = 0;
+    class FakeImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(url: string) {
+        const index = url.includes("/trickplay/tile") ? Number(new URL(url, "http://x").searchParams.get("index")) : -1;
+        created.push({ index, img: this });
+      }
+    }
+    vi.stubGlobal("Image", FakeImage);
+    // 10 × 10 vignettes toutes les 10 s par planche : une planche = 1 000 s ; 600 vignettes → 6 planches.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).includes("/trickplay/info")
+          ? { ok: true, json: async () => ({ width: 320, height: 180, tileWidth: 10, tileHeight: 10, thumbnailCount: 600, intervalMs: 10_000 }) }
+          : { ok: false, json: async () => null }
+      )
+    );
+  }
+  const tiles = () => created.filter((c) => c.index >= 0);
+
+  it("aucune planche avant la première image ; puis celle de la position, et les autres une à une, les plus proches d'abord", async () => {
+    stubImages();
+    let video!: HTMLVideoElement;
+    render(<Harness onVideoRef={(v) => (video = v)} />);
+    for (let i = 0; i < 5; i++) await act(async () => {});
+    // L'ouverture : métadonnées et même un `canplay` à la position 0 pendant le saut de reprise — rien.
+    Object.defineProperty(video, "currentTime", { value: 2_500, configurable: true, writable: true });
+    Object.defineProperty(video, "seeking", { value: true, configurable: true });
+    Object.defineProperty(video, "readyState", { value: 4, configurable: true });
+    await act(async () => void video.dispatchEvent(new Event("canplay")));
+    expect(tiles()).toHaveLength(0);
+    // La première image, à 2 500 s : la planche 2 d'abord, seule.
+    Object.defineProperty(video, "seeking", { value: false, configurable: true });
+    await act(async () => void video.dispatchEvent(new Event("playing")));
+    expect(tiles().map((c) => c.index)).toEqual([2]);
+    // Chacune attend la précédente — chargée ou en échec.
+    for (let i = 0; i < 5; i++) await act(async () => void (i % 2 ? tiles().at(-1)!.img.onerror?.() : tiles().at(-1)!.img.onload?.()));
+    expect(tiles().map((c) => c.index)).toEqual([2, 3, 1, 4, 0, 5]);
+    // Un second `playing` ne relance rien.
+    await act(async () => void video.dispatchEvent(new Event("playing")));
+    expect(tiles()).toHaveLength(6);
+  });
+
+  it("un composant remonté sur un film qui joue (plein écran ↔ mini) précharge tout de suite", async () => {
+    stubImages();
+    const ready = (v: HTMLVideoElement) => {
+      Object.defineProperty(v, "readyState", { value: 4, configurable: true });
+      Object.defineProperty(v, "currentTime", { value: 10, configurable: true, writable: true });
+    };
+    render(<Harness onVideoRef={ready} />);
+    for (let i = 0; i < 5; i++) await act(async () => {});
+    expect(tiles().map((c) => c.index)).toEqual([0]);
+  });
+});
+
 // 15/10/2026 (passe de nuit, ROBUSTESSE-11) : axe `label` (critique) — la barre de progression
 // n'avait pas de nom, et s'annonçait en secondes brutes.
 describe("PlayerControls — la barre de progression pour un lecteur d'écran", () => {

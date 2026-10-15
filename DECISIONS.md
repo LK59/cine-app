@@ -3923,6 +3923,17 @@ comportement ordinaire —, jamais en poser une. **Tests** : `ExperimentalPlayer
 bascule »), `jellyfin-playback-start-route.test.ts` (« débit visé : le plafond recopié… »),
 `networkBitrate.test.ts`.
 
+**Les vignettes de la barre après la première image (15/10/2026, LECTEUR-6, choix de Louis).** `PlayerControls`
+préchargeait toutes les planches trickplay au montage, avant le film : sur un lien à 2 Mbit/s, neuf planches
+(≈ 7 Mo) tenaient le lien de 13 à 39 s, l'init du film n'était demandée qu'à 30 s, la première image venait à
+42 s. Le préchargement reste automatique (le « premier toucher » du 08/10 reste écarté) ; il part au `playing`
+de l'élément, ou dès `readyState` ≥ 3 hors d'un saut (film mis en pause à l'ouverture, commandes remontées sur
+un film qui joue) — jamais sur le `canplay` de la position 0 que le lecteur serveur a avant son saut de
+reprise. La planche de la position d'abord, puis les plus proches, **une requête à la fois**
+(`trickplayTileIndex`, `trickplayTileOrder`, `trickplayTile.ts`). Sur un bon lien, toutes sont là en une ou
+deux secondes. **Tests** : `PlayerControls.test.tsx` (« les vignettes de la barre, préchargées après la
+première image »).
+
 ## 79. La connexion lente s'exécute à un seul endroit pour les deux lecteurs
 
 **La règle.** Ce que `slowLinkPolicy.ts` décide (§78) est exécuté par **une** classe, `SlowLinkRunner`

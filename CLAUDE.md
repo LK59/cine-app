@@ -535,9 +535,12 @@ dictionaries' values.
   and resume on their own if it stops (outside a film: 15 s maintenance, 60 s presence, unchanged).
   Measured on 13/10: ~59 player-log posts and ~320 heartbeats an hour of film, plus 73 presence and
   60 maintenance requests.
-  **Trickplay tiles stay prewarmed at the player's mount** (`PlayerControls`): fetching them on the
+  **Trickplay tiles stay prewarmed automatically** (`PlayerControls`): fetching them on the
   first touch of the seek bar saved ~2.4 MB per opening and left one to two seconds without a
-  preview — it was reverted the same day; do not try it again without a better idea.
+  preview — it was reverted the same day; do not try it again without a better idea. **Since
+  2026-10-15 they start after the first picture** (`playing`, or `readyState` ≥ 3 outside a seek),
+  the tile covering the position first, then the nearest ones one request at a time: all at the
+  mount, nine tiles (≈ 7 MB) held a 2 Mb/s link for 26 s ahead of the film's own init segment.
 - **SWR is paused while a film fills the screen** (`isPaused: isWatchingFullScreen`). Two
   consequences, each of which has caused an outage: a query the player needs *in order to exist*
   must carry `playerBootstrapOptions`, or the film taking the screen prevents learning how to play

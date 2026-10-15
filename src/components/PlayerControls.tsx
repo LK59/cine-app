@@ -1,6 +1,6 @@
 "use client";
 
-import { trickplayTileAt as sharedTrickplayTileAt } from "@/lib/trickplayTile";
+import { trickplayTileAt as sharedTrickplayTileAt, trickplayTileIndex, trickplayTileOrder } from "@/lib/trickplayTile";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages, Check } from "lucide-react";
@@ -1369,15 +1369,63 @@ export function PlayerControls({
   // Essayé le 08/10/2026 : chauffer au premier survol seulement (2,4 Mo de moins par ouverture).
   // Rendu le jour même — une à deux secondes sans aperçu au premier contact, exactement ce que
   // ce préchargement existe pour éviter.
+  //
+  // **Après la première image, la planche de la position d'abord, puis une à une** (15/10/2026,
+  // LECTEUR-6). Toutes partaient ensemble au montage, avant le film : sur un lien à 2 Mbit/s, neuf
+  // planches (≈ 7 Mo) occupaient le lien de 13 à 39 s, l'init du film n'était demandée qu'à 30 s, la
+  // première image arrivait à 42 s — le lien suffisait au film, pas au film plus les vignettes. Le
+  // préchargement reste automatique (ce n'est pas le « premier toucher » écarté le 08/10) ; seul son
+  // moment change : dès que l'élément joue (`playing`), ou qu'il a de quoi jouer hors d'un saut
+  // (`readyState` ≥ 3 — un film mis en pause à l'ouverture, ou un composant remonté sur un film qui
+  // joue). Pas sur le `canplay` de la position 0 que le lecteur serveur a avant de sauter à la reprise :
+  // `seeking` l'écarte, la planche choisie est celle de l'endroit où l'image arrive. Ensuite la plus
+  // proche d'abord, une requête à la fois — sur un bon lien elles sont toutes là en une seconde ou
+  // deux, bien avant le premier geste.
   useEffect(() => {
     if (!trickplay) return;
     const perTile = trickplay.tileWidth * trickplay.tileHeight;
     const tileCount = Math.ceil(trickplay.thumbnailCount / perTile);
-    for (let i = 0; i < tileCount; i++) {
+    if (!(tileCount > 0)) return;
+    const video = videoRef.current;
+    let cancelled = false;
+    let started = false;
+    const loadFrom = (order: number[]) => {
+      const next = order.shift();
+      if (cancelled || next === undefined) return;
       const img = new Image();
-      img.src = `/api/jellyfin/trickplay/tile?itemId=${itemId}&width=${trickplay.width}&index=${i}`;
+      // Échouée ou chargée, la suivante : l'aperçu demandera lui-même une planche manquante.
+      img.onload = img.onerror = () => loadFrom(order);
+      img.src = `/api/jellyfin/trickplay/tile?itemId=${itemId}&width=${trickplay.width}&index=${next}`;
+    };
+    const begin = () => {
+      if (started || cancelled) return;
+      started = true;
+      detach();
+      const position = video && Number.isFinite(video.currentTime) ? video.currentTime : 0;
+      const first = trickplayTileIndex(trickplay, position, tileCount);
+      loadFrom(trickplayTileOrder(first, tileCount));
+    };
+    const ifReady = () => {
+      if (video && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA && !video.seeking) begin();
+    };
+    const detach = () => {
+      video?.removeEventListener("playing", begin);
+      video?.removeEventListener("canplay", ifReady);
+      video?.removeEventListener("seeked", ifReady);
+    };
+    if (!video) {
+      begin();
+    } else {
+      video.addEventListener("playing", begin);
+      video.addEventListener("canplay", ifReady);
+      video.addEventListener("seeked", ifReady);
+      ifReady();
     }
-  }, [trickplay, itemId]);
+    return () => {
+      cancelled = true;
+      detach();
+    };
+  }, [trickplay, itemId, videoRef]);
 
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth));
   useEffect(() => {

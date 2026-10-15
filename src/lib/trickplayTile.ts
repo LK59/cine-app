@@ -28,3 +28,27 @@ export function trickplayTileAt(info: TrickplayInfo, itemId: string, seconds: nu
     bgY: -(row * info.height),
   };
 }
+
+/** Le rang de la planche qui couvre `seconds`, borné aux `tileCount` planches. */
+export function trickplayTileIndex(info: TrickplayInfo, seconds: number, tileCount: number): number {
+  const thumbIndex = Math.max(0, Math.floor((Math.max(0, seconds) * 1000) / info.intervalMs));
+  const index = Math.floor(thumbIndex / (info.tileWidth * info.tileHeight));
+  return Math.min(Math.max(0, tileCount - 1), index);
+}
+
+/**
+ * L'ordre de préchargement des planches (`PlayerControls`, LECTEUR-6) : celle de la position d'abord,
+ * puis les plus proches — la suivante avant la précédente à égale distance : on avance plus souvent
+ * qu'on ne recule.
+ */
+export function trickplayTileOrder(first: number, tileCount: number): number[] {
+  const order: number[] = [];
+  if (!(tileCount > 0)) return order;
+  const start = Math.min(Math.max(0, first), tileCount - 1);
+  order.push(start);
+  for (let d = 1; order.length < tileCount; d++) {
+    if (start + d < tileCount) order.push(start + d);
+    if (start - d >= 0) order.push(start - d);
+  }
+  return order;
+}
