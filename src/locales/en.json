@@ -18,7 +18,8 @@
     },
     "error": {
       "failed": "Could not sign in",
-      "unknown": "Something went wrong"
+      "unknown": "Something went wrong",
+      "rateLimited": "Too many attempts. Try again in {n} min."
     },
     "tagline": "Your films and series, ready to watch.",
     "hint": "Sign in with your Jellyfin account details.",

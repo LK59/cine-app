@@ -33,7 +33,7 @@ const state = { admin: { user: "gerant", source: "setup" } as { user: string; so
 const created: [string, string][] = [];
 const deleted: string[] = [];
 vi.mock("@/lib/session", () => ({ verifySessionFull: async () => state.session }));
-vi.mock("@/lib/rateLimiter", () => ({ checkRateLimit: () => true }));
+vi.mock("@/lib/rateLimiter", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/rateLimiter")>()), checkRateLimit: () => true }));
 vi.mock("@/lib/api-helpers", () => ({ getClientIp: () => "1.2.3.4" }));
 vi.mock("@/lib/eventLogs", () => ({ logAuthEvent: vi.fn() }));
 vi.mock("@/lib/db", () => ({

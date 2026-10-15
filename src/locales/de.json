@@ -18,7 +18,8 @@
     },
     "error": {
       "failed": "Anmeldung nicht möglich",
-      "unknown": "Ein Fehler ist aufgetreten"
+      "unknown": "Ein Fehler ist aufgetreten",
+      "rateLimited": "Zu viele Versuche. Versuch es in {n} Min. erneut."
     },
     "tagline": "Deine Filme und Serien, startklar.",
     "hint": "Melde dich mit deinem Jellyfin-Konto an.",

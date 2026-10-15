@@ -18,7 +18,8 @@
     },
     "error": {
       "failed": "No se pudo iniciar sesión",
-      "unknown": "Se produjo un error"
+      "unknown": "Se produjo un error",
+      "rateLimited": "Demasiados intentos. Inténtalo de nuevo en {n} min."
     },
     "tagline": "Tus películas y series, listas para ver.",
     "hint": "Usa los datos de tu cuenta de Jellyfin.",

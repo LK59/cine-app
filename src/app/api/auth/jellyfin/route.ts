@@ -5,7 +5,7 @@ import { jellyfinIdentityAuth } from "@/lib/jellyfinAuth";
 import { config } from "@/lib/config";
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE, type Role } from "@/lib/auth";
 import { sessionDb, userPrefsDb } from "@/lib/db";
-import { checkRateLimit } from "@/lib/rateLimiter";
+import { checkRateLimit, rateLimitedResponse, refundRateLimit } from "@/lib/rateLimiter";
 import { LOCALE_COOKIE } from "@/lib/i18n";
 import { getClientIp } from "@/lib/api-helpers";
 import { passwordAttempts, hasLeadingSpace, readCredentials } from "@/lib/passwordAttempts";
@@ -25,9 +25,7 @@ const JELLYFIN_AUTH_TIMEOUT_MS = 10_000;
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  if (!checkRateLimit(ip)) {
-    return NextResponse.json({ error: "Trop de tentatives, réessayez dans 15 minutes" }, { status: 429 });
-  }
+  if (!checkRateLimit(ip)) return rateLimitedResponse(ip);
 
   // Types et longueurs vérifiés avant tout travail : ce qui suit compare, journalise et appelle
   // Jellyfin avec ces valeurs, et la route est publique — voir `readCredentials`.
@@ -99,6 +97,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Une connexion réussie rend sa place au compteur : seuls les échecs comptent (BUREAU-2,
+  // `refundRateLimit`).
+  refundRateLimit(ip);
   const data = await jellyfinRes.json();
   const isAdmin = data.User?.Policy?.IsAdministrator === true;
   const jellyfinUsername: string = data.User?.Name ?? username;

@@ -18,7 +18,8 @@
     },
     "error": {
       "failed": "Connexion impossible",
-      "unknown": "Une erreur est survenue"
+      "unknown": "Une erreur est survenue",
+      "rateLimited": "Trop de tentatives. Réessayez dans {n} min."
     },
     "tagline": "Vos films et vos séries, prêts à regarder.",
     "hint": "Utilisez les identifiants de votre compte Jellyfin.",
