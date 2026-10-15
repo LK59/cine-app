@@ -5568,3 +5568,35 @@ illisible), `player-account-panel.test.tsx` (la ligne marquée en tête, hors de
 laquelle était celle-ci. L'heure « Vue il y a 5 min » (`sessionSeenLabel`) était déjà faite.
 
 **Décidé le 15/10/2026** (Louis).
+
+## 100. Les onglets de la barre se remplacent ; les fiches, panneaux poussés et le lecteur s'empilent
+
+**Règle.** Changer d'onglet (Accueil, Recherche, Ma liste, Compte — barre du téléphone, rail du
+bureau, clavier et télécommande compris) ne coûte jamais plus d'un Retour :
+- le premier onglet ouvert depuis ce qui est dessous (l'accueil, une grille, une fiche) empile **une**
+  entrée — l'« entrée d'onglet », qui retient dans `history.state` (`cinemaTabBase`) l'adresse
+  qu'elle recouvre ;
+- passer d'un onglet à un autre **remplace** cette entrée (`replaceState`) ;
+- « Accueil », la croix et Échap d'un onglet la rendent par un retour (`cinemaClose`, donc un seul
+  `history.back()` en vol) quand ce qu'elle recouvre est l'accueil ; sinon (un onglet ouvert
+  par-dessus une fiche, au bureau) ils la réécrivent en accueil, et le Retour suivant retrouve la fiche.
+Le premier Retour depuis un onglet ramène donc à ce qu'il y avait avant le premier onglet ; depuis une
+fiche ouverte dans un onglet, il ferme la fiche. Les fiches, les écrans poussés depuis le Compte
+(activité, signalements, Nouveautés) et le lecteur (§94) continuent d'empiler : `cinemaNavigate` retire
+la marque d'onglet de toute entrée qu'il empile.
+
+**Porteurs.** `cinemaSwitchTab` et `cinemaTabHome` (`src/lib/cinemaRoute.ts`).
+
+**Appelant.** `openPanel` (`playerNav.ts`), seule porte des onglets : `PlayerBottomBar`, `PlayerRail`,
+`PlayerPanelFrame` (croix et Échap d'un onglet). Le glisser de la lentille garde son `replace` explicite
+(§45) : il réécrit l'entrée que l'appui vient d'écrire.
+
+**Tests.** `cinemaRoute-tabs.test.tsx` (le vrai historique de jsdom : la rafale de la passe de nuit,
+1, 2, … 10 avant, jamais plus de 1 après ; Retour depuis un onglet ; fiche dans un onglet ; onglet sur
+une fiche ; double fermeture), `playerNav.test.ts`.
+
+**Pourquoi.** Passe de nuit du 15/10/2026 (ROBUSTESSE-14) : dix changements d'onglet, dix retours pour
+sortir, l'accueil revenu trois fois dans la pile. Décidé par Louis le 15/10/2026 (« remplace »).
+
+**Différent exprès.** Toucher l'onglet courant sous une fiche (Ma liste couverte par un film) referme
+la fiche en empilant, comme avant : ce n'est pas un changement d'onglet.

@@ -509,7 +509,11 @@ export function useSheetOrigins(): SheetOrigins {
 
 // `push` for opening a screen (Back should close it); `replace` for changing something about the
 // screen you're already on, like the Films/Séries tab — a filter shouldn't cost a Back press.
-export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "replace" = "push"): void {
+export function cinemaNavigate(
+  patch: Partial<CinemaRoute>,
+  mode: "push" | "replace" = "push",
+  options: { tabBase?: string } = {}
+): void {
   if (typeof window === "undefined") return;
   const next = { ...getSnapshot(), ...patch };
   const serialized = serialize(next);
@@ -539,8 +543,12 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
   // ouverte depuis l'écran de fin, par-dessus l'entrée du lecteur, n'est pas cette entrée — la
   // fermeture du lecteur, qui rend la sienne d'un `history.back()`, l'aurait refermée aussitôt.
   const base = (window.history.state ?? {}) as Record<string, unknown>;
+  // L'entrée d'onglet (`TAB_BASE_KEY`, DECISIONS.md §100) ne se transmet pas : une fiche empilée
+  // par-dessus un onglet n'est pas un onglet. Un `replace` la garde — c'est la même entrée.
+  const pushed = mode === "push" ? withoutTabEntry(withoutPlayerEntry(base)) : base;
   const state = {
-    ...(mode === "push" ? withoutPlayerEntry(base) : base),
+    ...pushed,
+    ...(mode === "push" && options.tabBase !== undefined ? { [TAB_BASE_KEY]: options.tabBase } : {}),
     [DEPTH_KEY]: mode === "push" ? depth + 1 : depth,
     // Ce qu'on laisse derrière soi, retenu au moment où on l'empile — la seule occasion de le
     // savoir. Un `replace` ne change pas ce qui est en dessous, donc il garde la valeur en place.
@@ -647,6 +655,65 @@ export function cinemaClose(fallback: Partial<CinemaRoute>): void {
   } else {
     cinemaNavigate(fallback, "replace");
   }
+}
+
+/**
+ * Les onglets de la barre ne s'empilent pas (DECISIONS.md §100, ROBUSTESSE-14).
+ *
+ * Chaque appui sur Recherche, Ma liste, Compte ou Accueil empilait une entrée : dix changements
+ * d'onglet, dix retours pour sortir, en repassant par chaque panneau et plusieurs fois par l'accueil
+ * (passe de nuit du 15/10/2026). Comme une barre d'onglets native, désormais :
+ *
+ * - le premier onglet ouvert depuis l'écran du dessous (l'accueil, une grille, une fiche) empile
+ *   **une** entrée — l'« entrée d'onglet », qui retient sous `TAB_BASE_KEY` l'adresse qu'elle
+ *   recouvre ;
+ * - passer d'un onglet à un autre **remplace** cette entrée ;
+ * - « Accueil » (et la croix ou Échap d'un onglet) la rend par un retour quand ce qu'elle recouvre
+ *   est déjà l'accueil — le même `cinemaClose`, donc un seul `history.back()` en vol ; sinon il la
+ *   remplace par l'accueil.
+ *
+ * Le premier Retour depuis un onglet ramène donc à ce qu'il y avait avant le premier onglet. Les
+ * fiches, les écrans poussés depuis le Compte (activité, signalements, Nouveautés) et le lecteur
+ * continuent d'empiler : `cinemaNavigate` retire la marque de toute entrée qu'il empile.
+ */
+const TAB_BASE_KEY = "cinemaTabBase";
+
+function withoutTabEntry(state: Record<string, unknown>): Record<string, unknown> {
+  if (!(TAB_BASE_KEY in state)) return state;
+  const rest = { ...state };
+  delete rest[TAB_BASE_KEY];
+  return rest;
+}
+
+/** L'adresse que recouvre l'entrée d'onglet courante, ou `null` si l'entrée n'en est pas une. */
+function readTabBase(): string | null {
+  const value = (window.history.state as Record<string, unknown> | null)?.[TAB_BASE_KEY];
+  return typeof value === "string" ? value : null;
+}
+
+/** Ouvrir l'onglet que décrit `patch` — Recherche, Ma liste, Compte. Voir `TAB_BASE_KEY`. */
+export function cinemaSwitchTab(patch: Partial<CinemaRoute>): void {
+  if (typeof window === "undefined") return;
+  if (readTabBase() !== null) cinemaNavigate(patch, "replace");
+  else cinemaNavigate(patch, "push", { tabBase: serialize(getSnapshot()) });
+}
+
+/**
+ * Revenir à l'accueil depuis la barre : `patch` referme tout. `alreadyHome` : rien à refermer, on
+ * réécrit l'entrée sans rien empiler (comme avant).
+ */
+export function cinemaTabHome(patch: Partial<CinemaRoute>, alreadyHome: boolean): void {
+  if (typeof window === "undefined") return;
+  const tabBase = readTabBase();
+  if (tabBase !== null) {
+    // Ce que l'entrée recouvre, une fois refermé ce que l'accueil referme : si rien ne change, c'est
+    // déjà l'accueil, et le retour y ramène sans rien empiler.
+    const underIsHome = serialize({ ...parse(tabBase), ...patch }) === serialize(parse(tabBase));
+    if (underIsHome && currentDepth() > 0) cinemaClose(patch);
+    else cinemaNavigate(patch, "replace");
+    return;
+  }
+  cinemaNavigate(patch, alreadyHome ? "replace" : "push");
 }
 
 /**

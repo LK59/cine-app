@@ -12,7 +12,11 @@ vi.mock("@/lib/cinemaRoute", () => ({
   accountScreenOpen: (r: { activity?: string | null; report?: string | null; news?: string | null }) => (r.activity ?? null) !== null || (r.report ?? null) !== null || (r.news ?? null) !== null,
   cinemaClose: vi.fn(),
   cinemaNavigate: vi.fn(),
-  useCinemaRoute: () => ({ film: null, serie: null, discover: null, person: null }),
+  // La porte « Accueil » des onglets (DECISIONS.md §100) : elle choisit seule entre rendre l'entrée
+  // d'onglet et réécrire l'adresse.
+  cinemaTabHome: vi.fn(),
+  cinemaSwitchTab: vi.fn(),
+  useCinemaRoute:() => ({ film: null, serie: null, discover: null, person: null }),
 }));
 
 const playbackMode = vi.hoisted(() => ({ current: "closed" as "closed" | "full" | "mini" }));
@@ -181,13 +185,17 @@ describe("PlayerPanelFrame — arrivée depuis un autre onglet", () => {
 // (23/09/2026).
 describe("PlayerPanelFrame — Échap", () => {
   it("referme le panneau quand rien d'autre ne le réclame — vers l'accueil", async () => {
-    const { cinemaClose, cinemaNavigate } = await import("@/lib/cinemaRoute");
+    const { cinemaClose, cinemaNavigate, cinemaTabHome } = await import("@/lib/cinemaRoute");
     vi.mocked(cinemaClose).mockClear();
     vi.mocked(cinemaNavigate).mockClear();
+    vi.mocked(cinemaTabHome).mockClear();
     render(panel(false));
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(cinemaNavigate).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(cinemaNavigate).mock.calls[0][0]).toMatchObject({ search: false, list: false, account: false });
+    // Par la porte « Accueil » des onglets (§100) : un retour si l'accueil est dessous, jamais une
+    // entrée de plus.
+    expect(cinemaTabHome).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(cinemaTabHome).mock.calls[0][0]).toMatchObject({ search: false, list: false, account: false });
+    expect(cinemaNavigate).not.toHaveBeenCalled();
     expect(cinemaClose).not.toHaveBeenCalled();
   });
 

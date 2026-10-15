@@ -1,7 +1,7 @@
 "use client";
 
 import { Home, Search, Bookmark, User } from "lucide-react";
-import { accountScreenOpen, cinemaNavigate, type CinemaRoute } from "@/lib/cinemaRoute";
+import { accountScreenOpen, cinemaNavigate, cinemaSwitchTab, cinemaTabHome, type CinemaRoute } from "@/lib/cinemaRoute";
 import { requestSearchFocus } from "@/lib/searchFocus";
 
 export type PlayerPanel = "home" | "search" | "list" | "account";
@@ -96,7 +96,10 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute, mode: "push"
       !current.discover &&
       !current.person &&
       !current.browse;
-    cinemaNavigate(closed, alreadyHome || mode === "replace" ? "replace" : "push");
+    // Le glisser de la lentille réécrit l'entrée que l'appui vient d'écrire ; sinon la règle des
+    // onglets (DECISIONS.md §100) : rendre l'entrée d'onglet quand l'accueil est dessous.
+    if (mode === "replace") cinemaNavigate(closed, "replace");
+    else cinemaTabHome(closed, alreadyHome);
     return;
   }
   if (isOnPanel(panel, current)) {
@@ -107,11 +110,12 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute, mode: "push"
     return;
   }
 
-  cinemaNavigate(
-    {
-      ...closed,
-      ...(panel === "search" ? { search: true } : panel === "list" ? { list: true } : { account: true }),
-    },
-    mode,
-  );
+  const patch = {
+    ...closed,
+    ...(panel === "search" ? { search: true } : panel === "list" ? { list: true } : { account: true }),
+  };
+  // Un onglet remplace l'onglet d'avant au lieu de s'empiler (DECISIONS.md §100) : le premier depuis
+  // l'accueil ou une fiche empile une entrée d'onglet, les suivants la réécrivent.
+  if (mode === "replace") cinemaNavigate(patch, "replace");
+  else cinemaSwitchTab(patch);
 }

@@ -6,6 +6,10 @@ vi.mock("@/lib/cinemaRoute", async (importOriginal) => ({
   // La règle « un écran poussé depuis le Compte est ouvert » reste la vraie (`accountScreenOpen`).
   accountScreenOpen: (await importOriginal<typeof import("@/lib/cinemaRoute")>()).accountScreenOpen,
   cinemaNavigate: (...args: unknown[]) => mockNavigate(...args),
+  // Les onglets passent par leurs deux portes (DECISIONS.md §100), éprouvées sur le vrai historique
+  // dans `cinemaRoute.test.tsx` ; ici, on note seulement laquelle a été prise.
+  cinemaSwitchTab: (patch: unknown) => mockNavigate(patch, "tab"),
+  cinemaTabHome: (patch: unknown, alreadyHome: boolean) => mockNavigate(patch, alreadyHome ? "home-already" : "home"),
 }));
 
 const EMPTY: CinemaRoute = {
@@ -81,10 +85,21 @@ describe("openPanel", () => {
   it("goes home by closing everything, and replaces the entry when already home", async () => {
     const { openPanel } = await import("@/components/player/playerNav");
     openPanel("home", { ...EMPTY, list: true });
-    expect(mockNavigate.mock.calls[0][1]).toBe("push");
+    expect(mockNavigate.mock.calls[0][1]).toBe("home");
 
     mockNavigate.mockClear();
     openPanel("home", EMPTY);
+    expect(mockNavigate.mock.calls[0][1]).toBe("home-already");
+  });
+
+  // ROBUSTESSE-14 : un onglet passe par la porte des onglets, qui remplace au lieu d'empiler ; le
+  // glisser de la lentille réécrit toujours l'entrée que l'appui vient d'écrire.
+  it("opens a tab through the tab door, and the lens drag still replaces", async () => {
+    const { openPanel } = await import("@/components/player/playerNav");
+    openPanel("account", { ...EMPTY, list: true });
+    expect(mockNavigate.mock.calls[0][1]).toBe("tab");
+    mockNavigate.mockClear();
+    openPanel("account", { ...EMPTY, list: true }, "replace");
     expect(mockNavigate.mock.calls[0][1]).toBe("replace");
   });
 });
