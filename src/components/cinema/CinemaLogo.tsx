@@ -1,5 +1,6 @@
 "use client";
 
+import { knownLogoRatio, rememberLogoRatio } from "@/lib/logoRatios";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useImageRetry } from "@/lib/useImageRetry";
 
@@ -78,15 +79,7 @@ type SurfaceFit = { reserve: string; floor: number };
 /** En dessous, la fenêtre est trop courte pour la hauteur généreuse. */
 const ROOMY_FROM = 760;
 
-/**
- * Les proportions déjà mesurées, gardées d'une carte à l'autre.
- *
- * La hauteur d'un logo dépend de sa forme, et sa forme ne se connaît qu'une fois l'image
- * chargée : la première fois, il s'affichait donc à la hauteur par défaut puis se corrigeait
- * sous les yeux. Une image déjà vue — c'est le cas dès qu'on repasse sur un titre — n'a plus à
- * repasser par là.
- */
-const KNOWN_RATIOS = new Map<string, number>();
+// Les proportions déjà mesurées : `logoRatios.ts`, que l'appui sur une affiche remplit aussi.
 
 export function CinemaLogo({
   src,
@@ -120,7 +113,7 @@ export function CinemaLogo({
    */
   shadow?: boolean;
 }) {
-  const [ratio, setRatio] = useState<number | null>(() => KNOWN_RATIOS.get(src) ?? null);
+  const [ratio, setRatio] = useState<number | null>(() => knownLogoRatio(src));
   // L'adresse refusée, et non un simple drapeau : un autre logo passé à la même instance a droit
   // à sa chance.
   // Un échec n'est plus définitif (`useImageRetry`, DECISIONS.md) : le repli (le titre écrit) tient
@@ -195,7 +188,7 @@ export function CinemaLogo({
         // WebKit — reproduit, `CSSTransition` « running » à 0 ms plusieurs secondes après —, et le
         // logo demeurait invisible, sa place tenue, jusqu'à ce qu'on rouvre la fiche (Casino
         // Royale après une fiche de la saga, sur iPhone). Un logo déjà vu est de toute façon montré
-        // d'emblée (`KNOWN_RATIOS`) ; un nouveau apparaît d'un coup, à sa taille.
+        // d'emblée (`knownLogoRatio`) ; un nouveau apparaît d'un coup, à sa taille.
         opacity: ratio === null ? 0 : 1,
       }}
       /**
@@ -216,6 +209,6 @@ export function CinemaLogo({
 
 /** Retient la proportion mesurée, pour cette image et pour les prochaines fois. */
 function remember(src: string, ratio: number, apply: (value: number) => void): void {
-  KNOWN_RATIOS.set(src, ratio);
+  rememberLogoRatio(src, ratio);
   apply(ratio);
 }

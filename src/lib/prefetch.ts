@@ -1,6 +1,6 @@
 import { preload } from "swr";
 import { fetcher, progressKey } from "@/lib/swr";
-import { prefetchSheetBannerNow } from "@/lib/sheetMorph/prefetchBanners";
+import { prefetchLogo } from "@/lib/logoRatios";
 
 /**
  * Un préchargement SWR dont l'échec ne va nulle part — le seul `preload` du dépôt.
@@ -59,14 +59,14 @@ export function preloadOutcome<T>(
 export function prefetchTitleSheet(
   title: ({ kind: "movie"; radarrId: number } | { kind: "series"; sonarrId: number }) & {
     jellyfinItemId: string | null | undefined;
-    /** Le logo que la fiche affichera — décodé dès l'appui, comme son visuel (`prefetchSheetBannerNow`). */
+    /** Le logo que la fiche affichera — téléchargé dès l'appui, sa forme notée à l'arrivée (`prefetchLogo`). */
     logoUrl?: string | null;
   }
 ): void {
   if (!title.jellyfinItemId) return;
   // Le logo de la fiche, dès l'appui (15/10/2026) : le visuel partait déjà (`data-sheet-backdrop`),
   // le logo, servi par TMDB lui aussi, n'arrivait qu'une fois la fiche montée.
-  prefetchSheetBannerNow(title.logoUrl);
+  prefetchLogo(title.logoUrl);
   // La description seulement, la même pour tout le monde. Pas l'état Jellyfin ni la liste des
   // épisodes : un préchargement jamais consommé reste dans la réserve de SWR et est rendu, des
   // heures plus tard, comme s'il venait d'arriver — un doigt qui frôlait *Dune* en défilant, le film
