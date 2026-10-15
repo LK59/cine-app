@@ -1338,8 +1338,10 @@ function MobileRow({
         </div>
         {onSeeAll && (
           // Servi au relâchement : juste après un défilement, iOS gardait le premier clic pour
-          // arrêter l'élan — voir `useTap`.
-          <TapButton onTap={onSeeAll} className="shrink-0 text-xs font-medium text-muted transition-colors active:text-white">
+          // arrêter l'élan — voir `useTap`. Une cible de 44 px de haut (15/10/2026, passe de nuit,
+          // MOBILE-13 : le texte seul en faisait 49 × 16) ; les marges négatives gardent la ligne
+          // à sa hauteur et le mot à sa place.
+          <TapButton onTap={onSeeAll} className="-my-3.5 -mr-2 shrink-0 py-3.5 pl-3 pr-2 text-xs font-medium text-muted transition-colors active:text-white">
             {t("player.browse.seeAll")}
           </TapButton>
         )}
