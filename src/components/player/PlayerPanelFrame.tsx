@@ -211,6 +211,39 @@ export function PlayerPanelFrame({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [covered, leaving, playerOwnsKeyboard, closeWindow]);
 
+  /**
+   * La première flèche entre dans le contenu, d'où que parte le focus (15/10/2026, passe de nuit,
+   * BUREAU-24).
+   *
+   * Les flèches sont écoutées sur le corps (`usePanelArrowNav`) ; or à l'ouverture le focus est sur
+   * le titre — hors du corps —, ou resté sur le bouton de l'accueil qui a ouvert l'écran (« Voir tous
+   * les films », caché dessous), ou sur rien après un lien profond. Aucune flèche ne bougeait alors
+   * rien dans la grille complète ni dans Ma liste : il fallait six tabulations pour atteindre la
+   * première affiche. Comme sur l'accueil, ↓ et → y entrent par le premier élément. Pas depuis le
+   * rail ou la barre du bas (leurs propres flèches), ni depuis une fenêtre, ni dans un champ.
+   */
+  useEffect(() => {
+    if (covered || leaving || playerOwnsKeyboard) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || (e.key !== "ArrowDown" && e.key !== "ArrowRight")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const active = document.activeElement as HTMLElement | null;
+      const nowhere = !active || active === document.body || active === document.documentElement;
+      const onHeading = active !== null && active === headingRef.current;
+      const outside = !nowhere && !onHeading && !active!.closest("[data-panel-root]");
+      if (!nowhere && !onHeading && !outside) return;
+      if (active?.closest("[data-player-nav], [aria-modal='true']")) return;
+      if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
+      const first = bodyRef.current?.querySelector<HTMLElement>("[data-nav-item]");
+      if (!first) return;
+      e.preventDefault();
+      first.focus({ preventScroll: true });
+      first.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [covered, leaving, playerOwnsKeyboard]);
+
   // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
   // `document` n'existe pas et où `createPortal` fait échouer la page entière.
   if (typeof document === "undefined") return null;

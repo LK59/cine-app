@@ -39,6 +39,41 @@ afterEach(() => {
  * faisaient plus rien dans le panneau.
  */
 describe("PlayerPanelFrame — les flèches", () => {
+  // 15/10/2026 (passe de nuit, BUREAU-24) : à l'ouverture, le focus est sur le titre (hors du corps
+  // qui écoute les flèches), ou resté sur le bouton de l'accueil caché dessous : aucune flèche ne
+  // bougeait rien dans la grille complète ni dans Ma liste.
+  it("entrent dans le contenu depuis le titre, depuis rien, et depuis l'écran caché dessous", () => {
+    render(panel(false));
+    const heading = screen.getByRole("heading", { name: "Titre" });
+    heading.focus();
+    fireEvent.keyDown(heading, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByText("un"));
+
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(screen.getByText("un"));
+
+    const below = document.createElement("button");
+    document.body.appendChild(below);
+    below.focus();
+    fireEvent.keyDown(below, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByText("un"));
+    below.remove();
+  });
+
+  it("laissent le rail et la barre du bas à leurs propres flèches", () => {
+    render(panel(false));
+    const rail = document.createElement("nav");
+    rail.setAttribute("data-player-nav", "");
+    const tab = document.createElement("button");
+    rail.appendChild(tab);
+    document.body.appendChild(rail);
+    tab.focus();
+    fireEvent.keyDown(tab, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(tab);
+    rail.remove();
+  });
+
   it("parcourent le panneau à son ouverture", () => {
     render(panel(false));
     fireEvent.keyDown(screen.getByText("un").parentElement!, { key: "ArrowDown" });
