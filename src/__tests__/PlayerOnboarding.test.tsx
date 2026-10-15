@@ -176,3 +176,34 @@ describe("l'écran d'accueil", () => {
     expect(await screen.findByText("player.onboarding.welcomeTitle:Louis")).toBeTruthy();
   });
 });
+
+// 15/10/2026 (passe de nuit, BUREAU-12) : le focus restait derrière la fenêtre — Tab partait dans le
+// rail caché, Entrée ouvrait « Signaler » sous l'accueil, Échap ne faisait rien.
+describe("l'accueil au clavier", () => {
+  it("prend le focus à l'ouverture, et Échap vaut alors « Passer »", async () => {
+    draw();
+    await screen.findByText("player.onboarding.welcomeTitle:Louis");
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("player.onboarding.next"));
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByText(/welcomeTitle/)).toBeNull();
+  });
+
+  it("rend le focus au bouton qui l'a ouverte", async () => {
+    pending = false;
+    const opener = document.createElement("button");
+    opener.textContent = "Ouvrir";
+    document.body.appendChild(opener);
+    try {
+      draw();
+      await waitFor(() => expect(called("/api/onboarding")).toBe(true));
+      opener.focus();
+      act(() => openOnboarding());
+      await screen.findByText("player.onboarding.welcomeTitle:Louis");
+      await waitFor(() => expect(document.activeElement?.textContent).toBe("player.onboarding.next"));
+      fireEvent.click(screen.getByText("player.onboarding.skip"));
+      expect(document.activeElement).toBe(opener);
+    } finally {
+      opener.remove();
+    }
+  });
+});

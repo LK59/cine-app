@@ -213,6 +213,33 @@ export function PlayerOnboarding({
   const rootRef = useRef<HTMLDivElement>(null);
   useLiquidDelegation(rootRef);
 
+  /**
+   * Le focus entre dans la fenêtre, et revient à qui l'a ouverte (15/10/2026, passe de nuit,
+   * BUREAU-12).
+   *
+   * Le piège à Tab et Échap ci-dessous est posé sur la fenêtre elle-même : il ne reçoit rien tant
+   * que le focus est dehors — et rien ne l'y mettait. Au premier lancement, Tab partait dans le rail
+   * caché derrière ; rouverte depuis le Compte, Entrée ouvrait « Signaler » *sous* l'accueil et Échap
+   * ne faisait rien. Le bouton principal le reçoit à l'ouverture et à chaque étape où il l'aurait
+   * perdu (un bouton désactivé pendant un envoi le rend au document). Pas sur un appareil qu'on
+   * touche : il n'y a pas de clavier à servir, et un anneau de focus n'y aurait rien à dire.
+   */
+  const primaryRef = useRef<HTMLButtonElement>(null);
+  const primaryDisabled = busy || (step === "playback" && !playback);
+  useEffect(() => {
+    const active = document.activeElement;
+    const opener = active instanceof HTMLElement && active !== document.body ? active : null;
+    return () => {
+      if (opener?.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, []);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || primaryDisabled || root.contains(document.activeElement)) return;
+    if (typeof window.matchMedia === "function" && window.matchMedia("(hover: none) and (pointer: coarse)").matches) return;
+    primaryRef.current?.focus({ preventScroll: true });
+  }, [step, primaryDisabled]);
+
   const pushSupported = typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
 
   async function next() {
@@ -424,9 +451,10 @@ export function PlayerOnboarding({
 
         <div className="flex flex-col gap-2">
           <button
+            ref={primaryRef}
             type="button"
             onClick={() => void next()}
-            disabled={busy || (step === "playback" && !playback)}
+            disabled={primaryDisabled}
             data-liquid-pan="wide"
             className="flex w-full items-center justify-center rounded-full bg-white px-4 py-3.5 text-base font-semibold text-ink disabled:opacity-60"
           >
