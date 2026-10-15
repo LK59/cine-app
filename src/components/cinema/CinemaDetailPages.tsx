@@ -54,18 +54,13 @@ const TITLE_CLASS = "text-2xl font-bold leading-tight text-white drop-shadow-lg 
 /** Le nom du titre en tête de colonne : son logo quand il en a un, le titre écrit sinon. */
 /**
  * Le nom du titre en tête d'une fiche du téléphone — bibliothèque et découverte (15/10/2026) : son
- * logo, ou le titre écrit quand il n'en a pas (ou qu'il ne vient pas). L'un ou l'autre voyage avec la
- * carte pendant l'ouverture (`data-sheet-carry`) : le logo arrivait avec le bloc du dessous, un rien
- * après la bannière. La fiche découverte du téléphone n'écrivait que le titre (05/09/2026).
+ * logo, ou le titre écrit quand il n'en a pas (ou qu'il ne vient pas). La fiche découverte du
+ * téléphone n'écrivait que le titre depuis sa création (05/09/2026).
  */
 export function PhoneSheetTitle({ title, logoUrl }: { title: string; logoUrl: string | null | undefined }) {
-  const written = (
-    <h1 data-sheet-carry="" className="mb-3 font-display text-2xl font-bold leading-tight text-white">
-      {title}
-    </h1>
-  );
+  const written = <h1 className="mb-3 font-display text-2xl font-bold leading-tight text-white">{title}</h1>;
   if (!logoUrl) return written;
-  return <CinemaLogo src={logoUrl} alt={title} surface="phone" shadow={false} carry className="mb-3 object-left" fallback={written} />;
+  return <CinemaLogo src={logoUrl} alt={title} surface="phone" shadow={false} className="mb-3 object-left" fallback={written} />;
 }
 
 export function CinemaDetailTitle({ title, logoUrl }: { title: string; logoUrl: string | null | undefined }) {

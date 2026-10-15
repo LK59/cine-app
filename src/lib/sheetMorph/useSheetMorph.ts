@@ -698,14 +698,6 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     const photo = root.querySelector<HTMLImageElement>("[data-sheet-photo]");
     const veils = Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-veil]"));
     const content = Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-content]"));
-    // Ce qui voyage avec la carte au téléphone (`data-sheet-carry` : le logo, ou le titre écrit) —
-    // à sa place d'arrivée, lue ici avec le reste. Il ne fait plus partie du fondu du contenu : le
-    // logo arrivait un rien après la bannière, avec le bloc du dessous (Louis, 15/10/2026).
-    const carried = phone ? Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-carry]")).map((el) => ({ el, box: boxOf(el) })) : [];
-    // Le fondu du contenu, sans ce qui voyage : les enfants d'un bloc qui en contient un, le bloc sinon.
-    const fading = content.flatMap((el) =>
-      carried.some((c) => el.contains(c.el)) ? Array.from(el.children).filter((child): child is HTMLElement => child instanceof HTMLElement && !child.hasAttribute("data-sheet-carry")) : [el]
-    );
     const settle = Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-settle]"));
     const glass = Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-glass]"));
     const h = layout === "desktop" && !otherSheetsOpen(root) ? homeElement() : null;
@@ -776,17 +768,6 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     const backdropSrc = photo?.currentSrc || photo?.src || source.image;
     const w = buildWindow(layer, null, stage, base, target, srcBox, source.image, backdropSrc, veils, radius, phone ? { box: card, ink } : null);
     s.win = w;
-    // Une copie, posée dans la carte à sa place d'arrivée : elle grandit avec elle. L'original est
-    // caché le temps du trajet (`data-sheet-flying`, globals.css) et reprend la main à l'arrivée, dans
-    // la même image que le retrait de la fenêtre (`settleOpen`).
-    for (const { el, box } of carried) {
-      const copy = el.cloneNode(true) as HTMLElement;
-      copy.removeAttribute("data-sheet-carry");
-      // Les bornes du logo (`maxHeight` en `cqh`) n'ont plus de conteneur ici : la boîte mesurée suffit.
-      Object.assign(copy.style, { position: "absolute", margin: "0", visibility: "visible", maxHeight: "none", maxWidth: "none" });
-      place(copy, box);
-      w.inner.appendChild(copy);
-    }
     if (waitBd) w.bdFade.style.opacity = "0";
     hideSource(source);
     hold(root, holdTransparent(layout));
@@ -814,7 +795,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     // Le contenu part quand l'image est en place pour l'œil, d'un seul bloc — au téléphone, la carte
     // est alors presque entière autour de lui.
     const revealAt = timeAt(samples, d, REVEAL_AT);
-    for (const el of fading)
+    for (const el of content)
       go(el, [{ opacity: 0, transform: `translateY(${REVEAL_RISE_PX}px)` }, { opacity: 1, transform: "none" }], {
         duration: REVEAL_MS,
         delay: revealAt,
@@ -838,7 +819,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
       homeMotion.anim = a;
       s.ownsHome = true;
     }
-    s.unpromote = promote([w.win, w.inner, w.bd, w.poster, w.bdFade, w.posterFade, dim, h, ...fading]);
+    s.unpromote = promote([w.win, w.inner, w.bd, w.poster, w.bdFade, w.posterFade, dim, h, ...content]);
     const run = { motion, poseAt, startedAt: null as number | null, span: travelOf(startBox, end.box), target, base, stage, clock: anims[0] ?? null };
     s.run = run;
     s.bdShown = !waitBd;
