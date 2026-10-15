@@ -705,10 +705,10 @@ function ActivePlayer({
   // exhausted, playback truly stopped). Drives the small non-blocking "Reconnexion..." banner.
   const [reconnecting, setReconnecting] = useState(false);
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
-  // Non-interactive — a measured signal, not a settings toggle. Two real, checkable metrics
-  // (not an invented "latency" a browser can't actually observe for HLS segments): how often
-  // playback has stalled to rebuffer in the last minute, and the decoder's own RECENT
-  // dropped-frame rate via the standard getVideoPlaybackQuality() API. Reset per session in
+  // Non-interactive — a measured signal, not a settings toggle (not an invented "latency" a
+  // browser can't actually observe for HLS segments): how often playback has stalled to rebuffer
+  // in the last minute. The decoder's dropped-frame rate used to count too, and named the network
+  // for what the device could not decode (LECTEUR-8, 15/10/2026). Reset per session in
   // startPlayback.
   const [badConnection, setBadConnection] = useState(false);
   const rebufferTimestamps = useRef<number[]>([]);
@@ -717,12 +717,6 @@ function ActivePlayer({
   // position) — reported live as a false-positive trigger during normal scrubbing, nothing to
   // do with connection quality. 'waiting' within this long after a 'seeking' event is ignored.
   const lastSeekAt = useRef(0);
-  // getVideoPlaybackQuality()'s dropped/total counts are cumulative since playback started, so a
-  // ratio computed directly from them can only ever climb — once real congestion pushed it past
-  // the threshold once, the badge could never clear again even after the connection fully
-  // recovered. Comparing against the previous poll's reading turns it into a recent-window rate
-  // that can properly drop back down.
-  const lastQuality = useRef<{ total: number; dropped: number } | null>(null);
   // Estimated actual network throughput (hls.js's own adaptive-bitrate estimate) — distinct
   // from playbackInfo.video.bitRate/audio.bitRate, which are the STATIC target bitrate Jellyfin
   // encoded/is streaming at. Only meaningful on the hls.js path (Transcode/DirectStream on
@@ -1339,7 +1333,6 @@ function ActivePlayer({
       rebufferTimestamps.current = [];
       hasPlayedOnce.current = false;
       lastSeekAt.current = 0;
-      lastQuality.current = null;
       setBadConnection(false);
       setNetworkBitrate(null);
 
@@ -2935,16 +2928,11 @@ function ActivePlayer({
     const interval = setInterval(() => {
       const cutoff = Date.now() - 60_000;
       rebufferTimestamps.current = rebufferTimestamps.current.filter((t) => t > cutoff);
-      const quality = video.getVideoPlaybackQuality?.();
-      let droppedRatio = 0;
-      if (quality) {
-        const prev = lastQuality.current;
-        const deltaTotal = prev ? quality.totalVideoFrames - prev.total : 0;
-        const deltaDropped = prev ? quality.droppedVideoFrames - prev.dropped : 0;
-        if (deltaTotal > 0) droppedRatio = deltaDropped / deltaTotal;
-        lastQuality.current = { total: quality.totalVideoFrames, dropped: quality.droppedVideoFrames };
-      }
-      setBadConnection(rebufferTimestamps.current.length >= 2 || droppedRatio > 0.02);
+      // Les attentes seules. Les images perdues (`getVideoPlaybackQuality`) allumaient aussi la
+      // pastille, au-delà de 2 % : c'est un décodeur ou un processeur qui ne suit pas — Fire TV,
+      // vieux téléphone, machine chargée —, pas le réseau. Passe de nuit du 15/10/2026 (LECTEUR-8) :
+      // « Connexion instable » toute une séance servie à 445 Mb/s, segments en 0,1–0,7 s.
+      setBadConnection(rebufferTimestamps.current.length >= 2);
     }, 5000);
 
     return () => {
@@ -3316,8 +3304,8 @@ function ActivePlayer({
               </div>
             </div>
           )}
-          {/* Non-interactive by design — a measured signal (recent rebuffers + decoder dropped-
-              frame ratio, see badConnection's own comment), not a settings toggle with a detail
+          {/* Non-interactive by design — a measured signal (recent rebuffers, see badConnection's
+              own comment), not a settings toggle with a detail
               view to open. En haut à droite pour ne jamais recouvrir la pastille ci-dessus, que
               les deux peuvent légitimement afficher en même temps (hors ligne *et* déjà en train
               de se remplir). Elles se croisaient d'autant moins quand celle-ci était en bas ;

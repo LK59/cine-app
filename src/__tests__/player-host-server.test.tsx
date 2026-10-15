@@ -398,3 +398,53 @@ describe("lecteur serveur — une scène ouverte depuis une réplique", () => {
     expect(refreshAfterPlayback).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * La pastille « Connexion instable » (passe de nuit du 15/10/2026, LECTEUR-8) : allumée par les
+ * images perdues au décodage — une machine qui ne suit pas, pas le réseau —, elle est restée toute
+ * une séance servie à 445 Mb/s. Seules les attentes en pleine lecture l'allument désormais.
+ */
+describe("lecteur serveur — la pastille « Connexion instable »", () => {
+  afterEach(() => vi.useRealTimers());
+
+  async function playing() {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    stubFetch();
+    render(<PlayerHost />);
+    await waitFor(() => expect(lignes("start")).toHaveLength(1));
+    const video = document.querySelector("video")!;
+    act(() => void video.dispatchEvent(new Event("playing")));
+    return video;
+  }
+
+  it("ne s'allume pas pour des images perdues", async () => {
+    // 11 images perdues sur 50, puis 193 sur 1 051 : relevé de la séance de nuit.
+    const readings = [
+      { totalVideoFrames: 50, droppedVideoFrames: 11 },
+      { totalVideoFrames: 1051, droppedVideoFrames: 193 },
+      { totalVideoFrames: 2051, droppedVideoFrames: 400 },
+    ];
+    let i = 0;
+    Object.defineProperty(HTMLVideoElement.prototype, "getVideoPlaybackQuality", {
+      configurable: true,
+      value: () => readings[Math.min(i++, readings.length - 1)],
+    });
+    try {
+      await playing();
+      act(() => void vi.advanceTimersByTime(15_000));
+      expect(screen.queryByText("player.badConnection")).toBeNull();
+    } finally {
+      delete (HTMLVideoElement.prototype as { getVideoPlaybackQuality?: unknown }).getVideoPlaybackQuality;
+    }
+  });
+
+  it("s'allume pour deux attentes en pleine lecture dans la minute", async () => {
+    const video = await playing();
+    act(() => {
+      video.dispatchEvent(new Event("waiting"));
+      video.dispatchEvent(new Event("waiting"));
+    });
+    act(() => void vi.advanceTimersByTime(5_000));
+    expect(screen.getByText("player.badConnection")).toBeTruthy();
+  });
+});
