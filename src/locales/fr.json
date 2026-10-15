@@ -2208,6 +2208,8 @@
       "hint": "Change la luminosité des films HDR sur cet écran. La valeur Auto devrait convenir."
     },
     "chapterN": "Chapitre {n}",
+    "seekLabel": "Position de lecture",
+    "seekValue": "{at} sur {total}",
     "report": {
       "details": "Détails techniques",
       "copy": "Copier",

@@ -2208,6 +2208,8 @@
       "hint": "Ändert die Helligkeit von HDR-Filmen auf diesem Bildschirm. Auto sollte passen."
     },
     "chapterN": "Kapitel {n}",
+    "seekLabel": "Wiedergabeposition",
+    "seekValue": "{at} von {total}",
     "report": {
       "details": "Technische Details",
       "copy": "Kopieren",

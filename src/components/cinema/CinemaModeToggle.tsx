@@ -80,12 +80,15 @@ export function CinemaModeToggle({
           et du blanc sur blanc (04/10/2026). Translucide, la lentille laisse les libellés clairs
           lisibles à toutes les positions. */}
       <span ref={lensRef} className="nav-lens" aria-hidden />
+      {/* `aria-pressed` : la lentille dit à l'œil lequel est actif, rien ne le disait à un lecteur
+          d'écran (15/10/2026, passe de nuit, ROBUSTESSE-11). */}
       <button
         ref={moviesRef}
         onClick={() => onChange("movies")}
         data-lens="movies"
         onKeyDown={onKeyDown}
         data-tv-escape-up={mode === "movies" ? "true" : undefined}
+        aria-pressed={mode === "movies"}
         className={`relative z-[1] rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${TV_NAV_RING} ${
           mode === "movies" ? "text-white" : "text-muted hover:text-white"
         }`}
@@ -98,6 +101,7 @@ export function CinemaModeToggle({
         data-lens="series"
         onKeyDown={onKeyDown}
         data-tv-escape-up={mode === "series" ? "true" : undefined}
+        aria-pressed={mode === "series"}
         className={`relative z-[1] rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${TV_NAV_RING} ${
           mode === "series" ? "text-white" : "text-muted hover:text-white"
         }`}

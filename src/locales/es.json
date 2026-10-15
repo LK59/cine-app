@@ -2208,6 +2208,8 @@
       "hint": "Cambia el brillo de las películas HDR en esta pantalla. El valor Auto debería ser adecuado."
     },
     "chapterN": "Capítulo {n}",
+    "seekLabel": "Posición de reproducción",
+    "seekValue": "{at} de {total}",
     "report": {
       "details": "Detalles técnicos",
       "copy": "Copiar",
