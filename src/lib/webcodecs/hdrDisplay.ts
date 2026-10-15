@@ -81,6 +81,19 @@ export function isChromiumOnLinux(userAgent: string): boolean {
 }
 
 /**
+ * Firefox sur un Linux de bureau : le seul endroit où l'aide « HDR délavé » du panneau Compte sert
+ * (observé lors de son ajout, 01e60719). Gecko y sait convertir le HDR, mais derrière
+ * `gfx.color_management.hdr`, coupé par défaut. C'est un défaut de moteur et non une capacité
+ * manquante — la vidéo se décode et se lit, elle sort seulement grise —, aucune sonde ne le trahit,
+ * d'où un test d'agent utilisateur, comme pour WebKit. Les dérivés (LibreWolf, Waterfox) gardent
+ * « Firefox/ » dans leur agent et le même réglage. Android, qui se dit parfois Linux, et ChromeOS
+ * n'ont pas été observés et restent dehors.
+ */
+export function isFirefoxOnLinux(userAgent: string): boolean {
+  return /Linux/i.test(userAgent) && !/Android|CrOS/i.test(userAgent) && /Firefox\//i.test(userAgent) && /Gecko\//i.test(userAgent);
+}
+
+/**
  * Le réglage a-t-il un sens ici ? Sur un écran HDR, le plafond ne ferait qu'écrêter des reflets
  * que l'écran sait montrer ; sous WebKit, la conversion (EDR) est déjà juste et n'a pas à être
  * corrigée. Une réponse inconnue de l'écran ne le propose pas non plus : dans le doute, rien.
