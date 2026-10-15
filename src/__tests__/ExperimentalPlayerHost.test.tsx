@@ -3698,3 +3698,89 @@ describe("zone illisible (§93)", () => {
     expect(prewarms).toHaveLength(0);
   });
 });
+
+/**
+ * Une coupure en pleine lecture (15/10/2026, LECTEUR-4) : trois séances figées sans un mot puis
+ * fermées à la croix ; le bilan comptait l'image figée comme regardée.
+ */
+describe("une coupure en pleine lecture", () => {
+  const logged = (kind: string) =>
+    (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .filter((entry) => entry.kind === kind);
+  const word = () => screen.queryByText("unstable");
+
+  beforeEach(() => resetNetworkTrouble());
+  afterEach(() => resetNetworkTrouble());
+
+  it("le temps regardé s'arrête pendant l'attente et repart à l'image", async () => {
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(600);
+    const now = vi.spyOn(Date, "now");
+    let t = 1_000_000;
+    now.mockImplementation(() => t);
+    act(() => void element.dispatchEvent(new Event("play")));
+    act(() => void element.dispatchEvent(new Event("playing")));
+    t += 10_000;
+    // Plus rien sous la tête : deux minutes d'image figée.
+    act(() => void element.dispatchEvent(new Event("waiting")));
+    t += 120_000;
+    act(() => void element.dispatchEvent(new Event("playing")));
+    t += 5_000;
+    unmount();
+    now.mockRestore();
+    expect(logged("stop")[0].fields.watched).toBe(15);
+  });
+
+  /** Lance un film, le fait jouer, puis l'élément attend son média ; le temps est simulé. */
+  async function stalled() {
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    vi.useFakeTimers();
+    const element = videoElement(600);
+    act(() => void element.dispatchEvent(new Event("play")));
+    act(() => void element.dispatchEvent(new Event("playing")));
+    await act(async () => void vi.advanceTimersByTime(2000));
+    act(() => void element.dispatchEvent(new Event("waiting")));
+    return element;
+  }
+
+  it("dit « Connexion perdue ou instable… » sous la roue, au même délai que les autres mots, quand des tentatives échouent", async () => {
+    await stalled();
+    act(() => noteFetchRetrying());
+    await act(async () => void vi.advanceTimersByTime(2500));
+    expect(word()).toBeNull();
+    await act(async () => void vi.advanceTimersByTime(1000));
+    expect(word()).not.toBeNull();
+  });
+
+  it("ne clignote pas entre deux tentatives, et s'en va avec l'attente", async () => {
+    const element = await stalled();
+    act(() => noteFetchRetrying());
+    await act(async () => void vi.advanceTimersByTime(4000));
+    expect(word()).not.toBeNull();
+    // Une tentative finit, la suivante n'a pas encore échoué : le mot reste.
+    act(() => noteFetchSettled());
+    await act(async () => void vi.advanceTimersByTime(1000));
+    expect(word()).not.toBeNull();
+    act(() => void element.dispatchEvent(new Event("playing")));
+    await act(async () => void vi.advanceTimersByTime(200));
+    expect(word()).toBeNull();
+  });
+
+  it("une attente ordinaire, sans tentative en échec, reste muette : la roue des commandes suffit", async () => {
+    await stalled();
+    await act(async () => void vi.advanceTimersByTime(10_000));
+    expect(word()).toBeNull();
+  });
+
+  it("hors ligne, le mot vient aussi (le navigateur le dit)", async () => {
+    await stalled();
+    Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
+    act(() => void window.dispatchEvent(new Event("offline")));
+    await act(async () => void vi.advanceTimersByTime(3500));
+    expect(word()).not.toBeNull();
+  });
+});

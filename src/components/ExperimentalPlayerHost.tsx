@@ -881,6 +881,16 @@ export function ExperimentalPlayerHost({
   // fact rather than guessed from the platform: on a desktop it clears within a frame, so none
   // of what follows ever appears there.
   const [startingAt, setStartingAt] = useState<number | null>(null);
+  /**
+   * Une attente de l'élément en pleine lecture — ni ouverture, ni saut, ni reprise après une pause —
+   * et si des tentatives réseau ont échoué pendant qu'elle dure (`stallUnstable`, retenu jusqu'à sa
+   * fin : le mot ne clignote pas entre deux tentatives). De quoi dire « Connexion perdue ou
+   * instable… » sous la roue (§78), ce que seules l'ouverture et la reprise disaient : le 15/10/2026
+   * (LECTEUR-4), une coupure figeait l'image plus de trois minutes sans un mot.
+   */
+  const [stallAt, setStallAt] = useState<number | null>(null);
+  const [stallUnstable, setStallUnstable] = useState(false);
+  const stallAtRef = useRef<number | null>(null);
   // Why this file is being played the way it is. Kept for the panel on *both* paths: a fallback
   // whose reason is only visible on the path that was not taken explains nothing at all.
   const [pathReason, setPathReason] = useState<string | null>(null);
@@ -1396,6 +1406,9 @@ export function ExperimentalPlayerHost({
     // sont déjà retirés. Resté vrai, `playing` comptait ce temps comme regardé et le rapportait
     // à Jellyfin « en lecture » (relu le 24/09/2026). Le pipeline suivant le repasse à vrai.
     setPlaying(false);
+    stallAtRef.current = null;
+    setStallAt(null);
+    setStallUnstable(false);
     setRuntimeError(null);
     setRebuildCount((count) => count + 1);
   }, [lifecycle, background, tally]);
@@ -1803,6 +1816,7 @@ export function ExperimentalPlayerHost({
   const startingFor = useElapsedSince(startingAt);
   const openingFor = useElapsedSince(ready || error ? null : openedAt);
   const waitingFor = openingFor ?? startingFor;
+  const stallFor = useElapsedSince(stallAt);
   // Nothing has failed, so there is no error screen — and this is exactly the case that leaves
   // nothing at all behind: a spinner that never stops, on a device with no console.
   const stuck = openingFor !== null && openingFor >= STUCK_AFTER_MS;
@@ -2747,6 +2761,11 @@ export function ExperimentalPlayerHost({
         if (playedOnce && !element.seeking && !seeks.pending()) {
           tally.waitStarted(Date.now());
           diagWaitStarted(leadAt(element));
+          if (stallAtRef.current === null) {
+            stallAtRef.current = Date.now();
+            setStallAt(stallAtRef.current);
+          }
+          if (networkUnstable()) setStallUnstable(true);
           // Un blocage qui dure : à 5 s, la bascule s'il tient au réseau (§78).
           if (longWaitTimer !== null) clearTimeout(longWaitTimer);
           longWaitTimer = setTimeout(() => {
@@ -2762,6 +2781,13 @@ export function ExperimentalPlayerHost({
        * message), jamais page cachée. Ceux d'un saut n'y entrent jamais : `onWaiting` ne les compte pas.
        */
       let longWaitTimer: ReturnType<typeof setTimeout> | null = null;
+      /** L'attente en pleine lecture est finie (image, pause, saut, fin) : le mot s'en va avec elle. */
+      const endStall = () => {
+        if (stallAtRef.current === null) return;
+        stallAtRef.current = null;
+        setStallAt(null);
+        setStallUnstable(false);
+      };
       const networkStall = (verdict: string) =>
         verdict === "réseau" &&
         document.visibilityState !== "hidden" &&
@@ -2770,6 +2796,7 @@ export function ExperimentalPlayerHost({
       const endWait = (wait: { verdict: string; ms: number } | null) => {
         if (longWaitTimer !== null) clearTimeout(longWaitTimer);
         longWaitTimer = null;
+        endStall();
         // Le tableau du simulateur de la page de test, s'il est allumé (rien sinon).
         if (wait && wait.ms > 1000) pushSlowLinkEvent(`blocage de ${Math.round(wait.ms)} ms (${wait.verdict})`);
         if (!wait) return;
@@ -2789,6 +2816,7 @@ export function ExperimentalPlayerHost({
       const onSeeking = () => {
         tally.waitAbandoned();
         diagWaitEnded(false);
+        endStall();
         if (longWaitTimer !== null) clearTimeout(longWaitTimer);
         longWaitTimer = null;
         // Un saut en pleine lecture attend son image : traité comme une ouverture au-delà de 10 s (§78).
@@ -2797,6 +2825,7 @@ export function ExperimentalPlayerHost({
       const onEnded = () => {
         setPlaying(false);
         setEnded(true);
+        endStall();
         // La fin est annoncée à Jellyfin tout de suite : c'est cet arrêt, en fin de fichier, qui
         // marque le film « vu ». Il ne partait qu'à la fermeture — « Revoir » le remplaçait par
         // la position de la seconde vision, et une application tuée en arrière-plan sur l'écran
@@ -3426,6 +3455,8 @@ export function ExperimentalPlayerHost({
     () =>
       subscribeNetworkTrouble((value) => {
         setUnstable(value);
+        // Retenu pour l'attente en cours, jusqu'à sa fin — voir `stallAt`.
+        if (value && stallAtRef.current !== null) setStallUnstable(true);
         if (!readyRef.current || diagWaiting()) slowLog.noteAt(value ? "instable" : "instable fini", Date.now() - mountedAtRef.current);
       }),
     [slowLog]
@@ -3503,6 +3534,12 @@ export function ExperimentalPlayerHost({
           : openingFor !== null
             ? t("player.experimental.loading")
             : t("player.experimental.preparing");
+
+  // L'attente en pleine lecture (`stallAt`) : seulement « Connexion perdue ou instable… », au même
+  // délai que les autres mots (§78) ; une attente ordinaire garde la seule roue des commandes.
+  const stallWord =
+    waitingFor === null && stallFor !== null && stallFor >= WORD_AFTER_MS && stallUnstable ? t("player.slowLink.unstable") : null;
+  const centerWord = resumeSpinner ? waitingWord : stallWord;
 
   const report: ReportInput = {
     error,
@@ -4226,9 +4263,11 @@ export function ExperimentalPlayerHost({
 
       {/* A resume long enough to deserve a word gets the word only: the controls are already
           showing the spinner, and a second one beside it is what this looked like at first. */}
-      {!openingSpinner && resumeSpinner && waitingWord && !error && !networkLost && !isMini && (
+      {/* Et une attente en pleine lecture, quand le réseau est en cause : le mot seul, sous la roue
+          ou le fil des commandes — voir `stallWord`. */}
+      {!openingSpinner && centerWord && !error && !networkLost && !isMini && (
         <div className="pointer-events-none absolute inset-x-0 top-1/2 mt-10 flex justify-center">
-          <p className="text-sm text-slate-400">{waitingWord}</p>
+          <p className="text-sm text-slate-400">{centerWord}</p>
         </div>
       )}
     </div>,
