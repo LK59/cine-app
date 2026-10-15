@@ -2333,6 +2333,7 @@
     "removeFromContinue": "Quitar de Continuar viendo",
     "removeFromContinueFailed": "No se pudo quitar este título de Continuar viendo.",
     "titleUnavailable": "Este título aún no está disponible en el cine.",
+    "titleRetired": "Este título se ha retirado de la biblioteca.",
     "seriesStillWatched": "Todos sus episodios están vistos: la serie sigue en «Visto».",
     "forYou": "Para ti",
     "outage": {

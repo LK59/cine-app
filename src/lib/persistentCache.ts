@@ -374,6 +374,20 @@ export function noteResponse(key: string, data: unknown): void {
   writeTimer = setTimeout(flushWrites, WRITE_DELAY_MS);
 }
 
+/**
+ * Le réseau vient de confirmer la donnée tenue (un 304 de la relecture au premier plan, §96) : elle
+ * est réécrite telle quelle, pour que l'appareil la date d'aujourd'hui — comme le lancement réécrit
+ * une réponse identique. Sans ceci, un catalogue confirmé chaque jour pendant une semaine sortait du
+ * cache (`MAX_AGE_MS`) comme s'il n'avait jamais été relu. Ni la ligne d'ouverture, ni l'attente des
+ * flux (`awaitingFresh`) ne sont touchées : ce n'est pas une réponse de lancement.
+ */
+export function renewPersisted(key: string, data: unknown): void {
+  if (!isPersistedKey(key) || data === undefined || !currentAccount || outageMarked(data)) return;
+  pendingWrites.set(key, data);
+  if (writeTimer) return;
+  writeTimer = setTimeout(flushWrites, WRITE_DELAY_MS);
+}
+
 function outageMarked(data: unknown): boolean {
   if (!data || typeof data !== "object") return false;
   const marks = data as { stale?: unknown; jellyfinDown?: unknown };

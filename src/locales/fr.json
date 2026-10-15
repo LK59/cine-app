@@ -2333,6 +2333,7 @@
     "removeFromContinue": "Retirer de « Reprendre »",
     "removeFromContinueFailed": "Ce titre n'a pas pu être retiré de « Reprendre ».",
     "titleUnavailable": "Ce titre n'est pas encore disponible dans le cinéma.",
+    "titleRetired": "Ce titre a été retiré de la bibliothèque.",
     "seriesStillWatched": "Tous ses épisodes sont vus : la série reste dans « Vu ».",
     "forYou": "Pour vous",
     "outage": {

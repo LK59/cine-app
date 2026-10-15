@@ -2,7 +2,7 @@
 
 import { memo, useRef } from "react";
 import { useT } from "@/components/TranslationProvider";
-import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
+import { useCatalogueRow } from "@/lib/useCatalogueRow";
 import { CinemaCard } from "@/components/cinema/CinemaCard";
 import { ROW_CONTAINMENT } from "@/lib/rowContainment";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
@@ -22,6 +22,9 @@ const EDGE_FADE = {
 // card — on each press. Every prop passed in is already stable across those renders (the item
 // arrays come straight off the SWR payload, the callbacks are useCallback'd there), so the rows
 // simply opt out of that work entirely.
+/** La clé d'une carte de film — celle du `key` React, lue par `useCatalogueRow`. */
+const movieKey = (item: CinemaMovie) => String(item.radarrId);
+
 export const CinemaRow = memo(function CinemaRow({
   label,
   rowKey,
@@ -58,10 +61,11 @@ export const CinemaRow = memo(function CinemaRow({
 }) {
   const t = useT();
   // Les affiches glissent vers leur nouvelle place quand les données fraîches remplacent celles
-  // du cache de l'appareil — voir `CATALOGUE_FLIP`.
+  // du cache de l'appareil, une carte retirée s'efface, et rien ne bouge sous la main — voir
+  // `useCatalogueRow` (DECISIONS.md §96).
   const track = useRef<HTMLDivElement>(null);
-  useFlipGrid(track, items.map((item) => String(item.radarrId)), CATALOGUE_FLIP);
-  if (items.length === 0) return null;
+  const { shown } = useCatalogueRow(track, items, movieKey);
+  if (shown.length === 0) return null;
 
   return (
     // snap-start: the scroll pane above (CinemaClient) is snap-y/snap-mandatory — this makes
@@ -89,7 +93,7 @@ export const CinemaRow = memo(function CinemaRow({
           hover/focus-scaled card with no room above it gets its top edge clipped by this same
           box — this is what "les affiches sont coupées" turned out to be. */}
       <div ref={track} className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
-        {items.map((item, i) => (
+        {shown.map((item, i) => (
           <CinemaCard
             key={item.radarrId}
             item={item}

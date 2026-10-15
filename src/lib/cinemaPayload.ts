@@ -18,6 +18,7 @@
 
 import { noteUnauthorized } from "@/lib/sessionExpired";
 import { withCode } from "@/lib/upstreamError";
+import { catalogueUnchanged, noteCatalogueRead } from "@/lib/catalogueRefresh";
 
 /** Ce qui voyage : les titres une fois, et des identifiants partout ailleurs. */
 export interface WirePayload<T> {
@@ -89,6 +90,20 @@ export async function cinemaFetcher<T>(url: string): Promise<T> {
     const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
     throw withCode(new Error(body.error || `Erreur ${res.status}`), body.code);
   }
+  // Une réponse à l'étiquette déjà lue — le cache HTTP du navigateur rend un 200 reconstitué après
+  // un 304 — : l'objet déjà tenu, sans relire un mégaoctet de JSON (`catalogueRefresh.ts`, §96).
+  const same = catalogueUnchanged(url, res);
+  if (same !== undefined) return same as T;
+  // Notée, et une copie de secours plus ancienne que ce qu'on tient n'en remplace pas les titres (§96).
+  return noteCatalogueRead(url, res, await readCatalogueBody<T>(url, res));
+}
+
+/**
+ * Le corps d'une réponse du catalogue, rendu à la forme des écrans. Partagé avec la relecture au
+ * retour au premier plan (`useCatalogueRefresh`) : une seule écriture de ce qui transforme le fil en
+ * écran.
+ */
+export async function readCatalogueBody<T>(url: string, res: Response): Promise<T> {
   const raw = (await res.json()) as WirePayload<Record<string, unknown>> & Record<string, unknown>;
   const idOf = url.includes("/series")
     ? (item: Record<string, unknown>) => item.sonarrId as number

@@ -9,6 +9,7 @@ import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { bannerResumeAt, feedResumeAt } from "@/lib/sheetFacts";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
+import { interleaveLeaving } from "@/lib/useCatalogueRow";
 
 /**
  * La rangée « Reprendre » des deux accueils — bureau et téléphone —, décidée une fois (DECISIONS.md
@@ -72,25 +73,8 @@ export const FRESH_WAIT_MAX_MS = 4000;
  * changement, la précédait et est toujours là — ou en tête, s'il n'y en a pas.
  */
 export function withLeaving<E extends { key: string }>(before: readonly (E & { leaving?: true })[], next: readonly E[]): (E & { leaving?: true })[] {
-  const present = new Set(next.map((entry) => entry.key));
-  const after = new Map<string | null, (E & { leaving?: true })[]>();
-  let anchor: string | null = null;
-  for (const entry of before) {
-    if (present.has(entry.key)) {
-      anchor = entry.key;
-      continue;
-    }
-    const list = after.get(anchor) ?? [];
-    list.push({ ...entry, leaving: true });
-    after.set(anchor, list);
-  }
-  if (after.size === 0) return [...next];
-  const out: (E & { leaving?: true })[] = [...(after.get(null) ?? [])];
-  for (const entry of next) {
-    out.push(entry);
-    out.push(...(after.get(entry.key) ?? []));
-  }
-  return out;
+  // Le placement est celui des rangées du catalogue (§96) : une seule écriture.
+  return interleaveLeaving<E & { leaving?: true }>(before, next as readonly (E & { leaving?: true })[], (entry) => entry.key, (entry) => ({ ...entry, leaving: true }));
 }
 
 interface RowSnapshot {

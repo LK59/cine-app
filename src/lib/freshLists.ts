@@ -14,7 +14,8 @@ import { NEXT_UP_KEY, RESUME_KEY, TO_WATCH_KEY } from "@/lib/swr";
  * changeant d'onglet ni en ouvrant une fiche — seulement en relançant l'application (25/09/2026).
  * Ce sont de petites réponses, qui changent au fil de la journée et parfois ailleurs que dans
  * cine-app (un « vu » marqué sur la télé) : on les redemande au retour de l'application au premier
- * plan et à chaque changement d'onglet Films/Séries. Pas le catalogue.
+ * plan et à chaque changement d'onglet Films/Séries. Pas le catalogue : lui se relit au retour au
+ * premier plan passé un quart d'heure, par sa propre règle (`useCatalogueRefresh`, DECISIONS.md §96).
  *
  * `mutate(clé)` ne relance que les clés qu'un écran affiche : une liste que personne ne regarde
  * n'est pas demandée. Rien pendant un film en plein écran : SWR y est en pause, et une requête

@@ -2,7 +2,7 @@
 
 import { memo, useRef } from "react";
 import { useT } from "@/components/TranslationProvider";
-import { CATALOGUE_FLIP, useFlipGrid } from "@/lib/useFlipGrid";
+import { useCatalogueRow } from "@/lib/useCatalogueRow";
 import { CinemaSeriesCard } from "@/components/cinema/CinemaSeriesCard";
 import { ROW_CONTAINMENT } from "@/lib/rowContainment";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -16,6 +16,9 @@ const EDGE_FADE = {
 };
 
 // memo'd for the same reason CinemaRow is — see its own note.
+/** La clé d'une carte de série — celle du `key` React, lue par `useCatalogueRow`. */
+const seriesKey = (item: CinemaSeries) => String(item.sonarrId);
+
 export const CinemaSeriesRow = memo(function CinemaSeriesRow({
   label,
   rowKey,
@@ -46,10 +49,11 @@ export const CinemaSeriesRow = memo(function CinemaSeriesRow({
   seeAllKey?: string;
 }) {
   const t = useT();
-  // Comme CinemaRow : les affiches glissent quand les données fraîches arrivent.
+  // Comme CinemaRow : les affiches glissent quand les données fraîches arrivent, une carte retirée
+  // s'efface, et rien ne bouge sous la main (`useCatalogueRow`, DECISIONS.md §96).
   const track = useRef<HTMLDivElement>(null);
-  useFlipGrid(track, items.map((item) => String(item.sonarrId)), CATALOGUE_FLIP);
-  if (items.length === 0) return null;
+  const { shown } = useCatalogueRow(track, items, seriesKey);
+  if (shown.length === 0) return null;
 
   return (
     // Mise en page sautée loin de l'écran — voir `ROW_CONTAINMENT`.
@@ -69,7 +73,7 @@ export const CinemaSeriesRow = memo(function CinemaSeriesRow({
         )}
       </div>
       <div ref={track} className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
-        {items.map((item, i) => (
+        {shown.map((item, i) => (
           <CinemaSeriesCard
             key={item.sonarrId}
             item={item}
