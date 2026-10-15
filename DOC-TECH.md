@@ -1128,7 +1128,19 @@ reads and two verbs.
   first picture) is removed, so the buffer never holds the same pictures twice — and never anything
   under the head: a group starting less than 1 s ahead of it falls back to the ordinary recovery
   instead (long GOPs, a late retry). Below 5 s of lead,
-  after four tries, or if a seek intervened, the ordinary recovery runs as before (24/09).
+  after four tries, or if a seek intervened, the ordinary recovery runs as before (24/09) — **until the
+  pipeline has played**. Since 2026-10-15 (DECISIONS §97), once it has (`playing` seen), a network
+  failure never goes through the refused-append ladder: the buffers are kept whatever the lead, and the
+  read is retried without a count (1, 2, 4, 8 s, then every 8 s; at once on `online`; the watchdog does
+  not recover meanwhile). The bound is time: when the head has run out of media (lead < 0.5 s or
+  `readyState` < 3), the element is not paused, the page is visible, and the source has delivered no
+  chunk for **48 s** under a demand (`HttpByteSource.networkSilentMs`: from the first unanswered
+  request, kept across failed reads, reset by any chunk that arrives, by `online` and by a return to
+  the foreground), `onError(…, "network")` — the host's "connection lost" screen and `network` line,
+  then its own retry when the network returns. A slow link delivers chunks and is never silent that
+  long (a request under ~40 KB/s was already cut by the 25 s timeout). Network back before the bound:
+  a read still waiting resumes at once (≈0.4 s, unchanged); after failed reads, the next retry re-reads
+  from where it stopped. Before the first picture, the opening keeps its old path (35 s, §77/§78).
 - **Source loss**: iOS reclaims media resources in the background and closes the MediaSource. This
   is a pipeline to rebuild at the current position, not a failure to report — up to three times.
 - **The rebuild budget decays.** Three source losses an hour apart are not the failure the limit

@@ -2850,7 +2850,7 @@ par `restart` (`ExperimentalPlayerHost`, reconstructions automatiques seulement)
 d'erreur et les erreurs hls.js de `PlayerHost`. `learnedExclusions`, `purgeLegacyAudioBlocklist`
 (`PlayerHost`).
 
-**Volontairement à part.** La coupure réseau (attente sans fin, voulue et visible) ; les gestes du
+**Volontairement à part.** La coupure réseau (attente voulue et visible — bornée à 48 s de silence en pleine lecture depuis le 15/10/2026, §97) ; les gestes du
 spectateur (réessayer, piste, plafond HDR) ; `mseSource` et `playbackGuard`, déjà bornés ; le
 rechargement WebKit en fin d'échelle, borné par `reloadAttempt`.
 
@@ -5333,7 +5333,7 @@ inerte puis glissement, défilement, focus, doigt posé, réduction des animatio
 
 **Décidé le 15/10/2026** (Louis).
 
-## 97. Une coupure en pleine lecture : dite à l'écran, hors du temps regardé, au journal
+## 97. Une coupure en pleine lecture : dite à l'écran, hors du temps regardé, au journal, bornée à 48 s
 
 Relevé le 15/10/2026 (passe de nuit, LECTEUR-4) : trois séances d'un même compte (Windows, *The
 Rookie*, 212 s ; iPhone, *Lucifer*, 129 s et 66 s) figées sans un mot, puis fermées à la croix ; une
@@ -5359,7 +5359,33 @@ instance de test : image figée 100 à 196 s, ni roue, ni mot, ni ligne `stall` 
   restées en file (`unsentLines`, §42) partent dès l'événement `online`, puis une seconde passe 5 s
   après (`online` dit l'interface revenue, pas encore le serveur joignable), en plus du tic de la minute.
 
+**Règle — temps 2, le chemin de lecture : la coupure bornée comme celle du lecteur serveur.**
+- Une fois que le pipeline a joué (`playing`), une lecture en échec réseau (`NetworkUnavailable`) ne
+  passe plus par l'échelle des envois refusés (`appendFailures` / `recover`, qui vidait les tampons
+  pour relire sur le même réseau absent, chaque essai relançant la minute de patience de la lecture) :
+  le tampon est gardé quelle que soit l'avance et la lecture retentée sans compter (1, 2, 4, 8 s, puis
+  toutes les 8 s ; aussitôt sur `online`), le chien de garde ne reprend rien pendant ce temps
+  (`holdThroughOutage`, `outageHold`).
+- La borne est le temps (`watchForOutage`, au chien de garde) : tête à court de média (moins de 0,5 s
+  devant, ou `readyState` < 3), ni pause ni page cachée, et **48 s** sans un morceau reçu sous une
+  demande (`NETWORK_OUTAGE_GIVE_UP_MS`, la borne du lecteur serveur). Alors `onError(…, "network")`,
+  une fois : l'écran « connexion perdue », la ligne `network` (`reason` « coupure réseau : aucun octet
+  reçu depuis 48 s »), et le nouvel essai de l'hôte au retour du réseau, inchangé. Plus rien ne part du
+  pipeline rendu (`networkGaveUp`).
+- Le silence (`HttpByteSource.networkSilentMs`) part de la première demande restée sans octet, tient à
+  travers les lectures qui échouent (un serveur qui refuse aussitôt reste un silence), et s'efface au
+  premier morceau arrivé ; `online` et le retour au premier plan le font repartir de zéro. Un lien lent
+  n'est jamais un silence : il livre des morceaux de 1 Mio — au-delà des 256 Kio de §77 —, et sous
+  ~40 Ko/s l'échéance de 25 s des requêtes le coupait déjà. La patience d'une minute par lecture
+  (`OFFLINE_PATIENCE_MS`) et les quatre tentatives d'une plage ne changent pas.
+- Le réseau revenu avant la borne : une lecture encore en attente repart aussitôt (≈ 0,4 s, comme
+  avant) ; après des lectures en échec, l'essai suivant relit là où la lecture s'était arrêtée.
+- Avant la première image de ce pipeline, l'ouverture garde exactement son chemin d'avant : l'hôte a
+  le sien (35 s, §77/§78).
+
 **Porteurs.** `WatchedClock.stall` / `resume`, `watchElementWaits` (`src/lib/playerSessionTally.ts`) ;
+`holdThroughOutage`, `watchForOutage`, `retryReadLater` (`mseSource.ts`), `networkSilentMs`
+(`byteSource.ts`, relayé par `Remuxer`) ;
 `stallAt` / `stallUnstable` / `stallWord` (`ExperimentalPlayerHost`) ; `MseSource.networkFacts` ;
 l'effet des envois en retard de `PlaybackProvider`.
 
@@ -5369,7 +5395,11 @@ l'effet des envois en retard de `PlaybackProvider`.
 **Tests.** `playerSessionTally.test.ts` (« s'arrête pendant une attente », `watchElementWaits`),
 `ExperimentalPlayerHost.test.tsx` (« une coupure en pleine lecture » : temps regardé, mot à 3 s, sans
 clignoter, muet sans tentative, hors ligne), `PlayerHost-temps-regarde.test.tsx`,
-`webcodecs-mseSource.test.ts` (« l'échelle des reprises » : `onLine`, `netTrouble`, `relaunch`),
+`webcodecs-mseSource.test.ts` (« l'échelle des reprises » : `onLine`, `netTrouble`, `relaunch` ; « une
+coupure en pleine lecture, bornée » : refus à chaque lecture, requête pendante, retour du réseau avant
+l'échéance avec et sans lecture en attente, `online`, pause, ouverture inchangée),
+`webcodecs-byteSource.test.ts` (« le silence du réseau » : hors ligne, refus immédiat, requête pendante
+avec `onLine` vrai, lien lent),
 `unsentLines-online.test.tsx`, `decisions-partagees.test.ts` (« le temps regardé s'arrête pendant une
 attente »).
 

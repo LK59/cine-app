@@ -176,6 +176,18 @@ const NETWORK_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
 /** Ce que le retrait laisse au moins devant la tête — sous elle, jamais. */
 const NETWORK_TRIM_MARGIN_SECONDS = 1;
 
+/**
+ * La borne d'une coupure en pleine lecture (DECISIONS.md §97) : la tête à court de média et le réseau
+ * muet depuis ce temps sous une demande (`networkSilentMs`), la main passe à l'hôte — l'écran
+ * « connexion perdue », qui relance seul au retour du réseau. 48 s, celle du lecteur serveur
+ * (`NETWORK_OUTAGE_GIVE_UP_MS`, PlayerHost). Avant le 15/10/2026, une coupure passait par l'échelle des
+ * envois refusés (`appendFailures` / `recover`), chaque reprise relançant la patience d'une minute par
+ * lecture : quatre minutes et plus d'image figée, sans un mot, avant cet écran.
+ */
+const NETWORK_OUTAGE_GIVE_UP_MS = 48_000;
+/** « À court » : moins que cela devant la tête, ou l'élément qui n'a plus de quoi avancer. */
+const OUTAGE_STARVED_LEAD_SECONDS = 0.5;
+
 /** How long a playhead with no media under it is tolerated before a seek is forced to reach it. */
 const STALL_TIMEOUT_MS = 700;
 
@@ -317,6 +329,7 @@ export class MseSource {
   /** Nouveaux essais réseau faits sans vider le tampon depuis le dernier envoi réussi. */
   private networkRetries = 0;
   private networkRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private networkRetryGeneration = 0;
   /**
    * La lecture a repris après une coupure sans vider le tampon : le premier segment relu remplace
    * ce que le tampon tient déjà à partir de son propre début, qui est retiré juste avant l'envoi.
@@ -329,6 +342,14 @@ export class MseSource {
    * il repositionne tout lui-même.
    */
   private networkHold = false;
+  /**
+   * Une coupure en pleine lecture tenue (§97) : le tampon gardé quelle que soit l'avance, de nouveaux
+   * essais sans fin (`NETWORK_RETRY_DELAYS_MS`, puis le dernier), jusqu'à la borne de
+   * `watchForOutage`. Retombe au premier envoi accepté.
+   */
+  private outageHold = false;
+  /** La main est passée à l'hôte pour une coupure (§97) : plus rien ne part d'ici. */
+  private networkGaveUp = false;
   /**
    * Everything about the element's own clock — pausing, resuming, landing after a seek, starting
    * a film the element gave up on. A different subject from moving bytes, with a
@@ -679,6 +700,7 @@ export class MseSource {
       this.video.addEventListener("play", this.onPlay);
       this.video.addEventListener("playing", this.request);
       this.video.addEventListener("playing", this.onPlaying);
+      if (typeof window !== "undefined" && typeof window.addEventListener === "function") window.addEventListener("online", this.onOnline);
       this.lastAppendAt = Date.now();
       this.watchdogTimer = setInterval(this.watchdog, WATCHDOG_MS);
 
@@ -1054,7 +1076,7 @@ export class MseSource {
 
   private async runFill(): Promise<void> {
     // Une zone illisible : le lecteur de fichier est resté devant elle, et il n'y a rien d'autre à lire.
-    if (this.destroyed || this.ended || this.networkHold || this.zone || this.zoneHanded) return;
+    if (this.destroyed || this.ended || this.networkHold || this.networkGaveUp || this.zone || this.zoneHanded) return;
     // À chaque battement d'horloge aussi, pas seulement après un envoi : une avance bornée par la
     // place du son (`audioRoom`) n'envoie plus rien, et l'arrière qui la bornait ne serait alors
     // retiré qu'une fois l'avance tombée au plancher.
@@ -1081,7 +1103,7 @@ export class MseSource {
         const builtFrom = diagNow();
         const segment = await this.remuxer.nextSegment();
         diagInterval("segment", builtFrom);
-        if (this.generation !== generation || this.destroyed) break;
+        if (this.generation !== generation || this.destroyed || this.networkGaveUp) break;
         if (this.appendsTraced < TRACED_APPENDS) {
           this.appendsTraced++;
           trace(
@@ -1294,6 +1316,14 @@ export class MseSource {
       // Une lecture coupée par un saut : ce n'est pas un segment refusé, et il n'y a rien à
       // reprendre — le saut qui l'a coupée repositionne tout derrière.
       if (isReadAbandoned(error)) return;
+      if (this.networkGaveUp) return;
+      // Une coupure en pleine lecture (§97) : tenue, bornée par le temps — jamais l'échelle des
+      // envois refusés, qui relançait la patience d'une minute à chaque reprise. Avant la première
+      // image de ce pipeline, l'ouverture garde son chemin d'avant : l'hôte a le sien (35 s, §77/§78).
+      if (isNetworkFailure(error) && this.lastPlayingAt > 0) {
+        this.holdThroughOutage(generation, error);
+        return;
+      }
       if (isNetworkFailure(error) && this.keepThroughNetworkFailure(generation)) return;
       // Reported by the viewer as a freeze that a second seek or a language change undoes — so
       // nothing was actually lost, and declaring playback over was the wrong answer. A refused
@@ -1326,6 +1356,10 @@ export class MseSource {
       this.rememberBuffered(video ? "envoi vidéo" : "envoi audio");
       this.appendFailures = 0;
       this.networkRetries = 0;
+      if (this.outageHold) {
+        this.outageHold = false;
+        trace("coupure réseau : le média arrive de nouveau");
+      }
     } catch (error) {
       // The buffer is full rather than broken: drop what is behind the playhead and try again.
       //
@@ -1924,21 +1958,89 @@ export class MseSource {
     if (this.networkRetries >= NETWORK_RETRY_DELAYS_MS.length) return false;
     const delay = NETWORK_RETRY_DELAYS_MS[this.networkRetries];
     this.networkRetries += 1;
-    this.networkHold = true;
     trace(`coupure réseau avec ${this.lead.toFixed(1)} s d'avance : tampon gardé, nouvel essai dans ${delay / 1000} s`);
-    if (this.networkRetryTimer) clearTimeout(this.networkRetryTimer);
-    this.networkRetryTimer = setTimeout(() => {
-      this.networkRetryTimer = null;
-      // Un saut, une reprise ou une destruction entre-temps a tout repositionné : rien à reprendre.
-      if (this.destroyed || this.generation !== generation) return;
-      this.networkHold = false;
-      // `readUpTo` est déjà sur l'horloge du fichier : lui retirer le décalage repartait du groupe
-      // d'avant quand la lecture s'était arrêtée pile sur une image clé — sous la tête, donc vidage.
-      this.remuxer.seekTo(this.readUpTo);
-      this.trimBeforeNextAppend = true;
-      void this.fill();
-    }, delay);
+    this.retryReadLater(generation, delay);
     return true;
+  }
+
+  /**
+   * Une coupure en pleine lecture (DECISIONS.md §97), une fois que ce pipeline a joué : le tampon est
+   * gardé quelle que soit l'avance, et la lecture retentée sans compter (1, 2, 4, 8 s, puis toutes les
+   * 8 s ; tout de suite à `online`). Ce n'est plus l'échelle des envois refusés : la reprise y vidait
+   * les tampons pour relire la même plage, sur le même réseau absent, et chaque essai relançait la
+   * patience d'une minute de la lecture. La borne est le temps, pas le nombre d'essais :
+   * `watchForOutage`, à la tête à court de média. Le réseau revenu avant elle, la lecture reprend là
+   * où elle s'était arrêtée, sans reconstruction.
+   */
+  private holdThroughOutage(generation: number, error: unknown): void {
+    if (this.destroyed || this.stuck || this.networkGaveUp) return;
+    const delay = NETWORK_RETRY_DELAYS_MS[Math.min(this.networkRetries, NETWORK_RETRY_DELAYS_MS.length - 1)];
+    this.networkRetries += 1;
+    this.outageHold = true;
+    const detail = error instanceof Error ? error.message : String(error);
+    trace(`coupure réseau (${detail.slice(0, 80)}), ${this.lead.toFixed(1)} s d'avance : tampon gardé, essai n°${this.networkRetries} dans ${delay / 1000} s`);
+    this.retryReadLater(generation, delay);
+  }
+
+  /** Relit plus tard là où la lecture s'était arrêtée, le tampon gardé — voir `trimBeforeNextAppend`. */
+  private retryReadLater(generation: number, delay: number): void {
+    this.networkHold = true;
+    if (this.networkRetryTimer) clearTimeout(this.networkRetryTimer);
+    this.networkRetryGeneration = generation;
+    this.networkRetryTimer = setTimeout(() => this.retryReadNow(generation), delay);
+  }
+
+  private retryReadNow(generation: number): void {
+    if (this.networkRetryTimer) clearTimeout(this.networkRetryTimer);
+    this.networkRetryTimer = null;
+    // Un saut, une reprise ou une destruction entre-temps a tout repositionné : rien à reprendre.
+    if (this.destroyed || this.generation !== generation || this.networkGaveUp) return;
+    this.networkHold = false;
+    // `readUpTo` est déjà sur l'horloge du fichier : lui retirer le décalage repartait du groupe
+    // d'avant quand la lecture s'était arrêtée pile sur une image clé — sous la tête, donc vidage.
+    this.remuxer.seekTo(this.readUpTo);
+    this.trimBeforeNextAppend = true;
+    void this.fill();
+  }
+
+  /** Le réseau revient pendant qu'une coupure attend son prochain essai : il part tout de suite. */
+  private readonly onOnline = () => {
+    if (!this.outageHold || !this.networkHold || this.networkRetryTimer === null) return;
+    trace("coupure réseau : le navigateur est de nouveau en ligne, nouvel essai tout de suite");
+    this.retryReadNow(this.networkRetryGeneration);
+  };
+
+  /**
+   * La borne d'une coupure en pleine lecture (DECISIONS.md §97), au chien de garde : ce pipeline a
+   * joué, le spectateur veut jouer (ni pause ni fin, page visible), la tête est à court de média, et
+   * le réseau n'a rien livré depuis `NETWORK_OUTAGE_GIVE_UP_MS` sous une demande. Alors la main passe
+   * à l'hôte (`onError(…, "network")`) : l'écran « connexion perdue », la ligne `network`, et le
+   * nouvel essai de l'hôte au retour du réseau. Un lien lent livre ses morceaux : jamais ici.
+   */
+  private watchForOutage(): void {
+    if (this.networkGaveUp || this.stuck || this.destroyed || this.ended || this.lastPlayingAt === 0) return;
+    if (this.video.paused) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    const starved = this.lead < OUTAGE_STARVED_LEAD_SECONDS || (typeof this.video.readyState === "number" && this.video.readyState < 3);
+    if (!starved) return;
+    const silent = this.networkSilentMs();
+    if (silent < NETWORK_OUTAGE_GIVE_UP_MS) return;
+    this.networkGaveUp = true;
+    this.networkHold = false;
+    this.outageHold = false;
+    if (this.networkRetryTimer) clearTimeout(this.networkRetryTimer);
+    this.networkRetryTimer = null;
+    const why = `coupure réseau : aucun octet reçu depuis ${Math.round(silent / 1000)} s`;
+    trace(`${why} — la main passe à l'hôte`);
+    this.callbacks.onError(`${why} ${this.elementState()}`, "network");
+  }
+
+  private networkSilentMs(): number {
+    try {
+      return (this.remuxer as { networkSilentMs?: () => number }).networkSilentMs?.() ?? 0;
+    } catch {
+      return 0;
+    }
   }
 
   private async clear(queue: BufferQueue): Promise<void> {
@@ -1995,6 +2097,9 @@ export class MseSource {
     // Before anything returns early: a stall is exactly the case where every check below has
     // decided there is nothing to do, and that decision is what the log line has to show.
     this.watchForStall();
+    // La borne d'une coupure en pleine lecture (§97), avant tout ce qui rend la main plus bas.
+    this.watchForOutage();
+    if (this.networkGaveUp) return;
     // Handed to the host, which is rebuilding: another seek from here would only race it.
     if (this.stuck) return;
     if (this.ended || !this.videoBuffer || this.video.paused) return;
@@ -2018,6 +2123,9 @@ export class MseSource {
     // guessing how long a segment takes to arrive — and guessing short, as a 4K file over a slow
     // link showed, means seeking again to the very place already being fetched.
     if (this.fillTask) return;
+    // Une coupure tenue attend son prochain essai (§97) : une reprise relirait sur le même réseau
+    // absent en vidant les tampons. La borne est `watchForOutage`.
+    if (this.outageHold) return;
 
     // Nothing is being read and the playhead is on nothing: whatever failed to say so, the
     // viewer is somewhere this player is not serving.
@@ -2215,7 +2323,8 @@ export class MseSource {
         netTrouble: networkUnstable(),
         relaunch:
           `garde ${this.networkRetries}/${NETWORK_RETRY_DELAYS_MS.length}${this.networkHold ? " en attente" : ""}` +
-          ` · échecs ${this.appendFailures}/${MAX_APPEND_FAILURES}`,
+          ` · échecs ${this.appendFailures}/${MAX_APPEND_FAILURES}` +
+          (this.outageHold ? ` · coupure, silence ${Math.round(this.networkSilentMs() / 1000)} s` : ""),
       };
     } catch {
       return {};
@@ -2703,6 +2812,7 @@ export class MseSource {
     this.video.removeEventListener("play", this.onPlay);
     this.video.removeEventListener("playing", this.request);
     this.video.removeEventListener("playing", this.onPlaying);
+    if (typeof window !== "undefined" && typeof window.removeEventListener === "function") window.removeEventListener("online", this.onOnline);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
     if (this.openingReassertTimer) clearTimeout(this.openingReassertTimer);

@@ -227,7 +227,8 @@ si elle a changé.
 | Taille derrière la tête | `trimBehind`, `evict` | après chaque envoi quand un budget existe ; sur `QuotaExceededError` |
 | Éviction par le navigateur | `refillEvicted` | ManagedMediaSource seulement : une plage retirée devant la tête est relue (3 fois par minute au plus) |
 | Rattrapage | chien de garde, horloge figée, tête partie, échelle | voir ci-dessous |
-| Réserve réseau | `keepThroughNetworkFailure` | avance ≥ 5 s : on garde les tampons et on réessaie (1, 2, 4, 8 s) |
+| Réserve réseau | `keepThroughNetworkFailure` | avant la première image du pipeline : avance ≥ 5 s, on garde les tampons et on réessaie (1, 2, 4, 8 s) |
+| Coupure tenue (`outageHold`) | `holdThroughOutage`, après `playing` | tampons gardés quelle que soit l'avance, essais sans compter (1, 2, 4, 8 s puis 8 s ; aussitôt à `online`), aucune reprise du chien de garde ; borne : tête à court, ni pause ni page cachée, 48 s sans un morceau reçu sous une demande (`networkSilentMs`) → `onError(…, "network")` une fois, puis plus rien ne part (`networkGaveUp`) (DECISIONS.md §97) |
 | Perte | `lost` | `sourceclose` ou `error` de l'élément ne font qu'**une photo** (`lossSnapshot`) ; `lost` = source fermée ou échelle épuisée. **Le moteur ne se reconstruit jamais lui-même** |
 | Fin de flux | `ended` | `nextSegment()` nul → `endOfStream` |
 | Destruction | `destroy` | voir ci-dessous |
@@ -345,7 +346,7 @@ l'observe par ses événements.
 
 | Rappel | Émis par | Lu par l'hôte comme |
 |---|---|---|
-| `onError(msg, "network")` | remplissage (réseau non gardé), chaîne des sauts | écran « connexion perdue » |
+| `onError(msg, "network")` | remplissage (réseau non gardé, avant la première image), borne de la coupure (`watchForOutage`, 48 s de silence la tête à court), chaîne des sauts | écran « connexion perdue » |
 | `onError(msg, "playback")` | remplissage après 3 échecs ou échelle épuisée, `handOver` | avec `lost` : reconstruction ; sinon bascule |
 | `onUnreadableZone(événement)` | remplissage qui lit une zone illisible (`held`), saut qui la quitte (`left`) | préparer le relais (préchauffage) ou l'annuler ; WebKit HLS natif : relais immédiat (§93) |
 | `onError(motif, "playback", { unreadableZone })` | tête arrivée au relais, saut dans la zone | relais au lecteur serveur à `resumeAt`, **avant** toute autre lecture de l'erreur — ni reconstruction, ni reprise (§93) |

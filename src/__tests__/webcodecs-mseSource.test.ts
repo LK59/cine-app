@@ -3380,3 +3380,179 @@ describe("MseSource — zone illisible (§93)", () => {
     expect(FakeSource.instances[0].endedTimes).toBe(0);
   });
 });
+
+/**
+ * Une coupure en pleine lecture, bornée par le temps (DECISIONS.md §97, LECTEUR-4). Avant : l'échelle
+ * des envois refusés (`appendFailures` / `recover`) vidait les tampons pour relire sur le même réseau
+ * absent, et l'écran « connexion perdue » ne venait qu'après quatre à sept minutes d'image figée.
+ * Le silence du réseau est celui de la source (`networkSilentMs`, testé avec un `fetch` factice dans
+ * webcodecs-byteSource.test.ts) ; ici, le remultiplexeur le rend d'après ce que le test décide.
+ */
+describe("une coupure en pleine lecture, bornée (§97)", () => {
+  const networkError = () => Object.assign(new Error("Plage inaccessible : Load failed"), { network: true });
+  afterEach(() => vi.useRealTimers());
+
+  /**
+   * Un film qui a joué, la tête au bout du média, et un réseau dans l'état `mode` : `reject` (chaque
+   * lecture échoue — hors ligne après sa minute de patience, ou un refus immédiat), `hang` (la lecture
+   * pend — requête sans réponse, `onLine` vrai), `ok`.
+   */
+  async function playingThenCut() {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    const video = fakeVideo();
+    const onError = vi.fn();
+    let mode: "ok" | "reject" | "hang" = "ok";
+    let silentSince: number | null = null;
+    let index = 0;
+    const seeks: number[] = [];
+    const hung: (() => void)[] = [];
+    const remuxer = Object.assign(fakeRemuxer(5000), {
+      seeks,
+      seekTo: (at: number) => {
+        seeks.push(at);
+        index = Math.floor(at / 2);
+      },
+      diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0, segmentStartSeconds: index * 2 }),
+      networkSilentMs: () => (silentSince === null ? 0 : Date.now() - silentSince),
+      nextSegment: async () => {
+        if (mode === "reject") throw networkError();
+        if (mode === "hang") {
+          await new Promise<void>((resolve) => hung.push(resolve));
+          if ((mode as string) !== "ok") throw networkError(); // relu après l'attente : `restore` a pu le changer
+        }
+        index += 1;
+        silentSince = null;
+        return { video: [new Uint8Array([index])], audio: new Uint8Array([index]), subtitles: [], endSeconds: index * 2 };
+      },
+    });
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError });
+    await vi.waitFor(() => expect(video.buffered.length > 0 && video.buffered.end(0) > 10).toBe(true));
+    video.dispatchEvent(new Event("playing"));
+    const buffers = FakeSource.instances[0].buffers;
+    const removedBefore = buffers.map((b) => b.removed.length);
+    const cut = (to: "reject" | "hang") => {
+      mode = to;
+      silentSince = Date.now();
+      // La tête arrive au bout du média : à court, rien sous elle — l'image figée d'une vraie coupure.
+      (video as unknown as { currentTime: number }).currentTime = video.buffered.end(0);
+      void (mse as unknown as { fill: () => Promise<void> }).fill();
+    };
+    const restore = () => {
+      mode = "ok";
+      hung.splice(0).forEach((f) => f());
+    };
+    const fullClears = () => buffers.flatMap((b, i) => b.removed.slice(removedBefore[i])).filter(([from]) => from === 0).length;
+    return { mse, video, onError, seeks, cut, restore, fullClears, buffers };
+  }
+
+  it("refus à chaque lecture : ni reprise ni vidage, des essais sans compter, puis la main à l'hôte à 48 s de silence", async () => {
+    const { mse, onError, cut, fullClears } = await playingThenCut();
+    cut("reject");
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(onError).not.toHaveBeenCalled();
+    expect(fullClears()).toBe(0);
+    expect(traceText()).toMatch(/coupure réseau .*essai n°6/);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][1]).toBe("network");
+    expect(onError.mock.calls[0][0]).toMatch(/aucun octet reçu depuis 4[89] s/);
+    // Rien ne part plus d'ici : l'hôte a la main.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(fullClears()).toBe(0);
+    mse.destroy();
+  });
+
+  it("requête pendante, `onLine` vrai : la borne vient du silence, pas d'une erreur — la lecture pend encore", async () => {
+    const { mse, onError, cut, restore, buffers } = await playingThenCut();
+    cut("hang");
+    await vi.advanceTimersByTimeAsync(47_000);
+    expect(onError).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][1]).toBe("network");
+    // La requête finit par répondre après coup : rien n'est envoyé sur un pipeline rendu à l'hôte.
+    const appended = buffers.map((b) => b.appended.length);
+    restore();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(buffers.map((b) => b.appended.length)).toEqual(appended);
+    mse.destroy();
+  });
+
+  it("le réseau revient avant l'échéance, la lecture encore en attente : elle reprend où elle était, sans reconstruction ni vidage", async () => {
+    // Le cas de la passe de nuit (hors ligne, la lecture attend `online`) : reprise en 0,4 s, gardée.
+    const { mse, video, onError, cut, restore, fullClears } = await playingThenCut();
+    const end = video.buffered.end(0);
+    cut("hang");
+    await vi.advanceTimersByTimeAsync(20_000);
+    restore();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(video.buffered.end(0)).toBeGreaterThan(end + 1);
+    expect(onError).not.toHaveBeenCalled();
+    expect(fullClears()).toBe(0);
+    // Et la borne ne vient plus : le silence est fini. (L'horloge de ce modèle n'avance pas : seule
+    // l'erreur réseau compte ici, le chien de garde de l'horloge figée a ses propres tests.)
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(onError.mock.calls.filter(([, kind]) => kind === "network")).toEqual([]);
+    mse.destroy();
+  });
+
+  it("le réseau revient avant l'échéance après des lectures en échec : le nouvel essai reprend, sans passer la main à l'hôte", async () => {
+    // La tête posée au bout du média : le groupe relu commence sous elle, et c'est la reprise
+    // habituelle (`trimBeforeNextAppend`) qui sert — un saut, pas une reconstruction.
+    const { mse, video, onError, cut, restore } = await playingThenCut();
+    const end = video.buffered.end(0);
+    cut("reject");
+    await vi.advanceTimersByTimeAsync(20_000);
+    restore();
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(video.buffered.end(0)).toBeGreaterThan(end - 1);
+    expect(onError).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(onError.mock.calls.filter(([, kind]) => kind === "network")).toEqual([]);
+    mse.destroy();
+  });
+
+  it("le réseau revient pendant l'attente d'un essai : `online` le relance tout de suite", async () => {
+    const { mse, video, cut, restore } = await playingThenCut();
+    const end = video.buffered.end(0);
+    cut("reject");
+    // Assez d'essais pour que le suivant soit à 8 s.
+    await vi.advanceTimersByTimeAsync(16_000);
+    restore();
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(video.buffered.end(0)).toBeGreaterThan(end + 1);
+    mse.destroy();
+  });
+
+  it("en pause, ou avec de l'avance, la borne attend : seule une tête à court la déclenche", async () => {
+    const { mse, video, onError, cut } = await playingThenCut();
+    cut("reject");
+    (video as unknown as { paused: boolean }).paused = true;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(onError).not.toHaveBeenCalled();
+    (video as unknown as { paused: boolean }).paused = false;
+    await vi.advanceTimersByTimeAsync(500);
+    expect(onError).toHaveBeenCalledTimes(1);
+    mse.destroy();
+  });
+
+  it("avant la première image de ce pipeline, l'ouverture garde son chemin d'avant", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    const video = fakeVideo();
+    const onError = vi.fn();
+    const remuxer = Object.assign(fakeRemuxer(500), {
+      networkSilentMs: () => 120_000,
+      nextSegment: async () => {
+        throw networkError();
+      },
+    });
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError });
+    await vi.advanceTimersByTimeAsync(5000);
+    // L'échelle d'avant : des reprises, puis l'erreur réseau — jamais la borne de 48 s.
+    expect(remuxer.seeks.length).toBeGreaterThan(0);
+    expect(traceText()).not.toMatch(/aucun octet reçu/);
+    mse.destroy();
+  });
+});
