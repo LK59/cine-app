@@ -5511,3 +5511,35 @@ le titre et le synopsis de *Chernobyl* suivaient la langue du compte (§58), ses
 de l'accueil gardés sur l'appareil, qu'aucun appel TMDB ne doit ralentir.
 
 **Tests.** `episodes-langue.test.ts`.
+
+## 101. Session perdue : la connexion dit pourquoi, et rend la page exacte, fiche comprise
+
+**Règle.** Quand la session disparaît sous une page ouverte, l'écran de connexion le dit — « Votre
+session a expiré, reconnectez-vous : vous retrouverez la page où vous étiez. » (`auth.reasonExpired`,
+quatre langues) — et la connexion ramène à l'adresse complète, **fragment compris** : la fiche ouverte
+(`#film=920`, `cinemaRoute.ts`) revient telle quelle. La destination passe toujours par
+`safeNextPath` : jamais une autre origine.
+
+**Porteurs.**
+- `expiredLoginUrl` (`src/lib/sessionExpired.ts`) : l'adresse de connexion après un 401 marqué
+  `x-session-expired` — `/login?reason=expired&next=<chemin + recherche + fragment>`. Appelée par
+  `noteUnauthorized`, le seul endroit du client qui réagit à cet en-tête.
+- Le proxy (`src/proxy.ts`) : une **page** demandée avec un cookie présenté puis refusé (révoqué,
+  expiré, illisible) ajoute `reason=expired` ; sans cookie du tout — une première visite — rien.
+- `nextWithFragment` (`src/lib/signOut.ts`) : le serveur ne voit jamais le fragment, mais le
+  navigateur le recolle à l'adresse d'arrivée d'une redirection qui n'en a pas
+  (`/login?next=%2F#film=920`). La page de connexion le reprend quand `next` n'en nomme pas déjà un.
+
+**Pourquoi.** Passe de nuit du 15/10/2026 (ROBUSTESSE-3) : cookie effacé ou session fermée dans un
+autre onglet, puis une fiche ouverte — redirection propre vers `/login?next=%2F`, mais un formulaire
+muet, et l'accueil au lieu de la fiche après la reconnexion. `safeNextPath` acceptait déjà le
+fragment ; personne ne le lui donnait.
+
+**Tests.** `sessionExpired.test.ts` (fragment et `reason` dans l'adresse), `signOut.test.ts`
+(`nextWithFragment`, toujours filtré par `safeNextPath`), `proxy-login-redirect.test.ts` (`reason`
+seulement quand un cookie a été présenté).
+
+**Différent exprès.** `reason=jellyfin` (jeton Jellyfin révoqué) et `reason=playback` gardent leurs
+propres mots. La redirection du proxy garde `next` = le chemin seul, comme avant.
+
+**Décidé le 15/10/2026** (Louis).

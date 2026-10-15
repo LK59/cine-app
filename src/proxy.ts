@@ -424,6 +424,11 @@ export async function proxy(req: NextRequest) {
       );
     }
     const loginUrl = new URL("/login", req.url);
+    // Un cookie présenté mais refusé (révoqué, expiré, illisible) : une session a existé, l'écran de
+    // connexion dit qu'elle a pris fin (DECISIONS.md §101). Sans cookie du tout, c'est une première
+    // visite, et il n'y a rien à expliquer. Le fragment (la fiche ouverte) n'arrive jamais ici : le
+    // navigateur le recolle à l'adresse d'arrivée, et la page de connexion le reprend.
+    if (token) loginUrl.searchParams.set("reason", "expired");
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }

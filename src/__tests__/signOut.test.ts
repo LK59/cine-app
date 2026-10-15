@@ -76,3 +76,31 @@ describe("safeNextPath — où aller après la connexion", () => {
     expect(safeNextPath(null, "/gestion")).toBe("/gestion");
   });
 });
+
+/**
+ * Le fragment recollé par le navigateur à l'adresse de connexion (DECISIONS.md §101).
+ *
+ * `/#film=920` refusé par le proxy arrive sur `/login?next=%2F#film=920` : le fragment n'est jamais
+ * parti au serveur, mais le navigateur le recolle à l'adresse d'arrivée. La page de connexion le
+ * reprend, et la destination reste filtrée par `safeNextPath`.
+ */
+describe("nextWithFragment — la fiche ouverte retrouvée après la connexion", () => {
+  it("recolle le fragment de la page de connexion à un `next` qui n'en a pas", async () => {
+    const { nextWithFragment } = await import("@/lib/signOut");
+    expect(nextWithFragment("/", "#film=920")).toBe("/#film=920");
+    expect(safeNextPath(nextWithFragment("/", "#film=920"), "/")).toBe("/#film=920");
+  });
+
+  it("garde le fragment que `next` nomme déjà, et ne fabrique rien sans fragment", async () => {
+    const { nextWithFragment } = await import("@/lib/signOut");
+    expect(nextWithFragment("/#serie=3", "#film=920")).toBe("/#serie=3");
+    expect(nextWithFragment("/", "")).toBe("/");
+    expect(nextWithFragment("/", "#")).toBe("/");
+    expect(nextWithFragment(null, "#film=1")).toBeNull();
+  });
+
+  it("ne rend jamais une autre adresse sûre", async () => {
+    const { nextWithFragment } = await import("@/lib/signOut");
+    expect(safeNextPath(nextWithFragment("//ailleurs.example", "#film=1"), "/")).toBe("/");
+  });
+});

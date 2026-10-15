@@ -2,6 +2,7 @@
   "auth": {
     "reasonPlayback": "Melden Sie sich erneut an, um abzuspielen.",
     "reasonJellyfin": "Ihre Sitzung ist abgelaufen: Melden Sie sich erneut an, damit Ihr Fortschritt wieder gespeichert wird.",
+    "reasonExpired": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an, um zur vorherigen Seite zurückzukehren.",
     "jellyfin": {
       "heading": "Anmelden",
       "username": "Benutzername",

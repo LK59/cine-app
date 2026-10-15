@@ -75,3 +75,27 @@ describe("proxy — /login avec une session valide", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 });
+
+/** ROBUSTESSE-3 — dire pourquoi on revient à la connexion (DECISIONS.md §101). */
+describe("proxy — une page demandée sans session valide", () => {
+  it("dit `reason=expired` quand un cookie a été présenté puis refusé", async () => {
+    mockVerify.mockResolvedValue(null);
+    const { proxy } = await import("@/proxy");
+    const res = await proxy(req("/"));
+    const location = new URL(res.headers.get("location")!);
+    expect(location.pathname).toBe("/login");
+    expect(location.searchParams.get("reason")).toBe("expired");
+    expect(location.searchParams.get("next")).toBe("/");
+  });
+
+  it("ne dit rien à une première visite, sans cookie", async () => {
+    mockVerify.mockResolvedValue(null);
+    const { proxy } = await import("@/proxy");
+    const r = req("/");
+    (r as unknown as { cookies: { get: () => undefined } }).cookies = { get: () => undefined };
+    const res = await proxy(r);
+    const location = new URL(res.headers.get("location")!);
+    expect(location.searchParams.get("reason")).toBeNull();
+    expect(location.searchParams.get("next")).toBe("/");
+  });
+});

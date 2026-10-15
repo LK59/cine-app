@@ -24,7 +24,21 @@ describe("noteUnauthorized", () => {
       value: { pathname: "/gestion", search: "?onglet=disques", replace },
     });
     noteUnauthorized(res({ [SESSION_EXPIRED_HEADER]: "1" }));
-    expect(replace).toHaveBeenCalledWith("/login?next=%2Fgestion%3Fonglet%3Ddisques");
+    expect(replace).toHaveBeenCalledWith("/login?reason=expired&next=%2Fgestion%3Fonglet%3Ddisques");
+  });
+
+  // ROBUSTESSE-3 (15/10/2026) : la fiche ouverte vit dans le fragment, et `next` n'emportait que
+  // le chemin — on revenait sur l'accueil après la reconnexion, sans savoir pourquoi on en était parti.
+  it("emporte la fiche ouverte (le fragment) et dit pourquoi (DECISIONS §101)", () => {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { pathname: "/", search: "", hash: "#film=920&tab=movies", replace },
+    });
+    noteUnauthorized(res({ [SESSION_EXPIRED_HEADER]: "1" }));
+    const url = new URL(replace.mock.calls[0][0] as string, "https://cine.invalid");
+    expect(url.pathname).toBe("/login");
+    expect(url.searchParams.get("reason")).toBe("expired");
+    expect(url.searchParams.get("next")).toBe("/#film=920&tab=movies");
   });
 
   it("ignore un 401 qui ne vient pas de la session — un service amont, une clé d'API", () => {

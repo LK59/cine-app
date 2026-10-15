@@ -77,6 +77,20 @@ export function hardNavigate(path: string): void {
  * après avoir retiré la tabulation (audit du 26/09/2026). Les caractères de contrôle sont refusés
  * d'office — aucun chemin légitime n'en porte.
  */
+/**
+ * `next`, complété du fragment que la page de connexion porte elle-même (DECISIONS.md §101).
+ *
+ * Un navigateur ne transmet jamais le fragment au serveur, mais le recolle à l'adresse d'arrivée
+ * d'une redirection qui n'en a pas : `/#film=920` refusé par le proxy devient
+ * `/login?next=%2F#film=920`. Le fragment était donc là, sous les yeux de la page, et perdu à la
+ * connexion. Un `next` qui nomme déjà son fragment (`noteUnauthorized`) l'emporte ; le résultat
+ * passe toujours par `safeNextPath`.
+ */
+export function nextWithFragment(asked: string | null, hash: string): string | null {
+  if (!asked || asked.includes("#") || !hash || hash === "#") return asked;
+  return asked + (hash.startsWith("#") ? hash : `#${hash}`);
+}
+
 export function safeNextPath(asked: string | null, fallback: string): string {
   if (!asked || !asked.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(asked)) return fallback;
   try {

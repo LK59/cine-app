@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Activity, Eye, EyeOff } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
-import { hardNavigate, safeNextPath } from "@/lib/signOut";
+import { hardNavigate, nextWithFragment, safeNextPath } from "@/lib/signOut";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { AppSignature } from "@/components/AppSignature";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
@@ -67,7 +67,8 @@ function LoginForm() {
        * qui est ce pour quoi elle existe. Une destination explicitement demandée reste prioritaire,
        * et rien n'empêche d'aller ensuite au lecteur à la main.
        */
-      const asked = searchParams.get("next");
+      // Le fragment recollé par le navigateur après la redirection du proxy — voir `nextWithFragment`.
+      const asked = nextWithFragment(searchParams.get("next"), window.location.hash);
       const local = endpoint.endsWith("/login");
       // Un vrai chargement, pas une navigation interne : voir `hardNavigate`. Et seulement vers ce site.
       hardNavigate(safeNextPath(asked, local ? "/gestion" : "/"));
@@ -109,6 +110,13 @@ function LoginForm() {
           {reason === "playback" && (
             <p className="mb-5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200">
               {t("auth.reasonPlayback")}
+            </p>
+          )}
+          {/* La session a pris fin sous une page ouverte (`noteUnauthorized`, ou un cookie refusé par
+              le proxy) : dire pourquoi on revient ici, et que la page sera rendue telle quelle. */}
+          {reason === "expired" && (
+            <p role="status" className="mb-5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200">
+              {t("auth.reasonExpired")}
             </p>
           )}
           {reason === "jellyfin" && (

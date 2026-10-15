@@ -56,8 +56,21 @@ export function noteUnauthorized(res: Response): void {
   if (isPublicPath(window.location.pathname)) return;
 
   leaving = true;
-  const here = window.location.pathname + window.location.search;
-  window.location.replace(`/login?next=${encodeURIComponent(here)}`);
+  window.location.replace(expiredLoginUrl(window.location));
+}
+
+/**
+ * L'adresse de la connexion quand la session a disparu sous une page ouverte (DECISIONS.md §101).
+ *
+ * `reason=expired` fait dire à l'écran pourquoi on y revient : sans lui, on retombait sur le
+ * formulaire comme au premier lancement, sans savoir qu'une reconnexion suffisait. Et `next` emporte
+ * le fragment : la fiche ouverte vit dans `#film=…` (`cinemaRoute.ts`), et l'adresse rendue après la
+ * connexion n'en gardait que le chemin — on revenait sur l'accueil (passe de nuit du 15/10/2026,
+ * ROBUSTESSE-3). `safeNextPath` valide toujours la destination à l'arrivée.
+ */
+export function expiredLoginUrl(here: Pick<Location, "pathname" | "search"> & { hash?: string }): string {
+  const next = here.pathname + here.search + (here.hash ?? "");
+  return `/login?reason=expired&next=${encodeURIComponent(next)}`;
 }
 
 /** Pour les tests, qui doivent pouvoir rejouer le premier 401. */
