@@ -5425,3 +5425,28 @@ perdue ou instable… », §78) : seul son temps regardé change ici. Le mot res
 film qui joue.
 
 **Décidé le 15/10/2026.**
+
+## 98. L'ordre d'une filmographie : bibliothèque, vrais rôles, note pondérée par les votes
+
+**Règle.** La filmographie d'une personne se trie sur trois clés : les titres de la bibliothèque
+d'abord (la fiche les montre à part), puis les vrais rôles avant les apparitions — personnage
+« Self », « Himself », « Herself » (et leurs suites « - Guest », « (archive footage) »), images
+d'archives, talk-shows et actualités (genres TMDB 10767, 10763) —, puis la note **pondérée par le
+nombre de votes** : la moyenne bayésienne d'IMDb, `(v·R + 500·6) / (v + 500)`. Un titre noté 10 par
+une personne tend vers 6 ; un film noté 7,7 par 12 000 garde ~7,6. Pas la popularité TMDB : elle mesure
+la semaine en cours, et l'ordre changerait d'un jour à l'autre.
+
+**Pourquoi.** Nuit du 15/10/2026 (BUREAU-5) : triée par note moyenne seule, la filmographie de Tom
+Hanks commençait, après ses titres de la bibliothèque, par « Nos Bastidores de Hollywood — Self
+(archive footage) », « The Last Mile — Self » et des talk-shows ; *Seul au monde* était 37ᵉ, *Toy
+Story 2* 44ᵉ ; 158 entrées sur 270 étaient des apparitions. Décision de Louis le 15/10.
+
+**Porteur.** `sortFilmography`, `isAppearance`, `weightedRating` (`src/lib/filmographyOrder.ts`).
+
+**Appelant.** `/api/tmdb/person/[id]` — la seule route qui ordonne une filmographie ; la fiche personne
+du cinéma, `ActorModal` et la page personne de la gestion la lisent telle quelle. `vote_count` et
+`genre_ids` étaient déjà dans la réponse de TMDB gardée sur disque : aucune clé de cache ne change. Le
+genre ne part pas au navigateur.
+
+**Tests.** `tmdb-routes.test.ts` (« hors bibliothèque : note pondérée par les votes, et les apparitions
+… en fin »).

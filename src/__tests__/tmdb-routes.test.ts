@@ -108,6 +108,34 @@ describe("GET /api/tmdb/person/[id]", () => {
     expect(body.credits[0].title).toBe("In library");
   });
 
+  // 15/10/2026 (passe de nuit, BUREAU-5, DECISIONS §98) : triée par note moyenne seule, la
+  // filmographie de Tom Hanks commençait par des « Self (archive footage) » notés 10 par une
+  // personne ; *Seul au monde* était 37ᵉ.
+  it("hors bibliothèque : note pondérée par les votes, et les apparitions (Self, archives, talk-shows) en fin", async () => {
+    mockTmdb.getPersonDetails.mockResolvedValue({ name: "Tom Hanks", biography: "bio" });
+    const credit = (id: number, title: string, character: string, vote_average: number, vote_count: number, genre_ids: number[] = []) =>
+      ({ id, media_type: "movie", title, character, popularity: 1, vote_average, vote_count, genre_ids, poster_path: null, release_date: "2000-01-01" });
+    mockTmdb.getPersonCredits.mockResolvedValue({
+      cast: [
+        credit(1, "Bastidores", "Self (archive footage)", 10, 1),
+        credit(2, "The Last Mile", "Self", 9, 3),
+        credit(3, "Obscure", "Bob", 10, 1),
+        credit(4, "Cast Away", "Chuck Noland", 7.7, 12000),
+        credit(5, "Toy Story 2", "Woody (voice)", 7.6, 14000),
+        credit(6, "Talk Show", "", 8, 50, [10767]),
+        credit(7, "Larry Crowne", "Larry", 5.9, 1500),
+      ],
+    });
+    const { GET } = await import("@/app/api/tmdb/person/[id]/route");
+    const res = await GET(fakeReq(), params("31"));
+    const body = await res.json();
+    expect(body.credits.map((c: { title: string }) => c.title)).toEqual([
+      "Cast Away", "Toy Story 2", "Obscure", "Larry Crowne", "Talk Show", "The Last Mile", "Bastidores",
+    ]);
+    // Le genre sert au tri, il ne part pas au navigateur.
+    expect(body.credits[0]).not.toHaveProperty("genreIds");
+  });
+
   // 15/10/2026 (passe de nuit, ROBUSTESSE-7) : un lien vers une personne disparue de TMDB affichait
   // en rouge `404 Not Found: {"success":false,"status_code":34,…}`.
   it("une personne inconnue de TMDB : 404, une phrase et un code, jamais le corps de TMDB", async () => {

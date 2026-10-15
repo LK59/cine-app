@@ -8,6 +8,7 @@ import { getTmdbLocale } from "@/lib/i18n";
 import { playableLibrary } from "@/lib/playerLibrary";
 import { withErrorHandling } from "@/lib/api-helpers";
 import { withPersistentCache } from "@/lib/server-cache";
+import { sortFilmography } from "@/lib/filmographyOrder";
 
 /**
  * Une semaine, sur disque (23/09/2026) : une fiche personne coûtait deux appels à TMDB à chaque
@@ -63,8 +64,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       if (!existing || c.popularity > existing.popularity) seen.set(key, c);
     }
 
-    const credits = [...seen.values()]
-      .map((c) => {
+    // L'ordre : bibliothèque, vrais rôles, puis note pondérée par les votes (DECISIONS.md §98).
+    const credits = sortFilmography(
+      [...seen.values()].map((c) => {
         const isMovie = c.media_type === "movie";
         const libraryId = isMovie ? movieByTmdb.get(c.id) : seriesByTmdb.get(c.id);
         return {
@@ -82,12 +84,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           // Le même identifiant, nu : le lecteur ouvre une fiche par son id, pas par une adresse
           // de la partie gestion — et il ne doit surtout pas avoir à découper une URL pour ça.
           libraryId: libraryId ?? null,
+          voteCount: c.vote_count ?? null,
+          genreIds: c.genre_ids ?? null,
         };
       })
-      .sort((a, b) => {
-        if (a.inLibrary !== b.inLibrary) return a.inLibrary ? -1 : 1;
-        return b.voteAverage - a.voteAverage;
-      });
+    ).map(({ genreIds: _genreIds, ...c }) => c); // le genre ne sert qu'au tri
 
     // Ce que les tags bloqués du compte lui cachent n'apparaît pas dans une filmographie (DECISIONS.md §54).
     const hidden = await hiddenTmdbKeysFor((await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value))?.jfId);

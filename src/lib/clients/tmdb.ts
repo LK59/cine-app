@@ -57,6 +57,10 @@ export interface TmdbPersonCredit {
   release_date?: string;
   first_air_date?: string;
   vote_average: number;
+  // Déjà dans les réponses gardées sur disque (le cache garde la réponse entière de TMDB) :
+  // déclarés le 15/10/2026 pour l'ordre de la filmographie (DECISIONS.md §98).
+  vote_count?: number;
+  genre_ids?: number[];
   character: string;
   popularity: number;
 }
