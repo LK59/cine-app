@@ -74,6 +74,7 @@ const fake = {
   startLoad: vi.fn(),
   stopLoad: vi.fn(),
   recoverMediaError: vi.fn(),
+  destroy: vi.fn(),
   config: null as null | { xhrSetup?: (xhr: XMLHttpRequest, url: string) => void },
 };
 vi.mock("hls.js", () => {
@@ -101,7 +102,9 @@ vi.mock("hls.js", () => {
     stopLoad() {
       fake.stopLoad();
     }
-    destroy() {}
+    destroy() {
+      fake.destroy();
+    }
   }
   return { default: Hls };
 });
@@ -157,6 +160,7 @@ beforeEach(() => {
   fake.listeners = new Map();
   fake.config = null;
   fake.stopLoad.mockClear();
+  fake.destroy.mockClear();
   nativeHls = false;
   reported.length = 0;
   stableTakeover = null;
@@ -235,6 +239,44 @@ describe("le chien de garde des 20 s", () => {
     expect(line).toMatchObject({ reason: "connexion trop lente", needMbps: 3.9, path: "serveur" });
     expect(line.recvMbps).toBeCloseTo(0.32, 1);
     expect(line.measuredS).toBeGreaterThanOrEqual(10);
+  });
+
+  // Passe de nuit du 15/10/2026 (LECTEUR-5) : l'écran ne faisait que s'afficher, hls.js continuait
+  // de charger et le film démarrait sous lui, 6 à 30 s plus tard, sans que l'écran parte jamais.
+  it("l'écran « trop long » arrête le chargement d'hls.js — « Réessayer » repart de zéro", async () => {
+    await mounted();
+    expect(fake.destroy).not.toHaveBeenCalled();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(21_000)));
+    expect(document.body.textContent).toContain("player.loadingTooLong");
+    expect(fake.destroy).toHaveBeenCalledTimes(1);
+    // Réessayer : une nouvelle négociation, un nouvel hls.js — le chemin d'avant, inchangé.
+    fake.config = null;
+    fireEvent.click(Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "common.retry")!);
+    for (let i = 0; i < 200 && !fake.config; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(startBodies).toHaveLength(2);
+    expect(fake.config).not.toBeNull();
+    expect(document.body.textContent).not.toContain("player.loadingTooLong");
+  });
+
+  it("l'écran « connexion trop lente » arrête lui aussi le chargement", async () => {
+    writePlaybackQuality("original");
+    await mounted();
+    await trickle(40_000, 21);
+    expect(document.body.textContent).toContain("player.slowLink.failed");
+    expect(fake.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("Safari (HLS natif) : l'écran met l'élément en pause, sans toucher à sa source", async () => {
+    nativeHls = true;
+    render(<PlayerHost />);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(5_000)));
+    const src = document.querySelector("video")!.getAttribute("src");
+    expect(src).toBeTruthy();
+    vi.mocked(HTMLMediaElement.prototype.pause).mockClear();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(16_000)));
+    expect(document.body.textContent).toContain("player.loadingTooLong");
+    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+    expect(document.querySelector("video")!.getAttribute("src")).toBe(src);
   });
 
   it("le bilan `stop` porte le verdict du lien sous `diag`", async () => {

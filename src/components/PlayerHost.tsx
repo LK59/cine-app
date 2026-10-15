@@ -1691,6 +1691,29 @@ function ActivePlayer({
       setLinkFailure(null);
       setHlsJs(!nativeHls && !data.isDirectPlay);
       measureStartRef.current = startedAtWall;
+      /**
+       * L'écran d'échec du chien de garde arrête ce chargement-ci (passe de nuit du 15/10/2026,
+       * LECTEUR-5). Il ne faisait que s'afficher : hls.js continuait de charger, et sur un lien lent
+       * le film démarrait 6 à 30 s plus tard *sous* « Le chargement prend trop de temps », le son
+       * derrière un écran qui ne partait jamais. L'écran dit « Réessayer », qui renégocie de zéro
+       * (`handleRetry` → `startPlayback`) : rien de ce chargement ne lui sert. hls.js est détruit —
+       * comme au bout du budget de récupération, sans quoi sa MediaSource se rechargerait seule
+       * (`autoStartLoad`, `autoPlay`) ; le HLS natif et la lecture directe sont mis en pause, sans
+       * toucher à leur `src` (WebKit et sa session HLS unique : « Réessayer » remonte l'élément).
+       * `halted` arrête aussi un hls.js dont le module n'était pas encore arrivé.
+       */
+      let halted = false;
+      const haltLoading = () => {
+        halted = true;
+        if (generation !== playbackGeneration.current) return;
+        const current = hlsRef.current;
+        if (current) {
+          current.destroy();
+          hlsRef.current = null;
+        } else {
+          video.pause();
+        }
+      };
       const fireWatchdog = () => {
         if (linkWatch.current) clearInterval(linkWatch.current);
         linkWatch.current = null;
@@ -1737,6 +1760,12 @@ function ActivePlayer({
         } else {
           reportPlayback("error", serverFailureFields(logContext.current, "pas de première image en 20 s", { ...stages, ...slowLogRef.current.fields() }));
           setError(t('player.loadingTooLong'));
+        }
+        // Après la ligne `error`, qui lit encore le démarrage tel qu'il était.
+        try {
+          haltLoading();
+        } catch {
+          // L'arrêt n'est qu'un ménage : l'écran d'échec doit paraître quoi qu'il arrive.
         }
         setReconnecting(false);
         setLoading(false);
@@ -1924,7 +1953,9 @@ function ActivePlayer({
       // Dernier recours : l'import de hls.js est lui aussi un await, et l'instance vient d'être
       // construite. Sans ce garde elle s'écrirait par-dessus celle d'un appel plus récent, qui
       // resterait vivante et sans propriétaire.
-      if (generation !== playbackGeneration.current) {
+      // Ou le chien de garde a déjà renoncé pendant l'import (`haltLoading`) : pas de chargement
+      // qui démarrerait sous son écran.
+      if (generation !== playbackGeneration.current || halted) {
         hls.destroy();
         return;
       }

@@ -80,7 +80,7 @@ Deux règles de montage, qui définissent ce qu'est « la même lecture » :
 | Demandée | `session` posée, `mode === "full"` ; tant que la préférence `legacy` ou le réglage `serverFallback` ne sont pas connus, `PlayerHost` ne rend rien |
 | Lecteur natif | `useNative` vrai : `!serverFallback \|\| (!legacy && !handedOver.includes(itemId) && !carried && !castingNow(...) && !reloadedOnServer)` |
 | Lecteur serveur : négociation | `ActivePlayer` monté, `loading && !playSession` pendant `POST /api/jellyfin/playback/start` |
-| Lecteur serveur : chargement | `playSession` posé, `loading` jusqu'à `loadeddata` ; chien de garde de 20 s |
+| Lecteur serveur : chargement | `playSession` posé, `loading` jusqu'à `loadeddata` ; chien de garde de 20 s, dont l'écran arrête le chargement (`haltLoading` : hls.js détruit, HLS natif et lecture directe en pause — 15/10/2026, le film démarrait sous l'écran) |
 | Lecteur serveur : lecture | `!loading && !error` |
 | Relais natif → serveur (échec) | l'élément est dans `handedOver` ; `takeover.cast` absent |
 | Relais natif → serveur (version allégée, §78) | `lighterNow(takeover, session)` — une bascule, hors `handedOver` — ou `session.lighter` (règle des deux minutes, posé par `play`/`advance`) ; le lecteur serveur reprend le préchauffage (`takePrewarm`) et l'annonce lui-même à Jellyfin |
