@@ -5629,6 +5629,11 @@ relancé, bascule Wi-Fi → 4G en cours de passage).
 **Pourquoi.** Passe de nuit du 15/10/2026 (ROBUSTESSE-12) : 70,8 Mo (ordinateur) et 77,1 Mo (Pixel 7)
 en dix secondes au premier lancement d'un profil neuf. Décidé par Louis le 15/10/2026.
 
+**Mesuré le 15/10/2026** sur une instance de test (Pixel 7 simulé dans Chromium, profil neuf, 25 s) :
+sans \`connection\` 129 requêtes de flux pour 7 titres (de 6 à 13 s) ; \`saveData\` 0 ; \`cellular\` 7 requêtes,
+1 titre. Un premier essai comptait l'écart sur les seuls titres qui rendaient des morceaux gardés : il
+ne jouait pas (129 requêtes) — l'écart part de chaque titre tenté.
+
 ## 105. Une adresse incohérente est ramenée, là où l'adresse est lue — les adresses valides ne bougent pas
 
 **Règle.** `cinemaRoute.ts` reste le seul endroit qui lit et écrit l'adresse du cinéma, et il nettoie :

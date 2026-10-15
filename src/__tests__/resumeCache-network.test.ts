@@ -90,6 +90,21 @@ describe("runResumeCache selon le réseau", () => {
     expect(recordTitle).toHaveBeenCalledTimes(5);
   });
 
+  // Vu sur l'instance de test (Pixel simulé) : l'écart compté sur les seuls titres gardés ne jouait
+  // pas — 129 requêtes pour 7 titres, comme sans réglage. Un titre qui rend 0 a pu télécharger.
+  it("données mobiles : l'écart tient même quand l'écriture d'un titre échoue", async () => {
+    setConnection({ type: "cellular" });
+    recordTitle.mockImplementation(async () => 0);
+    try {
+      const { runResumeCache } = await import("@/lib/resumeCache/useResumeCache");
+      void runResumeCache(targets, new AbortController().signal);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(recordTitle).toHaveBeenCalledTimes(1);
+    } finally {
+      recordTitle.mockImplementation(async () => 8);
+    }
+  });
+
   it("données mobiles : un passage relancé ne repart pas d'un premier titre immédiat", async () => {
     setConnection({ type: "cellular" });
     const { runResumeCache } = await import("@/lib/resumeCache/useResumeCache");

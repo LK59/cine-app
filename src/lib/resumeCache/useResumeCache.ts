@@ -121,8 +121,11 @@ async function onePass(targets: ResumeTarget[], signal: AbortSignal, now: number
     // affiche tombait au milieu — l'ouverture de la fiche démarrait derrière (`uiQuiet.ts`).
     await whenUiQuiet(signal);
     if (mustStop(signal)) return;
+    // Compté à chaque titre tenté, quoi qu'il rende : un titre qui rend 0 morceau gardé (écriture
+    // refusée, quota) a pu télécharger ses octets quand même. Compté seulement quand `kept > 0`, l'écart
+    // ne jouait pas sur l'instance de test (Pixel simulé, 15/10/2026 : 129 requêtes, 7 titres en 7 s).
     const kept = await recordTitle(account, target, remaining, signal);
-    if (kept > 0) lastNetworkTitleAt = Date.now();
+    lastNetworkTitleAt = Date.now();
     remaining -= kept;
     await new Promise((resolve) => setTimeout(resolve, BETWEEN_TITLES_MS));
   }
