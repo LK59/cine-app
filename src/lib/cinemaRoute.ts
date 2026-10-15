@@ -587,6 +587,10 @@ export function cinemaNavigate(
   options: { tabBase?: string } = {}
 ): void {
   if (typeof window === "undefined") return;
+  if (backPending) {
+    afterBack.push(() => cinemaNavigate(patch, mode, options));
+    return;
+  }
   const next = { ...getSnapshot(), ...patch };
   const serialized = serialize(next);
   /**
@@ -701,10 +705,27 @@ export function openLibraryTitle(
  */
 let backPending = false;
 
+/**
+ * Les navigations demandées pendant ce retour, rejouées une fois arrivé (15/10/2026).
+ *
+ * Fermer une fiche puis toucher aussitôt « Séries » : le `replace` de l'onglet réécrivait l'entrée
+ * de la fiche — celle dont on sortait —, puis le `popstate` du retour ramenait l'entrée d'en dessous
+ * avec l'ancien onglet. L'appui était perdu, il fallait recliquer (relevé par Louis sur iPhone, à
+ * condition d'aller vite). Un `push` dans la même fenêtre s'empilait sur la fiche, que le retour
+ * retrouvait ensuite. Fermer est une demande, pas un fait : ce qui vient après attend qu'elle soit
+ * faite, et s'applique à l'adresse où l'on est vraiment.
+ */
+let afterBack: (() => void)[] = [];
+
+function settleBack(): void {
+  backPending = false;
+  const queued = afterBack;
+  afterBack = [];
+  for (const run of queued) run();
+}
+
 if (typeof window !== "undefined") {
-  window.addEventListener("popstate", () => {
-    backPending = false;
-  });
+  window.addEventListener("popstate", () => settleBack());
 }
 
 /**
@@ -721,7 +742,7 @@ export function cinemaClose(fallback: Partial<CinemaRoute>): void {
     if (backPending) return;
     backPending = true;
     setTimeout(() => {
-      backPending = false;
+      if (backPending) settleBack();
     }, 400);
     window.history.back();
   } else {

@@ -541,3 +541,54 @@ describe("useSheetOrigins", () => {
     expect(result.current).toEqual({ title: 0, person: null, discover: 0 });
   });
 });
+
+describe("une navigation pendant le retour d'une fermeture", () => {
+  /** Le vrai `history.back()` de jsdom : le retour est programmé, `popstate` arrive plus tard. */
+  const nextPopstate = () => new Promise<void>((r) => window.addEventListener("popstate", () => r(), { once: true }));
+
+  it("fermer une fiche puis toucher « Séries » aussitôt : l'onglet change, sans second appui", async () => {
+    const { result } = renderHook(() => useCinemaRoute());
+    act(() => openLibraryTitle("movie", 603));
+    expect(result.current.film).toBe(603);
+    const arrived = nextPopstate();
+    // Les deux dans la même image, avant que le retour ne soit arrivé — le doigt rapide.
+    act(() => {
+      cinemaClose({ film: null });
+      cinemaNavigate({ tab: "series", film: null, serie: null }, "replace");
+    });
+    await act(async () => {
+      await arrived;
+    });
+    // Avant : le `replace` réécrivait l'entrée de la fiche, et le retour ramenait « Films ».
+    expect(result.current.film).toBeNull();
+    expect(result.current.tab).toBe("series");
+    expect(window.location.hash).toContain("series");
+  });
+
+  it("une fiche ouverte aussitôt après une fermeture s'ouvre sur l'accueil, pas sur l'ancienne fiche", async () => {
+    const { result } = renderHook(() => useCinemaRoute());
+    act(() => openLibraryTitle("movie", 603));
+    const arrived = nextPopstate();
+    act(() => {
+      cinemaClose({ film: null });
+      openLibraryTitle("movie", 77);
+    });
+    await act(async () => {
+      await arrived;
+    });
+    expect(result.current.film).toBe(77);
+    // Un seul retour referme la nouvelle fiche, et ramène à l'accueil.
+    const back = nextPopstate();
+    window.history.back();
+    await act(async () => {
+      await back;
+    });
+    expect(result.current.film).toBeNull();
+  });
+
+  it("sans retour en vol, une navigation part tout de suite, comme avant", () => {
+    const { result } = renderHook(() => useCinemaRoute());
+    act(() => cinemaNavigate({ tab: "series" }, "replace"));
+    expect(result.current.tab).toBe("series");
+  });
+});
