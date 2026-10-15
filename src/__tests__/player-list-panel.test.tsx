@@ -167,6 +167,18 @@ describe("PlayerListPanel", () => {
   // La liste se fouille dès qu'elle dépasse la poignée de titres : la recherche interne filtre
   // l'onglet ouvert, et les compteurs des onglets suivent — un onglet qui annonce huit titres et
   // n'en montre aucun ment au moment où on a le plus besoin d'y croire.
+  // 15/10/2026 (passe de nuit, MOBILE-9) : « Rechercher dans la liste… » coupé en « Rechercher dar »
+  // sur iPhone. L'indicatif est court ; le nom complet reste pour un lecteur d'écran.
+  it("garde un indicatif court, et le nom complet pour un lecteur d'écran", async () => {
+    renderWith({
+      ...EMPTY_LISTS,
+      toWatch: [{ tmdbId: 603, type: "movie", title: "Matrix", year: 1999, poster: null, libraryId: 42, jellyfinId: null, addedAt: 2 }],
+    });
+    await screen.findByText("Matrix");
+    const field = screen.getByLabelText("player.lists.searchInList");
+    expect(field.getAttribute("placeholder")).toBe("nav.searchPlaceholder");
+  });
+
   it("filters the list on what is typed, counts included", async () => {
     renderWith({
       ...EMPTY_LISTS,
@@ -177,7 +189,7 @@ describe("PlayerListPanel", () => {
     });
 
     await screen.findByText("Matrix");
-    fireEvent.change(screen.getByPlaceholderText("player.lists.searchInList"), { target: { value: "bat" } });
+    fireEvent.change(screen.getByLabelText("player.lists.searchInList"), { target: { value: "bat" } });
 
     expect(screen.getByText("Batman")).toBeTruthy();
     expect(screen.queryByText("Matrix")).toBeNull();
@@ -213,7 +225,7 @@ describe("PlayerListPanel", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
     // Et la liste s'efface pendant ce temps : deux champs à l'écran, on ne sait plus lequel
     // filtre quoi.
-    expect(screen.queryByPlaceholderText("player.lists.searchInList")).toBeNull();
+    expect(screen.queryByLabelText("player.lists.searchInList")).toBeNull();
   });
 
   // Le tri vaut pour les demandes comme pour le reste : « date d'ajout » y veut dire « date de la
