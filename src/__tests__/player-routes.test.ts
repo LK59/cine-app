@@ -136,6 +136,25 @@ describe("GET /api/player/title", () => {
     expect(body.logo).toBe("https://image.tmdb.org/t/p/w500/logo.png");
   });
 
+  // 15/10/2026 (passe de nuit, ROBUSTESSE-7) : `/#decouverte=999999999&type=series` affichait en
+  // rouge le corps de TMDB (`404 Not Found: {"success":false,…}`).
+  it("un titre inconnu de TMDB : 404 « Titre introuvable » avec son code, film comme série", async () => {
+    const { HttpError } = await import("@/lib/http");
+    const tmdb404 = () => new HttpError('404 Not Found: {"success":false,"status_code":34}', 404);
+    tmdbClient.getMovie.mockRejectedValue(tmdb404());
+    tmdbClient.getTv.mockRejectedValue(tmdb404());
+    jellyseerr.getMovieMedia.mockResolvedValue({});
+    jellyseerr.getTvMedia.mockResolvedValue({});
+    const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+    for (const type of ["movie", "series"]) {
+      const res = await GET(req(), { params: Promise.resolve({ type, tmdbId: "999999999" }) });
+      expect([type, res.status]).toEqual([type, 404]);
+      const body = await res.json();
+      expect(body.code).toBe("title_not_found");
+      expect(body.error).not.toContain("status_code");
+    }
+  });
+
   it("refuses an anonymous caller", async () => {
     mockVerify.mockResolvedValue(null);
     const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");

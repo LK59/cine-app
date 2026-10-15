@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { errorBody } from "@/lib/apiErrorCodes";
+import { errorBody, renameNotFound } from "@/lib/apiErrorCodes";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { playableLibrary, playableId } from "@/lib/playerLibrary";
@@ -110,7 +110,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
         : null;
 
     if (type === "movie") {
-      const [detail, lib, logo] = await Promise.all([tmdb.getMovie(tmdbId), playableLibrary(), titleLogo("movie", tmdbId, req)]);
+      const [detail, lib, logo] = await Promise.all([
+        // Un titre que TMDB ne connaît plus (lien ancien) : « Titre introuvable », pas le corps de
+        // TMDB — voir `renameNotFound` (ROBUSTESSE-7).
+        renameNotFound(tmdb.getMovie(tmdbId), "Titre introuvable", "title_not_found"),
+        playableLibrary(),
+        titleLogo("movie", tmdbId, req),
+      ]);
       // Ouvrable, pas seulement connu de Radarr : un film surveillé sans fichier n'a pas de fiche
       // à ouvrir, et lui donner un identifiant menait à un clic qui ne faisait rien.
       const libraryId = hidden ? null : playableId(lib, "movie", tmdbId);
@@ -137,7 +143,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       });
     }
 
-    const [detail, lib, logo] = await Promise.all([tmdb.getTv(tmdbId), playableLibrary(), titleLogo("series", tmdbId, req)]);
+    const [detail, lib, logo] = await Promise.all([
+      renameNotFound(tmdb.getTv(tmdbId), "Titre introuvable", "title_not_found"),
+      playableLibrary(),
+      titleLogo("series", tmdbId, req),
+    ]);
     const libraryId = hidden ? null : playableId(lib, "series", tmdbId);
     const downloading = libraryId === null && !hidden ? await titleDownloadProgress("series", tmdbId) : null;
     return build({

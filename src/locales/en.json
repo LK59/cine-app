@@ -1663,7 +1663,8 @@
       "title_not_found": "Title not found.",
       "not_in_list": "This title isn't in your list.",
       "service_unavailable": "This service isn't available right now.",
-      "network": "Couldn't reach the server right now."
+      "network": "Couldn't reach the server right now.",
+      "person_not_found": "Person not found."
     }
   },
   "sse": {

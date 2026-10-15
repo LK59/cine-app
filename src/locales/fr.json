@@ -1663,7 +1663,8 @@
       "title_not_found": "Titre introuvable.",
       "not_in_list": "Ce titre n'est pas dans ta liste.",
       "service_unavailable": "Ce service n'est pas disponible pour le moment.",
-      "network": "Le serveur est injoignable pour le moment."
+      "network": "Le serveur est injoignable pour le moment.",
+      "person_not_found": "Personne introuvable."
     }
   },
   "sse": {
