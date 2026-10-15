@@ -302,7 +302,12 @@ because Next demands a literal string for its `matcher`; a test compares the two
   and re-read in the background once three quarters of their TTL has passed, so no opening waits for
   them (it used to: ~1.1 s of route after two quiet minutes, Jellyfin's movie list alone 0.8 s) and
   no value is ever older than its TTL — the freshness bound is unchanged. An invalidation re-reads at
-  once; a list no route has read for a day stops being kept. `withPersistentCache` values are not copied into
+  once; a list no route has read for a day stops being kept. **The cache's state lives on
+  `globalThis`** (`Symbol.for("cine-app.serverCache")`): `instrumentation.ts` and the routes are
+  bundled as separate entry points and the module existed in several copies — 8.65.4 kept warm a copy
+  the movie catalogue route never read (940 ms measured in production). A module-level singleton
+  written from `instrumentation.ts` and read by a route must do the same (`statusCron.ts`,
+  `jellyfinBreaker.ts`). `withPersistentCache` values are not copied into
   the stale store; the disk is their fallback. Cache *projections* of TMDB answers (versioned keys:
   `search:person-credits:v2:`, `credits:v2:`), never whole responses — 75 MB of `kv_cache` was
   filmographies and credits nobody read past five fields. Consultation caches are pruned after 14
