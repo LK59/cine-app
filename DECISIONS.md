@@ -3876,6 +3876,19 @@ ne mesure rien : inchangé. Le préchauffage n'est pas bridé par le simulateur 
 
 **Un préchauffage appartient à qui le prend, et ne sert qu'à ce pour quoi il a été fait (13/10/2026, chasse aux bugs).** Pris par le lecteur serveur (`takePrewarm`), un préchauffage est à lui seul : prêt quand son segment arrive même s'il a été pris en cours (la bascule des 35 s n'attend pas qu'il soit prêt — il se résolvait « en échec », d'où un second ffmpeg et une séance jamais refermée) ; écarté, il est refermé par `discardTakenPrewarm` — `cancelPrewarm` ne touche jamais un préchauffage pris. Il n'est repris que s'il **convient** (`prewarmFits`) : même palier **et même piste audio**, gravée dans l'adresse du transcodage (un préchauffage du 2e blocage suivi d'un changement de piste jouait l'ancienne piste sous le menu de la nouvelle). Pris ou abandonné ailleurs, il n'est plus tenu par l'exécution (`prewarmGone`, `SlowLinkRunner.status`) : tenu « en cours », il bloquait toute bascule du reste de la séance. Un saut sans image ne reprend qu'un préchauffage fait **à sa position** (à 1 s près) : sinon il est refermé et refait là (un second saut ramenait le spectateur au premier) ; côté serveur, la position d'un saut est la cible de l'élément (`seeking`), la position connue ne bougeant pas tant qu'il n'a pas d'image. Un préchauffage qui ne servira plus est refermé aussi quand le chien de garde du serveur renonce (écran), et dès qu'une décision rend `none` en « Originale ». Hors §78 strict, du même chantier : la position gardée d'une coupure est rangée par compte (`unsentPosition.ts`, l'ancienne clé encore lue) ; le réglage Qualité suit l'événement `storage` (un autre onglet). **Tests** : `lighterPrewarm.test.ts`, `slowLinkRunner.test.ts`, `PlayerHost-connexion-lente.test.tsx`, `unsentPosition.test.ts`, `playbackQuality.test.ts`.
 
+**Le plafond ordinaire ne lit plus `downlink` (15/10/2026, LECTEUR-10, choix de Louis).** `pickMaxBitrate`
+(`networkBitrate.ts`), le `MaxStreamingBitrate` de toute négociation ordinaire du lecteur serveur (`ActivePlayer`
+et le préchauffage de zone §93), prenait toute valeur de `navigator.connection.downlink` sous 10 pour une
+mesure : plafond 0,75 × `downlink`, plancher 1,5 Mbit/s. Relevé sur la prod : 22 % des séances Chrome / Edge /
+Android annonçaient moins de 10 (1,45 ; 1,55 ; 4,8…) sur des liens que le lecteur natif du même onglet
+mesurait à 15–110 Mbit/s — l'estimateur de Chrome part d'une valeur par défaut et n'apprend rien d'un hôte
+proche. Le Grinch (2,5 Mbit/s, 1080p) en sortait ré-encodé en 720p à 1,5 Mbit/s : la charge que le plafond
+devait éviter, créée par lui. Désormais seule la classe compte : `slow-2g`/`2g` → `CRAWL` (1,5), `3g` →
+`THREE_G` (6,4), tout le reste — `4g`, inconnu, pas d'API (Safari) — `UNCONSTRAINED`. La mesure du lien est
+celle de l'app, et elle n'agit que sur un blocage réel (règle ci-dessous). `downlink` reste au journal
+(`diag.downlinkMbps`, `downlinkMinMbps`), lu, jamais suivi. **Tests** : `networkBitrate.test.ts` (« ne lit
+jamais downlink comme une mesure », « garde la classe 3g quel que soit downlink »).
+
 ## 79. La connexion lente s'exécute à un seul endroit pour les deux lecteurs
 
 **La règle.** Ce que `slowLinkPolicy.ts` décide (§78) est exécuté par **une** classe, `SlowLinkRunner`

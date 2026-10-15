@@ -43,9 +43,14 @@ describe("pickMaxBitrate", () => {
     expect(pickMaxBitrate()).toBeGreaterThan(10_000_000);
   });
 
-  it("suit la mesure quand elle est sous le plafond de l'API", () => {
-    withConnection({ effectiveType: "4g", downlink: 8 });
-    expect(pickMaxBitrate()).toBe(6_000_000);
+  // LECTEUR-10 (15/10/2026) : 22 % des séances Chrome/Edge/Android annonçaient un `downlink` sous 10
+  // (1,45 ; 1,55 ; 4,8…) sur des liens que le lecteur natif mesurait à 15–110 Mb/s. Lu comme une
+  // mesure, il bridait un fichier de 2,5 Mb/s à 1,5 Mb/s en 720p. `downlink` n'est plus jamais lu.
+  it("ne lit jamais downlink comme une mesure, même sous la saturation", () => {
+    for (const downlink of [8, 4.8, 1.55, 1.45, 0.5]) {
+      withConnection({ effectiveType: "4g", downlink });
+      expect(pickMaxBitrate()).toBeGreaterThan(HEAVIEST_LIBRARY_FILE);
+    }
   });
 
   // La médiane de la bibliothèque : la moitié des films passe intacte sur un lien de cette classe.
@@ -61,10 +66,10 @@ describe("pickMaxBitrate", () => {
     expect(pickMaxBitrate()).toBe(1_500_000);
   });
 
-  // Un plafond au ras du sol ne rend aucun service : il rend la lecture impossible proprement.
-  it("ne descend jamais sous le plancher, même sur une mesure minuscule", () => {
+  // Seule la classe compte : un `downlink` minuscule ne fait pas descendre un lien « 3g » sous sa classe.
+  it("garde la classe 3g quel que soit downlink", () => {
     withConnection({ effectiveType: "3g", downlink: 0.5 });
-    expect(pickMaxBitrate()).toBe(1_500_000);
+    expect(pickMaxBitrate()).toBe(6_400_000);
   });
 
   it("ignore une valeur de downlink inexploitable", () => {

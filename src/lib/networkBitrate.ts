@@ -15,15 +15,15 @@
  * Mais le vrai défaut n'était pas la valeur, c'était la question posée : la largeur de l'écran ne
  * dit rien du réseau. Un téléphone sur le wifi du salon et le même téléphone en 4G donnent la
  * même largeur physique et recevaient le même plafond ; le premier était bridé pour rien, le
- * second l'était sur une coïncidence. On demande donc au réseau lui-même.
+ * second l'était sur une coïncidence. On demande donc au réseau lui-même — sa classe annoncée,
+ * jamais son estimation chiffrée (voir `pickMaxBitrate`).
  *
  * Pas de renégociation en cours de lecture pour la résolution (compromis accepté).
  */
 
-/** Ce que `navigator.connection` expose, non typé par lib.dom. */
+/** Ce que `navigator.connection` expose, non typé par lib.dom (`downlink` n'est pas lu : voir plus bas). */
 interface NetworkInformationLike {
   effectiveType?: string;
-  downlink?: number;
 }
 
 /**
@@ -49,48 +49,38 @@ const THREE_G = 6_400_000;
 export const CRAWL = 1_500_000;
 
 /**
- * `downlink` sature à 10 Mbps.
+ * **`downlink` n'est jamais lu comme une mesure** (15/10/2026, LECTEUR-10).
  *
- * Chrome arrondit l'estimation à 25 kbit/s près **et la plafonne à 10**, pour ne pas transformer
- * l'API en empreinte. Donc 10 ne veut pas dire « dix », il veut dire « au moins dix, on ne dira
- * pas combien » : le lire comme une mesure ferait brider un wifi gigabit à 7,5 Mbps et partir en
- * ré-encodage 38 % de la bibliothèque — le défaut qu'on corrige, en pire. Seule une valeur
- * *sous* le plafond est une vraie mesure.
+ * Jusque-là, toute valeur sous 10 (Chrome la plafonne à 10 pour ne pas en faire une empreinte)
+ * faisait un plafond de 0,75 × `downlink`, plancher 1,5 Mb/s. Relevé sur la prod : 22 % des
+ * séances Chrome / Edge / Android annoncent un `downlink` sous 10 — 1,45, 1,55, 4,8… — pendant que
+ * le lecteur natif du même onglet mesure le lien à 15–110 Mb/s (`diag.linkMbps`). L'estimateur de
+ * Chrome part d'une valeur par défaut, n'apprend rien des hôtes proches, et ne voit que le trafic
+ * récent de l'onglet. Le lire comme une mesure, c'était exactement le défaut décrit plus haut : un
+ * film de 2,5 Mb/s ré-encodé en 720p à 1,5 Mb/s (« Le Grinch », Chrome, la nuit du 14/10), sur un
+ * lien qui en portait cent fois plus — la charge créée par le plafond lui-même.
+ *
+ * Seule la **classe** annoncée (`effectiveType`) reste : elle ne descend sous « 4g » que sur un lien
+ * réellement mauvais (RTT et débit observés sur plusieurs requêtes), et un spectateur sur un tel lien
+ * ne perd rien à recevoir un flux qu'il peut porter. La vraie mesure du lien, c'est celle de l'app
+ * (§77/§78 : `LinkMeter`, préchauffage et bascule sur blocage réel), pas celle du navigateur.
  */
-const DOWNLINK_SATURATION_MBPS = 10;
 
 /**
- * La part du débit annoncé qu'on accepte de réserver au film.
- *
- * `downlink` est une estimation du débit observé récemment, pas une garantie ; il faut de la
- * place pour les en-têtes, la variabilité, et le fait qu'un tampon qui se remplit tout juste au
- * rythme de la lecture ne se remplit jamais.
- */
-export const USABLE_SHARE = 0.75;
-
-/**
- * Le plafond à envoyer, d'après ce que le navigateur dit du lien.
+ * Le plafond à envoyer, d'après la classe de lien que le navigateur annonce.
  *
  * **Le repli est la valeur haute, délibérément.** `navigator.connection` n'existe pas sur Safari
  * — donc sur tous les iPhone et iPad du foyer — et l'absence d'information n'est pas une
  * information de lenteur. Entre les deux erreurs possibles, on choisit celle qui se répare toute
- * seule : un tampon qui se remplit lentement est un démarrage plus long, un ré-encodage inutile
- * est une charge CPU sur une machine qui n'en a pas à donner, pour tout le monde à la fois.
+ * seule : un tampon qui se remplit lentement est un démarrage plus long (et, s'il bloque vraiment,
+ * la bascule de §78), un ré-encodage inutile est une charge sur une machine qui n'en a pas à donner,
+ * pour tout le monde à la fois.
  */
 export function pickMaxBitrate(): number {
   const conn = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
   if (!conn) return UNCONSTRAINED;
-
-  const { effectiveType, downlink } = conn;
+  const { effectiveType } = conn;
   if (effectiveType === "slow-2g" || effectiveType === "2g") return CRAWL;
-
-  // Pas de mesure exploitable : on retombe sur la classe annoncée, et « 4g » ou rien du tout
-  // veut dire « pas de raison de brider ».
-  if (typeof downlink !== "number" || !Number.isFinite(downlink) || downlink >= DOWNLINK_SATURATION_MBPS) {
-    return effectiveType === "3g" ? THREE_G : UNCONSTRAINED;
-  }
-
-  const usable = Math.round(downlink * USABLE_SHARE * 1_000_000);
-  // En dessous de `CRAWL`, un plafond ne sert plus qu'à rendre la lecture impossible proprement.
-  return Math.max(usable, CRAWL);
+  // « 4g », rien du tout ou une valeur inconnue : pas de raison de brider.
+  return effectiveType === "3g" ? THREE_G : UNCONSTRAINED;
 }

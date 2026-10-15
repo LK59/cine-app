@@ -1905,7 +1905,7 @@ byte, first-byte delay, `Server-Timing`), each read that had to wait for bytes (
 starved), each segment built, the re-encoded sound of each segment, each append until
 `updateend`, and Chromium's long tasks — plus a 500 ms sampler for event-loop lag and presented
 frames, `navigator.connection` (`type` is `wifi`/`cellular` on Android Chrome; `downlink` saturates
-at 10) and the battery. A session is delimited by the host (`diagBegin`/`diagEnd`, by session id);
+at 10, and is only reported: since 15/10/2026 nothing caps a stream on it — DECISIONS §78) and the battery. A session is delimited by the host (`diagBegin`/`diagEnd`, by session id);
 rebuilds stay inside it.
 
 | Field | Meaning |
@@ -2191,6 +2191,7 @@ All in `src/lib/`. DECISIONS §77–§79.
 | `transcodePolicy.ts` | Whether the account's Jellyfin policy allows video transcoding |
 | `playbackQuality.ts` | The Quality setting (Automatique / Originale) and the two-minute memory (`carriedLighter`) |
 | `linkSimulator.ts`, `slowLinkMonitor.ts` | The Lab's link simulator and its live thread; inert elsewhere |
+| `networkBitrate.ts` | The ordinary `MaxStreamingBitrate`: from the browser's link *class* only (`2g` → 1.5, `3g` → 6.4 Mb/s, else unconstrained) — `downlink` is never read as a measurement |
 
 Removed: `SlowLinkPopup.tsx` (12/10/2026 — nothing is offered any more, the switch is automatic) and
 `useLegacyPlayer.ts` (13/10/2026 — no per-account choice of the server player).
