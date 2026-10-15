@@ -1122,7 +1122,10 @@ function ActivePlayer({
               },
             }
           : {};
-      return { ...linkDiag, ...(startupRef.current?.fields(true) ?? {}), ...serverStopFields(logContext.current, why, lastKnownTime.current, consume ? watched.take(now) : watched.seconds(now), {
+      // La reprise (LECTEUR-2) : ce que l'image à la position demandée a coûté, sous `diag` avec le lien.
+      const resumeDiag = startupRef.current?.resumeFields() ?? {};
+      const diagFields = Object.keys(resumeDiag).length ? { diag: { ...("diag" in linkDiag ? linkDiag.diag : {}), ...resumeDiag } } : linkDiag;
+      return { ...diagFields, ...(startupRef.current?.fields(true) ?? {}), ...serverStopFields(logContext.current, why, lastKnownTime.current, consume ? watched.take(now) : watched.seconds(now), {
         ...sleepTimerLogFields(sleepTimerStore.get()),
         duration: video?.duration,
         ended: video?.ended ?? false,
@@ -1450,6 +1453,7 @@ function ActivePlayer({
 
       // Les étapes du démarrage, comptées depuis cette demande (§77) — voir `ServerStartup`.
       const startup = new ServerStartup(performance.now());
+      if (opts?.resumeAt) startup.resumeAsked(opts.resumeAt);
       // Le préchauffage de ce palier (§78), s'il y en a un : sa négociation est reprise TELLE QUELLE —
       // même PlaySessionId, mêmes adresses —, et hls.js part à sa position (`startPosition`) : Jellyfin
       // sert le segment déjà produit et poursuit le même ffmpeg (vérifié sur la prod le 12/10/2026 : un
@@ -1703,7 +1707,13 @@ function ActivePlayer({
             learnedExclusions.current = [...new Set([...learnedExclusions.current, ...opts.disableAudioCodecs])];
             carryLearnedExclusions(itemId, learnedExclusions.current);
           }
-          if (resumeAt) video.currentTime = resumeAt;
+          if (resumeAt) {
+            // L'image à la position de reprise, au bilan (`diag.resume*`, LECTEUR-2) : `pictureMs` ci-dessus
+            // est celle d'avant ce saut.
+            startup.resumeSeek();
+            video.addEventListener("seeked", () => startup.resumePicture(), { once: true });
+            video.currentTime = resumeAt;
+          }
           // Seeded here rather than waiting for the first 'timeupdate' — otherwise a progress
           // heartbeat firing in the gap right after a resume would still report the pre-seek 0.
           lastKnownTime.current = resumeAt ?? 0;

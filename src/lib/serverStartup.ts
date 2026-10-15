@@ -108,6 +108,64 @@ export class ServerStartup {
     this.safe(() => (this.facts.pictureMs ??= this.now()));
   }
 
+  // --- la reprise : l'image à la position demandée (LECTEUR-2, 15/10/2026) ---------------------------
+  //
+  // `pictureMs` est la première image du flux, prise au `loadeddata` — **avant** le saut à la position de
+  // reprise, posé juste après. Sans préchauffage, hls.js montrait d'abord le début du film, et ce que la
+  // reprise coûtait (le second démarrage de ffmpeg chez Jellyfin, 1,85 à 3,8 s mesurées) ne se lisait
+  // nulle part. Ces instants le disent, au bilan (`diag.resume*`, hors du plafond des quarante).
+  private resume: { at: number; kickMs?: number; kickSegment?: number; seekMs?: number; pictureMs?: number } | null = null;
+
+  /** Une ouverture à `at` secondes (> 0) : la reprise sera suivie. */
+  resumeAsked(at: number): void {
+    this.safe(() => {
+      if (at > 0 && Number.isFinite(at)) this.resume ??= { at };
+    });
+  }
+
+  /** Le segment de la reprise demandé avant hls.js (`warmSegmentAt`) est arrivé : ffmpeg est parti là. */
+  resumeKicked(segment: number): void {
+    this.safe(() => {
+      if (!this.resume || this.resume.kickMs !== undefined) return;
+      this.resume.kickMs = this.now();
+      this.resume.kickSegment = segment;
+    });
+  }
+
+  /** Le saut à la position de reprise est posé sur l'élément (au `loadeddata`). */
+  resumeSeek(): void {
+    this.safe(() => {
+      if (this.resume) this.resume.seekMs ??= this.now();
+    });
+  }
+
+  /** L'image est là, à la position de reprise (`seeked` du saut de reprise). */
+  resumePicture(): void {
+    this.safe(() => {
+      if (this.resume) this.resume.pictureMs ??= this.now();
+    });
+  }
+
+  /**
+   * Pour le bilan : `{ resumeAt, resumeKickMs, resumeKickSegment, resumeSeekMs, resumePictureMs }`, à
+   * ranger sous `diag` — rien sans reprise. `resumePictureMs` absent avec `resumeAt` présent : la séance
+   * s'est arrêtée avant l'image de la reprise.
+   */
+  resumeFields(): Record<string, number> {
+    try {
+      const r = this.resume;
+      if (!r) return {};
+      return {
+        resumeAt: Math.round(r.at * 10) / 10,
+        ...(r.kickMs !== undefined ? { resumeKickMs: r.kickMs, resumeKickSegment: r.kickSegment ?? -1 } : {}),
+        ...(r.seekMs !== undefined ? { resumeSeekMs: r.seekMs } : {}),
+        ...(r.pictureMs !== undefined ? { resumePictureMs: r.pictureMs } : {}),
+      };
+    } catch {
+      return {};
+    }
+  }
+
   /**
    * Safari, HLS natif : ce que les entrées de ressources disent des adresses du flux (`/api/
    * jellyfin/stream/…`) parties depuis la demande. La première liste est la maître, la suivante la

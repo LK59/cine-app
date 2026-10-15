@@ -1887,7 +1887,9 @@ give-up the measured link explains carries `reason: "connexion trop lente"` with
 connections, never against the file. Every server-player `start` says why it negotiated (`why`:
 `open`, `handover`, `audio`, `audio-reload`, `retry`, `cast-relaunch`, `ladder`, `retry-reload`,
 `reload-direct`, `lighter`), and its `start`, `error` and `stop` carry `startup.*` (lists, first segment,
-picture, ms from the request; `startup.stage` on a failure). `stall`, `error`, `fallback`, `rebuild`,
+picture, ms from the request; `startup.stage` on a failure — the picture is the stream's first one, taken before the
+resume seek; a resumed session's `stop` adds `diag.resumeAt`, `diag.resumeSeekMs`, `diag.resumePictureMs`, and
+`diag.resumeKickMs`/`diag.resumeKickSegment` when hls.js was started on the resume segment). `stall`, `error`, `fallback`, `rebuild`,
 `network` and `stop` carry `timeline`: the last two minutes sampled every 5 s in memory
 (`pos,s,Mb/s,ahead,reserveMB,state;…`, `playbackTimeline.ts`).
 

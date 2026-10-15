@@ -912,3 +912,35 @@ describe("le relais d'une zone illisible (§93)", () => {
     expect(takePrewarm("film")).toBe(lighter);
   });
 });
+
+/**
+ * La reprise du lecteur serveur (LECTEUR-2, 15/10/2026) : `startup.pictureMs` est la première image,
+ * prise au `loadeddata` — avant le saut à la position de reprise. Le bilan dit désormais ce que l'image
+ * À LA POSITION DE REPRISE a coûté.
+ */
+describe("la reprise du lecteur serveur", () => {
+  const video = () => document.querySelector("video")!;
+
+  it("le bilan porte le saut de reprise et l'image à la position demandée (`diag.resume*`)", async () => {
+    playback.session = { itemId: "film", openId: 1, resumeAt: 1200, title: "Film" };
+    await mounted();
+    await act(async () => void fireEvent(video(), new Event("loadeddata")));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(1500)));
+    await act(async () => void fireEvent(video(), new Event("seeked")));
+    cleanup();
+    const stop = reported.find((r) => r.kind === "stop")!.fields;
+    const diag = stop.diag as Record<string, number>;
+    // La reprise recule de 5 s (« se remettre dans la scène ») : 1 195.
+    expect(diag.resumeAt).toBe(1195);
+    expect(diag.resumeSeekMs).toBeTypeOf("number");
+    expect(diag.resumePictureMs - diag.resumeSeekMs).toBeGreaterThanOrEqual(1500);
+  });
+
+  it("sans reprise : aucun champ de plus", async () => {
+    await mounted();
+    await act(async () => void fireEvent(video(), new Event("loadeddata")));
+    cleanup();
+    const stop = reported.find((r) => r.kind === "stop")!.fields;
+    expect(Object.keys((stop.diag as Record<string, unknown>) ?? {}).filter((k) => k.startsWith("resume"))).toEqual([]);
+  });
+});

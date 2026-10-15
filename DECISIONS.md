@@ -3681,6 +3681,16 @@ coupure), `PlayerHost-connexion-lente.test.tsx`, `activity-connexion-lente.test.
 
 **Mesure sans toucher à la réception (12/10/2026, choix de Louis).** La première version lisait le corps des réponses au fil de l'eau pendant chaque ouverture (`readCounted`) : même octets, mais un chemin de réception neuf pour toutes les ouvertures, Safari iOS compris, jamais validé sur appareil. `HttpByteSource` lit de nouveau d'un bloc (`arrayBuffer()`, comme avant §77) et compte chaque morceau une fois arrivé ; le morceau encore en vol n'apporte que son temps, ce qui ne peut qu'abaisser la mesure d'au plus un morceau — sans effet sur le verdict d'un lien comme celui du 12/10 (morceaux de 1 Mio en 2, 7, 14, 25 s). `readCounted` reste dans `slowLink.ts`, testée, non branchée.
 
+**Le coût d'une reprise, au bilan du lecteur serveur (15/10/2026, LECTEUR-2).** `startup.pictureMs` est la
+première image du flux, prise au `loadeddata` — **avant** le saut à la position de reprise posé juste après. Ce
+que la reprise coûtait vraiment (hls.js chargeait le début du film, puis Jellyfin relançait ffmpeg au segment
+de la reprise : 3,8 s relevées sur *L'Exorciste* à 2 205 s) ne se lisait nulle part. Une séance ouverte à une
+position porte au `stop`, sous `diag` (hors du plafond des quarante champs) : `resumeAt` (s), `resumeSeekMs`
+(saut posé) et `resumePictureMs` (le `seeked` de ce saut : l'image à la position), en ms depuis la demande —
+`resumePictureMs` absent avec `resumeAt` présent, la séance s'est arrêtée avant. Tous les chemins (hls.js,
+HLS natif, lecture directe) ; `ServerStartup.resumeFields`. **Tests** : `PlayerHost-connexion-lente.test.tsx`
+(« la reprise du lecteur serveur »).
+
 **Dire la lenteur pendant le chargement — informer tôt, ne jamais abandonner tôt (12/10/2026, choix de
 Louis).** Le verdict attendait le renoncement (35 s / 20 s) alors que le lien se savait lent bien avant.
 Pendant l'ouverture, le lien est lu chaque seconde (`openingLinkState`) — mesure et affichage seulement,
