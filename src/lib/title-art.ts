@@ -168,6 +168,30 @@ function defaultLogo(byLang: Record<string, string>): string | null {
  * regarde. Puis sans texte, puis anglais, puis n'importe lequel. Sans logos par langue (entrée
  * d'avant le 09/10/2026), l'ancien logo.
  */
+/**
+ * Les noms d'un titre pour `logoForLocale`, complétés par la réponse de TMDB qu'on a déjà en main
+ * quand le cache n'a rien pour cette langue (15/10/2026, passe de nuit, BUREAU-6).
+ *
+ * `getTitleNames` rend `{}` pour un titre jamais vu, et calcule ses noms en arrière-plan : à la
+ * première ouverture d'une fiche découverte, le logo suivait alors la langue de l'écran — le logo
+ * québécois « Histoire de jouets 2 » au-dessus de *Toy Story 2*, le bon à la seconde ouverture.
+ * Le titre dans la langue de l'écran, le titre et la langue d'origine sont dans la réponse : la
+ * règle §58 a de quoi s'appliquer dès la première fois. Quand le cache les a, rien ne change.
+ */
+export function namesWithDetail(
+  cached: TitleNames,
+  locale: Locale,
+  fromDetail: { shown?: string; original?: string; originalLanguage?: string }
+): TitleNames {
+  if (cached[locale]) return cached;
+  return {
+    ...(fromDetail.shown ? { [locale]: fromDetail.shown } : {}),
+    ...(fromDetail.original ? { original: fromDetail.original } : {}),
+    ...(fromDetail.originalLanguage ? { originalLanguage: fromDetail.originalLanguage } : {}),
+    ...cached,
+  };
+}
+
 export function logoForLocale(art: TitleArt, names: TitleNames, locale: Locale): string | null {
   const byLang = art.logosByLang;
   if (!byLang) return art.logoUrl;

@@ -77,7 +77,8 @@ vi.mock("@/lib/db", () => ({ watchlistDb, pendingRequestDb: { add: vi.fn() } }))
 const mockHidden = vi.fn(async (_jfId?: string | null) => new Set<string>());
 vi.mock("@/lib/blockedTags", () => ({ hiddenTmdbKeysFor: (jfId?: string | null) => mockHidden(jfId) }));
 // Le logo de la fiche découverte (14/10/2026) : la même entrée de cache que le catalogue.
-vi.mock("@/lib/title-art", () => ({
+vi.mock("@/lib/title-art", async (importOriginal) => ({
+  namesWithDetail: (await importOriginal<typeof import("@/lib/title-art")>()).namesWithDetail,
   getTitleArt: async () => ({ logoUrl: "https://image.tmdb.org/t/p/w500/logo.png", posterTextlessUrl: null, posterByLang: {} }),
   logoForLocale: (art: { logoUrl: string | null }) => art.logoUrl,
 }));

@@ -4,7 +4,7 @@ import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { playableLibrary, playableId } from "@/lib/playerLibrary";
 import { getTmdbLocale, LOCALE_COOKIE, localeOf } from "@/lib/i18n";
-import { getTitleArt, logoForLocale } from "@/lib/title-art";
+import { getTitleArt, logoForLocale, namesWithDetail, type TitleArt } from "@/lib/title-art";
 import { getTitleNames } from "@/lib/titleNames";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -110,12 +110,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
         : null;
 
     if (type === "movie") {
-      const [detail, lib, logo] = await Promise.all([
+      const [detail, lib, art] = await Promise.all([
         // Un titre que TMDB ne connaît plus (lien ancien) : « Titre introuvable », pas le corps de
         // TMDB — voir `renameNotFound` (ROBUSTESSE-7).
         renameNotFound(tmdb.getMovie(tmdbId), "Titre introuvable", "title_not_found"),
         playableLibrary(),
-        titleLogo("movie", tmdbId, req),
+        titleArt("movie", tmdbId),
       ]);
       // Ouvrable, pas seulement connu de Radarr : un film surveillé sans fichier n'a pas de fiche
       // à ouvrir, et lui donner un identifiant menait à un clic qui ne faisait rien.
@@ -139,14 +139,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
         watchlistStatus: userId ? watchlistDb.get(userId, "movie", tmdbId)?.status ?? null : null,
         downloading,
         watched: userId ? isWatchedLocally(userId, "movie", tmdbId) : false,
-        logo,
+        logo: pickLogo(art, "movie", tmdbId, req, { shown: detail.title, original: detail.original_title, originalLanguage: detail.original_language }),
       });
     }
 
-    const [detail, lib, logo] = await Promise.all([
+    const [detail, lib, art] = await Promise.all([
       renameNotFound(tmdb.getTv(tmdbId), "Titre introuvable", "title_not_found"),
       playableLibrary(),
-      titleLogo("series", tmdbId, req),
+      titleArt("series", tmdbId),
     ]);
     const libraryId = hidden ? null : playableId(lib, "series", tmdbId);
     const downloading = libraryId === null && !hidden ? await titleDownloadProgress("series", tmdbId) : null;
@@ -169,7 +169,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       watchlistStatus: userId ? watchlistDb.get(userId, "series", tmdbId)?.status ?? null : null,
       downloading,
       watched: userId ? isWatchedLocally(userId, "series", tmdbId) : false,
-      logo,
+      logo: pickLogo(art, "series", tmdbId, req, { shown: detail.name, original: detail.original_name, originalLanguage: detail.original_language }),
     });
   }, "player-title");
 }
@@ -178,10 +178,35 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
  * Le logo, de la même entrée de cache que le catalogue (`getTitleArt`, une semaine sur disque).
  * Un ornement : un échec rend le titre écrit, jamais une fiche en erreur.
  */
-async function titleLogo(type: "movie" | "series", tmdbId: number, req: NextRequest): Promise<string | null> {
+async function titleArt(type: "movie" | "series", tmdbId: number): Promise<TitleArt | null> {
   try {
-    const art = await getTitleArt(tmdbId, type);
-    return logoForLocale(art, getTitleNames(tmdbId, type), localeOf(req));
+    return await getTitleArt(tmdbId, type);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Le logo qui suit le titre affiché (DECISIONS.md §58).
+ *
+ * Les noms du titre viennent du cache (`getTitleNames`), qui rend `{}` pour un titre jamais vu et
+ * lance leur calcul en arrière-plan : sans eux, `logoForLocale` prenait la langue de l'écran — le
+ * logo québécois « Histoire de jouets 2 » au-dessus de *Toy Story 2*, à la première ouverture
+ * seulement (15/10/2026, passe de nuit, BUREAU-6). La réponse de TMDB que la route a déjà en main
+ * porte ces noms — titre dans la langue de l'écran, titre et langue d'origine : elle les donne
+ * quand le cache n'a rien pour cette langue. Rien ne change quand il les a.
+ */
+function pickLogo(
+  art: TitleArt | null,
+  type: "movie" | "series",
+  tmdbId: number,
+  req: NextRequest,
+  fromDetail: { shown?: string; original?: string; originalLanguage?: string }
+): string | null {
+  if (!art) return null;
+  try {
+    const locale = localeOf(req);
+    return logoForLocale(art, namesWithDetail(getTitleNames(tmdbId, type), locale, fromDetail), locale);
   } catch {
     return null;
   }
