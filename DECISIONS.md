@@ -5600,3 +5600,31 @@ sortir, l'accueil revenu trois fois dans la pile. Décidé par Louis le 15/10/20
 
 **Différent exprès.** Toucher l'onglet courant sous une fiche (Ma liste couverte par un film) referme
 la fiche en empilant, comme avant : ce n'est pas un changement d'onglet.
+
+## 104. Le cache de reprise regarde le réseau : rien en économie de données, un titre à la fois en données mobiles
+
+**Règle.** Le passage d'arrière-plan qui garde l'ouverture de « Reprendre » et d'« À suivre » sur
+l'appareil (`src/lib/resumeCache/`) lit `navigator.connection` avant chaque titre :
+- `saveData` (économie de données) : **rien** n'est téléchargé — les effacements, eux, se font ;
+- `type === "cellular"` : le titre en tête (le premier de « Reprendre », sinon d'« À suivre ») tout
+  de suite, puis un titre toutes les **deux minutes** (`CELLULAR_SPACING_MS`), mesurées depuis le dernier
+  titre gardé dans la page — un passage relancé (retour au premier plan, liste changée) ne repart pas d'un
+  « premier » titre immédiat ;
+- Wi-Fi, filaire, ou rien de dit : inchangé.
+Le budget par titre et total, le repos (`whenIdle`, `whenUiQuiet`), la page visible et l'arrêt pendant
+un film (`mustStop`) ne changent pas : l'attente s'y ajoute et s'interrompt avec le passage.
+
+**Où l'API n'existe pas.** `navigator.connection` est propre à Chromium, et `type` n'y est donné que
+sur Android et ChromeOS. **Safari (iPhone, iPad, Mac) et Firefox ne disent rien : le comportement y
+reste celui d'avant.** Chrome de bureau donne `saveData` si l'extension ou le réglage l'active.
+
+**Porteurs.** `resumeNetworkMode` / `waitBeforeTitle` (`src/lib/resumeCache/network.ts`), lus par
+`onePass` (`useResumeCache.ts`). Même lecture que `prefetchBanners.ts` et `decoderWarmup.ts`
+(`saveData`).
+
+**Tests.** `resumeCache-network.test.ts` (le vrai `runResumeCache`, minuteries simulées : cinq titres
+en Wi-Fi ou sans API, aucun en économie, un puis un toutes les deux minutes en données mobiles, passage
+relancé, bascule Wi-Fi → 4G en cours de passage).
+
+**Pourquoi.** Passe de nuit du 15/10/2026 (ROBUSTESSE-12) : 70,8 Mo (ordinateur) et 77,1 Mo (Pixel 7)
+en dix secondes au premier lancement d'un profil neuf. Décidé par Louis le 15/10/2026.

@@ -11,6 +11,7 @@ import { watchUiActivity, whenUiQuiet } from "@/lib/uiQuiet";
 import { deviceBudget, deviceUsage, overQuota } from "./budget";
 import { planResumeCache, remainingChunks, resumeTargets, type ResumeTarget } from "./plan";
 import { mustStop, recordTitle } from "./recordTitle";
+import { currentResumeNetworkMode, waitBeforeTitle } from "./network";
 import { readResumeIndex, removeResumeEntry, sweepResumeStore } from "./store";
 
 export { recordTitle } from "./recordTitle";
@@ -107,13 +108,48 @@ async function onePass(targets: ResumeTarget[], signal: AbortSignal, now: number
   for (const target of plan.record) {
     if (mustStop(signal)) return;
     if ((over || remaining <= 0) && !index[target.itemId]) continue;
+    // Le réseau d'abord (DECISIONS.md §104) : rien en économie de données, un titre toutes les deux
+    // minutes en données mobiles. Relu après l'attente — le réseau a pu changer entre-temps.
+    for (;;) {
+      const wait = waitBeforeTitle(currentResumeNetworkMode(), lastNetworkTitleAt === null ? null : Date.now() - lastNetworkTitleAt);
+      if (wait === null) return;
+      if (wait === 0) break;
+      await pause(wait, signal);
+      if (mustStop(signal)) return;
+    }
     // Jamais pendant un geste : la lecture de l'en-tête tient le fil principal, et un appui sur une
     // affiche tombait au milieu — l'ouverture de la fiche démarrait derrière (`uiQuiet.ts`).
     await whenUiQuiet(signal);
     if (mustStop(signal)) return;
-    remaining -= await recordTitle(account, target, remaining, signal);
+    const kept = await recordTitle(account, target, remaining, signal);
+    if (kept > 0) lastNetworkTitleAt = Date.now();
+    remaining -= kept;
     await new Promise((resolve) => setTimeout(resolve, BETWEEN_TITLES_MS));
   }
+}
+
+/** Quand le dernier titre a été gardé, dans cette page — l'écart des données mobiles en part. */
+let lastNetworkTitleAt: number | null = null;
+
+/** Pour les tests : une page neuve. */
+export function resetResumeCacheForTests(): void {
+  lastNetworkTitleAt = null;
+  swept = false;
+  chain = Promise.resolve();
+}
+
+/** Une attente que l'annulation du passage interrompt aussitôt. */
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done);
+  });
 }
 
 function whenIdle(work: () => void): () => void {
