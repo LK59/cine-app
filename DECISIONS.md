@@ -5383,6 +5383,23 @@ instance de test : image figée 100 à 196 s, ni roue, ni mot, ni ligne `stall` 
 - Avant la première image de ce pipeline, l'ouverture garde exactement son chemin d'avant : l'hôte a
   le sien (35 s, §77/§78).
 
+**Mesuré le 15/10/2026** sur une instance de test contre le vrai Jellyfin (*Pulp Fiction*, H.264, lecteur
+natif ; Chrome 155 et WebKit de Playwright ; 8.62.2 avant, la branche après ; coupure à ~30–45 s d'avance) :
+- *Chrome, hors ligne* (`setOffline`) : avant, image figée à 81 s, puis rien pendant 70 s (ni mot, ni
+  écran), reprise seule en 0,8 s au retour, `watched` 230 ; après, l'écran « Connexion perdue » à
+  l'instant du gel (80,5 s : le silence durait déjà), la ligne `network` partie au retour, reprise par
+  reconstruction en 2,7 s, `watched` 158 (le film avait avancé d'autant). Coupé à 30 s d'avance : gel
+  à 46 s, écran à 49 s.
+- *Chrome, requête pendante, `onLine` vrai* (tout le trafic retenu par Playwright) : avant, gel à 81 s et
+  rien ; après, l'écran au gel, puis la relance de l'hôte (en ligne : 0,8 s) rouvre le film, dont
+  l'ouverture dit « Connexion perdue ou instable… » 25 s plus tard ; reprise en 1,8 s au retour.
+- *WebKit, hors ligne* : avant, gel à 65 s et rien ; après, l'écran à 64,5 s, reprise en 7,2 s.
+  *WebKit, requête pendante* (agent de service bloqué — sans cela Playwright ne retient pas ses
+  requêtes) : gel à 65 s, l'écran, la reconstruction rejoue ce qu'elle a en mémoire puis le mot sous la
+  roue à 92 s, un second `network` à 48 s de silence ; reprise en 0,8 s.
+Le prix : au retour du réseau après l'écran, une reconstruction (1,8 à 7 s) au lieu d'une reprise sur
+place (0,8 à 2 s) ; avant l'échéance, la reprise sur place est inchangée.
+
 **Porteurs.** `WatchedClock.stall` / `resume`, `watchElementWaits` (`src/lib/playerSessionTally.ts`) ;
 `holdThroughOutage`, `watchForOutage`, `retryReadLater` (`mseSource.ts`), `networkSilentMs`
 (`byteSource.ts`, relayé par `Remuxer`) ;
