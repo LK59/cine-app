@@ -1483,7 +1483,10 @@ interruptible, avec un fil de chargement fin qui n'apparaît qu'après 150 ms. T
 - ouvrir la grille complète : le premier écran (28 cartes) d'abord, la liste entière ensuite
   (`useDeferredValue(shown, firstScreen)`), un filtre changé par le même chemin ;
 - les boutons « Voir tout » du téléphone répondent au relâchement du doigt (`useTap`) : juste après
-  un défilement, iOS garde le premier `click` pour arrêter l'élan.
+  un défilement, iOS garde le premier `click` pour arrêter l'élan. Le `click` de compatibilité qui
+  suit un appui servi est retenu s'il tombe sur un autre élément (15/10/2026) : il visait « Lire »
+  de la fiche ouverte sous le doigt, et le film partait sur Android. Borné par 700 ms et par le
+  prochain `pointerdown` ; un clic clavier (`detail` 0) passe toujours.
 
 **Porteur.** `useDeferredValue` aux deux endroits cités, `useKeptTabs` (`src/lib/keptTabs.ts`),
 `useTap` (`src/lib/useTap.ts`) et `TapButton`.
