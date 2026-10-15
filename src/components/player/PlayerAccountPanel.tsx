@@ -502,6 +502,8 @@ function PasswordSection() {
  */
 function StorageRow() {
   const t = useT();
+  // La taille dans la langue de l'écran — « 56,5 Mo », pas « 56.5 MB » (BUREAU-28, `fmtSize`).
+  const { locale } = useLocale();
   const toast = useToast();
   const [usage, setUsage] = useState<number | null>(null);
   const [clearing, setClearing] = useState(false);
@@ -534,7 +536,7 @@ function StorageRow() {
       hint={
         <>
           {t("player.account.storageHint")}
-          {usage !== null && usage > 0 && <span className="mt-0.5 block text-muted">{t("player.account.storageUsed", { size: fmtSize(usage) })}</span>}
+          {usage !== null && usage > 0 && <span className="mt-0.5 block text-muted">{t("player.account.storageUsed", { size: fmtSize(usage, locale) })}</span>}
         </>
       }
     >
