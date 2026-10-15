@@ -16,6 +16,19 @@ import os from "os";
  */
 const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "cine-test-data-"));
 
+/**
+ * Le fuseau du foyer, pour toute la suite (15/10/2026).
+ *
+ * Les fichiers tournent dans des fils (`pool: "threads"`, ci-dessous) et non plus des processus :
+ * 128 s → 99 s avec l'import paresseux de `vitest.setup.ts`, l'isolement entre fichiers gardé. Mais
+ * un fil ne peut pas changer de fuseau pour lui seul — le fuseau est celui du processus —, et deux
+ * fichiers (`activity-perday-dst`, `activity-diagnosis`) posaient `process.env.TZ` pour eux.
+ * Posé ici, avant le premier fil, il vaut pour tous ; aucun autre test ne dépend de l'UTC
+ * (la suite entière passe ainsi). Sans isolement du tout (`isolate: false`), 30 à 60 tests
+ * tombaient selon l'ordre : les doubles de `vi.mock` fuyaient d'un fichier à l'autre — écarté.
+ */
+process.env.TZ = "Europe/Paris";
+
 export default defineConfig({
   // tsconfig.json sets "jsx": "preserve" (correct for Next.js's own SWC compiler, which does the
   // actual JSX transform) — Vite's default esbuild-based transform reads that same tsconfig and,
@@ -29,6 +42,8 @@ export default defineConfig({
     // `// @vitest-environment jsdom` docblock at the top of the file, rather than paying the
     // jsdom setup cost across every test file.
     environment: "node",
+    // Des fils plutôt que des processus, isolés comme avant — voir `process.env.TZ` plus haut.
+    pool: "threads",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     /**
