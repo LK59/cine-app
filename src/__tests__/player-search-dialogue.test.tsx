@@ -131,6 +131,18 @@ describe("la section Répliques", () => {
   });
 });
 
+// 15/10/2026 (passe de nuit, BUREAU-26 / MOBILE-16) : « Tout 0 », puce active, au-dessus d'une
+// réplique trouvée — la puce ne comptait que titres et personnes.
+describe("la puce « Tout »", () => {
+  it("compte aussi les films trouvés par leurs répliques", async () => {
+    state.titles = { library: [], tmdb: [], persons: [] };
+    type("tu choisis la pilule");
+    await waitFor(() => expect(screen.getByText("0:00:42")).toBeTruthy());
+    const all = screen.getByRole("button", { name: /player.search.filterAll/ });
+    expect(all.textContent).toBe("player.search.filterAll1");
+  });
+});
+
 describe("ce que la section dit", () => {
   it("nomme la réplique dans le nom du bouton, pour un lecteur d'écran", async () => {
     type("tu choisis la pilule");
