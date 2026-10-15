@@ -296,7 +296,13 @@ because Next demands a literal string for its `matcher`; a test compares the two
 - `src/lib/server-cache.ts` — TTL-keyed caching in front of them. Prefer `cachedMovies` /
   `cachedSeries` over hitting a client directly from a route. **Bounded** since 2026-10-08 (LRU of
   4 000 entries, 1 500 stale, swept every 10 min): it used to keep every key ever produced — one per
-  search query, per calendar range — until a restart. `withPersistentCache` values are not copied into
+  search query, per calendar range — until a restart. **The library lists are kept warm**
+  (`withKeptCache`, since 2026-10-15): Radarr, Sonarr and Jellyfin's admin lists (movies, series,
+  first episodes, seasons, recent episodes, episode counts) are read at startup (`catalogueWarm.ts`)
+  and re-read in the background once three quarters of their TTL has passed, so no opening waits for
+  them (it used to: ~1.1 s of route after two quiet minutes, Jellyfin's movie list alone 0.8 s) and
+  no value is ever older than its TTL — the freshness bound is unchanged. An invalidation re-reads at
+  once; a list no route has read for a day stops being kept. `withPersistentCache` values are not copied into
   the stale store; the disk is their fallback. Cache *projections* of TMDB answers (versioned keys:
   `search:person-credits:v2:`, `credits:v2:`), never whole responses — 75 MB of `kv_cache` was
   filmographies and credits nobody read past five fields. Consultation caches are pruned after 14

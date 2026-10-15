@@ -60,6 +60,11 @@ export async function register() {
     const { startPosterPrewarm } = await import("./lib/posterPrewarm");
     startPosterPrewarm();
 
+    // Les listes de la bibliothèque (Radarr, Sonarr, Jellyfin) lues au démarrage et relues avant
+    // d'expirer : aucune ouverture ne les attend plus — voir `withKeptCache`.
+    const { startCatalogueWarm } = await import("./lib/catalogueWarm");
+    startCatalogueWarm();
+
     // Les sous-titres générés (DECISIONS.md §69) : les tâches en cours reprennent là où elles
     // étaient — lignes acquises gardées — et les fichiers finis continuent vers Jellyfin. Gardé :
     // une base illisible ne doit pas empêcher le serveur de démarrer.

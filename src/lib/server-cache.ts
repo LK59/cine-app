@@ -278,6 +278,94 @@ export async function withBackgroundRefresh<T>(key: string, ttlMs: number, maxSt
   return withCache(key, ttlMs, fn);
 }
 
+// ─── Gardées chaudes ──────────────────────────────────────────────────────────
+
+/**
+ * Les listes de la bibliothèque, relues par le serveur **avant** d'expirer (15/10/2026).
+ *
+ * Elles n'étaient relues qu'à la demande : passé deux minutes sans personne, la première ouverture
+ * attendait que Jellyfin et Radarr renvoient leurs listes entières. Mesuré le 15/10 au journal
+ * d'ouverture (`routes`) : 1 080 à 1 411 ms de route pour le catalogue, « Reprendre » et « À suivre »
+ * à chaque première ouverture, 24 à 49 ms pour celles qui suivaient. Mesuré depuis le conteneur le
+ * même jour : la liste des films de Jellyfin 780–860 ms (2 Mo), Radarr 270–330 ms (5,2 Mo, 23–34 ms
+ * d'analyse synchrone), le reste moins de 90 ms. Presque toute ouverture réelle tombait dans ce cas.
+ *
+ * Ici rien ne change de ce qu'une réponse peut avoir d'âge — le TTL de chaque liste reste sa
+ * borne : la relecture part quand les trois quarts du TTL sont passés, et la valeur en mémoire est
+ * remplacée sans jamais expirer. Plus personne ne l'attend, et elle n'est jamais plus vieille
+ * qu'avant. Une liste que plus rien ne lit depuis un jour cesse d'être relue ; une invalidation
+ * (une écriture de l'application) la relit tout de suite.
+ *
+ * Le minuteur ne tourne que démarré (`startKeptCacheRefresh`, au démarrage du serveur) : les tests
+ * qui importent ce module n'ont rien qui parte tout seul.
+ */
+interface Kept {
+  ttlMs: number;
+  fn: () => Promise<unknown>;
+  /** Dernière lecture par une route — pas par le minuteur. */
+  readAt: number;
+  /** Pas de nouvelle relecture avant cette heure (après une relecture, réussie ou non). */
+  retryAt: number;
+}
+
+const kept = new Map<string, Kept>();
+/** La relecture part quand il reste ce quart du TTL. */
+const KEEP_AHEAD_SHARE = 0.25;
+/** Une relecture ratée (source absente) n'est pas retentée plus vite que ça. */
+const KEEP_RETRY_MIN_MS = 15_000;
+const KEEP_UNREAD_MS = 24 * 3600_000;
+const KEEP_TICK_MS = 5_000;
+let keepTimer: ReturnType<typeof setInterval> | null = null;
+
+/** `withCache`, et la clé gardée chaude tant qu'une route la lit. */
+export function withKeptCache<T>(key: string, ttlMs: number, fn: () => Promise<T>, options: { forceRefresh?: boolean } = {}): Promise<T> {
+  const now = Date.now();
+  const entry = kept.get(key);
+  if (entry) {
+    entry.readAt = now;
+    entry.ttlMs = ttlMs;
+    entry.fn = fn;
+  } else {
+    kept.set(key, { ttlMs, fn, readAt: now, retryAt: 0 });
+  }
+  return withCache(key, ttlMs, fn, options);
+}
+
+/** Un passage du minuteur. Exportée pour les tests. */
+export function refreshKeptCache(now = Date.now()): void {
+  for (const [key, k] of kept) {
+    if (now - k.readAt > KEEP_UNREAD_MS) {
+      kept.delete(key);
+      continue;
+    }
+    if (inFlight.has(key) || now < k.retryAt) continue;
+    const hit = store.get(key);
+    if (hit && hit.exp - now > k.ttlMs * KEEP_AHEAD_SHARE) continue;
+    k.retryAt = now + Math.max(k.ttlMs * KEEP_AHEAD_SHARE, KEEP_RETRY_MIN_MS);
+    // `forceRefresh` saute la valeur encore bonne ; une route qui lit pendant le trajet la reçoit
+    // toujours, et la garde anti-ruée partage la relecture. Un échec garde l'ancienne (`withCache`).
+    withCache(key, k.ttlMs, k.fn, { forceRefresh: true }).catch(() => {});
+  }
+}
+
+export function startKeptCacheRefresh(): void {
+  if (keepTimer) return;
+  keepTimer = setInterval(() => refreshKeptCache(), KEEP_TICK_MS);
+  (keepTimer as { unref?: () => void }).unref?.();
+}
+
+/** Pour les tests. */
+export function stopKeptCacheRefresh(): void {
+  if (keepTimer) clearInterval(keepTimer);
+  keepTimer = null;
+  kept.clear();
+}
+
+/** Pour les tests : les clés gardées chaudes. */
+export function keptCacheKeys(): string[] {
+  return [...kept.keys()];
+}
+
 /**
  * Les appareils Jellyfin, pour le panneau Activité (13/10/2026).
  *
@@ -301,6 +389,12 @@ export function invalidateKey(key: string) {
   store.delete(key);
   inFlight.delete(key);
   generation.set(key, generationOf(key) + 1);
+  // Une liste gardée chaude est relue tout de suite : la prochaine ouverture n'a pas à l'attendre.
+  const k = kept.get(key);
+  if (k && keepTimer) {
+    k.retryAt = 0;
+    setTimeout(() => refreshKeptCache(), 0);
+  }
 }
 
 export function invalidateByPrefix(prefix: string) {
@@ -332,7 +426,7 @@ export function invalidateJellyfinLibrary() {
 // cents films changeraient d'identifiant (`catalogueMembers`). Vérifié avant le cache : un Radarr
 // branché ensuite dans l'application est lu au prochain appel.
 export const cachedMovies = (opts?: { forceRefresh?: boolean }): Promise<RadarrMovie[]> =>
-  serviceConfigured("radarr") ? withCache("radarr:movies", TTL.LONG, () => radarr.getMovies(), opts) : Promise.resolve([]);
+  serviceConfigured("radarr") ? withKeptCache("radarr:movies", TTL.LONG, () => radarr.getMovies(), opts) : Promise.resolve([]);
 
 /**
  * La liste des torrents, partagée par ses deux lecteurs en arrière-plan (08/10/2026) : les messages
@@ -343,7 +437,7 @@ export const cachedTorrents = () => withCache("qbit:torrents", TTL.VERY_SHORT, (
 
 // Sonarr non configuré : une liste vide, sans rien demander — la même règle que `cachedMovies`.
 export const cachedSeries = (opts?: { forceRefresh?: boolean }): Promise<SonarrSeries[]> =>
-  serviceConfigured("sonarr") ? withCache("sonarr:series", TTL.MEDIUM, () => sonarr.getSeries(), opts) : Promise.resolve([]);
+  serviceConfigured("sonarr") ? withKeptCache("sonarr:series", TTL.MEDIUM, () => sonarr.getSeries(), opts) : Promise.resolve([]);
 
 /**
  * Les identifiants externes d'un titre chez Jellyfin — TVDB, TMDB, IMDb.
@@ -363,28 +457,28 @@ export const cachedJellyfinMovies = (userId: string, opts?: { forceRefresh?: boo
   withCache(`jf:movies:${userId}`, TTL.LONG, () => jellyfin.getAllMovies(userId), opts);
 
 export const cachedJellyfinMoviesAdmin = (opts?: { forceRefresh?: boolean }) =>
-  withCache("jf:movies:admin", TTL.LONG, () => jellyfin.getAllMoviesAdmin(), opts);
+  withKeptCache("jf:movies:admin", TTL.LONG, () => jellyfin.getAllMoviesAdmin(), opts);
 
 export const cachedJellyfinSeries = (userId: string, opts?: { forceRefresh?: boolean }) =>
   withCache(`jf:series:${userId}`, TTL.LONG, () => jellyfin.getAllSeries(userId), opts);
 
 export const cachedJellyfinSeriesAdmin = (opts?: { forceRefresh?: boolean }) =>
-  withCache("jf:series:admin", TTL.LONG, () => jellyfin.getAllSeriesAdmin(), opts);
+  withKeptCache("jf:series:admin", TTL.LONG, () => jellyfin.getAllSeriesAdmin(), opts);
 
 // Les S1·É1 de la bibliothèque, au rythme des séries elles-mêmes — voir `getFirstEpisodesAdmin`.
 export const cachedJellyfinFirstEpisodes = (opts?: { forceRefresh?: boolean }) =>
-  withCache("jf:first-episodes:admin", TTL.LONG, () => jellyfin.getFirstEpisodesAdmin(), opts);
+  withKeptCache("jf:first-episodes:admin", TTL.LONG, () => jellyfin.getFirstEpisodesAdmin(), opts);
 
 // Les saisons de la bibliothèque, pour leur nombre — voir `getSeasonsAdmin`.
 export const cachedJellyfinSeasons = (opts?: { forceRefresh?: boolean }) =>
-  withCache("jf:seasons:admin", TTL.LONG, () => jellyfin.getSeasonsAdmin(), opts);
+  withKeptCache("jf:seasons:admin", TTL.LONG, () => jellyfin.getSeasonsAdmin(), opts);
 
 /**
  * Le nombre d'épisodes réels d'une série — pour les seules séries que Jellyfin a seul (§89), qui
  * n'entrent au catalogue qu'avec au moins un épisode. Au rythme de la bibliothèque.
  */
 export const cachedJellyfinEpisodeCount = (seriesId: string) =>
-  withCache(`jf:episode-count:${seriesId}`, TTL.LONG, () => jellyfin.countEpisodesAdmin(seriesId));
+  withKeptCache(`jf:episode-count:${seriesId}`, TTL.LONG, () => jellyfin.countEpisodesAdmin(seriesId));
 
 /** Un épisode de Sonarr réduit à ce que la fiche en lit, avec le nom du fichier qu'il a rattaché. */
 export interface SonarrEpisodeText {
@@ -421,7 +515,7 @@ export const cachedSonarrEpisodeTexts = (sonarrId: number) =>
  * manque à personne.
  */
 export const cachedJellyfinRecentEpisodes = (opts?: { forceRefresh?: boolean }) =>
-  withCache("jf:recent-episodes:admin:v1", TTL.VERY_LONG, async (): Promise<RecentEpisode[]> => {
+  withKeptCache("jf:recent-episodes:admin:v1", TTL.VERY_LONG, async (): Promise<RecentEpisode[]> => {
     const since = Date.now() - NEW_BADGE_DAYS * 86_400_000;
     const items = await jellyfin.getRecentEpisodesAdmin(since);
     return items

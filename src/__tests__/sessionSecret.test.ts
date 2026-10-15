@@ -48,6 +48,7 @@ describe("le démarrage", () => {
     vi.doMock("@/lib/dbBackup", () => ({ startDbBackupCron: vi.fn() }));
     vi.doMock("@/lib/jellyfinDevicePrune", () => ({ startJellyfinDevicePruneCron: vi.fn() }));
     vi.doMock("@/lib/posterPrewarm", () => ({ startPosterPrewarm: vi.fn() }));
+    vi.doMock("@/lib/catalogueWarm", () => ({ startCatalogueWarm: vi.fn() }));
     vi.doMock("@/lib/server-cache", () => ({ cachedMovies: vi.fn(async () => {}), cachedSeries: vi.fn(async () => {}) }));
     const previous = process.env.NEXT_RUNTIME;
     process.env.NEXT_RUNTIME = "nodejs";
