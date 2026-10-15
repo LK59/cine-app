@@ -2390,6 +2390,10 @@ L'accueil du bureau porte `data-sheet-home`.
   `swallowStrayClick`, `visibleFraction`.
 - `src/lib/sheetMorph/source.ts` : le geste, la source, sa visibilité au retour.
 - `useSheetMorph` (`src/lib/sheetMorph/useSheetMorph.ts`).
+- `useSwallowEntryRepeatClicks` (`src/lib/sheetMorph/entryClicks.ts`, 15/10/2026), posé par
+  `useSheetMorph` : pendant 600 ms après l'arrivée d'une fiche, un clic portant `detail ≥ 2` (la
+  suite d'un double-clic sur l'affiche) est retenu — il ouvrait le résumé, ou cochait « À voir »,
+  de la fiche toute neuve. Un clic simple passe toujours.
 
 Ses appelants : `CinemaMobileDetail`, `CinemaMovieDetail`, `CinemaSeriesDetail`,
 `PlayerDiscoverSheet`. Le lot H de `IntroLots.tsx` importe le moteur.
