@@ -955,7 +955,7 @@
     "capabilitiesNotConfigured": "Fonctions en attente d'un service non configuré : {n} (hors de l'état d'ensemble)",
     "storagePaths": {
       "sectionTitle": "Chemins de stockage",
-      "sectionSubtitle": "Vérifie que les chemins utilisés pour les stats disque/média sont montés et lisibles",
+      "sectionSubtitle": "Vérifiez que les chemins utilisés pour les stats disque/média sont montés et lisibles",
       "entries": "{n} éléments",
       "notFound": "Le chemin n'existe pas — vérifier le montage du volume et MEDIA_ROOT/.env",
       "notReadable": "Le chemin existe mais n'est pas lisible — vérifier les permissions du conteneur",
@@ -971,7 +971,7 @@
     },
     "apiTests": {
       "sectionTitle": "Tests des routes API",
-      "sectionSubtitle": "Vérifie chaque endpoint interne — authentification, latence et forme de réponse",
+      "sectionSubtitle": "Vérifiez chaque endpoint interne — authentification, latence et forme de réponse",
       "ok": "{n} ok",
       "errors": "{n} erreur|{n} erreurs",
       "running": "Test en cours…",
@@ -1411,7 +1411,7 @@
       "title": "Application",
       "subtitle": "Mise à jour de la PWA installée",
       "updateTitle": "Mettre à jour la PWA",
-      "updateDesc": "Vérifie et installe la dernière version du Service Worker",
+      "updateDesc": "Vérifiez et installez la dernière version du Service Worker",
       "version": "Version {version}",
       "alreadyUpToDate": "Déjà à jour",
       "updateApplied": "Mise à jour appliquée",

@@ -13,7 +13,7 @@ import fr from "@/locales/fr.json";
  * l'anglais n'a pas la distinction, l'espagnol et l'allemand ont leurs propres conventions.
  */
 const TU = /(?<![\p{L}'’])(tu|ta|ton|tes|toi|te|t['’])(?![\p{L}])/iu;
-const IMPERATIVE = /(?<![\p{L}'’])(Réessaie|réessaie|Vérifie ta|Appuie sur|Choisis|Sélectionne au|Garde cette|Active ou|Ajoute des|Envoie une)(?![\p{L}])/u;
+const IMPERATIVE = /(?<![\p{L}'’])(Réessaie|réessaie|Vérifie ta|Appuie sur|Choisis|Sélectionne au|Garde cette|Active ou|Ajoute des|Envoie une|Vérifie que|Vérifie chaque|Vérifie et)(?![\p{L}])/u;
 
 function strings(o: unknown, path = ""): [string, string][] {
   if (typeof o === "string") return [[path, o]];
