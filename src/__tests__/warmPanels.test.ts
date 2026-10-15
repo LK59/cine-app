@@ -37,17 +37,18 @@ describe("le code des écrans chargés à la demande", () => {
     expect(load).not.toHaveBeenCalled();
   });
 
-  it("couvre chaque écran que la coquille charge à la demande, sauf l'activité (administrateur)", () => {
+  // Les mêmes chargeurs que `next/dynamic` : un `import()` écrit ailleurs donnait un autre morceau
+  // (Turbopack découpe par endroit d'import), et la Recherche réclamait encore le sien hors ligne.
+  it("garde, par les chargeurs mêmes de la coquille, chaque écran ouvert depuis la navigation", () => {
     const shell = readFileSync(join(process.cwd(), "src/components/player/PlayerShell.tsx"), "utf8");
-    const warm = readFileSync(join(process.cwd(), "src/lib/warmPanels.ts"), "utf8");
-    const lazy = [...shell.matchAll(/dynamic\(\(\) => import\("\.\/(\w+)"\)/g)].map((m) => m[1]);
-    expect(lazy.length).toBeGreaterThan(5);
-    for (const name of lazy) {
-      // L'activité : administrateur seul. Les décodeurs et l'accueil « Bienvenue » : ils tirent le
-      // décodeur FLAC, qu'un `import()` hors de `next/dynamic` ferait entrer dans le rendu serveur.
-      if (name === "PlayerActivityPanel" || name === "DecoderWarmup" || name === "PlayerOnboarding") continue;
-      expect(warm, name).toContain(`import("@/components/player/${name}")`);
+    const warmCall = shell.slice(shell.indexOf("scheduleWarmPanels({"), shell.indexOf("scheduleWarmPanels({") + 400);
+    for (const name of ["PlayerSearchPanel", "PlayerListPanel", "PlayerAccountPanel", "PlayerReportPanel", "PlayerNewsPanel", "PlayerDiscoverSheet", "PlayerPersonSheet"]) {
+      expect(shell, name).toContain(`const ${name} = dynamic(load${name},`);
+      expect(warmCall, name).toContain(`load${name}`);
     }
-    expect(shell).toContain("scheduleWarmPanels()");
+    // Jamais l'activité : administrateur seul.
+    expect(warmCall).not.toContain("Activity");
+    const warm = readFileSync(join(process.cwd(), "src/lib/warmPanels.ts"), "utf8");
+    expect(warm).not.toMatch(/=>\s*import\(/);
   });
 });

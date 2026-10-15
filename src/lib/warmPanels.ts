@@ -13,43 +13,29 @@
  * mécanisme par génération qui fait le travail, et un morceau inchangé d'un déploiement au suivant y
  * est repris sans être retéléchargé.
  *
- * Pas en économie de données, ni pendant un film (le réseau est à lui), ni l'activité des comptes,
- * réservée à l'administrateur : personne d'autre ne paie son code. Un échec ne coûte rien — le
- * morceau sera demandé à l'ouverture, comme avant.
+ * **Les chargeurs sont ceux de `next/dynamic`, passés par l'appelant, jamais un `import()` écrit
+ * ici.** Turbopack découpe un morceau par endroit d'import : un `import()` du même fichier écrit dans
+ * ce module produisait un *autre* morceau que celui que l'écran demande à son ouverture — vérifié
+ * hors ligne dans Chromium, la Recherche réclamait encore le sien. Et un `import()` hors de
+ * `next/dynamic` entre dans le rendu serveur : l'accueil « Bienvenue » y tirait le décodeur FLAC, et
+ * la construction échouait.
+ *
+ * Pas en économie de données, ni l'activité des comptes, réservée à l'administrateur : personne
+ * d'autre ne paie son code. Un échec ne coûte rien — le morceau sera demandé à l'ouverture.
  */
 export type PanelLoader = () => Promise<unknown>;
-
-/** Le même chemin que les `dynamic(() => import(…))` de `PlayerShell` — un test vérifie qu'aucun ne manque. */
-export const PANEL_LOADERS: PanelLoader[] = [
-  () => import("@/components/player/PlayerSearchPanel"),
-  () => import("@/components/player/PlayerListPanel"),
-  () => import("@/components/player/PlayerAccountPanel"),
-  () => import("@/components/player/PlayerReportPanel"),
-  () => import("@/components/player/PlayerNewsPanel"),
-  () => import("@/components/player/PlayerDiscoverSheet"),
-  () => import("@/components/player/PlayerPersonSheet"),
-  // Pas l'accueil « Bienvenue » (`PlayerOnboarding`) : il importe le préchauffage des décodeurs, et
-  // un `import()` écrit ici est aussi compilé pour le rendu serveur — le décodeur FLAC y casse la
-  // construction (« Module not found », @eshaz/web-worker). C'est ce que `ssr: false` de
-  // `next/dynamic` évite dans PlayerShell (voir decoderWarmup.ts). Il ne sert qu'au premier
-  // lancement, en ligne par définition.
-  () => import("@/components/player/NewsGate"),
-  () => import("@/components/player/PushResumePrompt"),
-  () => import("@/components/TrailerModal"),
-];
 
 /** Après le premier écran, ses affiches et le préchauffage des décodeurs. */
 export const WARM_PANELS_DELAY_MS = 10_000;
 
-export function scheduleWarmPanels(options: { loaders?: PanelLoader[]; delayMs?: number; busy?: () => boolean } = {}): () => void {
+export function scheduleWarmPanels({ loaders, delayMs = WARM_PANELS_DELAY_MS }: { loaders: PanelLoader[]; delayMs?: number }): () => void {
   if (typeof window === "undefined") return () => {};
-  const { loaders = PANEL_LOADERS, delayMs = WARM_PANELS_DELAY_MS, busy = () => false } = options;
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
   if (connection?.saveData) return () => {};
   let cancelled = false;
   const run = async () => {
     for (const load of loaders) {
-      if (cancelled || busy()) return;
+      if (cancelled) return;
       await load().catch(() => {});
     }
   };
