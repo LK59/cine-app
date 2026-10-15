@@ -5628,3 +5628,29 @@ relancé, bascule Wi-Fi → 4G en cours de passage).
 
 **Pourquoi.** Passe de nuit du 15/10/2026 (ROBUSTESSE-12) : 70,8 Mo (ordinateur) et 77,1 Mo (Pixel 7)
 en dix secondes au premier lancement d'un profil neuf. Décidé par Louis le 15/10/2026.
+
+## 105. Une adresse incohérente est ramenée, là où l'adresse est lue — les adresses valides ne bougent pas
+
+**Règle.** `cinemaRoute.ts` reste le seul endroit qui lit et écrit l'adresse du cinéma, et il nettoie :
+- **à la lecture et à l'écriture** : `episodes` n'existe qu'avec `serie` (`parse` et `serialize`) — la
+  fermeture du téléphone le laissait dans l'adresse (`#episodes=1` après un Retour), et elle le retire
+  désormais comme les deux du bureau ; valeurs illisibles (`#serie=abc`, `#film=-5`), `type` sans fiche
+  découverte et paramètres inconnus tombaient déjà à la lecture, mais restaient affichés ;
+- **à l'arrivée** (`normalizeArrivedAddress` : premier abonnement et `hashchange`), sur `/` seulement et
+  pour une entrée **que l'application n'a pas écrite** (pas de `cinemaDepth` : lien direct, fragment
+  tapé) : l'adresse est réécrite sur place (`replaceState`, rien d'empilé) dans sa forme normalisée
+  (`normalizeRoute`) — un seul onglet, dans l'ordre où `activePanel` les lit (Recherche, Ma liste, écran
+  poussé depuis le Compte, Compte), et un écran poussé (activité, signalement, Nouveautés) remplace le
+  Compte. Une adresse qui dit la même chose dans un autre ordre n'est pas réécrite ;
+- **l'activité** d'un compte qui n'est pas administrateur se referme (`closeAdminOnlyScreens`, appelée
+  par `PlayerShell` dès que `useRole` connaît le rôle ; `replace`) au lieu d'un « Réessayer » qui ne
+  peut jamais marcher.
+
+**Différent exprès.** Une entrée écrite par `cinemaNavigate` n'est jamais renormalisée : les Nouveautés
+ouvertes au lancement par-dessus la Recherche (`NewsGate`) restent telles quelles au rechargement. Les
+titres introuvables (`#film=999999999`) étaient déjà refermés et nettoyés par les fiches.
+
+**Tests.** `cinemaRoute-normalize.test.tsx` (adresses collées réécrites, adresses valides intactes,
+fragment tapé, entrée de l'application, hors du cinéma, `episodes` à la fermeture, activité et rôle).
+
+**Pourquoi.** Passe de nuit du 15/10/2026 (ROBUSTESSE-8). Décidé par Louis le 15/10/2026.

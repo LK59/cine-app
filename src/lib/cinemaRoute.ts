@@ -284,11 +284,16 @@ function readNumber(params: URLSearchParams, key: string): number | null {
 
 function parse(hash: string): CinemaRoute {
   const params = new URLSearchParams(hash.replace(/^#/, ""));
+  const serie = readNumber(params, "serie");
   return {
     tab: params.get("tab") === "series" ? "series" : "movies",
     film: readNumber(params, "film"),
-    serie: readNumber(params, "serie"),
-    episodes: params.get("episodes") === "1",
+    serie,
+    // Le panneau des épisodes n'existe que sur une série (DECISIONS.md §105) : sans elle, le drapeau
+    // restait collé à l'adresse — la fermeture du téléphone ne le retirait pas (`#episodes=1` après
+    // un Retour, ROBUSTESSE-8) —, et un iPad passé à la mise en page bureau aurait ouvert les épisodes
+    // de la série suivante. Lu ici, il disparaît aussi de toute adresse réécrite.
+    episodes: serie !== null && params.get("episodes") === "1",
     search: params.get("recherche") === "1",
     list: params.get("liste") === "1",
     account: params.get("compte") === "1",
@@ -307,7 +312,8 @@ function serialize(route: CinemaRoute): string {
   if (route.tab === "series") params.set("tab", "series");
   if (route.film) params.set("film", String(route.film));
   if (route.serie) params.set("serie", String(route.serie));
-  if (route.episodes) params.set("episodes", "1");
+  // Jamais sans série — voir `parse` (DECISIONS.md §105).
+  if (route.episodes && route.serie) params.set("episodes", "1");
   if (route.search) params.set("recherche", "1");
   if (route.list) params.set("liste", "1");
   if (route.account) params.set("compte", "1");
@@ -322,6 +328,62 @@ function serialize(route: CinemaRoute): string {
   if (route.news) params.set("nouveautes", route.news);
   const query = params.toString();
   return query ? `#${query}` : "";
+}
+
+/**
+ * Une adresse collée ou tapée, ramenée à une combinaison que l'application sait produire
+ * (DECISIONS.md §105, ROBUSTESSE-8).
+ *
+ * Un seul onglet à la fois — Recherche, puis Ma liste, puis un écran poussé depuis le Compte, puis le
+ * Compte : c'est l'ordre où `activePanel` les lit déjà (`#liste=1&compte=1&recherche=1` montrait le
+ * Compte sous une pilule allumée sur Recherche). Un écran poussé (activité, signalement, Nouveautés)
+ * remplace le Compte, comme quand on l'ouvre. Le reste — valeurs illisibles, paramètres inconnus,
+ * `type` sans fiche découverte, `episodes` sans série — tombe déjà à la lecture et à l'écriture.
+ */
+export function normalizeRoute(route: CinemaRoute): CinemaRoute {
+  const out = { ...route };
+  if (out.search) Object.assign(out, { list: false, account: false, activity: null, report: null, news: null });
+  else if (out.list) Object.assign(out, { account: false, activity: null, report: null, news: null });
+  else if (accountScreenOpen(out)) out.account = false;
+  return out;
+}
+
+/** Les mêmes paramètres, dans n'importe quel ordre. */
+function sameParams(a: string, b: string): boolean {
+  const pairs = (h: string) => [...new URLSearchParams(h.replace(/^#/, "")).entries()].map(([k, v]) => `${k}=${v}`).sort().join("&");
+  return pairs(a) === pairs(b);
+}
+
+/**
+ * Réécrire sur place l'adresse d'une entrée que l'application n'a pas écrite elle-même.
+ *
+ * Seulement sur le cinéma (`/`), et seulement une entrée sans `cinemaDepth` — un lien direct, un
+ * fragment tapé dans la barre d'adresse : une entrée que `cinemaNavigate` a écrite est cohérente par
+ * construction, et la réécrire pourrait défaire un choix voulu (les Nouveautés ouvertes au lancement
+ * par-dessus un panneau). Une adresse valide n'est jamais réécrite : l'ordre des paramètres ne compte
+ * pas, seul ce qu'ils disent. `replaceState` : rien n'est empilé, et l'état de l'entrée (Next, la
+ * pile des fiches) est gardé.
+ */
+export function normalizeArrivedAddress(): void {
+  if (typeof window === "undefined" || window.location.pathname !== "/") return;
+  const state = window.history.state as Record<string, unknown> | null;
+  if (typeof state?.[DEPTH_KEY] === "number") return;
+  const hash = window.location.hash;
+  const canonical = serialize(normalizeRoute(parse(hash)));
+  if (sameParams(hash, canonical)) return;
+  window.history.replaceState(state, "", `${window.location.pathname}${window.location.search}${canonical}`);
+  emit();
+}
+
+/**
+ * L'activité est à l'administrateur : un autre compte qui y arrive par l'adresse la voit refermée,
+ * au lieu d'un « Impossible de charger l'activité. Réessayer » qui ne peut jamais réussir (le proxy
+ * refuse ses lectures). `isAdmin` : `undefined` tant que le rôle n'est pas connu — on attend.
+ */
+export function closeAdminOnlyScreens(isAdmin: boolean | undefined): void {
+  if (typeof window === "undefined" || isAdmin !== false) return;
+  if (getSnapshot().activity === null) return;
+  cinemaNavigate({ activity: null }, "replace");
 }
 
 // useSyncExternalStore requires a stable snapshot identity between changes, so the parsed object
@@ -376,7 +438,17 @@ function emit() {
   for (const listener of listeners) listener();
 }
 
+// Une adresse tapée dans la barre arrive par `hashchange` : nettoyée avant que les écrans abonnés ne
+// la lisent (cet écouteur est posé au chargement du module, donc avant les leurs). L'arrivée par un
+// lien direct est nettoyée au premier abonnement — voir `normalizeArrivedAddress`.
+if (typeof window !== "undefined") {
+  window.addEventListener("hashchange", () => normalizeArrivedAddress());
+}
+
 function subscribe(onChange: () => void): () => void {
+  // Dans `subscribe` et non au rendu : réécrire l'adresse est un effet, et useSyncExternalStore
+  // relit l'instantané juste après l'abonnement.
+  normalizeArrivedAddress();
   listeners.add(onChange);
   // popstate covers Back/Forward over entries we pushed; hashchange covers a hash edited in the
   // address bar or a same-page link. Both end up re-reading location, so a duplicate is harmless.

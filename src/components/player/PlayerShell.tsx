@@ -3,9 +3,11 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { useRole } from "@/lib/useRole";
 import {
   cinemaClose,
   cinemaNavigate,
+  closeAdminOnlyScreens,
   useCinemaRoute,
   useSheetBehind,
   useRouteBehind,
@@ -117,6 +119,12 @@ const DECODER_WARMUP_MS = 8000;
 export function PlayerShell() {
   const isMobile = useIsMobile();
   const route = useCinemaRoute();
+  const { role } = useRole();
+  // L'activité ouverte par l'adresse chez un compte qui n'est pas administrateur : refermée dès que
+  // le rôle est connu (DECISIONS.md §105) — la règle est dans `cinemaRoute.ts`.
+  useEffect(() => {
+    if (route.activity !== null) closeAdminOnlyScreens(role === undefined ? undefined : role === "admin");
+  }, [role, route.activity]);
 
   // La variable vit sur l'élément racine parce que c'est le seul ancêtre commun entre le rail et
   // un écran porté dans document.body. Elle est remise à zéro sur téléphone, où la navigation est

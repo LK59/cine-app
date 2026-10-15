@@ -381,7 +381,9 @@ export function CinemaMobileClient() {
   if (route.browse !== null && route.browse !== lastBrowse) setLastBrowse(route.browse);
 
   const noop = useCallback(() => {}, []);
-  const closeSheet = useCallback(() => cinemaClose({ film: null, serie: null }), []);
+  // `episodes: false` comme les deux fermetures du bureau (ROBUSTESSE-8) ; la lecture de l'adresse
+  // l'écarte de toute façon sans série (DECISIONS.md §105).
+  const closeSheet = useCallback(() => cinemaClose({ film: null, serie: null, episodes: false }), []);
   const behind = useRouteBehind();
   // Le cran où chaque fiche de l'adresse a été ouverte — l'autre moitié de leur clé (§74).
   const origins = useSheetOrigins();
