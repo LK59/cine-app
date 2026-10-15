@@ -57,7 +57,11 @@ the production `server.log`. A test fails if that isolation disappears.
 that way before. Read the gate's exit status before committing.
 
 Tests default to the `node` environment; a component test opts into jsdom with a
-`// @vitest-environment jsdom` docblock on its first line. `clearMocks` is pinned to `false` in
+`// @vitest-environment jsdom` docblock on its first line. Files run in worker threads (`pool: "threads"`, isolated as
+before) under the household's time zone, set once in `vitest.config.ts` (`process.env.TZ`): a
+thread cannot change the time zone for itself, so a test must not set `TZ`. `isolate: false` was
+measured and rejected — `vi.mock` doubles leaked between files and 30 to 60 tests failed by order.
+The DOM matchers load only under jsdom (`vitest.setup.ts`). `clearMocks` is pinned to `false` in
 `vitest.config.ts` — that is Vitest 4's default, kept deliberately when moving to 5 so that no
 test quietly changed meaning; flipping it is a decision to take by reading the tests it affects.
 
@@ -204,7 +208,11 @@ and `resumeNetworkMs` (« Reprendre » from the network). The same day showed th
 the problem: the home's routes answered together in 4.3 s because folder matching (§47) scanned the
 whole Jellyfin library for every title — ~0.6–1.2 s of blocked event loop per catalogue, list or
 discovery call — while the resume feed alone costs 50 ms; `matchIndex` (server-cache.ts) indexes
-each list once. The cache exists because every
+each list once. Since 2026-10-15 the line also carries `routes` (`routeTimingsOf`): for the
+four opening requests (`movies`, `series`, `resume`, `nextUp`), when each left (`startMs`), its wait
+for the first byte (`waitMs`), the route's own time (`appMs`, from the `Server-Timing: app` header
+`timedRoute` adds — the same one the stream relay sends), the read (`readMs`) and the compressed
+size (`kB`). `waitMs − appMs` is the proxy, Node's queue and the network. The cache exists because every
 launch used to ask for the whole catalogue again — one to two seconds of loading screen for a phone
 roaming abroad; the log says what it actually saves. Since 2026-09-28 the same line carries the
 device's storage (`storageFacts`): the answer to `persist()` and whether storage is persistent,
