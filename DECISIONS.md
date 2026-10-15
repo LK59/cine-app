@@ -1380,7 +1380,9 @@ bouton visé ne fait que s'allumer (`data-lit`). La zone de toucher déborde de 
 tient jusqu'à 24 px hors du verre. **Le clic natif n'est jamais remplacé** : il part tel quel quand
 le doigt est relâché sur le bouton ; il n'est redirigé vers le bouton visé que s'il tombe à côté
 (marge, glissé), et cela depuis le clic natif lui-même, donc dans le geste utilisateur. Un clic du
-clavier ou d'un programme n'est pas touché. Les menus du lecteur naissent de la pilule des réglages
+clavier ou d'un programme n'est pas touché, ni celui d'une surface qui ne porte aucune des cibles
+du geste (15/10/2026 : « Passer l'intro », `data-liquid` sans être une cible du lecteur, voyait son
+clic retenu comme « tombé dans la pilule » — mort depuis le 04/10 ; `PlayerControls-geste-clic.test.tsx`). Les menus du lecteur naissent de la pilule des réglages
 (une surface découpée à sa forme qui s'ouvre sur le ressort ; icône, titre et lignes apparaissent
 en fondu à leur place — l'icône glissait du bouton jusqu'au titre et bougeait encore dans la boîte
 posée), hauts de 280 px au plus ; ils se démontent à l'instant où ils se ferment, et une copie inerte

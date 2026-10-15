@@ -17,7 +17,8 @@
 // - le doigt est parti plus loin : l'appui est annulé ; un clic qui tomberait encore dans la
 //   pilule est arrêté, un clic ailleurs part comme avant.
 // Si aucun clic natif ne vient (un doigt qui a glissé, sur iOS), le bouton visé est cliqué au bout
-// de 300 ms. Un clic du clavier ou d'un programme (`detail` à 0, ou non fiable) n'est jamais touché.
+// de 300 ms. Un clic du clavier ou d'un programme (`detail` à 0, ou non fiable) n'est jamais touché,
+// ni celui d'une surface qui ne porte aucune des cibles du geste : il n'y vise rien.
 
 import { springKeyframes, type SpringParams } from "./spring";
 
@@ -313,6 +314,13 @@ export function createLiquidPress(options: LiquidPressOptions) {
     if (s.chosen) light(s.chosen, false, s.last.x, s.last.y);
     if (!redirect && !cancelled && options.pull === "outside" && s.pull.r > 0) swallowNextClick(s.surface);
     if (cancelled || !redirect) return;
+    // Une surface où le geste n'a rien à viser — aucune de ses cibles n'y est : il ne prend aucun
+    // clic en charge (ni redirection, ni secours), il n'en arrête donc aucun. Le bouton « Passer
+    // l'intro » porte `data-liquid` sans être une cible du lecteur : son clic, tombé « dans la
+    // pilule sans rien de visé », était retenu ici — la fonction est restée morte du 04/10 au
+    // 15/10/2026, à la souris comme au doigt, sans un mot (passe de nuit, LECTEUR-3). Les tests ne
+    // le voyaient pas : sous jsdom, aucun clic n'est fiable, et le geste les laisse tous passer.
+    if (!s.chosen && visibleTargets(s.surface).length === 0) return;
     clearPending();
     const target = s.chosen;
     pending = {

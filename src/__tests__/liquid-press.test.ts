@@ -141,6 +141,45 @@ describe("le geste liquide et le clic natif", () => {
     expect(onRoot).toHaveBeenCalledTimes(1);
   });
 
+  // « Passer l'intro » (passe de nuit du 15/10/2026, LECTEUR-3) : un bouton-pilule seul, branché
+  // sur le geste sans être une de ses cibles. Son clic du doigt était retenu en capture — rien ne
+  // se passait, à la souris comme au toucher, depuis le 04/10.
+  it("laisse passer le clic d'une surface où il n'a rien à viser", () => {
+    const { root, onRoot, press } = setup();
+    const skip = document.createElement("button");
+    root.append(skip);
+    box(skip, 300, 300, 120, 44);
+    const onSkip = vi.fn();
+    skip.addEventListener("click", onSkip);
+    const down = pointer("pointerdown", 360, 322);
+    skip.dispatchEvent(down);
+    press.down(down, skip);
+    expect(press.active()).toBe(true); // le geste anime bien la surface
+    window.dispatchEvent(pointer("pointerup", 360, 322));
+    fingerClick(skip);
+    expect(onSkip).toHaveBeenCalledTimes(1);
+    expect(onRoot).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1000);
+    expect(onSkip).toHaveBeenCalledTimes(1);
+  });
+
+  it("retient toujours le clic tombé dans une pilule à côté de ses boutons", () => {
+    // La règle d'avant, inchangée là où elle sert : une pilule qui porte des cibles, touchée loin
+    // de chacune (au-delà des 12 px), n'actionne rien et ne laisse rien filer au fond.
+    const { pill, a, b, onA, onB, onRoot, press } = setup();
+    box(pill, 100, 100, 200, 50);
+    box(a, 104, 104, 44, 44);
+    box(b, 152, 104, 44, 44);
+    const down = pointer("pointerdown", 270, 125);
+    press.down(down, pill);
+    window.dispatchEvent(pointer("pointerup", 270, 125));
+    fingerClick(pill);
+    vi.advanceTimersByTime(1000);
+    expect(onA).not.toHaveBeenCalled();
+    expect(onB).not.toHaveBeenCalled();
+    expect(onRoot).not.toHaveBeenCalled();
+  });
+
   it("ignore le curseur du volume, qui garde son propre geste", () => {
     const { pill, press } = setup();
     const input = document.createElement("input");
