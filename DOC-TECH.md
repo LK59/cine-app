@@ -1060,6 +1060,13 @@ reads and two verbs.
 
 - MediaSource allows only one operation at a time per buffer; everything goes through
   `BufferQueue`. Unserialised call sites produce a fatal `InvalidStateError`.
+  An operation still `updating` after 4 s is **waited for, never skipped**: the queue stays held,
+  is looked at again every 4 s (or 250 ms after a timer that fired more than a second late — a
+  blocked main thread, whose `updateend` is right behind it), and only after 30 s is it `abort()`ed,
+  its own `updateend` awaited, then rejected. Until 2026-10-15 the 4 s timeout rejected and let the
+  next append start on a busy buffer — a certain `InvalidStateError`, and three of them handed the
+  film to the server player; 4.6 s of main-thread work during an append was enough (night pass,
+  LECTEUR-1).
 - The fill loop targets **30 s of lead**, with an **8 s floor** fetched unconditionally. Obeying
   `ManagedMediaSource.streaming` without that floor leaves the buffer empty forever once the system
   says stop.

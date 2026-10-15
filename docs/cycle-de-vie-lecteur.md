@@ -372,7 +372,7 @@ l'observe par ses événements.
 | Bascule pendant la fermeture | `fallToStable` ne regarde que `steppedAside` | **fragile** (point n° 5) |
 | Fermer pendant la négociation serveur | la génération n'est pas revérifiée après la lecture du corps de la réponse | **fragile** (point n° 6) |
 | Deux fermetures du lecteur serveur | rien ne garde la ligne `stop` | **fragile** (point n° 7) |
-| Envoi pendant qu'un tampon travaille | tout passe par `BufferQueue` | solide, sauf la fin de flux (point n° 8) |
+| Envoi pendant qu'un tampon travaille | tout passe par `BufferQueue` ; une opération encore en cours après 4 s est attendue (file tenue), interrompue seulement à 30 s (15/10/2026) | solide, sauf la fin de flux (point n° 8) |
 | Quota dépassé | éviction, puis `recover` : un saut complet qui **vide les deux tampons** | lourd mais voulu (« relit depuis la tête ») ; compte dans l'échelle |
 | Préférence `legacy` ou réglage serveur qui change en plein film | les deux lecteurs s'échangent sans relais de position | **fragile**, rare (point n° 9) |
 | SWR en pause pendant le plein écran | les requêtes vitales portent `playerBootstrapOptions` ; au retour, `PlaybackProvider` redemande ce qui n'a rien reçu | solide (dépend de l'ordre des effets dans `PlaybackProvider`) |
