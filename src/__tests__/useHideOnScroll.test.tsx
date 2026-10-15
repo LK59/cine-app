@@ -22,9 +22,13 @@ function Bar({ enabled = true }: { enabled?: boolean }) {
   );
 }
 
-/** Une zone qui défile vraiment en hauteur — jsdom donne zéro à toutes les dimensions. */
+/**
+ * Une zone qui défile vraiment en hauteur — jsdom donne zéro à toutes les dimensions. Assez haute
+ * pour que chaque position des tests soit atteignable (le crochet borne `scrollTop` à ce que le
+ * conteneur peut parcourir, pour ignorer le rebond élastique).
+ */
 function tall(el: HTMLElement) {
-  Object.defineProperty(el, "scrollHeight", { value: 2000, configurable: true });
+  Object.defineProperty(el, "scrollHeight", { value: 3000, configurable: true });
   Object.defineProperty(el, "clientHeight", { value: 800, configurable: true });
 }
 
@@ -61,6 +65,35 @@ describe("useHideOnScroll", () => {
     await scrollTo(300);
     expect(state()).toBe("cachée");
     await scrollTo(305);
+    expect(state()).toBe("cachée");
+  });
+
+  // 15/10/2026 (MOBILE-3) : le seuil était comparé image par image — remonter doucement (4 px par
+  // image) ne rendait jamais la barre ; seul un coup sec la rappelait. C'est la distance qui compte.
+  it("revient quand on remonte doucement, à la distance parcourue", async () => {
+    render(<Bar />);
+    await scrollTo(300);
+    expect(state()).toBe("cachée");
+    for (const top of [296, 292, 288]) await scrollTo(top);
+    // 12 px : encore une hésitation.
+    expect(state()).toBe("cachée");
+    await scrollTo(284);
+    expect(state()).toBe("visible");
+  });
+
+  it("garde le coup sec tel quel, et repart du point où le sens change", async () => {
+    render(<Bar />);
+    await scrollTo(300);
+    await scrollTo(280); // un coup sec vers le haut : visible tout de suite
+    expect(state()).toBe("visible");
+    // Redescendre de 10 px, puis remonter de 4 : ni l'un ni l'autre ne dépasse le seuil.
+    await scrollTo(290);
+    await scrollTo(286);
+    expect(state()).toBe("visible");
+    // Redescendre lentement depuis 286 : 4 px par image, cachée une fois 12 px franchis.
+    for (const top of [290, 294, 298]) await scrollTo(top);
+    expect(state()).toBe("visible");
+    await scrollTo(302);
     expect(state()).toBe("cachée");
   });
 
