@@ -281,7 +281,10 @@ plein écran.
 
 **Porteur.** `playerHoldsKeyboard(playback)` (`src/lib/playerKeyboard.ts`). Appelants :
 `CinemaMobileDetail`, `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaEpisodeBrowser`, et
-`gridIsTop` (`src/lib/cinemaGridTop.ts`) pour la grille du bureau — flèches, « / », carte centrée.
+`gridIsTop` (`src/lib/cinemaGridTop.ts`) pour la grille du bureau — flèches, « / », carte centrée —,
+et depuis le 15/10/2026 `PlayerPanelFrame` (Échap d'un panneau, par `usePlaybackMode`, qui vaut
+« fermé » hors du fournisseur) : Échap pendant une scène lancée depuis la Recherche refermait la
+Recherche sous le film.
 
 **Corrigé le 21/09.** Les fiches du bureau le savaient, chacune avec son `playback.mode === "full"` ;
 la fiche du téléphone non — Échap sur une tablette à clavier refermait le lecteur *et* la fiche.

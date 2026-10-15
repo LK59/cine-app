@@ -9,6 +9,8 @@ import { useT } from "@/components/TranslationProvider";
 import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
 import { openPanel } from "./playerNav";
 import { usePanelScrollMemory } from "@/lib/panelScrollMemory";
+import { usePlaybackMode } from "@/components/PlaybackProvider";
+import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 
 /**
  * L'habillage commun des écrans ouverts depuis le rail — Recherche, Ma liste, Compte.
@@ -177,8 +179,15 @@ export function PlayerPanelFrame({
   // il y en a *deux* montés, celui qui part et celui qui arrive. Sans cette condition, les deux
   // écoutent Échap, et une seule touche reculait de deux crans — depuis le premier écran de la
   // pile, elle faisait sortir du mode cinéma. Un écran en train de partir n'a plus d'avis sur rien.
+  //
+  // Et le lecteur plein écran recouvre tout (15/10/2026, passe de nuit, BUREAU-11) : Échap pendant
+  // une scène lancée depuis la Recherche refermait la Recherche *sous* le film — en fermant le
+  // lecteur on tombait sur l'accueil, requête et résultats perdus. Les fiches se taisaient déjà
+  // (`playerHoldsKeyboard`) ; les panneaux, non. Écoutant en capture, ils prenaient même la touche
+  // au lecteur (`stopPropagation`).
+  const playerOwnsKeyboard = playerHoldsKeyboard({ mode: usePlaybackMode() });
   useEffect(() => {
-    if (covered || leaving) return;
+    if (covered || leaving || playerOwnsKeyboard) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       // Deux cas où Échap ne revient pas au panneau, relevés le 23/09/2026 :
@@ -200,7 +209,7 @@ export function PlayerPanelFrame({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [covered, leaving, closeWindow]);
+  }, [covered, leaving, playerOwnsKeyboard, closeWindow]);
 
   // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
   // `document` n'existe pas et où `createPortal` fait échouer la page entière.

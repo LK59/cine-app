@@ -13,6 +13,9 @@ vi.mock("@/lib/cinemaRoute", () => ({
   useCinemaRoute: () => ({ film: null, serie: null, discover: null, person: null }),
 }));
 
+const playbackMode = vi.hoisted(() => ({ current: "closed" as "closed" | "full" | "mini" }));
+vi.mock("@/components/PlaybackProvider", () => ({ usePlaybackMode: () => playbackMode.current }));
+
 import { PlayerPanelFrame } from "@/components/player/PlayerPanelFrame";
 
 const panel = (leaving: boolean) => (
@@ -178,6 +181,23 @@ describe("PlayerPanelFrame — Échap", () => {
     expect(cinemaClose).not.toHaveBeenCalled();
     expect(vi.mocked((await import("@/lib/cinemaRoute")).cinemaNavigate)).not.toHaveBeenCalled();
     dialog.remove();
+  });
+
+  // 15/10/2026 (passe de nuit, BUREAU-11) : Échap pendant une scène lancée depuis la Recherche
+  // refermait la Recherche sous le film ; à la fermeture du lecteur, requête et résultats perdus.
+  it("se tait pendant qu'un film occupe l'écran", async () => {
+    const { cinemaClose, cinemaNavigate } = await import("@/lib/cinemaRoute");
+    vi.mocked(cinemaClose).mockClear();
+    vi.mocked(cinemaNavigate).mockClear();
+    playbackMode.current = "full";
+    try {
+      render(panel(false));
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(cinemaNavigate).not.toHaveBeenCalled();
+      expect(cinemaClose).not.toHaveBeenCalled();
+    } finally {
+      playbackMode.current = "closed";
+    }
   });
 
   it("laisse Échap à l'élément qui le gère lui-même", async () => {
