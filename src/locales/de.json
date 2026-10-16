@@ -2081,6 +2081,8 @@
       "animLab": "Verschiedene Tests",
       "animLabHint": "Schaltflächen über Bildern mit verschiedenen Druckgesten und Unschärfen, zum Vergleichen auf diesem Gerät.",
       "openAnimLab": "Verschiedene Tests",
+      "ipadSim": "iPad-Simulator",
+      "ipadSimQuit": "iPad-Simulator beenden",
       "notifReportReply": "Antwort auf eine Meldung",
       "notifReportReplyHint": "Wenn eine Ihrer Meldungen eine Antwort bekommt oder ihren Status ändert.",
       "notifReportNew": "Neue Meldungen",

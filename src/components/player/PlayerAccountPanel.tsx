@@ -3,7 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical } from "lucide-react";
+import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { hardNavigate, signOut } from "@/lib/signOut";
@@ -18,6 +18,7 @@ import { AppSignature } from "@/components/AppSignature";
 import { useReportBadge } from "@/lib/useReportBadge";
 import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { BenchSection } from "./BenchSection";
+import { setIpadSimulator, useIpadSimulator } from "@/lib/ipadSimulator";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices, NotificationTest } from "./accountControls";
 import { openOnboarding } from "./onboardingEvents";
 import { Toggle } from "@/components/Toggle";
@@ -148,6 +149,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
   // sautait quand la lecture et le mot de passe apparaissaient (23/09/2026).
   const hasJellyfin = me ? me.jfUser != null : true;
   const badge = useReportBadge();
+  const ipadSimulator = useIpadSimulator();
   const needsHdrHelp = useNeedsHdrHelp();
 
   // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
@@ -237,10 +239,17 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
                 place de ce panneau ; le banc se prépare ici, sous la ligne. */}
             <BenchSection
               extraAction={
-                <button type="button" onClick={() => cinemaNavigate({ account: false, activity: "animations" })} className="btn btn-ghost w-full justify-center sm:w-auto">
-                  <Sparkles size={16} />
-                  {t("player.account.openAnimLab")}
-                </button>
+                <>
+                  <button type="button" onClick={() => cinemaNavigate({ account: false, activity: "animations" })} className="btn btn-ghost w-full justify-center sm:w-auto">
+                    <Sparkles size={16} />
+                    {t("player.account.openAnimLab")}
+                  </button>
+                  {/* L'interface large au doigt sur un iPhone, pour en juger sans iPad (16/10/2026). */}
+                  <button type="button" onClick={() => setIpadSimulator(!ipadSimulator)} className="btn btn-ghost w-full justify-center sm:w-auto">
+                    <Tablet size={16} />
+                    {t(ipadSimulator ? "player.account.ipadSimQuit" : "player.account.ipadSim")}
+                  </button>
+                </>
               }
             />
             <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>

@@ -4,6 +4,8 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { PlayerShell } from "@/components/player/PlayerShell";
 import { earlyFetchScript } from "@/lib/earlyFetch";
+import { ipadSimulatorScript } from "@/lib/ipadSimulator";
+import { IpadSimulatorBadge } from "@/components/player/IpadSimulatorBadge";
 
 /**
  * Le lecteur a sa propre coquille, et c'est tout l'intérêt du groupe de routes : pas de barre
@@ -60,8 +62,11 @@ export default async function PlayerLayout({ children }: { children: React.React
         identique à celui des récupérateurs — mêmes mode et identifiants, donc même réponse.
       */}
       <script dangerouslySetInnerHTML={{ __html: earlyFetchScript() }} />
+      {/* Le simulateur d'iPad de l'administrateur, avant le premier dessin (`ipadSimulator.ts`). */}
+      <script dangerouslySetInnerHTML={{ __html: ipadSimulatorScript() }} />
       {children}
       <PlayerShell />
+      <IpadSimulatorBadge />
     </div>
   );
 }

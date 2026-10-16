@@ -2081,6 +2081,8 @@
       "animLab": "Miscellaneous tests",
       "animLabHint": "Buttons over images, with several press gestures and blurs, to compare on this device.",
       "openAnimLab": "Miscellaneous tests",
+      "ipadSim": "iPad simulator",
+      "ipadSimQuit": "Leave iPad simulator",
       "notifReportReply": "Reply to a report",
       "notifReportReplyHint": "When one of your reports gets a reply or changes status.",
       "notifReportNew": "New reports",

@@ -2081,6 +2081,8 @@
       "animLab": "Tests divers",
       "animLabHint": "Des boutons sur des images, avec plusieurs gestes d'appui et plusieurs flous, pour comparer sur cet appareil.",
       "openAnimLab": "Tests divers",
+      "ipadSim": "Simulateur iPad",
+      "ipadSimQuit": "Quitter le simulateur iPad",
       "notifReportReply": "Réponse à un signalement",
       "notifReportReplyHint": "Quand un de vos signalements reçoit une réponse ou change d'état.",
       "notifReportNew": "Nouveaux signalements",
