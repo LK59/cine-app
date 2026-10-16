@@ -1,8 +1,16 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { Tablet } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
-import { setIpadSimulator, useIpadSimulator } from "@/lib/ipadSimulator";
+import { ipadSimulatorOn, setIpadSimulator } from "@/lib/ipadSimulator";
+
+/** Fixé au chargement : entrer ou sortir recharge la page, rien n'a à être suivi entre-temps. */
+const noSubscribe = () => () => {};
+
+export function useIpadSimulator(): boolean {
+  return useSyncExternalStore(noSubscribe, ipadSimulatorOn, () => false);
+}
 
 /** La sortie du simulateur d'iPad, toujours à l'écran tant qu'il est actif (`ipadSimulator.ts`). */
 export function IpadSimulatorBadge() {

@@ -1,7 +1,3 @@
-"use client";
-
-import { useSyncExternalStore } from "react";
-
 /**
  * Le simulateur d'iPad, sur un iPhone (16/10/2026) — un outil de test de l'administrateur.
  *
@@ -26,19 +22,13 @@ export function ipadSimulatorScript(): string {
   return `(function(){try{if(localStorage.getItem(${key})!=="1")return;var m=document.querySelector('meta[name="viewport"]');if(m)m.setAttribute("content",${content})}catch(e){}})()`;
 }
 
-function readOn(): boolean {
+/** Le mode est-il actif sur cet appareil ? Module sans React : le layout serveur en lit le script. */
+export function ipadSimulatorOn(): boolean {
   try {
     return window.localStorage.getItem(IPAD_SIMULATOR_KEY) === "1";
   } catch {
     return false;
   }
-}
-
-/** Fixé au chargement : entrer ou sortir recharge la page, rien n'a à être suivi entre-temps. */
-const noSubscribe = () => () => {};
-
-export function useIpadSimulator(): boolean {
-  return useSyncExternalStore(noSubscribe, readOn, () => false);
 }
 
 export function setIpadSimulator(on: boolean): void {
