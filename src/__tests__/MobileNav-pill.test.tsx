@@ -74,6 +74,18 @@ describe("MobileNav — la pilule du cinéma", () => {
     expect(bar?.querySelector(".nav-lens")).not.toBeNull();
   });
 
+  it("un appui long ne sélectionne aucun libellé : la sélection d'iOS figeait la lentille", () => {
+    render(<MobileNav />);
+    const bar = document.querySelector<HTMLElement>("[data-gestion-nav] [data-liquid-nav]");
+    // Posé par le geste lui-même, donc sur chaque barre à lentille, et la feuille de style le lit.
+    expect(bar?.hasAttribute("data-liquid-lens")).toBe(true);
+    const css = readFileSync("src/app/globals.css", "utf8");
+    const rule = css.match(/\[data-liquid-lens\],\s*\[data-liquid-lens\] \*\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toContain("-webkit-user-select: none");
+    expect(rule).toContain("user-select: none");
+    expect(rule).toContain("-webkit-touch-callout: none");
+  });
+
   it("navigue au contact, comme au cinéma", () => {
     render(<MobileNav />);
     const tab = layOut();

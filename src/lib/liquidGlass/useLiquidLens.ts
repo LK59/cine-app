@@ -130,6 +130,16 @@ export function useLiquidLens({
     const el = lensRef.current;
     const held = lens.current;
     if (!bar || !el) return;
+    /**
+     * Rien ne se sélectionne sur une barre à lentille (`[data-liquid-lens]`, globals.css).
+     *
+     * Un appui long sur un onglet lançait la sélection d'iOS sur son libellé : le texte surligné,
+     * la loupe, et le geste repris par le système — la lentille, soulevée à l'appui, ne recevait
+     * plus la fin du geste et restait figée jusqu'au toucher suivant (16/10/2026). Posé ici, et non
+     * dans chaque barre, parce que les quatre (barre du bas, rail, Films/Séries, langues) prennent
+     * le même geste.
+     */
+    bar.dataset.liquidLens = "";
     const items = () => Array.from(bar.querySelectorAll<HTMLElement>("[data-lens]"));
     const at = (e: PointerEvent) => (axis === "x" ? e.clientX : e.clientY);
     // `rest` : la barre au repos, mesurée une fois à l'appui — aucune lecture de mise en page par

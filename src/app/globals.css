@@ -1706,6 +1706,14 @@
 }
 
 /* ─── La barre du bas à lentille (`LiquidNavPill` : cinéma et gestion) ───────── */
+/* Toute barre que prend `useLiquidLens` : un appui long n'y sélectionne aucun libellé — la
+   sélection d'iOS reprenait le geste et figeait la lentille soulevée (16/10/2026). */
+[data-liquid-lens],
+[data-liquid-lens] * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
 .nav-lens {
   position: absolute;
   left: 0;
