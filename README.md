@@ -733,11 +733,19 @@ Beside them: `auth.log`, `startup.log`, `notifications.log`, `subtitle-gen.log` 
 
 ## Third-party code
 
-- `src/lib/webcodecs/truehd/truehd-wasm.mjs`, committed, is FFmpeg's TrueHD/MLP decoder (FFmpeg
-  7.1.2, configured without `--enable-gpl`, so LGPL-2.1-or-later), compiled to WebAssembly.
-  `tools/truehd-wasm/build.sh` rebuilds it byte for byte from the checksummed FFmpeg release.
+- `src/lib/webcodecs/truehd/truehd-wasm.mjs` and `src/lib/webcodecs/aac/aac-wasm.mjs`, committed,
+  are FFmpeg's TrueHD/MLP and AAC decoders (FFmpeg 7.1.5, configured without `--enable-gpl`, so
+  LGPL-2.1-or-later), compiled to WebAssembly. `tools/truehd-wasm/build.sh` and
+  `tools/aac-wasm/build.sh` rebuild them byte for byte from the checksummed FFmpeg release.
 - FLAC is decoded by `@wasm-audio-decoders/flac` (MIT); DTS and AC-3 by `@mediabunny/dts` and
   `@mediabunny/ac3`, on top of `mediabunny` (all MPL-2.0).
+
+## License
+
+Cine App is free software under the [GNU Affero General Public License v3.0](LICENSE)
+(`AGPL-3.0-only`). You may use, study, modify and share it; if you run a modified version for other
+people over a network, you must offer them its source code under the same license. Third-party
+code keeps its own license, listed above.
 
 ## Screenshot conventions
 
