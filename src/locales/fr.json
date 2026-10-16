@@ -2097,6 +2097,11 @@
       "storageClear": "Vider le cache",
       "storageCleared": "Cache vidé",
       "display": "Interface",
+      "interface": "Interface sur cet appareil",
+      "interfaceHint": "Automatique : l'interface tactile au doigt, l'interface ordinateur avec une souris. Ce choix ne vaut que pour cet appareil.",
+      "interfaceAuto": "Automatique",
+      "interfaceTouch": "Tactile",
+      "interfaceDesktop": "Ordinateur",
       "guidedScroll": "Défilement guidé",
       "guidedScrollHint": "Sur ordinateur, l'accueil se cale sur une rangée entière et les fiches sur une page entière. Coupé, la page défile librement.",
       "home": {

@@ -82,3 +82,13 @@ export function detailColumnMotion({ leaving, revealed }: { leaving: boolean; re
 export function phoneSheetCorner(offset: number): number {
   return Math.max(16, Math.min(28, offset * 0.5));
 }
+
+/**
+ * L'ombre d'une fiche du téléphone qu'on tire vers le bas — avec, sur l'iPad couché, le voile
+ * qu'elle porte sur l'accueil autour d'elle (`--sheet-scrim`, globals.css, 16/10/2026) : posée en
+ * ligne pendant le geste, cette ombre remplaçait celle de la feuille de style, et le voile
+ * disparaissait sous le doigt. Fiche de titre et fiche découverte.
+ */
+export function phoneSheetShadow(offset: number): string | undefined {
+  return offset > 0 ? "0 -18px 50px rgba(0,0,0,0.55), var(--sheet-scrim, 0 0 #0000)" : undefined;
+}

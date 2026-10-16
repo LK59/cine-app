@@ -15,7 +15,7 @@ import { useRequestConfirmation } from "./RequestConfirm";
 import { useTitleWatched } from "@/lib/useTitleWatched";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
-import { SHEET_OUT_MS, sheetMotionClass, detailColumnMotion, phoneSheetCorner } from "@/lib/sheetMotion";
+import { SHEET_OUT_MS, sheetMotionClass, detailColumnMotion, phoneSheetCorner, phoneSheetShadow } from "@/lib/sheetMotion";
 import { useSheetExit } from "@/lib/useSheetExit";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
 import {
@@ -229,7 +229,7 @@ export function PlayerDiscoverSheet({
         // l'autre proportionnels au chemin parcouru.
         borderTopLeftRadius: phoneSheetCorner(swipe.offset),
         borderTopRightRadius: phoneSheetCorner(swipe.offset),
-        boxShadow: swipe.offset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined,
+        boxShadow: phoneSheetShadow(swipe.offset),
       }}
     >
       {/* Même plafond que les fiches de bibliothèque : en 16:9 pleine largeur, une bannière fait

@@ -2097,6 +2097,11 @@
       "storageClear": "Cache leeren",
       "storageCleared": "Cache geleert",
       "display": "Oberfläche",
+      "interface": "Oberfläche auf diesem Gerät",
+      "interfaceHint": "Automatisch: die Touch-Oberfläche mit dem Finger, die Computer-Oberfläche mit einer Maus. Diese Wahl gilt nur für dieses Gerät.",
+      "interfaceAuto": "Automatisch",
+      "interfaceTouch": "Touch",
+      "interfaceDesktop": "Computer",
       "guidedScroll": "Geführtes Scrollen",
       "guidedScrollHint": "Am Computer rastet die Startseite auf eine ganze Reihe und die Titelseiten auf eine ganze Seite ein. Aus: Die Seite scrollt frei.",
       "home": {

@@ -2097,6 +2097,11 @@
       "storageClear": "Clear cache",
       "storageCleared": "Cache cleared",
       "display": "Interface",
+      "interface": "Interface on this device",
+      "interfaceHint": "Automatic: the touch interface with a finger, the computer interface with a mouse. This choice applies to this device only.",
+      "interfaceAuto": "Automatic",
+      "interfaceTouch": "Touch",
+      "interfaceDesktop": "Computer",
       "guidedScroll": "Guided scrolling",
       "guidedScrollHint": "On a computer, the home screen settles on a whole row and title pages on a whole page. Off, pages scroll freely.",
       "home": {

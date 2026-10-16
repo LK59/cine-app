@@ -13,7 +13,7 @@ import { arrivedByBack, markSheetLeaving, useSheetBehind, useRouteBehind } from 
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
-import { sheetMotionClass, phoneSheetCorner } from "@/lib/sheetMotion";
+import { sheetMotionClass, phoneSheetCorner, phoneSheetShadow } from "@/lib/sheetMotion";
 import { useSheetMorph } from "@/lib/sheetMorph/useSheetMorph";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
@@ -448,7 +448,7 @@ export function CinemaMobileDetail({
         // shadow, both proportional to how far it has come.
         borderTopLeftRadius: phoneSheetCorner(swipe.offset),
         borderTopRightRadius: phoneSheetCorner(swipe.offset),
-        boxShadow: swipe.offset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined,
+        boxShadow: phoneSheetShadow(swipe.offset),
       }}
     >
       {/* 16:9 header image, bleeding into the page under a gradient rather than ending on a hard
@@ -507,7 +507,7 @@ export function CinemaMobileDetail({
           restait qu'un liseré de six pixels. Positionner ce bloc à son tour le remet au-dessus,
           à sa place — le chevauchement lui-même est voulu, c'est ce qui pose le titre dans le
           fondu de l'image. */}
-      <div data-sheet-content="" className={`relative -mt-6 px-4 pb-16 ${short ? "mx-auto w-full max-w-xl" : ""}`}>
+      <div data-sheet-content="" className={`relative -mt-6 px-4 pb-16 tablet:px-8 ${short ? "mx-auto w-full max-w-xl" : ""}`}>
         <PhoneSheetTitle title={item.title} logoUrl={item.logoUrl} />
 
         <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">

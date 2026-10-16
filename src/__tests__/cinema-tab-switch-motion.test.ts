@@ -56,6 +56,6 @@ describe("du squelette au contenu, sur téléphone", () => {
     expect(rows).toMatch(/className=\{`scrollbar-thin flex \$\{fade\.arrived \? "" : "animate-fade-in "\}gap-3 overflow-x-auto/);
     // D'autres attributs peuvent s'y ajouter (la référence du geste liquide, 04/10/2026) : c'est le
     // fondu qu'on vérifie.
-    expect(lire("src/components/cinema/mobile/CinemaMobileHero.tsx")).toMatch(/<section[^>]*className=\{`\$\{fade\.arrived \? "" : "animate-fade-in "\}px-4 pt-2`\}[^>]*>/);
+    expect(lire("src/components/cinema/mobile/CinemaMobileHero.tsx")).toMatch(/<section[^>]*className=\{`\$\{fade\.arrived \? "" : "animate-fade-in "\}px-4 pt-2[^`]*`\}[^>]*>/);
   });
 });

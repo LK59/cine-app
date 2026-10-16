@@ -533,7 +533,7 @@ export function PlayerPersonSheet({
          * et la sortie saccadait. Même raison, même traitement que sur les fiches de titre.
          */
         className={`scrollbar-thin relative w-full overflow-y-auto overscroll-contain bg-ink shadow-2xl ring-1 ring-white/10 ${
-          isMobile ? "max-h-[92dvh] rounded-t-2xl" : "max-h-[88vh] max-w-4xl rounded-2xl"
+          isMobile ? "max-h-[92dvh] rounded-t-2xl tablet:landscape:max-w-184" : "max-h-[88vh] max-w-4xl rounded-2xl"
         } ${sheetMotionClass({
           swipe,
           leaving,

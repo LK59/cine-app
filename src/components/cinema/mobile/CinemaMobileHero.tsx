@@ -50,12 +50,16 @@ const LOOP_COPIES = 2;
 const NO_TRANSITION = { transition: "none" } as const;
 /** Ce que cette bannière affiche d'un titre : son affiche et son logo, décodés d'avance. */
 const heroImages = (item: Item) => [heroPoster(item), item.logoUrl];
+/** En grand (iPad), l'image de fond à la place de l'affiche. */
+const wideImage = (item: Item) => item.backdropUrl ?? heroPoster(item);
+const wideImages = (item: Item) => [wideImage(item), item.logoUrl];
 
 export const CinemaMobileHero = memo(function CinemaMobileHero({
   items: official,
   paused,
   offscreen = false,
   short,
+  wide = false,
   onPlay,
   onOpen,
   resumeFor,
@@ -72,6 +76,11 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   offscreen?: boolean;
   /** Écran couché : l'affiche passe à côté du texte au lieu d'être derrière. */
   short: boolean;
+  /**
+   * Grand écran tactile — iPad, tablette (16/10/2026) : l'image de fond du titre, logo et boutons
+   * posés dessus, une carte pleine largeur. L'affiche en 2:3 y remplissait tout l'écran.
+   */
+  wide?: boolean;
   onPlay: (item: Item) => void;
   onOpen: (item: Item) => void;
   /**
@@ -110,7 +119,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
     setSeen(new Map([...seen, ...official.map((item) => [heroKey(item), item] as const)]));
   }
   const { items, index } = resolveHeroCarousel(order, orderIndex, official, heroKey, (key) => seen.get(key));
-  useDecodeAhead(upcomingImages(items, index, heroImages));
+  useDecodeAhead(upcomingImages(items, index, wide ? wideImages : heroImages));
   // Le visuel de la fiche que chaque affiche de la bannière ouvrirait — toutes, une dizaine au plus —,
   // demandé dès que la liste est connue (au lancement, depuis le catalogue gardé) et gardé décodé :
   // sans lui, la fiche s'ouvre sur l'affiche en remplacement et le vrai visuel arrive après — voir
@@ -255,7 +264,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
    * titres à côté. Rogner l'affiche pour la raccourcir en perdait le haut ou le bas (refusé le
    * 07/10/2026). Couché, l'affiche est déjà à côté du texte : rien à montrer de plus.
    */
-  const peek = !short;
+  const peek = !short && !wide;
   /**
    * Toucher l'affiche ouvre la fiche (08/10/2026), comme « Plus d'infos » — mais pas le relâchement
    * d'un balayage, que le navigateur livre aussi comme un clic : un geste qui vient de glisser ne
@@ -357,7 +366,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
 
   return (
     // Fond en remplaçant son squelette, au lieu de surgir (23/09/2026) — au montage seulement.
-    <section ref={sectionRef} className={`${fade.arrived ? "" : "animate-fade-in "}px-4 pt-2`} onAnimationEnd={fade.onAnimationEnd}>
+    <section ref={sectionRef} className={`${fade.arrived ? "" : "animate-fade-in "}px-4 pt-2 tablet:px-8`} onAnimationEnd={fade.onAnimationEnd}>
       {/* Une piste, et non une affiche remplacée : toutes les affiches sont côte à côte et la
           piste est décalée d'une largeur par titre. Pendant le geste elle porte en plus le
           décalage du doigt, sans transition — elle n'anime pas vers une cible, elle est là où le
@@ -407,7 +416,42 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   vient, celle où l'on va. */}
               {/* Celles de la position de repos aussi, pendant un raccord : la case d'arrivée était vide
                   jusqu'au raccord, et son affiche et son logo montaient à neuf à cet instant. */}
-              {Math.abs(i - trackPos) > 1 && Math.abs(i - (index + pad)) > 1 ? null : short ? (
+              {Math.abs(i - trackPos) > 1 && Math.abs(i - (index + pad)) > 1 ? null : wide ? (
+                // L'image de fond, assombrie vers le bas et vers la gauche, sous le logo et les
+                // boutons — la bannière du bureau, sans le survol. Moins haute couché, pour laisser
+                // les rangées à l'écran.
+                <div data-sheet-source="" className="relative cursor-pointer overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
+                  <PosterImage
+                    src={wideImage(item)}
+                    alt={item.title}
+                    aspectRatio="aspect-16/10 landscape:aspect-3/1"
+                    subtle
+                    unoptimized
+                    priority={i === trackPos}
+                    eager
+                    sizes="100vw"
+                  />
+                  <div className="absolute inset-0 bg-linear-to-t from-ink via-ink/40 to-transparent landscape:bg-linear-to-r landscape:from-ink/90 landscape:via-ink/40" />
+                  <div className="absolute inset-x-0 bottom-0 p-8 landscape:right-auto landscape:w-[46%]">
+                    {item.logoUrl ? (
+                      <CinemaLogo
+                        src={item.logoUrl}
+                        alt={item.title}
+                        surface="sheet"
+                        className="mb-3"
+                        fallback={<h1 className="mb-3 text-4xl font-bold text-white drop-shadow-lg font-display">{item.title}</h1>}
+                      />
+                    ) : (
+                      <h1 className="mb-3 text-4xl font-bold text-white drop-shadow-lg font-display">{item.title}</h1>
+                    )}
+                    <div className="mb-4 flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted">
+                      <QualityBadges quality={"quality" in item ? item.quality : undefined} />
+                      {item.genres.length > 0 && <span className="truncate">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
+                    </div>
+                    {actions(item)}
+                  </div>
+                </div>
+              ) : short ? (
                 // `data-sheet-source` : la fiche part de cette affiche, et y revient (DECISIONS.md §61).
                 <div data-sheet-source="" className="flex cursor-pointer gap-4 rounded-2xl bg-surface/70 p-3 shadow-xl shadow-black/50" onClick={(e) => openFromPoster(e, item)}>
                   <div className="w-24 shrink-0 overflow-hidden rounded-lg">

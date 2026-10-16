@@ -5659,3 +5659,32 @@ titres introuvables (`#film=999999999`) étaient déjà refermés et nettoyés p
 fragment tapé, entrée de l'application, hors du cinéma, `episodes` à la fermeture, activité et rôle).
 
 **Pourquoi.** Passe de nuit du 15/10/2026 (ROBUSTESSE-8). Décidé par Louis le 15/10/2026.
+
+## 106. Un appareil touché a l'interface tactile, quelle que soit sa taille — choix par appareil
+
+**Règle.** `useIsMobile` (`useIsMobile.ts`) décide seul entre l'interface tactile (celle du téléphone) et
+l'interface ordinateur, dans cet ordre :
+- un écran étroit (`max-width: 767px`, ou un téléphone couché) : toujours tactile ;
+- le choix de l'appareil, Compte → Interface (Automatique / Tactile / Ordinateur, `localStorage`
+  `cine:interface`), là où il est proposé (`canChooseInterface`) : un appareil qu'on peut toucher
+  (`any-pointer: coarse`) à grand écran — iPad, tablette, ordinateur à écran tactile —, jamais une Fire TV ;
+- sinon automatique : tactile si l'appareil est touché (`hover: none` + `pointer: coarse`, lu une fois au
+  chargement), sauf une Fire TV.
+Changer de choix recharge la page. En grand, l'interface tactile s'élargit par `useIsTablet` et la
+variante CSS `tablet:` (même requête, `globals.css`) : bannière sur l'image de fond, rangées plus larges,
+fiche en carte centrée de 46 rem sur l'iPad couché (voile porté par l'ombre de la carte, `--sheet-scrim`,
+`phoneSheetShadow`).
+
+**Appelants.** `(player)/page.tsx` (quel écran), `PlayerShell` (barre du bas ou rail), `PlayerDiscoverSheet`,
+`PlayerPersonSheet` ; `CinemaMobileClient`/`CinemaMobileHero` (`wide`), `CinemaMobileDetail`.
+
+**Différent exprès.** Le nom `useIsMobile` est resté : six écrans le lisent. `useIsTouch` garde les gestes de
+l'interface ordinateur (affiche centrée, poignée des fiches) pour qui la choisit sur un appareil touché.
+
+**Tests.** `interface-choice.test.tsx` (étroit, iPad, ordinateur à souris, Fire TV, choix sur iPad et sur PC
+tactile, choix sans effet sur un téléphone).
+
+**Pourquoi.** Sur iPad, l'interface ordinateur supposait une souris : Safari simule un survol à chaque toucher,
+la bannière qui suit le survol change et le clic est parfois avalé (touchers perdus de Lucas, 16/10/2026) ;
+Louis l'a jugée inadaptée au doigt au simulateur d'iPad et a choisi l'interface tactile mise à l'échelle,
+sur maquette validée le 16/10/2026.

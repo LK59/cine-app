@@ -56,7 +56,7 @@ import { uniqueById, type NewBadgeMode, type SeriesArrival } from "@/lib/cinemaR
 import { BROWSE_ALL, browseSheetKey } from "@/lib/cinemaBrowse";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
-import { useIsShortViewport } from "@/lib/useIsMobile";
+import { useIsShortViewport, useIsTablet } from "@/lib/useIsMobile";
 import { useWarmSeriesCatalogue } from "@/lib/useWarmSeriesCatalogue";
 import { errorMessage } from "@/lib/upstreamError";
 import { usePlaySeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
@@ -81,8 +81,9 @@ import { useArrivalFade } from "@/lib/useArrivalFade";
 
 // Roughly a third of a phone's width, so a row always shows "two and a bit" posters — the visual
 // cue that it scrolls, without a card so small the artwork stops being readable.
-const POSTER_WIDTH = "w-28 sm:w-32";
-const CONTINUE_WIDTH = "w-44 sm:w-48";
+// `tablet:` — l'iPad, en grand (16/10/2026) : cinq affiches et demie debout, sept ou huit couché.
+const POSTER_WIDTH = "w-28 sm:w-32 tablet:w-36";
+const CONTINUE_WIDTH = "w-44 sm:w-48 tablet:w-60";
 // A phone row is flicked through, not traversed — past a couple of dozen cards nobody is
 // scrolling horizontally any further, and every extra card is DOM and decoded artwork the
 // browser carries for the whole session.
@@ -196,6 +197,7 @@ export function CinemaMobileClient() {
     cinemaNavigate({ tab, film: null, serie: null }, "replace");
   const searchOpen = route.search;
   const short = useIsShortViewport();
+  const wide = useIsTablet();
   // Les mêmes rangées de découverte que sur grand écran, en bas de page — voir la route.
   const { data: discovery } = useSWR<PlayerDiscoverPayload>("/api/player/discover", fetcher, {
     revalidateOnFocus: false,
@@ -756,6 +758,7 @@ export function CinemaMobileClient() {
               // `heroOffscreen`, la même règle que le bureau.
               offscreen={heroOffscreen(tab, route, playback.mode)}
               short={short}
+              wide={wide}
               onPlay={playHero}
               onOpen={openHero}
               // Pour que le bouton annonce « Reprendre — 40 min restantes » plutôt qu'un « Lire »
@@ -1346,15 +1349,15 @@ function MobileRow({
     // `mt-6` debout, `mt-4` couché : sur ~390 px de haut, six rems entre chaque rangée font qu'on
     // ne voit jamais deux rangées à la fois.
     // `data-poster-row` : ce que le décodage anticipé suit — voir `useDecodeRowsAhead`.
-    <section data-poster-row className="mt-6 [@media(max-height:500px)]:mt-4" style={containment}>
+    <section data-poster-row className="mt-6 tablet:mt-8 [@media(max-height:500px)]:mt-4" style={containment}>
       {/* « Voir tout » posé à côté du titre plutôt qu'au bout du défilement : une rangée s'arrête
           à vingt-quatre affiches, et il fallait faire glisser vingt-quatre fois pour découvrir
           qu'il y avait une suite. Ici il se voit avant qu'on commence. */}
-      <div className="mb-2 flex items-baseline justify-between gap-3 px-4 [@media(max-height:500px)]:mb-1.5">
+      <div className="mb-2 flex items-baseline justify-between gap-3 px-4 tablet:mb-3 tablet:px-8 [@media(max-height:500px)]:mb-1.5">
         <div className="min-w-0">
           {/* Une ligne, coupée par des points de suspension si trois titres n'y tiennent pas. */}
           {eyebrow && <p className="truncate text-[11px] leading-4 text-subtle" title={eyebrow}>{eyebrow}</p>}
-          <h2 className="min-w-0 truncate text-sm font-semibold text-white">{label}</h2>
+          <h2 className="min-w-0 truncate text-sm font-semibold text-white tablet:text-lg">{label}</h2>
         </div>
         {onSeeAll && (
           // Servi au relâchement : juste après un défilement, iOS gardait le premier clic pour
@@ -1372,7 +1375,7 @@ function MobileRow({
           (23/09/2026). Au montage seulement : rien ne rejoue en faisant défiler. */}
       <div
         ref={trackRef}
-        className={`scrollbar-thin flex ${fade.arrived ? "" : "animate-fade-in "}gap-3 overflow-x-auto overflow-y-hidden px-4 pb-1`}
+        className={`scrollbar-thin flex ${fade.arrived ? "" : "animate-fade-in "}gap-3 overflow-x-auto overflow-y-hidden px-4 pb-1 tablet:gap-4 tablet:px-8`}
         onAnimationEnd={fade.onAnimationEnd}
       >
         {children}

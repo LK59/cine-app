@@ -1,6 +1,9 @@
 @import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
+/* L'interface tactile sur un grand écran — iPad, tablette (16/10/2026). La même requête que
+   `TABLET_QUERY` (useIsMobile.ts) : large, et pas un téléphone couché (celui-là a `max-height: 500px`). */
+@custom-variant tablet (@media (min-width: 768px) and (min-height: 501px));
 
 @theme {
   --color-accent-50: rgb(var(--accent-50));
@@ -663,6 +666,19 @@
   @media (display-mode: standalone) {
     .phone-sheet-frame {
       height: calc(100vh - env(safe-area-inset-top, 0px) - 0.5rem);
+    }
+  }
+
+  /* L'iPad couché (16/10/2026) : la fiche reste une carte de lecture, centrée, plutôt qu'une page
+     étirée sur toute la largeur. L'accueil, visible de chaque côté, est assombri par l'ombre de la
+     carte elle-même (`--sheet-scrim`, reprise par l'ombre du geste) : elle suit la fiche quand on la
+     tire, et sort avec elle — aucun voile à faire entrer ni sortir à part. */
+  @media (min-width: 768px) and (min-height: 501px) and (orientation: landscape) {
+    .phone-sheet-frame {
+      --sheet-scrim: 0 0 0 100vmax rgb(0 0 0 / 0.6);
+      left: max(0px, calc((100vw - 46rem) / 2));
+      right: max(0px, calc((100vw - 46rem) / 2));
+      box-shadow: var(--sheet-scrim);
     }
   }
 }

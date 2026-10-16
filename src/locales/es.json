@@ -2097,6 +2097,11 @@
       "storageClear": "Vaciar la caché",
       "storageCleared": "Caché vaciada",
       "display": "Interfaz",
+      "interface": "Interfaz en este dispositivo",
+      "interfaceHint": "Automática: la interfaz táctil con el dedo, la interfaz de ordenador con un ratón. Esta elección solo se aplica a este dispositivo.",
+      "interfaceAuto": "Automática",
+      "interfaceTouch": "Táctil",
+      "interfaceDesktop": "Ordenador",
       "guidedScroll": "Desplazamiento guiado",
       "guidedScrollHint": "En el ordenador, el inicio se ajusta a una fila entera y las fichas a una página entera. Desactivado, la página se desplaza libremente.",
       "home": {

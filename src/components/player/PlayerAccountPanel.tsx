@@ -3,7 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet } from "lucide-react";
+import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { hardNavigate, signOut } from "@/lib/signOut";
@@ -24,6 +24,7 @@ import { LanguageSelect, SubtitleModeSelect, NotificationChoices, NotificationTe
 import { openOnboarding } from "./onboardingEvents";
 import { Toggle } from "@/components/Toggle";
 import { setGuidedScroll, useGuidedScroll } from "@/lib/guidedScroll";
+import { interfaceChoice, setInterfaceChoice, useInterfaceChoosable, type InterfaceChoice } from "@/lib/useIsMobile";
 import { setHomeLayoutChoice, useHomeLayoutChoice } from "@/lib/useHomeLayout";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import type { OtherSession } from "@/app/api/auth/sessions/route";
@@ -347,8 +348,10 @@ function DisplayRows() {
   const fail = () => toast.error(t("common.error"));
   const fallback = home.defaults.continueHero;
   const checked = home.own.continueHero ?? fallback;
+  const choosable = useInterfaceChoosable();
   return (
     <>
+      {choosable && <InterfaceRow />}
       <Row icon={Rows3} title={t("player.account.home.continueHero")} hint={t("player.account.home.continueHeroHint")}>
         <Toggle
           checked={checked}
@@ -364,6 +367,46 @@ function DisplayRows() {
     </>
   );
 }
+
+/**
+ * L'interface de cet appareil — automatique, tactile ou ordinateur (16/10/2026, `useIsMobile.ts`).
+ * Rangée sur l'appareil et non dans le compte : le même compte sur un iPad et sur un PC à souris
+ * n'a pas à avoir le même avis. Un choix recharge la page : les deux interfaces sont deux écrans.
+ */
+const INTERFACE_CHOICES: InterfaceChoice[] = ["auto", "touch", "desktop"];
+function InterfaceRow() {
+  const t = useT();
+  const current = useSyncExternalStore(noSubscribe, interfaceChoice, () => "auto" as InterfaceChoice);
+  const labels: Record<InterfaceChoice, string> = {
+    auto: t("player.account.interfaceAuto"),
+    touch: t("player.account.interfaceTouch"),
+    desktop: t("player.account.interfaceDesktop"),
+  };
+  return (
+    <div data-row="" className="border-t border-white/8 py-3.5 first:border-t-0">
+      <p className="flex items-center gap-2.5 text-sm text-white">
+        <TabletSmartphone size={16} className="shrink-0 text-subtle" />
+        <span id="interface-choice" className="min-w-0">{t("player.account.interface")}</span>
+      </p>
+      <div role="radiogroup" aria-labelledby="interface-choice" className="mt-3 grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
+        {INTERFACE_CHOICES.map((choice) => (
+          <button
+            key={choice}
+            type="button"
+            role="radio"
+            aria-checked={current === choice}
+            onClick={() => current !== choice && setInterfaceChoice(choice)}
+            className={`min-h-11 rounded-lg px-2 text-sm transition-colors ${current === choice ? "bg-white font-semibold text-ink" : "text-muted"}`}
+          >
+            {labels[choice]}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-subtle">{t("player.account.interfaceHint")}</p>
+    </div>
+  );
+}
+const noSubscribe = () => () => {};
 
 function PlaybackSection() {
   const t = useT();
