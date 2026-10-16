@@ -24,4 +24,15 @@ describe("le simulateur d'iPad", () => {
     new Function(ipadSimulatorScript())();
     expect(viewport()).toBe("width=1180, viewport-fit=cover");
   });
+
+  it("une méta `viewport` ajoutée après coup (Next en réécrit une) est corrigée aussi", async () => {
+    window.localStorage.setItem(IPAD_SIMULATOR_KEY, "1");
+    new Function(ipadSimulatorScript())();
+    const late = document.createElement("meta");
+    late.name = "viewport";
+    late.content = DEVICE;
+    document.head.append(late);
+    await Promise.resolve();
+    expect(late.getAttribute("content")).toBe("width=1180, viewport-fit=cover");
+  });
 });

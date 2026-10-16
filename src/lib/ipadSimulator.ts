@@ -10,8 +10,7 @@
  * reproduit. Un cadre au format iPad aurait demandé d'assouplir `frame-ancestors 'none'`.
  *
  * Rangé par appareil, jamais par compte : il ne change que le téléphone qui l'a activé. Le script
- * part avec le HTML (layout du cinéma), avant le premier dessin, sur la méta `viewport` que Next a
- * déjà écrite plus haut dans `<head>` ; entrer et sortir rechargent la page.
+ * part avec le HTML (layout du cinéma), avant le premier dessin ; entrer et sortir rechargent la page.
  */
 export const IPAD_SIMULATOR_KEY = "cine:simu-ipad";
 export const IPAD_SIMULATOR_WIDTH = 1180;
@@ -19,7 +18,9 @@ export const IPAD_SIMULATOR_WIDTH = 1180;
 export function ipadSimulatorScript(): string {
   const key = JSON.stringify(IPAD_SIMULATOR_KEY);
   const content = JSON.stringify(`width=${IPAD_SIMULATOR_WIDTH}, viewport-fit=cover`);
-  return `(function(){try{if(localStorage.getItem(${key})!=="1")return;var m=document.querySelector('meta[name="viewport"]');if(m)m.setAttribute("content",${content})}catch(e){}})()`;
+  // Toutes les méta `viewport`, et celles qui arrivent ensuite : Next en réécrit une seconde après
+  // le premier dessin (mesuré le 16/10/2026), et c'est la dernière qui compte.
+  return `(function(){try{if(localStorage.getItem(${key})!=="1")return;var c=${content};var f=function(){document.querySelectorAll('meta[name="viewport"]').forEach(function(m){if(m.getAttribute("content")!==c)m.setAttribute("content",c)})};f();new MutationObserver(f).observe(document.documentElement,{childList:true,subtree:true})}catch(e){}})()`;
 }
 
 /** Le mode est-il actif sur cet appareil ? Module sans React : le layout serveur en lit le script. */
