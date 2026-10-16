@@ -11,6 +11,22 @@ import { UnreadableZone } from "@/lib/webcodecs/unreadableZone";
 // the parts a real browser would only exercise on a device. So they are modelled explicitly.
 
 class FakeBuffer extends EventTarget {
+  /**
+   * Les tampons du test en cours, arrêtés à sa fin (`afterEach`).
+   *
+   * Un test qui ne détruit pas sa source laisse sa boucle de remplissage tourner : son `updateend`
+   * suivant partait en microtâche après la fin du fichier, une fois l'environnement jsdom démonté,
+   * et `dispatchEvent` refusait un `Event` qui n'était plus le sien — « parameter 1 is not of type
+   * 'Event' », une erreur non gérée qui faisait échouer la construction de l'image une fois de temps
+   * en temps, sous charge (16/10/2026). Arrêté, un tampon ne répond plus : la boucle oubliée attend
+   * pour toujours, sans rien toucher du test suivant.
+   */
+  static live = new Set<FakeBuffer>();
+  halted = false;
+  private emit(type: string) {
+    if (this.halted) return;
+    this.dispatchEvent(new Event(type));
+  }
   mode = "sequence";
   updating = false;
   appended: Uint8Array[] = [];
@@ -51,9 +67,9 @@ class FakeBuffer extends EventTarget {
       this.updating = false;
       if (this.failOnNextAppend || this.failAllAppends) {
         this.failOnNextAppend = false;
-        this.dispatchEvent(new Event("error"));
+        this.emit("error");
       } else {
-        this.dispatchEvent(new Event("updateend"));
+        this.emit("updateend");
       }
     };
     if (this.busyMs > 0) setTimeout(done, this.busyMs);
@@ -70,6 +86,7 @@ class FakeBuffer extends EventTarget {
 
   constructor(readonly type: string) {
     super();
+    FakeBuffer.live.add(this);
     if (FakeBuffer.managed) Object.assign(this, { onbufferedchange: null });
   }
 
@@ -135,7 +152,7 @@ class FakeBuffer extends EventTarget {
     if (this.coversNothing) {
       queueMicrotask(() => {
         this.updating = false;
-        this.dispatchEvent(new Event("updateend"));
+        this.emit("updateend");
       });
       return;
     }
@@ -164,12 +181,12 @@ class FakeBuffer extends EventTarget {
     if (this.busyMs > 0) {
       setTimeout(() => {
         this.updating = false;
-        this.dispatchEvent(new Event("updateend"));
+        this.emit("updateend");
       }, this.busyMs);
     } else {
       queueMicrotask(() => {
         this.updating = false;
-        this.dispatchEvent(new Event("updateend"));
+        this.emit("updateend");
       });
     }
   }
@@ -361,7 +378,11 @@ beforeEach(() => {
   vi.stubGlobal("MediaSource", FakeSource);
   vi.stubGlobal("URL", { createObjectURL: () => "blob:x", revokeObjectURL: () => {} });
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  for (const buffer of FakeBuffer.live) buffer.halted = true;
+  FakeBuffer.live.clear();
+  vi.unstubAllGlobals();
+});
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
