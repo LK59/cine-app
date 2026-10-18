@@ -280,7 +280,10 @@ export function CinemaSeriesDetail({
       resumeAt: ep.resumeTicks ? ep.resumeTicks / 10_000_000 : 0,
       getNextEpisode,
     });
-    setShowEpisodes(false);
+    // L'écran des épisodes reste ouvert sous le lecteur (voir `CinemaEpisodeBrowser`), comme sur le
+    // téléphone. Il était refermé ici, par `history.back()` — qui, depuis que le lecteur a son entrée
+    // d'historique (§94, 15/10), retirait celle-ci à peine posée : le lecteur se fermait aussitôt et
+    // un clic sur un épisode « ne faisait rien » (18/10/2026).
   }
 
   if (typeof document === "undefined") return null;

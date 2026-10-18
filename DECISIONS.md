@@ -5216,6 +5216,10 @@ pile des fiches y lisent leurs clés), plus un jeton `cinePlayer` propre au char
 - Retour pendant le fondu de la croix, double Retour rapide : un seul bilan (les gardes de fermeture
   des lecteurs), le second Retour ferme la fiche.
 - Aucun lecteur encore monté (la séance attend ses réglages) : la séance se ferme directement.
+- Rien ne referme un écran par `cinemaClose` juste après `play()` : son `history.back()` retirerait
+  l'entrée du lecteur à peine posée, et le lecteur se fermerait aussitôt. « Plus d'épisodes » au
+  bureau le faisait — un clic sur un épisode ne lançait rien (18/10/2026) ; l'écran reste désormais
+  ouvert sous le lecteur, comme sur le téléphone (`series-detail-episodes-play.test.tsx`).
 
 **Tests.** `playerHistory.test.tsx` (le vrai `PlaybackProvider` et l'historique de jsdom : chaque
 cas ci-dessus), `native-close-once.test.tsx`, `player-host-server.test.tsx` (AirPlay),
