@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Film, HardDrive, Play, Trash2, Tv, X } from "lucide-react";
+import { Check, Download, Film, HardDrive, Pause, Play, Trash2, Tv, X } from "lucide-react";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { formatDurationShort, formatFileSize } from "@/lib/format";
 import { deviceStore } from "@/lib/offline/deviceStore";
-import { offlineAccount, removeOfflineDownload, useOfflineDownloads, type OfflineDownload } from "@/lib/offline/downloads";
+import { offlineAccount, pauseOfflineDownload, removeOfflineDownload, resumeOfflineDownload, useOfflineDownloads, type OfflineDownload } from "@/lib/offline/downloads";
 import { groupOfflineDownloads, offlineRemainingSeconds, type OfflineSeriesGroup } from "@/lib/offline/downloadGroups";
 import { offlinePlayable, offlineProgress, offlineStatusLabel } from "./OfflineDownloadControl";
 
@@ -288,6 +288,15 @@ function DownloadRow({ download: d, episode = false, onOpenTitle }: { download: 
         {onOpenTitle && !episode && d.radarrId !== null && (
           <IconButton label={t("player.downloads.open")} onClick={() => onOpenTitle({ type: "movie", id: d.radarrId! })}>
             <Film size={15} />
+          </IconButton>
+        )}
+        {/* La pause (Louis, 19/10/2026) : plus rien n'arrive sur l'appareil, la préparation continue. */}
+        {!done && !failed && (
+          <IconButton
+            label={d.state === "paused" ? t("player.downloads.resumeDownload") : t("player.downloads.pause")}
+            onClick={() => void (d.state === "paused" ? resumeOfflineDownload(d.id) : pauseOfflineDownload(d.id))}
+          >
+            {d.state === "paused" ? <Download size={15} /> : <Pause size={15} />}
           </IconButton>
         )}
         <IconButton label={removeLabel} tone="danger" onClick={() => setConfirming(true)}>

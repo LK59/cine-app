@@ -2398,7 +2398,10 @@
       "entryOffline": "Sin conexión · reproducido desde este dispositivo",
       "openApp": "Abrir Cine App",
       "entryNoAccount": "No hay descargas que mostrar aquí. Abre Cine App con conexión e inicia sesión: tus descargas aparecerán allí y luego aquí.",
-      "accessDownloads": "Ir a las descargas"
+      "accessDownloads": "Ir a las descargas",
+      "pause": "Pausar",
+      "resumeDownload": "Reanudar la descarga",
+      "paused": "En pausa · {pct} %"
     }
   },
   "cinema": {

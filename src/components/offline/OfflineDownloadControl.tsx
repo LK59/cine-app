@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { AlertTriangle, Check, Download, Play, RotateCcw, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, Download, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -19,7 +19,9 @@ import { deviceStoreSupported } from "@/lib/offline/deviceStore";
 import { expectedBytes, type OfflineCodec, type OfflineQuality } from "@/lib/offline/quality";
 import {
   initOfflineDownloads,
+  pauseOfflineDownload,
   removeOfflineDownload,
+  resumeOfflineDownload,
   startOfflineDownload,
   useOfflineDownloadFor,
   type OfflineDownload,
@@ -77,7 +79,7 @@ interface Props extends OfflineTitle {
 
 /** Lisible : fini, ou dont le début est là — sur l'appareil, ou sur le serveur avec du réseau. */
 export function offlinePlayable(d: OfflineDownload): boolean {
-  return d.state === "done" || (d.state === "downloading" && Math.max(d.bytes, d.serverBytes) > 4 * 1024 * 1024);
+  return d.state === "done" || ((d.state === "downloading" || d.state === "paused") && Math.max(d.bytes, d.serverBytes) > 4 * 1024 * 1024);
 }
 
 /**
@@ -196,6 +198,7 @@ export function offlineStatusLabel(d: OfflineDownload, t: ReturnType<typeof useT
   if (d.state === "failed") return t("player.downloads.failed");
   // En file : le serveur prépare d'autres versions avant celle-ci — le dire, plutôt qu'une
   // « Préparation » qui n'avance pas (Louis, 19/10/2026).
+  if (d.state === "paused") return t("player.downloads.paused", { pct: offlineProgress(d) });
   if (d.serverStatus === "queued") return t("player.downloads.queued");
   if (d.state === "preparing" || d.bytes === 0) return t("player.downloads.preparing");
   return t("player.downloads.downloading", { pct: offlineProgress(d) });
@@ -238,7 +241,9 @@ function OfflineDownloadControlOn({ variant, rowClassName = "", badgeClassName =
         ...(earlyPlayable ? [{ label: t("player.downloads.playDownloaded"), icon: <Play size={18} />, onClick: () => playDownloaded(earlyPlayable) }] : []),
         ...(download.state === "failed"
           ? [{ label: t("player.downloads.retry"), icon: <RotateCcw size={18} />, onClick: () => void removeOfflineDownload(download.id).then(() => setChoosing(true)) }]
-          : []),
+          : download.state === "paused"
+            ? [{ label: t("player.downloads.resumeDownload"), icon: <Download size={18} />, onClick: () => void resumeOfflineDownload(download.id) }]
+            : [{ label: t("player.downloads.pause"), icon: <Pause size={18} />, onClick: () => void pauseOfflineDownload(download.id) }]),
         {
           label: download.state === "failed" ? t("player.downloads.remove") : t("player.downloads.cancel"),
           icon: <Trash2 size={18} />,

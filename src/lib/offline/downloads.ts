@@ -24,7 +24,8 @@ import type { OfflineCodec, OfflineQuality } from "./quality";
  * iPhone, rien ne télécharge application fermée.
  */
 
-export type OfflineState = "preparing" | "downloading" | "done" | "failed";
+/** `paused` : arrêté vers l'appareil par la personne ; la préparation du serveur, elle, continue. */
+export type OfflineState = "preparing" | "downloading" | "paused" | "done" | "failed";
 
 /** Ce qu'un épisode porte en plus d'un film : sa série et sa place, pour la page et l'épisode suivant. */
 export interface OfflineEpisodeFacts {
@@ -64,6 +65,8 @@ export interface OfflineDownload {
   itemId: string;
   /** Absent : un film. */
   episode?: OfflineEpisodeFacts;
+  /** Interne à `patch` : un changement d'état voulu par la personne (la reprise d'une pause). Jamais gardé. */
+  fromUser?: boolean;
   /** Vu jusqu'au bout avec le téléchargement automatique : effacé quand le suivant est arrivé. */
   watchedToEnd?: boolean;
   /** Pour rouvrir la fiche depuis le gestionnaire (`cinemaNavigate({ film })`). */
@@ -124,6 +127,12 @@ function subscribe(listener: () => void): () => void {
 function patch(id: string, change: Partial<OfflineDownload>): OfflineDownload | null {
   const index = downloads.findIndex((d) => d.id === id);
   if (index < 0) return null;
+  // Une pause décidée pendant un pas de la boucle n'est pas défaite par ce pas : seule la reprise
+  // (ou une fin, un échec) change l'état d'un téléchargement en pause.
+  if (downloads[index].state === "paused" && change.state && change.state !== "paused" && !change.fromUser) {
+    if (change.state !== "done" && change.state !== "failed") change = { ...change, state: "paused" };
+  }
+  delete change.fromUser;
   downloads[index] = { ...downloads[index], ...change };
   emit();
   return downloads[index];
@@ -393,6 +402,27 @@ async function worker(owner: string): Promise<void> {
 }
 
 /** Un pas : relire l'état de la préparation, puis télécharger au plus une plage. */
+/**
+ * Mettre en pause (Louis, 19/10/2026 : garder sa 4G, laisser passer un autre téléchargement) : plus
+ * rien n'arrive sur l'appareil ; la préparation du serveur continue — elle ne coûte rien à l'appareil,
+ * et à la reprise le téléchargement repart à pleine vitesse. Ce qui est déjà là reste lisible.
+ */
+export async function pauseOfflineDownload(id: string): Promise<void> {
+  const d = offlineDownloadById(id);
+  if (!d || (d.state !== "preparing" && d.state !== "downloading")) return;
+  claimed.get(id)?.abort();
+  const updated = patch(id, { state: "paused" });
+  if (updated) await saveMeta(updated);
+}
+
+export async function resumeOfflineDownload(id: string): Promise<void> {
+  const d = offlineDownloadById(id);
+  if (!d || d.state !== "paused") return;
+  const updated = patch(id, { state: d.bytes > 0 || d.serverDone ? "downloading" : "preparing", fromUser: true });
+  if (updated) await saveMeta(updated);
+  void runLoop();
+}
+
 async function step(owner: string, d: OfflineDownload, signal: AbortSignal): Promise<void> {
   const res = await fetch(`/api/offline/jobs/${d.id}`, { signal, cache: "no-store" });
   if (res.status === 404) {

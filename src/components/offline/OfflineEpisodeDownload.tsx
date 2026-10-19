@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { AlertTriangle, ArrowDownToLine, Check, CircleCheck, Download, Play, RotateCcw, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowDownToLine, Check, CircleCheck, Download, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -11,7 +11,16 @@ import { fetchDirectInfo } from "@/lib/directInfo";
 import { formatFileSize } from "@/lib/format";
 import { useOfflineDownloadsEnabled } from "@/lib/offline/useOfflineEnabled";
 import { deviceStoreSupported } from "@/lib/offline/deviceStore";
-import { initOfflineDownloads, offlineEpisodesOf, removeOfflineDownload, useOfflineDownloadFor, useOfflineDownloads, type OfflineDownload } from "@/lib/offline/downloads";
+import {
+  initOfflineDownloads,
+  offlineEpisodesOf,
+  pauseOfflineDownload,
+  removeOfflineDownload,
+  resumeOfflineDownload,
+  useOfflineDownloadFor,
+  useOfflineDownloads,
+  type OfflineDownload,
+} from "@/lib/offline/downloads";
 import {
   audioTrackLanguage,
   episodesToDownload,
@@ -149,6 +158,11 @@ function OfflineEpisodeButtonOn({
             disabled: !offlinePlayable(download),
             onClick: () => play(download),
           },
+          ...(download.state === "paused"
+            ? [{ label: t("player.downloads.resumeDownload"), icon: <Download size={18} />, onClick: () => void resumeOfflineDownload(download.id) }]
+            : download.state !== "done"
+              ? [{ label: t("player.downloads.pause"), icon: <Pause size={18} />, onClick: () => void pauseOfflineDownload(download.id) }]
+              : []),
           // Supprimer un fichier fini se confirme ; annuler un téléchargement en cours, non — comme le film.
           download.state === "done"
             ? { label: t("player.downloads.remove"), icon: <Trash2 size={18} />, variant: "danger", onClick: () => setConfirming(true) }

@@ -2398,7 +2398,10 @@
       "entryOffline": "Offline · played from this device",
       "openApp": "Open Cine App",
       "entryNoAccount": "No downloads to show here. Open Cine App with a network connection and sign in: your downloads will appear there, then here.",
-      "accessDownloads": "Go to downloads"
+      "accessDownloads": "Go to downloads",
+      "pause": "Pause",
+      "resumeDownload": "Resume the download",
+      "paused": "Paused · {pct}%"
     }
   },
   "cinema": {

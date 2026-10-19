@@ -5874,8 +5874,35 @@ peut évincer le stockage d'une PWA restée longtemps fermée (`persist()` aide 
 d'attente suppose que le worker reste en vie jusqu'à la réponse : arrêté entre-temps, la page recharge
 et la navigation repart de zéro.
 
-**Pas encore** : séries et épisodes, lecture pendant le téléchargement depuis l'interface, position
-renvoyée à Jellyfin, sous-titres et aperçus de la barre.
+**Ajouts du 19/10/2026 (retours de Louis, 8.71.x).**
+- *Lire avant la fin* : « Lire le fichier en cours de téléchargement », grisé tant que rien n'est lisible
+  (`offlinePlayable`) ; ce qui manque sur l'appareil est lu dans la copie du serveur, mêmes octets.
+  L'index des fragments d'un téléchargement en cours vient du serveur d'un coup
+  (`/api/offline/jobs/<id>/index`) : lu fragment par fragment par le réseau, l'ouverture restait
+  « bloquée à l'étape index des fragments » (iPhone et Chrome de Louis). Un saut au-delà de ce que le
+  serveur a préparé le dit et revient à la position d'avant.
+- *Reprise* : le lecteur hors ligne rapporte sa lecture à Jellyfin comme le lecteur en ligne
+  (`usePlaybackSession`, nom « engine ») — Jellyfin applique ses seuils (2 % / 95 % ici, durée
+  minimale) et la position est la même des deux côtés à la seconde. Sans réseau, les mêmes seuils sur
+  l'appareil (`resumeRules.ts`, lus chez Jellyfin) et l'envoi au retour du réseau (`unsentPosition.ts`).
+  Les deux boutons prennent Jellyfin pour référence, l'appareil tant qu'une position attend.
+- *Fiche* : « Lire » (ou « Reprendre ») / « Fichier téléchargé · 1h10 restantes » en tête, en blanc ;
+  « Lire en ligne » à la place de « Lire ».
+- *Lecteur* : l'ouverture du lecteur en ligne (`PlaybackIntro`) plus « Lecture du fichier téléchargé » ;
+  pas de menu son (une seule piste) ; sous-titres texte gardés avec le film (`subtitles.ts`,
+  `/api/offline/subtitles/<id>`) ; panneau technique (appareil / serveur) ; partie téléchargée de la
+  barre plus sombre que la partie lue ; aperçus et chapitres en ligne.
+- *Boucle* : jusqu'à trois téléchargements à la fois, les versions prêtes d'abord, un verrou par
+  téléchargement entre onglets ; « En file d'attente sur le serveur » ; pause (rien n'arrive sur
+  l'appareil, la préparation continue) ; un retrait de demande part avant toute nouvelle demande du
+  même titre (sinon il l'effaçait : « Préparation » sans fin puis « Échec »).
+- *H.264* : `h264_qsv` ne marque pas ses images clés forcées ; les fragments trop longs sont découpés
+  à la lecture et ces images servent d'entrées de saut (`fmp4.ts`, `Fmp4Reader`).
+- *Accès* : administrateurs seulement le temps de la bêta (`OFFLINE_DOWNLOADS_FOR_EVERYONE`, faux par
+  défaut), ouvrable à tous d'un geste comme le Chromecast.
+- *Activité* : chaque étape au journal (`scope: "offline"`), les copies du serveur dans le panneau.
+
+**Pas encore** : les aperçus de la barre gardés sur l'appareil (hors ligne, la barre n'en a pas).
 
 Tests : `offline-fmp4`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`,
 `offline-downloads-page`, `offline-entry`, `serviceWorker-offline-entry`, `offline-page`,

@@ -2398,7 +2398,10 @@
       "entryOffline": "Hors ligne · lu depuis cet appareil",
       "openApp": "Ouvrir Cine App",
       "entryNoAccount": "Aucun téléchargement à montrer ici. Ouvrez Cine App avec du réseau et connectez-vous : vos téléchargements y apparaîtront, puis ici.",
-      "accessDownloads": "Accéder aux téléchargements"
+      "accessDownloads": "Accéder aux téléchargements",
+      "pause": "Mettre en pause",
+      "resumeDownload": "Reprendre le téléchargement",
+      "paused": "En pause · {pct} %"
     }
   },
   "cinema": {
