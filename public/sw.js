@@ -18,6 +18,12 @@
 // (25/09/2026, sans changer de nom : ce fichier a changé pour rattraper les onglets ouverts sur un
 // code plus ancien — voir `reloadHiddenTabsOnce`. Un changement de contenu suffit à faire installer
 // le worker ; le nom, lui, évincerait tout le cache pour rien.)
+// (19/10/2026, sans changer de nom : l'entrée hors ligne des téléchargements, DECISIONS.md §109.
+// Le worker garde `/hors-ligne` — demandée sans cookie — et tout le code qu'elle atteint dans le
+// cache du build, à la demande du cinéma et seulement sur un appareil qui a des téléchargements ;
+// une navigation qui échoue y donne accès depuis la page « Pas de connexion », et une navigation
+// qui tarde plus de six secondes sur un tel appareil affiche cette page en mode « attente », qui
+// reprend la réponse dès qu'elle arrive. Le cache de l'application, lui, ne change pas.)
 const CACHE_NAME = "cine-app-v12";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
 
@@ -114,9 +120,41 @@ function reloadHiddenTabsOnce() {
     .catch(() => {});
 }
 
+/**
+ * Un fichier du code (`/_next/static/`) : du cache de ce build, sinon repris du précédent, sinon du
+ * réseau — et rangé dans le cache de ce build. Le gestionnaire `fetch` et la mise en réserve de
+ * l'entrée hors ligne passent par ici, pour que les deux rangent le code au même endroit.
+ */
+function staticResponse(request) {
+  return caches.open(STATIC_CACHE).then((current) =>
+    current.match(request).then((cached) => {
+      if (cached) return cached;
+      // Pas dans ce build : peut-être le même fichier, gardé par le précédent.
+      return previousStaticCache()
+        .then((previous) => (previous ? caches.open(previous).then((c) => c.match(request)) : undefined))
+        .then((carried) => {
+          if (carried) {
+            current.put(request, carried.clone()).catch(() => {});
+            return carried;
+          }
+          return fetch(request).then((response) => {
+            if (!response.ok) return response;
+            current.put(request, response.clone()).catch(() => {});
+            return response;
+          });
+        });
+    })
+  );
+}
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
+  // La page d'attente demande ici si la navigation qu'elle remplace a abouti — voir `navigate`.
+  if (url.pathname === WAIT_PATH) {
+    event.respondWith(waitingState(url.searchParams.get("url") || ""));
+    return;
+  }
   if (url.pathname.startsWith("/api/")) return;
 
   // Next's client-side navigations don't fetch the page — they fetch the target route's RSC
@@ -134,27 +172,7 @@ self.addEventListener("fetch", (event) => {
   // serving it straight away avoids a redundant network round-trip on every
   // navigation for JS/CSS chunks that never change between deploys.
   if (url.pathname.startsWith("/_next/static/")) {
-    event.respondWith(
-      caches.open(STATIC_CACHE).then((current) =>
-        current.match(event.request).then((cached) => {
-          if (cached) return cached;
-          // Pas dans ce build : peut-être le même fichier, gardé par le précédent.
-          return previousStaticCache()
-            .then((previous) => (previous ? caches.open(previous).then((c) => c.match(event.request)) : undefined))
-            .then((carried) => {
-              if (carried) {
-                current.put(event.request, carried.clone()).catch(() => {});
-                return carried;
-              }
-              return fetch(event.request).then((response) => {
-                if (!response.ok) return response;
-                current.put(event.request, response.clone()).catch(() => {});
-                return response;
-              });
-            });
-        })
-      )
-    );
+    event.respondWith(staticResponse(event.request));
     return;
   }
   /**
@@ -180,17 +198,21 @@ self.addEventListener("fetch", (event) => {
    * n'avait encore été mis en cache.
    */
   const isDocument = event.request.mode === "navigate";
+  if (isDocument) {
+    // Jamais mis en cache non plus — mais plus seulement « réseau, sinon offline.html » : voir
+    // `navigate` et l'entrée hors ligne des téléchargements, plus bas.
+    event.respondWith(navigate(event));
+    return;
+  }
 
-  // Network-first for everything else: this is a live dashboard, HTML/data
-  // must stay fresh. We only fall back to cache when the network is
-  // unreachable (offline) — and for a navigation that was never cached
-  // either, fall back further to a static offline page instead of failing.
+  // Network-first for everything else: this is a live dashboard, data must stay fresh. We only
+  // fall back to cache when the network is unreachable (offline). Navigations are handled above.
   event.respondWith(
     fetch(event.request)
       .then((response) => {
         // Une réponse d'erreur n'a rien à faire en cache : la garder revient à servir l'erreur
         // encore et encore une fois le réseau revenu.
-        if (isDocument || !response.ok) return response;
+        if (!response.ok) return response;
         const copy = response.clone();
         // `.catch` : un corps interrompu fait échouer l'écriture, et une promesse rejetée sans
         // personne pour l'attraper remonte comme une erreur du service worker.
@@ -202,12 +224,7 @@ self.addEventListener("fetch", (event) => {
       })
       .catch(() =>
         caches.match(event.request).then((cached) => {
-          if (cached && !isDocument) return cached;
-          if (isDocument) {
-            return caches
-              .match("/offline.html")
-              .then((offline) => offline ?? new Response("Offline", { status: 503 }));
-          }
+          if (cached) return cached;
           // event.respondWith() throws "Failed to convert value to 'Response'" if this ever
           // resolves to undefined (a real failure mode hit live: a non-navigate request whose
           // network fetch failed with nothing cached) — a synthetic error response is always
@@ -216,6 +233,244 @@ self.addEventListener("fetch", (event) => {
         })
       )
   );
+});
+
+// ─── L'entrée hors ligne des téléchargements (19/10/2026, DECISIONS.md §109) ───────────────────
+//
+// Le cinéma est rendu par le serveur, derrière une session : sans réseau, il n'y a rien à ouvrir, et
+// on ne garde jamais une page d'un compte (voir plus haut). Les téléchargements, eux, sont sur
+// l'appareil. `/hors-ligne` est une page publique qui les montre et les lit sans rien demander au
+// serveur ; le worker la garde ici, avec tout son code, pour qu'elle s'ouvre sans réseau.
+//
+// - **Quand** : à la demande du cinéma (`cine:warm-offline-entry`), qu'il n'envoie que s'il y a des
+//   téléchargements sur l'appareil — ce code (2,7 Mo compressés) n'a pas à être gardé partout. Une fois
+//   par build : elle vit dans le cache du build (`STATIC_CACHE`), avec le code qu'elle charge, si
+//   bien que la page et ses fichiers sont toujours de la même génération.
+// - **Comment** : la page est demandée **sans cookie** (`credentials: "omit"`) — rendue comme pour un
+//   inconnu, elle ne porte ni compte ni réglage de personne. Puis chaque fichier qu'elle nomme, et
+//   ceux que nomment ces fichiers (les morceaux chargés à la demande, le lecteur, les dictionnaires),
+//   jusqu'au dernier : Turbopack écrit leurs chemins en clair (`static/chunks/…`). La page n'est
+//   rangée qu'à la fin — tant qu'elle n'y est pas, rien ne la sert, et la demande suivante reprend.
+// - **Servie** : `/hors-ligne` part au réseau et prend la copie gardée au bout de 2,5 s ou à l'échec ;
+//   toute autre navigation qui échoue reçoit `offline.html`, dont le bouton y mène.
+//
+// **Une navigation lente** : sur un appareil qui garde l'entrée (donc qui a des téléchargements),
+// une page qui n'a pas répondu au bout de six secondes est remplacée par `offline.html` en mode
+// « attente » — le serveur tarde, et le bouton des téléchargements est là. La requête continue :
+// gardée ici une minute, la page d'attente la guette (`/__sw/attente`) et se recharge dès qu'elle a
+// répondu, recevant alors **cette** réponse sans la redemander. Six secondes, et pas moins : un
+// lancement en 4G en itinérance dépasse souvent trois secondes jusqu'au premier octet, et c'est un
+// lancement normal. Un appareil sans téléchargement n'attend jamais autrement qu'avant.
+
+const OFFLINE_ENTRY = "/hors-ligne";
+const WAIT_PATH = "/__sw/attente";
+const SLOW_NAVIGATION_MS = 6000;
+const OFFLINE_ENTRY_FAST_MS = 2500;
+const HELD_NAVIGATION_MS = 60000;
+/**
+ * Un plafond, au cas où un fichier nommerait des chemins sans fin. Mesuré sur 8.71.4 : la racine en
+ * atteint une cinquantaine sur les 177 du build — 8,7 Mo, 2,7 Mo compressés —, et rien de plus.
+ */
+const OFFLINE_ENTRY_MAX_FILES = 800;
+
+const SCOPE_BASE = (() => {
+  try {
+    return new URL("/", self.location.href).href;
+  } catch {
+    return "https://localhost/";
+  }
+})();
+const offlineEntryKey = () => new Request(new URL(OFFLINE_ENTRY, SCOPE_BASE).href);
+
+/** L'entrée gardée, de ce build ou du précédent — chacune avec le code de sa génération. */
+function cachedOfflineEntry() {
+  return caches
+    .open(STATIC_CACHE)
+    .then((c) => c.match(offlineEntryKey()))
+    .then(
+      (hit) =>
+        hit ||
+        previousStaticCache().then((previous) => (previous ? caches.open(previous).then((c) => c.match(offlineEntryKey())) : undefined))
+    )
+    .catch(() => undefined);
+}
+
+function offlinePage() {
+  return caches.match("/offline.html").then((offline) => offline ?? new Response("Offline", { status: 503 }));
+}
+
+/** `offline.html`, marquée « attente » : la même page, qui guette la navigation au lieu de dire l'échec. */
+function waitingPage() {
+  return caches.match("/offline.html").then((offline) =>
+    offline
+      ? offline.text().then(
+          (html) => new Response(html.replace("<html", '<html data-attente="1"'), { headers: { "Content-Type": "text/html; charset=utf-8" } })
+        )
+      : null
+  );
+}
+
+/** Les navigations qui ont tardé, par adresse (sans fragment), le temps que leur page d'attente les reprenne. */
+const heldNavigations = new Map();
+const navigationKey = (href) => String(href).split("#")[0];
+
+function navigate(event) {
+  const request = event.request;
+  const key = navigationKey(request.url);
+  if (new URL(request.url).pathname === OFFLINE_ENTRY) return navigateOfflineEntry(event);
+  // La page d'attente se recharge : la réponse qu'elle guettait est là, on la lui rend.
+  const held = heldNavigations.get(key);
+  if (held) {
+    heldNavigations.delete(key);
+    return held.response.catch(() => offlinePage());
+  }
+  const network = fetch(request);
+  // Une rejection que personne n'attend encore ne doit pas remonter comme une erreur du worker.
+  network.catch(() => {});
+  if (event.waitUntil) event.waitUntil(network.catch(() => {}));
+  return cachedOfflineEntry().then((entry) => {
+    if (!entry) return network.catch(() => offlinePage());
+    return new Promise((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        const at = Date.now();
+        heldNavigations.set(key, { response: network, at });
+        setTimeout(() => {
+          if (heldNavigations.get(key)?.at === at) heldNavigations.delete(key);
+        }, HELD_NAVIGATION_MS);
+        resolve(waitingPage().then((page) => page || network.catch(() => offlinePage())));
+      }, SLOW_NAVIGATION_MS);
+      network.then(
+        (response) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(response);
+        },
+        () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(offlinePage());
+        }
+      );
+    });
+  });
+}
+
+/**
+ * `/hors-ligne` : le réseau s'il répond vite et bien (la page rendue avec la session), sinon la copie
+ * gardée. Une page qu'on ouvre faute de réseau ne doit pas attendre le réseau.
+ */
+function navigateOfflineEntry(event) {
+  const network = fetch(event.request);
+  network.catch(() => {});
+  return cachedOfflineEntry().then((entry) => {
+    if (!entry) return network.catch(() => offlinePage());
+    return new Promise((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        resolve(entry);
+      }, OFFLINE_ENTRY_FAST_MS);
+      network.then(
+        (response) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(response.ok ? response : entry);
+        },
+        () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(entry);
+        }
+      );
+    });
+  });
+}
+
+/** Ce que la page d'attente apprend : `ready` (rechargez), `failed` (pas de réseau), `none` (rien de gardé). */
+function waitingState(href) {
+  const json = (state) =>
+    new Response(JSON.stringify({ state }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  const key = navigationKey(href);
+  const held = heldNavigations.get(key);
+  if (!held) return Promise.resolve(json("none"));
+  return held.response.then(
+    () => json("ready"),
+    () => {
+      heldNavigations.delete(key);
+      return json("failed");
+    }
+  );
+}
+
+/** Les chemins de fichiers du code qu'un texte nomme — HTML, JS (chemins en clair) ou CSS (`url(...)`). */
+const ASSET_IN_TEXT = /(?:\/_next\/)?static\/(?:chunks|media|css)\/[A-Za-z0-9_.~%\-/]+?\.(?:m?js|css|woff2?|ttf|otf|wasm|svg|png|jpe?g|webp|avif)(?![A-Za-z0-9_])/g;
+const CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+
+function assetsIn(text, base, isCss) {
+  const found = [];
+  for (const m of text.matchAll(ASSET_IN_TEXT)) found.push("/_next/" + m[0].replace(/^\/?(?:_next\/)?/, ""));
+  if (isCss) {
+    for (const m of text.matchAll(CSS_URL)) {
+      try {
+        const u = new URL(m[2], base);
+        if (u.origin === new URL(base).origin && u.pathname.startsWith("/_next/static/")) found.push(u.pathname);
+      } catch {
+        /* une adresse illisible n'est pas un fichier à garder */
+      }
+    }
+  }
+  return found;
+}
+
+let warming = null;
+
+/** Garde `/hors-ligne` et tout le code qu'elle atteint dans le cache de ce build — voir plus haut. */
+function warmOfflineEntry() {
+  if (warming) return warming;
+  warming = caches
+    .open(STATIC_CACHE)
+    .then((cache) =>
+      cache.match(offlineEntryKey()).then(async (already) => {
+        if (already) return;
+        const page = await fetch(new URL(OFFLINE_ENTRY, SCOPE_BASE).href, { credentials: "omit", cache: "no-store", redirect: "manual" });
+        if (!page.ok || !/text\/html/.test(page.headers.get("Content-Type") || "")) return;
+        const html = await page.text();
+        const queue = assetsIn(html, SCOPE_BASE, false);
+        const seen = new Set();
+        while (queue.length > 0 && seen.size < OFFLINE_ENTRY_MAX_FILES) {
+          const path = queue.shift();
+          if (seen.has(path)) continue;
+          seen.add(path);
+          const href = new URL(path, SCOPE_BASE).href;
+          // Un échec du réseau arrête tout (rien n'est rangé, la prochaine demande reprend) ; un 404
+          // n'est qu'un chemin cité qui n'est pas un fichier, passé.
+          const response = await staticResponse(new Request(href));
+          if (!response.ok) continue;
+          if (/\.(?:m?js|css)$/.test(path)) queue.push(...assetsIn(await response.text(), href, path.endsWith(".css")));
+        }
+        await cache.put(offlineEntryKey(), new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }));
+      })
+    )
+    .catch(() => {})
+    .then(() => {
+      warming = null;
+    });
+  return warming;
+}
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "cine:warm-offline-entry") {
+    const work = warmOfflineEntry();
+    if (event.waitUntil) event.waitUntil(work);
+  }
 });
 
 // ─── Push notifications ───────────────────────────────────────────────────────

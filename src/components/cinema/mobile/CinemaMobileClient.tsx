@@ -1,6 +1,7 @@
 "use client";
 
 import { OfflineDownloadsButton } from "@/components/offline/OfflineDownloadsButton";
+import { SlowLaunchDownloads } from "@/components/offline/SlowLaunchDownloads";
 import useSWR from "swr";
 import { memo, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -595,6 +596,7 @@ export function CinemaMobileClient() {
       route.browse !== null ||
       route.discover !== null ||
       route.person !== null ||
+      route.downloads ||
       accountScreenOpen(route)
   );
 
@@ -704,6 +706,8 @@ export function CinemaMobileClient() {
                 <div key={i} className={`skeleton ${POSTER_WIDTH} aspect-2/3 shrink-0 rounded-lg`} />
               ))}
             </div>
+            {/* Cinq secondes sans catalogue : les téléchargements de l'appareil, s'il y en a (§109). */}
+            <SlowLaunchDownloads />
           </div>
         )}
 

@@ -27,6 +27,12 @@ export const PUBLIC_PATHS = [
   "/api/setup/status",
   "/api/setup/admin",
   "/api/setup/language",
+  // L'entrée hors ligne des téléchargements (DECISIONS.md §109) : le service worker la demande sans
+  // cookie pour la garder, et la sert quand le serveur ne répond pas. Une page rendue, pas un fichier
+  // — d'où cette liste et non `ACTIFS_PUBLICS` : elle passe par le proxy (l'assistant de premier
+  // lancement, les écritures d'une autre page) comme `/status`. Elle ne sert rien d'un compte :
+  // ce qu'elle montre est lu sur l'appareil.
+  "/hors-ligne",
 ] as const;
 
 /** Vrai pour une de ces adresses, et pour tout ce qu'elle contient. */

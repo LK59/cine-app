@@ -20,6 +20,13 @@
   serveur), la page interroge /api/ping — publique, sans cookie, que le service worker ne
   retient pas — et ne se recharge que sur une réponse 200. Pas de boucle : rien ne recharge tant
   que la sonde échoue.
+
+  19/10/2026 (DECISIONS.md §109) : un bouton « Accéder aux téléchargements » mène à `/hors-ligne`,
+  l'entrée hors ligne que le service worker garde sur un appareil qui a des téléchargements — montré
+  seulement si elle est là (`caches.match`). Et un second mode, « attente » (`data-attente` posé par
+  le worker sur <html>) : la navigation n'a pas échoué, elle tarde. La page demande alors au worker
+  (`/__sw/attente`) de la prévenir quand la réponse arrive, et se recharge pour la recevoir telle
+  quelle ; si la navigation échoue finalement, elle redevient la page « Pas de connexion ».
 -->
 <style>
   html, body {
@@ -57,12 +64,22 @@
   }
   button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
   .waiting { font-size: 0.75rem; color: #737373; }
+  [hidden] { display: none !important; }
+  #retry.secondary { background: rgba(255, 255, 255, 0.12); color: #fff; margin-top: 0; }
+  .spinner {
+    width: 1.5rem; height: 1.5rem; border-radius: 9999px;
+    border: 2px solid rgba(255, 255, 255, 0.2); border-top-color: #fff;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
   <main class="wrap">
+    <div id="spinner" class="spinner" hidden></div>
     <h1 id="title">Pas de connexion</h1>
     <p id="text">Cine App n'a pas pu joindre le serveur. Vérifiez votre connexion réseau et réessayez.</p>
+    <button id="downloads" type="button" hidden>Accéder aux téléchargements</button>
     <button id="retry" type="button">Réessayer</button>
     <p id="waiting" class="waiting">La page reviendra d'elle-même dès que le serveur répondra.</p>
   </main>
@@ -73,25 +90,37 @@
         title: "Pas de connexion",
         text: "Cine App n'a pas pu joindre le serveur. Vérifiez votre connexion réseau et réessayez.",
         retry: "Réessayer",
-        waiting: "La page reviendra d'elle-même dès que le serveur répondra."
+        waiting: "La page reviendra d'elle-même dès que le serveur répondra.",
+        downloads: "Accéder aux téléchargements",
+        waitTitle: "Le serveur tarde à répondre",
+        waitText: "Cine App s'ouvrira dès qu'il répondra. En attendant, vos téléchargements sont sur cet appareil."
       },
       en: {
         title: "No connection",
         text: "Cine App couldn't reach the server. Check your network connection and try again.",
         retry: "Try again",
-        waiting: "This page will come back on its own as soon as the server answers."
+        waiting: "This page will come back on its own as soon as the server answers.",
+        downloads: "Go to downloads",
+        waitTitle: "The server is slow to respond",
+        waitText: "Cine App will open as soon as it answers. In the meantime, your downloads are on this device."
       },
       es: {
         title: "Sin conexión",
         text: "Cine App no ha podido contactar con el servidor. Comprueba tu conexión de red e inténtalo de nuevo.",
         retry: "Reintentar",
-        waiting: "La página volverá sola en cuanto el servidor responda."
+        waiting: "La página volverá sola en cuanto el servidor responda.",
+        downloads: "Ir a las descargas",
+        waitTitle: "El servidor tarda en responder",
+        waitText: "Cine App se abrirá en cuanto responda. Mientras tanto, tus descargas están en este dispositivo."
       },
       de: {
         title: "Keine Verbindung",
-        text: "Cine App konnte den Server nicht erreichen. Prüfe deine Netzwerkverbindung und versuche es erneut.",
+        text: "Cine App konnte den Server nicht erreichen. Prüfen Sie Ihre Netzwerkverbindung und versuchen Sie es erneut.",
         retry: "Erneut versuchen",
-        waiting: "Die Seite kommt von selbst zurück, sobald der Server antwortet."
+        waiting: "Die Seite kommt von selbst zurück, sobald der Server antwortet.",
+        downloads: "Zu den Downloads",
+        waitTitle: "Der Server antwortet nur langsam",
+        waitText: "Cine App öffnet sich, sobald er antwortet. Bis dahin sind Ihre Downloads auf diesem Gerät."
       }
     };
 
@@ -110,7 +139,7 @@
     var t = TEXTS[lang];
     document.documentElement.lang = lang;
     document.title = "Cine App — " + t.title;
-    ["title", "text", "retry", "waiting"].forEach(function (id) {
+    ["title", "text", "retry", "waiting", "downloads"].forEach(function (id) {
       document.getElementById(id).textContent = t[id];
     });
 
@@ -118,10 +147,28 @@
       location.reload();
     });
 
+    // L'entrée hors ligne des téléchargements, si le service worker la garde (un appareil qui a des
+    // téléchargements) : sinon le bouton mènerait à une page qui ne s'ouvre pas. Elle devient alors
+    // le bouton principal, « Réessayer » passe en second.
+    var downloadsButton = document.getElementById("downloads");
+    downloadsButton.addEventListener("click", function () {
+      location.href = "/hors-ligne";
+    });
+    if (typeof caches !== "undefined" && caches && caches.match) {
+      caches
+        .match("/hors-ligne")
+        .then(function (hit) {
+          if (!hit) return;
+          downloadsButton.hidden = false;
+          document.getElementById("retry").className = "secondary";
+        })
+        .catch(function () {});
+    }
+
     // Le serveur répond-il vraiment ? Seul un 200 de /api/ping recharge la page.
     var reloading = false;
     function probe() {
-      if (reloading) return;
+      if (reloading || waitingMode) return;
       fetch("/api/ping", { cache: "no-store" })
         .then(function (res) {
           if (res.ok && !reloading) {
@@ -131,6 +178,40 @@
         })
         .catch(function () {});
     }
+    // Le mode « attente » : la navigation tarde. La page le dit, et se recharge dès que le worker
+    // a la réponse — qu'il lui rendra sans la redemander. Un échec la ramène au mode ordinaire.
+    var waitingMode = document.documentElement.getAttribute("data-attente") === "1";
+    function plainMode() {
+      waitingMode = false;
+      document.getElementById("spinner").hidden = true;
+      document.getElementById("retry").hidden = false;
+      document.getElementById("waiting").hidden = false;
+      document.getElementById("title").textContent = t.title;
+      document.getElementById("text").textContent = t.text;
+      document.title = "Cine App — " + t.title;
+    }
+    if (waitingMode) {
+      document.getElementById("spinner").hidden = false;
+      document.getElementById("retry").hidden = true;
+      document.getElementById("waiting").hidden = true;
+      document.getElementById("title").textContent = t.waitTitle;
+      document.getElementById("text").textContent = t.waitText;
+      document.title = "Cine App — " + t.waitTitle;
+      fetch("/__sw/attente?url=" + encodeURIComponent(String(location.href).split("#")[0]), { cache: "no-store" })
+        .then(function (res) {
+          return res.json();
+        })
+        .then(function (body) {
+          // `ready` : la réponse est là. `none` : le worker ne la tient plus (arrêté entre-temps) —
+          // une nouvelle navigation est la seule façon de savoir. `failed` : pas de réseau.
+          if (body && (body.state === "ready" || body.state === "none")) {
+            reloading = true;
+            location.reload();
+          } else plainMode();
+        })
+        .catch(plainMode);
+    }
+
     window.addEventListener("online", probe);
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "visible") probe();

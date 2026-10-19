@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { catalogueCacheReady } from "@/lib/persistentCache";
 import { useResumeCache } from "@/lib/resumeCache/useResumeCache";
+import { SlowLaunchDownloads } from "@/components/offline/SlowLaunchDownloads";
 
 // L'écran d'attente est un simple bloc `fixed`, et non plus un portage dans `document.body`.
 //
@@ -16,6 +17,8 @@ function LoadingScreen() {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-ink" style={{ zIndex: 200 }}>
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+      {/* Cinq secondes sans écran : les téléchargements de l'appareil, s'il y en a (§109). */}
+      <SlowLaunchDownloads />
     </div>
   );
 }

@@ -2382,7 +2382,23 @@
       "defaultTrack": "Standardspur",
       "autoNext": "Nächste Folge automatisch herunterladen",
       "autoNextHint": "Zur Hälfte einer offline angesehenen Folge wird die nächste heruntergeladen; eine bis zum Ende gesehene Folge wird gelöscht, sobald die nächste da ist.",
-      "tracksFailedEpisode": "Die Tonspuren dieser Folge konnten nicht gelesen werden."
+      "tracksFailedEpisode": "Die Tonspuren dieser Folge konnten nicht gelesen werden.",
+      "films": "Filme",
+      "series": "Serien",
+      "season": "Staffel {n}",
+      "episodes": "{n} Folge|{n} Folgen",
+      "openSeries": "Seite der Serie öffnen",
+      "storageTitle": "Auf diesem Gerät",
+      "storageUsed": "{size} Downloads",
+      "storageFree": "etwa {size} noch verfügbar",
+      "stoppedAt": "Angehalten bei {time}",
+      "watched": "Bis zum Ende gesehen",
+      "panelHint": "Was sich ohne Netz ansehen lässt, auf diesem Gerät.",
+      "entryOnline": "Von diesem Gerät abgespielt",
+      "entryOffline": "Offline · von diesem Gerät abgespielt",
+      "openApp": "Cine App öffnen",
+      "entryNoAccount": "Hier gibt es keine Downloads. Öffnen Sie Cine App mit Netzverbindung und melden Sie sich an: Ihre Downloads erscheinen dort und dann hier.",
+      "accessDownloads": "Zu den Downloads"
     }
   },
   "cinema": {

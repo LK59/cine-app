@@ -63,6 +63,8 @@ export function isOnPanel(panel: PlayerPanel, current: CinemaRoute): boolean {
     current.discover !== null ||
     current.person !== null ||
     current.browse !== null ||
+    // Les téléchargements recouvrent l'accueil : y retourner depuis la barre les referme.
+    current.downloads ||
     // L'activité remplace le panneau Compte : y retourner depuis le rail doit la refermer.
     accountScreenOpen(current);
   return activePanel(current) === panel && !covered;
@@ -86,6 +88,7 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute, mode: "push"
     activity: null,
     report: null,
     news: null,
+    downloads: false,
   } satisfies Partial<CinemaRoute>;
 
   if (panel === "home") {
@@ -95,7 +98,8 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute, mode: "push"
       !current.serie &&
       !current.discover &&
       !current.person &&
-      !current.browse;
+      !current.browse &&
+      !current.downloads;
     // Le glisser de la lentille réécrit l'entrée que l'appui vient d'écrire ; sinon la règle des
     // onglets (DECISIONS.md §103) : rendre l'entrée d'onglet quand l'accueil est dessous.
     if (mode === "replace") cinemaNavigate(closed, "replace");

@@ -10,6 +10,7 @@ import { forgetHomeLayoutMirror } from "@/lib/useHomeLayout";
 import { forgetGuidedScrollMirror } from "@/lib/guidedScroll";
 import { dropPushOnSignOut } from "@/lib/pushOnSignOut";
 import { persistedCacheAccount } from "@/lib/persistentCache";
+import { forgetOfflineAccount } from "@/lib/offline/offlineEntry";
 
 /**
  * Se déconnecter : prévenir le serveur, puis aller à la page de connexion — **quoi qu'il arrive**.
@@ -35,6 +36,9 @@ export async function signOut(go: (path: string) => void): Promise<void> {
   // (audit du 08/10/2026).
   forgetHomeLayoutMirror();
   forgetGuidedScrollMirror();
+  // Le compte que l'entrée hors ligne des téléchargements montre (`offlineEntry.ts`, §109) : les
+  // fichiers restent sur l'appareil, mais `/hors-ligne`, ouverte sans session, ne les montre plus.
+  forgetOfflineAccount();
   // Le catalogue gardé sur l'appareil part avec la session : un iPad partagé ne doit rien garder
   // de la bibliothèque ni de la reprise de qui que ce soit. Borné : un stockage lent ne retient
   // pas la personne sur la page qu'elle quitte.

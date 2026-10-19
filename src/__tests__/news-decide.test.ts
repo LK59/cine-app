@@ -25,6 +25,7 @@ const HOME: CinemaRoute = {
   activity: null,
   report: null,
   news: null,
+  downloads: false,
 };
 const facts = (over: Partial<NewsGateFacts> = {}): NewsGateFacts => ({ unseen: 1, onboardingPending: false, playback: "closed", route: HOME, pathname: "/", ...over });
 

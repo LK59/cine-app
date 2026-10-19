@@ -36,6 +36,7 @@ describe("cinemaRoute", () => {
       activity: null,
       report: null,
       news: null,
+      downloads: false,
     });
 
     act(() => cinemaNavigate({ film: 603 }));
@@ -161,6 +162,7 @@ describe("cinemaRoute", () => {
       activity: null,
       report: null,
       news: null,
+      downloads: false,
     });
   });
 
@@ -170,6 +172,22 @@ describe("cinemaRoute", () => {
     act(() => cinemaNavigate({ news: "corrections:4" }));
     expect(window.location.hash).toBe("#nouveautes=corrections%3A4");
     expect(result.current.news).toBe("corrections:4");
+  });
+
+  // Les téléchargements de l'appareil (§109) : un écran poussé, que Retour referme, et sous lequel
+  // une fiche ouverte depuis lui garde sa place.
+  it("carries the downloads page in the hash, under the sheet opened from it", () => {
+    const { result } = renderHook(() => useCinemaRoute());
+    act(() => cinemaNavigate({ downloads: true }));
+    expect(window.location.hash).toBe("#telechargements=1");
+    expect(result.current.downloads).toBe(true);
+    act(() => openLibraryTitle("movie", 920));
+    expect(result.current).toMatchObject({ downloads: true, film: 920 });
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    act(() => cinemaClose({ downloads: false }));
+    expect(back).toHaveBeenCalledTimes(1);
+    // Le retour demandé n'arrivera pas (`back` est remplacé) : la porte est rouverte ici.
+    act(() => window.dispatchEvent(new PopStateEvent("popstate")));
   });
 
   // La grille complète est une adresse comme une autre : elle se partage, et le retour ramène à

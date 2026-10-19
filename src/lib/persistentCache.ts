@@ -270,6 +270,17 @@ export function persistedCacheAccount(): string | null {
 }
 
 /**
+ * Le compte d'une page servie sans session — l'entrée hors ligne des téléchargements (`/hors-ligne`,
+ * DECISIONS.md §109), gardée par le service worker et rendue sans cookie. Elle ne connaît que le
+ * compte retenu sur l'appareil (`offlineEntry.ts`) ; le poser ici fait ranger sous lui ce que ses
+ * lectures écrivent (la position gardée pour Jellyfin, `unsentPosition.ts`). Jamais par-dessus le
+ * compte d'une session : celui que le serveur a nommé l'emporte.
+ */
+export function adoptSignedOutAccount(account: string): void {
+  if (currentAccount === null) currentAccount = account;
+}
+
+/**
  * Le cinéma attend ceci avant de s'afficher, et jamais plus de `HYDRATION_BUDGET_MS` : au-delà,
  * il s'affiche comme avant, sans cache. Résolu tout de suite pour une page sans compte.
  */

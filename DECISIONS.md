@@ -5823,7 +5823,60 @@ fichier de l'appareil s'il est lisible, sinon la lecture en ligne s'il y a du r�
 pas de bouton (`offlineNextTarget`) ; la suite est celle notée à la demande (`episode.next`). Tests :
 `offline-episodes`, `offline-episodes-sweep`, `offline-episode-rows`, `offline-player-episodes`.
 
-**Pas encore** : lecture pendant le téléchargement depuis l'interface, ouverture de
-l'application sans réseau, position renvoyée à Jellyfin, sous-titres et aperçus de la barre.
+**La page des téléchargements** (19/10/2026, Louis : une page plein écran plutôt que la fenêtre du premier
+jour). Le rond ouvre `#telechargements=1` (`downloads` dans `CinemaRoute`), un écran poussé depuis
+l'accueil dans `PlayerPanelFrame` avec sa flèche de retour — pas un onglet : l'onglet allumé reste
+l'Accueil, tout onglet le referme (`openPanel`, `normalizeRoute`), et il recouvre la grille
+(`coversGrid`, `heroOffscreen`, la bannière du téléphone). Une fiche ouverte depuis lui passe par-dessus
+(plan 47 sur 46) et Retour y ramène, comme Ma liste. Le contenu (`OfflineDownloadsView`) est écrit une
+fois : la place sur l'appareil (ce que prennent les téléchargements, ce que `storage.estimate()` dit
+pouvoir encore accorder), les films, puis les séries par saison (`groupOfflineDownloads`) ; par ligne la
+qualité, la piste, la taille ou la barre d'avancement, où l'on s'était arrêté et ce qui reste, Lire
+(grisé tant que `offlinePlayable` dit non), la fiche (film par Radarr, série par Sonarr), Supprimer avec
+confirmation. Tout y est lu sur l'appareil, affiches comprises.
 
-Tests : `offline-fmp4`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`.
+**Ouvrir l'application sans réseau.** Le cinéma est rendu par le serveur derrière une session, et le
+service worker ne garde jamais une page d'un compte : sans réseau, une navigation ne peut aboutir qu'à
+`offline.html`. D'où une entrée à part, **`/hors-ligne`** : une page publique (`PUBLIC_PATHS` — une page
+rendue qui passe par le proxy comme `/status`, pas un fichier d'`ACTIFS_PUBLICS`), hors du groupe
+`(player)`, sous la seule racine — traductions, `PlaybackProvider`, le lecteur : de quoi lister et lire
+`cine-offline/<compte>/` sans rien demander au serveur. Choix faits :
+- **Quel compte.** Sans session, la page ne peut pas le demander : le rond du cinéma retient sur
+  l'appareil le compte et le nombre de ses téléchargements à chaque chargement (`offlineEntry.ts`) ; la
+  page l'adopte (`adoptSignedOutAccount`, jamais par-dessus celui d'une session). La déconnexion l'oublie :
+  les fichiers restent, la page ne les montre plus.
+- **Le worker la garde, par build.** Sur demande du cinéma (`cine:warm-offline-entry`), envoyée
+  seulement s'il y a des téléchargements (la racine atteint une cinquantaine de fichiers, 2,7 Mo
+  compressés, mesuré sur 8.71.4) : il demande `/hors-ligne` **sans cookie** (rendue pour un
+  inconnu, elle ne porte rien d'un compte ; la langue vient du cookie côté navigateur,
+  `TranslationProvider`), puis chaque fichier qu'elle nomme et ceux que ces fichiers nomment — Turbopack
+  écrit les chemins des morceaux chargés à la demande en clair —, lecteur et dictionnaires compris, et
+  range la page en dernier dans `cine-static-<build>`. Page et code sont donc de la même génération.
+- **Servie** : `/hors-ligne` prend le réseau s'il répond bien en 2,5 s, sinon la copie gardée.
+  `offline.html` montre « Accéder aux téléchargements » quand la copie existe (`caches.match`).
+- **Réseau lent.** Sur l'écran de chargement et l'attente du catalogue (les deux accueils), au bout de
+  5 s, le même bouton — **seulement si ce compte a des téléchargements** (le nombre retenu) : pour les
+  autres, ce serait une page vide au moment où l'on attend autre chose. Sans attendre sur l'écran
+  « catalogue indisponible ». Et le worker, sur un appareil qui garde l'entrée seulement, remplace une
+  navigation sans réponse après **6 s** par `offline.html` en mode « attente » : la requête continue,
+  gardée une minute ; la page guette `/__sw/attente` et se recharge dès qu'elle a répondu, recevant
+  cette réponse-là sans la redemander. Six et non trois : une ouverture en 4G en itinérance dépasse
+  souvent trois secondes jusqu'au premier octet, et c'est une ouverture normale. Un appareil sans
+  téléchargement n'a aucun changement de comportement.
+- **Lire hors ligne depuis le cinéma** : `PlaybackProvider.play` ne refuse plus un fichier téléchargé
+  pendant une panne de Jellyfin (§92) ni sur un titre retiré (§96) ; la boucle de téléchargement ne
+  compte plus un `fetch` sans réseau comme un échec du stockage — compté, il relançait le worker OPFS
+  toutes les cinq secondes et faisait échouer les lectures du lecteur hors ligne.
+
+**Limites.** Une PWA iPhone/iPad ouverte sans réseau ne montre `/hors-ligne` que si le worker a pu la
+garder auparavant (l'app ouverte avec du réseau après le premier téléchargement, pour ce build) ; iOS
+peut évincer le stockage d'une PWA restée longtemps fermée (`persist()` aide sans garantir). La page
+d'attente suppose que le worker reste en vie jusqu'à la réponse : arrêté entre-temps, la page recharge
+et la navigation repart de zéro.
+
+**Pas encore** : séries et épisodes, lecture pendant le téléchargement depuis l'interface, position
+renvoyée à Jellyfin, sous-titres et aperçus de la barre.
+
+Tests : `offline-fmp4`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`,
+`offline-downloads-page`, `offline-entry`, `serviceWorker-offline-entry`, `offline-page`,
+`proxy-offline-entry`, `cinemaRoute`, `cinemaRoute-normalize`, `playerNav`.

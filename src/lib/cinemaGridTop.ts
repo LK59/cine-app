@@ -30,6 +30,8 @@ export function coversGrid(route: CinemaRoute): boolean {
     route.search ||
     route.list ||
     route.account ||
+    // Les téléchargements de l'appareil (§109), poussés depuis l'accueil.
+    route.downloads ||
     // Ouverts depuis le Compte, avec `account` retiré de l'adresse : oubliés ici, la grille se
     // croyait à l'écran sous eux — les flèches envoyaient le focus sur une affiche cachée et
     // Entrée ouvrait un film invisible (chasse aux défauts du 25/09/2026, DECISIONS §10).

@@ -2382,7 +2382,23 @@
       "defaultTrack": "Piste par défaut",
       "autoNext": "Télécharger automatiquement l'épisode suivant",
       "autoNextHint": "À la moitié d'un épisode regardé hors ligne, le suivant se télécharge ; un épisode vu jusqu'au bout est effacé une fois le suivant arrivé.",
-      "tracksFailedEpisode": "Les pistes de cet épisode n'ont pas pu être lues."
+      "tracksFailedEpisode": "Les pistes de cet épisode n'ont pas pu être lues.",
+      "films": "Films",
+      "series": "Séries",
+      "season": "Saison {n}",
+      "episodes": "{n} épisode|{n} épisodes",
+      "openSeries": "Ouvrir la fiche de la série",
+      "storageTitle": "Sur cet appareil",
+      "storageUsed": "{size} de téléchargements",
+      "storageFree": "environ {size} encore disponibles",
+      "stoppedAt": "Arrêté à {time}",
+      "watched": "Vu jusqu'au bout",
+      "panelHint": "Ce qui se regarde sans réseau, sur cet appareil.",
+      "entryOnline": "Lu depuis cet appareil",
+      "entryOffline": "Hors ligne · lu depuis cet appareil",
+      "openApp": "Ouvrir Cine App",
+      "entryNoAccount": "Aucun téléchargement à montrer ici. Ouvrez Cine App avec du réseau et connectez-vous : vos téléchargements y apparaîtront, puis ici.",
+      "accessDownloads": "Accéder aux téléchargements"
     }
   },
   "cinema": {

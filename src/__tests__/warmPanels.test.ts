@@ -42,7 +42,7 @@ describe("le code des écrans chargés à la demande", () => {
   it("garde, par les chargeurs mêmes de la coquille, chaque écran ouvert depuis la navigation", () => {
     const shell = readFileSync(join(process.cwd(), "src/components/player/PlayerShell.tsx"), "utf8");
     const warmCall = shell.slice(shell.indexOf("scheduleWarmPanels({"), shell.indexOf("scheduleWarmPanels({") + 400);
-    for (const name of ["PlayerSearchPanel", "PlayerListPanel", "PlayerAccountPanel", "PlayerReportPanel", "PlayerNewsPanel", "PlayerDiscoverSheet", "PlayerPersonSheet"]) {
+    for (const name of ["PlayerSearchPanel", "PlayerListPanel", "PlayerAccountPanel", "PlayerReportPanel", "PlayerNewsPanel", "PlayerDownloadsPanel", "PlayerDiscoverSheet", "PlayerPersonSheet"]) {
       expect(shell, name).toContain(`const ${name} = dynamic(load${name},`);
       expect(warmCall, name).toContain(`load${name}`);
     }
