@@ -1154,7 +1154,9 @@
 
 /* ─── La barre de progression ─────────────────────────────────────────────────
    L'élément le plus regardé et le plus touché d'un lecteur, et c'était quatre
-   pixels avec une pastille permanente.
+   pixels avec une pastille permanente. Huit au repos depuis le 19/10/2026 (douze
+   sous le doigt) : à quatre, la barre était un trait sous des boutons ronds et
+   pleins — celle de l'app Apple TV fait une dizaine de pixels.
 
    Elle est peinte entièrement ici. `accent-color` remplissait la partie lue
    toute seule, ce qui était commode — mais il exclut `appearance: none`, sans
@@ -1186,7 +1188,7 @@
    Violette du 13 au 14/10/2026 (§83, option B), rendue au blanc par Louis — dans le lecteur, la barre
    est forcément la sienne, il n'y a rien dont la distinguer. */
 .player-seek::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 8px;
   border-radius: 999px;
   background: linear-gradient(to right, currentColor 0 var(--played, 0%), transparent var(--played, 0%) 100%);
   transition: height 260ms cubic-bezier(0.33, 1, 0.68, 1);
@@ -1198,7 +1200,7 @@
    exactement quand ça commence et quand ça s'arrête — il le sait déjà, c'est ce qui pilote la
    vignette de prévisualisation. */
 [data-scrub] .player-seek::-webkit-slider-runnable-track,
-.player-seek:focus-visible::-webkit-slider-runnable-track { height: 8px; }
+.player-seek:focus-visible::-webkit-slider-runnable-track { height: 12px; }
 
 .player-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -1209,7 +1211,7 @@
   background: currentColor;
   border: none;
   /* Centrée sur une piste dont la hauteur change : la moitié de la différence. */
-  margin-top: -5px;
+  margin-top: -3px;
   opacity: 0;
   transform: scale(0.5);
   transition: opacity 220ms ease-out, transform 260ms cubic-bezier(0.34, 1.3, 0.64, 1), margin-top 260ms cubic-bezier(0.33, 1, 0.68, 1);
@@ -1218,16 +1220,16 @@
 .player-seek:focus-visible::-webkit-slider-thumb {
   opacity: 1;
   transform: scale(1);
-  margin-top: -3px;
+  margin-top: -1px;
 }
 
 .player-seek::-moz-range-track {
-  height: 4px;
+  height: 8px;
   border-radius: 999px;
   background: linear-gradient(to right, currentColor 0 var(--played, 0%), transparent var(--played, 0%) 100%);
   transition: height 260ms cubic-bezier(0.33, 1, 0.68, 1);
 }
-[data-scrub] .player-seek::-moz-range-track { height: 8px; }
+[data-scrub] .player-seek::-moz-range-track { height: 12px; }
 .player-seek::-moz-range-thumb {
   width: 14px;
   height: 14px;

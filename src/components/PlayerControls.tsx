@@ -2962,7 +2962,7 @@ export function PlayerControls({
             {/* The rail at rest. Painted here rather than left to the native track, which cannot
                 be sized at all without giving up `accent-color` — and giving that up is what
                 lets the bar answer to a finger as well as to a pointer. */}
-            <div className={`pointer-events-none absolute top-1/2 w-full -translate-y-1/2 rounded-full bg-white/20 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-2" : "h-1"}`} />
+            <div className={`pointer-events-none absolute top-1/2 w-full -translate-y-1/2 rounded-full bg-white/20 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-3" : "h-2"}`} />
             {/* Buffered range — deliberately subtle (a slightly lighter track, not a bold
                 second color): its only job is "can I scrub ahead without waiting", not
                 competing for attention with the actual playback position. Sits under the
@@ -2970,7 +2970,7 @@ export function PlayerControls({
                 portion — exactly the part worth showing. */}
             {duration > 0 && bufferedEnd > 0 && (
               <div
-                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/35 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-2" : "h-1"}`}
+                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/35 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-3" : "h-2"}`}
                 // Both pointer-events-none (blocks click/drag) AND the two -webkit- properties
                 // (blocks the native long-press "Look Up / Copy / Writing Tools" callout menu,
                 // which iOS can still trigger on an element even with pointer-events: none —
@@ -2986,12 +2986,17 @@ export function PlayerControls({
             {/* Chapter markers — visual only, not independently clickable: the seek bar's own
                 drag already covers the whole track, so a second, narrower hit target right on
                 top of it would only make small drag corrections more error-prone. Jumping to a
-                specific chapter is what the chapters menu button is for. */}
+                specific chapter is what the chapters menu button is for.
+                Pendant le glissement seulement (19/10/2026) : au repos, une vingtaine de chapitres
+                génériques (« Chapter 5 », Interstellar) hachaient la barre en pointillés. C'est en
+                cherchant un passage qu'ils servent. */}
             {duration > 0 &&
+              scrubbing &&
               chapters.map((ch, i) => (
                 <div
                   key={i}
-                  className={`pointer-events-none absolute top-1/2 w-px -translate-y-1/2 bg-black/50 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-2" : "h-1"}`}
+                  data-chapter-mark=""
+                  className="pointer-events-none absolute top-1/2 h-3 w-px -translate-y-1/2 bg-black/50"
                   style={{ left: `${(ch.start / duration) * 100}%`, WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
                 />
               ))}
@@ -3125,7 +3130,9 @@ export function PlayerControls({
               }}
             />
           </div>
-          <span data-player-remaining className="player-time shrink-0 text-right">{formatTime(Math.max(0, duration - currentTime))}</span>
+          {/* Le temps restant porte son signe, comme sur l'Apple TV (19/10/2026) : « 2:13:36 » seul se
+              lisait comme la durée du film. Pas de signe à zéro. */}
+          <span data-player-remaining className="player-time shrink-0 text-right">{remainingLabel(duration, currentTime)}</span>
           </div>
         </div>
       </div>
@@ -3258,6 +3265,13 @@ function OffsetRow({ label, seconds, onShift }: { label: string; seconds: number
  * pour que les libellés restent alignés. `data-option-on` la désigne au menu, qui la fait
  * défiler dans son cadre à l'ouverture (`LiquidMenu`, LECTEUR-15).
  */
+/** Le temps restant, signé « − » (U+2212) tant qu'il en reste. */
+function remainingLabel(duration: number, currentTime: number): string {
+  const left = Math.max(0, duration - currentTime);
+  // Moins d'une seconde s'écrit « 0:00 » : sans signe, pas « −0:00 ».
+  return left >= 1 ? `\u2212${formatTime(left)}` : formatTime(0);
+}
+
 function OptionCheck({ on }: { on: boolean }) {
   return <Check size={16} strokeWidth={2.5} aria-hidden data-option-on={on ? "" : undefined} className={`mt-0.5 shrink-0 ${on ? "" : "invisible"}`} />;
 }

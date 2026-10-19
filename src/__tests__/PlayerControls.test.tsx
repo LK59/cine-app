@@ -170,6 +170,28 @@ describe("PlayerControls — la barre de progression", () => {
     expect(bar.hasAttribute("data-scrub")).toBe(false);
   });
 
+  it("ne montre les marques de chapitres que pendant le glissement (19/10/2026)", async () => {
+    // Au repos, une vingtaine de chapitres génériques hachaient la barre en pointillés (Interstellar).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.startsWith("/api/jellyfin/chapters")
+          ? { ok: true, json: async () => [{ start: 0, name: null }, { start: 600, name: null }, { start: 1200, name: null }] }
+          : { ok: false, json: async () => null }
+      )
+    );
+    let video: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    await withDuration(video!, bar);
+    expect(container.querySelectorAll("[data-chapter-mark]")).toHaveLength(0);
+    await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 40 }] }));
+    expect(container.querySelectorAll("[data-chapter-mark]")).toHaveLength(3);
+    await act(async () => void fireEvent.touchEnd(container.querySelector(".player-seek")!));
+    expect(container.querySelectorAll("[data-chapter-mark]")).toHaveLength(0);
+  });
+
   it("saute là où le doigt s'est posé, pas là où la pastille était", async () => {
     // An input[type=range] on iOS does not jump to where it is touched: the thumb has to be
     // grabbed and dragged. While the thumb was always visible that was guessable; hidden at
@@ -1879,7 +1901,7 @@ describe("PlayerControls — la disposition", () => {
     for (const name of ["skip-back", "skip-fwd"]) expect(nav(container, name)!.querySelector("svg text")?.textContent).toBe("10");
   });
 
-  it("montre le temps écoulé à gauche et le temps restant à droite, sans signe moins ni bascule", async () => {
+  it("montre le temps écoulé à gauche et le temps restant à droite, signé « − » comme l'Apple TV, sans bascule", async () => {
     stubMediaFetches();
     let video!: HTMLVideoElement;
     const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
@@ -1891,7 +1913,7 @@ describe("PlayerControls — la disposition", () => {
     const elapsed = container.querySelector("[data-player-elapsed]")!;
     const remaining = container.querySelector("[data-player-remaining]")!;
     expect(elapsed.textContent).toBe("0:10");
-    expect(remaining.textContent).toBe("57:18");
+    expect(remaining.textContent).toBe("−57:18");
     // De part et d'autre de la barre.
     const bar = container.querySelector(".player-seek")!;
     expect(elapsed.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -1899,11 +1921,14 @@ describe("PlayerControls — la disposition", () => {
     // Pas un bouton : un appui n'y change rien.
     expect(remaining.closest("button")).toBeNull();
     fireEvent.click(remaining);
-    expect(remaining.textContent).toBe("57:18");
-    expect(remaining.textContent).not.toContain("−");
+    expect(remaining.textContent).toBe("−57:18");
     // En pause aussi.
     act(() => void video.dispatchEvent(new Event("pause")));
-    expect(container.querySelector("[data-player-remaining]")!.textContent).toBe("57:18");
+    expect(container.querySelector("[data-player-remaining]")!.textContent).toBe("−57:18");
+    // À la fin, plus rien ne reste : pas de signe.
+    Object.defineProperty(video, "currentTime", { value: 3448, configurable: true });
+    act(() => void video.dispatchEvent(new Event("timeupdate")));
+    expect(container.querySelector("[data-player-remaining]")!.textContent).toBe("0:00");
   });
 
   it("garde le curseur du volume dans la page partout, et ne le replie qu'au pointeur fin qui survole", async () => {
