@@ -116,6 +116,12 @@ describe("offlineSeriesNext", () => {
   });
 });
 
+/** Une affiche touchée : la fiche s'ouvre une fois son visuel décodé (`decodeArtwork`). */
+async function openCard(name: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name }));
+  await act(async () => new Promise((r) => setTimeout(r, 0)));
+}
+
 describe("OfflineDownloadsView", () => {
   it("une grille : les films puis les séries, une affiche chacun ; « En cours » seulement si quelque chose arrive", () => {
     list = [download({ id: "f1", title: "Dune" }), episode("e1", 1, 1, 4), episode("e2", 2, 3, 5)];
@@ -129,10 +135,10 @@ describe("OfflineDownloadsView", () => {
     expect(screen.queryByText("player.downloads.season:1")).toBeNull();
   });
 
-  it("la fiche d'une série : ses saisons, ses épisodes, et Lire sur celui qu'on a commencé", () => {
+  it("la fiche d'une série : ses saisons, ses épisodes, et Lire sur celui qu'on a commencé", async () => {
     list = [episode("e1", 1, 1, 4), { ...episode("e2", 2, 3, 5), positionSeconds: 1200 }];
     render(<OfflineDownloadsView />);
-    fireEvent.click(screen.getByRole("button", { name: /^Ted Lasso/ }));
+    await openCard(/^Ted Lasso/);
     expect(screen.getByRole("dialog", { name: "Ted Lasso" })).toBeTruthy();
     expect(screen.getByText("player.downloads.season:1")).toBeTruthy();
     expect(screen.getByText("player.downloads.season:2")).toBeTruthy();
@@ -144,7 +150,7 @@ describe("OfflineDownloadsView", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("la fiche d'un film : son résumé et sa distribution gardés, en texte seul", () => {
+  it("la fiche d'un film : son résumé et sa distribution gardés, en texte seul", async () => {
     list = [
       download({
         id: "f1",
@@ -153,7 +159,7 @@ describe("OfflineDownloadsView", () => {
       }),
     ];
     render(<OfflineDownloadsView />);
-    fireEvent.click(screen.getByRole("button", { name: /^Dune/ }));
+    await openCard(/^Dune/);
     expect(screen.getByText("Sur Arrakis.")).toBeTruthy();
     expect(screen.getByText(/Timothée Chalamet, Zendaya/)).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();
@@ -176,7 +182,7 @@ describe("OfflineDownloadsView", () => {
   it("supprimer demande toujours confirmation", async () => {
     list = [download({ id: "f1", title: "Dune" })];
     render(<OfflineDownloadsView />);
-    fireEvent.click(screen.getByRole("button", { name: /^Dune/ }));
+    await openCard(/^Dune/);
     fireEvent.click(screen.getByRole("button", { name: "player.downloads.remove" }));
     expect(remove).not.toHaveBeenCalled();
     const confirm = screen.getAllByRole("button", { name: /player\.downloads\.remove/ }).at(-1)!;
@@ -188,13 +194,13 @@ describe("OfflineDownloadsView", () => {
     list = [download({ id: "f1", title: "Dune", radarrId: 42 }), episode("e1", 1, 1, 4)];
     const open = vi.fn();
     const { rerender } = render(<OfflineDownloadsView />);
-    fireEvent.click(screen.getByRole("button", { name: /^Dune/ }));
+    await openCard(/^Dune/);
     expect(screen.queryByRole("button", { name: /player\.downloads\.openShort/ })).toBeNull();
     rerender(<OfflineDownloadsView onOpenTitle={open} />);
     fireEvent.click(screen.getByRole("button", { name: /player\.downloads\.openShort/ }));
     // La fiche en ligne passe par-dessus : la fiche hors ligne se ferme, puis on ouvre celle de la série.
     await act(async () => new Promise((r) => setTimeout(r, 400)));
-    fireEvent.click(screen.getByRole("button", { name: /^Ted Lasso/ }));
+    await openCard(/^Ted Lasso/);
     fireEvent.click(screen.getByRole("button", { name: /player\.downloads\.openShort/ }));
     // L'entrée d'historique de la fiche est rendue avant d'ouvrir la fiche en ligne (`releaseOfflineSheetEntry`).
     await act(async () => new Promise((r) => setTimeout(r, 700)));

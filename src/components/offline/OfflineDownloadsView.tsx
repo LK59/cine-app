@@ -11,9 +11,9 @@ import { formatDurationShort, formatFileSize } from "@/lib/format";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { SHEET_OUT_MS, SHEET_UNMOUNT_SLACK_MS } from "@/lib/sheetMotion";
-import { pauseOfflineDownload, removeOfflineDownload, resumeOfflineDownload, retryOfflineDownload, useOfflineDownloads, type OfflineDownload } from "@/lib/offline/downloads";
+import { offlineAccount, pauseOfflineDownload, removeOfflineDownload, resumeOfflineDownload, retryOfflineDownload, useOfflineDownloads, type OfflineDownload } from "@/lib/offline/downloads";
 import { groupOfflineDownloads, offlineRemainingSeconds, type OfflineSeriesGroup } from "@/lib/offline/downloadGroups";
-import { POSTER_FILE, SERIES_POSTER_FILE } from "@/lib/offline/artwork";
+import { BACKDROP_FILE, LOGO_FILE, POSTER_FILE, SERIES_POSTER_FILE, offlineImage } from "@/lib/offline/artwork";
 import { OfflineTitleSheet } from "./OfflineTitleSheet";
 import { useOfflineImage } from "./useOfflineImage";
 import { offlinePlayable, offlineProgress, offlineStatusLabel, touchDevice } from "./OfflineDownloadControl";
@@ -57,8 +57,15 @@ export function OfflineDownloadsView({ onOpenTitle }: { onOpenTitle?: (target: O
   const shownFilm = shown && "film" in shown ? films.find((d) => d.id === shown.film) : undefined;
   const shownSeries = shown && "series" in shown ? series.find((g) => g.key === shown.series) : undefined;
   const show = (target: { film: string } | { series: string }) => {
-    setShown(target);
-    setOpen(true);
+    const lead = "film" in target ? films.find((d) => d.id === target.film) : seriesLead(series.find((g) => g.key === target.series));
+    // Le visuel et le logo décodés avant d'ouvrir, comme les fiches du cinéma (`prefetchTitleSheet`) :
+    // ouverte avant, la fiche faisait voler l'affiche agrandie — floue, son titre compris — et son
+    // visuel paraissait en fondu en plein vol, devant elle (Louis, 20/10/2026). Ils sont sur l'appareil :
+    // un quart de seconde au plus, l'appui reste celui que le trajet reconnaît.
+    void decodeArtwork(lead).then(() => {
+      setShown(target);
+      setOpen(true);
+    });
   };
   return (
     <div className="space-y-9 [@media(max-height:500px)]:space-y-6">
@@ -112,6 +119,27 @@ export function OfflineDownloadsView({ onOpenTitle }: { onOpenTitle?: (target: O
       )}
     </div>
   );
+}
+
+/** Ce qu'une série garde de sa fiche : chez l'épisode le plus récemment demandé qui en a une (la règle de `OfflineTitleSheet`). */
+function seriesLead(group: OfflineSeriesGroup | undefined): OfflineDownload | undefined {
+  if (!group) return undefined;
+  const episodes = group.seasons.flatMap((s) => s.episodes);
+  return [...episodes].sort((a, b) => b.createdAt - a.createdAt).find((d) => d.artwork) ?? group.first;
+}
+
+async function decodeArtwork(d: OfflineDownload | undefined): Promise<void> {
+  const account = offlineAccount();
+  if (!d?.artwork || !account) return;
+  const names = [d.artwork.hasBackdrop ? BACKDROP_FILE : null, d.artwork.hasLogo ? LOGO_FILE : null].filter((n): n is string => n !== null);
+  const decode = async (name: string) => {
+    const url = await offlineImage(account, d.id, name);
+    if (!url) return;
+    const img = new Image();
+    img.src = url;
+    await img.decode().catch(() => {});
+  };
+  await Promise.race([Promise.all(names.map(decode)), new Promise((r) => setTimeout(r, 250))]);
 }
 
 /** Le titre en petites capitales au-dessus d'un bloc — la forme des groupes du Compte. */
