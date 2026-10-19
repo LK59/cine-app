@@ -104,10 +104,24 @@ interface Running {
   bytes: number;
   playSessionId: string;
 }
+interface IndexEntry {
+  generation: number;
+  initEnd: number;
+  video: import("./fmp4").Fmp4Track | null;
+  fragments: { offset: number; size: number; time: number }[];
+  next: number;
+  /**
+   * Le prolongement en cours de cet index. Deux requêtes arrivées ensemble (le lecteur qui relance
+   * pendant que la précédente lit encore) partaient toutes deux du même `next` et ajoutaient chacune
+   * les mêmes fragments : un index en double, des fragments rejoués deux fois. Elles passent
+   * désormais l'une après l'autre.
+   */
+  busy?: Promise<void>;
+}
 interface Live {
   running: Map<string, Running>;
   /** Les index des fragments déjà lus, par version (`offlineIndex`). */
-  indexes: Map<string, { generation: number; initEnd: number; video: import("./fmp4").Fmp4Track | null; fragments: { offset: number; size: number; time: number }[]; next: number }>;
+  indexes: Map<string, IndexEntry>;
   timers: ReturnType<typeof setInterval>[];
   started: boolean;
 }
@@ -155,6 +169,31 @@ async function describeItem(itemId: string): Promise<{ fileVersion: string; medi
   };
 }
 
+/**
+ * Ce que les préparations en attente et en cours vont encore écrire (attendu − déjà écrit), hors
+ * `except`. Chaque demande n'était comparée qu'à la place libre de l'instant : une saison de dix
+ * épisodes passait dix fois le même contrôle, alors que le disque devait les contenir toutes.
+ */
+function reservedBytes(statuses: OfflineStatus[], except?: string): number {
+  const rows = getDb()
+    .prepare(`SELECT id, bytes, expected_bytes FROM offline_jobs WHERE status IN (${statuses.map(() => "?").join(",")})`)
+    .all(...statuses) as { id: string; bytes: number; expected_bytes: number }[];
+  let total = 0;
+  for (const row of rows) {
+    if (row.id === except) continue;
+    total += Math.max(0, row.expected_bytes - (live.running.get(row.id)?.bytes ?? row.bytes));
+  }
+  return total;
+}
+
+const NO_ROOM = "Plus assez de place sur le serveur pour préparer ce téléchargement";
+
+/** Si le disque des données peut recevoir `expected` octets en plus de `reserved`, marge comprise. */
+function roomFor(expected: number, reserved: number): boolean {
+  const free = freeBytes();
+  return free === null || free >= expected + reserved + DISK_MARGIN;
+}
+
 function freeBytes(): number | null {
   try {
     const stats = fs.statfsSync(DATA_DIR);
@@ -192,14 +231,16 @@ export async function requestOfflineJob(input: {
   if (existing) {
     id = existing.id;
     if (existing.status === "failed") {
+      // Relancer, c'est réécrire tout le fichier : le même contrôle de place qu'une demande neuve
+      // (il était sauté, et un échec « plus de place » repartait aussitôt).
+      if (!roomFor(existing.expected_bytes, reservedBytes(["queued", "running"], id))) throw new OfflineRefusal(NO_ROOM, 507);
       db.prepare("UPDATE offline_jobs SET status = 'queued', generation = generation + 1, bytes = 0, error = NULL, accessed_at = ? WHERE id = ?").run(now, id);
     } else {
       db.prepare("UPDATE offline_jobs SET accessed_at = ? WHERE id = ?").run(now, id);
     }
   } else {
     const expected = expectedBytes(item.runtimeSeconds, input.quality);
-    const free = freeBytes();
-    if (free !== null && free < expected + DISK_MARGIN) throw new OfflineRefusal("Plus assez de place sur le serveur pour préparer ce téléchargement", 507);
+    if (!roomFor(expected, reservedBytes(["queued", "running"]))) throw new OfflineRefusal(NO_ROOM, 507);
     id = randomBytes(16).toString("hex");
     db.prepare(
       `INSERT INTO offline_jobs (id, item_id, file_version, audio_index, quality, codec, status, generation, bytes, expected_bytes, runtime_s, created_at, accessed_at)
@@ -351,6 +392,16 @@ function pump(): void {
       )
       .get(...live.running.keys()) as Row | undefined;
     if (!next) return;
+    // Au moment de partir, la place se recompte face à ce que les préparations en cours vont encore
+    // écrire : le disque a pu se remplir depuis la demande (une autre version, autre chose que
+    // l'application). Sans place, elle échoue tout de suite avec la raison, plutôt qu'à mi-chemin
+    // sur un disque plein. Celles qui attendent derrière se recomptent à leur tour.
+    if (!roomFor(next.expected_bytes, reservedBytes(["running"]))) {
+      const job = fromRow(next);
+      db.prepare("UPDATE offline_jobs SET status = 'failed', error = ?, bytes = 0, finished_at = ? WHERE id = ?").run(NO_ROOM, Date.now(), next.id);
+      void logOfflineEvent("failed", job, { level: "error", accounts: accountsOf(next.id), reason: NO_ROOM, bytes: 0, durationMs: 0, generation: job.generation });
+      continue;
+    }
     void run(fromRow(next));
   }
 }
@@ -367,6 +418,10 @@ async function run(job: OfflineJob): Promise<void> {
   fs.mkdirSync(offlineDir(), { recursive: true });
   const file = offlineFile(job.id);
   let failure: string | null = null;
+  // Hors du `try` pour être fermé dans `finally` : une annulation ou un calage fait lever
+  // `reader.read()`, et le flux d'écriture restait ouvert — `fs.rm` retirait le nom du fichier, mais
+  // le descripteur gardait ses gigaoctets alloués sur le disque.
+  let out: fs.WriteStream | null = null;
   // Un flux qui ne donne plus rien pendant deux minutes : Jellyfin a calé. Sans ce garde, la
   // préparation resterait « en cours » pour toujours et occuperait sa place dans la file.
   let lastByteAt = Date.now();
@@ -406,16 +461,20 @@ async function run(job: OfflineJob): Promise<void> {
       signal: controller.signal,
     });
     if (!res.ok || !res.body) throw new Error(`Jellyfin a répondu ${res.status}`);
-    const out = fs.createWriteStream(file);
+    const stream = fs.createWriteStream(file);
+    out = stream;
     const reader = res.body.getReader();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (!out.write(value)) await new Promise<void>((resolve) => out.once("drain", () => resolve()));
-      state.bytes += value.byteLength;
       lastByteAt = Date.now();
+      // Compté une fois sur le disque, pas une fois confié au flux : la route du fichier et l'index
+      // lisent jusqu'à `bytes`, et un compte en avance leur faisait lire des octets pas encore écrits
+      // — des zéros, puis « moof sans mdat » et une erreur 500 au lecteur.
+      await new Promise<void>((resolve, reject) => stream.write(value, (error?: Error | null) => (error ? reject(error) : resolve())));
+      state.bytes += value.byteLength;
     }
-    await new Promise<void>((resolve, reject) => out.end((error?: Error | null) => (error ? reject(error) : resolve())));
+    await new Promise<void>((resolve, reject) => stream.end((error?: Error | null) => (error ? reject(error) : resolve())));
     // Jellyfin ferme le flux aussi quand son transcodage meurt : n'est « prêt » qu'un fichier qui va
     // jusqu'au bout du film (le dernier fragment commence dans les trente dernières secondes).
     const lastTime = await lastFragmentTime(file, state.bytes);
@@ -426,6 +485,8 @@ async function run(job: OfflineJob): Promise<void> {
     failure = stalled ? "Jellyfin ne répond plus" : controller.signal.aborted ? "annulé" : error instanceof Error ? error.message : String(error);
   } finally {
     clearInterval(noteBytes);
+    // Sans effet sur un flux déjà fermé par `end` ; libère le descripteur sinon.
+    out?.destroy();
     live.running.delete(job.id);
     void passJellyfinFetch(`${config.jellyfin.url}/Videos/ActiveEncodings?deviceId=${DEVICE_ID}&playSessionId=${playSessionId}`, {
       method: "DELETE",
@@ -463,11 +524,7 @@ async function run(job: OfflineJob): Promise<void> {
 async function lastFragmentTime(file: string, size: number): Promise<number | null> {
   const handle = await fs.promises.open(file, "r");
   try {
-    const read = async (offset: number, length: number) => {
-      const buffer = Buffer.alloc(Math.max(0, Math.min(length, size - offset)));
-      await handle.read(buffer, 0, buffer.length, offset);
-      return new Uint8Array(buffer);
-    };
+    const read = readerOf(handle, size);
     const init = parseInit(await read(0, Math.min(size, 4 * 1024 * 1024)));
     const video = init?.tracks.find((t) => t.kind === "video");
     if (!init || !video) return null;
@@ -487,39 +544,55 @@ async function lastFragmentTime(file: string, size: number): Promise<number | nu
  * la préparation, à partir de là où on s'était arrêté.
  */
 export async function offlineIndex(job: OfflineJob, from: number): Promise<{ fragments: { offset: number; size: number; time: number }[]; next: number }> {
-  const file = offlineFile(job.id);
-  const size = job.bytes;
   const cached = live.indexes.get(job.id);
-  const entry = cached && cached.generation === job.generation ? cached : { generation: job.generation, initEnd: 0, video: null, fragments: [], next: 0 };
+  const entry: IndexEntry = cached && cached.generation === job.generation ? cached : { generation: job.generation, initEnd: 0, video: null, fragments: [], next: 0 };
   live.indexes.set(job.id, entry);
-  if (entry.next < size) {
-    const handle = await fs.promises.open(file, "r");
-    try {
-      const read = async (offset: number, length: number) => {
-        const buffer = Buffer.alloc(Math.max(0, Math.min(length, size - offset)));
-        await handle.read(buffer, 0, buffer.length, offset);
-        return new Uint8Array(buffer);
-      };
-      if (!entry.video) {
-        const init = parseInit(await read(0, Math.min(size, 4 * 1024 * 1024)));
-        const video = init?.tracks.find((t) => t.kind === "video");
-        if (init && video) {
-          entry.video = video;
-          entry.initEnd = init.end;
-          entry.next = init.end;
-        }
-      }
-      if (entry.video) {
-        const scanned = await scanFragments(read, entry.next, size, entry.video);
-        entry.fragments.push(...scanned.fragments);
-        entry.next = scanned.next;
-      }
-    } finally {
-      await handle.close();
-    }
-  }
+  // Chacun son tour sur cette entrée (`IndexEntry.busy`) ; l'échec de l'un ne bloque pas le suivant.
+  const extended = (entry.busy ?? Promise.resolve()).then(() => extendIndex(job, entry));
+  entry.busy = extended.catch(() => {});
+  await extended;
   const start = entry.fragments.findIndex((f) => f.offset >= from);
   return { fragments: start < 0 ? [] : entry.fragments.slice(start), next: Math.max(from, entry.next) };
+}
+
+async function extendIndex(job: OfflineJob, entry: IndexEntry): Promise<void> {
+  if (entry.next >= job.bytes) return;
+  const handle = await fs.promises.open(offlineFile(job.id), "r");
+  try {
+    // Jamais au-delà de ce que le fichier contient vraiment, quoi que dise le compte.
+    const size = Math.min(job.bytes, (await handle.stat()).size);
+    if (entry.next >= size) return;
+    const read = readerOf(handle, size);
+    if (!entry.video) {
+      const init = parseInit(await read(0, Math.min(size, 4 * 1024 * 1024)));
+      const video = init?.tracks.find((t) => t.kind === "video");
+      if (init && video) {
+        entry.video = video;
+        entry.initEnd = init.end;
+        entry.next = init.end;
+      }
+    }
+    if (entry.video) {
+      const scanned = await scanFragments(read, entry.next, size, entry.video);
+      entry.fragments.push(...scanned.fragments);
+      entry.next = scanned.next;
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * Lit `length` octets à `offset`, bornés à `size` — et seulement ce que la lecture a rendu : le
+ * reste d'un tampon alloué à la longueur demandée revenait en zéros, que l'analyse prenait pour
+ * des boîtes.
+ */
+function readerOf(handle: fs.promises.FileHandle, size: number) {
+  return async (offset: number, length: number) => {
+    const buffer = Buffer.alloc(Math.max(0, Math.min(length, size - offset)));
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
+    return new Uint8Array(buffer.buffer, buffer.byteOffset, bytesRead);
+  };
 }
 
 /** Efface les versions que plus personne ne télécharge, et les échecs d'hier. */

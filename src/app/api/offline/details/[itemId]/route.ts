@@ -72,7 +72,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
   const { itemId } = await params;
   if (!isJellyfinId(itemId)) return new NextResponse(null, { status: 400 });
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session?.jfId) return new NextResponse(null, { status: 401 });
+  // Une session suffit : un administrateur local n'a pas d'identité Jellyfin (`jfId`) et recevait
+  // 401, alors que `assertVisible` le laisse passer — c'est elle qui décide de ce que le compte voit.
+  if (!session?.u) return new NextResponse(null, { status: 401 });
   const refused = await assertVisible(session, itemId);
   if (refused) return refused;
   try {

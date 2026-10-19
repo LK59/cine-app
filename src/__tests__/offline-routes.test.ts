@@ -11,8 +11,10 @@ const verify = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => verify(...a) }));
 const cfg = vi.hoisted(() => ({ offline: true, everyone: true }));
 vi.mock("@/lib/config", () => ({
-  config: { player: { get enabled() { return true; }, get offlineDownloads() { return cfg.offline; }, get offlineDownloadsForEveryone() { return cfg.everyone; } } },
+  config: { jellyfin: { url: "http://jf", apiKey: "k" }, player: { get enabled() { return true; }, get offlineDownloads() { return cfg.offline; }, get offlineDownloadsForEveryone() { return cfg.everyone; } } },
 }));
+const upstream = vi.fn();
+vi.mock("@/lib/jellyfinBreaker", () => ({ passJellyfinFetch: (...a: unknown[]) => upstream(...a) }));
 const visible = vi.fn();
 vi.mock("@/lib/itemVisibility", () => ({ assertVisible: (...a: unknown[]) => visible(...a) }));
 const jobs = vi.hoisted(() => ({ request: vi.fn(), jobFor: vi.fn(), forget: vi.fn(), touch: vi.fn() }));
@@ -28,6 +30,8 @@ vi.mock("@/lib/offline/jobs", () => ({
 import { POST } from "@/app/api/offline/jobs/route";
 import { GET as fileGET } from "@/app/api/offline/jobs/[jobId]/file/route";
 import { DELETE } from "@/app/api/offline/jobs/[jobId]/route";
+import { GET as detailsGET } from "@/app/api/offline/details/[itemId]/route";
+import { GET as subtitlesGET } from "@/app/api/offline/subtitles/[itemId]/route";
 
 const ITEM = "b".repeat(32);
 const JOB = "c".repeat(32);
@@ -89,5 +93,31 @@ describe("DELETE /api/offline/jobs/:id", () => {
   it("retire la demande de ce compte-là", async () => {
     expect((await DELETE(req(), params)).status).toBe(204);
     expect(jobs.forget).toHaveBeenCalledWith("mathis", JOB);
+  });
+});
+
+describe("fiche et sous-titres d'un titre à garder hors ligne", () => {
+  it("un administrateur local, sans identité Jellyfin, les obtient ; sans session, 401", async () => {
+    // Le compte administrateur local n'a pas de `jfId` : il recevait 401 alors que `assertVisible`
+    // le laisse passer.
+    verify.mockResolvedValue({ u: "admin", role: "admin", jti: "j" });
+    upstream.mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ Items: [{ Id: ITEM, Type: "Movie", Overview: "x", MediaSources: [{ Id: ITEM, MediaStreams: [{ Type: "Subtitle", Index: 3, Codec: "srt" }] }] }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+    );
+    const itemParams = () => ({ params: Promise.resolve({ itemId: ITEM }) });
+    const details = await detailsGET(req(), itemParams());
+    expect(details.status).toBe(200);
+    expect((await details.json()).overview).toBe("x");
+    const subs = await subtitlesGET(req(), itemParams());
+    expect(subs.status).toBe(200);
+    expect((await subs.json()).subtitles).toHaveLength(1);
+    expect(visible).toHaveBeenCalledTimes(2);
+    verify.mockResolvedValue(null);
+    expect((await detailsGET(req(), itemParams())).status).toBe(401);
+    expect((await subtitlesGET(req(), itemParams())).status).toBe(401);
   });
 });

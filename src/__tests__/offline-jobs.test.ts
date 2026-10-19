@@ -22,7 +22,8 @@ vi.mock("@/lib/jellyfinBreaker", () => ({ passJellyfinFetch: (...a: unknown[]) =
 vi.mock("@/lib/logger", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/logger")>()), logError: () => {} }));
 
 import { getDb } from "@/lib/db";
-import { forgetOfflineJob, offlineFile, offlineJobFor, requestOfflineJob } from "@/lib/offline/jobs";
+import { Writable } from "node:stream";
+import { forgetOfflineJob, offlineDir, offlineFile, offlineIndex, offlineJobFor, requestOfflineJob, type OfflineJob } from "@/lib/offline/jobs";
 
 const ITEM = "a".repeat(32);
 const FIXTURE = fs.readFileSync(path.join(process.cwd(), "src/__tests__/fixtures/offline/jellyfin-like.mp4"));
@@ -108,5 +109,154 @@ describe("la préparation", () => {
     const job = await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "hevc" });
     await vi.waitFor(() => expect(offlineJobFor("louis", job.id)?.status).toBe("failed"), { timeout: 3000 });
     expect(offlineJobFor("louis", job.id)?.error).toMatch(/interrompu/);
+  });
+});
+
+/** Un flux Jellyfin qui livre `first` puis ne donne plus rien, et lève quand on l'annule — comme `fetch`. */
+const hanging = (signal: AbortSignal | null | undefined, first: Uint8Array) =>
+  new ReadableStream<Uint8Array>({
+    start(c) {
+      c.enqueue(first);
+      signal?.addEventListener("abort", () => c.error(new DOMException("annulé", "AbortError")));
+    },
+  });
+const DISK_MARGIN = 5 * 1024 ** 3;
+/** L'estimation d'une version Standard de 3 s (voir plus haut). */
+const STANDARD_3S = Math.round(((3 * 2_128_000) / 8) * 1.05);
+
+describe("les défauts du 19/10 (relecture du serveur)", () => {
+  it("une préparation annulée en plein flux ferme son fichier (le descripteur gardait les octets alloués)", async () => {
+    process.env.OFFLINE_DOWNLOADS = "true";
+    const real = fs.createWriteStream.bind(fs);
+    let written: fs.WriteStream | undefined;
+    const spy = vi.spyOn(fs, "createWriteStream").mockImplementation(((...a: Parameters<typeof fs.createWriteStream>) => (written = real(...a))) as typeof fs.createWriteStream);
+    try {
+      upstream.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url.includes("/stream.mp4")) return new Response(hanging(init?.signal, new Uint8Array(FIXTURE.subarray(0, 1000))), { status: 200 });
+        if (init?.method === "DELETE") return new Response(null, { status: 204 });
+        return json(itemJson());
+      });
+      const job = await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "hevc" });
+      await vi.waitFor(() => expect(offlineJobFor("louis", job.id)?.bytes).toBe(1000), { timeout: 3000 });
+      expect(written?.closed).toBe(false);
+      forgetOfflineJob("louis", job.id);
+      await vi.waitFor(() => expect(written?.closed).toBe(true), { timeout: 3000 });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("les octets ne comptent qu'une fois sur le disque", async () => {
+    process.env.OFFLINE_DOWNLOADS = "true";
+    // Un flux d'écriture qui garde l'écriture en suspens jusqu'à ce qu'on la libère : ce qui est
+    // confié au flux n'est pas encore lisible dans le fichier.
+    const held: (() => void)[] = [];
+    const spy = vi.spyOn(fs, "createWriteStream").mockImplementation(((file: string) =>
+      new Writable({
+        highWaterMark: 1 << 26,
+        write(chunk: Buffer, _encoding, callback) {
+          held.push(() => {
+            fs.appendFileSync(file, chunk);
+            callback();
+          });
+        },
+      })) as unknown as typeof fs.createWriteStream);
+    try {
+      upstream.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url.includes("/stream.mp4")) return new Response(new Uint8Array(FIXTURE), { status: 200 });
+        if (init?.method === "DELETE") return new Response(null, { status: 204 });
+        return json(itemJson());
+      });
+      const job = await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "hevc" });
+      await vi.waitFor(() => expect(held.length).toBe(1), { timeout: 3000 });
+      // L'écriture n'a pas encore eu lieu : rien n'est à lire.
+      expect(offlineJobFor("louis", job.id)?.bytes).toBe(0);
+      held.splice(0).forEach((release) => release());
+      await vi.waitFor(() => expect(offlineJobFor("louis", job.id)?.status).toBe("done"), { timeout: 3000 });
+      expect(offlineJobFor("louis", job.id)?.bytes).toBe(FIXTURE.length);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("la place se compte avec ce que les préparations en attente vont encore écrire", async () => {
+    process.env.OFFLINE_DOWNLOADS = "false";
+    const spy = vi.spyOn(fs, "statfsSync").mockReturnValue({ bavail: DISK_MARGIN + 1.5 * STANDARD_3S, bsize: 1 } as fs.StatsFs);
+    try {
+      upstream.mockImplementation(async () => json(itemJson()));
+      await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "hevc" });
+      // Un deuxième épisode de la même taille : chacun tient seul, pas les deux.
+      await expect(requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "h264" })).rejects.toMatchObject({ status: 507 });
+      expect(getDb().prepare("SELECT COUNT(*) AS n FROM offline_jobs").get()).toEqual({ n: 1 });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("au départ, une préparation sans place échoue avec la raison ; la relancer redemande la place", async () => {
+    process.env.OFFLINE_DOWNLOADS = "false";
+    upstream.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.includes("/stream.mp4")) return new Response(hanging(init?.signal, new Uint8Array(FIXTURE.subarray(0, 1000))), { status: 200 });
+      if (init?.method === "DELETE") return new Response(null, { status: 204 });
+      return json(itemJson());
+    });
+    // Deux versions demandées quand il y avait la place…
+    const a = await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "hevc", now: 1 });
+    const b = await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "h264", now: 2 });
+    // …puis le disque s'est rempli : il n'en reste que pour une.
+    const spy = vi.spyOn(fs, "statfsSync").mockReturnValue({ bavail: DISK_MARGIN + 1.5 * STANDARD_3S, bsize: 1 } as fs.StatsFs);
+    try {
+      process.env.OFFLINE_DOWNLOADS = "true";
+      await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "hevc" });
+      expect(offlineJobFor("louis", a.id)?.status).toBe("running");
+      expect(offlineJobFor("louis", b.id)).toMatchObject({ status: "failed", error: expect.stringMatching(/place/) });
+      await expect(requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "h264" })).rejects.toMatchObject({ status: 507 });
+      expect(offlineJobFor("louis", b.id)?.status).toBe("failed");
+      forgetOfflineJob("louis", a.id);
+      await vi.waitFor(
+        () => expect(upstream.mock.calls.some(([url, init]) => (init as RequestInit | undefined)?.method === "DELETE" && String(url).includes("ActiveEncodings"))).toBe(true),
+        { timeout: 3000 }
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  const indexJob = (id: string, bytes: number, generation = 1): OfflineJob => ({
+    id,
+    itemId: ITEM,
+    fileVersion: "v1",
+    audioIndex: 1,
+    quality: "standard",
+    codec: "hevc",
+    status: "running",
+    generation,
+    bytes,
+    expectedBytes: bytes,
+    runtimeSeconds: 3,
+    error: null,
+  });
+
+  it("deux lectures de l'index en même temps ne dupliquent pas les fragments", async () => {
+    const id = "d".repeat(32);
+    fs.mkdirSync(offlineDir(), { recursive: true });
+    fs.writeFileSync(offlineFile(id), FIXTURE);
+    const [one, two] = await Promise.all([offlineIndex(indexJob(id, FIXTURE.length), 0), offlineIndex(indexJob(id, FIXTURE.length), 0)]);
+    // La référence : une lecture seule, sur une entrée neuve (autre génération).
+    const alone = await offlineIndex(indexJob(id, FIXTURE.length, 2), 0);
+    expect(alone.fragments.length).toBeGreaterThan(0);
+    expect(one.fragments).toEqual(alone.fragments);
+    expect(two.fragments).toEqual(alone.fragments);
+  });
+
+  it("l'index ne lit jamais au-delà de ce que le fichier contient", async () => {
+    const id = "e".repeat(32);
+    const cut = Math.floor(FIXTURE.length * 0.6);
+    fs.mkdirSync(offlineDir(), { recursive: true });
+    fs.writeFileSync(offlineFile(id), FIXTURE.subarray(0, cut));
+    // Un compte en avance sur le disque : le reste se lisait en zéros, pris pour des boîtes.
+    const index = await offlineIndex(indexJob(id, FIXTURE.length), 0);
+    expect(index.next).toBeLessThanOrEqual(cut);
+    for (const f of index.fragments) expect(f.offset + f.size).toBeLessThanOrEqual(cut);
   });
 });
