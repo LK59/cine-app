@@ -26,16 +26,18 @@ import type { SessionPayload } from "@/lib/auth";
  * (5 % et 90 %), et le serveur est passé à 2 % et 95 % — ce filet aurait appliqué une autre règle que
  * Jellyfin, la seule qui compte. Les valeurs par défaut ne servent que si Jellyfin ne répond pas.
  */
-const DEFAULT_THRESHOLDS = { min: 5, max: 90 };
+const DEFAULT_THRESHOLDS = { min: 5, max: 90, minDurationSeconds: 300 };
 const THRESHOLDS_TTL_MS = 10 * 60_000;
 
-async function resumeThresholds(): Promise<{ min: number; max: number }> {
+export async function resumeThresholds(): Promise<{ min: number; max: number; minDurationSeconds: number }> {
   try {
     return await withCache("jf:resume-thresholds", THRESHOLDS_TTL_MS, async () => {
       const c = await jellyfin.getServerConfiguration();
       const min = typeof c.MinResumePct === "number" ? c.MinResumePct : DEFAULT_THRESHOLDS.min;
       const max = typeof c.MaxResumePct === "number" ? c.MaxResumePct : DEFAULT_THRESHOLDS.max;
-      return { min, max };
+      // Un titre plus court ne garde jamais de reprise (« durée minimale de reprise » de Jellyfin).
+      const minDurationSeconds = typeof c.MinResumeDurationSeconds === "number" ? c.MinResumeDurationSeconds : DEFAULT_THRESHOLDS.minDurationSeconds;
+      return { min, max, minDurationSeconds };
     });
   } catch {
     return DEFAULT_THRESHOLDS;

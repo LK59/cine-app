@@ -105,6 +105,8 @@ interface Running {
 }
 interface Live {
   running: Map<string, Running>;
+  /** Les index des fragments déjà lus, par version (`offlineIndex`). */
+  indexes: Map<string, { generation: number; initEnd: number; video: import("./fmp4").Fmp4Track | null; fragments: { offset: number; size: number; time: number }[]; next: number }>;
   timers: ReturnType<typeof setInterval>[];
   started: boolean;
 }
@@ -112,7 +114,8 @@ interface Live {
 // aurait sa copie du module (CLAUDE.md, server-cache).
 const LIVE_KEY = Symbol.for("cine-app.offlineJobs");
 const shared = globalThis as typeof globalThis & { [LIVE_KEY]?: Live };
-const live: Live = (shared[LIVE_KEY] ??= { running: new Map(), timers: [], started: false });
+const live: Live = (shared[LIVE_KEY] ??= { running: new Map(), indexes: new Map(), timers: [], started: false });
+live.indexes ??= new Map();
 
 const identity = () => ({ client: "CineApp", device: "Téléchargements", deviceId: DEVICE_ID, version: APP_VERSION });
 
@@ -231,6 +234,7 @@ export function forgetOfflineJob(account: string, id: string): boolean {
 }
 
 function dropJob(id: string): void {
+  live.indexes.delete(id);
   const running = live.running.get(id);
   if (running) running.controller.abort();
   getDb().prepare("DELETE FROM offline_requests WHERE job_id = ?").run(id);
@@ -356,6 +360,50 @@ async function lastFragmentTime(file: string, size: number): Promise<number | nu
   } finally {
     await handle.close();
   }
+}
+
+/**
+ * L'index des fragments d'une version, lu sur le disque du serveur — pour le lecteur d'un
+ * téléchargement en cours (`/api/offline/jobs/<id>/index`). L'appareil le construisait lui-même en
+ * lisant l'en-tête de chaque fragment, par le réseau tant qu'il n'était pas arrivé : des centaines de
+ * petites requêtes en file, et l'ouverture tombait sur « bloqué à l'étape index des fragments »
+ * (Chrome de Louis, 19/10/2026). Ici, quelques millisecondes ; gardé en mémoire et prolongé au fil de
+ * la préparation, à partir de là où on s'était arrêté.
+ */
+export async function offlineIndex(job: OfflineJob, from: number): Promise<{ fragments: { offset: number; size: number; time: number }[]; next: number }> {
+  const file = offlineFile(job.id);
+  const size = job.bytes;
+  const cached = live.indexes.get(job.id);
+  const entry = cached && cached.generation === job.generation ? cached : { generation: job.generation, initEnd: 0, video: null, fragments: [], next: 0 };
+  live.indexes.set(job.id, entry);
+  if (entry.next < size) {
+    const handle = await fs.promises.open(file, "r");
+    try {
+      const read = async (offset: number, length: number) => {
+        const buffer = Buffer.alloc(Math.max(0, Math.min(length, size - offset)));
+        await handle.read(buffer, 0, buffer.length, offset);
+        return new Uint8Array(buffer);
+      };
+      if (!entry.video) {
+        const init = parseInit(await read(0, Math.min(size, 4 * 1024 * 1024)));
+        const video = init?.tracks.find((t) => t.kind === "video");
+        if (init && video) {
+          entry.video = video;
+          entry.initEnd = init.end;
+          entry.next = init.end;
+        }
+      }
+      if (entry.video) {
+        const scanned = await scanFragments(read, entry.next, size, entry.video);
+        entry.fragments.push(...scanned.fragments);
+        entry.next = scanned.next;
+      }
+    } finally {
+      await handle.close();
+    }
+  }
+  const start = entry.fragments.findIndex((f) => f.offset >= from);
+  return { fragments: start < 0 ? [] : entry.fragments.slice(start), next: Math.max(from, entry.next) };
 }
 
 /** Efface les versions que plus personne ne télécharge, et les échecs d'hier. */

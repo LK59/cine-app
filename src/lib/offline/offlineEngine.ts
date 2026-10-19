@@ -21,6 +21,14 @@ export interface OfflineSource {
   available(): number;
   /** Le fichier est-il entier ? */
   complete(): boolean;
+  /**
+   * L'index des fragments à partir d'une position, quand une source sait le donner d'un coup (le
+   * serveur, pour un téléchargement en cours) ; `null` : on l'établit nous-mêmes, sur ce que
+   * `localAvailable` dit être sur l'appareil.
+   */
+  scan?(from: number): Promise<{ fragments: Fmp4Fragment[]; next: number } | null>;
+  /** Ce qui est sur l'appareil, où lire l'index octet par octet reste rapide. */
+  localAvailable?(): number;
 }
 
 export interface OfflineEngineEvents {
@@ -150,7 +158,14 @@ export class OfflineEngine {
   private async rescan(): Promise<void> {
     if (!this.init) return;
     const video = this.init.tracks.find((t) => t.kind === "video")!;
-    const { fragments, next } = await scanFragments((o, l) => this.source.read(o, l), this.scanned, this.source.available(), video);
+    const remote = await this.source.scan?.(this.scanned).catch(() => null);
+    if (remote) {
+      this.fragments.push(...remote.fragments.filter((f) => f.offset >= this.scanned));
+      this.scanned = Math.max(this.scanned, remote.next);
+      return;
+    }
+    const limit = this.source.localAvailable?.() ?? this.source.available();
+    const { fragments, next } = await scanFragments((o, l) => this.source.read(o, l), this.scanned, limit, video);
     this.fragments.push(...fragments);
     this.scanned = next;
   }

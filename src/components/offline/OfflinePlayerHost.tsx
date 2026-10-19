@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle } from "lucide-react";
 import { usePlayback, type PlaybackSession } from "@/components/PlaybackProvider";
@@ -18,6 +18,10 @@ import { deviceStore } from "@/lib/offline/deviceStore";
 import { markOfflineWatched, offlineAccount, offlineDownloadById, saveOfflinePosition, useOfflineDownloads } from "@/lib/offline/downloads";
 import { OfflineEngine } from "@/lib/offline/offlineEngine";
 import { reportClientError } from "@/lib/reportClientError";
+import { usePlaybackSession } from "@/lib/usePlaybackSession";
+import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
+import { refreshAfterPlayback } from "@/lib/swr";
+import { refreshResumeThresholds } from "@/lib/offline/resumeRules";
 
 /**
  * Le lecteur des téléchargements hors ligne (bêta, 19/10/2026) — un hôte à part, voulu par Louis :
@@ -45,6 +49,17 @@ function offlineSourceFor(account: string, id: string, counts: { device: number;
       return d.state === "done" ? d.bytes : Math.max(d.bytes, online() ? d.serverBytes : 0);
     },
     complete: () => offlineDownloadById(id)?.state === "done",
+    localAvailable: local,
+    // Pendant le téléchargement, avec du réseau : l'index d'un coup, lu sur le disque du serveur.
+    // Fini, ou sans réseau : sur l'appareil.
+    scan: async (from: number) => {
+      const d = offlineDownloadById(id);
+      if (!d || d.state === "done" || !online()) return null;
+      const res = await fetch(`/api/offline/jobs/${id}/index?from=${from}`, { cache: "no-store" });
+      if (!res.ok) return null;
+      const body = (await res.json()) as { fragments: { offset: number; size: number; time: number }[]; next: number; generation: number };
+      return body.generation === d.generation ? { fragments: body.fragments, next: body.next } : null;
+    },
     read: async (offset: number, length: number): Promise<Uint8Array> => {
       const have = local();
       const fromDevice = async () => {
@@ -160,7 +175,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
       clearTimeout(openTimer);
       if (pictureTimer) clearTimeout(pictureTimer);
       video.removeEventListener("error", onMediaError);
-      if (video.currentTime > 0) saveOfflinePosition(id, video.currentTime, true);
+      if (video.currentTime > 0) saveOfflinePosition(id, video.currentTime);
       engine.close();
     };
     // Une seule ouverture par séance : la clé de l'hôte change avec elle.
@@ -181,7 +196,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     const onPlay = () => setPlaying(true);
     const onPause = () => {
       setPlaying(false);
-      saveOfflinePosition(id, video.currentTime, true);
+      saveOfflinePosition(id, video.currentTime);
     };
     // Vu jusqu'au bout : noté avec le téléchargement (le téléchargement automatique en efface
     // l'épisode quand le suivant est là — `markOfflineWatched`).
@@ -198,13 +213,40 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     };
   }, [id]);
 
+  // La lecture rapportée à Jellyfin comme par le lecteur en ligne, sous le même nom (« engine ») :
+  // annonce, battements, arrêt — Jellyfin applique lui-même ses seuils de reprise, et la position est
+  // la même des deux côtés, à la seconde (Louis, 19/10/2026). Sans réseau, chaque rapport manqué garde
+  // la position sur l'appareil et part au retour du réseau (`unsentPosition.ts`).
+  const positionRef = useRef(session.resumeAt ?? 0);
+  const getPosition = useCallback(() => positionRef.current, []);
+  const getPaused = useCallback(() => videoRef.current?.paused ?? true, []);
+  const itemId = session.itemId;
+  const reporting = useMemo(
+    () => (ready ? { itemId, playSessionId: `cine-offline-${id}`, mediaSourceId: itemId, playMethod: "DirectPlay" as const, client: PLAYBACK_CLIENTS.engine, announce: true } : null),
+    [ready, itemId, id]
+  );
+  const { stop: stopReporting } = usePlaybackSession(getPosition, reporting, getPaused);
+  useEffect(() => {
+    void refreshResumeThresholds();
+    const video = videoRef.current;
+    if (!video) return;
+    const onTime = () => {
+      if (!video.seeking) positionRef.current = video.currentTime;
+    };
+    video.addEventListener("timeupdate", onTime);
+    return () => video.removeEventListener("timeupdate", onTime);
+  }, []);
+
   const handleClose = useCallback(() => {
     if (closing) return;
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     setClosing(true);
+    const reported = stopReporting();
     const openId = session.openId;
     setTimeout(() => playback.close(openId), 200);
-  }, [closing, playback, session.openId]);
+    // La fiche et « Reprendre » se relisent une fois l'arrêt pris par Jellyfin, comme après le lecteur en ligne.
+    void refreshAfterPlayback(reported, itemId);
+  }, [closing, playback, session.openId, stopReporting, itemId]);
   usePlayerBackClose(handleClose);
 
   const handleExpand = useCallback(() => playback.expand(), [playback]);

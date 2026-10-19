@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 import { deviceStore, deviceStoreSupported, resetDeviceStore } from "./deviceStore";
 import { reportClientError } from "@/lib/reportClientError";
-import { flushUnsentPositions, saveUnsentPosition } from "@/lib/unsentPosition";
+import { applyResumeRules } from "./resumeRules";
 import type { OfflineJob } from "./jobs";
 import type { OfflineCodec, OfflineQuality } from "./quality";
 
@@ -74,8 +74,10 @@ export interface OfflineDownload {
   state: OfflineState;
   error: string | null;
   createdAt: number;
-  /** Où la lecture du fichier téléchargé s'est arrêtée. */
+  /** Où la lecture du fichier téléchargé s'est arrêtée (règle de reprise de Jellyfin appliquée). */
   positionSeconds: number;
+  /** Quand cette position a été notée. */
+  positionAt?: number;
   hasPoster: boolean;
 }
 
@@ -261,15 +263,18 @@ export function removeOfflineDownload(id: string): Promise<void> {
   return removal;
 }
 
-/** Où la lecture du fichier téléchargé s'est arrêtée — gardé avec lui, pour la reprendre. */
-export function saveOfflinePosition(id: string, seconds: number, send = false): void {
-  const updated = patch(id, { positionSeconds: seconds });
-  if (!updated) return;
-  void saveMeta(updated);
-  // Et vers Jellyfin, par le chemin des positions perdues (`unsentPosition.ts`) : gardée sur
-  // l'appareil, envoyée dès qu'il y a du réseau — le serveur ne fait qu'avancer une position.
-  if (seconds > 0) saveUnsentPosition(updated.itemId, seconds);
-  if (send && navigator.onLine !== false) void flushUnsentPositions().catch(() => {});
+/**
+ * Où la lecture du fichier téléchargé s'est arrêtée, selon la règle de reprise de Jellyfin
+ * (`resumeRules.ts`) : la même position que Jellyfin retiendra, à la seconde. Jellyfin, lui, la reçoit
+ * du lecteur hors ligne comme d'un lecteur en ligne (`usePlaybackSession`) — et sans réseau, par le
+ * chemin des positions perdues, dès qu'il revient.
+ */
+export function saveOfflinePosition(id: string, seconds: number): void {
+  const d = offlineDownloadById(id);
+  if (!d) return;
+  const kept = applyResumeRules(seconds, d.runtimeSeconds);
+  const updated = patch(id, { positionSeconds: kept.seconds, positionAt: Date.now(), ...(kept.watched ? { watchedToEnd: true } : {}) });
+  if (updated) void saveMeta(updated);
 }
 
 async function holdWakeLock(on: boolean): Promise<void> {

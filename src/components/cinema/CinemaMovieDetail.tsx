@@ -386,7 +386,7 @@ export function CinemaMovieDetail({
           <div data-detail-actions className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
             {/* Un téléchargement lisible passe en tête, et « Lire » devient « Lire en ligne » (Louis, 19/10/2026). */}
             {offlinePlayable && !fileMissing && (
-              <OfflinePlayButton download={offlinePlayable} onlineResumeTicks={facts.resumeTicks} variant="row" rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`} badgeClassName={MENU_BADGE} />
+              <OfflinePlayButton download={offlinePlayable} onlineResumeTicks={facts.resumeTicks} onlineKnown={facts.resumeKnown} variant="row" rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`} badgeClassName={MENU_BADGE} />
             )}
             <PlayButton
               itemId={item.jellyfinItemId}
@@ -404,7 +404,7 @@ export function CinemaMovieDetail({
               // poster card show the identical "Reprendre - 1h10 restants" wording.
               label={
                 offlinePlayable
-                  ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, facts.resumeTicks), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done").online
+                  ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, facts.resumeTicks, facts.resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done").online
                   : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks)
               }
               // La même ligne que les autres : c'est le sélecteur qui se peint en blanc, pas

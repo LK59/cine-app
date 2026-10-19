@@ -10,6 +10,7 @@ import { useToast } from "@/components/Toast";
 import { fetcher } from "@/lib/swr";
 import { fetchDirectInfo } from "@/lib/directInfo";
 import { formatDurationShort, formatFileSize } from "@/lib/format";
+import { findUnsentPositions } from "@/lib/unsentPosition";
 import { labelAudioTracks } from "@/lib/trackLabel";
 import { normaliseLanguage, trackLanguage } from "@/lib/trackPreferences";
 import { isWebKitEngine } from "@/lib/webkitEngine";
@@ -93,13 +94,18 @@ export function useOfflinePlayable(itemId: string | null | undefined): OfflineDo
  * peint en blanc, elle est la première), le bouton blanc pleine largeur au téléphone.
  */
 /**
- * La reprise partagée entre « Lire le fichier téléchargé » et « Lire en ligne » (Louis, 19/10/2026) :
- * la plus avancée des deux — celle gardée avec le téléchargement, celle de Jellyfin. La position lue
- * hors ligne part vers Jellyfin dès qu'il y a du réseau (`saveOfflinePosition`), et le serveur ne fait
- * qu'avancer une position : les deux finissent d'accord.
+ * La reprise partagée entre « Lire le fichier téléchargé » et « Lire en ligne » (Louis, 19/10/2026 :
+ * « sync à la seconde ») : une seule position. Le lecteur hors ligne rapporte sa lecture à Jellyfin
+ * comme le lecteur en ligne ; Jellyfin fait donc foi dès qu'il est joignable et que rien n'attend
+ * d'être envoyé. Hors ligne, ou tant qu'une position lue hors ligne n'est pas partie, celle de
+ * l'appareil — calculée avec les mêmes seuils (`resumeRules.ts`).
  */
-export function sharedResumeSeconds(download: OfflineDownload, onlineResumeTicks: number | null | undefined): number {
-  return Math.max(download.positionSeconds || 0, onlineResumeTicks ? onlineResumeTicks / 1e7 : 0);
+export function sharedResumeSeconds(download: OfflineDownload, onlineResumeTicks: number | null | undefined, onlineKnown = onlineResumeTicks !== undefined): number {
+  // Une position lue hors ligne qui n'est pas encore partie vers Jellyfin : c'est la plus récente.
+  if (findUnsentPositions().some((p) => p.itemId === download.itemId)) return download.positionSeconds || 0;
+  // Sinon, avec du réseau, ce que Jellyfin sait : la même position que « Lire en ligne », à la seconde.
+  if (onlineKnown && (typeof navigator === "undefined" || navigator.onLine !== false)) return onlineResumeTicks ? onlineResumeTicks / 1e7 : 0;
+  return download.positionSeconds || 0;
 }
 
 /** Les deux libellés, avec le temps restant quand il y a une reprise. */
@@ -123,6 +129,7 @@ export function OfflinePlayButton({
   download,
   variant,
   onlineResumeTicks,
+  onlineKnown,
   rowClassName = "",
   badgeClassName = "",
 }: {
@@ -130,12 +137,14 @@ export function OfflinePlayButton({
   variant: "row" | "wide";
   /** La reprise que Jellyfin connaît pour ce titre, celle que « Lire en ligne » prendrait. */
   onlineResumeTicks?: number | null;
+  /** Jellyfin a-t-il répondu ? Sinon, la position de l'appareil. */
+  onlineKnown?: boolean;
   rowClassName?: string;
   badgeClassName?: string;
 }) {
   const t = useT();
   const playback = usePlayback();
-  const resume = sharedResumeSeconds(download, onlineResumeTicks);
+  const resume = sharedResumeSeconds(download, onlineResumeTicks, onlineKnown);
   const label = offlinePlayLabels(t, resume, download.runtimeSeconds, download.state === "done").offline;
   // Grisé tant qu'il n'y a pas de quoi démarrer (préparation, tout début) ; cliquable ensuite.
   const ready = offlinePlayable(download);
