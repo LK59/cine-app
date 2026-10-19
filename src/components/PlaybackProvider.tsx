@@ -276,18 +276,23 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
    * So the lock is lifted for as long as a film has the whole screen, and asked for again after.
    * Every call is guarded: Safari implements none of this, and a refusal is not a reason for a
    * film to stop.
+   *
+   * Lifted by `lock("any")`, never by `unlock()`: `unlock()` returns to the *default* orientation,
+   * and for an installed app that default is the manifest's — portrait. The film stayed upright on
+   * every Android PWA, auto-rotation on or off (two viewers, 19/10/2026). `any` still follows the
+   * device's own rotation setting.
    */
   useEffect(() => {
     // Typed by hand: the orientation lock is not in the DOM library this project builds against,
     // being a proposal Safari has never implemented — which is exactly the platform where every
     // call below has to be allowed to be missing.
     const orientation = (typeof screen === "undefined" ? undefined : screen.orientation) as
-      | (ScreenOrientation & { lock?: (to: string) => Promise<void>; unlock?: () => void })
+      | (ScreenOrientation & { lock?: (to: string) => Promise<void> })
       | undefined;
     if (!orientation) return;
     const ask = (what: "free" | "portrait") => {
       try {
-        if (what === "free") orientation.unlock?.();
+        if (what === "free") void orientation.lock?.("any")?.catch(() => {});
         else void orientation.lock?.("portrait-primary")?.catch(() => {});
       } catch {
         // Unsupported, or refused outside fullscreen. Nothing here is worth an interruption.
