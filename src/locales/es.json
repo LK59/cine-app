@@ -2404,7 +2404,9 @@
       "resumeDownload": "Reanudar la descarga",
       "pauseShort": "Pausa",
       "resumeShort": "Reanudar",
-      "paused": "En pausa · {pct} %"
+      "paused": "En pausa · {pct} %",
+      "offlineStarved": "Sin conexión: el resto aún no está descargado. La reproducción seguirá cuando vuelva la red.",
+      "removedWhilePlaying": "Esta descarga se ha borrado del dispositivo."
     }
   },
   "cinema": {

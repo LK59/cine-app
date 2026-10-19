@@ -2404,7 +2404,9 @@
       "resumeDownload": "Reprendre le téléchargement",
       "pauseShort": "Pause",
       "resumeShort": "Reprendre",
-      "paused": "En pause · {pct} %"
+      "paused": "En pause · {pct} %",
+      "offlineStarved": "Hors ligne : la suite n'est pas encore téléchargée. La lecture reprendra au retour du réseau.",
+      "removedWhilePlaying": "Ce téléchargement a été supprimé de l'appareil."
     }
   },
   "cinema": {

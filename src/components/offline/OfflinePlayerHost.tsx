@@ -161,7 +161,8 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
       offlineSourceFor(account, id, countsRef.current),
       meta.runtimeSeconds || null,
       {
-        onError: (message) => setError(t("player.downloads.playFailed", { error: message })),
+        // Supprimé pendant la lecture : la fermeture s'en charge (plus bas), sans écran d'erreur.
+        onError: (message) => offlineDownloadById(id) && setError(t("player.downloads.playFailed", { error: message })),
         onBeyond: () => toast.error(t("player.downloads.notReadyYet")),
       }
     );
@@ -170,7 +171,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     // Un échec dit où il s'est produit, à l'écran et au journal (`server.log`, scope client) : les
     // premiers essais sur iPhone et sur Chrome se sont arrêtés sur un écran noir sans rien dire.
     const fail = (message: string) => {
-      if (cancelled) return;
+      if (cancelled || !offlineDownloadById(id)) return;
       setError(t("player.downloads.playFailed", { error: message }));
       reportClientError(new Error(`lecture hors ligne : ${message}`), "component:lecteur-hors-ligne", {
         stage: engine.stage,
@@ -306,6 +307,46 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   usePlayerBackClose(handleClose);
 
   const handleExpand = useCallback(() => playback.expand(), [playback]);
+
+  /**
+   * Supprimé pendant qu'il joue (depuis la page, le mini-lecteur ouvert) : le lecteur se ferme et le
+   * dit. Il lisait encore son tampon quelques secondes, puis s'arrêtait sur une erreur en anglais
+   * (« NotFoundError », iPhone, 19/10/2026). Pas quand c'est lui qui l'a effacé — vu jusqu'au bout,
+   * avec la suite déjà là (`markOfflineWatched`) : la carte « Épisode suivant » est alors à l'écran.
+   */
+  const present = downloads.some((d) => d.id === id);
+  useEffect(() => {
+    if (present || closing || watchedRef.current.marked || !opened) return;
+    toast.info(t("player.downloads.removedWhilePlaying"));
+    handleClose();
+  }, [present, closing, opened, handleClose, toast, t]);
+
+  /**
+   * Hors ligne, au bout de ce qui est sur l'appareil : un message clair plutôt qu'une roue sans fin
+   * (Louis, 19/10/2026). La lecture reprend d'elle-même au retour du réseau — la suite est alors lue
+   * sur le serveur.
+   */
+  const [starved, setStarved] = useState(false);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const check = () => {
+      const d = offlineDownloadById(id);
+      const waiting = !video.paused && video.readyState < 3 && !video.seeking;
+      setStarved(!online && !!d && d.state !== "done" && waiting);
+    };
+    const clear = () => setStarved(false);
+    video.addEventListener("waiting", check);
+    video.addEventListener("stalled", check);
+    video.addEventListener("playing", clear);
+    const timer = setInterval(check, 1500);
+    return () => {
+      video.removeEventListener("waiting", check);
+      video.removeEventListener("stalled", check);
+      video.removeEventListener("playing", clear);
+      clearInterval(timer);
+    };
+  }, [id, online]);
 
   /**
    * « Épisode suivant » d'un épisode téléchargé (§109) : le fichier sur l'appareil s'il est lisible —
@@ -477,6 +518,15 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
             />
           </div>
         )
+      )}
+      {starved && !error && !isMini && (
+        <div
+          role="status"
+          className="pointer-events-none absolute left-1/2 z-30 max-w-[90vw] -translate-x-1/2 animate-fade-in rounded-2xl bg-black/75 px-4 py-2.5 text-center text-sm text-white ring-1 ring-white/10 backdrop-blur-md"
+          style={{ top: "calc(env(safe-area-inset-top, 0px) + 5rem)" }}
+        >
+          {t("player.downloads.offlineStarved")}
+        </div>
       )}
       {!isMini && <SubtitleLayer primary={subs.text} style={subtitleStyle} chromeEdges={chromeEdges} />}
       <PlaybackInfoPanel open={showInfo && !isMini} onClose={() => setShowInfo(false)} data={panel} />

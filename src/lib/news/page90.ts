@@ -28,7 +28,7 @@ export const NEWS_90_CONTENT: NewsContentByLang = {
           {
             icon: "speed",
             title: "Prêt tout de suite",
-            text: "Lancez le film pendant qu'il se télécharge : ce qui n'est pas encore sur l'appareil est lu en ligne.",
+            text: "Lancez le film pendant qu'il se télécharge, sans attendre la fin.",
             badge: "",
           },
           {
@@ -81,7 +81,7 @@ export const NEWS_90_CONTENT: NewsContentByLang = {
           {
             icon: "speed",
             title: "Ready right away",
-            text: "Start the film while it downloads: whatever isn't on your device yet plays online.",
+            text: "Start the film while it downloads, no need to wait for the end.",
             badge: "",
           },
           {
@@ -134,7 +134,7 @@ export const NEWS_90_CONTENT: NewsContentByLang = {
           {
             icon: "speed",
             title: "Listo al instante",
-            text: "Empieza la película mientras se descarga: lo que aún no está en el dispositivo se reproduce en línea.",
+            text: "Empieza la película mientras se descarga, sin esperar a que termine.",
             badge: "",
           },
           {
@@ -187,7 +187,7 @@ export const NEWS_90_CONTENT: NewsContentByLang = {
           {
             icon: "speed",
             title: "Sofort bereit",
-            text: "Starten Sie den Film schon während des Downloads: Was noch nicht auf dem Gerät ist, wird online abgespielt.",
+            text: "Starten Sie den Film schon während des Downloads, ohne auf das Ende zu warten.",
             badge: "",
           },
           {

@@ -9,12 +9,13 @@ import type { OfflineDownload } from "@/lib/offline/downloads";
  * fichier de l'appareil s'il y est, sinon la lecture en ligne.
  */
 const play = vi.fn();
+const closePlayback = vi.fn();
 const nextDownload = vi.fn<(d: OfflineDownload) => Promise<"started">>(async () => "started");
 const markWatched = vi.fn<(id: string) => Promise<void>>(async () => {});
 let list: OfflineDownload[] = [];
 let controls: { nextEpisode: { itemId: string; title: string } | null; onAdvance: () => void } | null = null;
 
-vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "full", play, close: vi.fn(), minimize: vi.fn(), expand: vi.fn() }) }));
+vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "full", play, close: closePlayback, minimize: vi.fn(), expand: vi.fn() }) }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr" }) }));
 vi.mock("@/components/PlayerControls", () => ({
   PlayerControls: (props: { nextEpisode: { itemId: string; title: string } | null; onAdvance: () => void }) => {
@@ -106,6 +107,7 @@ async function mount() {
 
 beforeEach(() => {
   play.mockClear();
+  closePlayback.mockClear();
   nextDownload.mockClear();
   markWatched.mockClear();
   controls = null;
@@ -175,5 +177,24 @@ describe("lecteur hors ligne d'un épisode", () => {
     await mount();
     expect(controls?.nextEpisode).toBeNull();
     online.mockRestore();
+  });
+
+  it("supprimé pendant la lecture : le lecteur se ferme, sans écran d'erreur", async () => {
+    list = [episode("e1", 1)];
+    const { view } = await mount();
+    list = [];
+    view.rerender(<OfflinePlayerHost session={{ itemId: "item-e1", title: "x", offline: { id: "e1" }, openId: 1 }} mode="full" />);
+    await act(async () => new Promise((r) => setTimeout(r, 300)));
+    expect(closePlayback).toHaveBeenCalledWith(1);
+  });
+
+  it("effacé par lui-même en fin d'épisode (la suite est là) : le lecteur reste, sur « Épisode suivant »", async () => {
+    list = [episode("e1", 1)];
+    const { view } = await mount();
+    document.querySelector("video")!.dispatchEvent(new Event("ended"));
+    list = [];
+    view.rerender(<OfflinePlayerHost session={{ itemId: "item-e1", title: "x", offline: { id: "e1" }, openId: 1 }} mode="full" />);
+    await act(async () => new Promise((r) => setTimeout(r, 300)));
+    expect(closePlayback).not.toHaveBeenCalled();
   });
 });

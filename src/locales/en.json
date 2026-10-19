@@ -2404,7 +2404,9 @@
       "resumeDownload": "Resume the download",
       "pauseShort": "Pause",
       "resumeShort": "Resume",
-      "paused": "Paused · {pct}%"
+      "paused": "Paused · {pct}%",
+      "offlineStarved": "Offline: the rest isn't downloaded yet. Playback will resume when the network is back.",
+      "removedWhilePlaying": "This download was removed from the device."
     }
   },
   "cinema": {

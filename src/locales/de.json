@@ -2404,7 +2404,9 @@
       "resumeDownload": "Download fortsetzen",
       "pauseShort": "Pause",
       "resumeShort": "Fortsetzen",
-      "paused": "Pausiert · {pct} %"
+      "paused": "Pausiert · {pct} %",
+      "offlineStarved": "Offline: Der Rest ist noch nicht heruntergeladen. Die Wiedergabe geht weiter, sobald das Netz zurück ist.",
+      "removedWhilePlaying": "Dieser Download wurde vom Gerät gelöscht."
     }
   },
   "cinema": {
