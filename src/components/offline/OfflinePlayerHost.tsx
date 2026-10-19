@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { SubtitleLayer } from "@/components/player/SubtitleLayer";
+import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
+import { useOfflineSubtitles } from "./useOfflineSubtitles";
 import { createPortal } from "react-dom";
 import { AlertTriangle } from "lucide-react";
 import { usePlayback, type PlaybackSession } from "@/components/PlaybackProvider";
@@ -100,6 +103,9 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   const [error, setError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const subs = useOfflineSubtitles(download ?? null, videoRef);
+  const subtitleStyle = useSyncExternalStore(subtitleStyleStore.subscribe, subtitleStyleStore.snapshot, subtitleStyleStore.serverSnapshot);
+  const [chromeEdges, setChromeEdges] = useState<ChromeEdges | null>(null);
   const [panel, setPanel] = useState<PlaybackPanelData | null>(null);
   const countsRef = useRef({ device: 0, server: 0 });
   const engineRef = useRef<OfflineEngine | null>(null);
@@ -370,9 +376,10 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
               audioTracks={[]}
               currentAudioId={null}
               onChangeAudio={() => {}}
-              subtitleTracks={[]}
-              currentSubtitleId={null}
-              onChangeSubtitle={() => {}}
+              subtitleTracks={subs.tracks}
+              currentSubtitleId={subs.current}
+              onChangeSubtitle={subs.choose}
+              onChromeEdges={setChromeEdges}
               hidden={false}
               loading={false}
               introSkip={null}
@@ -383,6 +390,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
           </div>
         )
       )}
+      {!isMini && <SubtitleLayer primary={subs.text} style={subtitleStyle} chromeEdges={chromeEdges} />}
       <PlaybackInfoPanel open={showInfo && !isMini} onClose={() => setShowInfo(false)} data={panel} />
     </div>,
     document.body

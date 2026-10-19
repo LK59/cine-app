@@ -179,6 +179,12 @@ export const deviceStore = {
     return call<number>("writeBytes", [...offlinePaths(account, id), "poster"], { data: copy }, [copy.buffer]);
   },
   readPoster: (account: string, id: string) => call<Blob | null>("readBlob", [...offlinePaths(account, id), "poster"]),
+  /** Un petit fichier rangé à côté du film (sous-titres) : écrit d'un coup, relu en entier. */
+  writeFile: (account: string, id: string, name: string, bytes: Uint8Array) => {
+    const copy = bytes.slice();
+    return call<number>("writeBytes", [...offlinePaths(account, id), name], { data: copy }, [copy.buffer]);
+  },
+  readFile: (account: string, id: string, name: string) => call<Blob | null>("readBlob", [...offlinePaths(account, id), name]),
   /** Écrit à la position donnée du film (une copie transférée : jamais la vue d'un tampon plus grand). */
   writeVideo: (account: string, id: string, at: number, bytes: Uint8Array) => {
     const copy = bytes.slice();

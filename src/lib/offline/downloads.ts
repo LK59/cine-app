@@ -5,6 +5,7 @@ import { persistedCacheAccount } from "@/lib/persistentCache";
 import { deviceStore, deviceStoreSupported, resetDeviceStore } from "./deviceStore";
 import { reportClientError } from "@/lib/reportClientError";
 import { applyResumeRules } from "./resumeRules";
+import { storeOfflineSubtitles, type OfflineSubtitle } from "./subtitles";
 import type { OfflineJob } from "./jobs";
 import type { OfflineCodec, OfflineQuality } from "./quality";
 
@@ -81,6 +82,8 @@ export interface OfflineDownload {
   /** Quand cette position a été notée. */
   positionAt?: number;
   hasPoster: boolean;
+  /** Les sous-titres texte gardés avec le film (`subtitles.ts`). */
+  subtitles?: OfflineSubtitle[];
 }
 
 const CHUNK = 8 * 1024 * 1024;
@@ -224,6 +227,11 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
     emit();
   }
   await saveMeta(download);
+  // Les sous-titres texte, rangés à côté du film (Louis, 19/10/2026).
+  void storeOfflineSubtitles(owner, job.id, request.itemId).then(async (subtitles) => {
+    const updated = patch(job.id, { subtitles });
+    if (updated) await saveMeta(updated);
+  });
   // L'affiche par la route d'images de l'application : celle du catalogue est souvent chez TMDB, d'où
   // `fetch` ne peut rien lire sans CORS (relevé au premier essai réel, 19/10/2026 — aucune affiche gardée).
   {
