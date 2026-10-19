@@ -1,5 +1,6 @@
 "use client";
 
+import { useOfflineSheetOpen } from "@/lib/offline/offlineSheetOpen";
 import { useEffect, useRef } from "react";
 import { useCinemaRoute, useSheetBehind, useSheetLeaving } from "@/lib/cinemaRoute";
 import { useIsShortViewport } from "@/lib/useIsMobile";
@@ -49,7 +50,9 @@ export function PlayerBottomBar() {
   const route = useCinemaRoute();
   // Effacée pendant qu'une fiche est ouverte : elle recouvre l'écran entier, et la barre y
   // flotterait au-dessus d'un contenu qu'elle ne commande pas.
-  const sheetOpen = route.film !== null || route.serie !== null || route.discover !== null || route.person !== null;
+  // La fiche hors ligne n'est pas dans l'adresse : elle se signale elle-même (`offlineSheetOpen.ts`).
+  const offlineSheet = useOfflineSheetOpen();
+  const sheetOpen = route.film !== null || route.serie !== null || route.discover !== null || route.person !== null || offlineSheet;
   // Mais elle revient *avec* la fiche qui sort, pas après : l'adresse ne lâche le titre qu'à la
   // fin de l'animation de sortie, et attendre ce moment mettait les deux mouvements bout à bout.
   // Sauf s'il reste une fiche dessous — c'est elle qu'on découvre, et elle recouvre l'écran.

@@ -5904,6 +5904,25 @@ et la navigation repart de zéro.
   distribution en texte seul (ni liens ni photos : rien ne s'ouvre sans réseau, et le poids reste
   quelques centaines de Ko), puis les épisodes avec vignette et résumé. « Lire » et « Pause » écrits
   en toutes lettres (une icône seule se confondait avec la reprise du téléchargement).
+  Depuis la relecture du 19/10/2026 au soir, **la forme du cinéma, pièce pour pièce** : la fiche
+  (`OfflineTitleSheet.tsx`) prend le cadre et le mouvement des fiches de la bibliothèque
+  (`useSheetTransition` — l'affiche touchée devient la fiche —, `useSwipeToDismiss`, `useSheetExit`,
+  `PhoneSheetTitle`/`CinemaDetailTitle`, `CinemaDetailPages`, `MENU_ROW`), hors de l'adresse (elle vit
+  aussi sur `/hors-ligne`) — la barre du bas du téléphone la lit par `offlineSheetOpen.ts` ; la grille,
+  la carte de Ma liste (`PlayerResultCard`, `overlay`) ; l'état d'un épisode et ses gestes, une seule
+  pièce pour les deux fiches (`DownloadStateButton`) ; les images en adresses `blob:` partagées
+  (`useOfflineImage`), pour que le retour de la fiche retrouve sa carte ; le cadre du lecteur hors ligne,
+  celui du lecteur en ligne (`PLAYER_FRAME_TRANSITION`, fondu et échelle d'arrivée) ; l'interrupteur de
+  l'app (`Toggle`) et son écran vide (`PlayerEmptyState`).
+- *Relecture des défauts (19/10/2026 au soir)* : sauts du lecteur en file, jamais d'ajout ni de vidage
+  pendant une opération du tampon (`offline-engine.test.ts`) ; le stockage n'est relancé que sur ses
+  propres erreurs ; un seul chargement à la fois ; un échec redemandé repart ; une version effacée
+  (Activité) ou expirée n'est plus redemandée en silence — « Réessayer » le fait ; verrou d'écran unique
+  et repris au retour ; retraits non reçus renvoyés ; reprise identique partout (`adoptOnlinePosition`) ;
+  « vu » au seuil de Jellyfin ; sans réseau, seul ce qui est sur l'appareil rend « Lire » possible ; le
+  fichier de l'appareil reste proposé quand la bibliothèque a perdu le sien ; annuler se confirme comme
+  supprimer. Côté serveur : fichier fermé à l'annulation, place comptée avec la file, octets comptés une
+  fois écrits, index sans doublons.
 - *Fiche gardée* : demandée avec le fichier (`/api/offline/details/<id>`, `artwork.ts`) — résumé, année,
   genres, six premiers rôles, logo (`kind=logo`), visuel, affiche de la série pour un épisode ; rattrapée
   au chargement pour les téléchargements d'avant. L'ouverture de la lecture hors ligne en prend le logo
@@ -5919,6 +5938,6 @@ et la navigation repart de zéro.
   défaut), ouvrable à tous d'un geste comme le Chromecast.
 - *Activité* : chaque étape au journal (`scope: "offline"`), les copies du serveur dans le panneau.
 
-Tests : `offline-fmp4`, `offline-trickplay`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`,
+Tests : `offline-fmp4`, `offline-trickplay`, `offline-engine`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`,
 `offline-downloads-page`, `offline-entry`, `serviceWorker-offline-entry`, `offline-page`,
 `proxy-offline-entry`, `cinemaRoute`, `cinemaRoute-normalize`, `playerNav`.

@@ -224,7 +224,9 @@ function PosterCard({
     </>
   );
   return (
-    <li className="animate-fade-in">
+    // `grid` : la carte (un bouton) prend toute la largeur de sa case, comme dans Ma liste où elle est
+    // l'enfant direct de la grille — sinon chaque affiche avait la largeur de son image.
+    <li className="grid animate-fade-in">
       <PlayerResultCard kind={kind} showKind={false} title={title} subtitle={caption} poster={url} onOpen={onShow} overlay={overlay} />
     </li>
   );

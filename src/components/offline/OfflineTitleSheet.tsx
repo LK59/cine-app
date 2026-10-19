@@ -27,6 +27,7 @@ import { BACKDROP_FILE, LOGO_FILE, POSTER_FILE } from "@/lib/offline/artwork";
 import { BetaBadge, OfflinePlayButton, offlinePlayable, offlineProgress, offlineStatusLabel } from "./OfflineDownloadControl";
 import { DownloadStateButton } from "./OfflineEpisodeDownload";
 import { useOfflineImage } from "./useOfflineImage";
+import { setOfflineSheetOpen } from "@/lib/offline/offlineSheetOpen";
 import type { OfflineOpenTarget } from "./OfflineDownloadsView";
 
 /**
@@ -101,6 +102,13 @@ export function OfflineTitleSheet({
     revealed: false,
   });
 
+  // La barre du bas du téléphone s'efface sous la fiche, et revient avec sa sortie.
+  useEffect(() => {
+    if (leaving) return;
+    setOfflineSheetOpen(true);
+    return () => setOfflineSheetOpen(false);
+  }, [leaving]);
+
   // Au bureau : le focus sur la première action, et les flèches dans le menu, comme les fiches.
   useEffect(() => {
     if (!isMobile) focusFirstAction(rootRef.current);
@@ -144,7 +152,9 @@ export function OfflineTitleSheet({
   );
   const metaItems = [year, runtime, ...genres].filter(Boolean) as (string | number)[];
   const episodeList = series && morph.settled && (
-    <div className={isMobile ? "mt-2" : "mx-auto w-full max-w-3xl px-6 pb-16 pt-6 sm:px-10"}>
+    // Au bureau, la seconde page de la fiche, posée sur le visuel : un panneau sombre, sans quoi les
+    // résumés se lisaient sur le milieu clair de l'image.
+    <div className={isMobile ? "mt-2" : "w-full max-w-3xl rounded-2xl bg-black/60 p-5 ring-1 ring-white/10 backdrop-blur-md"}>
       {series.seasons.map((season) => (
         <section key={season.season} className="mb-5">
           <h3 className="mb-2 text-sm font-semibold text-white">{t("player.downloads.season", { n: season.season })}</h3>
