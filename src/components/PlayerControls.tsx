@@ -711,6 +711,17 @@ export function PlayerControls({
    * Le doigt cache la barre : sauter sous lui faisait perdre sa place à qui voulait reculer d'un peu.
    */
   const touchStartRef = useRef<{ x: number; time: number; target: number | null } | null>(null);
+  /**
+   * Ce qui a saisi l'input en dernier — `pointerType` de son pointerdown, ou « keyboard ».
+   *
+   * L'input natif pose sa valeur au point touché, avant que le doigt ait glissé d'un pixel : au
+   * pointerdown sur Chromium, sur la souris que le navigateur rejoue après le touchend sur iOS. Son
+   * `change` passait par `previewSeek`, et la partie lue allait un instant jusqu'au doigt puis revenait
+   * (8.70.0, iPhone, 19/10/2026). Au toucher, la valeur affichée ne vient que de la position relative
+   * (§108) : l'input est ignoré tant que la dernière saisie est un doigt — la souris rejouée ne
+   * produit pas de pointerdown, elle ne le fait donc pas oublier.
+   */
+  const inputPointerRef = useRef<string | null>(null);
   /** Le dernier point du doigt pris en compte — voir `TOUCH_JITTER_PX`. */
   const lastTouchXRef = useRef<number | null>(null);
   /**
@@ -2934,6 +2945,7 @@ export function PlayerControls({
             // rien déplacer ; le glissement déplace la tête d'autant que le doigt, depuis là.
             onTouchStart={(e) => {
               touchDragRef.current = true;
+              inputPointerRef.current = "touch";
               const x = e.touches[0].clientX;
               lastTouchXRef.current = x;
               touchStartRef.current = { x, time: currentTime, target: null };
@@ -3097,7 +3109,11 @@ export function PlayerControls({
               // Sauf sous la souris, où l'action par défaut de l'input passe après le mousemove
               // du conteneur et remettrait sa propre valeur par-dessus (voir mouseDragRef).
               onChange={(e) => {
+                if (inputPointerRef.current === "touch") return;
                 if (!mouseDragRef.current && !touchDragRef.current) previewSeek(Number(e.target.value));
+              }}
+              onPointerDown={(e) => {
+                inputPointerRef.current = e.pointerType;
               }}
               onMouseDown={(e) => {
                 // L'écho d'un toucher que le conteneur a déjà validé (voir lastTouchEndRef).
@@ -3146,6 +3162,7 @@ export function PlayerControls({
               // venait (chasse aux défauts du 13/10/2026). Retenue ici aussi pour qu'un lecteur
               // suspendu, dont la fenêtre ignore les touches, ne laisse pas l'input bouger seul.
               onKeyDown={(e) => {
+                inputPointerRef.current = "keyboard";
                 if (e.key === "ArrowLeft" || e.key === "ArrowRight") e.preventDefault();
               }}
               // h-5 (20px), not h-1: the native range control keeps its visual groove thin and

@@ -5750,3 +5750,9 @@ clavier : la partie blanche s'épaissit (8 → 12 px) quand on la saisit, comme 
 natif de l'input garde sa taille mais n'est jamais dessiné (`::-webkit-slider-thumb`, `::-moz-range-thumb`,
 transparents à `opacity: 0` dans tous les états) ; le contour `:focus-visible` reste pour le clavier
 (`seek-bar-no-thumb.test.ts`).
+
+**Rien de l'input au doigt (8.70.1, même jour).** L'input natif pose sa valeur au point touché (pointerdown
+sur Chromium, souris rejouée après le touchend sur iOS) ; son `change` faisait aller la partie lue jusqu'au
+doigt un instant, sans saut. `inputPointerRef` retient ce qui a saisi l'input en dernier (`pointerType`,
+`keyboard`) : tant que c'est un doigt, son `change` est ignoré — la position affichée ne vient que du
+glissement relatif. La souris rejouée n'émet pas de pointerdown et ne l'efface donc pas.

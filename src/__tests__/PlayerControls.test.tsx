@@ -247,6 +247,40 @@ describe("PlayerControls — la barre de progression", () => {
     expect(video!.currentTime).toBeCloseTo(960, 0);
   });
 
+  it("au doigt, un toucher sans glisser ne fait jamais aller la partie lue jusqu'au doigt (8.70.1)", async () => {
+    // Retour de Louis sur iPhone (8.70.0) : la lecture ne sautait pas, mais la partie blanche allait un
+    // instant jusqu'au doigt puis revenait. L'input natif pose sa valeur au point touché — au pointerdown
+    // sur Chromium, sur la souris rejouée après le touchend sur iOS — et son `change` passait par
+    // `previewSeek`. Au toucher, la valeur affichée ne vient que de la position relative (§108).
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    const input = container.querySelector(".player-seek") as HTMLInputElement;
+    await withDuration(video!, bar);
+    video!.currentTime = 600;
+    await act(async () => void video!.dispatchEvent(new Event("timeupdate")));
+    const played = () => input.style.getPropertyValue("--played");
+    const at600 = played();
+    expect(parseFloat(at600)).toBeCloseTo((600 / 3600) * 100, 1);
+
+    // Le doigt posé aux trois quarts : le pointerdown d'abord, et l'input natif qui prend la valeur du doigt.
+    await act(async () => void fireEvent.pointerDown(input, { pointerType: "touch", clientX: 150 }));
+    await act(async () => void fireEvent.change(input, { target: { value: "2700" } }));
+    expect(played()).toBe(at600);
+    await act(async () => void fireEvent.touchStart(input, { touches: [{ clientX: 150 }] }));
+    await act(async () => void fireEvent.change(input, { target: { value: "2700" } }));
+    expect(played()).toBe(at600);
+    await act(async () => void fireEvent.touchEnd(input));
+    // La souris que le navigateur rejoue au point levé, et l'action par défaut de l'input qui s'ensuit.
+    await act(async () => void fireEvent.mouseDown(input, { clientX: 150 }));
+    await act(async () => void fireEvent.change(input, { target: { value: "2700" } }));
+    await act(async () => void fireEvent.mouseUp(input, { clientX: 150 }));
+    expect(played()).toBe(at600);
+    expect(video!.currentTime).toBe(600);
+  });
+
   it("à la souris, saute là où est le curseur, pas là où l'input l'a placé", async () => {
     // L'input natif ne compte pas la demi-pastille à chaque bout : sa valeur, pour un même
     // pixel, tombe avant ce que la vignette annonce — neuf secondes au début d'un épisode de
