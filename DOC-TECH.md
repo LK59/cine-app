@@ -1743,7 +1743,7 @@ Playwright: still frozen under « hors ligne » after 5 min 30). The player mark
 and since 15/10/2026 bounds the cut itself (`NETWORK_OUTAGE_GIVE_UP_MS`, 48 s from the first sign — the first
 request without an answer or the first network fatal —, cleared by the next buffered fragment): at the
 deadline hls.js is stopped and detached and « La lecture a été interrompue… » is shown, ~48 s as with 1.5.17
-(Louis's decision). A shorter cut still resumes on its own; « Réessayer » restarts at the position the picture
+(a deliberate choice). A shorter cut still resumes on its own; « Réessayer » restarts at the position the picture
 froze at (`lastKnownTime`). hls.js's own load policies are left as they are: lowering `fragLoadPolicy.errorRetry`
 does not end the offline wait (taken whenever `maxNumRetry` > 0 on a single-variant stream), and zero would also
 drop hls.js's silent retries of a passing HTTP error. Our six relaunches (45 s) keep the hand where hls.js does
