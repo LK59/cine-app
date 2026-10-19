@@ -3,15 +3,17 @@ import type { NewsContentByLang } from "./content";
 /**
  * La page « 9.0 » — le téléchargement pour regarder hors ligne (DECISIONS.md §109), préparée à la
  * demande de Louis le 19/10/2026 : présentée comme un tout nouveau système, pour le visionnage sans
- * réseau ou quand la connexion faiblit, avec ses fonctions phares. Semée **en brouillon** : Louis la
- * publie lui-même depuis Activité → Nouveautés, le jour où la fonction est ouverte à tous (la version
- * et le texte s'y retouchent).
+ * réseau ou quand la connexion faiblit, avec ses fonctions phares. Semée en brouillon le 19/10, publiée
+ * pour toutes les installations et tous les comptes le 20/10 (`publishNewsDraft`, db.ts), le jour où la
+ * fonction s'ouvre à tous.
  *
  * Ne pas y mentionner les titres masqués (voulu par Louis), ni rien de la fabrication interne.
  */
 export const NEWS_90_VERSION = "9.0";
 /** Le marqueur dans `migrations_done` : posé une fois, la page n'est plus jamais réécrite. */
 export const NEWS_90_SEED = "news-seed-9.0-telechargements";
+/** La publication pour tous (20/10/2026), une fois : `publishNewsDraft`, db.ts. */
+export const NEWS_90_PUBLISH = "news-publish-9.0-telechargements";
 
 export const NEWS_90_CONTENT: NewsContentByLang = {
   fr: {

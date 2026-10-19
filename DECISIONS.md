@@ -5943,8 +5943,10 @@ et la navigation repart de zéro.
 - *Déconnexion* (20/10/2026) : avec des téléchargements de ce compte sur l'appareil, les trois boutons
   « Se déconnecter » (`useSignOut`) demandent d'abord : les garder (retrouvés à la reconnexion) ou les
   effacer (`removeAccountDownloads` : demandes retirées au serveur, dossier du compte effacé).
-- *Accès* : administrateurs seulement le temps de la bêta (`OFFLINE_DOWNLOADS_FOR_EVERYONE`, faux par
-  défaut), ouvrable à tous d'un geste comme le Chromecast.
+- *Accès* : ouvert à tous les comptes depuis le 20/10/2026 (`OFFLINE_DOWNLOADS_FOR_EVERYONE`, vrai par
+  défaut ; administrateurs seulement pendant les premiers essais), refermable aux administrateurs d'un
+  geste comme le Chromecast. Le label « Bêta » reste. Page Nouveautés « 9.0 » publiée pour toutes les
+  installations (`publishNewsDraft`).
 - *Activité* : chaque étape au journal (`scope: "offline"`), les copies du serveur dans le panneau.
 
 Tests : `offline-fmp4`, `offline-trickplay`, `offline-engine`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`,

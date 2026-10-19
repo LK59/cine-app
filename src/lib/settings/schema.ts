@@ -95,9 +95,9 @@ export const SETTINGS: readonly SettingDef[] = [
   // Le téléchargement hors ligne dans l'application (bêta, 19/10/2026) : Jellyfin prépare une version
   // légère, l'appareil la garde. Ouvert à tous les comptes ; coupé ici pour toute l'installation.
   { key: "OFFLINE_DOWNLOADS", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
-  // Le temps de la bêta, administrateurs seulement (Louis, 19/10/2026) ; ouvert à tous les comptes
-  // d'un geste ici, comme le Chromecast.
-  { key: "OFFLINE_DOWNLOADS_FOR_EVERYONE", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  // Ouvert à tous les comptes par défaut depuis le 20/10/2026 (administrateurs seulement pendant les
+  // premiers essais, du 19 au 20/10) ; refermé aux administrateurs d'un geste ici, comme le Chromecast.
+  { key: "OFFLINE_DOWNLOADS_FOR_EVERYONE", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   // La place que les versions préparées peuvent prendre sur le serveur, en Go (20/10/2026) : au-delà,
   // les plus anciennes que tous les appareils ont entièrement récupérées s'effacent (`jobs.ts`).
   { key: "OFFLINE_SERVER_QUOTA_GB", group: "playback", kind: "number", need: "optional", fallback: "50", inApp: true, placeholder: "50" },

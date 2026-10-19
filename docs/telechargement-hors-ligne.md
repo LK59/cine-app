@@ -166,7 +166,7 @@ préparation en cours), `/api/offline/details/<id>` (la fiche et les repères),
   | Variable | Défaut | Rôle |
   |---|---|---|
   | `OFFLINE_DOWNLOADS` | `true` | Active la fonctionnalité pour l'installation. Coupée : ni bouton ni préparation. |
-  | `OFFLINE_DOWNLOADS_FOR_EVERYONE` | `false` | `false` : administrateurs seulement, le temps de la bêta. `true` : tous les comptes. |
+  | `OFFLINE_DOWNLOADS_FOR_EVERYONE` | `true` | `true` : tous les comptes. `false` : administrateurs seulement. |
   | `OFFLINE_SERVER_QUOTA_GB` | `50` | Place totale des copies sur le serveur avant effacement des plus anciennes déjà récupérées. |
 
 - **Activité.** Une vue *Téléchargements* liste les copies du serveur (prêtes, en préparation, en

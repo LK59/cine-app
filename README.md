@@ -285,8 +285,8 @@ the next episode on its own and drop the ones already watched.
 A downloads page (the round button beside the home rows) lists what is on the device and how much
 room it takes. Without a network, the app opens on `/hors-ligne`, which plays those files with
 nothing asked of the server; positions reach Jellyfin when the network comes back. The app must
-stay in the foreground while a download arrives. Off for an installation with `OFFLINE_DOWNLOADS`,
-administrators only until `OFFLINE_DOWNLOADS_FOR_EVERYONE` is set — see
+stay in the foreground while a download arrives. Open to every account by default; off for an
+installation with `OFFLINE_DOWNLOADS`, administrators only with `OFFLINE_DOWNLOADS_FOR_EVERYONE=false` — see
 [docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md) (in French).
 
 ## Keyboard and remote

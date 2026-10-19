@@ -126,9 +126,9 @@ export const config = {
     get offlineDownloads() {
       return optional("OFFLINE_DOWNLOADS", "true") === "true";
     },
-    // Ouvert à tous les comptes, ou aux administrateurs seulement (le défaut, le temps de la bêta).
+    // Ouvert à tous les comptes (le défaut depuis le 20/10/2026), ou aux administrateurs seulement.
     get offlineDownloadsForEveryone() {
-      return optional("OFFLINE_DOWNLOADS_FOR_EVERYONE", "false") === "true";
+      return optional("OFFLINE_DOWNLOADS_FOR_EVERYONE", "true") === "true";
     },
     // La place maximale des versions préparées sur le serveur, en octets (réglage en Go, 50 par défaut).
     get offlineServerQuotaBytes() {

@@ -372,8 +372,8 @@ a network. Jellyfin prepares a lighter version through its transcoding API (720p
 or 1080p at about 4 Mbit/s), so it costs Jellyfin CPU, like the server player. No media folder needs mounting: the copy is written to
 `data/offline/`, fetched by the device into the browser's storage, and deleted from the server three
 days after its last download. Copies fully fetched by every device are also deleted, oldest first,
-once the total passes the server quota (50 GB by default). Administrators only until *for everyone*
-is turned on. **Account activity → Downloads** lists the server's copies and can delete one. Details,
+once the total passes the server quota (50 GB by default). Open to every account by default, or to
+administrators only when *for everyone* is turned off. **Account activity → Downloads** lists the server's copies and can delete one. Details,
 in French: [docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md).
 
 **Notifications.** The push keys are generated on first launch; nothing to set. Each person turns

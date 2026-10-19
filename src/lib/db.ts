@@ -8,7 +8,7 @@ import { INITIAL_NEWS_CONTENT, INITIAL_NEWS_SEED, INITIAL_NEWS_VERSION } from "@
 import type { NewsContentByLang } from "@/lib/news/content";
 import { NEWS_848_CONTENT, NEWS_848_SEED, NEWS_848_VERSION } from "@/lib/news/page848";
 import { NEWS_864_CONTENT, NEWS_864_SEED, NEWS_864_VERSION } from "@/lib/news/page864";
-import { NEWS_90_CONTENT, NEWS_90_SEED, NEWS_90_VERSION } from "@/lib/news/page90";
+import { NEWS_90_CONTENT, NEWS_90_PUBLISH, NEWS_90_SEED, NEWS_90_VERSION } from "@/lib/news/page90";
 import { NEWS_8672_CONTENT, NEWS_8672_FIRST_VERSION, NEWS_8672_REPUBLISH, NEWS_8672_SEED, NEWS_8672_VERSION } from "@/lib/news/page8672";
 
 // Réexporté, et défini ailleurs : le journal des erreurs a besoin du chemin et ne doit rien
@@ -589,9 +589,10 @@ function migrate(db: Database.Database): void {
   seedNewsPage(db, NEWS_8672_SEED, NEWS_8672_VERSION, NEWS_8672_CONTENT);
   // Complétée le lendemain (la rotation en paysage) et montrée de nouveau à tous (Louis, 19/10/2026).
   republishNewsPage(db, NEWS_8672_REPUBLISH, NEWS_8672_FIRST_VERSION, NEWS_8672_VERSION, NEWS_8672_CONTENT);
-  // Le téléchargement hors ligne (§109), en brouillon : Louis la publie depuis Activité → Nouveautés le
-  // jour où la fonction est ouverte à tous (19/10/2026).
+  // Le téléchargement hors ligne (§109) : semée en brouillon le 19/10/2026, publiée pour toutes les
+  // installations et tous les comptes le 20/10, le jour où la fonction s'ouvre à tous.
   seedNewsPage(db, NEWS_90_SEED, NEWS_90_VERSION, NEWS_90_CONTENT, Date.now(), "draft");
+  publishNewsDraft(db, NEWS_90_PUBLISH, NEWS_90_VERSION, NEWS_90_CONTENT);
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
     const now = Date.now();
     db.prepare("INSERT OR IGNORE INTO onboarding (user_name, pending, updated_at) VALUES ('louis', 1, ?)").run(now);
@@ -677,6 +678,32 @@ export function republishNewsPage(
         now,
         now,
         page.id
+      );
+    }
+    db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(marker, now);
+  })();
+}
+
+/**
+ * Une page semée en brouillon par `seedNewsPage`, publiée plus tard par le code : son brouillon prend
+ * le contenu du code (une retouche de l'administrateur entre-temps est remplacée) et le numéro
+ * suivant, donc chaque compte l'a à voir. Une installation qui n'a pas le brouillon (effacé à la main)
+ * ne reçoit rien : effacer, c'était refuser la page. Une fois, par son marqueur.
+ */
+export function publishNewsDraft(db: Database.Database, marker: string, version: string, content: NewsContentByLang, now = Date.now()): void {
+  if (db.prepare("SELECT 1 FROM migrations_done WHERE name = ?").get(marker)) return;
+  db.transaction(() => {
+    const draft = db
+      .prepare("SELECT id FROM news_pages WHERE version = ? AND status = 'draft' ORDER BY id DESC LIMIT 1")
+      .get(version) as { id: number } | undefined;
+    if (draft) {
+      const max = (db.prepare("SELECT COALESCE(MAX(seq), 0) AS m FROM news_pages").get() as { m: number }).m;
+      db.prepare("UPDATE news_pages SET content = ?, status = 'published', seq = ?, published_at = ?, updated_at = ? WHERE id = ?").run(
+        JSON.stringify(content),
+        max + 1,
+        now,
+        now,
+        draft.id
       );
     }
     db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(marker, now);
