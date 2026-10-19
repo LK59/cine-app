@@ -192,9 +192,11 @@ export function CinemaEpisodeBrowser({
             trois-quarts de rem, comme la fenêtre des panneaux ; opaque, parce que la liste d'à côté
             défile. Le fond seul est arrondi, et c'est une zone intérieure, retirée des coins, qui
             défile : un arrondi qui découpe ce qui défile se recalcule à chaque image (même leçon
-            que la fenêtre des panneaux). */}
-        <div className="float-surface mb-3 ml-3 flex w-56 shrink-0 rounded-2xl sm:w-64">
-        <div className="scrollbar-thin my-1.5 min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-1.5">
+            que la fenêtre des panneaux). À la hauteur de ses saisons (Louis, 19/10/2026) : étirée sur
+            toute la page, elle laissait un grand cadre vide sous quatre saisons ; plafonnée à la page,
+            elle défile au-delà. */}
+        <div className="float-surface mb-3 ml-3 flex max-h-[calc(100%-0.75rem)] w-56 shrink-0 self-start rounded-2xl sm:w-64">
+        <div className="scrollbar-thin my-1.5 min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1.5">
           <p className="mb-3 truncate px-2 text-sm font-medium text-muted">{title}</p>
           {seasonNumbers.map((seasonNumber) => {
             const active = seasonNumber === selectedSeason;

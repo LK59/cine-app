@@ -241,7 +241,6 @@ function OfflineChoiceSheet({ open, onClose, itemId, radarrId, title, year, post
       title,
       year,
       runtimeSeconds,
-      posterUrl,
       audioIndex: track.index,
       audioLabel: track.label,
       audioTracks: tracks.map(({ index, label }) => ({ index, label })),

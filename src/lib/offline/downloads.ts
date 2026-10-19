@@ -138,7 +138,6 @@ export interface OfflineRequest {
   title: string;
   year: number | null;
   runtimeSeconds: number;
-  posterUrl: string | null;
   audioIndex: number;
   audioLabel: string;
   audioTracks: { index: number; label: string }[];
@@ -192,8 +191,10 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
     emit();
   }
   await saveMeta(download);
-  if (request.posterUrl) {
-    void fetch(request.posterUrl)
+  // L'affiche par la route d'images de l'application : celle du catalogue est souvent chez TMDB, d'où
+  // `fetch` ne peut rien lire sans CORS (relevé au premier essai réel, 19/10/2026 — aucune affiche gardée).
+  {
+    void fetch(`/api/jellyfin/image?itemId=${encodeURIComponent(request.itemId)}&kind=poster`)
       .then((r) => (r.ok ? r.arrayBuffer() : null))
       .then(async (buffer) => {
         if (!buffer || !account) return;
