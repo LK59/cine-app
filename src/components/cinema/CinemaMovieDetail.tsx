@@ -28,7 +28,7 @@ import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
-import { OfflineDownloadControl } from "@/components/offline/OfflineDownloadControl";
+import { OfflineDownloadControl, OfflinePlayButton, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
@@ -121,6 +121,7 @@ export function CinemaMovieDetail({
   );
   // Grisé seulement si Jellyfin a répondu que le fichier n'existe plus — voir `missingFiles.ts`.
   const fileMissing = useFileMissing(item.jellyfinItemId);
+  const offlinePlayable = useOfflinePlayable(item.jellyfinItemId);
   // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
   usePlaybackPrefetch(item.jellyfinItemId);
   // Without this, Vu/À voir always opened looking un-toggled even for a title already on the
@@ -383,6 +384,10 @@ export function CinemaMovieDetail({
           {/* Plus étroit que le texte au-dessus, sans être une colonne à part : deux tiers de
               la largeur du bloc — voir MENU_STYLE. */}
           <div data-detail-actions className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
+            {/* Un téléchargement lisible passe en tête, et « Lire » devient « Lire en ligne » (Louis, 19/10/2026). */}
+            {offlinePlayable && !fileMissing && (
+              <OfflinePlayButton download={offlinePlayable} variant="row" rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`} badgeClassName={MENU_BADGE} />
+            )}
             <PlayButton
               itemId={item.jellyfinItemId}
               title={item.title}
@@ -397,7 +402,7 @@ export function CinemaMovieDetail({
               // Same override as CinemaSeriesDetail's own Play button — see its doc comment —
               // so a movie opened from the Continue Watching row and one opened from its own
               // poster card show the identical "Reprendre - 1h10 restants" wording.
-              label={formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks)}
+              label={offlinePlayable ? t("player.downloads.playOnline") : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks)}
               // La même ligne que les autres : c'est le sélecteur qui se peint en blanc, pas
               // elle. Deux blancs à l'écran — un fixe et un mobile — se disputaient le sens.
               className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}

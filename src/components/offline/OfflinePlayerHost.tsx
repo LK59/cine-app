@@ -12,7 +12,7 @@ import { useToast } from "@/components/Toast";
 import { usePlayerBackClose } from "@/lib/playerHistory";
 import { usePlayerFocus } from "@/lib/usePlayerFocus";
 import { deviceStore } from "@/lib/offline/deviceStore";
-import { offlineAccount, offlineDownloadById, saveOfflinePosition } from "@/lib/offline/downloads";
+import { markOfflineWatched, offlineAccount, offlineDownloadById, saveOfflinePosition, useOfflineDownloads } from "@/lib/offline/downloads";
 import { OfflineEngine } from "@/lib/offline/offlineEngine";
 
 /**
@@ -25,12 +25,43 @@ import { OfflineEngine } from "@/lib/offline/offlineEngine";
  * autre propose la lecture en ligne à la même position — ou dit qu'on est hors ligne. La position
  * est gardée avec le téléchargement (`saveOfflinePosition`), pas encore renvoyée à Jellyfin.
  */
+/**
+ * Le fichier tel que le lecteur le lit : ce qui est sur l'appareil d'abord, et pendant le
+ * téléchargement, avec du réseau, la suite depuis la copie du serveur — les mêmes octets
+ * (`/api/offline/jobs/<id>/file`, bornés à ce qui est écrit). Demandé par Louis le 19/10/2026 : lire
+ * le fichier téléchargé avant qu'il soit fini. Sans réseau, seulement ce qui est arrivé.
+ */
+function offlineSourceFor(account: string, id: string) {
+  const local = () => offlineDownloadById(id)?.bytes ?? 0;
+  const online = () => typeof navigator === "undefined" || navigator.onLine !== false;
+  return {
+    available: () => {
+      const d = offlineDownloadById(id);
+      if (!d) return 0;
+      return d.state === "done" ? d.bytes : Math.max(d.bytes, online() ? d.serverBytes : 0);
+    },
+    complete: () => offlineDownloadById(id)?.state === "done",
+    read: async (offset: number, length: number): Promise<Uint8Array> => {
+      const have = local();
+      if (offset + length <= have || !online()) return deviceStore.readVideo(account, id, offset, length);
+      try {
+        const res = await fetch(`/api/offline/jobs/${id}/file`, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, cache: "no-store" });
+        if (res.status === 206) return new Uint8Array(await res.arrayBuffer());
+      } catch {
+        /* réseau perdu en route : ce que l'appareil a */
+      }
+      return deviceStore.readVideo(account, id, offset, length);
+    },
+  };
+}
+
 export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession; mode: "full" | "mini" }) {
   const t = useT();
   const toast = useToast();
   const playback = usePlayback();
   const id = session.offline!.id;
-  const download = offlineDownloadById(id);
+  // Suivi en direct : la barre montre ce qui arrive pendant la lecture d'un téléchargement en cours.
+  const download = useOfflineDownloads().find((d) => d.id === id) ?? offlineDownloadById(id);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);
@@ -51,11 +82,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     }
     const engine = new OfflineEngine(
       video,
-      {
-        read: (offset, length) => deviceStore.readVideo(account, id, offset, length),
-        available: () => offlineDownloadById(id)?.bytes ?? 0,
-        complete: () => offlineDownloadById(id)?.state === "done",
-      },
+      offlineSourceFor(account, id),
       meta.runtimeSeconds || null,
       { onError: (message) => setError(t("player.downloads.playFailed", { error: message })) }
     );
@@ -96,7 +123,9 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
       setPlaying(false);
       saveOfflinePosition(id, video.currentTime);
     };
-    const onEnded = () => saveOfflinePosition(id, 0);
+    // Vu jusqu'au bout : noté avec le téléchargement (le téléchargement automatique en efface
+    // l'épisode quand le suivant est là — `markOfflineWatched`).
+    const onEnded = () => void markOfflineWatched(id);
     video.addEventListener("timeupdate", onTime);
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
@@ -198,6 +227,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
           <div className="absolute inset-0 z-10">
             <PlayerControls
               lab
+              downloadedFraction={download ? (download.state === "done" ? 1 : download.bytes / Math.max(1, download.expectedBytes)) : undefined}
               videoRef={videoRef}
               containerRef={containerRef}
               itemId={session.itemId}

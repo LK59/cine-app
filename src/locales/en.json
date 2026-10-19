@@ -2310,7 +2310,8 @@
       "audioOffline": "Audio track not available: you are offline.",
       "switchOnline": "Switch to online playback to hear this audio track?",
       "switchOnlineConfirm": "Play online",
-      "playFailed": "The downloaded file could not be played: {error}"
+      "playFailed": "The downloaded file could not be played: {error}",
+      "playOnline": "Play online"
     }
   },
   "cinema": {

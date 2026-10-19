@@ -2310,7 +2310,8 @@
       "audioOffline": "Tonspur nicht verfügbar: Sie sind offline.",
       "switchOnline": "Zur Online-Wiedergabe wechseln, um diese Tonspur zu hören?",
       "switchOnlineConfirm": "Online abspielen",
-      "playFailed": "Die heruntergeladene Datei konnte nicht abgespielt werden: {error}"
+      "playFailed": "Die heruntergeladene Datei konnte nicht abgespielt werden: {error}",
+      "playOnline": "Online abspielen"
     }
   },
   "cinema": {

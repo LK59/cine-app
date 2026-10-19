@@ -72,6 +72,49 @@ interface Props extends OfflineTitle {
   wideSpacing?: string;
 }
 
+/** Lisible : fini, ou dont le début est là — sur l'appareil, ou sur le serveur avec du réseau. */
+export function offlinePlayable(d: OfflineDownload): boolean {
+  return d.state === "done" || (d.state === "downloading" && Math.max(d.bytes, d.serverBytes) > 4 * 1024 * 1024);
+}
+
+/**
+ * Le téléchargement lisible d'un titre, s'il y en a un — ce qui fait passer « Lire » à « Lire en
+ * ligne » et met « Lire le fichier téléchargé » en tête de la fiche (Louis, 19/10/2026).
+ */
+export function useOfflinePlayable(itemId: string | null | undefined): OfflineDownload | null {
+  const enabled = useOfflineDownloadsEnabled();
+  const download = useOfflineDownloadFor(itemId);
+  return enabled && download && offlinePlayable(download) ? download : null;
+}
+
+/**
+ * « Lire le fichier téléchargé », en tête de la fiche : la ligne du menu au bureau (le sélecteur la
+ * peint en blanc, elle est la première), le bouton blanc pleine largeur au téléphone.
+ */
+export function OfflinePlayButton({ download, variant, rowClassName = "", badgeClassName = "" }: { download: OfflineDownload; variant: "row" | "wide"; rowClassName?: string; badgeClassName?: string }) {
+  const t = useT();
+  const playback = usePlayback();
+  const play = () => playback.play({ itemId: download.itemId, title: download.title, resumeAt: download.positionSeconds, offline: { id: download.id } });
+  return variant === "row" ? (
+    <button type="button" data-detail-menu onClick={play} className={rowClassName}>
+      <span className={badgeClassName}>
+        <Play size={14} fill="currentColor" />
+      </span>
+      <span className="text-sm font-medium">{t("player.downloads.playDownloaded")}</span>
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={play}
+      data-liquid-pan="wide"
+      className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink"
+    >
+      <Play size={18} fill="currentColor" />
+      {t("player.downloads.playDownloaded")}
+    </button>
+  );
+}
+
 export function offlineProgress(d: OfflineDownload): number {
   return d.expectedBytes > 0 ? Math.min(99, Math.floor((d.bytes / d.expectedBytes) * 100)) : 0;
 }
@@ -107,18 +150,17 @@ function OfflineDownloadControlOn({ variant, rowClassName = "", badgeClassName =
   let icon = <Download size={variant === "row" ? 14 : 16} />;
   let label = t("player.downloads.download");
   let onClick = () => setChoosing(true);
-  if (download?.state === "done") {
-    icon = <Play size={variant === "row" ? 14 : 16} fill="currentColor" />;
-    label = t("player.downloads.playDownloaded");
-    onClick = () => playDownloaded(download);
-  } else if (download) {
+  if (download) {
     icon = download.state === "failed" ? <AlertTriangle size={variant === "row" ? 14 : 16} /> : <ProgressRing value={offlineProgress(download)} size={variant === "row" ? 14 : 16} />;
     label = offlineStatusLabel(download, t);
     onClick = () => setManaging(true);
   }
 
+  const earlyPlayable = download && offlinePlayable(download) && download.state !== "done" ? download : null;
+
   const manageActions: SheetAction[] = download
     ? [
+        ...(earlyPlayable ? [{ label: t("player.downloads.playDownloaded"), icon: <Play size={18} />, onClick: () => playDownloaded(earlyPlayable) }] : []),
         ...(download.state === "failed"
           ? [{ label: t("player.downloads.retry"), icon: <RotateCcw size={18} />, onClick: () => void removeOfflineDownload(download.id).then(() => setChoosing(true)) }]
           : []),
@@ -132,13 +174,17 @@ function OfflineDownloadControlOn({ variant, rowClassName = "", badgeClassName =
       ]
     : [];
 
+  // Fini : la ligne disparaît — « Lire le fichier téléchargé » a pris la tête de la fiche
+  // (`OfflinePlayButton`), et le gestionnaire s'occupe de la suppression.
+  if (download?.state === "done") return null;
+
   return (
     <>
       {variant === "row" ? (
         <button type="button" data-detail-menu onClick={onClick} className={rowClassName}>
           <span className={badgeClassName}>{icon}</span>
           <span className="text-sm font-medium">{label}</span>
-          {download?.state !== "done" && <BetaBadge />}
+          <BetaBadge />
         </button>
       ) : (
         <button
@@ -149,7 +195,7 @@ function OfflineDownloadControlOn({ variant, rowClassName = "", badgeClassName =
         >
           {icon}
           {label}
-          {download?.state !== "done" && <BetaBadge />}
+          <BetaBadge />
         </button>
       )}
       <OfflineChoiceSheet open={choosing} onClose={() => setChoosing(false)} {...title} />

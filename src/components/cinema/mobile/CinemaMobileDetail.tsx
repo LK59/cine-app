@@ -1,6 +1,6 @@
 "use client";
 
-import { OfflineDownloadControl } from "@/components/offline/OfflineDownloadControl";
+import { OfflineDownloadControl, OfflinePlayButton, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
 import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -343,6 +343,8 @@ export function CinemaMobileDetail({
   const playTargetTitle = facts.title;
   // Grisé seulement si Jellyfin a répondu que le fichier n'existe plus — voir `missingFiles.ts`.
   const fileMissing = useFileMissing(playTargetId);
+  // Les films seulement ici : un épisode téléchargé se lit depuis sa ligne.
+  const offlinePlayable = useOfflinePlayable(isSeries ? null : item.jellyfinItemId);
   // La place du bouton est tenue tant qu'on ne sait ni si la lecture est ouverte, ni — pour une
   // série jamais commencée — quel épisode elle lancerait.
   const playPending =
@@ -538,6 +540,9 @@ export function CinemaMobileDetail({
             {t("common.play")}
           </div>
         )}
+        {/* Un téléchargement lisible passe en tête, en blanc, et « Lire » devient « Lire en ligne »
+            (Louis, 19/10/2026). */}
+        {!playPending && playerEnabled && offlinePlayable && !fileMissing && <OfflinePlayButton download={offlinePlayable} variant="wide" />}
         {!playPending && playerEnabled && playTargetId && (
           <button
             type="button"
@@ -545,14 +550,16 @@ export function CinemaMobileDetail({
             disabled={fileMissing}
             data-play-unavailable={fileMissing ? "" : undefined}
             data-liquid-pan="wide"
-            className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink ${
-              fileMissing ? "cursor-not-allowed opacity-45" : ""
-            }`}
+            className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 ${
+              offlinePlayable ? "bg-white/10 text-sm font-medium text-white" : "bg-white text-base font-semibold text-ink"
+            } ${fileMissing ? "cursor-not-allowed opacity-45" : ""}`}
           >
-            <Play size={18} fill="currentColor" />
+            <Play size={offlinePlayable ? 16 : 18} fill="currentColor" />
             {fileMissing
               ? t("cinema.fileMissing")
-              : formatContinueLabel(t, resumeTicks, runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch)}
+              : offlinePlayable
+                ? t("player.downloads.playOnline")
+                : formatContinueLabel(t, resumeTicks, runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch)}
           </button>
         )}
 

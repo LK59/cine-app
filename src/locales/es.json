@@ -2310,7 +2310,8 @@
       "audioOffline": "Pista de audio no disponible: estás sin conexión.",
       "switchOnline": "¿Cambiar a la reproducción en línea para escuchar esta pista de audio?",
       "switchOnlineConfirm": "Reproducir en línea",
-      "playFailed": "No se pudo reproducir el archivo descargado: {error}"
+      "playFailed": "No se pudo reproducir el archivo descargado: {error}",
+      "playOnline": "Reproducir en línea"
     }
   },
   "cinema": {

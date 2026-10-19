@@ -2310,7 +2310,8 @@
       "audioOffline": "Piste audio non disponible : vous êtes hors ligne.",
       "switchOnline": "Basculer vers la lecture en ligne pour écouter cette piste audio ?",
       "switchOnlineConfirm": "Lire en ligne",
-      "playFailed": "Le fichier téléchargé n'a pas pu être lu : {error}"
+      "playFailed": "Le fichier téléchargé n'a pas pu être lu : {error}",
+      "playOnline": "Lire en ligne"
     }
   },
   "cinema": {

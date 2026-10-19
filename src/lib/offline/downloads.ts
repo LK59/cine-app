@@ -23,10 +23,31 @@ import type { OfflineCodec, OfflineQuality } from "./quality";
 
 export type OfflineState = "preparing" | "downloading" | "done" | "failed";
 
+/** Ce qu'un épisode porte en plus d'un film : sa série et sa place, pour la page et l'épisode suivant. */
+export interface OfflineEpisodeFacts {
+  /** Pour rouvrir la fiche de la série (`cinemaNavigate({ serie })`). */
+  sonarrId: number | null;
+  seriesTitle: string;
+  seasonNumber: number;
+  episodeNumber: number | null;
+  /** Le titre de l'épisode seul ; `title` porte « Série — S01E02 · Titre » pour le lecteur. */
+  episodeTitle: string;
+  /**
+   * Le téléchargement automatique (carte blanche de Louis, 19/10/2026) : à mi-épisode lu depuis
+   * l'appareil, le suivant se télécharge avec la même langue et la même qualité ; un épisode vu
+   * jusqu'au bout s'efface une fois le suivant arrivé.
+   */
+  autoNext: boolean;
+}
+
 export interface OfflineDownload {
   /** L'identifiant de la préparation serveur — aussi le nom du dossier sur l'appareil. */
   id: string;
   itemId: string;
+  /** Absent : un film. */
+  episode?: OfflineEpisodeFacts;
+  /** Vu jusqu'au bout avec le téléchargement automatique : effacé quand le suivant est arrivé. */
+  watchedToEnd?: boolean;
   /** Pour rouvrir la fiche depuis le gestionnaire (`cinemaNavigate({ film })`). */
   radarrId: number | null;
   title: string;
@@ -134,6 +155,7 @@ export function offlineAccount(): string | null {
 /** Ce que la page sait du titre au moment de demander. */
 export interface OfflineRequest {
   itemId: string;
+  episode?: OfflineEpisodeFacts;
   radarrId: number | null;
   title: string;
   year: number | null;
@@ -166,6 +188,7 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
   const download: OfflineDownload = existing ?? {
     id: job.id,
     itemId: request.itemId,
+    ...(request.episode ? { episode: request.episode } : {}),
     radarrId: request.radarrId,
     title: request.title,
     year: request.year,
@@ -253,7 +276,10 @@ async function runLoop(): Promise<void> {
     try {
       for (;;) {
         if (account !== owner) return;
-        const next = downloads.find((d) => d.state === "preparing" || d.state === "downloading");
+        // Le plus ancien d'abord : une saison demandée d'un coup arrive dans l'ordre de ses épisodes.
+        const next = downloads
+          .filter((d) => d.state === "preparing" || d.state === "downloading")
+          .reduce<OfflineDownload | null>((oldest, d) => (!oldest || d.createdAt < oldest.createdAt ? d : oldest), null);
         if (!next) return;
         stopLoop = new AbortController();
         await holdWakeLock(true);
@@ -309,6 +335,7 @@ async function step(owner: string, d: OfflineDownload, signal: AbortSignal): Pro
   if (job.status === "done" && bytes >= job.bytes) {
     current = patch(d.id, { state: "done" });
     if (current) await saveMeta(current);
+    if (current?.episode) await sweepWatchedBefore(current);
     return;
   }
   if (bytes >= job.bytes) {
@@ -329,4 +356,40 @@ async function step(owner: string, d: OfflineDownload, signal: AbortSignal): Pro
   await deviceStore.writeVideo(owner, d.id, bytes, chunk);
   current = patch(d.id, { bytes: bytes + chunk.byteLength });
   if (current) await saveMeta(current);
+}
+
+/** L'ordre d'un épisode dans sa série : saison, puis numéro. */
+const episodeRank = (e: OfflineEpisodeFacts) => e.seasonNumber * 10_000 + (e.episodeNumber ?? 0);
+
+/**
+ * Le téléchargement automatique, côté ménage : un épisode vu jusqu'au bout s'efface dès qu'un
+ * épisode plus loin de la même série est arrivé sur l'appareil — on garde toujours de quoi
+ * continuer, jamais ce qu'on a fini.
+ */
+async function sweepWatchedBefore(arrived: OfflineDownload): Promise<void> {
+  const series = arrived.episode!;
+  for (const d of downloads) {
+    if (!d.episode || !d.watchedToEnd || !d.episode.autoNext || d.id === arrived.id) continue;
+    if (d.episode.sonarrId !== series.sonarrId || d.episode.seriesTitle !== series.seriesTitle) continue;
+    if (episodeRank(d.episode) < episodeRank(series)) await removeOfflineDownload(d.id);
+  }
+}
+
+/** Vu jusqu'au bout depuis l'appareil : noté, et effacé tout de suite si la suite est déjà là. */
+export async function markOfflineWatched(id: string): Promise<void> {
+  const d = patch(id, { watchedToEnd: true, positionSeconds: 0 });
+  if (!d) return;
+  await saveMeta(d);
+  if (!d.episode?.autoNext) return;
+  const later = downloads.find(
+    (x) => x.episode && x.state === "done" && x.episode.sonarrId === d.episode!.sonarrId && x.episode.seriesTitle === d.episode!.seriesTitle && episodeRank(x.episode) > episodeRank(d.episode!)
+  );
+  if (later) await removeOfflineDownload(d.id);
+}
+
+/** Les téléchargements d'une série sur l'appareil, dans l'ordre de ses épisodes. */
+export function offlineEpisodesOf(sonarrId: number | null, seriesTitle: string): OfflineDownload[] {
+  return downloads
+    .filter((d) => d.episode && d.episode.sonarrId === sonarrId && d.episode.seriesTitle === seriesTitle)
+    .sort((a, b) => episodeRank(a.episode!) - episodeRank(b.episode!));
 }

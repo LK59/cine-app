@@ -110,6 +110,12 @@ interface PlayerControlsProps {
    */
   lab?: boolean;
   /**
+   * La part du film déjà téléchargée sur l'appareil (0 à 1), pour le lecteur des téléchargements
+   * hors ligne : la barre la montre en gris clair entre la partie lue (blanche) et le reste (Louis,
+   * 19/10/2026). Absente partout ailleurs.
+   */
+  downloadedFraction?: number;
+  /**
    * Le logo du titre (celui de la série pour un épisode), montré à la place du titre écrit quand
    * il existe et qu'il est chargé — voir `PlayerTitle`. Absent : le titre écrit, comme avant.
    */
@@ -364,6 +370,7 @@ export function PlayerControls({
   itemId,
   title,
   lab = false,
+  downloadedFraction,
   logoUrl = null,
   onClose,
   onMinimize,
@@ -3006,6 +3013,13 @@ export function PlayerControls({
                 competing for attention with the actual playback position. Sits under the
                 native range input's own track, which only leaves it visible in the *unplayed*
                 portion — exactly the part worth showing. */}
+            {downloadedFraction !== undefined && downloadedFraction > 0 && (
+              <div
+                data-downloaded-range=""
+                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/35 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-3" : "h-2"}`}
+                style={{ width: `${Math.min(100, downloadedFraction * 100)}%`, WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
+              />
+            )}
             {duration > 0 && bufferedEnd > 0 && (
               <div
                 className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/35 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-3" : "h-2"}`}
