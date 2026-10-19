@@ -470,6 +470,17 @@ export const jellyfin = {
       { headers }
     ).then((page) => page.Items?.[0] ?? null),
 
+  /**
+   * Ce que le lecteur demande d'un titre à côté du film (`/api/player/item`) : la série d'un épisode,
+   * pour le menu « Épisodes », et la taille du fichier, pour « Télécharger ». À l'identifiant du compte,
+   * comme `getItemNaming` : un titre hors de ses droits ne revient pas.
+   */
+  getItemFile: async (userId: string, itemId: string) =>
+    fetchJson<{ Items?: { Type?: string | null; SeriesId?: string | null; MediaSources?: { Size?: number | null }[] | null }[] }>(
+      `${cfg.url}/Items?ids=${idSegment(itemId)}&userId=${idSegment(userId)}&fields=MediaSources`,
+      { headers }
+    ).then((page) => page.Items?.[0] ?? null),
+
   getSystemInfo: () =>
     fetchJson<{ ServerName: string; Version: string }>(`${cfg.url}/System/Info`, { headers }),
   getSessions: () => fetchJson<JellyfinSession[]>(`${cfg.url}/Sessions`, { headers }),

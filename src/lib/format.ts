@@ -143,3 +143,13 @@ export function selectBio(
   // Different tiers → French wins
   return tFr ? { text: t, source: "tmdb" } : { text: w, source: "wikipedia" };
 }
+
+/**
+ * La taille d'un fichier, dans la langue de qui la lit : « 1,1 Go », « 950 Mo », « 1.1 GB ».
+ * En unités décimales, comme les systèmes l'affichent dans leurs téléchargements.
+ */
+export function formatFileSize(bytes: number, locale: string): string {
+  const gb = bytes / 1e9;
+  const [value, unit] = gb >= 1 ? [gb, "gigabyte"] : [bytes / 1e6, "megabyte"];
+  return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "short", maximumFractionDigits: value >= 10 ? 0 : 1 }).format(value);
+}

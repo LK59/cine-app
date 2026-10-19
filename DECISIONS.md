@@ -5694,3 +5694,31 @@ tactile, choix sans effet sur un téléphone).
 la bannière qui suit le survol change et le clic est parfois avalé (touchers perdus de Lucas, 16/10/2026) ;
 Louis l'a jugée inadaptée au doigt au simulateur d'iPad et a choisi l'interface tactile mise à l'échelle,
 sur maquette validée le 16/10/2026.
+
+## 107. Le lecteur : « Épisodes » pour changer d'épisode, « Télécharger le fichier » au bureau
+
+**Règle.**
+- **Épisodes.** Un bouton dans la pilule du lecteur, avant « Épisode suivant », pour un épisode seulement
+  (`seriesId` de `/api/player/item`, `usePlayerItem`) et seulement si le lecteur sait changer d'épisode
+  (`onPlayEpisode` — absent pendant une scène §91 et un banc d'essai). Il ouvre la saison en cours
+  (`PlayerEpisodesMenu`, liste de `/api/cinema/series/{id}/episodes`, relue à l'ouverture), centrée sur
+  l'épisode en cours, inerte. Un autre épisode part par `handlePlayEpisode` des deux lecteurs : le même
+  passage que l'épisode suivant (arrêt `next`, `advance`), jamais `play()` puis une fermeture (§94).
+  `advance` prend la position de l'épisode choisi (`episodeResumeAt`, la même fonction que les deux
+  fiches série), zéro sinon.
+- **Télécharger le fichier.** La dernière ligne du ⋮, au bureau seulement (`!useIsMobile()`, §106) et pour
+  un compte que Jellyfin autorise (`Policy.EnableContentDownloading`, `contentDownloadingAllowed` — non
+  dans le doute). Le fichier d'origine, par `/api/player/download/{id}` → `/Items/{id}/Download`, plages
+  relayées (reprise du navigateur) ; la route vérifie session, visibilité (`assertVisible`) et droit
+  elle-même. Une ligne `scope: "download"` au journal du serveur par téléchargement commencé.
+
+**Pourquoi.** Demandés le 19/10/2026 par l'administrateur d'une autre installation, validés par Louis :
+un bouton de casque qui passe à l'épisode suivant par erreur, et aucun moyen de revenir sans quitter le
+film ; récupérer un fichier sur son ordinateur sans passer par Jellyfin. Pas sur téléphone : un fichier de
+plusieurs dizaines de Go, et une PWA iOS sans gestionnaire de téléchargements — le hors-ligne dans l'app
+reste un chantier à part (`docs/telechargement-hors-ligne.md`).
+
+**Ce qui diffère exprès.** Le Chromecast (`ChromecastPlayer`, une télécommande) n'a ni l'un ni l'autre.
+
+**Tests.** `PlayerControls-episodes-download.test.tsx`, `player-item-download-routes.test.ts`,
+`playback-advance-resume.test.tsx`, `transcodePolicy.test.ts`.

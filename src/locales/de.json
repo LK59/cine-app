@@ -2268,6 +2268,14 @@
       "auto": "Automatisch",
       "original": "Original",
       "hint": "Automatisch: Bei zu langsamer Verbindung wechselt das Video von selbst zu einer leichteren Version."
+    },
+    "episodes": {
+      "title": "Folgen",
+      "current": "Läuft gerade",
+      "unavailable": "Folgenliste nicht verfügbar."
+    },
+    "download": {
+      "file": "Datei herunterladen"
     }
   },
   "cinema": {

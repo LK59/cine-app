@@ -41,6 +41,7 @@ import { PhoneSheetTitle } from "@/components/cinema/CinemaDetailPages";
 import { resumeAtFor } from "@/lib/resumePosition";
 import { useQueuedPlay } from "@/lib/useQueuedPlay";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
+import { episodeResumeAt } from "@/lib/nextEpisode";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
@@ -379,7 +380,7 @@ export function CinemaMobileDetail({
     playback.play({
       itemId: episode.jellyfinItemId,
       title: episode.title,
-      resumeAt: episode.resumeTicks ? episode.resumeTicks / 10_000_000 : 0,
+      resumeAt: episodeResumeAt(episode),
       getNextEpisode,
     });
   }

@@ -2304,6 +2304,18 @@ export function ExperimentalPlayerHost({
     playback.advance(nextEpisode);
   }, [nextEpisode, playback, stopPlaybackNow, reportStop, lifecycle]);
 
+  // Un épisode choisi dans le menu « Épisodes » (19/10/2026) : le même passage que l'épisode suivant —
+  // arrêt rapporté (`next`), lecture coupée, `advance` —, avec la position que la liste connaît de lui.
+  const handlePlayEpisode = useCallback(
+    (episode: { itemId: string; title: string; resumeAt: number }) => {
+      if (lifecycle.isOver() || episode.itemId === itemId) return;
+      reportStop("next");
+      stopPlaybackNow();
+      playback.advance(episode);
+    },
+    [itemId, playback, stopPlaybackNow, reportStop, lifecycle]
+  );
+
   // Lu par les écouteurs de l'horloge, posés une fois pour toutes — voir `warmNextEpisode`.
   const nextEpisodeIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -4183,6 +4195,7 @@ export function ExperimentalPlayerHost({
             recapSkip={info?.recapSkip ?? null}
             creditsStart={info?.creditsStart ?? null}
             nextEpisode={nextEpisode}
+            onPlayEpisode={scene.active || session.bench ? undefined : handlePlayEpisode}
             onAdvance={handleAdvance}
             // Et pas de clavier non plus : l'écouteur est posé sur la fenêtre, `inert` ne l'arrête pas.
             // Ni sous l'écran de fin : la barre d'espace y relançait le film par-dessous, sans

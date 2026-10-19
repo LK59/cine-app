@@ -31,6 +31,7 @@ import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstA
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
+import { episodeResumeAt } from "@/lib/nextEpisode";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, useSheetPlayFacts, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
@@ -277,7 +278,7 @@ export function CinemaSeriesDetail({
     playback.play({
       itemId: ep.jellyfinItemId,
       title: ep.title,
-      resumeAt: ep.resumeTicks ? ep.resumeTicks / 10_000_000 : 0,
+      resumeAt: episodeResumeAt(ep),
       getNextEpisode,
     });
     // L'écran des épisodes reste ouvert sous le lecteur (voir `CinemaEpisodeBrowser`), comme sur le

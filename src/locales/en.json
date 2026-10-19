@@ -2268,6 +2268,14 @@
       "auto": "Automatic",
       "original": "Original",
       "hint": "Automatic: on a connection that is too slow, the video switches to a lighter version on its own."
+    },
+    "episodes": {
+      "title": "Episodes",
+      "current": "Now playing",
+      "unavailable": "Episode list unavailable."
+    },
+    "download": {
+      "file": "Download file"
     }
   },
   "cinema": {

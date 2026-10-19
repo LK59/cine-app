@@ -2268,6 +2268,14 @@
       "auto": "Automática",
       "original": "Original",
       "hint": "Automática: con una conexión demasiado lenta, el vídeo pasa solo a una versión ligera."
+    },
+    "episodes": {
+      "title": "Episodios",
+      "current": "En curso",
+      "unavailable": "Lista de episodios no disponible."
+    },
+    "download": {
+      "file": "Descargar el archivo"
     }
   },
   "cinema": {

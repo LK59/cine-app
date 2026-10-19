@@ -52,3 +52,25 @@ describe("le droit de transcoder la vidéo", () => {
     }
   });
 });
+
+describe("le droit de télécharger (19/10/2026)", () => {
+  it("lu dans la même politique : oui seulement sur un oui explicite", async () => {
+    const { contentDownloadingAllowed } = await import("@/lib/transcodePolicy");
+    policy = { EnableContentDownloading: true };
+    expect(await contentDownloadingAllowed("ffffffffffffffffffffffffffffffff")).toBe(true);
+    policy = { EnableContentDownloading: false };
+    expect(await contentDownloadingAllowed("11111111111111111111111111111111")).toBe(false);
+    policy = {};
+    expect(await contentDownloadingAllowed("22222222222222222222222222222222")).toBe(false);
+  });
+
+  it("Jellyfin muet : non — ni la réponse périmée, ni le défaut", async () => {
+    const { contentDownloadingAllowed } = await import("@/lib/transcodePolicy");
+    policy = { EnableContentDownloading: true };
+    expect(await contentDownloadingAllowed("33333333333333333333333333333333", 0)).toBe(true);
+    policy = null;
+    expect(await contentDownloadingAllowed("33333333333333333333333333333333", 10 * 60_000)).toBe(false);
+    expect(await contentDownloadingAllowed("44444444444444444444444444444444")).toBe(false);
+    expect(await contentDownloadingAllowed(null)).toBe(false);
+  });
+});

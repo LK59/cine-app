@@ -40,3 +40,12 @@ export function firstEpisodeOf(seasons: CinemaSeason[]): CinemaSeason["episodes"
   return season?.episodes[0] ?? null;
 }
 
+
+/**
+ * Où rouvrir un épisode choisi dans une liste : sa position si Jellyfin en garde une, sinon le début.
+ * Écrit une fois pour les trois listes qui lancent un épisode — la fiche série au bureau, sa jumelle
+ * du téléphone, et le menu « Épisodes » du lecteur (19/10/2026).
+ */
+export function episodeResumeAt(episode: { resumeTicks: number | null }): number {
+  return episode.resumeTicks ? episode.resumeTicks / 10_000_000 : 0;
+}

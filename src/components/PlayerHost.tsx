@@ -1197,6 +1197,18 @@ function ActivePlayer({
     playback.advance(nextEpisode);
   }, [nextEpisode, playback, stopPlaybackNow, reportStop]);
 
+  // Un épisode choisi dans le menu « Épisodes » (19/10/2026) : le même passage que l'épisode suivant —
+  // arrêt rapporté (`next`), lecture coupée, `advance` —, avec la position que la liste connaît de lui.
+  const handlePlayEpisode = useCallback(
+    (episode: { itemId: string; title: string; resumeAt: number }) => {
+      if (closedRef.current || episode.itemId === itemId) return;
+      reportStop("next");
+      stopPlaybackNow();
+      playback.advance(episode);
+    },
+    [itemId, playback, stopPlaybackNow, reportStop]
+  );
+
   // Fades out instead of vanishing instantly — an abrupt unmount back to the
   // underlying page reads as a glitch, especially mid-transcode. Reports the
   // stop position right now (not whenever React gets around to unmounting)
@@ -3542,6 +3554,7 @@ function ActivePlayer({
           recapSkip={recapSkip}
           creditsStart={creditsStart}
           nextEpisode={nextEpisode}
+          onPlayEpisode={scene.active || session.bench ? undefined : handlePlayEpisode}
           onAdvance={handleAdvance}
           /* La sortie de diffusion, et seulement quand cette séance existe pour ça. Elle ne
              dépend d'aucun événement : c'est ce qui la rend sûre là où la détection, elle, ne

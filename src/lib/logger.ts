@@ -139,3 +139,18 @@ export function logAdminAction(admin: string, action: string, context: Record<st
   console.log(JSON.stringify(entry));
   appendJsonLine(SERVER_LOG_FILE, entry, { keep: SERVER_LOG_KEEP });
 }
+
+/**
+ * Un fichier téléchargé depuis le lecteur (« Télécharger le fichier », 19/10/2026) : qui, quel titre,
+ * quelle taille. Au même journal, en `info`, lisible dans Activité comme les actions de l'administrateur.
+ * Une ligne par téléchargement, pas par plage : une reprise après coupure n'en écrit pas d'autre.
+ */
+export function logDownload(user: string, context: { itemId: string; title: string | null; sizeBytes: number | null }): void {
+  try {
+    const entry = { timestamp: new Date().toISOString(), level: "info", scope: "download", user, message: "fichier téléchargé", ...context };
+    console.log(JSON.stringify(entry));
+    appendJsonLine(SERVER_LOG_FILE, entry, { keep: SERVER_LOG_KEEP });
+  } catch {
+    /* un disque plein ne doit pas couper un téléchargement */
+  }
+}

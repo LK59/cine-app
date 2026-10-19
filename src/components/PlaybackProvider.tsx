@@ -139,7 +139,11 @@ interface PlaybackContextValue {
   close: (openId?: number) => void;
   minimize: () => void;
   expand: () => void;
-  advance: (next: { itemId: string; title: string }) => void;
+  /**
+   * Passer à un autre épisode dans la même séance. Depuis le début, sauf `resumeAt` : le menu
+   * « Épisodes » du lecteur (19/10/2026) rouvre un épisode à sa position — celui quitté par erreur.
+   */
+  advance: (next: { itemId: string; title: string; resumeAt?: number }) => void;
 }
 
 const PlaybackContext = createContext<PlaybackContextValue | null>(null);
@@ -397,20 +401,22 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     return installPlayerHistory(() => closeRef.current(), reloading);
   }, []);
 
-  // Resets resumeAt — an advance always starts the new episode from 0, matching the previous
-  // per-invocation player's behavior.
-  const advance = useCallback((next: { itemId: string; title: string }) => {
+  // Resets resumeAt — an advance starts the new episode from 0, matching the previous
+  // per-invocation player's behavior — unless the episodes menu passes the episode's own position.
+  const advance = useCallback((next: { itemId: string; title: string; resumeAt?: number }) => {
     // Zéro, et non « pas d'avis » : c'est bien depuis le début que l'épisode suivant commence.
+    // Un épisode choisi dans le menu « Épisodes » apporte sa position, connue de la liste.
+    const resumeAt = next.resumeAt ?? 0;
     // L'ouverture est préparée hors de la fonction de mise à jour, qui doit rester pure : la séance
     // en cours est lue par la référence que l'effet plus haut tient à jour.
     const current = currentSessionRef.current;
-    const introArt = current ? prepareIntro({ ...current, itemId: next.itemId, resumeAt: 0 }, current.openId) : null;
+    const introArt = current ? prepareIntro({ ...current, itemId: next.itemId, resumeAt }, current.openId) : null;
     // L'épisode suivant d'une séance allégée en hérite par la même règle (§78) : l'arrêt de l'épisode
     // vient d'être rapporté, et il a retenu son palier.
     const lighter = carriedLighter() ?? undefined;
     // `scene` ne passe pas à l'épisode suivant : il n'y en a pas pendant une scène, et après elle la
     // lecture est devenue ordinaire (`sceneMode.ts`).
-    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt: 0, introArt, lighter, reloadCarry: undefined, scene: undefined, sceneWatchedMs: undefined } : prev));
+    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt, introArt, lighter, reloadCarry: undefined, scene: undefined, sceneWatchedMs: undefined } : prev));
   }, [prepareIntro]);
 
   // Resumes into a WebKit reload-based track switch — see PLAYER_RELOAD_INTENT_KEY. Runs once on

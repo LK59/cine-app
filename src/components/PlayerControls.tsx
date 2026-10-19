@@ -3,13 +3,16 @@
 import { trickplayTileAt as sharedTrickplayTileAt, trickplayTileIndex, trickplayTileOrder } from "@/lib/trickplayTile";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages, Check } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages, Check, Layers } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
 import { formatTime } from "@/lib/playerClock";
 import { createLiquidPress, prefersReducedMotion } from "@/lib/liquidGlass/liquid";
 import { LiquidMenu } from "@/components/player/LiquidMenu";
+import { PlayerEpisodesMenu } from "@/components/player/PlayerEpisodesMenu";
+import { usePlayerItem } from "@/lib/usePlayerItem";
+import { PlayerDownloadRow } from "@/components/player/PlayerDownloadRow";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
   subtitleStyleStore,
@@ -181,6 +184,11 @@ interface PlayerControlsProps {
   nextEpisode: { itemId: string; title: string } | null;
   onAdvance: () => void;
   /**
+   * Lancer un autre épisode de la série depuis le menu « Épisodes » (19/10/2026) — le même passage
+   * que l'épisode suivant, chez le lecteur. Absent (scène, banc d'essai) : pas de bouton.
+   */
+  onPlayEpisode?: (episode: { itemId: string; title: string; resumeAt: number }) => void;
+  /**
    * Chaque saut demandé par le spectateur, à la position visée — avant que l'élément ne l'ait
    * atteinte. Un lecteur qui se reconstruit (changement de piste) part de là plutôt que de la
    * dernière position lue : sinon un saut encore en chargement suivi d'un changement de piste
@@ -299,6 +307,7 @@ const MENU_TITLES: Record<string, string> = {
   dualPrimary: "player.dualSubtitles.primary",
   dualSecond: "player.dualSubtitles.second",
   more: "player.moreOptions",
+  episodes: "player.episodes.title",
   chapters: "player.chapters",
   sleep: "player.sleep.title",
   hdrCap: "player.hdrCap.title",
@@ -314,6 +323,7 @@ const MENU_ICONS: Record<string, React.ReactNode> = {
   dualPrimary: <Captions size={20} />,
   dualSecond: <Captions size={20} />,
   more: <EllipsisVertical size={20} />,
+  episodes: <Layers size={20} />,
   chapters: <ListVideo size={20} />,
   sleep: <Timer size={20} />,
   hdrCap: <Sun size={20} />,
@@ -362,6 +372,7 @@ export function PlayerControls({
   creditsStart,
   nextEpisode,
   onAdvance,
+  onPlayEpisode,
   onCastRequest,
   chromecast,
   onCastReturn,
@@ -376,6 +387,11 @@ export function PlayerControls({
   onChromeEdges,
 }: PlayerControlsProps) {
   const t = useT();
+  // La série d'un épisode et le droit de télécharger (19/10/2026) — voir `usePlayerItem`.
+  const playerItem = usePlayerItem(itemId);
+  const episodesSeriesId = onPlayEpisode ? (playerItem?.seriesId ?? null) : null;
+  // Au bureau seulement — `PlayerDownloadRow` en décide (§107).
+  const downloadable = !!playerItem?.download;
   const [playing, setPlaying] = useState(false);
   /**
    * Ce que l'appui vient de demander, montré tout de suite (10/10/2026) : le triangle ne devenait
@@ -496,7 +512,7 @@ export function PlayerControls({
   }, [visible, hidden, onChromeEdges]);
   // Démonté (fermeture, passage au mini-lecteur), il n'y a plus de commandes à éviter.
   useEffect(() => () => onChromeEdges?.(null), [onChromeEdges]);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "subtitleGen" | "subtitleGenOther" | "dual" | "dualPrimary" | "dualSecond" | "quality" | "more">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "subtitleGen" | "subtitleGenOther" | "dual" | "dualPrimary" | "dualSecond" | "quality" | "episodes" | "more">(null);
   // Cachées par un écran d'erreur, les commandes restent montées (le lecteur serveur garde l'élément
   // pour « Réessayer ») et gardaient leur menu : le nouvel essai les rendait menu ouvert par-dessus le
   // film qui repart — et un menu ouvert suspend leur disparition, elles ne partaient plus (chasse
@@ -2206,6 +2222,12 @@ export function PlayerControls({
                       <Sun size={16} /> {t("player.hdrCap.title")} · {hdrCapLabel(hdrCap.current)}
                     </button>
                   )}
+                  {/* Le fichier d'origine, au bureau seulement et pour un compte que Jellyfin autorise à
+                      télécharger (19/10/2026) — la route le vérifie aussi, cacher la ligne n'est pas
+                      interdire. Le navigateur le télécharge lui-même, avec sa reprise. */}
+                  {downloadable && (
+                    <PlayerDownloadRow itemId={itemId} sizeBytes={playerItem?.download?.sizeBytes ?? null} onStart={() => setMenu(null)} />
+                  )}
                 </div>
               </>
             )}
@@ -2651,6 +2673,17 @@ export function PlayerControls({
                   {rate === 1 ? t('player.speedNormal') : `${rate}x`}
                 </button>
               ))}
+            {menu === "episodes" && episodesSeriesId && onPlayEpisode && (
+              <PlayerEpisodesMenu
+                seriesId={episodesSeriesId}
+                currentItemId={itemId}
+                onPick={(episode) => {
+                  setMenu(null);
+                  noteViewerPresent();
+                  onPlayEpisode(episode);
+                }}
+              />
+            )}
             {menu === "chapters" &&
               chapters.map((ch, i) => {
                 const tile = trickplayTileAt(ch.start);
@@ -2794,6 +2827,20 @@ export function PlayerControls({
                   le même `onAdvance` que la carte du générique, jamais un second chemin. Absent
                   quand la minuterie de veille arrête la série à la fin de cet épisode : elle a dit
                   « rien ne s'enchaîne ». */}
+              {/* Les épisodes de la saison (19/10/2026), comme sur Netflix : revenir à celui qu'un bouton
+                  du casque vient de quitter, ou en choisir un autre. Seulement pour un épisode. */}
+              {episodesSeriesId && (
+                <button
+                  data-player-nav="episodes"
+                  onClick={() => setMenu(menu === "episodes" ? null : "episodes")}
+                  title={t("player.episodes.title")}
+                  aria-label={t("player.episodes.title")}
+                  data-on={menu === "episodes" ? "" : undefined}
+                  className="player-pill-btn"
+                >
+                  <Layers size={22} />
+                </button>
+              )}
               {nextEpisode && !sleepBlocksAdvance && (
                 <button
                   data-player-nav="next-episode"
