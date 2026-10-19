@@ -57,7 +57,13 @@ export function offlineCodec(): OfflineCodec {
   return "h264";
 }
 
-export const appleTouch = () => typeof navigator !== "undefined" && isWebKitEngine(navigator.userAgent) && navigator.maxTouchPoints > 1;
+/**
+ * Un téléphone ou une tablette, iPhone comme Android : le téléchargement tourne dans la page, et le
+ * système la met en pause dès qu'elle passe en arrière-plan — d'où le conseil de garder l'app ouverte
+ * (Louis, 19/10/2026 : il ne s'affichait que sur iPhone et iPad, alors qu'Android fait de même).
+ */
+export const touchDevice = () =>
+  typeof window !== "undefined" && (window.matchMedia?.("(pointer: coarse)").matches === true || (isWebKitEngine(navigator.userAgent) && navigator.maxTouchPoints > 1));
 
 export interface OfflineTitle {
   itemId: string;
@@ -516,7 +522,7 @@ export function OfflineChoiceSheet({
         <QualityPicker quality={quality} onChange={setQuality} bytesFor={(q) => (runtimeSeconds > 0 ? expectedBytes(runtimeSeconds, q) : 0)} />
         {episode && <AutoNextToggle on={autoNext} onChange={setAutoNext} />}
         {lowSpace && <p className="px-1 text-xs text-warning">{t("player.downloads.lowSpace")}</p>}
-        {appleTouch() && <p className="px-1 text-xs text-subtle">{t("player.downloads.keepOpen")}</p>}
+        {touchDevice() && <p className="px-1 text-xs text-subtle">{t("player.downloads.keepOpen")}</p>}
       </div>
     </ActionSheet>
   );

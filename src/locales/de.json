@@ -2340,7 +2340,7 @@
       "high": "Hoch",
       "standardHint": "720p · etwa {size}",
       "highHint": "1080p · etwa {size}",
-      "keepOpen": "Auf iPhone und iPad die App während des Downloads bitte geöffnet lassen.",
+      "keepOpen": "Lassen Sie die App geöffnet: Der Download pausiert im Hintergrund und wird bei Ihrer Rückkehr fortgesetzt.",
       "lowSpace": "Wenig Speicher auf diesem Gerät: Der Download passt eventuell nicht.",
       "loadingTracks": "Spuren werden gelesen…",
       "tracksFailed": "Die Spuren dieses Films konnten nicht gelesen werden.",

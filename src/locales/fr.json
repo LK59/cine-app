@@ -2340,7 +2340,7 @@
       "high": "Haute",
       "standardHint": "720p · environ {size}",
       "highHint": "1080p · environ {size}",
-      "keepOpen": "Sur iPhone et iPad, gardez l'app ouverte pendant le téléchargement.",
+      "keepOpen": "Gardez l'app ouverte : le téléchargement se met en pause quand elle passe en arrière-plan, et reprend à son retour.",
       "lowSpace": "Peu de place sur cet appareil : le téléchargement risque de ne pas tenir.",
       "loadingTracks": "Lecture des pistes…",
       "tracksFailed": "Les pistes de ce film n'ont pas pu être lues.",

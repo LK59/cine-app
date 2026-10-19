@@ -11,7 +11,7 @@ import { deviceStore } from "@/lib/offline/deviceStore";
 import { offlineAccount, pauseOfflineDownload, removeOfflineDownload, resumeOfflineDownload, useOfflineDownloads, type OfflineDownload } from "@/lib/offline/downloads";
 import { groupOfflineDownloads, offlineRemainingSeconds, offlineSeriesNext, type OfflineSeriesGroup } from "@/lib/offline/downloadGroups";
 import { BACKDROP_FILE, LOGO_FILE, SERIES_POSTER_FILE, offlineImage } from "@/lib/offline/artwork";
-import { BetaBadge, offlinePlayable, offlineProgress, offlineStatusLabel } from "./OfflineDownloadControl";
+import { BetaBadge, offlinePlayable, offlineProgress, offlineStatusLabel, touchDevice } from "./OfflineDownloadControl";
 
 /**
  * La page des téléchargements (bêta, DECISIONS.md §109) — le contenu seul, monté par deux cadres :
@@ -61,6 +61,10 @@ export function OfflineDownloadsView({ onOpenTitle }: { onOpenTitle?: (target: O
                   <DownloadRow key={d.id} download={d} />
                 ))}
               </ul>
+              {/* Là où l'on regarde l'avancement, tant que quelque chose arrive encore. */}
+              {active.some((d) => d.state === "preparing" || d.state === "downloading") && touchDevice() && (
+                <p className="mt-2 px-1 text-xs text-subtle">{t("player.downloads.keepOpen")}</p>
+              )}
             </Section>
           )}
           {films.length > 0 && (

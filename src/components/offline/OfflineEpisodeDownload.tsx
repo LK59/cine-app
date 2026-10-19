@@ -36,7 +36,7 @@ import {
   OfflineChoiceSheet,
   ProgressRing,
   QualityPicker,
-  appleTouch,
+  touchDevice,
   offlineCodec,
   offlinePlayable,
   offlineProgress,
@@ -394,7 +394,7 @@ function OfflineSeasonDownloadOn({
           <QualityPicker quality={quality} onChange={setQuality} bytesFor={(q) => estimatedEpisodesBytes(remaining, q)} />
           <AutoNextToggle on={autoNext} onChange={setAutoNext} />
           {lowSpace && <p className="px-1 text-xs text-warning">{t("player.downloads.lowSpace")}</p>}
-          {appleTouch() && <p className="px-1 text-xs text-subtle">{t("player.downloads.keepOpen")}</p>}
+          {touchDevice() && <p className="px-1 text-xs text-subtle">{t("player.downloads.keepOpen")}</p>}
         </div>
       </ActionSheet>
     </>

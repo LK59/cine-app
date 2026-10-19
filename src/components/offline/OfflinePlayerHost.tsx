@@ -137,6 +137,25 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     return () => clearInterval(timer);
   }, [showInfo, id, locale]);
   const isMini = mode === "mini";
+  // Plein écran : la page sous le lecteur ne rebondit plus. Sur l'entrée hors ligne (`/hors-ligne`),
+  // un glissement sur le lecteur faisait rebondir tout le document sur iPhone — le lecteur montait
+  // avec lui et laissait une bande vide en bas (Louis, 19/10/2026). L'accueil, lui, est une coquille
+  // à la hauteur de l'écran qui ne défile pas, d'où rien du côté du lecteur en ligne.
+  useEffect(() => {
+    if (isMini) return;
+    const targets = [document.documentElement, document.body];
+    const before = targets.map((el) => [el.style.overflow, el.style.overscrollBehavior] as const);
+    for (const el of targets) {
+      el.style.overflow = "hidden";
+      el.style.overscrollBehavior = "none";
+    }
+    return () => {
+      targets.forEach((el, i) => {
+        el.style.overflow = before[i][0];
+        el.style.overscrollBehavior = before[i][1];
+      });
+    };
+  }, [isMini]);
 
   // Le moteur, ouvert une fois pour cette séance.
   useEffect(() => {
