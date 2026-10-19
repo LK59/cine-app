@@ -102,6 +102,12 @@ export function TranslationProvider({
     // somehow missing.
     if (!initialLocale) {
       applyLocale(cookieLang ?? DEFAULT_LOCALE);
+    } else if (cookieLang !== null && cookieLang !== initialLocale) {
+      // Une page rendue sans le cookie de ce navigateur : l'entrée hors ligne des téléchargements,
+      // que le service worker demande sans cookie pour ne jamais garder une page d'un compte
+      // (DECISIONS.md §109). Le serveur l'a écrite en français ; le cookie dit la langue d'ici.
+      // Partout ailleurs le serveur a lu le même cookie, et les deux sont égaux.
+      applyLocale(cookieLang);
     }
 
     // Fetch runtime config + user prefs in parallel — both work without baked-in env vars

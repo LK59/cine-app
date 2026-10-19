@@ -355,7 +355,11 @@ async function worker(owner: string): Promise<void> {
       // Réseau coupé, serveur qui redémarre : on réessaie un peu plus tard, sans rien perdre.
       // Au journal, une fois par erreur (le rapporteur dédoublonne) : ce qu'un iPhone a dit.
       if (!control.signal.aborted) reportClientError(error, "component:hors-ligne", { download: next.id, bytes: String(next.bytes) });
-      failures += 1;
+      // Un `fetch` sans réseau rejette d'un `TypeError` : rien à voir avec un fichier verrouillé.
+      // Compté, il relançait le stockage toutes les cinq secondes tant qu'un téléchargement
+      // attendait le réseau — et la relance fait échouer les lectures en vol du lecteur hors
+      // ligne, celui qu'on utilise justement sans réseau (§109, entrée hors ligne).
+      if (!(error instanceof TypeError)) failures += 1;
       // Deux échecs de suite : le stockage de l'appareil repart d'un worker neuf.
       if (failures >= 2) resetDeviceStore();
       await sleep(5000, control.signal);

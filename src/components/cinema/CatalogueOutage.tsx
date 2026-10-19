@@ -6,6 +6,7 @@ import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { errorMessage } from "@/lib/upstreamError";
+import { SlowLaunchDownloads } from "@/components/offline/SlowLaunchDownloads";
 import {
   needsOutageRefresh,
   notePlaybackOutage,
@@ -139,6 +140,8 @@ export function CatalogueUnavailable({ error, children }: { error: unknown; chil
           {busy ? t("cinema.outage.retrying") : t("cinema.outage.retry")}
         </button>
         {children}
+        {/* Le serveur ne répond plus : les téléchargements de l'appareil, s'il y en a (§109). */}
+        <SlowLaunchDownloads delayMs={0} placement="inline" />
       </div>
       <p className="text-xs text-subtle" aria-live="polite">
         {busy ? t("cinema.outage.retrying") : t("cinema.outage.nextRetry", { n: String(left) })}

@@ -2371,7 +2371,23 @@
       "introCaption": "Reproduciendo el archivo descargado",
       "fileDownloaded": "Archivo descargado",
       "fileDownloading": "Descargando",
-      "queued": "En cola en el servidor…"
+      "queued": "En cola en el servidor…",
+      "films": "Películas",
+      "series": "Series",
+      "season": "Temporada {n}",
+      "episodes": "{n} episodio|{n} episodios",
+      "openSeries": "Abrir la ficha de la serie",
+      "storageTitle": "En este dispositivo",
+      "storageUsed": "{size} de descargas",
+      "storageFree": "unos {size} todavía disponibles",
+      "stoppedAt": "Detenido en {time}",
+      "watched": "Visto hasta el final",
+      "panelHint": "Lo que se puede ver sin red, en este dispositivo.",
+      "entryOnline": "Reproducido desde este dispositivo",
+      "entryOffline": "Sin conexión · reproducido desde este dispositivo",
+      "openApp": "Abrir Cine App",
+      "entryNoAccount": "No hay descargas que mostrar aquí. Abre Cine App con conexión e inicia sesión: tus descargas aparecerán allí y luego aquí.",
+      "accessDownloads": "Ir a las descargas"
     }
   },
   "cinema": {

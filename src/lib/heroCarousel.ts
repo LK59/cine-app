@@ -79,7 +79,7 @@ export function reconcileHeroOrder(shown: readonly string[], index: number, offi
  */
 export function heroOffscreen(
   _heroTab: "movies" | "series",
-  route: Pick<CinemaRoute, "tab" | "list" | "account" | "search" | "browse" | "activity" | "report" | "news">,
+  route: Pick<CinemaRoute, "tab" | "list" | "account" | "search" | "browse" | "activity" | "report" | "news" | "downloads">,
   playerMode: string
 ): boolean {
   return (
@@ -88,6 +88,8 @@ export function heroOffscreen(
     route.account ||
     route.search ||
     route.browse !== null ||
+    // Les téléchargements de l'appareil (§109) recouvrent l'accueil comme la grille complète.
+    route.downloads ||
     // L'activité, « Signaler un problème », les Nouveautés recouvrent l'écran (chasse aux défauts du
     // 25/09/2026) — une seule liste, `accountScreenOpen`.
     accountScreenOpen(route)

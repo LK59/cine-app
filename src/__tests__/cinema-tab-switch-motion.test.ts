@@ -41,8 +41,9 @@ describe("changement d'onglet sur le téléphone", () => {
   it("un onglet pas encore chargé montre son fond, pas l'accueil", () => {
     const src = lire("src/components/player/PlayerShell.tsx");
     // Recherche, Ma liste, Compte — et l'activité des comptes et les signalements (24/09/2026), qui
-    // s'ouvrent depuis Compte, et Compte → Nouveautés (12/10/2026, DECISIONS.md §73).
-    expect(src.match(/loading: PanelPlaceholder/g)?.length).toBe(6);
+    // s'ouvrent depuis Compte, et Compte → Nouveautés (12/10/2026, DECISIONS.md §73), et les
+    // téléchargements de l'appareil (19/10/2026, §109).
+    expect(src.match(/loading: PanelPlaceholder/g)?.length).toBe(7);
   });
 });
 

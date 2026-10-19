@@ -47,7 +47,7 @@ describe("reconcileHeroOrder", () => {
 });
 
 describe("heroOffscreen — le moment de la remise à plat", () => {
-  const route = { tab: "movies" as const, list: false, account: false, search: false, browse: null, activity: null, report: null, news: null };
+  const route = { tab: "movies" as const, list: false, account: false, search: false, browse: null, activity: null, report: null, news: null, downloads: false };
 
   it("la bannière des films est à l'écran sur l'onglet Films", () => {
     expect(heroOffscreen("movies", route, "none")).toBe(false);
@@ -61,6 +61,7 @@ describe("heroOffscreen — le moment de la remise à plat", () => {
     ["l'activité", { ...route, activity: "1" }, "none"],
     ["un signalement", { ...route, report: "1" }, "none"],
     ["les Nouveautés", { ...route, news: "1" }, "none"],
+    ["les téléchargements (§109)", { ...route, downloads: true }, "none"],
     ["un film en plein écran", route, "full"],
   ])("est hors de l'écran : %s", (_name, r, mode) => {
     expect(heroOffscreen("movies", r, mode)).toBe(true);

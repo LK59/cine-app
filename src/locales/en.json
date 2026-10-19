@@ -2371,7 +2371,23 @@
       "introCaption": "Playing the downloaded file",
       "fileDownloaded": "Downloaded file",
       "fileDownloading": "Downloading",
-      "queued": "Queued on the server…"
+      "queued": "Queued on the server…",
+      "films": "Movies",
+      "series": "Shows",
+      "season": "Season {n}",
+      "episodes": "{n} episode|{n} episodes",
+      "openSeries": "Open the show's page",
+      "storageTitle": "On this device",
+      "storageUsed": "{size} of downloads",
+      "storageFree": "about {size} still available",
+      "stoppedAt": "Stopped at {time}",
+      "watched": "Watched to the end",
+      "panelHint": "What you can watch without a network, on this device.",
+      "entryOnline": "Played from this device",
+      "entryOffline": "Offline · played from this device",
+      "openApp": "Open Cine App",
+      "entryNoAccount": "No downloads to show here. Open Cine App with a network connection and sign in: your downloads will appear there, then here.",
+      "accessDownloads": "Go to downloads"
     }
   },
   "cinema": {

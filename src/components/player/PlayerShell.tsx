@@ -56,6 +56,10 @@ const loadPlayerNewsPanel = () => import("./PlayerNewsPanel").then((m) => m.Play
 const PlayerNewsPanel = dynamic(loadPlayerNewsPanel, { ssr: false, loading: PanelPlaceholder });
 const loadPlayerReportPanel = () => import("./PlayerReportPanel").then((m) => m.PlayerReportPanel);
 const PlayerReportPanel = dynamic(loadPlayerReportPanel, { ssr: false, loading: PanelPlaceholder });
+// Les téléchargements de l'appareil (§109) : chargés avec les autres écrans (`scheduleWarmPanels`) —
+// c'est un écran qu'on ouvre justement quand le réseau manque.
+const loadPlayerDownloadsPanel = () => import("./PlayerDownloadsPanel").then((m) => m.PlayerDownloadsPanel);
+const PlayerDownloadsPanel = dynamic(loadPlayerDownloadsPanel, { ssr: false, loading: PanelPlaceholder });
 const loadPlayerSearchPanel = () => import("./PlayerSearchPanel").then((m) => m.PlayerSearchPanel);
 const PlayerSearchPanel = dynamic(loadPlayerSearchPanel, { ssr: false, loading: PanelPlaceholder });
 const loadPlayerDiscoverSheet = () => import("./PlayerDiscoverSheet").then((m) => m.PlayerDiscoverSheet);
@@ -154,6 +158,7 @@ export function PlayerShell() {
   const lastReport = useLastValue(route.report);
   const news = useExitDelay(route.news !== null, EXIT_MS);
   const lastNews = useLastValue(route.news);
+  const downloads = useExitDelay(route.downloads, EXIT_MS);
   /**
    * Ces fiches sortent en glissant, sauf quand ce qu'elles recouvrent n'est pas dessiné.
    *
@@ -258,7 +263,7 @@ export function PlayerShell() {
   useEffect(
     () =>
       scheduleWarmPanels({
-        loaders: [loadPlayerSearchPanel, loadPlayerListPanel, loadPlayerAccountPanel, loadPlayerReportPanel, loadPlayerNewsPanel, loadPlayerDiscoverSheet, loadPlayerPersonSheet],
+        loaders: [loadPlayerSearchPanel, loadPlayerListPanel, loadPlayerAccountPanel, loadPlayerReportPanel, loadPlayerNewsPanel, loadPlayerDownloadsPanel, loadPlayerDiscoverSheet, loadPlayerPersonSheet],
       }),
     []
   );
@@ -307,6 +312,7 @@ export function PlayerShell() {
       )}
       {report.render && lastReport !== null && <PlayerReportPanel key={lastReport} raw={lastReport} leaving={report.leaving} />}
       {news.render && lastNews !== null && <PlayerNewsPanel key={lastNews} raw={lastNews} leaving={news.leaving} />}
+      {downloads.render && <PlayerDownloadsPanel leaving={downloads.leaving} />}
       {/* Une seule fiche du dessus à la fois. Deux rendues ensemble se recouvraient dans l'ordre
           de montage, et surtout écoutaient Échap toutes les deux — une touche remontait alors de
           deux crans. L'historique garde la précédente, et le retour la rouvre.

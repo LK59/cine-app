@@ -2371,7 +2371,23 @@
       "introCaption": "Heruntergeladene Datei wird abgespielt",
       "fileDownloaded": "Heruntergeladene Datei",
       "fileDownloading": "Wird heruntergeladen",
-      "queued": "Wartet auf dem Server…"
+      "queued": "Wartet auf dem Server…",
+      "films": "Filme",
+      "series": "Serien",
+      "season": "Staffel {n}",
+      "episodes": "{n} Folge|{n} Folgen",
+      "openSeries": "Seite der Serie öffnen",
+      "storageTitle": "Auf diesem Gerät",
+      "storageUsed": "{size} Downloads",
+      "storageFree": "etwa {size} noch verfügbar",
+      "stoppedAt": "Angehalten bei {time}",
+      "watched": "Bis zum Ende gesehen",
+      "panelHint": "Was sich ohne Netz ansehen lässt, auf diesem Gerät.",
+      "entryOnline": "Von diesem Gerät abgespielt",
+      "entryOffline": "Offline · von diesem Gerät abgespielt",
+      "openApp": "Cine App öffnen",
+      "entryNoAccount": "Hier gibt es keine Downloads. Öffnen Sie Cine App mit Netzverbindung und melden Sie sich an: Ihre Downloads erscheinen dort und dann hier.",
+      "accessDownloads": "Zu den Downloads"
     }
   },
   "cinema": {

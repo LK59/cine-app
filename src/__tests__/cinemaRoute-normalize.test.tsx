@@ -31,6 +31,9 @@ describe("une adresse collée", () => {
     ["#compte=1&activite=1", "#activite=1"],
     ["#type=series", ""],
     ["#film=920&inconnu=3", "#film=920"],
+    // Les téléchargements (§109) : tout onglet les referme, l'onglet reste.
+    ["#telechargements=1&liste=1", "#liste=1"],
+    ["#telechargements=1&compte=1", "#compte=1"],
   ])("%s devient « %s »", (pasted, expected) => {
     arrive(pasted);
     renderHook(() => useCinemaRoute());
@@ -46,6 +49,8 @@ describe("une adresse collée", () => {
     "#decouverte=12&type=series",
     "#compte=1",
     "#activite=journaux%3Asource%3Dplayer",
+    "#telechargements=1",
+    "#telechargements=1&film=920",
   ])("%s, valide, n'est pas réécrite", (valid) => {
     arrive(valid);
     renderHook(() => useCinemaRoute());

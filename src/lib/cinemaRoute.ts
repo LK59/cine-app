@@ -63,6 +63,13 @@ export interface CinemaRoute {
    * la fenêtre. Ouvert depuis le panneau Compte, qu'il remplace, comme l'activité.
    */
   news: string | null;
+  /**
+   * Les téléchargements hors ligne de l'appareil (bêta, DECISIONS.md §109) : un écran poussé depuis
+   * le rond à côté de « Tous les films / Toutes les séries », comme la grille complète — il recouvre
+   * l'accueil, une fiche passe par-dessus, et Retour y ramène. Ce n'est pas un onglet de la barre :
+   * l'onglet allumé reste l'Accueil, et en ouvrir un le referme.
+   */
+  downloads: boolean;
 }
 
 /**
@@ -91,6 +98,7 @@ const EMPTY: CinemaRoute = {
   activity: null,
   report: null,
   news: null,
+  downloads: false,
 };
 
 // How many entries this session has pushed. Kept in history.state so a close can tell "I opened
@@ -304,6 +312,7 @@ function parse(hash: string): CinemaRoute {
     activity: params.get("activite"),
     report: params.get("signalement"),
     news: params.get("nouveautes"),
+    downloads: params.get("telechargements") === "1",
   };
 }
 
@@ -326,6 +335,7 @@ function serialize(route: CinemaRoute): string {
   if (route.activity) params.set("activite", route.activity);
   if (route.report) params.set("signalement", route.report);
   if (route.news) params.set("nouveautes", route.news);
+  if (route.downloads) params.set("telechargements", "1");
   const query = params.toString();
   return query ? `#${query}` : "";
 }
@@ -342,6 +352,9 @@ function serialize(route: CinemaRoute): string {
  */
 export function normalizeRoute(route: CinemaRoute): CinemaRoute {
   const out = { ...route };
+  // Les téléchargements s'ouvrent depuis l'accueil et tout onglet les referme (`openPanel`) : avec un
+  // onglet dans la même adresse, c'est l'onglet qui reste.
+  if (out.search || out.list || out.account || accountScreenOpen(out)) out.downloads = false;
   if (out.search) Object.assign(out, { list: false, account: false, activity: null, report: null, news: null });
   else if (out.list) Object.assign(out, { account: false, activity: null, report: null, news: null });
   else if (accountScreenOpen(out)) out.account = false;
@@ -734,7 +747,7 @@ if (typeof window !== "undefined") {
  * laisse pas une fermeture l'oublier — l'activité, ajoutée le 24/09/2026, restait sinon affichée
  * après une croix.
  */
-export const CLOSE_PANELS = { search: false, list: false, account: false, browse: null, activity: null, report: null, news: null } satisfies Partial<CinemaRoute>;
+export const CLOSE_PANELS = { search: false, list: false, account: false, browse: null, activity: null, report: null, news: null, downloads: false } satisfies Partial<CinemaRoute>;
 
 export function cinemaClose(fallback: Partial<CinemaRoute>): void {
   if (typeof window === "undefined") return;

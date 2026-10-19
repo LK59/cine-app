@@ -27,6 +27,7 @@ const EMPTY: CinemaRoute = {
   activity: null,
   report: null,
   news: null,
+  downloads: false,
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -90,6 +91,20 @@ describe("openPanel", () => {
     mockNavigate.mockClear();
     openPanel("home", EMPTY);
     expect(mockNavigate.mock.calls[0][1]).toBe("home-already");
+  });
+
+  // Les téléchargements de l'appareil (§109) : un écran poussé depuis l'accueil. L'onglet allumé
+  // reste l'Accueil, et l'Accueil ou un autre onglet les referme.
+  it("tient les téléchargements pour un écran posé sur l'accueil, que tout onglet referme", async () => {
+    const { activePanel, isOnPanel, openPanel } = await import("@/components/player/playerNav");
+    const downloads = { ...EMPTY, downloads: true };
+    expect(activePanel(downloads)).toBe("home");
+    expect(isOnPanel("home", downloads)).toBe(false);
+    openPanel("home", downloads);
+    expect(mockNavigate.mock.calls[0]).toEqual([expect.objectContaining({ downloads: false }), "home"]);
+    mockNavigate.mockClear();
+    openPanel("list", downloads);
+    expect(mockNavigate.mock.calls[0][0]).toMatchObject({ downloads: false, list: true });
   });
 
   // ROBUSTESSE-14 : un onglet passe par la porte des onglets, qui remplace au lieu d'empiler ; le

@@ -1,6 +1,7 @@
 "use client";
 
 import { OfflineDownloadsButton } from "@/components/offline/OfflineDownloadsButton";
+import { SlowLaunchDownloads } from "@/components/offline/SlowLaunchDownloads";
 import { onRealHover } from "@/lib/pointerHover";
 import { HeroBackdrop } from "@/components/cinema/HeroBackdrop";
 import { ActionSheet } from "@/components/ActionSheet";
@@ -1137,6 +1138,8 @@ export function CinemaClient() {
             ))}
           </div>
         </div>
+        {/* Cinq secondes sans catalogue : les téléchargements de l'appareil, s'il y en a (§109). */}
+        <SlowLaunchDownloads />
       </div>,
       document.body
     );

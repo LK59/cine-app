@@ -577,8 +577,9 @@ describe("Jellyfin en panne : une seule conduite pour les deux accueils (§92)",
     }
   );
 
+  // Un fichier téléchargé n'a pas besoin de Jellyfin (§109) : il part pendant la panne.
   it("le bouton Lecture est refusé à un seul endroit : l'ouverture du lecteur", () => {
-    expect(lire("src/components/PlaybackProvider.tsx")).toMatch(/if \(playBlockedByOutage\(\)\) return;/);
+    expect(lire("src/components/PlaybackProvider.tsx")).toMatch(/if \(!s\.offline && playBlockedByOutage\(\)\) return;/);
   });
 });
 
@@ -1332,7 +1333,7 @@ describe("le catalogue relu au premier plan : une règle, une rangée, une fiche
 
   it("la Lecture d'un titre retiré est refusée par PlaybackProvider, à côté de celle de la panne", () => {
     const src = lire("src/components/PlaybackProvider.tsx");
-    expect(src).toMatch(/if \(playBlockedByOutage\(\)\) return;[\s\S]{0,200}if \(playBlockedByRetired\(\)\) return;/);
+    expect(src).toMatch(/if \(!s\.offline && playBlockedByOutage\(\)\) return;[\s\S]{0,200}if \(!s\.offline && playBlockedByRetired\(\)\) return;/);
   });
 });
 

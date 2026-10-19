@@ -76,7 +76,7 @@ export function PlayerBottomBar() {
    * défilement. Seuls les onglets Films/Séries la rendaient (`useTabScrollMemory`) ; même geste ici,
    * pour tout écran que la barre ou l'historique fait apparaître. Pas au montage : elle y est visible.
    */
-  const screenKey = `${active}|${route.browse ?? ""}|${route.activity ?? ""}|${route.report ?? ""}|${route.news ?? ""}`;
+  const screenKey = `${active}|${route.browse ?? ""}|${route.activity ?? ""}|${route.report ?? ""}|${route.news ?? ""}|${route.downloads ? "telechargements" : ""}`;
   const shownScreen = useRef(screenKey);
   useEffect(() => {
     if (shownScreen.current === screenKey) return;
