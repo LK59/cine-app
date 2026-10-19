@@ -99,7 +99,10 @@ describe("la grille complète est faite de paquets", () => {
     expect(chunks[chunks.length - 1].style.getPropertyValue("--rows")).toBe("3");
     // L'ordre de la liste est celui des cartes.
     expect(gridCards(root).map((c) => c.textContent)).toEqual(items.map((i) => `Titre ${i.id}2000`));
-  });
+    // Huit cents cartes rendues dans jsdom : ~1 s seul, et plus de 5 s quand la machine est chargée
+    // (agents et construction de l'image en même temps, 19/10/2026) — le délai par défaut faisait
+    // échouer la construction sans rien dire de la grille.
+  }, 30_000);
 
   it("à 1 100 px, six colonnes : des paquets de 48", async () => {
     vi.stubGlobal("innerWidth", 1100);
