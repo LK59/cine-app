@@ -290,6 +290,12 @@ const SEEK_SPINNER_MS = 150;
 const TOUCH_ECHO_MS = 800;
 /** En dessous, un déplacement du doigt est son tremblement, pas un geste — voir `lastTouchXRef`. */
 const TOUCH_JITTER_PX = 1;
+/**
+ * Ce qu'un doigt peut bouger en touchant la barre sans la faire glisser. En deçà, c'est un toucher,
+ * et un toucher ne déplace rien (19/10/2026, voir `touchStartRef`) ; au-delà, tout le déplacement
+ * compte, ces premiers pixels compris.
+ */
+const TOUCH_SLOP_PX = 6;
 
 /**
  * La flèche de ±10 s, avec son « 10 » dedans — dessinée en vecteurs, nette à toute taille : sans le
@@ -697,6 +703,14 @@ export function PlayerControls({
    * sous un doigt immobile (signalé sur iPhone le 23/09/2026).
    */
   const touchDragRef = useRef(false);
+  /**
+   * Au doigt, la barre glisse en relatif (19/10/2026, DECISIONS.md §108), comme l'app TV d'Apple et
+   * Photos : poser le doigt n'importe où ne déplace rien, glisser déplace la tête de lecture d'autant
+   * que le doigt, depuis là où elle était. `x` et `time` : le point de départ ; `target` : la position
+   * visée, nulle tant que le doigt n'a pas dépassé `TOUCH_SLOP_PX` — un toucher bref ne saute pas.
+   * Le doigt cache la barre : sauter sous lui faisait perdre sa place à qui voulait reculer d'un peu.
+   */
+  const touchStartRef = useRef<{ x: number; time: number; target: number | null } | null>(null);
   /** Le dernier point du doigt pris en compte — voir `TOUCH_JITTER_PX`. */
   const lastTouchXRef = useRef<number | null>(null);
   /**
@@ -1483,13 +1497,11 @@ export function PlayerControls({
   );
   const [previewFraction, setPreviewFraction] = useState(0);
 
-  // Shared by mouse hover (desktop) and touch drag (mobile — there's no true hover there, so
-  // this only actually renders while a touch is down, via the range input's own touch handling
-  // reaching pointer move too) — both just need "where along the bar is the pointer". Plain
-  // function, not useCallback: nothing needs its referential identity to stay stable, and the
-  // extra state/hooks added alongside chapters/PiP/speed tripped the React Compiler's own
-  // memoization-preservation check on the manually memoized version for reasons unrelated to
-  // this function's own logic.
+  // La souris : survol (la vignette) et glissement (la barre suit le curseur). Le doigt, lui, glisse en
+  // relatif depuis le 19/10/2026 (§108) et passe par `showPreviewAt`. Plain function, not
+  // useCallback: nothing needs its referential identity to stay stable, and the extra state/hooks
+  // added alongside chapters/PiP/speed tripped the React Compiler's own memoization-preservation
+  // check on the manually memoized version.
   /** Le temps sous ce pixel, sur toute la largeur de la barre — ce que la vignette annonce. */
   function fractionAt(clientX: number): number | null {
     const bar = seekBarRef.current;
@@ -1498,16 +1510,22 @@ export function PlayerControls({
     return rect.width > 0 ? Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)) : null;
   }
 
+  /** La vignette et la barre à un instant donné — le glissement relatif au doigt (§108). */
+  function showPreviewAt(time: number, follow: boolean) {
+    if (!duration) return;
+    const clamped = Math.min(duration, Math.max(0, time));
+    setPreviewFraction(clamped / duration);
+    setPreviewTime(clamped);
+    if (follow) previewSeek(clamped);
+  }
+
   function updatePreview(clientX: number) {
     const fraction = fractionAt(clientX);
     if (fraction === null) return;
     setPreviewFraction(fraction);
     setPreviewTime(fraction * duration);
-    // And the bar follows the finger, which it did not: a touch drag never reaches the input's
-    // own onChange — an input[type=range] on iOS only tracks its thumb — so the filled portion,
-    // the thumb and the timecode all stayed where playback was while the thumbnail moved. One
-    // navigated blind. This is the same call the input makes on a desktop drag, from the one
-    // place that knows where the finger is.
+    // The bar follows the cursor while dragging — the same call the input makes, from the one
+    // place that knows where the pointer is.
     //
     // Only while actually dragging. A pointer merely passing over the bar previews what is
     // there; moving the playhead under it would be the bar chasing the mouse.
@@ -2912,49 +2930,65 @@ export function PlayerControls({
               if (!(e.relatedTarget instanceof Node) && windowExitHides()) return;
               if (!seekingRef.current) showControls(5000);
             }}
+            // Au doigt, en relatif (§108) : le toucher montre la vignette là où en est le film, sans
+            // rien déplacer ; le glissement déplace la tête d'autant que le doigt, depuis là.
             onTouchStart={(e) => {
               touchDragRef.current = true;
-              lastTouchXRef.current = e.touches[0].clientX;
+              const x = e.touches[0].clientX;
+              lastTouchXRef.current = x;
+              touchStartRef.current = { x, time: currentTime, target: null };
+              // Le tic de la position se tait pendant le geste, d'où qu'il parte sur la barre :
+              // sans cela il remettrait la barre sous la tête pendant que le doigt glisse.
+              seekingRef.current = true;
               holdControls();
-              updatePreview(e.touches[0].clientX);
+              showPreviewAt(currentTime, false);
             }}
             onTouchMove={(e) => {
               holdControls();
+              const start = touchStartRef.current;
+              const width = seekBarRef.current?.getBoundingClientRect().width ?? 0;
+              if (!start || !duration || width <= 0) return;
               // Un doigt immobile n'est pas immobile au dixième de pixel près, et sur un
               // téléphone un pixel de barre vaut une vingtaine de secondes de film : sans ce
               // seuil, la vignette hésitait entre deux images sous un doigt posé.
               const x = e.touches[0].clientX;
               if (lastTouchXRef.current !== null && Math.abs(x - lastTouchXRef.current) < TOUCH_JITTER_PX) return;
               lastTouchXRef.current = x;
-              updatePreview(x);
+              if (start.target === null && Math.abs(x - start.x) < TOUCH_SLOP_PX) return;
+              // Un pixel de doigt vaut un pixel de barre : la même échelle que la barre elle-même.
+              const target = Math.min(duration, Math.max(0, start.time + ((x - start.x) / width) * duration));
+              start.target = target;
+              showPreviewAt(target, true);
             }}
             /**
-             * Le saut est décidé ici, à partir de l'endroit où le doigt était — et non de la
-             * valeur de l'input.
+             * Le saut est décidé ici, par le conteneur — et non par la valeur de l'input.
              *
-             * Un `input[type=range]` sur iOS ne saute pas là où on le touche : il faut attraper
-             * la pastille et la faire glisser. Tant qu'elle était visible en permanence, ça se
-             * devinait ; une fois cachée au repos, toucher la barre affichait bien la vignette —
-             * le conteneur, lui, suit le doigt — sans que l'input bouge d'un pixel, et le
-             * relâchement ne changeait donc rien. Le conteneur sait où le doigt est depuis le
-             * début : c'est lui qui conclut.
+             * Un `input[type=range]` sur iOS ne bouge que si l'on attrape sa pastille, cachée au
+             * repos ; le conteneur, lui, suit le doigt depuis le début. Il ne valide qu'un vrai
+             * glissement (`target`) : un toucher bref n'en est pas un, et ne déplace rien.
              */
             onTouchEnd={() => {
+              const target = touchStartRef.current?.target ?? null;
               seekingRef.current = false;
               touchDragRef.current = false;
               lastTouchXRef.current = null;
+              touchStartRef.current = null;
               lastTouchEndRef.current = performance.now();
-              if (previewTime !== null) commitSeek(previewTime);
+              if (target !== null) commitSeek(target);
               setPreviewTime(null);
               setTimeout(() => showControls(5000), 0);
             }}
             // A touch the system takes back — a notification, a call, a gesture the browser
             // claims — never reaches touchend, and without this the bar would stay thick with
-            // nothing on it. Rien n'est validé : le doigt n'a pas été relâché, il a été repris.
+            // nothing on it. Rien n'est validé : le doigt n'a pas été relâché, il a été repris —
+            // et la barre revient là où en est le film.
             onTouchCancel={() => {
+              const start = touchStartRef.current;
               seekingRef.current = false;
               touchDragRef.current = false;
               lastTouchXRef.current = null;
+              touchStartRef.current = null;
+              if (start?.target != null) previewSeek(videoRef.current?.currentTime ?? start.time);
               setPreviewTime(null);
               showControls(5000);
             }}
@@ -2962,7 +2996,7 @@ export function PlayerControls({
             {/* The rail at rest. Painted here rather than left to the native track, which cannot
                 be sized at all without giving up `accent-color` — and giving that up is what
                 lets the bar answer to a finger as well as to a pointer. */}
-            <div className={`pointer-events-none absolute top-1/2 w-full -translate-y-1/2 rounded-full bg-white/20 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-3" : "h-2"}`} />
+            <div className={`player-seek-rail pointer-events-none absolute top-1/2 w-full -translate-y-1/2 rounded-full bg-white/20 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-3" : "h-2"}`} />
             {/* Buffered range — deliberately subtle (a slightly lighter track, not a bold
                 second color): its only job is "can I scrub ahead without waiting", not
                 competing for attention with the actual playback position. Sits under the

@@ -5722,3 +5722,31 @@ reste un chantier à part (`docs/telechargement-hors-ligne.md`).
 
 **Tests.** `PlayerControls-episodes-download.test.tsx`, `player-item-download-routes.test.ts`,
 `playback-advance-resume.test.tsx`, `transcodePolicy.test.ts`.
+
+## 108. La barre de progression : au doigt, un glissement relatif ; à la souris, un saut au curseur
+
+**Règle.** Au toucher (`onTouchStart/Move/End/Cancel` du conteneur de la barre, `PlayerControls`) :
+poser le doigt n'importe où sur la barre ne déplace rien — elle s'épaissit et la vignette montre la
+position **actuelle** ; glisser déplace la tête de lecture du même déplacement que le doigt (un pixel de
+doigt = un pixel de barre, `touchStartRef`), bornée à [0, durée] ; un toucher qui bouge de moins de
+`TOUCH_SLOP_PX` (6 px) ne saute pas ; au lever, un seul saut à la position visée (`commitSeek`, le même
+chemin qu'avant), l'écho souris ignoré (`isTouchEcho`) ; repris par le système, rien n'est validé et la
+barre revient à la position du film. La **souris** et le **clavier** ne changent pas : un clic saute là
+où est le curseur, le glissement suit le curseur (`updatePreview`).
+
+**Pourquoi.** Louis, 19/10/2026 : comme l'app TV d'Apple et Photos. Le doigt cache la barre ; sauter
+sous lui faisait perdre sa place à qui voulait reculer d'un peu. Il remplace le saut sous le doigt du
+23/09/2026 (6e226cbb), qui répondait à une barre sans pastille visible où toucher ne faisait rien.
+
+**Avec elle (même jour).** La barre a une ombre douce (`.player-seek-rail`, globals.css) pour les scènes
+claires, invisible sur du noir, sans flou de surface.
+
+**Tests.** `PlayerControls.test.tsx` (« au doigt, un toucher sans glisser ne déplace rien… », « …glisser
+de +X px avance de X/largeur × durée depuis la position… », l'écho souris, la reprise par le système, le
+tremblement).
+
+**Sans pastille (même jour, Louis).** Plus aucun point sur la tête de lecture, au doigt, à la souris ni au
+clavier : la partie blanche s'épaissit (8 → 12 px) quand on la saisit, comme l'app TV d'Apple. Le pouce
+natif de l'input garde sa taille mais n'est jamais dessiné (`::-webkit-slider-thumb`, `::-moz-range-thumb`,
+transparents à `opacity: 0` dans tous les états) ; le contour `:focus-visible` reste pour le clavier
+(`seek-bar-no-thumb.test.ts`).

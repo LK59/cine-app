@@ -192,45 +192,59 @@ describe("PlayerControls — la barre de progression", () => {
     expect(container.querySelectorAll("[data-chapter-mark]")).toHaveLength(0);
   });
 
-  it("saute là où le doigt s'est posé, pas là où la pastille était", async () => {
-    // An input[type=range] on iOS does not jump to where it is touched: the thumb has to be
-    // grabbed and dragged. While the thumb was always visible that was guessable; hidden at
-    // rest, touching the bar showed the thumbnail — the container follows the finger — without
-    // the input moving at all, so releasing changed nothing.
+  // Au doigt, la barre glisse en relatif depuis le 19/10/2026 (DECISIONS.md §108), comme l'app TV
+  // d'Apple et Photos : ces tests remplacent « saute là où le doigt s'est posé » et « fait suivre la
+  // barre au doigt », qui décrivaient le saut sous le doigt (6e226cbb).
+  it("au doigt, un toucher sans glisser ne déplace rien — la vignette montre où en est le film", async () => {
     stubMediaFetches();
     let video: HTMLVideoElement | null = null;
-    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
-    await act(async () => {});
-    const bar = container.querySelector(".player-seek")!.parentElement!;
-    await withDuration(video!, bar);
-
-    // A quarter of the way along a bar two hundred pixels wide, on an hour-long film.
-    await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 50 }] }));
-    await act(async () => void fireEvent.touchEnd(bar));
-
-    expect(video!.currentTime).toBeCloseTo(900, 0);
-  });
-
-  it("fait suivre la barre au doigt, pas seulement la vignette", async () => {
-    // A touch drag never reaches the input's own onChange — an input[type=range] on iOS only
-    // tracks its thumb — so the filled portion, the thumb and the timecode stayed where playback
-    // was while only the thumbnail moved. One navigated blind.
-    stubMediaFetches();
-    let video: HTMLVideoElement | null = null;
-    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    const onSeekRequest = vi.fn();
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} onSeekRequest={onSeekRequest} />);
     await act(async () => {});
     const bar = container.querySelector(".player-seek")!.parentElement!;
     const input = container.querySelector(".player-seek") as HTMLInputElement;
     await withDuration(video!, bar);
+    video!.currentTime = 600;
+    await act(async () => void video!.dispatchEvent(new Event("timeupdate")));
 
-    await act(async () => void fireEvent.touchStart(input, { touches: [{ clientX: 100 }] }));
-    await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 100 }] }));
-    // Half of a two-hundred-pixel bar on an hour-long film, before anything is committed.
-    expect(Number(input.value)).toBeCloseTo(1800, 0);
-    expect(video!.currentTime).toBe(0);
+    // Posé aux trois quarts d'une barre de 200 px (45 min), tremblé de 3 px : un toucher, pas un geste.
+    await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 150 }] }));
+    expect(bar.hasAttribute("data-scrub")).toBe(true);
+    expect(Number(input.value)).toBeCloseTo(600, 0);
+    await act(async () => void fireEvent.touchMove(bar, { touches: [{ clientX: 153 }] }));
+    expect(Number(input.value)).toBeCloseTo(600, 0);
+    await act(async () => void fireEvent.touchEnd(bar));
 
-    await act(async () => void fireEvent.touchMove(bar, { touches: [{ clientX: 150 }] }));
-    expect(Number(input.value)).toBeCloseTo(2700, 0);
+    expect(onSeekRequest).not.toHaveBeenCalled();
+    expect(video!.currentTime).toBe(600);
+  });
+
+  it("au doigt, glisser de +X px avance de X/largeur × durée depuis la position, pas depuis le doigt", async () => {
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const onSeekRequest = vi.fn();
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} onSeekRequest={onSeekRequest} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    const input = container.querySelector(".player-seek") as HTMLInputElement;
+    await withDuration(video!, bar);
+    video!.currentTime = 600;
+    await act(async () => void video!.dispatchEvent(new Event("timeupdate")));
+
+    // Doigt posé à 150 px (ce serait 45 min en absolu), glissé de +20 px : 600 + 20/200 × 3600 = 960.
+    await act(async () => void fireEvent.touchStart(input, { touches: [{ clientX: 150 }] }));
+    await act(async () => void fireEvent.touchMove(bar, { touches: [{ clientX: 170 }] }));
+    // La barre suit pendant le geste, rien n'est encore validé.
+    expect(Number(input.value)).toBeCloseTo(960, 0);
+    expect(video!.currentTime).toBe(600);
+    // Bornée au début : −200 px depuis le départ.
+    await act(async () => void fireEvent.touchMove(bar, { touches: [{ clientX: -50 }] }));
+    expect(Number(input.value)).toBe(0);
+    await act(async () => void fireEvent.touchMove(bar, { touches: [{ clientX: 170 }] }));
+    await act(async () => void fireEvent.touchEnd(bar));
+
+    expect(onSeekRequest).toHaveBeenCalledTimes(1);
+    expect(video!.currentTime).toBeCloseTo(960, 0);
   });
 
   it("à la souris, saute là où est le curseur, pas là où l'input l'a placé", async () => {
@@ -271,7 +285,7 @@ describe("PlayerControls — la barre de progression", () => {
     expect(Number(input.value)).toBe(0);
   });
 
-  it("un toucher bref ne saute qu'une fois, malgré les événements souris que le navigateur rejoue", async () => {
+  it("un glissement au doigt ne saute qu'une fois, malgré les événements souris que le navigateur rejoue", async () => {
     // Après un touchend, le navigateur envoie au même point mousemove, mousedown et mouseup
     // « de compatibilité ». Le conteneur validait au touchend, puis l'onMouseUp de l'input
     // validait une seconde fois : deux demandes de saut, currentTime écrit deux fois (le saut
@@ -285,11 +299,13 @@ describe("PlayerControls — la barre de progression", () => {
     const input = container.querySelector(".player-seek") as HTMLInputElement;
     await withDuration(video!, bar);
 
+    // Un glissement de +50 px depuis 0 (le glissement relatif, §108), puis l'écho souris au point levé.
     await act(async () => void fireEvent.touchStart(input, { touches: [{ clientX: 50 }] }));
+    await act(async () => void fireEvent.touchMove(input, { touches: [{ clientX: 100 }] }));
     await act(async () => void fireEvent.touchEnd(input));
-    await act(async () => void fireEvent.mouseMove(input, { clientX: 50 }));
-    await act(async () => void fireEvent.mouseDown(input, { clientX: 50 }));
-    await act(async () => void fireEvent.mouseUp(input, { clientX: 50 }));
+    await act(async () => void fireEvent.mouseMove(input, { clientX: 100 }));
+    await act(async () => void fireEvent.mouseDown(input, { clientX: 100 }));
+    await act(async () => void fireEvent.mouseUp(input, { clientX: 100 }));
 
     expect(onSeekRequest).toHaveBeenCalledTimes(1);
     expect(onSeekRequest.mock.calls[0][0]).toBeCloseTo(900, 0);
@@ -325,8 +341,11 @@ describe("PlayerControls — la barre de progression", () => {
     await withDuration(video!, bar);
 
     await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 50 }] }));
+    await act(async () => void fireEvent.touchMove(bar, { touches: [{ clientX: 120 }] }));
     await act(async () => void fireEvent.touchCancel(bar));
     expect(video!.currentTime).toBe(0);
+    // Et la barre revient là où en est le film.
+    expect(Number((container.querySelector(".player-seek") as HTMLInputElement).value)).toBe(0);
   });
 
   it("redevient fine aussi quand le système reprend le toucher", async () => {
@@ -1388,20 +1407,27 @@ describe("PlayerControls — glisser au doigt sur la barre", () => {
 
   it("ignore la valeur que l'input natif se donne pendant le glisser", async () => {
     const { input } = await mountedBar();
+    // En relatif depuis 0 (§108) : +20 px sur 200, soit 360 s.
     fireEvent.touchStart(input, { touches: [{ clientX: 100 }] });
-    fireEvent.touchMove(input, { touches: [{ clientX: 102 }] });
+    fireEvent.touchMove(input, { touches: [{ clientX: 120 }] });
     // L'input natif, parti de sa pastille, annonce autre chose que le doigt.
     fireEvent.change(input, { target: { value: "300" } });
-    expect(Number(input.value)).toBeCloseTo(1836, 0);
+    expect(Number(input.value)).toBeCloseTo(360, 0);
   });
 
   it("ne bouge pas pour un tremblement de moins d'un pixel", async () => {
     const { input } = await mountedBar();
+    // En relatif depuis 0 (§108). Sous le seuil d'un toucher, rien ne bouge.
     fireEvent.touchStart(input, { touches: [{ clientX: 100 }] });
-    fireEvent.touchMove(input, { touches: [{ clientX: 100.4 }] });
-    expect(Number(input.value)).toBeCloseTo(1800, 0);
     fireEvent.touchMove(input, { touches: [{ clientX: 101.5 }] });
-    expect(Number(input.value)).toBeCloseTo(1827, 0);
+    expect(Number(input.value)).toBe(0);
+    fireEvent.touchMove(input, { touches: [{ clientX: 110 }] });
+    expect(Number(input.value)).toBeCloseTo(180, 0);
+    // Un tremblement de moins d'un pixel pendant le glissement : la barre ne bouge pas.
+    fireEvent.touchMove(input, { touches: [{ clientX: 110.4 }] });
+    expect(Number(input.value)).toBeCloseTo(180, 0);
+    fireEvent.touchMove(input, { touches: [{ clientX: 111.5 }] });
+    expect(Number(input.value)).toBeCloseTo(207, 0);
   });
 });
 

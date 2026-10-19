@@ -1165,7 +1165,7 @@
    plus faute de survol. La partie lue est maintenant un dégradé piloté par une
    variable, et la barre réagit au doigt comme au curseur. La partie lue est
    au violet de la marque — « où j'en suis » est un état personnel (§83,
-   option B) ; la pastille qu'on saisit reste blanche (`currentColor`).
+   option B) ; pas de pastille depuis le 19/10/2026 (plus bas).
 
    Trois couches empilées, qui grandissent ensemble : le rail au repos, ce qui
    est déjà chargé, puis ce qui est lu. */
@@ -1182,6 +1182,11 @@
   touch-action: none;
 }
 .player-seek:focus { outline: none; }
+/* Une ombre douce sous toute la barre (19/10/2026) : sur une scène claire — neige, ciel —, le rail
+   blanc translucide et la partie lue blanche se perdaient dans l'image. Portée par le rail, qui court
+   sur toute la longueur sous la partie lue : la barre entière a son contour, quel que soit le moteur.
+   Invisible sur du noir ; pas de flou de surface. Même ombre que le texte des temps (`.player-time`). */
+.player-seek-rail { box-shadow: 0 1px 3px rgb(0 0 0 / 0.4), 0 0 0 0.5px rgb(0 0 0 / 0.15); }
 .player-seek:focus-visible { outline: 2px solid rgb(255 255 255 / 0.6); outline-offset: 4px; border-radius: 999px; }
 
 /* La partie lue est blanche (le texte de la barre) : un lecteur façon Apple s'efface devant l'image.
@@ -1202,25 +1207,18 @@
 [data-scrub] .player-seek::-webkit-slider-runnable-track,
 .player-seek:focus-visible::-webkit-slider-runnable-track { height: 12px; }
 
+/* Pas de pastille, nulle part (19/10/2026, Louis) : comme l'app TV d'Apple, la tête de lecture est le bout
+   de la partie blanche, qui s'épaissit quand on la saisit — rien de dessiné dessus, au doigt, à la souris
+   ni au clavier (le contour `:focus-visible` de la barre reste pour le clavier). Le pouce natif garde sa
+   taille, invisible : c'est encore lui que la souris attrape pour glisser. */
 .player-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 14px;
   height: 14px;
-  border-radius: 999px;
-  background: currentColor;
   border: none;
-  /* Centrée sur une piste dont la hauteur change : la moitié de la différence. */
-  margin-top: -3px;
+  background: transparent;
   opacity: 0;
-  transform: scale(0.5);
-  transition: opacity 220ms ease-out, transform 260ms cubic-bezier(0.34, 1.3, 0.64, 1), margin-top 260ms cubic-bezier(0.33, 1, 0.68, 1);
-}
-[data-scrub] .player-seek::-webkit-slider-thumb,
-.player-seek:focus-visible::-webkit-slider-thumb {
-  opacity: 1;
-  transform: scale(1);
-  margin-top: -1px;
 }
 
 .player-seek::-moz-range-track {
@@ -1234,12 +1232,9 @@
   width: 14px;
   height: 14px;
   border: none;
-  border-radius: 999px;
-  background: currentColor;
+  background: transparent;
   opacity: 0;
-  transition: opacity 220ms ease-out;
 }
-[data-scrub] .player-seek::-moz-range-thumb { opacity: 1; }
 
 /* ─── L'attente, pendant la lecture ───────────────────────────────────────────
    Une roue au centre de l'écran dit « bloqué ». Un fil qui court en haut dit
