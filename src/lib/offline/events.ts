@@ -38,7 +38,9 @@ export type OfflineEvent =
   /** Effacée du serveur par le balayage (plus téléchargée depuis trois jours, ou échec de la veille). */
   | "expired"
   /** Effacée du serveur par l'administrateur, depuis l'Activité. */
-  | "deleted";
+  | "deleted"
+  /** Effacée du serveur pour tenir dans sa place (`OFFLINE_SERVER_QUOTA_GB`), une fois récupérée par tous. */
+  | "evicted";
 
 const MESSAGES: Record<OfflineEvent, string> = {
   requested: "téléchargement demandé",
@@ -50,6 +52,7 @@ const MESSAGES: Record<OfflineEvent, string> = {
   removed: "supprimé de l'appareil",
   expired: "effacé du serveur (expiré)",
   deleted: "effacé du serveur par l'administrateur",
+  evicted: "effacé du serveur (place)",
 };
 
 /** Ce qu'une ligne dit de la version concernée. */

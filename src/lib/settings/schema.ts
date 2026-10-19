@@ -98,6 +98,9 @@ export const SETTINGS: readonly SettingDef[] = [
   // Le temps de la bêta, administrateurs seulement (Louis, 19/10/2026) ; ouvert à tous les comptes
   // d'un geste ici, comme le Chromecast.
   { key: "OFFLINE_DOWNLOADS_FOR_EVERYONE", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  // La place que les versions préparées peuvent prendre sur le serveur, en Go (20/10/2026) : au-delà,
+  // les plus anciennes que tous les appareils ont entièrement récupérées s'effacent (`jobs.ts`).
+  { key: "OFFLINE_SERVER_QUOTA_GB", group: "playback", kind: "number", need: "optional", fallback: "50", inApp: true, placeholder: "50" },
   { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   // L'application que le Chromecast ouvre (DECISIONS.md §64) : vide, le récepteur public de Google.
   // Pas un secret — l'identifiant d'un récepteur qu'une installation a enregistré elle-même.

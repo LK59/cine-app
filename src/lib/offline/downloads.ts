@@ -755,3 +755,30 @@ export function offlineEpisodesOf(sonarrId: number | null, seriesTitle: string):
     .filter((d) => d.episode && d.episode.sonarrId === sonarrId && d.episode.seriesTitle === seriesTitle)
     .sort((a, b) => episodeRank(a.episode!) - episodeRank(b.episode!));
 }
+
+/** Combien de téléchargements ce compte a sur cet appareil (sans charger la liste). */
+export async function offlineDownloadCount(owner: string | null): Promise<number> {
+  if (!owner || !deviceStoreSupported()) return 0;
+  return (await deviceStore.list(owner).catch(() => [] as string[])).length;
+}
+
+/**
+ * Effacer tous les téléchargements de ce compte sur cet appareil — proposé à la déconnexion
+ * (Louis, 20/10/2026). Le serveur apprend d'abord que ce compte n'en veut plus (la session est encore
+ * là), puis le dossier du compte part en entier. Borné : la déconnexion n'attend pas un réseau lent.
+ */
+export async function removeAccountDownloads(owner: string | null): Promise<void> {
+  if (!owner || !deviceStoreSupported()) return;
+  const ids = await deviceStore.list(owner).catch(() => [] as string[]);
+  for (const id of ids) claimed.get(id)?.abort();
+  await Promise.race([
+    Promise.all(ids.map((id) => fetch(`/api/offline/jobs/${id}`, { method: "DELETE" }).catch(() => null))),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ]);
+  for (const id of ids) forgetOfflineImages(owner, id);
+  await deviceStore.removeAccount(owner).catch(() => {});
+  if (account === owner) {
+    downloads = [];
+    emit();
+  }
+}

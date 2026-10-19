@@ -824,7 +824,8 @@
         "removed": "Supprimé de l'appareil",
         "expired": "Effacé du serveur (expiré)",
         "deleted": "Effacé du serveur",
-        "download": "Fichier d'origine téléchargé"
+        "download": "Fichier d'origine téléchargé",
+        "evicted": "Effacé du serveur (place)"
       }
     }
   },
@@ -2406,7 +2407,11 @@
       "resumeShort": "Reprendre",
       "paused": "En pause · {pct} %",
       "offlineStarved": "Hors ligne : la suite n'est pas encore téléchargée. La lecture reprendra au retour du réseau.",
-      "removedWhilePlaying": "Ce téléchargement a été supprimé de l'appareil."
+      "removedWhilePlaying": "Ce téléchargement a été supprimé de l'appareil.",
+      "signOutTitle": "Téléchargements sur cet appareil",
+      "signOutText": "Ce compte a {n} téléchargement sur cet appareil. Le garder pour le retrouver à la prochaine connexion, ou l'effacer ?|Ce compte a {n} téléchargements sur cet appareil. Les garder pour les retrouver à la prochaine connexion, ou les effacer ?",
+      "signOutKeep": "Les garder et se déconnecter",
+      "signOutDelete": "Les effacer et se déconnecter"
     }
   },
   "cinema": {
@@ -3057,6 +3062,7 @@
       "PLAYER_SERVER_FALLBACK": "Relais vers Jellyfin pour les fichiers que le navigateur ne lit pas",
       "OFFLINE_DOWNLOADS": "Téléchargement hors ligne dans l'application (bêta)",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Téléchargement hors ligne ouvert à tous les comptes (sinon administrateurs seulement)",
+      "OFFLINE_SERVER_QUOTA_GB": "Place maximale des téléchargements sur le serveur (Go)",
       "PLAYER_AUTO_FRAME": "Agrandir l'image au-dessus des bandes noires",
       "CAST_RECEIVER_APP_ID": "Récepteur Chromecast (identifiant d'application, vide = celui de Google)",
       "CHROMECAST_FOR_EVERYONE": "Diffusion Chromecast pour tous les comptes (sinon administrateurs seulement)",

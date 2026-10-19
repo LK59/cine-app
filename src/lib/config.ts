@@ -130,6 +130,11 @@ export const config = {
     get offlineDownloadsForEveryone() {
       return optional("OFFLINE_DOWNLOADS_FOR_EVERYONE", "false") === "true";
     },
+    // La place maximale des versions préparées sur le serveur, en octets (réglage en Go, 50 par défaut).
+    get offlineServerQuotaBytes() {
+      const gb = Number(optional("OFFLINE_SERVER_QUOTA_GB", "50"));
+      return (Number.isFinite(gb) && gb > 0 ? gb : 50) * 1024 ** 3;
+    },
     // Whether the picture is enlarged to hide black bars baked into the file (see pictureFrame.ts).
     // Measured on the server from Jellyfin's trickplay thumbnails — no video is decoded — so it
     // needs trickplay images to exist; without them the picture is simply shown as it is.

@@ -23,7 +23,7 @@ vi.mock("@/lib/logger", async (importOriginal) => ({ ...(await importOriginal<ty
 
 import { getDb } from "@/lib/db";
 import { Writable } from "node:stream";
-import { forgetOfflineJob, offlineDir, offlineFile, offlineIndex, offlineJobFor, requestOfflineJob, type OfflineJob } from "@/lib/offline/jobs";
+import { enforceOfflineQuota, forgetOfflineJob, markOfflineFetched, offlineDir, offlineFile, offlineIndex, offlineJobFor, requestOfflineJob, type OfflineJob } from "@/lib/offline/jobs";
 
 const ITEM = "a".repeat(32);
 const FIXTURE = fs.readFileSync(path.join(process.cwd(), "src/__tests__/fixtures/offline/jellyfin-like.mp4"));
@@ -258,5 +258,48 @@ describe("les défauts du 19/10 (relecture du serveur)", () => {
     const index = await offlineIndex(indexJob(id, FIXTURE.length), 0);
     expect(index.next).toBeLessThanOrEqual(cut);
     for (const f of index.fragments) expect(f.offset + f.size).toBeLessThanOrEqual(cut);
+  });
+});
+
+describe("la place des versions sur le serveur (quota, 20/10/2026)", () => {
+  const put = (id: string, status: string, bytes: number, accessedAt: number) =>
+    getDb()
+      .prepare(
+        `INSERT INTO offline_jobs (id, item_id, file_version, audio_index, quality, codec, status, generation, bytes, expected_bytes, runtime_s, created_at, accessed_at)
+         VALUES (?, ?, 'v1', 1, 'standard', 'hevc', ?, 1, ?, ?, 3, ?, ?)`
+      )
+      .run(id, ITEM, status, bytes, bytes, accessedAt, accessedAt);
+  const ask = (account: string, id: string) => getDb().prepare("INSERT INTO offline_requests (account, job_id, created_at) VALUES (?, ?, 0)").run(account, id);
+  const left = () => (getDb().prepare("SELECT id FROM offline_jobs ORDER BY id").all() as { id: string }[]).map((r) => r.id);
+  const GB = 1024 ** 3;
+
+  it("au-delà de la limite, efface les plus anciennes que tous ont récupérées — jamais une en cours ou attendue", () => {
+    put("a", "done", 20 * GB, 1); // la plus ancienne, récupérée par tous
+    put("b", "done", 20 * GB, 2); // récupérée par l'un, pas par l'autre : gardée
+    put("c", "done", 20 * GB, 3); // récupérée, plus récente
+    put("d", "running", 20 * GB, 4); // en préparation : jamais
+    ask("louis", "a");
+    ask("louis", "b");
+    ask("mathis", "b");
+    ask("louis", "c");
+    ask("louis", "d");
+    markOfflineFetched("louis", "a");
+    markOfflineFetched("louis", "b");
+    markOfflineFetched("louis", "c");
+    // 80 Go pour 50 : « a » puis « c » partent ; « b » et « d » restent, au-dessus de la limite.
+    enforceOfflineQuota(50 * GB);
+    expect(left()).toEqual(["b", "d"]);
+    // Le second appareil finit : « b » devient effaçable, et part dès que la limite l'exige.
+    markOfflineFetched("mathis", "b");
+    enforceOfflineQuota(30 * GB);
+    expect(left()).toEqual(["d"]);
+  });
+
+  it("sous la limite, rien ne bouge — les trois jours de garde font le reste", () => {
+    put("a", "done", 10 * GB, 1);
+    ask("louis", "a");
+    markOfflineFetched("louis", "a");
+    enforceOfflineQuota(50 * GB);
+    expect(left()).toEqual(["a"]);
   });
 });

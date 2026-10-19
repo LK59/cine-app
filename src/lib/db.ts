@@ -577,6 +577,9 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (account, job_id)
     );
   `);
+  // Quand l'appareil de ce compte a reçu la version entière : le quota du serveur n'efface que ce que
+  // tous ses demandeurs ont récupéré (20/10/2026).
+  try { db.exec("ALTER TABLE offline_requests ADD COLUMN fetched_at INTEGER"); } catch { /* already exists */ }
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");

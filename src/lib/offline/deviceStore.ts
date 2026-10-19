@@ -241,4 +241,6 @@ export const deviceStore = {
   videoSize: (account: string, id: string) => call<number>("size", [...offlinePaths(account, id), "video.mp4"]),
   truncateVideo: (account: string, id: string, size: number) => call<number>("truncate", [...offlinePaths(account, id), "video.mp4"], { at: size }),
   remove: (account: string, id: string) => call<null>("remove", offlinePaths(account, id)),
+  /** Tous les téléchargements d'un compte sur cet appareil (son dossier entier). */
+  removeAccount: (account: string) => call<null>("remove", offlinePaths(account)),
 };

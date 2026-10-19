@@ -5934,6 +5934,15 @@ et la navigation repart de zéro.
   même titre (sinon il l'effaçait : « Préparation » sans fin puis « Échec »).
 - *H.264* : `h264_qsv` ne marque pas ses images clés forcées ; les fragments trop longs sont découpés
   à la lecture et ces images servent d'entrées de saut (`fmp4.ts`, `Fmp4Reader`).
+- *Place sur le serveur* (20/10/2026) : `OFFLINE_SERVER_QUOTA_GB` (50 par défaut, Paramètres › Lecture).
+  Au-delà, les versions finies que **tous** leurs demandeurs ont entièrement récupérées
+  (`offline_requests.fetched_at`, noté à la dernière plage servie) s'effacent, la moins récemment
+  servie d'abord (`enforceOfflineQuota`, ligne `evicted`). Jamais une version en préparation, en file
+  ou encore téléchargée : plusieurs gros téléchargements à la fois dépassent la limite, rattrapée dès
+  qu'ils finissent. Les trois jours de garde s'appliquent en plus.
+- *Déconnexion* (20/10/2026) : avec des téléchargements de ce compte sur l'appareil, les trois boutons
+  « Se déconnecter » (`useSignOut`) demandent d'abord : les garder (retrouvés à la reconnexion) ou les
+  effacer (`removeAccountDownloads` : demandes retirées au serveur, dossier du compte effacé).
 - *Accès* : administrateurs seulement le temps de la bêta (`OFFLINE_DOWNLOADS_FOR_EVERYONE`, faux par
   défaut), ouvrable à tous d'un geste comme le Chromecast.
 - *Activité* : chaque étape au journal (`scope: "offline"`), les copies du serveur dans le panneau.

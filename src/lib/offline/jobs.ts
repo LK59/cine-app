@@ -595,6 +595,43 @@ function readerOf(handle: fs.promises.FileHandle, size: number) {
   };
 }
 
+/**
+ * Le compte a reçu la version entière (la dernière plage d'une version finie, `file` route) : noté, et
+ * le quota du serveur est revu — c'est souvent à ce moment qu'une version devient effaçable.
+ */
+export function markOfflineFetched(account: string, id: string, now = Date.now()): void {
+  const changed = getDb().prepare("UPDATE offline_requests SET fetched_at = ? WHERE account = ? AND job_id = ? AND fetched_at IS NULL").run(now, account, id).changes;
+  if (changed > 0) enforceOfflineQuota();
+}
+
+/**
+ * La place des versions sur le serveur (`OFFLINE_SERVER_QUOTA_GB`, 50 Go par défaut — Louis,
+ * 20/10/2026). Au-delà, les versions finies que **tous** leurs demandeurs ont entièrement récupérées
+ * s'effacent, la moins récemment servie d'abord, jusqu'à repasser sous la limite. Une version en
+ * préparation, en file, ou qu'un appareil télécharge encore n'est jamais effacée : plusieurs gros
+ * téléchargements à la fois peuvent dépasser la limite, et elle est rattrapée dès qu'ils finissent.
+ * Les trois jours de garde (`sweepOfflineJobs`) s'appliquent en plus, quelle que soit la place.
+ */
+export function enforceOfflineQuota(quota = config.player.offlineServerQuotaBytes): void {
+  const db = getDb();
+  const rows = db.prepare("SELECT id, status, bytes FROM offline_jobs").all() as { id: string; status: OfflineStatus; bytes: number }[];
+  let total = rows.reduce((sum, r) => sum + (live.running.get(r.id)?.bytes ?? r.bytes), 0);
+  if (total <= quota) return;
+  const candidates = db
+    .prepare(
+      `SELECT * FROM offline_jobs j WHERE j.status = 'done'
+         AND NOT EXISTS (SELECT 1 FROM offline_requests r WHERE r.job_id = j.id AND r.fetched_at IS NULL)
+       ORDER BY j.accessed_at ASC`
+    )
+    .all() as AdminRow[];
+  for (const row of candidates) {
+    if (total <= quota) break;
+    void logOfflineEvent("evicted", fromRow(row), { accounts: accountsOf(row.id), bytes: row.bytes, lastAccess: row.accessed_at, quotaBytes: quota, totalBytes: total });
+    dropJob(row.id);
+    total -= row.bytes;
+  }
+}
+
 /** Efface les versions que plus personne ne télécharge, et les échecs d'hier. */
 export function sweepOfflineJobs(now = Date.now()): void {
   const db = getDb();
@@ -605,6 +642,7 @@ export function sweepOfflineJobs(now = Date.now()): void {
     void logOfflineEvent("expired", fromRow(row), { accounts: accountsOf(row.id), status: row.status, bytes: row.bytes, lastAccess: row.accessed_at });
     dropJob(row.id);
   }
+  enforceOfflineQuota();
   // Les fichiers sans ligne (une suppression interrompue) : effacés aussi.
   try {
     const known = new Set((db.prepare("SELECT id FROM offline_jobs").all() as { id: string }[]).map((r) => r.id));

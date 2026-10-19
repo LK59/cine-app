@@ -1,12 +1,12 @@
 "use client";
 
+import { useSignOut } from "@/components/offline/useSignOut";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
-import { hardNavigate, signOut } from "@/lib/signOut";
 import { LOCALES, LOCALE_LABELS, getDateLocale, type Locale } from "@/lib/i18n";
 import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { useLocale, useT } from "@/components/TranslationProvider";
@@ -155,7 +155,8 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
   const needsHdrHelp = useNeedsHdrHelp();
 
   // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
-  const logout = () => signOut(hardNavigate);
+  // La question des téléchargements de l'appareil d'abord, s'il y en a (`useSignOut`).
+  const { logout, sheet: signOutSheet } = useSignOut();
 
   return (
     <PlayerPanelFrame contentWidth="42rem"
@@ -268,6 +269,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
             <LogOut size={16} />
             {t("player.account.signOutAction")}
           </button>
+          {signOutSheet}
         </div>
 
         {/* La signature, sous tout le reste : la dernière chose de la page, jamais une qu'on lit

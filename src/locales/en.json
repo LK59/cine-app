@@ -824,7 +824,8 @@
         "removed": "Removed from the device",
         "expired": "Deleted from the server (expired)",
         "deleted": "Deleted from the server",
-        "download": "Original file downloaded"
+        "download": "Original file downloaded",
+        "evicted": "Removed from the server (space)"
       }
     }
   },
@@ -2406,7 +2407,11 @@
       "resumeShort": "Resume",
       "paused": "Paused · {pct}%",
       "offlineStarved": "Offline: the rest isn't downloaded yet. Playback will resume when the network is back.",
-      "removedWhilePlaying": "This download was removed from the device."
+      "removedWhilePlaying": "This download was removed from the device.",
+      "signOutTitle": "Downloads on this device",
+      "signOutText": "This account has {n} download on this device. Keep it for your next sign-in, or delete it?|This account has {n} downloads on this device. Keep them for your next sign-in, or delete them?",
+      "signOutKeep": "Keep them and sign out",
+      "signOutDelete": "Delete them and sign out"
     }
   },
   "cinema": {
@@ -3057,6 +3062,7 @@
       "PLAYER_SERVER_FALLBACK": "Hand files the browser can't play over to Jellyfin",
       "OFFLINE_DOWNLOADS": "Offline downloads in the app (beta)",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Offline downloads open to every account (otherwise administrators only)",
+      "OFFLINE_SERVER_QUOTA_GB": "Maximum server space for downloads (GB)",
       "PLAYER_AUTO_FRAME": "Enlarge the picture over black bars",
       "CAST_RECEIVER_APP_ID": "Chromecast receiver (application ID, empty = Google's)",
       "CHROMECAST_FOR_EVERYONE": "Chromecast for every account (otherwise administrators only)",

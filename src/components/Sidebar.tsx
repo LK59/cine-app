@@ -1,8 +1,8 @@
 "use client";
 
+import { useSignOut } from "@/components/offline/useSignOut";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { hardNavigate, signOut } from "@/lib/signOut";
 import { Clapperboard, LogOut, Search } from "lucide-react";
 import { NAV_PARTS, activeNavHref } from "@/components/navItems";
 import { prefetchRoute } from "@/lib/prefetch";
@@ -32,7 +32,8 @@ export function Sidebar() {
   const active = activeNavHref(pathname);
 
   // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
-  const logout = () => signOut(hardNavigate);
+  // La question des téléchargements de l'appareil d'abord, s'il y en a (`useSignOut`).
+  const { logout, sheet: signOutSheet } = useSignOut();
 
   return (
     <aside className="hidden h-full w-64 shrink-0 p-3 pr-0 md:flex">
@@ -118,6 +119,7 @@ export function Sidebar() {
           <LogOut size={17} className="shrink-0" />
           <span className="truncate">{t("nav.logout")}</span>
         </button>
+        {signOutSheet}
 
         {/* Sous « Déconnexion », hors de la liste qui défile : toujours au même endroit, jamais
             sous le masque de fondu (DECISIONS.md §41). */}

@@ -1,10 +1,10 @@
 "use client";
 
+import { useSignOut } from "@/components/offline/useSignOut";
 import { MIN_FLICK_PX } from "@/lib/useSwipeToDismiss";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { hardNavigate, signOut } from "@/lib/signOut";
 import { LogOut, MoreHorizontal, Search, RefreshCw } from "lucide-react";
 import { prefetchRoute } from "@/lib/prefetch";
 import { NAV_PARTS, NAV_ITEMS, NAV_BAR_HREFS, activeNavHref } from "@/components/navItems";
@@ -199,7 +199,8 @@ export function MobileNav() {
   }, [open]);
 
   // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
-  const logout = () => signOut(hardNavigate);
+  // La question des téléchargements de l'appareil d'abord, s'il y en a (`useSignOut`).
+  const { logout, sheet: signOutSheet } = useSignOut();
 
   async function refresh() {
     if (refreshing) return;
@@ -367,6 +368,7 @@ export function MobileNav() {
             >
               <LogOut size={16} /> {t('nav.logout')}
             </button>
+            {signOutSheet}
           </div>
 
           {/* Le pendant de la barre latérale du bureau, qui n'existe pas ici : la gestion sur

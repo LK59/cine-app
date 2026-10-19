@@ -576,7 +576,7 @@ function describeNotification(line: Record<string, unknown>, t: T): string {
   );
 }
 
-const DOWNLOAD_EVENTS = new Set(["requested", "started", "ready", "failed", "fetched", "cancelled", "removed", "expired", "deleted"]);
+const DOWNLOAD_EVENTS = new Set(["requested", "started", "ready", "failed", "fetched", "cancelled", "removed", "expired", "deleted", "evicted"]);
 const COPY_STATES = new Set(["new", "ready", "preparing", "retried"]);
 
 /** Une taille de fichier dans la langue de l'écran — « 1,2 Go », « 1.2 GB ». */

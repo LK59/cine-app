@@ -824,7 +824,8 @@
         "removed": "Vom Gerät entfernt",
         "expired": "Vom Server gelöscht (abgelaufen)",
         "deleted": "Vom Server gelöscht",
-        "download": "Originaldatei heruntergeladen"
+        "download": "Originaldatei heruntergeladen",
+        "evicted": "Vom Server gelöscht (Platz)"
       }
     }
   },
@@ -2406,7 +2407,11 @@
       "resumeShort": "Fortsetzen",
       "paused": "Pausiert · {pct} %",
       "offlineStarved": "Offline: Der Rest ist noch nicht heruntergeladen. Die Wiedergabe geht weiter, sobald das Netz zurück ist.",
-      "removedWhilePlaying": "Dieser Download wurde vom Gerät gelöscht."
+      "removedWhilePlaying": "Dieser Download wurde vom Gerät gelöscht.",
+      "signOutTitle": "Downloads auf diesem Gerät",
+      "signOutText": "Dieses Konto hat {n} Download auf diesem Gerät. Für die nächste Anmeldung behalten oder löschen?|Dieses Konto hat {n} Downloads auf diesem Gerät. Für die nächste Anmeldung behalten oder löschen?",
+      "signOutKeep": "Behalten und abmelden",
+      "signOutDelete": "Löschen und abmelden"
     }
   },
   "cinema": {
@@ -3057,6 +3062,7 @@
       "PLAYER_SERVER_FALLBACK": "Dateien, die der Browser nicht abspielt, an Jellyfin übergeben",
       "OFFLINE_DOWNLOADS": "Offline-Downloads in der App (Beta)",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Offline-Downloads für alle Konten (sonst nur Administratoren)",
+      "OFFLINE_SERVER_QUOTA_GB": "Maximaler Serverplatz für Downloads (GB)",
       "PLAYER_AUTO_FRAME": "Bild über schwarze Balken vergrößern",
       "CAST_RECEIVER_APP_ID": "Chromecast-Empfänger (Anwendungs-ID, leer = der von Google)",
       "CHROMECAST_FOR_EVERYONE": "Chromecast für alle Konten (sonst nur Administratoren)",

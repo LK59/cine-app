@@ -55,9 +55,12 @@ describe("signOut", () => {
   // Une seule façon de se déconnecter : trois copies non gardées, c'est ainsi que le défaut
   // existait trois fois.
   it("est la seule à appeler la déconnexion côté client", () => {
+    // Les trois boutons passent par `useSignOut` (la question des téléchargements de l'appareil, 20/10/2026),
+    // qui appelle `signOut`.
+    expect(readFileSync("src/components/offline/useSignOut.tsx", "utf8").includes("signOut(")).toBe(true);
     for (const f of ["src/components/player/PlayerAccountPanel.tsx", "src/components/Sidebar.tsx", "src/components/MobileNav.tsx"]) {
       const src = readFileSync(f, "utf8");
-      expect([f, src.includes("signOut(")]).toEqual([f, true]);
+      expect([f, src.includes("useSignOut(")]).toEqual([f, true]);
       expect([f, src.includes('"/api/auth/logout"')]).toEqual([f, false]);
     }
   });
