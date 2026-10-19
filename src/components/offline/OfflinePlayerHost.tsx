@@ -144,15 +144,19 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   useEffect(() => {
     if (isMini) return;
     const targets = [document.documentElement, document.body];
-    const before = targets.map((el) => [el.style.overflow, el.style.overscrollBehavior] as const);
+    const before = targets.map((el) => [el.style.overflow, el.style.overscrollBehavior, el.style.backgroundColor] as const);
     for (const el of targets) {
       el.style.overflow = "hidden";
       el.style.overscrollBehavior = "none";
+      // Le fond du document, noir comme le lecteur : ce qu'iOS laisse voir sous lui (la bande du bas,
+      // celle de la barre d'accueil) ne se distingue plus de l'image (Louis, 19/10/2026).
+      el.style.backgroundColor = "#000";
     }
     return () => {
       targets.forEach((el, i) => {
         el.style.overflow = before[i][0];
         el.style.overscrollBehavior = before[i][1];
+        el.style.backgroundColor = before[i][2];
       });
     };
   }, [isMini]);
