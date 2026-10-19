@@ -10,8 +10,7 @@ import { useToast } from "@/components/Toast";
 import { fetcher } from "@/lib/swr";
 import { fetchDirectInfo } from "@/lib/directInfo";
 import { formatDurationShort, formatFileSize } from "@/lib/format";
-import { labelAudioTracks } from "@/lib/trackLabel";
-import { normaliseLanguage, trackLanguage } from "@/lib/trackPreferences";
+import { normaliseLanguage } from "@/lib/trackPreferences";
 import { isWebKitEngine } from "@/lib/webkitEngine";
 import { useOfflineDownloadsEnabled } from "@/lib/offline/useOfflineEnabled";
 import { deviceStoreSupported } from "@/lib/offline/deviceStore";
@@ -23,6 +22,8 @@ import {
   useOfflineDownloadFor,
   type OfflineDownload,
 } from "@/lib/offline/downloads";
+import { offlineTracks, requestEpisodeDownload, trackForLanguage, type OfflineSeriesRef, type TrackLabeller } from "@/lib/offline/episodeDownloads";
+import type { CinemaEpisode, CinemaSeason } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 
 /**
  * Le téléchargement hors ligne sur la fiche d'un film (bêta, 19/10/2026) — une seule décision pour
@@ -40,7 +41,7 @@ export function BetaBadge() {
 }
 
 /** HEVC si ce navigateur le confie à MediaSource, sinon H.264 — ce que le lecteur hors ligne lira. */
-function offlineCodec(): OfflineCodec {
+export function offlineCodec(): OfflineCodec {
   const hevc = 'video/mp4; codecs="hvc1.1.6.L120.90,mp4a.40.2"';
   const managed = (globalThis as { ManagedMediaSource?: { isTypeSupported(t: string): boolean } }).ManagedMediaSource;
   try {
@@ -52,7 +53,7 @@ function offlineCodec(): OfflineCodec {
   return "h264";
 }
 
-const appleTouch = () => typeof navigator !== "undefined" && isWebKitEngine(navigator.userAgent) && navigator.maxTouchPoints > 1;
+export const appleTouch = () => typeof navigator !== "undefined" && isWebKitEngine(navigator.userAgent) && navigator.maxTouchPoints > 1;
 
 export interface OfflineTitle {
   itemId: string;
@@ -273,39 +274,31 @@ interface Preferences {
   audioLanguage: string | null;
 }
 
-/** La fenêtre de choix : piste son et qualité, validées par « Télécharger ». */
-function OfflineChoiceSheet({ open, onClose, itemId, radarrId, title, year, posterUrl, runtimeMinutes }: OfflineTitle & { open: boolean; onClose: () => void }) {
+/** La langue audio du compte (préférence Jellyfin), lue quand une fenêtre de choix s'ouvre. */
+export function useAccountAudioLanguage(open: boolean): string | null {
+  const { data: prefs } = useSWR<Preferences>(open ? "/api/player/account/preferences" : null, fetcher, { revalidateOnFocus: false });
+  return normaliseLanguage(prefs?.audioLanguage ?? null);
+}
+
+/** Les traductions des étiquettes de pistes, pour `offlineTracks`. */
+export function useTrackLabeller(): TrackLabeller {
   const t = useT();
   const { locale } = useLocale();
-  const toast = useToast();
-  const { data: info, error: infoError } = useSWR(open ? ["offline-tracks", itemId] : null, () => fetchDirectInfo(itemId), { revalidateOnFocus: false });
-  const { data: prefs } = useSWR<Preferences>(open ? "/api/player/account/preferences" : null, fetcher, { revalidateOnFocus: false });
-  const [audio, setAudio] = useState<number | null>(null);
-  const [quality, setQuality] = useState<OfflineQuality>("standard");
+  return useMemo(
+    () => ({ locale, canaux: (n: number) => t("player.trackLabel.channels", { n }), piste: (n: number) => t("player.trackLabel.track", { n }) }),
+    [locale, t]
+  );
+}
+
+/**
+ * La place libre de l'appareil, lue à l'ouverture d'une fenêtre de choix — pour prévenir, jamais pour
+ * refuser. Chrome ne dit pas la vraie place : il annonce un quota d'environ « ce qui est utilisé
+ * + 10 Gio » (pour ne pas laisser deviner le disque, en navigation privée surtout), si bien que
+ * l'avertissement peut sortir alors que le disque a la place — un avertissement donc, et un bouton
+ * qui reste ouvert.
+ */
+export function useFreeBytes(open: boolean): number | null {
   const [freeBytes, setFreeBytes] = useState<number | null>(null);
-
-  const tracks = useMemo(() => {
-    if (!info) return [];
-    const labels = labelAudioTracks(
-      info.audio.map((a) => ({ number: a.index, language: a.language, name: a.displayTitle, isDefault: a.isDefault, isForced: false, codecId: a.codec, channels: a.channels, profile: a.profile })),
-      {
-        locale,
-        originalLanguage: info.originalLanguage,
-        canaux: (n) => t("player.trackLabel.channels", { n }),
-        piste: (n) => t("player.trackLabel.track", { n }),
-      }
-    );
-    return info.audio.map((a, i) => ({ index: a.index, label: labels[i]?.label ?? String(a.index), track: a }));
-  }, [info, locale, t]);
-
-  // La piste préchoisie : la langue du compte, sinon celle du fichier par défaut, sinon la première.
-  const preferred = useMemo(() => {
-    const wanted = normaliseLanguage(prefs?.audioLanguage ?? null);
-    const inLanguage = wanted ? tracks.find((x) => trackLanguage({ language: x.track.language, name: x.track.displayTitle, isDefault: x.track.isDefault, isForced: false }) === wanted) : null;
-    return (inLanguage ?? tracks.find((x) => x.track.isDefault) ?? tracks[0])?.index ?? null;
-  }, [tracks, prefs]);
-  const chosen = audio !== null && tracks.some((x) => x.index === audio) ? audio : preferred;
-
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -319,14 +312,107 @@ function OfflineChoiceSheet({ open, onClose, itemId, radarrId, title, year, post
       cancelled = true;
     };
   }, [open]);
+  return freeBytes;
+}
+
+/** Les deux qualités, avec la taille que chacune pèserait. */
+export function QualityPicker({ quality, onChange, bytesFor }: { quality: OfflineQuality; onChange: (q: OfflineQuality) => void; bytesFor: (q: OfflineQuality) => number }) {
+  const t = useT();
+  const { locale } = useLocale();
+  return (
+    <div>
+      <p className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">{t("player.downloads.quality")}</p>
+      <div role="radiogroup" aria-label={t("player.downloads.quality")} className="grid grid-cols-2 gap-2">
+        {(["standard", "high"] as const).map((q) => {
+          const bytes = bytesFor(q);
+          return (
+            <button
+              key={q}
+              type="button"
+              role="radio"
+              aria-checked={q === quality}
+              onClick={() => onChange(q)}
+              className={`rounded-2xl px-3 py-2.5 text-left transition-colors ${q === quality ? "bg-white/15 ring-1 ring-white/40" : "bg-white/5 active:bg-white/10"}`}
+            >
+              <span className="block text-sm font-medium text-white">{t(`player.downloads.${q}`)}</span>
+              <span className="block text-xs text-subtle">{t(`player.downloads.${q}Hint`, { size: bytes > 0 ? formatFileSize(bytes, locale) : "—" })}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * « Télécharger automatiquement l'épisode suivant » — un interrupteur, ouvert par défaut (carte
+ * blanche de Louis, 19/10/2026) : à la moitié d'un épisode lu hors ligne, le suivant se télécharge ;
+ * un épisode vu jusqu'au bout s'efface une fois le suivant arrivé.
+ */
+export function AutoNextToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  const t = useT();
+  return (
+    <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)} className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white/5 px-3 py-2.5 text-left">
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-white">{t("player.downloads.autoNext")}</span>
+        <span className="block text-xs text-subtle">{t("player.downloads.autoNextHint")}</span>
+      </span>
+      <span aria-hidden className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${on ? "bg-accent-500" : "bg-white/20"}`}>
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${on ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+      </span>
+    </button>
+  );
+}
+
+/** Un épisode à télécharger : sa série, et la liste où chercher celui qui le suit. */
+export interface OfflineEpisodeTarget {
+  series: OfflineSeriesRef;
+  episode: CinemaEpisode;
+  seasons: CinemaSeason[];
+}
+
+/**
+ * La fenêtre de choix : piste son et qualité, validées par « Télécharger ». Pour un épisode
+ * (`episode`), la même fenêtre, plus le téléchargement automatique de l'épisode suivant.
+ */
+export function OfflineChoiceSheet({
+  open,
+  onClose,
+  itemId,
+  radarrId,
+  title,
+  year,
+  posterUrl,
+  runtimeMinutes,
+  episode,
+}: OfflineTitle & { open: boolean; onClose: () => void; episode?: OfflineEpisodeTarget }) {
+  const t = useT();
+  const toast = useToast();
+  const labeller = useTrackLabeller();
+  const { data: info, error: infoError } = useSWR(open ? ["offline-tracks", itemId] : null, () => fetchDirectInfo(itemId), { revalidateOnFocus: false });
+  const wanted = useAccountAudioLanguage(open);
+  const [audio, setAudio] = useState<number | null>(null);
+  const [quality, setQuality] = useState<OfflineQuality>("standard");
+  const [autoNext, setAutoNext] = useState(true);
+  const freeBytes = useFreeBytes(open);
+
+  const tracks = useMemo(() => (info ? offlineTracks(info, labeller) : []), [info, labeller]);
+
+  // La piste préchoisie : la langue du compte, sinon celle du fichier par défaut, sinon la première.
+  const preferred = useMemo(() => trackForLanguage(tracks, wanted)?.index ?? null, [tracks, wanted]);
+  const chosen = audio !== null && tracks.some((x) => x.index === audio) ? audio : preferred;
 
   const runtimeSeconds = info?.runtimeSeconds ?? (runtimeMinutes ? runtimeMinutes * 60 : 0);
-  const sizeOf = (q: OfflineQuality) => (runtimeSeconds > 0 ? formatFileSize(expectedBytes(runtimeSeconds, q), locale) : "—");
   const lowSpace = freeBytes !== null && runtimeSeconds > 0 && freeBytes < expectedBytes(runtimeSeconds, quality) * 1.1;
 
   const start = () => {
     const track = tracks.find((x) => x.index === chosen);
     if (!track) return;
+    const failed = (error: unknown) => toast.error(t("player.downloads.startFailed", { error: error instanceof Error ? error.message : String(error) }));
+    if (episode) {
+      requestEpisodeDownload(episode.series, episode.episode, episode.seasons, { language: null, audioIndex: track.index, quality, codec: offlineCodec(), autoNext }, labeller).catch(failed);
+      return;
+    }
     startOfflineDownload({
       itemId,
       radarrId,
@@ -338,7 +424,7 @@ function OfflineChoiceSheet({ open, onClose, itemId, radarrId, title, year, post
       audioTracks: tracks.map(({ index, label }) => ({ index, label })),
       quality,
       codec: offlineCodec(),
-    }).catch((error: unknown) => toast.error(t("player.downloads.startFailed", { error: error instanceof Error ? error.message : String(error) })));
+    }).catch(failed);
   };
 
   const choice = (selected: boolean) =>
@@ -364,7 +450,7 @@ function OfflineChoiceSheet({ open, onClose, itemId, radarrId, title, year, post
         <div>
           <p className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">{t("player.downloads.audio")}</p>
           {infoError ? (
-            <p className="px-1 text-sm text-warning">{t("player.downloads.tracksFailed")}</p>
+            <p className="px-1 text-sm text-warning">{t(episode ? "player.downloads.tracksFailedEpisode" : "player.downloads.tracksFailed")}</p>
           ) : !info ? (
             <p className="px-1 text-sm text-subtle">{t("player.downloads.loadingTracks")}</p>
           ) : (
@@ -378,24 +464,8 @@ function OfflineChoiceSheet({ open, onClose, itemId, radarrId, title, year, post
             </div>
           )}
         </div>
-        <div>
-          <p className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">{t("player.downloads.quality")}</p>
-          <div role="radiogroup" aria-label={t("player.downloads.quality")} className="grid grid-cols-2 gap-2">
-            {(["standard", "high"] as const).map((q) => (
-              <button
-                key={q}
-                type="button"
-                role="radio"
-                aria-checked={q === quality}
-                onClick={() => setQuality(q)}
-                className={`rounded-2xl px-3 py-2.5 text-left transition-colors ${q === quality ? "bg-white/15 ring-1 ring-white/40" : "bg-white/5 active:bg-white/10"}`}
-              >
-                <span className="block text-sm font-medium text-white">{t(`player.downloads.${q}`)}</span>
-                <span className="block text-xs text-subtle">{t(`player.downloads.${q}Hint`, { size: sizeOf(q) })}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        <QualityPicker quality={quality} onChange={setQuality} bytesFor={(q) => (runtimeSeconds > 0 ? expectedBytes(runtimeSeconds, q) : 0)} />
+        {episode && <AutoNextToggle on={autoNext} onChange={setAutoNext} />}
         {lowSpace && <p className="px-1 text-xs text-warning">{t("player.downloads.lowSpace")}</p>}
         {appleTouch() && <p className="px-1 text-xs text-subtle">{t("player.downloads.keepOpen")}</p>}
       </div>

@@ -2317,7 +2317,18 @@
       "resumeDownloaded": "Reanudar el archivo descargado · {time}",
       "resumeOnline": "Reanudar en línea · {time}",
       "playDownloading": "Reproducir el archivo en descarga",
-      "resumeDownloading": "Reanudar el archivo en descarga · {time}"
+      "resumeDownloading": "Reanudar el archivo en descarga · {time}",
+      "downloadEpisode": "Descargar el episodio",
+      "downloadSeason": "Descargar la temporada · {size}",
+      "seasonDone": "Temporada descargada",
+      "seasonSheet": "{n} episodio por descargar|{n} episodios por descargar",
+      "seasonFailed": "No se pudo solicitar {n} episodio: {error}|No se pudieron solicitar {n} episodios: {error}",
+      "language": "Idioma",
+      "languageHint": "En cada episodio, la pista en este idioma; si no, su pista predeterminada.",
+      "defaultTrack": "Pista predeterminada",
+      "autoNext": "Descargar automáticamente el siguiente episodio",
+      "autoNextHint": "A mitad de un episodio visto sin conexión, se descarga el siguiente; un episodio visto hasta el final se borra cuando llega el siguiente.",
+      "tracksFailedEpisode": "No se pudieron leer las pistas de este episodio."
     }
   },
   "cinema": {

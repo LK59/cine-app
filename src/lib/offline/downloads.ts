@@ -40,6 +40,21 @@ export interface OfflineEpisodeFacts {
    * jusqu'au bout s'efface une fois le suivant arrivé.
    */
   autoNext: boolean;
+  /**
+   * La série chez Jellyfin : pour relire sa liste d'épisodes au moment de télécharger le suivant
+   * (absent des épisodes demandés avant le 19/10/2026 au soir — le suivant ne se télécharge alors pas).
+   */
+  seriesItemId?: string;
+  /**
+   * La langue demandée (`trackLanguage`), reprise pour l'épisode suivant : les pistes diffèrent d'un
+   * épisode à l'autre, la langue non. `null` : la piste par défaut de chaque épisode.
+   */
+  audioLanguage?: string | null;
+  /**
+   * L'épisode qui suit, tel que la liste le disait à la demande (`nextEpisodeIn`) — ce que
+   * « Épisode suivant » du lecteur hors ligne lance, depuis l'appareil s'il y est, sans réseau.
+   */
+  next?: { itemId: string; title: string } | null;
 }
 
 export interface OfflineDownload {
@@ -409,6 +424,14 @@ async function step(owner: string, d: OfflineDownload, signal: AbortSignal): Pro
 const episodeRank = (e: OfflineEpisodeFacts) => e.seasonNumber * 10_000 + (e.episodeNumber ?? 0);
 
 /**
+ * Deux épisodes de la même chaîne : les spéciaux (saison 0) s'enchaînent entre eux, les saisons
+ * entre elles — la règle de `nextEpisodeIn`. Sans elle, un spécial vu s'effaçait dès qu'un épisode
+ * ordinaire arrivait, alors que ce n'est pas sa suite.
+ */
+const sameChain = (a: OfflineEpisodeFacts, b: OfflineEpisodeFacts) =>
+  a.sonarrId === b.sonarrId && a.seriesTitle === b.seriesTitle && (a.seasonNumber === 0) === (b.seasonNumber === 0);
+
+/**
  * Le téléchargement automatique, côté ménage : un épisode vu jusqu'au bout s'efface dès qu'un
  * épisode plus loin de la même série est arrivé sur l'appareil — on garde toujours de quoi
  * continuer, jamais ce qu'on a fini.
@@ -417,7 +440,7 @@ async function sweepWatchedBefore(arrived: OfflineDownload): Promise<void> {
   const series = arrived.episode!;
   for (const d of downloads) {
     if (!d.episode || !d.watchedToEnd || !d.episode.autoNext || d.id === arrived.id) continue;
-    if (d.episode.sonarrId !== series.sonarrId || d.episode.seriesTitle !== series.seriesTitle) continue;
+    if (!sameChain(d.episode, series)) continue;
     if (episodeRank(d.episode) < episodeRank(series)) await removeOfflineDownload(d.id);
   }
 }
@@ -429,7 +452,7 @@ export async function markOfflineWatched(id: string): Promise<void> {
   await saveMeta(d);
   if (!d.episode?.autoNext) return;
   const later = downloads.find(
-    (x) => x.episode && x.state === "done" && x.episode.sonarrId === d.episode!.sonarrId && x.episode.seriesTitle === d.episode!.seriesTitle && episodeRank(x.episode) > episodeRank(d.episode!)
+    (x) => x.episode && x.state === "done" && sameChain(x.episode, d.episode!) && episodeRank(x.episode) > episodeRank(d.episode!)
   );
   if (later) await removeOfflineDownload(d.id);
 }

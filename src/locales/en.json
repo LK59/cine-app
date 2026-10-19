@@ -2317,7 +2317,18 @@
       "resumeDownloaded": "Resume the downloaded file · {time}",
       "resumeOnline": "Resume online · {time}",
       "playDownloading": "Play the file being downloaded",
-      "resumeDownloading": "Resume the file being downloaded · {time}"
+      "resumeDownloading": "Resume the file being downloaded · {time}",
+      "downloadEpisode": "Download episode",
+      "downloadSeason": "Download season · {size}",
+      "seasonDone": "Season downloaded",
+      "seasonSheet": "{n} episode to download|{n} episodes to download",
+      "seasonFailed": "{n} episode could not be requested: {error}|{n} episodes could not be requested: {error}",
+      "language": "Language",
+      "languageHint": "In each episode, the track in this language, otherwise its default track.",
+      "defaultTrack": "Default track",
+      "autoNext": "Automatically download the next episode",
+      "autoNextHint": "Halfway through an episode watched offline, the next one downloads; an episode watched to the end is removed once the next one has arrived.",
+      "tracksFailedEpisode": "The tracks of this episode could not be read."
     }
   },
   "cinema": {

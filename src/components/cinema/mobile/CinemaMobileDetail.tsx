@@ -1,6 +1,7 @@
 "use client";
 
 import { OfflineDownloadControl, OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
+import { OfflineEpisodeButton, OfflineSeasonDownload } from "@/components/offline/OfflineEpisodeDownload";
 import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -284,6 +285,11 @@ export function CinemaMobileDetail({
   if (selectedSeason === null && opening !== null) setSelectedSeason(opening);
   const activeSeason = selectedSeason ?? opening;
   const episodes = seasons.find((s) => s.seasonNumber === activeSeason)?.episodes ?? [];
+  // Le téléchargement hors ligne des épisodes (§109) — la même série que la liste du bureau.
+  const offlineSeries = useMemo(
+    () => (isSeries ? { seriesItemId: item.jellyfinItemId, sonarrId: (item as CinemaSeries).sonarrId ?? null, seriesTitle: item.title } : null),
+    [isSeries, item]
+  );
 
   // Escape still closes on the mobile layout — a hardware/bluetooth keyboard on a tablet, and
   // desktop browsers emulating a phone viewport, both reach this screen.
@@ -297,6 +303,8 @@ export function CinemaMobileDetail({
     if (inert || playerOwnsKeyboard) return;
     function onKey(e: KeyboardEvent) {
       if (showTrailer) return;
+      // Une feuille ouverte par-dessus (téléchargement hors ligne) se referme seule à Échap.
+      if (document.querySelector("[data-action-sheet]")) return;
       if (e.key === "Escape") requestClose();
     }
     window.addEventListener("keydown", onKey);
@@ -693,10 +701,20 @@ export function CinemaMobileDetail({
               </div>
             )}
 
+            {/* « Télécharger la saison » (§109), sous les pastilles — et seul quand il n'y a qu'une
+                saison, puisqu'alors il n'y a pas de pastille. */}
+            {offlineSeries && activeSeason !== null && episodes.length > 0 && (
+              <div className="mb-3 flex justify-end">
+                <OfflineSeasonDownload series={offlineSeries} seasons={seasons} seasonNumber={activeSeason} posterUrl={item.posterUrl} size="phone" />
+              </div>
+            )}
+
             <div className="space-y-4">
               {(belowFold ? episodes : episodes.slice(0, EPISODES_FIRST)).map((episode) => (
+                // Un conteneur et deux boutons côte à côte : l'épisode, et son téléchargement à droite —
+                // jamais un bouton dans un autre.
+                <div key={episode.jellyfinItemId} data-episode-row="" className="flex items-start gap-1">
                 <button
-                  key={episode.jellyfinItemId}
                   type="button"
                   // Lecture intégrée fermée : la ligne reste lisible et ne lance rien, sans pastille
                   // de lecture — même garde que Lire au-dessus. Elle lançait l'épisode quoi qu'il
@@ -708,7 +726,7 @@ export function CinemaMobileDetail({
                   // Une ligne pleine largeur s'allume, elle ne s'enfonce pas : à 0,95 elle glissait
                   // d'une quinzaine de pixels sous le doigt — voir `pressable` dans globals.css.
                   // `active:transform-none` écarte aussi l'enfoncement de base des boutons.
-                  className="flex w-full gap-3 rounded-lg text-left transition-colors active:transform-none active:bg-white/10 active:delay-75"
+                  className="flex w-full gap-3 min-w-0 flex-1 rounded-lg text-left transition-colors active:transform-none active:bg-white/10 active:delay-75"
                 >
                   <div className="relative w-32 shrink-0">
                     <PosterImage src={episode.thumbnailUrl} alt={episode.title} aspectRatio="aspect-video" unoptimized subtle />
@@ -753,6 +771,9 @@ export function CinemaMobileDetail({
                     {episode.overview && <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted">{episode.overview}</p>}
                   </div>
                 </button>
+                {/* À hauteur de la vignette (72 px) : centré sur elle, pas sur le synopsis. */}
+                {offlineSeries && <OfflineEpisodeButton series={offlineSeries} seasons={seasons} episode={episode} posterUrl={item.posterUrl} size="phone" className="mt-4" />}
+                </div>
               ))}
             </div>
 

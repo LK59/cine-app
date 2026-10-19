@@ -543,6 +543,8 @@ export function CinemaSeriesDetail({
           title={item.title}
           seasons={episodesData.seasons}
           sonarrId={item.sonarrId}
+          seriesItemId={item.jellyfinItemId}
+          posterUrl={item.posterUrl}
           nextEpisodeId={episodesData?.nextEpisode?.itemId}
           onClose={() => {
             setShowEpisodes(false);

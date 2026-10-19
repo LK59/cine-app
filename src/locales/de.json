@@ -2317,7 +2317,18 @@
       "resumeDownloaded": "Heruntergeladene Datei fortsetzen · {time}",
       "resumeOnline": "Online fortsetzen · {time}",
       "playDownloading": "Datei während des Downloads abspielen",
-      "resumeDownloading": "Datei im Download fortsetzen · {time}"
+      "resumeDownloading": "Datei im Download fortsetzen · {time}",
+      "downloadEpisode": "Folge herunterladen",
+      "downloadSeason": "Staffel herunterladen · {size}",
+      "seasonDone": "Staffel heruntergeladen",
+      "seasonSheet": "{n} Folge herunterzuladen|{n} Folgen herunterzuladen",
+      "seasonFailed": "{n} Folge konnte nicht angefordert werden: {error}|{n} Folgen konnten nicht angefordert werden: {error}",
+      "language": "Sprache",
+      "languageHint": "In jeder Folge die Tonspur in dieser Sprache, sonst ihre Standardspur.",
+      "defaultTrack": "Standardspur",
+      "autoNext": "Nächste Folge automatisch herunterladen",
+      "autoNextHint": "Zur Hälfte einer offline angesehenen Folge wird die nächste heruntergeladen; eine bis zum Ende gesehene Folge wird gelöscht, sobald die nächste da ist.",
+      "tracksFailedEpisode": "Die Tonspuren dieser Folge konnten nicht gelesen werden."
     }
   },
   "cinema": {
