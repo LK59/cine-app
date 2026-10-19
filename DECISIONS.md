@@ -3458,6 +3458,8 @@ plus » → la bonne section), `decisions-partagees.test.ts` (une seule décisio
 
 **Pages suivantes et premier affichage (12/10/2026, 8.48).** Chaque page annoncée avec une version est écrite dans le code et publiée une fois par son marqueur (`seedNewsPage`, db.ts ; `src/lib/news/page848.ts`). Un compte qui n'a encore rien vu reçoit les dernières pages fusionnées, au plus `FIRST_VIEW_PAGES` = 3 (store.ts) — c'était la dernière seule : à la 8.48, les comptes qui n'avaient pas ouvert l'appli depuis la 8.44 l'auraient perdue (3 comptes sur une vingtaine l'avaient vue). Un compte qui a vu la 8.44 ne voit que la 8.48.
 
+**Page complétée et republiée (19/10/2026, 8.68).** Une page déjà publiée par le code peut être complétée dans son fichier puis republiée une fois par un second marqueur (`republishNewsPage`, db.ts) : contenu et version remplacés, nouveau `seq` — chaque compte la revoit comme une page neuve, sans toucher `news_state`. Une installation qui ne l'avait pas encore la reçoit complète de `seedNewsPage` ; une page supprimée n'est pas recréée. Premier cas : la 8.67.2 (« Plus d'épisodes ») devenue 8.68 avec la rotation en paysage (`news-republish.test.ts`).
+
 ## 74. Une fiche est une entrée de la pile : son identité est son cran d'ouverture, pas son titre
 
 **Règle.** Rouvrir une fiche déjà présente dans la pile (la même personne depuis un de ses films, la

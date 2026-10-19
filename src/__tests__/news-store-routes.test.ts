@@ -60,7 +60,7 @@ function logLines(): Record<string, unknown>[] {
 beforeEach(() => verify.mockReset());
 
 describe("la page initiale, publiée par la migration", () => {
-  it("base vide : la 8.44, la 8.64 et la 8.67.2 sont publiées, la 8.48 attend en brouillon ; publiée, un compte qui n'a rien vu a les trois dernières fusionnées", () => {
+  it("base vide : la 8.44, la 8.64 et la 8.68 (ex-8.67.2) sont publiées, la 8.48 attend en brouillon ; publiée, un compte qui n'a rien vu a les trois dernières fusionnées", () => {
     getDb();
     const pages = newsDb.published();
     // La 8.64 est publiée d'office sur toute installation qui prend l'image (Louis, 15/10/2026).
@@ -69,7 +69,8 @@ describe("la page initiale, publiée par la migration", () => {
     const initial = pages[2];
     const p864 = pages[1];
     const p8672 = pages[0];
-    expect(p8672.content.fr.sections[0].entries[0].title).toBe("Plus d'épisodes");
+    // Complétée le 19/10 : la rotation en paysage d'abord, puis « Plus d'épisodes ».
+    expect(p8672.content.fr.sections[0].entries.map((e) => e.title)).toEqual(["Écran en paysage", "Plus d'épisodes"]);
     expect(p8672.content.fr.fixes).toEqual([]);
     expect(initial.seq).toBe(1);
     expect(initial.content.fr.sections[0].entries[0].title).toBe("Améliorer les dialogues");
