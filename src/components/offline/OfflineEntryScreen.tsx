@@ -59,7 +59,11 @@ export function OfflineEntryScreen() {
   }, []);
 
   return (
-    <main className="fixed inset-0 overflow-y-auto overscroll-contain bg-ink">
+    // La coquille du cinéma (`(player)/layout.tsx`), à l'identique : un cadre à la hauteur de l'écran
+    // (`app-viewport`) qui ne défile pas, le défilement à l'intérieur. En `fixed inset-0`, l'iPhone
+    // laissait une bande sombre en bas, sous la page comme sous le lecteur (Louis, 19/10/2026).
+    <div className="app-viewport overflow-hidden bg-ink">
+    <main className="h-full overflow-y-auto overscroll-contain">
       <div
         className="mx-auto w-full max-w-3xl px-5 sm:px-10"
         style={{
@@ -99,6 +103,7 @@ export function OfflineEntryScreen() {
         )}
       </div>
     </main>
+    </div>
   );
 }
 

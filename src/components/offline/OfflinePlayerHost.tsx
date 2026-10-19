@@ -137,29 +137,6 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     return () => clearInterval(timer);
   }, [showInfo, id, locale]);
   const isMini = mode === "mini";
-  // Plein écran : la page sous le lecteur ne rebondit plus. Sur l'entrée hors ligne (`/hors-ligne`),
-  // un glissement sur le lecteur faisait rebondir tout le document sur iPhone — le lecteur montait
-  // avec lui et laissait une bande vide en bas (Louis, 19/10/2026). L'accueil, lui, est une coquille
-  // à la hauteur de l'écran qui ne défile pas, d'où rien du côté du lecteur en ligne.
-  useEffect(() => {
-    if (isMini) return;
-    const targets = [document.documentElement, document.body];
-    const before = targets.map((el) => [el.style.overflow, el.style.overscrollBehavior, el.style.backgroundColor] as const);
-    for (const el of targets) {
-      el.style.overflow = "hidden";
-      el.style.overscrollBehavior = "none";
-      // Le fond du document, noir comme le lecteur : ce qu'iOS laisse voir sous lui (la bande du bas,
-      // celle de la barre d'accueil) ne se distingue plus de l'image (Louis, 19/10/2026).
-      el.style.backgroundColor = "#000";
-    }
-    return () => {
-      targets.forEach((el, i) => {
-        el.style.overflow = before[i][0];
-        el.style.overscrollBehavior = before[i][1];
-        el.style.backgroundColor = before[i][2];
-      });
-    };
-  }, [isMini]);
 
   // Le moteur, ouvert une fois pour cette séance.
   useEffect(() => {
@@ -391,21 +368,20 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         touchAction: "none",
       }
     : {
-        // Les quatre bords plutôt que `100vw` × `app-viewport` (100vh en application installée) : sur
-        // l'entrée hors ligne, la page dessous est `fixed inset-0`, et elle dépassait le lecteur d'une
-        // bande en bas sur iPhone — une barre sombre sur la barre de progression, qu'un doigt faisait
-        // rebondir (Louis, 19/10/2026). Le lecteur couvre maintenant exactement ce qu'elle couvre.
+        // Le cadre du lecteur en ligne, à l'identique (`ExperimentalPlayerHost`) : la page dessous est
+        // la coquille du cinéma, ou celle de l'entrée hors ligne qui la reprend (19/10/2026).
         position: "fixed",
-        inset: 0,
+        top: 0,
+        left: 0,
+        width: "100vw",
         zIndex: 80,
         background: "black",
-        overscrollBehavior: "none",
         transition: "opacity 220ms ease-out",
         opacity: closing ? 0 : 1,
       };
 
   return createPortal(
-    <div ref={containerRef} style={style} className={isMini ? "animate-fade-in-scale" : undefined} {...(isMini ? handlers : {})}>
+    <div ref={containerRef} style={style} className={isMini ? "animate-fade-in-scale" : "app-viewport"} {...(isMini ? handlers : {})}>
       <video
         ref={videoRef}
         playsInline
