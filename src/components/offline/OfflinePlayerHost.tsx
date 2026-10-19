@@ -368,18 +368,21 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         touchAction: "none",
       }
     : {
+        // Les quatre bords plutôt que `100vw` × `app-viewport` (100vh en application installée) : sur
+        // l'entrée hors ligne, la page dessous est `fixed inset-0`, et elle dépassait le lecteur d'une
+        // bande en bas sur iPhone — une barre sombre sur la barre de progression, qu'un doigt faisait
+        // rebondir (Louis, 19/10/2026). Le lecteur couvre maintenant exactement ce qu'elle couvre.
         position: "fixed",
-        top: 0,
-        left: 0,
-        width: "100vw",
+        inset: 0,
         zIndex: 80,
         background: "black",
+        overscrollBehavior: "none",
         transition: "opacity 220ms ease-out",
         opacity: closing ? 0 : 1,
       };
 
   return createPortal(
-    <div ref={containerRef} style={style} className={isMini ? "animate-fade-in-scale" : "app-viewport"} {...(isMini ? handlers : {})}>
+    <div ref={containerRef} style={style} className={isMini ? "animate-fade-in-scale" : undefined} {...(isMini ? handlers : {})}>
       <video
         ref={videoRef}
         playsInline
