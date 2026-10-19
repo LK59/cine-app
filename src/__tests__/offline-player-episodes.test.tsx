@@ -13,12 +13,12 @@ const closePlayback = vi.fn();
 const nextDownload = vi.fn<(d: OfflineDownload) => Promise<"started">>(async () => "started");
 const markWatched = vi.fn<(id: string) => Promise<void>>(async () => {});
 let list: OfflineDownload[] = [];
-let controls: { nextEpisode: { itemId: string; title: string } | null; onAdvance: () => void } | null = null;
+let controls: { nextEpisode: { itemId: string; title: string } | null; onAdvance: () => void; creditsStart?: number | null; introSkip?: { start: number; end: number } | null } | null = null;
 
 vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "full", play, close: closePlayback, minimize: vi.fn(), expand: vi.fn() }) }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr" }) }));
 vi.mock("@/components/PlayerControls", () => ({
-  PlayerControls: (props: { nextEpisode: { itemId: string; title: string } | null; onAdvance: () => void }) => {
+  PlayerControls: (props: { nextEpisode: { itemId: string; title: string } | null; onAdvance: () => void; creditsStart?: number | null; introSkip?: { start: number; end: number } | null }) => {
     controls = props;
     return null;
   },
@@ -196,5 +196,13 @@ describe("lecteur hors ligne d'un épisode", () => {
     view.rerender(<OfflinePlayerHost session={{ itemId: "item-e1", title: "x", offline: { id: "e1" }, openId: 1 }} mode="full" />);
     await act(async () => new Promise((r) => setTimeout(r, 300)));
     expect(closePlayback).not.toHaveBeenCalled();
+  });
+
+  it("les repères gardés avec le téléchargement : « Passer l'intro » et la carte du générique de fin", async () => {
+    const markers = { introSkip: { start: 30, end: 90 }, recapSkip: null, creditsStart: 1900 };
+    list = [episode("e1", 1, { artwork: { overview: null, year: null, genres: [], cast: [], series: null, hasLogo: false, hasBackdrop: false, markers } })];
+    await mount();
+    expect(controls?.creditsStart).toBe(1900);
+    expect(controls?.introSkip).toEqual({ start: 30, end: 90 });
   });
 });

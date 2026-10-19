@@ -511,8 +511,11 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
               onChromeEdges={setChromeEdges}
               hidden={false}
               loading={false}
-              introSkip={null}
-              creditsStart={null}
+              // Les repères gardés avec le téléchargement (`artwork.ts`) : « Passer l'intro » et la carte
+              // « Épisode suivant » dès le générique de fin, comme en ligne, et sans réseau.
+              introSkip={download?.artwork?.markers?.introSkip ?? null}
+              recapSkip={download?.artwork?.markers?.recapSkip ?? null}
+              creditsStart={download?.artwork?.markers?.creditsStart ?? null}
               nextEpisode={nextTarget ? { itemId: nextTarget.itemId, title: nextTarget.title } : null}
               onAdvance={advance}
             />

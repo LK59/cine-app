@@ -216,7 +216,8 @@ async function load(current: string): Promise<void> {
   // une fois, avec du réseau (sans, rien n'est noté, et on réessaiera au prochain chargement).
   if (typeof navigator !== "undefined" && navigator.onLine !== false) {
     for (const d of loaded) if (d.trickplay === undefined && d.state !== "failed") void keepTrickplay(current, d.id, d.itemId);
-    for (const d of loaded) if (d.artwork === undefined && d.state !== "failed") void keepArtwork(current, d.id, d.itemId);
+    // Et ceux dont la fiche date d'avant les repères de générique (20/10/2026).
+    for (const d of loaded) if ((d.artwork === undefined || (d.artwork && d.artwork.markers === undefined)) && d.state !== "failed") void keepArtwork(current, d.id, d.itemId);
   }
   // Le logo et le visuel lus d'avance : l'ouverture de la lecture fige ce qu'elle montre à son montage.
   for (const d of loaded) if (d.artwork) warmArtwork(current, d);

@@ -6,6 +6,8 @@ import { isJellyfinId, jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { assertVisible } from "@/lib/itemVisibility";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
+import { jellyfin } from "@/lib/clients/jellyfin";
+import { playerMarkers, type PlayerMarkers } from "@/lib/episodeMarkers";
 
 /**
  * Ce qu'une fiche montre d'un titre, gardé avec son téléchargement pour la fiche hors ligne et
@@ -32,6 +34,12 @@ export interface OfflineDetails extends OfflineFacts {
   posterItemId: string | null;
   /** Pour un épisode : ce que dit la fiche de sa série. */
   series: OfflineFacts | null;
+  /**
+   * Les repères de Jellyfin — générique d'ouverture, récap, générique de fin — pour « Passer l'intro »
+   * et la carte « Épisode suivant » dès le générique, sans réseau : le lecteur hors ligne ne la
+   * montrait qu'à la dernière seconde (Louis, 20/10/2026).
+   */
+  markers: PlayerMarkers;
 }
 
 interface JellyfinItem {
@@ -89,6 +97,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
       backdropItemId: art.BackdropImageTags?.length && art.Id ? art.Id : null,
       posterItemId: series?.ImageTags?.Primary && series.Id ? series.Id : null,
       series: series ? factsOf(series) : null,
+      markers: playerMarkers(await jellyfin.getEpisodeTimestamps(itemId).catch(() => null)),
     };
     return NextResponse.json(details, { headers: { "Cache-Control": "private, no-store" } });
   } catch {

@@ -9,7 +9,9 @@ import type { OfflineDetails } from "@/app/api/offline/details/[itemId]/route";
  * l'ouverture de la lecture montrent sans réseau. Le logo et le visuel d'un épisode sont ceux de sa
  * série, rangés avec chaque épisode (quelques centaines de Ko, contre des centaines de Mo de vidéo).
  */
-export interface OfflineArtwork extends Omit<OfflineDetails, "logoItemId" | "backdropItemId" | "posterItemId"> {
+export interface OfflineArtwork extends Omit<OfflineDetails, "logoItemId" | "backdropItemId" | "posterItemId" | "markers"> {
+  /** Absent : une fiche gardée avant les repères (rattrapée au chargement). */
+  markers?: OfflineDetails["markers"];
   hasLogo: boolean;
   hasBackdrop: boolean;
   /** L'affiche de la série, pour un épisode (`SERIES_POSTER_FILE`). */
