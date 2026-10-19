@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, cleanup, act, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
 import { useEffect } from "react";
 
 /**
- * Un film peut tourner en paysage dans la PWA Android (19/10/2026). Le manifeste demande le portrait,
- * et `unlock()` revient à l'orientation par défaut — celle du manifeste pour une app installée : le
- * film restait droit, rotation automatique ou non. Le lecteur plein écran demande donc `any`, et le
- * portrait revient à sa fermeture.
+ * Toute l'app tourne (19/10/2026). Le manifeste demandait le portrait, et Android l'appliquait aux
+ * films aussi — `unlock()` y revient à l'orientation du manifeste, le film restait droit. Plus de
+ * portrait nulle part : le manifeste n'en demande plus, rien ne le verrouille, et une PWA installée
+ * avec l'ancien manifeste reçoit `lock("any")` au démarrage.
  */
 
 vi.mock("@/lib/codecSupport", () => ({ detectCodecSupport: async () => ({}) }));
@@ -43,18 +44,24 @@ afterEach(() => {
   cleanup();
 });
 
-describe("orientation pendant un film", () => {
-  it("demande « any » en plein écran, jamais `unlock()`, et le portrait après", async () => {
+describe("orientation", () => {
+  it("le manifeste ne demande aucune orientation", () => {
+    const manifest = JSON.parse(readFileSync("public/manifest.json", "utf8")) as Record<string, unknown>;
+    expect(manifest).not.toHaveProperty("orientation");
+  });
+
+  it("« any » au démarrage, et jamais de portrait ni d'`unlock()`, film ou pas", async () => {
     render(
       <PlaybackProvider>
         <Probe />
       </PlaybackProvider>
     );
-    expect(lock).toHaveBeenLastCalledWith("portrait-primary");
+    expect(lock.mock.calls).toEqual([["any"]]);
     act(() => api.play({ itemId: "film", title: "Film", resumeAt: 0 }));
-    await waitFor(() => expect(lock).toHaveBeenLastCalledWith("any"));
+    await waitFor(() => expect(api.session?.itemId).toBe("film"));
     act(() => api.close());
-    await waitFor(() => expect(lock).toHaveBeenLastCalledWith("portrait-primary"));
+    await waitFor(() => expect(api.session).toBeNull());
+    expect(lock.mock.calls).toEqual([["any"]]);
     expect(unlock).not.toHaveBeenCalled();
   });
 });

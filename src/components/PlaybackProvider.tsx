@@ -268,38 +268,28 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   }, [mode, cache, mutate]);
 
   /**
-   * The manifest asks for portrait, and it is right to: everything except a film is a list to
-   * scroll. A film is the exception, and on Android that lock applies to it as well — the page
-   * would simply refuse to turn. iOS ignores the manifest's orientation entirely, which is why
-   * this only ever mattered on the platform nobody here can test on.
+   * Toute l'app tourne, films et listes (Louis, 19/10/2026 : l'interface est utilisable en paysage).
+   * Le manifeste ne demande plus d'orientation, et rien ne verrouille plus le portrait.
    *
-   * So the lock is lifted for as long as a film has the whole screen, and asked for again after.
-   * Every call is guarded: Safari implements none of this, and a refusal is not a reason for a
-   * film to stop.
-   *
-   * Lifted by `lock("any")`, never by `unlock()`: `unlock()` returns to the *default* orientation,
-   * and for an installed app that default is the manifest's — portrait. The film stayed upright on
-   * every Android PWA, auto-rotation on or off (two viewers, 19/10/2026). `any` still follows the
-   * device's own rotation setting.
+   * Reste une demande, `lock("any")`, une fois au démarrage, pour les PWA Android installées quand le
+   * manifeste demandait encore le portrait : Chrome garde ce réglage dans l'app installée jusqu'à ce
+   * qu'il la mette à jour, quelques jours plus tard, et d'ici là tout restait droit. `unlock()` n'y
+   * peut rien, il revient justement à l'orientation du manifeste (`ScreenOrientationProviderImpl`,
+   * Chromium) : c'est ce qui laissait les films en portrait sur Android (deux spectateurs, 19/10).
+   * `any` y vaut `FULL_USER`, qui suit le réglage de rotation de l'appareil. Safari n'implémente
+   * rien de tout cela, et un ordinateur refuse : chaque appel est gardé.
    */
   useEffect(() => {
-    // Typed by hand: the orientation lock is not in the DOM library this project builds against,
-    // being a proposal Safari has never implemented — which is exactly the platform where every
-    // call below has to be allowed to be missing.
+    // Typé à la main : le verrou n'est pas dans la bibliothèque DOM de ce projet.
     const orientation = (typeof screen === "undefined" ? undefined : screen.orientation) as
       | (ScreenOrientation & { lock?: (to: string) => Promise<void> })
       | undefined;
-    if (!orientation) return;
-    const ask = (what: "free" | "portrait") => {
-      try {
-        if (what === "free") void orientation.lock?.("any")?.catch(() => {});
-        else void orientation.lock?.("portrait-primary")?.catch(() => {});
-      } catch {
-        // Unsupported, or refused outside fullscreen. Nothing here is worth an interruption.
-      }
-    };
-    ask(mode === "full" ? "free" : "portrait");
-  }, [mode]);
+    try {
+      void orientation?.lock?.("any")?.catch(() => {});
+    } catch {
+      // Non pris en charge : rien qui vaille une interruption.
+    }
+  }, []);
 
   // Speculative, fire-and-forget: detectCodecSupport() already caches its result in
   // localStorage per browser/device (not per session, not per film) — this just moves that
