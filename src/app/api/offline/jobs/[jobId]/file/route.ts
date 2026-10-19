@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { offlineFile, offlineJobFor, touchOfflineJob } from "@/lib/offline/jobs";
+import { noteOfflineServed } from "@/lib/offline/events";
 
 const JOB_ID = /^[0-9a-f]{32}$/;
 
@@ -38,6 +39,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ jobI
   if (start >= written || end < start) return new NextResponse(null, { status: 416, headers });
   headers["Content-Length"] = String(end - start + 1);
   headers["Content-Range"] = `bytes ${start}-${end}/${done ? written : "*"}`;
+  // La dernière plage d'une version finie : l'appareil l'a désormais entière — une ligne au journal
+  // la première fois pour ce compte, jamais une par plage (`noteOfflineServed`).
+  noteOfflineServed(session.u, job, end);
   const stream = fs.createReadStream(offlineFile(jobId), { start, end });
   return new NextResponse(Readable.toWeb(stream) as ReadableStream, { status: 206, headers });
 }

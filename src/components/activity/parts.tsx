@@ -7,6 +7,7 @@
 // affichages des mêmes données doivent dire la même chose.
 
 import { parseTimeline } from "@/lib/playbackTimeline";
+import { fmtSize } from "@/lib/format";
 import { useState } from "react";
 import { AlertTriangle, Check, ChevronRight, Film, MonitorSmartphone, Tv, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
@@ -575,6 +576,49 @@ function describeNotification(line: Record<string, unknown>, t: T): string {
   );
 }
 
+const DOWNLOAD_EVENTS = new Set(["requested", "started", "ready", "failed", "fetched", "cancelled", "removed", "expired", "deleted"]);
+const COPY_STATES = new Set(["new", "ready", "preparing", "retried"]);
+
+/** Une taille de fichier dans la langue de l'écran — « 1,2 Go », « 1.2 GB ». */
+export function size(bytes: number | null | undefined): string | null {
+  return bytes != null && bytes > 0 ? fmtSize(bytes, uiLocale() ?? "fr") : null;
+}
+
+/**
+ * Une ligne de téléchargement (`server.log`) : hors ligne (`scope: "offline"`, `offline/events.ts`)
+ * ou fichier d'origine (`scope: "download"`, `logDownload`). Le geste, le titre, la qualité, puis ce
+ * qui le précise — la version déjà prête sur le serveur, le temps de préparation et sa vitesse, la
+ * raison d'un échec. Une ligne qui concerne une version et non un compte nomme ceux qui l'attendaient.
+ */
+export function describeDownload(line: Record<string, unknown>, t: T): string {
+  const title = strOf(line.title) ?? strOf(line.itemId) ?? "?";
+  if (line.scope === "download") return join(t("activity.downloads.event.download"), title, size(numOf(line.sizeBytes)));
+  const event = strOf(line.event);
+  const quality = line.quality === "standard" || line.quality === "high" ? t(`activity.downloads.quality.${line.quality}`) : null;
+  const accounts = Array.isArray(line.accounts) ? (line.accounts as unknown[]).filter((u): u is string => typeof u === "string") : [];
+  // Le compte qui agit est déjà dans sa colonne ; ceux qu'une version concerne, seulement s'il n'y en a pas.
+  const forWho = !strOf(line.user) && accounts.length > 0 && t("activity.downloads.forAccounts", { who: accounts.join(", ") });
+  const head = event && DOWNLOAD_EVENTS.has(event) ? t(`activity.downloads.event.${event}`) : (strOf(line.message) ?? "?");
+  switch (event) {
+    case "requested":
+      return join(head, title, quality, strOf(line.copy) && COPY_STATES.has(line.copy as string) && t(`activity.downloads.copy.${line.copy}`));
+    case "ready": {
+      const took = numOf(line.durationMs);
+      const speed = numOf(line.speed);
+      return join(head, title, quality, size(numOf(line.bytes)), took != null && t("activity.downloads.took", { d: hours(took / 1000) }), speed != null && `×${speed}`, forWho);
+    }
+    case "failed":
+      return join(head, title, quality, strOf(line.reason), forWho);
+    case "cancelled":
+      return join(head, title, quality, line.stopped === true && t("activity.downloads.stopped"));
+    case "fetched":
+    case "removed":
+      return join(head, title, quality, size(numOf(line.bytes)));
+    default:
+      return join(head, title, quality, forWho);
+  }
+}
+
 /**
  * Une ligne de journal dite en une phrase — « saut de 752 à 762 s, 6,7 s ». Écrit une fois, pour
  * la liste des journaux, la chronologie d'une séance et les journaux figés d'un signalement : tous
@@ -583,6 +627,7 @@ function describeNotification(line: Record<string, unknown>, t: T): string {
  * générés) — une ligne de sous-titres se reconnaît à son `job`, une notification à ses `recipients`.
  */
 export function describeLine(line: Record<string, unknown>, t: T): string {
+  if (line.scope === "offline" || line.scope === "download") return describeDownload(line, t);
   if (strOf(line.job)) return describeSubtitleJob(line, t);
   if (Array.isArray(line.recipients)) return describeNotification(line, t);
   switch (line.kind) {

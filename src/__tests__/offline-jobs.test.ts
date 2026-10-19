@@ -18,7 +18,8 @@ const dir = vi.hoisted(() => {
 vi.mock("@/lib/dataDir", () => ({ DATA_DIR: dir }));
 const upstream = vi.fn();
 vi.mock("@/lib/jellyfinBreaker", () => ({ passJellyfinFetch: (...a: unknown[]) => upstream(...a) }));
-vi.mock("@/lib/logger", () => ({ logError: () => {} }));
+// Le vrai `logger` pour le reste : les lignes du journal (`offline/events.ts`) vont dans le `DATA_DIR` jetable.
+vi.mock("@/lib/logger", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/logger")>()), logError: () => {} }));
 
 import { getDb } from "@/lib/db";
 import { forgetOfflineJob, offlineFile, offlineJobFor, requestOfflineJob } from "@/lib/offline/jobs";

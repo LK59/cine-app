@@ -773,7 +773,60 @@
         "background": "Back from background"
       }
     },
-    "jellyfinDown": "Jellyfin unreachable since {time}"
+    "jellyfinDown": "Jellyfin unreachable since {time}",
+    "downloads": {
+      "title": "Downloads",
+      "open": "Open",
+      "intro": "The offline versions the server is keeping right now, who asked for them, and everyone's latest downloads. A ready version stays {n} days after its last download; deleting it does not remove it from devices that already have it.",
+      "ready": "Ready",
+      "preparing": "Preparing",
+      "queuedHint": "{n} waiting",
+      "failed": "Failed",
+      "disk": "On disk",
+      "free": "{size} free",
+      "copies": "Versions on the server ({n})",
+      "noCopies": "No version on the server.",
+      "events": "Latest downloads ({n} d)",
+      "noEvents": "No recent download.",
+      "status": {
+        "done": "Ready",
+        "running": "Preparing",
+        "queued": "Waiting",
+        "failed": "Failed"
+      },
+      "quality": {
+        "standard": "Standard",
+        "high": "High"
+      },
+      "progress": "{done} of {total} · {pct}%",
+      "took": "ready in {d}",
+      "forAccounts": "for {who}",
+      "nobody": "Nobody is waiting for it any more",
+      "lastAccess": "last downloaded {when}",
+      "expiresOn": "deleted on {date}",
+      "delete": "Delete",
+      "deleteConfirm": "Delete from the server",
+      "deleted": "Version deleted",
+      "stopped": "preparation stopped",
+      "copy": {
+        "new": "new version",
+        "ready": "already ready on the server",
+        "preparing": "already being prepared",
+        "retried": "restarted after a failure"
+      },
+      "event": {
+        "requested": "Requested",
+        "started": "Preparation started",
+        "ready": "Ready",
+        "failed": "Preparation failed",
+        "fetched": "Fetched by the device",
+        "cancelled": "Cancelled",
+        "removed": "Removed from the device",
+        "expired": "Deleted from the server (expired)",
+        "deleted": "Deleted from the server",
+        "download": "Original file downloaded"
+      }
+    }
   },
   "radarr": {
     "pageTitle": "Movies",

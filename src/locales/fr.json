@@ -773,7 +773,60 @@
         "background": "Retour d'arrière-plan"
       }
     },
-    "jellyfinDown": "Jellyfin injoignable depuis {time}"
+    "jellyfinDown": "Jellyfin injoignable depuis {time}",
+    "downloads": {
+      "title": "Téléchargements",
+      "open": "Ouvrir",
+      "intro": "Les versions hors ligne que le serveur garde en ce moment, qui les a demandées, et les derniers téléchargements de chacun. Une version prête reste {n} jours après son dernier téléchargement ; l'effacer ne la retire pas des appareils qui l'ont déjà.",
+      "ready": "Prêtes",
+      "preparing": "En préparation",
+      "queuedHint": "{n} en attente",
+      "failed": "Échouées",
+      "disk": "Sur le disque",
+      "free": "{size} libres",
+      "copies": "Versions sur le serveur ({n})",
+      "noCopies": "Aucune version sur le serveur.",
+      "events": "Derniers téléchargements ({n} j)",
+      "noEvents": "Aucun téléchargement récent.",
+      "status": {
+        "done": "Prête",
+        "running": "En préparation",
+        "queued": "En attente",
+        "failed": "Échouée"
+      },
+      "quality": {
+        "standard": "Standard",
+        "high": "Haute"
+      },
+      "progress": "{done} sur {total} · {pct} %",
+      "took": "prête en {d}",
+      "forAccounts": "pour {who}",
+      "nobody": "Plus personne ne l'attend",
+      "lastAccess": "dernier téléchargement {when}",
+      "expiresOn": "effacée le {date}",
+      "delete": "Effacer",
+      "deleteConfirm": "Effacer du serveur",
+      "deleted": "Version effacée",
+      "stopped": "préparation arrêtée",
+      "copy": {
+        "new": "nouvelle version",
+        "ready": "déjà prête sur le serveur",
+        "preparing": "déjà en préparation",
+        "retried": "relancée après un échec"
+      },
+      "event": {
+        "requested": "Demandé",
+        "started": "Préparation commencée",
+        "ready": "Prêt",
+        "failed": "Préparation échouée",
+        "fetched": "Récupéré sur l'appareil",
+        "cancelled": "Annulé",
+        "removed": "Supprimé de l'appareil",
+        "expired": "Effacé du serveur (expiré)",
+        "deleted": "Effacé du serveur",
+        "download": "Fichier d'origine téléchargé"
+      }
+    }
   },
   "radarr": {
     "pageTitle": "Films",

@@ -325,6 +325,11 @@ export function lineUsers(r: Record<string, unknown>): string[] {
       if (typeof u === "string" && u && !out.includes(u)) out.push(u);
     }
   }
+  // Une version hors ligne prête, échouée ou expirée n'a pas d'auteur non plus : elle concerne
+  // chaque compte qui l'attendait (`accounts`, `offline/events.ts`, 19/10/2026).
+  if (Array.isArray(r.accounts)) {
+    for (const u of r.accounts as unknown[]) if (typeof u === "string" && u && !out.includes(u)) out.push(u);
+  }
   return out;
 }
 
