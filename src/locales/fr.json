@@ -2360,9 +2360,6 @@
       "open": "Ouvrir la fiche",
       "used": "{size} utilisés sur cet appareil",
       "unsupported": "Cet appareil ne permet pas de garder des téléchargements.",
-      "audioOffline": "Piste audio non disponible : vous êtes hors ligne.",
-      "switchOnline": "Basculer vers la lecture en ligne pour écouter cette piste audio ?",
-      "switchOnlineConfirm": "Lire en ligne",
       "playFailed": "Le fichier téléchargé n'a pas pu être lu : {error}",
       "playOnline": "Lire en ligne",
       "confirmRemove": "Supprimer ce téléchargement de cet appareil ?",
@@ -2370,7 +2367,11 @@
       "resumeDownloaded": "Reprendre le fichier téléchargé · {time}",
       "resumeOnline": "Reprendre en ligne · {time}",
       "playDownloading": "Lire le fichier en cours de téléchargement",
-      "resumeDownloading": "Reprendre le fichier en cours de téléchargement · {time}"
+      "resumeDownloading": "Reprendre le fichier en cours de téléchargement · {time}",
+      "introCaption": "Lecture du fichier téléchargé",
+      "fileDownloaded": "Fichier téléchargé",
+      "fileDownloading": "En cours de téléchargement",
+      "queued": "En file d'attente sur le serveur…"
     }
   },
   "cinema": {

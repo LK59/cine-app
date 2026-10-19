@@ -3016,7 +3016,8 @@ export function PlayerControls({
             {downloadedFraction !== undefined && downloadedFraction > 0 && (
               <div
                 data-downloaded-range=""
-                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/35 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-3" : "h-2"}`}
+                // Plus sombre que la partie lue, nettement (Louis, 19/10/2026 : l'écart ne se voyait pas).
+                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/25 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-3" : "h-2"}`}
                 style={{ width: `${Math.min(100, downloadedFraction * 100)}%`, WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
               />
             )}

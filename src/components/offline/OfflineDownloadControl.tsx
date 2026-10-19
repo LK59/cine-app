@@ -145,7 +145,16 @@ export function OfflinePlayButton({
   const t = useT();
   const playback = usePlayback();
   const resume = sharedResumeSeconds(download, onlineResumeTicks, onlineKnown);
-  const label = offlinePlayLabels(t, resume, download.runtimeSeconds, download.state === "done").offline;
+  // Deux lignes, plus courtes qu'une phrase (Louis, 19/10/2026) : le geste en grand — Lire ou
+  // Reprendre —, et en petit d'où il lit et ce qu'il reste.
+  const resumes = resume >= 30 && download.runtimeSeconds > 0;
+  const main = t(resumes ? "common.resume" : "common.play");
+  const detail = [
+    t(download.state === "done" ? "player.downloads.fileDownloaded" : "player.downloads.fileDownloading"),
+    resumes ? t("cinema.timeRemaining", { time: formatDurationShort(Math.max(0, download.runtimeSeconds - resume) * 1e7) }) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   // Grisé tant qu'il n'y a pas de quoi démarrer (préparation, tout début) ; cliquable ensuite.
   const ready = offlinePlayable(download);
   const play = () => ready && playback.play({ itemId: download.itemId, title: download.title, resumeAt: resume, offline: { id: download.id } });
@@ -154,7 +163,10 @@ export function OfflinePlayButton({
       <span className={badgeClassName}>
         <Play size={14} fill="currentColor" />
       </span>
-      <span className="text-sm font-medium">{label}</span>
+      <span className="flex min-w-0 flex-col items-start leading-tight">
+        <span className="text-sm font-medium">{main}</span>
+        <span className="truncate text-[11px] opacity-70">{detail}</span>
+      </span>
     </button>
   ) : (
     <button
@@ -162,10 +174,13 @@ export function OfflinePlayButton({
       onClick={play}
       disabled={!ready}
       data-liquid-pan="wide"
-      className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink ${ready ? "" : "opacity-45"}`}
+      className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-base font-semibold text-ink ${ready ? "" : "opacity-45"}`}
     >
       <Play size={18} fill="currentColor" />
-      {label}
+      <span className="flex min-w-0 flex-col items-start leading-tight">
+        <span>{main}</span>
+        <span className="truncate text-xs font-medium opacity-60">{detail}</span>
+      </span>
     </button>
   );
 }
@@ -177,6 +192,9 @@ export function offlineProgress(d: OfflineDownload): number {
 export function offlineStatusLabel(d: OfflineDownload, t: ReturnType<typeof useT>): string {
   if (d.state === "done") return t("player.downloads.done");
   if (d.state === "failed") return t("player.downloads.failed");
+  // En file : le serveur prépare d'autres versions avant celle-ci — le dire, plutôt qu'une
+  // « Préparation » qui n'avance pas (Louis, 19/10/2026).
+  if (d.serverStatus === "queued") return t("player.downloads.queued");
   if (d.state === "preparing" || d.bytes === 0) return t("player.downloads.preparing");
   return t("player.downloads.downloading", { pct: offlineProgress(d) });
 }

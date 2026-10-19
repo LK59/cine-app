@@ -2360,9 +2360,6 @@
       "open": "Abrir la ficha",
       "used": "{size} usados en este dispositivo",
       "unsupported": "Este dispositivo no puede guardar descargas.",
-      "audioOffline": "Pista de audio no disponible: estás sin conexión.",
-      "switchOnline": "¿Cambiar a la reproducción en línea para escuchar esta pista de audio?",
-      "switchOnlineConfirm": "Reproducir en línea",
       "playFailed": "No se pudo reproducir el archivo descargado: {error}",
       "playOnline": "Reproducir en línea",
       "confirmRemove": "¿Eliminar esta descarga de este dispositivo?",
@@ -2370,7 +2367,11 @@
       "resumeDownloaded": "Reanudar el archivo descargado · {time}",
       "resumeOnline": "Reanudar en línea · {time}",
       "playDownloading": "Reproducir el archivo en descarga",
-      "resumeDownloading": "Reanudar el archivo en descarga · {time}"
+      "resumeDownloading": "Reanudar el archivo en descarga · {time}",
+      "introCaption": "Reproduciendo el archivo descargado",
+      "fileDownloaded": "Archivo descargado",
+      "fileDownloading": "Descargando",
+      "queued": "En cola en el servidor…"
     }
   },
   "cinema": {

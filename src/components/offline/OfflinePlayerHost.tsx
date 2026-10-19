@@ -6,7 +6,9 @@ import { AlertTriangle } from "lucide-react";
 import { usePlayback, type PlaybackSession } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
-import { ActionSheet } from "@/components/ActionSheet";
+import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
+import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
+import { useIntroPlaybackStarted } from "@/lib/introEnd";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { PlaybackInfoPanel, type PlaybackPanelData } from "@/components/PlaybackInfoPanel";
 import { formatFileSize } from "@/lib/format";
@@ -97,7 +99,6 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
-  const [switchTo, setSwitchTo] = useState<number | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [panel, setPanel] = useState<PlaybackPanelData | null>(null);
   const countsRef = useRef({ device: 0, server: 0 });
@@ -160,7 +161,12 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
       .then(() => {
         if (cancelled) return;
         setReady(true);
-        if (!session.startPaused) void video.play().catch(() => {});
+        if (!session.startPaused)
+          void video.play().catch(() => {
+            // Lecture automatique refusée : l'ouverture s'efface sur l'image arrêtée (`playbackRefused`).
+            startingRef.current = false;
+          });
+        else startingRef.current = false;
         pictureTimer = setTimeout(() => {
           if (video.readyState < 2 && !video.error) fail(`aucune image après 15 s (étape « ${engine.stage} »)`);
         }, 15_000);
@@ -193,7 +199,10 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         saveOfflinePosition(id, video.currentTime);
       }
     };
-    const onPlay = () => setPlaying(true);
+    const onPlay = () => {
+      startingRef.current = false;
+      setPlaying(true);
+    };
     const onPause = () => {
       setPlaying(false);
       saveOfflinePosition(id, video.currentTime);
@@ -253,21 +262,17 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   const { pos, size, isDragging, handlers } = useMiniPlayerDrag(isMini, handleExpand);
   usePlayerFocus(containerRef, !isMini);
 
-  // Une autre piste que celle du fichier : la lecture en ligne, ou rien sans réseau (Louis).
-  const changeAudio = (index: number) => {
-    if (index === download?.audioIndex) return;
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      toast.error(t("player.downloads.audioOffline"));
-      return;
-    }
-    setSwitchTo(index);
-  };
-  const goOnline = () => {
-    if (switchTo === null || !download) return;
-    const at = videoRef.current?.currentTime ?? 0;
-    saveOfflinePosition(id, at);
-    playback.play({ itemId: download.itemId, title: download.title, resumeAt: at, initialAudioStreamIndex: switchTo });
-  };
+  // L'ouverture du lecteur en ligne, à l'identique : visuel, logo, ligne de chargement, croix en verre
+  // en haut à gauche — plus « Lecture du fichier téléchargé » sous le texte habituel (Louis, 19/10/2026).
+  const thisIntro = introKey(session.openId, itemId);
+  const [introEligible] = useState(() => introAllowedFor(session) && !introFinished(thisIntro));
+  const [introStartedAt] = useState(() => startIntroClock(thisIntro));
+  const startingRef = useRef(true);
+  const introPlaying = useIntroPlaybackStarted(ready, videoRef, startingRef);
+  useEffect(() => {
+    if (introPlaying) finishIntro(thisIntro);
+  }, [introPlaying, thisIntro]);
+  const introPhase: IntroPhase = !introEligible || isMini ? "gone" : introPlaying ? "picture" : error ? "gone" : "waiting";
 
   if (typeof document === "undefined") return null;
   const style: React.CSSProperties = isMini
@@ -302,9 +307,23 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         playsInline
         className={`h-full w-full ${isMini ? "object-cover" : "object-contain"} transition-opacity duration-300 ${ready ? "opacity-100" : "opacity-0"}`}
       />
-      {/* Pendant l'ouverture : une attente qui se voit, et toujours une sortie (le premier essai sur
-          iPhone n'avait que le retour du navigateur). */}
-      {!ready && !error && !isMini && (
+      {introPhase !== "gone" && (
+        <PlaybackIntro
+          phase={introPhase}
+          startedAt={introStartedAt}
+          clockKey={thisIntro}
+          art={session.introArt ?? null}
+          imageShown={ready}
+          fallbackName={session.title}
+          caption={[...introCaption({ ...session.introArt, resumeSeconds: session.resumeAt ?? null }, t), t("player.downloads.introCaption")]}
+          onClose={handleClose}
+          closeLabel={t("common.close")}
+          className="absolute inset-0 z-[15]"
+        />
+      )}
+      {/* Sans ouverture (déjà jouée, mouvement réduit) : une attente qui se voit, et toujours une sortie
+          — le premier essai sur iPhone n'avait que le retour du navigateur. */}
+      {introPhase === "gone" && !ready && !error && !isMini && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black">
           <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" aria-hidden />
           <button type="button" onClick={handleClose} className="btn btn-ghost px-4 py-2">
@@ -346,9 +365,11 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
               onClose={handleClose}
               onMinimize={() => playback.minimize()}
               onTogglePlaybackInfo={() => setShowInfo((open) => !open)}
-              audioTracks={(download?.audioTracks ?? []).map((a) => ({ id: a.index, label: a.label }))}
-              currentAudioId={download?.audioIndex ?? null}
-              onChangeAudio={changeAudio}
+              // Une seule piste son dans un téléchargement : pas de menu (Louis, 19/10/2026 — un bouton
+              // qui ne fait rien n'a pas sa place).
+              audioTracks={[]}
+              currentAudioId={null}
+              onChangeAudio={() => {}}
               subtitleTracks={[]}
               currentSubtitleId={null}
               onChangeSubtitle={() => {}}
@@ -363,18 +384,6 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         )
       )}
       <PlaybackInfoPanel open={showInfo && !isMini} onClose={() => setShowInfo(false)} data={panel} />
-      <ActionSheet
-        open={switchTo !== null}
-        onClose={() => setSwitchTo(null)}
-        role="alertdialog"
-        centerOnWide
-        title={session.title}
-        subtitle={t("player.downloads.switchOnline")}
-        actions={[
-          { label: t("player.downloads.switchOnlineConfirm"), onClick: goOnline, noAutoFocus: true },
-          { label: t("common.cancel"), onClick: () => {} },
-        ]}
-      />
     </div>,
     document.body
   );

@@ -69,6 +69,8 @@ export interface OfflineDownload {
   /** Ce que le serveur a écrit (pendant la préparation), puis la taille finale. */
   serverBytes: number;
   serverDone: boolean;
+  /** Où en est la préparation : en file (d'autres passent avant), en cours, prête. */
+  serverStatus?: OfflineJob["status"];
   /** Ce qui est sur l'appareil. */
   bytes: number;
   state: OfflineState;
@@ -87,10 +89,7 @@ const POLL_MS = 2000;
 let account: string | null = null;
 let downloads: OfflineDownload[] = [];
 const listeners = new Set<() => void>();
-let loopRunning = false;
-let stopLoop: AbortController | null = null;
 let wakeLock: { release(): Promise<void> } | null = null;
-let failures = 0;
 /** Les suppressions en cours, par identifiant : une nouvelle demande les attend. */
 const removals = new Map<string, Promise<void>>();
 
@@ -246,7 +245,7 @@ export function removeOfflineDownload(id: string): Promise<void> {
   const owner = account;
   downloads = downloads.filter((d) => d.id !== id);
   emit();
-  if (stopLoop) stopLoop.abort();
+  claimed.get(id)?.abort();
   // Le retrait de la demande d'abord, et retenu : un nouveau téléchargement du même titre l'attend
   // (`startOfflineDownload`). Envoyé après le ménage de l'appareil, il arrivait après la nouvelle
   // demande — même version, même identifiant — et l'effaçait : « Préparation » sans fin, puis
@@ -298,47 +297,71 @@ const sleep = (ms: number, signal: AbortSignal) =>
     signal.addEventListener("abort", () => (clearTimeout(timer), resolve()), { once: true });
   });
 
-async function runLoop(): Promise<void> {
-  if (loopRunning || !account) return;
-  loopRunning = true;
+/**
+ * Plusieurs téléchargements à la fois (Louis, 19/10/2026 : un seul à la fois laissait les autres sur
+ * « Préparation » alors que leur version était parfois déjà prête) : jusqu'à `PARALLEL` fils, chacun
+ * prenant le téléchargement le plus avancé côté serveur — prêt d'abord, puis le plus ancien. Un
+ * téléchargement n'est tenu que par un fil de cette page, et par une seule page (`navigator.locks`,
+ * un verrou par téléchargement : deux onglets écrivant le même fichier le corrompraient).
+ */
+const PARALLEL = 3;
+const claimed = new Map<string, AbortController>();
+let workers = 0;
+
+function waiting(): OfflineDownload[] {
+  return downloads
+    .filter((d) => (d.state === "preparing" || d.state === "downloading") && !claimed.has(d.id))
+    .sort((a, b) => Number(b.serverDone) - Number(a.serverDone) || a.createdAt - b.createdAt);
+}
+
+function runLoop(): Promise<void> {
   const owner = account;
-  const run = async () => {
+  if (!owner) return Promise.resolve();
+  while (workers < PARALLEL && waiting().length > 0 && workers < downloads.filter((d) => d.state === "preparing" || d.state === "downloading").length) {
+    workers += 1;
+    void holdWakeLock(true);
+    void worker(owner).finally(() => {
+      workers -= 1;
+      if (workers === 0) void holdWakeLock(false);
+    });
+  }
+  return Promise.resolve();
+}
+
+async function worker(owner: string): Promise<void> {
+  let failures = 0;
+  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
+  for (;;) {
+    if (account !== owner) return;
+    const next = waiting()[0];
+    if (!next) return;
+    const control = new AbortController();
+    claimed.set(next.id, control);
     try {
-      for (;;) {
-        if (account !== owner) return;
-        // Le plus ancien d'abord : une saison demandée d'un coup arrive dans l'ordre de ses épisodes.
-        const next = downloads
-          .filter((d) => d.state === "preparing" || d.state === "downloading")
-          .reduce<OfflineDownload | null>((oldest, d) => (!oldest || d.createdAt < oldest.createdAt ? d : oldest), null);
-        if (!next) return;
-        stopLoop = new AbortController();
-        await holdWakeLock(true);
-        const failedBefore = failures;
-        await step(owner, next, stopLoop.signal)
-          .then(() => {
-            failures = 0;
+      const once = async () => {
+        await step(owner, next, control.signal);
+        failures = 0;
+      };
+      // Le verrou de ce téléchargement, s'il est libre : tenu par un autre onglet, on passe.
+      const ran = locks
+        ? await locks.request(`cine-offline-${owner}-${next.id}`, { ifAvailable: true }, async (lock) => {
+            if (!lock) return false;
+            await once();
+            return true;
           })
-          .catch(async (error: unknown) => {
-            // Réseau coupé, serveur qui redémarre : on réessaie un peu plus tard, sans rien perdre.
-            // Au journal, une fois par erreur (le rapporteur dédoublonne) : ce qu'un iPhone a dit.
-            if (!stopLoop?.signal.aborted) reportClientError(error, "component:hors-ligne", { download: next.id, bytes: String(next.bytes) });
-            failures = failedBefore + 1;
-            // Deux échecs de suite : le stockage de l'appareil repart d'un worker neuf.
-            if (failures >= 2) resetDeviceStore();
-            await sleep(5000, stopLoop!.signal);
-          });
-      }
+        : (await once(), true);
+      if (!ran) await sleep(5000, control.signal);
+    } catch (error) {
+      // Réseau coupé, serveur qui redémarre : on réessaie un peu plus tard, sans rien perdre.
+      // Au journal, une fois par erreur (le rapporteur dédoublonne) : ce qu'un iPhone a dit.
+      if (!control.signal.aborted) reportClientError(error, "component:hors-ligne", { download: next.id, bytes: String(next.bytes) });
+      failures += 1;
+      // Deux échecs de suite : le stockage de l'appareil repart d'un worker neuf.
+      if (failures >= 2) resetDeviceStore();
+      await sleep(5000, control.signal);
     } finally {
-      stopLoop = null;
-      await holdWakeLock(false);
+      if (claimed.get(next.id) === control) claimed.delete(next.id);
     }
-  };
-  try {
-    const locks = (navigator as Navigator & { locks?: LockManager }).locks;
-    if (locks) await locks.request(`cine-offline-${owner}`, run);
-    else await run();
-  } finally {
-    loopRunning = false;
   }
 }
 
@@ -377,6 +400,7 @@ async function step(owner: string, d: OfflineDownload, signal: AbortSignal): Pro
     generation: job.generation,
     serverBytes: job.bytes,
     serverDone: job.status === "done",
+    serverStatus: job.status,
     expectedBytes: job.status === "done" ? job.bytes : Math.max(job.expectedBytes, job.bytes),
     bytes,
     state: job.status === "done" || job.bytes > 0 ? "downloading" : "preparing",

@@ -86,7 +86,12 @@ export class OfflineEngine {
   /** Change à chaque saut : une boucle d'ajout partie avant lui s'arrête d'elle-même. */
   private generation = 0;
   private ended = false;
-  private readonly onTime = () => void this.pump();
+  /** La dernière position atteinte en lisant — où revenir après un saut au-delà de ce qui existe. */
+  private settled = 0;
+  private readonly onTime = () => {
+    if (!this.video.seeking) this.settled = this.video.currentTime;
+    void this.pump();
+  };
   private readonly onSeeking = () => void this.seek(this.video.currentTime);
 
   constructor(
@@ -136,6 +141,7 @@ export class OfflineEngine {
     this.video.addEventListener("timeupdate", this.onTime);
     this.video.addEventListener("seeking", this.onSeeking);
     if (startAt > 0) this.video.currentTime = startAt;
+    this.settled = startAt;
     this.nextIndex = Math.max(0, fragmentIndexAt(this.fragments, startAt));
     void this.pump();
     return init.mime;
@@ -252,7 +258,13 @@ export class OfflineEngine {
     const index = fragmentIndexAt(this.fragments, target);
     if (index < 0) return;
     const last = this.fragments[this.fragments.length - 1];
-    if (!this.source.complete() && index === this.fragments.length - 1 && target > last.time + 15) this.events.onBeyond?.(last.time);
+    // Au-delà de ce que le serveur a préparé : le message, et retour là où on était (Louis,
+    // 19/10/2026) — la tête restait au bord de ce qui existe, sur une attente sans fin.
+    if (!this.source.complete() && index === this.fragments.length - 1 && target > last.time + 15) {
+      this.events.onBeyond?.(last.time);
+      this.video.currentTime = this.settled;
+      return;
+    }
     // Déjà dans le tampon : rien à faire, la boucle d'ajout continue d'elle-même.
     const ranges = this.video.buffered;
     for (let i = 0; i < ranges.length; i++) if (ranges.start(i) <= target && ranges.end(i) > target + 1) return;

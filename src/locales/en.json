@@ -2360,9 +2360,6 @@
       "open": "Open details",
       "used": "{size} used on this device",
       "unsupported": "This device cannot keep downloads.",
-      "audioOffline": "Audio track not available: you are offline.",
-      "switchOnline": "Switch to online playback to hear this audio track?",
-      "switchOnlineConfirm": "Play online",
       "playFailed": "The downloaded file could not be played: {error}",
       "playOnline": "Play online",
       "confirmRemove": "Delete this download from this device?",
@@ -2370,7 +2367,11 @@
       "resumeDownloaded": "Resume the downloaded file · {time}",
       "resumeOnline": "Resume online · {time}",
       "playDownloading": "Play the file being downloaded",
-      "resumeDownloading": "Resume the file being downloaded · {time}"
+      "resumeDownloading": "Resume the file being downloaded · {time}",
+      "introCaption": "Playing the downloaded file",
+      "fileDownloaded": "Downloaded file",
+      "fileDownloading": "Downloading",
+      "queued": "Queued on the server…"
     }
   },
   "cinema": {
