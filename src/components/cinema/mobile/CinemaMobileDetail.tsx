@@ -555,7 +555,8 @@ export function CinemaMobileDetail({
         )}
         {/* Un téléchargement lisible passe en tête, en blanc, et « Lire » devient « Lire en ligne »
             (Louis, 19/10/2026). */}
-        {!playPending && playerEnabled && offlinePlayable && !fileMissing && <OfflinePlayButton download={offlinePlayable} onlineResumeTicks={resumeTicks} onlineKnown={resumeKnown} episodeCode={offlineEpisodeCode} variant="wide" />}
+        {/* Même si la bibliothèque a perdu le fichier : la copie de l'appareil est alors la seule lisible (§109). */}
+        {!playPending && playerEnabled && offlinePlayable && <OfflinePlayButton download={offlinePlayable} onlineResumeTicks={resumeTicks} onlineKnown={resumeKnown} episodeCode={offlineEpisodeCode} variant="wide" />}
         {!playPending && playerEnabled && playTargetId && (
           <button
             type="button"
@@ -612,6 +613,7 @@ export function CinemaMobileDetail({
             year={item.year ?? null}
             posterUrl={item.posterUrl ?? null}
             runtimeMinutes={"runtimeMinutes" in item ? (item.runtimeMinutes ?? null) : null}
+            onlineResumeTicks={resumeTicks}
           />
         )}
 

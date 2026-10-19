@@ -23,12 +23,14 @@ async function dir(parts, create) {
   for (const p of parts) d = await d.getDirectoryHandle(p, { create });
   return d;
 }
-async function handle(path) {
+// \`create\` faux pour lire : un lecteur ou un rangement arrivé après une suppression recréait le
+// dossier, vide de \`meta.json\`, que rien ne voyait plus ni n'effaçait (relecture du 19/10/2026).
+async function handle(path, create = true) {
   const key = path.join("/");
   let h = handles.get(key);
   if (!h) {
-    const d = await dir(path.slice(0, -1), true);
-    const f = await d.getFileHandle(path[path.length - 1], { create: true });
+    const d = await dir(path.slice(0, -1), create);
+    const f = await d.getFileHandle(path[path.length - 1], { create });
     h = await f.createSyncAccessHandle();
     handles.set(key, h);
   }
@@ -62,7 +64,7 @@ async function run(event) {
       h.flush();
       result = done;
     } else if (op === "read") {
-      const h = await handle(path);
+      const h = await handle(path, false);
       const size = h.getSize();
       const n = Math.max(0, Math.min(length, size - at));
       const buffer = new Uint8Array(n);
@@ -70,7 +72,7 @@ async function run(event) {
       while (got < n) { const r = h.read(buffer.subarray(got), { at: at + got }); if (!r) break; got += r; }
       result = got === n ? buffer : buffer.slice(0, got);
     } else if (op === "size") {
-      result = (await handle(path)).getSize();
+      result = (await handle(path, false)).getSize();
     } else if (op === "truncate") {
       const h = await handle(path); h.truncate(at); h.flush(); result = at;
     } else if (op === "writeText") {
@@ -122,7 +124,7 @@ function getWorker(): Worker {
     const entry = pending.get(event.data.id);
     if (!entry) return;
     pending.delete(event.data.id);
-    if (event.data.error !== undefined) entry.reject(new Error(event.data.error));
+    if (event.data.error !== undefined) entry.reject(Object.assign(new Error(event.data.error), { deviceStore: true }));
     else entry.resolve(event.data.result);
   };
   return worker;
@@ -147,6 +149,14 @@ function call<T>(op: string, path: string[], extra: Record<string, unknown> = {}
     pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
     getWorker().postMessage({ id, op, path, ...extra }, transfer);
   });
+}
+
+/**
+ * Une erreur venue du stockage de l'appareil (et non du réseau ou du serveur) : seules celles-là
+ * justifient de relancer le worker (`downloads.ts`).
+ */
+export function isDeviceStoreError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { deviceStore?: boolean }).deviceStore === true;
 }
 
 /** Le dossier d'un compte : son nom, rendu sûr comme celui de la reprise instantanée. */

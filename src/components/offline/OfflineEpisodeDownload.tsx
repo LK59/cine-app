@@ -17,6 +17,7 @@ import {
   pauseOfflineDownload,
   removeOfflineDownload,
   resumeOfflineDownload,
+  retryOfflineDownload,
   useOfflineDownloadFor,
   useOfflineDownloads,
   type OfflineDownload,
@@ -112,11 +113,8 @@ function OfflineEpisodeButtonOn({
   className?: string;
 }) {
   const t = useT();
-  const playback = usePlayback();
   const download = useOfflineDownloadFor(episode.jellyfinItemId);
   const [choosing, setChoosing] = useState(false);
-  const [managing, setManaging] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -124,67 +122,35 @@ function OfflineEpisodeButtonOn({
   }, []);
 
   const iconSize = size === "desktop" ? 20 : 18;
-  const state = episodeDownloadState(download);
-  const label = download ? offlineStatusLabel(download, t) : t("player.downloads.downloadEpisode");
-  const icon =
-    state === "none" ? (
-      <ArrowDownToLine size={iconSize} />
-    ) : state === "done" ? (
-      <CircleCheck size={iconSize} className="text-accent-400" />
-    ) : state === "failed" ? (
-      <AlertTriangle size={iconSize} className="text-warning" />
-    ) : (
-      // Préparation : l'anneau vide qui respire ; ensuite, l'anneau qui se remplit.
-      <span className={state === "preparing" ? "animate-pulse" : undefined}>
-        <ProgressRing value={download ? offlineProgress(download) : 0} size={iconSize} />
-      </span>
-    );
-
-  const play = (d: OfflineDownload) =>
-    playback.play({ itemId: d.itemId, title: d.title, resumeAt: sharedResumeSeconds(d, episode.resumeTicks), offline: { id: d.id } });
-
-  const actions: SheetAction[] = !download
-    ? []
-    : download.state === "failed"
-      ? [
-          { label: t("player.downloads.retry"), icon: <RotateCcw size={18} />, onClick: () => void removeOfflineDownload(download.id).then(() => setChoosing(true)) },
-          { label: t("player.downloads.remove"), icon: <Trash2 size={18} />, variant: "danger", onClick: () => void removeOfflineDownload(download.id) },
-          { label: t("player.downloads.close"), icon: <X size={18} />, onClick: () => {} },
-        ]
-      : [
-          {
-            label: t(download.state === "done" ? "player.downloads.playDownloaded" : "player.downloads.playDownloading"),
-            icon: <Play size={18} />,
-            disabled: !offlinePlayable(download),
-            onClick: () => play(download),
-          },
-          ...(download.state === "paused"
-            ? [{ label: t("player.downloads.resumeDownload"), icon: <Download size={18} />, onClick: () => void resumeOfflineDownload(download.id) }]
-            : download.state !== "done"
-              ? [{ label: t("player.downloads.pause"), icon: <Pause size={18} />, onClick: () => void pauseOfflineDownload(download.id) }]
-              : []),
-          // Supprimer un fichier fini se confirme ; annuler un téléchargement en cours, non — comme le film.
-          download.state === "done"
-            ? { label: t("player.downloads.remove"), icon: <Trash2 size={18} />, variant: "danger", onClick: () => setConfirming(true) }
-            : { label: t("player.downloads.cancel"), icon: <Trash2 size={18} />, variant: "danger", onClick: () => void removeOfflineDownload(download.id) },
-          { label: t("player.downloads.close"), icon: <X size={18} />, onClick: () => {} },
-        ];
-
+  const label = t("player.downloads.downloadEpisode");
   const box = size === "desktop" ? "h-11 w-11" : "h-10 w-10";
+  const poster = episode.thumbnailUrl ?? posterUrl ?? null;
   return (
     <>
-      <button
-        ref={buttonRef}
-        type="button"
-        data-episode-download="true"
-        data-download-state={state}
-        aria-label={`${label} — ${episode.episodeNumber}. ${episode.title}`}
-        title={label}
-        onClick={() => (download ? setManaging(true) : setChoosing(true))}
-        className={`${box} ${className} flex shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:bg-white/10 focus-visible:text-white focus-visible:outline-none active:bg-white/15`}
-      >
-        {icon}
-      </button>
+      {download ? (
+        <DownloadStateButton
+          download={download}
+          name={`${episode.episodeNumber}. ${episode.title}`}
+          poster={poster}
+          onlineResumeTicks={episode.resumeTicks}
+          size={size}
+          className={className}
+          onRetry={() => setChoosing(true)}
+        />
+      ) : (
+        <button
+          ref={buttonRef}
+          type="button"
+          data-episode-download="true"
+          data-download-state="none"
+          aria-label={`${label} — ${episode.episodeNumber}. ${episode.title}`}
+          title={label}
+          onClick={() => setChoosing(true)}
+          className={`${box} ${className} ${STATE_BUTTON}`}
+        >
+          <ArrowDownToLine size={iconSize} />
+        </button>
+      )}
       <OfflineChoiceSheet
         open={choosing}
         onClose={() => {
@@ -195,10 +161,115 @@ function OfflineEpisodeButtonOn({
         radarrId={null}
         title={`${episode.episodeNumber}. ${episode.title}`}
         year={null}
-        posterUrl={episode.thumbnailUrl ?? posterUrl ?? null}
+        posterUrl={poster}
         runtimeMinutes={episode.runtimeMinutes}
         episode={{ series, episode, seasons }}
       />
+    </>
+  );
+}
+
+const STATE_BUTTON =
+  "flex shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:bg-white/10 focus-visible:text-white focus-visible:outline-none active:bg-white/15";
+
+/**
+ * L'icône d'un téléchargement qui existe — préparation (l'anneau vide qui respire), anneau qui se
+ * remplit, téléchargé, échec — et la feuille qu'elle ouvre : lire, mettre en pause ou reprendre,
+ * annuler ou supprimer (confirmé une fois fini). Une seule pièce pour la ligne d'épisode de la fiche
+ * en ligne et pour celle de la fiche hors ligne (`OfflineDownloadsView`), qui ne doivent pas dire
+ * deux choses différentes du même fichier.
+ */
+export function DownloadStateButton({
+  download,
+  name,
+  poster,
+  onlineResumeTicks,
+  size,
+  className = "",
+  onRetry,
+}: {
+  download: OfflineDownload;
+  /** Ce que la feuille et le lecteur d'écran nomment (« 5. Marques de bronzage »). */
+  name: string;
+  poster: string | null;
+  /** La reprise de Jellyfin quand on la connaît (fiche en ligne) ; sinon celle de l'appareil. */
+  onlineResumeTicks?: number | null;
+  size: "desktop" | "phone";
+  className?: string;
+  /** Un échec se retente par la fenêtre de choix de l'appelant ; sans elle, aux mêmes choix (`retryOfflineDownload`). */
+  onRetry?: () => void;
+}) {
+  const t = useT();
+  const playback = usePlayback();
+  const [managing, setManaging] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const iconSize = size === "desktop" ? 20 : 18;
+  const state = episodeDownloadState(download);
+  const label = offlineStatusLabel(download, t);
+  const icon =
+    state === "done" ? (
+      <CircleCheck size={iconSize} className="text-accent-400" />
+    ) : state === "failed" ? (
+      <AlertTriangle size={iconSize} className="text-warning" />
+    ) : download.state === "paused" ? (
+      <Pause size={iconSize} />
+    ) : (
+      <span className={state === "preparing" ? "animate-pulse" : undefined}>
+        <ProgressRing value={offlineProgress(download)} size={iconSize} />
+      </span>
+    );
+  const play = () =>
+    playback.play({ itemId: download.itemId, title: download.title, resumeAt: sharedResumeSeconds(download, onlineResumeTicks), offline: { id: download.id } });
+  const actions: SheetAction[] =
+    download.state === "failed"
+      ? [
+          {
+            label: t("player.downloads.retry"),
+            icon: <RotateCcw size={18} />,
+            // Par la fenêtre de choix de l'appelant s'il en a une (fiche en ligne), sinon aux mêmes choix.
+            onClick: () => void (onRetry ? removeOfflineDownload(download.id).then(onRetry) : retryOfflineDownload(download.id)),
+          },
+          { label: t("player.downloads.remove"), icon: <Trash2 size={18} />, variant: "danger", onClick: () => void removeOfflineDownload(download.id) },
+          { label: t("player.downloads.close"), icon: <X size={18} />, onClick: () => {} },
+        ]
+      : [
+          {
+            label: t(download.state === "done" ? "player.downloads.playDownloaded" : "player.downloads.playDownloading"),
+            icon: <Play size={18} />,
+            disabled: !offlinePlayable(download),
+            onClick: play,
+          },
+          ...(download.state === "paused"
+            ? [{ label: t("player.downloads.resumeDownload"), icon: <Download size={18} />, onClick: () => void resumeOfflineDownload(download.id) }]
+            : download.state !== "done"
+              ? [{ label: t("player.downloads.pause"), icon: <Pause size={18} />, onClick: () => void pauseOfflineDownload(download.id) }]
+              : []),
+          // Supprimer, toujours confirmé (Louis, 19/10/2026) — annuler aussi : des centaines de Mo
+          // déjà arrivés se perdent pareil.
+          {
+            label: t(download.state === "done" ? "player.downloads.remove" : "player.downloads.cancel"),
+            icon: <Trash2 size={18} />,
+            variant: "danger",
+            onClick: () => setConfirming(true),
+          },
+          { label: t("player.downloads.close"), icon: <X size={18} />, onClick: () => {} },
+        ];
+  const box = size === "desktop" ? "h-11 w-11" : "h-10 w-10";
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        data-episode-download="true"
+        data-download-state={state}
+        aria-label={`${label} — ${name}`}
+        title={label}
+        onClick={() => setManaging(true)}
+        className={`${box} ${className} ${STATE_BUTTON}`}
+      >
+        {icon}
+      </button>
       <ActionSheet
         open={managing}
         onClose={() => {
@@ -206,9 +277,9 @@ function OfflineEpisodeButtonOn({
           restoreFocus(buttonRef);
         }}
         centerOnWide
-        title={download?.title ?? episode.title}
-        subtitle={download ? `${offlineStatusLabel(download, t)} · ${download.audioLabel}` : undefined}
-        poster={episode.thumbnailUrl ?? posterUrl ?? null}
+        title={name}
+        subtitle={`${label} · ${download.audioLabel}`}
+        poster={poster}
         actions={actions}
       />
       <ActionSheet
@@ -219,10 +290,16 @@ function OfflineEpisodeButtonOn({
         }}
         role="alertdialog"
         centerOnWide
-        title={download?.title ?? episode.title}
+        title={name}
         subtitle={t("player.downloads.confirmRemove")}
         actions={[
-          { label: t("player.downloads.remove"), icon: <Trash2 size={18} />, variant: "danger", noAutoFocus: true, onClick: () => download && void removeOfflineDownload(download.id) },
+          {
+            label: t(download.state === "done" ? "player.downloads.remove" : "player.downloads.cancel"),
+            icon: <Trash2 size={18} />,
+            variant: "danger",
+            noAutoFocus: true,
+            onClick: () => void removeOfflineDownload(download.id),
+          },
           { label: t("common.cancel"), onClick: () => {} },
         ]}
       />

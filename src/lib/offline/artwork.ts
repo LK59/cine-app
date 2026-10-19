@@ -16,6 +16,8 @@ export interface OfflineArtwork extends Omit<OfflineDetails, "logoItemId" | "bac
   hasSeriesPoster?: boolean;
 }
 
+/** L'affiche (ou la vignette d'un épisode), rangée par `downloads.ts` à la demande. */
+export const POSTER_FILE = "poster";
 export const LOGO_FILE = "logo";
 export const BACKDROP_FILE = "backdrop";
 export const SERIES_POSTER_FILE = "series-poster";

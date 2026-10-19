@@ -92,6 +92,15 @@ export class OfflineEngine {
    */
   private seekFrom: number | undefined;
   private pumping = false;
+  /**
+   * Les sauts passent un par un, et la boucle d'ajout se tait tant qu'il en reste un (relecture du
+   * 19/10/2026) : deux appuis rapides sur +10 s faisaient courir le second `remove` pendant que la
+   * boucle relancée par le premier ajoutait — `InvalidStateError`, et « Lecture impossible ».
+   */
+  private seekChain: Promise<void> = Promise.resolve();
+  private seekPending = 0;
+  /** Une seule relecture de l'index à la fois : deux en parallèle ajoutaient deux fois les mêmes fragments. */
+  private rescanning: Promise<void> | null = null;
   private closed = false;
   /** Change à chaque saut : une boucle d'ajout partie avant lui s'arrête d'elle-même. */
   private generation = 0;
@@ -173,7 +182,14 @@ export class OfflineEngine {
   }
 
   /** Rapporte les fragments arrivés depuis la dernière lecture de l'index. */
-  private async rescan(): Promise<void> {
+  private rescan(): Promise<void> {
+    this.rescanning ??= this.readIndex().finally(() => {
+      this.rescanning = null;
+    });
+    return this.rescanning;
+  }
+
+  private async readIndex(): Promise<void> {
     if (!this.init) return;
     const video = this.init.tracks.find((t) => t.kind === "video")!;
     const remote = await this.source.scan?.(this.scanned).catch(() => null);
@@ -217,6 +233,11 @@ export class OfflineEngine {
     });
   }
 
+  /** Attendre que le tampon ait fini son opération en cours : on n'ajoute ni ne vide pendant. */
+  private async idle(): Promise<void> {
+    while (this.buffer?.updating) await new Promise((r) => this.buffer!.addEventListener("updateend", r, { once: true }));
+  }
+
   private bufferedEndAround(t: number): number {
     const ranges = this.video.buffered;
     for (let i = 0; i < ranges.length; i++) if (ranges.start(i) <= t + 0.5 && ranges.end(i) >= t) return ranges.end(i);
@@ -224,14 +245,16 @@ export class OfflineEngine {
   }
 
   private async pump(): Promise<void> {
-    if (this.pumping || this.closed || !this.buffer) return;
+    if (this.pumping || this.closed || !this.buffer || this.seekPending > 0) return;
     this.pumping = true;
     const generation = this.generation;
     try {
-      while (!this.closed && generation === this.generation) {
+      while (!this.closed && generation === this.generation && this.seekPending === 0) {
         const now = this.video.currentTime;
         // Derrière la tête : gardé trente secondes, pour revenir un peu en arrière sans relire.
         if (now - BEHIND_S > 1 && this.video.buffered.length && this.video.buffered.start(0) < now - BEHIND_S) {
+          await this.idle();
+          if (generation !== this.generation || this.seekPending > 0) break;
           await this.remove(0, now - BEHIND_S);
           continue;
         }
@@ -261,6 +284,8 @@ export class OfflineEngine {
           }
           continue;
         }
+        await this.idle();
+        if (generation !== this.generation || this.seekPending > 0 || this.closed) break;
         await this.append(piece.bytes);
         // Un saut arrivé pendant l'ajout a déjà posé sa position et son point de départ : n'y touche pas.
         if (generation !== this.generation) break;
@@ -273,12 +298,28 @@ export class OfflineEngine {
       this.pumping = false;
     }
     // Un fichier qui arrive encore : on repasse plus tard voir s'il a grandi.
-    if (!this.closed && !this.ended && generation === this.generation && this.nextIndex >= this.fragments.length) {
+    if (!this.closed && !this.ended && generation === this.generation && this.seekPending === 0 && this.nextIndex >= this.fragments.length) {
       setTimeout(() => void this.pump(), 2000);
     }
   }
 
-  private async seek(target: number): Promise<void> {
+  private seek(target: number): Promise<void> {
+    this.seekPending += 1;
+    const run = this.seekChain
+      .then(() => this.applySeek(target))
+      .catch((error) => {
+        if (!this.closed) this.events.onError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        this.seekPending -= 1;
+        // Le dernier saut passé, la boucle reprend d'où il l'a posée.
+        if (this.seekPending === 0) void this.pump();
+      });
+    this.seekChain = run;
+    return run;
+  }
+
+  private async applySeek(target: number): Promise<void> {
     if (this.closed || !this.buffer) return;
     await this.rescan();
     const index = fragmentIndexAt(this.fragments, target);
@@ -291,13 +332,16 @@ export class OfflineEngine {
       this.video.currentTime = this.settled;
       return;
     }
-    // Déjà dans le tampon : rien à faire, la boucle d'ajout continue d'elle-même.
+    // Déjà dans le tampon : rien à faire, la boucle d'ajout reprend d'elle-même.
     const ranges = this.video.buffered;
     for (let i = 0; i < ranges.length; i++) if (ranges.start(i) <= target && ranges.end(i) > target + 1) return;
     this.generation += 1;
     this.events.trace?.(`hors ligne : saut à ${target.toFixed(1)} s, fragment ${index}`);
-    // Attendre l'ajout en cours avant de vider.
-    while (this.buffer.updating) await new Promise((r) => this.buffer!.addEventListener("updateend", r, { once: true }));
+    // La boucle en cours s'arrête au prochain pas (`seekPending`) ; on attend qu'elle l'ait fait, puis
+    // la fin de l'opération du tampon, avant de le vider.
+    while (this.pumping) await new Promise((r) => setTimeout(r, 20));
+    await this.idle();
+    if (this.closed || !this.buffer) return;
     if (this.ended && this.mediaSource?.readyState === "ended") {
       // Rouvrir un flux déclaré fini : un `remove` le repasse en `open`.
       this.ended = false;
@@ -306,8 +350,6 @@ export class OfflineEngine {
     await this.remove(0, end);
     this.nextIndex = index;
     this.seekFrom = target;
-    while (this.pumping) await new Promise((r) => setTimeout(r, 20));
-    void this.pump();
   }
 
   close(): void {

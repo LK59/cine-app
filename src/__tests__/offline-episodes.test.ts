@@ -175,12 +175,12 @@ describe("le téléchargement automatique de l'épisode suivant", () => {
   const fetchList = () =>
     vi.fn(async () => new Response(JSON.stringify({ seasons: SEASONS, nextEpisode: null }), { status: 200 })) as unknown as typeof fetch;
 
-  it("se déclenche à la moitié, et « vu » à 95 %", () => {
+  it("se déclenche à la moitié, et « vu » au seuil de Jellyfin (90 % par défaut)", () => {
     expect(autoNextDue(1349, 2700)).toBe(false);
     expect(autoNextDue(1350, 2700)).toBe(true);
     expect(autoNextDue(100, 0)).toBe(false);
-    expect(watchedThrough(2564, 2700)).toBe(false);
-    expect(watchedThrough(2565, 2700)).toBe(true);
+    expect(watchedThrough(2429, 2700)).toBe(false);
+    expect(watchedThrough(2430, 2700)).toBe(true);
   });
 
   it("demande le suivant aux mêmes langue, qualité et codec", async () => {

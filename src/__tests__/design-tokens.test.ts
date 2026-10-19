@@ -283,6 +283,7 @@ describe("le violet de la marque dit ce qui est à moi", () => {
     "src/components/cinema/CinemaEpisodeBrowser.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx",
     "src/components/player/PlayerDiscoverSheet.tsx", "src/components/player/PlayerListAdd.tsx",
     "src/components/player/PlayerEpisodesMenu.tsx", // « Vu » d'un épisode dans le menu « Épisodes » du lecteur, comme sur la fiche
+    "src/components/offline/OfflineTitleSheet.tsx", // « Vu » d'un épisode dans la fiche hors ligne, comme sur la fiche en ligne
     "src/components/player/NavDot.tsx", "src/components/player/PlayerAccountPanel.tsx", "src/components/reports/ReportParts.tsx",
     "src/app/(dashboard)/radarr/[id]/page.tsx", "src/app/(dashboard)/sonarr/[id]/page.tsx", // « Vu » dans la gestion
     // Les graphiques (14/10/2026, Louis) : l'accent devenu blanc les avait décolorés — séances par jour

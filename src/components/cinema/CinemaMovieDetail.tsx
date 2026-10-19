@@ -385,7 +385,8 @@ export function CinemaMovieDetail({
               la largeur du bloc — voir MENU_STYLE. */}
           <div data-detail-actions className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
             {/* Un téléchargement lisible passe en tête, et « Lire » devient « Lire en ligne » (Louis, 19/10/2026). */}
-            {offlinePlayable && !fileMissing && (
+            {/* Même si la bibliothèque a perdu le fichier : la copie de l'appareil est alors la seule lisible (§109). */}
+            {offlinePlayable && (
               <OfflinePlayButton download={offlinePlayable} onlineResumeTicks={facts.resumeTicks} onlineKnown={facts.resumeKnown} variant="row" rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`} badgeClassName={MENU_BADGE} />
             )}
             <PlayButton
@@ -466,6 +467,7 @@ export function CinemaMovieDetail({
                 year={item.year ?? null}
                 posterUrl={item.posterUrl ?? null}
                 runtimeMinutes={item.runtimeMinutes ?? null}
+                onlineResumeTicks={facts.resumeTicks}
               />
             )}
 

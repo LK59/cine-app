@@ -189,10 +189,14 @@ describe("liste des épisodes du bureau", () => {
     expect(remove).toHaveBeenCalledWith("job-ep104");
   });
 
-  it("un épisode en cours s'annule sans confirmation ; un épisode absent ouvre la fenêtre de choix", async () => {
+  it("un épisode en cours s'annule après confirmation ; un épisode absent ouvre la fenêtre de choix", async () => {
     renderBrowser();
     fireEvent.click(dl(2));
     fireEvent.click(await screen.findByText("player.downloads.cancel"));
+    // Annuler perd ce qui est déjà arrivé, comme supprimer : confirmé aussi (relecture du 19/10/2026).
+    const dialog = await screen.findByRole("alertdialog");
+    expect(remove).not.toHaveBeenCalled();
+    fireEvent.click([...dialog.querySelectorAll("button")].find((b) => b.textContent?.includes("player.downloads.cancel"))!);
     expect(remove).toHaveBeenCalledWith("job-ep103");
     fireEvent.click(dl(0));
     expect(await screen.findByText("player.downloads.sheetTitle")).toBeTruthy();

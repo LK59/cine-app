@@ -1,5 +1,6 @@
 "use client";
 
+import { PLAYER_FRAME_TRANSITION } from "@/lib/playerFrame";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { SubtitleLayer } from "@/components/player/SubtitleLayer";
 import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
@@ -137,6 +138,13 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     return () => clearInterval(timer);
   }, [showInfo, id, locale]);
   const isMini = mode === "mini";
+  // Posé à l'image suivante, comme le lecteur en ligne : l'état d'arrivée et l'état d'entrée dans le
+  // même rendu ne laissent rien à animer.
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setRevealed(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   // Le moteur, ouvert une fois pour cette séance.
   useEffect(() => {
@@ -305,7 +313,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
    * bouton. La suite en ligne garde son propre « Épisode suivant » par la liste que la fiche de la
    * série a laissée dans la réserve de SWR.
    */
-  const nextTarget = offlineNextTarget(download, downloads, online, offlinePlayable);
+  const nextTarget = offlineNextTarget(download, downloads, online, (d) => offlinePlayable(d, online));
   const seriesItemId = download?.episode?.seriesItemId;
   const getNextOnline = useNextEpisodeFromCache(seriesItemId ? `/api/cinema/series/${seriesItemId}/episodes` : "");
   const advance = () => {
@@ -364,7 +372,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         zIndex: 80,
         overflow: "hidden",
         boxShadow: "0 10px 30px rgba(0,0,0,.5)",
-        transition: isDragging ? "none" : "all 300ms cubic-bezier(0.32, 0.72, 0, 1)",
+        transition: isDragging ? "none" : PLAYER_FRAME_TRANSITION,
         touchAction: "none",
       }
     : {
@@ -374,10 +382,14 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         top: 0,
         left: 0,
         width: "100vw",
+        borderRadius: 0,
         zIndex: 80,
         background: "black",
-        transition: "opacity 220ms ease-out",
-        opacity: closing ? 0 : 1,
+        // L'arrivée et le départ du lecteur en ligne : un fondu avec une échelle à peine visible, et
+        // le passage du mini-lecteur au plein écran par le même mouvement (`PLAYER_FRAME_TRANSITION`).
+        transition: `${PLAYER_FRAME_TRANSITION}, opacity 220ms ease-out, transform 220ms cubic-bezier(0.32, 0.72, 0, 1)`,
+        opacity: revealed && !closing ? 1 : 0,
+        transform: revealed && !closing ? "scale(1)" : "scale(0.985)",
       };
 
   return createPortal(

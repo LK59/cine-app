@@ -1,7 +1,8 @@
 "use client";
 
+import { PlayerEmptyState } from "@/components/player/PlayerEmptyState";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, HardDrive } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { adoptSignedOutAccount } from "@/lib/persistentCache";
 import { deviceStoreSupported } from "@/lib/offline/deviceStore";
@@ -107,6 +108,7 @@ export function OfflineEntryScreen() {
   );
 }
 
+/** L'écran vide de l'app (`PlayerEmptyState`) : un signe, et la phrase qui dit pourquoi. */
 function Notice({ text }: { text: string }) {
-  return <p className="rounded-2xl bg-white/4 px-5 py-10 text-center text-sm leading-6 text-muted ring-1 ring-inset ring-white/8">{text}</p>;
+  return <PlayerEmptyState icon={HardDrive} message={text} />;
 }

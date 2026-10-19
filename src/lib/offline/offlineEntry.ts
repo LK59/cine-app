@@ -50,10 +50,6 @@ export function rememberedOfflineAccount(): RememberedOfflineAccount | null {
   return parse(rememberedOfflineRaw());
 }
 
-export function readRememberedOffline(raw: string | null): RememberedOfflineAccount | null {
-  return parse(raw);
-}
-
 /** Écrit seulement si quelque chose change : appelé à chaque mouvement de la liste. */
 export function rememberOfflineAccount(account: string, downloads: number): void {
   const next = JSON.stringify({ account, downloads } satisfies RememberedOfflineAccount);

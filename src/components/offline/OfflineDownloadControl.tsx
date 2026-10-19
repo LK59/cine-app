@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { AlertTriangle, Check, Download, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
+import { Toggle } from "@/components/Toggle";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { useToast } from "@/components/Toast";
@@ -18,6 +19,7 @@ import { useOfflineDownloadsEnabled } from "@/lib/offline/useOfflineEnabled";
 import { deviceStoreSupported } from "@/lib/offline/deviceStore";
 import { expectedBytes, type OfflineCodec, type OfflineQuality } from "@/lib/offline/quality";
 import {
+  adoptOnlinePosition,
   initOfflineDownloads,
   pauseOfflineDownload,
   removeOfflineDownload,
@@ -72,6 +74,8 @@ export interface OfflineTitle {
   year: number | null;
   posterUrl: string | null;
   runtimeMinutes: number | null;
+  /** La reprise que Jellyfin connaît pour ce titre, quand la fiche la sait — celle que « Lire » prend partout. */
+  onlineResumeTicks?: number | null;
 }
 
 interface Props extends OfflineTitle {
@@ -83,9 +87,15 @@ interface Props extends OfflineTitle {
   wideSpacing?: string;
 }
 
-/** Lisible : fini, ou dont le début est là — sur l'appareil, ou sur le serveur avec du réseau. */
-export function offlinePlayable(d: OfflineDownload): boolean {
-  return d.state === "done" || ((d.state === "downloading" || d.state === "paused") && Math.max(d.bytes, d.serverBytes) > 4 * 1024 * 1024);
+/**
+ * Lisible : fini, ou dont le début est là — sur l'appareil, ou sur le serveur **avec du réseau**.
+ * Sans réseau, ce qu'a préparé le serveur ne compte plus : « Lire » s'offrait sur un fichier dont le
+ * début n'était pas sur l'appareil, et le lecteur échouait aussitôt (relecture du 19/10/2026).
+ */
+export function offlinePlayable(d: OfflineDownload, online = typeof navigator === "undefined" || navigator.onLine !== false): boolean {
+  if (d.state === "done") return true;
+  if (d.state !== "downloading" && d.state !== "paused") return false;
+  return (online ? Math.max(d.bytes, d.serverBytes) : d.bytes) > 4 * 1024 * 1024;
 }
 
 /**
@@ -161,6 +171,14 @@ export function OfflinePlayButton({
   const t = useT();
   const playback = usePlayback();
   const resume = sharedResumeSeconds(download, onlineResumeTicks, onlineKnown);
+  // Ce que Jellyfin sait, rapporté sur l'appareil : la page des téléchargements et la fiche hors
+  // ligne disent alors le même temps restant que cette fiche (`adoptOnlinePosition`). Une position
+  // nulle n'est pas rapportée : chez Jellyfin, elle veut aussi dire « vu jusqu'au bout ».
+  useEffect(() => {
+    if (!onlineKnown || !onlineResumeTicks || (typeof navigator !== "undefined" && navigator.onLine === false)) return;
+    if (findUnsentPositions().some((p) => p.itemId === download.itemId)) return;
+    adoptOnlinePosition(download.id, onlineResumeTicks / 1e7);
+  }, [download.id, download.itemId, onlineKnown, onlineResumeTicks]);
   // Deux lignes, plus courtes qu'une phrase (Louis, 19/10/2026) : le geste en grand — Lire ou
   // Reprendre —, et en petit d'où il lit et ce qu'il reste.
   const resumes = resume >= 30 && download.runtimeSeconds > 0;
@@ -242,8 +260,9 @@ function OfflineDownloadControlOn({ variant, rowClassName = "", badgeClassName =
     void initOfflineDownloads();
   }, []);
 
+  // La même reprise que « Lire le fichier téléchargé » en tête de la fiche (`sharedResumeSeconds`).
   const playDownloaded = (d: OfflineDownload) =>
-    playback.play({ itemId: d.itemId, title: d.title, resumeAt: d.positionSeconds, offline: { id: d.id } });
+    playback.play({ itemId: d.itemId, title: d.title, resumeAt: sharedResumeSeconds(d, title.onlineResumeTicks), offline: { id: d.id } });
 
   let icon = <Download size={variant === "row" ? 14 : 16} />;
   let label = t("player.downloads.download");
@@ -404,18 +423,17 @@ export function QualityPicker({ quality, onChange, bytesFor }: { quality: Offlin
  */
 export function AutoNextToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
   const t = useT();
+  // L'interrupteur de l'app (`Toggle`), dans une ligne à la façon du Compte : l'intitulé et son
+  // explication à gauche, l'interrupteur à droite. Il en avait un à lui, qui ne se lisait pas une fois
+  // ouvert — une pastille blanche sur une piste blanche (Louis, iPhone, 19/10/2026).
   return (
-    <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)} className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white/5 px-3 py-2.5 text-left">
+    <div className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white/5 px-3 py-2.5">
       <span className="min-w-0">
         <span className="block text-sm font-medium text-white">{t("player.downloads.autoNext")}</span>
         <span className="block text-xs text-subtle">{t("player.downloads.autoNextHint")}</span>
       </span>
-      {/* Ouvert : piste blanche, pastille sombre. L'accent de l'app est blanc, et la pastille blanche
-          s'y perdait — un ovale blanc sans position lisible (Louis, iPhone, 19/10/2026). */}
-      <span aria-hidden className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${on ? "bg-white" : "bg-white/20"}`}>
-        <span className={`absolute top-0.5 h-5 w-5 rounded-full transition-transform ${on ? "translate-x-[18px] bg-ink" : "translate-x-0.5 bg-white"}`} />
-      </span>
-    </button>
+      <Toggle checked={on} onChange={onChange} ariaLabel={t("player.downloads.autoNext")} />
+    </div>
   );
 }
 

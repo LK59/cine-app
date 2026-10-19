@@ -31,6 +31,7 @@ export const PlayerResultCard = memo(function PlayerResultCard({
   onOpenId,
   showKind = true,
   uniform = false,
+  overlay = null,
 }: {
   kind: ResultKind;
   title: string;
@@ -63,6 +64,11 @@ export const PlayerResultCard = memo(function PlayerResultCard({
    * tout ce qui suivait sautait. Voir `useMeasuredCardHeight`.
    */
   uniform?: boolean;
+  /**
+   * Ce qui se pose sur l'affiche en plus — l'avancement d'un téléchargement, sa pause ou son échec
+   * (page des téléchargements, 19/10/2026). Absent partout ailleurs.
+   */
+  overlay?: React.ReactNode;
 }) {
   const t = useT();
   const Icon = kind === "movie" ? Film : kind === "series" ? Tv : User;
@@ -127,6 +133,7 @@ export const PlayerResultCard = memo(function PlayerResultCard({
             moins importante de la grille et la plus voyante, un bandeau violet pleine largeur en
             travers de six affiches sur huit. Réduite à une pastille de coin sans fond plein, le
             violet reste disponible pour ce qui le mérite — un titre qui vient d'arriver. */}
+        {overlay}
         {missing && (
           <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-accent-400 ring-1 ring-accent-400/40">
             {t("player.notInLibrary")}

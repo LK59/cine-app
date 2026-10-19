@@ -1,5 +1,6 @@
 "use client";
 
+import { PLAYER_FRAME_TRANSITION } from "@/lib/playerFrame";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
@@ -489,8 +490,7 @@ function useAudioLabels(fileTracks: PlayerTrack[], jellyfin: DirectPlayInfo["aud
   }, [fileTracks, jellyfin, originalLanguage, locale, t]);
 }
 
-const TRANSITION =
-  "top 300ms cubic-bezier(0.4,0,0.2,1), left 300ms cubic-bezier(0.4,0,0.2,1), width 300ms cubic-bezier(0.4,0,0.2,1), height 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1)";
+const TRANSITION = PLAYER_FRAME_TRANSITION;
 
 /**
  * The native player: the same chrome as the stable one, over a <video> element fed by the remuxer

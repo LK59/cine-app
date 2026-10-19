@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { persistedCacheAccount } from "@/lib/persistentCache";
-import { deviceStore, deviceStoreSupported, resetDeviceStore } from "./deviceStore";
+import { deviceStore, deviceStoreSupported, isDeviceStoreError, resetDeviceStore } from "./deviceStore";
 import { reportClientError } from "@/lib/reportClientError";
 import { applyResumeRules } from "./resumeRules";
 import { storeOfflineSubtitles, type OfflineSubtitle } from "./subtitles";
@@ -122,7 +122,11 @@ const POLL_MS = 2000;
 let account: string | null = null;
 let downloads: OfflineDownload[] = [];
 const listeners = new Set<() => void>();
-let wakeLock: { release(): Promise<void> } | null = null;
+interface WakeLockLike {
+  release(): Promise<void>;
+  addEventListener?(type: "release", listener: () => void): void;
+}
+let wakeLock: WakeLockLike | null = null;
 /** Les suppressions en cours, par identifiant : une nouvelle demande les attend. */
 const removals = new Map<string, Promise<void>>();
 
@@ -155,29 +159,51 @@ async function saveMeta(d: OfflineDownload): Promise<void> {
   await deviceStore.writeMeta(account, d.id, d).catch(() => {});
 }
 
-/** Charge les téléchargements du compte de cette page et relance la boucle. Sans effet sans compte. */
-export async function initOfflineDownloads(): Promise<void> {
+/**
+ * Charge les téléchargements du compte de cette page et relance la boucle. Sans effet sans compte.
+ *
+ * Un seul chargement à la fois par compte : le rond du cinéma, la fiche et l'entrée hors ligne le
+ * demandent chacun à leur montage, et deux lectures entrecroisées remplaçaient la liste par la plus
+ * ancienne — un téléchargement lancé entre les deux disparaissait (relecture du 19/10/2026).
+ */
+let loading: { account: string; promise: Promise<void> } | null = null;
+export function initOfflineDownloads(): Promise<void> {
   const current = persistedCacheAccount();
-  if (!current || !deviceStoreSupported()) return;
+  if (!current || !deviceStoreSupported()) return Promise.resolve();
   if (current === account && downloads.length) {
+    void flushPendingDeletes();
     void runLoop();
-    return;
+    return Promise.resolve();
   }
+  if (loading?.account === current) return loading.promise;
+  const promise = load(current).finally(() => {
+    if (loading?.promise === promise) loading = null;
+  });
+  loading = { account: current, promise };
+  return promise;
+}
+
+async function load(current: string): Promise<void> {
   account = current;
   const ids = await deviceStore.list(current).catch(() => [] as string[]);
   const loaded: OfflineDownload[] = [];
   for (const id of ids) {
     const meta = await deviceStore.readMeta<OfflineDownload>(current, id).catch(() => null);
-    if (!meta) continue;
+    if (!meta) {
+      // Un dossier sans description : un rangement arrivé après une suppression. Il ne se voyait
+      // nulle part et prenait de la place pour rien.
+      if (!downloads.some((d) => d.id === id) && !removals.has(id)) void deviceStore.remove(current, id).catch(() => {});
+      continue;
+    }
     const size = await deviceStore.videoSize(current, id).catch(() => 0);
-    // Un « Échec » dû à une demande retirée par erreur (le défaut du 19/10/2026) repart une fois :
-    // la boucle redemande la version, qui est souvent déjà prête sur le serveur.
-    const healed = meta.state === "failed" && meta.error === "La préparation n'existe plus sur le serveur" ? { state: "preparing" as const, error: null } : {};
-    loaded.push({ ...meta, ...healed, bytes: size });
+    loaded.push({ ...meta, bytes: size });
   }
   if (account !== current) return;
-  downloads = loaded.sort((a, b) => b.createdAt - a.createdAt);
+  // Ce qui a été demandé pendant la lecture du dossier reste : la liste lue s'y ajoute.
+  const started = downloads.filter((d) => !loaded.some((l) => l.id === d.id));
+  downloads = [...started, ...loaded].sort((a, b) => b.createdAt - a.createdAt);
   emit();
+  void flushPendingDeletes();
   void runLoop();
   // Les téléchargements faits avant que les aperçus de la barre partent avec le film : rattrapés
   // une fois, avec du réseau (sans, rien n'est noté, et on réessaiera au prochain chargement).
@@ -189,9 +215,19 @@ export async function initOfflineDownloads(): Promise<void> {
   for (const d of loaded) if (d.artwork) warmArtwork(current, d);
 }
 
+/**
+ * Un rangement (sous-titres, aperçus, fiche, affiche) qui finit après la suppression de son
+ * téléchargement a recréé son dossier : on le retire aussitôt.
+ */
+async function stillThere(owner: string, id: string): Promise<boolean> {
+  if (offlineDownloadById(id)) return true;
+  await deviceStore.remove(owner, id).catch(() => {});
+  return false;
+}
+
 async function keepArtwork(owner: string, id: string, itemId: string): Promise<void> {
   const artwork = await storeOfflineArtwork(owner, id, itemId);
-  if (artwork === undefined || account !== owner) return;
+  if (artwork === undefined || account !== owner || !(await stillThere(owner, id))) return;
   const updated = patch(id, { artwork });
   if (updated) {
     warmArtwork(owner, updated);
@@ -206,7 +242,7 @@ function warmArtwork(owner: string, d: OfflineDownload): void {
 
 async function keepTrickplay(owner: string, id: string, itemId: string): Promise<void> {
   const trickplay = await storeOfflineTrickplay(owner, id, itemId);
-  if (trickplay === undefined || account !== owner) return;
+  if (trickplay === undefined || account !== owner || !(await stillThere(owner, id))) return;
   const updated = patch(id, { trickplay });
   if (updated) await saveMeta(updated);
 }
@@ -263,7 +299,14 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
   for (const old of downloads.filter((d) => d.itemId === request.itemId && d.id !== job.id)) await removeOfflineDownload(old.id);
   // Garder le stockage à l'abri du ménage du navigateur, dès le premier téléchargement.
   void navigator.storage?.persist?.().catch(() => false);
-  const existing = downloads.find((d) => d.id === job.id);
+  let existing = downloads.find((d) => d.id === job.id);
+  // Un échec redemandé (« Télécharger la saison », l'épisode suivant automatique) : le serveur reprend
+  // la même version sous le même identifiant ; l'appareil repart de zéro avec elle. Gardé en
+  // « Échec », il ne se téléchargeait jamais alors que le serveur la refaisait (relecture du 19/10/2026).
+  if (existing?.state === "failed") {
+    await deviceStore.truncateVideo(owner, existing.id, 0).catch(() => {});
+    existing = patch(existing.id, { state: "preparing", error: null, generation: job.generation, bytes: 0, serverBytes: job.bytes, serverDone: job.status === "done", fromUser: true }) ?? undefined;
+  }
   const download: OfflineDownload = existing ?? {
     id: job.id,
     itemId: request.itemId,
@@ -295,6 +338,7 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
   await saveMeta(download);
   // Les sous-titres texte, rangés à côté du film (Louis, 19/10/2026).
   void storeOfflineSubtitles(owner, job.id, request.itemId).then(async (subtitles) => {
+    if (!(await stillThere(owner, job.id))) return;
     const updated = patch(job.id, { subtitles });
     if (updated) await saveMeta(updated);
   });
@@ -308,8 +352,9 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
     void fetch(`/api/jellyfin/image?itemId=${encodeURIComponent(request.itemId)}&kind=poster`)
       .then((r) => (r.ok ? r.arrayBuffer() : null))
       .then(async (buffer) => {
-        if (!buffer || !account) return;
+        if (!buffer || !account || !offlineDownloadById(job.id)) return;
         await deviceStore.writePoster(owner, job.id, new Uint8Array(buffer));
+        if (!(await stillThere(owner, job.id))) return;
         const updated = patch(job.id, { hasPoster: true });
         if (updated) await saveMeta(updated);
       })
@@ -329,7 +374,11 @@ export function removeOfflineDownload(id: string): Promise<void> {
   // demande — même version, même identifiant — et l'effaçait : « Préparation » sans fin, puis
   // « Échec » (Louis, 19/10/2026).
   const removal = (async () => {
-    await fetch(`/api/offline/jobs/${id}`, { method: "DELETE" }).catch(() => {});
+    // Sans réseau, le retrait attend : sinon la préparation continuait sur le serveur pour personne.
+    const sent = await fetch(`/api/offline/jobs/${id}`, { method: "DELETE" })
+      .then((r) => r.ok || r.status === 404)
+      .catch(() => false);
+    if (!sent && owner) rememberPendingDelete(owner, id);
     if (owner) {
       forgetOfflineImages(owner, id);
       await deviceStore.remove(owner, id).catch(() => {});
@@ -343,6 +392,85 @@ export function removeOfflineDownload(id: string): Promise<void> {
   return removal;
 }
 
+/** Les retraits que le serveur n'a pas reçus, par compte — renvoyés au prochain chargement. */
+const PENDING_DELETES = "cine:offline-pending-deletes";
+
+function pendingDeletes(): Record<string, string[]> {
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_DELETES) ?? "{}") as Record<string, string[]>;
+  } catch {
+    return {};
+  }
+}
+
+function rememberPendingDelete(owner: string, id: string): void {
+  try {
+    const all = pendingDeletes();
+    all[owner] = [...new Set([...(all[owner] ?? []), id])].slice(-50);
+    localStorage.setItem(PENDING_DELETES, JSON.stringify(all));
+  } catch {
+    /* stockage refusé : le retrait se perd, la copie expirera d'elle-même sur le serveur */
+  }
+}
+
+async function flushPendingDeletes(): Promise<void> {
+  const owner = account;
+  if (!owner || (typeof navigator !== "undefined" && navigator.onLine === false)) return;
+  const ids = pendingDeletes()[owner] ?? [];
+  for (const id of ids) {
+    // Redemandé depuis : il n'y a plus rien à retirer.
+    if (offlineDownloadById(id)) continue;
+    const sent = await fetch(`/api/offline/jobs/${id}`, { method: "DELETE" })
+      .then((r) => r.ok || r.status === 404)
+      .catch(() => false);
+    if (!sent) return;
+    try {
+      const all = pendingDeletes();
+      all[owner] = (all[owner] ?? []).filter((x) => x !== id);
+      localStorage.setItem(PENDING_DELETES, JSON.stringify(all));
+    } catch {
+      return;
+    }
+  }
+}
+
+/**
+ * Réessayer un échec, aux mêmes choix (piste, qualité, téléchargement automatique) : le retrait, puis
+ * la même demande — depuis la page des téléchargements et la fiche hors ligne, où il n'y a pas de
+ * fenêtre de choix sous la main.
+ */
+export async function retryOfflineDownload(id: string): Promise<void> {
+  const d = offlineDownloadById(id);
+  if (!d) return;
+  await removeOfflineDownload(id);
+  await startOfflineDownload({
+    itemId: d.itemId,
+    ...(d.episode ? { episode: d.episode } : {}),
+    radarrId: d.radarrId,
+    title: d.title,
+    year: d.year,
+    runtimeSeconds: d.runtimeSeconds,
+    audioIndex: d.audioIndex,
+    audioLabel: d.audioLabel,
+    audioTracks: d.audioTracks,
+    quality: d.quality,
+    codec: d.codec,
+  });
+}
+
+/**
+ * La reprise que Jellyfin connaît, rapportée sur l'appareil quand une fiche l'apprend : la page des
+ * téléchargements et la fiche hors ligne lisent celle de l'appareil, et disaient « 1 h 20 restantes »
+ * quand la fiche en ligne disait « 40 min » pour le même film, vu entre-temps ailleurs (relecture du
+ * 19/10/2026). Seulement quand rien n'attend d'être envoyé : une position lue hors ligne est la plus récente.
+ */
+export function adoptOnlinePosition(id: string, seconds: number): void {
+  const d = offlineDownloadById(id);
+  if (!d || Math.abs(d.positionSeconds - seconds) < 2) return;
+  const updated = patch(id, { positionSeconds: seconds, positionAt: Date.now(), watchedToEnd: false });
+  if (updated) void saveMeta(updated);
+}
+
 /**
  * Où la lecture du fichier téléchargé s'est arrêtée, selon la règle de reprise de Jellyfin
  * (`resumeRules.ts`) : la même position que Jellyfin retiendra, à la seconde. Jellyfin, lui, la reçoit
@@ -353,23 +481,49 @@ export function saveOfflinePosition(id: string, seconds: number): void {
   const d = offlineDownloadById(id);
   if (!d) return;
   const kept = applyResumeRules(seconds, d.runtimeSeconds);
-  const updated = patch(id, { positionSeconds: kept.seconds, positionAt: Date.now(), ...(kept.watched ? { watchedToEnd: true } : {}) });
+  // Revu en partie après avoir été vu jusqu'au bout : ce n'est plus « vu », et le ménage automatique
+  // ne doit plus l'effacer à l'arrivée du suivant.
+  const updated = patch(id, { positionSeconds: kept.seconds, positionAt: Date.now(), watchedToEnd: kept.watched });
   if (updated) void saveMeta(updated);
 }
 
-async function holdWakeLock(on: boolean): Promise<void> {
-  try {
-    if (on && !wakeLock && document.visibilityState === "visible") {
-      const nav = navigator as Navigator & { wakeLock?: { request(type: "screen"): Promise<{ release(): Promise<void> }> } };
-      wakeLock = (await nav.wakeLock?.request("screen")) ?? null;
-    } else if (!on && wakeLock) {
-      const lock = wakeLock;
-      wakeLock = null;
-      await lock.release();
-    }
-  } catch {
-    wakeLock = null;
+/**
+ * L'écran allumé tant qu'un téléchargement avance et que la page est visible. Une seule demande à la
+ * fois (trois fils la demandaient ensemble au lancement : deux verrous perdus, jamais rendus), et
+ * redemandée au retour au premier plan — le navigateur la rend de lui-même quand la page se cache.
+ */
+let wakeRequest: Promise<void> | null = null;
+function holdWakeLock(on: boolean): Promise<void> {
+  if (on) {
+    if (wakeLock || wakeRequest || typeof document === "undefined" || document.visibilityState !== "visible") return wakeRequest ?? Promise.resolve();
+    const nav = navigator as Navigator & { wakeLock?: { request(type: "screen"): Promise<WakeLockLike> } };
+    wakeRequest = (async () => {
+      try {
+        const lock = (await nav.wakeLock?.request("screen")) ?? null;
+        if (!lock) return;
+        // Rendu par le navigateur (page cachée) : oublié, pour être redemandé au retour.
+        lock.addEventListener?.("release", () => {
+          if (wakeLock === lock) wakeLock = null;
+        });
+        if (workers === 0) await lock.release().catch(() => {});
+        else wakeLock = lock;
+      } catch {
+        wakeLock = null;
+      } finally {
+        wakeRequest = null;
+      }
+    })();
+    return wakeRequest;
   }
+  const lock = wakeLock;
+  wakeLock = null;
+  return lock ? lock.release().catch(() => {}) : Promise.resolve();
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && workers > 0) void holdWakeLock(true);
+  });
 }
 
 const sleep = (ms: number, signal: AbortSignal) =>
@@ -388,10 +542,17 @@ const sleep = (ms: number, signal: AbortSignal) =>
 const PARALLEL = 3;
 const claimed = new Map<string, AbortController>();
 let workers = 0;
+/**
+ * Les téléchargements qu'un autre onglet tient, et jusqu'à quand on les laisse : un fil qui retombait
+ * sur le même toutes les cinq secondes était un fil perdu pour les autres (relecture du 19/10/2026).
+ */
+const elsewhere = new Map<string, number>();
+const ELSEWHERE_MS = 30_000;
 
 function waiting(): OfflineDownload[] {
+  const now = Date.now();
   return downloads
-    .filter((d) => (d.state === "preparing" || d.state === "downloading") && !claimed.has(d.id))
+    .filter((d) => (d.state === "preparing" || d.state === "downloading") && !claimed.has(d.id) && !((elsewhere.get(d.id) ?? 0) > now))
     .sort((a, b) => Number(b.serverDone) - Number(a.serverDone) || a.createdAt - b.createdAt);
 }
 
@@ -431,19 +592,28 @@ async function worker(owner: string): Promise<void> {
             return true;
           })
         : (await once(), true);
-      if (!ran) await sleep(5000, control.signal);
+      if (!ran) {
+        elsewhere.set(next.id, Date.now() + ELSEWHERE_MS);
+        setTimeout(() => void runLoop(), ELSEWHERE_MS + 100);
+      }
     } catch (error) {
+      // Une pause ou une annulation : rien d'anormal.
+      if (control.signal.aborted) continue;
       // Réseau coupé, serveur qui redémarre : on réessaie un peu plus tard, sans rien perdre.
       // Au journal, une fois par erreur (le rapporteur dédoublonne) : ce qu'un iPhone a dit.
-      if (!control.signal.aborted) reportClientError(error, "component:hors-ligne", { download: next.id, bytes: String(next.bytes) });
-      // Un `fetch` sans réseau rejette d'un `TypeError` : rien à voir avec un fichier verrouillé.
-      // Compté, il relançait le stockage toutes les cinq secondes tant qu'un téléchargement
-      // attendait le réseau — et la relance fait échouer les lectures en vol du lecteur hors
-      // ligne, celui qu'on utilise justement sans réseau (§109, entrée hors ligne).
-      if (!(error instanceof TypeError)) failures += 1;
+      reportClientError(error, "component:hors-ligne", { download: next.id, bytes: String(next.bytes) });
+      // Seules les erreurs du stockage de l'appareil comptent : un réseau coupé, un 502 pendant un
+      // déploiement, un 401 de session perdue n'ont rien à voir avec un fichier verrouillé — comptés,
+      // ils relançaient le stockage, et la relance fait échouer les lectures en vol du lecteur hors
+      // ligne, celui qu'on utilise justement sans réseau (§109, relecture du 19/10/2026).
+      if (isDeviceStoreError(error)) failures += 1;
       // Deux échecs de suite : le stockage de l'appareil repart d'un worker neuf.
-      if (failures >= 2) resetDeviceStore();
-      await sleep(5000, control.signal);
+      if (failures >= 2) {
+        failures = 0;
+        resetDeviceStore();
+      }
+      // Session perdue : inutile d'insister toutes les cinq secondes.
+      await sleep(error instanceof Error && error.message === "état 401" ? 60_000 : 5000, control.signal);
     } finally {
       if (claimed.get(next.id) === control) claimed.delete(next.id);
     }
@@ -475,17 +645,11 @@ export async function resumeOfflineDownload(id: string): Promise<void> {
 async function step(owner: string, d: OfflineDownload, signal: AbortSignal): Promise<void> {
   const res = await fetch(`/api/offline/jobs/${d.id}`, { signal, cache: "no-store" });
   if (res.status === 404) {
-    // La demande n'est plus connue du serveur (retirée par erreur, ou expirée) : on la refait, aux
-    // mêmes choix. La même version revient sous le même identifiant ; sinon, c'est un échec.
-    const again = await fetch("/api/offline/jobs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itemId: d.itemId, audioIndex: d.audioIndex, quality: d.quality, codec: d.codec }),
-      signal,
-    });
-    const body = (await again.json().catch(() => null)) as { job?: OfflineJob; error?: string } | null;
-    if (again.ok && body?.job?.id === d.id) return;
-    const failed = patch(d.id, { state: "failed", error: body?.error ?? "La préparation n'existe plus sur le serveur" });
+    // La version n'existe plus sur le serveur : effacée par l'administrateur (Activité), ou expirée
+    // après des jours en pause. On le dit, et « Réessayer » la redemande. Elle se redemandait toute
+    // seule (un remède au retrait mal ordonné du 19/10/2026, corrigé à la source depuis) : une copie
+    // effacée par l'administrateur revenait à chaque lancement, préparée pour personne.
+    const failed = patch(d.id, { state: "failed", error: "La préparation n'existe plus sur le serveur" });
     if (failed) await saveMeta(failed);
     return;
   }

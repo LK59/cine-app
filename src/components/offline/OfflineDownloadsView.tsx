@@ -1,17 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { AlertTriangle, ArrowLeft, Download, Film, HardDrive, Pause, Play, Trash2, Tv, X } from "lucide-react";
+import { AlertTriangle, Download, Film, HardDrive, Pause, Play, RotateCcw, Trash2, Tv, X } from "lucide-react";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { usePlayback } from "@/components/PlaybackProvider";
-import { formatDurationShort, formatFileSize, formatMinutes } from "@/lib/format";
-import { deviceStore } from "@/lib/offline/deviceStore";
-import { offlineAccount, pauseOfflineDownload, removeOfflineDownload, resumeOfflineDownload, useOfflineDownloads, type OfflineDownload } from "@/lib/offline/downloads";
-import { groupOfflineDownloads, offlineRemainingSeconds, offlineSeriesNext, type OfflineSeriesGroup } from "@/lib/offline/downloadGroups";
-import { BACKDROP_FILE, LOGO_FILE, SERIES_POSTER_FILE, offlineImage } from "@/lib/offline/artwork";
-import { BetaBadge, offlinePlayable, offlineProgress, offlineStatusLabel, touchDevice } from "./OfflineDownloadControl";
+import { PlayerResultCard } from "@/components/player/PlayerResultCard";
+import { PlayerEmptyState } from "@/components/player/PlayerEmptyState";
+import { formatDurationShort, formatFileSize } from "@/lib/format";
+import { useIsMobile } from "@/lib/useIsMobile";
+import { useExitDelay } from "@/lib/useExitDelay";
+import { SHEET_OUT_MS, SHEET_UNMOUNT_SLACK_MS } from "@/lib/sheetMotion";
+import { pauseOfflineDownload, removeOfflineDownload, resumeOfflineDownload, retryOfflineDownload, useOfflineDownloads, type OfflineDownload } from "@/lib/offline/downloads";
+import { groupOfflineDownloads, offlineRemainingSeconds, type OfflineSeriesGroup } from "@/lib/offline/downloadGroups";
+import { POSTER_FILE, SERIES_POSTER_FILE } from "@/lib/offline/artwork";
+import { OfflineTitleSheet } from "./OfflineTitleSheet";
+import { useOfflineImage } from "./useOfflineImage";
+import { offlinePlayable, offlineProgress, offlineStatusLabel, touchDevice } from "./OfflineDownloadControl";
 
 /**
  * La page des téléchargements (bêta, DECISIONS.md §109) — le contenu seul, monté par deux cadres :
@@ -43,15 +48,33 @@ export function OfflineDownloadsView({ onOpenTitle }: { onOpenTitle?: (target: O
   const active = downloads.filter((d) => d.state !== "done").sort((a, b) => b.createdAt - a.createdAt);
   // La fiche ouverte : un film (son identifiant) ou une série (sa clé de groupe). Relue dans la liste
   // vivante : elle suit le téléchargement, et se ferme si ce qu'elle montrait a quitté l'appareil.
+  // Gardée le temps de sa sortie, comme les fiches que la coquille du cinéma garde (`sheetExitMs`) :
+  // la cible survit à la fermeture, `open` dit si elle est encore demandée.
   const [shown, setShown] = useState<{ film: string } | { series: string } | null>(null);
+  const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const sheet = useExitDelay(open, isMobile ? SHEET_OUT_MS + SHEET_UNMOUNT_SLACK_MS : 200);
   const shownFilm = shown && "film" in shown ? films.find((d) => d.id === shown.film) : undefined;
   const shownSeries = shown && "series" in shown ? series.find((g) => g.key === shown.series) : undefined;
+  const show = (target: { film: string } | { series: string }) => {
+    setShown(target);
+    setOpen(true);
+  };
   return (
     <div className="space-y-9 [@media(max-height:500px)]:space-y-6">
-      {(shownFilm || shownSeries) && <OfflineTitleSheet film={shownFilm} series={shownSeries} onClose={() => setShown(null)} onOpenTitle={onOpenTitle} />}
+      {sheet.render && (shownFilm || shownSeries) && (
+        <OfflineTitleSheet
+          key={shownFilm?.id ?? shownSeries?.key}
+          film={shownFilm}
+          series={shownSeries}
+          leaving={sheet.leaving || !open}
+          onClose={() => setOpen(false)}
+          onOpenTitle={onOpenTitle}
+        />
+      )}
       <StorageSummary downloads={downloads} />
       {downloads.length === 0 ? (
-        <p className="rounded-2xl bg-white/4 px-5 py-10 text-center text-sm text-muted ring-1 ring-inset ring-white/8">{t("player.downloads.empty")}</p>
+        <PlayerEmptyState icon={Download} message={t("player.downloads.empty")} />
       ) : (
         <>
           {active.length > 0 && (
@@ -71,7 +94,7 @@ export function OfflineDownloadsView({ onOpenTitle }: { onOpenTitle?: (target: O
             <Section icon={Film} title={t("player.downloads.films")}>
               <Grid>
                 {films.map((d) => (
-                  <FilmCard key={d.id} download={d} onShow={() => setShown({ film: d.id })} />
+                  <FilmCard key={d.id} download={d} onShow={() => show({ film: d.id })} />
                 ))}
               </Grid>
             </Section>
@@ -80,7 +103,7 @@ export function OfflineDownloadsView({ onOpenTitle }: { onOpenTitle?: (target: O
             <Section icon={Tv} title={t("player.downloads.series")}>
               <Grid>
                 {series.map((g) => (
-                  <SeriesCard key={g.key} group={g} onShow={() => setShown({ series: g.key })} />
+                  <SeriesCard key={g.key} group={g} onShow={() => show({ series: g.key })} />
                 ))}
               </Grid>
             </Section>
@@ -105,7 +128,8 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
 }
 
 function Grid({ children }: { children: React.ReactNode }) {
-  return <ul className="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 md:grid-cols-5">{children}</ul>;
+  // La grille de Ma liste (`PlayerListPanel`), à l'identique.
+  return <ul className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5">{children}</ul>;
 }
 
 /**
@@ -161,10 +185,12 @@ function StorageSummary({ downloads }: { downloads: OfflineDownload[] }) {
 }
 
 /**
- * Une affiche de la grille : l'image gardée, et par-dessus ce qui compte avant de partir — une barre
- * tant que ça arrive, une pause, un échec. Le titre et une ligne dessous, comme les cartes de l'accueil.
+ * Une affiche de la grille : la carte de Ma liste et de la recherche (`PlayerResultCard`) — même
+ * cadre, même appui, même fondu, même titre —, et par-dessus ce qui compte avant de partir : une barre
+ * tant que ça arrive, une pause, un échec.
  */
 function PosterCard({
+  kind,
   url,
   title,
   caption,
@@ -173,6 +199,7 @@ function PosterCard({
   failed = false,
   onShow,
 }: {
+  kind: "movie" | "series";
   url: string | null;
   title: string;
   caption: string;
@@ -182,31 +209,23 @@ function PosterCard({
   failed?: boolean;
   onShow: () => void;
 }) {
-  return (
-    <li>
-      <button type="button" data-nav-item onClick={onShow} aria-label={title} className="group block w-full text-left">
-        <span className="relative block aspect-[2/3] overflow-hidden rounded-xl bg-white/6 ring-1 ring-inset ring-white/8">
-          {url ? (
-            // Une adresse `blob:` de l'affiche gardée sur l'appareil : rien à optimiser par le serveur.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={url} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <span className="flex h-full w-full items-center justify-center p-2 text-center text-xs text-subtle">{title}</span>
-          )}
-          {(paused || failed) && (
-            <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white">
-              {failed ? <AlertTriangle size={13} className="text-warning" /> : <Pause size={12} />}
-            </span>
-          )}
-          {progress !== undefined && !failed && (
-            <span className="absolute inset-x-2 bottom-2 h-1 overflow-hidden rounded-full bg-black/50" aria-hidden>
-              <span className="block h-full rounded-full bg-white" style={{ width: `${Math.max(3, progress)}%` }} />
-            </span>
-          )}
+  const overlay = (
+    <>
+      {(paused || failed) && (
+        <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white">
+          {failed ? <AlertTriangle size={13} className="text-warning" /> : <Pause size={12} />}
         </span>
-        <span className="mt-1.5 block truncate text-xs font-medium text-white">{title}</span>
-        <span className="block truncate text-[11px] text-subtle">{caption}</span>
-      </button>
+      )}
+      {progress !== undefined && !failed && (
+        <span className="absolute inset-x-2 bottom-2 h-1 overflow-hidden rounded-full bg-black/50" aria-hidden>
+          <span className="block h-full rounded-full bg-white transition-[width] duration-500" style={{ width: `${Math.max(3, progress)}%` }} />
+        </span>
+      )}
+    </>
+  );
+  return (
+    <li className="animate-fade-in">
+      <PlayerResultCard kind={kind} showKind={false} title={title} subtitle={caption} poster={url} onOpen={onShow} overlay={overlay} />
     </li>
   );
 }
@@ -223,6 +242,7 @@ function FilmCard({ download: d, onShow }: { download: OfflineDownload; onShow: 
         : [d.year, t(`player.downloads.${d.quality}`)].filter(Boolean).join(" · ");
   return (
     <PosterCard
+      kind="movie"
       url={poster}
       title={d.title}
       caption={caption}
@@ -246,6 +266,7 @@ function SeriesCard({ group, onShow }: { group: OfflineSeriesGroup; onShow: () =
   const progress = arriving.length ? Math.floor(arriving.reduce((sum, d) => sum + offlineProgress(d), 0) / arriving.length) : undefined;
   return (
     <PosterCard
+      kind="series"
       url={seriesPoster ?? firstPoster}
       title={group.title}
       caption={`${t("player.downloads.episodes", { n: episodes.length })} · ${formatFileSize(group.bytes, locale)}`}
@@ -267,17 +288,8 @@ function Poster({ url }: { url: string | null }) {
   );
 }
 
-/** La vignette d'un épisode, au format de l'image. */
-function Thumbnail({ url }: { url: string | null }) {
-  return url ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" className="aspect-video w-28 shrink-0 rounded-lg object-cover sm:w-36" />
-  ) : (
-    <span className="flex aspect-video w-28 shrink-0 items-center justify-center rounded-lg bg-white/8 text-subtle sm:w-36">
-      <Tv size={16} aria-hidden />
-    </span>
-  );
-}
+/** L'anneau de focus des cartes et des boutons de l'app (clavier, télécommande). */
+const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500";
 
 function IconButton({
   label,
@@ -297,7 +309,7 @@ function IconButton({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tone === "danger" ? "bg-white/8 text-danger" : "bg-white/8 text-white"}`}
+      className={`pressable flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${FOCUS} ${tone === "danger" ? "bg-white/8 text-danger" : "bg-white/8 text-white"}`}
     >
       {children}
     </button>
@@ -329,7 +341,7 @@ function PillButton({
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-opacity ${colors} ${disabled ? "cursor-default opacity-35" : ""}`}
+      className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-opacity ${FOCUS} ${colors} ${disabled ? "cursor-default opacity-35" : "pressable"}`}
     >
       {icon}
       {text}
@@ -413,57 +425,44 @@ function ProgressBlock({ download: d }: { download: OfflineDownload }) {
 }
 
 /**
- * Une ligne avec ses commandes : un téléchargement qui arrive (« En cours »), ou un épisode dans la
- * fiche de sa série (`rich` : sa vignette et son résumé). « Lire » et « Pause » écrits en toutes
- * lettres (Louis, 19/10/2026) : une icône de lecture seule se confondait avec la reprise du
- * téléchargement. Au téléphone, les boutons sous le texte — à côté de trois ronds, la langue et
- * l'avancement étaient coupés.
+ * Une ligne de « En cours », avec ses commandes. « Lire » et « Pause » écrits en toutes lettres (Louis,
+ * 19/10/2026) : une icône de lecture seule se confondait avec la reprise du téléchargement. Au
+ * téléphone, les boutons sous le texte — à côté de trois ronds, la langue et l'avancement étaient coupés.
  */
-function DownloadRow({ download: d, rich = false }: { download: OfflineDownload; rich?: boolean }) {
+function DownloadRow({ download: d }: { download: OfflineDownload }) {
   const t = useT();
-  const { locale } = useLocale();
   const play = usePlayDownload();
   const poster = usePosterUrl(d);
   const removal = useRemoval(d, poster);
   const done = d.state === "done";
   const playable = offlinePlayable(d);
-  const remaining = offlineRemainingSeconds(d);
-  const title = rich && d.episode ? `${d.episode.episodeNumber ?? "–"}. ${d.episode.episodeTitle || d.title}` : d.title;
-  const runtime = d.runtimeSeconds ? formatMinutes(Math.round(d.runtimeSeconds / 60)) : null;
   return (
-    <li className="flex flex-col gap-2.5 border-t border-white/8 py-3 first:border-t-0 sm:flex-row sm:items-center sm:gap-3">
-      <div className={`flex min-w-0 flex-1 gap-3 ${rich ? "items-start" : "items-center"}`}>
-        {rich ? <Thumbnail url={poster} /> : <Poster url={poster} />}
+    <li className="flex animate-fade-in flex-col gap-2.5 border-t border-white/8 py-3 first:border-t-0 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <Poster url={poster} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-white">{title}</p>
-          {rich ? (
-            <p className="truncate text-xs text-subtle">
-              {d.watchedToEnd
-                ? t("player.downloads.watched")
-                : remaining !== null
-                  ? t("cinema.timeRemaining", { time: formatDurationShort(remaining * 1e7) })
-                  : runtime}
-              {done ? <> · {formatFileSize(d.bytes, locale)}</> : null}
-            </p>
-          ) : (
-            <p className="truncate text-xs text-subtle">
-              {t(`player.downloads.${d.quality}`)} · {d.audioLabel}
-            </p>
-          )}
+          <p className="truncate text-sm font-medium text-white">{d.title}</p>
+          <p className="truncate text-xs text-subtle">
+            {t(`player.downloads.${d.quality}`)} · {d.audioLabel}
+          </p>
           {!done && <ProgressBlock download={d} />}
-          {rich && d.artwork?.overview && <p className="mt-1.5 line-clamp-3 text-xs leading-5 text-muted">{d.artwork.overview}</p>}
         </div>
       </div>
-      <div className={`flex shrink-0 items-center gap-1.5 ${rich ? "" : "pl-[3.75rem]"} sm:pl-0`}>
-        {/* Grisé tant qu'il n'y a pas de quoi démarrer — la même règle que la fiche (`offlinePlayable`). */}
-        <PillButton
-          label={t(done ? "player.downloads.playDownloaded" : "player.downloads.playDownloading")}
-          text={t("common.play")}
-          icon={<Play size={13} fill="currentColor" />}
-          tone="primary"
-          disabled={!playable}
-          onClick={() => playable && play(d)}
-        />
+      <div className="flex shrink-0 items-center gap-1.5 pl-[3.75rem] sm:pl-0">
+        {/* Un échec se réessaie aux mêmes choix ; sinon Lire, grisé tant qu'il n'y a pas de quoi
+            démarrer — la même règle que la fiche (`offlinePlayable`). */}
+        {d.state === "failed" ? (
+          <PillButton label={t("player.downloads.retry")} text={t("player.downloads.retry")} icon={<RotateCcw size={14} />} tone="primary" onClick={() => void retryOfflineDownload(d.id)} />
+        ) : (
+          <PillButton
+            label={t(done ? "player.downloads.playDownloaded" : "player.downloads.playDownloading")}
+            text={t("common.play")}
+            icon={<Play size={13} fill="currentColor" />}
+            tone="primary"
+            disabled={!playable}
+            onClick={() => playable && play(d)}
+          />
+        )}
         <PauseButton download={d} />
         <IconButton label={removal.label} tone="danger" onClick={removal.ask}>
           <Trash2 size={15} />
@@ -474,215 +473,7 @@ function DownloadRow({ download: d, rich = false }: { download: OfflineDownload;
   );
 }
 
-/** L'affiche gardée sur l'appareil — la liste s'affiche aussi sans réseau. */
+/** L'affiche gardée sur l'appareil, en adresse partagée (`useOfflineImage`) — la liste s'affiche aussi sans réseau. */
 function usePosterUrl(d: OfflineDownload | null): string | null {
-  const [url, setUrl] = useState<string | null>(null);
-  const id = d?.id ?? null;
-  const hasPoster = d?.hasPoster ?? false;
-  useEffect(() => {
-    const account = offlineAccount();
-    if (!id || !hasPoster || !account) return;
-    let made: string | null = null;
-    let cancelled = false;
-    void deviceStore
-      .readPoster(account, id)
-      .then((blob) => {
-        if (cancelled || !blob) return;
-        made = URL.createObjectURL(blob);
-        setUrl(made);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      if (made) URL.revokeObjectURL(made);
-    };
-  }, [id, hasPoster]);
-  return url;
-}
-
-/** Une image gardée avec un téléchargement (logo, visuel, affiche de série), en adresse `blob:` partagée. */
-function useOfflineImage(d: OfflineDownload | undefined, name: string, has: boolean | undefined): string | null {
-  const [url, setUrl] = useState<{ key: string; url: string | null } | null>(null);
-  const id = d?.id ?? null;
-  const key = `${id}/${name}`;
-  useEffect(() => {
-    const account = offlineAccount();
-    if (!id || !has || !account) return;
-    let cancelled = false;
-    void offlineImage(account, id, name).then((made) => {
-      if (!cancelled) setUrl({ key, url: made });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, name, has, key]);
-  return url?.key === key ? url.url : null;
-}
-
-/** Sous « Lire » dans la fiche d'un film : pause, suppression, et la fiche en ligne dans le cinéma. */
-function FilmActions({ film, poster, openOnline }: { film: OfflineDownload; poster: string | null; openOnline?: (target: OfflineOpenTarget) => void }) {
-  const t = useT();
-  const removal = useRemoval(film, poster);
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <PauseButton download={film} />
-      <PillButton label={removal.label} text={removal.label} icon={<Trash2 size={14} />} tone="danger" onClick={removal.ask} />
-      {openOnline && film.radarrId !== null && (
-        <PillButton label={t("player.downloads.open")} text={t("player.downloads.openShort")} icon={<Film size={14} />} onClick={() => openOnline({ type: "movie", id: film.radarrId! })} />
-      )}
-      {removal.sheet}
-    </div>
-  );
-}
-
-/**
- * La fiche hors ligne d'un film ou d'une série (Louis, 19/10/2026 : « pas de fiche série en full hors
- * ligne ? juste les épisodes bruts ? ») : la forme d'une fiche du cinéma — grand visuel, logo, année et
- * genres, Lire en tête, résumé, distribution — faite de ce qui est gardé avec le téléchargement
- * (`artwork.ts`). La distribution en texte seul, sans liens ni photos : une fiche de personne ne
- * s'ouvre pas sans réseau, et ses images alourdiraient chaque téléchargement. Pour une série, ses
- * épisodes sur l'appareil, saison par saison, avec leur vignette et leur résumé.
- *
- * Un calque au-dessus de la page, sous le lecteur (z 50 contre 80) et sous les confirmations (60).
- */
-function OfflineTitleSheet({
-  film,
-  series,
-  onClose,
-  onOpenTitle,
-}: {
-  film?: OfflineDownload;
-  series?: OfflineSeriesGroup;
-  onClose: () => void;
-  onOpenTitle?: (target: OfflineOpenTarget) => void;
-}) {
-  const t = useT();
-  const { locale } = useLocale();
-  const play = usePlayDownload();
-  const episodes = series ? series.seasons.flatMap((s) => s.episodes) : [];
-  // Ce que la série garde de sa fiche : chez l'épisode le plus récemment demandé qui en a une.
-  const lead = film ?? [...episodes].sort((a, b) => b.createdAt - a.createdAt).find((d) => d.artwork) ?? series?.first;
-  const artwork = lead?.artwork ?? null;
-  const backdrop = useOfflineImage(lead, BACKDROP_FILE, artwork?.hasBackdrop);
-  const logo = useOfflineImage(lead, LOGO_FILE, artwork?.hasLogo);
-  const poster = usePosterUrl(film ?? null);
-  const facts = film ? artwork : (artwork?.series ?? null);
-  const name = film ? film.title : (series?.title ?? "");
-  const runtime = film?.runtimeSeconds ? formatMinutes(Math.round(film.runtimeSeconds / 60)) : null;
-  const meta = [facts?.year ?? film?.year ?? null, runtime, ...(facts?.genres ?? []).slice(0, 3)].filter(Boolean).join(" · ");
-  // Lire en tête : le film, ou l'épisode à reprendre / le suivant à voir parmi ceux de l'appareil.
-  const next = film ?? (series ? offlineSeriesNext(series) : null);
-  // La fiche en ligne passe par-dessus la page : celle-ci se ferme d'abord, elle la couvrirait.
-  const openOnline = onOpenTitle ? (target: OfflineOpenTarget) => (onClose(), onOpenTitle(target)) : undefined;
-
-  useEffect(() => {
-    // En capture, et arrêtée : la page qui la porte se ferme aussi sur Échap, et un appui ne doit
-    // refermer qu'un écran à la fois.
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      onClose();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
-
-  if (typeof document === "undefined") return null;
-  const resume = next ? offlineRemainingSeconds(next) : null;
-  const nextCode = next?.episode && next.episode.episodeNumber !== null ? t("cinema.episodeShort", { episode: next.episode.episodeNumber, season: next.episode.seasonNumber }) : null;
-  const playMain = [t(resume !== null && !next?.watchedToEnd ? "common.resume" : "common.play"), nextCode].filter(Boolean).join(" ");
-  const playDetail = next
-    ? next.state !== "done"
-      ? // Un film a sa barre juste dessous ; un épisode, non : son état ici.
-        film
-        ? t("player.downloads.fileDownloading")
-        : offlineStatusLabel(next, t)
-      : resume !== null && !next.watchedToEnd
-        ? t("cinema.timeRemaining", { time: formatDurationShort(resume * 1e7) })
-        : t("player.downloads.fileDownloaded")
-    : null;
-  const ready = next ? offlinePlayable(next) : false;
-  return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={name} className="fixed inset-0 z-50 animate-fade-in overflow-y-auto overscroll-contain bg-ink">
-      <div className="relative">
-        <div className="relative aspect-video max-h-[62vh] w-full overflow-hidden bg-white/4">
-          {(backdrop ?? poster) && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={(backdrop ?? poster)!} alt="" className={`h-full w-full object-cover ${backdrop ? "" : "scale-110 blur-2xl"}`} />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/30 to-transparent" />
-        </div>
-        <button
-          type="button"
-          data-nav-item
-          onClick={onClose}
-          aria-label={t("common.back")}
-          className="absolute left-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur"
-          style={{ top: "max(1rem, env(safe-area-inset-top))" }}
-        >
-          <ArrowLeft size={18} />
-        </button>
-      </div>
-      <div className="relative mx-auto -mt-20 w-full max-w-3xl px-4 pb-16 sm:-mt-28 sm:px-8">
-        {logo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logo} alt={name} className="mb-4 max-h-24 max-w-[70%] object-contain object-left sm:max-h-32" />
-        ) : (
-          <h2 className="mb-3 font-display text-3xl font-semibold text-white sm:text-4xl">{name}</h2>
-        )}
-        <p className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
-          {meta && <span>{meta}</span>}
-          <BetaBadge />
-        </p>
-
-        {next && (
-          <div className="mb-5 space-y-2">
-            <button
-              type="button"
-              data-nav-item
-              disabled={!ready}
-              onClick={() => ready && play(next)}
-              className={`flex w-full sm:max-w-sm items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-base font-semibold text-ink ${ready ? "" : "opacity-45"}`}
-            >
-              <Play size={18} fill="currentColor" />
-              <span className="flex min-w-0 flex-col items-start leading-tight">
-                <span>{playMain}</span>
-                {playDetail && <span className="truncate text-xs font-medium opacity-60">{playDetail}</span>}
-              </span>
-            </button>
-            {film && film.state !== "done" && <ProgressBlock download={film} />}
-            {film && <FilmActions film={film} poster={poster} openOnline={openOnline} />}
-            {series && openOnline && series.sonarrId !== null && (
-              <PillButton label={t("player.downloads.openSeries")} text={t("player.downloads.openShort")} icon={<Tv size={14} />} onClick={() => openOnline({ type: "series", id: series.sonarrId! })} />
-            )}
-          </div>
-        )}
-
-        {film && (
-          <p className="mb-3 text-xs text-subtle">
-            {t(`player.downloads.${film.quality}`)} · {film.audioLabel}
-            {film.state === "done" ? <> · {formatFileSize(film.bytes, locale)}</> : null}
-          </p>
-        )}
-        {facts?.overview && <p className="mb-3 text-sm leading-6 text-muted">{facts.overview}</p>}
-        {facts && facts.cast.length > 0 && (
-          <p className="mb-6 text-xs leading-5 text-subtle">
-            <span className="text-muted">{t("player.downloads.castLabel")}</span> {facts.cast.join(", ")}
-          </p>
-        )}
-
-        {series?.seasons.map((season) => (
-          <section key={season.season} className="mb-5">
-            <h3 className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-subtle">{t("player.downloads.season", { n: season.season })}</h3>
-            <ul className="rounded-2xl bg-white/4 px-3 ring-1 ring-inset ring-white/8 sm:px-4">
-              {season.episodes.map((d) => (
-                <DownloadRow key={d.id} download={d} rich />
-              ))}
-            </ul>
-          </section>
-        ))}
-      </div>
-    </div>,
-    document.body
-  );
+  return useOfflineImage(d, POSTER_FILE, d?.hasPoster);
 }

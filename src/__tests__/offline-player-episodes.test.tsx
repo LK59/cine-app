@@ -137,7 +137,7 @@ describe("lecteur hors ligne d'un épisode", () => {
     expect(nextDownload).not.toHaveBeenCalled();
   });
 
-  it("vu à 95 % : noté vu à la fermeture, pas pendant le générique", async () => {
+  it("vu au seuil de Jellyfin : noté vu à la fermeture, pas pendant le générique", async () => {
     list = [episode("e1", 1)];
     const { at, view } = await mount();
     at(1950);
@@ -146,10 +146,10 @@ describe("lecteur hors ligne d'un épisode", () => {
     expect(markWatched).toHaveBeenCalledWith("e1");
   });
 
-  it("arrêté avant 95 % : pas noté vu", async () => {
+  it("arrêté avant le seuil de Jellyfin (90 % par défaut) : pas noté vu", async () => {
     list = [episode("e1", 1)];
     const { at, view } = await mount();
-    at(1800);
+    at(1700);
     view.unmount();
     expect(markWatched).not.toHaveBeenCalled();
   });

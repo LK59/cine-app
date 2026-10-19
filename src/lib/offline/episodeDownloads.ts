@@ -10,6 +10,7 @@ import { labelAudioTracks } from "@/lib/trackLabel";
 import { trackLanguage } from "@/lib/trackPreferences";
 import { offlineDownloadById, offlineEpisodesOf, startOfflineDownload, type OfflineDownload } from "./downloads";
 import { expectedBytes, type OfflineCodec, type OfflineQuality } from "./quality";
+import { applyResumeRules } from "./resumeRules";
 
 /**
  * Les épisodes hors ligne (bêta, 19/10/2026) — ce que les lignes d'épisode, « Télécharger la saison »
@@ -176,15 +177,19 @@ export async function requestSeasonDownloads(
 
 /** La moitié d'un épisode lu depuis l'appareil : le moment de demander le suivant. */
 export const AUTO_NEXT_AT = 0.5;
-/** Vu jusqu'au bout : 95 % — le générique de fin ne compte pas (ou `ended`). */
-export const WATCHED_AT = 0.95;
 
 export function autoNextDue(position: number, runtimeSeconds: number): boolean {
   return runtimeSeconds > 0 && position >= runtimeSeconds * AUTO_NEXT_AT;
 }
 
+/**
+ * Vu jusqu'au bout : le seuil de Jellyfin (`resumeRules.ts`, 90 % par défaut, celui du serveur sinon),
+ * le même que la position gardée. Un seuil à part (95 %) faisait d'un arrêt entre les deux un épisode
+ * « vu » pour l'appareil mais pas pour le ménage automatique — ou l'inverse, selon le serveur
+ * (relecture du 19/10/2026).
+ */
 export function watchedThrough(position: number, runtimeSeconds: number): boolean {
-  return runtimeSeconds > 0 && position >= runtimeSeconds * WATCHED_AT;
+  return applyResumeRules(position, runtimeSeconds).watched;
 }
 
 export type AutoNextOutcome = "started" | "present" | "none" | "offline" | "skipped";

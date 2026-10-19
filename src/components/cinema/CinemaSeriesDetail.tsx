@@ -391,7 +391,8 @@ export function CinemaSeriesDetail({
               </div>
             )}
             {/* « Lire en ligne » passe en dessous, comme sur la fiche d'un film. */}
-            {playTargetId && offlinePlayable && !fileMissing && (
+            {/* Même si la bibliothèque a perdu le fichier : la copie de l'appareil est alors la seule lisible (§109). */}
+            {playTargetId && offlinePlayable && (
               <OfflinePlayButton
                 download={offlinePlayable}
                 onlineResumeTicks={facts.resumeTicks}
