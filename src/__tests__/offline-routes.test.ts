@@ -9,8 +9,10 @@ import type { NextRequest } from "next/server";
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
 const verify = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => verify(...a) }));
-const cfg = vi.hoisted(() => ({ offline: true }));
-vi.mock("@/lib/config", () => ({ config: { player: { get enabled() { return true; }, get offlineDownloads() { return cfg.offline; } } } }));
+const cfg = vi.hoisted(() => ({ offline: true, everyone: true }));
+vi.mock("@/lib/config", () => ({
+  config: { player: { get enabled() { return true; }, get offlineDownloads() { return cfg.offline; }, get offlineDownloadsForEveryone() { return cfg.everyone; } } },
+}));
 const visible = vi.fn();
 vi.mock("@/lib/itemVisibility", () => ({ assertVisible: (...a: unknown[]) => visible(...a) }));
 const jobs = vi.hoisted(() => ({ request: vi.fn(), jobFor: vi.fn(), forget: vi.fn(), touch: vi.fn() }));
@@ -36,6 +38,7 @@ const params = { params: Promise.resolve({ jobId: JOB }) };
 beforeEach(() => {
   vi.clearAllMocks();
   cfg.offline = true;
+  cfg.everyone = true;
   verify.mockResolvedValue({ u: "mathis", role: "user", jfId: "x", jti: "j" });
   visible.mockResolvedValue(null);
   jobs.request.mockResolvedValue({ id: JOB });
@@ -57,6 +60,15 @@ describe("POST /api/offline/jobs", () => {
     expect((await POST(req({ itemId: ITEM, audioIndex: 1, quality: "ultra" }))).status).toBe(400);
     expect((await POST(req({ itemId: "../x", audioIndex: 1, quality: "high" }))).status).toBe(400);
     expect(jobs.request).not.toHaveBeenCalled();
+  });
+});
+
+describe("bêta réservée aux administrateurs", () => {
+  it("non ouvert à tous : un compte ordinaire est refusé, un administrateur passe", async () => {
+    cfg.everyone = false;
+    expect((await POST(req({ itemId: ITEM, audioIndex: 1, quality: "high" }))).status).toBe(403);
+    verify.mockResolvedValue({ u: "louis", role: "admin", jfId: "x", jti: "j" });
+    expect((await POST(req({ itemId: ITEM, audioIndex: 1, quality: "high" }))).status).toBe(200);
   });
 });
 

@@ -126,6 +126,10 @@ export const config = {
     get offlineDownloads() {
       return optional("OFFLINE_DOWNLOADS", "true") === "true";
     },
+    // Ouvert à tous les comptes, ou aux administrateurs seulement (le défaut, le temps de la bêta).
+    get offlineDownloadsForEveryone() {
+      return optional("OFFLINE_DOWNLOADS_FOR_EVERYONE", "false") === "true";
+    },
     // Whether the picture is enlarged to hide black bars baked into the file (see pictureFrame.ts).
     // Measured on the server from Jellyfin's trickplay thumbnails — no video is decoded — so it
     // needs trickplay images to exist; without them the picture is simply shown as it is.

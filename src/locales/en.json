@@ -3021,6 +3021,7 @@
       "PLAYER_ENABLED": "Built-in player",
       "PLAYER_SERVER_FALLBACK": "Hand files the browser can't play over to Jellyfin",
       "OFFLINE_DOWNLOADS": "Offline downloads in the app (beta)",
+      "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Offline downloads open to every account (otherwise administrators only)",
       "PLAYER_AUTO_FRAME": "Enlarge the picture over black bars",
       "CAST_RECEIVER_APP_ID": "Chromecast receiver (application ID, empty = Google's)",
       "CHROMECAST_FOR_EVERYONE": "Chromecast for every account (otherwise administrators only)",

@@ -16,6 +16,10 @@ export async function POST(req: NextRequest) {
   if (!config.player.enabled || !config.player.offlineDownloads) return NextResponse.json({ error: "Téléchargement hors ligne désactivé" }, { status: 404 });
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session?.u) return new NextResponse(null, { status: 401 });
+  // Le temps de la bêta, aux administrateurs seulement, sauf si l'installation l'a ouvert à tous.
+  if (!config.player.offlineDownloadsForEveryone && session.role !== "admin") {
+    return NextResponse.json({ error: "Téléchargement hors ligne réservé aux administrateurs" }, { status: 403 });
+  }
   const body = (await req.json().catch(() => null)) as { itemId?: unknown; audioIndex?: unknown; quality?: unknown; codec?: unknown } | null;
   const itemId = body?.itemId;
   const audioIndex = body?.audioIndex;

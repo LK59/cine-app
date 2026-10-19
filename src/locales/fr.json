@@ -3021,6 +3021,7 @@
       "PLAYER_ENABLED": "Lecteur intégré",
       "PLAYER_SERVER_FALLBACK": "Relais vers Jellyfin pour les fichiers que le navigateur ne lit pas",
       "OFFLINE_DOWNLOADS": "Téléchargement hors ligne dans l'application (bêta)",
+      "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Téléchargement hors ligne ouvert à tous les comptes (sinon administrateurs seulement)",
       "PLAYER_AUTO_FRAME": "Agrandir l'image au-dessus des bandes noires",
       "CAST_RECEIVER_APP_ID": "Récepteur Chromecast (identifiant d'application, vide = celui de Google)",
       "CHROMECAST_FOR_EVERYONE": "Diffusion Chromecast pour tous les comptes (sinon administrateurs seulement)",

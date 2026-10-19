@@ -25,7 +25,8 @@ export async function GET(req: NextRequest) {
     // offers the account option that selects it.
     playerServerFallback: config.player.serverFallback,
     // Le téléchargement hors ligne (bêta) : le bouton des fiches et le gestionnaire n'existent qu'avec lui.
-    offlineDownloads: config.player.offlineDownloads,
+    // Et pour ce compte-ci : administrateurs seulement tant que l'installation ne l'a pas ouvert à tous.
+    offlineDownloads: config.player.offlineDownloads && (config.player.offlineDownloadsForEveryone || session?.role === "admin"),
     // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).
     homeContinueHero: config.home.continueHero,
     ...(session ? { configured: configuredServices(config) } : {}),

@@ -95,6 +95,9 @@ export const SETTINGS: readonly SettingDef[] = [
   // Le téléchargement hors ligne dans l'application (bêta, 19/10/2026) : Jellyfin prépare une version
   // légère, l'appareil la garde. Ouvert à tous les comptes ; coupé ici pour toute l'installation.
   { key: "OFFLINE_DOWNLOADS", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  // Le temps de la bêta, administrateurs seulement (Louis, 19/10/2026) ; ouvert à tous les comptes
+  // d'un geste ici, comme le Chromecast.
+  { key: "OFFLINE_DOWNLOADS_FOR_EVERYONE", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   // L'application que le Chromecast ouvre (DECISIONS.md §64) : vide, le récepteur public de Google.
   // Pas un secret — l'identifiant d'un récepteur qu'une installation a enregistré elle-même.
