@@ -1,4 +1,4 @@
-import { fragmentIndexAt, normalizeFragment, parseInit, scanFragments, type Fmp4Fragment, type Fmp4Init } from "./fmp4";
+import { Fmp4Reader, fragmentIndexAt, parseInit, scanFragments, type Fmp4Fragment, type Fmp4Init } from "./fmp4";
 
 /**
  * Le moteur du lecteur des téléchargements (19/10/2026) — un chemin à part, voulu tel par Louis :
@@ -8,7 +8,10 @@ import { fragmentIndexAt, normalizeFragment, parseInit, scanFragments, type Fmp4
  * Le fichier est déjà dans la forme que MediaSource attend (`fmp4.ts`) : on lui confie l'en-tête,
  * puis les fragments dans l'ordre, une minute d'avance au plus, trente secondes derrière la tête
  * au plus. Un saut vide le tampon et repart du fragment qui couvre la position. Rien n'est
- * réécrit, rien n'est décodé par nous.
+ * décodé par nous, et rien n'est réécrit — sauf le fragment trop long (H.264 de Jellyfin : jusqu'à
+ * des minutes entre deux IDR), confié par morceaux de quelques secondes que `Fmp4Reader` refait en
+ * fragments à part ; un saut y repart de l'image d'entrée la plus proche avant la position, quitte
+ * à reculer d'un morceau (`fmp4.ts`, « Le fragment trop long »).
  *
  * Le fichier peut être encore en train d'arriver : `available()` dit jusqu'où il est écrit, et le
  * moteur attend la suite au lieu de déclarer la fin (`complete()` le dit).
@@ -69,10 +72,17 @@ export class OfflineEngine {
   private buffer: SourceBuffer | null = null;
   private url: string | null = null;
   private init: Fmp4Init | null = null;
+  private reader: Fmp4Reader | null = null;
   private fragments: Fmp4Fragment[] = [];
   private scanned = 0;
   /** Le prochain fragment à confier au tampon. */
   private nextIndex = 0;
+  /**
+   * Après un saut (ou une ouverture en cours de film) : l'instant à montrer, pour que le premier
+   * morceau confié commence à une image d'entrée qui le précède (`Fmp4Reader.fragment`). Effacé
+   * dès que cet ajout est fait — la suite se lit dans l'ordre.
+   */
+  private seekFrom: number | undefined;
   private pumping = false;
   private closed = false;
   /** Change à chaque saut : une boucle d'ajout partie avant lui s'arrête d'elle-même. */
@@ -95,6 +105,7 @@ export class OfflineEngine {
     if (!init) throw new Error("Le début du fichier n'est pas encore téléchargé");
     if (!offlinePlaybackSupported(init.mime)) throw new Error(`Format non lu par cet appareil (${init.mime})`);
     this.init = init;
+    this.reader = new Fmp4Reader((o, l) => this.source.read(o, l), init.tracks);
     this.scanned = init.end;
     this.stage = "index des fragments";
     await within(this.rescan(), 20_000, this.stage);
@@ -129,6 +140,7 @@ export class OfflineEngine {
     this.video.addEventListener("seeking", this.onSeeking);
     if (startAt > 0) this.video.currentTime = startAt;
     this.nextIndex = Math.max(0, fragmentIndexAt(this.fragments, startAt));
+    this.seekFrom = startAt > 0 ? startAt : undefined;
     void this.pump();
     return init.mime;
   }
@@ -214,10 +226,24 @@ export class OfflineEngine {
           break;
         }
         const fragment = this.fragments[this.nextIndex];
-        const bytes = await this.source.read(fragment.offset, fragment.size);
+        const piece = await this.reader!.fragment(fragment, this.seekFrom);
         if (generation !== this.generation || this.closed) break;
-        if (bytes.length < fragment.size) break;
-        await this.append(normalizeFragment(bytes, fragment.offset));
+        if (!piece) break;
+        if (!piece.entry) {
+          // Aucune image d'entrée avant la position dans ce morceau : on part de la dernière du
+          // précédent. Le premier morceau d'un fragment en a toujours une — la garde ne sert qu'à
+          // ne jamais boucler.
+          if (this.nextIndex === 0) this.seekFrom = undefined;
+          else {
+            this.nextIndex -= 1;
+            this.seekFrom = Infinity;
+          }
+          continue;
+        }
+        await this.append(piece.bytes);
+        // Un saut arrivé pendant l'ajout a déjà posé sa position et son point de départ : n'y touche pas.
+        if (generation !== this.generation) break;
+        this.seekFrom = undefined;
         this.nextIndex += 1;
       }
     } catch (error) {
@@ -252,6 +278,7 @@ export class OfflineEngine {
     const end = this.mediaSource && Number.isFinite(this.mediaSource.duration) ? this.mediaSource.duration : 1e7;
     await this.remove(0, end);
     this.nextIndex = index;
+    this.seekFrom = target;
     while (this.pumping) await new Promise((r) => setTimeout(r, 20));
     void this.pump();
   }
