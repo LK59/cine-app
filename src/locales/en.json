@@ -2311,7 +2311,13 @@
       "switchOnline": "Switch to online playback to hear this audio track?",
       "switchOnlineConfirm": "Play online",
       "playFailed": "The downloaded file could not be played: {error}",
-      "playOnline": "Play online"
+      "playOnline": "Play online",
+      "confirmRemove": "Delete this download from this device?",
+      "notReadyYet": "This part isn't ready yet: the server is preparing it, try again in a moment.",
+      "resumeDownloaded": "Resume the downloaded file · {time}",
+      "resumeOnline": "Resume online · {time}",
+      "playDownloading": "Play the file being downloaded",
+      "resumeDownloading": "Resume the file being downloaded · {time}"
     }
   },
   "cinema": {

@@ -2311,7 +2311,13 @@
       "switchOnline": "Basculer vers la lecture en ligne pour écouter cette piste audio ?",
       "switchOnlineConfirm": "Lire en ligne",
       "playFailed": "Le fichier téléchargé n'a pas pu être lu : {error}",
-      "playOnline": "Lire en ligne"
+      "playOnline": "Lire en ligne",
+      "confirmRemove": "Supprimer ce téléchargement de cet appareil ?",
+      "notReadyYet": "Ce passage n'est pas encore prêt : le serveur le prépare, réessayez dans un instant.",
+      "resumeDownloaded": "Reprendre le fichier téléchargé · {time}",
+      "resumeOnline": "Reprendre en ligne · {time}",
+      "playDownloading": "Lire le fichier en cours de téléchargement",
+      "resumeDownloading": "Reprendre le fichier en cours de téléchargement · {time}"
     }
   },
   "cinema": {

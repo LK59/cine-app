@@ -47,7 +47,11 @@ function close(key) {
 function closeUnder(prefix) {
   for (const key of [...handles.keys()]) if (key === prefix || key.startsWith(prefix + "/")) close(key);
 }
-self.onmessage = async (event) => {
+// Une opération à la fois, dans l'ordre d'arrivée : entrecroisées, une écriture partie avant une
+// suppression rouvrait un fichier que la suppression venait de fermer (19/10/2026).
+let chain = Promise.resolve();
+self.onmessage = (event) => { chain = chain.then(() => run(event)); };
+async function run(event) {
   const { id, op, path, at, length, data } = event.data;
   try {
     let result = null;
@@ -101,9 +105,9 @@ self.onmessage = async (event) => {
     }
     self.postMessage({ id, result });
   } catch (error) {
-    self.postMessage({ id, error: String(error && error.message || error) });
+    self.postMessage({ id, error: String(error && error.name ? error.name + ": " : "") + String(error && error.message || error) });
   }
-};
+}
 `;
 
 let worker: Worker | null = null;
@@ -122,6 +126,19 @@ function getWorker(): Worker {
     else entry.resolve(event.data.result);
   };
   return worker;
+}
+
+/**
+ * Repartir d'un worker neuf, comme le fait un redémarrage de l'application : un fichier resté
+ * verrouillé dans l'ancien (Safari, 19/10/2026 — un nouveau téléchargement après une suppression
+ * restait sur « Préparation » jusqu'au redémarrage) est libéré avec lui. Ce qui attendait une
+ * réponse échoue, et sera redemandé.
+ */
+export function resetDeviceStore(): void {
+  worker?.terminate();
+  worker = null;
+  for (const [, entry] of pending) entry.reject(new Error("stockage de l'appareil relancé"));
+  pending.clear();
 }
 
 function call<T>(op: string, path: string[], extra: Record<string, unknown> = {}, transfer: Transferable[] = []): Promise<T> {

@@ -2,7 +2,9 @@
 
 import { useSyncExternalStore } from "react";
 import { persistedCacheAccount } from "@/lib/persistentCache";
-import { deviceStore, deviceStoreSupported } from "./deviceStore";
+import { deviceStore, deviceStoreSupported, resetDeviceStore } from "./deviceStore";
+import { reportClientError } from "@/lib/reportClientError";
+import { flushUnsentPositions, saveUnsentPosition } from "@/lib/unsentPosition";
 import type { OfflineJob } from "./jobs";
 import type { OfflineCodec, OfflineQuality } from "./quality";
 
@@ -86,6 +88,9 @@ const listeners = new Set<() => void>();
 let loopRunning = false;
 let stopLoop: AbortController | null = null;
 let wakeLock: { release(): Promise<void> } | null = null;
+let failures = 0;
+/** Les suppressions en cours, par identifiant : une nouvelle demande les attend. */
+const removals = new Map<string, Promise<void>>();
 
 function emit(): void {
   downloads = [...downloads];
@@ -125,7 +130,10 @@ export async function initOfflineDownloads(): Promise<void> {
     const meta = await deviceStore.readMeta<OfflineDownload>(current, id).catch(() => null);
     if (!meta) continue;
     const size = await deviceStore.videoSize(current, id).catch(() => 0);
-    loaded.push({ ...meta, bytes: size });
+    // Un « Échec » dû à une demande retirée par erreur (le défaut du 19/10/2026) repart une fois :
+    // la boucle redemande la version, qui est souvent déjà prête sur le serveur.
+    const healed = meta.state === "failed" && meta.error === "La préparation n'existe plus sur le serveur" ? { state: "preparing" as const, error: null } : {};
+    loaded.push({ ...meta, ...healed, bytes: size });
   }
   if (account !== current) return;
   downloads = loaded.sort((a, b) => b.createdAt - a.createdAt);
@@ -172,6 +180,7 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
   if (!account) await initOfflineDownloads();
   const owner = account;
   if (!owner) throw new Error("Compte inconnu");
+  await Promise.all([...removals.values()]);
   const res = await fetch("/api/offline/jobs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -231,20 +240,36 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
 }
 
 /** Annuler ou supprimer : le fichier quitte l'appareil, et le serveur sait que ce compte n'en veut plus. */
-export async function removeOfflineDownload(id: string): Promise<void> {
+export function removeOfflineDownload(id: string): Promise<void> {
   const owner = account;
   downloads = downloads.filter((d) => d.id !== id);
   emit();
   if (stopLoop) stopLoop.abort();
-  if (owner) await deviceStore.remove(owner, id).catch(() => {});
-  await fetch(`/api/offline/jobs/${id}`, { method: "DELETE" }).catch(() => {});
-  void runLoop();
+  // Le retrait de la demande d'abord, et retenu : un nouveau téléchargement du même titre l'attend
+  // (`startOfflineDownload`). Envoyé après le ménage de l'appareil, il arrivait après la nouvelle
+  // demande — même version, même identifiant — et l'effaçait : « Préparation » sans fin, puis
+  // « Échec » (Louis, 19/10/2026).
+  const removal = (async () => {
+    await fetch(`/api/offline/jobs/${id}`, { method: "DELETE" }).catch(() => {});
+    if (owner) await deviceStore.remove(owner, id).catch(() => {});
+  })();
+  removals.set(id, removal);
+  void removal.finally(() => {
+    if (removals.get(id) === removal) removals.delete(id);
+    void runLoop();
+  });
+  return removal;
 }
 
 /** Où la lecture du fichier téléchargé s'est arrêtée — gardé avec lui, pour la reprendre. */
-export function saveOfflinePosition(id: string, seconds: number): void {
+export function saveOfflinePosition(id: string, seconds: number, send = false): void {
   const updated = patch(id, { positionSeconds: seconds });
-  if (updated) void saveMeta(updated);
+  if (!updated) return;
+  void saveMeta(updated);
+  // Et vers Jellyfin, par le chemin des positions perdues (`unsentPosition.ts`) : gardée sur
+  // l'appareil, envoyée dès qu'il y a du réseau — le serveur ne fait qu'avancer une position.
+  if (seconds > 0) saveUnsentPosition(updated.itemId, seconds);
+  if (send && navigator.onLine !== false) void flushUnsentPositions().catch(() => {});
 }
 
 async function holdWakeLock(on: boolean): Promise<void> {
@@ -283,10 +308,20 @@ async function runLoop(): Promise<void> {
         if (!next) return;
         stopLoop = new AbortController();
         await holdWakeLock(true);
-        await step(owner, next, stopLoop.signal).catch(async () => {
-          // Réseau coupé, serveur qui redémarre : on réessaie un peu plus tard, sans rien perdre.
-          await sleep(5000, stopLoop!.signal);
-        });
+        const failedBefore = failures;
+        await step(owner, next, stopLoop.signal)
+          .then(() => {
+            failures = 0;
+          })
+          .catch(async (error: unknown) => {
+            // Réseau coupé, serveur qui redémarre : on réessaie un peu plus tard, sans rien perdre.
+            // Au journal, une fois par erreur (le rapporteur dédoublonne) : ce qu'un iPhone a dit.
+            if (!stopLoop?.signal.aborted) reportClientError(error, "component:hors-ligne", { download: next.id, bytes: String(next.bytes) });
+            failures = failedBefore + 1;
+            // Deux échecs de suite : le stockage de l'appareil repart d'un worker neuf.
+            if (failures >= 2) resetDeviceStore();
+            await sleep(5000, stopLoop!.signal);
+          });
       }
     } finally {
       stopLoop = null;
@@ -306,7 +341,17 @@ async function runLoop(): Promise<void> {
 async function step(owner: string, d: OfflineDownload, signal: AbortSignal): Promise<void> {
   const res = await fetch(`/api/offline/jobs/${d.id}`, { signal, cache: "no-store" });
   if (res.status === 404) {
-    const failed = patch(d.id, { state: "failed", error: "La préparation n'existe plus sur le serveur" });
+    // La demande n'est plus connue du serveur (retirée par erreur, ou expirée) : on la refait, aux
+    // mêmes choix. La même version revient sous le même identifiant ; sinon, c'est un échec.
+    const again = await fetch("/api/offline/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId: d.itemId, audioIndex: d.audioIndex, quality: d.quality, codec: d.codec }),
+      signal,
+    });
+    const body = (await again.json().catch(() => null)) as { job?: OfflineJob; error?: string } | null;
+    if (again.ok && body?.job?.id === d.id) return;
+    const failed = patch(d.id, { state: "failed", error: body?.error ?? "La préparation n'existe plus sur le serveur" });
     if (failed) await saveMeta(failed);
     return;
   }
@@ -352,7 +397,9 @@ async function step(owner: string, d: OfflineDownload, signal: AbortSignal): Pro
   if (file.status !== 206) throw new Error(`fichier ${file.status}`);
   if (Number(file.headers.get("X-Offline-Generation")) !== job.generation) return;
   const chunk = new Uint8Array(await file.arrayBuffer());
-  if (signal.aborted || !offlineDownloadById(d.id)) return;
+  // Supprimé puis redemandé pendant ce pas (même identifiant, la version du serveur est reprise) :
+  // ces octets étaient pour l'ancien fichier, à une position qui n'est plus la bonne.
+  if (signal.aborted || offlineDownloadById(d.id)?.createdAt !== d.createdAt) return;
   await deviceStore.writeVideo(owner, d.id, bytes, chunk);
   current = patch(d.id, { bytes: bytes + chunk.byteLength });
   if (current) await saveMeta(current);

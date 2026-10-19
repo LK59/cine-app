@@ -28,7 +28,7 @@ import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
-import { OfflineDownloadControl, OfflinePlayButton, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
+import { OfflineDownloadControl, OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
@@ -386,7 +386,7 @@ export function CinemaMovieDetail({
           <div data-detail-actions className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
             {/* Un téléchargement lisible passe en tête, et « Lire » devient « Lire en ligne » (Louis, 19/10/2026). */}
             {offlinePlayable && !fileMissing && (
-              <OfflinePlayButton download={offlinePlayable} variant="row" rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`} badgeClassName={MENU_BADGE} />
+              <OfflinePlayButton download={offlinePlayable} onlineResumeTicks={facts.resumeTicks} variant="row" rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`} badgeClassName={MENU_BADGE} />
             )}
             <PlayButton
               itemId={item.jellyfinItemId}
@@ -402,7 +402,11 @@ export function CinemaMovieDetail({
               // Same override as CinemaSeriesDetail's own Play button — see its doc comment —
               // so a movie opened from the Continue Watching row and one opened from its own
               // poster card show the identical "Reprendre - 1h10 restants" wording.
-              label={offlinePlayable ? t("player.downloads.playOnline") : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks)}
+              label={
+                offlinePlayable
+                  ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, facts.resumeTicks), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done").online
+                  : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks)
+              }
               // La même ligne que les autres : c'est le sélecteur qui se peint en blanc, pas
               // elle. Deux blancs à l'écran — un fixe et un mobile — se disputaient le sens.
               className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}

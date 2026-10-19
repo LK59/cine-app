@@ -1,6 +1,6 @@
 "use client";
 
-import { OfflineDownloadControl, OfflinePlayButton, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
+import { OfflineDownloadControl, OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
 import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -542,7 +542,7 @@ export function CinemaMobileDetail({
         )}
         {/* Un téléchargement lisible passe en tête, en blanc, et « Lire » devient « Lire en ligne »
             (Louis, 19/10/2026). */}
-        {!playPending && playerEnabled && offlinePlayable && !fileMissing && <OfflinePlayButton download={offlinePlayable} variant="wide" />}
+        {!playPending && playerEnabled && offlinePlayable && !fileMissing && <OfflinePlayButton download={offlinePlayable} onlineResumeTicks={resumeTicks} variant="wide" />}
         {!playPending && playerEnabled && playTargetId && (
           <button
             type="button"
@@ -558,7 +558,7 @@ export function CinemaMobileDetail({
             {fileMissing
               ? t("cinema.fileMissing")
               : offlinePlayable
-                ? t("player.downloads.playOnline")
+                ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, resumeTicks), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done").online
                 : formatContinueLabel(t, resumeTicks, runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch)}
           </button>
         )}

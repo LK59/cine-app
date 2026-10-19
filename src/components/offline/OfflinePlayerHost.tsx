@@ -7,13 +7,17 @@ import { usePlayback, type PlaybackSession } from "@/components/PlaybackProvider
 import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { ActionSheet } from "@/components/ActionSheet";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
+import { PlaybackInfoPanel, type PlaybackPanelData } from "@/components/PlaybackInfoPanel";
+import { formatFileSize } from "@/lib/format";
+import type { OfflineDownload } from "@/lib/offline/downloads";
 import { useToast } from "@/components/Toast";
 import { usePlayerBackClose } from "@/lib/playerHistory";
 import { usePlayerFocus } from "@/lib/usePlayerFocus";
 import { deviceStore } from "@/lib/offline/deviceStore";
 import { markOfflineWatched, offlineAccount, offlineDownloadById, saveOfflinePosition, useOfflineDownloads } from "@/lib/offline/downloads";
 import { OfflineEngine } from "@/lib/offline/offlineEngine";
+import { reportClientError } from "@/lib/reportClientError";
 
 /**
  * Le lecteur des téléchargements hors ligne (bêta, 19/10/2026) — un hôte à part, voulu par Louis :
@@ -31,7 +35,7 @@ import { OfflineEngine } from "@/lib/offline/offlineEngine";
  * (`/api/offline/jobs/<id>/file`, bornés à ce qui est écrit). Demandé par Louis le 19/10/2026 : lire
  * le fichier téléchargé avant qu'il soit fini. Sans réseau, seulement ce qui est arrivé.
  */
-function offlineSourceFor(account: string, id: string) {
+function offlineSourceFor(account: string, id: string, counts: { device: number; server: number }) {
   const local = () => offlineDownloadById(id)?.bytes ?? 0;
   const online = () => typeof navigator === "undefined" || navigator.onLine !== false;
   return {
@@ -43,20 +47,30 @@ function offlineSourceFor(account: string, id: string) {
     complete: () => offlineDownloadById(id)?.state === "done",
     read: async (offset: number, length: number): Promise<Uint8Array> => {
       const have = local();
-      if (offset + length <= have || !online()) return deviceStore.readVideo(account, id, offset, length);
+      const fromDevice = async () => {
+        const bytes = await deviceStore.readVideo(account, id, offset, length);
+        counts.device += bytes.byteLength;
+        return bytes;
+      };
+      if (offset + length <= have || !online()) return fromDevice();
       try {
         const res = await fetch(`/api/offline/jobs/${id}/file`, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, cache: "no-store" });
-        if (res.status === 206) return new Uint8Array(await res.arrayBuffer());
+        if (res.status === 206) {
+          const bytes = new Uint8Array(await res.arrayBuffer());
+          counts.server += bytes.byteLength;
+          return bytes;
+        }
       } catch {
         /* réseau perdu en route : ce que l'appareil a */
       }
-      return deviceStore.readVideo(account, id, offset, length);
+      return fromDevice();
     },
   };
 }
 
 export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession; mode: "full" | "mini" }) {
   const t = useT();
+  const { locale } = useLocale();
   const toast = useToast();
   const playback = usePlayback();
   const id = session.offline!.id;
@@ -69,6 +83,21 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   const [error, setError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
   const [switchTo, setSwitchTo] = useState<number | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
+  const [panel, setPanel] = useState<PlaybackPanelData | null>(null);
+  const countsRef = useRef({ device: 0, server: 0 });
+  const engineRef = useRef<OfflineEngine | null>(null);
+  // Le panneau ouvert se relit chaque seconde (octets lus, tampon).
+  useEffect(() => {
+    if (!showInfo) return;
+    const read = () => {
+      const d = offlineDownloadById(id);
+      setPanel(d ? offlinePanelData(d, engineRef.current, videoRef.current, countsRef.current, locale) : null);
+    };
+    read();
+    const timer = setInterval(read, 1000);
+    return () => clearInterval(timer);
+  }, [showInfo, id, locale]);
   const isMini = mode === "mini";
 
   // Le moteur, ouvert une fois pour cette séance.
@@ -82,11 +111,34 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     }
     const engine = new OfflineEngine(
       video,
-      offlineSourceFor(account, id),
+      offlineSourceFor(account, id, countsRef.current),
       meta.runtimeSeconds || null,
-      { onError: (message) => setError(t("player.downloads.playFailed", { error: message })) }
+      {
+        onError: (message) => setError(t("player.downloads.playFailed", { error: message })),
+        onBeyond: () => toast.error(t("player.downloads.notReadyYet")),
+      }
     );
+    engineRef.current = engine;
     let cancelled = false;
+    // Un échec dit où il s'est produit, à l'écran et au journal (`server.log`, scope client) : les
+    // premiers essais sur iPhone et sur Chrome se sont arrêtés sur un écran noir sans rien dire.
+    const fail = (message: string) => {
+      if (cancelled) return;
+      setError(t("player.downloads.playFailed", { error: message }));
+      reportClientError(new Error(`lecture hors ligne : ${message}`), "component:lecteur-hors-ligne", {
+        stage: engine.stage,
+        mime: engine.describe().mime ?? meta.codec,
+        state: offlineDownloadById(id)?.state ?? "?",
+        bytes: String(offlineDownloadById(id)?.bytes ?? 0),
+      });
+    };
+    const onMediaError = () => {
+      const err = video.error;
+      if (err) fail(`le navigateur n'a pas pu décoder la vidéo (${err.code}${err.message ? ` : ${err.message}` : ""})`);
+    };
+    video.addEventListener("error", onMediaError);
+    // Ouvert mais sans image au bout de quinze secondes : ce n'est pas une attente, c'est une panne.
+    let pictureTimer: ReturnType<typeof setTimeout> | null = null;
     const start = session.resumeAt ?? meta.positionSeconds ?? 0;
     engine
       .open(start)
@@ -94,13 +146,21 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         if (cancelled) return;
         setReady(true);
         if (!session.startPaused) void video.play().catch(() => {});
+        pictureTimer = setTimeout(() => {
+          if (video.readyState < 2 && !video.error) fail(`aucune image après 15 s (étape « ${engine.stage} »)`);
+        }, 15_000);
       })
-      .catch((cause: unknown) => {
-        if (!cancelled) setError(t("player.downloads.playFailed", { error: cause instanceof Error ? cause.message : String(cause) }));
-      });
+      .catch((cause: unknown) => fail(cause instanceof Error ? cause.message : String(cause)));
+    // Ni ouvert ni en erreur au bout de vingt secondes : l'ouverture elle-même est bloquée.
+    const openTimer = setTimeout(() => {
+      if (!cancelled && engine.stage !== "premier fragment") fail(`ouverture bloquée à l'étape « ${engine.stage} »`);
+    }, 20_000);
     return () => {
       cancelled = true;
-      if (video.currentTime > 0) saveOfflinePosition(id, video.currentTime);
+      clearTimeout(openTimer);
+      if (pictureTimer) clearTimeout(pictureTimer);
+      video.removeEventListener("error", onMediaError);
+      if (video.currentTime > 0) saveOfflinePosition(id, video.currentTime, true);
       engine.close();
     };
     // Une seule ouverture par séance : la clé de l'hôte change avec elle.
@@ -121,7 +181,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     const onPlay = () => setPlaying(true);
     const onPause = () => {
       setPlaying(false);
-      saveOfflinePosition(id, video.currentTime);
+      saveOfflinePosition(id, video.currentTime, true);
     };
     // Vu jusqu'au bout : noté avec le téléchargement (le téléchargement automatique en efface
     // l'épisode quand le suivant est là — `markOfflineWatched`).
@@ -200,6 +260,16 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         playsInline
         className={`h-full w-full ${isMini ? "object-cover" : "object-contain"} transition-opacity duration-300 ${ready ? "opacity-100" : "opacity-0"}`}
       />
+      {/* Pendant l'ouverture : une attente qui se voit, et toujours une sortie (le premier essai sur
+          iPhone n'avait que le retour du navigateur). */}
+      {!ready && !error && !isMini && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black">
+          <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" aria-hidden />
+          <button type="button" onClick={handleClose} className="btn btn-ghost px-4 py-2">
+            {t("common.close")}
+          </button>
+        </div>
+      )}
       {error && !isMini && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center">
           <AlertTriangle className="text-amber-400" size={32} />
@@ -226,7 +296,6 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         !error && (
           <div className="absolute inset-0 z-10">
             <PlayerControls
-              lab
               downloadedFraction={download ? (download.state === "done" ? 1 : download.bytes / Math.max(1, download.expectedBytes)) : undefined}
               videoRef={videoRef}
               containerRef={containerRef}
@@ -234,7 +303,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
               title={session.title}
               onClose={handleClose}
               onMinimize={() => playback.minimize()}
-              onTogglePlaybackInfo={() => {}}
+              onTogglePlaybackInfo={() => setShowInfo((open) => !open)}
               audioTracks={(download?.audioTracks ?? []).map((a) => ({ id: a.index, label: a.label }))}
               currentAudioId={download?.audioIndex ?? null}
               onChangeAudio={changeAudio}
@@ -251,6 +320,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
           </div>
         )
       )}
+      <PlaybackInfoPanel open={showInfo && !isMini} onClose={() => setShowInfo(false)} data={panel} />
       <ActionSheet
         open={switchTo !== null}
         onClose={() => setSwitchTo(null)}
@@ -266,4 +336,55 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     </div>,
     document.body
   );
+}
+
+/**
+ * Le panneau technique du lecteur hors ligne : d'où viennent les octets (l'appareil, ou la copie du
+ * serveur pendant un téléchargement en cours), ce que contient le fichier, ce que MediaSource a reçu.
+ * Les intitulés en français, comme ceux des autres lecteurs : c'est une surface de diagnostic.
+ */
+function offlinePanelData(
+  d: OfflineDownload,
+  engine: OfflineEngine | null,
+  video: HTMLVideoElement | null,
+  counts: { device: number; server: number },
+  locale: string
+): PlaybackPanelData {
+  const size = (n: number) => formatFileSize(n, locale);
+  const described = engine?.describe();
+  const now = video?.currentTime ?? 0;
+  let ahead = 0;
+  if (video) for (let i = 0; i < video.buffered.length; i++) if (video.buffered.start(i) <= now + 0.5 && video.buffered.end(i) >= now) ahead = video.buffered.end(i) - now;
+  const done = d.state === "done";
+  return {
+    headline: done
+      ? { name: "Hors ligne", detail: "fichier téléchargé, lu depuis l'appareil", tone: "good" }
+      : { name: "Hors ligne — téléchargement en cours", detail: "l'appareil d'abord, la copie du serveur pour la suite", tone: "neutral" },
+    notes: [],
+    sections: [
+      {
+        title: "Fichier",
+        rows: [
+          { label: "Chemin", value: "téléchargement (MP4 fragmenté → MediaSource)" },
+          { label: "Qualité", value: d.quality === "high" ? "Haute · 1080p · 4 Mb/s" : "Standard · 720p · 2 Mb/s" },
+          { label: "Codec", value: described?.mime ?? d.codec },
+          { label: "Piste son", value: d.audioLabel },
+          { label: "Sur l'appareil", value: done ? size(d.bytes) : `${size(d.bytes)} / ${size(d.expectedBytes)}` },
+          { label: "Préparé sur le serveur", value: d.serverDone ? "oui" : size(d.serverBytes) },
+        ],
+      },
+      {
+        title: "Lecture",
+        rows: [
+          { label: "Lu depuis l'appareil", value: size(counts.device) },
+          { label: "Lu depuis le serveur", value: size(counts.server) },
+          { label: "Fragments indexés", value: described ? `${described.fragments}${described.lastFragmentAt !== null ? ` (jusqu'à ${Math.round(described.lastFragmentAt)} s)` : ""}` : "—" },
+          { label: "Image", value: video?.videoWidth ? `${video.videoWidth}×${video.videoHeight}` : "—" },
+          { label: "Tampon devant", value: `${ahead.toFixed(1)} s` },
+          { label: "Réseau", value: typeof navigator !== "undefined" && navigator.onLine === false ? "hors ligne" : "en ligne" },
+        ],
+      },
+    ],
+    report: null,
+  };
 }

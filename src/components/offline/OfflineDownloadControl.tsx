@@ -9,7 +9,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { useToast } from "@/components/Toast";
 import { fetcher } from "@/lib/swr";
 import { fetchDirectInfo } from "@/lib/directInfo";
-import { formatFileSize } from "@/lib/format";
+import { formatDurationShort, formatFileSize } from "@/lib/format";
 import { labelAudioTracks } from "@/lib/trackLabel";
 import { normaliseLanguage, trackLanguage } from "@/lib/trackPreferences";
 import { isWebKitEngine } from "@/lib/webkitEngine";
@@ -84,33 +84,79 @@ export function offlinePlayable(d: OfflineDownload): boolean {
 export function useOfflinePlayable(itemId: string | null | undefined): OfflineDownload | null {
   const enabled = useOfflineDownloadsEnabled();
   const download = useOfflineDownloadFor(itemId);
-  return enabled && download && offlinePlayable(download) ? download : null;
+  // Présent dès la demande (grisé tant que rien n'est lisible), absent après un échec.
+  return enabled && download && download.state !== "failed" ? download : null;
 }
 
 /**
  * « Lire le fichier téléchargé », en tête de la fiche : la ligne du menu au bureau (le sélecteur la
  * peint en blanc, elle est la première), le bouton blanc pleine largeur au téléphone.
  */
-export function OfflinePlayButton({ download, variant, rowClassName = "", badgeClassName = "" }: { download: OfflineDownload; variant: "row" | "wide"; rowClassName?: string; badgeClassName?: string }) {
+/**
+ * La reprise partagée entre « Lire le fichier téléchargé » et « Lire en ligne » (Louis, 19/10/2026) :
+ * la plus avancée des deux — celle gardée avec le téléchargement, celle de Jellyfin. La position lue
+ * hors ligne part vers Jellyfin dès qu'il y a du réseau (`saveOfflinePosition`), et le serveur ne fait
+ * qu'avancer une position : les deux finissent d'accord.
+ */
+export function sharedResumeSeconds(download: OfflineDownload, onlineResumeTicks: number | null | undefined): number {
+  return Math.max(download.positionSeconds || 0, onlineResumeTicks ? onlineResumeTicks / 1e7 : 0);
+}
+
+/** Les deux libellés, avec le temps restant quand il y a une reprise. */
+export function offlinePlayLabels(
+  t: ReturnType<typeof useT>,
+  resumeSeconds: number,
+  runtimeSeconds: number | null | undefined,
+  complete = true
+): { offline: string; online: string } {
+  if (resumeSeconds < 30 || !runtimeSeconds) {
+    return { offline: t(complete ? "player.downloads.playDownloaded" : "player.downloads.playDownloading"), online: t("player.downloads.playOnline") };
+  }
+  const time = t("cinema.timeRemaining", { time: formatDurationShort(Math.max(0, runtimeSeconds - resumeSeconds) * 1e7) });
+  return {
+    offline: t(complete ? "player.downloads.resumeDownloaded" : "player.downloads.resumeDownloading", { time }),
+    online: t("player.downloads.resumeOnline", { time }),
+  };
+}
+
+export function OfflinePlayButton({
+  download,
+  variant,
+  onlineResumeTicks,
+  rowClassName = "",
+  badgeClassName = "",
+}: {
+  download: OfflineDownload;
+  variant: "row" | "wide";
+  /** La reprise que Jellyfin connaît pour ce titre, celle que « Lire en ligne » prendrait. */
+  onlineResumeTicks?: number | null;
+  rowClassName?: string;
+  badgeClassName?: string;
+}) {
   const t = useT();
   const playback = usePlayback();
-  const play = () => playback.play({ itemId: download.itemId, title: download.title, resumeAt: download.positionSeconds, offline: { id: download.id } });
+  const resume = sharedResumeSeconds(download, onlineResumeTicks);
+  const label = offlinePlayLabels(t, resume, download.runtimeSeconds, download.state === "done").offline;
+  // Grisé tant qu'il n'y a pas de quoi démarrer (préparation, tout début) ; cliquable ensuite.
+  const ready = offlinePlayable(download);
+  const play = () => ready && playback.play({ itemId: download.itemId, title: download.title, resumeAt: resume, offline: { id: download.id } });
   return variant === "row" ? (
-    <button type="button" data-detail-menu onClick={play} className={rowClassName}>
+    <button type="button" data-detail-menu onClick={play} disabled={!ready} className={`${rowClassName} ${ready ? "" : "cursor-default opacity-45"}`}>
       <span className={badgeClassName}>
         <Play size={14} fill="currentColor" />
       </span>
-      <span className="text-sm font-medium">{t("player.downloads.playDownloaded")}</span>
+      <span className="text-sm font-medium">{label}</span>
     </button>
   ) : (
     <button
       type="button"
       onClick={play}
+      disabled={!ready}
       data-liquid-pan="wide"
-      className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink"
+      className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink ${ready ? "" : "opacity-45"}`}
     >
       <Play size={18} fill="currentColor" />
-      {t("player.downloads.playDownloaded")}
+      {label}
     </button>
   );
 }

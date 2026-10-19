@@ -25,6 +25,8 @@ export interface OfflineSource {
 
 export interface OfflineEngineEvents {
   onError(message: string): void;
+  /** Un saut au-delà de ce qui existe encore (téléchargement et préparation en cours) : on reste au bord. */
+  onBeyond?(availableUntil: number): void;
   /** Pour le journal du lecteur et la trace : ouverture, sauts, fin. */
   trace?(line: string): void;
 }
@@ -49,7 +51,20 @@ export function offlinePlaybackSupported(mime: string): boolean {
   return typeof MediaSource !== "undefined" && MediaSource.isTypeSupported(mime);
 }
 
+/** Une étape qui ne répond pas devient une erreur nommée, au lieu d'un écran noir sans fin. */
+function within<T>(promise: Promise<T>, ms: number, stage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`bloqué à l'étape « ${stage} »`)), ms);
+    promise.then(
+      (value) => (clearTimeout(timer), resolve(value)),
+      (error: unknown) => (clearTimeout(timer), reject(error))
+    );
+  });
+}
+
 export class OfflineEngine {
+  /** Où en est l'ouverture — dit par l'erreur et par le journal quand elle n'aboutit pas. */
+  stage = "lecture de l'en-tête";
   private mediaSource: MediaSourceLike | null = null;
   private buffer: SourceBuffer | null = null;
   private url: string | null = null;
@@ -75,27 +90,40 @@ export class OfflineEngine {
 
   /** Ouvre le fichier et attache la source à l'élément ; rend le type MIME confié. */
   async open(startAt: number): Promise<string> {
-    const head = await this.source.read(0, Math.min(this.source.available(), 4 * 1024 * 1024));
+    const head = await within(this.source.read(0, Math.min(this.source.available(), 4 * 1024 * 1024)), 15_000, this.stage);
     const init = parseInit(head);
     if (!init) throw new Error("Le début du fichier n'est pas encore téléchargé");
     if (!offlinePlaybackSupported(init.mime)) throw new Error(`Format non lu par cet appareil (${init.mime})`);
     this.init = init;
     this.scanned = init.end;
-    await this.rescan();
+    this.stage = "index des fragments";
+    await within(this.rescan(), 20_000, this.stage);
 
+    this.stage = "ouverture de MediaSource";
     const mediaSource = createMediaSource();
     this.mediaSource = mediaSource;
     // ManagedMediaSource exige que la lecture à distance soit coupée pour s'attacher.
     this.video.disableRemotePlayback = true;
-    this.url = URL.createObjectURL(mediaSource);
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("MediaSource ne s'est pas ouverte")), 10_000);
-      mediaSource.addEventListener("sourceopen", () => (clearTimeout(timer), resolve()), { once: true });
-      this.video.src = this.url!;
-    });
+    await within(
+      new Promise<void>((resolve) => {
+        mediaSource.addEventListener("sourceopen", () => resolve(), { once: true });
+        // `srcObject` d'abord, comme le lecteur en ligne (`mseSource.ts`) : c'est ainsi que Safari
+        // attache une ManagedMediaSource ; l'adresse `blob:` sinon.
+        try {
+          (this.video as HTMLVideoElement & { srcObject: unknown }).srcObject = mediaSource;
+        } catch {
+          this.url = URL.createObjectURL(mediaSource);
+          this.video.src = this.url;
+        }
+      }),
+      10_000,
+      this.stage
+    );
+    this.stage = "en-tête confié au navigateur";
     this.buffer = mediaSource.addSourceBuffer(init.mime);
     if (this.duration && Number.isFinite(this.duration)) mediaSource.duration = this.duration;
-    await this.append(init.bytes);
+    await within(this.append(init.bytes), 10_000, this.stage);
+    this.stage = "premier fragment";
     this.events.trace?.(`hors ligne : ouvert, ${this.fragments.length} fragments sur l'appareil, ${init.mime}`);
     this.video.addEventListener("timeupdate", this.onTime);
     this.video.addEventListener("seeking", this.onSeeking);
@@ -103,6 +131,12 @@ export class OfflineEngine {
     this.nextIndex = Math.max(0, fragmentIndexAt(this.fragments, startAt));
     void this.pump();
     return init.mime;
+  }
+
+  /** Pour le panneau technique : le type confié à MediaSource et les fragments connus. */
+  describe(): { mime: string | null; fragments: number; lastFragmentAt: number | null } {
+    const last = this.fragments[this.fragments.length - 1];
+    return { mime: this.init?.mime ?? null, fragments: this.fragments.length, lastFragmentAt: last ? last.time : null };
   }
 
   /** Où le fichier est lisible : jusqu'à la fin du dernier fragment présent. */
@@ -199,8 +233,11 @@ export class OfflineEngine {
 
   private async seek(target: number): Promise<void> {
     if (this.closed || !this.buffer) return;
+    await this.rescan();
     const index = fragmentIndexAt(this.fragments, target);
     if (index < 0) return;
+    const last = this.fragments[this.fragments.length - 1];
+    if (!this.source.complete() && index === this.fragments.length - 1 && target > last.time + 15) this.events.onBeyond?.(last.time);
     // Déjà dans le tampon : rien à faire, la boucle d'ajout continue d'elle-même.
     const ranges = this.video.buffered;
     for (let i = 0; i < ranges.length; i++) if (ranges.start(i) <= target && ranges.end(i) > target + 1) return;
@@ -224,6 +261,7 @@ export class OfflineEngine {
     this.video.removeEventListener("timeupdate", this.onTime);
     this.video.removeEventListener("seeking", this.onSeeking);
     try {
+      (this.video as HTMLVideoElement & { srcObject: unknown }).srcObject = null;
       this.video.removeAttribute("src");
       this.video.load();
     } catch {

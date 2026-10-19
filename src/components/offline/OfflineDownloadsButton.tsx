@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, Film, Play, Trash2 } from "lucide-react";
+import { Download, Film, Play, Trash2, X } from "lucide-react";
+import { ActionSheet } from "@/components/ActionSheet";
 import { Modal } from "@/components/Modal";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -87,6 +88,7 @@ function OfflineDownloadRow({ download: d, onClose }: { download: OfflineDownloa
   const { locale } = useLocale();
   const playback = usePlayback();
   const poster = usePosterUrl(d);
+  const [confirming, setConfirming] = useState(false);
   const size =
     d.state === "done"
       ? formatFileSize(d.bytes, locale)
@@ -145,12 +147,26 @@ function OfflineDownloadRow({ download: d, onClose }: { download: OfflineDownloa
           type="button"
           aria-label={d.state === "done" || d.state === "failed" ? t("player.downloads.remove") : t("player.downloads.cancel")}
           title={d.state === "done" || d.state === "failed" ? t("player.downloads.remove") : t("player.downloads.cancel")}
-          onClick={() => void removeOfflineDownload(d.id)}
+          onClick={() => setConfirming(true)}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-danger"
         >
           <Trash2 size={15} />
         </button>
       </div>
+      {/* Toujours une confirmation : un film retéléchargé, c'est des centaines de Mo (Louis, 19/10/2026). */}
+      <ActionSheet
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        role="alertdialog"
+        centerOnWide
+        title={d.title}
+        subtitle={t("player.downloads.confirmRemove")}
+        poster={poster}
+        actions={[
+          { label: t("player.downloads.remove"), icon: <Trash2 size={18} />, variant: "danger", onClick: () => void removeOfflineDownload(d.id) },
+          { label: t("common.cancel"), icon: <X size={18} />, onClick: () => {} },
+        ]}
+      />
     </li>
   );
 }
