@@ -36,11 +36,13 @@ flowchart LR
             SRV["Server player<br/>PlayerHost · hls.js or native HLS"]
             CCP["ChromecastPlayer<br/>a remote control"]
             MINI["MiniPlayer<br/>reduced, draggable"]
+            OFFP["Offline player<br/>OfflinePlayerHost · offlineEngine<br/>downloaded fMP4 → MediaSource"]
         end
-        SW["Service worker — public/sw.js<br/>cine-static-BUILD caches, offline.html"]
+        SW["Service worker — public/sw.js<br/>cine-static-BUILD caches, offline.html<br/>/hors-ligne kept where there are downloads"]
         subgraph DEV["Kept on the device"]
             IDB[("IndexedDB cine-cache<br/>catalogue and feeds, per account, 7 days")]
             OPFS[("OPFS cine-reprise-2<br/>opening bytes of Reprendre / À suivre")]
+            OPFSO[("OPFS cine-offline<br/>offline downloads, per account")]
             LS[("localStorage<br/>unsentStop · unsentLines · unsentPosition")]
         end
     end
@@ -51,7 +53,7 @@ flowchart LR
         direction TB
         BOOT["server-boot/boot.mjs<br/>startup refusals · first-run secrets<br/>static carry-over · x-cine-peer"]
         GATE{"src/proxy.ts<br/>the single gate"}
-        PAGES["Pages<br/>(player) · (dashboard) · /setup · /login · /status"]
+        PAGES["Pages<br/>(player) · (dashboard) · /setup · /login · /status · /hors-ligne"]
         API["API routes — src/app/api/**<br/>thin, ~60 lines"]
         LIB["src/lib<br/>clients/* · server-cache · watched · blockedTags<br/>subtitleGen · news · activity · reports · repliques"]
         JOBS["instrumentation.ts timers<br/>notifications · torrent watch · status · backup<br/>device prune · new-account tags · poster prewarm · subtitle engine<br/>dialogue indexing (resume, nightly)"]
@@ -62,6 +64,7 @@ flowchart LR
             IMGC[("data/image-cache")]
             SEC[("data/config/secrets.json")]
             REPS[("data/reports/ID/")]
+            OFFD[("data/offline/ID.mp4<br/>copies Jellyfin prepared for offline downloads")]
             REPL[("data/repliques.db — SQLite, separate<br/>dialogue lines · FTS5 · vocabulary<br/>rebuildable, not in the nightly copy")]
         end
         MEDIA[("/mnt/media/video — read-only<br/>films read by the dialogue indexer")]
@@ -111,6 +114,8 @@ flowchart LR
     TV -->|"stream with a signed castToken, no cookie"| RP
     CIN --- IDB
     NAT --- OPFS
+    OFFP --- OPFSO
+    LIB -->|"offline copies, written as Jellyfin transcodes"| OFFD
     PLAY --- LS
 ```
 
@@ -127,6 +132,14 @@ otherwise the whole file streamed — and writes them to `data/repliques.db`, a 
 with an FTS5 index on the folded text. Every file read passes a gate that stops for a pause and
 waits while anyone is watching (Jellyfin sessions, the stream relay, the playback beat). The
 cinema search queries it through `/api/repliques`, after and apart from the title search.
+
+**Offline downloads** ([DECISIONS §109](DECISIONS.md), `src/lib/offline/`, beta) do not read media
+files: Jellyfin transcodes a lighter version through its API (`/Videos/{id}/stream.mp4`, fragmented
+MP4), the server writes it to `data/offline/` as it arrives (`offline_jobs` / `offline_requests`), and
+the device fetches it by ranges into OPFS (`cine-offline/<account>/<id>/`) and plays it with a player
+of its own. `/hors-ligne` is a public page the service worker keeps per build, so the app opens on the
+downloads without a network. Description, in French:
+[docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md).
 
 ### 2. The two interfaces
 
@@ -589,7 +602,9 @@ flowchart LR
 Player line kinds (`PlayerEventKind`): `opening`, `start`, `fallback`, `network`, `rebuild`,
 `error`, `seek`, `stall`, `audio`, `pause`, `cast`, `reserve`, `subtitle-gen`, `fluidite`, `stop`.
 Every native and server line carries `session` and `build`; incident lines carry `timeline`, and
-`stall`/`stop` carry `diag.*`. Bench and dev lines never reach `player.log`, so they never count as
+`stall`/`stop` carry `diag.*`. Offline downloads write one line per step (requested, started, ready,
+failed, fetched, cancelled, removed, expired, deleted) to `server.log` under `scope: "offline"`, beside
+`scope: "download"` for the original file; the Activity panel reads them there. Bench and dev lines never reach `player.log`, so they never count as
 a viewer's. Details: [Diagnostics](#diagnostics), [The playback log](#the-playback-log),
 [Device test bench](#device-test-bench), [DECISIONS §42, §82](DECISIONS.md).
 
@@ -610,7 +625,7 @@ flowchart TD
     LOGINQ -->|"no"| IMGQ{"/_next/image?"}
     IMGQ -->|"session or loopback"| OK1["pass"]
     IMGQ -->|"neither"| F401I["401"]
-    IMGQ -->|"no"| PUB{"PUBLIC_PATHS?<br/>publicPaths.ts"}
+    IMGQ -->|"no"| PUB{"PUBLIC_PATHS?<br/>publicPaths.ts · /status, /hors-ligne"}
     PUB -->|"yes"| OK2["pass"]
     PUB -->|"no"| MOVED{"MOVED_PATHS?<br/>/player, /cinema"}
     MOVED -->|"yes"| R308["308 → /"]
@@ -683,6 +698,12 @@ declines: a file it cannot remux, a browser that refuses the codec, or a link to
 file (the lighter version). There is no per-account opt-out to it any more (removed 13/10/2026):
 the native player is always tried first. `PlayerHost` owns that switch, and `fallToStable` hands
 over rather than closing.
+
+A third player, apart from both, plays **offline downloads** (`OfflinePlayerHost`,
+`src/lib/offline/offlineEngine.ts`, DECISIONS §109): the downloaded file is already fragmented MP4,
+so its fragments go to MediaSource as they are and only the header is touched (`hev1` → `hvc1` for
+Safari). It shares `PlayerControls` and the mini-player with the others and nothing else, so online
+playback never depends on it. See [docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md).
 
 The design goal is the cost model. A server transcode is expensive, starts slowly and degrades the
 image; here the file leaves the disk as it is. That is why in-app playback (`PLAYER_ENABLED`) is on
@@ -2126,7 +2147,7 @@ or computer to be tested, and it plays real films through the real player while 
 | **TrueHD is decoded here** | Since 2026-09-21: FFmpeg's decoder compiled to WebAssembly (`tools/truehd-wasm`; FFmpeg 7.1.5 since 2026-10-14, see "Audio delivery"), run on the main thread in quarter-second batches with a yield between them (Turbopack does not compile a TypeScript worker), fed one Matroska block per call (FFmpeg's parser loses sync mid-stream), re-encoded like DTS. 52 tracks in the library then — 50 TrueHD Atmos 7.1, 2 TrueHD 5.1 (65 on 2026-10-14: 62 and 3) — 35 films whose VO or VF exists only in TrueHD. Validated against `ffmpeg astats` to 0.01 dB on every channel (`truehd-bench.spec.ts`); at most 88 ms of silence after a seek. Atmos objects are not rendered: the 7.1 presentation is, as on the server player |
 | **False keyframes cost one seek in eighty** | On the affected file only; a few seconds of frames nobody sees are re-read |
 | **ASS/SSA without styling** | Dialogue only — see [Subtitles](#subtitles) |
-| **Fragmented MP4 refused** | `moof`/`mvex` files carry no sample tables; the header read refuses them by name and the server player takes over. Only the first media edit of an edit list is followed |
+| **Fragmented MP4 refused** | `moof`/`mvex` files carry no sample tables; the header read refuses them by name and the server player takes over (offline downloads are fragmented MP4 and have their own reader, `src/lib/offline/fmp4.ts`). Only the first media edit of an edit list is followed |
 | **An MP4's index is read whole** | `moov` lists every sample, 2–14 MB on a feature film, fetched before the first frame — what a `<video>` given the URL reads too. Matroska's header and index are 0.2 MB |
 | **Bitmap subtitles not rendered** | PGS and VobSub, covered by external `.srt` in every affected file here |
 | **FLAC is carried where it is taken, decoded here where it is not** | Chrome and Firefox accept FLAC in a MediaSource and get it untouched. Safari refuses it, and since 2026-09-21 it is decoded by libFLAC compiled to WebAssembly (`@wasm-audio-decoders/flac`, `flacDecoder.ts`) and re-encoded like DTS. Verified against `ffmpeg astats` on 24-bit stereo, 16-bit mono and 24-bit 5.1 library tracks: every channel within 0.05 dB, dialogue in the centre |
@@ -2197,6 +2218,23 @@ Everything is in `src/lib/webcodecs/` unless stated otherwise.
 | `src/lib/castCors.ts`, `src/lib/castProgress.ts` | CORS for a cast pass; the resume point kept by the server when the page goes quiet |
 | `src/lib/playbackPanel.ts` | The technical panel's description, « Diffusé » included |
 | `src/lib/scrollProbe.ts` | The Lab's grid smoothness measure (`fluidite` line) |
+
+### Offline downloads
+
+All in `src/lib/offline/` unless stated otherwise. DECISIONS §109; description in
+[docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md).
+
+| File | Role |
+|---|---|
+| `jobs.ts`, `quality.ts`, `events.ts` | Server: preparations through Jellyfin, retention and room, the two qualities, the `scope: "offline"` log lines |
+| `src/app/api/offline/**`, `src/app/api/admin/offline/**` | Request, state, file by ranges, fragment index, details, subtitles; the administrator's list and deletion |
+| `downloads.ts`, `deviceStore.ts` | Device: the download loop (three at a time, pause, retry) and OPFS through a synchronous-access worker |
+| `episodeDownloads.ts`, `downloadGroups.ts` | Season downloads, next episode on its own, watched episodes removed; grouping for the downloads page |
+| `artwork.ts`, `subtitles.ts`, `trickplay.ts` | What is kept with the file: sheet and markers, text subtitles, scrubbing previews |
+| `offlineEngine.ts`, `fmp4.ts`, `src/components/offline/OfflinePlayerHost.tsx` | The offline player: fragment reader and MediaSource feed |
+| `resumeRules.ts` | Jellyfin's resume thresholds, applied on the device without a network |
+| `offlineEntry.ts`, `src/app/hors-ligne/`, `public/sw.js` | The entry without a network: the account remembered, the page kept by the service worker |
+| `src/components/offline/OfflineDownloadsView.tsx`, `OfflineTitleSheet.tsx` | The downloads page (cinema panel and `/hors-ligne`) and the offline title sheet |
 
 ### Slow connection
 

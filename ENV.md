@@ -92,6 +92,9 @@ Set in the app: **Management → Configuration → Playback**. Applied without a
 | `PLAYER_AUTO_FRAME` | `true` | Enlarges the picture over black bars baked into the file. Needs Jellyfin's trickplay images; without them the picture is shown as it is. |
 | `CHROMECAST_FOR_EVERYONE` | `true` | `true`: every account sees the Chromecast button. `false`: administrators only. |
 | `CAST_RECEIVER_APP_ID` | Google's Default Media Receiver | The receiver application a Chromecast opens: eight hexadecimal characters, from the Google Cast developer console. Any other value falls back to the default. |
+| `OFFLINE_DOWNLOADS` | `true` | Downloads for offline viewing (beta): Jellyfin prepares a lighter version that the device keeps. `false` removes the button and refuses any preparation. See [docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md). |
+| `OFFLINE_DOWNLOADS_FOR_EVERYONE` | `false` | `true`: every account can download for offline viewing. `false`: administrators only. |
+| `OFFLINE_SERVER_QUOTA_GB` | `50` | Room, in GB, the prepared copies may take in `data/offline/`. Past it, copies every device has fully fetched are deleted, oldest first; copies still being prepared or downloaded are never deleted, so the total can exceed it for a while. |
 
 ## Generated subtitles
 

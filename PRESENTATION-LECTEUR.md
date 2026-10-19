@@ -279,6 +279,7 @@ marche.
 | **Avance en mémoire** | Après une minute de film, le lecteur prend de l'avance par rafales — jusqu'à cinq minutes de film, 150 Mo au plus sur iPhone —, puis laisse la radio se reposer. En mémoire vive seulement : rien n'use le stockage de l'appareil |
 | **Changement de langue en cours de film** | Le lecteur se reconstruit à la même position, pause conservée |
 | **Préférences du compte** | Langue audio et de sous-titres, reprise là où le film s'était arrêté, quel que soit l'appareil |
+| **Téléchargement hors ligne** (bêta) | Un film, un épisode ou une saison, préparé par le serveur en version légère (720p ou 1080p, une piste son) et gardé sur l'appareil avec ses sous-titres texte et ses aperçus. Lu sans réseau par un lecteur à part ; la position revient au serveur au retour du réseau. Détails : [docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md) |
 
 ### Sous-titres générés (optionnel)
 
