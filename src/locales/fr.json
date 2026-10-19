@@ -2401,6 +2401,8 @@
       "accessDownloads": "Accéder aux téléchargements",
       "pause": "Mettre en pause",
       "resumeDownload": "Reprendre le téléchargement",
+      "pauseShort": "Pause",
+      "resumeShort": "Reprendre",
       "paused": "En pause · {pct} %"
     }
   },

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { SubtitleLayer } from "@/components/player/SubtitleLayer";
 import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
 import { useOfflineSubtitles } from "./useOfflineSubtitles";
+import { useOfflineTrickplay } from "./useOfflineTrickplay";
 import { createPortal } from "react-dom";
 import { AlertTriangle } from "lucide-react";
 import { usePlayback, type PlaybackSession } from "@/components/PlaybackProvider";
@@ -117,6 +118,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   const [closing, setClosing] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const subs = useOfflineSubtitles(download ?? null, videoRef);
+  const trickplay = useOfflineTrickplay(download ?? null);
   const subtitleStyle = useSyncExternalStore(subtitleStyleStore.subscribe, subtitleStyleStore.snapshot, subtitleStyleStore.serverSnapshot);
   const [chromeEdges, setChromeEdges] = useState<ChromeEdges | null>(null);
   const [panel, setPanel] = useState<PlaybackPanelData | null>(null);
@@ -413,6 +415,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
           <div className="absolute inset-0 z-10">
             <PlayerControls
               downloadedFraction={download ? (download.state === "done" ? 1 : download.bytes / Math.max(1, download.expectedBytes)) : undefined}
+              offlineTrickplay={trickplay}
               videoRef={videoRef}
               containerRef={containerRef}
               itemId={session.itemId}

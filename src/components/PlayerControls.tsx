@@ -1,6 +1,6 @@
 "use client";
 
-import { trickplayTileAt as sharedTrickplayTileAt, trickplayTileIndex, trickplayTileOrder } from "@/lib/trickplayTile";
+import { trickplayTileAt as sharedTrickplayTileAt, trickplayTileIndex, trickplayTileOrder, type TrickplayInfo } from "@/lib/trickplayTile";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages, Check, Layers } from "lucide-react";
@@ -115,6 +115,12 @@ interface PlayerControlsProps {
    * 19/10/2026). Absente partout ailleurs.
    */
   downloadedFraction?: number;
+  /**
+   * Les aperçus de la barre gardés sur l'appareil avec un téléchargement hors ligne : la description
+   * et une adresse `blob:` par planche. Présents, rien n'est demandé au serveur (Louis, 19/10/2026 :
+   * chercher un passage sans réseau). Absents, ceux du serveur, comme partout ailleurs.
+   */
+  offlineTrickplay?: { info: TrickplayInfo; urls: string[] } | null;
   /**
    * Le logo du titre (celui de la série pour un épisode), montré à la place du titre écrit quand
    * il existe et qu'il est chargé — voir `PlayerTitle`. Absent : le titre écrit, comme avant.
@@ -371,6 +377,7 @@ export function PlayerControls({
   title,
   lab = false,
   downloadedFraction,
+  offlineTrickplay = null,
   logoUrl = null,
   onClose,
   onMinimize,
@@ -1399,11 +1406,11 @@ export function PlayerControls({
   // Trickplay scrubbing preview — fetched once per item, not per hover: it's item-wide static
   // metadata (grid layout + a handful of sprite-sheet tiles covering the whole runtime), so
   // there's nothing to re-fetch as the seek bar is dragged, only tiles to look up locally.
-  const [trickplay, setTrickplay] = useState<{
-    width: number; height: number; tileWidth: number; tileHeight: number; thumbnailCount: number; intervalMs: number;
-  } | null>(null);
+  const [fetchedTrickplay, setTrickplay] = useState<TrickplayInfo | null>(null);
+  const trickplay = offlineTrickplay?.info ?? fetchedTrickplay;
+  const hasOfflineTrickplay = offlineTrickplay !== null;
   useEffect(() => {
-    if (lab) return;
+    if (lab || hasOfflineTrickplay) return;
     let cancelled = false;
     fetch(`/api/jellyfin/trickplay/info?itemId=${itemId}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -1416,7 +1423,7 @@ export function PlayerControls({
     return () => {
       cancelled = true;
     };
-  }, [itemId, lab]);
+  }, [itemId, lab, hasOfflineTrickplay]);
 
   // Pre-warms the browser's own HTTP cache with every trickplay sprite tile as soon as the
   // metadata is known, instead of only fetching a tile the first time the seek bar is actually
@@ -1441,7 +1448,8 @@ export function PlayerControls({
   // proche d'abord, une requête à la fois — sur un bon lien elles sont toutes là en une seconde ou
   // deux, bien avant le premier geste.
   useEffect(() => {
-    if (!trickplay) return;
+    // Gardées sur l'appareil : rien à faire venir.
+    if (!trickplay || hasOfflineTrickplay) return;
     const perTile = trickplay.tileWidth * trickplay.tileHeight;
     const tileCount = Math.ceil(trickplay.thumbnailCount / perTile);
     if (!(tileCount > 0)) return;
@@ -1465,7 +1473,7 @@ export function PlayerControls({
       cancelled = true;
       detach();
     };
-  }, [trickplay, itemId, videoRef]);
+  }, [trickplay, itemId, videoRef, hasOfflineTrickplay]);
 
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth));
   useEffect(() => {
@@ -1562,7 +1570,12 @@ export function PlayerControls({
   // Compiler's memoization check gets confused by unrelated nearby state).
   function trickplayTileAt(time: number): { url: string; bgX: number; bgY: number } | null {
     // Le calcul est partagé avec les répliques de la recherche (`trickplayTile.ts`, §88).
-    return trickplay ? sharedTrickplayTileAt(trickplay, itemId, time) : null;
+    if (!trickplay) return null;
+    const tile = sharedTrickplayTileAt(trickplay, itemId, time);
+    if (!offlineTrickplay) return tile;
+    const perTile = trickplay.tileWidth * trickplay.tileHeight;
+    const url = offlineTrickplay.urls[trickplayTileIndex(trickplay, time, Math.ceil(trickplay.thumbnailCount / perTile))];
+    return url ? { ...tile, url } : null;
   }
   const previewTile = previewTime !== null ? trickplayTileAt(previewTime) : null;
 
@@ -3021,7 +3034,9 @@ export function PlayerControls({
                 style={{ width: `${Math.min(100, downloadedFraction * 100)}%`, WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
               />
             )}
-            {duration > 0 && bufferedEnd > 0 && (
+            {/* Pas dans le lecteur hors ligne : la partie téléchargée y tient ce rôle, et les deux
+                ensemble faisaient quatre teintes sur une barre qui doit en avoir trois (Louis, 19/10/2026). */}
+            {downloadedFraction === undefined && duration > 0 && bufferedEnd > 0 && (
               <div
                 className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/35 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-3" : "h-2"}`}
                 // Both pointer-events-none (blocks click/drag) AND the two -webkit- properties

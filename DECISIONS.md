@@ -5887,11 +5887,18 @@ et la navigation repart de zéro.
   l'appareil (`resumeRules.ts`, lus chez Jellyfin) et l'envoi au retour du réseau (`unsentPosition.ts`).
   Les deux boutons prennent Jellyfin pour référence, l'appareil tant qu'une position attend.
 - *Fiche* : « Lire » (ou « Reprendre ») / « Fichier téléchargé · 1h10 restantes » en tête, en blanc ;
-  « Lire en ligne » à la place de « Lire ».
+  « Lire en ligne » à la place de « Lire ». Une série fait de même pour l'épisode que Lire lancerait
+  (`useOfflinePlayable(facts.targetId)`, `CinemaSeriesDetail` / `CinemaMobileDetail`), avec l'épisode
+  nommé sur les deux boutons et, tant qu'il n'est pas fini, où en est son téléchargement.
 - *Lecteur* : l'ouverture du lecteur en ligne (`PlaybackIntro`) plus « Lecture du fichier téléchargé » ;
   pas de menu son (une seule piste) ; sous-titres texte gardés avec le film (`subtitles.ts`,
   `/api/offline/subtitles/<id>`) ; panneau technique (appareil / serveur) ; partie téléchargée de la
-  barre plus sombre que la partie lue ; aperçus et chapitres en ligne.
+  barre plus sombre que la partie lue, et rien d'autre : la partie en tampon n'y est pas dessinée
+  (trois teintes, pas quatre) ; aperçus de la barre gardés avec le film (`trickplay.ts`, prop
+  `offlineTrickplay` de `PlayerControls`, rattrapés au chargement pour les téléchargements d'avant) ;
+  chapitres en ligne.
+- *Page* : « Lire » et « Pause » écrits en toutes lettres (une icône de lecture seule se confondait
+  avec la reprise du téléchargement) ; au téléphone, les boutons sous le texte.
 - *Boucle* : jusqu'à trois téléchargements à la fois, les versions prêtes d'abord, un verrou par
   téléchargement entre onglets ; « En file d'attente sur le serveur » ; pause (rien n'arrive sur
   l'appareil, la préparation continue) ; un retrait de demande part avant toute nouvelle demande du
@@ -5902,8 +5909,6 @@ et la navigation repart de zéro.
   défaut), ouvrable à tous d'un geste comme le Chromecast.
 - *Activité* : chaque étape au journal (`scope: "offline"`), les copies du serveur dans le panneau.
 
-**Pas encore** : les aperçus de la barre gardés sur l'appareil (hors ligne, la barre n'en a pas).
-
-Tests : `offline-fmp4`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`,
+Tests : `offline-fmp4`, `offline-trickplay`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`,
 `offline-downloads-page`, `offline-entry`, `serviceWorker-offline-entry`, `offline-page`,
 `proxy-offline-entry`, `cinemaRoute`, `cinemaRoute-normalize`, `playerNav`.

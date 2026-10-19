@@ -351,8 +351,13 @@ export function CinemaMobileDetail({
   const playTargetTitle = facts.title;
   // Grisé seulement si Jellyfin a répondu que le fichier n'existe plus — voir `missingFiles.ts`.
   const fileMissing = useFileMissing(playTargetId);
-  // Les films seulement ici : un épisode téléchargé se lit depuis sa ligne.
-  const offlinePlayable = useOfflinePlayable(isSeries ? null : item.jellyfinItemId);
+  // Le film, ou l'épisode que Lire lancerait : téléchargé, il passe en tête comme un film (Louis,
+  // 19/10/2026 — l'état de l'épisode en cours de téléchargement n'apparaissait que sur sa ligne).
+  const offlinePlayable = useOfflinePlayable(isSeries ? playTargetId : item.jellyfinItemId);
+  const offlineEpisodeCode =
+    isSeries && facts.seasonNumber != null && facts.episodeNumber != null
+      ? t("cinema.episodeShort", { episode: facts.episodeNumber, season: facts.seasonNumber })
+      : null;
   // La place du bouton est tenue tant qu'on ne sait ni si la lecture est ouverte, ni — pour une
   // série jamais commencée — quel épisode elle lancerait.
   const playPending =
@@ -550,7 +555,7 @@ export function CinemaMobileDetail({
         )}
         {/* Un téléchargement lisible passe en tête, en blanc, et « Lire » devient « Lire en ligne »
             (Louis, 19/10/2026). */}
-        {!playPending && playerEnabled && offlinePlayable && !fileMissing && <OfflinePlayButton download={offlinePlayable} onlineResumeTicks={resumeTicks} onlineKnown={resumeKnown} variant="wide" />}
+        {!playPending && playerEnabled && offlinePlayable && !fileMissing && <OfflinePlayButton download={offlinePlayable} onlineResumeTicks={resumeTicks} onlineKnown={resumeKnown} episodeCode={offlineEpisodeCode} variant="wide" />}
         {!playPending && playerEnabled && playTargetId && (
           <button
             type="button"
@@ -566,7 +571,7 @@ export function CinemaMobileDetail({
             {fileMissing
               ? t("cinema.fileMissing")
               : offlinePlayable
-                ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, resumeTicks, resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done").online
+                ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, resumeTicks, resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done", offlineEpisodeCode).online
                 : formatContinueLabel(t, resumeTicks, runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch)}
           </button>
         )}
@@ -752,7 +757,9 @@ export function CinemaMobileDetail({
                     <p className="text-sm font-medium text-white">
                       {episode.episodeNumber}. {episode.title}
                       {episode.jellyfinItemId === nextEpisode?.itemId && (
-                        <span className="ml-2 rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-400">
+                        // D'un bloc : coupée entre « À » et « suivre », l'étiquette se dessinait en deux
+                        // morceaux sur deux lignes (Louis, 19/10/2026).
+                        <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-400">
                           {t("cinema.nextUpBadge")}
                         </span>
                       )}

@@ -200,6 +200,38 @@ function IconButton({
   );
 }
 
+/** Un bouton qui dit ce qu'il fait : l'icône et le mot. */
+function PillButton({
+  label,
+  text,
+  icon,
+  onClick,
+  disabled = false,
+  tone = "ghost",
+}: {
+  label: string;
+  text: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "primary" | "ghost";
+}) {
+  return (
+    <button
+      type="button"
+      data-nav-item
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-opacity ${tone === "primary" ? "bg-white text-ink" : "bg-white/8 text-white"} ${disabled ? "cursor-default opacity-35" : ""}`}
+    >
+      {icon}
+      {text}
+    </button>
+  );
+}
+
 /**
  * Une ligne : un film (avec son affiche) ou un épisode (son numéro à la place). Ce qu'on veut savoir
  * d'un téléchargement avant de partir sans réseau : est-il là en entier, en quelle qualité et quelle
@@ -221,82 +253,89 @@ function DownloadRow({ download: d, episode = false, onOpenTitle }: { download: 
   const removeLabel = done || failed ? t("player.downloads.remove") : t("player.downloads.cancel");
   const playLabel = t(done ? "player.downloads.playDownloaded" : "player.downloads.playDownloading");
   return (
-    <li className={`flex items-center gap-3 border-t border-white/8 first:border-t-0 ${episode ? "py-2.5" : "py-3.5"}`}>
-      {episode ? (
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/8 text-xs font-semibold tabular-nums text-white">
-          {d.episode?.episodeNumber ?? "–"}
-        </span>
-      ) : (
-        <Poster url={poster} />
-      )}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-white">
-          {title}
-          {!episode && d.year ? <span className="font-normal text-subtle"> · {d.year}</span> : null}
-        </p>
-        <p className="truncate text-xs text-subtle">
-          {quality} · {d.audioLabel}
-          {done ? <> · {formatFileSize(d.bytes, locale)}</> : null}
-        </p>
-        {done ? (
-          <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted">
-            <Check size={12} className="shrink-0 text-success" aria-hidden />
-            <span className="truncate">
-              {d.watchedToEnd
-                ? t("player.downloads.watched")
-                : remaining !== null
-                  ? `${t("player.downloads.stoppedAt", { time: formatDurationShort(d.positionSeconds * 1e7) })} · ${t("cinema.timeRemaining", { time: formatDurationShort(remaining * 1e7) })}`
-                  : offlineStatusLabel(d, t)}
-            </span>
-          </p>
-        ) : failed ? (
-          <p className="mt-0.5 truncate text-xs text-warning">
-            {offlineStatusLabel(d, t)}
-            {d.error ? ` · ${d.error}` : ""}
-          </p>
+    // Les boutons sous le texte au téléphone, à droite dès qu'il y a la place : à côté de trois ronds,
+    // la langue et l'avancement étaient coupés (« Français — Dolb… », « 0,3 Mo… »), Louis, 19/10/2026.
+    <li className={`flex flex-col gap-2.5 border-t border-white/8 first:border-t-0 sm:flex-row sm:items-center sm:gap-3 ${episode ? "py-3" : "py-3.5"}`}>
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {episode ? (
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/8 text-xs font-semibold tabular-nums text-white">
+            {d.episode?.episodeNumber ?? "–"}
+          </span>
         ) : (
-          <div className="mt-1.5">
-            <div
-              className="h-1 overflow-hidden rounded-full bg-white/12"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={pct}
-              aria-label={offlineStatusLabel(d, t)}
-            >
-              <div className="h-full rounded-full bg-white transition-[width] duration-500" style={{ width: `${d.bytes > 0 ? Math.max(2, pct) : 0}%` }} />
-            </div>
-            <p className="mt-1 truncate text-[11px] text-subtle">
-              {offlineStatusLabel(d, t)}
-              {d.expectedBytes > 0 && d.bytes > 0
-                ? ` · ${t("player.downloads.sizeOf", { done: formatFileSize(d.bytes, locale), total: formatFileSize(d.expectedBytes, locale) })}`
-                : ""}
-            </p>
-          </div>
+          <Poster url={poster} />
         )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-white">
+            {title}
+            {!episode && d.year ? <span className="font-normal text-subtle"> · {d.year}</span> : null}
+          </p>
+          <p className="truncate text-xs text-subtle">
+            {quality} · {d.audioLabel}
+            {done ? <> · {formatFileSize(d.bytes, locale)}</> : null}
+          </p>
+          {done ? (
+            <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted">
+              <Check size={12} className="shrink-0 text-success" aria-hidden />
+              <span className="truncate">
+                {d.watchedToEnd
+                  ? t("player.downloads.watched")
+                  : remaining !== null
+                    ? `${t("player.downloads.stoppedAt", { time: formatDurationShort(d.positionSeconds * 1e7) })} · ${t("cinema.timeRemaining", { time: formatDurationShort(remaining * 1e7) })}`
+                    : offlineStatusLabel(d, t)}
+              </span>
+            </p>
+          ) : failed ? (
+            <p className="mt-0.5 truncate text-xs text-warning">
+              {offlineStatusLabel(d, t)}
+              {d.error ? ` · ${d.error}` : ""}
+            </p>
+          ) : (
+            <div className="mt-1.5">
+              <div
+                className="h-1 overflow-hidden rounded-full bg-white/12"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={pct}
+                aria-label={offlineStatusLabel(d, t)}
+              >
+                <div className="h-full rounded-full bg-white transition-[width] duration-500" style={{ width: `${d.bytes > 0 ? Math.max(2, pct) : 0}%` }} />
+              </div>
+              {/* L'état à gauche, les tailles à droite : deux choses, deux places. */}
+              <p className="mt-1 flex items-baseline justify-between gap-2 text-[11px] text-subtle">
+                <span className="truncate">{offlineStatusLabel(d, t)}</span>
+                {d.expectedBytes > 0 && d.bytes > 0 && (
+                  <span className="shrink-0 tabular-nums">{t("player.downloads.sizeOf", { done: formatFileSize(d.bytes, locale), total: formatFileSize(d.expectedBytes, locale) })}</span>
+                )}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        {/* Grisé tant qu'il n'y a pas de quoi démarrer — la même règle que la fiche (`offlinePlayable`). */}
-        <IconButton
+      <div className={`flex shrink-0 items-center gap-1.5 ${episode ? "pl-11" : "pl-[3.75rem]"} sm:pl-0`}>
+        {/* « Lire » écrit en toutes lettres (Louis, 19/10/2026) : une icône seule se confondait avec
+            la reprise du téléchargement. Grisé tant qu'il n'y a pas de quoi démarrer — la même règle
+            que la fiche (`offlinePlayable`). */}
+        <PillButton
           label={playLabel}
+          text={t("common.play")}
+          icon={<Play size={13} fill="currentColor" />}
           tone="primary"
           disabled={!playable}
           onClick={() => playable && playback.play({ itemId: d.itemId, title: d.title, resumeAt: d.watchedToEnd ? 0 : d.positionSeconds, offline: { id: d.id } })}
-        >
-          <Play size={14} fill="currentColor" />
-        </IconButton>
+        />
+        {/* La pause (Louis, 19/10/2026) : plus rien n'arrive sur l'appareil, la préparation continue. */}
+        {!done && !failed && (
+          <PillButton
+            label={d.state === "paused" ? t("player.downloads.resumeDownload") : t("player.downloads.pause")}
+            text={d.state === "paused" ? t("player.downloads.resumeShort") : t("player.downloads.pauseShort")}
+            icon={d.state === "paused" ? <Download size={14} /> : <Pause size={14} />}
+            onClick={() => void (d.state === "paused" ? resumeOfflineDownload(d.id) : pauseOfflineDownload(d.id))}
+          />
+        )}
         {onOpenTitle && !episode && d.radarrId !== null && (
           <IconButton label={t("player.downloads.open")} onClick={() => onOpenTitle({ type: "movie", id: d.radarrId! })}>
             <Film size={15} />
-          </IconButton>
-        )}
-        {/* La pause (Louis, 19/10/2026) : plus rien n'arrive sur l'appareil, la préparation continue. */}
-        {!done && !failed && (
-          <IconButton
-            label={d.state === "paused" ? t("player.downloads.resumeDownload") : t("player.downloads.pause")}
-            onClick={() => void (d.state === "paused" ? resumeOfflineDownload(d.id) : pauseOfflineDownload(d.id))}
-          >
-            {d.state === "paused" ? <Download size={15} /> : <Pause size={15} />}
           </IconButton>
         )}
         <IconButton label={removeLabel} tone="danger" onClick={() => setConfirming(true)}>

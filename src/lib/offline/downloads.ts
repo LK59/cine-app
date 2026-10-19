@@ -6,6 +6,7 @@ import { deviceStore, deviceStoreSupported, resetDeviceStore } from "./deviceSto
 import { reportClientError } from "@/lib/reportClientError";
 import { applyResumeRules } from "./resumeRules";
 import { storeOfflineSubtitles, type OfflineSubtitle } from "./subtitles";
+import { storeOfflineTrickplay, type OfflineTrickplay } from "./trickplay";
 import type { OfflineJob } from "./jobs";
 import type { OfflineCodec, OfflineQuality } from "./quality";
 
@@ -102,6 +103,11 @@ export interface OfflineDownload {
   hasPoster: boolean;
   /** Les sous-titres texte gardés avec le film (`subtitles.ts`). */
   subtitles?: OfflineSubtitle[];
+  /**
+   * Les aperçus de la barre gardés avec le film (`trickplay.ts`). Absent : pas encore cherchés (un
+   * téléchargement d'avant le 19/10/2026 au soir, rattrapé au chargement) ; `null` : le titre n'en a pas.
+   */
+  trickplay?: OfflineTrickplay | null;
 }
 
 const CHUNK = 8 * 1024 * 1024;
@@ -167,6 +173,18 @@ export async function initOfflineDownloads(): Promise<void> {
   downloads = loaded.sort((a, b) => b.createdAt - a.createdAt);
   emit();
   void runLoop();
+  // Les téléchargements faits avant que les aperçus de la barre partent avec le film : rattrapés
+  // une fois, avec du réseau (sans, rien n'est noté, et on réessaiera au prochain chargement).
+  if (typeof navigator !== "undefined" && navigator.onLine !== false) {
+    for (const d of loaded) if (d.trickplay === undefined && d.state !== "failed") void keepTrickplay(current, d.id, d.itemId);
+  }
+}
+
+async function keepTrickplay(owner: string, id: string, itemId: string): Promise<void> {
+  const trickplay = await storeOfflineTrickplay(owner, id, itemId);
+  if (trickplay === undefined || account !== owner) return;
+  const updated = patch(id, { trickplay });
+  if (updated) await saveMeta(updated);
 }
 
 export function useOfflineDownloads(): OfflineDownload[] {
@@ -256,6 +274,8 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
     const updated = patch(job.id, { subtitles });
     if (updated) await saveMeta(updated);
   });
+  // Les aperçus de la barre, pour chercher un passage sans réseau.
+  void keepTrickplay(owner, job.id, request.itemId);
   // L'affiche par la route d'images de l'application : celle du catalogue est souvent chez TMDB, d'où
   // `fetch` ne peut rien lire sans CORS (relevé au premier essai réel, 19/10/2026 — aucune affiche gardée).
   {

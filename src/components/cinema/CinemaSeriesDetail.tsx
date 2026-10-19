@@ -36,6 +36,7 @@ import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, useSheetPlayFacts, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
 import { useFileMissing } from "@/lib/missingFiles";
+import { OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
 import { FadeInImg } from "@/components/FadeInImg";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
@@ -123,6 +124,10 @@ export function CinemaSeriesDetail({
   // Sa ligne garde sa place en attendant, plutôt que de surgir.
   const playPending = !facts.targetId && episodesData === undefined && episodesError === undefined;
   const fileMissing = useFileMissing(facts.targetId);
+  // L'épisode que Lire lancerait, s'il est téléchargé : en tête, comme un film (Louis, 19/10/2026).
+  const offlinePlayable = useOfflinePlayable(facts.targetId);
+  const offlineEpisodeCode =
+    facts.seasonNumber != null && facts.episodeNumber != null ? t("cinema.episodeShort", { episode: facts.episodeNumber, season: facts.seasonNumber }) : null;
   // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
   // L'épisode du bouton principal seulement, pas chaque ligne de la liste.
   usePlaybackPrefetch(facts.targetId);
@@ -385,6 +390,18 @@ export function CinemaSeriesDetail({
                 <span className="text-sm font-medium">{t("common.play")}</span>
               </div>
             )}
+            {/* « Lire en ligne » passe en dessous, comme sur la fiche d'un film. */}
+            {playTargetId && offlinePlayable && !fileMissing && (
+              <OfflinePlayButton
+                download={offlinePlayable}
+                onlineResumeTicks={facts.resumeTicks}
+                onlineKnown={facts.resumeKnown}
+                episodeCode={offlineEpisodeCode}
+                variant="row"
+                rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+                badgeClassName={MENU_BADGE}
+              />
+            )}
             {playTargetId && (
               <PlayButton
                 itemId={playTargetId}
@@ -405,14 +422,11 @@ export function CinemaSeriesDetail({
                 // one reads exactly like the Continue Watching row's cards (same helper, "Lire
                 // EpX SX" / "Reprendre EpX SX - 30min restants"), since a user landing here from
                 // that row would otherwise see two different labels for the same episode.
-                label={formatContinueLabel(
-                  t,
-                  facts.resumeTicks,
-                  facts.runtimeTicks,
-                  facts.seasonNumber,
-                  facts.episodeNumber,
-                  facts.rewatch
-                )}
+                label={
+                  offlinePlayable && !fileMissing
+                    ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, facts.resumeTicks, facts.resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done", offlineEpisodeCode).online
+                    : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch)
+                }
                 // La même ligne que les autres : c'est le sélecteur qui se peint en blanc.
                 className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
               />

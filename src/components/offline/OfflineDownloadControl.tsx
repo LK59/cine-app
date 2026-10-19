@@ -117,15 +117,18 @@ export function offlinePlayLabels(
   t: ReturnType<typeof useT>,
   resumeSeconds: number,
   runtimeSeconds: number | null | undefined,
-  complete = true
+  complete = true,
+  /** L'épisode que la fiche d'une série lancerait (« S1:É5 »), dit sur « Lire en ligne » aussi. */
+  episodeCode?: string | null
 ): { offline: string; online: string } {
+  const withEpisode = (label: string) => (episodeCode ? `${label} · ${episodeCode}` : label);
   if (resumeSeconds < 30 || !runtimeSeconds) {
-    return { offline: t(complete ? "player.downloads.playDownloaded" : "player.downloads.playDownloading"), online: t("player.downloads.playOnline") };
+    return { offline: t(complete ? "player.downloads.playDownloaded" : "player.downloads.playDownloading"), online: withEpisode(t("player.downloads.playOnline")) };
   }
   const time = t("cinema.timeRemaining", { time: formatDurationShort(Math.max(0, runtimeSeconds - resumeSeconds) * 1e7) });
   return {
     offline: t(complete ? "player.downloads.resumeDownloaded" : "player.downloads.resumeDownloading", { time }),
-    online: t("player.downloads.resumeOnline", { time }),
+    online: episodeCode ? `${t("player.downloads.resumeOnline", { time: episodeCode })} · ${time}` : t("player.downloads.resumeOnline", { time }),
   };
 }
 
@@ -134,11 +137,14 @@ export function OfflinePlayButton({
   variant,
   onlineResumeTicks,
   onlineKnown,
+  episodeCode = null,
   rowClassName = "",
   badgeClassName = "",
 }: {
   download: OfflineDownload;
   variant: "row" | "wide";
+  /** Sur la fiche d'une série : l'épisode que ce bouton lance (« S1:É5 »). */
+  episodeCode?: string | null;
   /** La reprise que Jellyfin connaît pour ce titre, celle que « Lire en ligne » prendrait. */
   onlineResumeTicks?: number | null;
   /** Jellyfin a-t-il répondu ? Sinon, la position de l'appareil. */
@@ -153,8 +159,16 @@ export function OfflinePlayButton({
   // Reprendre —, et en petit d'où il lit et ce qu'il reste.
   const resumes = resume >= 30 && download.runtimeSeconds > 0;
   const main = t(resumes ? "common.resume" : "common.play");
+  // Pas fini, sur une série : où en est le téléchargement (« Téléchargement · 34 % », « En pause ·
+  // 34 % »…) — sa fiche n'a pas d'autre ligne pour le dire (Louis, 19/10/2026). Celle d'un film a la
+  // sienne juste en dessous (`OfflineDownloadControl`), qu'il ne faut pas répéter.
   const detail = [
-    t(download.state === "done" ? "player.downloads.fileDownloaded" : "player.downloads.fileDownloading"),
+    episodeCode,
+    download.state === "done"
+      ? t("player.downloads.fileDownloaded")
+      : episodeCode
+        ? offlineStatusLabel(download, t)
+        : t("player.downloads.fileDownloading"),
     resumes ? t("cinema.timeRemaining", { time: formatDurationShort(Math.max(0, download.runtimeSeconds - resume) * 1e7) }) : null,
   ]
     .filter(Boolean)
