@@ -5718,6 +5718,13 @@ film ; récupérer un fichier sur son ordinateur sans passer par Jellyfin. Pas s
 plusieurs dizaines de Go, et une PWA iOS sans gestionnaire de téléchargements — le hors-ligne dans l'app
 reste un chantier à part (`docs/telechargement-hors-ligne.md`).
 
+**Préparé d'avance (19/10/2026, 8.70.2).** Le menu s'ouvre rempli : `usePrewarmEpisodes` demande la liste
+puis les miniatures de la saison en cours, comme les planches de prévisualisation — après la première image
+(`afterFirstPicture`, `firstPicture.ts`, la même fonction que les planches), une requête à la fois, l'épisode en
+cours et ses voisins d'abord, rien en économie de données. Les miniatures restent décodées en mémoire
+(`episodeThumbs.ts`, 120 au plus) : sur iPhone, chaque ouverture redécodait des `<img>` neuves, chargées
+paresseusement — la liste apparaissait vide puis se remplissait. Les `<img>` du menu ne sont plus paresseuses.
+
 **Ce qui diffère exprès.** Le Chromecast (`ChromecastPlayer`, une télécommande) n'a ni l'un ni l'autre.
 
 **Tests.** `PlayerControls-episodes-download.test.tsx`, `player-item-download-routes.test.ts`,

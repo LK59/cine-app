@@ -132,6 +132,46 @@ describe("le bouton « Épisodes »", () => {
   });
 });
 
+describe("le menu préparé d'avance", () => {
+  it("rien avant la première image ; ensuite la liste puis les miniatures, l'épisode en cours d'abord", async () => {
+    const { forgetHeldThumbs } = await import("@/lib/episodeThumbs");
+    forgetHeldThumbs();
+    const loads: string[] = [];
+    vi.stubGlobal(
+      "Image",
+      class {
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        decoding = "";
+        set src(url: string) {
+          loads.push(url);
+          queueMicrotask(() => this.onload?.());
+        }
+        decode() {
+          return Promise.resolve();
+        }
+      }
+    );
+    item = { seriesId: SERIES, download: null };
+    const thumbs = { ...EPISODES, seasons: EPISODES.seasons.map((s) => ({ ...s, episodes: s.episodes.map((e) => ({ ...e, thumbnailUrl: `/t/${e.jellyfinItemId}` })) })) };
+    const fetchMock = vi.fn(async (url: string) => {
+      const body = url.startsWith("/api/player/item/") ? item : url.endsWith("/episodes") ? thumbs : null;
+      return { ok: !!body, status: body ? 200 : 404, json: async () => body };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = render(<Harness onPlayEpisode={vi.fn()} />);
+    await settle();
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith("/episodes"))).toBe(false);
+    expect(loads).toEqual([]);
+    await act(async () => void container.querySelector("video")!.dispatchEvent(new Event("playing")));
+    await settle();
+    await settle();
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith("/episodes"))).toBe(true);
+    // e3 en cours : lui, puis e2 (celui d'avant), puis e1 — la saison en cours seulement.
+    expect(loads).toEqual(["/t/e3", "/t/e2", "/t/e1"]);
+  });
+});
+
 describe("« Télécharger le fichier »", () => {
   const openMore = async (container: HTMLElement) => {
     await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));

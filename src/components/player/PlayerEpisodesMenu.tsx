@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import useSWR from "swr";
 import { Check } from "lucide-react";
 import { fetcher, playerBootstrapOptions } from "@/lib/swr";
@@ -9,6 +9,46 @@ import { episodeResumeAt } from "@/lib/nextEpisode";
 import { formatDurationShort, formatMinutes } from "@/lib/format";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import type { CinemaEpisodesPayload } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
+import { afterFirstPicture } from "@/lib/firstPicture";
+import { nearestFirst, warmThumbs } from "@/lib/episodeThumbs";
+import { currentResumeNetworkMode } from "@/lib/resumeCache/network";
+
+const episodesKey = (seriesId: string) => `/api/cinema/series/${seriesId}/episodes`;
+
+/**
+ * Le menu « Épisodes » prêt avant qu'on l'ouvre (19/10/2026) : la liste de la saison, puis ses
+ * miniatures, gardées décodées (`episodeThumbs.ts`). Comme les planches de prévisualisation : rien
+ * avant la première image du film (`afterFirstPicture`), une requête à la fois, l'épisode en cours et
+ * ses voisins d'abord. Rien du tout en économie de données — le menu chargera à l'ouverture.
+ *
+ * La liste n'est demandée que si la réserve de SWR ne l'a pas déjà (ouverte depuis la fiche, elle
+ * y est) ; le menu la relit de toute façon à l'ouverture, pour les positions.
+ */
+export function usePrewarmEpisodes(seriesId: string | null, currentItemId: string, videoRef: RefObject<HTMLVideoElement | null>) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (!seriesId || currentResumeNetworkMode() === "économie") return;
+    return afterFirstPicture(videoRef.current, () => setReady(true));
+  }, [seriesId, currentItemId, videoRef]);
+  const { data } = useSWR<CinemaEpisodesPayload>(ready && seriesId ? episodesKey(seriesId) : null, fetcher, {
+    ...playerBootstrapOptions,
+    revalidateIfStale: false,
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+  });
+  useEffect(() => {
+    if (!ready || !data) return;
+    const season = data.seasons.find((s) => s.episodes.some((e) => e.jellyfinItemId === currentItemId));
+    if (!season) return;
+    const index = season.episodes.findIndex((e) => e.jellyfinItemId === currentItemId);
+    const urls = nearestFirst(season.episodes, index).flatMap((e) => (e.thumbnailUrl ? [e.thumbnailUrl] : []));
+    let cancelled = false;
+    warmThumbs(urls, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, data, currentItemId]);
+}
 
 /**
  * Le menu « Épisodes » du lecteur (19/10/2026, idée de l'administrateur d'une autre installation) :
@@ -30,7 +70,7 @@ export function PlayerEpisodesMenu({
   onPick: (episode: { itemId: string; title: string; resumeAt: number }) => void;
 }) {
   const t = useT();
-  const { data, error } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${seriesId}/episodes`, fetcher, {
+  const { data, error } = useSWR<CinemaEpisodesPayload>(episodesKey(seriesId), fetcher, {
     ...playerBootstrapOptions,
     revalidateOnMount: true,
     revalidateOnFocus: false,
@@ -91,8 +131,8 @@ export function PlayerEpisodesMenu({
           >
             <span className="relative block w-16 shrink-0 overflow-hidden rounded bg-black/40" style={{ aspectRatio: "16 / 9" }}>
               {ep.thumbnailUrl && (
-                // eslint-disable-next-line @next/next/no-img-element -- une vignette de 64 px, déjà servie en cache immuable
-                <img src={ep.thumbnailUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                // eslint-disable-next-line @next/next/no-img-element -- une vignette de 64 px, gardée décodée d'avance (`usePrewarmEpisodes`) ; ni paresseuse ni optimisée : elle doit être peinte avec le menu
+                <img src={ep.thumbnailUrl} alt="" className="h-full w-full object-cover" />
               )}
               {ep.watched && (
                 <span className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-brand-strong">

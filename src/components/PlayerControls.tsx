@@ -10,7 +10,8 @@ import { useT } from "@/components/TranslationProvider";
 import { formatTime } from "@/lib/playerClock";
 import { createLiquidPress, prefersReducedMotion } from "@/lib/liquidGlass/liquid";
 import { LiquidMenu } from "@/components/player/LiquidMenu";
-import { PlayerEpisodesMenu } from "@/components/player/PlayerEpisodesMenu";
+import { PlayerEpisodesMenu, usePrewarmEpisodes } from "@/components/player/PlayerEpisodesMenu";
+import { afterFirstPicture } from "@/lib/firstPicture";
 import { usePlayerItem } from "@/lib/usePlayerItem";
 import { PlayerDownloadRow } from "@/components/player/PlayerDownloadRow";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
@@ -396,6 +397,8 @@ export function PlayerControls({
   // La série d'un épisode et le droit de télécharger (19/10/2026) — voir `usePlayerItem`.
   const playerItem = usePlayerItem(itemId);
   const episodesSeriesId = onPlayEpisode ? (playerItem?.seriesId ?? null) : null;
+  // Le menu « Épisodes » prêt d'avance, après la première image — voir `usePrewarmEpisodes`.
+  usePrewarmEpisodes(episodesSeriesId, itemId, videoRef);
   // Au bureau seulement — `PlayerDownloadRow` en décide (§107).
   const downloadable = !!playerItem?.download;
   const [playing, setPlaying] = useState(false);
@@ -1429,7 +1432,6 @@ export function PlayerControls({
     if (!(tileCount > 0)) return;
     const video = videoRef.current;
     let cancelled = false;
-    let started = false;
     const loadFrom = (order: number[]) => {
       const next = order.shift();
       if (cancelled || next === undefined) return;
@@ -1438,30 +1440,12 @@ export function PlayerControls({
       img.onload = img.onerror = () => loadFrom(order);
       img.src = `/api/jellyfin/trickplay/tile?itemId=${itemId}&width=${trickplay.width}&index=${next}`;
     };
-    const begin = () => {
-      if (started || cancelled) return;
-      started = true;
-      detach();
+    const detach = afterFirstPicture(video, () => {
+      if (cancelled) return;
       const position = video && Number.isFinite(video.currentTime) ? video.currentTime : 0;
       const first = trickplayTileIndex(trickplay, position, tileCount);
       loadFrom(trickplayTileOrder(first, tileCount));
-    };
-    const ifReady = () => {
-      if (video && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA && !video.seeking) begin();
-    };
-    const detach = () => {
-      video?.removeEventListener("playing", begin);
-      video?.removeEventListener("canplay", ifReady);
-      video?.removeEventListener("seeked", ifReady);
-    };
-    if (!video) {
-      begin();
-    } else {
-      video.addEventListener("playing", begin);
-      video.addEventListener("canplay", ifReady);
-      video.addEventListener("seeked", ifReady);
-      ifReady();
-    }
+    });
     return () => {
       cancelled = true;
       detach();
