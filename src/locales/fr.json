@@ -2371,7 +2371,18 @@
       "introCaption": "Lecture du fichier téléchargé",
       "fileDownloaded": "Fichier téléchargé",
       "fileDownloading": "En cours de téléchargement",
-      "queued": "En file d'attente sur le serveur…"
+      "queued": "En file d'attente sur le serveur…",
+      "downloadEpisode": "Télécharger l'épisode",
+      "downloadSeason": "Télécharger la saison · {size}",
+      "seasonDone": "Saison téléchargée",
+      "seasonSheet": "{n} épisode à télécharger|{n} épisodes à télécharger",
+      "seasonFailed": "{n} épisode n'a pas pu être demandé : {error}|{n} épisodes n'ont pas pu être demandés : {error}",
+      "language": "Langue",
+      "languageHint": "Dans chaque épisode, la piste dans cette langue, sinon sa piste par défaut.",
+      "defaultTrack": "Piste par défaut",
+      "autoNext": "Télécharger automatiquement l'épisode suivant",
+      "autoNextHint": "À la moitié d'un épisode regardé hors ligne, le suivant se télécharge ; un épisode vu jusqu'au bout est effacé une fois le suivant arrivé.",
+      "tracksFailedEpisode": "Les pistes de cet épisode n'ont pas pu être lues."
     }
   },
   "cinema": {

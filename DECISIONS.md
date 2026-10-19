@@ -5799,7 +5799,31 @@ Les fragments vont tels quels à MediaSource (ManagedMediaSource sur iPhone) ; s
 que celle du fichier propose la lecture en ligne à la même position, ou dit qu'on est hors ligne. La
 position est gardée avec le téléchargement.
 
-**Pas encore** : séries et épisodes, lecture pendant le téléchargement depuis l'interface, ouverture de
+**Les épisodes** (19/10/2026, `episodeDownloads.ts`, `OfflineEpisodeDownload.tsx`). Un petit bouton par
+ligne d'épisode, à la Netflix, voulu par Louis plutôt qu'un sélecteur global : une icône qui dit l'état
+(rien, préparation, anneau d'avancement, téléchargé, échec) et ouvre la suite — la fenêtre de choix d'un
+film plus « Télécharger automatiquement l'épisode suivant » (ouvert par défaut), ou, une fois là, « Lire
+le fichier téléchargé » et « Supprimer » (confirmé). La ligne reste le bouton de l'épisode et sa lecture
+en ligne ne change pas ; le bouton de téléchargement est à côté, jamais dedans, et au bureau les flèches
+y vont (→, ←, ↑/↓ dans sa colonne). Les mêmes composants pour la liste du bureau (`CinemaEpisodeBrowser`)
+et la fiche du téléphone (`CinemaMobileDetail`). « Télécharger la saison » (en tête de la saison au
+bureau, sous les pastilles au téléphone, même seule) annonce la taille estimée et ne pose qu'une
+question pour toute la saison : la **langue** — les pistes diffèrent d'un épisode à l'autre —, gardée
+dans chaque épisode par `trackForLanguage` (la première dans la langue, sinon la piste par défaut ; la
+même règle que la piste préchoisie d'un film), la qualité, l'automatique ; les épisodes absents partent
+un à un, dans l'ordre. La place libre (`navigator.storage.estimate`) avertit sans bloquer : Chrome
+annonce un quota d'environ « utilisé + 10 Gio », l'avertissement peut être pessimiste. **Le
+téléchargement automatique** (carte blanche de Louis) : à la moitié d'un épisode lu depuis l'appareil,
+le suivant (`nextEpisodeIn`, les spéciaux à part) se demande aux mêmes langue, qualité et codec s'il
+n'est pas déjà là — avec du réseau seulement, sans rien dire sinon ; vu à 95 % (noté en partant, pas
+pendant le générique) ou jusqu'à `ended`, l'épisode s'efface dès qu'un épisode plus loin de la même
+chaîne est sur l'appareil. Le titre d'un épisode téléchargé s'écrit comme celui du lecteur
+(`displayTitle` : « Série — S01E02 · Titre »). Dans le lecteur hors ligne, « Épisode suivant » lance le
+fichier de l'appareil s'il est lisible, sinon la lecture en ligne s'il y a du réseau, sinon il n'y a
+pas de bouton (`offlineNextTarget`) ; la suite est celle notée à la demande (`episode.next`). Tests :
+`offline-episodes`, `offline-episodes-sweep`, `offline-episode-rows`, `offline-player-episodes`.
+
+**Pas encore** : lecture pendant le téléchargement depuis l'interface, ouverture de
 l'application sans réseau, position renvoyée à Jellyfin, sous-titres et aperçus de la barre.
 
 Tests : `offline-fmp4`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`.

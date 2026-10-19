@@ -16,6 +16,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import type { CinemaSeason, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
+import { OfflineEpisodeButton, OfflineSeasonDownload } from "@/components/offline/OfflineEpisodeDownload";
 
 // "Plus d'épisodes" — Netflix's own TV-app episode browser: seasons as a vertical list on the
 // left, that season's episodes (thumbnail/title/duration/synopsis) on the right. Opened from
@@ -27,6 +28,8 @@ export function CinemaEpisodeBrowser({
   title,
   seasons,
   sonarrId,
+  seriesItemId,
+  posterUrl,
   nextEpisodeId,
   onClose,
   onPlayEpisode,
@@ -35,6 +38,12 @@ export function CinemaEpisodeBrowser({
   seasons: CinemaSeason[];
   /** Ce qui permet de savoir ce qui manque, et de le demander. */
   sonarrId?: number;
+  /**
+   * La série chez Jellyfin — ce qui ouvre le téléchargement hors ligne des épisodes (bêta, §109) :
+   * le bouton de chaque ligne et « Télécharger la saison ». Absent, aucun des deux n'est rendu.
+   */
+  seriesItemId?: string;
+  posterUrl?: string | null;
   // The series' own "Lire"/"Reprendre" target (CinemaSeriesDetail's nextEpisode) — badged here
   // too so it's obvious at a glance which episode picking "Plus d'épisodes" would have landed on
   // anyway, without having to cross-reference against the detail sheet underneath.
@@ -81,6 +90,11 @@ export function CinemaEpisodeBrowser({
     return () => clearTimeout(timer);
   }, [selectedSeason]);
   const episodes = seasons.find((s) => s.seasonNumber === displayedSeason)?.episodes ?? [];
+  // Le téléchargement hors ligne des épisodes (§109).
+  const offlineSeries = useMemo(
+    () => (seriesItemId ? { seriesItemId, sonarrId: sonarrId ?? null, seriesTitle: title } : null),
+    [seriesItemId, sonarrId, title]
+  );
 
   // "Going deeper" from the detail sheet — see the hook's own doc comment and globals.css's note
   // on slide-in-right/slide-out-right for why this gets a slide instead of every other Cinema
@@ -131,6 +145,9 @@ export function CinemaEpisodeBrowser({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (playerOwnsKeyboard) return;
+      // Une feuille ouverte depuis une ligne (téléchargement hors ligne) a ses touches : Échap la
+      // referme, elle — pas cet écran derrière elle (règle 2 des fiches).
+      if (document.querySelector("[data-action-sheet]")) return;
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         requestClose();
@@ -139,11 +156,27 @@ export function CinemaEpisodeBrowser({
       const active = document.activeElement as HTMLElement | null;
       const inSeasons = active?.getAttribute("data-episode-season") === "true";
       const inEpisodes = active?.getAttribute("data-episode-item") === "true";
-      if (!inSeasons && !inEpisodes) return;
+      // Le bouton de téléchargement d'une ligne, à sa droite : → depuis l'épisode, ← pour y revenir,
+      // ↑/↓ d'un bouton de téléchargement à l'autre — une troisième colonne, comme celle des saisons.
+      const inDownloads = active?.getAttribute("data-episode-download") === "true";
+      if (!inSeasons && !inEpisodes && !inDownloads) return;
 
       if (e.key === "ArrowRight" && inSeasons) {
         e.preventDefault();
         containerRef.current?.querySelector<HTMLButtonElement>('[data-episode-item="true"]:not(:disabled)')?.focus();
+        return;
+      }
+      if (e.key === "ArrowRight" && inEpisodes) {
+        const download = active?.closest("[data-episode-row]")?.querySelector<HTMLButtonElement>('[data-episode-download="true"]');
+        if (download) {
+          e.preventDefault();
+          download.focus();
+        }
+        return;
+      }
+      if (e.key === "ArrowLeft" && inDownloads) {
+        e.preventDefault();
+        active?.closest("[data-episode-row]")?.querySelector<HTMLButtonElement>('[data-episode-item="true"]')?.focus();
         return;
       }
       if (e.key === "ArrowLeft" && inEpisodes) {
@@ -154,7 +187,7 @@ export function CinemaEpisodeBrowser({
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
         // Un bouton désactivé — une demande déjà faite — ne prend pas le focus : le sauter.
-        const selector = inSeasons ? '[data-episode-season="true"]' : '[data-episode-item="true"]:not(:disabled)';
+        const selector = inSeasons ? '[data-episode-season="true"]' : inDownloads ? '[data-episode-download="true"]' : '[data-episode-item="true"]:not(:disabled)';
         const items = Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>(selector) ?? []);
         const idx = items.indexOf(active as HTMLButtonElement);
         const next = e.key === "ArrowDown" ? items[Math.min(idx + 1, items.length - 1)] : items[Math.max(idx - 1, 0)];
@@ -233,16 +266,26 @@ export function CinemaEpisodeBrowser({
               on every intermediate season while scrubbing would be exactly the "ghosting" bug
               CinemaClient's own hero backdrop hit; see displayedSeason's own doc comment above. */}
           <div key={displayedSeason} className="mx-auto flex max-w-3xl animate-fade-in flex-col gap-2">
+            {/* « Télécharger la saison », en tête de la saison affichée (§109) : la taille estimée
+                sur le bouton, la question posée une fois pour tous ses épisodes. */}
+            {offlineSeries && episodes.length > 0 && (
+              <div className="flex justify-end px-3">
+                <OfflineSeasonDownload series={offlineSeries} seasons={seasons} seasonNumber={displayedSeason} posterUrl={posterUrl} size="desktop" />
+              </div>
+            )}
             {episodes.map((ep) => (
+              // La ligne est un conteneur, et non plus un bouton : le bouton de téléchargement est à
+              // côté de celui de l'épisode, jamais dedans (un bouton dans un bouton n'est pas du HTML
+              // valide). L'épisode garde `data-episode-item` et tout ce que les flèches en attendent.
+              <div key={ep.jellyfinItemId} data-episode-row="" className="flex items-center gap-1">
               <button
-                key={ep.jellyfinItemId}
                 data-episode-item="true"
                 // Focalisable quand même : les flèches parcourent la liste et font défiler le synopsis.
                 aria-disabled={!playerEnabled || undefined}
                 onClick={() => {
                   if (playerEnabled) onPlayEpisode(ep);
                 }}
-                className="flex items-start gap-4 rounded-lg p-3 text-left transition-colors hover:bg-white/10 active:transform-none active:bg-white/15 active:delay-75 focus-visible:bg-white/10 focus-visible:outline-none"
+                className="flex min-w-0 flex-1 items-start gap-4 rounded-lg p-3 text-left transition-colors hover:bg-white/10 active:transform-none active:bg-white/15 active:delay-75 focus-visible:bg-white/10 focus-visible:outline-none"
               >
                 <div className="relative w-40 shrink-0 sm:w-48">
                   <PosterImage src={ep.thumbnailUrl} alt={ep.title} aspectRatio="aspect-video" unoptimized subtle />
@@ -283,6 +326,8 @@ export function CinemaEpisodeBrowser({
                   {ep.overview && <p className="mt-1 line-clamp-2 text-xs text-muted">{ep.overview}</p>}
                 </div>
               </button>
+              {offlineSeries && <OfflineEpisodeButton series={offlineSeries} seasons={seasons} episode={ep} posterUrl={posterUrl} size="desktop" />}
+              </div>
             ))}
 
             <CinemaMissingEpisodes

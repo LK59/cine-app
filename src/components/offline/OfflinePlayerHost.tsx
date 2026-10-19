@@ -27,6 +27,9 @@ import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { refreshAfterPlayback } from "@/lib/swr";
 import { refreshResumeThresholds } from "@/lib/offline/resumeRules";
+import { autoNextDue, downloadNextEpisode, offlineNextTarget, useOnline, watchedThrough } from "@/lib/offline/episodeDownloads";
+import { offlinePlayable, useTrackLabeller } from "@/components/offline/OfflineDownloadControl";
+import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
 
 /**
  * Le lecteur des téléchargements hors ligne (bêta, 19/10/2026) — un hôte à part, voulu par Louis :
@@ -95,7 +98,17 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   const playback = usePlayback();
   const id = session.offline!.id;
   // Suivi en direct : la barre montre ce qui arrive pendant la lecture d'un téléchargement en cours.
-  const download = useOfflineDownloads().find((d) => d.id === id) ?? offlineDownloadById(id);
+  const downloads = useOfflineDownloads();
+  // Ce que le téléchargement était à l'ouverture : un épisode vu jusqu'au bout peut quitter
+  // l'appareil pendant que le lecteur est encore là (`markOfflineWatched`), et « Épisode suivant »
+  // doit encore savoir où aller.
+  const [opened] = useState(() => offlineDownloadById(id));
+  const download = downloads.find((d) => d.id === id) ?? offlineDownloadById(id) ?? opened;
+  // Vu à 95 % (ou fini) : noté à la fermeture plutôt qu'à l'instant, pour ne pas effacer le fichier
+  // pendant le générique qu'on regarde encore. `marked` : déjà fait par `ended`.
+  const watchedRef = useRef({ reached: false, marked: false });
+  const labeller = useTrackLabeller();
+  const online = useOnline();
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);
@@ -125,6 +138,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   // Le moteur, ouvert une fois pour cette séance.
   useEffect(() => {
     const video = videoRef.current;
+    const watched = watchedRef.current;
     const account = offlineAccount();
     const meta = offlineDownloadById(id);
     if (!video || !account || !meta) {
@@ -187,7 +201,10 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
       clearTimeout(openTimer);
       if (pictureTimer) clearTimeout(pictureTimer);
       video.removeEventListener("error", onMediaError);
-      if (video.currentTime > 0) saveOfflinePosition(id, video.currentTime);
+      if (!watched.marked && video.currentTime > 0) saveOfflinePosition(id, video.currentTime);
+      // Vu au-delà de 95 % : noté vu en partant — le téléchargement automatique l'efface si la suite
+      // est déjà là (`markOfflineWatched`).
+      if (watched.reached && !watched.marked) void markOfflineWatched(id);
       engine.close();
     };
     // Une seule ouverture par séance : la clé de l'hôte change avec elle.
@@ -199,10 +216,20 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     const video = videoRef.current;
     if (!video) return;
     let last = 0;
+    let askedNext = false;
     const onTime = () => {
       if (Math.abs(video.currentTime - last) >= 10) {
         last = video.currentTime;
         saveOfflinePosition(id, video.currentTime);
+      }
+      const d = offlineDownloadById(id);
+      const runtime = d?.runtimeSeconds || video.duration || 0;
+      if (watchedThrough(video.currentTime, runtime)) watchedRef.current.reached = true;
+      // Le téléchargement automatique (§109) : à mi-épisode, le suivant se demande — une fois par
+      // séance, sans bruit hors ligne ; un échec va au journal, pas à l'écran.
+      if (!askedNext && d?.episode?.autoNext && autoNextDue(video.currentTime, runtime)) {
+        askedNext = true;
+        void downloadNextEpisode(d, labeller).catch((error: unknown) => reportClientError(error, "component:hors-ligne", { download: id, stage: "épisode suivant" }));
       }
     };
     const onPlay = () => {
@@ -215,7 +242,10 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     };
     // Vu jusqu'au bout : noté avec le téléchargement (le téléchargement automatique en efface
     // l'épisode quand le suivant est là — `markOfflineWatched`).
-    const onEnded = () => void markOfflineWatched(id);
+    const onEnded = () => {
+      watchedRef.current.marked = true;
+      void markOfflineWatched(id);
+    };
     video.addEventListener("timeupdate", onTime);
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
@@ -226,7 +256,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
       video.removeEventListener("pause", onPause);
       video.removeEventListener("ended", onEnded);
     };
-  }, [id]);
+  }, [id, labeller]);
 
   // La lecture rapportée à Jellyfin comme par le lecteur en ligne, sous le même nom (« engine ») :
   // annonce, battements, arrêt — Jellyfin applique lui-même ses seuils de reprise, et la position est
@@ -265,6 +295,25 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   usePlayerBackClose(handleClose);
 
   const handleExpand = useCallback(() => playback.expand(), [playback]);
+
+  /**
+   * « Épisode suivant » d'un épisode téléchargé (§109) : le fichier sur l'appareil s'il est lisible —
+   * une nouvelle séance hors ligne —, sinon la lecture en ligne s'il y a du réseau, sinon pas de
+   * bouton. La suite en ligne garde son propre « Épisode suivant » par la liste que la fiche de la
+   * série a laissée dans la réserve de SWR.
+   */
+  const nextTarget = offlineNextTarget(download, downloads, online, offlinePlayable);
+  const seriesItemId = download?.episode?.seriesItemId;
+  const getNextOnline = useNextEpisodeFromCache(seriesItemId ? `/api/cinema/series/${seriesItemId}/episodes` : "");
+  const advance = () => {
+    if (!nextTarget) return;
+    if (nextTarget.offlineId) {
+      // Depuis le début, comme `advance` en ligne : c'est la suite qu'on enchaîne.
+      playback.play({ itemId: nextTarget.itemId, title: nextTarget.title, resumeAt: 0, offline: { id: nextTarget.offlineId } });
+      return;
+    }
+    playback.play({ itemId: nextTarget.itemId, title: nextTarget.title, resumeAt: 0, ...(seriesItemId ? { getNextEpisode: getNextOnline } : {}) });
+  };
   const { pos, size, isDragging, handlers } = useMiniPlayerDrag(isMini, handleExpand);
   usePlayerFocus(containerRef, !isMini);
 
@@ -384,8 +433,8 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
               loading={false}
               introSkip={null}
               creditsStart={null}
-              nextEpisode={null}
-              onAdvance={() => {}}
+              nextEpisode={nextTarget ? { itemId: nextTarget.itemId, title: nextTarget.title } : null}
+              onAdvance={advance}
             />
           </div>
         )
