@@ -214,7 +214,8 @@ language here applies in the Jellyfin apps too.
 Playback happens in the page, over the rows, and can be shrunk into a **draggable mini-player**
 that keeps playing while you browse. The player carries resume, audio and subtitle track
 selection with size and manual offset, chapters, playback speed, trickplay scrubbing previews,
-skip-intro and automatic next-episode advance, AirPlay and Chromecast.
+skip-intro and automatic next-episode advance, AirPlay and Chromecast, and
+[downloads for offline viewing](#downloads-for-offline-viewing).
 
 In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now works:
 
@@ -270,6 +271,23 @@ of the player, in French: [PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md).
      Then uncomment:
 <img src="docs/screenshots/cinema-playback-info.png" height="360">
 -->
+
+## Downloads for offline viewing
+
+*Beta.* A film, an episode or a whole season can be downloaded from its page to watch without a
+network, or on a link too weak for streaming. CineApp does not copy the original file: Jellyfin
+prepares a lighter version through its transcoding API — *Standard* (720p, about 2 Mbit/s) or
+*High* (1080p, about 4 Mbit/s), with the one audio track chosen at download — and the device keeps
+it in the browser's private storage, together with its text subtitles, scrubbing previews, artwork
+and intro/credits markers. A download can be played while it is still arriving. A series can fetch
+the next episode on its own and drop the ones already watched.
+
+A downloads page (the round button beside the home rows) lists what is on the device and how much
+room it takes. Without a network, the app opens on `/hors-ligne`, which plays those files with
+nothing asked of the server; positions reach Jellyfin when the network comes back. The app must
+stay in the foreground while a download arrives. Off for an installation with `OFFLINE_DOWNLOADS`,
+administrators only until `OFFLINE_DOWNLOADS_FOR_EVERYONE` is set — see
+[docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md) (in French).
 
 ## Keyboard and remote
 
@@ -724,6 +742,7 @@ Beside them: `auth.log`, `startup.log`, `notifications.log`, `subtitle-gen.log` 
 | **[ARCHITECTURE.svg](ARCHITECTURE.svg)** | The whole application on one zoomable page: system, interfaces, both players, one playback, caches, logs, security — on a phone, open it then *Raw* |
 | **[DOC-TECH.md](DOC-TECH.md)** | The in-browser player: the native path and the server player behind it, the remuxer, audio, generated subtitles, diagnostics |
 | **[PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md)** | A non-technical presentation of the player, in French |
+| **[docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md)** | Offline downloads: preparation by Jellyfin, storage on the device, the offline player and entry, settings — in French |
 | **[CLAUDE.md](CLAUDE.md)** | Architecture and conventions, for anyone working on the code |
 | **[DECISIONS.md](DECISIONS.md)** | Rules decided in one shared function, their callers and tests |
 | **[`tools/truehd-wasm/`](tools/truehd-wasm/)**, **[`tools/aac-wasm/`](tools/aac-wasm/)** | Reproducible builds of the committed TrueHD and AAC WebAssembly decoders: pinned FFmpeg, checked SHA-256 |

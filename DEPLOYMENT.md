@@ -26,12 +26,13 @@ repository, install Node, or write an `.env` file.
 | **Architecture** | `linux/amd64` |
 | **Listens on** | port `3000` inside the container, plain HTTP |
 | **Runs as** | uid `1001`, gid `1001`, not root |
-| **Keeps its state in** | `/app/data`: SQLite database and its daily backups, settings, generated secrets, logs, image cache, generated subtitles, report screenshots |
+| **Keeps its state in** | `/app/data`: SQLite database and its daily backups, settings, generated secrets, logs, image cache, generated subtitles, report screenshots, copies prepared for offline downloads |
 | **Reads** | your media folder, read-only and optional, for storage statistics only |
 | **Health check** | `GET /api/ping` answers when the server is up and can read its database |
 
-CineApp is a front end. It downloads, transcodes and stores nothing itself: it talks to the
-services you already run. Jellyfin (accounts and playback), TMDB (posters, synopses) and Radarr or
+CineApp is a front end. It downloads and transcodes nothing itself: it talks to the services you
+already run. The one thing it stores beyond its own state is the lighter copies Jellyfin prepares
+for offline downloads, kept a few days in its data volume. Jellyfin (accounts and playback), TMDB (posters, synopses) and Radarr or
 Sonarr (the library) are needed; everything else is optional, and a service left unconfigured is
 simply not shown.
 
@@ -317,7 +318,7 @@ at once, without a restart, unless the field says otherwise.
 | Page | What it holds |
 |---|---|
 | **Connections** | Address, key and *Test connection* for each service: Jellyfin, TMDB, Radarr and Sonarr (with the quality profile given to titles added from the app), Jellyseerr, qBittorrent, Bazarr, Jackett, ratings. The *Application* card: poster preparation (applies at the next start) and the notification contact. |
-| **Playback** | The built-in player, handing unplayable files to Jellyfin, black-bar framing, who sees the Chromecast button, and the Chromecast receiver. |
+| **Playback** | The built-in player, handing unplayable files to Jellyfin, black-bar framing, who sees the Chromecast button, the Chromecast receiver, and offline downloads (on or off, who may use them, the server quota). |
 | **Generated subtitles** | Provider, key, model and monthly budget for AI-translated subtitles, with the month's spending and the jobs. |
 | **Dialogue search** | Off by default. Indexes the films' subtitles so the cinema search finds a film by a line: the initial indexing (start, pause, resume, progress), the nightly update and its window, the languages, the index size and *Rebuild the index*. Greyed out until the films folder is mounted. |
 | **New accounts** | What an account gets until it chooses otherwise: language, home banner, Jellyfin tags blocked automatically on new accounts. And the welcome screen, offered again to everyone or removed. |
@@ -366,6 +367,15 @@ player or casting) and resumes a few minutes after; it can also be paused by han
 after a restart. The index lives in `data/repliques.db` (a few hundred kilobytes per film), is
 left out of the nightly database copy, and can be rebuilt at any time.
 
+**Offline downloads** (beta). A viewer can download a film, an episode or a season to watch without
+a network. Jellyfin prepares a lighter version through its transcoding API (720p at about 2 Mbit/s,
+or 1080p at about 4 Mbit/s), so it costs Jellyfin CPU, like the server player. No media folder needs mounting: the copy is written to
+`data/offline/`, fetched by the device into the browser's storage, and deleted from the server three
+days after its last download. Copies fully fetched by every device are also deleted, oldest first,
+once the total passes the server quota (50 GB by default). Administrators only until *for everyone*
+is turned on. **Account activity → Downloads** lists the server's copies and can delete one. Details,
+in French: [docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md).
+
 **Notifications.** The push keys are generated on first launch; nothing to set. Each person turns
 them on in **Account → Notifications**, on each device. On iPhone and iPad, add the app to the Home
 Screen first, then turn them on from inside it.
@@ -411,7 +421,8 @@ nothing is playing. `docker image prune` reclaims the old images.
 Everything is in the data volume. The app also copies its database every night into `backups/`
 inside it (not `repliques.db`, the dialogue index, which is rebuilt from the films), keeping seven days — a guard against a damaged database file, not against losing the
 disk. Copy the volume elsewhere for that, with the container stopped so the copy is consistent
-(the image cache rebuilds itself):
+(the image cache rebuilds itself, and `offline/` holds only copies the devices can ask for again —
+add `--exclude=./offline` to leave them out):
 
 ```bash
 docker compose stop
