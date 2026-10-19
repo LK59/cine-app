@@ -25,18 +25,33 @@ async function dir(parts, create) {
 }
 // \`create\` faux pour lire : un lecteur ou un rangement arrivé après une suppression recréait le
 // dossier, vide de \`meta.json\`, que rien ne voyait plus ni n'effaçait (relecture du 19/10/2026).
+// Un fichier ouvert en accès synchrone est verrouillé pour tout le navigateur : la page d'avant un
+// rechargement (une nouvelle version, iPhone, 19/10/2026) le tenait encore quand la nouvelle voulait le
+// lire — « InvalidStateError », un épisode affiché à 0 Mo et illisible. On attend qu'il se libère,
+// jusqu'à cinq secondes, avant de renoncer.
+const LOCKED = new Set(["InvalidStateError", "NoModificationAllowedError"]);
+async function open(f) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await f.createSyncAccessHandle();
+    } catch (error) {
+      if (!(error && LOCKED.has(error.name)) || attempt >= 25) throw error;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+}
 async function handle(path, create = true) {
   const key = path.join("/");
   let h = handles.get(key);
   if (!h) {
     const d = await dir(path.slice(0, -1), create);
     const f = await d.getFileHandle(path[path.length - 1], { create });
-    h = await f.createSyncAccessHandle();
+    h = await open(f);
     handles.set(key, h);
   }
   clearTimeout(timers.get(key));
-  // Fermé après vingt secondes sans usage : un fichier ouvert reste verrouillé.
-  timers.set(key, setTimeout(() => close(key), 20000));
+  // Fermé après cinq secondes sans usage : un fichier ouvert reste verrouillé pour les autres pages.
+  timers.set(key, setTimeout(() => close(key), 5000));
   return h;
 }
 function close(key) {
@@ -104,6 +119,11 @@ async function run(event) {
       try { const d = await dir(path.slice(0, -1), false); await d.removeEntry(path[path.length - 1], { recursive: true }); } catch {}
     } else if (op === "close") {
       closeUnder(path.join("/"));
+    } else if (op === "closeAll") {
+      for (const key of [...handles.keys()]) close(key);
+    } else if (op === "files") {
+      result = [];
+      try { const d = await dir(path, false); for await (const [name, h] of d.entries()) if (h.kind === "file") result.push(name); } catch {}
     }
     self.postMessage({ id, result });
   } catch (error) {
@@ -113,6 +133,21 @@ async function run(event) {
 `;
 
 let worker: Worker | null = null;
+
+/**
+ * La page s'en va (rechargement, fermeture) ou passe derrière : ses fichiers sont rendus tout de
+ * suite, pour qu'une autre page — la même après un rechargement — puisse les ouvrir. Rouverts au
+ * besoin par l'opération suivante.
+ */
+if (typeof window !== "undefined") {
+  const release = () => {
+    if (worker) worker.postMessage({ id: 0, op: "closeAll", path: [] });
+  };
+  window.addEventListener("pagehide", release);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") release();
+  });
+}
 let seq = 0;
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 
@@ -174,6 +209,8 @@ export const offlinePaths = (account: string, id?: string) => (id ? [ROOT, safeN
 export const deviceStore = {
   /** Les téléchargements de ce compte sur cet appareil (noms de dossiers). */
   list: (account: string) => call<string[]>("list", offlinePaths(account)),
+  /** Les fichiers d'un téléchargement (noms), sans rien ouvrir. */
+  files: (account: string, id: string) => call<string[]>("files", offlinePaths(account, id)),
   readMeta: async <T>(account: string, id: string): Promise<T | null> => {
     const text = await call<string | null>("readText", [...offlinePaths(account, id), "meta.json"]);
     if (!text) return null;

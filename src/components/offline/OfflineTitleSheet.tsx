@@ -28,6 +28,7 @@ import { BetaBadge, OfflinePlayButton, offlinePlayable, offlineProgress, offline
 import { DownloadStateButton } from "./OfflineEpisodeDownload";
 import { useOfflineImage } from "./useOfflineImage";
 import { setOfflineSheetOpen } from "@/lib/offline/offlineSheetOpen";
+import { releaseOfflineSheetEntry, useOfflineSheetBack } from "@/lib/offline/offlineSheetHistory";
 import type { OfflineOpenTarget } from "./OfflineDownloadsView";
 
 /**
@@ -86,11 +87,20 @@ export function OfflineTitleSheet({
   const nextCode =
     next?.episode && next.episode.episodeNumber !== null ? t("cinema.episodeShort", { episode: next.episode.episodeNumber, season: next.episode.seasonNumber }) : null;
   // La fiche en ligne passe par-dessus la page : celle-ci se ferme d'abord, elle la couvrirait.
-  const openOnline = onOpenTitle ? (target: OfflineOpenTarget) => (onClose(), onOpenTitle(target)) : undefined;
+  // L'entrée d'historique de la fiche est rendue d'abord : un retour parti après l'ouverture de la
+  // fiche en ligne l'aurait refermée.
+  const openOnline = onOpenTitle
+    ? (target: OfflineOpenTarget) => {
+        onClose();
+        void releaseOfflineSheetEntry().then(() => onOpenTitle(target));
+      }
+    : undefined;
   const onlineTarget: OfflineOpenTarget | null =
     film && film.radarrId !== null ? { type: "movie", id: film.radarrId } : series && series.sonarrId !== null ? { type: "series", id: series.sonarrId } : null;
 
   const exit = useSheetExit(onClose, { leaving, listening: !overviewOpen && !confirming });
+  // Retour (Android, navigateur) ferme la fiche, pas la page qui la porte.
+  useOfflineSheetBack(onClose, leaving);
   const swipe = useSwipeToDismiss(exit.requestClose);
   useLiquidDelegation(rootRef);
   const morph = useSheetTransition({

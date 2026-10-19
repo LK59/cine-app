@@ -8,6 +8,7 @@ import { INITIAL_NEWS_CONTENT, INITIAL_NEWS_SEED, INITIAL_NEWS_VERSION } from "@
 import type { NewsContentByLang } from "@/lib/news/content";
 import { NEWS_848_CONTENT, NEWS_848_SEED, NEWS_848_VERSION } from "@/lib/news/page848";
 import { NEWS_864_CONTENT, NEWS_864_SEED, NEWS_864_VERSION } from "@/lib/news/page864";
+import { NEWS_90_CONTENT, NEWS_90_SEED, NEWS_90_VERSION } from "@/lib/news/page90";
 import { NEWS_8672_CONTENT, NEWS_8672_FIRST_VERSION, NEWS_8672_REPUBLISH, NEWS_8672_SEED, NEWS_8672_VERSION } from "@/lib/news/page8672";
 
 // Réexporté, et défini ailleurs : le journal des erreurs a besoin du chemin et ne doit rien
@@ -585,6 +586,9 @@ function migrate(db: Database.Database): void {
   seedNewsPage(db, NEWS_8672_SEED, NEWS_8672_VERSION, NEWS_8672_CONTENT);
   // Complétée le lendemain (la rotation en paysage) et montrée de nouveau à tous (Louis, 19/10/2026).
   republishNewsPage(db, NEWS_8672_REPUBLISH, NEWS_8672_FIRST_VERSION, NEWS_8672_VERSION, NEWS_8672_CONTENT);
+  // Le téléchargement hors ligne (§109), en brouillon : Louis la publie depuis Activité → Nouveautés le
+  // jour où la fonction est ouverte à tous (19/10/2026).
+  seedNewsPage(db, NEWS_90_SEED, NEWS_90_VERSION, NEWS_90_CONTENT, Date.now(), "draft");
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
     const now = Date.now();
     db.prepare("INSERT OR IGNORE INTO onboarding (user_name, pending, updated_at) VALUES ('louis', 1, ?)").run(now);

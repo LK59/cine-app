@@ -190,12 +190,19 @@ async function load(current: string): Promise<void> {
   for (const id of ids) {
     const meta = await deviceStore.readMeta<OfflineDownload>(current, id).catch(() => null);
     if (!meta) {
-      // Un dossier sans description : un rangement arrivé après une suppression. Il ne se voyait
-      // nulle part et prenait de la place pour rien.
-      if (!downloads.some((d) => d.id === id) && !removals.has(id)) void deviceStore.remove(current, id).catch(() => {});
+      // Un dossier sans description et sans vidéo : un rangement arrivé après une suppression. Il ne
+      // se voyait nulle part et prenait de la place pour rien. Jamais un dossier qui a une vidéo : une
+      // description illisible un instant ne doit pas coûter un film.
+      const files = await deviceStore.files(current, id).catch(() => null);
+      if (files && !files.includes("video.mp4") && !files.includes("meta.json") && !downloads.some((d) => d.id === id) && !removals.has(id)) {
+        void deviceStore.remove(current, id).catch(() => {});
+      }
       continue;
     }
-    const size = await deviceStore.videoSize(current, id).catch(() => 0);
+    // La taille du fichier fait foi ; illisible (fichier tenu un instant par une autre page), celle
+    // notée au dernier morceau écrit — jamais 0, qui affichait un épisode entier « 0 Mo » et le faisait
+    // repartir de zéro (iPhone, 19/10/2026).
+    const size = await deviceStore.videoSize(current, id).catch(() => meta.bytes ?? 0);
     loaded.push({ ...meta, bytes: size });
   }
   if (account !== current) return;

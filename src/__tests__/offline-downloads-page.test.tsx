@@ -196,6 +196,8 @@ describe("OfflineDownloadsView", () => {
     await act(async () => new Promise((r) => setTimeout(r, 400)));
     fireEvent.click(screen.getByRole("button", { name: /^Ted Lasso/ }));
     fireEvent.click(screen.getByRole("button", { name: /player\.downloads\.openShort/ }));
+    // L'entrée d'historique de la fiche est rendue avant d'ouvrir la fiche en ligne (`releaseOfflineSheetEntry`).
+    await act(async () => new Promise((r) => setTimeout(r, 700)));
     expect(open.mock.calls).toEqual([[{ type: "movie", id: 42 }], [{ type: "series", id: 7 }]]);
   });
 
