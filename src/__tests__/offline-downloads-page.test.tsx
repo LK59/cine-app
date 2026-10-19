@@ -27,7 +27,7 @@ vi.mock("@/lib/offline/downloads", () => ({
   startOfflineDownload: async () => {},
 }));
 
-import { groupOfflineDownloads, offlineRemainingSeconds } from "@/lib/offline/downloadGroups";
+import { groupOfflineDownloads, offlineRemainingSeconds, offlineSeriesNext } from "@/lib/offline/downloadGroups";
 import { OfflineDownloadsView } from "@/components/offline/OfflineDownloadsView";
 
 function download(over: Partial<OfflineDownload>): OfflineDownload {
@@ -102,42 +102,79 @@ describe("groupOfflineDownloads", () => {
   });
 });
 
+describe("offlineSeriesNext", () => {
+  it("l'épisode commencé, sinon le premier pas vu jusqu'au bout, sinon le premier", () => {
+    const e1 = { ...episode("e1", 1, 1, 1), watchedToEnd: true };
+    const e2 = episode("e2", 1, 2, 2);
+    const e3 = { ...episode("e3", 1, 3, 3), positionSeconds: 600 };
+    const group = (eps: OfflineDownload[]) => groupOfflineDownloads(eps).series[0];
+    expect(offlineSeriesNext(group([e1, e2, e3]))!.id).toBe("e3");
+    expect(offlineSeriesNext(group([e1, e2]))!.id).toBe("e2");
+    expect(offlineSeriesNext(group([e1]))!.id).toBe("e1");
+  });
+});
+
 describe("OfflineDownloadsView", () => {
-  it("films puis séries, chaque saison sous son titre", () => {
+  it("une grille : les films puis les séries, une affiche chacun ; « En cours » seulement si quelque chose arrive", () => {
     list = [download({ id: "f1", title: "Dune" }), episode("e1", 1, 1, 4), episode("e2", 2, 3, 5)];
     render(<OfflineDownloadsView />);
     expect(screen.getByText("player.downloads.films")).toBeTruthy();
     expect(screen.getByText("player.downloads.series")).toBeTruthy();
-    expect(screen.getByText("Ted Lasso")).toBeTruthy();
-    expect(screen.getByText("player.downloads.season:1")).toBeTruthy();
-    expect(screen.getByText("player.downloads.season:2")).toBeTruthy();
-    expect(screen.getByText("Épisode 3")).toBeTruthy();
+    expect(screen.queryByText("player.downloads.inProgress")).toBeNull();
+    expect(screen.getByRole("button", { name: "Dune" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Ted Lasso" })).toBeTruthy();
+    // Les épisodes ne sont pas dans la grille : ils sont dans la fiche de la série.
+    expect(screen.queryByText("player.downloads.season:1")).toBeNull();
   });
 
-  it("Lire part du fichier téléchargé, à la position gardée ; grisé tant que rien n'est lisible", () => {
+  it("la fiche d'une série : ses saisons, ses épisodes, et Lire sur celui qu'on a commencé", () => {
+    list = [episode("e1", 1, 1, 4), { ...episode("e2", 2, 3, 5), positionSeconds: 1200 }];
+    render(<OfflineDownloadsView />);
+    fireEvent.click(screen.getByRole("button", { name: "Ted Lasso" }));
+    expect(screen.getByRole("dialog", { name: "Ted Lasso" })).toBeTruthy();
+    expect(screen.getByText("player.downloads.season:1")).toBeTruthy();
+    expect(screen.getByText("player.downloads.season:2")).toBeTruthy();
+    expect(screen.getByText("3. Épisode 3")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^common\.resume cinema\.episodeShort:3,2/ }));
+    expect(play).toHaveBeenCalledWith({ itemId: "ep-e2", title: "Ted Lasso — S02E03", resumeAt: 1200, offline: { id: "e2" } });
+    // Échap ferme la fiche, pas la page.
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("la fiche d'un film : son résumé et sa distribution gardés, en texte seul", () => {
     list = [
-      download({ id: "f1", itemId: "dune", title: "Dune", positionSeconds: 1200 }),
+      download({
+        id: "f1",
+        title: "Dune",
+        artwork: { overview: "Sur Arrakis.", year: 2021, genres: ["Science-fiction"], cast: ["Timothée Chalamet", "Zendaya"], series: null, hasLogo: false, hasBackdrop: false },
+      }),
+    ];
+    render(<OfflineDownloadsView />);
+    fireEvent.click(screen.getByRole("button", { name: "Dune" }));
+    expect(screen.getByText("Sur Arrakis.")).toBeTruthy();
+    expect(screen.getByText(/Timothée Chalamet, Zendaya/)).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("En cours : Lire grisé tant que rien n'est lisible, la barre et son pourcentage", () => {
+    list = [
+      download({ id: "f1", itemId: "dune", title: "Dune", state: "downloading", bytes: 420_000_000, serverDone: false }),
       download({ id: "f2", itemId: "arrival", title: "Arrival", state: "preparing", bytes: 0, serverBytes: 0, createdAt: 0 }),
     ];
     render(<OfflineDownloadsView />);
+    expect(screen.getByText("player.downloads.inProgress")).toBeTruthy();
     const [ready, waiting] = screen.getAllByRole("button", { name: /player\.downloads\.play/ });
     expect((waiting as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(ready);
-    expect(play).toHaveBeenCalledWith({ itemId: "dune", title: "Dune", resumeAt: 1200, offline: { id: "f1" } });
-    // Arrêté à 20 min, 1 h 20 restantes : ce qu'on veut savoir avant de reprendre.
-    expect(screen.getByText(/player\.downloads\.stoppedAt:20min · cinema\.timeRemaining:1h20/)).toBeTruthy();
-  });
-
-  it("une barre de progression et son pourcentage pendant le téléchargement", () => {
-    list = [download({ id: "f1", state: "downloading", bytes: 420_000_000, serverDone: false })];
-    render(<OfflineDownloadsView />);
-    const bar = screen.getByRole("progressbar");
-    expect(bar.getAttribute("aria-valuenow")).toBe("42");
+    expect(play).toHaveBeenCalledWith({ itemId: "dune", title: "Dune", resumeAt: 0, offline: { id: "f1" } });
+    expect(screen.getAllByRole("progressbar")[0].getAttribute("aria-valuenow")).toBe("42");
   });
 
   it("supprimer demande toujours confirmation", async () => {
     list = [download({ id: "f1", title: "Dune" })];
     render(<OfflineDownloadsView />);
+    fireEvent.click(screen.getByRole("button", { name: "Dune" }));
     fireEvent.click(screen.getByRole("button", { name: "player.downloads.remove" }));
     expect(remove).not.toHaveBeenCalled();
     const confirm = screen.getAllByRole("button", { name: /player\.downloads\.remove/ }).at(-1)!;
@@ -145,13 +182,15 @@ describe("OfflineDownloadsView", () => {
     expect(remove).toHaveBeenCalledWith("f1");
   });
 
-  it("« Ouvrir la fiche » seulement dans le cinéma : le film par Radarr, la série par Sonarr", () => {
-    list = [download({ id: "f1", radarrId: 42 }), episode("e1", 1, 1, 4)];
-    const { rerender } = render(<OfflineDownloadsView />);
-    expect(screen.queryByRole("button", { name: "player.downloads.open" })).toBeNull();
+  it("« Fiche en ligne » seulement dans le cinéma : le film par Radarr, la série par Sonarr", () => {
+    list = [download({ id: "f1", title: "Dune", radarrId: 42 }), episode("e1", 1, 1, 4)];
     const open = vi.fn();
+    const { rerender } = render(<OfflineDownloadsView />);
+    fireEvent.click(screen.getByRole("button", { name: "Dune" }));
+    expect(screen.queryByRole("button", { name: "player.downloads.open" })).toBeNull();
     rerender(<OfflineDownloadsView onOpenTitle={open} />);
     fireEvent.click(screen.getByRole("button", { name: "player.downloads.open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ted Lasso" }));
     fireEvent.click(screen.getByRole("button", { name: "player.downloads.openSeries" }));
     expect(open.mock.calls).toEqual([[{ type: "movie", id: 42 }], [{ type: "series", id: 7 }]]);
   });

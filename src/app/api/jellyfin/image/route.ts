@@ -42,11 +42,20 @@ export async function GET(req: NextRequest) {
   // de l'original de TheTVDB, sans consigne de cache (10/10/2026). 500 px : la largeur rendue d'une
   // carte (112–200 px) sur un écran ×2–×3. Voir `jellyfinPoster`.
   const poster = kind === "poster";
+  // `kind=logo` : le logo du titre, gardé avec un téléchargement hors ligne pour l'ouverture de la
+  // lecture et la fiche sans réseau (19/10/2026) — PNG transparent, à la largeur d'un écran.
+  const logo = kind === "logo";
   const params = new URLSearchParams(
-    backdrop ? { quality: "80", maxWidth: "1280" } : poster ? { quality: "85", maxWidth: "500" } : { quality: "90", maxWidth: "300" }
+    backdrop
+      ? { quality: "80", maxWidth: "1280" }
+      : poster
+        ? { quality: "85", maxWidth: "500" }
+        : logo
+          ? { maxWidth: "800" }
+          : { quality: "90", maxWidth: "300" }
   );
   if (tag) params.set("tag", tag);
-  const url = `${config.jellyfin.url}/Items/${itemId}/Images/${backdrop ? "Backdrop/0" : "Primary"}?${params}`;
+  const url = `${config.jellyfin.url}/Items/${itemId}/Images/${backdrop ? "Backdrop/0" : logo ? "Logo" : "Primary"}?${params}`;
 
   try {
     const res = await jellyfinFetch(url, {

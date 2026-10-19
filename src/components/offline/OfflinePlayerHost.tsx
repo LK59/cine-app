@@ -11,7 +11,8 @@ import { usePlayback, type PlaybackSession } from "@/components/PlaybackProvider
 import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
-import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
+import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock, type PlaybackIntroArt } from "@/lib/playbackIntro";
+import { BACKDROP_FILE, LOGO_FILE, offlineImage, peekOfflineImage } from "@/lib/offline/artwork";
 import { useIntroPlaybackStarted } from "@/lib/introEnd";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { PlaybackInfoPanel, type PlaybackPanelData } from "@/components/PlaybackInfoPanel";
@@ -330,6 +331,26 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     if (introPlaying) finishIntro(thisIntro);
   }, [introPlaying, thisIntro]);
   const introPhase: IntroPhase = !introEligible || isMini ? "gone" : introPlaying ? "picture" : error ? "gone" : "waiting";
+  // Le logo et le visuel gardés sur l'appareil (`artwork.ts`) : sans réseau, ceux du catalogue ne
+  // viennent pas, et l'ouverture écrivait « Ted Lasso — S01E05 · … » en toutes lettres (Louis,
+  // 19/10/2026). L'ouverture fige ce qu'elle montre à son montage : elle attend leur lecture, déjà
+  // faite d'ordinaire au chargement des téléchargements, 400 ms au plus.
+  const [deviceArt, setDeviceArt] = useState<PlaybackIntroArt | null | undefined>(() => offlineIntroArt(opened, true));
+  useEffect(() => {
+    if (deviceArt !== undefined) return;
+    let cancelled = false;
+    const account = offlineAccount();
+    const give = (art: PlaybackIntroArt | null) => !cancelled && setDeviceArt((current) => (current === undefined ? art : current));
+    const timer = setTimeout(() => give(offlineIntroArt(opened, false) ?? null), 400);
+    if (account && opened) {
+      void Promise.all([offlineImage(account, opened.id, LOGO_FILE), offlineImage(account, opened.id, BACKDROP_FILE)]).then(() => give(offlineIntroArt(opened, false) ?? null));
+    }
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [deviceArt, opened]);
+  const introArt = mergeIntroArt(deviceArt ?? null, session.introArt ?? null);
 
   if (typeof document === "undefined") return null;
   const style: React.CSSProperties = isMini
@@ -364,15 +385,15 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         playsInline
         className={`h-full w-full ${isMini ? "object-cover" : "object-contain"} transition-opacity duration-300 ${ready ? "opacity-100" : "opacity-0"}`}
       />
-      {introPhase !== "gone" && (
+      {introPhase !== "gone" && deviceArt !== undefined && (
         <PlaybackIntro
           phase={introPhase}
           startedAt={introStartedAt}
           clockKey={thisIntro}
-          art={session.introArt ?? null}
+          art={introArt}
           imageShown={ready}
           fallbackName={session.title}
-          caption={[...introCaption({ ...session.introArt, resumeSeconds: session.resumeAt ?? null }, t), t("player.downloads.introCaption")]}
+          caption={[...introCaption({ ...introArt, resumeSeconds: session.resumeAt ?? null }, t), t("player.downloads.introCaption")]}
           onClose={handleClose}
           closeLabel={t("common.close")}
           className="absolute inset-0 z-[15]"
@@ -416,6 +437,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
             <PlayerControls
               downloadedFraction={download ? (download.state === "done" ? 1 : download.bytes / Math.max(1, download.expectedBytes)) : undefined}
               offlineTrickplay={trickplay}
+              logoUrl={introArt?.logoUrl ?? null}
               videoRef={videoRef}
               containerRef={containerRef}
               itemId={session.itemId}
@@ -454,6 +476,38 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
  * serveur pendant un téléchargement en cours), ce que contient le fichier, ce que MediaSource a reçu.
  * Les intitulés en français, comme ceux des autres lecteurs : c'est une surface de diagnostic.
  */
+/**
+ * L'ouverture d'un téléchargement, faite de ce que l'appareil garde : le nom de la série (ou du film),
+ * son logo et son visuel, la place de l'épisode. `undefined` avec `peekOnly` : une image gardée n'a
+ * pas encore été lue.
+ */
+function offlineIntroArt(d: OfflineDownload | null, peekOnly: boolean): PlaybackIntroArt | null | undefined {
+  const account = offlineAccount();
+  if (!d || !account) return null;
+  const image = (has: boolean | undefined, name: string) => {
+    if (!has) return null;
+    const url = peekOfflineImage(account, d.id, name);
+    return url === undefined ? (peekOnly ? undefined : null) : url;
+  };
+  const logoUrl = image(d.artwork?.hasLogo, LOGO_FILE);
+  const backdropUrl = image(d.artwork?.hasBackdrop, BACKDROP_FILE);
+  if (logoUrl === undefined || backdropUrl === undefined) return undefined;
+  const episode = d.episode;
+  return {
+    name: episode?.seriesTitle || d.title,
+    logoUrl,
+    backdropUrl,
+    ...(episode && episode.episodeNumber !== null ? { season: episode.seasonNumber, episode: episode.episodeNumber, episodeTitle: episode.episodeTitle } : {}),
+  };
+}
+
+/** Ce que l'appareil garde d'abord ; ce que le catalogue sait pour le reste (en ligne). */
+function mergeIntroArt(device: PlaybackIntroArt | null, online: PlaybackIntroArt | null): PlaybackIntroArt | null {
+  if (!device) return online;
+  if (!online) return device;
+  return { ...online, ...device, logoUrl: device.logoUrl ?? online.logoUrl, backdropUrl: device.backdropUrl ?? online.backdropUrl };
+}
+
 function offlinePanelData(
   d: OfflineDownload,
   engine: OfflineEngine | null,

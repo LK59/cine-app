@@ -70,3 +70,13 @@ export function offlineRemainingSeconds(d: OfflineDownload): number | null {
   if (!d.runtimeSeconds || d.positionSeconds < 30) return null;
   return Math.max(0, d.runtimeSeconds - d.positionSeconds);
 }
+
+/**
+ * L'épisode que « Lire » lance dans la fiche hors ligne d'une série : celui qu'on a commencé, sinon le
+ * premier pas encore vu jusqu'au bout, dans l'ordre de la série — la règle de « Reprendre » puis
+ * « À suivre », appliquée à ce qui est sur l'appareil. Tous vus : le premier.
+ */
+export function offlineSeriesNext(group: OfflineSeriesGroup): OfflineDownload | null {
+  const ordered = group.seasons.flatMap((s) => s.episodes).filter((d) => d.state !== "failed");
+  return ordered.find((d) => !d.watchedToEnd && offlineRemainingSeconds(d) !== null) ?? ordered.find((d) => !d.watchedToEnd) ?? ordered[0] ?? null;
+}

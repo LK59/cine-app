@@ -7,6 +7,7 @@ import { reportClientError } from "@/lib/reportClientError";
 import { applyResumeRules } from "./resumeRules";
 import { storeOfflineSubtitles, type OfflineSubtitle } from "./subtitles";
 import { storeOfflineTrickplay, type OfflineTrickplay } from "./trickplay";
+import { BACKDROP_FILE, LOGO_FILE, forgetOfflineImages, offlineImage, storeOfflineArtwork, type OfflineArtwork } from "./artwork";
 import type { OfflineJob } from "./jobs";
 import type { OfflineCodec, OfflineQuality } from "./quality";
 
@@ -108,6 +109,11 @@ export interface OfflineDownload {
    * téléchargement d'avant le 19/10/2026 au soir, rattrapé au chargement) ; `null` : le titre n'en a pas.
    */
   trickplay?: OfflineTrickplay | null;
+  /**
+   * La fiche gardée avec le film (`artwork.ts`) : résumé, année, genres, logo, grand visuel. Absente :
+   * pas encore cherchée (rattrapée au chargement) ; `null` : le titre n'est plus connu du serveur.
+   */
+  artwork?: OfflineArtwork | null;
 }
 
 const CHUNK = 8 * 1024 * 1024;
@@ -177,7 +183,25 @@ export async function initOfflineDownloads(): Promise<void> {
   // une fois, avec du réseau (sans, rien n'est noté, et on réessaiera au prochain chargement).
   if (typeof navigator !== "undefined" && navigator.onLine !== false) {
     for (const d of loaded) if (d.trickplay === undefined && d.state !== "failed") void keepTrickplay(current, d.id, d.itemId);
+    for (const d of loaded) if (d.artwork === undefined && d.state !== "failed") void keepArtwork(current, d.id, d.itemId);
   }
+  // Le logo et le visuel lus d'avance : l'ouverture de la lecture fige ce qu'elle montre à son montage.
+  for (const d of loaded) if (d.artwork) warmArtwork(current, d);
+}
+
+async function keepArtwork(owner: string, id: string, itemId: string): Promise<void> {
+  const artwork = await storeOfflineArtwork(owner, id, itemId);
+  if (artwork === undefined || account !== owner) return;
+  const updated = patch(id, { artwork });
+  if (updated) {
+    warmArtwork(owner, updated);
+    await saveMeta(updated);
+  }
+}
+
+function warmArtwork(owner: string, d: OfflineDownload): void {
+  if (d.artwork?.hasLogo) void offlineImage(owner, d.id, LOGO_FILE);
+  if (d.artwork?.hasBackdrop) void offlineImage(owner, d.id, BACKDROP_FILE);
 }
 
 async function keepTrickplay(owner: string, id: string, itemId: string): Promise<void> {
@@ -276,6 +300,8 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
   });
   // Les aperçus de la barre, pour chercher un passage sans réseau.
   void keepTrickplay(owner, job.id, request.itemId);
+  // La fiche (résumé, logo, visuel), pour la page des téléchargements et l'ouverture sans réseau.
+  void keepArtwork(owner, job.id, request.itemId);
   // L'affiche par la route d'images de l'application : celle du catalogue est souvent chez TMDB, d'où
   // `fetch` ne peut rien lire sans CORS (relevé au premier essai réel, 19/10/2026 — aucune affiche gardée).
   {
@@ -304,7 +330,10 @@ export function removeOfflineDownload(id: string): Promise<void> {
   // « Échec » (Louis, 19/10/2026).
   const removal = (async () => {
     await fetch(`/api/offline/jobs/${id}`, { method: "DELETE" }).catch(() => {});
-    if (owner) await deviceStore.remove(owner, id).catch(() => {});
+    if (owner) {
+      forgetOfflineImages(owner, id);
+      await deviceStore.remove(owner, id).catch(() => {});
+    }
   })();
   removals.set(id, removal);
   void removal.finally(() => {

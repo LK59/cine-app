@@ -404,8 +404,10 @@ export function AutoNextToggle({ on, onChange }: { on: boolean; onChange: (on: b
         <span className="block text-sm font-medium text-white">{t("player.downloads.autoNext")}</span>
         <span className="block text-xs text-subtle">{t("player.downloads.autoNextHint")}</span>
       </span>
-      <span aria-hidden className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${on ? "bg-accent-500" : "bg-white/20"}`}>
-        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${on ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+      {/* Ouvert : piste blanche, pastille sombre. L'accent de l'app est blanc, et la pastille blanche
+          s'y perdait — un ovale blanc sans position lisible (Louis, iPhone, 19/10/2026). */}
+      <span aria-hidden className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${on ? "bg-white" : "bg-white/20"}`}>
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full transition-transform ${on ? "translate-x-[18px] bg-ink" : "translate-x-0.5 bg-white"}`} />
       </span>
     </button>
   );
