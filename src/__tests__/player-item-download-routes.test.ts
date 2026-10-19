@@ -103,6 +103,14 @@ describe("/api/player/download", () => {
     expect(logDownload).toHaveBeenCalledWith("mathis", { itemId: EP, title: "Série — S01E02 · Deux", sizeBytes: 1_100_000_000 });
   });
 
+  it("une plage depuis zéro : une ligne, avec la taille du fichier entier", async () => {
+    allowed.mockResolvedValue(true);
+    upstream.mockResolvedValue(file(206, { "Content-Length": "16", "Content-Range": "bytes 0-15/1100000000" }));
+    await downloadGET(req({ range: "bytes=0-15" }), params(EP));
+    await vi.waitFor(() => expect(logDownload).toHaveBeenCalledTimes(1));
+    expect(logDownload.mock.calls[0][1].sizeBytes).toBe(1_100_000_000);
+  });
+
   it("une reprise : la plage part à Jellyfin, la réponse partielle revient telle quelle, sans seconde ligne", async () => {
     allowed.mockResolvedValue(true);
     upstream.mockResolvedValue(file(206, { "Content-Range": "bytes 500-1099999999/1100000000" }));

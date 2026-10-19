@@ -61,7 +61,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
 
   // Le début du fichier seulement : une reprise (une plage plus loin) n'est pas un second téléchargement.
   if (!range || /^bytes=0-/.test(range)) {
-    const length = Number(res.headers.get("Content-Length"));
+    // La taille du fichier : le total de `Content-Range` pour une plage depuis zéro, sinon la longueur.
+    const total = Number(res.headers.get("Content-Range")?.split("/")[1]);
+    const length = Number.isFinite(total) && total > 0 ? total : Number(res.headers.get("Content-Length"));
     void jellyfin
       .getItemNaming(session.jfId, itemId)
       .catch(() => null)
