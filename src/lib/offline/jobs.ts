@@ -10,6 +10,7 @@ import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
 import { logError } from "@/lib/logger";
 import { parseInit, scanFragments } from "./fmp4";
+import { logOfflineEvent, noteOfflineTitle, type JellyfinNaming } from "./events";
 import { expectedBytes, OFFLINE_AUDIO_BPS, OFFLINE_QUALITIES, type OfflineCodec, type OfflineQuality } from "./quality";
 
 /**
@@ -133,11 +134,13 @@ async function describeItem(itemId: string): Promise<{ fileVersion: string; medi
   });
   if (!res.ok) throw new OfflineRefusal(`Jellyfin a répondu ${res.status}`, 502);
   const page = (await res.json()) as {
-    Items?: { Type?: string; RunTimeTicks?: number; MediaSources?: { Id?: string; ETag?: string; MediaStreams?: { Type?: string; Index?: number }[] }[] }[];
+    Items?: (JellyfinNaming & { RunTimeTicks?: number; MediaSources?: { Id?: string; ETag?: string; MediaStreams?: { Type?: string; Index?: number }[] }[] })[];
   };
   const item = page.Items?.[0];
   const source = item?.MediaSources?.[0];
   if (!item || !source?.Id) throw new OfflineRefusal("Titre introuvable", 404);
+  // Le nom du titre et de ses pistes, pour le journal : la même réponse, rien à redemander.
+  noteOfflineTitle(itemId, item);
   if (item.Type !== "Movie" && item.Type !== "Episode") throw new OfflineRefusal("Seuls les films et les épisodes se téléchargent", 400);
   const runtimeSeconds = (item.RunTimeTicks ?? 0) / 1e7;
   if (!(runtimeSeconds > 0)) throw new OfflineRefusal("Durée inconnue", 409);
@@ -180,6 +183,9 @@ export async function requestOfflineJob(input: {
     )
     .get(input.itemId, item.fileVersion, input.audioIndex, input.quality, input.codec) as Row | undefined;
   let id: string;
+  // Ce que le journal dit de la version au moment de la demande : déjà prête (rien à préparer),
+  // en préparation (un autre compte l'a demandée), relancée après un échec, ou nouvelle.
+  const copy = !existing ? "new" : existing.status === "done" ? "ready" : existing.status === "failed" ? "retried" : "preparing";
   if (existing) {
     id = existing.id;
     if (existing.status === "failed") {
@@ -198,6 +204,8 @@ export async function requestOfflineJob(input: {
     ).run(id, input.itemId, item.fileVersion, input.audioIndex, input.quality, input.codec, expected, item.runtimeSeconds, now, now);
   }
   db.prepare("INSERT OR IGNORE INTO offline_requests (account, job_id, created_at) VALUES (?, ?, ?)").run(input.account, id, now);
+  const asked = offlineJobFor(input.account, id)!;
+  void logOfflineEvent("requested", asked, { user: input.account, copy, expectedBytes: asked.expectedBytes });
   pump();
   return offlineJobFor(input.account, id)!;
 }
@@ -225,9 +233,22 @@ export function forgetOfflineJob(account: string, id: string): boolean {
   const removed = db.prepare("DELETE FROM offline_requests WHERE account = ? AND job_id = ?").run(account, id).changes > 0;
   if (!removed) return false;
   const others = db.prepare("SELECT COUNT(*) AS n FROM offline_requests WHERE job_id = ?").get(id) as { n: number };
-  const row = db.prepare("SELECT status FROM offline_jobs WHERE id = ?").get(id) as { status: string } | undefined;
-  if (others.n === 0 && row && row.status !== "done") dropJob(id);
+  const row = db.prepare("SELECT * FROM offline_jobs WHERE id = ?").get(id) as Row | undefined;
+  const stopped = others.n === 0 && !!row && row.status !== "done";
+  if (row) {
+    const job = fromRow(row);
+    // Une version prête retirée de l'appareil reste sur le serveur ; avant, c'est une annulation —
+    // et la préparation s'arrête si plus personne ne l'attend (`stopped`).
+    const done = row.status === "done";
+    void logOfflineEvent(done ? "removed" : "cancelled", job, { user: account, status: row.status, bytes: job.bytes, ...(!done && { stopped }) });
+  }
+  if (stopped) dropJob(id);
   return true;
+}
+
+/** Les comptes qui attendent une version, pour les lignes qui les concernent tous. */
+function accountsOf(id: string): string[] {
+  return (getDb().prepare("SELECT account FROM offline_requests WHERE job_id = ? ORDER BY created_at").all(id) as { account: string }[]).map((r) => r.account);
 }
 
 function dropJob(id: string): void {
@@ -236,6 +257,83 @@ function dropJob(id: string): void {
   getDb().prepare("DELETE FROM offline_requests WHERE job_id = ?").run(id);
   getDb().prepare("DELETE FROM offline_jobs WHERE id = ?").run(id);
   fs.rm(offlineFile(id), { force: true }, () => {});
+}
+
+interface AdminRow extends Row {
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  accessed_at: number;
+  accounts: string | null;
+}
+
+/** Une version telle que l'Activité la montre à l'administrateur : son état, ses dates, ses comptes. */
+export interface OfflineCopy extends OfflineJob {
+  createdAt: number;
+  startedAt: number | null;
+  finishedAt: number | null;
+  accessedAt: number;
+  /** Quand le balayage l'effacera s'il ne se passe rien d'ici là ; `null` tant qu'elle se prépare. */
+  expiresAt: number | null;
+  /** Les comptes qui l'attendent (ou l'ont sur leur appareil), dans l'ordre de leur demande. */
+  accounts: string[];
+}
+
+/** Combien de jours une version prête reste sur le serveur après son dernier téléchargement. */
+export const OFFLINE_KEEP_DAYS = KEEP_MS / (24 * 3600_000);
+
+/**
+ * Toutes les versions du serveur, pour l'Activité (administrateur seul) : les préparations d'abord,
+ * puis les plus récemment touchées. L'expiration se calcule avec les règles du balayage lui-même
+ * (`sweepOfflineJobs`), pour que la date affichée soit celle où il passera.
+ */
+export function listOfflineCopies(): OfflineCopy[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT j.*, (SELECT GROUP_CONCAT(account, char(10)) FROM (SELECT account FROM offline_requests r WHERE r.job_id = j.id ORDER BY r.created_at)) AS accounts
+       FROM offline_jobs j
+       ORDER BY CASE j.status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END, j.accessed_at DESC`
+    )
+    .all() as AdminRow[];
+  return rows.map((row) => ({
+    ...fromRow(row),
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    accessedAt: row.accessed_at,
+    expiresAt: row.status === "done" ? row.accessed_at + KEEP_MS : row.status === "failed" ? (row.finished_at ?? row.created_at) + FAILED_KEEP_MS : null,
+    accounts: row.accounts ? row.accounts.split("\n") : [],
+  }));
+}
+
+/** La place que prennent les versions (`data/offline`) et celle qui reste sur le disque des données. */
+export function offlineDiskUsage(): { usedBytes: number; freeBytes: number | null } {
+  let usedBytes = 0;
+  try {
+    for (const name of fs.readdirSync(offlineDir())) {
+      try {
+        usedBytes += fs.statSync(path.join(offlineDir(), name)).size;
+      } catch {
+        /* effacé entre-temps */
+      }
+    }
+  } catch {
+    /* pas encore de dossier */
+  }
+  return { usedBytes, freeBytes: freeBytes() };
+}
+
+/**
+ * L'administrateur efface une version du serveur, depuis l'Activité. Une préparation en cours
+ * s'arrête ; les appareils qui l'avaient déjà entière la gardent (elle est chez eux), ceux qui la
+ * téléchargeaient encore recevront 404 et diront qu'elle n'existe plus.
+ */
+export function deleteOfflineCopy(id: string, admin: string): boolean {
+  const row = getDb().prepare("SELECT * FROM offline_jobs WHERE id = ?").get(id) as Row | undefined;
+  if (!row) return false;
+  void logOfflineEvent("deleted", fromRow(row), { user: admin, accounts: accountsOf(id), status: row.status, bytes: fromRow(row).bytes });
+  dropJob(id);
+  return true;
 }
 
 /** Lance les préparations en attente, dans la limite de `MAX_RUNNING`. */
@@ -259,7 +357,9 @@ async function run(job: OfflineJob): Promise<void> {
   const playSessionId = `${job.id}${job.generation}`;
   const state: Running = { controller, bytes: 0, playSessionId };
   live.running.set(job.id, state);
-  db.prepare("UPDATE offline_jobs SET status = 'running', started_at = ?, bytes = 0, error = NULL WHERE id = ?").run(Date.now(), job.id);
+  const startedAt = Date.now();
+  db.prepare("UPDATE offline_jobs SET status = 'running', started_at = ?, bytes = 0, error = NULL WHERE id = ?").run(startedAt, job.id);
+  void logOfflineEvent("started", job, { accounts: accountsOf(job.id), generation: job.generation, expectedBytes: job.expectedBytes });
   fs.mkdirSync(offlineDir(), { recursive: true });
   const file = offlineFile(job.id);
   let failure: string | null = null;
@@ -330,11 +430,27 @@ async function run(job: OfflineJob): Promise<void> {
   }
   const stillThere = db.prepare("SELECT 1 FROM offline_jobs WHERE id = ?").get(job.id);
   if (stillThere) {
+    const finishedAt = Date.now();
+    const durationMs = finishedAt - startedAt;
     if (failure) {
-      if (failure !== "annulé") logError("offline", new Error(`préparation ${job.id} (${job.itemId}) : ${failure}`));
-      db.prepare("UPDATE offline_jobs SET status = 'failed', error = ?, bytes = ?, finished_at = ? WHERE id = ?").run(failure, state.bytes, Date.now(), job.id);
+      // L'échec s'écrit une fois, en ligne `offline` de niveau erreur — comptée comme avant parmi les
+      // erreurs du serveur. C'était un `logError` dont la pile, née ici, ne disait rien de plus ; la
+      // ligne porte en plus le titre et les comptes.
+      if (failure !== "annulé") {
+        void logOfflineEvent("failed", job, { level: "error", accounts: accountsOf(job.id), reason: failure, bytes: state.bytes, durationMs, generation: job.generation });
+      }
+      db.prepare("UPDATE offline_jobs SET status = 'failed', error = ?, bytes = ?, finished_at = ? WHERE id = ?").run(failure, state.bytes, finishedAt, job.id);
     } else {
-      db.prepare("UPDATE offline_jobs SET status = 'done', bytes = ?, finished_at = ?, accessed_at = ? WHERE id = ?").run(state.bytes, Date.now(), Date.now(), job.id);
+      db.prepare("UPDATE offline_jobs SET status = 'done', bytes = ?, finished_at = ?, accessed_at = ? WHERE id = ?").run(state.bytes, finishedAt, finishedAt, job.id);
+      void logOfflineEvent("ready", job, {
+        accounts: accountsOf(job.id),
+        bytes: state.bytes,
+        durationMs,
+        // Combien de fois plus vite que le film lui-même : la question qu'on se pose en attendant.
+        speed: durationMs > 0 ? Math.round((job.runtimeSeconds / (durationMs / 1000)) * 10) / 10 : null,
+        runtimeSeconds: Math.round(job.runtimeSeconds),
+        generation: job.generation,
+      });
     }
   }
   pump();
@@ -362,9 +478,12 @@ async function lastFragmentTime(file: string, size: number): Promise<number | nu
 export function sweepOfflineJobs(now = Date.now()): void {
   const db = getDb();
   const stale = db
-    .prepare("SELECT id FROM offline_jobs WHERE (status = 'done' AND accessed_at < ?) OR (status = 'failed' AND COALESCE(finished_at, created_at) < ?)")
-    .all(now - KEEP_MS, now - FAILED_KEEP_MS) as { id: string }[];
-  for (const { id } of stale) dropJob(id);
+    .prepare("SELECT * FROM offline_jobs WHERE (status = 'done' AND accessed_at < ?) OR (status = 'failed' AND COALESCE(finished_at, created_at) < ?)")
+    .all(now - KEEP_MS, now - FAILED_KEEP_MS) as AdminRow[];
+  for (const row of stale) {
+    void logOfflineEvent("expired", fromRow(row), { accounts: accountsOf(row.id), status: row.status, bytes: row.bytes, lastAccess: row.accessed_at });
+    dropJob(row.id);
+  }
   // Les fichiers sans ligne (une suppression interrompue) : effacés aussi.
   try {
     const known = new Set((db.prepare("SELECT id FROM offline_jobs").all() as { id: string }[]).map((r) => r.id));

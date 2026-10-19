@@ -773,7 +773,60 @@
         "background": "Vuelta del segundo plano"
       }
     },
-    "jellyfinDown": "Jellyfin inaccesible desde las {time}"
+    "jellyfinDown": "Jellyfin inaccesible desde las {time}",
+    "downloads": {
+      "title": "Descargas",
+      "open": "Abrir",
+      "intro": "Las versiones sin conexión que el servidor guarda ahora, quién las pidió y las últimas descargas de cada uno. Una versión lista se queda {n} días después de su última descarga; borrarla no la quita de los dispositivos que ya la tienen.",
+      "ready": "Listas",
+      "preparing": "En preparación",
+      "queuedHint": "{n} en espera",
+      "failed": "Fallidas",
+      "disk": "En el disco",
+      "free": "{size} libres",
+      "copies": "Versiones en el servidor ({n})",
+      "noCopies": "Ninguna versión en el servidor.",
+      "events": "Últimas descargas ({n} d)",
+      "noEvents": "Ninguna descarga reciente.",
+      "status": {
+        "done": "Lista",
+        "running": "En preparación",
+        "queued": "En espera",
+        "failed": "Fallida"
+      },
+      "quality": {
+        "standard": "Estándar",
+        "high": "Alta"
+      },
+      "progress": "{done} de {total} · {pct} %",
+      "took": "lista en {d}",
+      "forAccounts": "para {who}",
+      "nobody": "Ya nadie la espera",
+      "lastAccess": "última descarga {when}",
+      "expiresOn": "se borra el {date}",
+      "delete": "Borrar",
+      "deleteConfirm": "Borrar del servidor",
+      "deleted": "Versión borrada",
+      "stopped": "preparación detenida",
+      "copy": {
+        "new": "versión nueva",
+        "ready": "ya lista en el servidor",
+        "preparing": "ya en preparación",
+        "retried": "relanzada tras un fallo"
+      },
+      "event": {
+        "requested": "Pedido",
+        "started": "Preparación iniciada",
+        "ready": "Listo",
+        "failed": "Preparación fallida",
+        "fetched": "Recibido en el dispositivo",
+        "cancelled": "Cancelado",
+        "removed": "Quitado del dispositivo",
+        "expired": "Borrado del servidor (caducado)",
+        "deleted": "Borrado del servidor",
+        "download": "Archivo original descargado"
+      }
+    }
   },
   "radarr": {
     "pageTitle": "Películas",

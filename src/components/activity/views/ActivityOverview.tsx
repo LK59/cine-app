@@ -9,6 +9,7 @@ import {
   CalendarClock,
   Clapperboard,
   Clock,
+  Download,
   FastForward,
   Hourglass,
   KeyRound,
@@ -41,6 +42,8 @@ import type { Seance } from "@/lib/activity/seances";
 import { liveAccounts, pendingReports } from "@/lib/activity/summary";
 import { ActivityLink, goTo } from "@/components/activity/nav";
 import { NEWS_ADMIN_KEY, NewsTiles, type NewsAdminData } from "@/components/activity/views/ActivityNews";
+import { DOWNLOADS_ADMIN_KEY, DownloadsTiles } from "@/components/activity/views/ActivityDownloads";
+import type { DownloadsOverview } from "@/lib/activity/offlineDownloads";
 
 interface Overview {
   now: number;
@@ -314,6 +317,32 @@ function NewsPanel() {
   );
 }
 
+/**
+ * Les téléchargements en quatre chiffres (19/10/2026) ; les versions, leurs comptes et les derniers
+ * gestes dans leur vue. Rien tant que le serveur n'a jamais rien préparé ni rien journalisé : un
+ * panneau de zéros ne dirait rien à personne.
+ */
+function DownloadsPanel() {
+  const t = useT();
+  const { data } = useSWR<DownloadsOverview>(DOWNLOADS_ADMIN_KEY, fetcher, { refreshInterval: 60_000 });
+  if (!data || (data.copies.length === 0 && data.events.length === 0)) return null;
+  return (
+    <Panel
+      title={t("activity.downloads.title")}
+      icon={Download}
+      action={
+        <ActivityLink to={{ kind: "downloads" }} className="text-xs text-accent-400 hover:underline">
+          {t("activity.downloads.open")}
+        </ActivityLink>
+      }
+    >
+      <div className="p-3">
+        <DownloadsTiles data={data} />
+      </div>
+    </Panel>
+  );
+}
+
 /** La vue d'ensemble : en direct, à regarder, la semaine, les comptes, le fil des séances. */
 export function ActivityOverview() {
   const t = useT();
@@ -405,6 +434,9 @@ export function ActivityOverview() {
 
       {/* Les Nouveautés : qui a vu la dernière page, et comment (DECISIONS.md §73). */}
       <NewsPanel />
+
+      {/* Les téléchargements : les versions prêtes sur le serveur, et qui a emporté quoi. */}
+      <DownloadsPanel />
 
       {/* Le fichier ou l'appareil : le verdict de chaque titre qui a échoué. */}
       <DiagnosisPanel items={data.household.diagnosis} now={now} days={data.household.days} />

@@ -217,6 +217,11 @@ const ADMIN_ONLY_READS: RegExp[] = [
   // Le contrôle de la bibliothèque : chaque titre et chaque dossier, tags bloqués compris (§90). La
   // route le vérifie aussi (`adminOnly`).
   /^\/api\/admin\/library-check(\/|$)/,
+  // Les téléchargements vus de l'activité : les versions du serveur, qui les a demandées, et ce que
+  // chacun a emporté — titres cachés par un tag bloqué compris (19/10/2026). La route le vérifie
+  // aussi (`adminOnly`). Son effacement (`DELETE /api/admin/offline/<id>`) n'est pas dans la liste
+  // blanche des écritures : refusé à un compte ordinaire d'office.
+  /^\/api\/admin\/offline(\/|$)/,
 ];
 
 function isAdminOnlyRead(pathname: string): boolean {

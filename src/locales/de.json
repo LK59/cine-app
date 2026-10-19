@@ -773,7 +773,60 @@
         "background": "Rückkehr aus dem Hintergrund"
       }
     },
-    "jellyfinDown": "Jellyfin nicht erreichbar seit {time}"
+    "jellyfinDown": "Jellyfin nicht erreichbar seit {time}",
+    "downloads": {
+      "title": "Downloads",
+      "open": "Öffnen",
+      "intro": "Die Offline-Versionen, die der Server gerade aufbewahrt, wer sie angefordert hat, und die letzten Downloads aller Konten. Eine fertige Version bleibt {n} Tage nach ihrem letzten Download; Löschen entfernt sie nicht von Geräten, die sie schon haben.",
+      "ready": "Fertig",
+      "preparing": "In Vorbereitung",
+      "queuedHint": "{n} wartend",
+      "failed": "Fehlgeschlagen",
+      "disk": "Auf der Festplatte",
+      "free": "{size} frei",
+      "copies": "Versionen auf dem Server ({n})",
+      "noCopies": "Keine Version auf dem Server.",
+      "events": "Letzte Downloads ({n} T)",
+      "noEvents": "Kein aktueller Download.",
+      "status": {
+        "done": "Fertig",
+        "running": "In Vorbereitung",
+        "queued": "Wartend",
+        "failed": "Fehlgeschlagen"
+      },
+      "quality": {
+        "standard": "Standard",
+        "high": "Hoch"
+      },
+      "progress": "{done} von {total} · {pct} %",
+      "took": "fertig in {d}",
+      "forAccounts": "für {who}",
+      "nobody": "Niemand wartet mehr darauf",
+      "lastAccess": "zuletzt heruntergeladen {when}",
+      "expiresOn": "wird am {date} gelöscht",
+      "delete": "Löschen",
+      "deleteConfirm": "Vom Server löschen",
+      "deleted": "Version gelöscht",
+      "stopped": "Vorbereitung gestoppt",
+      "copy": {
+        "new": "neue Version",
+        "ready": "schon fertig auf dem Server",
+        "preparing": "schon in Vorbereitung",
+        "retried": "nach einem Fehler neu gestartet"
+      },
+      "event": {
+        "requested": "Angefordert",
+        "started": "Vorbereitung gestartet",
+        "ready": "Fertig",
+        "failed": "Vorbereitung fehlgeschlagen",
+        "fetched": "Vom Gerät abgerufen",
+        "cancelled": "Abgebrochen",
+        "removed": "Vom Gerät entfernt",
+        "expired": "Vom Server gelöscht (abgelaufen)",
+        "deleted": "Vom Server gelöscht",
+        "download": "Originaldatei heruntergeladen"
+      }
+    }
   },
   "radarr": {
     "pageTitle": "Filme",
