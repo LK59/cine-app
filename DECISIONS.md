@@ -5763,3 +5763,43 @@ sur Chromium, souris rejouée après le touchend sur iOS) ; son `change` faisait
 doigt un instant, sans saut. `inputPointerRef` retient ce qui a saisi l'input en dernier (`pointerType`,
 `keyboard`) : tant que c'est un doigt, son `change` est ignoré — la position affichée ne vient que du
 glissement relatif. La souris rejouée n'émet pas de pointerdown et ne l'efface donc pas.
+
+## 109. Le téléchargement hors ligne (bêta) : Jellyfin prépare, l'appareil garde, un lecteur à part
+
+**La règle.** Un film se télécharge pour une lecture sans réseau depuis sa fiche (Lire, Bande-annonce,
+puis Télécharger). Une fenêtre demande toujours la piste son — préchoisie dans la langue du compte — et la
+qualité — Standard préchoisie —, validées par « Télécharger ». Deux qualités : Standard, 2 Mb/s (Jellyfin
+choisit le 720p), Haute, 4 Mb/s (le plus bas débit où il garde le 1080p), tranchées à l'œil sur quatre
+extraits (lot « Qualité hors ligne » des tests divers) : pas de différence visible avec un encodeur
+réglé à la main, donc Jellyfin plutôt qu'un encodeur dans l'image. Ouvert à tous les comptes — ce n'est
+pas le fichier d'origine du §107, que seul le droit Jellyfin ouvre —, coupé pour toute l'installation
+par `OFFLINE_DOWNLOADS`. Marqué « Bêta » partout où il paraît.
+
+**Le serveur** (`src/lib/offline/jobs.ts`, tables `offline_jobs` / `offline_requests`). Jellyfin
+transcode en MP4 fragmenté ; l'application l'écrit dans `data/offline/<id>.mp4` au fil de l'eau, et
+l'appareil télécharge déjà ce qui est écrit (`/api/offline/jobs/<id>/file`, plages bornées à l'écrit).
+Une version (titre, ETag du fichier, piste, qualité, codec) sert tous les comptes qui la demandent ;
+gardée trois jours après le dernier téléchargement ; effacée dès que plus personne ne l'attend si elle
+n'est pas finie. Deux préparations à la fois (`MAX_RUNNING`, à mesurer). N'est « prête » qu'une
+préparation dont le dernier fragment arrive dans les trente dernières secondes du film ; deux minutes
+sans octet, c'est un échec. Un redémarrage reprend de zéro sous une nouvelle `generation`, et l'appareil
+recommence.
+
+**L'appareil** (`deviceStore.ts`, `downloads.ts`). OPFS, `cine-offline/<compte>/<id>/`, écrit et lu par
+un worker en accès synchrone : `createWritable` recopierait le film entier à chaque morceau. La taille
+du fichier dit ce qui est là ; un seul onglet télécharge par compte (`navigator.locks`) ; écran gardé
+allumé pendant un téléchargement visible ; `persist()` au premier. Le gestionnaire est un rond à côté de
+« Tous les… », au bureau et au téléphone.
+
+**Le lecteur** (`OfflinePlayerHost`, `offlineEngine.ts`, `fmp4.ts`). Un chemin à part, voulu par Louis
+pour que la lecture en ligne n'en dépende jamais : il ne partage que `PlayerControls` et le mini-lecteur.
+Les fragments vont tels quels à MediaSource (ManagedMediaSource sur iPhone) ; seul l'en-tête est retouché
+(`hev1` → `hvc1`, Safari refusant `hev1`, à la condition que le `hvcC` porte les jeux de paramètres).
+`mp4Demux.ts` refuse toujours le MP4 fragmenté. Le menu son montre toutes les pistes du film : une autre
+que celle du fichier propose la lecture en ligne à la même position, ou dit qu'on est hors ligne. La
+position est gardée avec le téléchargement.
+
+**Pas encore** : séries et épisodes, lecture pendant le téléchargement depuis l'interface, ouverture de
+l'application sans réseau, position renvoyée à Jellyfin, sous-titres et aperçus de la barre.
+
+Tests : `offline-fmp4`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`.

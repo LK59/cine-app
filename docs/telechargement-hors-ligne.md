@@ -1,7 +1,9 @@
 # Téléchargement pour lecture hors ligne
 
-État : **conception**. Rien n'est encore implémenté. Ce document fixe l'architecture retenue et
-les mesures faites sur le serveur avant d'écrire du code.
+État : **bêta pour les films** (DECISIONS.md §109) — préparation par Jellyfin en deux qualités,
+téléchargement pendant la préparation avec reprise, gestionnaire, lecteur à part. La suite de ce
+document est la conception d'origine ; là où elle diffère, le §109 fait foi (Jellyfin seul, plusieurs
+préparations à la fois, accès à tous les comptes, piste son choisie au téléchargement).
 
 ## Pourquoi pas un téléchargement « partiel »
 

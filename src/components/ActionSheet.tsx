@@ -40,11 +40,16 @@ interface Props {
    * à l'ordinateur). Au téléphone, rien ne change. Les autres feuilles gardent leur forme.
    */
   centerOnWide?: boolean;
+  /**
+   * Un contenu entre l'en-tête et les actions — des choix à faire avant de confirmer (la fenêtre de
+   * téléchargement hors ligne, 19/10/2026 : piste son et qualité). Absent partout ailleurs.
+   */
+  children?: ReactNode;
 }
 
 const CLOSE_THRESHOLD = 80; // px dragged down to trigger close
 
-export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSubtitle, poster: livePoster, actions, role = "dialog", centerOnWide = false }: Props) {
+export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSubtitle, poster: livePoster, actions, role = "dialog", centerOnWide = false, children }: Props) {
   /**
    * L'en-tête reste celui de l'ouverture pendant la sortie.
    *
@@ -229,6 +234,8 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
             </div>
           </div>
         )}
+
+        {children}
 
         {/* Actions */}
         <div className="py-1.5">

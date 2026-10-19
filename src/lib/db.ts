@@ -542,6 +542,40 @@ function migrate(db: Database.Database): void {
       value TEXT NOT NULL
     );
   `);
+  /*
+   * Le téléchargement hors ligne (bêta, 19/10/2026 — `src/lib/offline/jobs.ts`) : une ligne par
+   * version légère que Jellyfin prépare sur le disque de l'application, partagée par tous les comptes
+   * qui demandent la même (titre, fichier, piste, qualité, codec) ; et qui l'a demandée. `generation`
+   * change quand une préparation interrompue repart de zéro : les octets d'avant ne sont plus les mêmes,
+   * et l'appareil qui les gardait recommence.
+   */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS offline_jobs (
+      id             TEXT    PRIMARY KEY,
+      item_id        TEXT    NOT NULL,
+      file_version   TEXT    NOT NULL,
+      audio_index    INTEGER NOT NULL,
+      quality        TEXT    NOT NULL,
+      codec          TEXT    NOT NULL,
+      status         TEXT    NOT NULL,
+      generation     INTEGER NOT NULL DEFAULT 1,
+      bytes          INTEGER NOT NULL DEFAULT 0,
+      expected_bytes INTEGER NOT NULL,
+      runtime_s      REAL    NOT NULL,
+      error          TEXT,
+      created_at     INTEGER NOT NULL,
+      started_at     INTEGER,
+      finished_at    INTEGER,
+      accessed_at    INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_offline_jobs_key ON offline_jobs(item_id, file_version, audio_index, quality, codec);
+    CREATE TABLE IF NOT EXISTS offline_requests (
+      account    TEXT    NOT NULL,
+      job_id     TEXT    NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (account, job_id)
+    );
+  `);
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");

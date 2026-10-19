@@ -1,5 +1,6 @@
 "use client";
 
+import { OfflineDownloadsButton } from "@/components/offline/OfflineDownloadsButton";
 import { onRealHover } from "@/lib/pointerHover";
 import { HeroBackdrop } from "@/components/cinema/HeroBackdrop";
 import { ActionSheet } from "@/components/ActionSheet";
@@ -1241,7 +1242,9 @@ export function CinemaClient() {
       {/* « Tous les films / séries » en haut à droite, en rond comme sur téléphone (08/10/2026) ;
           l'aide du clavier se range à sa gauche. Toujours là depuis le 13/10/2026 : l'option qui
           le masquait n'était choisie par personne et doublait chaque écran d'un cas à tenir. */}
-      <div className="fixed right-4 z-10" style={{ top: "max(1rem, env(safe-area-inset-top))" }}>
+      <div className="fixed right-4 z-10 flex items-center gap-2" style={{ top: "max(1rem, env(safe-area-inset-top))" }}>
+        {/* Le gestionnaire des téléchargements hors ligne (bêta), à côté de « Tous les… » (Louis, 19/10/2026). */}
+        <OfflineDownloadsButton />
         <CinemaBrowseAllButton mediaType={mediaType} compact />
       </div>
       <CinemaShortcutsGuide />

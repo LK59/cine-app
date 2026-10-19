@@ -1,5 +1,6 @@
 "use client";
 
+import { OfflineDownloadControl } from "@/components/offline/OfflineDownloadControl";
 import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -578,6 +579,20 @@ export function CinemaMobileDetail({
             <Video size={16} />
             {t("cinema.trailer")}
           </button>
+        )}
+        {/* Le téléchargement hors ligne (bêta, 19/10/2026), films seulement pour l'instant : sous la
+            bande-annonce, collé à elle (la marge de 1rem de la bande-annonce reste sous le bloc). */}
+        {!isSeries && !fileMissing && playerEnabled && (
+          <OfflineDownloadControl
+            variant="wide"
+            wideSpacing={lead.trailerKey ? "-mt-2 mb-4" : "mb-4"}
+            itemId={item.jellyfinItemId}
+            radarrId={"radarrId" in item ? (item.radarrId ?? null) : null}
+            title={item.title}
+            year={item.year ?? null}
+            posterUrl={item.posterUrl ?? null}
+            runtimeMinutes={"runtimeMinutes" in item ? (item.runtimeMinutes ?? null) : null}
+          />
         )}
 
         {/* Avec le synopsis plutôt qu'avec l'année : placée plus haut, elle repoussait « Lire ». */}

@@ -24,6 +24,8 @@ export async function GET(req: NextRequest) {
     // before it mounts a player at all — which of the two it mounts depends on it — and before it
     // offers the account option that selects it.
     playerServerFallback: config.player.serverFallback,
+    // Le téléchargement hors ligne (bêta) : le bouton des fiches et le gestionnaire n'existent qu'avec lui.
+    offlineDownloads: config.player.offlineDownloads,
     // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).
     homeContinueHero: config.home.continueHero,
     ...(session ? { configured: configuredServices(config) } : {}),

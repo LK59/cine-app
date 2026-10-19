@@ -108,6 +108,12 @@ export interface PlaybackSession {
    */
   labSample?: { file: string; sizeBytes: number | null };
   /**
+   * Le fichier téléchargé pour une lecture hors ligne (bêta, `src/lib/offline/`) : lu par son propre
+   * lecteur (`OfflinePlayerHost`) depuis l'appareil, sans rien demander au serveur — un chemin à part,
+   * pour que la lecture en ligne n'en dépende jamais.
+   */
+  offline?: { id: string };
+  /**
    * Une scène ouverte depuis une réplique (recherche de répliques, lecture à début − 5 s) : rien
    * n'est rapporté à Jellyfin ni gardé pour une reprise — ni battement, ni arrêt, ni « vu », ni
    * position gardée sur l'appareil —, et pas d'épisode suivant, tant que dix minutes n'ont pas été

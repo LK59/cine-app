@@ -28,6 +28,7 @@ import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
+import { OfflineDownloadControl } from "@/components/offline/OfflineDownloadControl";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
@@ -442,6 +443,21 @@ export function CinemaMovieDetail({
                 </span>
                 <span className="text-sm font-medium">{t("cinema.trailer")}</span>
               </button>
+            )}
+
+            {/* Le téléchargement hors ligne (bêta, 19/10/2026) : Lire, Bande-annonce, puis Télécharger (Louis). */}
+            {!fileMissing && (
+              <OfflineDownloadControl
+                variant="row"
+                rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+                badgeClassName={MENU_BADGE}
+                itemId={item.jellyfinItemId}
+                radarrId={item.radarrId ?? null}
+                title={item.title}
+                year={item.year ?? null}
+                posterUrl={item.posterUrl ?? null}
+                runtimeMinutes={item.runtimeMinutes ?? null}
+              />
             )}
 
             <button

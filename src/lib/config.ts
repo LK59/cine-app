@@ -121,6 +121,11 @@ export const config = {
     get serverFallback() {
       return optional("PLAYER_SERVER_FALLBACK", "true") === "true";
     },
+    // Le téléchargement hors ligne (bêta) : chaque compte peut demander une version légère d'un film,
+    // préparée par Jellyfin (`src/lib/offline/`). Coupé, ni bouton ni préparation — la route refuse.
+    get offlineDownloads() {
+      return optional("OFFLINE_DOWNLOADS", "true") === "true";
+    },
     // Whether the picture is enlarged to hide black bars baked into the file (see pictureFrame.ts).
     // Measured on the server from Jellyfin's trickplay thumbnails — no video is decoded — so it
     // needs trickplay images to exist; without them the picture is simply shown as it is.

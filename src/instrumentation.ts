@@ -95,6 +95,15 @@ export async function register() {
       console.error("integrite: démarrage", error);
     }
 
+    // Le téléchargement hors ligne (bêta) : les préparations coupées par le redémarrage repartent,
+    // et les versions que plus personne ne télécharge sont effacées (`offline/jobs.ts`).
+    try {
+      const { startOfflineJobs } = await import("./lib/offline/jobs");
+      startOfflineJobs();
+    } catch (error) {
+      console.error("hors ligne: démarrage", error);
+    }
+
     // Non-blocking cache warmup — fire and forget, never delays startup
     setTimeout(() => {
       import("./lib/server-cache").then(async ({ cachedMovies, cachedSeries }) => {

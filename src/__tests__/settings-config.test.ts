@@ -23,6 +23,7 @@ const saved = { ...process.env };
 const HOT: [key: string, read: () => unknown, env: string, app: string, envRead: unknown, appRead: unknown, fallbackRead: unknown][] = [
   ["PLAYER_SERVER_FALLBACK", () => config.player.serverFallback, "false", "true", false, true, true],
   ["PLAYER_ENABLED", () => config.player.enabled, "false", "true", false, true, true],
+  ["OFFLINE_DOWNLOADS", () => config.player.offlineDownloads, "false", "true", false, true, true],
   ["PLAYER_AUTO_FRAME", () => config.player.autoFrame, "false", "true", false, true, true],
   ["APP_LANGUAGE", () => config.app.language, "de", "fr", "de", "fr", "en"],
   ["NEW_ACCOUNT_BLOCKED_TAGS", () => config.accounts.newBlockedTags, "a", "prive", "a", "prive", ""],

@@ -1,0 +1,38 @@
+import { NextRequest, NextResponse } from "next/server";
+import { SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionFull } from "@/lib/session";
+import { config } from "@/lib/config";
+import { isJellyfinId } from "@/lib/jellyfinPath";
+import { assertVisible } from "@/lib/itemVisibility";
+import { OfflineRefusal, requestOfflineJob, type OfflineCodec, type OfflineQuality } from "@/lib/offline/jobs";
+
+/**
+ * Demander un téléchargement hors ligne (bêta) : Jellyfin prépare la version, l'appareil la suit par
+ * `GET /api/offline/jobs/<id>`. Ouvert à tous les comptes — ce n'est pas le fichier d'origine, que
+ * seul le droit Jellyfin « Autoriser les téléchargements » ouvre (`/api/player/download`) —, sauf
+ * réglage de l'installation, et seulement pour un titre que le compte voit.
+ */
+export async function POST(req: NextRequest) {
+  if (!config.player.enabled || !config.player.offlineDownloads) return NextResponse.json({ error: "Téléchargement hors ligne désactivé" }, { status: 404 });
+  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
+  if (!session?.u) return new NextResponse(null, { status: 401 });
+  const body = (await req.json().catch(() => null)) as { itemId?: unknown; audioIndex?: unknown; quality?: unknown; codec?: unknown } | null;
+  const itemId = body?.itemId;
+  const audioIndex = body?.audioIndex;
+  const quality = body?.quality;
+  const codec = body?.codec ?? "hevc";
+  if (!isJellyfinId(itemId) || typeof audioIndex !== "number" || !Number.isInteger(audioIndex) || audioIndex < 0) {
+    return NextResponse.json({ error: "Demande invalide" }, { status: 400 });
+  }
+  if (quality !== "standard" && quality !== "high") return NextResponse.json({ error: "Qualité inconnue" }, { status: 400 });
+  if (codec !== "hevc" && codec !== "h264") return NextResponse.json({ error: "Codec inconnu" }, { status: 400 });
+  const refused = await assertVisible(session, itemId);
+  if (refused) return refused;
+  try {
+    const job = await requestOfflineJob({ account: session.u, itemId, audioIndex, quality: quality as OfflineQuality, codec: codec as OfflineCodec });
+    return NextResponse.json({ job }, { headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) {
+    if (error instanceof OfflineRefusal) return NextResponse.json({ error: error.message }, { status: error.status });
+    throw error;
+  }
+}

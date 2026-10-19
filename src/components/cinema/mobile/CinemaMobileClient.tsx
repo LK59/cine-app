@@ -1,5 +1,6 @@
 "use client";
 
+import { OfflineDownloadsButton } from "@/components/offline/OfflineDownloadsButton";
 import useSWR from "swr";
 import { memo, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -653,7 +654,9 @@ export function CinemaMobileClient() {
             ouvrait la même recherche que l'onglet « Recherche » de la barre du bas, toujours à
             portée de pouce : retirée le 08/10/2026. Toujours affiché depuis le 13/10/2026 : l'option
             qui le masquait a disparu. */}
-        <div className="ml-auto flex items-center">
+        <div className="ml-auto flex items-center gap-2">
+          {/* Le gestionnaire des téléchargements hors ligne (bêta), à côté de « Tous les… » (Louis, 19/10/2026). */}
+          <OfflineDownloadsButton />
           <CinemaBrowseAllButton mediaType={mediaType} compact />
         </div>
         {/* Le nouvel onglet se construit : un fil fin sous la barre, le temps que ses rangées

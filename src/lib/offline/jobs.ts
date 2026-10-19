@@ -1,0 +1,401 @@
+import fs from "node:fs";
+import path from "node:path";
+import { randomBytes } from "node:crypto";
+import { getDb } from "@/lib/db";
+import { config } from "@/lib/config";
+import { DATA_DIR } from "@/lib/dataDir";
+import { APP_VERSION } from "@/lib/appBuild";
+import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { jellyfinIdSegment } from "@/lib/jellyfinPath";
+import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
+import { logError } from "@/lib/logger";
+import { parseInit, scanFragments } from "./fmp4";
+import { expectedBytes, OFFLINE_AUDIO_BPS, OFFLINE_QUALITIES, type OfflineCodec, type OfflineQuality } from "./quality";
+
+/**
+ * Les préparations du téléchargement hors ligne (bêta, 19/10/2026 — docs/telechargement-hors-ligne.md).
+ *
+ * Jellyfin transcode une version légère en MP4 fragmenté ; ce module la lit au fil de l'eau et
+ * l'écrit sur le disque de l'application (`data/offline/<id>.mp4`), pendant que l'appareil
+ * télécharge déjà ce qui est écrit (`/api/offline/jobs/<id>/file`). La préparation ne dépend pas de
+ * l'appareil : quitter l'application ne l'arrête pas, et le fichier fini attend qu'on revienne.
+ *
+ * Deux qualités, tranchées le 19/10 après un test à l'œil (lot « Qualité hors ligne ») : Standard,
+ * 2 Mb/s — Jellyfin choisit alors le 720p — et Haute, 4 Mb/s, le plus bas débit où il garde le 1080p.
+ * Son AAC stéréo d'une seule piste (un transcodage n'en sort qu'une), HDR converti en SDR par
+ * Jellyfin. Une même version (titre, fichier, piste, qualité, codec) sert tous les comptes qui la
+ * demandent.
+ *
+ * Plusieurs préparations à la fois (Louis ne voulait pas d'une seule) : `MAX_RUNNING`, à mesurer.
+ * Un redémarrage du serveur pendant une préparation la reprend de zéro sous une nouvelle
+ * `generation` — Jellyfin ne sait pas reprendre un transcodage progressif là où il s'était arrêté,
+ * et ses octets ne seraient pas les mêmes ; l'appareil qui gardait l'ancien début recommence.
+ */
+
+export type { OfflineCodec, OfflineQuality } from "./quality";
+export type OfflineStatus = "queued" | "running" | "done" | "failed";
+
+const AUDIO_BPS = OFFLINE_AUDIO_BPS;
+/** Combien de préparations tournent ensemble ; les autres attendent leur tour. */
+const MAX_RUNNING = 2;
+/** Gardée sur le serveur trois jours après le dernier téléchargement. */
+const KEEP_MS = 3 * 24 * 3600_000;
+const FAILED_KEEP_MS = 24 * 3600_000;
+/** Une marge de place libre sur le disque des données, au-delà du fichier attendu. */
+const DISK_MARGIN = 5 * 1024 ** 3;
+const DEVICE_ID = "cine-offline";
+const STALL_MS = 120_000;
+
+export interface OfflineJob {
+  id: string;
+  itemId: string;
+  fileVersion: string;
+  audioIndex: number;
+  quality: OfflineQuality;
+  codec: OfflineCodec;
+  status: OfflineStatus;
+  generation: number;
+  bytes: number;
+  expectedBytes: number;
+  runtimeSeconds: number;
+  error: string | null;
+}
+
+interface Row {
+  id: string;
+  item_id: string;
+  file_version: string;
+  audio_index: number;
+  quality: string;
+  codec: string;
+  status: string;
+  generation: number;
+  bytes: number;
+  expected_bytes: number;
+  runtime_s: number;
+  error: string | null;
+}
+
+function fromRow(row: Row): OfflineJob {
+  return {
+    id: row.id,
+    itemId: row.item_id,
+    fileVersion: row.file_version,
+    audioIndex: row.audio_index,
+    quality: row.quality as OfflineQuality,
+    codec: row.codec as OfflineCodec,
+    status: row.status as OfflineStatus,
+    // Pendant la préparation, ce qui est écrit à l'instant, pas la dernière valeur notée en base.
+    generation: row.generation,
+    bytes: live.running.get(row.id)?.bytes ?? row.bytes,
+    expectedBytes: row.expected_bytes,
+    runtimeSeconds: row.runtime_s,
+    error: row.error,
+  };
+}
+
+export const offlineDir = () => path.join(DATA_DIR, "offline");
+export const offlineFile = (id: string) => path.join(offlineDir(), `${id}.mp4`);
+
+
+interface Running {
+  controller: AbortController;
+  bytes: number;
+  playSessionId: string;
+}
+interface Live {
+  running: Map<string, Running>;
+  timers: ReturnType<typeof setInterval>[];
+  started: boolean;
+}
+// Sur `globalThis` : `instrumentation.ts` et les routes sont des points d'entrée séparés, et chacun
+// aurait sa copie du module (CLAUDE.md, server-cache).
+const LIVE_KEY = Symbol.for("cine-app.offlineJobs");
+const shared = globalThis as typeof globalThis & { [LIVE_KEY]?: Live };
+const live: Live = (shared[LIVE_KEY] ??= { running: new Map(), timers: [], started: false });
+
+const identity = () => ({ client: "CineApp", device: "Téléchargements", deviceId: DEVICE_ID, version: APP_VERSION });
+
+export class OfflineRefusal extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+  }
+}
+
+/** Ce que Jellyfin dit du fichier : sa version, sa durée, ses pistes son. */
+async function describeItem(itemId: string): Promise<{ fileVersion: string; mediaSourceId: string; runtimeSeconds: number; audioIndexes: number[] }> {
+  const res = await passJellyfinFetch(`${config.jellyfin.url}/Items?ids=${jellyfinIdSegment(itemId)}&fields=MediaSources`, {
+    headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) throw new OfflineRefusal(`Jellyfin a répondu ${res.status}`, 502);
+  const page = (await res.json()) as {
+    Items?: { Type?: string; RunTimeTicks?: number; MediaSources?: { Id?: string; ETag?: string; MediaStreams?: { Type?: string; Index?: number }[] }[] }[];
+  };
+  const item = page.Items?.[0];
+  const source = item?.MediaSources?.[0];
+  if (!item || !source?.Id) throw new OfflineRefusal("Titre introuvable", 404);
+  if (item.Type !== "Movie" && item.Type !== "Episode") throw new OfflineRefusal("Seuls les films et les épisodes se téléchargent", 400);
+  const runtimeSeconds = (item.RunTimeTicks ?? 0) / 1e7;
+  if (!(runtimeSeconds > 0)) throw new OfflineRefusal("Durée inconnue", 409);
+  return {
+    fileVersion: source.ETag ?? source.Id,
+    mediaSourceId: source.Id,
+    runtimeSeconds,
+    audioIndexes: (source.MediaStreams ?? []).filter((s) => s.Type === "Audio" && typeof s.Index === "number").map((s) => s.Index!),
+  };
+}
+
+function freeBytes(): number | null {
+  try {
+    const stats = fs.statfsSync(DATA_DIR);
+    return stats.bavail * stats.bsize;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Demande une version pour un compte : reprise si elle existe déjà (prête, en cours ou en attente),
+ * relancée si elle avait échoué, créée sinon. Le compte est noté parmi ceux qui l'attendent.
+ */
+export async function requestOfflineJob(input: {
+  account: string;
+  itemId: string;
+  audioIndex: number;
+  quality: OfflineQuality;
+  codec: OfflineCodec;
+  now?: number;
+}): Promise<OfflineJob> {
+  const now = input.now ?? Date.now();
+  const item = await describeItem(input.itemId);
+  if (!item.audioIndexes.includes(input.audioIndex)) throw new OfflineRefusal("Piste son inconnue", 400);
+  const db = getDb();
+  const existing = db
+    .prepare(
+      "SELECT * FROM offline_jobs WHERE item_id = ? AND file_version = ? AND audio_index = ? AND quality = ? AND codec = ? ORDER BY created_at DESC LIMIT 1"
+    )
+    .get(input.itemId, item.fileVersion, input.audioIndex, input.quality, input.codec) as Row | undefined;
+  let id: string;
+  if (existing) {
+    id = existing.id;
+    if (existing.status === "failed") {
+      db.prepare("UPDATE offline_jobs SET status = 'queued', generation = generation + 1, bytes = 0, error = NULL, accessed_at = ? WHERE id = ?").run(now, id);
+    } else {
+      db.prepare("UPDATE offline_jobs SET accessed_at = ? WHERE id = ?").run(now, id);
+    }
+  } else {
+    const expected = expectedBytes(item.runtimeSeconds, input.quality);
+    const free = freeBytes();
+    if (free !== null && free < expected + DISK_MARGIN) throw new OfflineRefusal("Plus assez de place sur le serveur pour préparer ce téléchargement", 507);
+    id = randomBytes(16).toString("hex");
+    db.prepare(
+      `INSERT INTO offline_jobs (id, item_id, file_version, audio_index, quality, codec, status, generation, bytes, expected_bytes, runtime_s, created_at, accessed_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'queued', 1, 0, ?, ?, ?, ?)`
+    ).run(id, input.itemId, item.fileVersion, input.audioIndex, input.quality, input.codec, expected, item.runtimeSeconds, now, now);
+  }
+  db.prepare("INSERT OR IGNORE INTO offline_requests (account, job_id, created_at) VALUES (?, ?, ?)").run(input.account, id, now);
+  pump();
+  return offlineJobFor(input.account, id)!;
+}
+
+/** La version, si ce compte l'a demandée. */
+export function offlineJobFor(account: string, id: string): OfflineJob | null {
+  const row = getDb()
+    .prepare("SELECT j.* FROM offline_jobs j JOIN offline_requests r ON r.job_id = j.id WHERE j.id = ? AND r.account = ?")
+    .get(id, account) as Row | undefined;
+  return row ? fromRow(row) : null;
+}
+
+/** Noté à chaque lecture du fichier : c'est ce qui le garde sur le serveur. */
+export function touchOfflineJob(id: string, now = Date.now()): void {
+  getDb().prepare("UPDATE offline_jobs SET accessed_at = ? WHERE id = ?").run(now, id);
+}
+
+/**
+ * Le compte ne la veut plus (annulation ou suppression sur l'appareil). Une préparation que plus
+ * personne n'attend s'arrête et disparaît ; une version prête reste jusqu'à son expiration, pour qui
+ * la redemanderait.
+ */
+export function forgetOfflineJob(account: string, id: string): boolean {
+  const db = getDb();
+  const removed = db.prepare("DELETE FROM offline_requests WHERE account = ? AND job_id = ?").run(account, id).changes > 0;
+  if (!removed) return false;
+  const others = db.prepare("SELECT COUNT(*) AS n FROM offline_requests WHERE job_id = ?").get(id) as { n: number };
+  const row = db.prepare("SELECT status FROM offline_jobs WHERE id = ?").get(id) as { status: string } | undefined;
+  if (others.n === 0 && row && row.status !== "done") dropJob(id);
+  return true;
+}
+
+function dropJob(id: string): void {
+  const running = live.running.get(id);
+  if (running) running.controller.abort();
+  getDb().prepare("DELETE FROM offline_requests WHERE job_id = ?").run(id);
+  getDb().prepare("DELETE FROM offline_jobs WHERE id = ?").run(id);
+  fs.rm(offlineFile(id), { force: true }, () => {});
+}
+
+/** Lance les préparations en attente, dans la limite de `MAX_RUNNING`. */
+function pump(): void {
+  if (!config.player.offlineDownloads) return;
+  const db = getDb();
+  while (live.running.size < MAX_RUNNING) {
+    const next = db
+      .prepare(
+        `SELECT * FROM offline_jobs WHERE status = 'queued' ${live.running.size ? `AND id NOT IN (${[...live.running.keys()].map(() => "?").join(",")})` : ""} ORDER BY created_at LIMIT 1`
+      )
+      .get(...live.running.keys()) as Row | undefined;
+    if (!next) return;
+    void run(fromRow(next));
+  }
+}
+
+async function run(job: OfflineJob): Promise<void> {
+  const db = getDb();
+  const controller = new AbortController();
+  const playSessionId = `${job.id}${job.generation}`;
+  const state: Running = { controller, bytes: 0, playSessionId };
+  live.running.set(job.id, state);
+  db.prepare("UPDATE offline_jobs SET status = 'running', started_at = ?, bytes = 0, error = NULL WHERE id = ?").run(Date.now(), job.id);
+  fs.mkdirSync(offlineDir(), { recursive: true });
+  const file = offlineFile(job.id);
+  let failure: string | null = null;
+  // Un flux qui ne donne plus rien pendant deux minutes : Jellyfin a calé. Sans ce garde, la
+  // préparation resterait « en cours » pour toujours et occuperait sa place dans la file.
+  let lastByteAt = Date.now();
+  let stalled = false;
+  const noteBytes = setInterval(() => {
+    if (Date.now() - lastByteAt > STALL_MS) {
+      stalled = true;
+      controller.abort();
+    }
+    try {
+      db.prepare("UPDATE offline_jobs SET bytes = ? WHERE id = ?").run(state.bytes, job.id);
+    } catch {
+      /* la ligne a pu disparaître (annulation) */
+    }
+  }, 5000);
+  try {
+    const item = await describeItem(job.itemId);
+    if (item.fileVersion !== job.fileVersion) throw new Error("le fichier a changé dans la bibliothèque");
+    const query = new URLSearchParams({
+      Static: "false",
+      MediaSourceId: item.mediaSourceId,
+      VideoCodec: job.codec,
+      AudioCodec: "aac",
+      AudioStreamIndex: String(job.audioIndex),
+      AudioChannels: "2",
+      AudioBitrate: String(AUDIO_BPS),
+      VideoBitrate: String(OFFLINE_QUALITIES[job.quality].videoBps),
+      MaxWidth: "1920",
+      MaxHeight: "1080",
+      PlaySessionId: playSessionId,
+      DeviceId: DEVICE_ID,
+      allowVideoStreamCopy: "false",
+      allowAudioStreamCopy: "false",
+    });
+    const res = await passJellyfinFetch(`${config.jellyfin.url}/Videos/${jellyfinIdSegment(job.itemId)}/stream.mp4?${query}`, {
+      headers: jellyfinAuthHeaders(config.jellyfin.apiKey, identity()),
+      signal: controller.signal,
+    });
+    if (!res.ok || !res.body) throw new Error(`Jellyfin a répondu ${res.status}`);
+    const out = fs.createWriteStream(file);
+    const reader = res.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!out.write(value)) await new Promise<void>((resolve) => out.once("drain", () => resolve()));
+      state.bytes += value.byteLength;
+      lastByteAt = Date.now();
+    }
+    await new Promise<void>((resolve, reject) => out.end((error?: Error | null) => (error ? reject(error) : resolve())));
+    // Jellyfin ferme le flux aussi quand son transcodage meurt : n'est « prêt » qu'un fichier qui va
+    // jusqu'au bout du film (le dernier fragment commence dans les trente dernières secondes).
+    const lastTime = await lastFragmentTime(file, state.bytes);
+    if (lastTime === null || lastTime < job.runtimeSeconds - 30) {
+      throw new Error(`transcodage interrompu à ${lastTime === null ? "?" : Math.round(lastTime)} s sur ${Math.round(job.runtimeSeconds)} s`);
+    }
+  } catch (error) {
+    failure = stalled ? "Jellyfin ne répond plus" : controller.signal.aborted ? "annulé" : error instanceof Error ? error.message : String(error);
+  } finally {
+    clearInterval(noteBytes);
+    live.running.delete(job.id);
+    void passJellyfinFetch(`${config.jellyfin.url}/Videos/ActiveEncodings?deviceId=${DEVICE_ID}&playSessionId=${playSessionId}`, {
+      method: "DELETE",
+      headers: jellyfinAuthHeaders(config.jellyfin.apiKey, identity()),
+    }).catch(() => {});
+  }
+  const stillThere = db.prepare("SELECT 1 FROM offline_jobs WHERE id = ?").get(job.id);
+  if (stillThere) {
+    if (failure) {
+      if (failure !== "annulé") logError("offline", new Error(`préparation ${job.id} (${job.itemId}) : ${failure}`));
+      db.prepare("UPDATE offline_jobs SET status = 'failed', error = ?, bytes = ?, finished_at = ? WHERE id = ?").run(failure, state.bytes, Date.now(), job.id);
+    } else {
+      db.prepare("UPDATE offline_jobs SET status = 'done', bytes = ?, finished_at = ?, accessed_at = ? WHERE id = ?").run(state.bytes, Date.now(), Date.now(), job.id);
+    }
+  }
+  pump();
+}
+
+async function lastFragmentTime(file: string, size: number): Promise<number | null> {
+  const handle = await fs.promises.open(file, "r");
+  try {
+    const read = async (offset: number, length: number) => {
+      const buffer = Buffer.alloc(Math.max(0, Math.min(length, size - offset)));
+      await handle.read(buffer, 0, buffer.length, offset);
+      return new Uint8Array(buffer);
+    };
+    const init = parseInit(await read(0, Math.min(size, 4 * 1024 * 1024)));
+    const video = init?.tracks.find((t) => t.kind === "video");
+    if (!init || !video) return null;
+    const { fragments } = await scanFragments(read, init.end, size, video);
+    return fragments.length ? fragments[fragments.length - 1].time : null;
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Efface les versions que plus personne ne télécharge, et les échecs d'hier. */
+export function sweepOfflineJobs(now = Date.now()): void {
+  const db = getDb();
+  const stale = db
+    .prepare("SELECT id FROM offline_jobs WHERE (status = 'done' AND accessed_at < ?) OR (status = 'failed' AND COALESCE(finished_at, created_at) < ?)")
+    .all(now - KEEP_MS, now - FAILED_KEEP_MS) as { id: string }[];
+  for (const { id } of stale) dropJob(id);
+  // Les fichiers sans ligne (une suppression interrompue) : effacés aussi.
+  try {
+    const known = new Set((db.prepare("SELECT id FROM offline_jobs").all() as { id: string }[]).map((r) => r.id));
+    for (const name of fs.readdirSync(offlineDir())) {
+      if (name.endsWith(".mp4") && !known.has(name.slice(0, -4))) fs.rmSync(path.join(offlineDir(), name), { force: true });
+    }
+  } catch {
+    /* pas encore de dossier */
+  }
+}
+
+/** Au démarrage : les préparations coupées par l'arrêt repartent de zéro, puis la file reprend. */
+export function startOfflineJobs(): void {
+  if (live.started) return;
+  live.started = true;
+  const db = getDb();
+  const cut = db.prepare("SELECT id FROM offline_jobs WHERE status = 'running'").all() as { id: string }[];
+  for (const { id } of cut) {
+    fs.rmSync(offlineFile(id), { force: true });
+    db.prepare("UPDATE offline_jobs SET status = 'queued', generation = generation + 1, bytes = 0 WHERE id = ?").run(id);
+  }
+  sweepOfflineJobs();
+  pump();
+  const sweep = setInterval(() => {
+    try {
+      sweepOfflineJobs();
+      pump();
+    } catch (error) {
+      logError("offline", error);
+    }
+  }, 30 * 60_000);
+  sweep.unref?.();
+  live.timers.push(sweep);
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { OfflinePlayerHost } from "@/components/offline/OfflinePlayerHost";
 import { useEffect, useMemo, useRef, useState, useCallback, useSyncExternalStore, type RefObject } from "react";
 import { Loader2 } from "lucide-react";
 import { createPortal, flushSync } from "react-dom";
@@ -378,6 +379,11 @@ export function PlayerHost() {
   );
 
   if (!session) return null;
+  // Un fichier téléchargé (bêta) : son propre lecteur, lu depuis l'appareil, sans attendre la
+  // configuration du serveur ni passer par l'aiguillage — rien de la lecture en ligne n'est en jeu.
+  if (session.offline) {
+    return <OfflinePlayerHost key={`offline:${session.offline.id}:${session.openId ?? 0}`} session={session} mode={mode === "mini" ? "mini" : "full"} />;
+  }
   // Waited for rather than assumed. Whichever player is assumed while the answer is in flight
   // mounts and *starts* — and for the server-side one that means negotiating a stream and
   // warming a transcode, which was then thrown away a round trip later. One request, once per

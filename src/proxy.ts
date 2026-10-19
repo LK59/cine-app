@@ -82,6 +82,8 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // mot de passe répondaient tous 403. Invisible en administrateur, c'est-à-dire invisible pour
   // celui qui teste.
   "POST /api/player/requests",
+  // Le téléchargement hors ligne (bêta, 19/10/2026) : demandé par chaque compte pour lui-même.
+  "POST /api/offline/jobs",
   "POST /api/jellyfin/favorite",
   "POST /api/player/account/preferences",
   "POST /api/player/account/password",
@@ -134,6 +136,8 @@ const GUEST_ALLOWED_PATTERNS: RegExp[] = [
   // reprise après une pause. Identifiant de 32 caractères hexadécimaux, rien d'autre : l'annulation
   // (`/api/subtitle-gen/admin/...`) reste à l'administrateur.
   /^POST \/api\/subtitle-gen\/jobs\/[0-9a-f]{32}\/(poll|resume)$/,
+  // Le compte retire sa propre demande ; la route ne touche qu'aux siennes.
+  /^DELETE \/api\/offline\/jobs\/[0-9a-f]{32}$/,
 ];
 
 function isAllowedForEveryone(method: string, pathname: string): boolean {
