@@ -8,7 +8,11 @@ import { isFireTv } from "@/lib/fireTv";
 // TV-remote-style legend, browse screen only — CinemaMovieDetail intentionally shows nothing
 // but its own backdrop/menu (see its doc comment), so this never renders there. Purely
 // informational, never focusable/interactive itself.
-/** Le bouton « Tous les films » occupe toujours le coin (13/10/2026) — la légende se range à sa gauche. */
+/**
+ * Le bouton « Tous les films » occupe toujours le coin (13/10/2026) — la légende se range à sa gauche,
+ * dans la même rangée que lui (`CinemaClient`) : posée à une distance fixe du bord, elle recouvrait le
+ * bouton des téléchargements arrivé à côté de lui le 19/10/2026 (relevé par Louis le même jour).
+ */
 export function CinemaShortcutsGuide() {
   const t = useT();
   // Pas sur un appareil qu'on touche (15/10/2026, MOBILE-10) : sur un iPad en portrait (834 px, donc
@@ -28,8 +32,7 @@ export function CinemaShortcutsGuide() {
       // gauche, avec le reste de la navigation.
       // `pointer-events-none` : purement informative, elle ne prend jamais un clic à ce qu'elle
       // chevaucherait encore (une fenêtre étroite de portable tactile, par exemple).
-      className="pointer-events-none fixed right-16 z-10 hidden items-center gap-3 rounded-full px-4 py-2 text-xs text-muted player-bar md:flex"
-      style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+      className="pointer-events-none hidden items-center gap-3 rounded-full px-4 py-2 text-xs text-muted player-bar md:flex"
     >
       <span className="flex items-center gap-1">
         <ArrowUp size={12} />

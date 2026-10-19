@@ -1,4 +1,4 @@
-import { fragmentIndexAt, parseInit, scanFragments, type Fmp4Fragment, type Fmp4Init } from "./fmp4";
+import { fragmentIndexAt, normalizeFragment, parseInit, scanFragments, type Fmp4Fragment, type Fmp4Init } from "./fmp4";
 
 /**
  * Le moteur du lecteur des téléchargements (19/10/2026) — un chemin à part, voulu tel par Louis :
@@ -183,7 +183,7 @@ export class OfflineEngine {
         const bytes = await this.source.read(fragment.offset, fragment.size);
         if (generation !== this.generation || this.closed) break;
         if (bytes.length < fragment.size) break;
-        await this.append(bytes);
+        await this.append(normalizeFragment(bytes, fragment.offset));
         this.nextIndex += 1;
       }
     } catch (error) {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { fragmentIndexAt, parseInit, scanFragments } from "@/lib/offline/fmp4";
+import { fragmentIndexAt, normalizeFragment, parseInit, scanFragments } from "@/lib/offline/fmp4";
 
 /**
  * Le MP4 fragmenté des téléchargements hors ligne, sur un fichier de la forme exacte que Jellyfin
@@ -71,5 +71,58 @@ describe("fragmentIndexAt", () => {
     expect(fragmentIndexAt(fragments, 10)).toBe(1);
     expect(fragmentIndexAt(fragments, 25)).toBe(2);
     expect(fragmentIndexAt([], 5)).toBe(-1);
+  });
+});
+
+describe("normalizeFragment", () => {
+  it("l'adresse absolue de chaque piste devient « relative au moof », et les mêmes octets sont désignés", async () => {
+    const video = parseInit(file)!.tracks[0];
+    const { fragments } = await scanFragments(reader(file), 3742, file.length, video);
+    for (const f of fragments) {
+      const original = file.slice(f.offset, f.offset + f.size);
+      const fixed = normalizeFragment(original, f.offset);
+      // Deux pistes : seize octets de moins, le moof aussi.
+      expect(fixed.length).toBe(original.length - 16);
+      const view = new DataView(fixed.buffer);
+      const moofSize = view.getUint32(0);
+      expect(moofSize).toBe(new DataView(original.buffer).getUint32(0) - 16);
+      expect(String.fromCharCode(...fixed.subarray(moofSize + 4, moofSize + 8))).toBe("mdat");
+      // Chaque trun désigne, dans le fragment corrigé, les mêmes octets qu'avant dans le fichier.
+      const trafs = (bytes: Uint8Array) => {
+        const out: { flags: number; dataOffset: number; base: number | null }[] = [];
+        const v = new DataView(bytes.buffer, bytes.byteOffset);
+        let o = 8;
+        const end = v.getUint32(0);
+        while (o < end) {
+          const size = v.getUint32(o);
+          if (String.fromCharCode(...bytes.subarray(o + 4, o + 8)) === "traf") {
+            let q = o + 8;
+            let base: number | null = null;
+            let flags = 0;
+            while (q < o + size) {
+              const s = v.getUint32(q);
+              const type = String.fromCharCode(...bytes.subarray(q + 4, q + 8));
+              if (type === "tfhd") {
+                flags = v.getUint32(q + 8) & 0xffffff;
+                base = flags & 1 ? Number(v.getBigUint64(q + 16)) : null;
+              }
+              if (type === "trun") out.push({ flags, dataOffset: v.getInt32(q + 16), base });
+              q += s;
+            }
+          }
+          o += size;
+        }
+        return out;
+      };
+      const before = trafs(original);
+      const after = trafs(fixed);
+      expect(after.every((t) => t.base === null && (t.flags & 0x020000) !== 0)).toBe(true);
+      before.forEach((b, i) => {
+        const from = b.base! - f.offset + b.dataOffset;
+        expect(Buffer.from(fixed.subarray(after[i].dataOffset, after[i].dataOffset + 64)).equals(Buffer.from(original.subarray(from, from + 64)))).toBe(true);
+      });
+      // Déjà relatif : rendu tel quel.
+      expect(normalizeFragment(fixed, f.offset)).toBe(fixed);
+    }
   });
 });

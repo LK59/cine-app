@@ -10,9 +10,13 @@ import { avcCodecString, hevcCodecString } from "@/lib/webcodecs/codecConfig";
  * remultiplexeur du lecteur en ligne — un chemin à part, voulu par Louis pour que la lecture en
  * ligne ne dépende en rien de celui-ci (`mp4Demux.ts`, lui, refuse toujours un MP4 fragmenté).
  *
- * Deux retouches seulement, sur l'en-tête : l'entrée `hev1` devient `hvc1` (Safari refuse `hev1`
+ * Deux retouches, rien d'autre. Sur l'en-tête, l'entrée `hev1` devient `hvc1` (Safari refuse `hev1`
  * dans MediaSource ; Jellyfin range VPS, SPS et PPS dans le `hvcC`, ce qui est exactement ce que
- * `hvc1` exige — vérifié, et refusé sinon), et rien d'autre : les fragments passent octet pour octet.
+ * `hvc1` exige — vérifié, et refusé sinon). Sur chaque fragment, l'adresse absolue que FFmpeg écrit
+ * dans `tfhd` (`base-data-offset`, la position du `moof` dans le fichier) devient « relative au
+ * moof » (`default-base-is-moof`) : Chrome refuse la première dans MediaSource (« TFHD
+ * base-data-offset not allowed by MSE », relevé au premier essai réel le 19/10/2026), et les deux
+ * désignent les mêmes octets — `normalizeFragment`.
  */
 
 export interface Fmp4Track {
@@ -242,4 +246,64 @@ export function fragmentIndexAt(fragments: readonly Fmp4Fragment[], seconds: num
     else hi = mid - 1;
   }
   return lo;
+}
+
+/**
+ * Un fragment (`moof` + `mdat`) tel que MediaSource l'accepte partout : chaque `tfhd` qui porte une
+ * adresse absolue (`base-data-offset`, drapeau 0x1) la perd au profit de `default-base-is-moof`
+ * (0x20000). FFmpeg y écrit la position du `moof` lui-même, et ses `trun` comptent leurs données à
+ * partir de là : retirer huit octets par piste rapproche les données d'autant, et chaque `data_offset`
+ * diminue du total retiré. Un fragment déjà relatif est rendu tel quel ; une adresse qui ne serait pas
+ * celle du `moof` est refusée plutôt que devinée.
+ */
+export function normalizeFragment(fragment: Uint8Array, offsetInFile: number): Uint8Array {
+  const moof = boxAt(fragment, 0, fragment.length);
+  if (!moof || moof.type !== "moof") throw new Error("MP4 fragmenté : un fragment ne commence pas par moof");
+  const trafs = children(fragment, moof.body, moof.end).filter((x) => x.type === "traf");
+  const isAbsolute = (traf: Box) => {
+    const tfhd = child(fragment, traf, "tfhd");
+    return Boolean(tfhd && fragment[tfhd.body + 3] & 0x01);
+  };
+  const removed = trafs.filter(isAbsolute).length * 8;
+  if (removed === 0) return fragment;
+
+  // Les huit octets de chaque adresse sautés à la copie ; le reste, octet pour octet.
+  const cuts: number[] = [];
+  for (const traf of trafs) {
+    if (!isAbsolute(traf)) continue;
+    const tfhd = child(fragment, traf, "tfhd")!;
+    const base = u64(fragment, tfhd.body + 8);
+    if (base !== offsetInFile) throw new Error(`MP4 fragmenté : adresse de base ${base} hors du moof (${offsetInFile})`);
+    cuts.push(tfhd.body + 8);
+  }
+  const out = new Uint8Array(fragment.length - removed);
+  let read = 0;
+  let write = 0;
+  for (const cut of cuts) {
+    out.set(fragment.subarray(read, cut), write);
+    write += cut - read;
+    read = cut + 8;
+  }
+  out.set(fragment.subarray(read), write);
+
+  // Où une position d'origine se trouve après les coupes qui la précèdent.
+  const moved = (original: number) => original - 8 * cuts.filter((cut) => cut < original).length;
+  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  view.setUint32(0, moof.end - removed);
+  for (const traf of trafs) {
+    const tfhd = child(fragment, traf, "tfhd")!;
+    if (isAbsolute(traf)) {
+      view.setUint32(moved(traf.start), traf.end - traf.start - 8);
+      view.setUint32(moved(tfhd.start), tfhd.end - tfhd.start - 8);
+      const flags = view.getUint32(moved(tfhd.body));
+      view.setUint32(moved(tfhd.body), (flags & ~0x01) | 0x020000);
+    }
+    // Les données sont désormais comptées depuis le moof raccourci : chaque décalage perd ce qui a été retiré.
+    for (const trun of children(fragment, traf.body, traf.end).filter((x) => x.type === "trun")) {
+      if (!(fragment[trun.body + 3] & 0x01)) continue;
+      const position = moved(trun.body + 8);
+      view.setInt32(position, view.getInt32(position) - removed);
+    }
+  }
+  return out;
 }

@@ -1244,10 +1244,10 @@ export function CinemaClient() {
           le masquait n'était choisie par personne et doublait chaque écran d'un cas à tenir. */}
       <div className="fixed right-4 z-10 flex items-center gap-2" style={{ top: "max(1rem, env(safe-area-inset-top))" }}>
         {/* Le gestionnaire des téléchargements hors ligne (bêta), à côté de « Tous les… » (Louis, 19/10/2026). */}
+        <CinemaShortcutsGuide />
         <OfflineDownloadsButton />
         <CinemaBrowseAllButton mediaType={mediaType} compact />
       </div>
-      <CinemaShortcutsGuide />
 
       {/* La recherche est rendue par la coquille du lecteur (PlayerShell), pas ici : c'est le
           même moteur que la recherche globale, elle trouve aussi les personnes et les titres
