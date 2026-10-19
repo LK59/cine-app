@@ -632,13 +632,13 @@ function OfflineTitleSheet({
         </p>
 
         {next && (
-          <div className="mb-5 space-y-2 sm:max-w-sm">
+          <div className="mb-5 space-y-2">
             <button
               type="button"
               data-nav-item
               disabled={!ready}
               onClick={() => ready && play(next)}
-              className={`flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-base font-semibold text-ink ${ready ? "" : "opacity-45"}`}
+              className={`flex w-full sm:max-w-sm items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-base font-semibold text-ink ${ready ? "" : "opacity-45"}`}
             >
               <Play size={18} fill="currentColor" />
               <span className="flex min-w-0 flex-col items-start leading-tight">

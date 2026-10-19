@@ -5897,8 +5897,18 @@ et la navigation repart de zéro.
   (trois teintes, pas quatre) ; aperçus de la barre gardés avec le film (`trickplay.ts`, prop
   `offlineTrickplay` de `PlayerControls`, rattrapés au chargement pour les téléchargements d'avant) ;
   chapitres en ligne.
-- *Page* : « Lire » et « Pause » écrits en toutes lettres (une icône de lecture seule se confondait
-  avec la reprise du téléchargement) ; au téléphone, les boutons sous le texte.
+- *Page* (partagée par le panneau du cinéma et `/hors-ligne`) : la place, puis « En cours » — des lignes
+  avec leurs commandes, tant que quelque chose arrive —, puis films et séries en grille d'affiches. Une
+  affiche ouvre la fiche hors ligne (`OfflineTitleSheet`) : visuel, logo, année et genres, Lire en tête
+  (pour une série, l'épisode commencé sinon le premier pas vu, `offlineSeriesNext`), résumé,
+  distribution en texte seul (ni liens ni photos : rien ne s'ouvre sans réseau, et le poids reste
+  quelques centaines de Ko), puis les épisodes avec vignette et résumé. « Lire » et « Pause » écrits
+  en toutes lettres (une icône seule se confondait avec la reprise du téléchargement).
+- *Fiche gardée* : demandée avec le fichier (`/api/offline/details/<id>`, `artwork.ts`) — résumé, année,
+  genres, six premiers rôles, logo (`kind=logo`), visuel, affiche de la série pour un épisode ; rattrapée
+  au chargement pour les téléchargements d'avant. L'ouverture de la lecture hors ligne en prend le logo
+  et le visuel (elle fige ce qu'elle montre à son montage : les adresses `blob:` sont lues d'avance,
+  400 ms d'attente au plus).
 - *Boucle* : jusqu'à trois téléchargements à la fois, les versions prêtes d'abord, un verrou par
   téléchargement entre onglets ; « En file d'attente sur le serveur » ; pause (rien n'arrive sur
   l'appareil, la préparation continue) ; un retrait de demande part avant toute nouvelle demande du
