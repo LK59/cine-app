@@ -75,7 +75,10 @@ const ep = (n: number): CinemaEpisode => ({
   watched: false,
   resumeTicks: null,
 });
-const S1: CinemaSeason = { seasonNumber: 1, episodes: [ep(1), ep(2), ep(3), ep(4)] };
+// L'épisode 4 repris à 10 min chez Jellyfin, comme sur l'appareil : depuis le 19/10/2026, Jellyfin fait
+// foi pour la reprise d'un téléchargement dès qu'aucune position lue hors ligne n'attend d'être envoyée
+// (`sharedResumeSeconds`).
+const S1: CinemaSeason = { seasonNumber: 1, episodes: [ep(1), ep(2), ep(3), { ...ep(4), resumeTicks: 6_000_000_000 }] };
 
 const download = (itemId: string, change: Partial<OfflineDownload>): OfflineDownload =>
   ({
