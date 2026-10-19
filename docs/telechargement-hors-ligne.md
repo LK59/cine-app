@@ -88,6 +88,23 @@ Essai : 60 s de transcodage d'un film 4K HEVC Dolby Vision / HDR10+ à 25 Mb/s, 
 À vérifier avant l'implémentation : le débit ou le paramètre qui donne réellement du 1080p (4 Mb/s,
 ou une largeur imposée), et la façon de garder le HDR10 si l'option est retenue.
 
+## Mesures du 19/10/2026 : résolution et encodeur
+
+Même film (4K HEVC Dolby Vision, très sombre et granuleux), même chaîne de conversion HDR→SDR que
+Jellyfin (`tonemap_opencl`, bt2390), sortie HEVC Main 8 bits et AAC stéréo 128 kb/s.
+
+| Mesure | Résultat |
+|---|---|
+| Résolution imposée par Jellyfin | **720p jusqu'à 3 Mb/s, 1080p à partir de 4 Mb/s**, quoi qu'on demande (`MaxWidth`/`MaxHeight`, `Width`, `Width`+`Height` essayés) |
+| Réglage d'encodage de Jellyfin | `-preset veryfast`, `-maxrate` égal au débit (débit quasi constant), images clés forcées toutes les 5 s, sortie MP4 fragmentée (`frag_keyframe+empty_moov`) |
+| Vitesse, Jellyfin tel quel | 6 à 7× le temps réel |
+| Vitesse, même encodeur (QSV) appelé directement en `slow`, débit variable (maximum 2× la cible), anticipation de 40 images | ~3,5× le temps réel, démarrage compris |
+
+Conséquence : du 1080p à 2 ou 3 Mb/s n'est possible qu'en appelant l'encodeur directement, pas par
+l'API de transcodage de Jellyfin. Quatre extraits de deux minutes (1080p 2 et 3 Mb/s par l'encodeur
+direct, 720p 2 Mb/s et 1080p 4 Mb/s par Jellyfin) sont lisibles dans le vrai lecteur, depuis les
+tests divers de l'administrateur, pour choisir à l'œil.
+
 ## Ordre de réalisation
 
 Chaque étape est utilisable seule.

@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { AlertTriangle, RotateCw, WifiOff, X } from "lucide-react";
 import { playerBootstrapOptions, refreshAfterPlayback } from "@/lib/swr";
 import { directInfoForOpening } from "@/lib/directInfo";
+import { labSampleByFile, labSampleInfo } from "@/lib/labSamples";
 import { directInfoKey, fetchPlaybackState, takePrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { errorMessage, isUpstreamUnreachable } from "@/lib/upstreamError";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -739,8 +740,9 @@ export function ExperimentalPlayerHost({
     clearUnsentStop(sessionId);
     const file = describeFileRef.current();
     const path = pathRef.current ?? "non décidé";
-    if (serverFallbackRef.current === false) {
-      trace(`abandon : aucun lecteur serveur sur cette installation — ${reason}`);
+    // Un extrait de test non plus : le lecteur serveur ouvrirait le film entier, pas l'extrait.
+    if (serverFallbackRef.current === false || session.labSample) {
+      trace(`abandon : ${session.labSample ? "extrait de test" : "aucun lecteur serveur sur cette installation"} — ${reason}`);
       reportPlayback("error", { ...file, reason, path, ...extra, ...tally.backgroundFacts(Date.now()) });
       setRuntimeError(reason);
       // L'écran de coupure promettait une reprise qui ne viendra plus : l'erreur prend sa place, au
@@ -777,7 +779,7 @@ export function ExperimentalPlayerHost({
     // deux. Le 24/09/2026, une demi-heure de film passée par le serveur se lisait en deux séances,
     // dont une à zéro seconde regardée — et une soirée de diffusion vers la télé, deux heures à zéro.
     onFallbackRef.current(reason, handover, sessionId);
-  }, [sessionId, tally, watched, lifecycle]);
+  }, [sessionId, tally, watched, lifecycle, session.labSample]);
   /**
    * A passing notice, with the moment it was raised.
    *
@@ -1429,7 +1431,7 @@ export function ExperimentalPlayerHost({
   // Le numéro de l'essai : une description perdue faute de réseau est redemandée sous une clé
   // neuve, la seule façon de faire reposer la question à SWR sans revalidation (voir plus bas).
   const [infoAttempt, setInfoAttempt] = useState(0);
-  const { data: info, error: infoError } = useSWR<DirectPlayInfo>([directInfoKey(itemId), openingId, infoAttempt], () => directInfoForOpening(itemId), {
+  const { data: fileInfo, error: infoError } = useSWR<DirectPlayInfo>([directInfoKey(itemId), openingId, infoAttempt], () => directInfoForOpening(itemId), {
     // La description du fichier est ce qui décide du chemin de lecture : la mettre en pause parce
     // qu'un film occupe l'écran, c'est attendre que le film commence pour savoir comment le lire.
     ...playerBootstrapOptions,
@@ -1449,6 +1451,14 @@ export function ExperimentalPlayerHost({
       setPlaying(false);
     },
   });
+  // Un extrait du test de qualité hors ligne se décrit lui-même (`labSamples.ts`) : sa description
+  // remplace celle du film, demandée quand même par la ligne ci-dessus — la clé que la fiche précharge
+  // reste la seule façon d'obtenir une description.
+  const [labInfo] = useState(() => {
+    const sample = session.labSample ? labSampleByFile(session.labSample.file) : null;
+    return sample && session.labSample ? labSampleInfo(sample, session.labSample.sizeBytes) : null;
+  });
+  const info = labInfo ?? fileInfo;
 
   /**
    * Le nouvel essai après une coupure : une reconstruction si le fichier était ouvert, sinon une
@@ -4073,6 +4083,7 @@ export function ExperimentalPlayerHost({
             inert={!ready || endScreen}
           >
           <PlayerControls
+            lab={!!session.labSample}
             // A real media element: seeking, volume and rate are the browser's own.
             videoRef={videoElRef}
             onSeekRequest={noteSeekRequest}

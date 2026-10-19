@@ -105,6 +105,11 @@ interface PlayerControlsProps {
   itemId: string;
   title: string;
   /**
+   * Un extrait du test de qualité hors ligne (`labSamples.ts`) : ni chapitres, ni aperçus de la
+   * barre — ceux du film entier ne tombent pas aux mêmes instants —, ni téléchargement du fichier.
+   */
+  lab?: boolean;
+  /**
    * Le logo du titre (celui de la série pour un épisode), montré à la place du titre écrit quand
    * il existe et qu'il est chargé — voir `PlayerTitle`. Absent : le titre écrit, comme avant.
    */
@@ -358,6 +363,7 @@ export function PlayerControls({
   containerRef,
   itemId,
   title,
+  lab = false,
   logoUrl = null,
   onClose,
   onMinimize,
@@ -400,7 +406,7 @@ export function PlayerControls({
   // Le menu « Épisodes » prêt d'avance, après la première image — voir `usePrewarmEpisodes`.
   usePrewarmEpisodes(episodesSeriesId, itemId, videoRef);
   // Au bureau seulement — `PlayerDownloadRow` en décide (§107).
-  const downloadable = !!playerItem?.download;
+  const downloadable = !lab && !!playerItem?.download;
   const [playing, setPlaying] = useState(false);
   /**
    * Ce que l'appui vient de demander, montré tout de suite (10/10/2026) : le triangle ne devenait
@@ -871,6 +877,7 @@ export function PlayerControls({
 
   // Chapters — fetched once per item, same shape/lifecycle as the trickplay metadata below.
   useEffect(() => {
+    if (lab) return;
     let cancelled = false;
     fetch(`/api/jellyfin/chapters?itemId=${itemId}`)
       .then((r) => (r.ok ? r.json() : []))
@@ -883,7 +890,7 @@ export function PlayerControls({
     return () => {
       cancelled = true;
     };
-  }, [itemId]);
+  }, [itemId, lab]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1389,6 +1396,7 @@ export function PlayerControls({
     width: number; height: number; tileWidth: number; tileHeight: number; thumbnailCount: number; intervalMs: number;
   } | null>(null);
   useEffect(() => {
+    if (lab) return;
     let cancelled = false;
     fetch(`/api/jellyfin/trickplay/info?itemId=${itemId}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -1401,7 +1409,7 @@ export function PlayerControls({
     return () => {
       cancelled = true;
     };
-  }, [itemId]);
+  }, [itemId, lab]);
 
   // Pre-warms the browser's own HTTP cache with every trickplay sprite tile as soon as the
   // metadata is known, instead of only fetching a tile the first time the seek bar is actually

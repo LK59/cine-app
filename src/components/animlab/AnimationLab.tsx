@@ -14,6 +14,7 @@ import { catalogueTitles, cinemaFetcher } from "@/lib/cinemaPayload";
 import { PlayerIntroLot, SheetOpenLot } from "./IntroLots";
 import { LinkSimLot } from "./LinkSimLot";
 import { SmoothnessLot } from "./SmoothnessLot";
+import { OfflineQualityLot } from "./OfflineQualityLot";
 import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { tmdbResize } from "@/lib/images";
 import { isWebKitEngine } from "@/lib/webkitEngine";
@@ -96,6 +97,7 @@ const LOTS = [
   { id: "H", name: "Ouverture de fiche" },
   { id: "S", name: "Connexion simulée" },
   { id: "T", name: "Fluidité de la grille" },
+  { id: "Q", name: "Qualité hors ligne" },
 ] as const;
 type LotId = (typeof LOTS)[number]["id"];
 
@@ -237,7 +239,7 @@ export function AnimationLab() {
             </select>
           </Row>
         )}
-        {lot !== "A" && lot !== "G" && lot !== "H" && lot !== "T" && (
+        {lot !== "A" && lot !== "G" && lot !== "H" && lot !== "T" && lot !== "Q" && (
           <Row label="Geste des boutons">
             <select className="select max-w-full" value={gesture} onChange={(e) => setGesture(e.target.value as GestureKind)}>
               {GESTURES.map((g) => <option key={g.kind} value={g.kind}>{g.name}</option>)}
@@ -251,6 +253,8 @@ export function AnimationLab() {
         {/* La connexion simulée (§78) : le vrai lecteur sous un débit réglé à la main. */}
         {lot === "S" && <LinkSimLot movies={simMovies} />}
         {lot === "T" && <SmoothnessLot />}
+        {/* Les extraits du test de qualité hors ligne, dans le vrai lecteur (19/10/2026). */}
+        {lot === "Q" && <OfflineQualityLot />}
         <div key={lot} className="grid gap-x-5 gap-y-7 sm:grid-cols-2 xl:grid-cols-3">
           {lot === "A" && GESTURES.map((g) => (
             <Card key={g.kind} title={g.name} hint={g.hint} cost="nul">

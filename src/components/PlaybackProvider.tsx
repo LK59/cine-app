@@ -101,6 +101,13 @@ export interface PlaybackSession {
    */
   bench?: string;
   /**
+   * Un extrait du test de qualité hors ligne (« Tests divers », `labSamples.ts`) : le lecteur lit ce
+   * fichier-là au lieu de celui de `itemId`, sans chapitres ni aperçus (ceux du film entier ne
+   * tombent pas aux mêmes instants), et refuse plutôt que de passer au lecteur serveur, qui
+   * ouvrirait le film entier. Toujours avec `bench`, pour que rien ne soit rapporté à Jellyfin.
+   */
+  labSample?: { file: string; sizeBytes: number | null };
+  /**
    * Une scène ouverte depuis une réplique (recherche de répliques, lecture à début − 5 s) : rien
    * n'est rapporté à Jellyfin ni gardé pour une reprise — ni battement, ni arrêt, ni « vu », ni
    * position gardée sur l'appareil —, et pas d'épisode suivant, tant que dix minutes n'ont pas été
