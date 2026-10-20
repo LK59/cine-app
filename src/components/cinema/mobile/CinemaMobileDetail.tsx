@@ -514,6 +514,22 @@ export function CinemaMobileDetail({
         >
           <X size={18} />
         </button>
+        {/* Partager ce titre par un lien (DECISIONS.md §112) : une pastille de verre à côté de la croix,
+            hors des boutons de la fiche — administrateur seul, film ou série entière. */}
+        {item.jellyfinItemId && !fileMissing && (
+          <ShareButton
+            variant="icon"
+            {...NOT_THE_HANDLE}
+            iconClassName="nav-glass absolute right-14 top-3 flex h-9 w-9 items-center justify-center rounded-full text-white"
+            kind={isSeries ? "series" : "movie"}
+            itemId={item.jellyfinItemId}
+            radarrId={!isSeries && "radarrId" in item ? (item.radarrId ?? null) : null}
+            sonarrId={isSeries && "sonarrId" in item ? (item.sonarrId ?? null) : null}
+            title={item.title}
+            year={item.year ?? null}
+            posterUrl={item.posterUrl ?? null}
+          />
+        )}
       </div>
 
       {/* Couché, l'écran fait ~844 px de large : des boutons pleine largeur y traversent tout
@@ -615,20 +631,6 @@ export function CinemaMobileDetail({
             posterUrl={item.posterUrl ?? null}
             runtimeMinutes={"runtimeMinutes" in item ? (item.runtimeMinutes ?? null) : null}
             onlineResumeTicks={resumeTicks}
-          />
-        )}
-        {/* Partager ce titre par un lien (DECISIONS.md §112) : administrateur seul, film ou série entière. */}
-        {item.jellyfinItemId && !fileMissing && (
-          <ShareButton
-            variant="wide"
-            wideSpacing="mb-4"
-            kind={isSeries ? "series" : "movie"}
-            itemId={item.jellyfinItemId}
-            radarrId={!isSeries && "radarrId" in item ? (item.radarrId ?? null) : null}
-            sonarrId={isSeries && "sonarrId" in item ? (item.sonarrId ?? null) : null}
-            title={item.title}
-            year={item.year ?? null}
-            posterUrl={item.posterUrl ?? null}
           />
         )}
 

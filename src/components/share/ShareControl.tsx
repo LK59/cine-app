@@ -44,8 +44,17 @@ export interface ShareTitle {
 }
 
 interface Props extends ShareTitle {
-  /** `row` : une ligne du menu de la fiche au bureau ; `wide` : un bouton pleine largeur au téléphone. */
-  variant: "row" | "wide";
+  /**
+   * `row` : une ligne du menu de la fiche au bureau ; `wide` : un bouton pleine largeur au téléphone ;
+   * `icon` : une pastille ronde, sans texte — la place retenue (20/10/2026) : partager n'est pas un
+   * geste de la fiche au même rang que Lire, et la ligne de menu en faisait trop (Louis).
+   */
+  variant: "row" | "wide" | "icon";
+  /** Pour `icon` : la forme et la place de la pastille, posées par la fiche. */
+  iconClassName?: string;
+  iconStyle?: React.CSSProperties;
+  /** Pour `icon` : la pastille posée sur l'image du téléphone ne doit pas saisir la fiche au doigt. */
+  onPointerDown?: (e: React.PointerEvent) => void;
   rowClassName?: string;
   badgeClassName?: string;
   /** L'espacement du bouton pleine largeur dans sa colonne. */
@@ -58,7 +67,7 @@ export function ShareButton(props: Props) {
   return isReadOnly === false ? <ShareButtonOn {...props} /> : null;
 }
 
-function ShareButtonOn({ variant, rowClassName = "", badgeClassName = "", wideSpacing = "mb-2", ...title }: Props) {
+function ShareButtonOn({ variant, rowClassName = "", badgeClassName = "", wideSpacing = "mb-2", iconClassName = "", iconStyle, onPointerDown, ...title }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   // Une ouverture, une fenêtre neuve : le mot de passe d'un lien déjà créé ne doit pas reparaître à
@@ -71,7 +80,19 @@ function ShareButtonOn({ variant, rowClassName = "", badgeClassName = "", wideSp
   const label = t("share.admin.button");
   return (
     <>
-      {variant === "row" ? (
+      {variant === "icon" ? (
+        <button
+          type="button"
+          onClick={openSheet}
+          onPointerDown={onPointerDown}
+          aria-label={label}
+          title={label}
+          className={iconClassName}
+          style={iconStyle}
+        >
+          <Link2 size={16} />
+        </button>
+      ) : variant === "row" ? (
         <button type="button" data-detail-menu onClick={openSheet} className={rowClassName}>
           <span className={badgeClassName}>
             <Link2 size={14} />

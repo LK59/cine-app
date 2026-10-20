@@ -333,6 +333,22 @@ export function CinemaMovieDetail({
         <ArrowLeft size={16} /> {t("cinema.back")}
       </button>
 
+      {/* Partager ce film par un lien (DECISIONS.md §112) : une pastille discrète en face du retour,
+          hors du menu de la fiche — administrateur seul, rien pour les autres. */}
+      {item.jellyfinItemId && !fileMissing && (
+        <ShareButton
+          variant="icon"
+          iconClassName="btn btn-ghost fixed z-10 rounded-full bg-black/55 p-2.5 float-edge"
+          iconStyle={{ top: "max(1rem, env(safe-area-inset-top))", right: "1rem" }}
+          kind="movie"
+          itemId={item.jellyfinItemId}
+          radarrId={item.radarrId ?? null}
+          title={item.title}
+          year={item.year ?? null}
+          posterUrl={item.posterUrl ?? null}
+        />
+      )}
+
       {/* Two snap positions, like the browse screen: the title block, then the similar titles.
           Each section is min-h-full so it fills the viewport on its own, which is what stops the
           scroll from ever resting halfway between the two.
@@ -469,20 +485,6 @@ export function CinemaMovieDetail({
                 posterUrl={item.posterUrl ?? null}
                 runtimeMinutes={item.runtimeMinutes ?? null}
                 onlineResumeTicks={facts.resumeTicks}
-              />
-            )}
-            {/* Partager ce film par un lien (DECISIONS.md §112) : administrateur seul, rien pour les autres. */}
-            {item.jellyfinItemId && !fileMissing && (
-              <ShareButton
-                variant="row"
-                rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-                badgeClassName={MENU_BADGE}
-                kind="movie"
-                itemId={item.jellyfinItemId}
-                radarrId={item.radarrId ?? null}
-                title={item.title}
-                year={item.year ?? null}
-                posterUrl={item.posterUrl ?? null}
               />
             )}
 

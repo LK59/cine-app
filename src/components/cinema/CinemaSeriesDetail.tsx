@@ -339,6 +339,22 @@ export function CinemaSeriesDetail({
         <ArrowLeft size={16} /> {t("cinema.back")}
       </button>
 
+      {/* Partager la série entière par un lien (DECISIONS.md §112) : une pastille discrète en face du
+          retour, hors du menu de la fiche — administrateur seul. */}
+      {item.jellyfinItemId && (
+        <ShareButton
+          variant="icon"
+          iconClassName="btn btn-ghost fixed z-10 rounded-full bg-black/55 p-2.5 float-edge"
+          iconStyle={{ top: "max(1rem, env(safe-area-inset-top))", right: "1rem" }}
+          kind="series"
+          itemId={item.jellyfinItemId}
+          sonarrId={item.sonarrId ?? null}
+          title={item.title}
+          year={item.year ?? null}
+          posterUrl={item.posterUrl ?? null}
+        />
+      )}
+
       {/* Two snap positions, like the browse screen: the title block, then the similar titles.
           Each section is min-h-full so it fills the viewport on its own, which is what stops the
           scroll from ever resting halfway between the two.
@@ -484,21 +500,6 @@ export function CinemaSeriesDetail({
                 </span>
                 <span className="text-sm font-medium">{t("cinema.moreEpisodes")}</span>
               </button>
-            )}
-
-            {/* Partager la série entière par un lien (DECISIONS.md §112) : administrateur seul. */}
-            {item.jellyfinItemId && (
-              <ShareButton
-                variant="row"
-                rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-                badgeClassName={MENU_BADGE}
-                kind="series"
-                itemId={item.jellyfinItemId}
-                sonarrId={item.sonarrId ?? null}
-                title={item.title}
-                year={item.year ?? null}
-                posterUrl={item.posterUrl ?? null}
-              />
             )}
 
             <button
