@@ -5963,3 +5963,30 @@ et la navigation repart de zéro.
 Tests : `offline-fmp4`, `offline-trickplay`, `offline-engine`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`,
 `offline-downloads-page`, `offline-entry`, `serviceWorker-offline-entry`, `offline-page`,
 `proxy-offline-entry`, `cinemaRoute`, `cinemaRoute-normalize`, `playerNav`.
+
+## 110. La langue du son retenue par série
+
+**La règle (Louis, 20/10/2026).** Dans une série, changer la langue du son à la main dans deux épisodes
+différents, vers la même langue, en fait la langue d'ouverture de cette série pour ce compte, à la place
+de la préférence du compte. Réversible de la même façon : deux épisodes passés vers une autre langue la
+remplacent ; un retour à la langue retenue efface le changement en cours. Les films gardent la
+préférence du compte.
+
+**Pourquoi pas une préférence du compte à corriger.** Augustine passait de l'anglais au français
+35 fois en onze jours, mais seulement sur le Mac (The Handmaid's Tale, Obi-Wan, Shōgun) ; sur l'iPhone,
+Lucifer et The Rookie restaient en anglais 41 fois sur 41. Une fenêtre « passer en français par défaut »
+avait été envisagée et écartée : elle aurait déplacé le problème sur l'autre série.
+
+**Une fonction, une réponse.** La règle est `nextSeriesLanguage` (`seriesLanguage.ts`), l'état dans
+`series_audio_language` (compte, série). Le serveur répond seul : `playback-state` donne la langue de la
+série comme `audioLanguage` (et `playDefaultAudioTrack: false`), et l'ouverture du lecteur natif choisit
+sa piste avec, comme avant. Les deux lecteurs signalent un choix à la main par
+`POST /api/player/series-language` (`noteSeriesLanguage`) : le natif quand la reconstruction arrive sur
+la piste voulue, le lecteur serveur dans `changeAudio`. Ni le banc ni un extrait de test. La série vient
+de Jellyfin (`SeriesId`), le compte de la session.
+
+**Différence voulue.** Un épisode ouvert directement par le lecteur serveur (titre déjà passé au
+serveur dans cette séance de l'app) suit encore le choix de Jellyfin : son ouverture ne lit pas
+`playback-state`. Un relais du natif garde la piste du natif.
+
+Tests : `series-language.test.ts` (règle, rangement par compte, route, ouverture), `jellyfin-playback-state-route`.

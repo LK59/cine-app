@@ -55,6 +55,8 @@ import { SlowLinkRunner, type SeekSignal, type SlowLinkHost } from "@/lib/slowLi
 import { forgetLighterCarry, readPlaybackQuality, rememberLighter, usePlaybackQuality } from "@/lib/playbackQuality";
 import { simulatorActive, throttledHlsLoader } from "@/lib/linkSimulator";
 import { hlsRecoveryPosition, hlsResetItself, livePosition } from "@/lib/hlsRecovery";
+import { noteSeriesLanguage } from "@/lib/noteSeriesLanguage";
+import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { pushSlowLinkEvent } from "@/lib/slowLinkMonitor";
 
 /** Pas d'indice : l'état ordinaire d'un chargement (§78). */
@@ -971,6 +973,8 @@ function ActivePlayer({
   // The server's own name for the item — the only one that knows an episode is an episode. What
   // the caller passed stands until it arrives, so the title never blinks in empty.
   const [serverTitle, setServerTitle] = useState<string | null>(null);
+  /** Jellyfin's stream index → the track's language, from the last negotiation. */
+  const audioLanguagesRef = useRef<Map<number, string | null>>(new Map());
   const title = serverTitle ?? openedAs;
   // Ce que chaque ligne du journal de ce lecteur porte — voir `serverPlayerLog`. Tenu dans une
   // référence : `startPlayback` a des dépendances volontairement figées, et y lire `title` ou
@@ -1688,6 +1692,8 @@ function ActivePlayer({
           }
         ).map((e) => ({ id: e.number, label: e.label }))
       );
+      // La langue de chaque piste, pour dire au serveur celle choisie à la main (`changeAudio`).
+      audioLanguagesRef.current = new Map(faitsAudio.map((t) => [t.index, t.language]));
       setCurrentAudioId(opts?.audioStreamIndex ?? data.audioTracks?.find((t: { isDefault: boolean }) => t.isDefault)?.index ?? null);
       setServerTitle(data.title ?? null);
       setIntroSkip(data.introSkip ?? null);
@@ -2297,6 +2303,9 @@ function ActivePlayer({
 
   const changeAudio = useCallback(
     (id: number) => {
+      // Un choix à la main : la langue retenue par série en tient compte (`seriesLanguage.ts`), comme
+      // depuis le lecteur natif.
+      if (!bench) noteSeriesLanguage(itemId, toJellyfinLanguage(audioLanguagesRef.current.get(id) ?? null));
       // La position à Jellyfin tout de suite, avant la renégociation : le battement ne part plus
       // que toutes les 30 s (13/10/2026, `usePlaybackSession`).
       reportPositionNow();
@@ -2344,7 +2353,7 @@ function ActivePlayer({
       }
       startPlayback({ audioStreamIndex: id, resumeAt, cause: { why: "audio" } });
     },
-    [startPlayback, itemId, title, reloadCarryNow, reportPositionNow]
+    [startPlayback, itemId, title, reloadCarryNow, reportPositionNow, bench]
   );
 
   /**

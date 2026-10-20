@@ -5,6 +5,7 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import type { TrackPreferences } from "@/lib/trackPreferences";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { UpstreamUnreachableError, UPSTREAM_UNREACHABLE } from "@/lib/http";
+import { seriesPreferredLanguage } from "@/lib/seriesLanguage";
 
 /**
  * Ce qui change entre deux lectures du même fichier — et rien d'autre.
@@ -78,14 +79,27 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     return NextResponse.json({ error: (unreachable as UpstreamUnreachableError).message, code: UPSTREAM_UNREACHABLE }, { status: 502 });
   }
 
+  // La langue retenue pour cette série (`seriesLanguage.ts`) passe avant celle du compte : deux
+  // épisodes passés à la main vers la même langue ont dit ce que ce compte veut pour elle. Une
+  // lecture de la base qui échoue laisse la préférence du compte, comme avant.
+  let seriesLanguage: string | null = null;
+  if (item?.Type === "Episode" && item.SeriesId && session.u) {
+    try {
+      seriesLanguage = seriesPreferredLanguage(session.u, item.SeriesId);
+    } catch {
+      seriesLanguage = null;
+    }
+  }
+
   return NextResponse.json<PlaybackState>({
     resumeSeconds: (item?.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000,
     preferences: configuration
       ? {
-          audioLanguage: configuration.AudioLanguagePreference ?? null,
+          audioLanguage: seriesLanguage ?? configuration.AudioLanguagePreference ?? null,
           subtitleLanguage: configuration.SubtitleLanguagePreference ?? null,
           subtitleMode: (configuration.SubtitleMode as TrackPreferences["subtitleMode"]) ?? null,
-          playDefaultAudioTrack: configuration.PlayDefaultAudioTrack === true,
+          // Une langue retenue pour la série n'est pas à céder à la piste par défaut du fichier.
+          playDefaultAudioTrack: seriesLanguage === null && configuration.PlayDefaultAudioTrack === true,
         }
       : null,
   });

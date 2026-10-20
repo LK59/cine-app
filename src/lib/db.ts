@@ -9,6 +9,7 @@ import type { NewsContentByLang } from "@/lib/news/content";
 import { NEWS_848_CONTENT, NEWS_848_SEED, NEWS_848_VERSION } from "@/lib/news/page848";
 import { NEWS_864_CONTENT, NEWS_864_SEED, NEWS_864_VERSION } from "@/lib/news/page864";
 import { NEWS_90_CONTENT, NEWS_90_PUBLISH, NEWS_90_SEED, NEWS_90_VERSION } from "@/lib/news/page90";
+import { NEWS_91_CONTENT, NEWS_91_SEED, NEWS_91_VERSION } from "@/lib/news/page91";
 import { NEWS_8672_CONTENT, NEWS_8672_FIRST_VERSION, NEWS_8672_REPUBLISH, NEWS_8672_SEED, NEWS_8672_VERSION } from "@/lib/news/page8672";
 
 // Réexporté, et défini ailleurs : le journal des erreurs a besoin du chemin et ne doit rien
@@ -577,6 +578,18 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (account, job_id)
     );
   `);
+  // La langue du son retenue par série et par compte (`seriesLanguage.ts`, 20/10/2026).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS series_audio_language (
+      account            TEXT    NOT NULL,
+      series_id          TEXT    NOT NULL,
+      preferred          TEXT,
+      candidate          TEXT,
+      candidate_episodes TEXT,
+      updated_at         INTEGER NOT NULL,
+      PRIMARY KEY (account, series_id)
+    );
+  `);
   // Quand l'appareil de ce compte a reçu la version entière : le quota du serveur n'efface que ce que
   // tous ses demandeurs ont récupéré (20/10/2026).
   try { db.exec("ALTER TABLE offline_requests ADD COLUMN fetched_at INTEGER"); } catch { /* already exists */ }
@@ -593,6 +606,8 @@ function migrate(db: Database.Database): void {
   // installations et tous les comptes le 20/10, le jour où la fonction s'ouvre à tous.
   seedNewsPage(db, NEWS_90_SEED, NEWS_90_VERSION, NEWS_90_CONTENT, Date.now(), "draft");
   publishNewsDraft(db, NEWS_90_PUBLISH, NEWS_90_VERSION, NEWS_90_CONTENT);
+  // En brouillon : Louis la publie depuis Activité → Nouveautés (20/10/2026).
+  seedNewsPage(db, NEWS_91_SEED, NEWS_91_VERSION, NEWS_91_CONTENT, Date.now(), "draft");
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
     const now = Date.now();
     db.prepare("INSERT OR IGNORE INTO onboarding (user_name, pending, updated_at) VALUES ('louis', 1, ?)").run(now);

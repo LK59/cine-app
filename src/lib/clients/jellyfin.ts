@@ -829,7 +829,7 @@ export const jellyfin = {
     }>(`${cfg.url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}?Fields=MediaSources,UserData,RunTimeTicks`, { headers }),
 
   getItemUserData: async (userId: string, itemId: string) =>
-    fetchJson<{ UserData?: JellyfinItem["UserData"]; RunTimeTicks?: number }>(
+    fetchJson<{ UserData?: JellyfinItem["UserData"]; RunTimeTicks?: number; Type?: string; SeriesId?: string | null }>(
       `${cfg.url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}?Fields=UserData,RunTimeTicks`,
       { headers }
     ),

@@ -120,7 +120,8 @@ import {
   toPlayerTrack as externalToPlayerTrack,
   type ExternalSubtitleSource,
 } from "@/lib/webcodecs/externalSubtitles";
-import { chooseAudioTrack, chooseSubtitleTrack, normaliseLanguage, trackLanguage } from "@/lib/trackPreferences";
+import { chooseAudioTrack, chooseSubtitleTrack, normaliseLanguage, toJellyfinLanguage, trackLanguage } from "@/lib/trackPreferences";
+import { noteSeriesLanguage } from "@/lib/noteSeriesLanguage";
 import { labelAudioTracks, labelSubtitleTracks, languageName } from "@/lib/trackLabel";
 import {
   isGeneratingTrack,
@@ -1466,6 +1467,11 @@ export function ExperimentalPlayerHost({
    * 20/10/2026) — la trace repart de zéro à l'ouverture du fichier, après cette attente.
    */
   const infoAtRef = useRef<number | null>(null);
+  /** Ni le banc ni un extrait de test : ce que fait cette lecture dit quelque chose du spectateur. */
+  const observesViewerRef = useRef(!session.bench && !session.labSample);
+  useEffect(() => {
+    observesViewerRef.current = !session.bench && !session.labSample;
+  }, [session.bench, session.labSample]);
   useEffect(() => {
     if (info && infoAtRef.current === null) infoAtRef.current = Date.now();
   }, [info]);
@@ -2697,6 +2703,12 @@ export function ExperimentalPlayerHost({
       if (pendingSwitch) {
         pendingSwitchRef.current = null;
         reportAudioSwitch(pendingSwitch.from, pendingSwitch.fromLabel, pendingSwitch.to, pendingSwitch.startedAt, playback, "reconstruction");
+        // Un choix à la main, arrivé sur la piste voulue : la langue retenue par série en tient compte
+        // (`seriesLanguage.ts`). Ni le banc ni un extrait de test n'en disent rien du spectateur.
+        if (playback.currentAudioTrack === pendingSwitch.to && observesViewerRef.current) {
+          const chosen = playback.audioTracks.find((track) => track.number === pendingSwitch.to);
+          noteSeriesLanguage(itemId, toJellyfinLanguage(chosen ? trackLanguage(chosen) : null));
+        }
       }
       // La piste voulue n'est pas celle sur laquelle on a ouvert : on reconstruit dessus, comme
       // pour tout changement de piste. Rare — l'ouverture et l'écran choisissent avec la même

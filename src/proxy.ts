@@ -86,6 +86,8 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   "POST /api/offline/jobs",
   "POST /api/jellyfin/favorite",
   "POST /api/player/account/preferences",
+  // La langue retenue par série (20/10/2026) : rangée sous le compte de la session, rien d'autre.
+  "POST /api/player/series-language",
   "POST /api/player/account/password",
   // La langue de l'app (23/09/2026). Refusée à un compte ordinaire sans que rien ne le dise —
   // `fetch` ne lève pas sur un 403 —, puis le rechargement relisait l'ancienne langue et la
