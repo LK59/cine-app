@@ -1511,6 +1511,18 @@ l'élan d'un défilement tactile).
 **Trouvé le 04/10/2026** : premier passage sur « Séries » lent, et « Voir tous les films » qui
 demandait deux appuis au bout de la page.
 
+
+**Des transitions allégées (20/10/2026, Louis : « lentes, lourdes sans raison »).** Les durées ne
+changent pas — le poids venait de ce qui se faisait pendant elles. La grille complète n'insère le
+reste de ses cartes qu'après son fondu d'entrée (`ENTRY_SETTLE_MS`, 240 ms) : le premier écran reste
+immédiat. La remise à zéro de la bannière « hors écran » est différée sur les deux accueils, comme sa
+pause. Ce qu'on ouvre depuis le Compte (activité, signalement, nouveautés) se pose sur lui au lieu
+d'un fondu croisé qui montrait l'accueil à mi-chemin ; le code et la vue d'ensemble de l'Activité sont
+demandés dès l'ouverture du Compte (administrateur), le code des téléchargements dès le premier temps
+libre. Les cartes d'un onglet plein écran n'ont plus de flou d'arrière-plan (invisible sur un fond
+uni, recalculé à chaque image), les téléchargements ne refont plus un fondu par carte ni ne sautent de
+18 px à l'arrivée de l'estimation de place. Au doigt, une surface liquide n'a plus de transition CSS
+sur `transform` (le verre traînait derrière le doigt). La sortie des écrans pleins est en `ease-out`.
 ## 47. Ce que le cinéma montre, et ce qu'il dit « dans la bibliothèque »
 
 **Règle.** Un film avec son fichier, une série avec au moins un épisode, **et** son élément

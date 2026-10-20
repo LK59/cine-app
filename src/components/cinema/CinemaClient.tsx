@@ -20,7 +20,7 @@ import {
 } from "@/lib/homeLayout";
 import { useHomeLayout } from "@/lib/useHomeLayout";
 import useSWR from "swr";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { createPortal } from "react-dom";
 import { Play, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -607,12 +607,18 @@ export function CinemaClient() {
   // le film à l'écran y reste, une nouveauté vient au passage suivant, et l'ordre officiel revient
   // dès qu'elle quitte l'écran — voir `useHeroCarousel`, commun avec le téléphone.
   // Le hook ne reçoit que des valeurs primitives — voir `useHeroOrder`.
+  // Différés, comme la pause de la bannière du téléphone (`heroCovered`) : passer « hors écran »
+  // remet la bannière à son premier titre et la redessine, et ce travail se faisait dans la tâche
+  // même où s'ouvrait la grille complète ou un onglet — sous la première image de l'animation
+  // (relevé le 20/10/2026). Un titre de bannière qui change un instant plus tard ne se voit pas.
+  const moviesOffscreen = useDeferredValue(heroOffscreen("movies", route, playback.mode));
+  const seriesOffscreen = useDeferredValue(heroOffscreen("series", route, playback.mode));
   const [movieOrderIndex, setMovieCarouselIndex, movieOrder] = useHeroOrder(
     heroSignature(movieCarouselOfficial.map(movieHeroKey)),
     // L'onglet caché garde sa place, en pause : revenir sur Films retrouve le titre qu'on y avait
     // laissé (08/10/2026) — voir `heroOffscreen`.
     focusedItem !== null || !gridOnTop || mediaType !== "movies" || bannerEngaged,
-    heroOffscreen("movies", route, playback.mode),
+    moviesOffscreen,
     movieHero.continuing ? "continue" : "spotlight"
   );
   // Un titre à l'écran qui vient de sortir de la liste reste à l'écran : retrouvé dans le catalogue.
@@ -669,7 +675,7 @@ export function CinemaClient() {
   const [seriesOrderIndex, setSeriesCarouselIndex, seriesOrder] = useHeroOrder(
     heroSignature(seriesCarouselOfficial.map(seriesHeroKey)),
     seriesFocusedItem !== null || !gridOnTop || mediaType !== "series" || bannerEngaged,
-    heroOffscreen("series", route, playback.mode),
+    seriesOffscreen,
     seriesHero.continuing ? "continue" : "spotlight"
   );
   const { items: seriesCarousel, index: seriesCarouselIndex } = resolveHeroCarousel(

@@ -512,6 +512,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    page: "9.1",
+    version: "9.3.6",
+    group: { fr: "Navigation", en: "Navigation", es: "Navegación", de: "Navigation" },
+    items: [
+      {
+        fr: "« Tous les films », « Toutes les séries » et les téléchargements s'ouvrent plus légèrement, et les boutons répondent sans traîner sous le doigt.",
+        en: "“All movies”, “All series” and downloads open more lightly, and buttons respond without lagging under your finger.",
+        es: "«Todas las películas», «Todas las series» y las descargas se abren con más fluidez, y los botones responden sin retraso bajo el dedo.",
+        de: "„Alle Filme“, „Alle Serien“ und die Downloads öffnen sich flüssiger, und die Schaltflächen reagieren ohne Verzögerung unter dem Finger.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

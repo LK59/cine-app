@@ -50,7 +50,8 @@ const loadPlayerAccountPanel = () => import("./PlayerAccountPanel").then((m) => 
 const PlayerAccountPanel = dynamic(loadPlayerAccountPanel, { ssr: false, loading: PanelPlaceholder });
 // L'activité des comptes, pour l'administrateur seul : chargée à la première ouverture, jamais
 // avant — personne d'autre ne paie son code.
-const PlayerActivityPanel = dynamic(() => import("./PlayerActivityPanel").then((m) => m.PlayerActivityPanel), { ssr: false, loading: PanelPlaceholder });
+const loadPlayerActivityPanel = () => import("./PlayerActivityPanel").then((m) => m.PlayerActivityPanel);
+const PlayerActivityPanel = dynamic(loadPlayerActivityPanel, { ssr: false, loading: PanelPlaceholder });
 // Compte → Nouveautés (DECISIONS.md §73), ouvert depuis le Compte ou par « Voir plus » de la fenêtre.
 const loadPlayerNewsPanel = () => import("./PlayerNewsPanel").then((m) => m.PlayerNewsPanel);
 const PlayerNewsPanel = dynamic(loadPlayerNewsPanel, { ssr: false, loading: PanelPlaceholder });
@@ -237,6 +238,11 @@ export function PlayerShell() {
       (PlayerSearchPanel as Preloadable).preload?.();
       (PlayerListPanel as Preloadable).preload?.();
       (PlayerAccountPanel as Preloadable).preload?.();
+      // Les téléchargements, dont le bouton est sur l'accueil : leur code n'arrivait qu'avec les
+      // autres écrans, dix secondes après le lancement, et une ouverture plus tôt montrait un écran
+      // noir (ou rien, au bureau) le temps de le charger (20/10/2026). Le chargeur nommé, lui, charge
+      // vraiment — voir plus bas.
+      void loadPlayerDownloadsPanel().catch(() => undefined);
       // Puis les deux fiches, qui s'ouvrent depuis un résultat de recherche : leur première
       // ouverture payait le même aller-retour, juste plus tard dans le parcours.
       (PlayerDiscoverSheet as Preloadable).preload?.();
@@ -255,6 +261,18 @@ export function PlayerShell() {
     const timer = setTimeout(warm, 1500);
     return () => clearTimeout(timer);
   }, []);
+
+  /**
+   * L'activité, pour l'administrateur : son code et sa vue d'ensemble demandés dès que le Compte
+   * s'ouvre (20/10/2026). Ils n'étaient chargés qu'au premier appui, et l'écran arrivait vide
+   * puis rempli — au bureau, le Compte s'effaçait sur l'accueil le temps du chargement. Personne
+   * d'autre ne les paie.
+   */
+  useEffect(() => {
+    if (!account.render || role !== "admin") return;
+    void loadPlayerActivityPanel().catch(() => undefined);
+    void preloadQuietly("/api/admin/activity");
+  }, [account.render, role]);
 
   // Et le code de tous les écrans chargés à la demande, gardé sur l'appareil pour qu'ils s'ouvrent
   // hors ligne — voir `warmPanels.ts` (ROBUSTESSE-4). Le `preload` ci-dessus ne s'en charge pas :
@@ -298,11 +316,15 @@ export function PlayerShell() {
           fromTab={search.leaving || account.leaving}
         />
       )}
+      {/* Ce qu'on ouvre depuis le Compte (l'activité, un signalement, les nouveautés) se pose sur lui :
+          le Compte reste en place sous l'écran qui arrive, et revient d'un coup au retour — un
+          fondu croisé montrait l'accueil à travers les deux écrans à mi-chemin, comme entre deux
+          onglets avant le 23/09 (relevé le 20/10/2026). */}
       {account.render && (
         <PlayerAccountPanel
           leaving={account.leaving}
-          replaced={account.leaving && (route.search || route.list)}
-          fromTab={search.leaving || list.leaving}
+          replaced={account.leaving && (route.search || route.list || route.activity !== null || route.report !== null || route.news !== null)}
+          fromTab={search.leaving || list.leaving || activity.leaving || report.leaving || news.leaving}
         />
       )}
       {/* L'activité : une clé par vue — une autre vue est un autre écran (voir la règle des fiches

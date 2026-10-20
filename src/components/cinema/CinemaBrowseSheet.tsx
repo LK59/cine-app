@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useDeferredValue, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { escapeClears } from "@/lib/escapeClears";
 import { useT } from "@/components/TranslationProvider";
 import { PlayerPanelFrame } from "@/components/player/PlayerPanelFrame";
@@ -37,6 +37,8 @@ import {
  */
 /** De quoi remplir un premier écran, même grand : 7 colonnes × 4 rangées. */
 const FIRST_SCREEN_CARDS = 28;
+/** Le fondu d'entrée d'un écran plein (`animate-fade-in-side`, 220 ms), et un souffle. */
+const ENTRY_SETTLE_MS = 240;
 
 type BrowseSheetProps<T extends BrowsableTitle> = {
   /** Un genre, ou `BROWSE_ALL` pour toute la bibliothèque. */
@@ -199,8 +201,20 @@ function BrowseSheet<T extends BrowsableTitle>({
    * grille reste le temps que la nouvelle soit prête, avec le fil de chargement au-dessus.
    */
   const firstScreen = useMemo(() => shown.slice(0, FIRST_SCREEN_CARDS), [shown]);
-  const grid = useDeferredValue(shown, firstScreen);
-  const building = grid !== shown;
+  /**
+   * Et le reste seulement une fois l'entrée jouée (20/10/2026). Le rendu différé s'interrompt, mais
+   * pas son insertion : quelque sept cents cartes (≈ 7 000 nœuds, autant d'observateurs d'images)
+   * tombaient d'un bloc pendant les 220 ms du fondu d'ouverture, et sur un téléphone l'animation
+   * accrochait. Le premier écran est là dès l'appui ; la suite arrive juste après, avant qu'on ait
+   * eu le temps de défiler.
+   */
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setEntered(true), ENTRY_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  const grid = useDeferredValue(entered ? shown : firstScreen, firstScreen);
+  const building = entered && grid !== shown;
 
   // Les affiches des deux écrans suivants sont décodées d'avance : c'est leur arrivée pendant le
   // défilement qui saccadait, et non la grille elle-même. Voir `useDecodeAhead`.

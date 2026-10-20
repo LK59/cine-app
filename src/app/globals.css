@@ -90,7 +90,11 @@
      "gone", not be admired, and Cinema Mode's own back-navigation needs to stay snappy. */
   --animate-fade-out: fade-out 0.2s ease-in both;
   --animate-fade-out-down: fade-out-down 0.2s ease-in both;
-  --animate-fade-out-scale: fade-out-scale 0.18s ease-in both;
+  /* Sauf celle-ci, en `ease-out` (20/10/2026) : c'est la sortie des onglets et des écrans pleins
+     (`PlayerPanelFrame`, la grille complète). En `ease-in`, l'opacité ne bougeait presque pas les
+     soixante premières millisecondes — ajoutées au saut de l'historique, l'appui semblait ne pas
+     répondre. Elle part tout de suite ; la durée, lue par `EXIT_MS`, ne change pas. */
+  --animate-fade-out-scale: fade-out-scale 0.18s ease-out both;
   /* "Going deeper" (series detail → its episode browser) slides in from the right and, on the
      way back out, slides back out the same way it came — a spatial forward/back cue, not just a
      crossfade, for the one place in Cinema Mode where one full screen genuinely replaces another
@@ -578,6 +582,16 @@
 
 @utility badge {
   @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2.5 py-0.5 text-xs font-medium backdrop-blur-xs;
+}
+
+/* Dans un onglet plein écran (`PlayerPanelFrame`, fond opaque), le flou derrière une carte ne floute
+   qu'une couleur unie : invisible, et pourtant recalculé à chaque image de l'entrée et du défilement
+   — seize grandes cartes dans l'Activité (relevé le 20/10/2026). La règle des grandes surfaces sans
+   flou (§45, 26/09) s'applique là aussi ; l'apparence ne change pas. */
+[data-panel-root] .card,
+[data-panel-root] .select {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 @utility select {
@@ -1608,6 +1622,16 @@
 .player-liquid .player-center-btn[data-lit],
 .player-liquid .player-pill-solo[data-lit] { box-shadow: var(--glass-edge), var(--glass-lit), 0 8px 24px rgb(0 0 0 / 0.28); }
 .player-liquid .player-capsule:active { transform: none; }
+/* Toute surface liquide en dehors du lecteur aussi (20/10/2026) : la transition de `transform` que
+   tout bouton porte (150 ms) rejouait chaque position que le geste écrit pendant le glissement — le
+   verre traînait derrière le doigt —, et `:active` poussait sous le gonflement. Le geste anime seul ;
+   les couleurs gardent leur transition. Au doigt seulement : c'est là que le geste est branché
+   (`useLiquidDelegation` dans les écrans tactiles) ; à la souris, et en mouvement réduit, où le geste
+   ne joue pas, `:active` reste le seul retour. */
+@media (prefers-reduced-motion: no-preference) and (pointer: coarse) {
+  [data-liquid] { transition-property: background-color, border-color, color, opacity, box-shadow; }
+  [data-liquid]:not(:disabled):active { transform: none; }
+}
 .player-liquid .player-capsule[data-lit] { background: rgb(255 255 255 / 0.8); }
 
 /* La pilule cachée sous le menu qui naît d'elle (`LiquidMenu`) : invisible, elle n'a pas à refaire

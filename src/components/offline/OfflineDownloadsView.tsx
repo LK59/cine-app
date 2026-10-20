@@ -167,11 +167,18 @@ function Grid({ children }: { children: React.ReactNode }) {
  * Firefox sous Windows annonçaient tous « usage + 10 Gio » pile (startup.log, 09-10/2026) quand Safari
  * sur iPhone donnait ~41 Go — « environ 10 Go encore disponibles » se lisait comme le disque du PC.
  */
+/**
+ * La dernière place libre lue, gardée pour la prochaine ouverture (20/10/2026) : l'estimation arrive
+ * après le premier rendu, et la barre qu'elle fait apparaître poussait toute la page de 18 px à
+ * chaque ouverture. La page s'ouvre avec la valeur d'avant, que la nouvelle remplace.
+ */
+let lastFree: number | null = null;
+
 function StorageSummary({ downloads }: { downloads: OfflineDownload[] }) {
   const t = useT();
   const { locale } = useLocale();
   const used = downloads.reduce((sum, d) => sum + d.bytes, 0);
-  const [free, setFree] = useState<number | null>(null);
+  const [free, setFree] = useState<number | null>(lastFree);
   // Relue quand la place prise change de plus de quelques Mo : un téléchargement en cours la fait
   // bouger toutes les deux secondes, l'estimation n'a pas à suivre chaque morceau.
   const step = Math.round(used / (64 * 1024 * 1024));
@@ -182,7 +189,9 @@ function StorageSummary({ downloads }: { downloads: OfflineDownload[] }) {
     storage
       .estimate()
       .then((e) => {
-        if (!cancelled && typeof e.quota === "number" && typeof e.usage === "number") setFree(Math.max(0, e.quota - e.usage));
+        if (cancelled || typeof e.quota !== "number" || typeof e.usage !== "number") return;
+        lastFree = Math.max(0, e.quota - e.usage);
+        setFree(lastFree);
       })
       .catch(() => {});
     return () => {
@@ -256,7 +265,9 @@ function PosterCard({
   return (
     // `grid` : la carte (un bouton) prend toute la largeur de sa case, comme dans Ma liste où elle est
     // l'enfant direct de la grille — sinon chaque affiche avait la largeur de son image.
-    <li className="grid animate-fade-in">
+    // Sans fondu à elle : l'écran entier arrive déjà en fondu, et les deux opacités se multipliaient —
+    // le contenu se posait visiblement après le cadre (20/10/2026).
+    <li className="grid">
       <PlayerResultCard kind={kind} showKind={false} title={title} subtitle={caption} poster={url} onOpen={onShow} overlay={overlay} />
     </li>
   );
@@ -469,7 +480,7 @@ function DownloadRow({ download: d }: { download: OfflineDownload }) {
   const done = d.state === "done";
   const playable = offlinePlayable(d);
   return (
-    <li className="flex animate-fade-in flex-col gap-2.5 border-t border-white/8 py-3 first:border-t-0 sm:flex-row sm:items-center sm:gap-3">
+    <li className="flex flex-col gap-2.5 border-t border-white/8 py-3 first:border-t-0 sm:flex-row sm:items-center sm:gap-3">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <Poster url={poster} />
         <div className="min-w-0 flex-1">

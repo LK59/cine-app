@@ -588,6 +588,10 @@ export function CinemaMobileClient() {
    * au départ d'une fermeture, processeur ×4). Une bande-annonce qui tourne un instant de plus derrière
    * une fiche ne se voit pas.
    */
+  // « Hors écran » aussi : il remet la bannière à son premier titre, un travail qui pesait sur la
+  // première image de l'ouverture de la grille complète ou d'un onglet (relevé le 20/10/2026).
+  const moviesOffscreenLater = useDeferredValue(heroOffscreen("movies", route, playback.mode));
+  const seriesOffscreenLater = useDeferredValue(heroOffscreen("series", route, playback.mode));
   const heroCovered = useDeferredValue(
     selected !== null ||
       searchOpen ||
@@ -763,7 +767,7 @@ export function CinemaMobileClient() {
               // Hors de l'écran — l'autre onglet, un panneau, le lecteur plein écran : l'ordre
               // officiel et le début. Pas une fiche, pas le retour d'arrière-plan : voir
               // `heroOffscreen`, la même règle que le bureau.
-              offscreen={heroOffscreen(tab, route, playback.mode)}
+              offscreen={tab === "movies" ? moviesOffscreenLater : seriesOffscreenLater}
               short={short}
               wide={wide}
               onPlay={playHero}

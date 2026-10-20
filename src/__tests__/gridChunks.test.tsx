@@ -82,7 +82,9 @@ describe("la grille complète est faite de paquets", () => {
     render(
       <CinemaBrowseSheet genre={BROWSE_ALL} mediaType="movies" items={items} genres={[]} idOf={(i) => i.id} posterOf={() => null} libraryIdOf={(i) => i.id} />
     );
-    await screen.findByText("Titre 800");
+    // Le reste après l'entrée (240 ms, `ENTRY_SETTLE_MS`) : l'attente par défaut (1 s) ne suffit plus
+    // à jsdom chargé.
+    await screen.findByText("Titre 800", undefined, { timeout: 15_000 });
     const root = document.querySelector(".grid-chunks") as HTMLElement;
     const chunks = [...root.children] as HTMLElement[];
     expect(chunks.every((c) => c.hasAttribute(GRID_CHUNK_ATTR))).toBe(true);
