@@ -3818,6 +3818,8 @@ export function ExperimentalPlayerHost({
 
   return createPortal(
     <div
+      // Rien à sélectionner dans le lecteur, vidéo et sous-titres compris (globals.css).
+      data-player-frame
       ref={containerRef}
       style={style}
       className={isMini ? "animate-fade-in-scale" : "app-viewport"}

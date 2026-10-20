@@ -1947,6 +1947,22 @@ body:has(.gestion-liquid) .glass-window {
   }
 }
 
+/* Tout le cadre des lecteurs — en ligne, serveur, hors ligne — ne sélectionne rien, vidéo et
+   sous-titres compris (20/10/2026). `select-none` ne couvrait que les commandes : un appui long ou
+   une rafale de touchers sur l'image ou un sous-titre lançait la sélection d'iOS, qui s'étendait à
+   toute la page et prenait les touchers — plus aucun bouton, ni les étirements de la pilule,
+   jusqu'à un toucher à côté. */
+[data-player-frame] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+[data-player-frame] input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+[data-player-frame] textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* Le lecteur ne sélectionne rien (`select-none` sur sa racine, 11/10/2026) — sauf un champ où l'on
    écrirait : la sélection y est utile. */
 .player-liquid input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),

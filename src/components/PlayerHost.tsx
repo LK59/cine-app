@@ -3374,6 +3374,8 @@ function ActivePlayer({
 
   return createPortal(
     <div
+      // Rien à sélectionner dans le lecteur, vidéo et sous-titres compris (globals.css).
+      data-player-frame
       ref={containerRef}
       style={style}
       // app-viewport rather than an inline 100dvh — see its note in globals.css: the right unit

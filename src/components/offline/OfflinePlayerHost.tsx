@@ -434,7 +434,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
       };
 
   return createPortal(
-    <div ref={containerRef} style={style} className={isMini ? "animate-fade-in-scale" : "app-viewport"} {...(isMini ? handlers : {})}>
+    <div data-player-frame ref={containerRef} style={style} className={isMini ? "animate-fade-in-scale" : "app-viewport"} {...(isMini ? handlers : {})}>
       <video
         ref={videoRef}
         playsInline
