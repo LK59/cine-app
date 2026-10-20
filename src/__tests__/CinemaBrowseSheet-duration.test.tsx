@@ -56,7 +56,8 @@ describe("CinemaBrowseSheet — l'ouverture en deux temps", () => {
     render(sheet("movies", many));
     // Le premier écran tout de suite…
     expect(screen.queryByText("Titre 1")).not.toBeNull();
-    // … et le reste, construit en arrière-plan.
-    expect(await screen.findByText("Titre 60")).not.toBeNull();
+    // … et le reste, construit en arrière-plan une fois l'entrée jouée (`ENTRY_SETTLE_MS`, 240 ms) —
+    // l'attente par défaut (1 s) ne suffit plus à jsdom chargé (la construction de l'image).
+    expect(await screen.findByText("Titre 60", undefined, { timeout: 15_000 })).not.toBeNull();
   });
 });

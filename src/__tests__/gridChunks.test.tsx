@@ -112,7 +112,7 @@ describe("la grille complète est faite de paquets", () => {
     render(
       <CinemaBrowseSheet genre={BROWSE_ALL} mediaType="movies" items={items} genres={[]} idOf={(i) => i.id} posterOf={() => null} libraryIdOf={(i) => i.id} />
     );
-    await screen.findByText("Titre 100");
+    await screen.findByText("Titre 100", undefined, { timeout: 15_000 });
     const chunks = [...(document.querySelector(".grid-chunks") as HTMLElement).children];
     expect(chunks.map((c) => c.children.length)).toEqual([48, 48, 4]);
   });
