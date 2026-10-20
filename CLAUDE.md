@@ -15,8 +15,11 @@ SQLite. One container, deployed by `docker compose`, image published to GHCR.
 | Cinema | `/` — route group `(player)` | Every Jellyfin account |
 | Management | `/gestion` — route group `(dashboard)` | Admin only |
 
-There are exactly **two roles**, `admin` and `user`. Permissions are never enforced by the
-interface: `src/proxy.ts` refuses every write a `user` should not make, whatever the screen shows.
+There are two household roles, `admin` and `user`, and a third for share links, `share`
+(DECISIONS.md §112: one film or one series, a password, an end date). Permissions are never enforced
+by the interface: `src/proxy.ts` refuses every write a `user` should not make, whatever the screen
+shows, and sends every `share` session to `shareGate` (`src/lib/share/gate.ts`), a closed list where
+each route's item is checked against the shared title — anything not listed does not exist for it.
 Hiding the management button is presentation, not security.
 
 ## Commands

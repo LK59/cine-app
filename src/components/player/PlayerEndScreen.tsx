@@ -8,6 +8,7 @@ import { noteWatchlistChange } from "@/lib/watchlistCache";
 import { apiAction } from "@/lib/apiAction";
 import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
 import { useT } from "@/components/TranslationProvider";
+import { useShareMode } from "@/components/ShareMode";
 import { PosterImage } from "@/components/PosterImage";
 import { similarInLibrary } from "@/lib/cinemaSimilar";
 import { uniqueById } from "@/lib/cinemaRails";
@@ -55,8 +56,15 @@ export function PlayerEndScreen({
   // Lu dans le cache, jamais redemandé : c'est la charge utile que l'écran d'accueil tient déjà
   // à jour, et la revalider ici coûterait un mégaoctet et demi pour une rangée de fin.
   const { data } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
+  /**
+   * L'invité d'un lien de partage (DECISIONS.md §112) n'a que ce titre : ni titres similaires, ni
+   * suite de la saga, ni « retirer de À voir » — rien d'autre à lancer, aucune liste à lui. Sans
+   * catalogue ni film identifié, la saga ne demande rien (`useCinemaCollection(null)`). Faux pour un
+   * compte du foyer, pour qui cet écran reste ce qu'il était.
+   */
+  const shareMode = useShareMode();
 
-  const all = data ? uniqueById(catalogueTitles(data), (m) => m.radarrId) : [];
+  const all = data && !shareMode ? uniqueById(catalogueTitles(data), (m) => m.radarrId) : [];
   const subject = all.find((m) => m.jellyfinItemId === itemId) ?? null;
   const similar = subject ? similarInLibrary(subject, all, (m) => m.radarrId === subject.radarrId).slice(0, 8) : [];
   // La saga de ce film, par le même chemin que sa rangée sur la fiche — les mêmes clés, souvent déjà
@@ -65,7 +73,7 @@ export function PlayerEndScreen({
 
   return (
     <div className="absolute inset-0 z-30 flex flex-col justify-end bg-linear-to-t from-black via-black/85 to-black/40">
-      <FinishedAsk itemId={itemId} />
+      {!shareMode && <FinishedAsk itemId={itemId} />}
       <div className="mx-auto w-full max-w-4xl px-6 pb-10 sm:px-10">
         <p className="text-xs uppercase tracking-wide text-subtle">{t("player.end.finished")}</p>
         <h2 className="mt-1 truncate font-display text-2xl font-semibold text-white sm:text-3xl">{title}</h2>

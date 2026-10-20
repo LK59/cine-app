@@ -15,7 +15,14 @@ vi.mock("@/components/PosterImage", () => ({ PosterImage: () => null }));
 const film = (radarrId: number, title: string) => ({ radarrId, jellyfinItemId: `jf-${radarrId}`, title, tmdbId: radarrId * 10, genres: [] });
 const SUBJECT = film(1, "Part One");
 const catalogue = { spotlight: [SUBJECT], rows: {} };
-vi.mock("swr", () => ({ default: () => ({ data: catalogue }) }));
+/** Chaque clé que l'écran demande à SWR — `null` : rien de demandé. */
+const swrKeys: unknown[] = [];
+vi.mock("swr", () => ({
+  default: (key: unknown) => {
+    swrKeys.push(key);
+    return { data: catalogue };
+  },
+}));
 
 /** La saga telle que la rangée de la fiche la résout. */
 let saga: { movie: ReturnType<typeof film> | null }[] = [];
@@ -37,10 +44,12 @@ vi.mock("@/lib/useJellyfinItemState", () => ({
 }));
 
 import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
+import { ShareModeProvider } from "@/components/ShareMode";
 
 afterEach(() => {
   cleanup();
   collectionCalls.length = 0;
+  swrKeys.length = 0;
 });
 
 function show(onPlayNext = vi.fn()) {
@@ -87,5 +96,35 @@ describe("PlayerEndScreen — la suite d'une saga", () => {
     saga = [];
     show();
     expect(screen.queryByText("player.end.suite")).toBeNull();
+  });
+});
+
+/**
+ * L'invité d'un lien de partage (DECISIONS.md §112) n'a que son titre : la fin d'un film ne lui propose
+ * rien d'autre, et ne demande rien de ce que la porte des liens refuserait.
+ */
+describe("PlayerEndScreen — lien de partage", () => {
+  it("ni suite de saga, ni titres similaires, ni « retirer de À voir » — et rien de demandé pour eux", () => {
+    saga = [{ movie: SUBJECT }, { movie: film(2, "Part Two") }];
+    states = { "jf-2": { played: false, resumeTicks: null } };
+    render(
+      <ShareModeProvider shareMode>
+        <PlayerEndScreen itemId="jf-1" title="Part One" onReplay={() => {}} onClose={() => {}} onOpenTitle={() => {}} onPlayNext={vi.fn()} />
+      </ShareModeProvider>
+    );
+    expect(screen.queryByText("player.end.suite")).toBeNull();
+    expect(screen.queryByText("cinema.similar")).toBeNull();
+    // Revoir et Terminé restent : c'est la fin du film, pas une impasse.
+    expect(screen.getByText("player.end.replay")).toBeTruthy();
+    expect(screen.getByText("player.end.done")).toBeTruthy();
+    // La saga n'est pas cherchée (aucun film identifié), et « vu / à voir » n'est pas demandé.
+    expect(collectionCalls[0]?.[0]).toBeNull();
+    expect(swrKeys.some((key) => typeof key === "string" && key.startsWith("/api/player/watched/finished"))).toBe(false);
+  });
+
+  it("sans le drapeau, le même écran demande toujours si le titre est fini", () => {
+    saga = [];
+    show();
+    expect(swrKeys.some((key) => typeof key === "string" && key.startsWith("/api/player/watched/finished"))).toBe(true);
   });
 });

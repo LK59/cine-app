@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
+import { shareRefusal } from "@/lib/share/guard";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { isLanguageCode, recordSeriesLanguageChoice } from "@/lib/seriesLanguage";
@@ -22,6 +23,8 @@ export async function POST(req: NextRequest) {
   if (typeof itemId !== "string" || !isJellyfinId(itemId) || !isLanguageCode(language)) {
     return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
   }
+  const shareRefused = await shareRefusal(session, itemId);
+  if (shareRefused) return shareRefused;
 
   const item = await jellyfin.getItemUserData(session.jfId, itemId).catch(() => null);
   if (!item) return NextResponse.json({ error: "Élément introuvable" }, { status: 404 });

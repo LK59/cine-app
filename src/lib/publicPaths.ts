@@ -33,6 +33,11 @@ export const PUBLIC_PATHS = [
   // lancement, les écritures d'une autre page) comme `/status`. Elle ne sert rien d'un compte :
   // ce qu'elle montre est lu sur l'appareil.
   "/hors-ligne",
+  // Un lien de partage (DECISIONS.md §112) : sa page demande le mot de passe à qui n'a pas encore de
+  // session, et l'entrée l'échange contre une session `share`. La page elle-même ne montre rien du
+  // titre avant le mot de passe ; ce qui suit passe par la porte des liens (`share/gate.ts`).
+  "/partage",
+  "/api/share/redeem",
 ] as const;
 
 /** Vrai pour une de ces adresses, et pour tout ce qu'elle contient. */

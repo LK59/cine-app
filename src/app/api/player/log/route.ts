@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
+import { shareRefusal } from "@/lib/share/guard";
 import { config } from "@/lib/config";
 import { logPlaybackEvent, isPlayerEventKind } from "@/lib/playerLog";
 import { recoverLostPosition } from "@/lib/lostStopPosition";
@@ -44,7 +45,8 @@ export async function POST(req: NextRequest) {
   // Un bilan perdu connaît la dernière position mieux que Jellyfin : il la lui rend, s'il n'a rien
   // de plus récent (voir `lostStopPosition.ts`). Ce que ça a donné part dans la ligne ; un échec ici
   // ne coûte que la reprise d'avant, jamais la ligne elle-même.
-  if (body.kind === "stop" && cleaned.why === "lost") {
+  // Pour un lien de partage, seulement sur son titre (DECISIONS.md §112) : la ligne, elle, s'écrit.
+  if (body.kind === "stop" && cleaned.why === "lost" && !(await shareRefusal(session, cleaned.itemId))) {
     cleaned.resumeFix = await recoverLostPosition(session.jfId, cleaned).catch((error: unknown) =>
       `échec : ${error instanceof Error ? error.message : String(error)}`.slice(0, 200)
     );

@@ -1,4 +1,5 @@
 import { PLAYBACK_CLIENTS, type PlaybackClient } from "@/lib/playbackClients";
+import { withoutShareAccounts } from "@/lib/share/accounts";
 import type { PlaybackDevice } from "@/lib/playbackDevice";
 import type { NamedItem } from "@/lib/displayTitle";
 
@@ -764,8 +765,12 @@ export const jellyfin = {
    * Lu avec la clé d'administration : c'est une tâche de fond qui appelle, sans session de
    * personne. Le nom compte autant que l'identifiant — c'est sous lui que les abonnements aux
    * notifications sont rangés (voir `pushDb`), et sous l'identifiant que Jellyfin répond.
+   *
+   * Sans les comptes techniques des liens de partage (DECISIONS.md §112) : ce ne sont pas des
+   * personnes du foyer, et tout ce qui lit cette liste — l'Activité, les nouveautés, l'accueil, les
+   * notifications — en parle comme de personnes. Écartés ici, une fois, plutôt qu'à chaque lecteur.
    */
-  getUsers: () => fetchJson<JellyfinUser[]>(`${cfg.url}/Users`, { headers }),
+  getUsers: async () => withoutShareAccounts(await fetchJson<JellyfinUser[]>(`${cfg.url}/Users`, { headers })),
 
   /**
    * Les appareils autorisés — un par jeton. Pour la page d'activité : un compte dont l'appareil de

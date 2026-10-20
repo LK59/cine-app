@@ -33,6 +33,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ClientErrorListener } from "@/components/ClientErrorListener";
 import { RemoteControlSupport } from "@/components/RemoteControlSupport";
 import { PresencePinger } from "@/components/PresencePinger";
+import { ShareModeProvider } from "@/components/ShareMode";
 
 // Portrait iOS splash screens, keyed by CSS width/height/DPR so Safari picks
 // the right one for the device at launch (avoids the blank flash).
@@ -112,7 +113,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Le compte, pour le cache du catalogue gardé sur l'appareil (`persistentCache.ts`) : il est
   // rangé par compte, et le navigateur doit savoir lequel lire avant d'avoir rien demandé au
   // réseau — c'est tout l'intérêt. Rien pour une page sans session : pas de cache à lire.
-  const account = (await verifySessionFull(cookieStore.get(SESSION_COOKIE)?.value).catch(() => null))?.u ?? null;
+  const session = await verifySessionFull(cookieStore.get(SESSION_COOKIE)?.value).catch(() => null);
+  const account = session?.u ?? null;
+  // Un lien de partage (DECISIONS.md §112) : le lecteur, monté ici, ne propose ni ne demande ce que
+  // la porte des liens refusera — voir `ShareMode`. Faux pour tout compte du foyer.
+  const shareMode = session?.role === "share";
   const lang: Locale = LOCALES.includes(rawLang as Locale) ? rawLang as Locale : "fr";
   const dict = await loadLocaleDict(lang);
   return (
@@ -171,6 +176,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body>
         <TranslationProvider initialLocale={lang} initialDict={dict}>
+          <ShareModeProvider shareMode={shareMode}>
             <SWRProvider account={account}>
               <ToastProvider>
                 <PlaybackProvider>
@@ -212,6 +218,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </PlaybackProvider>
               </ToastProvider>
             </SWRProvider>
+          </ShareModeProvider>
           <InstallPrompt />
         </TranslationProvider>
         <ServiceWorkerRegistration />

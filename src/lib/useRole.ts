@@ -4,7 +4,9 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 
 export function useRole() {
-  const { data } = useSWR<{ role: "admin" | "user"; username: string; jfId: string | null; jfUser: string | null }>(
+  // `share` : un lien de partage (DECISIONS.md §112). Il n'est pas administrateur, donc en lecture
+  // seule comme `user` — et la porte des liens (`share/gate.ts`) restreint bien davantage au serveur.
+  const { data } = useSWR<{ role: "admin" | "user" | "share"; username: string; jfId: string | null; jfUser: string | null }>(
     "/api/auth/me",
     fetcher
   );

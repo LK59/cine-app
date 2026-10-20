@@ -53,6 +53,9 @@ export async function reportCaller(req: NextRequest): Promise<Who | NextResponse
     refused.headers.set(SESSION_EXPIRED_HEADER, "1");
     return refused;
   }
+  // Un lien de partage ne signale rien (DECISIONS.md §112) : ces routes sont hors du proxy, sa porte
+  // fermée par défaut ne les couvre pas.
+  if (session.role === "share") return reportError("refused", 403, "Requête refusée");
   if (Number(req.headers?.get("content-length")) > REPORT_BODY_LIMIT) return reportError("requestTooLarge", 413, "Envoi trop lourd");
   // Un corps sans longueur annoncée (`Transfer-Encoding: chunked`) passait sous la limite ci-dessus,
   // et `formData()` le gardait entier en mémoire (audit du 08/10/2026). Un navigateur annonce

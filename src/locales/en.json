@@ -840,6 +840,54 @@
         "download": "Original file downloaded",
         "evicted": "Removed from the server (space)"
       }
+    },
+    "shares": {
+      "title": "Shares",
+      "open": "Open",
+      "intro": "Links that open a film or a series to someone outside the household, with a password sent separately. An expired link can still be extended for a month; after that, its account is deleted.",
+      "active": "Active links",
+      "total": "{n} in total",
+      "playing": "Playing now",
+      "watched": "Hours watched",
+      "data": "Data sent",
+      "dataHint": "measured by the built-in player",
+      "links": "Links ({n})",
+      "none": "No links.",
+      "state": {
+        "active": "Active",
+        "expired": "Expired",
+        "revoked": "Revoked"
+      },
+      "kind": {
+        "movie": "Film",
+        "series": "Series"
+      },
+      "guest": "guest · {label}",
+      "created": "created {date} by {who}",
+      "until": "until {date}",
+      "expiredOn": "expired {date}",
+      "revokedOn": "revoked {date}",
+      "playingNow": "playing · {n}/{max}",
+      "nowPlaying": "Playing: {title}",
+      "redeemed": "sign-ins: {n}",
+      "lastVisit": "last visit {when}",
+      "never": "Never opened",
+      "seances": "sessions: {n}",
+      "watchedFor": "{d} watched",
+      "lastSeance": "Last session: {title}, {when}",
+      "lastSeanceAt": "Last session: {title}, stopped at {at}, {when}",
+      "copyLink": "Copy link",
+      "extend": "Extend",
+      "extendBy": "+{n} d",
+      "extended": "Link extended by {n} d",
+      "cantExtendRevoked": "A revoked link can't be extended.",
+      "cantExtendDeleted": "Ended more than a month ago: create a new link.",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoke link",
+      "revoked": "Link revoked",
+      "delete": "Delete",
+      "deleteConfirm": "Delete permanently",
+      "deleted": "Link deleted"
     }
   },
   "radarr": {
@@ -1732,7 +1780,8 @@
       "not_in_list": "This title isn't in your list.",
       "service_unavailable": "This service isn't available right now.",
       "network": "Couldn't reach the server right now.",
-      "person_not_found": "Person not found."
+      "person_not_found": "Person not found.",
+      "share-streams": "This link is already playing on the maximum number of devices. Try again once a playback has finished."
     }
   },
   "sse": {
@@ -3476,6 +3525,70 @@
       "unreachableTail": "The end of the file could not be read (no index point after the stretch).",
       "unreadable": "Files that could not be read ({n})",
       "actionFailed": "The action did not go through."
+    }
+  },
+  "share": {
+    "guest": {
+      "tagline": "A title has been shared with you.",
+      "householdWarning": "You are signed in with your account. Opening this link will sign you out of it on this device.",
+      "code": "Link code",
+      "password": "Password",
+      "submit": "Open",
+      "submitting": "Opening…",
+      "hint": "The code and password were given to you with the link.",
+      "toLogin": "Sign in with an account",
+      "loginButton": "I have a share code",
+      "availableUntil": "Available until {date}",
+      "streamsFull": "{n} playback is already running on this link. Try again once it has finished.|{n} playbacks are already running on this link. Try again once one of them has finished.",
+      "enterPassword": "Enter the password",
+      "errors": {
+        "refused": "Wrong code or password, or the link is no longer valid.",
+        "rateLimited": "Too many attempts. Try again later.",
+        "unavailable": "The library is not responding. Try again in a moment.",
+        "generic": "The link could not be opened.",
+        "network": "No connection. Check your network and try again.",
+        "gone": "This link is no longer available.",
+        "titleMissing": "This title is no longer in the library.",
+        "loadFailed": "The title could not be loaded."
+      }
+    },
+    "admin": {
+      "button": "Share with a link",
+      "sheetTitle": "Share link",
+      "who": "Who is it for?",
+      "whoPlaceholder": "Paul",
+      "duration": "Duration",
+      "days": "{n} d",
+      "daysLong": "{n} days",
+      "coversSeries": "The whole series, upcoming episodes included.",
+      "coversMovie": "This film only.",
+      "streams": "At most {n} playbacks at the same time.",
+      "noDownload": "No downloads.",
+      "create": "Create link",
+      "creating": "Creating…",
+      "close": "Close",
+      "done": "Done",
+      "created": "Link for {label}, valid until {date}.",
+      "link": "Link",
+      "password": "Password",
+      "copyLink": "Copy link",
+      "copyPassword": "Copy password",
+      "copied": "Copied",
+      "copyFailed": "Couldn't copy: select the text instead",
+      "shareLink": "Send link…",
+      "shareText": "{title}, watch it with this link",
+      "once": "This password will not be shown again.",
+      "separately": "Send the password separately, through another channel than the link.",
+      "errors": {
+        "label": "Give the link a name.",
+        "days": "Invalid duration.",
+        "item": "This title can't be found in the library.",
+        "missing": "This link no longer exists.",
+        "revoked": "This link has been revoked.",
+        "deleted": "This link ended too long ago: create a new one.",
+        "unavailable": "The server couldn't process the link. Try again in a moment.",
+        "generic": "The link couldn't be created."
+      }
     }
   }
 }

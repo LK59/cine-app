@@ -1,5 +1,6 @@
 "use client";
 
+import { ShareButton } from "@/components/share/ShareControl";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -483,6 +484,21 @@ export function CinemaSeriesDetail({
                 </span>
                 <span className="text-sm font-medium">{t("cinema.moreEpisodes")}</span>
               </button>
+            )}
+
+            {/* Partager la série entière par un lien (DECISIONS.md §112) : administrateur seul. */}
+            {item.jellyfinItemId && (
+              <ShareButton
+                variant="row"
+                rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+                badgeClassName={MENU_BADGE}
+                kind="series"
+                itemId={item.jellyfinItemId}
+                sonarrId={item.sonarrId ?? null}
+                title={item.title}
+                year={item.year ?? null}
+                posterUrl={item.posterUrl ?? null}
+              />
             )}
 
             <button

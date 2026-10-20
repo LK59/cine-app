@@ -590,6 +590,37 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (account, series_id)
     );
   `);
+  // Les liens de partage (DECISIONS.md §112) : un film ou une série, un mot de passe (haché), une
+  // fin, et le compte Jellyfin technique qui garde la reprise du lien. La ligne reste après
+  // l'expiration — ce que le lien a consommé se lit encore dans l'Activité.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS shares (
+      id              TEXT    PRIMARY KEY,
+      code            TEXT    NOT NULL UNIQUE,
+      password_hash   TEXT    NOT NULL,
+      kind            TEXT    NOT NULL,
+      item_id         TEXT    NOT NULL,
+      radarr_id       INTEGER,
+      sonarr_id       INTEGER,
+      title           TEXT    NOT NULL,
+      label           TEXT    NOT NULL,
+      created_by      TEXT    NOT NULL,
+      created_at      INTEGER NOT NULL,
+      expires_at      INTEGER NOT NULL,
+      revoked_at      INTEGER,
+      max_streams     INTEGER NOT NULL DEFAULT 3,
+      jf_user_id      TEXT,
+      jf_user_name    TEXT,
+      jf_password     TEXT,
+      jf_disabled_at  INTEGER,
+      jf_deleted_at   INTEGER,
+      redeemed        INTEGER NOT NULL DEFAULT 0,
+      last_used_at    INTEGER,
+      last_ip         TEXT,
+      last_device     TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_shares_jf_user ON shares(jf_user_id);
+  `);
   // Le compte de chaque jour clos de l'Activité, pour « Depuis le début » (`activityHistory.ts`) :
   // il survit à la rotation des journaux, il ne se recalcule donc pas — gardé dans la sauvegarde.
   db.exec(`

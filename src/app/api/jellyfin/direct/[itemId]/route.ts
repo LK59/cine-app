@@ -4,6 +4,7 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { playerMarkers } from "@/lib/episodeMarkers";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
+import { shareRefusal, shareStreamRefusal } from "@/lib/share/guard";
 import { config } from "@/lib/config";
 import { cachedMovies } from "@/lib/server-cache";
 import { originalLanguageCode } from "@/lib/originalLanguage";
@@ -193,6 +194,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
 
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session?.jfId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  // Un lien de partage (DECISIONS.md §112) : son titre — le proxy l'a vérifié, la route le revérifie —
+  // et trois lectures au plus, comptées à l'ouverture du lecteur natif.
+  const shareRefused = (await shareRefusal(session, itemId)) ?? shareStreamRefusal(session);
+  if (shareRefused) return shareRefused;
 
   // Plus de refus « lecteur legacy demandé pour ce compte » (13/10/2026) : le choix par compte a
   // disparu, le lecteur natif est le chemin de chacun. Une colonne `legacy_player` restée à 1 en

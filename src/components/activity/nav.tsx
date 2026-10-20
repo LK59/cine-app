@@ -23,7 +23,9 @@ export type ActivityView =
   // Les Nouveautés (DECISIONS.md §73) : état par compte, relance, écriture des pages.
   | { kind: "news" }
   // Les téléchargements (19/10/2026) : les versions hors ligne du serveur, et qui a emporté quoi.
-  | { kind: "downloads" };
+  | { kind: "downloads" }
+  // Les liens de partage (DECISIONS.md §112) : ce que chacun a ouvert, consommé, et ses gestes.
+  | { kind: "shares" };
 
 export function encodeView(view: ActivityView): string {
   switch (view.kind) {
@@ -41,6 +43,8 @@ export function encodeView(view: ActivityView): string {
       return "nouveautes";
     case "downloads":
       return "telechargements";
+    case "shares":
+      return "partages";
     case "logs": {
       const params = new URLSearchParams();
       for (const [k, v] of Object.entries(view.preset)) if (v !== undefined && v !== "") params.set(k, String(v));
@@ -55,6 +59,7 @@ export function decodeView(raw: string | null): ActivityView | null {
   if (raw === "animations") return { kind: "animations" };
   if (raw === "nouveautes") return { kind: "news" };
   if (raw === "telechargements") return { kind: "downloads" };
+  if (raw === "partages") return { kind: "shares" };
   if (raw.startsWith("compte:")) return { kind: "account", id: raw.slice(7) };
   if (raw.startsWith("seance:")) return { kind: "seance", id: raw.slice(7) };
   if (raw.startsWith("signalement:")) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { ShareButton } from "@/components/share/ShareControl";
 import { OfflineDownloadControl, OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
 import { OfflineEpisodeButton, OfflineSeasonDownload } from "@/components/offline/OfflineEpisodeDownload";
 import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
@@ -614,6 +615,20 @@ export function CinemaMobileDetail({
             posterUrl={item.posterUrl ?? null}
             runtimeMinutes={"runtimeMinutes" in item ? (item.runtimeMinutes ?? null) : null}
             onlineResumeTicks={resumeTicks}
+          />
+        )}
+        {/* Partager ce titre par un lien (DECISIONS.md §112) : administrateur seul, film ou série entière. */}
+        {item.jellyfinItemId && !fileMissing && (
+          <ShareButton
+            variant="wide"
+            wideSpacing="mb-4"
+            kind={isSeries ? "series" : "movie"}
+            itemId={item.jellyfinItemId}
+            radarrId={!isSeries && "radarrId" in item ? (item.radarrId ?? null) : null}
+            sonarrId={isSeries && "sonarrId" in item ? (item.sonarrId ?? null) : null}
+            title={item.title}
+            year={item.year ?? null}
+            posterUrl={item.posterUrl ?? null}
           />
         )}
 

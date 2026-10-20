@@ -1,21 +1,17 @@
 import { NextResponse } from "next/server";
 import { hiddenForRequest, withoutHidden } from "@/lib/blockedTags";
-import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { catalogueFallbackResponse, catalogueResponse, type CatalogueOutageFlags } from "@/lib/catalogueFallback";
 import { logError } from "@/lib/logger";
 import { cachedMovies, cachedJellyfinMoviesAdmin } from "@/lib/server-cache";
 import { jellyfinOnlyMovies, matchMovies } from "@/lib/catalogueMembers";
 import { jellyfinOnlyCinemaMovie } from "@/lib/jellyfinOnlyCatalogue";
-import { posterUrl, backdropUrl, tmdbResize, cataloguePoster } from "@/lib/images";
-import { localeOf, type Locale } from "@/lib/i18n";
-import { getTitleArt, logoForLocale } from "@/lib/title-art";
-import { catalogueExtras, getTitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
+import { localeOf } from "@/lib/i18n";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import { dailyTop10Db } from "@/lib/db";
 import type { HydratedPayload } from "@/lib/cinemaPayload";
-import { toDynamicRange, type VideoQuality } from "@/lib/videoQuality";
-import type { RadarrMovie } from "@/lib/clients/radarr";
+import type { VideoQuality } from "@/lib/videoQuality";
+import { toCinemaMovie } from "@/lib/cinemaEntries";
 import { timedRoute } from "@/lib/serverTiming";
 
 export interface CinemaMovie {
@@ -119,62 +115,7 @@ export interface CinemaMoviesWire {
   top10Theme: Top10Theme | null;
 }
 
-// Bulk-included here (like poster/backdrop already were) rather than fetched per-item on focus
-// — Cinema Mode's whole hero/detail idea is an instant title treatment, not a spinner-then-swap.
-// getTitleLogo() is persistently cached 7 days per title (same cache the per-item
-// /api/radarr/movies/[id]/info route already populates), so only the very first request after a
-// cold cache pays the full TMDB round-trip for the whole library at once — every request after
-// that, including this one, is cache reads only.
-async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string, locale: Locale): Promise<CinemaMovie> {
-  // Le logo et l'affiche sans texte viennent de la même réponse TMDB et de la même entrée de
-  // cache : la seconde ne coûte donc pas un appel de plus.
-  const art = await getTitleArt(m.tmdbId, "movie");
-  const names = getTitleNames(m.tmdbId, "movie");
-  const { title, aka } = localizedTitle(names, locale, m.title);
-  return {
-    radarrId: m.id,
-    runtimeMinutes: m.runtime && m.runtime > 0 ? m.runtime : null,
-    jellyfinItemId,
-    tmdbId: m.tmdbId,
-    title,
-    ...(aka ? { aka } : {}),
-    ...(m.originalTitle && m.originalTitle !== title && m.originalTitle !== aka ? { originalTitle: m.originalTitle } : {}),
-    year: m.year,
-    // L'affiche dans la langue de qui regarde, celle de Radarr sinon. Voir `libraryPoster`.
-    posterUrl: cataloguePoster("movie", art.posterByLang, m.images, locale),
-    backdropUrl: tmdbResize(backdropUrl(m.images, "full"), "w1280"),
-    // Le logo de la langue du titre affiché — voir `logoForLocale` (DECISIONS.md §58).
-    logoUrl: logoForLocale(art, names, locale),
-    posterTextlessUrl: art.posterTextlessUrl,
-    // Dans la langue de qui regarde quand TMDB la connaît — voir `TitleOverviews`.
-    overview: localizedOverview(getTitleOverviews(m.tmdbId, "movie"), locale, m.overview ?? null),
-    // L'accroche et la bande-annonce, là dès l'ouverture de la fiche — voir `TitleExtras`.
-    ...catalogueExtras(getTitleExtras(m.tmdbId, "movie"), locale),
-    // Radarr already resolves this itself at add/refresh time (Skyhook) — free, no
-    // OMDb/TMDB round trip needed, same field fetchHero() in the dashboard route uses.
-    imdbRating: m.ratings?.imdb?.value != null ? m.ratings.imdb.value.toFixed(1) : null,
-    quality: videoQualityOf(m),
-    // Sous leur nom commun : « Horreur » et « Horror » ne font qu'un genre — voir `genres.ts`.
-    genres: canonicalGenres(m.genres),
-    addedAt: m.added ?? null,
-  };
-}
-
-/**
- * Ce que Radarr sait du fichier, réduit à ce qui s'affiche.
- *
- * `undefined` plutôt qu'un objet vide quand il n'y a rien à dire : c'est ce qui fait qu'un film
- * sans information ne pèse pas une clé de plus dans la charge utile.
- */
-function videoQualityOf(m: RadarrMovie): VideoQuality | undefined {
-  const resolution = m.movieFile?.quality?.quality?.resolution;
-  const dynamicRange = toDynamicRange(m.movieFile?.mediaInfo?.videoDynamicRangeType);
-  if (!resolution && !dynamicRange) return undefined;
-  return {
-    ...(resolution ? { resolution } : {}),
-    ...(dynamicRange ? { dynamicRange } : {}),
-  };
-}
+// La carte d'un film : `toCinemaMovie` (`cinemaEntries.ts`), partagée avec la page d'un lien de partage.
 
 // Cinema Mode is library-only and movies-only for now (series + their own season/episode
 // screen are a follow-up) — every item returned here must already be playable, so items

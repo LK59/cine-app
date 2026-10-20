@@ -13,6 +13,7 @@ import {
   FastForward,
   Hourglass,
   KeyRound,
+  Link2,
   ListTree,
   MessageSquareWarning,
   MonitorSmartphone,
@@ -44,6 +45,8 @@ import { ActivityLink, goTo } from "@/components/activity/nav";
 import { NEWS_ADMIN_KEY, NewsTiles, type NewsAdminData } from "@/components/activity/views/ActivityNews";
 import { DOWNLOADS_ADMIN_KEY, DownloadsTiles } from "@/components/activity/views/ActivityDownloads";
 import type { DownloadsOverview } from "@/lib/activity/offlineDownloads";
+import { SharesTiles, type SharesOverview } from "@/components/activity/views/ActivityShares";
+import { SHARE_ADMIN_KEY } from "@/components/share/shareClient";
 
 interface Overview {
   now: number;
@@ -343,6 +346,32 @@ function DownloadsPanel() {
   );
 }
 
+/**
+ * Les liens de partage en deux chiffres (DECISIONS.md §112) ; le détail, les prolongations et les
+ * révocations dans leur vue. Rien tant qu'aucun lien n'existe : la plupart des semaines, personne
+ * hors du foyer ne regarde rien.
+ */
+function SharesPanel() {
+  const t = useT();
+  const { data } = useSWR<SharesOverview>(SHARE_ADMIN_KEY, fetcher, { refreshInterval: 60_000 });
+  if (!data?.shares?.length) return null;
+  return (
+    <Panel
+      title={t("activity.shares.title")}
+      icon={Link2}
+      action={
+        <ActivityLink to={{ kind: "shares" }} className="text-xs text-accent-400 hover:underline">
+          {t("activity.shares.open")}
+        </ActivityLink>
+      }
+    >
+      <div className="p-3">
+        <SharesTiles data={data} compact />
+      </div>
+    </Panel>
+  );
+}
+
 const PERIODS = [7, 30, "all"] as const;
 type Period = (typeof PERIODS)[number];
 
@@ -571,6 +600,9 @@ export function ActivityOverview() {
 
       {/* Les téléchargements : les versions prêtes sur le serveur, et qui a emporté quoi. */}
       <DownloadsPanel />
+
+      {/* Les liens de partage : ceux qui vivent, et ce qui joue en ce moment (§112). */}
+      <SharesPanel />
 
       {/* Le fichier ou l'appareil : le verdict de chaque titre qui a échoué. */}
       <DiagnosisPanel items={data.household.diagnosis} now={now} days={data.household.days} />

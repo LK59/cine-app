@@ -54,6 +54,11 @@ export async function register() {
     const { startNewAccountTagsCron } = await import("./lib/newAccountTags");
     startNewAccountTagsCron();
 
+    // Les liens de partage finis : leur compte Jellyfin désactivé, puis effacé un mois plus tard —
+    // voir `share/service.ts` (DECISIONS.md §112).
+    const { startShareSweep } = await import("./lib/share/service");
+    startShareSweep();
+
     // Les affiches du catalogue préparées d'avance dans les tailles que les écrans demandent : sans
     // cela, la première personne à voir un titre payait 60 à 350 ms par affiche (25/09/2026). En
     // arrière-plan, une minute après le démarrage — voir `posterPrewarm.ts`.

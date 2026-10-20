@@ -36,6 +36,10 @@ export const API_ERROR_CODES = [
   "network",
   // Une personne que TMDB ne connaît pas (lien ancien, identifiant mal copié) — ROBUSTESSE-7.
   "person_not_found",
+  // Un lien de partage déjà lu sur le nombre d'appareils permis (`shareStreamRefusal`, DECISIONS.md
+  // §112). Nommé ici pour que le lecteur serveur, qui traduit la réponse de sa négociation par son
+  // code (`apiErrorText`), dise la vraie raison à l'invité au lieu de « lecture impossible ».
+  "share-streams",
 ] as const;
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];

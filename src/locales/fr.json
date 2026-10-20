@@ -840,6 +840,54 @@
         "download": "Fichier d'origine téléchargé",
         "evicted": "Effacé du serveur (place)"
       }
+    },
+    "shares": {
+      "title": "Partages",
+      "open": "Ouvrir",
+      "intro": "Les liens qui ouvrent un film ou une série à quelqu'un hors du foyer, avec un mot de passe envoyé à part. Un lien expiré peut encore être prolongé pendant un mois ; ensuite, son compte est effacé.",
+      "active": "Liens actifs",
+      "total": "{n} au total",
+      "playing": "Lectures en cours",
+      "watched": "Heures regardées",
+      "data": "Données envoyées",
+      "dataHint": "mesurées par le lecteur intégré",
+      "links": "Liens ({n})",
+      "none": "Aucun lien.",
+      "state": {
+        "active": "Actif",
+        "expired": "Expiré",
+        "revoked": "Révoqué"
+      },
+      "kind": {
+        "movie": "Film",
+        "series": "Série"
+      },
+      "guest": "invité · {label}",
+      "created": "créé le {date} par {who}",
+      "until": "jusqu'au {date}",
+      "expiredOn": "expiré le {date}",
+      "revokedOn": "révoqué le {date}",
+      "playingNow": "en lecture · {n}/{max}",
+      "nowPlaying": "En lecture : {title}",
+      "redeemed": "entrées : {n}",
+      "lastVisit": "dernière visite {when}",
+      "never": "Jamais ouvert",
+      "seances": "séances : {n}",
+      "watchedFor": "{d} regardées",
+      "lastSeance": "Dernière séance : {title}, {when}",
+      "lastSeanceAt": "Dernière séance : {title}, arrêtée à {at}, {when}",
+      "copyLink": "Copier le lien",
+      "extend": "Prolonger",
+      "extendBy": "+{n} j",
+      "extended": "Lien prolongé de {n} j",
+      "cantExtendRevoked": "Un lien révoqué ne se prolonge pas.",
+      "cantExtendDeleted": "Terminé depuis plus d'un mois : créez un nouveau lien.",
+      "revoke": "Révoquer",
+      "revokeConfirm": "Révoquer le lien",
+      "revoked": "Lien révoqué",
+      "delete": "Supprimer",
+      "deleteConfirm": "Supprimer définitivement",
+      "deleted": "Lien supprimé"
     }
   },
   "radarr": {
@@ -1732,7 +1780,8 @@
       "not_in_list": "Ce titre n'est pas dans votre liste.",
       "service_unavailable": "Ce service n'est pas disponible pour le moment.",
       "network": "Le serveur est injoignable pour le moment.",
-      "person_not_found": "Personne introuvable."
+      "person_not_found": "Personne introuvable.",
+      "share-streams": "Ce lien est déjà lu sur le nombre maximal d'appareils. Réessayez quand une lecture sera terminée."
     }
   },
   "sse": {
@@ -3476,6 +3525,70 @@
       "unreachableTail": "La fin du fichier n'a pas pu être relue (aucun point d'index après la zone).",
       "unreadable": "Fichiers qui n'ont pas pu être relus ({n})",
       "actionFailed": "L'action n'a pas abouti."
+    }
+  },
+  "share": {
+    "guest": {
+      "tagline": "Un titre a été partagé avec vous.",
+      "householdWarning": "Vous êtes connecté avec votre compte. Ouvrir ce lien vous en déconnectera sur cet appareil.",
+      "code": "Code du lien",
+      "password": "Mot de passe",
+      "submit": "Ouvrir",
+      "submitting": "Ouverture…",
+      "hint": "Le code et le mot de passe vous ont été donnés avec le lien.",
+      "toLogin": "Se connecter avec un compte",
+      "loginButton": "J'ai un code de partage",
+      "availableUntil": "Disponible jusqu'au {date}",
+      "streamsFull": "{n} lecture est déjà en cours sur ce lien. Réessayez quand elle sera terminée.|{n} lectures sont déjà en cours sur ce lien. Réessayez quand l'une d'elles sera terminée.",
+      "enterPassword": "Saisir le mot de passe",
+      "errors": {
+        "refused": "Code ou mot de passe incorrect, ou lien qui n'est plus valable.",
+        "rateLimited": "Trop d'essais. Réessayez plus tard.",
+        "unavailable": "La bibliothèque ne répond pas. Réessayez dans un moment.",
+        "generic": "Le lien n'a pas pu être ouvert.",
+        "network": "Pas de connexion. Vérifiez votre réseau et réessayez.",
+        "gone": "Ce lien n'est plus disponible.",
+        "titleMissing": "Ce titre n'est plus dans la bibliothèque.",
+        "loadFailed": "Le titre n'a pas pu être chargé."
+      }
+    },
+    "admin": {
+      "button": "Partager par un lien",
+      "sheetTitle": "Lien de partage",
+      "who": "Pour qui ?",
+      "whoPlaceholder": "Paul",
+      "duration": "Durée",
+      "days": "{n} j",
+      "daysLong": "{n} jours",
+      "coversSeries": "Toute la série, épisodes à venir compris.",
+      "coversMovie": "Ce film seulement.",
+      "streams": "{n} lectures en même temps au plus.",
+      "noDownload": "Pas de téléchargement.",
+      "create": "Créer le lien",
+      "creating": "Création…",
+      "close": "Fermer",
+      "done": "Terminé",
+      "created": "Lien pour {label}, valable jusqu'au {date}.",
+      "link": "Lien",
+      "password": "Mot de passe",
+      "copyLink": "Copier le lien",
+      "copyPassword": "Copier le mot de passe",
+      "copied": "Copié",
+      "copyFailed": "Copie impossible : sélectionnez le texte",
+      "shareLink": "Envoyer le lien…",
+      "shareText": "{title}, à regarder avec ce lien",
+      "once": "Ce mot de passe ne sera plus affiché.",
+      "separately": "Envoyez le mot de passe à part, par un autre moyen que le lien.",
+      "errors": {
+        "label": "Donnez un nom au lien.",
+        "days": "Durée invalide.",
+        "item": "Ce titre est introuvable dans la bibliothèque.",
+        "missing": "Ce lien n'existe plus.",
+        "revoked": "Ce lien a été révoqué.",
+        "deleted": "Ce lien est terminé depuis trop longtemps : créez-en un nouveau.",
+        "unavailable": "Le serveur n'a pas pu traiter le lien. Réessayez dans un instant.",
+        "generic": "Le lien n'a pas pu être créé."
+      }
     }
   }
 }

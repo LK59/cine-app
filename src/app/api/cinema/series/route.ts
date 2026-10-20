@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { hiddenForRequest, withoutHidden } from "@/lib/blockedTags";
-import { tvEpisodeRuntime } from "@/lib/tvRuntime";
-import { canonicalGenres } from "@/lib/genres";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { catalogueFallbackResponse, catalogueResponse, type CatalogueOutageFlags } from "@/lib/catalogueFallback";
 import { logError } from "@/lib/logger";
@@ -9,15 +7,12 @@ import { cachedSeries, cachedJellyfinSeriesAdmin, cachedJellyfinFirstEpisodes, c
 import { latestArrivals, seriesFreshness } from "@/lib/seriesArrival";
 import { jellyfinOnlySeries, matchSeries } from "@/lib/catalogueMembers";
 import { jellyfinOnlyCinemaSeries } from "@/lib/jellyfinOnlyCatalogue";
-import { cataloguePoster, seriesBackdrop } from "@/lib/images";
-import { localeOf, type Locale } from "@/lib/i18n";
-import { getTitleArt, logoForLocale } from "@/lib/title-art";
-import { catalogueExtras, getTitleExtras, type TitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
-import { getImdbRating } from "@/lib/imdb-rating";
+import { localeOf } from "@/lib/i18n";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import { dailyTop10Db } from "@/lib/db";
 import type { HydratedPayload } from "@/lib/cinemaPayload";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
+import { toCinemaSeries } from "@/lib/cinemaEntries";
 import { timedRoute } from "@/lib/serverTiming";
 
 export interface CinemaSeries {
@@ -92,67 +87,7 @@ export interface CinemaSeriesWire {
   top10Theme: Top10Theme | null;
 }
 
-// Mirrors /api/cinema/movies/route.ts exactly (see its own comments for the reasoning behind
-// each choice — bulk-included logo/rating, jellyfin-match-required filtering, genre rows +
-// spotlight) — the one real difference is IMDb rating: Radarr resolves that for movies itself
-// (Skyhook, free), but Sonarr doesn't for series, hence the extra getImdbRating() call here
-// (OMDb-backed, 24h persistently cached — same helper the dashboard route already uses for its
-// own "recently added series" rail).
-/**
- * L'accroche, la bande-annonce et la durée d'un épisode (« 43min/ép. ») : la même règle que la
- * fiche (`tvEpisodeRuntime`), la durée de Sonarr comprise. Absentes ensemble tant que TMDB n'a pas
- * répondu pour ce titre.
- */
-function seriesExtras(extras: TitleExtras | null, locale: Locale, sonarrRuntime: number | null | undefined) {
-  if (!extras) return {};
-  return { ...catalogueExtras(extras, locale), episodeRuntime: tvEpisodeRuntime(extras.tvRuntime ?? null, sonarrRuntime) };
-}
-
-async function toCinemaSeries(
-  s: SonarrSeries,
-  jellyfinItem: { Id: string; BackdropImageTags?: string[]; ImageTags?: { Primary?: string } },
-  locale: Locale,
-  firstEpisode: CinemaSeries["firstEpisode"],
-  seasonCount: number | undefined,
-  freshness: Pick<CinemaSeries, "addedAt" | "arrival">
-): Promise<CinemaSeries> {
-  // Independent lookups (different upstreams, different cache keys) — run concurrently rather
-  // than one after the other, halving the cold-cache latency per series that hasn't been seen
-  // by either cache before (steady state is unaffected either way, both are cache reads then).
-  const [art, imdbRating] = await Promise.all([
-    getTitleArt(s.tmdbId ?? 0, "series"),
-    s.tmdbId ? getImdbRating(s.tmdbId, "series") : Promise.resolve(null),
-  ]);
-  const names = getTitleNames(s.tmdbId, "series");
-  const { title, aka } = localizedTitle(names, locale, s.title);
-  return {
-    sonarrId: s.id,
-    jellyfinItemId: jellyfinItem.Id,
-    tvdbId: s.tvdbId,
-    tmdbId: s.tmdbId ?? null,
-    title,
-    ...(aka ? { aka } : {}),
-    year: s.year,
-    // La langue de qui regarde, celle de Jellyfin sinon, celle de Sonarr en dernier — voir `jellyfinPoster`.
-    posterUrl: cataloguePoster("series", art.posterByLang, s.images, locale, jellyfinItem),
-    // Redimensionné par Jellyfin plutôt que l'original de TheTVDB — voir `seriesBackdrop`.
-    backdropUrl: seriesBackdrop(jellyfinItem, s.images),
-    // Le logo de la langue du titre affiché — voir `logoForLocale` (DECISIONS.md §58).
-    logoUrl: logoForLocale(art, names, locale),
-    posterTextlessUrl: art.posterTextlessUrl,
-    // Dans la langue de qui regarde quand TMDB la connaît — voir `TitleOverviews`.
-    overview: localizedOverview(getTitleOverviews(s.tmdbId, "series"), locale, s.overview ?? null),
-    // L'accroche et la bande-annonce, là dès l'ouverture de la fiche — voir `TitleExtras`.
-    ...seriesExtras(getTitleExtras(s.tmdbId, "series"), locale, s.runtime),
-    imdbRating,
-    // Sous leur nom commun : « Horreur » et « Horror » ne font qu'un genre — voir `genres.ts`.
-    genres: canonicalGenres(s.genres),
-    addedAt: freshness.addedAt,
-    ...(freshness.arrival ? { arrival: freshness.arrival } : {}),
-    ...(firstEpisode ? { firstEpisode } : {}),
-    ...(seasonCount ? { seasonCount } : {}),
-  };
-}
+// La carte d'une série : `toCinemaSeries` (`cinemaEntries.ts`), partagée avec la page d'un lien de partage.
 
 // Library-only, same as movies: every item returned here must already have at least one
 // downloaded episode AND a resolved Jellyfin match — a series with neither isn't playable, so

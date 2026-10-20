@@ -4,6 +4,7 @@ import { isJellyfinId } from "@/lib/jellyfinPath";
 import { PLAYBACK_CLIENTS, isPlaybackClient } from "@/lib/playbackClients";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
+import { shareRefusal } from "@/lib/share/guard";
 import { config } from "@/lib/config";
 import { reportPlayback } from "@/lib/playbackReport";
 import { castProgressRelay } from "@/lib/castProgress";
@@ -25,6 +26,9 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
   const itemId = body?.itemId as string | undefined;
+  // Un lien de partage ne parle que de son titre (DECISIONS.md §112).
+  const shareRefused = await shareRefusal(session, itemId);
+  if (shareRefused) return shareRefused;
   const playSessionId = body?.playSessionId as string | undefined;
   const mediaSourceId = body?.mediaSourceId as string | undefined;
   const positionTicks = Number(body?.positionTicks) || 0;

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { shareRefusal } from "@/lib/share/guard";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
@@ -103,12 +104,15 @@ async function askJellyfin(jfId: string, itemId: string): Promise<boolean | null
  * `jfId` pour revérifier ici changerait son format, ce qui est un autre chantier.
  */
 export async function assertVisible(
-  session: Pick<SessionPayload, "jti" | "role" | "jfId"> | null | undefined,
+  session: Pick<SessionPayload, "jti" | "role" | "jfId" | "sh"> | null | undefined,
   itemId: string,
   now = Date.now()
 ): Promise<NextResponse | null> {
   if (!session) return new NextResponse(null, { status: 403 });
   if (session.role === "admin") return null;
+  // Un lien de partage ne voit que son titre (DECISIONS.md §112) — en plus de ce que Jellyfin permet
+  // à son compte : le flux, les sous-titres, les images, les aperçus passent tous par ici.
+  if (session.role === "share" && (await shareRefusal(session, itemId))) return new NextResponse(null, { status: 404 });
   if (!session.jfId || !session.jti) return new NextResponse(null, { status: 403 });
 
   const key = `${session.jti}:${itemId}`;

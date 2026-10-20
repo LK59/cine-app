@@ -75,6 +75,7 @@ import { chromecastSnapshot, requestChromecastSession } from "@/lib/chromecast/f
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
+import { useShareMode } from "@/components/ShareMode";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
 import { useFrameFit } from "@/lib/frameFit";
@@ -530,6 +531,12 @@ export function ExperimentalPlayerHost({
   }, [t]);
   const playback = usePlayback();
   const { itemId, title: openedAs } = session;
+  /**
+   * Un invité d'un lien de partage (DECISIONS.md §112) : ni génération de sous-titres, ni Chromecast
+   * — la porte des liens les refuse de toute façon ; ici, on ne les demande pas. Faux pour un compte
+   * du foyer (`ShareMode`), et alors rien ne change.
+   */
+  const shareMode = useShareMode();
 
   const videoElRef = useRef<HTMLVideoElement>(null);
   /**
@@ -1606,12 +1613,14 @@ export function ExperimentalPlayerHost({
       },
     });
   });
-  // Ouverte avec l'hôte, fermée avec lui ; pas pendant un banc d'essai, qui mesure la lecture seule.
+  // Ouverte avec l'hôte, fermée avec lui ; pas pendant un banc d'essai, qui mesure la lecture seule,
+  // ni pour l'invité d'un lien de partage (§112) : jamais ouverte, elle ne demande pas ses options,
+  // n'a aucune langue à proposer, et le menu « Générer » n'apparaît pas.
   useEffect(() => {
-    if (session.bench) return;
+    if (session.bench || shareMode) return;
     void generation.open();
     return () => generation.close();
-  }, [generation, session.bench]);
+  }, [generation, session.bench, shareMode]);
   // Un sondage qui apporte des lignes (ou change d'état) redessine l'instant — film en pause compris,
   // où aucun `timeupdate` ne le ferait.
   useEffect(
@@ -1729,7 +1738,8 @@ export function ExperimentalPlayerHost({
    * un choix et non un échec — mais à `ChromecastPlayer`, qui pilote le téléviseur (`castTarget`).
    * Une session déjà ouverte (un autre onglet, un essai précédent) est reprise sans redemander.
    */
-  const chromecastAllowed = useChromecastAllowed(serverFallback === true && !session.bench);
+  // Ni pour un lien de partage (§112) : sa question (`/api/player/cast`) lui serait refusée.
+  const chromecastAllowed = useChromecastAllowed(serverFallback === true && !session.bench && !shareMode);
   const chromecastState = useChromecast(chromecastAllowed);
   const requestChromecast = useCallback(() => {
     const handOver = () => fallToStable("diffusion demandée", { ...takeoverNow(), cast: true, castTarget: "chromecast" });

@@ -3,7 +3,9 @@ import { setupDone } from "@/lib/settings/setup";
 // `appConfig` et non `config` : le bas de ce fichier exporte déjà une constante nommée
 // `config`, qui est la configuration du proxy lui-même.
 import { config as appConfig } from "@/lib/config";
-import { SESSION_COOKIE, SESSION_MAX_AGE, refreshSessionToken, shouldRefresh } from "@/lib/auth";
+import { SESSION_COOKIE, SESSION_MAX_AGE, refreshSessionToken, reissueShareSessionToken, shouldRefresh } from "@/lib/auth";
+import { shareGate } from "@/lib/share/gate";
+import { sharesDb } from "@/lib/share/store";
 import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { isPublicPath } from "@/lib/publicPaths";
 import { verifySessionFull } from "@/lib/session";
@@ -224,6 +226,8 @@ const ADMIN_ONLY_READS: RegExp[] = [
   // aussi (`adminOnly`). Son effacement (`DELETE /api/admin/offline/<id>`) n'est pas dans la liste
   // blanche des écritures : refusé à un compte ordinaire d'office.
   /^\/api\/admin\/offline(\/|$)/,
+  // Les liens de partage : qui les a reçus, ce qu'ils ont regardé (DECISIONS.md §112).
+  /^\/api\/admin\/shares(\/|$)/,
 ];
 
 function isAdminOnlyRead(pathname: string): boolean {
@@ -446,6 +450,28 @@ export async function proxy(req: NextRequest) {
     if (token) loginUrl.searchParams.set("reason", "expired");
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  /**
+   * Une session de partage (DECISIONS.md §112) a sa propre porte, fermée par défaut, et ne descend
+   * jamais aux règles des comptes ci-dessous : celles-ci ouvrent toute lecture à un `user`. Sa fin
+   * est celle du lien, sans glissement — réémise seulement si le lien a été prolongé.
+   */
+  if (session.role === "share") {
+    const gated = await shareGate(req, session);
+    if (gated.status !== 200 || gated.headers.get("location")) return gated;
+    const share = sharesDb.get(session.sh ?? "");
+    if (share && share.expiresAt !== session.exp) {
+      gated.cookies.set(SESSION_COOKIE, await reissueShareSessionToken(session, share.expiresAt), {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: appConfig.app.cookieSecure,
+        maxAge: Math.max(1, Math.floor((share.expiresAt - Date.now()) / 1000)),
+        path: "/",
+      });
+    }
+    sessionDb.touch(session.jti);
+    return gated;
   }
 
   if (

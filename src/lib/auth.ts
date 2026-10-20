@@ -4,7 +4,13 @@ import { config } from "@/lib/config";
 const COOKIE_NAME = "cine_session";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
-export type Role = "admin" | "user";
+/**
+ * `share` : un lien de partage (20/10/2026, DECISIONS.md §112) — un seul film ou une seule série,
+ * le temps du lien. Pas « guest » : ce nom est celui de l'ancien rôle non-administrateur, que
+ * `verifySessionToken` ramène encore à `user`. Tout ce qu'une session `share` peut faire est la
+ * liste fermée de `share/gate.ts`, appliquée par `proxy.ts` avant les règles des comptes.
+ */
+export type Role = "admin" | "user" | "share";
 
 /**
  * Le rôle non-administrateur s'est appelé « guest » jusqu'au chantier du lecteur, et les jetons
@@ -21,6 +27,8 @@ export interface SessionPayload {
   jfUser?: string;   // Jellyfin username — set when authenticated via Jellyfin SSO
   jfId?: string;     // Jellyfin user UUID — required for watch status operations
   jfToken?: string;  // Jellyfin access token — used for deep-link auth redirect
+  /** L'identifiant du lien de partage — présent si et seulement si `role === "share"`. */
+  sh?: string;
   jsCookie?: string; // Jellyseerr session cookie (connect.sid value) — this fork requires a real
                       // session for user-attributed actions (requests), the admin API key alone
                       // is no longer sufficient. Obtained by also logging into Jellyseerr with
@@ -117,6 +125,15 @@ async function decryptField(value: string | undefined): Promise<string | undefin
   }
 }
 
+/**
+ * Les mêmes, pour un secret gardé en base plutôt que dans le cookie : le mot de passe du compte
+ * Jellyfin d'un lien de partage (`share/store.ts`). Même clé, même forme.
+ */
+export const encryptSecret = encryptField;
+export async function decryptSecret(value: string | null | undefined): Promise<string | undefined> {
+  return decryptField(value ?? undefined);
+}
+
 async function sign(payload: string): Promise<string> {
   const key = await getKey();
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
@@ -139,6 +156,27 @@ export async function createSessionToken(
 ): Promise<{ token: string; jti: string }> {
   const jti = generateJti();
   return { token: await encodeSession(buildPayload(jti, username, role, jellyfinUser, jellyfinId, jellyfinToken, jellyseerrCookie)), jti };
+}
+
+/**
+ * La session d'un lien de partage : son compte Jellyfin technique, et une fin fixée par le lien —
+ * jamais au-delà (`exp` ne glisse pas, voir `proxy.ts`).
+ */
+export async function createShareSessionToken(
+  shareId: string,
+  jellyfinUser: string,
+  jellyfinId: string,
+  jellyfinToken: string,
+  expiresAt: number
+): Promise<{ token: string; jti: string }> {
+  const jti = generateJti();
+  const payload: SessionPayload = { ...buildPayload(jti, jellyfinUser, "share", jellyfinUser, jellyfinId, jellyfinToken), exp: expiresAt, sh: shareId };
+  return { token: await encodeSession(payload), jti };
+}
+
+/** La même session de partage, avec la fin du lien relue (un lien prolongé). */
+export async function reissueShareSessionToken(payload: SessionPayload, expiresAt: number): Promise<string> {
+  return encodeSession({ ...payload, exp: expiresAt });
 }
 
 /**
@@ -232,7 +270,9 @@ export async function verifySessionToken(
     const payload = JSON.parse(new TextDecoder().decode(fromBase64url(encodedPayload))) as SessionPayload;
     if (typeof payload.exp !== "number" || payload.exp <= Date.now()) return null;
     if ((payload.role as string) === LEGACY_GUEST) payload.role = "user";
-    if (payload.role !== "admin" && payload.role !== "user") return null;
+    if (payload.role !== "admin" && payload.role !== "user" && payload.role !== "share") return null;
+    // Une session de partage nomme son lien ; un `sh` sur un autre rôle n'a pas de sens.
+    if ((payload.role === "share") !== (typeof payload.sh === "string" && payload.sh.length > 0)) return null;
     payload.jfToken = await decryptField(payload.jfToken);
     payload.jsCookie = await decryptField(payload.jsCookie);
     return payload;

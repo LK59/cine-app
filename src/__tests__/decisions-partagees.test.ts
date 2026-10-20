@@ -50,8 +50,9 @@ describe("une seule source d'affiche", () => {
    * « What's in a Name? » dans la suivante.
    */
   const ROUTES = [
-    "src/app/api/cinema/movies/route.ts",
-    "src/app/api/cinema/series/route.ts",
+    // La carte des deux catalogues (et celle d'un lien de partage, §112) : écrite une fois depuis le
+    // 20/10/2026, hors des deux routes qui la construisaient chacune.
+    "src/lib/cinemaEntries.ts",
     "src/app/api/player/lists/route.ts",
   ];
 
@@ -497,6 +498,8 @@ describe("ce que Lire trouve déjà prêt", () => {
       "src/components/cinema/CinemaMovieDetail.tsx",
       "src/components/cinema/CinemaSeriesDetail.tsx",
       "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+      // La fiche d'un lien de partage (§112) : une fiche, avec le seul titre de son bouton principal.
+      "src/components/shareGuest/ShareTitleSheet.tsx",
     ]);
   });
 

@@ -121,6 +121,9 @@ export async function ensureJellyseerrUserId(jfId: string | undefined, jfUser: s
 }
 
 export async function resolveJellyseerrIdentity(session: SessionPayload): Promise<JellyseerrIdentity> {
+  // Un lien de partage n'a pas de compte Jellyseerr, et n'en reçoit pas : son compte Jellyfin
+  // technique ne doit jamais y être importé (DECISIONS.md §112).
+  if (session.role === "share") return { userId: null };
   if (session.jsCookie) {
     // Refusé, expiré, ou Jellyseerr qui ne répond pas : on passe au compte nommé à la clé, et le
     // cookie n'est plus présenté à personne pour cette requête.

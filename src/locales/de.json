@@ -840,6 +840,54 @@
         "download": "Originaldatei heruntergeladen",
         "evicted": "Vom Server gelöscht (Platz)"
       }
+    },
+    "shares": {
+      "title": "Freigaben",
+      "open": "Öffnen",
+      "intro": "Links, die einen Film oder eine Serie für jemanden außerhalb des Haushalts öffnen, mit einem getrennt geschickten Passwort. Ein abgelaufener Link lässt sich noch einen Monat lang verlängern; danach wird sein Konto gelöscht.",
+      "active": "Aktive Links",
+      "total": "{n} insgesamt",
+      "playing": "Laufende Wiedergaben",
+      "watched": "Gesehene Stunden",
+      "data": "Gesendete Daten",
+      "dataHint": "vom integrierten Player gemessen",
+      "links": "Links ({n})",
+      "none": "Keine Links.",
+      "state": {
+        "active": "Aktiv",
+        "expired": "Abgelaufen",
+        "revoked": "Widerrufen"
+      },
+      "kind": {
+        "movie": "Film",
+        "series": "Serie"
+      },
+      "guest": "Gast · {label}",
+      "created": "erstellt am {date} von {who}",
+      "until": "bis {date}",
+      "expiredOn": "abgelaufen am {date}",
+      "revokedOn": "widerrufen am {date}",
+      "playingNow": "läuft · {n}/{max}",
+      "nowPlaying": "Läuft: {title}",
+      "redeemed": "Anmeldungen: {n}",
+      "lastVisit": "letzter Besuch {when}",
+      "never": "Nie geöffnet",
+      "seances": "Sitzungen: {n}",
+      "watchedFor": "{d} gesehen",
+      "lastSeance": "Letzte Sitzung: {title}, {when}",
+      "lastSeanceAt": "Letzte Sitzung: {title}, angehalten bei {at}, {when}",
+      "copyLink": "Link kopieren",
+      "extend": "Verlängern",
+      "extendBy": "+{n} T",
+      "extended": "Link um {n} T verlängert",
+      "cantExtendRevoked": "Ein widerrufener Link lässt sich nicht verlängern.",
+      "cantExtendDeleted": "Seit über einem Monat beendet: Erstelle einen neuen Link.",
+      "revoke": "Widerrufen",
+      "revokeConfirm": "Link widerrufen",
+      "revoked": "Link widerrufen",
+      "delete": "Löschen",
+      "deleteConfirm": "Endgültig löschen",
+      "deleted": "Link gelöscht"
     }
   },
   "radarr": {
@@ -1732,7 +1780,8 @@
       "not_in_list": "Dieser Titel ist nicht in Ihrer Liste.",
       "service_unavailable": "Dieser Dienst ist gerade nicht verfügbar.",
       "network": "Der Server ist gerade nicht erreichbar.",
-      "person_not_found": "Person nicht gefunden."
+      "person_not_found": "Person nicht gefunden.",
+      "share-streams": "Dieser Link wird bereits auf der maximalen Anzahl von Geräten abgespielt. Versuchen Sie es erneut, wenn eine Wiedergabe beendet ist."
     }
   },
   "sse": {
@@ -3476,6 +3525,70 @@
       "unreachableTail": "Das Dateiende konnte nicht gelesen werden (kein Indexpunkt nach dem Abschnitt).",
       "unreadable": "Dateien, die nicht gelesen werden konnten ({n})",
       "actionFailed": "Die Aktion ist fehlgeschlagen."
+    }
+  },
+  "share": {
+    "guest": {
+      "tagline": "Ein Titel wurde mit Ihnen geteilt.",
+      "householdWarning": "Sie sind mit Ihrem Konto angemeldet. Wenn Sie diesen Link öffnen, werden Sie auf diesem Gerät abgemeldet.",
+      "code": "Link-Code",
+      "password": "Passwort",
+      "submit": "Öffnen",
+      "submitting": "Wird geöffnet…",
+      "hint": "Code und Passwort haben Sie zusammen mit dem Link erhalten.",
+      "toLogin": "Mit einem Konto anmelden",
+      "loginButton": "Ich habe einen Freigabecode",
+      "availableUntil": "Verfügbar bis {date}",
+      "streamsFull": "Über diesen Link läuft bereits {n} Wiedergabe. Versuchen Sie es erneut, wenn sie beendet ist.|Über diesen Link laufen bereits {n} Wiedergaben. Versuchen Sie es erneut, wenn eine davon beendet ist.",
+      "enterPassword": "Passwort eingeben",
+      "errors": {
+        "refused": "Code oder Passwort falsch, oder der Link ist nicht mehr gültig.",
+        "rateLimited": "Zu viele Versuche. Versuchen Sie es später erneut.",
+        "unavailable": "Die Bibliothek antwortet nicht. Versuchen Sie es gleich noch einmal.",
+        "generic": "Der Link konnte nicht geöffnet werden.",
+        "network": "Keine Verbindung. Prüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
+        "gone": "Dieser Link ist nicht mehr verfügbar.",
+        "titleMissing": "Dieser Titel ist nicht mehr in der Bibliothek.",
+        "loadFailed": "Der Titel konnte nicht geladen werden."
+      }
+    },
+    "admin": {
+      "button": "Per Link teilen",
+      "sheetTitle": "Freigabelink",
+      "who": "Für wen?",
+      "whoPlaceholder": "Paul",
+      "duration": "Dauer",
+      "days": "{n} T",
+      "daysLong": "{n} Tage",
+      "coversSeries": "Die ganze Serie, kommende Folgen inklusive.",
+      "coversMovie": "Nur dieser Film.",
+      "streams": "Höchstens {n} Wiedergaben gleichzeitig.",
+      "noDownload": "Keine Downloads.",
+      "create": "Link erstellen",
+      "creating": "Wird erstellt…",
+      "close": "Schließen",
+      "done": "Fertig",
+      "created": "Link für {label}, gültig bis {date}.",
+      "link": "Link",
+      "password": "Passwort",
+      "copyLink": "Link kopieren",
+      "copyPassword": "Passwort kopieren",
+      "copied": "Kopiert",
+      "copyFailed": "Kopieren nicht möglich: Text markieren",
+      "shareLink": "Link senden…",
+      "shareText": "{title}, mit diesem Link ansehen",
+      "once": "Dieses Passwort wird nicht noch einmal angezeigt.",
+      "separately": "Schicke das Passwort getrennt, auf einem anderen Weg als den Link.",
+      "errors": {
+        "label": "Gib dem Link einen Namen.",
+        "days": "Ungültige Dauer.",
+        "item": "Dieser Titel ist nicht in der Mediathek.",
+        "missing": "Dieser Link existiert nicht mehr.",
+        "revoked": "Dieser Link wurde widerrufen.",
+        "deleted": "Dieser Link ist zu lange abgelaufen: Erstelle einen neuen.",
+        "unavailable": "Der Server konnte den Link nicht verarbeiten. Versuche es gleich noch einmal.",
+        "generic": "Der Link konnte nicht erstellt werden."
+      }
     }
   }
 }

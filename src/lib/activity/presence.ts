@@ -95,6 +95,16 @@ export function presenceOf(user: string, now = Date.now()): Presence {
   return { state, lastSeen, playing, devices: [...devices] };
 }
 
+/** Les sessions (`jti`) de ce compte qui jouent en ce moment — la limite de lectures d'un lien de partage. */
+export function playingSessionsOf(user: string, now = Date.now()): string[] {
+  const key = user.toLowerCase();
+  const out: string[] = [];
+  for (const [jti, beat] of beats) {
+    if (beat.user.toLowerCase() === key && beat.playing && now - beat.at <= PRESENCE_TTL_MS) out.push(jti);
+  }
+  return out;
+}
+
 /**
  * Un film joue-t-il quelque part, tous comptes confondus ? — un battement de lecture vivant. Lu par
  * l'indexation des répliques, qui se met en pause pendant qu'on regarde (DECISIONS.md §88).

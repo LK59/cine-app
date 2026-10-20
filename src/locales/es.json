@@ -840,6 +840,54 @@
         "download": "Archivo original descargado",
         "evicted": "Borrado del servidor (espacio)"
       }
+    },
+    "shares": {
+      "title": "Compartidos",
+      "open": "Abrir",
+      "intro": "Los enlaces que abren una película o una serie a alguien de fuera del hogar, con una contraseña enviada aparte. Un enlace caducado aún puede prolongarse durante un mes; después, su cuenta se borra.",
+      "active": "Enlaces activos",
+      "total": "{n} en total",
+      "playing": "Reproducciones en curso",
+      "watched": "Horas vistas",
+      "data": "Datos enviados",
+      "dataHint": "medidos por el reproductor integrado",
+      "links": "Enlaces ({n})",
+      "none": "Ningún enlace.",
+      "state": {
+        "active": "Activo",
+        "expired": "Caducado",
+        "revoked": "Revocado"
+      },
+      "kind": {
+        "movie": "Película",
+        "series": "Serie"
+      },
+      "guest": "invitado · {label}",
+      "created": "creado el {date} por {who}",
+      "until": "hasta el {date}",
+      "expiredOn": "caducó el {date}",
+      "revokedOn": "revocado el {date}",
+      "playingNow": "reproduciendo · {n}/{max}",
+      "nowPlaying": "Reproduciendo: {title}",
+      "redeemed": "accesos: {n}",
+      "lastVisit": "última visita {when}",
+      "never": "Nunca abierto",
+      "seances": "sesiones: {n}",
+      "watchedFor": "{d} vistas",
+      "lastSeance": "Última sesión: {title}, {when}",
+      "lastSeanceAt": "Última sesión: {title}, detenida en {at}, {when}",
+      "copyLink": "Copiar el enlace",
+      "extend": "Prolongar",
+      "extendBy": "+{n} d",
+      "extended": "Enlace prolongado {n} d",
+      "cantExtendRevoked": "Un enlace revocado no se puede prolongar.",
+      "cantExtendDeleted": "Terminó hace más de un mes: crea un enlace nuevo.",
+      "revoke": "Revocar",
+      "revokeConfirm": "Revocar el enlace",
+      "revoked": "Enlace revocado",
+      "delete": "Eliminar",
+      "deleteConfirm": "Eliminar definitivamente",
+      "deleted": "Enlace eliminado"
     }
   },
   "radarr": {
@@ -1732,7 +1780,8 @@
       "not_in_list": "Este título no está en tu lista.",
       "service_unavailable": "Este servicio no está disponible en este momento.",
       "network": "No se puede conectar con el servidor en este momento.",
-      "person_not_found": "No se encontró a esta persona."
+      "person_not_found": "No se encontró a esta persona.",
+      "share-streams": "Este enlace ya se está reproduciendo en el número máximo de dispositivos. Inténtalo de nuevo cuando termine una reproducción."
     }
   },
   "sse": {
@@ -3476,6 +3525,70 @@
       "unreachableTail": "No se pudo leer el final del archivo (no hay punto de índice después de la zona).",
       "unreadable": "Archivos que no se pudieron leer ({n})",
       "actionFailed": "La acción no se completó."
+    }
+  },
+  "share": {
+    "guest": {
+      "tagline": "Se ha compartido un título contigo.",
+      "householdWarning": "Has iniciado sesión con tu cuenta. Abrir este enlace cerrará tu sesión en este dispositivo.",
+      "code": "Código del enlace",
+      "password": "Contraseña",
+      "submit": "Abrir",
+      "submitting": "Abriendo…",
+      "hint": "El código y la contraseña te los dieron junto con el enlace.",
+      "toLogin": "Iniciar sesión con una cuenta",
+      "loginButton": "Tengo un código para compartir",
+      "availableUntil": "Disponible hasta el {date}",
+      "streamsFull": "Ya hay {n} reproducción en curso con este enlace. Inténtalo de nuevo cuando termine.|Ya hay {n} reproducciones en curso con este enlace. Inténtalo de nuevo cuando termine alguna.",
+      "enterPassword": "Introducir la contraseña",
+      "errors": {
+        "refused": "Código o contraseña incorrectos, o el enlace ya no es válido.",
+        "rateLimited": "Demasiados intentos. Inténtalo más tarde.",
+        "unavailable": "La biblioteca no responde. Inténtalo dentro de un momento.",
+        "generic": "No se pudo abrir el enlace.",
+        "network": "Sin conexión. Comprueba tu red e inténtalo de nuevo.",
+        "gone": "Este enlace ya no está disponible.",
+        "titleMissing": "Este título ya no está en la biblioteca.",
+        "loadFailed": "No se pudo cargar el título."
+      }
+    },
+    "admin": {
+      "button": "Compartir con un enlace",
+      "sheetTitle": "Enlace para compartir",
+      "who": "¿Para quién?",
+      "whoPlaceholder": "Pablo",
+      "duration": "Duración",
+      "days": "{n} d",
+      "daysLong": "{n} días",
+      "coversSeries": "Toda la serie, episodios futuros incluidos.",
+      "coversMovie": "Solo esta película.",
+      "streams": "Como máximo {n} reproducciones a la vez.",
+      "noDownload": "Sin descargas.",
+      "create": "Crear el enlace",
+      "creating": "Creando…",
+      "close": "Cerrar",
+      "done": "Listo",
+      "created": "Enlace para {label}, válido hasta el {date}.",
+      "link": "Enlace",
+      "password": "Contraseña",
+      "copyLink": "Copiar el enlace",
+      "copyPassword": "Copiar la contraseña",
+      "copied": "Copiado",
+      "copyFailed": "No se pudo copiar: selecciona el texto",
+      "shareLink": "Enviar el enlace…",
+      "shareText": "{title}, para ver con este enlace",
+      "once": "Esta contraseña no se volverá a mostrar.",
+      "separately": "Envía la contraseña aparte, por otro medio que el enlace.",
+      "errors": {
+        "label": "Ponle un nombre al enlace.",
+        "days": "Duración no válida.",
+        "item": "Este título no está en la biblioteca.",
+        "missing": "Este enlace ya no existe.",
+        "revoked": "Este enlace ha sido revocado.",
+        "deleted": "Este enlace terminó hace demasiado tiempo: crea uno nuevo.",
+        "unavailable": "El servidor no pudo procesar el enlace. Inténtalo de nuevo en un momento.",
+        "generic": "No se pudo crear el enlace."
+      }
     }
   }
 }

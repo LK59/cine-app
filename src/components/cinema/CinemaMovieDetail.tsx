@@ -1,5 +1,6 @@
 "use client";
 
+import { ShareButton } from "@/components/share/ShareControl";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -468,6 +469,20 @@ export function CinemaMovieDetail({
                 posterUrl={item.posterUrl ?? null}
                 runtimeMinutes={item.runtimeMinutes ?? null}
                 onlineResumeTicks={facts.resumeTicks}
+              />
+            )}
+            {/* Partager ce film par un lien (DECISIONS.md §112) : administrateur seul, rien pour les autres. */}
+            {item.jellyfinItemId && !fileMissing && (
+              <ShareButton
+                variant="row"
+                rowClassName={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+                badgeClassName={MENU_BADGE}
+                kind="movie"
+                itemId={item.jellyfinItemId}
+                radarrId={item.radarrId ?? null}
+                title={item.title}
+                year={item.year ?? null}
+                posterUrl={item.posterUrl ?? null}
               />
             )}
 

@@ -15,6 +15,7 @@
 
 import { config } from "@/lib/config";
 import { knownAccountsDb } from "@/lib/db";
+import { withoutShareAccounts } from "@/lib/share/accounts";
 import { logAuthEvent } from "@/lib/eventLogs";
 import { upstreamSignal, UPSTREAM_TIMEOUT_MS } from "@/lib/http";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
@@ -64,7 +65,9 @@ export async function applyNewAccountTags(): Promise<{ tagged: string[] }> {
     logError("jellyfin.new-account-tags", err);
     return { tagged };
   }
-  const valid = users.filter((u): u is JellyfinUser & { Id: string } => typeof u.Id === "string" && u.Id.length > 0);
+  // Les comptes des liens de partage ont leur propre politique (`share/jellyfinAccount.ts`) : on n'y
+  // touche pas (DECISIONS.md §112).
+  const valid = withoutShareAccounts(users).filter((u): u is JellyfinUser & { Id: string } => typeof u.Id === "string" && u.Id.length > 0);
   // Première fois : tout ce qui existe est connu, et rien n'est modifié.
   if (knownAccountsDb.isEmpty()) {
     knownAccountsDb.addAll(valid.map((u) => u.Id));

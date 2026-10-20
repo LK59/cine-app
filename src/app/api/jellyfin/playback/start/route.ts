@@ -9,6 +9,7 @@ import { playbackDevice } from "@/lib/playbackDevice";
 import { HttpError } from "@/lib/http";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
+import { shareRefusal, shareStreamRefusal } from "@/lib/share/guard";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { stripAccessToken } from "@/lib/stripAccessToken";
@@ -190,6 +191,10 @@ export async function POST(req: NextRequest) {
   if (!isJellyfinId(itemId)) {
     return NextResponse.json({ error: "itemId invalide" }, { status: 400 });
   }
+  // Un lien de partage : son titre seulement, et trois lectures au plus (DECISIONS.md §112). Rien
+  // pour les comptes du foyer.
+  const shareRefused = (await shareRefusal(session, itemId)) ?? shareStreamRefusal(session);
+  if (shareRefused) return shareRefused;
 
   try {
     const effectiveSupport: CodecSupport = {

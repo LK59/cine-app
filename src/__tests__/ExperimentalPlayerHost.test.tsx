@@ -344,6 +344,7 @@ vi.mock("@/lib/introEnd", async (original) => {
 import { noteWatching } from "@/lib/resumeRewind";
 import { resetIntroClocks } from "@/lib/playbackIntro";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
+import { ShareModeProvider } from "@/components/ShareMode";
 import { meterOpeningRequest } from "@/lib/slowLink";
 import { forgetLighterCarry } from "@/lib/playbackQuality";
 import { noteFetchRetrying, noteFetchSettled, resetNetworkTrouble } from "@/lib/networkTrouble";
@@ -1564,6 +1565,20 @@ describe("générer des sous-titres", () => {
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
     await settle();
     expect(screen.queryByText("gen:fr")).toBeNull();
+  });
+
+  // Un lien de partage (DECISIONS.md §112) : la porte des liens refuse `/api/subtitle-gen/*` ; le
+  // lecteur ne le demande même pas — ni options au montage, ni « Générer » au menu. Le test du dessus
+  // prouve que, sans le drapeau, le même montage les demande et les propose.
+  it("lien de partage : la génération n'est jamais ouverte — aucune demande, aucune langue proposée", async () => {
+    render(<ShareModeProvider shareMode>{player()}</ShareModeProvider>);
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    await settle();
+    expect(screen.queryByText("gen:fr")).toBeNull();
+    expect(screen.queryByText("gen2:fr")).toBeNull();
+    const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([url]) => String(url));
+    expect(calls.some((url) => url.startsWith("/api/subtitle-gen"))).toBe(false);
+    expect(calls.some((url) => url.startsWith("/api/player/cast"))).toBe(false);
   });
 
   it("générer : entrée temporaire choisie, « préparation » dessinée comme un sous-titre, puis la vraie ligne à sa place", async () => {

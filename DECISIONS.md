@@ -478,7 +478,8 @@ ceux du fichier.
 `forgetDirectInfo`. Jamais `preload` de SWR pour la description : il garde une réponse jusqu'à ce
 qu'un hook la prenne, des heures s'il le faut.
 
-**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`. Lecteur natif :
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`, et la fiche d'un lien de
+partage, `ShareTitleSheet` (§112 — pas quand les lectures du lien sont prises). Lecteur natif :
 `ExperimentalPlayerHost` lit la description par `directInfoForOpening`, sous une clé SWR propre à
 chaque ouverture, et prend l'état préparé, sinon le demande. Le cache de reprise (`recordTitle`) et
 l'épisode suivant (`warmNextEpisode`) passent par `fetchDirectInfo`. L'oubli : `refreshAfterPlayback` (avant et après le
@@ -6023,3 +6024,56 @@ vingt-six semaines.
 Tests : `activity-history.test.ts` (somme gardé + direct, jour sorti des archives, jours suivants,
 changement de version, trente jours), et ceux de la semaine (`activity-alerts-cleared`,
 `activity-perday-dst`, `activity-core`), inchangés.
+
+## 112. Les liens de partage : un titre, un mot de passe, une fin
+
+**La règle.** L'administrateur crée, depuis la fiche d'un film ou d'une série, un lien
+`/partage/<code>` et un mot de passe à part, valables un nombre de jours choisi (1 à 90), pour
+trois lectures en même temps. Qui a les deux voit la fiche de ce titre — une série entière,
+épisodes à venir compris — et le lit avec les mêmes lecteurs, les mêmes règles et la même reprise
+qu'un compte du foyer. Rien d'autre : ni catalogue, ni recherche, ni listes, ni demandes, ni
+personnes, ni téléchargement d'aucune sorte, ni génération de sous-titres, ni compte. Réservé à
+l'administrateur à la création, révocable et prolongeable depuis l'Activité.
+
+**Un troisième rôle, fermé par défaut.** Une session de lien a le rôle `share` et porte son lien
+(`sh`). Pas « guest » : ce nom est celui de l'ancien rôle non-administrateur, que
+`verifySessionToken` ramène encore à `user`. Les comptes du foyer sont « toute lecture ouverte sauf
+une liste » ; une session `share` est l'inverse — `proxy.ts` l'envoie à `shareGate`
+(`share/gate.ts`) avant les règles des comptes, et elle n'en sort jamais : une liste fermée de
+routes (`SHARE_RULES`), chacune avec la façon d'y lire l'élément demandé, vérifié contre le titre du
+lien (`itemInShare`, `share/scope.ts` : un film lui seul ; une série, elle et tout élément dont
+Jellyfin dit `SeriesId` = elle). Toute autre page ramène à la fiche du lien. Quand l'élément est dans
+le corps (positions, journal, langue par série, négociation du lecteur serveur), la route vérifie
+elle-même (`shareRefusal`, `share/guard.ts`), et `assertVisible` le refait pour le flux, les
+sous-titres, les images et les aperçus. Les signalements, hors du proxy, refusent le rôle dans
+`reportCaller`. Une session de lien ne glisse pas : sa fin est celle du lien, réémise seulement s'il a
+été prolongé ; révoqué ou passé, `verifySessionFull` la refuse à la requête suivante, film en cours
+compris.
+
+**Un compte Jellyfin technique par lien.** Tout ce qui joue parle à Jellyfin au nom d'un compte (la
+négociation, les positions, les « vu », la langue) ; un compte par lien garde ces routes telles
+quelles, et c'est Jellyfin qui garde la reprise du lien. Créé par `createShareAccount`
+(`share/jellyfinAccount.ts`), nommé `partage-<8 hex>`, verrouillé au plus serré : caché, la seule
+bibliothèque du genre du titre, sans téléchargement ni gestion des sous-titres, ni télévision en
+direct, ni contrôle des autres ; transcodage permis comme pour le foyer. Les langues de
+l'administrateur qui partage y sont recopiées. Son mot de passe, aléatoire, est gardé chiffré (même clé
+que les secrets du cookie) pour ouvrir une session Jellyfin par appareil ; celui du lien n'est gardé que
+haché (scrypt). Ces comptes ne sont pas des personnes du foyer : `jellyfin.getUsers` les écarte (une
+fois, pour l'Activité, les nouveautés, l'accueil et les notifications), le blocage des tags des nouveaux
+comptes ne les touche pas, Jellyseerr ne les importe jamais. Fin du lien : compte désactivé et sessions
+fermées au passage suivant (`sweepShares`, dix minutes) ; effacé un mois après — d'ici là, le lien se
+prolonge, reprise comprise.
+
+**Trois lectures.** Comptées à l'ouverture (`direct` pour le lecteur natif, `playback/start` pour le
+lecteur serveur) : les autres sessions du lien dont le battement de lecture a moins de deux minutes et
+demie (`playingSessionsOf`). L'appareil qui demande ne se compte pas — un épisode suivant passe toujours.
+
+**L'entrée.** `POST /api/share/redeem` (publique) : code et mot de passe contre la session. Freinée par
+adresse (10 / 15 min) et par lien (20 / h) ; un refus ne dit jamais lequel des deux était faux.
+
+**Porteurs.** `share/store.ts`, `share/service.ts`, `share/gate.ts`, `share/scope.ts`, `share/guard.ts`,
+`share/jellyfinAccount.ts`, `share/accounts.ts`, `share/overview.ts`.
+
+Tests : `share-gate.test.ts` (parcourt toutes les routes de l'API, toutes méthodes : refus hors liste et
+hors titre ; chaque route « corps » appelle `shareRefusal`), `share-core.test.ts` (jeton, secrets, vie
+d'un lien, compte verrouillé, comptes écartés, trois lectures).
